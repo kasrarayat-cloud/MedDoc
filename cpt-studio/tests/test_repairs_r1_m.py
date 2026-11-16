@@ -787,7 +787,10 @@ class TheUndoScriptsOnTheDatabaseTests(OperatorReads, TestCase):
         a, b, c = (self.encounter(tag) for tag in 'FGH')
         self.assertEqual(run_app_script(install.UNRUNNABLE_STAGES, {})['stuck'], 0)
         self.stage(a, 'review9', models.Job.QUEUED, created=now)
-        self.stage(b, 'review9', models.Job.CANCELLED, created=now + dt.timedelta(seconds=1))  # b's latest stage
+        # b's latest stage: placed after every job b's own pipeline wrote, whenever setting up the encounters took
+        # (now + 1 s alone was not later than them when that took over a second, as under a loaded gate)
+        b_jobs = models.Job.objects.filter(revision=b.current_revision).values_list('created_at', flat=True)
+        self.stage(b, 'review9', models.Job.CANCELLED, created=max([now, *b_jobs]) + dt.timedelta(seconds=1))
         older = self.stage(c, 'review9', models.Job.CANCELLED, created=now - dt.timedelta(days=1))
         self.stage(c, models.Job.ASSESS, models.Job.CANCELLED, created=now, tag='later')  # c's latest is known
         self.stage(c, 'review9', models.Job.FAILED, created=now - dt.timedelta(hours=1), tag='failed')

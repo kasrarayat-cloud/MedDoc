@@ -7,6 +7,9 @@ What is proved here, each against the design's text or against v1 computed in th
   certifies anything (3.6);
 - RESPONSE_SCHEMA_2 derives mechanically from it, through the 0b copy of v1's generator, and equals v1's generator's own
   output; it shares nothing with its source;
+- ANSWER_SHAPE_2 (AMENDMENT-2 2.1, step F2) differs from LOCAL_SCHEMA_2 by exactly the 38 SLOT attributes' array nodes,
+  each gaining "maxItems": 1, proved node by node against a list of the 38 written out here, with planted controls; it
+  shares nothing with its source, which keeps its pin, and it is shown, never validated (AnswerShape2Tests);
 - ATTRIBUTES agrees with the schema both ways, names every Attribute, and gives each id the family I4 resolves it in;
 - BOUNDS_2 is 1.8's, number for number; DOUBT_ATTRIBUTES names, for each DOUBT_ABOUT value, attributes its families
   carry, and ``whole`` all of them (the rows DECISIONS D200 confirms);
@@ -611,6 +614,136 @@ class RuledDefinitionTests(SimpleTestCase):
         self.assertFalse([line for line in BEFORE_RULINGS[1:] if line in sessions])
         # the control: as 1b wrote them, motility's meaning did not set anorectal testing apart
         self.assertFalse(meaning(BEFORE_RULINGS[1], 'motility').endswith('never anorectal testing'))
+
+
+# --- ANSWER_SHAPE_2 (AMENDMENT-2 2.1, step F2): LOCAL_SCHEMA_2 with "maxItems": 1 on the 38 slots, nothing else -------
+
+# The array nodes of the 38 SLOT attributes (Arity.SLOT in ATTRIBUTES), by schema path, written out here as AMENDMENT-2
+# 2.1 counts them, so the derivation is checked against a list it did not make
+SLOT_PATHS = (
+    'encounter.documenting_clinician',
+    'sections[].role', 'sections[].occasion', 'sections[].performer', 'sections[].performer_person',
+    'sessions[].examination', 'sessions[].encounter', 'sessions[].tract', 'sessions[].approach', 'sessions[].through',
+    'sessions[].reached_anatomy', 'sessions[].completion', 'sessions[].part_of_session',
+    'anatomy[].organ', 'anatomy[].subtype',
+    'lesions[].multiplicity',
+    'events[].other_class', 'events[].session', 'events[].date_relation', 'events[].date', 'events[].performer',
+    'events[].performer_person', 'events[].target.lesion', 'events[].target.structure', 'events[].target.anatomy',
+    'events[].target.duct', 'events[].technique.device', 'events[].technique.route', 'events[].purpose',
+    'events[].cause', 'events[].cause_event', 'events[].part_of', 'events[].part_relation', 'events[].yield',
+    'events[].access_outcome', 'events[].scope.breadth', 'events[].visit.basis',
+    'events[].visit.separately_identifiable',
+)
+# a FACTS list holds one fact per value (1.3): never a slot, so never bounded by maxItems
+FACTS_PATHS = ('sessions[].reached', 'sessions[].device_reached', 'sessions[].stations', 'anatomy[].joins',
+               'lesions[].places', 'lesions[].distinct_from', 'lesions[].same_as', 'events[].target.places')
+MAX_ITEMS = ',"maxItems":1'  # what each slot adds to the canonical bytes
+
+
+def shape_differences(local: dict, shape: dict) -> dict:
+    """{path: the keys ``shape``'s node adds to ``local``'s, with their values}, node by node over both schemas (the
+    children of a node compared at their own paths); AssertionError when the two have other paths, or a node of
+    ``shape`` drops or changes a key of ``local``'s."""
+    local_nodes, shape_nodes = list(nodes(local)), list(nodes(shape))
+    assert [path for path, _ in local_nodes] == [path for path, _ in shape_nodes], 'the paths differ'
+    found = {}
+    for (path, before), (_, after) in zip(local_nodes, shape_nodes):
+        own_before = {key: value for key, value in before.items() if key not in ('properties', 'items')}
+        own_after = {key: value for key, value in after.items() if key not in ('properties', 'items')}
+        assert all(own_after.get(key, object()) == value for key, value in own_before.items()), path
+        if 'properties' in before:
+            assert list(after['properties']) == list(before['properties']), path  # same keys, same order
+        added = {key: value for key, value in own_after.items() if key not in own_before}
+        if added:
+            found[path] = added
+    return found
+
+
+class AnswerShape2Tests(SimpleTestCase):
+    def test_it_differs_from_local_schema_2_by_exactly_the_38_slot_nodes(self):
+        # AMENDMENT-2 2.1: LOCAL_SCHEMA_2 with "maxItems": 1 added to the array node of each of the 38 SLOT attributes
+        # and nothing else changed - proved node by node
+        found = shape_differences(xs.LOCAL_SCHEMA_2, xs.ANSWER_SHAPE_2)
+        self.assertEqual(len(found), 38)
+        self.assertEqual(sorted(found), sorted(SLOT_PATHS))
+        self.assertEqual(len(SLOT_PATHS), len(set(SLOT_PATHS)))
+        every = dict(nodes(xs.ANSWER_SHAPE_2))
+        for path in SLOT_PATHS:
+            with self.subTest(slot=path):
+                self.assertEqual(found[path], {'maxItems': 1})
+                self.assertEqual(every[path]['type'], 'array')
+                self.assertTrue(is_fact(every[path]['items']))  # a slot of facts
+        for path in FACTS_PATHS:  # the lists of facts and the plain lists take no maxItems
+            with self.subTest(facts=path):
+                self.assertTrue(is_fact(every[path]['items']))
+                self.assertNotIn('maxItems', every[path])
+        self.assertEqual([path for path, node in nodes(xs.ANSWER_SHAPE_2) if 'maxItems' in node and path not in found],
+                         [])
+        self.assertEqual(xs.BOUNDS_2[xs.Bound.SLOT], 1)  # the value is the slot's bound of 1.8, which A2 4.3 keeps
+
+    def test_the_38_paths_are_the_slot_attributes_of_the_table(self):
+        slots = [schema_path(family, field) for family, fields in xs.ATTRIBUTES.items() for field in fields
+                 if field.arity is xs.Arity.SLOT]
+        self.assertEqual(slots, list(SLOT_PATHS))  # the table's order, the design's count
+        self.assertTrue(all(field.bound is xs.Bound.SLOT for fields in xs.ATTRIBUTES.values() for field in fields
+                            if field.arity is xs.Arity.SLOT))
+
+    def test_the_node_by_node_check_finds_a_planted_change(self):
+        # the positive controls: a maxItems planted on a list of facts, a slot left without one, a changed enumeration
+        # and a reordered object are each seen
+        planted = copy.deepcopy(xs.ANSWER_SHAPE_2)
+        planted['properties']['sessions']['items']['properties']['reached']['maxItems'] = 1
+        self.assertIn('sessions[].reached', shape_differences(xs.LOCAL_SCHEMA_2, planted))
+        missing = copy.deepcopy(xs.ANSWER_SHAPE_2)
+        del missing['properties']['events']['items']['properties']['technique']['properties']['device']['maxItems']
+        self.assertNotIn('events[].technique.device', shape_differences(xs.LOCAL_SCHEMA_2, missing))
+        self.assertEqual(len(shape_differences(xs.LOCAL_SCHEMA_2, missing)), 37)
+        changed = copy.deepcopy(xs.ANSWER_SHAPE_2)
+        changed['properties']['doubts']['items']['properties']['about']['enum'].append('x')
+        with self.assertRaises(AssertionError):
+            shape_differences(xs.LOCAL_SCHEMA_2, changed)
+        reordered = copy.deepcopy(xs.ANSWER_SHAPE_2)
+        session = reordered['properties']['sessions']['items']['properties']
+        reordered['properties']['sessions']['items']['properties'] = dict(reversed(list(session.items())))
+        with self.assertRaises(AssertionError):
+            shape_differences(xs.LOCAL_SCHEMA_2, reordered)
+
+    def test_it_shares_nothing_and_leaves_local_schema_2_as_pinned(self):
+        local_ids = {id(node) for _, node in nodes(xs.LOCAL_SCHEMA_2)}
+        self.assertFalse(local_ids & {id(node) for _, node in nodes(xs.ANSWER_SHAPE_2)})
+        self.assertEqual(jsonschema.sha256_of(xs.LOCAL_SCHEMA_2), LOCAL_SHA256)  # the source is unchanged
+        self.assertEqual(len(jsonschema.canonical(xs.ANSWER_SHAPE_2)),
+                         len(jsonschema.canonical(xs.LOCAL_SCHEMA_2)) + 38 * len(MAX_ITEMS))
+        self.assertEqual(jsonschema.canonical(xs.ANSWER_SHAPE_2).count(MAX_ITEMS.encode()), 38)
+        self.assertEqual(xs.ANSWER_SHAPE_2, xs._answer_shape())  # derived, never written by hand: a pure function
+        self.assertNotIn('maxItems', xs.LOCAL_SCHEMA_2['properties']['encounter']['properties']['documenting_clinician'])
+
+    def test_it_is_shown_and_never_validated(self):
+        # AMENDMENT-2 2.1: the reader validates LOCAL_SCHEMA_2; ANSWER_SHAPE_2 is written into the instruction alone.
+        # No production module but these two names it: extract_schema defines it, extract_prompt shows it
+        studio = APP / 'studio'
+        naming = sorted(str(path.relative_to(APP)) for path in studio.rglob('*.py')
+                        if '__pycache__' not in path.parts
+                        and any(isinstance(node, (ast.Name, ast.Attribute))
+                                and (getattr(node, 'id', None) or getattr(node, 'attr', None)) == 'ANSWER_SHAPE_2'
+                                for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))))
+        self.assertEqual(naming, ['studio/interpretation/contract/extract_prompt.py',
+                                  'studio/interpretation/contract/extract_schema.py'])
+        reader = (CONTRACT / 'extract_read.py').read_text(encoding='utf-8')
+        self.assertIn('LOCAL_SCHEMA_2', reader)  # the reader's schema is the source
+        # CPT Studio's validator implements no maxItems and refuses to judge a schema that has one, so the shape could
+        # not be validated against by mistake; an answer filling a slot twice breaks no schema the reader validates
+        # against (AMENDMENT-2 4.3: an item-level finding, never a schema refusal)
+        with self.assertRaisesRegex(ValueError, 'maxItems'):
+            reading.schema_error({}, xs.ANSWER_SHAPE_2, 'the interpretation')
+        fact = {'state': 'supported', 'value': 'P1', 'qualifiers': [], 'sources': [], 'options': []}
+        doubled = {'encounter': {'date_of_service': {'state': 'not_stated', 'value': '', 'sources': [], 'options': []},
+                                 'other_dates': [], 'documenting_clinician': [fact, dict(fact, value='P2')]},
+                   'people': [], 'sections': [], 'sessions': [], 'anatomy': [], 'lesions': [], 'events': [], 'doubts': []}
+        self.assertEqual(reading.schema_error(doubled, xs.LOCAL_SCHEMA_2, 'the interpretation'), '')
+        broken = dict(doubled, doubts=[{'about': 'reached'}])  # the control: the same validator judges a broken one
+        self.assertEqual(reading.schema_error(broken, xs.LOCAL_SCHEMA_2, 'the interpretation'),
+                         "doubts[0] lacks the required field 'objects'")
 
 
 # --- the pins, the sizes, and 5.7 measure 4 -----------------------------------------------------------------------------

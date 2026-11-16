@@ -5,11 +5,20 @@ What is proved here, each against the design or against v1 computed in the test:
   which DECISIONS D230 sets to gemini-4-carbon for every request built (D272, step cb); v2's labels of 1.1
   under new names; every pin of 2.5 named, each naming the step that fills it, and written as a sha256 but the health
   thresholds' (DECISIONS D202); the family dispatch of is_new_assessment and is_new_context for @1 and @2 alike;
-- the settings: D49's deadlines for the second call (7.4 [R:MO-3]), as literal assignments beside the interpreter's;
+- AMENDMENT-2's labels (8.1, adopted by DECISIONS D279; the interpreter is Claude Fable 5.2, D275): the _V3 names beside
+  v2's, each fitting its column, the anthropic-version value beside ADAPTER_VERSION_V3, READ_PROVIDERS, the model and
+  provider; its pins (8.2, with the three pass-2 objects D292's U1 and U3 change) placeholders that name their steps,
+  and every pin of a recorded label kept byte for byte;
+- the settings: AMENDMENT-2 1.12's deadlines for both passes as literal assignments, and D289's guard (G2-01): each
+  send deadline at least fable_adapter.MAX_TOKENS at 100 tokens per second plus 40 s, each read timeout at most its
+  deadline, each stage at least its send, recording and 45 s, each stale threshold above its stage; 1.11's credential
+  settings (the existing Anthropic credential, the historical mode and replay settings);
 - the enumerations: each a plain, unique, closed Enum whose values are the design's strings in its order, the ones the
   design derives from v1 equal to v1's tuples by value;
 - the records: frozen dataclasses with slots holding exactly the fields the design names, each of the type it names
   (typing.get_type_hints); the engine's text-free boundary, typed (no field holds a str but HeldFact's two code fields);
+  AMENDMENT-2 4.3's two additions, Reason.SLOT_OVERFULL in row 4 right after reference_invalid and the engine Fact's
+  defaulted negated_values;
 - the check records of DECISIONS D206 (the waves 1-2 triage's INT-4): Citation, AnchorCitation and SectionPlace are
   contract/geometry.py's records field for field, closers included (the integration's O3), and convert from geometry's
   output with nothing lost; Checked freezes what it is given, is generic in the answer's fact key (mypy --strict refuses
@@ -99,7 +108,7 @@ V1_VALUES = {
 # FINAL-V2 1.1, and 8.1 step 0b's names for them
 V2_VALUES = {
     'INTERPRETATION_VERSION_V2': 'gemini-events@2', 'APPRAISAL_VERSION': 'gemini-appraisal@1',
-    'INVENTORY_VERSION_V2': 'gemini-inventory@2', 'REQUIREMENTS_VERSION': 'cpt-requirements@1',
+    'INVENTORY_VERSION_V2': 'gemini-inventory@2', 'REQUIREMENTS_VERSION': 'cpt-requirements@2',  # DECISIONS D292
     'ENGINE_VERSION_V2': 'cpt-studio-events@2', 'CONTEXT_VERSION_V2': 'gemini-context@2',
     'ROUTING_VERSION_V2': 'gemini-routing@2', 'ADAPTER_VERSION_V2': 'gemini-generate@cptstudio-2',
     'INTERPRETATION_PAIR': 'gemini-events@2/appraisal@1', 'APPRAISAL_PURPOSE': 'appraisal',
@@ -126,6 +135,50 @@ PINS_2_5 = {
 # test_extract_prompt, test_extract_read, test_requirements, test_claims, test_appraise_prompt, test_appraise_read);
 # step 8 sets the health thresholds from D3
 UNWRITTEN_PINS = frozenset({'HEALTH_THRESHOLDS_SHA256'})
+# Every pin of a label already recorded (gemini-events@2: D1; gemini-appraisal@1: D1v, D1w), byte for byte: AMENDMENT-2
+# moves none of them (8.2 [R:replay-R1]; DECISIONS D202), and the dormant Gemini adapter and its recordings read them.
+RECORDED_PINS = {
+    'INSTRUCTIONS_SHA256_V2': '543adde5d07822bc45c3eaffb52c19175ad5a8d30b842c1e2ebc8008707b9089',
+    'LOCAL_SCHEMA_SHA256_V2': '7cd387041de317825f371415070bcee1703be0d9022c92bf77580f59dda3d04c',
+    'RESPONSE_SCHEMA_SHA256_V2': 'bcb7fce8f1fa0b28c5fb8ea7514ba22f14ce06f18d1f557b16b92798f1109cab',
+    'SEGMENTATION_SHA256': '41d2245ada69f2a573d0354486323d9f30e00fef7091f531e2e0541a11af8e78',
+    'APPRAISAL_INSTRUCTIONS_SHA256': '892d696beaa9261875d7e4dfba5836b5445ce5f045c297ad668e3303f480292d',
+    'APPRAISAL_LOCAL_SCHEMA_SHA256': '526dd4e4116c07ed3e1431759a47ac79d4a4d3e7aba81c3133933abe5da46cbf',
+    'APPRAISAL_RESPONSE_SCHEMA_SHA256': 'fc83346270c6bc165baba78ed8a731132c7e90f172ad22853b100d085ffbd275',
+    'TEMPLATES_SHA256': '8362112662c3172e6d375e713bb2ba5da7057e6f3c30085b68bc8359a50ef823',
+    'STATEMENT_TEMPLATES_SHA256': '3880e4af3eefbdbccf0c5bb8e4a099df1d50268b485e991f46db7b8f3a19e162',
+    'CONTROLS_SHA256': 'e4a8a79250ed14135b3d9f613fc4c4f57094bbe588b5484a1be98cc591a31c32',
+    'CLAIMED_SHA256': '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81',
+    'HEALTH_THRESHOLDS_SHA256': '',
+    'CLAIM_BOUND_SHA256': '58f544bee79e592b0a40c01e24884995f2e9dd4dd9ff4c16aeec104dcf691f02',
+}
+
+# AMENDMENT-2 8.1 (DECISIONS D279; the interpreter is Claude Fable 5.2, D275): the new names beside v2's, never in their
+# place [R:replay-R4], the anthropic-version value beside the adapter version [R:replay-R8], and 1.1's model, provider
+# and READ_PROVIDERS
+V3_VALUES = {
+    'INTERPRETATION_VERSION_V3': 'gemini-events@3', 'APPRAISAL_VERSION_V3': 'gemini-appraisal@2',
+    'INVENTORY_VERSION_V3': 'gemini-inventory@3', 'ENGINE_VERSION_V3': 'cpt-studio-events@3',
+    'INTERPRETATION_PAIR_V3': 'gemini-events@3/appraisal@2',
+    'ADAPTER_VERSION_V3': 'anthropic-messages@cptstudio-interp-1', 'API_VERSION_V3': '2026-10-21',
+    'MODEL_V3': 'claude-fable-5-2', 'PROVIDER_V3': 'anthropic', 'READ_PROVIDERS': ('anthropic', 'gemini'),
+}
+# each new label beside the v2 label it succeeds: the version moves, the family stays (8.1)
+V3_SUCCEEDS = {'INTERPRETATION_VERSION_V3': 'INTERPRETATION_VERSION_V2', 'APPRAISAL_VERSION_V3': 'APPRAISAL_VERSION',
+               'INVENTORY_VERSION_V3': 'INVENTORY_VERSION_V2', 'ENGINE_VERSION_V3': 'ENGINE_VERSION_V2'}
+# AMENDMENT-2 8.2, item by item, and the name holding each new pin: the instruction of pass 1, 8.2's two pass-2 pins of
+# their own, and the three pass-2 objects DECISIONS D292 changes after 8.2 was written (U1's statement templates, U3's
+# reached_anatomy claim and its shared control) - each a placeholder until the integration owner writes it after the
+# build's last repair, computed by its step's own function on the merged tree (D202: nothing is recorded under the new
+# labels yet). Every other pin of 8.2 is a v2 pin above, kept (RECORDED_PINS).
+PINS_8_2 = {
+    'pass 1 instruction (INSTRUCTIONS_3, with ANSWER_SHAPE_2)': 'INSTRUCTIONS_SHA256_V3',
+    'claims.TEMPLATES (D292 U3)': 'TEMPLATES_SHA256_V3',
+    'claims.STATEMENT_TEMPLATES (D292 U1)': 'STATEMENT_TEMPLATES_SHA256_V3',
+    'the claims.CONTROLS generator (D292 U3)': 'CONTROLS_SHA256_V3',
+    'the per-request claim bound claims.CLAIM_BOUND_V3': 'CLAIM_BOUND_SHA256_V3',
+    'the health thresholds of gemini-appraisal@2': 'HEALTH_THRESHOLDS_SHA256_V3',
+}
 
 
 def _init_source() -> str:
@@ -188,8 +241,8 @@ class LabelTests(SimpleTestCase):
     def test_every_pin_of_2_5_is_written_or_waits_for_step_8_and_names_its_step(self):
         source = _init_source()
         pins = {name for name in vars(interpretation) if 'SHA256' in name}
-        self.assertEqual(pins, set(PINS_2_5.values()) | {'INSTRUCTIONS_SHA256', 'LOCAL_SCHEMA_SHA256',
-                                                         'RESPONSE_SCHEMA_SHA256'})
+        self.assertEqual(pins, set(PINS_2_5.values()) | set(PINS_8_2.values()) | {
+            'INSTRUCTIONS_SHA256', 'LOCAL_SCHEMA_SHA256', 'RESPONSE_SCHEMA_SHA256'})
         self.assertEqual(len(PINS_2_5), 13)
         self.assertLess(UNWRITTEN_PINS, set(PINS_2_5.values()))
         for item, name in PINS_2_5.items():
@@ -212,6 +265,72 @@ class LabelTests(SimpleTestCase):
         family = interpretation._family
         self.assertEqual(family(interpretation.ENGINE_VERSION), family(interpretation.ENGINE_VERSION_V2))
         self.assertEqual(family(interpretation.CONTEXT_VERSION), family(interpretation.CONTEXT_VERSION_V2))
+
+    def test_amendment_2s_labels_are_8_1s_beside_v2s(self):
+        self.assertEqual({name: getattr(interpretation, name) for name in V3_VALUES}, V3_VALUES)
+        # the pair is built from its two parts, as v2's is; READ_PROVIDERS names Fable's provider and the stored runs'
+        self.assertEqual(interpretation.INTERPRETATION_PAIR_V3,
+                         f"{interpretation.INTERPRETATION_VERSION_V3}/"
+                         f"{interpretation.APPRAISAL_VERSION_V3.removeprefix('gemini-')}")
+        self.assertEqual(interpretation.READ_PROVIDERS, (interpretation.PROVIDER_V3, interpretation.PROVIDER))
+        # new names, never v2's moved: each succeeds its v2 label in the same family, so the family dispatch reads an
+        # @3 row as a new-path row, and the v2 names keep their values (V2_VALUES, above)
+        family = interpretation._family
+        for new, old in V3_SUCCEEDS.items():
+            with self.subTest(label=new):
+                self.assertEqual(family(getattr(interpretation, new)), family(getattr(interpretation, old)))
+                self.assertNotEqual(getattr(interpretation, new), getattr(interpretation, old))
+        self.assertEqual({name: getattr(interpretation, name) for name in V2_VALUES}, V2_VALUES)
+        self.assertIs(interpretation.is_new_assessment(
+            types.SimpleNamespace(engine_version=interpretation.ENGINE_VERSION_V3)), True)
+        # the labels 8.1 leaves alone, and the Gemini model and provider the dormant adapter and its tests read (1.1)
+        self.assertEqual((interpretation.CONTEXT_VERSION_V2, interpretation.ROUTING_VERSION_V2, interpretation.MODEL,
+                          interpretation.PROVIDER, interpretation.ADAPTER_VERSION_V2),
+                         ('gemini-context@2', 'gemini-routing@2', 'gemini-4-carbon', 'gemini',
+                          'gemini-generate@cptstudio-2'))
+
+    def test_each_v3_label_fits_its_column(self):
+        columns = (
+            (interpretation.INTERPRETATION_PAIR_V3, EventInventory, 'interpretation_version'),
+            (interpretation.INVENTORY_VERSION_V3, EventInventory, 'inventory_version'),
+            (interpretation.ENGINE_VERSION_V3, Assessment, 'engine_version'),
+            (interpretation.ADAPTER_VERSION_V3, ProviderRun, 'adapter_version'),
+            (interpretation.PROVIDER_V3, ProviderRun, 'provider'),
+            (interpretation.MODEL_V3, ProviderRun, 'requested_model'),
+            (interpretation.MODEL_V3, ProviderRun, 'returned_model'),
+            *((provider, ProviderRun, 'provider') for provider in interpretation.READ_PROVIDERS),
+        )
+        for value, model, name in columns:
+            with self.subTest(column=f'{model.__name__}.{name}', value=value):
+                self.assertLessEqual(len(value), model._meta.get_field(name).max_length)
+        # the counts 8.1 and 1.1 state: the pair 27 of 40, the adapter version 37 of 40, the provider 9 of 20
+        self.assertEqual((len(interpretation.INTERPRETATION_PAIR_V3), len(interpretation.ADAPTER_VERSION_V3),
+                          len(interpretation.PROVIDER_V3)), (27, 37, 9))
+
+    def test_every_pin_of_8_2_is_its_owning_functions_measure_and_no_recorded_pin_moves(self):
+        """AMENDMENT-2 8.2: the integration owner writes each pin after the build's last repair, by its owning step's
+        function on the merged tree (D202: no recording exists under the new labels) - step f2's
+        extract_prompt.pins_fable for pass 1 and appraise_prompt.pins_fable for pass 2 (f3s's documents under
+        gemini-appraisal@2); HEALTH_THRESHOLDS_SHA256_V3 is settle.health_document()'s measure, 3.2.6's values
+        unchanged (8.2 sets it from D3, which D277 does not run: DECISIONS D293)."""
+        from studio.interpretation.contract import appraise_prompt, extract_prompt, settle
+        measured = {**extract_prompt.pins_fable(), **appraise_prompt.pins_fable()}
+        source = _init_source()
+        for item, name in PINS_8_2.items():
+            with self.subTest(pin=item):
+                comment = _pin_comment(source, name)
+                if name == 'HEALTH_THRESHOLDS_SHA256_V3':  # 8.2 sets it from D3, which D277 does not run: D293
+                    self.assertEqual(getattr(interpretation, name), jsonschema.sha256_of(settle.health_document()))
+                    self.assertRegex(comment, r'\bD277\b.*\bD293\b')
+                else:  # written: its owning function's measure on this tree, the step named
+                    self.assertEqual(getattr(interpretation, name), measured[name])
+                    self.assertRegex(comment, r'\bstep f[0-9][a-z]*\b')
+        self.assertEqual({name: getattr(interpretation, name) for name in RECORDED_PINS}, RECORDED_PINS)
+        self.assertEqual(len(PINS_8_2), 6)
+        # 8.2's pin of a 1,000-claim bound is the one its comment states (claims.claim_bound_document's form)
+        thousand = jsonschema.sha256_of({'claims_per_request': 1000})
+        self.assertEqual(thousand, '3fe08a5c8ec23575e2df78032d5b4b18dcff0927ce1c628743c47946b9415628')
+        self.assertIn(thousand, _pin_comment(source, 'CLAIM_BOUND_SHA256_V3'))
 
     def test_the_package_still_imports_nothing(self):
         tree = ast.parse(_init_source())
@@ -236,33 +355,96 @@ def _settings_literals() -> dict:
     return literals
 
 
+def _settings_assigned() -> set:
+    """Every name cptstudio/settings.py assigns at module level, literal or not."""
+    tree = ast.parse((APP / 'cptstudio' / 'settings.py').read_text(encoding='utf-8'))
+    return {target.id for node in tree.body if isinstance(node, ast.Assign) for target in node.targets
+            if isinstance(target, ast.Name)}
+
+
+# AMENDMENT-2 1.12's rows for the interpreter's two passes (DECISIONS D279, D289's G2-01), each pass with its send
+# deadline, read timeout and stage (its job kind); every other stage keeps its deadline.
+PASSES_1_12 = {'interpretation': ('INTERPRETER_SEND_DEADLINE_SECONDS', 'INTERPRETER_READ_TIMEOUT_SECONDS', 'interpret'),
+               'appraisal': ('APPRAISER_SEND_DEADLINE_SECONDS', 'APPRAISER_READ_TIMEOUT_SECONDS', 'appraise')}
+SEND_1_12, READ_1_12, STAGE_1_12, STALE_1_12 = 1320, 1320, 1380, 1440
+OTHER_STAGES = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180, 'astra': 580,
+                'fable': 580, 'astra_peer': 580, 'fable_peer': 580}
+# 1.12's derivation: a send at the output maximum at 100 tokens per second (13.5% below the slowest measured rate),
+# plus 40 s for the connection, the prefill and the stream's tail; a stage of its send, the recording and 45 s of work
+RATE_1_12, TAIL_1_12, STAGE_WORK_1_12 = 100, 40, 45
+
+
 class SettingsTests(SimpleTestCase):
-    def test_the_second_call_takes_d49s_deadlines(self):
+    def test_each_reading_pass_fits_the_bounds_its_output_maximum_sets(self):
+        """D289's guard (G2-01; W9R-BUILD-LIST B21), read from the module that sends: for each pass, the send deadline
+        holds fable_adapter.MAX_TOKENS at 100 tokens per second plus 40 s, the read timeout never cuts before the
+        deadline, the stage covers the send, its recording and 45 s of work, and the stage's stale threshold lies above
+        the stage. A changed cap or deadline that breaks any of them fails here."""
+        from studio import jobs
+        from studio.interpretation import fable_adapter
+
+        cap = fable_adapter.MAX_TOKENS / RATE_1_12 + TAIL_1_12
+        for purpose, (send, read, kind) in PASSES_1_12.items():
+            with self.subTest(purpose=purpose):
+                deadline = getattr(settings, send)
+                self.assertLessEqual(cap, deadline)
+                self.assertLessEqual(getattr(settings, read), deadline)
+                self.assertLessEqual(deadline + jobs.LOOP_RECORDING_SECONDS + STAGE_WORK_1_12,
+                                     settings.JOB_DEADLINE_SECONDS[kind])
+                self.assertLess(settings.JOB_DEADLINE_SECONDS[kind], settings.STALE_RUNNING_SECONDS_BY_KIND[kind])
+
+    def test_the_settings_are_1_12s_literal_assignments(self):
+        literals = _settings_literals()
+        for purpose, (send, read, kind) in PASSES_1_12.items():
+            with self.subTest(purpose=purpose):
+                self.assertEqual((literals[send], literals[read], literals['JOB_DEADLINE_SECONDS'][kind],
+                                  literals['STALE_RUNNING_SECONDS_BY_KIND'][kind]),
+                                 (SEND_1_12, READ_1_12, STAGE_1_12, STALE_1_12))
+                self.assertEqual((getattr(settings, send), getattr(settings, read)), (SEND_1_12, READ_1_12))
+        # the per-kind threshold names the two reading stages only; every other stage keeps its deadline and the
+        # stale-stage sweep's 600 s
+        self.assertEqual(set(literals['STALE_RUNNING_SECONDS_BY_KIND']), {'interpret', 'appraise'})
+        self.assertEqual({kind: seconds for kind, seconds in literals['JOB_DEADLINE_SECONDS'].items()
+                          if kind not in ('interpret', 'appraise')}, OTHER_STAGES)
+        self.assertEqual(literals['STALE_RUNNING_SECONDS'], 600)
+        # the interpreter's response cap (1.12's last row)
+        self.assertEqual(settings.INTERPRETER_MAX_RESPONSE_BYTES, 16 * 1024 * 1024)
+        # the derivation the guard reads: 128,000 tokens at 100 per second plus 40 s is the deadline exactly, and the
+        # stage is the send, the recording and 45 s
         from studio import jobs
 
-        self.assertEqual((settings.APPRAISER_READ_TIMEOUT_SECONDS, settings.APPRAISER_SEND_DEADLINE_SECONDS,
-                          settings.JOB_DEADLINE_SECONDS['appraise']), (480, 510, 560))
-        # D49's values: the interpreter's, unchanged beside them
-        self.assertEqual((settings.INTERPRETER_READ_TIMEOUT_SECONDS, settings.INTERPRETER_SEND_DEADLINE_SECONDS,
-                          settings.JOB_DEADLINE_SECONDS['interpret']), (480, 510, 560))
-        # the read bounds the generation inside the send; the send and its recording fit the stage, and the stage ends
-        # before the stale-stage sweep (7.4)
-        self.assertLess(settings.APPRAISER_READ_TIMEOUT_SECONDS, settings.APPRAISER_SEND_DEADLINE_SECONDS)
-        self.assertLess(settings.APPRAISER_SEND_DEADLINE_SECONDS + jobs.LOOP_RECORDING_SECONDS,
-                        settings.JOB_DEADLINE_SECONDS['appraise'])
-        self.assertLess(settings.JOB_DEADLINE_SECONDS['appraise'], settings.STALE_RUNNING_SECONDS)
-        # a cut-off answer of 32,768 tokens at the slowest measured rate (82.4 tokens per second) fits the read
-        self.assertLess(32_768 / 82.4, settings.APPRAISER_READ_TIMEOUT_SECONDS)
+        self.assertEqual(128_000 / RATE_1_12 + TAIL_1_12, SEND_1_12)
+        self.assertEqual(SEND_1_12 + jobs.LOOP_RECORDING_SECONDS + STAGE_WORK_1_12, STAGE_1_12)
 
-    def test_they_are_literal_assignments_as_the_interpreters_are(self):
-        literals = _settings_literals()
-        self.assertEqual((literals['APPRAISER_READ_TIMEOUT_SECONDS'], literals['APPRAISER_SEND_DEADLINE_SECONDS'],
-                          literals['JOB_DEADLINE_SECONDS']['appraise']), (480, 510, 560))
-        # every other stage's deadline is as before
-        self.assertEqual({kind: seconds for kind, seconds in literals['JOB_DEADLINE_SECONDS'].items()
-                          if kind != 'appraise'},
-                         {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180, 'astra': 580,
-                          'fable': 580, 'astra_peer': 580, 'fable_peer': 580, 'interpret': 560})
+    def test_the_interpreter_reads_the_existing_anthropic_credential_and_keeps_its_mode_and_replay_settings(self):
+        # AMENDMENT-2 1.11 (D275): no interpreter key of its own - the setting is the Fable participant's,
+        # ANTHROPIC_CREDENTIALS_FILE - and the mode and replay directory keep their historical settings and variables
+        source = (APP / 'cptstudio' / 'settings.py').read_text(encoding='utf-8')
+        for line in ("ANTHROPIC_CREDENTIALS_FILE = _env('ANTHROPIC_CREDENTIALS_FILE', '')",
+                     "GEMINI_MODE = _env('GEMINI_MODE', 'disabled')",
+                     "GEMINI_REPLAY_DIR = _env('GEMINI_REPLAY_DIR', '')",
+                     "GEMINI_CREDENTIALS_FILE = _env('GEMINI_CREDENTIALS_FILE', '')"):
+            with self.subTest(line=line):
+                self.assertEqual(source.count(line), 1)
+        credentials = {name for name in _settings_assigned() if 'CREDENTIALS' in name}
+        self.assertEqual(credentials, {'CORTI_CREDENTIALS_FILE', 'OPENAI_CREDENTIALS_FILE',
+                                       'ANTHROPIC_CREDENTIALS_FILE', 'GEMINI_CREDENTIALS_FILE'})
+        # read from the environment when the settings load (a fresh process, synthetic paths only, no file opened)
+        script = ('import cptstudio.settings as s\n'
+                  'print(repr((s.ANTHROPIC_CREDENTIALS_FILE, s.GEMINI_MODE, s.GEMINI_REPLAY_DIR)))\n')
+        base = {'PATH': os.environ.get('PATH', ''), 'PYTHONDONTWRITEBYTECODE': '1',
+                'CPT_STUDIO_SECRET_KEY': 'synthetic-settings-check-only'}
+        given = {'CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE': '/run/cpt-studio/anthropic-credentials.env',
+                 'CPT_STUDIO_GEMINI_MODE': 'replay',
+                 'CPT_STUDIO_GEMINI_REPLAY_DIR': '/app/tests/fixtures/interpretation'}
+        for environment, expected in (({}, ('', 'disabled', '')),
+                                      (given, ('/run/cpt-studio/anthropic-credentials.env', 'replay',
+                                               '/app/tests/fixtures/interpretation'))):
+            with self.subTest(environment=sorted(environment)):
+                completed = subprocess.run([sys.executable, '-c', script], cwd=APP, env={**base, **environment},
+                                           capture_output=True, text=True, timeout=60)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(completed.stdout.strip(), repr(expected))
 
 
 # --- the enumerations -------------------------------------------------------------------------------------------------
@@ -369,11 +551,12 @@ K1_RULES = ('scope', 'yield', 'access_outcome', 'cause', 'part_of', 'endoscopic'
 
 def _reasons() -> tuple:
     """FINAL-V2 3.3's reasons in its row order, 3.1's check reasons in row 4 (K1's after G5's), 3.2.3's in row 9 (a
-    qualified verdict that names no qualifier after those that name one): DECISIONS D186."""
+    qualified verdict that names no qualifier after those that name one): DECISIONS D186. AMENDMENT-2 4.3.2 adds
+    slot_overfull to row 4, right after reference_invalid."""
     qualifiers = DESIGN_LISTS[ct.Qualifier]
     return (('contradicted_by_pass1', 'doubt_stated', 'doubt_unclear', 'silent',
              'shape_inconsistent', 'unit_unknown', 'words_not_in_units', 'words_not_bounded', 'units_not_consecutive',
-             'source_too_long', 'anchor_words', 'reference_invalid')
+             'source_too_long', 'anchor_words', 'reference_invalid', 'slot_overfull')
             + tuple(f'geometry_{link}' for link in DESIGN_LISTS[ct.Link])
             + ('section_order', 'section_start_unlocated', 'target_detached', 'inherit_unattached', 'extent_inferred')
             + tuple(f'structure_{rule}' for rule in K1_RULES)
@@ -433,6 +616,25 @@ class EnumTests(SimpleTestCase):
         # lesions, Y1.. anatomy entries; the letter is CardType's own, so a renumbering reads it instead of a copy
         self.assertEqual([card_type.letter for card_type in ct.CardType], ['A', 'X', 'N', 'L', 'Y'])
 
+    def test_slot_overfull_is_row_4s_reason_right_after_reference_invalid_and_integritys(self):
+        # AMENDMENT-2 4.3.2: the reader's item-level finding on every fact of a single-valued slot holding more than
+        # one joins the closed list in row 4, after REFERENCE_INVALID (I4's) and before G1's geometry reasons
+        from studio.interpretation.contract import settle
+
+        members = list(ct.Reason)
+        at = members.index(ct.Reason.SLOT_OVERFULL)
+        self.assertEqual(ct.Reason.SLOT_OVERFULL.value, 'slot_overfull')
+        self.assertEqual(members[at - 1:at + 2],
+                         [ct.Reason.REFERENCE_INVALID, ct.Reason.SLOT_OVERFULL, ct.Reason.GEOMETRY_STATEMENT])
+        self.assertEqual(ct.Reason('slot_overfull'), ct.Reason.SLOT_OVERFULL)
+        # 4.3.5: in none of settle's geometry, literal and consistency tables, so row 4 reads it as integrity's ("an
+        # unforeseen reason fails integrity"), and settle's order puts it where the closed list does
+        self.assertNotIn(ct.Reason.SLOT_OVERFULL,
+                         settle.GEOMETRY_REASONS | settle.LITERAL_REASONS | settle.CONSISTENCY_REASONS)
+        self.assertEqual(settle.ordered({ct.Reason.GEOMETRY_STATEMENT, ct.Reason.SLOT_OVERFULL,
+                                         ct.Reason.REFERENCE_INVALID}),
+                         (ct.Reason.REFERENCE_INVALID, ct.Reason.SLOT_OVERFULL, ct.Reason.GEOMETRY_STATEMENT))
+
 
 # --- the records ------------------------------------------------------------------------------------------------------
 
@@ -480,7 +682,9 @@ FIELDS = {
     et.Id: ('family', 'number'),
     et.IsoDate: ('value', 'precision'),
     et.Cited: ('link', 'units', 'at'),  # DECISIONS D188
-    et.Fact: ('result', 'value', 'state', 'options', 'reasons', 'spans', 'cited', 'inherited_from', 'counter'),  # D188
+    # D188's three fields, then AMENDMENT-2 4.3.3's negated_values
+    et.Fact: ('result', 'value', 'state', 'options', 'reasons', 'spans', 'cited', 'inherited_from', 'counter',
+              'negated_values'),
     et.Anchor: ('units', 'kind_words', 'status_words'),
     et.UnlistedStatement: ('units', 'what', 'kind', 'session'),
     et.FactSet: ('encounter', 'people', 'sections', 'sessions', 'anatomy', 'lesions', 'events', 'anchors', 'unlisted',
@@ -569,7 +773,7 @@ TYPES = {
     et.Cited: {'link': ct.Link, 'units': ct.Span, 'at': ct.Span | None},
     et.Fact: {'result': ct.Result, 'value': _VALUE | None, 'state': ct.FactState | None, 'options': tuple[_VALUE, ...],
               'reasons': tuple[ct.Reason, ...], 'spans': tuple[ct.Span, ...], 'cited': tuple[et.Cited, ...],
-              'inherited_from': et.Id | None, 'counter': tuple[ct.Span, ...]},
+              'inherited_from': et.Id | None, 'counter': tuple[ct.Span, ...], 'negated_values': tuple[_VALUE, ...]},
     et.Anchor: {'units': tuple[ct.Span, ...], 'kind_words': ct.Span | None, 'status_words': ct.Span | None},
     et.UnlistedStatement: {'units': tuple[ct.Span, ...], 'what': ct.UnlistedWhat, 'kind': ct.Kind | None,
                            'session': et.Id | None},
@@ -698,16 +902,45 @@ class RecordTests(SimpleTestCase):
                 self.assertEqual(defined, {cls for cls in FIELDS if cls.__module__ == module.__name__})
 
     def test_an_engine_fact_keeps_its_six_field_constructor(self):
-        # DECISIONS D188 adds cited, inherited_from and counter, each empty by default: 4.1's six-field Fact builds as
-        # before, and the three fields carry what they are given
+        # DECISIONS D188 adds cited, inherited_from and counter, and AMENDMENT-2 4.3.3 negated_values, each empty by
+        # default: 4.1's six-field Fact builds as before, and the four fields carry what they are given
         span, cited = ct.Span(0, 4), et.Cited(ct.Link.STATEMENT, ct.Span(0, 9), None)
         six = et.Fact(ct.Result.SUPPORTED, ct.Performer.DOCUMENTING_TEAM, ct.FactState.SUPPORTED, (), (), (span,))
-        self.assertEqual((six.cited, six.inherited_from, six.counter), ((), None, ()))
+        self.assertEqual((six.cited, six.inherited_from, six.counter, six.negated_values), ((), None, (), ()))
         nine = et.Fact(ct.Result.SUPPORTED, ct.Performer.DOCUMENTING_TEAM, ct.FactState.SUPPORTED, (), (), (span,),
                        (cited,), N2, (ct.Span(5, 9),))
         self.assertEqual((nine.cited, nine.inherited_from, nine.counter), ((cited,), N2, (ct.Span(5, 9),)))
+        self.assertEqual(nine.negated_values, ())
         self.assertNotEqual(nine, six)
         self.assertEqual(dataclasses.replace(nine, cited=(), inherited_from=None, counter=()), six)
+        ten = dataclasses.replace(nine, negated_values=(ct.Performer.OTHER_CLINICIAN,))
+        self.assertEqual(ten.negated_values, (ct.Performer.OTHER_CLINICIAN,))
+        self.assertNotEqual(ten, nine)
+        self.assertEqual(dataclasses.replace(ten, negated_values=()), nine)
+
+    def test_an_overfilled_slot_is_one_fact_holding_its_written_values_and_its_negated_ones(self):
+        # AMENDMENT-2 4.3.3: the one fact an overfilled single-valued slot is read as - unresolved, contradicted, value
+        # None, reason slot_overfull, options every value the slot's facts wrote once each in written order, spans every
+        # written fact's - carries in negated_values the written values whose fact was negated (A-v2's shape: one
+        # supported device, two negated); a reader of what pass 1 stated reads the options less them (4.3.3 b)
+        written = (ct.Device.COLD_SNARE, ct.Device.HOT_SNARE, ct.Device.FORCEPS)
+        spans = (ct.Span(0, 9), ct.Span(10, 19), ct.Span(20, 29))
+        merged = et.Fact(ct.Result.UNRESOLVED, None, ct.FactState.CONTRADICTED, written, (ct.Reason.SLOT_OVERFULL,),
+                         spans, negated_values=written[1:])
+        self.assertEqual((merged.options, merged.negated_values), (written, written[1:]))
+        self.assertEqual(tuple(value for value in merged.options if value not in merged.negated_values),
+                         (ct.Device.COLD_SNARE,))
+        self.assertEqual(merged.reasons, (ct.Reason.SLOT_OVERFULL,))
+        # every written value is supported (A-v6's shape): nothing is negated; a date slot holds its written dates (T9)
+        supported = dataclasses.replace(merged, options=(ct.Landmark.CECUM, ct.Landmark.ILEUM), negated_values=())
+        self.assertEqual(supported.negated_values, ())
+        dates = (et.IsoDate(datetime.date(2026, 11, 2), ct.Precision.DAY),
+                 et.IsoDate(datetime.date(2026, 11, 9), ct.Precision.DAY))
+        dated = dataclasses.replace(merged, options=dates, negated_values=dates[:1])
+        self.assertEqual(dated.negated_values, dates[:1])
+        # frozen as every record field is
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            setattr(merged, 'negated_values', ())
 
     def test_records_construct_and_are_frozen_with_slots(self):
         samples = _samples()

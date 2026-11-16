@@ -8,12 +8,14 @@ every consumer that reads an assessment's stored rows reads them through the rea
   overlay.py's port of the review overlay over completeness['event_coding'], the frozen event inventory for a reviewed
   coverage, and the event coding's sessions for the documented services.
 - DESIGN V2 (docs/gemini-migration/FINAL-V2.md 6.2, 6.5; step 5c of its 8.1): EventReader dispatches by the events
-  version that made a row (``EventReader.branch``). A cpt-studio-events@2 row (READ_ENGINES) is read from event_coding@2
-  and the FactSet of its frozen settled inventory - store.load_v2 at any version pair store.READ_VERSIONS lists, as
-  stored [R:MO-5], then store.textfree_v2 and overlay.reading (engine/facts.effective with the date of service the
-  assessment was made with); a cpt-studio-events@1 row (a test instance's, v1) goes to the V1 branch, labelled
-  legacy_record, read AS STORED and UNREADABLE: revoke only, until it is assessed again; any other events version is
-  UNREADABLE. ``label_of`` labels a v1 row legacy_record, so a v1 row is never read under new_path.
+  version that made a row (``EventReader.branch``). A cpt-studio-events@2 or @3 row (READ_ENGINES; AMENDMENT-2 8.1:
+  @3 is what the engine writes now, @2 a row stored before it, read as stored) is read from its event coding (the
+  overlay's READ_CODINGS) and the FactSet of its frozen settled inventory - store.load_v2 at any version pair
+  store.READ_VERSIONS lists, as stored [R:MO-5], then store.textfree_v2 and overlay.reading (engine/facts.effective
+  with the date of service the assessment was made with); a cpt-studio-events@1 row (a test instance's, v1) goes to
+  the V1 branch, labelled legacy_record, read AS STORED and UNREADABLE: revoke only, until it is assessed again; any
+  other events version is UNREADABLE. ``label_of`` labels a v1 row legacy_record, so a v1 row is never read under
+  new_path.
 - Each refuses the other's rows (WrongReader, a ValueError): a mis-dispatch fails loudly, never quietly reads a record
   with the wrong rules.
 - Each method sets the sentinel's row label for its duration (FINAL 10.3): LegacyReader's executions count as
@@ -61,8 +63,9 @@ SELECTED, EXCLUDED, ALTERNATIVE = 'selected', 'excluded', 'alternative'
 # other events version (a later release's), which it does not read.
 V2, V1, UNKNOWN = 'v2', 'v1', 'unknown'
 # The engine versions whose rows EventReader reads (FINAL-V2 6.2 [R:MO-5], as the adapter and store keep READ_VERSIONS):
-# a later engine version is added here beside the earlier one, never in its place.
-READ_ENGINES = (interpretation.ENGINE_VERSION_V2,)
+# a later engine version is added here beside the earlier one, never in its place - AMENDMENT-2 8.1 [R:replay-R4]: the
+# engine engine/assess writes now (cpt-studio-events@3) beside design v2's first (@2), whose rows are read as stored.
+READ_ENGINES = (interpretation.ENGINE_VERSION_V2, interpretation.ENGINE_VERSION_V3)
 # The context version a v2 assessment is made through (engine/derive.py; FINAL-V2 1.1).
 READ_CONTEXTS = (interpretation.CONTEXT_VERSION_V2,)
 _MISSING = object()
@@ -171,15 +174,16 @@ class EventReader(_Reader):
     """An events-engine assessment's records (FINAL-V2 6.2 and 6.5; step 5c), dispatched by the engine version that made
     them (``branch``):
 
-    - V2 (``READ_ENGINES``: cpt-studio-events@2): read from what the engine stored and the frozen settled inventory -
-      the overlay over completeness['event_coding'] (event_coding@2) and the FactSet of the EventInventory row, read
+    - V2 (``READ_ENGINES``: cpt-studio-events@2 and @3, AMENDMENT-2 8.1): read from what the engine stored and the
+      frozen settled inventory - the overlay over completeness['event_coding'] (its version the row's: overlay
+      READ_CODINGS) and the FactSet of the EventInventory row, read
       through store.load_v2 (every shipped v2 inventory version, store.READ_VERSIONS, as stored [R:MO-5]: a newer
       version never makes an older v2 assessment unreadable) against its revision's text sha256 and both runs' stored
       response bytes, then store.textfree_v2 and overlay.reading (engine/facts.effective with the date of service the
       assessment was made with). Label new_path.
     - V1 (cpt-studio-events@1, a test instance's row; FINAL-V2 6.2): read AS STORED under the label legacy_record -
-      the stored rows as they are, nothing re-read or recomputed (the overlay reads event_coding@2 only, so its every
-      check and question stands) - and UNREADABLE: readiness adds overlay.UNREADABLE_BLOCKER, so only a revoke is
+      the stored rows as they are, nothing re-read or recomputed (the overlay reads design v2's codings only, so its
+      every check and question stands) - and UNREADABLE: readiness adds overlay.UNREADABLE_BLOCKER, so only a revoke is
       allowed and approve, export and a reinstatement's reviewed completeness are refused until it is assessed again.
       A v1 EventInventory row is never read by v2 (store.load_v2 refuses its versions; store._v1_reader is v1's own).
     - any other events version (a later release's row): UNREADABLE, nothing read.
@@ -319,10 +323,13 @@ class EventReader(_Reader):
         try:
             counted = overlay.counted_codes(rows, keys, R)
             # DECISIONS D270 DQ-2: the engine's own competition reads without the codes assess took out of it by an
-            # overlay-bound "Not documented" (overlay.assessed_out, from the stored record), so it reproduces the record
+            # overlay-bound "Not documented" (overlay.assessed_out, from the stored record), and D283 item 3: its ADDON
+            # row without the codes assess left out of its count (overlay.assessed_uncounted, the one derivation from
+            # the stored record), so it reproduces the record
             found = overlay.recount(rows, [item.key for item in counted], engine, coding, R,
                                     retrieval=assessment.retrieval, member=self.member(assessment),
-                                    assessed=overlay.assessed_out(assessment.completeness, rows))
+                                    assessed=overlay.assessed_out(assessment.completeness, rows),
+                                    uncounted=overlay.assessed_uncounted(assessment.completeness, rows))
             # the assessment's own counts: recorded, or derived from what step 5a's completeness records (overlay)
             own = overlay.assessment_counts(completeness, R, rows, retrieval=assessment.retrieval)
             return overlay.reviewed_coverage(completeness, R, counted, reinstated, own,
@@ -411,8 +418,9 @@ class EventReader(_Reader):
             return out
 
     def _sessions(self, assessment: Any) -> Optional[dict[str, dict[str, Any]]]:
-        """{session id: {family, done, incomplete, part_of, acts}} of ``assessment``'s event coding: event_coding@2's
-        sessions, each family as its gi.profiles slug and its reportable acts by their kinds' labels; a v1 row's
+        """{session id: {family, done, incomplete, part_of, acts}} of ``assessment``'s event coding: a design v2
+        coding's sessions (overlay.READ_CODINGS), each family as its gi.profiles slug and its reportable acts by their
+        kinds' labels; a v1 row's
         event_coding@1 sessions as stored (``_v1_coding``); None when the coding cannot be read."""
         if self.branch(assessment) == V1:
             return _v1_coding(assessment.completeness)

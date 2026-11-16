@@ -76,7 +76,8 @@ Slots fields in its Fill.
 
 **D266, D267** (DECISIONS; repair r3c of round w9r - a denial is worded as a denial, and one label and only known words
 in every item): DOUBT words an unlisted DENIAL (``unlisted_what``, which step r4a fills for a carded entry as for one
-with no card), of any kind or none, as a statement that the act was not done (DENIAL_STATED), quoting the denial and
+with no card), of any kind or none, as a statement that the act was not done (D266's DENIAL_STATED; since D281, a
+statement that an act was not done, DENIAL_SCOPE, its bearing on the act not asserted), quoting the denial and
 never saying the document leaves the act in doubt; an ACT there reads as SYNTHETIC_ACT's sentence over the entry's own
 kind. UNLISTED_SCOPE and DOUBT keep a true form with no quote of the examination for a Fill that gives none (step r4a
 quotes it only when that examination is possibly done on the date of service). BUNDLED with a requirement group that
@@ -86,6 +87,26 @@ not established - is worded as possible, "possibly through a pouch or a stoma" (
 established (EXAMINATION_ROUTE), never "the documented stoma" or "the documented pouch" (refute-r4a-r2 F5; D254 rule
 1); step r4a fills it (classes.doubted_routes) and mirrors it in its Fill. customer_api.held_fact_words (step r3c's
 other file) words 'conflict:other' as 'another act' and a procedure-keyed held fact by the item's message.
+
+**D280-D284** (DECISIONS; step f3w of AMENDMENT-2's build round, which owns the whole module by D291 - build list B1,
+B3, B5, B6, B7): two ids are appended and two optional Slots fields; every earlier id, field and constant keeps its
+place. DIGITAL_SCOPE (D280.3) words every hold resting on an examination whose device claims manual without establishing
+it as D258 asks: the held session's examination by its service, quoting its own words (``words``: only an examination
+that may be quoted, never the claimed one), asked whether it is "documented as performed, in full or in part, on the
+date of service" (DONE_IN_PART); the reason quotes the claimed examination's own words (``statements``' first) as a
+statement whose technique CPT Studio could not confirm, and states its open fact - by the held fact's RANK row
+(``held``) and attribute: not established as done on the date of service, its date or its performer not established,
+told only in another role's entry (``owner``), left in doubt, the document's statements about it disagreeing (its sides,
+``statements``' rest), more than one technique stated (``techniques``); with no attribute (a pair whose statement it
+is), whether it is about that examination. Its clarification keeps the held fact's key: fact_key reads it from
+``held`` (one RANK row, one key) and, for a conflict, ``act`` (engine/questions.py, step f3w's, mirrors the id and both
+fields). ADDON (D284, G3-15) words an add-on held by its ADDON row from ``code`` and ``codes`` alone - none of its
+primary codes is counted for this encounter -, quoting nothing and asking no fact of the add-on's act, with a true form
+for no codes. D281: DOUBT words a rule-4 DENIAL as a statement that an act was not done whose bearing on the act
+CPT Studio could not confirm (B5, G3-10), never "states that <the act> was not done"; DOUBT's question about the held
+session's examination (an examination named by its service) and UNLISTED_SCOPE's say row 7's done, DONE_IN_PART (B6,
+G3-27); and ANOTHER_ENTRY names the code's group ("this code accounts for") only for the code's own act, a session's
+examination with no group by the item's act (B3, G1-05 (ii)).
 """
 from __future__ import annotations
 
@@ -102,6 +123,7 @@ from studio.interpretation.contract.types import (Approach, Attribute, Device, E
                                                   SessionKind, Span, Station, Tract, UnlistedWhat)
 from studio.interpretation.engine import anatomy as engine_anatomy
 from studio.interpretation.engine import catalogue as engine_catalogue
+from studio.interpretation.engine import requirements as engine_requirements
 from studio.interpretation.engine.types import ItemKind
 from studio.types import Check, sha256_json
 
@@ -963,6 +985,9 @@ class Message(Enum):
     # D258 and D253 QX (ii) (repair r3c of round w8r): appended, so every earlier member keeps its place
     UNLISTED_SCOPE = 'unlisted_scope'  # 2 Q: a statement naming no procedure session, the held session's examination asked
     ENTEROSCOPY_THROUGH = 'enteroscopy_through'  # 8 Q: ENT's route part, only the anatomy passed through not established
+    # D280.3 and D284 (step f3w of AMENDMENT-2's build round): appended, so every earlier member keeps its place
+    DIGITAL_SCOPE = 'digital_scope'  # Q, the held fact's own key and rank: a claimed digital examination's hold
+    ADDON = 'addon'  # 4 Q: an add-on its ADDON row holds, from codes alone (TEXT_FREE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -993,7 +1018,10 @@ class Slots:
     whose type is not established (engine/classes.doubted_routes) - each worded as possible (ENTEROSCOPY_ROUTE), or as
     not established (EXAMINATION_ROUTE), never as "the documented stoma" or "the documented pouch"; ``approaches`` holds
     the routes it establishes (classes.routes). A route in both is worded as possible: the sentence never states more
-    than the marker allows.
+    than the marker allows. held, techniques (D280.3, step f3w of AMENDMENT-2's build round): the RANK row of the held
+    fact a DIGITAL_SCOPE item rests on - its clarification keeps that fact's key (fact_key: the row's one fact key, or
+    conflict:<act>), and its reason states the open fact the row and ``attribute`` name -, and whether the document
+    states more than one technique for the examination it quotes (an overfilled or contradicted device).
 
     D254 rule 1: a builder refuses only when a slot every item of its message carries by construction is missing
     (MESSAGES' ``needs``, each with its reason in CARRIED); every other slot has a form for its absence.
@@ -1037,6 +1065,8 @@ class Slots:
     whole_family: SessionKind | None = None
     whole_possible: bool = False
     possible_approaches: tuple[Approach, ...] = ()
+    held: engine_requirements.Rank | None = None
+    techniques: bool = False
 
     def __post_init__(self) -> None:
         for field in fields(self):
@@ -1080,6 +1110,7 @@ _SLOT_TYPES: Mapping[str, tuple[object, bool]] = MappingProxyType({
     'listed': (Kind, True), 'possible': (Kind, True), 'codes': (str, True), 'both': (bool, False),
     'attribute': (Attribute, False), 'unlisted_what': (UnlistedWhat, False), 'unlisted_kind': (Kind, False),
     'whole_family': (SessionKind, False), 'whole_possible': (bool, False), 'possible_approaches': (Approach, True),
+    'held': (engine_requirements.Rank, False), 'techniques': (bool, False),
 })
 # The Slots fields that hold spans: a message that needs one needs words at it, not only a span.
 _SPAN_FIELDS = frozenset({'lesion', 'words', 'whole_words', 'approach_words'})
@@ -1286,19 +1317,32 @@ def _doubt(s: Slots, text: str) -> tuple[str, str]:
 
     D266 (repair r3c of round w9r; refute-r3c-r1 F3): the reason words the unlisted entry the hold rests on by its own
     nature (``unlisted_what``, which step r4a fills for a carded entry as for one with no card). A DENIAL - carded or
-    not, of any kind or none - is a statement that the act was not done (DENIAL_STATED), quoting the denial: its first
-    statement with units, never the act's own sentence, which states the act; with none, nothing is quoted. It is never
-    said to leave the act in doubt. An ACT (no Fill gives DOUBT one: step r4a words 3.2.6 rule 3's synthetic act by
-    SYNTHETIC_ACT) is SYNTHETIC_ACT's sentence over the entry's own kind (``unlisted_kind``) and statement, never "in
-    doubt" (D246). A DOUBT, or no entry named, reads as before. The question is v1's in every case: whether the act was
-    done (D266's first half: the act's own sentence is quoted only when the Fill gives it)."""
+    not, of any kind or none - is a statement that an act was not done (DENIAL_SCOPE, D281 below), quoting the denial:
+    its first statement with units, never the act's own sentence, which states the act; with none, nothing is quoted.
+    It is never said to leave the act in doubt. An ACT (no Fill gives DOUBT one: step r4a words 3.2.6 rule 3's
+    synthetic act by SYNTHETIC_ACT) is SYNTHETIC_ACT's sentence over the entry's own kind (``unlisted_kind``) and
+    statement, never "in doubt" (D246). A DOUBT, or no entry named, reads as before. The question is v1's in every case: whether the act was
+    done (D266's first half: the act's own sentence is quoted only when the Fill gives it).
+
+    D281 (step f3w; build list B5, G3-10): every DOUBT whose entry is a DENIAL comes from 3.2.6 rule 4's pair, unresolved
+    statement_scope by construction, so its reason never asserts the denial's scope: "The document states “<denial>”, a
+    statement that an act was not done (DENIAL_SCOPE); CPT Studio could not confirm from the document whether it is about
+    <the act>." - with no statement units, "The document states that an act was not done; ...". Never "states that <the
+    act> was not done", and never "leaves ... in doubt". And (B6, G3-27) where the question asks whether the held
+    session's examination was done - the act an examination named by its service (``family`` given) - it says row 7's
+    done: "is documented as performed, in full or in part, on the date of service" (DONE_IN_PART), true of a begun
+    examination too; every other act keeps v1's question."""
     act = the_act(text, s)
     words = _words(s, text, 'doubt')
-    question = f'Confirm whether {act}{_shown(words)} was done on the date of service.'
+    if s.act is Kind.EXAMINATION and s.family is not None:  # the held session's examination (B6): row 7's done
+        question = f'Confirm whether {act}{_shown(words)} is {DONE_IN_PART}.'
+    else:
+        question = f'Confirm whether {act}{_shown(words)} was done on the date of service.'
     stated = next(iter(_sides(text, s.statements, 'doubt')), '')
-    if s.unlisted_what is UnlistedWhat.DENIAL:
-        denied = DENIAL_STATED.format(act=act)
-        return question, (f'The document {denied}: {quote(stated, 140)}.' if stated else f'The document {denied}.')
+    if s.unlisted_what is UnlistedWhat.DENIAL:  # B5: a statement that an act was not done, its scope not asserted
+        about = f'CPT Studio could not confirm from the document whether it is about {act}'
+        return question, (f'The document states {quote(stated, 140)}, {DENIAL_SCOPE}; {about}.' if stated
+                          else f'The document states that an act was not done; {about}.')
     if s.unlisted_what is UnlistedWhat.ACT:
         kind = _a(kind_words(s.unlisted_kind), named_kind(s.unlisted_kind))
         return question, f'The document documents {kind}{_shown(stated, 140)}, {SYNTHETIC_UNACCOUNTED}.'
@@ -1308,9 +1352,13 @@ def _doubt(s: Slots, text: str) -> tuple[str, str]:
     return question, reason
 
 
-# D266 (repair r3c of round w9r): what DOUBT's reason says an unlisted denial states - the act not done, the act with
-# its article (the_act: 'the snare removal', or NO_KIND_LABEL alone); UNLISTED_STATED's DENIAL row, said of the act
-DENIAL_STATED = 'states that {act} was not done'
+# D281 (step f3w; build list B5, G3-10), replacing D266's DENIAL_STATED ('states that {act} was not done', untrue of a
+# rule-4 denial whose scope is unresolved): what DOUBT's reason calls an unlisted denial - a statement that AN act was not
+# done; which act it is about is the open fact the reason states after it
+DENIAL_SCOPE = 'a statement that an act was not done'
+# D281 (B6, G3-27): row 7's done, as a question about the held session's examination says it (a begun examination is
+# done for row 7: evaluate._done_rows, combination.session_done) - UNLISTED_SCOPE, the session's DOUBT and DIGITAL_SCOPE
+DONE_IN_PART = 'documented as performed, in full or in part, on the date of service'
 
 
 def _scope(s: Slots, text: str) -> tuple[str, str]:
@@ -1400,16 +1448,22 @@ OTHER_ENTRY = "an entry other than the physician's note"
 def _another_entry(s: Slots, text: str) -> tuple[str, str]:
     """events.another_role_hold's question and detail (copied), its entry named by the owner of the part that tells
     the act (OTHER_ENTRY when no other role is given); the detail's opening clause (the session's acts listed) is left
-    out; the group's acts, else the act."""
+    out; the group's acts, else the act. D281 (step f3w; build list B3, G1-05 (ii)): the code's group, "this code
+    accounts for", only for the code's own act (row 5); a session's examination the code's group does not name (row 7:
+    the examination told only in another role's entry, read on another act's row) is named by the item's act, never as
+    what this code accounts for - "The colonoscopy is documented only in the nursing entry (...)". Keyed on that row-7
+    case alone, so the code's own act of a kind not established keeps its group's name."""
     entry = OWNER_ENTRIES.get(s.owner, OTHER_ENTRY) if s.owner is not None else OTHER_ENTRY
     name = service_phrase(s.family)
-    group = group_phrase(s)
+    own = not (s.act is Kind.EXAMINATION and Kind.EXAMINATION not in s.group)  # B3: the code's own act (row 5)
+    group = group_phrase(s) if own else ''
+    accounts = ' this code accounts for' if own else ''
     what = f'the {group}' if group else the_act(text, s)
     passage = _shown(_words(s, text, 'another_entry'))
     return (f'{_capital(what)} is documented only in {entry}{passage}. Was it performed in this {name} on the date of '
             'service?',
-            f'{_capital(what)} this code accounts for is documented only in {entry}{passage}, not by the physician '
-            f'performing the {name}. {HELD}')
+            f'{_capital(what)}{accounts} is documented only in {entry}{passage}, not by the physician performing the '
+            f'{name}. {HELD}')
 
 
 def _time(s: Slots, text: str) -> tuple[str, str]:
@@ -2419,10 +2473,11 @@ def _unlisted_scope(s: Slots, text: str) -> tuple[str, str]:
     sentence (``words``), and asks whether it is documented as done on the date of service - a member's "documented"
     releases, "not documented" excludes; the reason quotes the statement (``statements``) and says it names no
     procedure session. It never says the document leaves that examination in doubt or denies it, and it names no nature
-    of the statement (a doubt, a denial). With no statement of units, the statement is named, not quoted."""
-    service = SESSION_SERVICES.get(s.family) if s.family is not None else None
-    noun = kind_label(service) if service else (SESSION_NOUNS.get(s.family, 'examination') if s.family is not None
-                                                else 'examination')
+    of the statement (a doubt, a denial). With no statement of units, the statement is named, not quoted. D281 (step
+    f3w; build list B6, G3-27): "documented as done" says row 7's done, "documented as performed, in full or in part, on
+    the date of service" (DONE_IN_PART), so a member asked about a begun examination never answers "Not documented"
+    truthfully."""
+    noun = _session_noun(s)
     words = _words(s, text, 'unlisted_scope')
     said = _sides(text, s.statements, 'unlisted_scope')
     if not said:
@@ -2434,8 +2489,109 @@ def _unlisted_scope(s: Slots, text: str) -> tuple[str, str]:
     else:
         stated = f'The document states {join([quote(item, 140) for item in said])}, which name no procedure session'
         about = 'they are'
-    return (f'Is the {noun}{_shown(words)} documented as done on the date of service?',
+    return (f'Is the {noun}{_shown(words)} {DONE_IN_PART}?',
             f'{stated}; CPT Studio could not confirm from the document whether {about} about the {noun}. {HELD}')
+
+
+def _session_noun(s: Slots) -> str:
+    """The held session's examination as UNLISTED_SCOPE and DIGITAL_SCOPE name it: its service (``family``), a visit for
+    an E/M of another setting (SESSION_NOUNS), else 'examination' (no family given: any session's)."""
+    service = SESSION_SERVICES.get(s.family) if s.family is not None else None
+    if service:
+        return kind_label(service)
+    return SESSION_NOUNS.get(s.family, 'examination') if s.family is not None else 'examination'
+
+
+# --- D280.3 and D284 (step f3w of AMENDMENT-2's build round; build list B1, B7) --------------------------------------
+
+DIGITAL_UNCONFIRMED = 'a statement whose technique CPT Studio could not confirm from the document'
+DIGITAL_TECHNIQUES = ' (the document states more than one technique for it)'
+
+
+def _digital_open(s: Slots, noun: str, sides: Sequence[str]) -> str:
+    """DIGITAL_SCOPE's open fact (D280.3), said of the claimed examination ("it"): with no ``attribute`` - a pair whose
+    statement it is - whether it is about the held session's examination (D258's clause); else by the held fact's RANK
+    row (``held``) and attribute: a conflict its sides (or, with one side or none, that the document is not consistent
+    about that attribute), a doubt "left in doubt", another role's entry (``owner``; whose entry, when none is given), its
+    date, its performer; at any other row the procedure it was done in or what was done when its session or its kind is
+    the attribute, "not established as done on the date of service" for its status, else D258's clause. Each true for
+    every state its slots allow."""
+    rank, attribute = s.held, s.attribute
+    about = f'CPT Studio could not confirm from the document whether it is about the {noun}'
+    if attribute is None:
+        return about
+    if rank is engine_requirements.Rank.CONFLICT:
+        what = _ATTRIBUTE_FORMS[attribute].format(act='it', session=session_label(s))
+        if len(sides) > 1:
+            return f'statements in the document disagree about {what} ({"; ".join(quote(item, 140) for item in sides)})'
+        if sides:
+            return f'the document is not consistent about {what} ({quote(sides[0], 140)})'
+        return f'the document is not consistent about {what}'
+    if rank is engine_requirements.Rank.DOUBT:
+        return 'the document leaves it in doubt'
+    if rank is engine_requirements.Rank.ENTRY:
+        entry = OWNER_ENTRIES.get(s.owner) if s.owner is not None else None
+        if entry:
+            return f'it is told only in {entry}'
+        return 'CPT Studio could not confirm from the document whose entry it is told in'
+    if rank is engine_requirements.Rank.TIME:
+        return 'CPT Studio could not confirm from the document when it was done'
+    if rank is engine_requirements.Rank.PERFORMER:
+        return 'CPT Studio could not confirm from the document who performed it'
+    if attribute is Attribute.SESSION:
+        return 'CPT Studio could not confirm from the document in which procedure it was done'
+    if attribute is Attribute.KIND:
+        return 'CPT Studio could not confirm from the document what was done'
+    if rank is engine_requirements.Rank.STATUS:
+        return 'it is not established as done on the date of service'
+    return about
+
+
+def _digital_scope(s: Slots, text: str) -> tuple[str, str]:
+    """DECISIONS D280.3 (build list B1): a hold resting on an examination whose device claims manual without establishing
+    it, asked as D258 asks. The question names the held session's examination by its service (``family``; 'examination'
+    when none is given) and asks whether it is documented as performed, in full or in part, on the date of service
+    (DONE_IN_PART), quoting only ``words`` - the session's examination that may be quoted, never the claimed one. The
+    reason quotes the claimed examination's own words (``statements``' first) as a statement whose technique CPT Studio
+    could not confirm (with ``techniques``, that the document states more than one), and states its open fact
+    (``_digital_open``; a conflict's sides are ``statements``' rest, each quoted once). It never asks about the claimed
+    examination itself - a truthful "Not documented" about it would exclude the code (D258) - and never names it by the
+    session's service. With no statement units, it is named, not quoted."""
+    noun = _session_noun(s)
+    words = _words(s, text, 'digital_scope')
+    first = next(iter(_sides(text, s.statements[:1], 'digital_scope')), '')
+    sides = _sides(text, s.statements[1:], 'digital_scope')  # a conflict's sides, the claimed one's own among them
+    if sides == [' '.join(first.split())]:  # its one side is the statement already quoted: quoted once
+        sides = []
+    techniques = DIGITAL_TECHNIQUES if s.techniques else ''
+    stated = (f'The document states {quote(first, 140)}, {DIGITAL_UNCONFIRMED}{techniques}' if first else
+              f'A statement in the document names an examination whose technique CPT Studio could not confirm from '
+              f'the document{techniques}')
+    return (f'Is the {noun}{_shown(words)} {DONE_IN_PART}?', f'{stated}; {_digital_open(s, noun, sides)}. {HELD}')
+
+
+def _or_codes(codes: Sequence[str]) -> str:
+    """Codes joined by 'or' (one of them is what an add-on needs)."""
+    return codes[0] if len(codes) == 1 else ', '.join(codes[:-1]) + ' or ' + codes[-1]
+
+
+def _addon(s: Slots, text: str) -> tuple[str, str]:
+    """DECISIONS D284 (G3-15; build list B7): an add-on code its ADDON row holds - none of its primary codes is counted
+    for this encounter - from ``code`` and ``codes`` alone (TEXT_FREE: it reads no document text, quotes nothing and asks
+    no fact of the add-on's act), true whether no primary was proposed, the reviewer rejected it or a member's answer
+    excluded it. ``codes``: its primary codes (engine/assess.primaries); with none given, "a primary code" (D254 rule 1's
+    true absence form). A member's "Not documented" says that none is documented, which is what it excludes on."""
+    codes = tuple(dict.fromkeys(s.codes))
+    if codes:
+        primary = f'one of its primary codes ({_or_codes(codes)}), and none of them'
+        asked = 'Is one of them'
+    else:
+        primary = 'a primary code, and none'
+        asked = 'Is one'
+    return (f'{s.code} is reported only together with {primary} is counted for this encounter. {asked} documented as '
+            'performed on the date of service?',
+            f'{s.code} is an add-on code: it is reported only together with {primary} is counted for this encounter. '
+            f'{HELD}')
 
 
 _Q, _E = ItemKind.QUESTION, ItemKind.EXPLANATION
@@ -2457,13 +2613,17 @@ CARRIED: Mapping[str, str] = MappingProxyType({
               'label, recognised_only)',
     'act': "a conflict's fact key is conflict:<kind> (questions.fact_of finds a kind in every conflict key) and "
            "questions._specific sets Fill.act to that kind (_conflict_kind; the examination for a session's attribute) - "
-           'the conflict items, whose fact key fact_key builds from it',
+           'the conflict items, whose fact key fact_key builds from it; and digital_scope, whose Fill.act '
+           "questions._digital_fill always sets (the held conflict's kind, else the examination)",
     'attribute': 'questions.message_of gives conflict_attribute only for a held fact whose attribute is set (and item '
                  "turns a conflict_fact into it only then); questions._specific copies held.attribute",
     'unlisted_what': 'questions._refined gives unlisted_evidence only for a held fact in raised.evidence, and '
                      "questions._specific copies that entry's what (UnlistedStatement.what is required)",
     'exam_class': "questions.message_of gives examination_route and examination_approach only when the code's EUS class "
                   'is the stoma class (_stoma_route), and Fill.exam_class is CodeFacts.exam_class',
+    'held': "questions._refined gives digital_scope only for a held fact resting on a claimed digital examination, and "
+            "questions._digital_fill sets Fill.held to that held fact's RANK row (every held fact a rule raises on an "
+            'examination or a pair carries one) and Fill.act to its conflict kind, else the examination (D280.3)',
 })
 
 # Every message id's entry (FINAL-V2 4.8's RANK rows; 4.3's unmet and established-otherwise columns). ``needs`` (D254 rule
@@ -2537,13 +2697,25 @@ MESSAGES: Mapping[Message, MessageSpec] = MappingProxyType({
     # D258 and D253 QX (ii) (repair r3c of round w8r)
     Message.UNLISTED_SCOPE: _spec('performed_status', _Q, 2, (), _unlisted_scope),
     Message.ENTEROSCOPY_THROUGH: _spec('procedure', _Q, 8, ('code',), _enteroscopy_through),
+    # D280.3 and D284 (step f3w): DIGITAL_SCOPE's row is D258's (performed_status, rank 2, a question), the shape it is
+    # asked in; its clarification keeps the HELD fact's key and rank (fact_key reads ``held`` and ``act``)
+    Message.DIGITAL_SCOPE: _spec('performed_status', _Q, 2, ('held', 'act'), _digital_scope),
+    Message.ADDON: _spec('performed_status', _Q, 4, ('code',), _addon),
 })
 
 
 def fact_key(message: Message, slots: Slots) -> str:
     """The questions.FORM fact key of ``message``'s item: conflict:<the act's kind> for a conflict (RANK's rank 1),
-    else MESSAGES' fact."""
+    else MESSAGES' fact. DIGITAL_SCOPE (D280.3: "the clarification keeps the held fact's key; a message may take its key
+    from the item") takes the held fact's: its RANK row's fact key (``held``; RANK names one for each row a
+    DIGITAL_SCOPE item rests on - the first for a row of several), conflict:<act> for the conflict row."""
     spec = MESSAGES[message]
+    if message is Message.DIGITAL_SCOPE:
+        rank = _req(slots.held, 'held')
+        key = engine_requirements.RANK[rank][0]
+        if key is engine_requirements.FactKey.CONFLICT:
+            return f'conflict:{_req(slots.act, "act").value}'
+        return str(key.value)
     return f'conflict:{_req(slots.act, "act").value}' if spec.fact == 'conflict' else spec.fact
 
 

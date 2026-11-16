@@ -1,8 +1,23 @@
 """Whether pass 1's own values can hold together (docs/gemini-migration/FINAL-V2.md 3.1 rows K1-K8, L1 and Q1, as
-REFUTATIONS-V2 revised them [R:HO-7][R:HO-9][R:MO-5]; step 2b of 8.1): the consistency of values (K1-K8), the date
-literal in a date's or a timing fact's own words (L1), and the qualifiers pass 1 reported (Q1). ``check`` runs them
-all over one answer read by contract/extract_read.py (step 1b); ``rejudge`` re-judges L1's stored literals at assess
-and read time.
+REFUTATIONS-V2 revised them [R:HO-7][R:HO-9][R:MO-5]; step 2b of 8.1; AMENDMENT-2 4.3.3 [R:truth-T3][R:truth-T9], step
+f3s): the consistency of values (K1-K8), the date literal in a date's or a timing fact's own words (L1), and the
+qualifiers pass 1 reported (Q1). ``check`` runs them all over one answer read by contract/extract_read.py (step 1b);
+``rejudge`` re-judges L1's stored literals at assess and read time.
+
+**Slots are read as a single-valued attribute is read** (AMENDMENT-2 4.3.3): _Answer.one gives extract_read.merged's
+view - for a slot holding more than one fact (read under gemini-events@3), ONE contradicted fact whose options are every
+written value, never its first written fact - and every K rule and L1 FIRES FOR EACH VALUE a slot's fact states or
+offers wherever its firing demotes another fact: its supported value, each side of pass 1's own contradiction, each
+value an overfilled slot's written facts that are not negated write, and for a rule reading two slots every combination
+(``_offered``; K1's status against timing, K2's arms, K3, K4's type and organ, K5's performer, person, role and
+documenting clinician, K7's role, L1's relations; an overfilled date has L1 run on each written date, and an act's date
+relation is judged with the words of every date its slot states or offers, ``_dates_read``). A rule that
+fires on an ABSENCE (no established value) reads the established value alone (``_value``), which the merged view never
+is - so it fires. K2's examination-link arm, which fires when the examination's session does NOT name the session,
+counts a session as named only when every written fact states it (``_names``: never a contradiction, never a denied
+value). So the merged view is never weaker than one of its written facts read alone, for any rule (4.4), and offering
+more values only demotes more (D178: every check only demotes). A finding on the merged view lands on every written
+fact of the slot (ReadFact.keys).
 
 **What a finding does, and never does** (3.1 "What a failure does", 3.4). Every finding names one fact of pass 1's
 answer (by extract_read.FactKey: a fact, or a member of a statement's scope list) and a closed-list reason (a
@@ -54,10 +69,13 @@ readings of waves 1 and 2, or in the ruling named beside it):
   (``date_literals.compare``; DECISIONS D193, with 3.8 probe (b) and v1's D54): on_date_of_service, a day equal to it,
   or a month or a year containing it; earlier_date, a literal that ends before it; later_date, one that starts after
   it. The timing facts are a section's occasion, an event's own date_relation (read with the words of its own ``date``
-  too), and the EFFECTIVE date relation of an event that has none of its own but has a supported ``date`` (1.5: the
-  occasion of the section its anchor lies in, through ``containing``), read with the occasion's words and the event's
-  own date's. That finding is keyed on the event's own date_relation slot, never on the section's fact (D193). Only a
-  SUPPORTED ``date`` is read into a relation: a negated date is no evidence of when the act was done. At claim time the
+  too), and the EFFECTIVE date relation of an event that has none of its own but whose ``date`` slot states or offers
+  a date (1.5: the occasion of the section its anchor lies in, through ``containing``), read with the occasion's words
+  and the event's own date's. That finding is keyed on the event's own date_relation slot, never on the section's fact
+  (D193). Every date the slot states or offers is read into a relation - a supported one, each side of pass 1's own
+  contradiction, each written date of an overfilled slot that is not negated (AMENDMENT-2 4.3.3 [R:truth-T3]
+  [R:truth-T9]; ``_dates_read``) - so the relation fails when any of them, read with it alone, would; a negated date is
+  no evidence of when the act was done, and its words are never read. At claim time the
   reference is the document's own date of service, pass 1's stated value when its own literal passes, never a member
   value, and a literal that meets no document date stops nothing [R:MO-5]. ``rejudge`` re-judges the stored literals at
   assess and read time against the effective date (member precedence is dates.py's), with no text, and can only add
@@ -81,7 +99,8 @@ values, ids, states, links and the doubts' attributes. The one text this module 
 own located words, which only contract/date_literals.py's parsers read (the one text module WordsNeverDecide lets
 consistency import); it calls no string method, holds no word, phrase, marker or frame list (every module-level
 collection holds enumeration members), and imports no regular-expression module itself. Versions: the checks belong to
-INVENTORY_VERSION_V2 (gemini-inventory@2): a changed rule re-settles stored pass-1 bytes (1.1, 2.5).
+the inventory version (gemini-inventory@3 since AMENDMENT-2's stated-or-offered reading): a changed rule re-settles
+stored pass-1 bytes (1.1, 2.5).
 """
 from __future__ import annotations
 
@@ -94,7 +113,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from studio.interpretation.contract import date_literals
 from studio.interpretation.contract import extract_schema as xs
-from studio.interpretation.contract.extract_read import DateOfService, FactKey, ReadAnswer
+from studio.interpretation.contract.extract_read import DateOfService, FactKey, ReadAnswer, ReadFact, merged
 from studio.interpretation.contract.types import (AnatomyType, Attribute, Breadth, DateRelation, DateState, DoubtBasis,
                                                   Extent, Fact, FactState, Kind, Landmark, Link, Owner, Performer,
                                                   PersonRole, Precision, Purpose, Qualifier, Reason, SectionRole,
@@ -188,8 +207,9 @@ class Findings:
     (session_inconsistent, session_conflict, session_unreachable, anatomy_conflict, person_conflict,
     instrument_conflict, frame_role). literal: L1's reasons at claim time (literal_mismatch). literals: the date
     literals L1 read in each date and timing fact's words, stored so that assess and read time re-judge them with no
-    text (``rejudge``; types.Checks.literals); for an event with no date relation of its own and a supported date, its
-    section's occasion literals and its own date's, under its own date_relation key (DECISIONS D193). qualified: Q1's
+    text (``rejudge``; types.Checks.literals); for an event with no date relation of its own whose date slot states or
+    offers a date, its section's occasion literals and those of every date its slot states or offers, under its own
+    date_relation key (DECISIONS D193; AMENDMENT-2 4.3.3). qualified: Q1's
     reasons. joined: K8's groups. document_date: the claim-time reference date, pass 1's stated date of service when
     its own literal passed, else None."""
     structure: Mapping[FactKey, tuple[Reason, ...]]
@@ -250,6 +270,7 @@ class _Answer:
             for family in Family if family is not Family.ENCOUNTER}
         self.dos: tuple[FactKey, DateOfService] | None = None
         self._facts: dict[tuple[xs.Family, str, Attribute], list[Found]] = {}
+        self._read: dict[tuple[xs.Family, str, Attribute], list[ReadFact]] = {}
         self._members: dict[tuple[xs.Family, str, Attribute], list[tuple[FactKey, str]]] = {}
         self.order: dict[FactKey, int] = {}
         for item in answer.facts:
@@ -259,6 +280,7 @@ class _Answer:
             else:
                 self._facts.setdefault((item.key.family, item.key.object, item.key.attribute), []).append(
                     (item.key, item.fact))
+                self._read.setdefault((item.key.family, item.key.object, item.key.attribute), []).append(item)
         for member in answer.members:
             self.order[member.key] = len(self.order)
             self._members.setdefault((member.key.family, member.key.object, member.key.attribute), []).append(
@@ -268,10 +290,13 @@ class _Answer:
         """Every fact of that object's attribute (a FACT or a slot: at most one; a list: in its order)."""
         return self._facts.get((family, object_id, attribute), [])
 
-    def one(self, family: xs.Family, object_id: str, attribute: Attribute) -> Found | None:
-        """The fact of a FACT or a slot, None when the slot is silent."""
-        found = self.facts(family, object_id, attribute)
-        return found[0] if found else None
+    def one(self, family: xs.Family, object_id: str, attribute: Attribute) -> ReadFact | None:
+        """The fact of a FACT or a slot as a reader of a single-valued attribute reads it (extract_read.merged,
+        AMENDMENT-2 4.3.3): None when the slot is silent; for a slot holding more than one fact, the MERGED VIEW - state
+        contradicted, every written value an option, its written facts kept (ReadFact.keys: a finding on it lands on
+        every fact of the slot; stated_values and asserted_values: what it states or offers) - never its first written
+        fact."""
+        return merged(self._read.get((family, object_id, attribute), []))
 
     def members(self, family: xs.Family, object_id: str, attribute: Attribute) -> list[tuple[FactKey, str]]:
         """The members of a statement's scope list, with their keys."""
@@ -294,37 +319,57 @@ def _member(enumeration: type[_E], value: str) -> _E | None:
     return None
 
 
-def _value(found: Found | None, enumeration: type[_E]) -> _E | None:
-    """The member a SUPPORTED fact holds, None for a silent slot or any other state."""
-    if found is None or found[1].state is not FactState.SUPPORTED:
+def _fact(found: ReadFact) -> Fact:
+    """A read slot's fact (the date of service is never read through _Answer.one: it is _Answer.dos)."""
+    if not isinstance(found.fact, Fact):
+        raise TypeError('The date of service is read as _Answer.dos, never as a slot.')
+    return found.fact
+
+
+def _value(found: ReadFact | None, enumeration: type[_E]) -> _E | None:
+    """The member a SUPPORTED fact holds, None for a silent slot or any other state (the merged view of an overfilled
+    slot is contradicted, so it holds none). Read only where a rule fires on an ABSENCE (no established value: the
+    reading that fires most) or demotes the fact it reads; a rule whose firing demotes another fact reads _offered."""
+    if found is None or _fact(found).state is not FactState.SUPPORTED:
         return None
-    return _member(enumeration, found[1].value)
+    return _member(enumeration, _fact(found).value)
 
 
-def _id(found: Found | None) -> str | None:
-    """The id a SUPPORTED fact names, None otherwise."""
-    if found is None or found[1].state is not FactState.SUPPORTED or found[1].value == '':
+def _id(found: ReadFact | None) -> str | None:
+    """The id a SUPPORTED fact names, None otherwise (read as _value is)."""
+    if found is None or _fact(found).state is not FactState.SUPPORTED or _fact(found).value == '':
         return None
-    return found[1].value
+    return _fact(found).value
 
 
-def _states_or_offers(found: Found | None, enumeration: type[_E], members: frozenset[_E]) -> bool:
-    """Whether a fact states one of ``members`` (supported) or offers one as a side of a contradiction."""
+def _offered(found: ReadFact | None, enumeration: type[_E]) -> tuple[_E, ...]:
+    """Each member a fact states or offers, as every K rule and L1 read it wherever their firing demotes another fact
+    (AMENDMENT-2 4.3.3 [R:truth-T3]): a supported fact's value, each side of pass 1's own contradiction, each value an
+    overfilled slot's supported or contradicted written facts write (ReadFact.asserted_values: a value only negated
+    facts write is never stated, and one a written fact states fires the rule even if another denies it - firing only
+    demotes); () for a silent slot or a negated fact."""
     if found is None:
-        return False
-    fact = found[1]
-    if fact.state is FactState.SUPPORTED:
-        return _member(enumeration, fact.value) in members
-    if fact.state is FactState.CONTRADICTED:
-        return any(_member(enumeration, option.value) in members for option in fact.options)
-    return False
+        return ()
+    members = (_member(enumeration, value) for value in found.asserted_values)
+    return tuple(member for member in members if member is not None)
+
+
+def _offered_ids(found: ReadFact | None) -> tuple[str, ...]:
+    """Each id a fact states or offers, read as _offered reads a member."""
+    return () if found is None else found.asserted_values
+
+
+def _states_or_offers(found: ReadFact | None, enumeration: type[_E], members: frozenset[_E]) -> bool:
+    """Whether a fact states one of ``members`` (supported), offers one as a side of a contradiction, or - the merged
+    view of an overfilled slot - writes one in a fact that is not negated (_offered)."""
+    return any(member in members for member in _offered(found, enumeration))
 
 
 def _statement(answer: _Answer, event_id: str) -> bool:
     """K1's statement: an event whose status pass 1 stated negated, or which a well-formed doubt of basis stated names
     for its status (1.3: "the document itself states doubt")."""
     status = answer.one(Family.EVENT, event_id, A.STATUS)
-    if status is not None and status[1].state is FactState.NEGATED:
+    if status is not None and _fact(status).state is FactState.NEGATED:
         return True
     return any(not doubt.malformed and doubt.doubt.basis is DoubtBasis.STATED
                and (Family.EVENT, event_id) in doubt.objects and A.STATUS in doubt.named(Family.EVENT)
@@ -335,7 +380,7 @@ def _act_class(answer: _Answer, event_id: str) -> bool:
     """CLAIMED's act class (3.2.1): an event whose status pass 1 did not state negated, the examination included; an
     event whose status it stated negated is a statement."""
     status = answer.one(Family.EVENT, event_id, A.STATUS)
-    return status is None or status[1].state is not FactState.NEGATED
+    return status is None or _fact(status).state is not FactState.NEGATED
 
 
 def _act(answer: _Answer, event_id: str) -> bool:
@@ -432,7 +477,6 @@ def _k1_event(answer: _Answer, vocabulary: Vocabulary, event_id: str, out: _Out)
     kind_found = answer.one(Family.EVENT, event_id, A.KIND)
     kind = _value(kind_found, Kind)
     status_found = answer.one(Family.EVENT, event_id, A.STATUS)
-    status = _value(status_found, Status)
     breadth_found = answer.one(Family.EVENT, event_id, A.SCOPE_BREADTH)
     scope = keys(A.SCOPE_BREADTH) + [key for attribute in _SCOPE_LISTS
                                      for key, _ in answer.members(Family.EVENT, event_id, attribute)]
@@ -446,8 +490,8 @@ def _k1_event(answer: _Answer, vocabulary: Vocabulary, event_id: str, out: _Out)
                                                 Purpose) is not Purpose.HEMOSTASIS:
         out.rule(keys(A.CAUSE, A.CAUSE_EVENT), Structure.CAUSE)
     part_of, relation = answer.one(Family.EVENT, event_id, A.PART_OF), keys(A.PART_RELATION)
-    if part_of is not None and not relation and part_of[1].state is not FactState.NEGATED:
-        out.rule([part_of[0]], Structure.PART_OF)  # a negated part_of is a separate act (1.6): no relation needed
+    if part_of is not None and not relation and _fact(part_of).state is not FactState.NEGATED:
+        out.rule(part_of.keys, Structure.PART_OF)  # a negated part_of is a separate act (1.6): no relation needed
     if relation and part_of is None:
         out.rule(relation, Structure.PART_OF)
     if keys(*_VISIT_FACTS) and kind is not Kind.EM_VISIT:
@@ -455,18 +499,19 @@ def _k1_event(answer: _Answer, vocabulary: Vocabulary, event_id: str, out: _Out)
     if keys(A.OTHER_CLASS) and kind is not Kind.OTHER:
         out.rule(keys(A.OTHER_CLASS), Structure.OTHER_CLASS)
     timing = answer.one(Family.EVENT, event_id, A.DATE_RELATION)
-    relation_value = _value(timing, DateRelation)
-    if timing is not None and status_found is not None and (
-            (status in _POSITIVE and relation_value is DateRelation.LATER_DATE)
-            or (status is Status.PLANNED and relation_value is DateRelation.EARLIER_DATE)):
-        out.rule([status_found[0], timing[0]], Structure.STATUS_TIME)
+    # status against timing demotes both, so it fires on every value either states or offers ([R:truth-T3])
+    if timing is not None and status_found is not None and any(
+            (stated in _POSITIVE and relation is DateRelation.LATER_DATE)
+            or (stated is Status.PLANNED and relation is DateRelation.EARLIER_DATE)
+            for stated in _offered(status_found, Status) for relation in _offered(timing, DateRelation)):
+        out.rule([*status_found.keys, *timing.keys], Structure.STATUS_TIME)
     breadth = _value(breadth_found, Breadth)
     if breadth_found is not None and breadth is not None:
         rule = _breadth_rule(answer, vocabulary, event_id, kind, breadth)
         if rule is not None:
-            out.rule([breadth_found[0]], rule)
+            out.rule(breadth_found.keys, rule)
     if kind_found is not None and kind is Kind.INTERVENTION and not statement:
-        out.rule([kind_found[0]], Structure.UMBRELLA)
+        out.rule(kind_found.keys, Structure.UMBRELLA)
 
 
 def _breadth_rule(answer: _Answer, vocabulary: Vocabulary, event_id: str, kind: Kind | None,
@@ -508,84 +553,108 @@ def _covered(vocabulary: Vocabulary, statement: Kind, act: Kind | None) -> bool:
 
 
 def _k2(answer: _Answer, vocabulary: Vocabulary, containing: Mapping[str, str], out: _Out) -> None:
+    """K2. Each read of a slot whose value decides the rule reads every value it states or offers (_offered,
+    [R:truth-T3]): the examination link, the act's session, its kind, the session's kind, and the date relations K2's
+    date arm compares - for two slots, every combination - so a contradicted or overfilled slot fires the rule on each
+    of its values instead of switching it off. What K2 demotes is unchanged: the act's session fact and the session's
+    examination link, on every fact of an overfilled slot (ReadFact.keys)."""
     sessions = frozenset(answer.ids[Family.SESSION])
     events = frozenset(answer.ids[Family.EVENT])
     for event_id in answer.ids[Family.EVENT]:  # an event's session exists
         found = answer.one(Family.EVENT, event_id, A.SESSION)
-        if found is not None and any(name not in sessions for name in _named(found[1])):
-            out.reason([found[0]], Reason.SESSION_INCONSISTENT)
+        if found is not None and any(name not in sessions for name in _named(found)):
+            out.reason(found.keys, Reason.SESSION_INCONSISTENT)
     for session_id in answer.ids[Family.SESSION]:  # a session's examination names it
         link = answer.one(Family.SESSION, session_id, A.EXAMINATION)
-        examination = _id(link)
-        if link is None or examination is None or examination not in events:
-            continue
-        theirs = answer.one(Family.EVENT, examination, A.SESSION)
-        if theirs is not None and not _names(theirs[1], session_id):
-            out.reason([link[0]], Reason.SESSION_INCONSISTENT)
+        for examination in _offered_ids(link):
+            theirs = answer.one(Family.EVENT, examination, A.SESSION) if examination in events else None
+            if link is not None and theirs is not None and not _names(theirs, session_id):
+                out.reason(link.keys, Reason.SESSION_INCONSISTENT)
     for event_id in answer.ids[Family.EVENT]:
         found = answer.one(Family.EVENT, event_id, A.SESSION)
-        session = _id(found)
-        if found is None or session is None or session not in sessions or not _act(answer, event_id):
+        if found is None or not _act(answer, event_id):
             continue
-        kind = _value(answer.one(Family.EVENT, event_id, A.KIND), Kind)
-        family = _value(answer.one(Family.SESSION, session, A.KIND), SessionKind)
-        if kind is not None and family is not None and not vocabulary.family_admits(family, kind):
-            out.reason([found[0]], Reason.SESSION_INCONSISTENT)  # an act's session kind admits its kind (D191)
+        kinds = _offered(answer.one(Family.EVENT, event_id, A.KIND), Kind)
         own = answer.one(Family.EVENT, event_id, A.DATE_RELATION)
-        examination = _id(answer.one(Family.SESSION, session, A.EXAMINATION))
-        if own is None or examination is None or examination == event_id or examination not in events:
-            continue
-        theirs = answer.one(Family.EVENT, examination, A.DATE_RELATION)
-        if theirs is None and examination in containing:
-            theirs = answer.one(Family.SECTION, containing[examination], A.OCCASION)
-        if theirs is not None and _incompatible(own[1], theirs[1]):
-            out.reason([found[0]], Reason.SESSION_CONFLICT)  # the act's own other date: its session fact only
+        for session in _offered_ids(found):
+            if session not in sessions:
+                continue
+            families = _offered(answer.one(Family.SESSION, session, A.KIND), SessionKind)
+            if any(not vocabulary.family_admits(family, kind) for kind in kinds for family in families):
+                out.reason(found.keys, Reason.SESSION_INCONSISTENT)  # an act's session kind admits its kind (D191)
+            if own is None:
+                continue
+            for examination in _offered_ids(answer.one(Family.SESSION, session, A.EXAMINATION)):
+                if examination == event_id or examination not in events:
+                    continue
+                theirs = answer.one(Family.EVENT, examination, A.DATE_RELATION)
+                if theirs is None and examination in containing:
+                    theirs = answer.one(Family.SECTION, containing[examination], A.OCCASION)
+                if theirs is not None and _incompatible(own, theirs):
+                    out.reason(found.keys, Reason.SESSION_CONFLICT)  # the act's own other date: its session fact only
 
 
-def _named(fact: Fact) -> list[str]:
-    """The ids a fact names: its value, or each side's value when contradicted ('' names nothing)."""
-    names = [option.value for option in fact.options] if fact.state is FactState.CONTRADICTED else [fact.value]
-    return [name for name in names if name != '']
+def _named(found: ReadFact) -> tuple[str, ...]:
+    """The ids a fact names, whatever its state: its value, each side's value when contradicted, and for the merged view
+    of an overfilled slot every value a written fact writes (K2's existence arm fires on any of them, as it fires on a
+    negated fact's value: the merged view is never weaker than one written fact read alone, 4.4; '' names nothing)."""
+    fact = _fact(found)
+    if found.written or fact.state is FactState.CONTRADICTED:
+        return tuple(option.value for option in fact.options if option.value != '')
+    return (fact.value,) if fact.value != '' else ()
 
 
-def _names(fact: Fact, object_id: str) -> bool:
-    """Whether a fact states ``object_id`` (supported), or offers it as a side of a contradiction."""
-    if fact.state is FactState.SUPPORTED:
-        return fact.value == object_id
-    return fact.state is FactState.CONTRADICTED and any(option.value == object_id for option in fact.options)
+def _names(found: ReadFact, object_id: str) -> bool:
+    """Whether a fact establishes that it names ``object_id``, as K2's examination-link arm reads it - the one negative
+    trigger, which demotes the link when the examination's session does NOT name the session: a supported fact of that
+    value names it; a contradiction does not, for it offers another side on which the rule fires ([R:truth-T3]: each
+    side of pass 1's own contradiction); nor does the merged view of an overfilled slot unless every written fact
+    states that value (4.3.3 b, a denied value is never read as stated; 4.4, never stronger than one written fact read
+    alone, a negated one included); a negated fact names nothing."""
+    return set(found.asserted_values) == {object_id} and not found.negated_values
 
 
-def _incompatible(first: Fact, second: Fact) -> bool:
-    """Whether two date relations cannot both hold: both stated with different values, or one stated and the other
-    denying that same value. A contradicted one states no value; two denials never conflict."""
-    states = {first.state, second.state}
-    if FactState.CONTRADICTED in states or first.value == '' or second.value == '':
-        return False
-    if first.state is FactState.SUPPORTED and second.state is FactState.SUPPORTED:
-        return first.value != second.value
-    return states == {FactState.SUPPORTED, FactState.NEGATED} and first.value == second.value
+def _denied(found: ReadFact) -> tuple[str, ...]:
+    """The values a fact denies: a negated fact's value; the merged view's negated_values; none otherwise."""
+    if found.written:
+        return found.negated_values
+    fact = _fact(found)
+    return (fact.value,) if fact.state is FactState.NEGATED and fact.value != '' else ()
+
+
+def _incompatible(first: ReadFact, second: ReadFact) -> bool:
+    """Whether two date relations cannot both hold, read on every value each states or offers [R:truth-T3]: a value one
+    states or offers differs from a value the other states or offers, or is a value the other denies. Two denials never
+    conflict. (Before AMENDMENT-2 a contradicted relation stated no value, so it switched the arm off.)"""
+    mine, theirs = first.asserted_values, second.asserted_values
+    return (any(one != other for one in mine for other in theirs)
+            or bool(set(mine) & set(_denied(second))) or bool(set(theirs) & set(_denied(first))))
 
 
 # --- K3: place against session; K4: anatomy against places ------------------------------------------------------------
 
 
 def _k3(answer: _Answer, vocabulary: Vocabulary, out: _Out) -> None:
+    """K3, on every session the act's session fact states or offers and every family that session's kind states or
+    offers ([R:truth-T3]): a supported place in a region the family cannot reach demotes the act's session fact."""
     sessions = frozenset(answer.ids[Family.SESSION])
     for event_id in answer.ids[Family.EVENT]:
         found = answer.one(Family.EVENT, event_id, A.SESSION)
-        session_id = _id(found)
-        if found is None or session_id is None or session_id not in sessions or not _act(answer, event_id):
+        if found is None or not _act(answer, event_id):
             continue
-        family = _value(answer.one(Family.SESSION, session_id, A.KIND), SessionKind)
-        reach = vocabulary.reach.get(family) if family is not None else None
-        if reach is None:
-            continue
+        regions: list[Region] = []
         for _, fact in answer.facts(Family.EVENT, event_id, A.TARGET_PLACES):
             place = _member(Landmark, fact.value) if fact.state is FactState.SUPPORTED else None
             region = vocabulary.region(place) if place is not None else None
-            if region is not None and region not in reach:
-                out.reason([found[0]], Reason.SESSION_UNREACHABLE)  # nothing is ever moved
-                break
+            if region is not None:
+                regions.append(region)
+        for session_id in _offered_ids(found):
+            if session_id not in sessions:
+                continue
+            families = _offered(answer.one(Family.SESSION, session_id, A.KIND), SessionKind)
+            reaches = [vocabulary.reach[family] for family in families if family in vocabulary.reach]
+            if any(region not in reach for reach in reaches for region in regions):
+                out.reason(found.keys, Reason.SESSION_UNREACHABLE)  # nothing is ever moved
 
 
 def _k4(answer: _Answer, vocabulary: Vocabulary, out: _Out) -> None:
@@ -596,16 +665,17 @@ def _k4(answer: _Answer, vocabulary: Vocabulary, out: _Out) -> None:
     for event_id in answer.ids[Family.EVENT]:
         if _act(answer, event_id):
             places += _supported_places(answer.facts(Family.EVENT, event_id, A.TARGET_PLACES), Landmark)
+    # the type and the organ on every value each states or offers ([R:truth-T3]): a contradicted or overfilled organ
+    # (several organs written for one entry) fires K4 on each, as a contradicted type offering surgically_absent does
     for anatomy_id in answer.ids[Family.ANATOMY]:
         absent = answer.one(Family.ANATOMY, anatomy_id, A.TYPE)
         organ_found = answer.one(Family.ANATOMY, anatomy_id, A.ORGAN)
-        organ = _value(organ_found, Landmark)
-        if (absent is None or organ_found is None or organ is None
-                or _value(absent, AnatomyType) is not AnatomyType.SURGICALLY_ABSENT):
+        if absent is None or organ_found is None or AnatomyType.SURGICALLY_ABSENT not in _offered(absent, AnatomyType):
             continue
-        hits = [key for key, place in places if place.value == organ.value or vocabulary.contains(organ, place)]
-        if hits:
-            out.reason([absent[0], organ_found[0], *hits], Reason.ANATOMY_CONFLICT)
+        for organ in _offered(organ_found, Landmark):
+            hits = [key for key, place in places if place.value == organ.value or vocabulary.contains(organ, place)]
+            if hits:
+                out.reason([*absent.keys, *organ_found.keys, *hits], Reason.ANATOMY_CONFLICT)
 
 
 def _supported_places(found: Sequence[Found], enumeration: type[Enum]) -> list[tuple[FactKey, Place]]:
@@ -616,21 +686,23 @@ def _supported_places(found: Sequence[Found], enumeration: type[Enum]) -> list[t
 
 
 def _k5(answer: _Answer, out: _Out) -> None:
-    roles = {person_id: _value(answer.one(Family.PERSON, person_id, A.ROLE), PersonRole)
+    """K5, on every combination of the performers, persons, the person's roles and documenting clinicians the facts
+    state or offer ([R:truth-T3]): a conflict in any demotes the performer and the person."""
+    roles = {person_id: _offered(answer.one(Family.PERSON, person_id, A.ROLE), PersonRole)
              for person_id in answer.ids[Family.PERSON]}
-    documenting = _id(answer.one(Family.ENCOUNTER, '', A.DOCUMENTING_CLINICIAN))
+    documenting = _offered_ids(answer.one(Family.ENCOUNTER, '', A.DOCUMENTING_CLINICIAN))
     for family in (Family.EVENT, Family.SECTION):
         for object_id in answer.ids[family]:
             performer_found = answer.one(family, object_id, A.PERFORMER)
             person_found = answer.one(family, object_id, A.PERFORMER_PERSON)
-            performer, person = _value(performer_found, Performer), _id(person_found)
-            if performer_found is None or person_found is None or performer is None or person is None:
+            if performer_found is None or person_found is None:
                 continue
-            role = roles.get(person)
-            if ((performer is Performer.DOCUMENTING_TEAM and role is not None and role not in _TEAM_ROLES)
-                    or (performer in _OTHER_PERFORMERS
-                        and (role is PersonRole.DOCUMENTING_CLINICIAN or person == documenting))):
-                out.reason([performer_found[0], person_found[0]], Reason.PERSON_CONFLICT)
+            if any((performer is Performer.DOCUMENTING_TEAM
+                    and any(role not in _TEAM_ROLES for role in roles.get(person, ())))
+                   or (performer in _OTHER_PERFORMERS
+                       and (PersonRole.DOCUMENTING_CLINICIAN in roles.get(person, ()) or person in documenting))
+                   for performer in _offered(performer_found, Performer) for person in _offered_ids(person_found)):
+                out.reason([*performer_found.keys, *person_found.keys], Reason.PERSON_CONFLICT)
 
 
 def _k6(answer: _Answer, out: _Out) -> None:
@@ -712,11 +784,14 @@ def _l1(answer: _Answer, words: Words, containing: Mapping[str, str], out: _Out)
     and each section's occasion. Returns the reference date.
 
     An event's effective date relation (1.5) is its own, read with the words of its own date; when pass 1 left its own
-    slot silent and the event has a supported date, it is the occasion of the section its anchor lies in
+    slot silent and the event's date slot states or offers a date, it is the occasion of the section its anchor lies in
     (``containing``), read with the occasion's words and the event's own date's, and judged and stored under the
-    event's own date_relation key (``_Answer.inherited``), never the section's (DECISIONS D193). Only a supported date's
-    words are read into a relation: a negated date is no evidence of when the act was done, and a contradicted one
-    states no date (D193; the arbiter triage's repair 2b#5)."""
+    event's own date_relation key (``_Answer.inherited``), never the section's (DECISIONS D193). The words read into a
+    relation are those of every date the slot states or offers (``_dates_read``; AMENDMENT-2 4.3.3 [R:truth-T3]
+    [R:truth-T9], which supersede D193's "a contradicted one states no date": L1 fires for each side of pass 1's own
+    contradiction and each written value of an overfilled slot that is not negated), so a relation one of those dates
+    contradicts is never left standing; a negated date is no evidence of when the act was done, and its words are never
+    read (D193; the arbiter triage's repair 2b#5)."""
     reference: date | None = None
     if answer.dos is not None:
         key, when = answer.dos
@@ -732,25 +807,53 @@ def _l1(answer: _Answer, words: Words, containing: Mapping[str, str], out: _Out)
         _transcription(key, [(other, fact.sources)], words, out)
     for event_id in answer.ids[Family.EVENT]:
         dated = answer.one(Family.EVENT, event_id, A.DATE)
-        if dated is not None:
-            fact = dated[1]
+        # an overfilled date slot: L1 on each written date, each fact's own (its value, or each side), under its own
+        # key (AMENDMENT-2 4.3.3 [R:truth-T9]: the written dates are the view's options)
+        for item in (dated.written or (dated,)) if dated is not None else ():
+            fact = _fact(item)
             sides = ([(option.value, option.sources) for option in fact.options]
                      if fact.state is FactState.CONTRADICTED else [(fact.value, fact.sources)])
-            _transcription(dated[0], sides, words, out)
-        supported = dated is not None and dated[1].state is FactState.SUPPORTED
-        date_sources = dated[1].sources if dated is not None and supported else ()
+            _transcription(item.key, sides, words, out)
+        # the act's date relation is judged with the words of EVERY date the slot states or offers (_dates_read:
+        # each side of pass 1's own contradiction, each written fact of an overfilled slot that is not negated), so
+        # it fails whenever any one of those dates, read with it alone, would fail it ([R:truth-T3][R:truth-T9])
+        dates_stated, date_sources = _dates_read(dated)
         own = answer.one(Family.EVENT, event_id, A.DATE_RELATION)
         if own is not None:
-            _timing(own, date_sources, words, reference, out)
-        elif supported and event_id in containing:
+            _timing(own.keys, own, date_sources, words, reference, out)
+        elif dates_stated and event_id in containing:
             occasion = answer.one(Family.SECTION, containing[event_id], A.OCCASION)
             if occasion is not None:
-                _timing((answer.inherited(event_id), occasion[1]), date_sources, words, reference, out)
+                _timing((answer.inherited(event_id),), occasion, date_sources, words, reference, out)
     for section_id in answer.ids[Family.SECTION]:
         occasion = answer.one(Family.SECTION, section_id, A.OCCASION)
         if occasion is not None:
-            _timing(occasion, (), words, reference, out)
+            _timing(occasion.keys, occasion, (), words, reference, out)
     return reference
+
+
+def _dates_read(dated: ReadFact | None) -> tuple[bool, tuple[Source, ...]]:
+    """What an act's date slot gives L1's judgment of the act's date relation (AMENDMENT-2 4.3.3 [R:truth-T3]
+    [R:truth-T9]: L1 fires for each date the slot states or offers): whether the slot states or offers any date, and
+    the sources of every date it states or offers, each once in written order - a supported fact's sources (as before
+    AMENDMENT-2); a contradicted fact's own sources and each side's (pass 1's own contradiction); and for the merged
+    view of an overfilled slot those of each written fact that is not negated, read the same way. _timing judges
+    every literal they hold on its own, so the relation fails exactly when some date, read with it alone, would fail
+    it: the merged view is never weaker than one of its written facts (4.4). A negated date is no evidence of when the
+    act was done: its words are never read into a relation (D193)."""
+    if dated is None:
+        return False, ()
+    stated = False
+    sources: list[Source] = []
+    for item in dated.written or (dated,):
+        fact = _fact(item)
+        if fact.state is FactState.NEGATED:
+            continue
+        stated = True
+        sources += fact.sources
+        if fact.state is FactState.CONTRADICTED:
+            sources += [source for option in fact.options for source in option.sources]
+    return stated, tuple(dict.fromkeys(sources))
 
 
 def _precision(value: str) -> Precision | None:
@@ -776,18 +879,23 @@ def _transcription(key: FactKey, sides: Sequence[tuple[str, Sequence[Source]]], 
     return passed
 
 
-def _timing(found: Found, date_sources: Sequence[Source], words: Words, reference: date | None, out: _Out) -> None:
-    """L1 on a timing fact at ``found``'s key (an event's effective date relation, with the words of its own supported
-    date; a section's occasion): every literal read is stored; a supported relation is judged against the claim-time
-    reference date, and a literal that meets no document date stops nothing."""
-    key, fact = found
-    literals = _read([*fact.sources, *date_sources], words, day_only=False)
-    out.literals[key] = _stored(literals)
-    relation = _member(DateRelation, fact.value) if fact.state is FactState.SUPPORTED else None
-    if relation is None or reference is None:
+def _timing(keys: Sequence[FactKey], found: ReadFact, date_sources: Sequence[Source], words: Words,
+            reference: date | None, out: _Out) -> None:
+    """L1 on a timing fact (an event's effective date relation, with the words of every date its own date slot states
+    or offers, _dates_read; a section's occasion), its findings and literals at ``keys`` (every fact of an overfilled
+    slot, or an event's inherited key):
+    every literal read is stored; each relation the fact states or offers ([R:truth-T3]: a supported one, each side of
+    pass 1's own contradiction, each stated value of an overfilled slot) is judged against the claim-time reference
+    date, and a literal that meets no document date stops nothing."""
+    literals = _read([*_fact(found).sources, *date_sources], words, day_only=False)
+    for key in keys:
+        out.literals[key] = _stored(literals)
+    if reference is None:
         return
-    if not all(_holds(relation, literal.value, literal.precision, reference) for literal in literals):
-        out.literal.setdefault(key, set()).add(Reason.LITERAL_MISMATCH)
+    if any(not all(_holds(relation, literal.value, literal.precision, reference) for literal in literals)
+           for relation in _offered(found, DateRelation)):
+        for key in keys:
+            out.literal.setdefault(key, set()).add(Reason.LITERAL_MISMATCH)
 
 
 def _read(sources: Iterable[Source], words: Words, *, day_only: bool) -> list[date_literals.DateLiteral]:

@@ -2,7 +2,14 @@
 outcome arm (not_sent only while nothing can have left; unknown after; failed for a non-200 with its body kept;
 succeeded for a 200), the original-file placeholder verified and expanded only at send time, what each exchange
 records, and that no credential reaches an exchange, a stored body or an error. Offline and synthetic
-(test_participants_support): every send goes to a fake session."""
+(test_participants_support): every send goes to a fake session.
+
+AMENDMENT-2 1.3 (step F1), the vendor's ``complete`` hook (CompleteHookTests, CompleteHookSocketTests): a vendor that
+names none - every participant - keeps every outcome as before; with one, a 200 whose stream did not reach its end - an
+EOF mid-stream, a chunked body cut at the socket without its terminating chunk (requests raises ChunkedEncodingError
+inside iter_content), a deadline cut, a cap overflow - is UNKNOWN with the bytes read before the stop kept and no usage
+[R:connector-CONN-6][R:connector-CONN-2][R:connector-CONN-3]. The socket-level cases run against a loopback server on
+127.0.0.1 behind a loopback guard (tests/v2/test_fable_adapter.py's)."""
 from __future__ import annotations
 
 import base64
@@ -709,3 +716,201 @@ class TrickleTests(SimpleTestCase):
         self.assertLess(elapsed, 2.5)
         self.assertEqual((exchange.outcome, exchange.http_status, exchange.response_bytes, exchange.response_id),
                          ('succeeded', 200, self.BODY, 'resp_synthetic_trickle'))
+
+
+# --- AMENDMENT-2 1.3: the complete hook ------------------------------------------------------------------------------------
+
+def _ended(raw: bytes) -> bool:
+    return raw.endswith(b'"end": true}')
+
+
+SYNTHETIC_BODY = json.dumps({'id': 'resp_synthetic_hook', 'model': 'synthetic-model', 'usage': {'output_tokens': 5},
+                             'padding': 'x' * 300, 'end': True}).encode()
+# a describe that always states a usage: a cut stream must still record none
+HOOKED = participants_http.Vendor(label='Synthetic', request_id_header='request-id', complete=_ended,
+                                  describe=lambda raw: ({'output_tokens': 7}, 'synthetic-model', 'resp_synthetic_hook'))
+PLAIN = participants_http.Vendor(label='Synthetic', request_id_header='request-id',
+                                 describe=lambda raw: ({'output_tokens': 7}, 'synthetic-model', 'resp_synthetic_hook'))
+
+
+class CompleteHookTests(OfflineTestCase):
+    def setUp(self):
+        super().setUp()
+        self.clock = FakeClock()
+        self.enterContext(mock.patch.object(participants_http, 'monotonic', self.clock))
+
+    def post(self, vendor, response, max_response_bytes=1 << 20):
+        session = FakeSession(response)
+        exchange = participants_http.post(vendor, lambda: session, 'https://synthetic.invalid/v1/stream', b'{}', {},
+                                          deadline=self.clock() + 60, connect_timeout=10, read_timeout=60,
+                                          max_response_bytes=max_response_bytes, requested_model='synthetic-model')
+        self.assertTrue(all(item.closed for item in session.responses))
+        return exchange
+
+    def response(self, *chunks, status=200):
+        return FakeResponse(status, chunks=list(chunks), headers={'request-id': 'req_synthetic_hook'})
+
+    def assertCut(self, exchange, kept, expect):
+        self.assertEqual((exchange.outcome, exchange.sent, exchange.http_status, exchange.response_bytes,
+                          exchange.response_sha256, exchange.usage, exchange.usage_basis, exchange.provider_request_id,
+                          exchange.endpoint, exchange.requested_model),
+                         ('unknown', True, 200, kept, hashlib.sha256(kept).hexdigest(), {}, '', 'req_synthetic_hook',
+                          'https://synthetic.invalid/v1/stream', 'synthetic-model'))
+        self.assertIn('The request reached Synthetic, but its answer stream', exchange.error)
+        self.assertIn(UNKNOWN, exchange.error)
+        self.assertIn(expect, exchange.error)
+
+    def test_without_the_hook_every_outcome_is_as_before(self):
+        first, second = SYNTHETIC_BODY[:100], SYNTHETIC_BODY[100:200]
+        self.assertEqual(participants_http.Vendor(label='x', request_id_header='').complete, None)
+        whole = self.post(PLAIN, self.response(first, second))  # a 200 is read whole, whatever it holds
+        self.assertEqual((whole.outcome, whole.response_bytes, whole.usage), ('succeeded', first + second,
+                                                                              {'output_tokens': 7}))
+        broken = self.post(PLAIN, self.response(first, requests.exceptions.ChunkedEncodingError('synthetic')))
+        self.assertEqual((broken.outcome, broken.response_bytes, broken.response_sha256, broken.usage),
+                         ('unknown', None, '', {}))
+        self.assertIn('The request may have reached Synthetic, but no complete response was read (ChunkedEncodingError)',
+                      broken.error)
+
+        def late():
+            self.clock.advance(120)
+            return second
+        cut = self.post(PLAIN, self.response(first, late))
+        self.assertEqual((cut.outcome, cut.response_bytes), ('unknown', None))
+        self.assertIn(participants_http.DEADLINE_READING, cut.error)
+        capped = self.post(PLAIN, self.response(first, second), max_response_bytes=150)
+        self.assertEqual((capped.outcome, capped.response_bytes), ('unknown', None))
+        failed = self.post(PLAIN, self.response(b'{"error": 1}', status=503))
+        self.assertEqual((failed.outcome, failed.http_status, failed.response_bytes), ('failed', 503, b'{"error": 1}'))
+
+    def test_with_the_hook_an_eof_mid_stream_is_unknown_with_its_bytes(self):
+        kept = SYNTHETIC_BODY[:-5]
+        self.assertCut(self.post(HOOKED, self.response(kept[:100], kept[100:])), kept, 'ended before its end event')
+        self.assertCut(self.post(HOOKED, self.response()), b'', 'ended before its end event')  # an empty 200
+
+    def test_with_the_hook_a_broken_chunk_keeps_the_bytes_read_before_it(self):
+        first, second = SYNTHETIC_BODY[:100], SYNTHETIC_BODY[100:200]
+        for error in (requests.exceptions.ChunkedEncodingError('synthetic: connection broken'),
+                      requests.exceptions.ConnectionError('synthetic: connection reset'),
+                      ProtocolError('synthetic: incomplete read')):
+            with self.subTest(error=type(error).__name__):
+                exchange = self.post(HOOKED, self.response(first, second, error, b'never read'))
+                self.assertCut(exchange, first + second, type(error).__name__)
+
+    def test_with_the_hook_a_deadline_cut_keeps_the_bytes_read_before_it(self):
+        first, second = SYNTHETIC_BODY[:100], SYNTHETIC_BODY[100:200]
+
+        def late():
+            self.clock.advance(120)
+            return second
+        self.assertCut(self.post(HOOKED, self.response(first, late, SYNTHETIC_BODY[200:])), first + second,
+                       participants_http.DEADLINE_READING)
+
+    def test_with_the_hook_a_cap_overflow_keeps_the_bytes_read_before_it(self):
+        first, second = SYNTHETIC_BODY[:100], SYNTHETIC_BODY[100:]
+        exchange = self.post(HOOKED, self.response(first, second), max_response_bytes=150)
+        self.assertCut(exchange, first, 'the response exceeded 150 bytes')
+        self.assertLessEqual(len(exchange.response_bytes), 150)
+        at_cap = self.post(HOOKED, self.response(first, second), max_response_bytes=len(SYNTHETIC_BODY))
+        self.assertEqual((at_cap.outcome, at_cap.response_bytes), ('succeeded', SYNTHETIC_BODY))  # exactly at the cap
+
+    def test_with_the_hook_a_whole_stream_and_a_non_200_keep_their_paths(self):
+        whole = self.post(HOOKED, self.response(SYNTHETIC_BODY[:100], SYNTHETIC_BODY[100:]))
+        self.assertEqual((whole.outcome, whole.http_status, whole.response_bytes, whole.usage, whole.usage_basis,
+                          whole.returned_model, whole.response_id),
+                         ('succeeded', 200, SYNTHETIC_BODY, {'output_tokens': 7}, participants_http.USAGE_BASIS,
+                          'synthetic-model', 'resp_synthetic_hook'))
+        failed = self.post(HOOKED, self.response(b'not an end', status=529))  # the hook is a 200's
+        self.assertEqual((failed.outcome, failed.http_status, failed.response_bytes), ('failed', 529, b'not an end'))
+        broken = self.post(HOOKED, self.response(b'{"x"', requests.exceptions.ChunkedEncodingError('x'), status=529))
+        self.assertEqual((broken.outcome, broken.response_bytes), ('unknown', None))
+
+    def test_a_hook_that_raises_says_the_stream_did_not_end(self):
+        def explodes(raw):
+            raise RuntimeError('synthetic')
+        vendor = participants_http.Vendor(label='Synthetic', request_id_header='request-id', complete=explodes)
+        self.assertCut(self.post(vendor, self.response(SYNTHETIC_BODY)), SYNTHETIC_BODY, 'ended before its end event')
+        truthy = participants_http.Vendor(label='Synthetic', request_id_header='request-id', complete=lambda raw: 1)
+        self.assertEqual(self.post(truthy, self.response(SYNTHETIC_BODY)).outcome, 'unknown')  # only True ends it
+
+
+class CompleteHookSocketTests(SimpleTestCase):
+    """The hook at the socket (11.1: a fake session that ends cleanly proves the rare path, not the production one):
+    the real default session, a loopback server, the loopback guard."""
+
+    def setUp(self):  # the loopback guard: only 127.0.0.1 is reachable (test_the_guard_trips is its positive control)
+        super().setUp()
+        real_connect, real_getaddrinfo = socket.socket.connect, socket.getaddrinfo
+        self.attempts = []
+
+        def connect(sock, address):
+            host = address[0] if isinstance(address, tuple) else address
+            if host != '127.0.0.1':
+                self.attempts.append(host)
+                raise NetworkBlocked(f'{host} was reached; only 127.0.0.1 may be.')
+            return real_connect(sock, address)
+
+        def getaddrinfo(host, *args, **kwargs):
+            if host != '127.0.0.1':
+                self.attempts.append(host)
+                raise NetworkBlocked(f'{host} was looked up; only 127.0.0.1 may be.')
+            return real_getaddrinfo(host, *args, **kwargs)
+        self.enterContext(mock.patch.object(socket.socket, 'connect', connect))
+        self.enterContext(mock.patch.object(socket, 'getaddrinfo', getaddrinfo))
+
+    def tearDown(self):
+        self.assertEqual(self.attempts, [], 'A test reached an address other than 127.0.0.1.')
+        super().tearDown()
+
+    def post(self, vendor, url, deadline_s=5.0, max_response_bytes=1 << 20):
+        return participants_http.post(vendor, participants_http.default_session, url, b'{}',
+                                      {'content-type': 'application/json'}, deadline=time.monotonic() + deadline_s,
+                                      connect_timeout=2, read_timeout=3, max_response_bytes=max_response_bytes,
+                                      requested_model='synthetic-model')
+
+    def server(self, script):
+        from tests.v2.test_fable_adapter import LoopbackServer
+
+        return LoopbackServer(self, script)
+
+    HEAD = b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nrequest-id: req_synthetic_hook\r\n\r\n'
+
+    def test_the_guard_trips(self):  # the positive control
+        with self.assertRaises(NetworkBlocked):
+            socket.getaddrinfo('synthetic.invalid', 443)
+        self.assertEqual(self.attempts, ['synthetic.invalid'])
+        self.attempts.clear()
+
+    def test_a_chunked_body_cut_at_the_socket_keeps_the_bytes_read_before_the_cut(self):
+        from tests.v2.test_fable_adapter import chunk
+
+        first, second = SYNTHETIC_BODY[:120], SYNTHETIC_BODY[120:240]
+        script = [(self.HEAD, 0), (chunk(first), 0), (chunk(second), 0.05), (b'%x\r\n' % 4096 + b'partial', 0.05)]
+        hooked = self.post(HOOKED, self.server(script).url)
+        self.assertEqual((hooked.outcome, hooked.http_status, hooked.response_bytes, hooked.usage),
+                         ('unknown', 200, first + second, {}))
+        self.assertIn('ChunkedEncodingError', hooked.error)
+        plain = self.post(PLAIN, self.server(script).url)  # without the hook: as before, nothing kept
+        self.assertEqual((plain.outcome, plain.response_bytes, plain.usage), ('unknown', None, {}))
+        self.assertIn('no complete response was read (ChunkedEncodingError)', plain.error)
+
+    def test_a_deadline_cut_at_the_socket_keeps_the_bytes_read_before_the_cut(self):
+        from tests.v2.test_fable_adapter import chunk
+
+        first, second = SYNTHETIC_BODY[:120], SYNTHETIC_BODY[120:240]
+        script = [(self.HEAD, 0), (chunk(first), 0), (chunk(second), 0.05), (chunk(SYNTHETIC_BODY[240:]), 0.25,
+                                                                            'trickle')]
+        started = time.monotonic()
+        exchange = self.post(HOOKED, self.server(script).url, deadline_s=1.0)
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertEqual((exchange.outcome, exchange.response_bytes, exchange.usage), ('unknown', first + second, {}))
+        self.assertIn(participants_http.DEADLINE_READING, exchange.error)
+
+    def test_a_cap_overflow_at_the_socket_keeps_the_bytes_read_before_it(self):
+        from tests.v2.test_fable_adapter import chunk
+
+        first, rest = SYNTHETIC_BODY[:120], SYNTHETIC_BODY[120:]
+        script = [(self.HEAD, 0), (chunk(first), 0), (chunk(rest), 0.05), (b'0\r\n\r\n', 0)]
+        exchange = self.post(HOOKED, self.server(script).url, max_response_bytes=200)
+        self.assertEqual((exchange.outcome, exchange.response_bytes, exchange.usage), ('unknown', first, {}))
+        self.assertIn('the response exceeded 200 bytes', exchange.error)

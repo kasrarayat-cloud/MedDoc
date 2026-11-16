@@ -294,6 +294,10 @@ FIXTURES = {
                        'statements': (DENIAL,)},
     M.ENTEROSCOPY_THROUGH: {**ENT_BASE, 'code': '44380', 'enteroscopy_class': EnteroscopyClass.STOMA,
                             'approach': Approach.THROUGH_STOMA},
+    # D280.3 and D284 (step f3w of AMENDMENT-2's build round)
+    M.DIGITAL_SCOPE: {'code': '45385', 'act': Kind.EXAMINATION, 'family': SessionKind.COLONOSCOPY, 'words': REACH,
+                      'statements': (DENIAL,), 'attribute': Attribute.STATUS, 'held': requirements.Rank.STATUS},
+    M.ADDON: {'code': '99417', 'family': SessionKind.OFFICE_EM, 'codes': ('99205', '99215', '99245')},
 }
 
 
@@ -769,10 +773,13 @@ class D225Items(SimpleTestCase):
         for message, entry in expected.items():
             spec = wording.MESSAGES[message]
             self.assertEqual((spec.fact, spec.kind, spec.rank, spec.needs), entry, message)
-        # the six D225 ids, then D246's synthetic_act and round w8r's two ids appended after them
-        self.assertEqual([member.value for member in M][-9:-3], ['conflict_attribute', 'unlisted_evidence',
-                                                                 'examination_route', 'examination_approach',
-                                                                 'same_duct', 'structure_place'])
+        # the six D225 ids, then D246's synthetic_act and round w8r's two ids appended after them, then step f3w's two
+        # (D280.3's digital_scope, D284's addon)
+        self.assertEqual([member.value for member in M][-11:-5], ['conflict_attribute', 'unlisted_evidence',
+                                                                  'examination_route', 'examination_approach',
+                                                                  'same_duct', 'structure_place'])
+        self.assertEqual([member.value for member in M][-5:], ['synthetic_act', 'unlisted_scope', 'enteroscopy_through',
+                                                               'digital_scope', 'addon'])
         names = [field.name for field in wording.Slots.__dataclass_fields__.values()]  # after both, whatever follows them
         self.assertEqual(names[names.index('both') + 1:names.index('both') + 4], ['attribute', 'unlisted_what',
                                                                                   'unlisted_kind'])
@@ -1658,8 +1665,10 @@ class D246Forms(SimpleTestCase):
         self.assertEqual((item.question, item.reason), ('Confirm whether the stent removal was done on the date of '
                                                         'service.', 'The document leaves the stent removal in doubt.'))
         item = d246_worded(M.DOUBT, act=Kind.EXAMINATION, family=SessionKind.COLONOSCOPY)  # UnitlessEntries' shape
-        self.assertEqual((item.question, item.reason), ('Confirm whether the colonoscopy was done on the date of '
-                                                        'service.', 'The document leaves the colonoscopy in doubt.'))
+        # restated for D281 (step f3w; build list B6, G3-27): the held session's examination is asked by row 7's done
+        self.assertEqual((item.question, item.reason), ('Confirm whether the colonoscopy is documented as performed, in '
+                                                        'full or in part, on the date of service.',
+                                                        'The document leaves the colonoscopy in doubt.'))
         # the doubt's passage, when it has units, is still the reason's quote
         item = d246_worded(M.DOUBT, act=Kind.STENT_REMOVAL, statements=(OLD_STENT,))
         self.assertEqual((item.question, item.reason), ('Confirm whether the stent removal was done on the date of '
@@ -1985,6 +1994,7 @@ POOLS = {
     'approaches': (*((approach,) for approach in Approach), (Approach.THROUGH_STOMA, Approach.THROUGH_POUCH)),
     'possible_approaches': (*((approach,) for approach in Approach), (Approach.THROUGH_STOMA, Approach.THROUGH_POUCH)),
     'codes': (('45385',), ('45385', '45386'), ('45385', '45385')),
+    'held': tuple(requirements.Rank), 'techniques': (True,),  # D280.3 (step f3w): every RANK row; the flag
 }
 DEFAULTS = {field: getattr(wording.Slots(), field) for field in FIELD_NAMES}
 _SEEN = set()
@@ -2109,6 +2119,7 @@ class D254Total(SimpleTestCase):
         M.COMPETING: ('code',), M.SETTING: ('family',), M.PATIENT_STATUS: ('family',),
         M.UNLISTED_EVIDENCE: ('code', 'unlisted_what'), M.EXAMINATION_ROUTE: ('code', 'exam_class'),
         M.EXAMINATION_APPROACH: ('code', 'exam_class'),
+        M.DIGITAL_SCOPE: ('held', 'act'), M.ADDON: ('code',),  # D280.3 and D284 (step f3w)
     }
 
     def test_needs_name_only_carried_slots(self):
@@ -2506,14 +2517,16 @@ class D257BaseWithin(SimpleTestCase):
 class D258UnlistedScope(SimpleTestCase):
     """D258 (r4a QP2, QD; r4c Q1): UNLISTED_SCOPE - a statement that names no procedure session, beside the held session's
     established examination: the question names that examination by its service and asks whether it is documented as
-    done on the date of service; the reason quotes the statement and says it names no procedure session; never that the
+    performed, in full or in part, on the date of service (row 7's done: D281, build list B6 - restated from
+    "documented as done"); the reason quotes the statement and says it names no procedure session; never that the
     document leaves that examination in doubt or denies it."""
 
     def test_the_entry(self):
         spec = wording.MESSAGES[M.UNLISTED_SCOPE]
         self.assertEqual((M.UNLISTED_SCOPE.value, spec.fact, spec.kind, spec.rank, spec.needs),
                          ('unlisted_scope', 'performed_status', ItemKind.QUESTION, 2, ()))
-        self.assertEqual([member.value for member in M][-3:], ['synthetic_act', 'unlisted_scope', 'enteroscopy_through'])
+        self.assertEqual([member.value for member in M][-5:],  # D280.3's and D284's two appended after it (step f3w)
+                         ['synthetic_act', 'unlisted_scope', 'enteroscopy_through', 'digital_scope', 'addon'])
         requirements.Item(requirements.Rank(2), requirements.FactKey('performed_status'))
 
     def test_the_question_and_the_reason(self):
@@ -2521,17 +2534,18 @@ class D258UnlistedScope(SimpleTestCase):
                                                              family=SessionKind.COLONOSCOPY, words=U_REACH,
                                                              statements=(U_PRIOR,)), D254_TEXT)  # QP2's input
         self.assertEqual((item.fact, item.kind), ('performed_status', ItemKind.QUESTION))
-        self.assertEqual(item.question, 'Is the colonoscopy (“The scope was advanced to the ileum.”) documented as done on '
-                                        'the date of service?')
+        self.assertEqual(item.question, 'Is the colonoscopy (“The scope was advanced to the ileum.”) documented as '
+                                        'performed, in full or in part, on the date of service?')
         self.assertEqual(item.reason, 'The document states “It is not known whether she had a colonoscopy before.”, which '
                                       'names no procedure session; CPT Studio could not confirm from the document whether '
                                       'it is about the colonoscopy. Held for the reviewer, not excluded.')
         item = wording.build(M.UNLISTED_SCOPE, wording.Slots(family=SessionKind.EGD, statements=(U_NONE,)), D254_TEXT)
-        self.assertEqual(item.question, 'Is the upper endoscopy documented as done on the date of service?')  # QD
+        self.assertEqual(item.question, 'Is the upper endoscopy documented as performed, in full or in part, on the date '
+                                        'of service?')  # QD
         self.assertIn('“No polyps were removed.”, which names no procedure session;', item.reason)
         item = wording.build(M.UNLISTED_SCOPE, wording.Slots(), D254_TEXT)  # nothing given
         self.assertEqual((item.question, item.reason),
-                         ('Is the examination documented as done on the date of service?',
+                         ('Is the examination documented as performed, in full or in part, on the date of service?',
                           'A statement in the document names no procedure session; CPT Studio could not confirm from the '
                           'document whether it is about the examination. Held for the reviewer, not excluded.'))
         item = wording.build(M.UNLISTED_SCOPE, wording.Slots(family=SessionKind.ENTEROSCOPY,
@@ -2729,38 +2743,52 @@ class D266DenialForm(SimpleTestCase):
         return wording.build(M.DOUBT, wording.Slots(**slots), W9_TEXT)
 
     def test_a_denial_states_that_the_act_was_not_done(self):
+        """Restated for D281 (step f3w; build list B5, G3-10 ruling D): a rule-4 denial's scope is unresolved by
+        construction, so the reason states it as a statement that AN act was not done and that CPT Studio could not
+        confirm whether it is about the act - never "states that <the act> was not done" (before: D266's DENIAL_STATED,
+        now gone)."""
         item = self.worded(**self.SNARE, statements=(W9_DENIAL,), unlisted_what=UnlistedWhat.DENIAL)
         self.assertEqual((item.message, item.fact, item.kind), (M.DOUBT, 'performed_status', ItemKind.QUESTION))
         self.assertEqual(item.question, f'Confirm whether {self.ACT} ({self.SNARED}) was done on the date of service.')
-        self.assertEqual(item.reason, f'The document states that {self.ACT} was not done: “No polyp was removed from the '
-                                      'rectum.”.')
+        self.assertEqual(item.reason, '“No polyp was removed from the rectum.”'.join((
+            'The document states ', ', a statement that an act was not done; CPT Studio could not confirm from the '
+            f'document whether it is about {self.ACT}.')))
         self.assertEqual(item.question, wording.doubt_question(self.LABEL, wording.span_text(W9_TEXT, W9_SNARED)))
-        self.assertEqual(wording.DENIAL_STATED.format(act='x'), 'states that x was not done')
+        self.assertEqual(wording.DENIAL_SCOPE, 'a statement that an act was not done')
+        self.assertFalse(hasattr(wording, 'DENIAL_STATED'))  # B5's mutant restores it
         self.assertEqual(wording.UNLISTED_STATED[UnlistedWhat.DENIAL], 'states that {kind} was not done')  # its row
-        # the session's examination (a carded kindless denial beside 45378 alone: G2-16 (ii)), named by its service
+        # the session's examination (a carded kindless denial beside 45378 alone: G2-16 (ii)), named by its service and
+        # asked by row 7's done (B6)
         item = self.worded(code='45378', act=Kind.EXAMINATION, family=SessionKind.COLONOSCOPY,
                            statements=(W9_NONE_TODAY,), unlisted_what=UnlistedWhat.DENIAL)
         self.assertEqual((item.question, item.reason),
-                         ('Confirm whether the colonoscopy was done on the date of service.',
-                          'The document states that the colonoscopy was not done: “No colonoscopy was performed '
-                          'today.”.'))
+                         ('Confirm whether the colonoscopy is documented as performed, in full or in part, on the date '
+                          'of service.',
+                          'The document states “No colonoscopy was performed today.”, a statement that an act was not '
+                          'done; CPT Studio could not confirm from the document whether it is about the colonoscopy.'))
         # an act no kind names (D254 rule 2): 'another act', no article before it
         item = self.worded(code='45385', statements=(W9_DENIAL,), unlisted_what=UnlistedWhat.DENIAL)
         self.assertEqual((item.question, item.reason),
                          ('Confirm whether another act was done on the date of service.',
-                          'The document states that another act was not done: “No polyp was removed from the rectum.”.'))
+                          'The document states “No polyp was removed from the rectum.”, a statement that an act was not '
+                          'done; CPT Studio could not confirm from the document whether it is about another act.'))
 
     def test_a_denial_with_no_units_is_named_without_a_quote_never_the_acts_own_sentence(self):
         """A Fill that gives no statement with units: the denial is stated, nothing quoted for it - never the act's own
-        sentence, which states the act (DOUBT's doubt form falls back to it; a denial never does)."""
+        sentence, which states the act (DOUBT's doubt form falls back to it; a denial never does). Restated for D281 (B5):
+        "The document states that an act was not done; CPT Studio could not confirm ... whether it is about <the act>"."""
         for statements in ((), ((),)):
             item = self.worded(**self.SNARE, statements=statements, unlisted_what=UnlistedWhat.DENIAL)
-            self.assertEqual(item.reason, f'The document states that {self.ACT} was not done.')
+            self.assertEqual(item.reason, 'The document states that an act was not done; CPT Studio could not confirm '
+                                          f'from the document whether it is about {self.ACT}.')
             self.assertEqual(item.question, f'Confirm whether {self.ACT} ({self.SNARED}) was done on the date of service.')
         item = self.worded(code='45378', act=Kind.EXAMINATION, family=SessionKind.COLONOSCOPY,
                            unlisted_what=UnlistedWhat.DENIAL)
-        self.assertEqual((item.question, item.reason), ('Confirm whether the colonoscopy was done on the date of service.',
-                                                        'The document states that the colonoscopy was not done.'))
+        self.assertEqual((item.question, item.reason),
+                         ('Confirm whether the colonoscopy is documented as performed, in full or in part, on the date of '
+                          'service.',
+                          'The document states that an act was not done; CPT Studio could not confirm from the document '
+                          'whether it is about the colonoscopy.'))
 
     def test_a_denial_is_never_said_to_leave_the_act_in_doubt(self):
         """Over every kind (and none), with the act's own words and without, every statement shape and two families: no
@@ -2839,10 +2867,12 @@ class D266DenialForm(SimpleTestCase):
                         for sentence in (spec.question, spec.reason):
                             self.assertNotIn('doubt', unquoted(sentence), sentence)
                             self.assertNotIn('leaves', unquoted(sentence), sentence)
-                        if found.item.message.value == 'doubt':
+                        if found.item.message.value == 'doubt':  # D281 (B5): the denial's scope never asserted
                             doubts.add((card is not None, kind, found.code))
-                            self.assertTrue(spec.reason.startswith('The document states that '), spec.reason)
-                            self.assertTrue(spec.reason.endswith(f' was not done: {quoted}.'), spec.reason)
+                            self.assertTrue(spec.reason.startswith(f'The document states {quoted}, a statement that an '
+                                                                   'act was not done; CPT Studio could not confirm from '
+                                                                   'the document whether it is about '), spec.reason)
+                            self.assertNotIn(' was not done: ', spec.reason)
         # never vacuous: the carded and the no-card denial of kind snare and kindless beside the snare are each DOUBT
         for card in (True, False):
             for kind in (None, Kind.SNARE):
@@ -2857,26 +2887,31 @@ class D266NoQuote(SimpleTestCase):
     EXAM = dict(code='45378', act=Kind.EXAMINATION, family=SessionKind.COLONOSCOPY)
 
     def test_unlisted_scope_names_the_examination_by_its_service_with_no_quote(self):
+        """Restated for D281 (B6): row 7's done, "documented as performed, in full or in part, on the date of service"."""
         item = wording.build(M.UNLISTED_SCOPE, wording.Slots(**self.EXAM, statements=(W9_PRIOR,)), W9_TEXT)
-        self.assertEqual(item.question, 'Is the colonoscopy documented as done on the date of service?')
+        self.assertEqual(item.question, 'Is the colonoscopy documented as performed, in full or in part, on the date of '
+                                        'service?')
         self.assertEqual(item.reason, 'The document states “It is not known whether she had a colonoscopy before.”, which '
                                       'names no procedure session; CPT Studio could not confirm from the document whether '
                                       'it is about the colonoscopy. Held for the reviewer, not excluded.')
         item = wording.build(M.UNLISTED_SCOPE, wording.Slots(**self.EXAM), W9_TEXT)
         self.assertEqual((item.question, item.reason),
-                         ('Is the colonoscopy documented as done on the date of service?',
+                         ('Is the colonoscopy documented as performed, in full or in part, on the date of service?',
                           'A statement in the document names no procedure session; CPT Studio could not confirm from the '
                           'document whether it is about the colonoscopy. Held for the reviewer, not excluded.'))
 
     def test_doubt_names_the_examination_by_its_service_with_no_quote(self):
-        question = 'Confirm whether the colonoscopy was done on the date of service.'
+        """Restated for D281: the session's DOUBT asks row 7's done (B6); a denial's reason never asserts its scope (B5)."""
+        question = 'Confirm whether the colonoscopy is documented as performed, in full or in part, on the date of service.'
         for what, statements, reason in (
                 (None, (W9_PRIOR,), 'The document leaves the colonoscopy in doubt: “It is not known whether she had a '
                                     'colonoscopy before.”.'),
                 (UnlistedWhat.DOUBT, (), 'The document leaves the colonoscopy in doubt.'),
-                (UnlistedWhat.DENIAL, (W9_NONE_TODAY,), 'The document states that the colonoscopy was not done: “No '
-                                                        'colonoscopy was performed today.”.'),
-                (UnlistedWhat.DENIAL, (), 'The document states that the colonoscopy was not done.')):
+                (UnlistedWhat.DENIAL, (W9_NONE_TODAY,), 'The document states “No colonoscopy was performed today.”, a '
+                                                        'statement that an act was not done; CPT Studio could not '
+                                                        'confirm from the document whether it is about the colonoscopy.'),
+                (UnlistedWhat.DENIAL, (), 'The document states that an act was not done; CPT Studio could not confirm '
+                                          'from the document whether it is about the colonoscopy.')):
             with self.subTest(what=what, statements=statements):
                 item = wording.build(M.DOUBT, wording.Slots(**self.EXAM, statements=statements, unlisted_what=what),
                                      W9_TEXT)
@@ -3066,7 +3101,9 @@ class D267PossibleRoute(SimpleTestCase):
                                         'performed on the date of service?')
 
     def test_the_marker_is_an_optional_typed_slot_appended_last(self):
-        self.assertEqual([field for field in wording.Slots.__dataclass_fields__][-1], 'possible_approaches')
+        # restated for step f3w: D280.3's two optional fields (held, techniques) are appended after it
+        self.assertEqual([field for field in wording.Slots.__dataclass_fields__][-3:],
+                         ['possible_approaches', 'held', 'techniques'])
         self.assertEqual(wording.Slots().possible_approaches, ())
         self.assertEqual(wording._SLOT_TYPES['possible_approaches'], (Approach, True))
         for value in ('through_stoma', (Kind.SNARE,), Approach.THROUGH_STOMA, ('through_pouch',)):
@@ -3074,3 +3111,234 @@ class D267PossibleRoute(SimpleTestCase):
                 wording.Slots(possible_approaches=value)
         self.assertIn('possible_approaches', reads_of(M.ENTEROSCOPY_ROUTE))
         self.assertIn('possible_approaches', reads_of(M.EXAMINATION_ROUTE))
+
+
+# --- step f3w of AMENDMENT-2's build round (DECISIONS D280-D284; build list B1, B3, B5, B6, B7) -------------------------
+
+# the claimed examination's own sentence (any unit of W9_TEXT stands for it here), the held session's examination's
+W9_CLAIMED = W9_NONE_TODAY
+DS = dict(code='45385', act=Kind.EXAMINATION, family=SessionKind.COLONOSCOPY, words=W9_REACH, statements=(W9_CLAIMED,))
+DS_ASK = ('Is the colonoscopy (“The scope was advanced to the jejunum.”) documented as performed, in full or in part, on '
+          'the date of service?')
+DS_STATED = ('The document states “No colonoscopy was performed today.”, a statement whose technique CPT Studio could not '
+             'confirm from the document')
+R_ = requirements.Rank
+
+
+class D280DigitalScope(SimpleTestCase):
+    """DECISIONS D280.3 (build list B1): DIGITAL_SCOPE words every hold resting on an examination whose device claims
+    manual without establishing it as D258 asks - the question names the held session's examination by its service and
+    asks whether it is documented as performed, in full or in part, on the date of service, quoting only ``words`` (the
+    session's examination that may be quoted, never the claimed one); the reason quotes the claimed examination's own
+    words (``statements``' first) as a statement whose technique CPT Studio could not confirm, and states its open fact
+    by the held fact's RANK row (``held``) and attribute - its sides for a conflict, the owner for an entry, more than one
+    technique stated (``techniques``), and, with no attribute (a pair whose statement it is), whether it is about that
+    examination. The clarification keeps the held fact's key (fact_key from ``held`` and, for a conflict, ``act``)."""
+
+    @staticmethod
+    def worded(**slots):
+        return wording.build(M.DIGITAL_SCOPE, wording.Slots(**{**DS, **slots}), W9_TEXT)
+
+    def test_the_entry(self):
+        spec = wording.MESSAGES[M.DIGITAL_SCOPE]
+        self.assertEqual((M.DIGITAL_SCOPE.value, spec.fact, spec.kind, spec.rank, spec.needs),
+                         ('digital_scope', 'performed_status', ItemKind.QUESTION, 2, ('held', 'act')))
+        self.assertIn('held', wording.CARRIED)
+        self.assertIn('digital_scope', wording.CARRIED['act'])
+        self.assertEqual(wording._SLOT_TYPES['held'], (requirements.Rank, False))
+        self.assertEqual(wording._SLOT_TYPES['techniques'], (bool, False))
+        self.assertEqual((wording.Slots().held, wording.Slots().techniques), (None, False))
+        for value in (4, 'status', requirements.FactKey.PERFORMED_STATUS):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                wording.Slots(held=value)
+
+    def test_each_open_fact_in_its_exact_text(self):
+        """Every row a hold on a claimed examination can rest on - its own facts (row 7's status, doubt, date, performer,
+        entry, a conflict, its session tie) and a pair whose statement it is (no attribute: statement_scope, procedure,
+        technique, timing, performer rows) - in its exact sentence; the question is the same for every one."""
+        about = 'CPT Studio could not confirm from the document whether it is about the colonoscopy'
+        cases = (
+            (dict(held=R_.STATUS, attribute=Attribute.STATUS), 'it is not established as done on the date of service'),
+            (dict(held=R_.STATUS, attribute=Attribute.SESSION),
+             'CPT Studio could not confirm from the document in which procedure it was done'),
+            (dict(held=R_.STATUS, attribute=Attribute.KIND), 'CPT Studio could not confirm from the document what was done'),
+            (dict(held=R_.DOUBT, attribute=Attribute.STATUS), 'the document leaves it in doubt'),
+            (dict(held=R_.TIME, attribute=Attribute.DATE_RELATION),
+             'CPT Studio could not confirm from the document when it was done'),
+            (dict(held=R_.PERFORMER, attribute=Attribute.PERFORMER),
+             'CPT Studio could not confirm from the document who performed it'),
+            (dict(held=R_.ENTRY, attribute=Attribute.ENTRY, owner=Owner.NURSING), 'it is told only in the nursing entry'),
+            (dict(held=R_.ENTRY, attribute=Attribute.ENTRY, owner=Owner.OTHER_CLINICIAN),
+             "it is told only in another clinician's entry"),
+            (dict(held=R_.ENTRY, attribute=Attribute.ENTRY),
+             'CPT Studio could not confirm from the document whose entry it is told in'),
+            (dict(held=R_.ENTRY, attribute=Attribute.ENTRY, owner=Owner.DOCUMENTING_CLINICIAN),
+             'CPT Studio could not confirm from the document whose entry it is told in'),  # contradicts the row: absent
+            (dict(held=R_.CONFLICT, attribute=Attribute.STATUS, statements=(W9_CLAIMED, W9_PRIOR, W9_CLAIMED)),
+             'statements in the document disagree about whether it was done (“It is not known whether she had a '
+             'colonoscopy before.”; “No colonoscopy was performed today.”)'),
+            (dict(held=R_.CONFLICT, attribute=Attribute.DATE_RELATION, statements=(W9_CLAIMED, W9_PRIOR)),
+             'the document is not consistent about when it was done (“It is not known whether she had a colonoscopy '
+             'before.”)'),
+            (dict(held=R_.CONFLICT, attribute=Attribute.STATUS, statements=(W9_CLAIMED, W9_CLAIMED)),
+             'the document is not consistent about whether it was done'),  # its one side is the statement quoted
+            (dict(held=R_.CONFLICT, attribute=Attribute.ENTRY), 'the document is not consistent about whose entry it is '
+                                                                'told in'),
+            *((dict(held=rank), about) for rank in (R_.STATEMENT_SCOPE, R_.PROCEDURE, R_.TECHNIQUE, R_.TIME,
+                                                     R_.PERFORMER)),
+        )
+        for slots, open_fact in cases:
+            with self.subTest(**{key: getattr(value, 'value', value) for key, value in slots.items()
+                                 if key != 'statements'}):
+                item = self.worded(**slots)
+                self.assertEqual(item.question, DS_ASK)
+                self.assertEqual(item.reason, f'{DS_STATED}; {open_fact}. {wording.HELD}')
+
+    def test_more_than_one_technique_and_no_statement_or_words(self):
+        item = self.worded(held=R_.STATUS, attribute=Attribute.STATUS, techniques=True)
+        self.assertEqual(item.reason, f'{DS_STATED} (the document states more than one technique for it); it is not '
+                                      f'established as done on the date of service. {wording.HELD}')
+        item = wording.build(M.DIGITAL_SCOPE, wording.Slots(act=Kind.EXAMINATION, held=R_.TIME,
+                                                             attribute=Attribute.DATE_RELATION), W9_TEXT)
+        self.assertEqual((item.question, item.reason),
+                         ('Is the examination documented as performed, in full or in part, on the date of service?',
+                          'A statement in the document names an examination whose technique CPT Studio could not '
+                          'confirm from the document; CPT Studio could not confirm from the document when it was done. '
+                          f'{wording.HELD}'))
+        item = self.worded(held=R_.PROCEDURE, family=SessionKind.EGD, words=(), statements=((),))
+        self.assertEqual(item.question, 'Is the upper endoscopy documented as performed, in full or in part, on the date '
+                                        'of service?')
+
+    def test_the_clarification_keeps_the_held_facts_key(self):
+        """D280.3: "The held facts, rank and status are unchanged. The clarification keeps the held fact's key, so an
+        answer binds as today; a message may take its key from the item (wording.fact_key)": for every RANK row, the
+        row's fact key (the first of a row of several), conflict:<act> for the conflict row - never MESSAGES' own fact."""
+        for rank in requirements.Rank:
+            key = requirements.RANK[rank][0]
+            for act in (Kind.EXAMINATION, Kind.OTHER, Kind.SNARE):
+                with self.subTest(rank=rank, act=act):
+                    expected = f'conflict:{act.value}' if key is requirements.FactKey.CONFLICT else key.value
+                    slots = wording.Slots(**{**DS, 'act': act, 'held': rank})
+                    self.assertEqual(wording.fact_key(M.DIGITAL_SCOPE, slots), expected)
+                    self.assertEqual(wording.build(M.DIGITAL_SCOPE, slots, W9_TEXT).fact, expected)
+        with self.assertRaises(ValueError):
+            wording.build(M.DIGITAL_SCOPE, wording.Slots(**DS), W9_TEXT)  # no held row: refused (CARRIED)
+
+    def test_it_never_asks_about_the_claimed_examination(self):
+        """Over every RANK row, every attribute and owner: the claimed examination's words are never in the question
+        (a truthful "Not documented" about it would exclude the code: D258), always in the reason; no "in doubt" of the
+        session's examination, no provider, cause or placeholder; the question is row 7's done."""
+        claimed = '“No colonoscopy was performed today.”'
+        built = 0
+        for rank in requirements.Rank:
+            for attribute in (None, *Attribute):
+                for owner in (None, Owner.NURSING):
+                    item = self.worded(held=rank, attribute=attribute, owner=owner, techniques=bool(built % 2))
+                    built += 1
+                    self.assertNotIn(claimed, item.question)
+                    self.assertIn(claimed, item.reason)
+                    self.assertTrue(item.question.endswith('documented as performed, in full or in part, on the date of '
+                                                           'service?'))
+                    self.assertNotIn('the colonoscopy in doubt', item.reason)
+                    for sentence in (item.question, item.reason):
+                        self.assertEqual(sentence_problems(sentence, W9_TEXT), [], sentence)
+        self.assertEqual(built, len(requirements.Rank) * (len(Attribute) + 1) * 2)
+
+
+class D281Forms(SimpleTestCase):
+    """DECISIONS D281 (step f3w): B3 (G1-05 (ii)) - ANOTHER_ENTRY names the code's group ("this code accounts for") only
+    for the code's own act; a session's examination the group does not name is named by the item's act (case B: "The
+    colonoscopy is documented only in the nursing entry (...)"); B6 (G3-27) - the held session's examination is asked by
+    row 7's done, "documented as performed, in full or in part, on the date of service", in UNLISTED_SCOPE, the
+    session's DOUBT and DIGITAL_SCOPE, while every other act keeps v1's "was done"."""
+
+    def test_case_b_the_colonoscopy_told_only_in_the_nursing_entry(self):
+        item = wording.build(M.ANOTHER_ENTRY, wording.Slots(code='45385', act=Kind.EXAMINATION,
+                                                            family=SessionKind.COLONOSCOPY, group=(Kind.SNARE,),
+                                                            words=W9_REACH, owner=Owner.NURSING), W9_TEXT)
+        self.assertEqual(item.question, 'The colonoscopy is documented only in the nursing entry (“The scope was advanced '
+                                        'to the jejunum.”). Was it performed in this colonoscopy on the date of service?')
+        self.assertEqual(item.reason, 'The colonoscopy is documented only in the nursing entry (“The scope was advanced to '
+                                      'the jejunum.”), not by the physician performing the colonoscopy. Held for the '
+                                      'reviewer, not excluded.')
+        self.assertNotIn('this code accounts for', item.question + item.reason)
+        self.assertNotIn('snare', item.question + item.reason)
+
+    def test_the_codes_own_act_keeps_its_group(self):
+        """Case C (the snare itself in the nursing entry), 45378's own examination, and the code's own act of a kind not
+        established (D2xx's first prototype would have renamed it): "this code accounts for" as before."""
+        for slots, what in ((dict(code='45385', act=Kind.SNARE, group=(Kind.SNARE,)), 'The snare removal'),
+                            (dict(code='45378', act=Kind.EXAMINATION, group=(Kind.EXAMINATION,)), 'The colonoscopy'),
+                            (dict(code='45385', act=Kind.OTHER, group=(Kind.SNARE,)), 'The snare removal'),
+                            (dict(code='45385', group=(Kind.SNARE,)), 'The snare removal')):
+            with self.subTest(**{key: str(value) for key, value in slots.items()}):
+                item = wording.build(M.ANOTHER_ENTRY, wording.Slots(**slots, family=SessionKind.COLONOSCOPY,
+                                                                    words=W9_SNARED, owner=Owner.NURSING), W9_TEXT)
+                self.assertTrue(item.reason.startswith(f'{what} this code accounts for is documented only in the '
+                                                       'nursing entry'), item.reason)
+
+    def test_the_held_sessions_examination_is_asked_by_row_7s_done(self):
+        done = 'documented as performed, in full or in part, on the date of service'
+        for message, slots, question in (
+                (M.UNLISTED_SCOPE, dict(act=Kind.EXAMINATION, family=SessionKind.COLONOSCOPY, words=W9_REACH),
+                 f'Is the colonoscopy (“The scope was advanced to the jejunum.”) {done}?'),
+                (M.DOUBT, dict(act=Kind.EXAMINATION, family=SessionKind.COLONOSCOPY, words=W9_REACH),
+                 f'Confirm whether the colonoscopy (“The scope was advanced to the jejunum.”) is {done}.'),
+                (M.DOUBT, dict(act=Kind.EXAMINATION, words=W9_REACH),  # the examination its own unit speaks of
+                 'Confirm whether the examination (“The scope was advanced to the jejunum.”) was done on the date of '
+                 'service.'),
+                (M.DOUBT, dict(act=Kind.SNARE, family=SessionKind.COLONOSCOPY, words=W9_SNARED),  # another act: v1's
+                 'Confirm whether the snare removal (“A cold snare polypectomy of the 6 mm sigmoid polyp was '
+                 'performed.”) was done on the date of service.'),
+                (M.DIGITAL_SCOPE, dict(DS, held=R_.STATUS, attribute=Attribute.STATUS), DS_ASK)):
+            with self.subTest(message=message, act=slots.get('act'), family=slots.get('family')):
+                item = wording.build(message, wording.Slots(**slots), W9_TEXT)
+                self.assertEqual(item.question, question)
+
+
+class D284Addon(SimpleTestCase):
+    """DECISIONS D284 (G3-15; build list B7): ADDON words an add-on its ADDON row holds from ``code`` and ``codes`` alone -
+    none of its primary codes is counted for this encounter - TEXT_FREE (it reads no document text and quotes nothing),
+    asking no fact of the add-on's act, never "could not confirm ... done", with a true form for no codes (D254 rule 1);
+    its fact key and rank are the ADDON row's (performed_status, rank 4, a question)."""
+
+    def test_the_entry(self):
+        spec = wording.MESSAGES[M.ADDON]
+        self.assertEqual((M.ADDON.value, spec.fact, spec.kind, spec.rank, spec.needs),
+                         ('addon', 'performed_status', ItemKind.QUESTION, 4, ('code',)))
+        self.assertEqual([member.value for member in M][-1], 'addon')
+
+    def test_every_present_and_absent_combination(self):
+        cases = (
+            (('99215',), '99417 is reported only together with one of its primary codes (99215), and none of them is '
+                         'counted for this encounter. Is one of them documented as performed on the date of service?',
+             '99417 is an add-on code: it is reported only together with one of its primary codes (99215), and none of '
+             f'them is counted for this encounter. {wording.HELD}'),
+            (('99205', '99215', '99245'), '99417 is reported only together with one of its primary codes (99205, 99215 '
+                                          'or 99245), and none of them is counted for this encounter. Is one of them '
+                                          'documented as performed on the date of service?',
+             '99417 is an add-on code: it is reported only together with one of its primary codes (99205, 99215 or '
+             f'99245), and none of them is counted for this encounter. {wording.HELD}'),
+            ((), '99417 is reported only together with a primary code, and none is counted for this encounter. Is one '
+                 'documented as performed on the date of service?',
+             '99417 is an add-on code: it is reported only together with a primary code, and none is counted for this '
+             f'encounter. {wording.HELD}'),
+        )
+        for codes, question, reason in cases:
+            for family in (None, SessionKind.OFFICE_EM):
+                with self.subTest(codes=codes, family=family):
+                    item = wording.build(M.ADDON, wording.Slots(code='99417', codes=codes, family=family), '')
+                    self.assertEqual((item.question, item.reason, item.fact), (question, reason, 'performed_status'))
+                    for sentence in (item.question, item.reason):
+                        self.assertNotIn('“', sentence)
+                        self.assertNotRegex(sentence, r'could not confirm.*done')
+                        self.assertEqual(sentence_problems(sentence, ''), [], sentence)
+        self.assertEqual(wording.build(M.ADDON, wording.Slots(code='43273', codes=('43260', '43260')), '').question,
+                         '43273 is reported only together with one of its primary codes (43260), and none of them is '
+                         'counted for this encounter. Is one of them documented as performed on the date of service?')
+
+    def test_it_reads_no_text_and_every_slot_it_reads(self):
+        """TEXT_FREE: worded over an empty revision text exactly as over any; the slots it reads are code and codes."""
+        slots = wording.Slots(**FIXTURES[M.ADDON])
+        self.assertEqual(wording.build(M.ADDON, slots, ''), wording.build(M.ADDON, slots, TEXT))
+        self.assertEqual(reads_of(M.ADDON), frozenset({'code', 'codes'}))

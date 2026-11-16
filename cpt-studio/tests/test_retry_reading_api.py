@@ -150,14 +150,14 @@ class CutOffAnswerTests(RetryCase):
         self.assertEqual(self.run_next('interpret').state, models.Job.FAILED)
 
     def test_the_member_is_told_the_document_is_too_long_and_nothing_is_released(self):
-        self.assert_refused(self.retry(self.encounter), jobs.RETRY_TOO_LONG)
+        self.assert_refused(self.retry(self.encounter), jobs.RETRY_CUT_OFF)  # AMENDMENT-2 1.5 [R:truth-T7]
         [run] = self.interpret_runs(self.revision)
         self.assertIsNone(run.reconciled_at)
         self.assertEqual(progress.encounter_progress(self.encounter)['error']['action'], 'new_document')
 
     def test_an_operator_is_refused_too_unless_the_override_is_asked_and_it_is_recorded(self):
         response = self.operator_retry(self.encounter)
-        self.assertEqual((response.status_code, response.json()['error']), (409, jobs.RETRY_TOO_LONG))
+        self.assertEqual((response.status_code, response.json()['error']), (409, jobs.RETRY_CUT_OFF))
         self.assertEqual(self.operator_retry(self.encounter, {'override': 'yes'}).status_code, 400)
         response = self.operator_retry(self.encounter, {'override': True})
         self.assertEqual(response.status_code, 201, response.content)

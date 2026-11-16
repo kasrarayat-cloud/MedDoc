@@ -66,9 +66,10 @@ their items.
 round w9r): a digital examination (FINAL 5.6 E13: its device claiming manual, ``digital_examination``) never takes a
 binding (engine/evaluate.py), and where a hold rests on its own facts - its rows 2-5 read on another act's row 7, r4a
 QD2, kept as built by D271 - the item names the session's examination by its service, never the DRE's sentence or device
-(``fill``, ``_session_named``). UNLISTED_SCOPE and the carded DOUBT quote an examination statement only when that
-examination is possibly done on the date of service - not of another date, not planned, not by another performer, not
-negated (``_quotable``, ``_quoted_examination``) - else they name the examination by its service with no quote; and
+(``fill``; since D280.3, DIGITAL_SCOPE: below). UNLISTED_SCOPE and the carded DOUBT quote an examination statement only
+when that examination is possibly done on the date of service - not of another date, not planned, not by another
+performer, not negated (``_quotable``, ``_quoted_examination``) - else they name the examination by its service with no
+quote; and
 every DOUBT of a kept unlisted entry carries the entry's nature (``unlisted_what``), carded or not, so a denial is
 worded as a statement that the act was not done (step r3c's form). An act whose kind is not SUPPORTED (negated,
 doubted, unresolved, contradicted, silent) or is other is Kind.OTHER, "another act", in ``act_kind`` - the one label the
@@ -90,6 +91,32 @@ BASE_WITHIN (5c's R8), its whole named by its own family and stated as only poss
 every act slot, "another act", never the code's group's kind (D254 rule 2: ``_act_slot``; a code-level hold, which
 names no act, keeps the group).
 
+**A claimed digital examination's hold is asked as D258 asks** (DECISIONS D280.3; step f3w of AMENDMENT-2's build round,
+build list B1): an examination ESTABLISHED as a digital examination (pairing.established_digital: kind supported
+examination, device supported manual) holds nothing (engine/evaluate's row 7 skips it, pairing's statement side pairs
+it with no examination: D280.1, D280.2). One whose device CLAIMS manual without establishing it - pairing.
+digital_examination and not established, an overfilled device slot included (AMENDMENT-2 4.3.3 c) - keeps QD2's hold
+(D271), and every item resting on it is DIGITAL_SCOPE (``_digital_rest``, ``_digital_fill``): the hold on its own facts
+(its status, date, performer, entry, doubt, a conflict over them - row 7, read on another act's row) and a pair's hold
+in which it is the statement beside an act that may be the session's examination (row 8: its device, its breadth,
+target, session, timing or performer rows). The question names the held session's examination by its service and asks
+whether it is documented as performed, in full or in part, on the date of service, quoting only the session's
+examination that may be quoted (``_quoted_examination``: never the claimed one); the reason quotes the claimed
+examination's own words as a statement whose technique CPT Studio could not confirm, with its open fact (the held fact's
+RANK row, ``held``; its attribute; the entry's owner; a conflict's sides; more than one technique stated, ``techniques``)
+- and, for a pair's hold, whether it is about that examination. The held fact, its key, rank and status are unchanged:
+the clarification keeps the held fact's key (wording.fact_key reads it from ``held`` and, for a conflict, ``act``). It
+is routed by the claimed kind (``_claims_examination``, D281), so an act whose kind is not established but claims the
+examination is asked the same way (the step's NOTES, question Q-DRE-KIND).
+
+**D281, D284, D287** (step f3w): ``_session_named`` clears the owner with the device, place and lesion where the held
+act's words are not quoted (B3); a rank-2 unlisted hold is routed by the act's CLAIMED kind (``_claims_examination``:
+supported, or the claimed value of an unresolved or doubted kind; silent, contradicted and negated claim none), never
+by ``act_kind``, which names (B4), and only an act whose kind is SUPPORTED examination is quoted as the session's
+examination (``_quotable``); an add-on held by its ADDON row is ADDON (``ADDON_CAUSE``, engine/assess's cause, rebuilt
+here from Tag.ADDON: the engine cannot import assess), from codes alone (B7); and ``act_kind``'s event branch is
+facts.established_kind, the one label every conflict key names (B9).
+
 **Causes** (4.4 [R:MO-2]; ``cause_of``): reading_unknown (silent or doubted), reading_contradicted,
 appraisal:<verdict or coherence> for an appraisal reason (3.3 row 9), unestablished:<reason> for any other reason of an
 unresolved fact (unestablished when it carries none), coding_rule:<id> for an established fact failing a coding rule
@@ -98,7 +125,8 @@ vendor is named, and no customer string carries one. step 4c asked for this one 
 
 **Message ids** (``MessageId``; step 3c's wording.Message, mirrored value for value - repair r3c's six D225 ids, three
 Slots fields and D246's SYNTHETIC_ACT included, and round w8r's UNLISTED_SCOPE and ENTEROSCOPY_THROUGH with the Slots
-fields whole_family and whole_possible; and round w9r's Slots field possible_approaches): the engine cannot import
+fields whole_family and whole_possible; round w9r's Slots field possible_approaches; and AMENDMENT-2's round's
+DIGITAL_SCOPE and ADDON with the Slots fields held and techniques): the engine cannot import
 studio/interpretation/wording.py - it imports studio.gi and is no ``mypy --strict`` module (5.7 measure 5) - so the ids
 are restated here as an Enum whose every member equals wording.Message's by name and value (tests/v2/test_questions.py
 pins it, and pins each id's fact key, kind and rank against wording.MESSAGES), and ``Fill`` mirrors wording.Slots field
@@ -108,8 +136,9 @@ wording.Bundling by value (never dataclasses.asdict, which would turn the Span r
 test_questions.slots does it).
 
 **The text-free boundary** (P1, FINAL-V2 5.7 measures 4 and 5): this module imports the standard library,
-contract/types.py and engine's anatomy, catalogue, classes, combination, coverage, facts, pairing, requirements and
-types only (classes, combination and coverage read for the items they raise: D246) - no retired v1 module,
+contract/types.py and engine's anatomy, catalogue, classes, combination, coverage, facts, pairing, requirements,
+requirements_table (Tag.ADDON, for the ADDON row's cause) and types only (classes, combination and coverage read for the
+items they raise: D246) - no retired v1 module,
 none of contract's text modules, not wording - holds no word, phrase or marker list (every module-level collection holds
 enumeration members, or is computed from them), reads no text and returns no document string (a cause and a fact key are
 CPT Studio's codes). ``mypy --strict`` passes over it.
@@ -121,12 +150,14 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, unique
 from types import MappingProxyType
 
-from studio.interpretation.contract.types import (AnatomyType, Approach, Attribute, DateRelation, Device, Extent, Kind,
-                                                  Landmark, Owner, Performer, Purpose, Qualifier2, Reason, Result,
-                                                  SessionKind, Station, Status, Tract, UnlistedWhat, VerdictValue)
+from studio.interpretation.contract.types import (AnatomyType, Approach, Attribute, DateRelation, Device, Extent,
+                                                  FactState, Kind, Landmark, Owner, Performer, Purpose, Qualifier2,
+                                                  Reason, Result, SessionKind, Station, Status, Tract, UnlistedWhat,
+                                                  VerdictValue)
 from studio.interpretation.engine import anatomy, catalogue, classes, combination, coverage, pairing
 from studio.interpretation.engine import facts as facts_
 from studio.interpretation.engine import requirements as rq
+from studio.interpretation.engine.requirements_table import Tag
 from studio.interpretation.engine.types import (Fact, FactSet, HeldFact, Id, IdFamily, ItemKind, Span,
                                                 UnlistedStatement)
 
@@ -195,8 +226,9 @@ class Rule(Enum):
     ACT_ELSEWHERE = 'act_elsewhere'  # ENT (step 4c's: an act held by another family's session)
 
 
-def coding_rule(rule: Rule) -> str:
-    """The cause of a hold a coding rule raises: coding_rule:<id> (4.4)."""
+def coding_rule(rule: Rule | Tag) -> str:
+    """The cause of a hold a coding rule raises: coding_rule:<id> (4.4) - a Rule of this module, or a code-specific row of
+    requirements_table (Tag: engine/assess's ADDON row, ``ADDON_CAUSE``)."""
     return f'coding_rule:{rule.value}'
 
 
@@ -219,6 +251,9 @@ def cause_of(found: Fact) -> str:
     return f'{UNESTABLISHED}:{reason.value}'
 
 
+# The cause of an unmet ADDON row (engine/assess.ADDON_CAUSE, 4.4's coding_rule:<id>): engine/assess imports this module,
+# so it is rebuilt here from the same tag (tests/v2/test_questions.py pins the two equal; DECISIONS D284, build list B7).
+ADDON_CAUSE = coding_rule(Tag.ADDON)
 # The causes engine/pairing.py gives a relation's hold (4.4's relation:<type>; pairing.cause).
 POSSIBLE_STATEMENT = 'relation:possible_statement'
 RELATION_CAUSES: frozenset[str] = frozenset(
@@ -427,6 +462,10 @@ class MessageId(Enum):
     # held session's examination asked; ENT's route part whose only unknown is the anatomy passed through
     UNLISTED_SCOPE = 'unlisted_scope'
     ENTEROSCOPY_THROUGH = 'enteroscopy_through'
+    # D280.3 and D284 (step f3w of AMENDMENT-2's build round, mirrored): a claimed digital examination's hold, asked as
+    # D258 asks; an add-on held by its ADDON row, from codes alone
+    DIGITAL_SCOPE = 'digital_scope'
+    ADDON = 'addon'
 
 
 @unique
@@ -486,6 +525,8 @@ class Fill:
     whole_family: SessionKind | None = None
     whole_possible: bool = False
     possible_approaches: tuple[Approach, ...] = ()
+    held: rq.Rank | None = None
+    techniques: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -682,9 +723,11 @@ def message_of(held: HeldFact, code: CodeFacts) -> MessageId:
     ENTEROSCOPY_ROUTE too (``_approach_unknown``: DECISIONS D267, r4a QA option (b)); a contradicted attribute other
     than the status by
     that attribute (CONFLICT_ATTRIBUTE: P7); a base-within
-    hold (step 4d's combination.base_within_hold, cause coding_rule:base_within) by BASE_WITHIN (D246, 5c's R8).
+    hold (step 4d's combination.base_within_hold, cause coding_rule:base_within) by BASE_WITHIN (D246, 5c's R8); the
+    ADDON row's witness (cause ``ADDON_CAUSE``) by ADDON (D284, build list B7), from codes alone.
     ``item`` refines it where the FactSet or the holds evaluate.py raised decide (``_refined``: SYNTHETIC_ACT,
-    UNLISTED_SCOPE). Every id it returns has the held fact's fact key and rank in wording.MESSAGES, and its kind too -
+    UNLISTED_SCOPE, DIGITAL_SCOPE - the last a question with the held fact's own key and rank, whatever its
+    MESSAGES row). Every id it returns has the held fact's fact key and rank in wording.MESSAGES, and its kind too -
     but for BASE_WITHIN, an explanation in wording, which a base-within hold of a possible whole (a question) is mapped
     to by the ruling's letter (r4a's QW; D257 words the possible whole) (tested)."""
     key, _ = fact_of(held)
@@ -703,6 +746,8 @@ def message_of(held: HeldFact, code: CodeFacts) -> MessageId:
             return MessageId.DOUBT
         if held.rank == rq.Rank.BUNDLED.value:
             return MessageId.BUNDLED
+        if held.cause == coding_rule(Tag.ADDON):  # D284 (B7): the ADDON row's own message, from codes alone
+            return MessageId.ADDON
         if held.kind is _E and rule is not None and rule in _STATUS_EXPLANATIONS:
             return _STATUS_EXPLANATIONS[rule]
         return MessageId.NOT_DOCUMENTED if rule is Rule.NOT_DOCUMENTED else MessageId.STATUS
@@ -769,16 +814,13 @@ def act_kind(R: FactSet, event: Id | None, group: Sequence[Kind]) -> Kind | None
     negated, doubted, unresolved, contradicted or silent - or is other is Kind.OTHER, "another act" (DECISIONS D267:
     D254 rule 2 reaches every kind that is not SUPPORTED, refute-5c-r1 P2's four inputs; the one label overlay's slots,
     the Fill and evaluate's conflict key read - a negated snare is never "the snare removal", the kind the document
-    denies). For no act (a code-level hold), the first kind of the code's group (None for none)."""
+    denies). For an act it is facts.established_kind (DECISIONS D287, build list B9: the branch moved there, not copied,
+    so this, evaluate's, coverage's and classes' keys read one derivation); for no act (a code-level hold), the first
+    kind of the code's group (None for none). It names an act; it never routes a hold (D281: ``_claims_examination``
+    routes)."""
     if event is None:
         return group[0] if group else None
-    found = facts_.fact(R, event, _A.KIND)
-    if found.result is Result.SUPPORTED and isinstance(found.value, Kind):
-        purpose = _supported(facts_.fact(R, event, _A.PURPOSE))
-        named = catalogue.catalogue_kind(found.value, purpose if isinstance(purpose, Purpose) else None)
-        if named is not None:
-            return named
-    return Kind.OTHER
+    return facts_.established_kind(R, event)
 
 
 def _act_slot(R: FactSet, event: Id | None, group: Sequence[Kind]) -> Kind | None:
@@ -940,10 +982,13 @@ def fill(held: HeldFact, groups: Sequence[Group], code: CodeFacts, R: FactSet, m
     Then what D225's and D246's ids name (``_specific``): the unlisted entry on the evidence, XCHG's two acts, a
     synthetic act, an unlisted doubt's pair with a session's examination (D232), the contradicted attribute, the stoma
     class's approach, the place STRUCT:pfc sets apart, the bundling items' part, whole and rule, the enteroscopy class
-    items' class, approach and form. A digital examination the hold names as the session's examination (its rows 2-5,
-    read on another act's row 7: r4a QD2, kept as built by DECISIONS D271) is never quoted or named as it: the
-    session's examination that may be quoted, by its service, and no device (``_session_named``: D265, "the DRE's
-    sentence is never quoted as 'the colonoscopy'")."""
+    items' class, approach and form. A held fact resting on a claimed digital examination (DIGITAL_SCOPE, D280.3: its
+    rows 2-5 read on another act's row 7 - r4a QD2, kept by DECISIONS D271 - or a pair whose statement it is) is filled
+    by ``_digital_fill``: the held session's examination by its service, quoting only the session's examination that may
+    be quoted, the claimed examination's own words its first statement. Any other hold naming a digital examination as
+    the session's examination (none is left once an established one holds nothing: D280.1, D280.2) is never quoted or
+    named as it: the session's examination that may be quoted, by its service, and no device (``_session_named``: D265,
+    "the DRE's sentence is never quoted as 'the colonoscopy'")."""
     named = _named(held, groups, R, acts)
     event = named.act
     words = anchor_units(R, event)
@@ -968,6 +1013,9 @@ def fill(held: HeldFact, groups: Sequence[Group], code: CodeFacts, R: FactSet, m
                 owner=owner if isinstance(owner, Owner) else None, stations=stations, denied=denied,
                 tract=tract if isinstance(tract, Tract) else None, required_tract=code.tract)
     where = session if isinstance(session, Id) else None
+    rest = _digital_rest(held, R) if message is MessageId.DIGITAL_SCOPE else None
+    if rest is not None:  # D280.3 (B1): the held session's examination asked, the claimed one quoted in the reason
+        return _digital_fill(base, held, code, R, rest, groups, acts, named.statements)
     if event is not None and base.act is Kind.EXAMINATION and digital_examination(R, event):
         base = _session_named(base, R, event, where)  # D265: never the digital examination as the session's
     return _specific(base, held, code, R, message, event, where, raised if raised is not None else Raised(), acts)
@@ -1086,7 +1134,7 @@ def _scope_entry(held: HeldFact, R: FactSet, raised: Raised) -> UnlistedStatemen
             return synthetic
         return None
     event = _event(held.subject)
-    if event is None or act_kind(R, event, ()) is not Kind.EXAMINATION:
+    if event is None or not _claims_examination(R, event):  # D281 (B4): routed by the claimed kind, never act_kind
         return None
     pair = _unlisted_pair(held, R, event)
     return pair.statement if pair is not None and _names_no_held_session(pair.statement, R) else None
@@ -1108,13 +1156,33 @@ def _possibly_done_today(R: FactSet, event: Id) -> bool:
             and facts_.possibly(facts_.fact(R, event, _A.PERFORMER), Performer.DOCUMENTING_TEAM))
 
 
+def _claims_examination(R: FactSet, event: Id | None) -> bool:
+    """Whether a hold on ``event`` is routed as a hold on the held session's examination (DECISIONS D281, build list B4;
+    D258's UNLISTED_SCOPE, D232's carded DOUBT, D280.3's DIGITAL_SCOPE): the catalogue kind of the act's CLAIMED kind is
+    the examination - its kind supported, or not established with the examination its claimed value (unresolved,
+    doubted: its claim stated, ``state`` supported). A silent kind, a contradicted one (pass 1's own, or one settle
+    found contradicted) and a negated one claim none. A predicate over facts.fact(R, event, KIND).value; ``act_kind``
+    names an act and never routes (D267 rules the label, D281 the routing)."""
+    if event is None:
+        return False
+    found = facts_.fact(R, event, _A.KIND)
+    if (not isinstance(found.value, Kind) or found.state is not FactState.SUPPORTED
+            or found.result not in (Result.SUPPORTED, Result.UNRESOLVED, Result.UNKNOWN)):
+        return False
+    purpose = _supported(facts_.fact(R, event, _A.PURPOSE))
+    return catalogue.catalogue_kind(found.value, purpose if isinstance(purpose, Purpose) else None) is Kind.EXAMINATION
+
+
 def _quotable(R: FactSet, event: Id | None) -> bool:
-    """An examination an item may quote as the held session's examination (DECISIONS D265, D266): never a digital
-    examination (FINAL 5.6 E13, ``digital_examination``: the DRE's sentence is never quoted as "the colonoscopy"), and
-    only one possibly done on the date of service (``_possibly_done_today``: "Colonoscopy in 2019 was normal.", "Repeat
-    colonoscopy in 3 years.", one by another performer or a denial is never quoted as the examination whose performance
-    on the date of service is asked - refute-r4a-r2 F2, D258's QP2 mechanism)."""
-    return event is not None and not digital_examination(R, event) and _possibly_done_today(R, event)
+    """An examination an item may quote as the held session's examination (DECISIONS D265, D266): an act whose kind is
+    SUPPORTED examination (D281, build list B4: an act whose kind is not established is never quoted as the session's
+    examination), never a digital examination (FINAL 5.6 E13, ``digital_examination``: the DRE's sentence is never
+    quoted as "the colonoscopy"), and only one possibly done on the date of service (``_possibly_done_today``:
+    "Colonoscopy in 2019 was normal.", "Repeat colonoscopy in 3 years.", one by another performer or a denial is never
+    quoted as the examination whose performance on the date of service is asked - refute-r4a-r2 F2, D258's QP2
+    mechanism)."""
+    return (event is not None and facts_.holds(facts_.fact(R, event, _A.KIND), Kind.EXAMINATION)
+            and not digital_examination(R, event) and _possibly_done_today(R, event))
 
 
 def _quoted_examination(R: FactSet, event: Id | None, session: Id | None) -> Id | None:
@@ -1137,11 +1205,13 @@ def _session_named(base: Fill, R: FactSet, event: Id | None, session: Id | None)
     another occasion) and no device, place or lesion of the act - a digital examination is never named as the session's
     examination ("Was the colonoscopy (manual) (<the DRE's sentence>) done ...": refute-r4a-r2 F1, refute-r4a-r1 P3 of
     round w8r), and an examination of another occasion never as the one done on the date of service (refute-r4a-r2
-    F2). The statements the item quotes are unchanged."""
+    F2). The statements the item quotes are unchanged. No Fill carries one event's words beside another event's facts
+    (DECISIONS D281, G1-05 (i); build list B3): where the held act's words are not quoted, its owner goes with its
+    device, place and lesion."""
     examination = _quoted_examination(R, event, session)
     if examination is not None and examination == event:
         return base
-    return replace(base, words=anchor_units(R, examination), device=None, place=None, lesion=())
+    return replace(base, words=anchor_units(R, examination), device=None, place=None, lesion=(), owner=None)
 
 
 def _scope_family(R: FactSet, session: Id | None, code: CodeFacts) -> SessionKind | None:
@@ -1162,7 +1232,9 @@ def _scope_fill(base: Fill, held: HeldFact, code: CodeFacts, R: FactSet, event: 
     session's examination that may be, else none: ``_quoted_examination``), the statement quoted (``statements``: the
     entry's own units, none when it has none), its nature (``unlisted_what``, as the carded DOUBT's: D266), and the act
     an examination (no device, place or lesion of the code's act). It never names the statement's nature, and never
-    says that the document leaves that examination in doubt or denies it (wording's builder)."""
+    says that the document leaves that examination in doubt or denies it (wording's builder). The owner of the held act
+    goes with its words (DECISIONS D281, build list B3: no Fill carries one event's words beside another event's facts):
+    kept only when the examination quoted is the held act itself."""
     entry = _scope_entry(held, R, raised)
     units = tuple(sorted(set(entry.units))) if entry is not None else ()
     if _event(held.subject) is not None:  # 3.2.6 rule 4's pair: the held act is the examination
@@ -1170,9 +1242,11 @@ def _scope_fill(base: Fill, held: HeldFact, code: CodeFacts, R: FactSet, event: 
     else:  # a synthetic examination's doubt: the held session
         where = _session_of(held)
         examination = _quoted_examination(R, None, where)
+    own = examination is not None and examination == _event(held.subject)
     return replace(base, act=Kind.EXAMINATION, family=_scope_family(R, where, code),
                    words=anchor_units(R, examination), statements=(units,) if units else (), device=None,
-                   place=None, lesion=(), unlisted_what=entry.what if entry is not None else None)
+                   place=None, lesion=(), owner=base.owner if own else None,
+                   unlisted_what=entry.what if entry is not None else None)
 
 
 def _side_slot(R: FactSet, side: Side) -> Kind:
@@ -1358,6 +1432,116 @@ def _enteroscopy_fill(base: Fill, held: HeldFact, code: CodeFacts, R: FactSet, m
                    possible_approaches=tuple(way for way in Approach if way in possible))
 
 
+# --- a claimed digital examination's hold, asked as D258 asks (DECISIONS D280.3; build list B1) ------------------------
+
+# The fact keys a hold on an examination's OWN facts carries when engine/evaluate's row 7 reads them on another act's row
+# (its rows 2-5 - status, date relation, performer, entry -, a doubt on its status, a conflict over any of them, and its
+# kind and session ties): RANK's keys, read with conflict:<kind> apart (``_ROW_7_FACTS``).
+_ROW_7_FACTS: frozenset[rq.FactKey] = frozenset({rq.FactKey.PERFORMED_STATUS, rq.FactKey.EVENT_TIME,
+                                                 rq.FactKey.EVENT_PERFORMER, rq.FactKey.EVENT_ENTRY})
+_ROW_7_ATTRIBUTES: frozenset[Attribute] = frozenset({_A.STATUS, _A.DATE_RELATION, _A.PERFORMER, _A.ENTRY, _A.KIND,
+                                                     _A.SESSION})
+
+
+def claimed_digital(R: FactSet, event: Id) -> bool:
+    """An examination whose device CLAIMS manual without establishing it (DECISIONS D280.3; build list B1: "device not
+    supported manual"): its claimed kind the examination (``_claims_examination``, D281's routing) and
+    pairing.digital_examination (manual its claimed value or one of its readings, an overfilled device slot whose written
+    facts state it included: AMENDMENT-2 4.3.3 c), its device not SUPPORTED manual. It keeps QD2's hold (D271), and every
+    item resting on it is DIGITAL_SCOPE, whose reason says CPT Studio could not confirm its technique - true of exactly
+    these. An examination established as a digital one (kind supported examination AND device supported manual) holds
+    nothing (D280.1, D280.2), so no item rests on it; one whose device is supported manual but whose kind is not
+    established is neither (its technique is confirmed): its items keep D265's form (the step's NOTES, Q-DRE-KIND)."""
+    return (_claims_examination(R, event) and digital_examination(R, event)
+            and not facts_.holds(facts_.fact(R, event, _A.TECHNIQUE_DEVICE), Device.MANUAL))
+
+
+@dataclass(frozen=True, slots=True)
+class _Rest:
+    """A held fact resting on a claimed digital examination (D280.3): ``examination``, that examination; ``act``, the act
+    a pair's hold names beside it, the claimed examination its statement (4.5, row 8), None for a hold on the
+    examination's own facts (row 7, read on another act's row)."""
+    examination: Id
+    act: Id | None
+
+
+def _digital_rest(held: HeldFact, R: FactSet) -> _Rest | None:
+    """Where ``held`` rests on a claimed digital examination (``claimed_digital``; D280.3, build list B1), and how: a hold
+    on its own facts - its subject the examination, its fact key a row-7 key (``_ROW_7_FACTS``, or conflict:<kind>) about
+    one of its row-7 attributes (``_ROW_7_ATTRIBUTES``): status, date, performer, entry, doubt, a conflict over them, its
+    kind and session ties -; or a pair's hold (a relation's cause) whose statement is the examination, beside an act whose
+    claimed kind is the examination (the session's examination it may be: its device row, its breadth, target, session,
+    timing or performer rows). None for every other held fact: a hold of another rule that happens to name the
+    examination keeps its item."""
+    subject = _event(held.subject)
+    if subject is None:
+        return None
+    key, _ = fact_of(held)
+    statement = _statement_of(held, R)
+    if statement is not None:
+        if claimed_digital(R, statement) and _claims_examination(R, subject):
+            return _Rest(statement, subject)
+        return None
+    if held.cause in RELATION_CAUSES:  # a relation's hold whose statement is not found; an unlisted hold has no attribute
+        return None
+    own = key is rq.FactKey.CONFLICT or key in _ROW_7_FACTS
+    if own and held.attribute in _ROW_7_ATTRIBUTES and claimed_digital(R, subject):
+        return _Rest(subject, None)
+    return None
+
+
+def _held_session(R: FactSet, rest: _Rest, groups: Sequence[Group], acts: Sequence[Id]) -> Id | None:
+    """The held session a DIGITAL_SCOPE item names (D280.3): for a pair's hold, the session of the act it names, else the
+    claimed examination's; for a hold on the examination's own facts, its supported session, else the session of the act
+    whose row read it (the group's bound act, else the code's first supporting act) - each a supported session; None
+    when none is."""
+    first = rest.act if rest.act is not None else rest.examination
+    found = _supported(facts_.fact(R, first, _A.SESSION))
+    if isinstance(found, Id):
+        return found
+    others = ((rest.examination,) if rest.act is not None else
+              (*(group.bound for group in groups if group.bound is not None), *acts))
+    for other in others:
+        session = _supported(facts_.fact(R, other, _A.SESSION))
+        if isinstance(session, Id):
+            return session
+    return None
+
+
+def _techniques(R: FactSet, event: Id) -> bool:
+    """More than one technique stated for ``event`` (D280.3's open fact): its device fact claims two values or more
+    (facts.claimed_values: an overfilled slot's written values or a contradiction's sides, the denied ones left out)."""
+    return len(facts_.claimed_values(facts_.fact(R, event, _A.TECHNIQUE_DEVICE))) > 1
+
+
+def _digital_fill(base: Fill, held: HeldFact, code: CodeFacts, R: FactSet, rest: _Rest, groups: Sequence[Group],
+                  acts: Sequence[Id], statements: tuple[tuple[Span, ...], ...]) -> Fill:
+    """DIGITAL_SCOPE's slots (D280.3; build list B1), from the code and the held fact alone - nothing of the claimed
+    examination but its words: ``family`` the held session's service (``_scope_family``: none for a session the FactSet
+    does not hold), ``words`` the session's examination that may be quoted (``_quoted_examination``: for a pair's hold the
+    act it names when it may be, else the session's first established examination that may be; never the claimed one,
+    which is no examination ``_quotable`` takes), ``statements`` the claimed examination's own words first, then - for a
+    conflict over its facts - the conflict's sides; ``owner`` its supported owner for an entry hold (another role's
+    entry); ``attribute`` the held fact's attribute for a hold on its own facts, None for a pair's (whose open fact is
+    whether the statement is about the session's examination); ``held`` the held fact's RANK row and ``act`` its
+    conflict's kind (the examination otherwise), so the clarification keeps the held fact's key (wording.fact_key);
+    ``techniques`` when more than one technique is stated for it. No device, place or lesion."""
+    where = _held_session(R, rest, groups, acts)
+    examination = _quoted_examination(R, rest.act, where)
+    key, kind = fact_of(held)
+    own = rest.act is None
+    owner = _supported(facts_.fact(R, rest.examination, _A.ENTRY)) if own and key is rq.FactKey.EVENT_ENTRY else None
+    sides = statements if own and key is rq.FactKey.CONFLICT else ()
+    return Fill(code=base.code, group=base.group, technique=base.technique, site=base.site,
+                exam_class=base.exam_class, required_tract=base.required_tract,
+                act=kind if kind is not None else Kind.EXAMINATION, family=_scope_family(R, where, code),
+                words=anchor_units(R, examination), statements=(anchor_units(R, rest.examination), *sides),
+                owner=owner if isinstance(owner, Owner) and owner is not Owner.DOCUMENTING_CLINICIAN else None,
+                attribute=held.attribute if own else None,
+                held=rq.Rank(held.rank) if held.rank is not None else None,
+                techniques=_techniques(R, rest.examination))
+
+
 def _specific(base: Fill, held: HeldFact, code: CodeFacts, R: FactSet, message: MessageId, event: Id | None,
               session: Id | None, raised: Raised, acts: Sequence[Id] = ()) -> Fill:
     """The slots D225's and D246's ids need (wording's builders refuse slots that contradict them), set on the base Fill:
@@ -1418,11 +1602,14 @@ def _specific(base: Fill, held: HeldFact, code: CodeFacts, R: FactSet, message: 
     pair = _unlisted_pair(held, R, event) if message is MessageId.DOUBT and held.cause == UNLISTED else None
     if pair is not None and event is not None:  # 3.2.6 rule 4's pair (row 8): its entry's nature, carded or not (D266)
         what = pair.statement.what
-        if base.act is Kind.EXAMINATION:  # with a session's examination
+        if _claims_examination(R, event):  # with a session's examination - routed by the claimed kind (D281, B4)
             if what is UnlistedWhat.DOUBT and not _names_sessions_examination(pair.statement, event, R):
                 return replace(_own_entry(base, pair.statement), unlisted_what=what)  # D232: never "left in doubt"
-            return replace(_session_named(base, R, event, session), unlisted_what=what)  # D265, D266: quoted only
+            named = replace(base, act=Kind.EXAMINATION)  # the session's examination by its service (D281, as _scope_fill)
+            return replace(_session_named(named, R, event, session), unlisted_what=what)  # D265, D266: quoted only
         return replace(base, unlisted_what=what)
+    if message is MessageId.ADDON:  # D284 (B7): from codes alone - the add-on code; its primaries are the caller's
+        return Fill(code=base.code, group=base.group, family=base.family)
     if message in _BUNDLING_ITEMS:
         return _bundling_fill(base, held, code, R, message, acts)
     if message in _ENTEROSCOPY_FILLED:
@@ -1457,11 +1644,15 @@ def _refined(held: HeldFact, message: MessageId, raised: Raised, R: FactSet) -> 
     procedure session - a doubt or a denial with no card, or a card naming a session the FactSet does not hold - held
     against a session's examination as UNLISTED_SCOPE (D258, ``_scope_entry``: the held session's examination asked,
     never the statement), the same fact key, kind and rank again; any other kept unlisted DOUBT stays DOUBT, whose
-    sentence is true of it."""
+    sentence is true of it. A held fact resting on a claimed digital examination (``_digital_rest``: its own facts read
+    on another act's row 7, or a pair whose statement it is) is DIGITAL_SCOPE (D280.3, build list B1), whatever its fact
+    key: the held fact, its key and rank are unchanged."""
     if held in raised.evidence:
         return MessageId.UNLISTED_EVIDENCE
     if message is MessageId.DUCT and held in raised.exchanges:
         return MessageId.SAME_DUCT
+    if _digital_rest(held, R) is not None:  # D280.3 (B1): a claimed digital examination's hold, asked as D258 asks
+        return MessageId.DIGITAL_SCOPE
     if message is MessageId.DOUBT:
         entry = synthetic_entry(held, R, raised)
         if entry is not None and entry.what is UnlistedWhat.ACT:

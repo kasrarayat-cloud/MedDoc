@@ -201,6 +201,9 @@ class RecordTests(TestCase):
 class SectionTests(TestCase):
     def setUp(self):
         self.rows = Rows()
+        # AMENDMENT-2 1.5: only a run of the current adapter version sets a hold; Rows' runs are v1's
+        self.enterContext(mock.patch.object(holds, 'current_adapter_version',
+                                            return_value=interpretation.ADAPTER_VERSION))
 
     def test_a_legacy_assessment_is_only_said_to_be_one(self):
         legacy = self.rows.assessment(engine_version=LEGACY_ENGINE, context=self.rows.context(version='gi-context@5'))
@@ -256,6 +259,9 @@ class SectionTests(TestCase):
 class WindowTests(TestCase):
     def setUp(self):
         installed(self)
+        # AMENDMENT-2 1.5: only a run of the current adapter version sets a hold; Rows' runs are v1's
+        self.enterContext(mock.patch.object(holds, 'current_adapter_version',
+                                            return_value=interpretation.ADAPTER_VERSION))
         self.rows = rows = Rows()
         rows.run(usage=USAGE)  # before the window
         rows.assessment(engine_version=LEGACY_ENGINE, context=rows.context(version='gi-context@5'))
@@ -289,12 +295,14 @@ class WindowTests(TestCase):
         found = report.window(self.since)
         runs = found['gemini_runs']
         self.assertEqual(runs['total'], 8)  # the earlier run and the Corti run are outside it
+        self.assertEqual(runs['by_provider'], {'gemini': 8})  # AMENDMENT-2 section 9: READ_PROVIDERS, by provider
         self.assertEqual(runs['by_state'], {'failed': 2, 'not_sent': 1, 'succeeded': 4, 'unknown': 1})
         self.assertEqual((runs['sent'], runs['reused']), (6, 1))
         self.assertEqual(runs['requested_models'], {'gemini-4-carbon': 8})
         self.assertEqual(runs['returned_models'], {'(none)': 5, 'gemini-4-carbon': 3})
         self.assertEqual(runs['paused'], {holds.HELD_HOLD: 1})
-        self.assertEqual(runs['usage'], {'promptTokenCount': 6355, 'candidatesTokenCount': 11183,
+        self.assertEqual(runs['usage'], {**{key: 0 for key in report.ANTHROPIC_USAGE_KEYS},
+                                         'promptTokenCount': 6355, 'candidatesTokenCount': 11183,
                                          'thoughtsTokenCount': 120, 'totalTokenCount': 17658,
                                          'cachedContentTokenCount': 0, 'toolUsePromptTokenCount': 0})
         expected = (Decimal(pricing.estimate(interpretation.MODEL, USAGE, on=NOVEMBER)['estimated_usd'])
@@ -336,7 +344,12 @@ class WindowTests(TestCase):
             'inventory_version': 'gemini-inventory@1', 'engine_version': 'cpt-studio-events@1',
             # design v2 (step 5c): the labels this release writes
             'adapter_version_v2': 'gemini-generate@cptstudio-2', 'interpretation_pair': 'gemini-events@2/appraisal@1',
-            'inventory_version_v2': 'gemini-inventory@2', 'engine_version_v2': 'cpt-studio-events@2'})
+            'inventory_version_v2': 'gemini-inventory@2', 'engine_version_v2': 'cpt-studio-events@2',
+            # AMENDMENT-2 8.1: the labels the current path writes, beside the kept names
+            'model_v3': 'claude-fable-5-2', 'provider_v3': 'anthropic',
+            'adapter_version_v3': 'anthropic-messages@cptstudio-interp-1',
+            'interpretation_pair_v3': 'gemini-events@3/appraisal@2', 'inventory_version_v3': 'gemini-inventory@3',
+            'engine_version_v3': 'cpt-studio-events@3', 'read_providers': ['anthropic', 'gemini']})
         # design v2: the cpt-studio-events@1 rows of this window are v1 rows, counted apart (FINAL-V2 6.2)
         self.assertEqual((found['assessments']['v2'], found['assessments']['v1_events']), (0, 3))
         json.dumps(found)
@@ -366,7 +379,8 @@ class WindowTests(TestCase):
 
     def test_the_model_constant_is_checked_against_d13s_literal(self):
         # interpretation.MODEL, adapter.MODEL and adapter.ENDPOINT are one value: comparing them with each other passes
-        # whatever the model is
+        # whatever the model is. AMENDMENT-2 section 9 keeps D13's literals for the dormant Gemini adapter, so its
+        # constants are still checked (D275's are, in test_the_model_constant_is_checked_against_d275s_literal)
         from studio.interpretation import adapter
 
         clean = {item['name']: item for item in report.self_test(report.window(timezone.now()))['checks']}
@@ -389,6 +403,34 @@ class WindowTests(TestCase):
         with mock.patch.object(adapter, 'ENDPOINT', adapter.ENDPOINT.replace('v1beta', 'v1')):  # the endpoint alone
             self.assertFalse({item['name']: item for item in report.self_test(report.window(timezone.now()))['checks']}
                              ['model constant']['ok'])
+
+    def test_the_model_constant_is_checked_against_d275s_literal(self):
+        # AMENDMENT-2 section 9: interpretation.MODEL_V3, fable_adapter.MODEL and fable_adapter.ENDPOINT are compared
+        # with the written-out D275_MODEL and D275_ENDPOINT, never with each other (the three are one value)
+        from studio.interpretation import fable_adapter
+
+        self.assertEqual((report.D275_MODEL, report.D275_ENDPOINT),
+                         ('claude-fable-5-2', 'https://api.anthropic.com/v1/messages'))
+        clean = {item['name']: item for item in report.self_test(report.window(timezone.now()))['checks']}
+        self.assertTrue(clean['model constant']['ok'], clean['model constant'])
+        self.assertIn('claude-fable-5-2, D275 says claude-fable-5-2', clean['model constant']['detail'])
+        for changed in ('claude-fable-5-2-preview', 'claude-fable-5-1', 'claude-opus-5-5'):
+            with self.subTest(changed=changed):
+                with mock.patch.object(interpretation, 'MODEL_V3', changed), \
+                        mock.patch.object(fable_adapter, 'MODEL', changed):
+                    test = report.self_test(report.window(timezone.now()))
+                check = {item['name']: item for item in test['checks']}['model constant']
+                self.assertFalse(check['ok'])
+                self.assertFalse(test['passed'])
+                self.assertIn(f'{changed}, D275 says claude-fable-5-2', check['detail'])
+                self.assertIn('interpretation.MODEL_V3, fable_adapter.MODEL differ', check['detail'])
+        for name, value in (('MODEL', 'claude-fable-5-2-preview'),
+                            ('ENDPOINT', 'https://api.anthropic.com/v1/complete')):  # each constant alone
+            with self.subTest(name=name), mock.patch.object(fable_adapter, name, value):
+                check = {item['name']: item for item in report.self_test(report.window(timezone.now()))['checks']
+                         }['model constant']
+                self.assertFalse(check['ok'])
+                self.assertTrue(check['detail'].endswith(f'; fable_adapter.{name} differ'), check['detail'])
 
     def test_a_record_that_names_another_inventory_fails_the_self_test(self):
         # the reviewer's case: a complete, on-pin sentinel record and an inventory on the assessment, but the record
@@ -466,7 +508,9 @@ class CommandTests(TestCase):
         self.assertEqual(self.fields(text), list(report.D22_FIELDS))
         lines = dict(line.split(': ', 1) for line in text.splitlines())
         self.assertTrue(all(lines[field].strip() for field in report.D22_FIELDS))  # each with its value
-        self.assertEqual(lines['model'].split(' ')[0], 'gemini-4-carbon')
+        # AMENDMENT-2 section 9: the interpreter's model first, the dormant Gemini adapter's beside it
+        self.assertEqual(lines['model'].split(' ')[0], 'claude-fable-5-2')
+        self.assertIn("the dormant Gemini adapter's gemini-4-carbon", lines['model'])
         self.assertIn('2539 code objects (pinned 2539', lines['sentinel deny-set size'])
         self.assertEqual(lines['sentinel positive control'], 'ok')
         self.assertTrue(lines['sentinel install'].startswith('ok; sys.monitoring tool 4 (cpt-studio-sentinel)'))

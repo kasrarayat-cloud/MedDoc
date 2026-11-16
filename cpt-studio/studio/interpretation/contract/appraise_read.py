@@ -1,6 +1,7 @@
-"""The strict reader of pass 2's answer (gemini-appraisal@1; docs/gemini-migration/FINAL-V2.md 3.2.4, 3.2.5, 2.4 and
-1.8; step 2c of 8.1): read(answer_text, claim_set, unit_count) gives the answer's verdicts and unlisted statements,
-each bound to its claim's content key, with their item-level findings (ReadAppraisal), or a Refusal of the WHOLE answer.
+"""The strict reader of pass 2's answer (gemini-appraisal@1, and @2 for the Fable request: AMENDMENT-2 8.1-8.2;
+docs/gemini-migration/FINAL-V2.md 3.2.4, 3.2.5, 2.4 and 1.8; step 2c of 8.1): read(answer_text, claim_set,
+unit_count) gives the answer's verdicts and unlisted statements, each bound to its claim's content key, with their
+item-level findings (ReadAppraisal), or a Refusal of the WHOLE answer.
 
 **The whole answer, in this order; the first failure refuses it and nothing of it is read** (3.2.4: "Strict JSON, the
 schema and the bounds refuse the whole answer, as for pass 1"):
@@ -34,6 +35,13 @@ Nothing here judges a verdict or reads a word of the document: it reads ids, enu
 reason is CPT Studio's own sentence (extract_read's Refusal, the shared type): it names places by path and position and
 values by count, never the model's text. An answer is read only under LOCAL_SCHEMA's pin (check_pin), which stays empty
 until the integration owner writes it (2.5): until then no answer is read.
+
+**The pin is checked by the label the request was built under** (AMENDMENT-2 8.1-8.2 [R:replay-R4]): ``read`` and
+``check_pin`` take that label, APPRAISAL_VERSION (gemini-appraisal@1, the dormant Gemini adapter's: the default, so its
+reading is unchanged) or APPRAISAL_VERSION_V3 (gemini-appraisal@2, the Fable path's, whose caller names it). Both labels
+read the one LOCAL schema under its one pin, APPRAISAL_LOCAL_SCHEMA_SHA256 (8.2: the object is unchanged, and under @2 it
+is also the structured-output schema the request sends), and a refusal names the label it was read under. Any other
+label is refused before a byte of the answer is read: no answer is read under a label this reader holds no pin for.
 """
 from __future__ import annotations
 
@@ -105,27 +113,34 @@ class ReadAppraisal:
         return next((item for item in self.verdicts if item.claim == claim_id), None)
 
 
-def check_pin() -> None:
-    """RuntimeError unless LOCAL_SCHEMA is byte for byte what APPRAISAL_VERSION pins (2.5; v1's read.check_pin
-    pattern). An empty pin (step 0b's placeholder) is refused too: no answer is read under a schema nobody pinned. Until
-    the first recording under the label a changed schema needs only its pin recomputed; after it, a new
-    APPRAISAL_VERSION (DECISIONS D202)."""
+def check_pin(version: str | None = None) -> None:
+    """RuntimeError unless LOCAL_SCHEMA is byte for byte what the label ``version`` pins (2.5; v1's read.check_pin
+    pattern; AMENDMENT-2 8.2): APPRAISAL_VERSION when None, or APPRAISAL_VERSION_V3, each under
+    APPRAISAL_LOCAL_SCHEMA_SHA256 (the schema is unchanged by the @2 label). Any other label is refused, as an empty pin
+    (step 0b's placeholder) is: no answer is read under a schema nobody pinned for its label. Until the first recording
+    under a label a changed schema needs only its pin recomputed; after it, a new APPRAISAL_VERSION (DECISIONS D202)."""
+    label = interpretation.APPRAISAL_VERSION if version is None else version
+    if label != interpretation.APPRAISAL_VERSION and label != interpretation.APPRAISAL_VERSION_V3:
+        raise RuntimeError(f'No pin of the local schema is held for the label {label!r}; an answer is read only under '
+                           'the pin of the label its request was built under.')
     pinned = interpretation.APPRAISAL_LOCAL_SCHEMA_SHA256
-    version = interpretation.APPRAISAL_VERSION
     if not pinned:
-        raise RuntimeError(f'The local schema of {version} has no pin yet; an answer is read only under its pin.')
+        raise RuntimeError(f'The local schema of {label} has no pin yet; an answer is read only under its pin.')
     if jsonschema.sha256_of(appraise_schema.LOCAL_SCHEMA) != pinned:
-        raise RuntimeError(f'The local schema no longer matches the {version} pin; a changed schema needs its pin '
+        raise RuntimeError(f'The local schema no longer matches the {label} pin; a changed schema needs its pin '
                            'recomputed before the first recording under the label, and a new APPRAISAL_VERSION after '
                            'it (DECISIONS D202).')
 
 
-def read(answer: object, claim_set: claims.ClaimSet, unit_count: int) -> Refusal | ReadAppraisal:
+def read(answer: object, claim_set: claims.ClaimSet, unit_count: int, *,
+         version: str | None = None) -> Refusal | ReadAppraisal:
     """Pass 2's answer to the request ``claim_set`` was built into, parsed and checked whole as 3.2.4 says, then item by
-    item; or the Refusal of all of it. ``unit_count``: the number of units contract/segment.py cut the revision into.
-    Nothing is repaired, coerced or truncated. RuntimeError when LOCAL_SCHEMA is not pinned or no longer matches its
-    pin; ValueError for a unit count that is not a whole number of at least 0."""
-    check_pin()
+    item; or the Refusal of all of it. ``unit_count``: the number of units contract/segment.py cut the revision into;
+    ``version``: the label the request was built under (check_pin: APPRAISAL_VERSION when None, as the dormant adapter
+    reads; the Fable path names APPRAISAL_VERSION_V3). Nothing is repaired, coerced or truncated. RuntimeError when the
+    label is unknown or LOCAL_SCHEMA is not pinned or no longer matches its pin; ValueError for a unit count that is not
+    a whole number of at least 0."""
+    check_pin(version)
     if type(unit_count) is not int or unit_count < 0:
         raise ValueError('The unit count is a whole number of at least 0.')
     if not isinstance(answer, str):

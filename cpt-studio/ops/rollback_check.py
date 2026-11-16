@@ -56,6 +56,17 @@ taking effect there (a new context with it) - saved through that web's details p
 the field, as a member saves it (refutation 6b-r1 P4: its /context saves whatever the revert did). Assertion 6 reads the appraise stages as it reads the interpret ones.
 update_problems, scenario_problems, member_values and reading_settled_before are pure and unit-tested.
 
+AMENDMENT-2 (the interpreter is Claude Fable 5.2, DECISIONS D275; its 8.5 [R:replay-R6]). The Fable candidate writes
+AMENDMENT-2's labels, so the record kinds count the assessments of both engine versions a design v2 row may carry
+(V2_ENGINES: FINAL-V2's cpt-studio-events@2, read as stored, and AMENDMENT-2's cpt-studio-events@3) and the appraisal
+runs of every interpreter provider an installation may hold (READ_PROVIDERS: 'anthropic', and Gemini's stored runs), and
+for a Fable candidate (its installer's INTERPRETER is the Anthropic one) assertion 7 also requires 8.5's own rows
+(SCENARIO_V3: an inventory of gemini-events@3/appraisal@2 and gemini-inventory@3, a cpt-studio-events@3 assessment, a
+run of anthropic-messages@cptstudio-interp-1, an interpreter hold with reason declined). With @2 and 'gemini' alone,
+ten of the thirteen kinds counted 0 on a database the Fable candidate filled and assertion 7 blocked the install late.
+The literals are the server's (studio/interpretation/__init__.py), held to it by ops/test_rollback_check.py, since
+this runner imports no module of the application.
+
     python3 -B cpt-studio/ops/rollback_check.py counts --db cptg_<dump> --candidate cpt-studio-test:<sha12> \\
         --out <new directory> --db-env-file <0600 env file>
 
@@ -357,8 +368,24 @@ def reading_settled_before(rows, started_at) -> bool:
 # database before the switch-back, so the transcript shows the run held them (assertion 7). The amendment's U17 rows are
 # named by the run's declared JSON (--declared: 'update', the encounters the instance was built with) and judged from the
 # close's answer, the rows after it, the audit rows and the previous web's own save (assertion 8).
-V2_ENGINE = 'cpt-studio-events@2'
-_V2_ASSESSMENTS = f"(select id from studio_assessment where engine_version = '{V2_ENGINE}')"
+# AMENDMENT-2 8.5 [R:replay-R6]: a design v2 assessment is one of either engine version - FINAL-V2's @2, read as stored,
+# and AMENDMENT-2's @3, which the Fable candidate writes (interpretation.ENGINE_VERSION_V2 and ENGINE_VERSION_V3) - and
+# an interpreter's run is one of any provider an installation may hold (interpretation.READ_PROVIDERS: Fable's, and
+# Gemini's stored runs). With the @2 and 'gemini' literals alone, ten of the thirteen kinds counted 0 on a database the
+# Fable candidate filled. The literals are the server's: ops/test_rollback_check.py holds them to its labels.
+V2_ENGINES = ('cpt-studio-events@2', 'cpt-studio-events@3')
+READ_PROVIDERS = ('anthropic', 'gemini')
+SQL_LABEL = re.compile(r'[a-z0-9@./-]+')  # what a label the SQL below names may hold, so it never needs quoting
+
+
+def sql_strings(values: tuple[str, ...]) -> str:
+    """``values`` - labels of SQL_LABEL's shape, never anything else - as an SQL list of string literals."""
+    if not values or not all(isinstance(value, str) and SQL_LABEL.fullmatch(value) for value in values):
+        raise ValueError(f'not labels: {values!r}')
+    return '(' + ', '.join(f"'{value}'" for value in values) + ')'
+
+
+_V2_ASSESSMENTS = f"(select id from studio_assessment where engine_version in {sql_strings(V2_ENGINES)})"
 SCENARIO_V2 = (
     ('interpreted_and_appraised', 'an interpreted and appraised upload (a read inventory bound to its appraisal run)',
      "select count(*) from studio_eventinventory where state = 'read' and appraisal_run_id is not null"),
@@ -375,23 +402,40 @@ SCENARIO_V2 = (
      f"select count(*) from studio_reportartifact where kind = 'approved' and assessment_id in {_V2_ASSESSMENTS}"),
     ('member_answer', "a member answer on a v2 assessment's revision",
      f"select count(*) from studio_memberanswer where revision_id in (select revision_id from studio_assessment "
-     f"where engine_version = '{V2_ENGINE}')"),
+     f"where engine_version in {sql_strings(V2_ENGINES)})"),
     ('second_review', 'a second review on an encounter with a v2 assessment',
      f"select count(*) from studio_providerrun where purpose = 'second_review' and encounter_id in "
-     f"(select encounter_id from studio_assessment where engine_version = '{V2_ENGINE}')"),
+     f"(select encounter_id from studio_assessment where engine_version in {sql_strings(V2_ENGINES)})"),
     ('interpreter_hold', 'an interpreter hold', 'select count(*) from studio_interpreterhold'),
     ('queued_interpret', 'a queued interpret job', "select count(*) from studio_job where kind = 'interpret' "
                                                    "and state = 'queued'"),
     ('queued_appraise', 'a queued appraise job', "select count(*) from studio_job where kind = 'appraise' "
                                                  "and state = 'queued'"),
     ('pass2_refusal', 'a pass-2 refusal (an appraisal answer the reader refused, on its run)',
-     "select count(*) from studio_providerrun where provider = 'gemini' and purpose = 'appraisal' "
-     "and scope->>'refused' = 'reading'"),
+     f"select count(*) from studio_providerrun where provider in {sql_strings(READ_PROVIDERS)} "
+     "and purpose = 'appraisal' and scope->>'refused' = 'reading'"),
     ('unhealthy_appraisal', 'an unhealthy appraisal (refused whole by its health, on its run)',
-     "select count(*) from studio_providerrun where provider = 'gemini' and purpose = 'appraisal' "
-     "and scope->>'refused' = 'unhealthy'"),
+     f"select count(*) from studio_providerrun where provider in {sql_strings(READ_PROVIDERS)} "
+     "and purpose = 'appraisal' and scope->>'refused' = 'unhealthy'"),
     ('held_new_fact', "a held code whose item is a new fact (event_entry)",
      f"select count(*) from studio_clarification where fact = 'event_entry' and assessment_id in {_V2_ASSESSMENTS}"),
+)
+# AMENDMENT-2 8.5: "The D15 runtime test's migrated database gains rows of the new versions" - each counted as
+# SCENARIO_V2's kinds are, and required by assertion 7 of a Fable candidate (fable_candidate): its inventory pair and
+# inventory version (interpretation.INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3), its engine (ENGINE_VERSION_V3), a run
+# of its adapter (ADAPTER_VERSION_V3) and the hold a decline sets (InterpreterHold.DECLINED). Literals, as above.
+PAIR_V3, INVENTORY_V3 = 'gemini-events@3/appraisal@2', 'gemini-inventory@3'
+ENGINE_V3, ADAPTER_V3, DECLINED = 'cpt-studio-events@3', 'anthropic-messages@cptstudio-interp-1', 'declined'
+SCENARIO_V3 = (
+    ('fable_inventory', f'an event inventory of {PAIR_V3} and {INVENTORY_V3}',
+     f"select count(*) from studio_eventinventory where interpretation_version in {sql_strings((PAIR_V3,))} "
+     f"and inventory_version in {sql_strings((INVENTORY_V3,))}"),
+    ('fable_assessment', f'an assessment of {ENGINE_V3}',
+     f"select count(*) from studio_assessment where engine_version in {sql_strings((ENGINE_V3,))}"),
+    ('fable_run', f'an interpreter run of {ADAPTER_V3}',
+     f"select count(*) from studio_providerrun where adapter_version in {sql_strings((ADAPTER_V3,))}"),
+    ('declined_hold', f'an interpreter hold with reason {DECLINED}',
+     f"select count(*) from studio_interpreterhold where reason in {sql_strings((DECLINED,))}"),
 )
 UPDATE_SETS = ('pending_before_analyze', 'pending_after_analyze', 'completed', 'a21')
 UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')  # an id put into SQL is one
@@ -400,11 +444,18 @@ UPDATE_REASON_OF = {'pending_before_analyze': 'values_saved', 'pending_after_ana
 CONTEXT_FIELDS = ('service_date', 'setting', 'billing_context', 'patient_status')  # studio.types.CONTEXT_FACTS
 
 
-def scenario_problems(found: dict) -> list:
-    """Assertion 7: the record kinds of FINAL-V2 6.4 the test database did not hold before the switch-back (``found``:
-    {key: count, or an error text})."""
+def fable_candidate(installer: object) -> bool:
+    """Whether the candidate's installer installs the Fable interpreter (AMENDMENT-2 1.11: its INTERPRETER is the
+    Anthropic credential's), so that the D15 database must hold AMENDMENT-2 8.5's rows (SCENARIO_V3)."""
+    spec = getattr(installer, 'INTERPRETER', None)
+    return isinstance(spec, dict) and bool(spec.get('name') == 'anthropic')
+
+
+def scenario_problems(found: dict, kinds: tuple[tuple[str, str, str], ...] = SCENARIO_V2) -> list:
+    """Assertion 7: the record kinds of FINAL-V2 6.4 (and, given ``kinds`` with SCENARIO_V3, of AMENDMENT-2 8.5) the
+    test database did not hold before the switch-back (``found``: {key: count, or an error text})."""
     problems = []
-    for key, title, _ in SCENARIO_V2:
+    for key, title, _ in kinds:
         count = found.get(key) if isinstance(found, dict) else None
         if type(count) is not int:
             problems.append(f'{key}: not counted ({count!r})')
@@ -927,6 +978,8 @@ class Check:
         self.installer = load_installer(self.candidate['revision'])
         # design v2: a candidate whose installer knows pass 2's stage is judged on v2 records (assertions 7 and 8)
         self.v2 = isinstance(getattr(self.installer, 'APPRAISE_KIND', None), str)
+        # AMENDMENT-2 8.5: a candidate that installs the Fable interpreter is judged on its new versions' rows too
+        self.fable = fable_candidate(self.installer)
         self.recompute_previous = literal(self.previous['revision'], INSTALLER_PATH, 'RECOMPUTE_STATES')
         self.recompute_candidate = literal(self.candidate['revision'], INSTALLER_PATH, 'RECOMPUTE_STATES')
         self.client = (literal(self.previous['revision'], CLIENT_CONTRACT_PATH, 'HEADER'),
@@ -956,9 +1009,10 @@ class Check:
         return {'rows': {name: int(count) for name, count in rows}, 'job_states': {s: int(n) for s, n in states}}
 
     def scenario(self) -> dict:
-        """FINAL-V2 6.4: {key: count} of each record kind SCENARIO_V2 names, by SQL (an error text where one failed)."""
+        """FINAL-V2 6.4: {key: count} of each record kind SCENARIO_V2 names - and AMENDMENT-2 8.5's, SCENARIO_V3 - by
+        SQL (an error text where one failed)."""
         found = {}
-        for key, _, statement in SCENARIO_V2:
+        for key, _, statement in SCENARIO_V2 + SCENARIO_V3:
             try:
                 found[key] = int(self.instance.sql(statement)[0][0])
             except (RuntimeError, IndexError, ValueError) as error:
@@ -1396,7 +1450,8 @@ class Check:
         if self.v2 and not reading_settled_before(reading, worker.get('started_at')):
             a6.append('the interpret and appraise stages were not each settled by CLOSE_STAGES before the previous '
                       'worker started')
-        a7 = scenario_problems(sb.get('scenario_v2')) if self.v2 else []
+        a7 = (scenario_problems(sb.get('scenario_v2'), SCENARIO_V2 + (SCENARIO_V3 if self.fable else ()))
+              if self.v2 else [])
         update = (self.declared or {}).get('update') if isinstance(self.declared, dict) else None
         upd = sb.get('update') or {}
         a8 = (update_problems(update, {'update_pending': upd.get('update_pending'), 'reverted': upd.get('reverted')},
@@ -1432,8 +1487,8 @@ class Check:
                            'interpret_jobs_at_start': worker.get('interpret_jobs_at_start'),
                            'reading_jobs_at_start': worker.get('reading_jobs_at_start'),
                            'worker_started_at': worker.get('started_at'), 'worker': worker.get('at_end')}),
-            assertion(7, 'FINAL-V2 6.4: the run holds each v2 record kind', a7,
-                      {'v2_candidate': self.v2, 'scenario_v2': sb.get('scenario_v2'),
+            assertion(7, 'FINAL-V2 6.4 (and AMENDMENT-2 8.5 for a Fable candidate): the run holds each v2 record kind',
+                      a7, {'v2_candidate': self.v2, 'fable_candidate': self.fable, 'scenario_v2': sb.get('scenario_v2'),
                        'install_reads': sb.get('install_reads')}),
             assertion(8, 'AMENDMENT-1 U17: the pending updates named, the unapplied saves reverted and listed, the value '
                          'saved again taking effect on the previous web', a8,
@@ -1459,7 +1514,7 @@ class Check:
                    f'{(sb.get("note") or {}).get("context_only")}; exact: {not note_issues}; refusing reasons {reasons}',
                 6: f'closed {[row[1] for row in sb.get("closed_stages") or ()]}; open at the worker start '
                    f'{worker.get("open_at_start")}',
-                7: f'v2 candidate {self.v2}; record kinds {sb.get("scenario_v2")}',
+                7: f'v2 candidate {self.v2}; Fable candidate {self.fable}; record kinds {sb.get("scenario_v2")}',
                 8: f'named {sorted(((sb.get("update") or {}).get("update_pending") or {}))}, reverted '
                    f'{sorted(((sb.get("update") or {}).get("reverted") or {}))}, resave {http_rec.get("resave")}'}
         for item in rec['assertions']:

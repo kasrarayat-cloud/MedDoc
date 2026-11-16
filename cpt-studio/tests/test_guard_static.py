@@ -105,18 +105,48 @@ Refutation 6a-r2b P2 (DECISIONS D245), each form with a planted control (REFUTAT
   (presence, never a word) passes, and the engine's existing comparisons with its own records' and reference rows'
   values are pinned by function and value (WND_PINS), each with why. Outside engine/ the scanned modules compare their
   own stored records' strings (a question's scope, a check's status), which this rule does not read.
+
+AMENDMENT-2 (docs/gemini-migration/AMENDMENT-2.md section 9 and its step F7: "the new module scanned and clean; every pin
+used; the planted controls red"; DECISIONS D275, D279):
+- THE FABLE CONNECTOR (FableConnectorTests). sentinel.KEPT gains fable_adapter, named here again (RetiredPinTests), and
+  the entry is load-bearing: a layout without it refuses the install as a module neither kept nor retired. The static
+  rules read it as they read adapter.py - the new package's rule, the retired-reference rule of a kept module, and the
+  production-module rule (keyed by its stem, as adapter is) - and each finds nothing and meets NO pin: "the new module
+  imports nothing the sentinel denies", so unlike adapter.py (whose v1 surface keeps two pinned v1 branches,
+  RETIRED_REFERENCES) it has no pinned v1 branch, no dynamic import, no allowed constant of a denied module and no
+  reference at all to studio.gi, studio.validation, studio.candidates or a retired module. Its whole import closure,
+  loaded in a process that never set up Django (so the sentinel, whose install imports the deny list itself, never ran),
+  holds no module that holds denied code (sentinel's own list: DENY_MODULES, checks.py, jobs.py, RETIRED_MODULES), with
+  a positive control (store.py's closure holds the retired schema and read). Each rule refuses a planted control in its
+  own source under its own name - adapter.py's pins never extend to it - applied in memory (asserted by its marker and
+  by the planted text's sha256 differing from the file's) with the file's bytes unchanged throughout (sha256 before and
+  after).
+- gemini-appraisal@2's OUTPUT tables (step f3s's R4): claims.TEMPLATES_V3 and STATEMENT_TEMPLATES_V3 are pinned OUTPUT
+  tables under their own pins, TEMPLATES_SHA256_V3 and STATEMENT_TEMPLATES_SHA256_V3 (A2 8.2), and DEFINITIONS, which
+  INSTRUCTIONS_3 renders too (step f2's R7), is covered by INSTRUCTIONS_SHA256_V3 as well (OUTPUT_TABLES_ALSO). Each
+  table's texts are inside the document its pin hashes; a written pin equals that document's sha256, and a pin the
+  integration owner writes after the build's last repair (A2 8.2; UNWRITTEN_PIN_CHECKS) may be empty only while the
+  request builder of its label refuses for that pin alone (check_pins_fable: no request is built under an unpinned
+  object), the builder's own measure of the pin being that same document's sha256.
+- EVERY PIN USED: each OUTPUT_TABLES pin and the date_literals exemption is load-bearing - without it NoWordLists refuses
+  its table - so none is stale; the other tables' "no stale pin" checks stand as written.
 """
 from __future__ import annotations
 
 import ast
 import enum
+import hashlib
 import importlib
+import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import namedtuple
+from collections.abc import Callable, Iterable
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -747,6 +777,20 @@ OUTPUT_TABLES = {
     ('contract/claims', 'CARD_PHRASES'): 'TEMPLATES_SHA256',
     ('contract/claims', 'STATEMENT_TEMPLATES'): 'STATEMENT_TEMPLATES_SHA256',
     ('contract/extract_schema', 'DEFINITIONS'): 'INSTRUCTIONS_SHA256_V2',
+    # gemini-appraisal@2's own tables (AMENDMENT-2 8.1-8.2; DECISIONS D292's U1 and U3; step f3s's R4), rendered into the
+    # Fable request by claims.templates_document and statement_templates_document under APPRAISAL_VERSION_V3
+    ('contract/claims', 'TEMPLATES_V3'): 'TEMPLATES_SHA256_V3',
+    ('contract/claims', 'STATEMENT_TEMPLATES_V3'): 'STATEMENT_TEMPLATES_SHA256_V3',
+}
+# a pinned OUTPUT table another label renders too, covered by that label's pin as well: extract_prompt.INSTRUCTIONS_3
+# renders DEFINITIONS line by line as INSTRUCTIONS_2 does (step f2's R7): (module, table) -> the other pin
+OUTPUT_TABLES_ALSO = {('contract/extract_schema', 'DEFINITIONS'): 'INSTRUCTIONS_SHA256_V3'}
+# AMENDMENT-2 8.2's pins of the output tables, written by the integration owner after the build's last repair: each with
+# the request builder of its label (its pins_fable measures the pin, its check_pins_fable refuses an empty one)
+UNWRITTEN_PIN_CHECKS = {
+    'TEMPLATES_SHA256_V3': 'studio.interpretation.contract.appraise_prompt',
+    'STATEMENT_TEMPLATES_SHA256_V3': 'studio.interpretation.contract.appraise_prompt',
+    'INSTRUCTIONS_SHA256_V3': 'studio.interpretation.contract.extract_prompt',
 }
 # the design's enumerations whose values a string collection may hold (triage 0b#10, 1e:R6; DECISIONS D207)
 ENUM_MODULES = ('studio.interpretation.contract.types', 'studio.interpretation.engine.types',
@@ -760,6 +804,12 @@ GEOMETRY_MODULES = ('contract/segment', 'contract/geometry')
 ADMITTED = ('isspace', 'islower', 'isalnum', 'isalpha', 'isupper')  # SingleCharacterGeometry's str calls (D205)
 MYPY_FENCE = ('studio/interpretation/engine/types.py', 'studio/interpretation/engine/facts.py',
               'studio/interpretation/engine/reading.py')  # 5.7 measure 5
+# AMENDMENT-2 section 9: the Fable connector, a kept module beside adapter.py ("sentinel.KEPT gains fable_adapter"). It
+# imports nothing the sentinel denies, so no pin of any table here names it
+FABLE = 'fable_adapter'
+# the modules that hold denied code - the list sentinel._import_deny_modules imports to walk them: the legacy deny set's
+# modules, checks.py (denied by function), jobs.py (its archived stages) and the 17 retired modules
+DENIED_HOLDERS = sentinel.DENY_MODULES + (sentinel.CHECKS_MODULE, sentinel.JOBS_MODULE) + sentinel.RETIRED_MODULES
 
 
 def module_package(key: str) -> str:
@@ -1791,7 +1841,7 @@ class RetiredPinTests(SimpleTestCase):
                                                   'identity', 'lexicon', 'relations', 'mapping', 'classes', 'ercp',
                                                   'facts', 'events', 'coverage', 'combination', 'assess'))  # 5.0
         self.assertEqual(sentinel.KEPT, ('__init__', 'adapter', 'holds', 'sentinel', 'readers', 'overlay', 'store',
-                                         'wording', 'report', 'replay', 'dates'))
+                                         'wording', 'report', 'replay', 'dates', 'fable_adapter'))  # A2 section 9
         on_disk = {path.stem for path in PACKAGE.glob('*.py')}
         self.assertEqual(on_disk - set(sentinel.KEPT), set(sentinel.RETIRED_NAMES))
         self.assertEqual(sentinel.expected_retired(), set(sentinel.RETIRED_MODULES))
@@ -1857,6 +1907,156 @@ class RetiredPinTests(SimpleTestCase):
         moved = 'def stage_planted(job):\n    from .interpretation import facts\n    return facts.derive\n'
         self.assertTrue(retired_references('jobs', moved, 'studio'))
         self.assertEqual(retired_references('jobs', moved.replace('stage_planted', 'derived_facts'), 'studio'), [])
+
+
+# AMENDMENT-2's F7: a planted control in the Fable connector's own source for each rule that reads it, appended to the
+# file's text in memory - name: (the rule, the planted lines, its marker, the finding expected). Each pinned exception of
+# another module (adapter.py's v1 branches, store.py's v1 reader, readers' LegacyReader, sentinel's dynamic import) is
+# planted under the connector's name, so a pin that leaked to it would leave a plant green.
+FABLE_PLANTS = {
+    'a retired call in a function': (
+        'retired', '\n\ndef _planted_negation(text):\n    from studio.interpretation import lexicon\n'
+                   '    return lexicon.negation(text)\n',
+        '_planted_negation', 'names the retired studio.interpretation.lexicon'),
+    "adapter.py's pinned v1 branch, under the connector's name": (
+        'retired', '\n\ndef _v1_prompt():\n    from studio.interpretation import prompt\n    return prompt\n',
+        'def _v1_prompt', 'names the retired studio.interpretation.prompt'),
+    "store.py's pinned module-level v1 import, under the connector's name": (
+        'retired', '\nfrom studio.interpretation.read import Refusal as _PlantedRefusal\n',
+        '_PlantedRefusal', 'names the retired studio.interpretation.read.Refusal'),
+    'a gi reader': (
+        'new package', '\n\ndef _planted_route(text):\n    from studio.gi import detect\n'
+                       '    return detect.route(text, None)\n',
+        '_planted_route', 'names studio.gi.detect.route'),
+    'a checks reader outside FINAL 7.1': (
+        'new package', '\n\ndef _planted_status(text):\n    from studio.validation import checks\n'
+                       '    return checks.status_check(text)\n',
+        '_planted_status', 'names studio.validation.checks.status_check, which is not a FINAL 7.1 check'),
+    'a cue constant': (
+        'new package', '\n\ndef _planted_cue(text):\n    from studio.gi.cues import PAGE_NUMBER_LINE\n'
+                       '    return PAGE_NUMBER_LINE.search(text)\n',
+        '_planted_cue', 'names the cue constant studio.gi.cues.PAGE_NUMBER_LINE'),
+    "the legacy reader's overlay call, under the connector's name": (
+        'new package', '\n\nclass LegacyReader:\n    def views(self):\n'
+                       '        from studio.validation import review_view\n        return review_view.review_view\n',
+        'class LegacyReader', 'names studio.validation.review_view.review_view'),
+    "sentinel's pinned dynamic import, under the connector's name": (
+        'new package', '\n\ndef _import_deny_modules(name):\n    import importlib\n'
+                       '    return importlib.import_module(name)\n',
+        'def _import_deny_modules', 'imports by a name it computes (name)'),
+}
+
+
+def _planted_line(finding: str) -> int:
+    """The line a finding names (``module.scope:LINE ...``)."""
+    return int(finding.split(' ', 1)[0].rpartition(':')[2])
+
+
+class FableConnectorTests(SimpleTestCase):
+    """AMENDMENT-2 section 9 and its step F7 (module docstring): the Fable connector is kept, read by every rule that reads
+    adapter.py, clean and meeting no pin; its import closure holds no module that holds denied code; and each rule
+    refuses a planted control in its own source, under its own name."""
+
+    PATH = PACKAGE / f'{FABLE}.py'
+
+    def test_it_is_kept_and_its_entry_is_load_bearing(self) -> None:
+        self.assertIn(FABLE, sentinel.KEPT)
+        self.assertNotIn(FABLE, sentinel.RETIRED_NAMES)
+        self.assertTrue(self.PATH.is_file())
+        self.assertEqual(sentinel.expected_retired(), set(sentinel.RETIRED_MODULES))
+        sentinel.check_retired_list()  # the tree: accepted
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / 'interpretation'
+            folder.mkdir()
+            for name in sentinel.KEPT + sentinel.RETIRED_NAMES:
+                (folder / f'{name}.py').write_text('', encoding='utf-8')
+            for package in sentinel.NEW_PACKAGES:
+                (folder / package).mkdir()
+                (folder / package / '__init__.py').write_text('', encoding='utf-8')
+            sentinel.check_retired_list(root)  # the tree's layout: accepted
+            # the planted control: KEPT without the connector reads it as a module neither kept nor retired
+            with mock.patch.object(sentinel, 'KEPT', tuple(name for name in sentinel.KEPT if name != FABLE)):
+                with self.assertRaisesRegex(sentinel._Refused, r"neither kept nor retired \['studio\.interpretation\."
+                                                               r"fable_adapter'\]"):
+                    sentinel.check_retired_list(root)
+            sentinel.check_retired_list(root)  # restored
+            (folder / f'{FABLE}.py').unlink()  # and the entry names a file: a missing kept module refuses
+            with self.assertRaisesRegex(sentinel._Refused, r"no kept module \['fable_adapter'\]"):
+                sentinel.check_retired_list(root)
+
+    def test_every_rule_that_reads_adapter_reads_it_and_finds_nothing_and_meets_no_pin(self) -> None:
+        source = self.PATH.read_text(encoding='utf-8')
+        self.assertEqual(package_modules()[FABLE], source)  # the new package's rule reads it
+        production = production_modules()
+        self.assertEqual(production[FABLE], (source, 'studio.interpretation'))  # the production rule, keyed by its
+        self.assertEqual(production['adapter'][1], 'studio.interpretation')  # stem as a kept module, as adapter is
+        used: set[object] = set()
+        self.assertEqual(new_package_violations(FABLE, references(source, module_package(FABLE)), used), [])
+        self.assertEqual(retired_references(FABLE, source, 'studio.interpretation', used), [])
+        self.assertEqual(used, set())  # no pin met: no pinned v1 branch, dynamic import or allowed denied constant
+        # stronger than "no finding": no reference at all to studio.gi, studio.validation, studio.candidates or a
+        # retired module, and no import by a computed name (adapter.py keeps two pinned v1 branches; the connector none)
+        self.assertEqual(references(source, module_package(FABLE), V2_ROOTS), [])
+        tables: dict[str, Iterable[tuple[str, ...]]] = {'RETIRED_REFERENCES': RETIRED_REFERENCES, 'DYNAMIC': DYNAMIC, 'CONSUMER_DYNAMIC': CONSUMER_DYNAMIC,
+                  'WND_PINS': WND_PINS, 'DISPLAY_BUILDERS': DISPLAY_BUILDERS, 'DISPLAY_RECORDS': DISPLAY_RECORDS}
+        for name, table in tables.items():
+            with self.subTest(pins=name):
+                self.assertFalse([key for key in table if key[0] == FABLE])  # no pin names it
+        # the contrast, read by the same rule: adapter.py meets exactly its two pinned v1 branches
+        adapter_used: set[object] = set()
+        self.assertEqual(retired_references('adapter', (PACKAGE / 'adapter.py').read_text(encoding='utf-8'),
+                                            'studio.interpretation', adapter_used), [])
+        self.assertEqual(adapter_used, {key for key in RETIRED_REFERENCES if key[0] == 'adapter'})
+        self.assertEqual(len(adapter_used), 2)
+
+    def test_its_import_closure_holds_no_module_that_holds_denied_code(self) -> None:
+        # loaded in a fresh interpreter that never sets up Django, so the sentinel's install - which imports every
+        # module holding denied code itself (R-1) - never runs: what remains is what importing the module imports
+        probe = ('import importlib, json, sys\n'
+                 'sys.path.insert(0, sys.argv[2])\n'
+                 'before = set(sys.modules)\n'
+                 'importlib.import_module(sys.argv[1])\n'
+                 'print(json.dumps(sorted(set(sys.modules) - before)))\n')
+
+        def closure(module: str) -> set[str]:
+            result = subprocess.run([sys.executable, '-I', '-B', '-c', probe, module, str(APP)], capture_output=True,
+                                    text=True, timeout=300, cwd=APP)
+            self.assertEqual(result.returncode, 0, result.stderr[-2000:])
+            return set(json.loads(result.stdout.strip().splitlines()[-1]))
+
+        loaded = closure(f'studio.interpretation.{FABLE}')
+        self.assertLessEqual({f'studio.interpretation.{FABLE}', 'studio.interpretation.adapter',
+                              'studio.interpretation.contract.claims', 'studio.participants.http'}, loaded)
+        self.assertEqual(sorted(loaded & set(DENIED_HOLDERS)), [])
+        self.assertFalse([name for name in loaded if denied(name) or _retired(name)])
+        # the positive control: the same probe on store.py, whose v1 reader imports the retired schema and read
+        control = closure('studio.interpretation.store')
+        self.assertLessEqual({'studio.interpretation.schema', 'studio.interpretation.read'}, control & set(DENIED_HOLDERS))
+
+    def test_each_rule_refuses_a_planted_control_in_its_source_under_its_own_name(self) -> None:
+        before = hashlib.sha256(self.PATH.read_bytes()).hexdigest()
+        source = self.PATH.read_text(encoding='utf-8')
+        last = len(source.splitlines())
+        rules: dict[str, Callable[[str], list[str]]] = {
+            'retired': lambda text: retired_references(FABLE, text, 'studio.interpretation'),
+            'new package': lambda text: new_package_violations(FABLE, references(text, module_package(FABLE))),
+        }
+        for rule, read in rules.items():
+            self.assertEqual(read(source), [], rule)  # the control: the file as it stands
+        for what, (rule, lines, marker, expected) in FABLE_PLANTS.items():
+            with self.subTest(plant=what):
+                planted = source + lines
+                self.assertNotIn(marker, source)
+                self.assertIn(marker, planted)  # applied: its marker, and the text is no longer the file's
+                self.assertNotEqual(hashlib.sha256(planted.encode('utf-8')).hexdigest(),
+                                    hashlib.sha256(source.encode('utf-8')).hexdigest())
+                found = rules[rule](planted)
+                self.assertTrue(any(expected in item for item in found), found)
+                self.assertTrue(all(item.startswith(f'{FABLE}.') for item in found), found)  # under its own name
+                self.assertTrue(all(_planted_line(item) > last for item in found), found)  # only on the planted lines
+        # restored: the file's bytes never moved
+        self.assertEqual(hashlib.sha256(self.PATH.read_bytes()).hexdigest(), before)
 
 
 # Refutation 6a-r1 F4 and F6: forms 5.7 measure 4 names that the first round let through, each refused (the finding's
@@ -2192,30 +2392,104 @@ class NoWordListsTests(SimpleTestCase):
         self.assertEqual(found, [])
         self.assertGreater(len(values), 300)  # it read the design's enumerations
 
-    def test_each_output_table_is_covered_by_its_version_pin(self):
+    def output_documents(self) -> dict[str, object]:
+        """{pin: the document it hashes} of every pin an OUTPUT table is covered by (OUTPUT_TABLES, OUTPUT_TABLES_ALSO):
+        gemini-appraisal@1's and gemini-events@2's, and AMENDMENT-2 8.2's gemini-appraisal@2 and gemini-events@3 ones."""
         from studio import interpretation
-        from studio.interpretation.contract import claims, extract_prompt, extract_schema, jsonschema
+        from studio.interpretation.contract import claims, extract_prompt
+
+        v3 = interpretation.APPRAISAL_VERSION_V3
+        return {'TEMPLATES_SHA256': claims.templates_document(),
+                'STATEMENT_TEMPLATES_SHA256': claims.statement_templates_document(),
+                'INSTRUCTIONS_SHA256_V2': extract_prompt.INSTRUCTIONS_2,
+                'TEMPLATES_SHA256_V3': claims.templates_document(version=v3),
+                'STATEMENT_TEMPLATES_SHA256_V3': claims.statement_templates_document(version=v3),
+                'INSTRUCTIONS_SHA256_V3': extract_prompt.INSTRUCTIONS_3}
+
+    def assert_pinned(self, name: str, document: object) -> None:
+        """A written pin is ``document``'s sha256. An unwritten one - only one of AMENDMENT-2 8.2's, which the integration
+        owner writes after the build's last repair (UNWRITTEN_PIN_CHECKS) - only while its label's request builder
+        refuses for that pin alone (no request is built under an unpinned object), the builder's own measure of the pin
+        being ``document``'s sha256, so the value written from it covers this document."""
+        from studio import interpretation
+        from studio.interpretation.contract import jsonschema
+
+        measured, pinned = jsonschema.sha256_of(document), getattr(interpretation, name)
+        if pinned:
+            self.assertEqual(measured, pinned)
+            return
+        self.assertIn(name, UNWRITTEN_PIN_CHECKS)
+        builder = importlib.import_module(UNWRITTEN_PIN_CHECKS[name])
+        measures = builder.pins_fable()
+        self.assertEqual(measures[name], measured)
+        with mock.patch.multiple(interpretation, **{other: value for other, value in measures.items() if other != name}):
+            with self.assertRaisesRegex(RuntimeError, rf'^{name} is not pinned yet'):
+                builder.check_pins_fable()
+
+    def test_each_output_table_is_covered_by_its_version_pin(self) -> None:
+        from studio.interpretation.contract import claims, extract_schema, jsonschema
 
         modules = {'contract/claims': claims, 'contract/extract_schema': extract_schema}
-        documents = {'TEMPLATES_SHA256': claims.templates_document(),
-                     'STATEMENT_TEMPLATES_SHA256': claims.statement_templates_document(),
-                     'INSTRUCTIONS_SHA256_V2': extract_prompt.INSTRUCTIONS_2}
+        documents = self.output_documents()
         for name, document in documents.items():
             with self.subTest(pin=name):
-                self.assertEqual(jsonschema.sha256_of(document), getattr(interpretation, name))
-        rendered = jsonschema.canonical(documents['TEMPLATES_SHA256']).decode('utf-8')
-        for (module, table), pin in OUTPUT_TABLES.items():
-            with self.subTest(table=(module, table)):
+                self.assert_pinned(name, document)
+        # each table's texts inside the document of every pin that covers it (a text as text, an object as its canonical
+        # JSON)
+        rendered = {name: document if isinstance(document, str) else jsonschema.canonical(document).decode('utf-8')
+                    for name, document in documents.items()}
+        for (module, table), pin in [*OUTPUT_TABLES.items(), *OUTPUT_TABLES_ALSO.items()]:
+            with self.subTest(table=(module, table), pin=pin):
                 value = getattr(modules[module], table)
                 self.assertTrue(len(value) >= 2)
                 texts = [text for text in value.values()] if hasattr(value, 'values') else list(value)
                 for text in texts:
                     forms = text if isinstance(text, (tuple, list)) else (text,)
                     for form in forms:
-                        covered = (form in documents[pin] if pin == 'INSTRUCTIONS_SHA256_V2'
-                                   else json_in(form, documents[pin] if pin != 'TEMPLATES_SHA256' else rendered))
-                        self.assertTrue(covered, (table, form[:60]))
-        self.assertEqual(set(OUTPUT_TABLES.values()), set(documents))
+                        covered = (form in rendered[pin] if isinstance(documents[pin], str)
+                                   else json_in(form, rendered[pin]))
+                        self.assertTrue(covered, (table, pin, form[:60]))
+        self.assertEqual(set(OUTPUT_TABLES.values()) | set(OUTPUT_TABLES_ALSO.values()), set(documents))
+        self.assertLessEqual(set(OUTPUT_TABLES_ALSO), set(OUTPUT_TABLES))  # a table covered twice is a pinned one
+        self.assertLessEqual(set(UNWRITTEN_PIN_CHECKS), set(documents))  # every unwritten pin is a pin read here
+
+    def test_an_unwritten_pin_is_only_one_its_builder_refuses(self) -> None:
+        # the controls of assert_pinned: an unwritten pin outside UNWRITTEN_PIN_CHECKS fails; a written pin that is no
+        # longer its document's fails; a builder that let an unwritten pin through would fail the refusal
+        from studio import interpretation
+
+        documents = self.output_documents()
+        with mock.patch.object(interpretation, 'TEMPLATES_SHA256', ''):
+            with self.assertRaises(AssertionError):
+                self.assert_pinned('TEMPLATES_SHA256', documents['TEMPLATES_SHA256'])
+        with mock.patch.object(interpretation, 'TEMPLATES_SHA256_V3', '0' * 64):
+            with self.assertRaises(AssertionError):
+                self.assert_pinned('TEMPLATES_SHA256_V3', documents['TEMPLATES_SHA256_V3'])
+        for name, module in UNWRITTEN_PIN_CHECKS.items():
+            with self.subTest(pin=name), mock.patch.object(interpretation, name, ''):
+                with mock.patch.object(importlib.import_module(module), 'check_pins_fable', lambda: None):
+                    with self.assertRaises(AssertionError):
+                        self.assert_pinned(name, documents[name])
+                self.assert_pinned(name, documents[name])  # unwritten, and refused by its builder: covered
+
+    def test_every_output_table_pin_and_the_exemption_is_load_bearing(self) -> None:
+        # AMENDMENT-2's F7 "every pin used": without its pin NoWordLists refuses each pinned table, so none is stale
+        values, modules = _design_values(), _v2_modules()
+        for key in OUTPUT_TABLES:
+            module, table = key
+            with self.subTest(table=key):
+                self.assertFalse([item for item in no_word_lists(modules[module], module, values)
+                                  if f' a word list in {table} ' in item])  # pinned: it passes
+                rest = {other: pin for other, pin in OUTPUT_TABLES.items() if other != key}
+                with mock.patch.dict(OUTPUT_TABLES, rest, clear=True):
+                    found = no_word_lists(modules[module], module, values)
+                self.assertTrue([item for item in found if f' a word list in {table} ' in item], found)
+        self.assertEqual(len(OUTPUT_TABLES), 10)
+        for module in NO_WORD_LISTS_EXEMPT:
+            with self.subTest(exempt=module):
+                self.assertEqual(no_word_lists(modules[module], module, values), [])
+                with mock.patch.dict(NO_WORD_LISTS_EXEMPT, {}, clear=True):
+                    self.assertTrue(no_word_lists(modules[module], module, values))
 
     def test_the_keyword_enum_is_named_apart(self):
         from studio.interpretation.contract import jsonschema

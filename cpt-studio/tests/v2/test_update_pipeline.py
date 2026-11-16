@@ -29,7 +29,7 @@ from tests.legacy_chain import legacy_chain
 from tests.support import operator as ops
 from tests.support import factories as f
 from tests.v2.test_jobs import (APPRAISAL, BARE_429, EXAM, EXTRACTION, HTTP_402, HTTP_500, NOTE, POLYP, UNKNOWN,
-                                PipelineCase, answered, body, note_answer)
+                                PipelineCase, answered, body, note_answer, stream_of)
 from tests.v2.test_settle import colonoscopy
 
 Run, Job = models.ProviderRun, models.Job
@@ -127,7 +127,7 @@ class UpdateCase(PipelineCase):
         self.drain()
         encounter.refresh_from_db()
         self.assertTrue(review.fresh(encounter))
-        self.assertEqual(encounter.current_assessment.engine_version, interpretation.ENGINE_VERSION_V2)
+        self.assertEqual(encounter.current_assessment.engine_version, interpretation.ENGINE_VERSION_V3)
         return encounter
 
     def legacy_fixture(self, text=NOTE):
@@ -252,7 +252,7 @@ class CaseBTests(UpdateCase):
         context = row.current_assessment.context
         self.assertEqual(review.values(context), {'setting': OFFICE, 'service_date': D2})
         self.assertEqual(context.earlier_assessment_id, legacy.pk)
-        self.assertEqual(row.current_assessment.engine_version, interpretation.ENGINE_VERSION_V2)
+        self.assertEqual(row.current_assessment.engine_version, interpretation.ENGINE_VERSION_V3)
         self.save(encounter, setting=HOSPITAL)  # a third save: case A, no Gemini job
         self.assertFalse(Job.objects.filter(encounter=encounter, state=Job.QUEUED,
                                             kind__in=(jobs.INTERPRET, jobs.APPRAISE)).exists())
@@ -371,7 +371,8 @@ class RapidEditTests(UpdateCase):
         self.save(encounter, **self.SAVES[0])
         job = jobs.claim_next()  # the interpret, claimed by a worker that dies before it ends
         self.save(encounter, **self.SAVES[1])
-        Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(seconds=700))
+        # older than a reading stage's stale threshold (AMENDMENT-2 1.12: 1,440 s)
+        Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(seconds=1500))
         jobs.mark_stale()
         job.refresh_from_db()
         self.assertEqual(job.state, Job.CANCELLED)
@@ -406,13 +407,13 @@ class RapidEditTests(UpdateCase):
         dying = jobs.claim_next()
         self.assertEqual((dying.kind, dying.idempotency_key), (jobs.INTERPRET, jobs._interpret_key(revision)))
         data = body(note_answer())
-        unsettled = Run.objects.create(encounter=encounter, revision=revision, provider='gemini',
-                                       adapter_version=interpretation.ADAPTER_VERSION_V2, request_sha256='c' * 64,
+        unsettled = Run.objects.create(encounter=encounter, revision=revision, provider=interpretation.PROVIDER_V3,
+                                       adapter_version=interpretation.ADAPTER_VERSION_V3, request_sha256='c' * 64,
                                        request_body={}, contexts=[], state=Run.SUCCEEDED, sent=True, http_status=200,
                                        response_bytes=data, response_sha256=hashlib.sha256(data).hexdigest(),
                                        purpose=interpretation.PURPOSE, scope={'mode': 'replay'},
                                        started_at=timezone.now(), finished_at=timezone.now())
-        Job.objects.filter(pk=dying.pk).update(started_at=timezone.now() - timedelta(seconds=700))
+        Job.objects.filter(pk=dying.pk).update(started_at=timezone.now() - timedelta(seconds=1500))  # A2 1.12
         jobs.mark_stale()
         [settled] = Job.objects.filter(encounter=encounter, state=Job.QUEUED)
         self.assertEqual(settled.idempotency_key, jobs._interpret_key(revision, f'settled:{unsettled.pk}'))
@@ -686,7 +687,7 @@ class StopResumeTests(UpdateCase):
             with self.assertRaises(KeyboardInterrupt), jobs._stage_scope(job):
                 jobs.STAGES[jobs.INTERPRET](job)
         self.assertTrue(self.save(encounter, setting='').restored)  # the dead stage no longer serves the saved state
-        Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(seconds=700))
+        Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(seconds=1500))  # A2 1.12
         jobs.mark_stale()
         job.refresh_from_db()
         self.assertEqual(job.state, Job.SUCCEEDED)
@@ -949,17 +950,18 @@ class UpdateFailureTests(UpdateCase):
 
     def test_u12_an_unhealthy_appraisal_and_a_cut_off_reading_during_a_legacy_update(self):
         """Pass 2 unhealthy: 7.1's appraisal row with Try reading again (a retry re-sends pass 2 only); pass 1 cut off
-        at its output limit (MAX_TOKENS): the too-long row, no Retry. The earlier codes stand in both."""
+        at its output limit (stop_reason max_tokens): AMENDMENT-2 1.5 [R:truth-T7] - never 7.1's too-long row, whose
+        sentence names a cause the run does not show: the pass's failed row (true: the reading could not be completed),
+        its action a new document, never the retry (refused with RETRY_CUT_OFF). The earlier codes stand in both."""
         from studio import customer_api
-        from tests.test_interpretation_adapter import encoded, with_parts
         from tests.v2.test_settle import faithful, verdict
 
         def yes_man(claim, role, claim_set):
             return verdict(claim, 'supports')  # every control supported too: control acceptance refuses
-        cut = answered(encoded(with_parts({'text': '{"events": ['}, finish='MAX_TOKENS')))
+        cut = answered(stream_of('{"events": [', stop_reason='max_tokens'))
         for name, oracle, script, situation, action in (
                 ('unhealthy', yes_man, {}, 'appraisal_failed', 'retry_reading'),
-                ('cut off', faithful, {EXTRACTION: [cut]}, 'too_long', 'none')):
+                ('cut off', faithful, {EXTRACTION: [cut]}, 'reading_failed', 'new_document')):
             with self.subTest(name):
                 self.new_workspace()
                 encounter = self.legacy_fixture()
@@ -970,10 +972,11 @@ class UpdateFailureTests(UpdateCase):
                 row = self.assertEarlierStands(encounter, earlier)
                 self.assertEqual(progress.encounter_progress(row)['error'], {
                     'text': customer_api.update_text(situation, review.UPDATE_DETAILS, True), 'action': action})
-                if action == 'none':
+                if action == 'new_document':
+                    self.assertNotIn('too long', progress.encounter_progress(row)['error']['text'])
                     with self.assertRaises(jobs.Refused) as refused:
                         jobs.retry_reading(encounter, self.user)
-                    self.assertEqual(str(refused.exception), jobs.RETRY_TOO_LONG)
+                    self.assertEqual(str(refused.exception), jobs.RETRY_CUT_OFF)
                     continue
                 self.interpreter.oracle = faithful
                 self.assertEqual(jobs.retry_reading(encounter, self.user).kind, jobs.APPRAISE)
@@ -1102,7 +1105,7 @@ class DisabledCodingServiceTests(UpdateCase):
         final = row.current_assessment
         self.assertNotEqual(final.pk, earlier.pk)
         self.assertEqual((final.engine_version, final.provider_run_id),
-                         (interpretation.ENGINE_VERSION_V2, earlier.provider_run_id))
+                         (interpretation.ENGINE_VERSION_V3, earlier.provider_run_id))
         self.assertEqual(sorted(final.proposals.filter(bucket='selected').values_list('code', flat=True)), ['45378'])
         self.assertFalse(self.no_review_finals(encounter).exists())
         self.assertEqual(self.corti.sent, [])

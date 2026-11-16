@@ -313,9 +313,9 @@ class EventsCase(TestCase):
         context = context or assessment.context
         inventory = models.EventInventory.objects.get(revision=assessment.revision)
         self.assertEqual((inventory.state, inventory.interpretation_version, inventory.inventory_version),
-                         ('read', interpretation.INTERPRETATION_PAIR, interpretation.INVENTORY_VERSION_V2))
+                         ('read', interpretation.INTERPRETATION_PAIR_V3, interpretation.INVENTORY_VERSION_V3))
         self.assertEqual((assessment.engine_version, assessment.event_inventory_id, context.event_inventory_id),
-                         (interpretation.ENGINE_VERSION_V2, inventory.pk, inventory.pk))
+                         (interpretation.ENGINE_VERSION_V3, inventory.pk, inventory.pk))
         self.assertEqual((context.version, assessment.context_id), (interpretation.CONTEXT_VERSION_V2, context.pk))
         self.assertEqual((assessment.routing.version, assessment.routing.result['inventory']),
                          (interpretation.ROUTING_VERSION_V2, str(inventory.pk)))
@@ -326,7 +326,7 @@ class EventsCase(TestCase):
         self.assertEqual(record['inventory'], {'id': str(inventory.pk), 'sha256': inventory.sha256})
         self.assertEqual((record['gemini_run'], record['appraisal_run'], record['context'], record['engine_version']),
                          (str(inventory.provider_run_id), str(inventory.appraisal_run_id), str(context.pk),
-                          interpretation.ENGINE_VERSION_V2))
+                          interpretation.ENGINE_VERSION_V3))  # the record names the engine that made it (f5's R2)
         self.assertEqual(record['member_date_state']['state'], context.facts['service_date']['state'])
         self.assertEqual((record['sentinel']['legacy_calls'], record['sentinel'][report.RETIRED_CALLS],
                           record['sentinel']['positive_control']), (0, 0, 'ok'))

@@ -30,6 +30,13 @@ single-flight lock (refutation round 4, sends-1): the session is idle for the wh
 has ended with it, so another session - the worker's - could take it and send. When it does not hold the lock, or the
 question fails, nothing more is sent; the receipt of what was sent is still printed, with CPT Studio's sentence for why
 the loop stopped, and the check does not pass.
+
+The installer runs it with --wait-for-lock (AMENDMENT-2 1.11 [R:cost-F-COST-8]), after the new worker has started, and
+that worker may be in one of the interpreter's readings, whose send holds the single-flight lock for its whole stream -
+up to the interpreter's send deadline, now 1,320 s. With the flag it waits for the lock, asking again every
+LOCK_POLL_SECONDS and sending nothing meanwhile, for up to that deadline (the longer of the two passes') plus
+LOCK_WAIT_MARGIN_SECONDS, and refuses only then, so a reading in flight never fails an install; the installer's timeout
+for the whole check covers the wait. Without it - a check run by hand - it refuses at once, as it always did.
 """
 from __future__ import annotations
 
@@ -39,6 +46,7 @@ import re
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from time import monotonic, sleep
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -52,6 +60,13 @@ from studio.providers.base import ProviderUnavailable
 PARTICIPANTS = ('corti', 'astra', 'fable')
 LOCK_UNCHECKED = ('CPT Studio could not check that its database session still holds the provider lock ({error}), '
                   'after {number} exchange{plural}; nothing more was sent, and the run has no final answer.')
+IN_FLIGHT = 'Another provider request is in flight; nothing was sent. Try again once it has finished.'
+WAITED = ' CPT Studio waited {seconds} s for it to finish.'  # added to IN_FLIGHT after --wait-for-lock's wait
+# AMENDMENT-2 1.11 [R:cost-F-COST-8]: --wait-for-lock asks for the lock again this often, and waits for at most the
+# interpreter's send deadline (settings, read at call time: _lock_wait_seconds) plus this margin, which covers the
+# stage's recording of the reading's outcome before the lock is released
+LOCK_POLL_SECONDS = 1.0
+LOCK_WAIT_MARGIN_SECONDS = 60
 TOOL_NOTE = ('This is CPT Studio\'s access check: its tools return no reference data here. Answer from the document '
              'alone.')
 NOTE = ('SYNTHETIC TEST DOCUMENT - not a real patient. Written for a CPT Studio access check.\n'
@@ -68,6 +83,10 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--participant', required=True, choices=PARTICIPANTS)
+        parser.add_argument('--wait-for-lock', action='store_true',
+                            help='wait, sending nothing, while another provider request holds the provider lock - for '
+                                 "up to the interpreter's send deadline plus 60 s - before refusing (the installer's "
+                                 'run); without it the check refuses at once')
 
     def handle(self, *args, **options):
         name = options['participant']
@@ -80,7 +99,7 @@ class Command(BaseCommand):
         if not settings.AUTHORIZATION_REF:
             raise CommandError('No owner authorization is configured (CPT_STUDIO_AUTHORIZATION_REF); nothing was sent.')
         try:
-            with _single_flight():
+            with _single_flight(wait=bool(options.get('wait_for_lock'))):
                 receipt = _corti() if name == 'corti' else _participant(name)
         except ProviderUnavailable as exc:  # misconfigured, or no request could be built: nothing was sent
             raise CommandError(str(exc)) from None
@@ -90,19 +109,42 @@ class Command(BaseCommand):
             raise CommandError(f'The {label} access check did not pass: see the receipt.')
 
 
+def _lock_wait_seconds() -> int:
+    """How long --wait-for-lock waits for the provider lock (AMENDMENT-2 1.11 [R:cost-F-COST-8]): the interpreter's
+    send deadline - the longer of its two passes', INTERPRETER_SEND_DEADLINE_SECONDS and
+    APPRAISER_SEND_DEADLINE_SECONDS, read from settings at call time: a reading's send holds the lock for up to that
+    long - plus LOCK_WAIT_MARGIN_SECONDS."""
+    deadline: int = max(settings.INTERPRETER_SEND_DEADLINE_SECONDS, settings.APPRAISER_SEND_DEADLINE_SECONDS)
+    return deadline + LOCK_WAIT_MARGIN_SECONDS
+
+
+def _took_lock(key: int) -> bool:
+    """Whether this database session took the session advisory lock ``key`` now (pg_try_advisory_lock: never blocks)."""
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_try_advisory_lock(%s)', [key])
+        return bool(cursor.fetchone()[0])
+
+
 @contextmanager
-def _single_flight():
+def _single_flight(wait: bool = False):
     """The installation-wide provider lock the pipeline's sends take (jobs._send): one clinical provider call at a
     time, the access check included. Taking a session advisory lock writes nothing. The lock is the session's and ends
     with it: an unlock that fails - the session has ended (refutation round 4, sends-1) - closes the connection, which
-    ends any session still holding the lock, and the receipt of what was sent is still printed."""
+    ends any session still holding the lock, and the receipt of what was sent is still printed.
+
+    Held by another request, the lock is refused at once (IN_FLIGHT, nothing sent); with ``wait`` (--wait-for-lock, the
+    installer's run: AMENDMENT-2 1.11 [R:cost-F-COST-8]) it is asked for again every LOCK_POLL_SECONDS for up to
+    _lock_wait_seconds(), sending nothing meanwhile, and refused only when it is still held then (IN_FLIGHT and WAITED).
+    The deadline is a monotonic clock's, read before the first ask."""
     from studio.jobs import PROVIDER_LOCK_KEY
 
-    with connection.cursor() as cursor:
-        cursor.execute('SELECT pg_try_advisory_lock(%s)', [PROVIDER_LOCK_KEY])
-        if not cursor.fetchone()[0]:
-            raise CommandError('Another provider request is in flight; nothing was sent. Try again once it has '
-                               'finished.')
+    bound = _lock_wait_seconds() if wait else 0
+    deadline = monotonic() + bound
+    while not _took_lock(PROVIDER_LOCK_KEY):
+        left = deadline - monotonic()
+        if left <= 0:
+            raise CommandError(IN_FLIGHT + (WAITED.format(seconds=bound) if wait else ''))
+        sleep(min(LOCK_POLL_SECONDS, left))
     try:
         yield
     finally:

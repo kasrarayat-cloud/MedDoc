@@ -10,6 +10,12 @@ active account holding an operator grant no revocation ended) and the note - giv
 as the operator commands read their reasons, so no prose passes through a shell) or as ``--note`` (FINAL 11.2's form).
 The hold rows stay. When no hold stands, nothing is recorded and the command says so with a non-zero exit. Members then
 Resume.
+
+The release report (docs/gemini-migration/AMENDMENT-2.md 1.5 [R:connector-CONN-1]): for each hold it ends, the command
+prints its reason, the run that set it, that run's encounter and the first 16 hex of the run's request sha256
+(holds.release_report), and says for a request-bound hold - a decline, or a hold an error event set after the answer
+stream began - that its request stays blocked for members: a Resume or a Retry does not send it again, and only an
+operator's recorded override sends it once. Every other hold's request may be sent again by a member's next Resume.
 """
 from django.core.management.base import BaseCommand, CommandError
 
@@ -52,8 +58,14 @@ class Command(BaseCommand):
             raise CommandError('No interpreter hold is standing; nothing was recorded.')
         for item in released:
             self.stdout.write(f'Released {holds.describe(item.hold)} (release {item.pk}).')
+            self.stdout.write(f'  {holds.released_line(item)}')
+        blocked = sum(1 for item in released if holds.request_bound(item.hold))
         self.stdout.write(f'{len(released)} hold{"s" if len(released) != 1 else ""} released by {user.username}. '
                           'Members may now Resume.')
+        if blocked:
+            self.stdout.write(f'{blocked} of them {"is" if blocked == 1 else "are"} request-bound: '
+                              f'{"its request stays" if blocked == 1 else "their requests stay"} blocked for members, '
+                              "and only an operator's recorded override sends one again.")
 
     @staticmethod
     def read_note(path):

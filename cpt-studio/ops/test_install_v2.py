@@ -399,12 +399,12 @@ class V2Rows(DatabaseTest):
         return encounter
 
     def made_run(self, encounter, *, provider='corti', purpose='primary', state='succeeded', sent=True, http_status=200,
-            error='', reconciled=False, request='e'):
+            error='', reconciled=False, request='e', adapter_version='synthetic@1'):
         from django.utils import timezone
         from studio import models
         return models.ProviderRun.objects.create(
             encounter=encounter, revision=encounter.current_revision, provider=provider,
-            adapter_version='synthetic@1', purpose=purpose, request_sha256=request * 64, request_body={}, contexts=[],
+            adapter_version=adapter_version, purpose=purpose, request_sha256=request * 64, request_body={}, contexts=[],
             state=state, sent=sent, http_status=http_status, error=error, started_at=timezone.now(),
             reconciled_at=timezone.now() if reconciled else None)
 
@@ -438,6 +438,32 @@ class V2Rows(DatabaseTest):
             interpretation_version=version, inventory_version=inventory_version, text_sha256='a' * 64,
             request_sha256='e' * 64, response_sha256='b' * 64, state='read', events={}, encounter_facts={},
             open_questions=[], verification={}, sha256='c' * 64)
+
+    def current_inventory(self, encounter):
+        """A read EventInventory at the CURRENT versions (jobs.current_versions: AMENDMENT-2 8.1's
+        gemini-events@3/appraisal@2 and gemini-inventory@3), bound to two runs of the current interpreter (Fable:
+        PROVIDER_V3, ADAPTER_VERSION_V3)."""
+        from studio import interpretation, models
+        runs = [self.made_run(encounter, provider=interpretation.PROVIDER_V3, purpose=purpose, request=request,
+                              adapter_version=interpretation.ADAPTER_VERSION_V3)
+                for purpose, request in ((interpretation.PURPOSE, 'a'), (interpretation.APPRAISAL_PURPOSE, 'b'))]
+        return models.EventInventory.objects.create(
+            encounter=encounter, revision=encounter.current_revision, provider_run=runs[0], appraisal_run=runs[1],
+            interpretation_version=interpretation.INTERPRETATION_PAIR_V3,
+            inventory_version=interpretation.INVENTORY_VERSION_V3, text_sha256='a' * 64, request_sha256='e' * 64,
+            response_sha256='b' * 64, state='read', events={}, encounter_facts={}, open_questions=[],
+            verification={}, sha256='c' * 64)
+
+    def v3(self, tag):
+        """An interpreted and appraised upload read at the current versions (AMENDMENT-2 8.1): its cpt-studio-events@3
+        assessment current on its gemini context."""
+        from studio import interpretation
+        encounter = self.extracted(self.encounter(tag))
+        made = self.current_inventory(encounter)
+        context = self.context(encounter, version=interpretation.CONTEXT_VERSION_V2, inventory=made)
+        self.assessment(encounter, context, engine_version=interpretation.ENGINE_VERSION_V3,
+                        provider_run=self.made_run(encounter), inventory=made)
+        return encounter
 
     def job(self, encounter, kind, state, *, tag=''):
         from django.utils import timezone
@@ -581,7 +607,7 @@ class InstallCountsOnTheDatabaseTests(V2Rows):
         labelled = self.extracted(self.encounter('labelled'), text='Synthetic note [S2] with a unit label.')
         unextracted = self.encounter('unextracted')  # no text at all: an extraction that has not run
         blank = self.extracted(self.encounter('blank'), text='')  # extracted, and empty: class b (6b-r1 P8)
-        self.v2('read-now')  # an inventory read at the current versions: never counted, whatever its text
+        self.v3('read-now')  # an inventory read at the current versions: never counted, whatever its text
         two_pages = 'Synthetic page one.\fSynthetic page two.'
         paged = self.extracted(self.encounter('paged'), text=two_pages,
                                pages=[{'page': 1, 'start': 0, 'end': 19}, {'page': 2, 'start': 20, 'end': 39}])
@@ -668,9 +694,9 @@ class InstallCountsOnTheDatabaseTests(V2Rows):
         unknown = self.made_run(a21, state='unknown', http_status=None, reconciled=True)
         self.assessment(a21, self.context(a21), provider_run=unknown)  # a legacy context: a reading is owed
         settled = self.extracted(self.encounter('reconciled-v2'))  # a v2 encounter read at the current versions
-        made = self.inventory(settled)
+        made = self.current_inventory(settled)  # AMENDMENT-2 8.1's (jobs.current_versions)
         self.assessment(settled, self.context(settled, version='gemini-context@2', inventory=made),
-                        engine_version='cpt-studio-events@2', inventory=made,
+                        engine_version='cpt-studio-events@3', inventory=made,
                         provider_run=self.made_run(settled, state='unknown', http_status=None, reconciled=True))
         open_unknown = self.extracted(self.encounter('unreconciled'))
         self.assessment(open_unknown, self.context(open_unknown),
@@ -1758,7 +1784,7 @@ class PutBackOnTheDatabaseTests(V2Rows):
         self.assertGreater(models.Job.objects.get(pk=waiting.pk).deadline_at, due)  # its deadline renewed (2.3)
         # refutation w7r 6b-r1 R3: it waits for a worker only until that deadline, and the sentence says so
         self.assertIn('1 of them had a reading stage still queued (interpret 1), its deadline renewed: claimed by a '
-                      'worker of this revision within 30 minutes of the put-back, it reads the details put back; claimed '
+                      'worker of this revision within 60 minutes of the put-back, it reads the details put back; claimed '
                       'after that, it expires without starting, and the update then reads stopped, with Resume',
                       done['sentence'])
 
@@ -1766,9 +1792,11 @@ class PutBackOnTheDatabaseTests(V2Rows):
         from studio import models, review
         encounter = self.saved('failed', stage=False)
         self.job(encounter, 'interpret', models.Job.FAILED)  # the reading stage that failed, then its run
-        self.made_run(encounter, provider='gemini', purpose='interpretation', state='failed', http_status=500,
-                      request='f')
-        models.ProviderRun.objects.filter(encounter=encounter, provider='gemini').update(scope={'effect': 'failed'})
+        from studio import interpretation  # the reading path's runs (jobs.retry_target: AMENDMENT-2 section 9)
+        self.made_run(encounter, provider=interpretation.PROVIDER_V3, purpose='interpretation', state='failed',
+                      http_status=500, request='f', adapter_version=interpretation.ADAPTER_VERSION_V3)
+        models.ProviderRun.objects.filter(encounter=encounter, provider=interpretation.PROVIDER_V3).update(
+            scope={'effect': 'failed'})
         before = review._state_and_run(models.Encounter.objects.get(pk=encounter.pk))
         closed = self.close(revert=True)
         done = self.reapply([closed])
@@ -1953,7 +1981,7 @@ class RequeueDeadlineOnTheDatabaseTests(V2Rows):
         with mock.patch.object(install, 'app_script', in_this_image):
             done = install.reapply_reverted(IMAGE, b'', [closed])
         self.assertIn('while it waits for a worker of this revision the update reads updating; claimed within the '
-                      'queue deadline (30 minutes from the put-back), it runs, its doors sending the save\'s request at '
+                      'queue deadline (60 minutes from the put-back), it runs, its doors sending the save\'s request at '
                       'most once; claimed after it, it expires without starting, and the update then reads stopped, with '
                       'Resume', done['sentence'])
         shown = progress.encounter_progress(models.Encounter.objects.get(pk=encounter.pk))

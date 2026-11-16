@@ -68,7 +68,7 @@ from django.utils import timezone
 
 from studio import customer_api, interpretation, jobs, models, review
 from studio.gi import cues, structure
-from studio.interpretation import adapter, holds, readers, sentinel
+from studio.interpretation import adapter, fable_adapter, holds, readers, sentinel
 from studio.providers.base import request_sha256
 from tests import guard_support, v1_chain
 from tests.guard_support import (APP, CACHE, CODE, IN_IMAGE_EXEMPT, INSTALL, LABELS, LEGACY, NEW, OK, OTHER, REGEX,
@@ -82,6 +82,7 @@ from tests.test_pipeline_assess_events import AUTH, MODULES, Scripted, final_ans
 from tests.test_pipeline_assess_events import Corti as PipelineCorti
 from tests.test_pipeline_assess_events import two_procedures
 from tests.v2.test_adapter import measured_pins
+from tests.v2.test_jobs import fable_pins
 from tests.v2.test_jobs import (EXTRACTION, UNKNOWN, USAGE as V2_USAGE, ScriptedInterpreterV2, answered, appraisal_for,
                                 body, oracle_answer)
 from tests.v2.test_settle import HEALTH_PIN, NOTE, colonoscopy, event, fact, lesion, note_answer, src
@@ -360,7 +361,8 @@ class V2GuardCase(TestCase):
 
     def setUp(self):
         super().setUp()
-        self.enterContext(mock.patch.multiple(interpretation, HEALTH_THRESHOLDS_SHA256=HEALTH_PIN, **measured_pins()))
+        self.enterContext(mock.patch.multiple(interpretation, HEALTH_THRESHOLDS_SHA256=HEALTH_PIN,
+                                              **{**measured_pins(), **fable_pins()}))
         self.replay = tempfile.mkdtemp(prefix='s6a-replay-', dir=os.environ.get('TMPDIR'))
         self.addCleanup(shutil.rmtree, self.replay, True)
         self.enterContext(override_settings(GEMINI_REPLAY_DIR=self.replay))
@@ -370,7 +372,7 @@ class V2GuardCase(TestCase):
         self.corti = WorldCorti(*self.corti_groups)
         self.interpreter = WorldInterpreter({})
         self.adapters = {name: WorldScripted(name, self.replay, self.participant_codes) for name in MODULES}
-        self.enterContext(mock.patch.object(adapter, 'get_interpreter_v2', return_value=self.interpreter))
+        self.enterContext(mock.patch.object(fable_adapter, 'get_interpreter_v2', return_value=self.interpreter))
         self.enterContext(mock.patch('studio.jobs.get_provider', return_value=self.corti))
         self.enterContext(mock.patch('studio.participants.get_participant', side_effect=self.adapter))
         self.assertTrue(sentinel.retired_armed())
@@ -614,7 +616,7 @@ class V2World(World):
         pk = self.v2_upload('E8')
         self.drain('E8', until=Job.EXTRACT)
         job = Job.objects.get(encounter_id=pk, kind=jobs.INTERPRET)
-        Job.objects.filter(pk=job.pk).update(state=Job.RUNNING, started_at=timezone.now() - timedelta(seconds=700),
+        Job.objects.filter(pk=job.pk).update(state=Job.RUNNING, started_at=timezone.now() - timedelta(seconds=1500),
                                              attempts=1)
         sending_pass_1(job, body(v2_answer('E8')), self.case.user)
         self.matrix.call(('worker', 'mark_stale'), 'jobs.mark_stale', jobs.mark_stale, tag='E8')
@@ -641,14 +643,14 @@ def sending_pass_1(job, data: bytes, user):
     """The pass-1 run a worker that died mid-send leaves (FINAL-V2 7.4's settled path): SENDING, its one exchange
     recorded succeeded with HTTP 200 and ``data``."""
     revision = job.revision
-    request = adapter.build_extraction_request(revision.text, jobs._participant_pages(revision),
+    request = fable_adapter.build_extraction_request(revision.text, jobs._participant_pages(revision),
                                                jobs._participant_document(revision)[0])
     run = Run.objects.create(
-        encounter=job.encounter, revision=revision, provider=interpretation.PROVIDER,
-        adapter_version=interpretation.ADAPTER_VERSION_V2, request_sha256=request.canonical_sha256,
+        encounter=job.encounter, revision=revision, provider=interpretation.PROVIDER_V3,
+        adapter_version=interpretation.ADAPTER_VERSION_V3, request_sha256=request.canonical_sha256,
         request_body=request.body, contexts=list(request.contexts), state=Run.SENDING, sent=True,
         purpose=interpretation.PURPOSE, scope={'mode': 'replay'}, endpoint=WorldInterpreter.endpoint,
-        requested_model=interpretation.MODEL, started_at=timezone.now(), authorization_ref=AUTH, requested_by=user)
+        requested_model=interpretation.MODEL_V3, started_at=timezone.now(), authorization_ref=AUTH, requested_by=user)
     models.ProviderExchange.objects.create(
         run=run, turn=1, request_body=request.body, request_sha256=request.canonical_sha256, state='succeeded',
         http_status=200, response_bytes=data, response_sha256=hashlib.sha256(data).hexdigest(), usage=dict(V2_USAGE),
@@ -671,7 +673,7 @@ class V2NewPathOnlyDatabaseTests(V2GuardCase):
         self.assertEqual({readers.label_of(item) for item in encounters}, {NEW})
         # over v2 assessments only (5.7 measure 8)
         self.assertEqual(set(models.Assessment.objects.values_list('engine_version', flat=True)),
-                         {interpretation.ENGINE_VERSION_V2})
+                         {interpretation.ENGINE_VERSION_V3})
         self.assertEqual(matrix.missing(), [])
         self.assertEqual(matrix.unknown(), [])
         unsatisfied = sorted(name for name, found in matrix.satisfied().items() if not found)
@@ -847,7 +849,7 @@ class U15Tests(V2GuardCase):
             world.reads_of(pk, 'completed')
             after = matrix.observations[completed:]
         encounter = models.Encounter.objects.get(pk=pk)
-        self.assertEqual(encounter.current_assessment.engine_version, interpretation.ENGINE_VERSION_V2)
+        self.assertEqual(encounter.current_assessment.engine_version, interpretation.ENGINE_VERSION_V3)
         self.assertIsNotNone(payload['what_changed'])
         self.assertEqual([item for item in during if item.count((NEW, OTHER, UNSCOPED)) or item.errors], [],
                          '\n'.join(item.describe() for item in during))

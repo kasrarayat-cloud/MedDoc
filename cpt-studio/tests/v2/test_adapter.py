@@ -34,7 +34,8 @@ What is proved, item by item against the done-when of 8.1 step 3b, amendment 1's
 - mypy --strict passes on adapter.py (ImportTests);
 - a text that cannot be framed is ``refused: unbuilt`` with contract/extract_prompt's Unframed reason, never
   participants.http.framed_text's sentence (hand-offs 1a:R2, 2a#5, 2a:R2; UnbuiltTests);
-- per-purpose timeouts, pass 2 at D49's 480 and 510 s, from settings.APPRAISER_* (TimeoutTests);
+- per-purpose timeouts: the dormant adapter's own constants keep D49's 480 and 510 s; its configured interpreters
+  read settings.INTERPRETER_* and APPRAISER_* (AMENDMENT-2 1.12: 1,320 s each), under D289's guard (TimeoutTests);
 - v1's prompt and read imports removed: the module imports neither, importing it loads neither, and the v2 path
   executes no line of any retired module nor of the v1 surface (ImportTests, TraceTests); v1's surface is unchanged
   (tests/test_interpretation_adapter.py, which no step edits, stays green).
@@ -1116,25 +1117,44 @@ class TurnFormTests(Pinned, OfflineTestCase):
 # --- the per-purpose timeouts and the configured interpreter --------------------------------------------------------
 
 class TimeoutTests(SimpleTestCase):
-    def test_pass_2_takes_d49s_deadlines(self):
-        from studio import jobs
+    """Per-purpose timeouts, restated with AMENDMENT-2 1.12 (D289's G2-01; W9R-BUILD-LIST B21): the dormant adapter's
+    own module constants keep D49's 480 s read and 510 s deadline and are no longer compared with the settings; its
+    configured interpreters read each purpose's settings, which are 1.12's 1,320 s; and each pass's settings hold the
+    output maximum of the module that sends on the interpreter's path (fable_adapter.MAX_TOKENS), with the read, the
+    stage and the stale threshold above them as 1.12 derives them."""
 
+    def test_the_dormant_adapters_own_constants_keep_d49s_values(self):
+        self.assertEqual((adapter.READ_TIMEOUT_SECONDS, adapter.SEND_DEADLINE_SECONDS), (480, 510))
         self.assertEqual((adapter.APPRAISAL_READ_TIMEOUT_SECONDS, adapter.APPRAISAL_SEND_DEADLINE_SECONDS), (480, 510))
-        self.assertEqual((settings.APPRAISER_READ_TIMEOUT_SECONDS, settings.APPRAISER_SEND_DEADLINE_SECONDS),
-                         (adapter.APPRAISAL_READ_TIMEOUT_SECONDS, adapter.APPRAISAL_SEND_DEADLINE_SECONDS))
-        self.assertEqual((settings.INTERPRETER_READ_TIMEOUT_SECONDS, settings.INTERPRETER_SEND_DEADLINE_SECONDS),
-                         (adapter.READ_TIMEOUT_SECONDS, adapter.SEND_DEADLINE_SECONDS))
-        appraise = settings.JOB_DEADLINE_SECONDS['appraise']
-        self.assertEqual(appraise, 560)
-        self.assertLess(settings.APPRAISER_READ_TIMEOUT_SECONDS, settings.APPRAISER_SEND_DEADLINE_SECONDS)
-        self.assertLess(settings.APPRAISER_SEND_DEADLINE_SECONDS + jobs.LOOP_RECORDING_SECONDS, appraise)
-        self.assertLess(appraise, settings.STALE_RUNNING_SECONDS)
-        # FINAL-V2 7.4: a cut-off answer of 32,768 tokens at 82.4 tokens per second fits the read, so it is TOO_LONG
-        self.assertLess(32_768 / 82.4, settings.APPRAISER_READ_TIMEOUT_SECONDS)
         interpreter = adapter.InterpreterV2()
         self.assertEqual(interpreter.send_deadlines, {'interpretation': 510, 'appraisal': 510})
         live = adapter.GeminiInterpreterV2('/nonexistent/gemini.env')
         self.assertEqual((live.connect_timeout, live.read_timeouts), (10, {'interpretation': 480, 'appraisal': 480}))
+
+    def test_each_purposes_settings_are_1_12s(self):
+        stale = settings.STALE_RUNNING_SECONDS_BY_KIND
+        self.assertEqual((settings.INTERPRETER_SEND_DEADLINE_SECONDS, settings.INTERPRETER_READ_TIMEOUT_SECONDS,
+                          settings.JOB_DEADLINE_SECONDS['interpret'], stale['interpret']), (1320, 1320, 1380, 1440))
+        self.assertEqual((settings.APPRAISER_SEND_DEADLINE_SECONDS, settings.APPRAISER_READ_TIMEOUT_SECONDS,
+                          settings.JOB_DEADLINE_SECONDS['appraise'], stale['appraise']), (1320, 1320, 1380, 1440))
+
+    def test_each_pass_fits_the_bounds_the_senders_output_maximum_sets(self):
+        from studio import jobs
+        from studio.interpretation import fable_adapter
+
+        # 1.12: the output maximum at 100 tokens per second, plus 40 s for the connection, the prefill and the tail
+        cap = fable_adapter.MAX_TOKENS / 100 + 40
+        for purpose, send, read, kind in (
+                ('interpretation', settings.INTERPRETER_SEND_DEADLINE_SECONDS,
+                 settings.INTERPRETER_READ_TIMEOUT_SECONDS, 'interpret'),
+                ('appraisal', settings.APPRAISER_SEND_DEADLINE_SECONDS, settings.APPRAISER_READ_TIMEOUT_SECONDS,
+                 'appraise')):
+            with self.subTest(purpose=purpose):
+                self.assertLessEqual(cap, send)
+                self.assertLessEqual(read, send)  # the read never cuts a live stream before the deadline
+                # the stage covers the send, its recording and 45 s of its own work, and ends before its stale sweep
+                self.assertLessEqual(send + jobs.LOOP_RECORDING_SECONDS + 45, settings.JOB_DEADLINE_SECONDS[kind])
+                self.assertLess(settings.JOB_DEADLINE_SECONDS[kind], settings.STALE_RUNNING_SECONDS_BY_KIND[kind])
 
     def test_every_deadline_and_limit_is_validated(self):
         for option in ('send_deadline', 'appraisal_send_deadline'):
@@ -1166,8 +1186,12 @@ class TimeoutTests(SimpleTestCase):
                                                                      {'interpretation': 500, 'appraisal': 490}))
         with override_settings(GEMINI_MODE='live', GEMINI_CREDENTIALS_FILE='/nonexistent/gemini.env'):
             live = adapter.get_interpreter_v2()
-        self.assertEqual((live.read_timeouts, live.send_deadlines), ({'interpretation': 480, 'appraisal': 480},
-                                                                     {'interpretation': 510, 'appraisal': 510}))
+        # with the default settings, each purpose's own (compared with the settings, never with literals: B21)
+        self.assertEqual((live.read_timeouts, live.send_deadlines),
+                         ({'interpretation': settings.INTERPRETER_READ_TIMEOUT_SECONDS,
+                           'appraisal': settings.APPRAISER_READ_TIMEOUT_SECONDS},
+                          {'interpretation': settings.INTERPRETER_SEND_DEADLINE_SECONDS,
+                           'appraisal': settings.APPRAISER_SEND_DEADLINE_SECONDS}))
         with override_settings(GEMINI_MODE='replay', GEMINI_REPLAY_DIR=''):
             with self.assertRaisesMessage(ProviderUnavailable, 'Replay interpretation needs '
                                                                'CPT_STUDIO_GEMINI_REPLAY_DIR.'):

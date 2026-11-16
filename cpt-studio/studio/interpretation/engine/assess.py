@@ -1,5 +1,5 @@
 """The assessment of one revision from its settled inventory (docs/gemini-migration/FINAL-V2.md 4.1, 4.3, 4.4, 4.7, 4.8,
-4.12 and 9.3; step 5a of 8.1; cpt-studio-events@2): v1's studio/interpretation/assess.py forked into engine/, its
+4.12 and 9.3; step 5a of 8.1; cpt-studio-events@3, AMENDMENT-2 8.1): v1's studio/interpretation/assess.py forked into engine/, its
 readers deleted and its inputs rewired to the typed, text-free FactSet. It assembles, per proposed code, R1 (the
 proposer's quote is the document's own text), the per-code rule (engine/evaluate.py, R2-R5 and the code-specific rows),
 R6, the class rule (engine/classes.py), the bundling (engine/coverage.py), the combination (engine/combination.py), R7
@@ -91,8 +91,9 @@ new fingerprints, so a pre-v2 answer is asked differently) all match; "Not docum
 that code (not reinstatable). It confirms no fact and releases no hold of its own (4.8, D182): the answered code stays
 counted in the combination's base, within and same-day rules and in the coverage (session decision (e)). Two readings
 leave it out:
-- ADDON: an answered code is no longer counted for ADDON, so an add-on whose every counted primary an answer excluded is
-  held (fail-closed);
+- ADDON: an answered code is no longer counted for ADDON - one an engine-read answer excluded, and one an overlay-bound
+  answer of EITHER value binds (DECISIONS D283, G1-03: read time counts no code an answer binds now, D268) - so an
+  add-on whose every counted primary such an answer excluded or binds is held (fail-closed);
 - the competition (DECISIONS D260, read time's D249 reading in interpretation/overlay.py): a code a member answered
   "Not documented" leaves the competition (``compete_without``), so a rival with no other rival left loses its
   competing_codes hold, and one with a rival left keeps it, naming only the rivals left; "Cannot confirm" leaves the
@@ -102,24 +103,31 @@ code detail unavailable, which assess never does. DECISIONS D270 (DQ-2) reads on
 alone, as D260 reads one the engine applies, so the stored record and read time agree (``overlay_bound``): an answer
 read time binds by its (code, family, fact) key alone (studio.validation.questions.bind) - to a key-bound fact
 (base_included, separate_em) whatever fingerprint it carries, or with no fingerprint (the earlier form) - bound to a
-selected code whose ONE item has that key, and "Not documented" takes that code out of the competition exactly as above.
-Never an answer to the competing question, which offers no answer (codes competing for one act are settled by rejecting
-one: studio/answers.py, P-ADMIT2), nor to the date of service. Nothing else reads it: the code stays selected with its
-item (read time shows it detail unavailable), it is still counted for ADDON and every other rule, and "Cannot confirm"
-moves nothing.
-None of these readings moves the answered code itself: a code an answer took out of the competition or excluded is never
-assessed again - an excluded code's answer stands, and an overlay-bound one keeps the record its answer found, so read
-time binds the answer to the same item. The answers are bound in passes: every code whose ADDON row or competition the
-answers moved is assessed again over the counted set and the competition the answers leave (keeping the fingerprint it
-has without the answers while its status is unchanged: the next paragraph), and the answers are bound again over the
-result - never a code an answer excluded or took out of the competition, whose answer was given to the item it presented
-and stands, so no code flips back into review. A further pass follows only a code newly excluded or newly out of the
-competition, and those only grow, so the passes end: at most one pass per newly excluded code (an overlay binding
-counted as one), never one pass per proposal - a code can be assessed again in more than one pass (em_chain's 99214,
-tests/v2/test_assess.AnswerPassTests: narrowed by the first pass, released by the second). A service answer (no code)
-closes the service questions it was given to - those its fingerprint names, or, with none, every question of its
-(family, fact) - each question by the first answer that names it; a later answer naming only questions already closed is
-recorded as not applied (v1's record).
+selected code whose ONE item has that key, and "Not documented" takes that code out of the competition exactly as above
+while it binds that item. Never an answer to the competing question, which offers no answer (codes competing for one act
+are settled by rejecting one: studio/answers.py, P-ADMIT2): DECISIONS D283 (G1-01, option (c)) records it applied by
+nothing (``not_applied``, as an answer to the date of service is), and read time binds none either - the competing hold
+is settled by the reviewer's rejection (D270 DQ-3). Nothing else reads an overlay-bound answer but the ADDON row: the
+code stays selected with its item (read time shows it detail unavailable), it is no longer counted for ADDON (either
+value, D283) and is still counted for every other rule, and "Cannot confirm" moves nothing in the competition.
+An engine-read answer's exclusion stands: an excluded code is never assessed again. The answers are bound in passes, by
+ONE implementation read time calls too (``answer_pass`` and ``read_again``; DECISIONS D283 items 1-2): in each pass the
+ADDON count leaves out every code an engine-read answer excluded and every code an overlay-bound answer of either value
+binds, accumulated over the passes so that they end; the competition leaves out every code an engine-read answer
+excluded "Not documented" and every code an overlay-bound "Not documented" binds IN THAT PASS (recomputed); every code
+whose competition or ADDON row the pass moved is assessed again over the counted set and the competition the answers
+leave (keeping the fingerprint it has without the answers while its status is unchanged: the next paragraph) - a code
+taken out of the competition by an overlay-bound "Not documented" only when its ADDON row moved (D283, G1-02: once its
+item is the ADDON row's, its answer binds nothing, it is recorded no longer asked and the code is back in the
+competition, D270 DQ-2's restore made at assess as read time makes it) - and the answers are bound again over the
+result, each to the item its code then presents: an answer that no longer binds is recorded no longer asked. The
+excluded codes and the uncounted ones only grow, and a taken code's ADDON row moves only when they grow, so the passes
+end: a code can be assessed again in more than one pass (em_chain's 99214, tests/v2/test_assess.AnswerPassTests:
+narrowed by the first pass, released by the second). A service answer (no code) closes the service questions it was
+given to - with the fingerprint of the FIRST service question of its (family, fact), every question of that key, as
+read time binds a key by its first stored fingerprint (DECISIONS D283, G3-16 option (b)); with none, every question of
+the key - each question by the first answer that names it; one with any other fingerprint is asked differently, and a
+later answer naming only questions already closed is recorded as not applied (v1's record).
 
 **Fingerprints over facts** (``fingerprint``): the sha256 of the engine and requirement versions, the code, its family,
 its units, its kept evidence as offsets, its status, its evaluation, ranked held facts, item, answer and
@@ -136,7 +144,8 @@ is unchanged (``_kept_fingerprint``), so a reviewer's decision on it carries acr
 takes the fingerprint of what it now is (the status is a fingerprint input, FINAL-V2 6.5).
 
 **The D22 fields** (FINAL-V2 5.7 measure 9): the assessment records the versions that made it (``versions``: the engine,
-cpt-studio-events@2, the requirement table, and the inventory pair it read); the sentinel's record (legacy_calls,
+cpt-studio-events@3, the requirement table, and the inventory pair - AMENDMENT-2 8.1's labels, gemini-events@3/
+appraisal@2 and gemini-inventory@3, which every writer on the current path writes [R:replay-R4]); the sentinel's record (legacy_calls,
 retired_calls) is the caller's (interpretation/report.py, measured by engine/measure.py). SERVICES_STUB and
 INVENTORY_PROBLEMS are written exactly as v1 wrote them for the rollback image (FINAL 12; FINAL-V2 6.4), the stub's
 version this engine's.
@@ -162,7 +171,8 @@ from enum import Enum, unique
 from types import MappingProxyType
 from typing import Protocol, TypeVar
 
-from studio.interpretation import ENGINE_VERSION_V2, INTERPRETATION_PAIR, INVENTORY_VERSION_V2, REQUIREMENTS_VERSION
+from studio.interpretation import (ENGINE_VERSION_V3, INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3,
+                                   REQUIREMENTS_VERSION)
 from studio.interpretation.contract.jsonschema import canonical, sha256_of
 from studio.interpretation.contract.types import (AccessOutcome, Attribute, Completion, Extent, Kind, Reason, Result,
                                                   SessionKind, Status)
@@ -177,13 +187,15 @@ _A = Attribute
 _Q = ItemKind.QUESTION
 _E = TypeVar('_E', bound=Enum)
 
-ENGINE_VERSION = ENGINE_VERSION_V2  # Assessment.engine_version of an assessment made here
+# Assessment.engine_version of an assessment made here: AMENDMENT-2 8.1's label (the overfilled slot's reading and the
+# repaired claimed-value readers, 4.3.3); every writer on the current path writes the _V3 labels [R:replay-R4]
+ENGINE_VERSION = ENGINE_VERSION_V3
 MAX_LISTED_CODE = 10  # wording.MAX_LISTED_CODE: what a stored proposal code holds; codes are never truncated
 QUESTION_FORM = 'cpt-studio-question@2'  # the fingerprint form of a v2 item (studio.validation.questions.FORM is @1)
 # FINAL 4.3 (v1's): what the new path writes into the legacy services slot, and the sentence that freezes the old
 # image's read-time reconciliation (FINAL 12.2). The stub's keys are the legacy record's field names - an output shape,
 # never compared with any text - written by keyword, so this module holds no string list; its version is this engine's.
-SERVICES_STUB: Mapping[str, object] = MappingProxyType(dict(version=ENGINE_VERSION_V2, services=(), conflicts=(),
+SERVICES_STUB: Mapping[str, object] = MappingProxyType(dict(version=ENGINE_VERSION_V3, services=(), conflicts=(),
                                                             attributions=(), problems=()))
 INVENTORY_PROBLEMS = ('This assessment was made by a later release from an event inventory; this release does not '
                       're-read it.',)
@@ -714,8 +726,8 @@ class Assessment:
 def versions() -> dict[str, str]:
     """The D22 fields an assessment carries (9.1 versions): the inventory pair read, the inventory version, the
     requirement table and the engine."""
-    return {'interpretation': INTERPRETATION_PAIR, 'inventory': INVENTORY_VERSION_V2,
-            'requirements': REQUIREMENTS_VERSION, 'engine': ENGINE_VERSION_V2}
+    return {'interpretation': INTERPRETATION_PAIR_V3, 'inventory': INVENTORY_VERSION_V3,
+            'requirements': REQUIREMENTS_VERSION, 'engine': ENGINE_VERSION_V3}
 
 
 # --- canonical data (fingerprints, P-DET) -----------------------------------------------------------------------------
@@ -1584,7 +1596,7 @@ def fingerprint(selection: _Selection, status: Outcome, held: Sequence[HeldFact]
     context = {'setting': member.setting if em else None, 'patient_status': member.patient_status if em else None,
                'billing_context': member.billing_context if em or selection.pctc else None}
     return sha256_of(jsonable({
-        'engine': ENGINE_VERSION_V2, 'requirements': REQUIREMENTS_VERSION, 'code': selection.code,
+        'engine': ENGINE_VERSION_V3, 'requirements': REQUIREMENTS_VERSION, 'code': selection.code,
         'family': selection.family, 'units': selection.units, 'kept': selection.evidence.kept,
         'in_scope': not selection.evidence.scope_reason, 'status': status, 'evaluation': evaluation,
         'held': tuple(held), 'item': (item.held, item.message, item.fill) if item is not None else None,
@@ -1725,7 +1737,11 @@ def _apply_answers(proposals: list[Assessed], answers: Sequence[tuple[AnswerInpu
                    selections: Mapping[str, _Selection]) -> tuple[list[Assessed], list[AnswerApplied],
                                                                    list[AnswerEarlier]]:
     """Each engine-read answer bound to the item it was given to (module docstring): its code EXCLUDED, nothing else
-    moved."""
+    moved. Every other answer is recorded: an answer to the date of service or to the competing question as applied by
+    nothing (``not_applied``: DECISIONS D283, G1-01 option (c) - the competing question takes no answer, and read time
+    binds none to it either); an overlay-read answer as the overlay's while it binds the item a selected code presents
+    now, and as no longer asked once it binds none (D283 item 1: an answer binds only the item its code then presents,
+    as read time lists it)."""
     asked: dict[tuple[str, str, str], tuple[str, list[str]]] = {}
     for p in proposals:
         if p.bucket is Bucket.SELECTED and p.item is not None:
@@ -1738,8 +1754,15 @@ def _apply_answers(proposals: list[Assessed], answers: Sequence[tuple[AnswerInpu
         if not answer.code:
             continue  # a service answer: _close_services
         if not engine_reads(answer):
-            # the encounter-scope date of service is settled by a date, by nobody's answer: never the overlay's either
-            why = Unbound.NOT_APPLIED if answer.fact == _ENCOUNTER_FACT else Unbound.OVERLAY_READ
+            # the encounter-scope date of service is settled by a date, by nobody's answer: never the overlay's either;
+            # nor is the competing question (D283, G1-01: it takes no answer); an overlay-read answer that binds no item
+            # a selected code presents now is no longer asked (D283 item 1)
+            if answer.fact in (_ENCOUNTER_FACT, _COMPETING_FACT):
+                why = Unbound.NOT_APPLIED
+            elif (answer.code, answer.family, answer.fact) in asked:
+                why = Unbound.OVERLAY_READ
+            else:
+                why = Unbound.NO_LONGER_ASKED
             earlier.append(AnswerEarlier(answer.answer_id, answer.code, answer.family, answer.fact, value, why))
             continue
         found = asked.get((answer.code, answer.family, answer.fact))
@@ -1782,8 +1805,9 @@ def overlay_bound(proposals: Sequence[Assessed], answers: Sequence[tuple[AnswerI
     date of service (no code asks it: the date item is the encounter's question) or to the competing question (the
     competing question offers no answer: codes competing for one act are settled by rejecting one - studio/answers.py,
     P-ADMIT2; this step's NOTES, question Q1). Each proposal is bound by the first answer that binds it (the answers'
-    order). Read for the competition alone: the caller takes a proposal bound "Not documented" out of the competition
-    and moves nothing else of it."""
+    order). Read for the competition and the ADDON row (DECISIONS D283, G1-03; ``answer_pass``): the caller takes a
+    proposal bound "Not documented" out of the competition while it binds, and counts no proposal it binds, of either
+    value, for ADDON; nothing else of it moves."""
     asked: dict[tuple[str, str, str], list[str]] = {}
     for p in proposals:
         if p.bucket is Bucket.SELECTED and p.item is not None:
@@ -1838,20 +1862,17 @@ def compete_without(joined: combination.Combination, members: Mapping[str, combi
     return replace(joined, competes=competes, contested=shared, unlisted_contested=shared_unlisted, held=held)
 
 
-def _moved(found: Assessed, was: _Encounter, now: _Encounter) -> bool:
-    """Whether a selected proposal no answer excluded reads another competition, or another ADDON row, over ``now`` (the
-    counted set and the competition the answers leave) than over ``was`` (the encounter it was assessed with): the
-    proposals a pass assesses again (module docstring, "Member answers"), but those an overlay-bound "Not documented"
-    took out of the competition, which ``_bind_in_passes`` leaves as their answer found them. The assembly reads the
-    combination only through the code's own holds and rivals and the procedure day and modifier reviews, which
-    ``compete_without`` never moves, so these are exact."""
+def _competition_moved(found: Assessed, was: _Encounter, now: _Encounter) -> bool:
+    """Whether a selected proposal no answer excluded reads another competition over ``now`` (the competition the
+    answers leave) than over ``was`` (the encounter it was assessed with) - its own combination holds or its rivals:
+    with ``_addon_moved``, what ``read_again`` reads (module docstring, "Member answers"; DECISIONS D283). The assembly
+    reads the combination only through the code's own holds and rivals and the procedure day and modifier reviews,
+    which ``compete_without`` never moves, so this is exact."""
     if found.answered is not None or found.bucket is not Bucket.SELECTED or found.evaluation is None:
         return False
     key = found.key
-    if (was.joined.held.get(key, ()) != now.joined.held.get(key, ())
-            or was.joined.competes.get(key, ()) != now.joined.competes.get(key, ())):
-        return True
-    return _addon_moved(found, was.counted, now.counted)
+    return (was.joined.held.get(key, ()) != now.joined.held.get(key, ())
+            or was.joined.competes.get(key, ()) != now.joined.competes.get(key, ()))
 
 
 def _kept_fingerprint(found: Assessed, before: Assessed) -> Assessed:
@@ -1870,32 +1891,77 @@ def _kept_fingerprint(found: Assessed, before: Assessed) -> Assessed:
     return found
 
 
+@dataclass(frozen=True, slots=True)
+class AnswerPass:
+    """One pass's reading of the member answers (DECISIONS D283 items 1-2; module docstring, "Member answers"), the ONE
+    implementation engine/assess's passes and read time's (interpretation/overlay.review_view) both read, over proposal
+    keys: ``out``, the keys out of the competition in this pass - those an engine-read answer excluded "Not documented"
+    and those an overlay-bound "Not documented" binds now (``withdrawn``, recomputed each pass); ``uncounted``, the keys
+    no longer counted for ADDON - every key an engine-read answer excluded and every key an overlay-bound answer of
+    either value has bound, accumulated over the passes so that they end."""
+    out: frozenset[str]
+    withdrawn: frozenset[str]
+    uncounted: frozenset[str]
+
+
+def answer_pass(excluded: Mapping[str, Answer], bound: Mapping[str, Answer],
+                before: AnswerPass | None = None) -> AnswerPass:
+    """The next pass's reading (``AnswerPass``) from ``excluded`` ({key: value} of the codes an engine-read answer
+    excluded), ``bound`` ({key: value} of the selected codes an overlay-bound answer binds now: ``overlay_bound`` at
+    assess, read time's own binding at read time) and the pass ``before`` it (None for the first). DECISIONS D283 item
+    1: the ADDON count leaves out every code an engine-read answer excluded and every primary an overlay-bound answer of
+    either value binds, accumulated (G1-03); the competition leaves out every code an overlay-bound "Not documented"
+    binds in this pass (G1-02: recomputed, so a code whose answer no longer binds is back in it)."""
+    withdrawn = frozenset(key for key, value in bound.items() if value is Answer.NOT_DOCUMENTED)
+    out = frozenset(key for key, value in excluded.items() if value is Answer.NOT_DOCUMENTED) | withdrawn
+    uncounted = (before.uncounted if before is not None else frozenset()) | frozenset(excluded) | frozenset(bound)
+    return AnswerPass(out=out, withdrawn=withdrawn, uncounted=uncounted)
+
+
+def read_again(key: str, now: AnswerPass, *, excluded: bool, competition_moved: bool, addon_moved: bool) -> bool:
+    """DECISIONS D283 item 1, the one rule both halves read: whether the code ``key`` is read again after a pass - never
+    a code an engine-read answer excluded (``excluded``: its exclusion stands); a code an overlay-bound "Not documented"
+    takes out of the competition in ``now`` only when its ADDON row moved (G1-02: its answer then binds only the item it
+    presents, C7's correction at both halves); every other code when its competition or its ADDON row moved."""
+    if excluded:
+        return False
+    if key in now.withdrawn:
+        return addon_moved
+    return competition_moved or addon_moved
+
+
 def _bind_in_passes(unanswered: list[Assessed], given: Sequence[tuple[AnswerInput, Answer]], enc: _Encounter,
                     by_key: Mapping[str, _Selection]) -> tuple[list[Assessed], list[Assessed], list[AnswerApplied],
                                                                list[AnswerEarlier], _Encounter]:
-    """The member answers bound in passes (module docstring, "Member answers"): (the proposals, the proposals before the
-    answers - each code assessed again in a pass replaced -, the answers applied and not, and the encounter of the last
-    pass, whose combination is the Assessment's). Each pass reads the codes the answers excluded - none counts for
-    ADDON, and those answered "Not documented" leave the competition (``compete_without``) - and the codes an
-    overlay-bound "Not documented" binds (``overlay_bound``, DECISIONS D270's DQ-2), which leave the competition and
-    nothing else; every other proposal that moved (``_moved``) is assessed again over that encounter - keeping the
-    fingerprint it has without the answers while its status is unchanged (``_kept_fingerprint``) - and the answers are
-    bound again over the result. A code an answer excluded or took out of the competition is never assessed again (its
-    answer stands: an overlay-bound code keeps the item read time binds its answer to), so those codes only grow and a
-    further pass follows only a new one: at most one pass per newly excluded code (an overlay binding counted as one),
+    """The member answers bound in passes (module docstring, "Member answers"; DECISIONS D283): (the proposals, the
+    proposals before the answers - each code assessed again in a pass replaced -, the answers applied and not, and the
+    encounter of the last pass, whose combination is the Assessment's). Each pass reads ``answer_pass``: the codes the
+    answers excluded and those an overlay-bound answer of either value binds (accumulated) leave the ADDON count; the
+    codes an engine-read answer excluded "Not documented" and those an overlay-bound "Not documented" binds in this pass
+    leave the competition (``compete_without``; D270's DQ-2, recomputed each pass, G1-02). Every proposal ``read_again``
+    names is assessed again over that encounter - keeping the fingerprint it has without the answers while its status
+    is unchanged (``_kept_fingerprint``) - and the answers are bound again over the result, each to the item its code
+    then presents (an answer that no longer binds is recorded no longer asked). A code an engine-read answer excluded is
+    never assessed again; one taken out of the competition by an overlay-bound "Not documented" only when its ADDON row
+    moved (its answer then binds the ADDON row's item or nothing, and the code is back in the competition). The
+    excluded and uncounted codes only grow and a taken code's ADDON row moves only when they grow, so the passes end,
     while one proposal can be assessed again in several passes (em_chain's 99214: narrowed, then released)."""
     R, member, date_of_service = enc.R, enc.member, enc.date_of_service
     first = {p.key: p for p in unanswered}  # every proposal as assessed without the answers
+    codes = {p.key: p.code for p in unanswered}
     proposals, applied, earlier = _apply_answers(unanswered, given, R, member, date_of_service, by_key)
     assessed_with = {p.key: enc for p in unanswered}
-    withdrawn: set[str] = set()  # the codes an overlay-bound "Not documented" took out of the competition: each stands
+    now: AnswerPass | None = None
     while True:
-        excluded = [p for p in proposals if p.answered is not None]
-        withdrawn |= {key for key, value in overlay_bound(proposals, given).items() if value is Answer.NOT_DOCUMENTED}
-        out = frozenset(p.key for p in excluded if p.answered is not None and p.answered.value is Answer.NOT_DOCUMENTED)
-        current = replace(enc, counted=enc.counted - frozenset(p.code for p in excluded),
-                          joined=compete_without(enc.joined, enc.members, out | withdrawn, R))
-        again = {p.key for p in proposals if p.key not in withdrawn and _moved(p, assessed_with[p.key], current)}
+        excluded = {p.key: p.answered.value for p in proposals if p.answered is not None}
+        now = answer_pass(excluded, overlay_bound(proposals, given), now)
+        current = replace(enc, counted=enc.counted - frozenset(codes[key] for key in now.uncounted if key in codes),
+                          joined=compete_without(enc.joined, enc.members, now.out, R))
+        again = {p.key for p in proposals
+                 if read_again(p.key, now, excluded=p.answered is not None or p.bucket is not Bucket.SELECTED,
+                               competition_moved=_competition_moved(p, assessed_with[p.key], current),
+                               addon_moved=_addon_moved(p, assessed_with[p.key].counted, current.counted))
+                 and p.evaluation is not None}
         if not again:
             return proposals, unanswered, applied, earlier, current
         unanswered = [_kept_fingerprint(_assessed(p.key, by_key[p.key], current, p.disagreements), first[p.key])
@@ -1906,11 +1972,14 @@ def _bind_in_passes(unanswered: list[Assessed], given: Sequence[tuple[AnswerInpu
 
 def _close_services(service_items: Sequence[ServiceQuestion], answers: Sequence[tuple[AnswerInput, Answer]]
                     ) -> tuple[list[ServiceQuestion], list[AnswerApplied], list[AnswerEarlier]]:
-    """Each service answer (no code) bound by v1's bind to the service questions it was given to - those of its (family,
-    fact) asked with its fingerprint, or every one of them for an answer recorded with none - closing each question it
-    is the first answer to (answers in v1's order). An answer every question of which an earlier answer closed is
-    recorded as not applied (v1's record); one whose (family, fact) is not asked, or asked only with other
-    fingerprints, as no longer asked or asked differently. Nothing is excluded."""
+    """Each service answer (no code) bound to the service questions of its (family, fact) as read time binds it
+    (DECISIONS D283, G3-16 option (b); review.stored_service_questions binds a key by its FIRST stored fingerprint):
+    whenever an answer carries the fingerprint of the first service question of its (family, fact) in the engine's
+    order, it closes every service question of that key not yet closed; one recorded with no fingerprint (the earlier
+    form) closes every one too; one with any other fingerprint is asked differently (read time never binds it) -
+    closing each question it is the first answer to (answers in v1's order). An answer every question of which an
+    earlier answer closed is recorded as not applied (v1's record); one whose (family, fact) is not asked as no longer
+    asked. Nothing is excluded."""
     asked: dict[tuple[str, str], list[int]] = {}
     for index, found in enumerate(service_items):
         family = family_slug(found.item.family) if found.item.family is not None else ''
@@ -1922,8 +1991,9 @@ def _close_services(service_items: Sequence[ServiceQuestion], answers: Sequence[
         if answer.code:
             continue
         indices = asked.get((answer.family, answer.fact), [])
-        matching = [index for index in indices if not answer.question
-                    or service_items[index].question == answer.question]
+        # D283 (G3-16): the key is bound by its first service question's fingerprint, as read time binds it
+        matching = indices if indices and (not answer.question
+                                           or service_items[indices[0]].question == answer.question) else []
         if not indices or not matching:
             earlier.append(AnswerEarlier(answer.answer_id, '', answer.family, answer.fact, value,
                                          Unbound.NO_LONGER_ASKED if not indices else Unbound.ASKED_DIFFERENTLY))

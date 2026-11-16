@@ -23,6 +23,16 @@ stay byte-identical, because the 17 retired v1 modules and their tests read them
 calls v1 until step 5b switches it. v2's code lives in the two subpackages, contract and engine; this module imports
 neither, and still loads nothing else. is_new_assessment and is_new_context dispatch by version family, so @1 and @2
 rows alike are new-path rows.
+
+AMENDMENT-2 (docs/gemini-migration/AMENDMENT-2.md, adopted by DECISIONS D279: the interpreter is Claude Fable 5.2, D275)
+adds its labels the same way, under new names with the suffix _V3 (its 8.1 [R:replay-R4]). The first recording under
+each v2 label has happened (D202: D1 under gemini-events@2, D1v and D1w under gemini-appraisal@1), so changed bytes take
+new versions, and the v2 names keep their values: the dormant Gemini adapter and the rows stored under them read them.
+Every writer on the current path writes the _V3 labels, and every reader of a stored row accepts both families; @3
+rows are new-path rows too, since the families are unchanged. READ_PROVIDERS names every interpreter provider whose
+runs an installation may hold. AMENDMENT-2's pins (8.2) are written by the integration owner on the merged tree,
+each by its owning step's function (round a2b), but HEALTH_THRESHOLDS_SHA256_V3, which 8.2 sets from D3: DECISIONS D277
+runs no D3, so DECISIONS D293 pins 3.2.6's thresholds unchanged.
 """
 from __future__ import annotations
 
@@ -51,7 +61,9 @@ INTERPRETATION_VERSION_V2 = 'gemini-events@2'  # pass 1: instruction, schemas, b
 # CONTROLS generator and its tables, the seed rule, the health thresholds
 APPRAISAL_VERSION = 'gemini-appraisal@1'
 INVENTORY_VERSION_V2 = 'gemini-inventory@2'  # the checks, inheritance, the settle table, the doubt mapping, the reasons
-REQUIREMENTS_VERSION = 'cpt-requirements@1'  # the requirement table, its read-sets, the CLAIMED table, RANK
+# the requirement table, its read-sets, the CLAIMED table, RANK; @2 since DECISIONS D292 (E1j: BUNDLING's read-set
+# gains a whole's target lesion's places), @1's pins kept in tests/v2/test_requirements.REQUIREMENTS_PINS
+REQUIREMENTS_VERSION = 'cpt-requirements@2'
 ENGINE_VERSION_V2 = 'cpt-studio-events@2'  # Assessment.engine_version: the engine and event_coding@2
 CONTEXT_VERSION_V2 = 'gemini-context@2'  # EncounterContext.version derived by engine/derive.py
 ROUTING_VERSION_V2 = 'gemini-routing@2'  # RoutingRun.version of engine/derive.py's stand-in
@@ -98,6 +110,59 @@ CLAIMED_SHA256 = '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b
 HEALTH_THRESHOLDS_SHA256 = ''  # the health thresholds of 3.2.6 (contract/settle.py, step 3a), set from D3: step 8
 # the per-request claim bound of 1.8 (step 2c; 640 claims), recomputed from D2: step 8
 CLAIM_BOUND_SHA256 = '58f544bee79e592b0a40c01e24884995f2e9dd4dd9ff4c16aeec104dcf691f02'
+
+# --- AMENDMENT-2 (DECISIONS D275, D279): the interpreter is Claude Fable 5.2; the labels of its 8.1 -------------------
+# New names beside v2's, never in their place [R:replay-R4]: v2's names keep their values for the dormant Gemini adapter
+# and the rows stored under them, and every writer on the current path writes these. The families are unchanged
+# (gemini-events@, gemini-context@, cpt-studio-events@), so is_new_assessment reads an @3 assessment as a new-path one.
+INTERPRETATION_VERSION_V3 = 'gemini-events@3'  # pass 1: INSTRUCTIONS_3 and its request form; the slot finding leaves S1
+APPRAISAL_VERSION_V3 = 'gemini-appraisal@2'  # pass 2: the LOCAL schema as the constraint, its request form, its bound
+INVENTORY_VERSION_V3 = 'gemini-inventory@3'  # the slot_overfull reason, the slot rule and the K rules' reading (4.3)
+ENGINE_VERSION_V3 = 'cpt-studio-events@3'  # Assessment.engine_version: the overfilled slot's reading (4.3.3)
+# EventInventory.interpretation_version of an AMENDMENT-2 row: gemini-events@3/appraisal@2, 27 of 40 characters
+INTERPRETATION_PAIR_V3 = f"{INTERPRETATION_VERSION_V3}/{APPRAISAL_VERSION_V3.removeprefix('gemini-')}"
+# ProviderRun.adapter_version of a Fable run (37 of 40 characters): the connector (fable_adapter.py) with the
+# anthropic-version header it sends, API_VERSION_V3. The header is outside the body and moves no request sha256, so a
+# changed value is a new adapter version: the doors match the adapter version and reuse no answer across it, and
+# fable_adapter.API_VERSION is pinned to this value, never to the Fable participant's (8.4 [R:replay-R8]).
+ADAPTER_VERSION_V3 = 'anthropic-messages@cptstudio-interp-1'
+API_VERSION_V3 = '2026-10-21'  # the anthropic-version value every Fable run sends and records (scope.api_version)
+MODEL_V3 = 'claude-fable-5-2'  # D275, D13: an answer is read only when Anthropic reports exactly this model
+PROVIDER_V3 = 'anthropic'  # ProviderRun.provider of a Fable run (9 of 20); an operator field, never shown to a customer
+# every interpreter provider whose runs an installation may hold: Fable's, and the stored runs of Gemini (8.5)
+READ_PROVIDERS = (PROVIDER_V3, PROVIDER)
+
+# --- AMENDMENT-2's pins (8.2): written by the integration owner after the build's last repair -------------------------
+# An object the @3 and @2 labels change has a pin of its own: gemini-appraisal@1, which shares the v2 names, has
+# recordings (D1v, D1w), so a changed object under a shared name would move a recorded label (D202 [R:replay-R1]). No
+# recording exists under the new labels, so each is written by the integration owner on the merged tree with its
+# owning step's function (round a2b, after the build's last repair); an empty pin is refused like every empty pin.
+# Every pin above keeps its value, and the Fable path checks the ones whose objects 8.2 leaves unchanged:
+# LOCAL_SCHEMA_SHA256_V2 (the schema ANSWER_SHAPE_2 shows), SEGMENTATION_SHA256, APPRAISAL_INSTRUCTIONS_SHA256,
+# APPRAISAL_LOCAL_SCHEMA_SHA256 (now also pass 2's structured-output schema) and CLAIMED_SHA256; pass 1 has no
+# RESPONSE pin. After the first recording under a label, a changed byte of a pass-1 object needs gemini-events@4, of
+# a pass-2 object gemini-appraisal@3.
+# pass 1 (INTERPRETATION_VERSION_V3):
+# contract/extract_prompt.INSTRUCTIONS_3 (UTF-8), which contains ANSWER_SHAPE_2: step f2's extract_prompt.pins_fable
+INSTRUCTIONS_SHA256_V3 = '43e49a7ad6da1d8ba2300e772085783196517ae1bea64dadd09932697c77d4fb'
+# pass 2 (APPRAISAL_VERSION_V3) - the three objects DECISIONS D292 changes after 8.2 was written:
+# claims.TEMPLATES, whose reached_anatomy claim D292's U3 restates: step f3s (claims.templates_document under
+# gemini-appraisal@2, by step f2's appraise_prompt.pins_fable)
+TEMPLATES_SHA256_V3 = '2938e85b242524e72581cc6e509328b808958c03c2b79b6961243532e78bfc4e'
+# claims.STATEMENT_TEMPLATES, a doubted kind's statements in kind-neutral forms (D292's U1): step f3s (by step f2's
+# appraise_prompt.pins_fable)
+STATEMENT_TEMPLATES_SHA256_V3 = '0fcd3bd3e630762ef293196298621a9565559adfd2d4af1878ac36e52e183106'
+# the claims.CONTROLS generator with its tables, D244's shared reached_anatomy control restated (D292's U3): step f3s
+# (session_others included; by step f2's appraise_prompt.pins_fable)
+CONTROLS_SHA256_V3 = '570e24d654adee656a518ee047a16ed653494dd4c7b5d15a80bf92471982a9dc'
+# the per-request claim bound claims.CLAIM_BOUND_V3, sized for the size bound (D278; 8.2 names 1,000 claims, whose pin
+# is 3fe08a5c8ec23575e2df78032d5b4b18dcff0927ce1c628743c47946b9415628): step f3s (claims.claim_bound_document under
+# gemini-appraisal@2, by step f2's appraise_prompt.pins_fable)
+CLAIM_BOUND_SHA256_V3 = '3fe08a5c8ec23575e2df78032d5b4b18dcff0927ce1c628743c47946b9415628'
+# the health thresholds of 3.2.6 under gemini-appraisal@2 (contract/settle.py: jsonschema.sha256_of(health_document())),
+# which 8.2 sets from D3: DECISIONS D277 runs no D3, so DECISIONS D293 pins 3.2.6's values unchanged (the paid probes
+# measured establishment 0.93-1.00 and control acceptance at most 4.1% against 1/2 and 1/2)
+HEALTH_THRESHOLDS_SHA256_V3 = '68591d1982640551c215a7714e1b2eba7e46102afd52f98b54f3c52d1812c848'
 
 
 def _family(version: str) -> str:

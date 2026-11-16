@@ -27,7 +27,7 @@ from django.conf import settings
 
 from . import answers, interpretation, jobs, models, progress, review
 from .gi.profiles import PROFILES
-from .interpretation import readers, sentinel, wording
+from .interpretation import overlay, readers, sentinel, wording
 from .interpretation.contract.types import Attribute, Kind, SessionKind
 from .interpretation.wording import MISSING as EVENT_FACTS_MISSING
 from .models import Decision, DecisionInvalidation, Proposal, ProviderRun, ReportArtifact, SourceRevision
@@ -192,21 +192,38 @@ def _asked_of(attribute: Attribute, family: SessionKind) -> str:
     return wording.ATTRIBUTE_PHRASES[attribute].format(session=wording.session_label(wording.Slots(family=family)))
 
 
+def _described(family: SessionKind) -> str:
+    """What a procedure-keyed EXPLANATION asks (DECISIONS D284, G1-08; build list B8; D267: "names what its item asks"):
+    its route or tract is ESTABLISHED, so what is not found is the class the code describes - the held-fact sentence
+    names that class's performance, never a phrase of the attribute it states ("the route of ..." is known)."""
+    return f'whether the {wording.session_label(wording.Slots(family=family))} this code describes was performed'
+
+
 # DECISIONS D267 (repair r3c of round w9r; refute-r3c-r1 F7 = r3c Q10; D253 QX (ii)): the held-fact sentence of a
 # procedure-keyed held fact names what its item asks, never "in which procedure the act was done" where the procedure
 # is known - keyed by the item's message (wording.Message's value, which step 5b records with the held fact): the
-# anatomy the enteroscopy was passed through (ENTEROSCOPY_THROUGH), the route (ENTEROSCOPY_ROUTE, EXAMINATION_ROUTE, and
-# the two approach explanations, whose class needs a route the document does not give), the tract (ANOTHER_TRACT). Each
-# is wording.ATTRIBUTE_PHRASES' own phrase, said of the session by its service, so a held fact and its item's sentence
+# anatomy the enteroscopy was passed through (ENTEROSCOPY_THROUGH), the route (ENTEROSCOPY_ROUTE, EXAMINATION_ROUTE),
+# each wording.ATTRIBUTE_PHRASES' own phrase, said of the session by its service, so a held fact and its item's sentence
 # read one vocabulary. PROCEDURE asks the procedure itself and has no entry: v1's MISSING sentence, as with no message.
+# DECISIONS D284 (G1-08; build list B8, step f3w): the three EXPLANATIONS - the two approach explanations and the tract's
+# (ENTEROSCOPY_APPROACH, EXAMINATION_APPROACH, ANOTHER_TRACT) - state an established route or tract and ask whether the
+# class the code describes was performed: "whether the <service> this code describes was performed" (``_described``).
 HELD_FACT_ASKS: Mapping[str, str] = MappingProxyType({
     wording.Message.ENTEROSCOPY_THROUGH.value: _asked_of(Attribute.THROUGH, SessionKind.ENTEROSCOPY),
     wording.Message.ENTEROSCOPY_ROUTE.value: _asked_of(Attribute.APPROACH, SessionKind.ENTEROSCOPY),
-    wording.Message.ENTEROSCOPY_APPROACH.value: _asked_of(Attribute.APPROACH, SessionKind.ENTEROSCOPY),
+    wording.Message.ENTEROSCOPY_APPROACH.value: _described(SessionKind.ENTEROSCOPY),
     wording.Message.EXAMINATION_ROUTE.value: _asked_of(Attribute.APPROACH, SessionKind.EUS),
-    wording.Message.EXAMINATION_APPROACH.value: _asked_of(Attribute.APPROACH, SessionKind.EUS),
-    wording.Message.ANOTHER_TRACT.value: _asked_of(Attribute.TRACT, SessionKind.EUS),
+    wording.Message.EXAMINATION_APPROACH.value: _described(SessionKind.EUS),
+    wording.Message.ANOTHER_TRACT.value: _described(SessionKind.EUS),
 })
+# DECISIONS D284 (G3-15; build list B7, step f3w): the customer's fixed sentence for an add-on its ADDON row holds - none
+# of its primary codes is counted for this encounter -, chosen by the item's message (wording.Message.ADDON's value:
+# the message step 5b records with the stored item, support['item']['message'], and read time carries on a question it
+# words live), never QUESTION_WORDS['performed_status'] ("could not confirm ... done", untrue of an established add-on
+# act) and never STALE_WORDS (the row was recomputed). ADDON_CHECK names the same row's withholding of a reinstated
+# add-on (overlay.ADDON_CHECK, review_view's withheld_by).
+ADDON_WORDS = 'This add-on code is reported only together with a primary code, and none is counted for this encounter.'
+ADDON_CHECK = overlay.ADDON_CHECK
 
 
 def held_fact_words(fact: object, message: object = None) -> str:
@@ -708,6 +725,8 @@ KNOWN_ERRORS = {
     jobs.RETRY_UNKNOWN: None,
     jobs.RETRY_PAUSED: None,
     jobs.RETRY_TOO_LONG: None,
+    jobs.RETRY_CUT_OFF: None,  # AMENDMENT-2 1.5 [R:truth-T7]: a reading cut at its output limit
+    jobs.RETRY_DECLINED: None,  # AMENDMENT-2 1.5 [R:connector-CONN-1]: a declined reading's request
     jobs.RETRY_UNBUILT: None,
     # a write the legacy-call sentinel refused (FINAL 10.3): CPT Studio's sentence, naming no module or provider
     sentinel.MESSAGES['executed']: None,
@@ -1090,7 +1109,26 @@ WITHHELD_WORDS = {
     'review.reinstatement': 'This reinstated code needs a detail before it can be approved.',
     'em.same_day_if_reinstated': 'A separately identifiable office visit is not documented beside the procedure '
                                  'reinstated for the same day.',
+    # D284 (G3-15; build list B7): a reinstated add-on its ADDON row holds (overlay.ADDON_CHECK as withheld_by)
+    ADDON_CHECK: 'This reinstated add-on code is reported only together with a primary code, and none is counted for '
+                 'this encounter.',
 }
+
+
+def _addon_question(question: object, support: object) -> bool:
+    """Whether an open question a view shows is the ADDON row's (DECISIONS D284, build list B7), by the item's message: a
+    question read time words live carries its message (``question['message']``); a stored one (it has a row id) is the
+    stored item's when the record's item (``support['item']``, the message step 5b records) is ADDON and of its fact."""
+    if not isinstance(question, dict):
+        return False
+    message = question.get('message')
+    if isinstance(message, str):
+        return message == wording.Message.ADDON.value
+    item = support.get('item') if isinstance(support, dict) else None
+    return (bool(question.get('id')) and question.get('scope', 'proposal') == 'proposal' and isinstance(item, dict)
+            and item.get('message') == wording.Message.ADDON.value and item.get('fact') == question.get('fact'))
+
+
 STALE_WORDS = ('After the review decisions, a check that depends on the other codes could not be recomputed for this '
                'code.')
 
@@ -1126,6 +1164,8 @@ def _qualifications(proposal, status, view, code):
             elif fact == 'separate_em' and same_day:
                 # the visit a reinstated same-day procedure holds (refutation round 3, B-05): the gate's own sentence
                 out.append(WITHHELD_WORDS[review.SAME_DAY_EM_GATE])
+            elif _addon_question(question, support):  # D284 (B7): chosen by the item's message, never by its key
+                out.append(ADDON_WORDS)
             elif fact in QUESTION_WORDS:
                 out.append(QUESTION_WORDS[fact])
         if status == 'needs_detail' and not out:

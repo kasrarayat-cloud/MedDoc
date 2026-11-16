@@ -37,7 +37,9 @@ SAME_DUCT's two act slots (P4), and rule 4's pair is found by its spans and its 
 from __future__ import annotations
 
 import dataclasses
+import enum
 import itertools
+from types import SimpleNamespace
 from pathlib import Path
 
 from django.test import SimpleTestCase
@@ -51,11 +53,11 @@ from studio.interpretation.engine import evaluate as EV
 from studio.interpretation.engine import questions as Q
 from studio.interpretation.engine import requirements as rq
 from studio.interpretation.engine.requirements_table import Tag
-from studio.interpretation.engine.types import HeldFact, ItemKind, Span
+from studio.interpretation.engine.types import Fact, HeldFact, Id, IdFamily, ItemKind, Span
 from tests.v2 import test_assess as TA
 from tests.v2 import test_evaluate as TE
-from tests.v2.evaluate_fixtures import (SILENT, E, Status, X, colonoscopy, contra, doubted, fact, sup, unit, unres,
-                                        without_events)
+from tests.v2.evaluate_fixtures import (EARLIER, SILENT, Doc, E, L, Status, X, colonoscopy, contra, doubted, fact, neg,
+                                        sup, unit, unres, without_events)
 from tests.v2.test_types import measure_4
 
 APP = Path(__file__).resolve().parents[2]
@@ -98,7 +100,7 @@ class Mirrors(SimpleTestCase):
             out = {}
             for field in dataclasses.fields(cls):
                 text = str(field.type)
-                for old in ('engine_catalogue.', 'catalogue.'):
+                for old in ('engine_catalogue.', 'catalogue.', 'engine_requirements.', 'rq.'):  # the modules' aliases
                     text = text.replace(old, '')
                 out[field.name] = text
             return out
@@ -266,7 +268,12 @@ class OneItem(SimpleTestCase):
                 self.assertIn(found.held, evaluation.held_facts)
                 spec = wording.MESSAGES[wording.Message(found.message.value)]
                 key, _ = Q.fact_of(found.held)
-                self.assertEqual((spec.fact, spec.kind, spec.rank), (key.value, found.kind, found.held.rank))
+                if found.message is Q.MessageId.DIGITAL_SCOPE:  # D280.3 (step f3w): the held fact's own key, kind, rank
+                    self.assertEqual((found.fill.held, wording.fact_key(wording.Message.DIGITAL_SCOPE,
+                                                                        slots(found.fill)), found.kind),
+                                     (rq.Rank(found.held.rank), found.held.fact, found.held.kind))
+                else:
+                    self.assertEqual((spec.fact, spec.kind, spec.rank), (key.value, found.kind, found.held.rank))
                 worded = wording.build(wording.Message(found.message.value), slots(found.fill), FILLER)
                 self.assertEqual(worded.fact, found.held.fact)
                 self.assertTrue(worded.question and worded.reason)
@@ -661,7 +668,10 @@ class RefutedSentences(SimpleTestCase):
                 worded = wording.build(wording.Message(found.message.value), slots(found.fill), FILLER)
                 self.assertEqual((found.held, found.message, found.fill.act, found.fill.words),
                                  (extra, Q.MessageId.DOUBT, ct.Kind.EXAMINATION, (unit(5),)))
-                self.assertTrue(worded.question.startswith(f'Confirm whether the {named} ({_quote(unit(5))}) was done'))
+                # D281 (B6): the held session's examination, named by its service, is asked by row 7's done
+                verb = DONE if named == 'colonoscopy' else 'was done'
+                self.assertTrue(worded.question.startswith(f'Confirm whether the {named} ({_quote(unit(5))}) '
+                                                           f'{"is " if verb == DONE else ""}{verb}'), worded.question)
                 self.assertTrue(worded.reason.startswith(f'The document leaves the {named} in doubt: '))
 
     def test_the_same_duct_question_names_the_counterpart_whose_status_is_unknown(self):
@@ -700,8 +710,8 @@ class D232Sentences(SimpleTestCase):
         found, worded = self.item('45385', doc.build())
         self.assertEqual((found.message, found.fill.act, found.fill.words, found.held.subject),
                          (Q.MessageId.DOUBT, ct.Kind.EXAMINATION, (unit(9),), X(1)))
-        self.assertEqual(worded.question,
-                         f'Confirm whether the colonoscopy ({_quote(unit(9))}) was done on the date of service.')
+        self.assertEqual(worded.question,  # D281 (B6): the held session's examination asked by row 7's done
+                         f'Confirm whether the colonoscopy ({_quote(unit(9))}) is {DONE}.')
         self.assertTrue(worded.reason.startswith('The document leaves the colonoscopy in doubt: '))
         for card in (None, TE.X(9)):
             with self.subTest(card=card):
@@ -712,7 +722,7 @@ class D232Sentences(SimpleTestCase):
                                   found.fill.family, found.held.subject),
                                  (Q.MessageId.UNLISTED_SCOPE, ct.Kind.EXAMINATION, (), ((unit(9),),),
                                   ct.SessionKind.COLONOSCOPY, X(1)))
-                self.assertEqual(worded.question, 'Is the colonoscopy documented as done on the date of service?')
+                self.assertEqual(worded.question, f'Is the colonoscopy {DONE}?')  # D281 (B6)
                 self.assertEqual(worded.reason, scope_reason(unit(9), 'colonoscopy'))
 
     def test_rule_4s_pair_names_the_examination_only_when_the_doubts_card_names_its_session(self):
@@ -737,7 +747,7 @@ class D232Sentences(SimpleTestCase):
                                  (Q.MessageId.UNLISTED_SCOPE, 'performed_status', 2, examination, Q.UNLISTED,
                                   ct.Kind.EXAMINATION, Q.anchor_units(R, examination), ((unit(9),),), family))
                 self.assertEqual(worded.question, f'Is the {service} ({_quote(Q.anchor_units(R, examination)[0])}) '
-                                                  'documented as done on the date of service?')
+                                                  f'{DONE}?')  # D281 (B6)
                 self.assertEqual(worded.reason, scope_reason(unit(9), service))
                 self.assertNotIn('in doubt', worded.question + worded.reason)
                 self.assertNotIn(other, worded.question + worded.reason)
@@ -784,6 +794,10 @@ class D232Sentences(SimpleTestCase):
 def _quote_reason(span):
     """The filler's words a span quotes in a reason (wording.doubt_reason cuts at 140)."""
     return wording.quote(wording.span_text(FILLER, (span,)), 140)
+
+
+# D281 (step f3w; build list B6, G3-27): row 7's done, as every question about the held session's examination says it
+DONE = 'documented as performed, in full or in part, on the date of service'
 
 
 def scope_reason(span, service):
@@ -1134,7 +1148,7 @@ class R4a2Sentences(SimpleTestCase):
         self.assertEqual((found.message, found.fill.act, found.fill.family, found.fill.words, found.fill.statements),
                          (Q.MessageId.UNLISTED_SCOPE, ct.Kind.EXAMINATION, None, (), ((unit(9),),)))
         worded = wording.build(wording.Message(found.message.value), slots(found.fill), FILLER)
-        self.assertEqual(worded.question, 'Is the examination documented as done on the date of service?')
+        self.assertEqual(worded.question, f'Is the examination {DONE}?')  # D281 (B6)
         self.assertEqual(worded.reason, scope_reason(unit(9), 'examination'))
         self.assertNotIn('colonoscopy', worded.question + worded.reason)
 
@@ -1187,7 +1201,7 @@ class D258UnlistedScope(SimpleTestCase):
                           found.item.held.cause, found.item.held.subject),
                          ('needs_clarification', Q.MessageId.UNLISTED_SCOPE, 'performed_status', 2, Q.UNLISTED, E(1)))
         self.assertTrue(spec.question.startswith('Is the colonoscopy ('))
-        self.assertTrue(spec.question.endswith(') documented as done on the date of service?'))
+        self.assertTrue(spec.question.endswith(f') {DONE}?'))  # D281 (B6)
         self.assertIn('which names no procedure session', spec.reason)
         self.assertNotIn('in doubt', spec.question + spec.reason)
         self.assertEqual(before['45385'][0].status.value, 'ready')
@@ -1232,8 +1246,7 @@ class D258UnlistedScope(SimpleTestCase):
                                   found.fill.family, found.fill.words, found.fill.statements),
                                  (Q.MessageId.UNLISTED_SCOPE, 'performed_status', 2, Q.UNLISTED, subject,
                                   ct.SessionKind.ENTEROSCOPY, (unit(1),), ((unit(9),),)))
-                self.assertEqual(worded.question, f'Is the enteroscopy ({_quote(unit(1))}) documented as done on the '
-                                                  'date of service?')
+                self.assertEqual(worded.question, f'Is the enteroscopy ({_quote(unit(1))}) {DONE}?')  # D281 (B6)
                 self.assertEqual(worded.reason, scope_reason(unit(9), 'enteroscopy'))
                 code, spec = renderer_words(R, ('44376', 1))['44376']
                 self.assertEqual(code.item.message, Q.MessageId.UNLISTED_SCOPE)
@@ -1602,31 +1615,29 @@ class D265Items(SimpleTestCase):
 
     def test_qd2_the_digital_examinations_own_rows_never_name_it_as_the_session(self):
         """QD2's input: a colonoscopy, E1 the DRE (device manual) whose status is unresolved or doubted, or whose date
-        relation or performer is open, and the snare E2: 45385 stays held (as built, D271), its item about E1 - before,
-        "Was the colonoscopy (manual) (<the DRE's sentence>) done ..." - now the colonoscopy named by its service, no
-        device and no words; beside E3, the colonoscope's examination done, E3's words. Through the renderer's own call
-        too."""
-        for name, over, message in (('status unresolved', dict(status=unres(Status.PERFORMED)), Q.MessageId.STATUS),
-                                    ('status doubted', dict(status=doubted(Status.PERFORMED)), Q.MessageId.DOUBT),
-                                    ('date open', dict(date=unres(TE.ON)), Q.MessageId.TIME),
-                                    ('performer open', dict(performer=unres(TE.TEAM)), Q.MessageId.PERFORMER)):
-            for beside, words in ((False, ()), (True, (unit(3),))):
+        relation or performer is open, and the snare E2. Restated for DECISIONS D280.1 (step f3w; build list B1): the
+        DRE's device is SUPPORTED manual, so it is established as a digital examination and row 7 reads none of it -
+        each of the eight rows is READY, with no held fact and no item, exactly the same document without the DRE line
+        (before: 45385 held, its item the colonoscopy named by its service). Through the renderer's own call too. The
+        claimed-device rows keep QD2's hold, worded by D280.3: D280ResidualItems."""
+        for name, over in (('status unresolved', dict(status=unres(Status.PERFORMED))),
+                           ('status doubted', dict(status=doubted(Status.PERFORMED))),
+                           ('date open', dict(date=unres(TE.ON))), ('performer open', dict(performer=unres(TE.TEAM)))):
+            for beside in (False, True):
                 with self.subTest(dre=name, beside=beside):
                     doc = colonoscopy()
                     doc.exam(1, device=sup(ct.Device.MANUAL), **over)
                     if beside:
                         doc.exam(3)
                     R = doc.build()
-                    found, worded = self.item('45385', R)
-                    self.assertEqual((found.message, found.held.subject, found.fill.act, found.fill.family,
-                                      found.fill.device, found.fill.words),
-                                     (message, E(1), ct.Kind.EXAMINATION, ct.SessionKind.COLONOSCOPY, None, words))
-                    for never in ('manual', _quote(unit(1))):
-                        self.assertNotIn(never, worded.question + worded.reason)
+                    evaluation = EV.decide('45385', (), R)
+                    self.assertEqual((evaluation.supporting, evaluation.held_facts), ((E(2),), ()))
+                    self.assertIsNone(EV.item('45385', (), R, evaluation))
                     assessed, spec = renderer_words(R, ('45385', 2))['45385']
-                    self.assertEqual(assessed.status.value, 'needs_clarification')
-                    for never in ('manual', '(manual)'):
-                        self.assertNotIn(never, spec.question + spec.reason)
+                    without, _ = renderer_words(without_events(R, E(1)), ('45385', 2))['45385']
+                    self.assertEqual((assessed.status.value, assessed.held_facts, assessed.item, spec),
+                                     ('ready', (), None, None))
+                    self.assertEqual((without.status.value, without.held_facts), ('ready', ()))
 
     def test_f1_the_claimed_device_never_words_the_session_examination_question(self):
         """refute-r4a-r2 F1: the DRE alone, its device claiming manual without establishing it (unresolved, doubted,
@@ -1738,8 +1749,10 @@ class D266Quotes(SimpleTestCase):
         """refute-r3c-r1 F3 = r4a-2 Q2 (TRIAGE G2-16), its three inputs through the renderer's own call: (i) 45385 on
         the snare beside a kept unlisted denial carded X1, of no kind or kind snare; (ii) 45378 beside a kindless denial
         carded X1 (p41's); (iii) 45385 beside a denial of kind snare with no card. Each a DOUBT on the act with
-        ``unlisted_what`` DENIAL: "The document states that <the act> was not done: <the denial>", never "leaves ... in
-        doubt" (before: the doubt form). The same entry told as a doubt keeps it (``unlisted_what`` DOUBT)."""
+        ``unlisted_what`` DENIAL - restated for D281 (step f3w; build list B5, G3-10): "The document states <the denial>, a
+        statement that an act was not done; CPT Studio could not confirm from the document whether it is about <the act>"
+        (before: "The document states that <the act> was not done: <the denial>"), never "leaves ... in doubt" (before
+        that: the doubt form). The same entry told as a doubt keeps it (``unlisted_what`` DOUBT)."""
         cases = []
         for kind in (None, ct.Kind.SNARE):
             doc = colonoscopy()
@@ -1755,9 +1768,11 @@ class D266Quotes(SimpleTestCase):
                 found, spec = renderer_words(R, code)[code[0]]
                 self.assertEqual((found.item.message, found.item.held.subject, found.item.fill.unlisted_what),
                                  (Q.MessageId.DOUBT, subject, ct.UnlistedWhat.DENIAL))
-                self.assertTrue(spec.reason.startswith(f'The document states that {act}'), spec.reason)
-                self.assertIn('was not done: ', spec.reason)
-                for never in ('in doubt', 'leaves'):
+                head, middle, tail = spec.reason.partition('”, a statement that an act was not done; CPT Studio could '
+                                                           'not confirm from the document whether it is about ')
+                self.assertTrue(middle and head.startswith('The document states “'), spec.reason)
+                self.assertTrue(tail.startswith(act) and tail.endswith('.'), spec.reason)  # the act as its form names it
+                for never in ('in doubt', 'leaves', 'was not done: ', f'that {act} was not done'):
                     self.assertNotIn(never, spec.reason)
         doc = colonoscopy()
         doc.unlisted.append(TE.unlisted(ct.UnlistedWhat.DOUBT, ct.Kind.SNARE, X(1), unit(9)))
@@ -2147,3 +2162,784 @@ class Boundary(SimpleTestCase):
                                                        'evaluate.py').read_text(encoding='utf-8')
         self.assertNotIn('import wording', source)
         self.assertNotIn('interpretation.wording', source)
+
+
+# --- step f3w of AMENDMENT-2's build round (DECISIONS D280.3, D281, D284, D287; build list B1, B3-B7, B9) -------------
+
+
+def _ta_words(n):
+    """The synthetic revision's characters at unit ``n`` (tests/v2/test_assess.TEXT: the text the renderer quotes)."""
+    return wording.span_text(TA.TEXT, (unit(n),))
+
+
+def _ta_quote(n, cut=120):
+    """Unit ``n`` of tests/v2/test_assess.TEXT as wording quotes it (a question cuts at 120, a reason at 140)."""
+    return wording.quote(_ta_words(n), cut)
+
+
+def dre_shape(over=None, *, e3=True, biopsy=True):
+    """refute-safety's qd2_steer and refute-r4a-r1's v9_dre_own_rows, v9_dre_own_rows2 and v9_dre_conflict shapes,
+    ported and synthetic: a colonoscopy X1 to the cecum; E1 filed as its examination with ``over`` (its device among
+    them; None: no E1 - the same document without the DRE line); the cold snare E2 of L1 at the sigmoid colon; the
+    colonoscope's examination E3 done today (``e3``); a cold-forceps biopsy E4 at the ascending colon (``biopsy``)."""
+    doc = Doc()
+    doc.session(1, ct.SessionKind.COLONOSCOPY, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER),
+                reached=[sup(ct.Extent.CECUM)])
+    if over is not None:
+        over = dict(over)
+        doc.act(1, over.pop('kind', ct.Kind.EXAMINATION), **over)
+    doc.lesion(1, lesion_places=[sup(ct.Landmark.SIGMOID_COLON)])
+    doc.act(2, ct.Kind.SNARE, places=[sup(ct.Landmark.SIGMOID_COLON)], lesion=sup(L(1)),
+            device=sup(ct.Device.COLD_SNARE))
+    if e3:
+        doc.exam(3)
+    if biopsy:
+        doc.act(4, ct.Kind.BIOPSY, places=[sup(ct.Landmark.ASCENDING_COLON)], device=sup(ct.Device.COLD_FORCEPS))
+    return doc.build()
+
+
+def overfilled_device(*written) -> Fact:
+    """An overfilled device slot's merged view as engine/facts builds it (AMENDMENT-2 4.3.3; tests/v2/test_pairing's
+    form): ``written`` its written facts as (state, value)."""
+    values = tuple(dict.fromkeys(value for _state, value in written))
+    stated = {value for state, value in written if state is not ct.FactState.NEGATED}
+    denied = tuple(dict.fromkeys(value for state, value in written
+                                 if state is ct.FactState.NEGATED and value not in stated))
+    return Fact(result=ct.Result.UNRESOLVED, value=None, state=ct.FactState.CONTRADICTED, options=values,
+                reasons=(ct.Reason.SLOT_OVERFULL,), spans=(), negated_values=denied)
+
+
+# A device that CLAIMS manual without establishing it (D280.3; AMENDMENT-2 4.3.3 c's overfilled slot included)
+CLAIMED_DEVICES = (('unresolved', unres(ct.Device.MANUAL)), ('doubted', doubted(ct.Device.MANUAL)),
+                   ('contradicted', contra(ct.Device.MANUAL, ct.Device.ENDOSCOPE)),
+                   ('overfilled', overfilled_device((ct.FactState.SUPPORTED, ct.Device.MANUAL),
+                                                    (ct.FactState.SUPPORTED, ct.Device.ENDOSCOPE))))
+# The DRE's own rows (v9_dre_own_rows, v9_dre_own_rows2, v9_dre_conflict, qd2_steer) and, for a claimed device, the
+# fact key 45385's hold rests on E1 by beside E3 (None: E1 adds no hold beside the session's done examination - an
+# event of another occasion, or the control - so the code is the document's without the DRE line)
+DRE_OWN = (
+    ('status negated', dict(status=neg(Status.PERFORMED)), 'performed_status'),
+    ('status unresolved', dict(status=unres(Status.PERFORMED)), 'performed_status'),
+    ('status doubted', dict(status=doubted(Status.PERFORMED)), 'performed_status'),
+    ('status contradicted, two sides', dict(status=contra(Status.PERFORMED, Status.PLANNED,
+                                                          spans=(unit(1), Span(950, 990)))), 'conflict:examination'),
+    ('status contradicted', dict(status=contra(Status.PERFORMED, Status.PLANNED)), 'conflict:examination'),
+    ('entry nursing', dict(entry=sup(ct.Owner.NURSING)), 'event_entry'),
+    ('entry anesthesia', dict(entry=sup(ct.Owner.ANESTHESIA)), 'event_entry'),
+    ('entry another clinician', dict(entry=sup(ct.Owner.OTHER_CLINICIAN)), 'event_entry'),
+    ('entry unresolved', dict(entry=unres(ct.Owner.DOCUMENTING_CLINICIAN)), 'event_entry'),
+    ('performer unresolved', dict(performer=unres(TE.TEAM)), 'event_performer'),
+    ('date unresolved', dict(date=unres(TE.ON)), 'event_time'),
+    ('status planned', dict(status=sup(Status.PLANNED)), None),
+    ('date earlier', dict(date=sup(EARLIER)), None),
+    ('performer other', dict(performer=sup(ct.Performer.OTHER_CLINICIAN)), None),
+    ('done (control)', {}, None),
+)
+DRE_CODES = (('45385', 2), ('45380', 4), ('45378', 3))
+
+
+class D280ResidualItems(SimpleTestCase):
+    """DECISIONS D280.1 and D280.3 (build list B1; G3-09, G1-05 (iii), G1-06), questions.py's and the renderer's half
+    (the per-code rule: tests/v2/test_evaluate.py D280Row7): over refute-safety's qd2_steer and refute-r4a-r1's
+    v9_dre_own_rows, v9_dre_own_rows2 and v9_dre_conflict shapes, every row whose DRE is ESTABLISHED (kind supported
+    examination, device supported manual) is the document without the DRE line, every code's status and item; every
+    row whose device only CLAIMS manual keeps its hold, its held fact, rank and key, and every item resting on the
+    claimed examination is DIGITAL_SCOPE: its question names the held session's examination by its service and quotes
+    none of the claimed examination's words (the session's examination E3's when it may be quoted), its reason quotes
+    them, and the clarification keeps the held fact's key (an answer binds as today)."""
+
+    @staticmethod
+    def assessed(R, *codes):
+        return {code: (found.status.value, found.item, spec)
+                for code, (found, spec) in renderer_words(R, *codes).items()}
+
+    def check_digital_scope(self, found, spec, R, *, e3):
+        self.assertEqual(found.status.value, 'needs_clarification')
+        item = found.item
+        self.assertEqual(item.message, Q.MessageId.DIGITAL_SCOPE)
+        self.assertIn(item.held, found.held_facts)
+        self.assertEqual((item.fill.act, item.fill.family, item.fill.held),
+                         (ct.Kind.EXAMINATION, ct.SessionKind.COLONOSCOPY, rq.Rank(item.held.rank)))
+        self.assertEqual(item.fill.statements[0], (unit(1),))  # the claimed examination's own words, first
+        self.assertEqual(item.fill.words, (unit(3),) if e3 else ())  # the session's examination that may be quoted
+        self.assertEqual(spec.fact, item.held.fact)  # the clarification keeps the held fact's key
+        self.assertNotIn(_ta_words(1), spec.question)
+        self.assertIn(_ta_quote(1, 140), spec.reason)
+        self.assertIn('a statement whose technique CPT Studio could not confirm from the document', spec.reason)
+        self.assertEqual(_ta_words(3) in spec.question, e3)
+        self.assertTrue(spec.question.startswith('Is the colonoscopy '), spec.question)
+        self.assertTrue(spec.question.endswith(f'{DONE}?'), spec.question)
+
+    def test_every_established_dre_row_is_the_document_without_the_dre_line(self):
+        rows = 0
+        for e3 in (True, False):
+            codes = DRE_CODES if e3 else DRE_CODES[:2] + (('45378', 1),)
+            without = self.assessed(dre_shape(None, e3=e3), *codes)
+            for name, over, _key in DRE_OWN:
+                with self.subTest(e3=e3, dre=name):
+                    R = dre_shape(dict(over, device=sup(ct.Device.MANUAL)), e3=e3)
+                    found = self.assessed(R, *codes)
+                    self.assertEqual({code: (status, item) for code, (status, item, _spec) in found.items()},
+                                     {code: (status, item) for code, (status, item, _spec) in without.items()})
+                    self.assertEqual(found['45385'][0], 'ready')
+                    rows += 1
+        self.assertEqual(rows, 2 * len(DRE_OWN))
+
+    def test_every_claimed_device_row_keeps_its_hold_worded_digital_scope(self):
+        held = 0
+        for e3 in (True, False):
+            codes = DRE_CODES if e3 else DRE_CODES[:2] + (('45378', 1),)
+            without = renderer_words(dre_shape(None, e3=e3), *codes)
+            for name, over, key in DRE_OWN:
+                for device_name, device in CLAIMED_DEVICES:
+                    with self.subTest(e3=e3, dre=name, device=device_name):
+                        R = dre_shape(dict(over, device=device), e3=e3)
+                        found = renderer_words(R, *codes)
+                        snare, spec = found['45385']
+                        if (key is None and e3) or not over:  # beside the session's done examination, or done
+                            self.assertEqual((snare.status.value, snare.item), ('ready', None))
+                        else:
+                            self.check_digital_scope(snare, spec, R, e3=e3)
+                            self.assertEqual(snare.item.held.subject, E(1))
+                            if key is not None:
+                                self.assertEqual(snare.item.held.fact, key)
+                            held += 1
+                        for code, (other, worded) in found.items():  # every other code: DIGITAL_SCOPE or unchanged
+                            if other.item is not None and other.item.message is Q.MessageId.DIGITAL_SCOPE:
+                                self.check_digital_scope(other, worded, R, e3=e3)
+                            else:
+                                self.assertEqual((other.status, other.item), (without[code][0].status,
+                                                                              without[code][0].item))
+        self.assertEqual(held, len(CLAIMED_DEVICES) * (len(DRE_OWN) - 1 + len(DRE_OWN) - 4))
+
+    def test_each_open_fact_reaches_its_reason(self):
+        """The reason states the claimed examination's open fact by the held fact's RANK row: the four own-row forms and
+        the conflict's sides, beside E3 (qd2_steer's E3)."""
+        for name, over, words in (
+                ('status unresolved', dict(status=unres(Status.PERFORMED)),
+                 'it is not established as done on the date of service'),
+                ('status doubted', dict(status=doubted(Status.PERFORMED)), 'the document leaves it in doubt'),
+                ('entry nursing', dict(entry=sup(ct.Owner.NURSING)), 'it is told only in the nursing entry'),
+                ('entry unresolved', dict(entry=unres(ct.Owner.DOCUMENTING_CLINICIAN)),
+                 'CPT Studio could not confirm from the document whose entry it is told in'),
+                ('performer unresolved', dict(performer=unres(TE.TEAM)),
+                 'CPT Studio could not confirm from the document who performed it'),
+                ('date unresolved', dict(date=unres(TE.ON)),
+                 'CPT Studio could not confirm from the document when it was done'),
+                ('status contradicted, two sides', dict(status=contra(Status.PERFORMED, Status.PLANNED,
+                                                                      spans=(unit(1), Span(950, 990)))),
+                 'statements in the document disagree about whether it was done'),
+                ('status contradicted', dict(status=contra(Status.PERFORMED, Status.PLANNED)),
+                 'the document is not consistent about whether it was done')):
+            with self.subTest(dre=name):
+                R = dre_shape(dict(over, device=unres(ct.Device.MANUAL)), biopsy=False)
+                found, spec = renderer_words(R, ('45385', 2))['45385']
+                self.assertEqual(found.item.message, Q.MessageId.DIGITAL_SCOPE)
+                self.assertEqual(spec.question, f'Is the colonoscopy ({_ta_quote(3)}) {DONE}?')
+                self.assertTrue(spec.reason.startswith(f'The document states {_ta_quote(1, 140)}, a statement whose '
+                                                       f'technique CPT Studio could not confirm from the document; '
+                                                       f'{words}'), spec.reason)
+                self.assertTrue(spec.reason.endswith(f'. {wording.HELD}'), spec.reason)
+
+    def test_g2_28_a_colonoscope_examination_whose_device_is_doubted_stays_held(self):
+        """G2-28's input pinned held (build list B1): the colonoscope's examination E1, its device doubted (endoscope or
+        manual) and its status open, the snare E2 - with or without E3. Held, the item DIGITAL_SCOPE on E1's status
+        (performed_status, RANK row 4); never READY (mutant: row 7 skipping the claimed digital examination)."""
+        for e3 in (False, True):
+            with self.subTest(e3=e3):
+                R = dre_shape(dict(device=doubted(ct.Device.ENDOSCOPE, ct.Device.ENDOSCOPE, ct.Device.MANUAL),
+                                   status=unres(Status.PERFORMED)), e3=e3, biopsy=False)
+                evaluation = EV.decide('45385', (), R)
+                self.assertNotEqual(evaluation.held_facts, ())
+                found, spec = renderer_words(R, ('45385', 2))['45385']
+                self.check_digital_scope(found, spec, R, e3=e3)
+                self.assertEqual((found.item.held.fact, found.item.held.rank, found.item.held.subject),
+                                 ('performed_status', 4, E(1)))
+
+    def test_a_claimed_digital_statement_beside_the_sessions_examination(self):
+        """refute-safety's dre_statement (D280.2's claimed side, option (a)): a claimed DRE E1 that is a statement - its
+        status negated or unresolved - beside the colonoscope's done examination E2, 45378 on E2's unit: the pair's
+        hold (statement_scope, RANK row 3, on E2) worded DIGITAL_SCOPE with no attribute - "whether it is about the
+        colonoscopy" - quoting E2 in the question and E1 in the reason. Established: READY, as without E1."""
+        for name, status in (('negated', neg(Status.PERFORMED)), ('unresolved', unres(Status.PERFORMED))):
+            for device_name, device in CLAIMED_DEVICES:
+                with self.subTest(status=name, device=device_name):
+                    doc = TE.dre_alone(endoscopic={}, dre=False)
+                    doc.exam(1, device=device, status=status)
+                    R = doc.build()
+                    found, spec = renderer_words(R, ('45378', 2))['45378']
+                    self.assertEqual((found.item.message, found.item.held.fact, found.item.held.rank,
+                                      found.item.held.subject, found.item.fill.attribute),
+                                     (Q.MessageId.DIGITAL_SCOPE, 'statement_scope', 3, E(2), None))
+                    self.assertEqual(spec.question, f'Is the colonoscopy ({_ta_quote(2)}) {DONE}?')
+                    self.assertIn('whether it is about the colonoscopy', spec.reason)
+                    self.assertIn(_ta_quote(1, 140), spec.reason)
+                    self.assertEqual(spec.fact, 'statement_scope')
+            with self.subTest(status=name, device='established'):
+                doc = TE.dre_alone(endoscopic={}, dre=False)
+                doc.exam(1, device=sup(ct.Device.MANUAL), status=status)
+                found, spec = renderer_words(doc.build(), ('45378', 2))['45378']
+                self.assertEqual((found.status.value, found.item, spec), ('ready', None, None))
+
+    def test_a_supported_manual_device_with_its_kind_not_established_keeps_d265s_form(self):
+        """The step's NOTES, question Q-DRE-KIND: E1's device SUPPORTED manual and its kind unresolved examination is
+        neither established (D280.1: its kind is not supported) nor device-claimed (D280.3: "device not supported
+        manual") - its technique is confirmed, so DIGITAL_SCOPE's reason would be untrue; its hold keeps the item it had
+        (45385 held on E1's status, never DIGITAL_SCOPE)."""
+        R = dre_shape(dict(kind=unres(ct.Kind.EXAMINATION), device=sup(ct.Device.MANUAL),
+                           status=unres(Status.PERFORMED)), biopsy=False)
+        self.assertFalse(Q.claimed_digital(R, E(1)))
+        found, spec = renderer_words(R, ('45385', 2))['45385']
+        self.assertEqual(found.status.value, 'needs_clarification')
+        self.assertNotEqual(found.item.message, Q.MessageId.DIGITAL_SCOPE)
+        self.assertNotIn('technique', spec.reason)
+
+    def test_claimed_digital_reads_the_device_and_the_claimed_kind(self):
+        """``claimed_digital``: the claimed kind the examination (supported, unresolved, doubted) and a device that claims
+        manual without being supported manual; never a supported manual device, a negated or silent kind, an endoscope,
+        manual negated, or an overfilled slot whose written facts deny manual."""
+        for kind_name, kind in (('supported', sup(ct.Kind.EXAMINATION)), ('unresolved', unres(ct.Kind.EXAMINATION)),
+                                ('doubted', doubted(ct.Kind.EXAMINATION, ct.Kind.EXAMINATION, ct.Kind.SNARE)),
+                                ('negated', neg(ct.Kind.EXAMINATION)), ('silent', SILENT)):
+            for device_name, device, claims in (
+                    *((name, device, True) for name, device in CLAIMED_DEVICES),
+                    ('supported manual', sup(ct.Device.MANUAL), False), ('endoscope', sup(ct.Device.ENDOSCOPE), False),
+                    ('manual negated', neg(ct.Device.MANUAL), False), ('silent', None, False),
+                    ('overfilled [endoscope, manual denied]',
+                     overfilled_device((ct.FactState.SUPPORTED, ct.Device.ENDOSCOPE),
+                                       (ct.FactState.NEGATED, ct.Device.MANUAL)), False)):
+                with self.subTest(kind=kind_name, device=device_name):
+                    R = dre_shape(dict(kind=kind, device=device), biopsy=False)
+                    expected = claims and kind_name in ('supported', 'unresolved', 'doubted')
+                    self.assertEqual(Q.claimed_digital(R, E(1)), expected)
+
+
+class D281Routing(SimpleTestCase):
+    """DECISIONS D281 (build list B4, G1-07; B3, G1-05; B6, G3-27), questions.py's half: refute-r4a-r1's
+    v9_scope_kind_states and the lead's g107_carded_kind_states grid - E1, the colonoscopy's examination done today,
+    its kind supported, unresolved, doubted (examination|snare) or silent, beside pass 2's unlisted doubt or denial of
+    kind examination with no card or carded X1, 45378 kept on E1's unit. A rank-2 unlisted hold is routed by the act's
+    CLAIMED kind: UNLISTED_SCOPE (no card) or the session's DOUBT (carded) for the first three, the examination asked by
+    row 7's done; DOUBT naming "another act" for the silent kind (D267's label, D271). E1 is quoted as the session's
+    examination only when its kind is supported, and where it is not quoted its owner, device, place and lesion are
+    not carried (B3). A carded denial reads B5's form (mutant: routing by act_kind)."""
+
+    KINDS = (('supported', sup(ct.Kind.EXAMINATION)), ('unresolved', unres(ct.Kind.EXAMINATION)),
+             ('doubted examination|snare', doubted(ct.Kind.EXAMINATION, ct.Kind.EXAMINATION, ct.Kind.SNARE)),
+             ('silent', SILENT))
+
+    def test_the_grid(self):
+        rows = 0
+        for name, kind in self.KINDS:
+            for what in (ct.UnlistedWhat.DOUBT, ct.UnlistedWhat.DENIAL):
+                for card in (None, X(1)):
+                    with self.subTest(kind=name, what=what, card=card):
+                        doc = colonoscopy(snare=False)
+                        doc.act(1, kind)
+                        doc.unlisted.append(TE.unlisted(what, ct.Kind.EXAMINATION, card, unit(9)))
+                        found, spec = renderer_words(doc.build(), ('45378', 1))['45378']
+                        item = found.item
+                        self.assertEqual((item.held.fact, item.held.rank, item.held.cause, item.held.subject),
+                                         ('performed_status', 2, Q.UNLISTED, E(1)))
+                        self.assertEqual(item.fill.unlisted_what, what)
+                        denial = 'a statement that an act was not done; CPT Studio could not confirm from the ' \
+                                 'document whether it is about'
+                        if name == 'silent':
+                            self.assertEqual((item.message, item.fill.act, item.fill.words),
+                                             (Q.MessageId.DOUBT, ct.Kind.OTHER, (unit(1),)))
+                            self.assertEqual(spec.question, f'Confirm whether another act ({_ta_quote(1)}) was done '
+                                                            'on the date of service.')
+                            self.assertEqual(spec.reason, f'The document states {_ta_quote(9, 140)}, {denial} another '
+                                                          'act.' if what is ct.UnlistedWhat.DENIAL else
+                                             f'The document leaves another act in doubt: {_ta_quote(9, 140)}.')
+                            rows += 1
+                            continue
+                        quoted = name == 'supported'
+                        self.assertEqual((item.fill.act, item.fill.family, item.fill.words),
+                                         (ct.Kind.EXAMINATION, ct.SessionKind.COLONOSCOPY,
+                                          (unit(1),) if quoted else ()))
+                        if not quoted:  # B3: no Fill carries one event's facts beside another's (or no) words
+                            self.assertEqual((item.fill.owner, item.fill.device, item.fill.place, item.fill.lesion),
+                                             (None, None, None, ()))
+                        named = f'the colonoscopy ({_ta_quote(1)})' if quoted else 'the colonoscopy'
+                        if card is None:
+                            self.assertEqual(item.message, Q.MessageId.UNLISTED_SCOPE)
+                            self.assertEqual(spec.question, f'Is {named} {DONE}?')
+                            self.assertEqual(spec.reason, f'The document states {_ta_quote(9, 140)}, which names no '
+                                                          'procedure session; CPT Studio could not confirm from the '
+                                                          f'document whether it is about the colonoscopy. '
+                                                          f'{wording.HELD}')
+                        else:
+                            self.assertEqual(item.message, Q.MessageId.DOUBT)
+                            self.assertEqual(spec.question, f'Confirm whether {named} is {DONE}.')
+                            self.assertEqual(spec.reason, f'The document states {_ta_quote(9, 140)}, {denial} the '
+                                                          'colonoscopy.' if what is ct.UnlistedWhat.DENIAL else
+                                             f'The document leaves the colonoscopy in doubt: {_ta_quote(9, 140)}.')
+                        rows += 1
+        self.assertEqual(rows, 16)
+
+    def test_the_route_reads_the_claimed_kind_never_act_kind(self):
+        """``_claims_examination`` against act_kind (D267's label): an unresolved or doubted examination is Kind.OTHER by
+        act_kind and is routed as the session's examination; a contradicted, negated or silent kind claims none."""
+        for name, kind, claims in (('supported', sup(ct.Kind.EXAMINATION), True),
+                                   ('unresolved', unres(ct.Kind.EXAMINATION), True),
+                                   ('doubted', doubted(ct.Kind.EXAMINATION, ct.Kind.EXAMINATION, ct.Kind.SNARE), True),
+                                   ('doubted, snare claimed', doubted(ct.Kind.SNARE, ct.Kind.SNARE,
+                                                                      ct.Kind.EXAMINATION), False),
+                                   ('contradicted', contra(ct.Kind.EXAMINATION, ct.Kind.SNARE), False),
+                                   ('negated', neg(ct.Kind.EXAMINATION), False), ('silent', SILENT, False),
+                                   ('a snare', sup(ct.Kind.SNARE), False)):
+            with self.subTest(kind=name):
+                doc = colonoscopy(snare=False)
+                doc.act(1, kind)
+                R = doc.build()
+                self.assertEqual(Q._claims_examination(R, E(1)), claims)
+                self.assertEqual(Q._quotable(R, E(1)), name == 'supported')
+
+    def test_b3_the_owner_goes_with_the_words_over_the_d265_and_d266_grids(self):
+        """Build list B3's property, over this class's grid, D265Items' and D266Quotes' shapes and the DRE shapes: whenever
+        a Fill's words are not its held event's anchor, its owner, device, place and lesion are empty - except
+        DIGITAL_SCOPE, whose owner states its first statement, the held examination's own words (the step's NOTES, the
+        B3 property's exemption)."""
+        scenes = []
+        for _name, kind in self.KINDS:
+            for what in (ct.UnlistedWhat.DOUBT, ct.UnlistedWhat.DENIAL):
+                for card in (None, X(1)):
+                    doc = colonoscopy(snare=False)
+                    doc.act(1, kind, entry=sup(ct.Owner.NURSING))
+                    doc.unlisted.append(TE.unlisted(what, ct.Kind.EXAMINATION, card, unit(9)))
+                    scenes.append((doc.build(), ('45378', 1)))
+        for _name, over, _key in DRE_OWN:
+            for _device_name, device in CLAIMED_DEVICES + (('established', sup(ct.Device.MANUAL)),):
+                scenes.append((dre_shape(dict(over, device=device)), ('45385', 2)))
+                scenes.append((dre_shape(dict(over, device=device), e3=False), ('45385', 2)))
+        for other in TE.A2_OTHERS:
+            for what, card in TE.A2_ENTRIES:
+                for kept in (1, 2, 3):
+                    scenes.append((TE.dre_colonoscopy(other, what=what, card=card).build(), ('45378', kept)))
+        checked = 0
+        for R, code in scenes:
+            found, _spec = renderer_words(R, code)[code[0]]
+            item = found.item
+            if item is None or item.message is Q.MessageId.DIGITAL_SCOPE:
+                continue
+            subject = item.held.subject
+            if subject is None or subject.family.value != 'E':  # the property is about a held event
+                continue
+            if item.fill.words != R.anchors[subject].units:
+                with self.subTest(code=code, message=item.message, subject=subject):
+                    self.assertEqual((item.fill.owner, item.fill.device, item.fill.place, item.fill.lesion),
+                                     (None, None, None, ()))
+                checked += 1
+        self.assertGreater(checked, 8)
+
+
+class D281DenialForm(SimpleTestCase):
+    """DECISIONS D281 (build list B5, G3-10), engine to renderer: refute-r4a-r1's v9_denial_pairs (a kept unlisted
+    denial of kind snare, removal or none beside the snare, no card or carded X1), v9_denial_same_unit (the denial in the
+    snare's own unit, 45385 kept elsewhere) and refute-r3c-r1's two-session input (p41 beside an EGD, a kindless denial):
+    every DOUBT item whose entry is a DENIAL reads "The document states “<denial>”, a statement that an act was not done;
+    CPT Studio could not confirm from the document whether it is about <the act>." - quoting the denial, never "was not
+    done" after the act's label; a DOUBT entry keeps "leaves ... in doubt" (mutant: DENIAL_STATED restored)."""
+
+    def denial_items(self, R, *codes):
+        out = []
+        for code, (found, spec) in renderer_words(R, *codes).items():
+            if found.item is not None and found.item.message is Q.MessageId.DOUBT \
+                    and found.item.fill.unlisted_what is ct.UnlistedWhat.DENIAL:
+                out.append((code, found, spec))
+        return out
+
+    def check(self, found, spec, statement):
+        head, middle, tail = spec.reason.partition(', a statement that an act was not done; CPT Studio could not '
+                                                   'confirm from the document whether it is about ')
+        self.assertEqual(head, f'The document states {wording.quote(wording.span_text(TA.TEXT, statement), 140)}')
+        self.assertTrue(middle and tail.endswith('.'), spec.reason)
+        self.assertNotIn(' was not done:', spec.reason)
+        self.assertNotIn(f'{tail[:-1]} was not done', spec.reason)
+        self.assertNotIn('in doubt', spec.reason)
+
+    def test_v9_denial_pairs(self):
+        rows = 0
+        for kind in (ct.Kind.SNARE, ct.Kind.REMOVAL, None):
+            for card in (None, X(1)):
+                with self.subTest(kind=kind, card=card):
+                    doc = colonoscopy()
+                    doc.unlisted.append(TE.unlisted(ct.UnlistedWhat.DENIAL, kind, card, unit(9)))
+                    found = self.denial_items(doc.build(), ('45385', 2))
+                    self.assertEqual([code for code, _found, _spec in found], ['45385'])
+                    code, item, spec = found[0]
+                    self.assertEqual(item.item.held.subject, E(2))
+                    self.check(item, spec, (unit(9),))
+                    self.assertTrue(spec.reason.endswith('whether it is about the snare removal (cold snare) at the '
+                                                         'sigmoid colon.'), spec.reason)
+                    rows += 1
+                    doc = colonoscopy()
+                    doc.unlisted.append(TE.unlisted(ct.UnlistedWhat.DOUBT, kind, card, unit(9)))
+                    doubt, worded = renderer_words(doc.build(), ('45385', 2))['45385']
+                    self.assertEqual(worded.reason, 'The document leaves the snare removal (cold snare) at the sigmoid '
+                                                    f'colon in doubt: {_ta_quote(9, 140)}.')
+        self.assertEqual(rows, 6)
+
+    def test_v9_denial_same_unit(self):
+        """The denial in the snare's own unit (2), 45385 kept on unit 7 (a unit no event holds), so the entry is the
+        rule-4 pair's statement and not the code's evidence passage: the DENIAL form quoting the snare's own words."""
+        for kind in (ct.Kind.SNARE, None):
+            for card in (None, X(1)):
+                with self.subTest(kind=kind, card=card):
+                    doc = colonoscopy()
+                    doc.unlisted.append(TE.unlisted(ct.UnlistedWhat.DENIAL, kind, card, unit(2)))
+                    R = doc.build()
+                    evaluation = EV.decide('45385', (unit(7),), R)
+                    found = EV.item('45385', (unit(7),), R, evaluation)
+                    self.assertEqual((found.message, found.fill.unlisted_what, found.fill.statements),
+                                     (Q.MessageId.DOUBT, ct.UnlistedWhat.DENIAL, ((unit(2),),)))
+                    worded = wording.build(wording.Message(found.message.value), slots(found.fill), TA.TEXT)
+                    self.check(found, worded, (unit(2),))
+
+    def test_the_two_session_input(self):
+        """p41 beside an EGD X2 (its examination E3, a biopsy E4 at the stomach), one kindless kept denial in unit 9: with
+        no card it pairs with the snare and the biopsy (DOUBT, the DENIAL form) and is 45378's UNLISTED_SCOPE; carded X1,
+        the snare's DOUBT and 45378's session DOUBT read the DENIAL form, and the EGD's biopsy is READY."""
+        for card, denied in ((None, ['43239', '45385']), (X(1), ['45378', '45385'])):
+            with self.subTest(card=card):
+                R = TE.p41(ct.UnlistedWhat.DENIAL, card, egd_beside=True, kind=None).build()
+                found = self.denial_items(R, ('45385', 2), ('45378', 1), ('43239', 4))
+                self.assertEqual(sorted(code for code, _found, _spec in found), denied)
+                for _code, item, spec in found:
+                    self.check(item, spec, (unit(9),))
+
+
+class D281Begun(SimpleTestCase):
+    """DECISIONS D281 (build list B6, G3-27): refute-safety's begun_scope shape - the colonoscopy's examination E1 begun
+    (status attempted_not_completed) beside a kept unlisted doubt of kind examination with no card, 45378 on E1's unit:
+    UNLISTED_SCOPE quoting E1 and asking row 7's done, which says "in part" (an examination begun counts as done, as v1's
+    done does) - never "documented as done" (mutant: that form restored for a begun examination)."""
+
+    def test_begun_scope(self):
+        doc = Doc()
+        doc.session(1, ct.SessionKind.COLONOSCOPY, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER))
+        doc.exam(1, status=sup(Status.ATTEMPTED_NOT_COMPLETED))
+        doc.unlisted.append(TE.unlisted(ct.UnlistedWhat.DOUBT, ct.Kind.EXAMINATION, None, unit(9)))
+        found, spec = renderer_words(doc.build(), ('45378', 1))['45378']
+        self.assertEqual((found.item.message, found.item.fill.words), (Q.MessageId.UNLISTED_SCOPE, (unit(1),)))
+        self.assertEqual(spec.question, f'Is the colonoscopy ({_ta_quote(1)}) documented as performed, in full or in '
+                                        'part, on the date of service?')
+        self.assertNotIn('documented as done', spec.question)
+
+
+class D284AddonItems(SimpleTestCase):
+    """DECISIONS D284 (G3-15; build list B7), questions.py's half: a performed_status witness whose cause is
+    engine/assess.ADDON_CAUSE is ADDON (message_of), its Fill the add-on code and no fact of its act; through engine/assess
+    the add-on beside no counted primary (43273 alone; 99417 beside 99213) is held with ADDON's item, worded from codes
+    alone - never "could not confirm ... done" and no quote. The primaries the sentence names are the caller's (the
+    step's NOTES, request: engine/assess fills ``codes``); with none it reads its true absence form."""
+
+    def test_the_cause_is_assess_s(self):
+        from studio.interpretation.engine import assess
+        self.assertEqual(Q.ADDON_CAUSE, assess.ADDON_CAUSE)
+        self.assertEqual(Q.MessageId.ADDON.value, wording.Message.ADDON.value)
+
+    def test_message_of(self):
+        for number in ('43273', '99417', '91013', '99153'):
+            code = EV.code_facts(number)
+            with self.subTest(code=number):
+                witness = held(fact='performed_status', rank=4, cause=Q.ADDON_CAUSE)
+                self.assertIs(Q.message_of(witness, code), Q.MessageId.ADDON)
+                for cause in ('reading_unknown', Q.coding_rule(Q.Rule.NOT_DOCUMENTED)):
+                    with self.subTest(cause=cause):
+                        self.assertIsNot(Q.message_of(held(fact='performed_status', rank=4, cause=cause), code),
+                                         Q.MessageId.ADDON)
+
+    def test_through_assess(self):
+        from studio.interpretation.engine import assess
+        for name, doc, codes, code in (('43273 alone', TA.ercp(stone=False), (('43273', 3),), '43273'),
+                                       ('99417 beside 99213', TA.office_prolonged(), (('99213', 1), ('99417', 2)),
+                                        '99417')):
+            with self.subTest(case=name):
+                found, spec = renderer_words(doc.build(), *codes)[code]
+                self.assertEqual(found.status.value, 'needs_clarification')
+                self.assertEqual((found.item.message, found.item.held.cause, found.item.held.fact,
+                                  found.item.held.rank), (Q.MessageId.ADDON, Q.ADDON_CAUSE, 'performed_status', 4))
+                self.assertEqual(found.item.fill.code, code)
+                self.assertLessEqual(set(found.item.fill.codes), set(assess.primaries(code)))
+                self.assertTrue(spec.question.startswith(f'{code} is reported only together with '), spec.question)
+                self.assertTrue(spec.question.endswith('documented as performed on the date of service?'))
+                self.assertEqual(spec.fact, 'performed_status')
+                for sentence in (spec.question, spec.reason):
+                    self.assertNotIn('could not confirm', sentence)
+                    self.assertNotIn('“', sentence)
+
+
+class D287Keys(SimpleTestCase):
+    """DECISIONS D287 (G3-28; build list B9), questions.py's and evaluate.py's half: act_kind is facts.established_kind
+    for an event (the derivation moved, never copied), and the per-code rule keys a conflict over an act
+    conflict:<established_kind> - for an act E2 whose kind is silent, unresolved, doubted, contradicted, negated,
+    supported, or a clip supported for hemostasis, each beside "No polyp was removed." (a broad snare denial) and with its
+    own status contradicted. g3c's shape 4 through the renderer: the clip's conflict names "the bleeding control". (The
+    keys of coverage.Reader, act_witnesses, the bundling verdict and classes' witnesses are their owner's: the step's
+    NOTES, requests.)"""
+
+    def shapes(self):
+        for name, kind in (('silent', SILENT), ('unresolved', unres(ct.Kind.SNARE)),
+                           ('doubted', doubted(ct.Kind.SNARE, ct.Kind.SNARE, ct.Kind.BIOPSY)),
+                           ('contradicted', contra(ct.Kind.SNARE, ct.Kind.BIOPSY)), ('negated', neg(ct.Kind.SNARE)),
+                           ('supported', sup(ct.Kind.SNARE))):
+            doc = colonoscopy(kind=kind, status=contra(Status.PERFORMED, Status.PLANNED))
+            TE.denial_event(doc, number=3, kind=ct.Kind.SNARE)
+            yield name, doc.build(), '45385'
+        doc = colonoscopy(snare=False)
+        doc.act(2, ct.Kind.CLIP, purpose=sup(ct.Purpose.HEMOSTASIS), cause=sup(ct.Cause.PRE_EXISTING_LESION),
+                places=[sup(ct.Landmark.SIGMOID_COLON)], status=contra(Status.PERFORMED, Status.PLANNED))
+        yield 'clip for hemostasis', doc.build(), '45382'
+
+    def test_act_kind_is_established_kind_and_every_per_code_key_names_it(self):
+        from studio.interpretation.engine import facts as F
+        expected = {'silent': ct.Kind.OTHER, 'unresolved': ct.Kind.OTHER, 'doubted': ct.Kind.OTHER,
+                    'contradicted': ct.Kind.OTHER, 'negated': ct.Kind.OTHER, 'supported': ct.Kind.SNARE,
+                    'clip for hemostasis': ct.Kind.BLEEDING_CONTROL}
+        for name, R, code in self.shapes():
+            with self.subTest(kind=name):
+                label = F.established_kind(R, E(2))
+                self.assertEqual(label, expected[name])
+                self.assertEqual(Q.act_kind(R, E(2), (ct.Kind.SNARE,)), label)
+                keys = {entry.fact for entry in EV.decide(code, (), R).held_facts if entry.fact.startswith('conflict:')}
+                self.assertLessEqual(keys, {f'conflict:{label.value}'})
+        self.assertIs(Q.act_kind(colonoscopy().build(), None, (ct.Kind.SNARE,)), ct.Kind.SNARE)  # no act: the group's
+
+    def test_g3_28_shape_4_names_the_bleeding_control(self):
+        *_, (_name, R, code) = self.shapes()
+        found, spec = renderer_words(R, (code, 2))[code]
+        self.assertEqual((found.item.held.fact, found.item.message),
+                         ('conflict:bleeding_control', Q.MessageId.CONFLICT_ATTRIBUTE))
+        self.assertIn('the bleeding control', spec.question)
+        self.assertNotIn('clip placement', spec.question + spec.reason)
+
+    def test_g3_28_shapes_2_to_4_through_the_renderers_calls(self):
+        """g3c's shapes 2-4 (build list B9 (ii)), through jobs.word_item and the service questions' held-fact sentence
+        (customer_api.held_fact_words): shape 2 - an act E2 whose kind is not established beside "No polyp was removed.",
+        45385 on E2 (its item) and 45378 alone (the service question coverage keys); shape 3 - a lift injection E4 whose
+        part_of names that E2, 45381 on E4; shape 4 - the clip for hemostasis, 45382 on it and 45378 alone. Each names
+        "another act" or "the bleeding control", never "the snare removal" or "the clip placement"."""
+        from studio.customer_api import held_fact_words
+        for name, kind in (('silent', SILENT), ('unresolved', unres(ct.Kind.SNARE)),
+                           ('doubted', doubted(ct.Kind.SNARE, ct.Kind.SNARE, ct.Kind.BIOPSY)),
+                           ('contradicted', contra(ct.Kind.SNARE, ct.Kind.BIOPSY))):
+            with self.subTest(shape=2, kind=name):
+                doc = colonoscopy(kind=kind)
+                TE.denial_event(doc, number=3, kind=ct.Kind.SNARE)
+                R = doc.build()
+                found, spec = renderer_words(R, ('45385', 2), ('45378', 1))['45385']
+                self.assertEqual(found.item.held.fact, 'conflict:other')
+                self.assertNotIn('snare removal', spec.question + spec.reason)
+                assessment = TA.run(R, ('45378', 1))
+                asked = [question.item.item.fact for question in assessment.service_questions]
+                self.assertEqual(asked, ['conflict:other'])
+                self.assertEqual(held_fact_words(asked[0]),
+                                 'A detail is needed: which statement about another act is right for this date.')
+            if name in ('silent', 'unresolved'):
+                with self.subTest(shape=3, kind=name):
+                    doc.act(4, ct.Kind.INJECTION, places=[sup(ct.Landmark.SIGMOID_COLON)], part_of=sup(E(2)),
+                            part_relation=sup(ct.PartRelation.LIFT_FOR))
+                    found, spec = renderer_words(doc.build(), ('45381', 4), ('45378', 1))['45381']
+                    self.assertEqual((found.item.held.fact, found.item.held.subject), ('conflict:other', E(2)))
+                    self.assertIn('another act', spec.question)
+                    self.assertNotIn('snare removal', spec.question + spec.reason)
+        *_, (_name, R, code) = self.shapes()
+        with self.subTest(shape=4):
+            found, spec = renderer_words(R, (code, 2), ('45378', 1))[code]
+            self.assertIn('the bleeding control', spec.question)
+            assessment = TA.run(R, ('45378', 1))
+            asked = [question.item.item.fact for question in assessment.service_questions]
+            self.assertEqual(asked, ['conflict:bleeding_control'])
+            self.assertEqual(held_fact_words(asked[0]), 'A detail is needed: which statement about the bleeding '
+                                                        'control is right for this date.')
+            for sentence in (spec.question, spec.reason, held_fact_words(asked[0])):
+                self.assertNotIn('clip placement', sentence)
+
+
+# --- AMENDMENT-2 4.3.3 item 3's plant test, the member-sentence half (step f3e's request R7) ----------------------------
+
+PLANT_TABLES = {'P': 'people', 'N': 'sections', 'X': 'sessions', 'Y': 'anatomy', 'L': 'lesions', 'E': 'events'}
+
+
+def enriched_with_objects():
+    """tests/v2/test_assess.enriched with a person P1, a section N1 and an anatomy entry Y1 of no facts of their own, so
+    every family of the 38 slot attributes has an object to plant on (each table is read by coverage's Reader)."""
+    R = TA.enriched().build()
+    return dataclasses.replace(R, people={**R.people, Id(IdFamily.PERSON, 1): {}},
+                               sections={**R.sections, Id(IdFamily.SECTION, 1): {}},
+                               anatomy={**R.anatomy, Id(IdFamily.ANATOMY, 1): {}})
+
+
+PLANT_SCENES = (('enriched, with a person, a section and an anatomy entry', enriched_with_objects, TA.TWO),
+                ('egd_dilation', lambda: TA.egd_dilation().build(), (('43249', 2), ('43239', 3))),
+                ('ercp', lambda: TA.ercp().build(), (('43262', 4), ('43264', 5), ('43273', 3))),
+                ('push_enteroscopy', lambda: TA.push_enteroscopy().build(), (('44361', 2), ('44377', 2))),
+                ('office_and_sigmoidoscopy', lambda: TA.office_and_sigmoidoscopy().build(), (('99213', 1),
+                                                                                             ('45330', 2))))
+
+
+def merged_view(written) -> Fact:
+    """The ONE fact engine/facts gives a reader of an overfilled slot (AMENDMENT-2 4.3.3; tests/v2/test_facts'
+    OverfilledSlotTests pins the builder to it): ``written`` its written facts as (state name, value)."""
+    values = tuple(dict.fromkeys(value for _state, value in written))
+    stated = {value for state, value in written if state != 'negated'}
+    denied = tuple(dict.fromkeys(value for state, value in written if state == 'negated' and value not in stated))
+    return Fact(result=ct.Result.UNRESOLVED, value=None, state=ct.FactState.CONTRADICTED, options=values,
+                reasons=(ct.Reason.SLOT_OVERFULL,), spans=tuple(Span(3000 + 100 * n, 3060 + 100 * n)
+                                                                 for n in range(len(written))),
+                negated_values=denied)
+
+
+def plant(R, family, subject, attribute, fact):
+    """``R`` with ``subject``'s single-valued ``attribute`` the overfilled slot's merged view (``family`` None: the
+    encounter's)."""
+    if family is None:
+        return dataclasses.replace(R, encounter={**R.encounter, attribute: (fact,)})
+    name = PLANT_TABLES[family.value]
+    table = dict(getattr(R, name))
+    table[subject] = {**table[subject], attribute: (fact,)}
+    return dataclasses.replace(R, **{name: table})
+
+
+def unstated_members(item, before, kind, stated):
+    """The members of the planted attribute's type ``kind`` (an enumeration) that ``item``'s Fill carries, outside the
+    values the slot stated and outside what the same code's item carried without the plant (another event's or the
+    catalogue's): each a value worded as stated that the slot denied or never wrote. Kind.OTHER is D254 rule 2's label
+    for an act no kind names, never a value."""
+    found = []
+    for field in dataclasses.fields(item.fill):
+        value = getattr(item.fill, field.name)
+        prior = getattr(before.fill, field.name) if before is not None else None
+        priors = prior if isinstance(prior, tuple) else (prior,)
+        for member in value if isinstance(value, tuple) else (value,):
+            if isinstance(member, kind) and member is not ct.Kind.OTHER and member not in priors \
+                    and member not in stated:
+                found.append((field.name, member))
+    return found
+
+
+class OverfilledSlotMemberSentences(SimpleTestCase):
+    """AMENDMENT-2 4.3.3 item 3's plant test, the member-sentence half (step f3e's request R7; [R:truth-T2][R:truth-T5];
+    4.4: "no member sentence words a value pass 1 did not state"): on five scenes of tests/v2/test_assess (two sessions
+    enriched with the rarely-read attributes, an EGD dilation, an ERCP, a push enteroscopy, an office visit beside a
+    flexible sigmoidoscopy), EVERY object of each family is given each of the 38 slot attributes (facts.SLOTS) as an
+    overfilled slot in the three shapes - supported values only (A-v6), one supported beside negated others (A-v2),
+    negated only - and every held code's ONE item is worded by the renderer's own call (jobs.word_item: a refusal
+    raises). No Fill slot of the attribute's type carries a value the slot denied or did not write; a stated technique
+    is the class of a stated device; the enteroscopy's incomplete form only where incomplete is stated (T5). Item 7: an
+    item resting on the overfilled fact is that fact's own question, cause unestablished:slot_overfull, never "not
+    documented" - for a device, which technique was used (T2)."""
+
+    def test_every_slot_attribute_in_every_shape_on_every_object(self):
+        from studio import jobs
+        from studio.interpretation.engine import catalogue
+        from studio.interpretation.engine import facts as F
+        from tests.v2 import test_facts as TF
+
+        runs = rested = moved = 0
+        attributes = set()
+        for name, build, codes in PLANT_SCENES:
+            R0 = TA.dated(build())
+            plain = {found.code: found.item for found in TA.run(R0, *codes).codes}
+            for family, attribute in sorted(F.SLOTS, key=lambda key: (str(key[0]), key[1].value)):
+                subjects = [None] if family is None else list(getattr(R0, PLANT_TABLES[family.value]))
+                v1, v2, v3 = (TF.parsed(family, attribute, value) for value in TF.three_values(family, attribute))
+                kind = type(v1) if isinstance(v1, enum.Enum) else None
+                for subject in subjects:
+                    for shape, written in (('supported only', [('supported', v1), ('supported', v2)]),
+                                           ('one supported, others negated',
+                                            [('supported', v1), ('negated', v2), ('negated', v3)]),
+                                           ('negated only', [('negated', v1), ('negated', v2)])):
+                        R = plant(R0, family, subject, attribute, merged_view(written))
+                        stated = {value for state, value in written if state != 'negated'}
+                        assessment = TA.run(R, *codes)
+                        runs += 1
+                        attributes.add((family, attribute))
+                        for found in assessment.codes:
+                            if found.item is None:
+                                continue
+                            with self.subTest(scene=name, attribute=attribute.value, subject=str(subject),
+                                              shape=shape, code=found.code):
+                                spec = jobs.word_item(found.item, found.key, assessment.combination, R, TA.TEXT)
+                                before = plain[found.code]
+                                moved += found.item != before
+                                if kind is not None:
+                                    self.assertEqual(unstated_members(found.item, before, kind, stated), [])
+                                stated_class = found.item.fill.stated
+                                if attribute is ct.Attribute.TECHNIQUE_DEVICE and stated_class is not None \
+                                        and (before is None or before.fill.stated != stated_class):
+                                    self.assertIn(stated_class, {catalogue.technique_class(device) for device in stated})
+                                if attribute is ct.Attribute.COMPLETION and found.item.fill.incomplete \
+                                        and not (before is not None and before.fill.incomplete):
+                                    self.assertIn(ct.Completion.INCOMPLETE, stated)
+                                if found.item.held.cause == 'unestablished:slot_overfull':
+                                    rested += 1
+                                    self.assertIsNot(found.item.message, Q.MessageId.NOT_DOCUMENTED)
+                                    self.assertNotIn('not documented', (spec.question + spec.reason).lower())
+        self.assertEqual(len(attributes), 38)
+        self.assertGreater(runs, 1000)
+        self.assertGreater(rested, 100)  # the plant reaches the member sentences, not only the FactSet
+        self.assertGreater(moved, 100)
+
+    def test_the_device_item_asks_which_technique(self):
+        """Item 7 [R:truth-T2] on the dilation E2 of egd_dilation, its device overfilled - the plant test's three shapes
+        and a balloon beside a bougie, stated or the bougie denied: 43249 and 43248 are held by the device's own hold
+        (technique, cause unestablished:slot_overfull), asked "Which technique was used for the dilation ...", never
+        "not documented"."""
+        from studio import jobs
+        D, S, N = ct.Device, 'supported', 'negated'
+        for name, written in (('supported only', [(S, D.ENDOSCOPE), (S, D.COLD_SNARE)]),
+                              ('one supported, others negated', [(S, D.ENDOSCOPE), (N, D.COLD_SNARE), (N, D.HOT_SNARE)]),
+                              ('negated only', [(N, D.ENDOSCOPE), (N, D.COLD_SNARE)]),
+                              ('balloon, bougie', [(S, D.BALLOON), (S, D.BOUGIE)]),
+                              ('balloon, bougie denied', [(S, D.BALLOON), (N, D.BOUGIE)])):
+            R = plant(TA.dated(TA.egd_dilation().build()), E(2).family, E(2), ct.Attribute.TECHNIQUE_DEVICE,
+                      merged_view(written))
+            assessment = TA.run(R, ('43249', 2), ('43248', 2))
+            for found in assessment.codes:
+                with self.subTest(device=name, code=found.code):
+                    spec = jobs.word_item(found.item, found.key, assessment.combination, R, TA.TEXT)
+                    self.assertEqual((found.item.held.fact, found.item.held.cause, found.item.message),
+                                     ('technique', 'unestablished:slot_overfull', Q.MessageId.STATED_TECHNIQUE))
+                    self.assertTrue(spec.question.startswith('Which technique was used for the dilation'))
+                    self.assertNotIn('not documented', (spec.question + spec.reason).lower())
+
+    def test_the_checker_finds_a_planted_value(self):
+        """The checker's positive control: an item whose Fill carries a denied device, an unwritten one, or one only the
+        unplanted item carried."""
+        item = SimpleNamespace(fill=Q.Fill(code='45385', device=ct.Device.HOT_SNARE, group=(ct.Kind.SNARE,)))
+        stated = {ct.Device.ENDOSCOPE}
+        self.assertEqual(unstated_members(item, None, ct.Device, stated), [('device', ct.Device.HOT_SNARE)])
+        self.assertEqual(unstated_members(item, item, ct.Device, stated), [])  # the unplanted item carried it
+        self.assertEqual(unstated_members(item, None, ct.Device, {ct.Device.HOT_SNARE}), [])  # stated
+        self.assertEqual(unstated_members(item, None, ct.Kind, set()), [('group', ct.Kind.SNARE)])
+        self.assertEqual(unstated_members(SimpleNamespace(fill=Q.Fill(act=ct.Kind.OTHER)), None, ct.Kind, set()), [])
+
+
+class OverfilledExaminationAlone(SimpleTestCase):
+    """The step's NOTES, question Q-T2-ALONE, pinned as built: the colonoscopy's only examination E1 with its device slot
+    overfilled, manual and endoscope both STATED, is a claimed digital examination (AMENDMENT-2 4.3.3 c: manual is
+    written), so - as refute-r4a-r2 F1's ruling (D265) reads a claimed-manual examination alone - 45378's group has no
+    positive candidate and its item is the code-level not-documented question, the device's own hold
+    (unestablished:slot_overfull) beside it; AMENDMENT-2 4.3.7 says an overfilled device's item is never "not
+    documented". With manual not stated (an endoscope written twice, or beside a denied manual) E1 is the colonoscopy's
+    done examination and 45378 is READY (T2's refutation input, repaired)."""
+
+    def test_as_built(self):
+        D, S, N = ct.Device, 'supported', 'negated'
+        for name, written, expected in (('manual, endoscope stated', [(S, D.MANUAL), (S, D.ENDOSCOPE)], 'held'),
+                                        ('endoscope twice', [(S, D.ENDOSCOPE), (S, D.ENDOSCOPE)], 'ready'),
+                                        ('endoscope, manual denied', [(S, D.ENDOSCOPE), (N, D.MANUAL)], 'ready'),
+                                        ('both denied', [(N, D.MANUAL), (N, D.ENDOSCOPE)], 'ready')):
+            with self.subTest(device=name):
+                R = plant(colonoscopy(snare=False).build(), E(1).family, E(1), ct.Attribute.TECHNIQUE_DEVICE,
+                          merged_view(written))
+                found, spec = renderer_words(R, ('45378', 1))['45378']
+                if expected == 'ready':
+                    self.assertEqual((found.status.value, found.item), ('ready', None))
+                    continue
+                self.assertEqual(found.item.message, Q.MessageId.NOT_DOCUMENTED)
+                self.assertIn(('performed_status', 'unestablished:slot_overfull'),
+                              [(entry.fact, entry.cause) for entry in found.held_facts])

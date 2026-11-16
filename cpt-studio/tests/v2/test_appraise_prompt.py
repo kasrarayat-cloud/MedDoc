@@ -20,6 +20,29 @@ What is proved, item by item against the done-when of 8.1 step 2c:
   (LeakTests, both scans);
 - no request is built for a text that cannot be framed, over the claim bound, or under an empty or changed pin; the
   shas handed to the integration owner (RefusalTests, PinTests); 5.7 measure 4 (GuardTests).
+
+AMENDMENT-2's step F2 (adopted by DECISIONS D279), for the Fable request of gemini-appraisal@2:
+- the body has exactly the connector's BODY_KEYS (extract_prompt.FABLE_BODY_KEYS) - the model, the maximum, the stream,
+  effort high with the LOCAL schema as the structured-output format, pass 2's instruction unchanged with no cache marker,
+  the turn - and nothing else, no Gemini form (FableRequestTests);
+- the turn holds the framed document, the cards and the claims claims.build makes under APPRAISAL_VERSION_V3, ordered by
+  that label's seed (8.1): every label-aware call of claims.py the request makes names gemini-appraisal@2, and the
+  objects DECISIONS D292's U1 and U3 change reach the turn (the refutation's F2R1-1); a byte-identical body for identical
+  inputs in any process; the findings a required keyword; no option, state, qualifier or doubt of pass 1 in it
+  (FableRequestTests);
+- the bound is step f3s's claims.CLAIM_BOUND_V3, imported, never defined here, its document claims.py's under the label
+  (8.2's pin at 1,000 claims), refusing a larger claim set and independent of the Gemini bound (FableBoundTests);
+- no Fable request under an empty or changed pin of 8.2, read by the _V3 names step f0 gave D292's changed objects; the
+  pins hash claims.py's documents under gemini-appraisal@2, never the recorded @1 objects; each form reads its own pins
+  (FablePinTests);
+- FINAL-V2 2.3's scans read every fixed text claims.py renders under each label it builds, gemini-appraisal@2's
+  templates among them (ScanTests).
+Until f3s's claims.py is merged these tests stand in for what it adds (f3s_claims): 8.2's 1,000 claims for
+CLAIM_BOUND_V3, and claims.build and the four documents taking the label and giving gemini-appraisal@1's objects under
+either, the only ones this tree holds; then they read f3s's own. Four tests are red until their steps land:
+FableBoundTests.test_the_bound_is_step_f3s, FableRequestTests.test_the_turn_carries_gemini_appraisal_2s_claims and
+FablePinTests.test_the_changed_objects_are_pinned_apart_from_the_recorded_ones (step f3s), and
+FableRequestTests.test_the_connector_sends_these_keys (step f1).
 """
 from __future__ import annotations
 
@@ -55,7 +78,9 @@ from tests.v2.test_types import measure_4
 APP = Path(__file__).resolve().parents[2]
 MODULE = APP / 'studio' / 'interpretation' / 'contract' / 'appraise_prompt.py'
 FINAL_V2 = APP / 'docs' / 'gemini-migration' / 'FINAL-V2.md'
-FINAL_V2_SHA256 = '9d650797c41091d3ab9ce2f783c1838e5aa394bb926c5d5b2733c2186d733b21'  # D178's adopted design
+# D178's adopted design, with step f0's restatement of P19 and G5 for DECISIONS D292's U3 (AMENDMENT-2's build; it moved
+# the pin from 9d650797...): the quoted examples and clause examples this module scans for are unchanged (40 and 7)
+FINAL_V2_SHA256 = '6b2b09cc7f388489f75b5b46bd6c36a44b405cc3b79a27ea7314463a2d0256fb'
 DEV_EXCLUSION = APP / 'docs' / 'gemini-migration' / 'acceptance-a1' / 'DEV-EXCLUSION.sha256'
 EVIDENCE = Path(os.environ.get('CPT_STUDIO_DESIGN_EVIDENCE', '/home/claude/cpt-studio-completion-20261106'))
 SURVEY_4 = EVIDENCE / 'gemini-migration' / 'design-v2' / 'survey' / 'failures.md'
@@ -219,9 +244,13 @@ def phrase_hits(text_words, phrases):
 
 
 def fixed_tables():
-    """Every fixed text claims.py renders into the request: each template (its slots replaced by FILLER), each label,
-    each card phrase and format."""
+    """Every fixed text claims.py renders into a request, under each appraisal label it builds claims for
+    (labels_built): each template (its slots replaced by FILLER) - gemini-appraisal@1's, and @2's wherever it differs,
+    which the Fable request renders (DECISIONS D292's U1 and U3, step f3s) - each label, each card phrase and format."""
     texts = {f'template {key.value}': re.sub(r'\{[a-z_]+\}', FILLER, claims.template(key)) for key in claims.TemplateId}
+    for version in labels_built()[1:]:
+        texts.update({f'template {key.value} ({version})': re.sub(r'\{[a-z_]+\}', FILLER, claims.template(key, version))
+                      for key in claims.TemplateId if claims.template(key, version) != claims.template(key)})
     texts.update({f'label {type(member).__name__}.{member.name}': text for member, text in claims.LABELS.items()})
     texts.update({f'place {place.name}': text for place, text in claims.PLACE_LABELS.items()})
     texts.update({f'kind {kind.name} {at}': form for kind, forms in claims.KIND_LABELS.items()
@@ -300,6 +329,16 @@ CONTROL_TELLS = re.compile(r'\b(controls?|decoys?|traps?|tests? you|on purpose|d
 
 
 class ScanTests(SimpleTestCase):
+    def test_the_scans_read_every_label_claims_py_builds(self):
+        # the Fable request renders gemini-appraisal@2's templates (DECISIONS D292's U1 and U3, step f3s), so every scan
+        # below reads them beside @1's: each template sentence under each label claims.py builds is a scanned text
+        scanned = set(fixed_tables().values())
+        for version in labels_built():
+            for key in claims.TemplateId:
+                sentence = claims.template(key) if version == LABELS[0] else claims.template(key, version)
+                with self.subTest(version=version, template=key.value):
+                    self.assertIn(re.sub(r'\{[a-z_]+\}', FILLER, sentence), scanned)
+
     def test_no_statement_that_some_claims_are_controls(self):
         self.assertIsNone(CONTROL_TELLS.search(appraise_prompt.INSTRUCTIONS))
         for name, text in fixed_tables().items():
@@ -375,7 +414,12 @@ class ScanTests(SimpleTestCase):
         for counter in ('refused', 'sealed', 'binary', 'unread'):  # no development text is an acceptance one
             with self.subTest(counter=counter):
                 self.assertEqual(sum(getattr(read, counter) for read in scanned.values()), 0)
-        self.assertEqual({name: read.hits for name, read in scanned.items() if read.hits}, {})  # the scan
+        # the scan. FRESH's inputs hold the documents reserved for DECISIONS D277's pairs, so a run shared with them is
+        # reported by its count alone, never its words (as step 2a's scan of INSTRUCTIONS_3 reports it)
+        fresh = 'FRESH-1 and FRESH-2 inputs'
+        self.assertEqual({name: len(runs) for name, runs in scanned[fresh].hits.items()}, {},
+                         f'runs shared with {fresh}, by target (counts only)')
+        self.assertEqual({name: read.hits for name, read in scanned.items() if read.hits and name != fresh}, {})
         # the positive controls: five consecutive words of the instruction, planted in a document, are a shared run; and
         # each corpus's own run of five words (its last read text's last run, never a text's first), planted in the
         # MIDDLE of every target - the instruction and each fixed table - is found in that corpus for that target by the
@@ -575,34 +619,39 @@ def leaky_answer():
     return data
 
 
+def assert_no_leak(case, built):
+    """2.4's leak scan over a built request's cards and claims, for either request (LeakTests; FableRequestTests for the
+    Fable request): no option, state, qualifier, doubt, reading or unknown of pass 1, and no pass-1 id."""
+    rest = after_document(built.turn)
+    case.assertTrue(rest)
+    lowered = rest.lower()
+    hidden = {  # every label of a value that is an option, doubted, qualified or a reading
+        'option argon_plasma': claims.label(claims.Device.ARGON_PLASMA),
+        'option cryotherapy': claims.label(claims.Device.CRYOTHERAPY),
+        'doubted later_date': claims.label(claims.DateRelation.LATER_DATE),
+        'hedged appendiceal orifice': claims.label(claims.Landmark.APPENDICEAL_ORIFICE),
+        'qualified anal canal': claims.label(claims.Landmark.ANAL_CANAL),
+    }
+    for name, text in hidden.items():
+        with case.subTest(hidden=name):
+            case.assertNotIn(text.lower(), lowered)
+    tokens = set(words(rest))
+    for enumeration in (FactState, Qualifier, Qualifier2, claims.Breadth):
+        for member in enumeration:
+            with case.subTest(value=member.value):
+                case.assertNotIn(member.value, tokens)
+    case.assertFalse({'doubt', 'doubted', 'doubts', 'unknown', 'contradicted', 'option', 'options', 'readings',
+                      'silent', 'negated'} & tokens)
+    case.assertFalse([token for token in tokens if '_' in token])  # no enumeration value is ever written raw
+    case.assertIsNone(re.search(r'\b[EP]\d+\b', rest))  # pass 1's event and person ids never reach pass 2
+    # the control: the same scan sees a leaked label
+    leaked = rest + '\nK0 (about A1; cites S6): This act used ' + claims.label(claims.Device.ARGON_PLASMA) + '.'
+    case.assertIn(claims.label(claims.Device.ARGON_PLASMA).lower(), leaked.lower())
+
+
 class LeakTests(SimpleTestCase):
     def test_no_option_state_qualifier_doubt_or_unknown_of_pass_1_in_the_request(self):
-        built = request(fixtures.NOTE, leaky_answer())
-        rest = after_document(built.turn)
-        self.assertTrue(rest)
-        lowered = rest.lower()
-        hidden = {  # every label of a value that is an option, doubted, qualified or a reading
-            'option argon_plasma': claims.label(claims.Device.ARGON_PLASMA),
-            'option cryotherapy': claims.label(claims.Device.CRYOTHERAPY),
-            'doubted later_date': claims.label(claims.DateRelation.LATER_DATE),
-            'hedged appendiceal orifice': claims.label(claims.Landmark.APPENDICEAL_ORIFICE),
-            'qualified anal canal': claims.label(claims.Landmark.ANAL_CANAL),
-        }
-        for name, text in hidden.items():
-            with self.subTest(hidden=name):
-                self.assertNotIn(text.lower(), lowered)
-        tokens = set(words(rest))
-        for enumeration in (FactState, Qualifier, Qualifier2, claims.Breadth):
-            for member in enumeration:
-                with self.subTest(value=member.value):
-                    self.assertNotIn(member.value, tokens)
-        self.assertFalse({'doubt', 'doubted', 'doubts', 'unknown', 'contradicted', 'option', 'options', 'readings',
-                          'silent', 'negated'} & tokens)
-        self.assertFalse([token for token in tokens if '_' in token])  # no enumeration value is ever written raw
-        self.assertIsNone(re.search(r'\b[EP]\d+\b', rest))  # pass 1's event and person ids never reach pass 2
-        # the control: the same scan sees a leaked label
-        leaked = rest + '\nK0 (about A1; cites S6): This act used ' + claims.label(claims.Device.ARGON_PLASMA) + '.'
-        self.assertIn(claims.label(claims.Device.ARGON_PLASMA).lower(), leaked.lower())
+        assert_no_leak(self, request(fixtures.NOTE, leaky_answer()))
 
     def test_no_label_of_pass_1s_values_on_a_card(self):
         for text, data in ((fixtures.NOTE, fixtures.note_answer()), (fixtures.RICH, fixtures.rich_answer()),
@@ -705,6 +754,489 @@ class PinTests(SimpleTestCase):
                 appraise_prompt.build_request(fixtures.NOTE, (), 'txt', found, findings={})
 
 
+# --- AMENDMENT-2 (step F2): the Fable request of gemini-appraisal@2 ----------------------------------------------------------
+
+# What step f3s's claims.py adds and this module reads (AMENDMENT-2 8.1-8.2; DECISIONS D278, D292's U1 and U3):
+# claims.CLAIM_BOUND_V3, the Fable request's claim bound, imported and never defined here; and claims.py by appraisal
+# label - claims.build(basis, seed, *, version=...) and the four documents the pins hash, each taking the label - so the
+# Fable request is built from gemini-appraisal@2's objects. Until f3s's claims.py is merged, the tests stand in for both
+# (f3s_claims): 8.2's value for the bound (1,000 claims, the value F3long ran under), and functions that take the label,
+# refuse any label but gemini-appraisal@1 and @2 (KeyError, as f3s's claims.tables does) and give @1's object under
+# either, since this tree holds no other; once it is, they read f3s's own. A test that needs @2's own objects is red
+# until then (the module's docstring names them).
+BOUND_V3_STAND_IN = 1000
+BOUND_V3_SHA256 = '3fe08a5c8ec23575e2df78032d5b4b18dcff0927ce1c628743c47946b9415628'  # 8.2: the pin at 1,000 claims
+# AMENDMENT-2 8.2's pins of a Fable appraisal request, with D292's three changed objects under their _V3 names (step f0)
+FABLE_PIN_NAMES = ('APPRAISAL_INSTRUCTIONS_SHA256', 'APPRAISAL_LOCAL_SCHEMA_SHA256', 'TEMPLATES_SHA256_V3',
+                   'STATEMENT_TEMPLATES_SHA256_V3', 'CONTROLS_SHA256_V3', 'CLAIMED_SHA256', 'CLAIM_BOUND_SHA256_V3',
+                   'SEGMENTATION_SHA256')
+NEVER_SENT = ('thinking', 'temperature', 'top_p', 'top_k', 'tools', 'tool_choice', 'stop_sequences', 'metadata',
+              'fallbacks', 'cache_control')
+# claims.py's functions that read the appraisal label once f3s's claims.py is merged, and the labels it builds
+LABELLED = ('build', 'templates_document', 'statement_templates_document', 'controls_document', 'claim_bound_document')
+LABELS = (interpretation.APPRAISAL_VERSION, interpretation.APPRAISAL_VERSION_V3)
+# The pins of the objects D292 changes under gemini-appraisal@2, and the recorded @1 pins of the same tables (D202)
+CHANGED_PINS = {'TEMPLATES_SHA256_V3': 'TEMPLATES_SHA256', 'STATEMENT_TEMPLATES_SHA256_V3': 'STATEMENT_TEMPLATES_SHA256',
+                'CONTROLS_SHA256_V3': 'CONTROLS_SHA256'}
+
+
+def labelled_claims():
+    """Whether claims.py builds by appraisal label (step f3s): every LABELLED function takes ``version``."""
+    return all('version' in inspect.signature(getattr(claims, name)).parameters for name in LABELLED)
+
+
+def labels_built():
+    """The appraisal labels claims.py builds claims under: both LABELS once f3s's claims.py is merged, else @1 alone."""
+    return LABELS if labelled_claims() else LABELS[:1]
+
+
+def _stand_in(name, real):
+    """claims.<name> as step f3s's claims.py has it, on a tree whose claims.py does not: the label taken (claims.build's
+    keyword, a document's argument), any label but LABELS refused, and gemini-appraisal@1's object given under either -
+    the bound's document holding the label's bound, read when called, as f3s's claim_bound_document reads it."""
+    def label_of(version):
+        if version not in LABELS:
+            raise KeyError(version)
+        return version
+
+    if name == 'build':
+        def build(basis, seed, *, version=interpretation.APPRAISAL_VERSION):
+            label_of(version)
+            return real(basis, seed)
+        return build
+    if name == 'claim_bound_document':
+        def claim_bound_document(version=interpretation.APPRAISAL_VERSION):
+            if label_of(version) == interpretation.APPRAISAL_VERSION:
+                return real()
+            return dict.fromkeys(real(), claims.CLAIM_BOUND_V3)
+        return claim_bound_document
+
+    def document(version=interpretation.APPRAISAL_VERSION):
+        label_of(version)
+        return real()
+    return document
+
+
+def f3s_claims():
+    """Step f3s's claims.py as these tests read it: its own CLAIM_BOUND_V3 and label-aware functions where they are
+    merged, else the stand-ins (8.2's bound; _stand_in)."""
+    stack = contextlib.ExitStack()
+    if not hasattr(claims, 'CLAIM_BOUND_V3'):
+        stack.enter_context(mock.patch.object(claims, 'CLAIM_BOUND_V3', BOUND_V3_STAND_IN, create=True))
+    if not labelled_claims():
+        for name in LABELLED:
+            stack.enter_context(mock.patch.object(claims, name, _stand_in(name, getattr(claims, name))))
+    return stack
+
+
+@contextlib.contextmanager
+def labels_read():
+    """{name: [label, ...]}: the appraisal label of every call of a LABELLED function of claims.py while the block runs
+    - the label given (claims.build's keyword; a document's argument or keyword) or gemini-appraisal@1 when none is (the
+    default of each) - each call passed on unchanged to the function in place when the block began."""
+    seen = {name: [] for name in LABELLED}
+
+    def spy(name, called):
+        def recorded(*args, **kwargs):
+            given = () if name == 'build' else args[:1]  # claims.build's label is keyword-only
+            seen[name].append(kwargs.get('version', given[0] if given else interpretation.APPRAISAL_VERSION))
+            return called(*args, **kwargs)
+        return recorded
+
+    with contextlib.ExitStack() as stack:
+        for name in LABELLED:
+            stack.enter_context(mock.patch.object(claims, name, spy(name, getattr(claims, name))))
+        yield seen
+
+
+def pinned_fable():
+    """f3s_claims, and every pin of AMENDMENT-2 8.2 a Fable appraisal request reads set to its measured sha, as the
+    integration owner will write them."""
+    stack = contextlib.ExitStack()
+    stack.enter_context(f3s_claims())
+    stack.enter_context(mock.patch.multiple(interpretation, **appraise_prompt.pins_fable()))
+    return stack
+
+
+def reached_and_doubted_answer():
+    """NOTE's answer with the two inputs DECISIONS D292 changes the claims of under gemini-appraisal@2: session X1's
+    furthest point an anastomosis entry Y1 (U3: reached_anatomy, and the control it shares with the reach), and a doubt
+    about the kind of the rectal biopsy denial E3 (U1: a doubted kind's statements in kind-neutral forms)."""
+    data = fixtures.note_answer()
+    data['anatomy'] = [{'id': 'Y1', 'type': fixtures.fact('anastomosis', fixtures.src(['S5'], '')), 'organ': [],
+                        'subtype': [], 'joins': []}]
+    data['sessions'][0]['reached_anatomy'] = [fixtures.fact('Y1', fixtures.src(['S5'], 'advanced to the cecum'))]
+    data['doubts'] = [{'about': 'kind', 'objects': ['E3'], 'units': ['S7'], 'basis': 'stated', 'readings': []}]
+    return data
+
+
+def request_fable(text, data, kind='txt', findings=None, pages=()):
+    found = fixtures.read(text, data)
+    with pinned_fable():
+        return appraise_prompt.build_request_fable(text, pages, kind, found, findings=findings or {})
+
+
+def leaves(value, path=()):
+    """Every (path, leaf) of a body."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield from leaves(item, path + (key,))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from leaves(item, path + (index,))
+    else:
+        yield path, value
+
+
+class FableRequestTests(SimpleTestCase):
+    def test_the_body_has_exactly_the_fable_keys_and_values(self):
+        built = request_fable(fixtures.NOTE, fixtures.note_answer())
+        self.assertEqual(list(built.body), list(extract_prompt.FABLE_BODY_KEYS))
+        self.assertEqual(built.body, {
+            'model': 'claude-fable-5-2', 'max_tokens': 128000, 'stream': True,
+            'output_config': {'effort': 'high', 'format': {'type': 'json_schema', 'schema': appraise_schema.LOCAL_SCHEMA}},
+            'system': [{'type': 'text', 'text': appraise_prompt.INSTRUCTIONS}],
+            'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': built.turn}]}]})
+        self.assertEqual(built.body['model'], interpretation.MODEL_V3)
+        self.assertIs(built.body['stream'], True)
+        # the instruction is pass 2's, byte for byte (AMENDMENT-2 2.2: unchanged), and so is the LOCAL schema
+        self.assertEqual(jsonschema.sha256_of(appraise_prompt.INSTRUCTIONS), INSTRUCTIONS_SHA256)
+        self.assertEqual(jsonschema.sha256_of(built.body['output_config']['format']['schema']),
+                         PINS['APPRAISAL_LOCAL_SCHEMA_SHA256'])
+        with pinned_fable():
+            self.assertEqual(built.body, appraise_prompt.request_parts_fable(built.turn))
+
+    def test_nothing_is_sent_but_the_instruction_the_turn_the_schema_and_the_settings(self):
+        built = request_fable(fixtures.RICH, fixtures.rich_answer())
+        found = dict(leaves({key: value for key, value in built.body.items() if key != 'output_config'}))
+        self.assertEqual(found, {('model',): 'claude-fable-5-2', ('max_tokens',): 128000, ('stream',): True,
+                                 ('system', 0, 'type'): 'text', ('system', 0, 'text'): appraise_prompt.INSTRUCTIONS,
+                                 ('messages', 0, 'role'): 'user', ('messages', 0, 'content', 0, 'type'): 'text',
+                                 ('messages', 0, 'content', 0, 'text'): built.turn})
+        self.assertEqual(set(built.body['output_config']), {'effort', 'format'})
+        self.assertEqual(set(built.body['output_config']['format']), {'type', 'schema'})
+        keys = {key for path, _ in leaves(built.body) for key in path if isinstance(key, str)}
+        for field in NEVER_SENT + ('systemInstruction', 'contents', 'generationConfig', 'responseSchema',
+                                   'propertyOrdering'):
+            with self.subTest(never=field):
+                self.assertNotIn(field, keys)  # no cache marker on pass 2 (7.2), no Gemini form (2.3)
+        self.assertNotIn(jsonschema.canonical(appraise_schema.RESPONSE_SCHEMA), canonical_body(built.body))
+
+    def test_the_turn_holds_the_labels_claims_in_the_labels_order(self):
+        # AMENDMENT-2 8.1: the Fable request carries the framed document pass 1 reads, then the cards and the claims that
+        # claims.build makes under gemini-appraisal@2 from the request's basis, in the order that label's seed gives -
+        # never the Gemini request's claim set reordered (DECISIONS D292's U1 and U3 change @2's claims and sentences:
+        # test_the_turn_carries_gemini_appraisal_2s_claims; the refutation's F2R1-2)
+        version = interpretation.APPRAISAL_VERSION_V3
+        for text, data in ((fixtures.RICH, fixtures.rich_answer()), (fixtures.NOTE, reached_and_doubted_answer())):
+            found = fixtures.read(text, data)
+            gemini, fable = request(text, data), request_fable(text, data)
+            with f3s_claims():
+                expected = claims.build(appraise_prompt.basis(text, (), found, findings={}),
+                                        appraise_prompt.seed_fable(text, found), version=version)
+            with self.subTest(text=text[:24]):
+                self.assertEqual(fable.claim_set, expected)
+                self.assertEqual(fable.turn, appraise_prompt.user_turn(fable.framed, expected, text))
+                self.assertEqual(fable.indistinct, appraise_prompt.indistinct(expected, text))
+                self.assertEqual(fable.framed, gemini.framed)  # pass 1's framing, one function (2c#15)
+                self.assertTrue(fable.turn.startswith(fable.framed + '\n\nCARDS\n'))
+                # the seed reads the label, so the claims' order is the label's (8.1)
+                self.assertEqual(fable.claim_set.seed, appraise_prompt.seed_fable(text, found))
+                self.assertEqual(gemini.claim_set.seed, appraise_prompt.seed(text, found))
+                self.assertNotEqual(fable.claim_set.seed, gemini.claim_set.seed)
+                self.assertNotEqual([claim.content for claim in fable.claim_set.claims],
+                                    [claim.content for claim in gemini.claim_set.claims])
+                self.assertEqual(appraise_prompt.seed_fable(text, found), jsonschema.sha256_of(
+                    ['gemini-appraisal@2', jsonschema.sha256_of(text), jsonschema.sha256_of(found.answer)]))
+
+    def test_the_claims_are_built_under_the_label(self):
+        # the refutation's F2R1-1: the Fable request's claims are built by claims.build under gemini-appraisal@2, the
+        # label whose objects DECISIONS D292's U1 and U3 change, and every label-aware call the build makes names that
+        # label; the dormant Gemini request builds under @1, as recorded (D1v, D1w; D202)
+        for text, data in ((fixtures.RICH, fixtures.rich_answer()), (fixtures.NOTE, reached_and_doubted_answer())):
+            found = fixtures.read(text, data)
+            with self.subTest(text=text[:24]):
+                with pinned_fable(), labels_read() as seen:
+                    appraise_prompt.build_request_fable(text, (), 'txt', found, findings={})
+                self.assertEqual(seen['build'], [interpretation.APPRAISAL_VERSION_V3])
+                self.assertEqual({label for labels in seen.values() for label in labels},
+                                 {interpretation.APPRAISAL_VERSION_V3})
+                with pinned(), labels_read() as seen:  # the control
+                    appraise_prompt.build_request(text, (), 'txt', found, findings={})
+                self.assertEqual(seen['build'], [interpretation.APPRAISAL_VERSION])
+                self.assertEqual({label for labels in seen.values() for label in labels},
+                                 {interpretation.APPRAISAL_VERSION})
+
+    def test_the_turn_carries_gemini_appraisal_2s_claims(self):
+        # DECISIONS D292 (the refutation's F2R1-1): what U3 and U1 change reaches the Fable request, and only it. U3: the
+        # reached_anatomy claim is gemini-appraisal@2's sentence, while the Gemini request keeps @1's. U1: a doubted
+        # kind's denial has its status, place and breadth claimed in kind-neutral statement forms - its status in U1's
+        # own first example (HOLDS-ANALYSIS.md section 6) - where @1 leaves them unclaimed (the kind). Red until step
+        # f3s's claims.py is merged: this tree's claims.py holds gemini-appraisal@1's objects alone
+        self.assertTrue(labelled_claims(), "claims.py builds by appraisal label from step f3s's claims.py, not merged yet")
+        version, recorded = interpretation.APPRAISAL_VERSION_V3, interpretation.APPRAISAL_VERSION
+        data = reached_and_doubted_answer()
+        fable, gemini = request_fable(fixtures.NOTE, data), request(fixtures.NOTE, data)
+        reach = claims.TemplateId.SESSION_REACHED_ANATOMY
+        sentence = {label: claims.template(reach, label).format(session='X1', anatomy='Y1') for label in LABELS}
+        self.assertNotEqual(sentence[version], sentence[recorded])  # U3 restates it under @2
+        for built, label in ((fable, version), (gemini, recorded)):
+            with self.subTest(reached_anatomy=label):
+                items = fixtures.appraised(built.claim_set, fixtures.A.REACHED_ANATOMY, 'X1')
+                self.assertEqual([built.claim_set.sentences[item.claim] for item in items], [sentence[label]])
+                self.assertIn(sentence[label], built.turn)
+        self.assertNotIn(sentence[recorded], fable.turn)
+        not_done = 'This statement says that the act it names was not done.'  # U1's first example, verbatim
+        status = fixtures.appraised(fable.claim_set, fixtures.A.STATUS, 'E3')
+        self.assertEqual([fable.claim_set.sentences[item.claim] for item in status], [not_done])
+        self.assertIn(not_done, fable.turn)
+        self.assertNotIn(not_done, gemini.turn)
+        for attribute in (fixtures.A.STATUS, fixtures.A.TARGET_PLACES, fixtures.A.SCOPE_BREADTH):
+            with self.subTest(doubted_kind=attribute.value):
+                self.assertTrue(fixtures.appraised(fable.claim_set, attribute, 'E3'))
+                self.assertFalse(fixtures.appraised(gemini.claim_set, attribute, 'E3'))
+                self.assertIn((attribute, claims.Unclaimable.KIND),
+                              {(item.key.attribute, item.why) for item in gemini.claim_set.unclaimed
+                               if item.key.object == 'E3'})
+        # what U1 still holds: the doubted kind itself is claimed under neither label (D191, HO-5), while the same
+        # statement's kind, undoubted, is (the control)
+        for built in (fable, gemini):
+            self.assertFalse(fixtures.appraised(built.claim_set, fixtures.A.KIND, 'E3'))
+        self.assertTrue(fixtures.appraised(request_fable(fixtures.NOTE, fixtures.note_answer()).claim_set,
+                                           fixtures.A.KIND, 'E3'))
+
+    def test_identical_inputs_give_a_byte_identical_request(self):
+        first = request_fable(fixtures.RICH, fixtures.rich_answer())
+        second = request_fable(fixtures.RICH, copy.deepcopy(fixtures.rich_answer()))
+        self.assertEqual(canonical_body(first.body), canonical_body(second.body))
+        changed = fixtures.rich_answer()
+        changed['events'][4]['technique']['device'] = [fixtures.fact('hot_snare', fixtures.src(['S11'], 'hot snare'))]
+        self.assertNotEqual(request_sha256(request_fable(fixtures.RICH, changed).body), request_sha256(first.body))
+        reached = request_fable(fixtures.NOTE, reached_and_doubted_answer())  # gemini-appraisal@2's own claims too
+        self.assertEqual(canonical_body(reached.body),
+                         canonical_body(request_fable(fixtures.NOTE, copy.deepcopy(reached_and_doubted_answer())).body))
+        code = ('import sys, os; sys.path.insert(0, %r)\n'
+                'os.environ.setdefault("DJANGO_SETTINGS_MODULE", "cptstudio.settings")\n'
+                'import django; django.setup()\n'
+                'from tests.v2 import test_appraise_prompt as t, test_claims as f\n'
+                'from studio.providers.base import request_sha256\n'
+                'print(request_sha256(t.request_fable(f.RICH, f.rich_answer()).body))\n' % str(APP))
+        outputs = set()
+        for seed in ('3', '4096'):
+            env = {key: value for key, value in os.environ.items() if key.startswith('CPT_STUDIO_')}
+            env.update(PYTHONHASHSEED=seed, PATH='/usr/bin:/bin')
+            result = subprocess.run([sys.executable, '-B', '-c', code], capture_output=True, text=True, timeout=120,
+                                    cwd=APP, env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            outputs.add(result.stdout.strip())
+        self.assertEqual(outputs, {request_sha256(first.body)})
+
+    def test_the_body_shares_nothing_with_the_module(self):
+        built = request_fable(fixtures.NOTE, fixtures.note_answer())
+        built.body['output_config']['format']['schema']['properties'].clear()
+        built.body['system'][0]['text'] = 'changed'
+        self.assertTrue(appraise_schema.LOCAL_SCHEMA['properties'])
+        again = request_fable(fixtures.NOTE, fixtures.note_answer())
+        self.assertEqual(again.body['system'][0]['text'], appraise_prompt.INSTRUCTIONS)
+        self.assertEqual(again.body['output_config']['format']['schema'], appraise_schema.LOCAL_SCHEMA)
+
+    def test_the_findings_are_required_and_an_unframeable_text_builds_nothing(self):
+        parameter = inspect.signature(appraise_prompt.build_request_fable).parameters['findings']
+        self.assertIs(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIs(parameter.default, inspect.Parameter.empty)
+        self.assertEqual(list(inspect.signature(appraise_prompt.request_parts_fable).parameters), ['turn'])
+        found = fixtures.read(fixtures.NOTE, fixtures.note_answer())
+        with pinned_fable():
+            with self.assertRaises(TypeError):
+                appraise_prompt.build_request_fable(fixtures.NOTE, (), 'txt', found)
+            with self.assertRaises(TypeError):
+                appraise_prompt.request_parts_fable(None)
+            with self.assertRaises(appraise_prompt.Unbuilt) as caught:
+                appraise_prompt.build_request_fable(fixtures.NOTE + '[S12]', (), 'txt', found, findings={})
+            self.assertIs(caught.exception.reason, appraise_prompt.Unframed.LABEL)
+            # given, a failed fact is not claimed (D206), as in the Gemini request
+            failed = {FactKey(extract_schema.Family.EVENT, 'E2', fixtures.A.TECHNIQUE_DEVICE, 0):
+                      (fixtures.Reason.WORDS_NOT_IN_UNITS,)}
+            built = appraise_prompt.build_request_fable(fixtures.NOTE, (), 'txt', found, findings=failed)
+        self.assertFalse(fixtures.appraised(built.claim_set, fixtures.A.TECHNIQUE_DEVICE, 'E2'))
+
+    def test_no_option_state_qualifier_doubt_or_unknown_of_pass_1_in_the_turn(self):
+        # 2.4's leak scan (LeakTests) over the Fable request: the claims gemini-appraisal@2 renders - U1's kind-neutral
+        # forms among them, written for a statement whose kind pass 1 doubts (DECISIONS D292) - carry no option,
+        # state, qualifier, doubt, reading or unknown of pass 1, and no pass-1 id
+        data = leaky_answer()
+        data['doubts'].append({'about': 'kind', 'objects': ['E3'], 'units': ['S7'], 'basis': 'stated', 'readings': []})
+        assert_no_leak(self, request_fable(fixtures.NOTE, data))
+
+    def test_the_connector_sends_these_keys(self):
+        # AMENDMENT-2 1.1-1.2: the body carries fable_adapter.BODY_KEYS, and the connector's body_kind reads it as a
+        # pass-2 body of its own - the turn's claims gemini-appraisal@2's (the refutation's F2R1-3: called, not claimed);
+        # a changed maximum is not one (the control). Red until step f1 adds fable_adapter.py
+        from studio.interpretation import fable_adapter
+        built = request_fable(fixtures.NOTE, reached_and_doubted_answer())
+        self.assertEqual(set(fable_adapter.BODY_KEYS), set(built.body))
+        with pinned_fable():
+            self.assertEqual(fable_adapter.body_kind(built.body), (fable_adapter.APPRAISAL, ''))
+            self.assertEqual(fable_adapter.body_kind(dict(built.body, max_tokens=1)), ('', fable_adapter.NOT_BUILT))
+
+
+class FableBoundTests(SimpleTestCase):
+    def test_the_bound_is_step_f3s(self):
+        # AMENDMENT-2 8.2: claims.CLAIM_BOUND_V3, defined by step f3s (contract/claims.py) and never here. Red until
+        # f3s's claims.py is merged
+        self.assertTrue(hasattr(claims, 'CLAIM_BOUND_V3'), 'claims.CLAIM_BOUND_V3 is step f3s\'s, not merged yet')
+        self.assertIs(type(claims.CLAIM_BOUND_V3), int)
+        self.assertEqual(appraise_prompt.claim_bound_document_v3(), {'claims_per_request': claims.CLAIM_BOUND_V3})
+        # claims.py's own document of the bound under the label, one form (step f3s)
+        self.assertEqual(appraise_prompt.claim_bound_document_v3(),
+                         claims.claim_bound_document(version=interpretation.APPRAISAL_VERSION_V3))
+        self.assertNotIn('CLAIM_BOUND_V3', {node.targets[0].id for node in ast.parse(MODULE.read_text(encoding='utf-8')).body
+                                            if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)})
+
+    def test_the_bound_document_is_8_2s_form(self):
+        # at 8.2's 1,000 claims the document's sha256 is the pin 8.2 states; claim_bound_document's form, the V3 value
+        with f3s_claims(), mock.patch.object(claims, 'CLAIM_BOUND_V3', 1000, create=True):
+            self.assertEqual(appraise_prompt.claim_bound_document_v3(), {'claims_per_request': 1000})
+            self.assertEqual(jsonschema.sha256_of(appraise_prompt.claim_bound_document_v3()), BOUND_V3_SHA256)
+            self.assertEqual(appraise_prompt.pins_fable()['CLAIM_BOUND_SHA256_V3'], BOUND_V3_SHA256)
+        self.assertEqual(list(claims.claim_bound_document()), ['claims_per_request'])  # the one form, claims.py's
+
+    def test_a_claim_set_over_the_fable_bound_builds_no_request(self):
+        found = fixtures.read(fixtures.NOTE, fixtures.note_answer())
+        with pinned_fable(), mock.patch.object(claims, 'CLAIM_BOUND_V3', 10, create=True), \
+                mock.patch.object(interpretation, 'CLAIM_BOUND_SHA256_V3',
+                                  jsonschema.sha256_of({'claims_per_request': 10})):
+            with self.assertRaises(appraise_prompt.OverBound) as caught:
+                appraise_prompt.build_request_fable(fixtures.NOTE, (), 'txt', found, findings={})
+        self.assertGreater(caught.exception.count, 10)
+        self.assertEqual(caught.exception.bound, 10)
+        self.assertIn('more than the 10 one request may carry', str(caught.exception))
+        # the Gemini bound decides nothing on the Fable path, and the Fable bound nothing on the Gemini path
+        with pinned_fable(), mock.patch.object(claims, 'CLAIM_BOUND', 1):
+            built = appraise_prompt.build_request_fable(fixtures.NOTE, (), 'txt', found, findings={})
+            self.assertFalse(appraise_prompt.over_bound_fable(built.claim_set))
+            self.assertTrue(claims.over_bound(built.claim_set))
+        with pinned(), mock.patch.object(claims, 'CLAIM_BOUND_V3', 1, create=True):
+            self.assertTrue(appraise_prompt.build_request(fixtures.NOTE, (), 'txt', found, findings={}).claim_set.claims)
+        self.assertEqual(appraise_prompt.OverBound(5).bound, claims.CLAIM_BOUND)  # the Gemini refusal, as before
+        self.assertIn(f'more than the {claims.CLAIM_BOUND:,} one request', str(appraise_prompt.OverBound(700)))
+
+
+class FablePinTests(SimpleTestCase):
+    def test_the_shas_handed_to_the_integration_owner(self):
+        version = interpretation.APPRAISAL_VERSION_V3
+        with f3s_claims():
+            measured = appraise_prompt.pins_fable()
+            self.assertEqual(measured['CLAIM_BOUND_SHA256_V3'],
+                             jsonschema.sha256_of({'claims_per_request': claims.CLAIM_BOUND_V3}))
+            # the objects D292 changes, each claims.py's document under gemini-appraisal@2 - the label the request's
+            # claims are built under - never the recorded @1 document of the same table (the refutation's F2R1-2)
+            self.assertEqual(measured['TEMPLATES_SHA256_V3'],
+                             jsonschema.sha256_of(claims.templates_document(version=version)))
+            self.assertEqual(measured['STATEMENT_TEMPLATES_SHA256_V3'],
+                             jsonschema.sha256_of(claims.statement_templates_document(version=version)))
+            self.assertEqual(measured['CONTROLS_SHA256_V3'],
+                             jsonschema.sha256_of(claims.controls_document(version=version)))
+            self.assertEqual(measured['CLAIM_BOUND_SHA256_V3'],
+                             jsonschema.sha256_of(claims.claim_bound_document(version=version)))
+        self.assertEqual(tuple(measured), FABLE_PIN_NAMES)
+        # the unchanged objects under their v2 names, measured as before
+        for name in ('APPRAISAL_INSTRUCTIONS_SHA256', 'APPRAISAL_LOCAL_SCHEMA_SHA256', 'CLAIMED_SHA256',
+                     'SEGMENTATION_SHA256'):
+            self.assertEqual(measured[name], PINS[name], name)
+        names = set(vars(interpretation))
+        self.assertLessEqual(set(FABLE_PIN_NAMES), names)  # step f0's placeholders, or the v2 pins of unchanged objects
+        for name in FABLE_PIN_NAMES:  # '' until the integration owner writes it on the merged tree, then the measured
+            with self.subTest(pin=name):
+                self.assertIn(getattr(interpretation, name), ('', measured[name]))
+        self.assertNotIn('APPRAISAL_RESPONSE_SCHEMA_SHA256', FABLE_PIN_NAMES)  # @2 pins no RESPONSE schema
+
+    def test_the_pins_hash_the_labels_objects(self):
+        # the refutation's F2R1-1: every document of claims.py pins_fable hashes - the templates, the statement
+        # templates, the controls and the bound - is read under gemini-appraisal@2, the label the request's claims are
+        # built under, so the _V3 pins guard the objects the request sends; the Gemini pins read @1's, as recorded
+        with f3s_claims(), labels_read() as seen:
+            appraise_prompt.pins_fable()
+        self.assertEqual({name: labels for name, labels in seen.items() if labels},
+                         {name: [interpretation.APPRAISAL_VERSION_V3] for name in LABELLED if name != 'build'})
+        with labels_read() as seen:  # the control
+            appraise_prompt.pins()
+        self.assertEqual({name: labels for name, labels in seen.items() if labels},
+                         {name: [interpretation.APPRAISAL_VERSION] for name in LABELLED if name != 'build'})
+
+    def test_the_changed_objects_are_pinned_apart_from_the_recorded_ones(self):
+        # DECISIONS D292 changes the templates (U3's reached_anatomy claim), the statement templates (U1) and the
+        # controls (U3's shared control) under gemini-appraisal@2, so their _V3 pins differ from the recorded @1 pins of
+        # the same tables, which keep their bytes (D202: @1 has recordings, D1v and D1w): pins_fable never hands the
+        # integration owner a recorded @1 value under a _V3 name (the refutation's F2R1-1). Red until step f3s's
+        # claims.py is merged: this tree's claims.py holds gemini-appraisal@1's objects alone
+        self.assertTrue(labelled_claims(), "claims.py builds by appraisal label from step f3s's claims.py, not merged yet")
+        measured, recorded = appraise_prompt.pins_fable(), appraise_prompt.pins()
+        for name, old in CHANGED_PINS.items():
+            with self.subTest(pin=name):
+                self.assertNotEqual(measured[name], recorded[old])
+                self.assertEqual(recorded[old], PINS[old])  # the @1 object is as recorded
+        self.assertNotEqual(measured['CLAIM_BOUND_SHA256_V3'], recorded['CLAIM_BOUND_SHA256'])
+
+    def test_no_fable_request_under_an_empty_or_changed_pin(self):
+        found = fixtures.read(fixtures.NOTE, fixtures.note_answer())
+        for name in FABLE_PIN_NAMES:
+            for value, refusal in (('', 'is not pinned yet'), ('0' * 64, 'no longer matches its pin')):
+                with self.subTest(pin=name, value=value[:4]), pinned_fable(), \
+                        mock.patch.object(interpretation, name, value):
+                    with self.assertRaisesMessage(RuntimeError, f'{name} {refusal}'):
+                        appraise_prompt.build_request_fable(fixtures.NOTE, (), 'txt', found, findings={})
+        with pinned_fable(), mock.patch.object(claims, 'KIND_SIBLINGS', {}):  # a changed table
+            with self.assertRaisesMessage(RuntimeError, 'CONTROLS_SHA256_V3 no longer matches'):
+                appraise_prompt.build_request_fable(fixtures.NOTE, (), 'txt', found, findings={})
+        with pinned_fable(), mock.patch.object(appraise_prompt, 'INSTRUCTIONS', appraise_prompt.INSTRUCTIONS + ' '):
+            with self.assertRaisesMessage(RuntimeError, 'APPRAISAL_INSTRUCTIONS_SHA256 no longer matches'):
+                appraise_prompt.build_request_fable(fixtures.NOTE, (), 'txt', found, findings={})
+        with pinned_fable():  # the control
+            self.assertEqual(list(appraise_prompt.build_request_fable(fixtures.NOTE, (), 'txt', found,
+                                                                      findings={}).body),
+                             list(extract_prompt.FABLE_BODY_KEYS))
+
+    def test_each_form_reads_its_own_pins(self):
+        # the Fable request reads the _V3 names, never the recorded @1 names of the objects D292 changes, nor the
+        # RESPONSE schema's pin; and the Gemini request keeps its own
+        found = fixtures.read(fixtures.NOTE, fixtures.note_answer())
+        recorded = dict.fromkeys(('TEMPLATES_SHA256', 'STATEMENT_TEMPLATES_SHA256', 'CONTROLS_SHA256',
+                                  'CLAIM_BOUND_SHA256', 'APPRAISAL_RESPONSE_SCHEMA_SHA256'), '')
+        with pinned_fable(), mock.patch.multiple(interpretation, **recorded):
+            self.assertTrue(appraise_prompt.build_request_fable(fixtures.NOTE, (), 'txt', found, findings={}).body)
+        fable_only = dict.fromkeys(('TEMPLATES_SHA256_V3', 'STATEMENT_TEMPLATES_SHA256_V3', 'CONTROLS_SHA256_V3',
+                                    'CLAIM_BOUND_SHA256_V3'), '')
+        with pinned(), mock.patch.multiple(interpretation, **fable_only):
+            self.assertTrue(appraise_prompt.build_request(fixtures.NOTE, (), 'txt', found, findings={}).body)
+
+    def test_the_fable_functions_name_no_recorded_label_or_object(self):
+        # AMENDMENT-2 8.1 [R:replay-R4]: a writer on the current path writes the new label only. The Fable functions name
+        # gemini-appraisal@2's label, bound and pins, never @1's label, its RESPONSE schema, the recorded names of the
+        # objects D292 changes, the Gemini bound, seed, builders or settings - by name, or by a pin's name as a string
+        dormant = {'APPRAISAL_VERSION', 'RESPONSE_SCHEMA', 'APPRAISAL_RESPONSE_SCHEMA_SHA256', 'TEMPLATES_SHA256',
+                   'STATEMENT_TEMPLATES_SHA256', 'CONTROLS_SHA256', 'CLAIM_BOUND_SHA256', 'CLAIM_BOUND', 'over_bound',
+                   'request_parts', 'build_request', 'check_pins', 'pins', 'seed', 'TEMPERATURE', 'MAX_OUTPUT_TOKENS',
+                   'THINKING_LEVEL', 'RESPONSE_MIME_TYPE'}
+        functions = {node.name: node for node in ast.parse(MODULE.read_text(encoding='utf-8')).body
+                     if isinstance(node, ast.FunctionDef)}
+
+        def named(function) -> set:
+            return ({getattr(node, 'id', None) or getattr(node, 'attr', None) for node in ast.walk(function)
+                     if isinstance(node, (ast.Name, ast.Attribute))}
+                    | {node.value for node in ast.walk(function)
+                       if isinstance(node, ast.Constant) and isinstance(node.value, str)})
+        for name in ('request_parts_fable', 'build_request_fable', 'over_bound_fable', 'seed_fable',
+                     'claim_bound_document_v3', 'pins_fable', 'check_pins_fable'):
+            with self.subTest(function=name):
+                self.assertEqual(sorted(named(functions[name]) & dormant), [])
+        # and each that reads claims.py's label-aware objects, or the label's seed or pins, names gemini-appraisal@2
+        for name in ('build_request_fable', 'claim_bound_document_v3', 'pins_fable', 'check_pins_fable', 'seed_fable'):
+            with self.subTest(label=name):
+                self.assertIn('APPRAISAL_VERSION_V3', named(functions[name]))
+        self.assertLessEqual({'APPRAISAL_VERSION', 'pins'}, named(functions['check_pins']))  # the control
+
+
 class GuardTests(SimpleTestCase):
     def test_measure_4_holds_over_the_module(self):
         source = MODULE.read_text(encoding='utf-8')
@@ -725,6 +1257,9 @@ class GuardTests(SimpleTestCase):
             'studio.interpretation.contract.types.Link', 'studio.interpretation.contract.types.LocatedWords',
             'studio.interpretation.contract.types.Reason', 'studio.interpretation.contract.types.Source',
             'studio.interpretation.contract.types.Span', 'studio.interpretation.engine.requirements',
+            # the Fable body's maximum and effort, pass 1's constants, one for both passes (AMENDMENT-2 1.1)
+            'studio.interpretation.contract.extract_prompt.FABLE_EFFORT',
+            'studio.interpretation.contract.extract_prompt.FABLE_MAX_TOKENS',
             # step 2a's framing, one implementation (the arbiter's 2c#15)
             'studio.interpretation.contract.extract_prompt.Unbuilt',
             'studio.interpretation.contract.extract_prompt.Unframed',

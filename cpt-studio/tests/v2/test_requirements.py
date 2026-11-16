@@ -63,6 +63,16 @@ REQUIREMENTS_PINS = {
         'rules': '4efba46a8dee311ddd7d357b5dc9a1b5bf719f67779f16ac1a617fd644f3d50c',
         'claimed': '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81',
     },
+    # DECISIONS D292 (E1j): BUNDLING's read-set gains a whole's target lesion's places, and REQUIREMENTS_VERSION moves with
+    # it - the label is the integration's (interpretation/__init__.py, f0's file: until it reads cpt-requirements@2 the
+    # lookup below compares the @2 read-set with @1's recorded pin and fails, which is that request's signal); the table,
+    # RANK and CLAIMED are unchanged
+    'cpt-requirements@2': {
+        'table': '1b0f0d18e5d3328d923f43bd033b75559e439c849dafae259ddd6e64b89820e5',
+        'rank': '4c0c972d7c8f05b48bc4cebfaa1628c8e7d772ebb3dbcd4146a0eb80da3c26c1',
+        'rules': '1677db1b003841c3cd76b35bd6702dbda6dbb5d0273be43d83cc713699c91bf7',
+        'claimed': '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81',
+    },
 }
 CLAIMED_PINS = {'gemini-appraisal@1': '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81'}
 

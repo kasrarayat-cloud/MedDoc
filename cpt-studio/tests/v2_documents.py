@@ -11,9 +11,10 @@ note. Every other line is the v1 document's, and every quote a provider fake sel
 D261). tests/test_v2_replay.py's DocumentTests checks the quotes this module defines - TWO_CODES, DENIED_CODES, POLYP
 and VISIT_TIME, each equal to v1's, the denial's 45385 quote with its stop - and that every class of the class C modules
 that gives a marked test Corti groups of its own (``v2_corti_groups``) gives it its v1 groups. A fake that selects its
-own module's constants on both paths gives v1's quotes by identity, and DocumentTests reads none of those constants
-(tests.test_repairs_7c8_p1reports' SNARE and BIOPSY, v1's phrases with no stop, which tests.test_repairs_gi2_reports'
-fakes select too).
+own module's constants on both paths gives v1's quotes by identity. DocumentTests reads none of
+tests.test_repairs_7c8_p1reports' SNARE and BIOPSY (v1's phrases with no stop, which tests.test_repairs_gi2_reports'
+fakes select too), and it reads tests.test_repairs_ec5_reportruns' VISIT, which ec5's fakes select on both paths, as
+the v1 side of VISIT_TIME's check.
 
 Each answer files what the document states and nothing else: its parts, the endoscopist, each session with its kind and
 the reach the document states (none where it states none), the lesions, and each act with its kind, status, session,

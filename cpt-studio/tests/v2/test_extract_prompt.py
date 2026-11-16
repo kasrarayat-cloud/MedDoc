@@ -25,6 +25,19 @@ What is proved here, item by item against the done-when of 8.1 step 2a:
 - the pins handed to the integration owner, and no request under an empty or changed pin (PinTests); 7.3's measure of
   the instruction against v1's (LeanTests); 5.7 measure 4 over the module (GuardTests).
 
+AMENDMENT-2's step F2 (adopted by DECISIONS D279; the instruction principles of D292), against its done-when:
+- INSTRUCTIONS_3 is INSTRUCTIONS_2's clauses with exactly 2.1's items 1 and 2 and D292's U2, U3, U4, U7, U8 and U9
+  (derived here by those edits, each applied once), item 4's VALUES heading and item 5's ANSWER SHAPE part, item 3
+  withdrawn; 2.1's four changes found by grep, each against AMENDMENT-2.md's own text, and each principle and its generic
+  example against HOLDS-ANALYSIS.md section 6's (Instructions3Tests, DesignTextTests);
+- FINAL-V2 2.3's scans pass on INSTRUCTIONS_3, the character-level ones on the prose before ANSWER SHAPE, whose part is
+  pinned whole (Scan3Tests);
+- the Fable body has exactly FABLE_BODY_KEYS (AMENDMENT-2 1.1's BODY_KEYS) and nothing else, is byte-identical for
+  identical inputs in any process, sends no Gemini form, and is built only under INTERPRETATION_VERSION_V3's pins, which
+  are handed to the integration owner (FableBodyTests, Pin3Tests); its sizes (Lean3Tests). One test reads the connector's
+  constants and calls its body_kind on the body built here, and is red until step f1 adds
+  interpretation/fable_adapter.py.
+
 The scans that read the session's evidence (survey 4, the development corpora) skip where that directory is absent
 (CPT_STUDIO_DESIGN_EVIDENCE names it); the instruction they scanned is pinned by sha256 here, so a changed instruction
 fails INSTRUCTIONS_SHA256 everywhere and is re-scanned where the evidence is (the integration owner runs them unskipped
@@ -71,8 +84,10 @@ APP = Path(__file__).resolve().parents[2]
 MODULE = APP / 'studio' / 'interpretation' / 'contract' / 'extract_prompt.py'
 FINAL_V2 = APP / 'docs' / 'gemini-migration' / 'FINAL-V2.md'
 # The part of D178's adopted design the example scan reads, 2.1 and 2.2 (from '### 2.1' to '### 2.3'), pinned by its own
-# sha256 (UTF-8), so an edit elsewhere in the design (an amendment after 9.9) leaves the scan as it is (triage 2a#3)
-FINAL_V2_EXAMPLES_SHA256 = '64f3ab80d9eeee9f15b4e0cef439da225293c7fad563e96e1bd1f556a927ff3a'
+# sha256 (UTF-8), so an edit elsewhere in the design (an amendment after 9.9) leaves the scan as it is (triage 2a#3).
+# Step f0 of AMENDMENT-2's build restated P19 for DECISIONS D292's U3 (FINAL-V2 2.1), which moved it from 64f3ab80...;
+# its quoted examples are unchanged (the scan still reads 40 phrases)
+FINAL_V2_EXAMPLES_SHA256 = 'c396e1354e17ea90b1fdb33e76e5c122fa33ad837f24e5156e5538bc8c472901'
 # The acceptance set's development exclusion list: hashes only. It is the one file of acceptance-a1/ any builder opens.
 DEV_EXCLUSION = APP / 'docs' / 'gemini-migration' / 'acceptance-a1' / 'DEV-EXCLUSION.sha256'
 EVIDENCE = Path(os.environ.get('CPT_STUDIO_DESIGN_EVIDENCE', '/home/claude/cpt-studio-completion-20261106'))
@@ -116,6 +131,13 @@ INSTRUCTIONS_SHA256_BEFORE_D244 = '462631172d4741a35418ef99bc6befd8ac3dcef95e466
 SEGMENTATION_SHA256 = '41d2245ada69f2a573d0354486323d9f30e00fef7091f531e2e0541a11af8e78'  # step 1a's rule constants
 PINS = {'INSTRUCTIONS_SHA256_V2': INSTRUCTIONS_SHA256, 'RESPONSE_SCHEMA_SHA256_V2': RESPONSE_SHA256,
         'LOCAL_SCHEMA_SHA256_V2': LOCAL_SHA256, 'SEGMENTATION_SHA256': SEGMENTATION_SHA256}
+# AMENDMENT-2 8.2: the pins of INTERPRETATION_VERSION_V3 a Fable pass-1 body is built under (check_pins_fable).
+# INSTRUCTIONS_SHA256_V3, the sha256 of INSTRUCTIONS_3 (UTF-8), which holds ANSWER_SHAPE_2, is new: this step hands it to
+# the integration owner, who writes it on the merged tree after the build's last repair (an empty placeholder until
+# then). LOCAL_SCHEMA_SHA256_V2 and SEGMENTATION_SHA256 pin unchanged objects; no RESPONSE schema is pinned under @3.
+INSTRUCTIONS_3_SHA256 = '43e49a7ad6da1d8ba2300e772085783196517ae1bea64dadd09932697c77d4fb'
+PINS_3 = {'INSTRUCTIONS_SHA256_V3': INSTRUCTIONS_3_SHA256, 'LOCAL_SCHEMA_SHA256_V2': LOCAL_SHA256,
+          'SEGMENTATION_SHA256': SEGMENTATION_SHA256}
 
 # A synthetic note written for this test (no development or acceptance document): a hard wrap the join rule joins,
 # initials that end no unit, two pages.
@@ -143,6 +165,8 @@ V1_SECOND_LINE = ('Its extracted text follows between the two marker lines. The 
 # build_request for DECISIONS D230's generation settings (thinkingLevel high, maxOutputTokens 65536; step cb of round
 # w9r: dca8fc35... before them, 739e001c... before D244's sentence)
 NOTE_PDF_REQUEST_SHA256 = '7d91cdb67c35945297b6ae3b1a027248fd357f1c25b73ddd4ee410bcde65e8c6'
+# the same for the Fable body (build_request_fable, under PINS_3): AMENDMENT-2 1.2's request for NOTE as a PDF
+NOTE_PDF_FABLE_REQUEST_SHA256 = 'c6eb3e2a3456f445cd76a78a059bdfa398ce5fc40cf2c87670f5e59eeaf0d062'
 
 WORD = re.compile(r"[a-z0-9_]+(?:'[a-z]+)?")  # a word: letters, digits and '_' (an enumeration value is one word)
 
@@ -163,6 +187,12 @@ def normalized(text: str) -> str:
 def pinned():
     """Every pin of 2.5 set to the measured sha, as the integration owner will write them."""
     return mock.patch.multiple(interpretation, **PINS)
+
+
+def pinned_3():
+    """Every pin of AMENDMENT-2 8.2 a Fable pass-1 body reads set to the measured sha, as the integration owner will
+    write them."""
+    return mock.patch.multiple(interpretation, **PINS_3)
 
 
 # --- 2.1: each clause pinned by a grep of its rule ----------------------------------------------------------------------
@@ -1541,6 +1571,652 @@ class LeanTests(SimpleTestCase):
                 self.assertIn(asked, text)
 
 
+# --- AMENDMENT-2 (step F2): INSTRUCTIONS_3 and the Fable request body ----------------------------------------------------
+
+AMENDMENT_2 = APP / 'docs' / 'gemini-migration' / 'AMENDMENT-2.md'
+HOLDS_ANALYSIS = APP / 'docs' / 'gemini-migration' / 'HOLDS-ANALYSIS.md'
+# AMENDMENT-2 2.1's changes, as its text words them (DesignTextTests reads them back from AMENDMENT-2.md)
+ITEM_1_OLD = ("device: the device the document names for this act; a device the document says was not used for this act is "
+              "that device's fact negated.")
+ITEM_1_NEW = ('device: the device the document names for this act. When the document also says that other devices were '
+              'not used for this act, the slot still holds the named device alone; a negated device fact is for a device '
+              'the document says was not used when it names no device used for this act.')
+ITEM_2_OLD = 'type is the alteration or absence, and organ the organ it concerns;'
+ITEM_2_NEW = ('type is the alteration or absence, and organ the one organ it concerns: an alteration or absence the '
+              'document states of two or more organs is one anatomy entry per organ, each citing the units that state '
+              'it;')
+ITEM_4_OLD = 'One line per list of values; the response schema gives each field its list.'
+ITEM_4_NEW = 'One line per list of values; the answer shape below gives each field its list.'
+ITEM_5_RULE = ('The answer is one JSON object that satisfies this JSON Schema exactly: every object has exactly the '
+               'properties listed, all required, and nothing else; an enumeration lists every allowed value; an array '
+               'whose "maxItems" is 1 is a slot and holds at most one fact.')
+SLOT_SENTENCE = 'A slot holds at most one fact; a list such as places, reached or stations holds one fact per value.'
+CLOSING = 'Answer with the JSON object only.'
+# item 3 [R:truth-T8], withdrawn: none of its words reach TARGETS
+ITEM_3_WITHDRAWN = ('tissue rather than a lesion', 'then lesion stays empty')
+# DECISIONS D292's instruction principles, each as HOLDS-ANALYSIS.md section 6 words it (fields named bare, since the
+# instruction quotes nothing; U2's doubt names extent, the DOUBT_ABOUT value whose row holds reached), each in its part
+D292 = {
+    'U2': (C.P19_EXTENT, (
+        'device_reached holds only points the endoscope itself never reached.',
+        'A point the endoscope reached goes in reached, even when a guidewire, catheter or capsule also reached it.',
+        'Never list one point in both.',
+        'When the words leave unclear whether the endoscope itself reached a point, list it in device_reached and add a '
+        'doubt about extent.')),
+    'U3': (C.P19_EXTENT, (
+        'reached_anatomy names the anatomy entry of an anastomosis or pouch the endoscope itself reached, at its '
+        "furthest point or on its way beyond it, citing the examination's own words that say so.",)),
+    'U4 DENIALS': (C.P22_DENIALS, (
+        'A denial confined to one place is single_target with that place in target.places; segment is for a stretch '
+        'named by two different places.',)),
+    'U4 TARGETS': (C.P13_TARGET, (
+        'An act done beside a lesion to mark or reach it is not done to that lesion: give the place where it was done, '
+        'and leave target.lesion empty unless the document says the act was done to the lesion itself.',)),
+    'U7': (C.P6_FACTS, (
+        "When a sentence says another act's device was not used on this act's target, it denies that other act there.",
+        "File it also as a negated event of that other act's kind with this target, and keep this act's device slot "
+        'for the device it used.')),
+    'U8': (C.P7_DOUBT, (
+        "A mark of uncertainty inside a denial's own words (a question mark, or a word that leaves the denial open) "
+        'makes its status a doubt, never an established negation.',)),
+    'U9': (C.P3_OBJECTS, (
+        "A lesion's places list every segment the lesion lies in or reaches, also across a junction; give one place "
+        'only when the words confine the lesion to it.',)),
+}
+# each principle's generic example (HOLDS-ANALYSIS.md section 6's, written as a sentence that quotes no words): the only
+# examples the instruction holds, each after its principle
+EXAMPLES_3 = {
+    'U2': ('For example, a wire passed into the jejunum from a scope that stopped in the duodenum puts the jejunum in '
+           'device_reached; a scope that followed the wire into the jejunum puts it in reached.'),
+    'U3': ('For example, a scope that reached a surgical junction and went on into the bowel beyond it still names that '
+           "junction's anatomy entry in reached_anatomy."),
+    'U4 DENIALS': ('For example, a statement that nothing was done in the cecum is single_target, and one that nothing '
+                   'was done between the hepatic flexure and the rectum is segment.'),
+    'U4 TARGETS': ('For example, ink injected a few folds beyond a polyp to mark its site gets the place where it was '
+                   'injected and no target.lesion.'),
+    'U7': ('For example, a forceps removal of a polyp, with a sentence saying that no snare was used on it, also gets '
+           'a negated snare event on that polyp.'),
+    'U8': ('For example, a line that denies a dilation and ends with a question mark files a doubt about the status of '
+           'that denial.'),
+    'U9': 'For example, a flat lesion running from one segment over the flexure into the next lists both segments',
+}
+# The edits that make INSTRUCTIONS_3's clauses from INSTRUCTIONS_2's (2.1 items 1 and 2; D292's U2, U3, U4, U7, U8 and
+# U9), each (old, new) occurring exactly once where it is applied, in this order
+CHANGES_3 = (
+    ("device: the device the document names for this act; a device the document says was not used for this act is that\n"
+     "device's fact negated. route: how the act's agent reached the tissue (the route values below).",
+     'device: the device the document names for this act. When the document also says that other devices were not used '
+     'for\nthis act, the slot still holds the named device alone; a negated device fact is for a device the document says '
+     'was not\nused when it names no device used for this act. route: how the act\'s agent reached the tissue (the route '
+     'values\nbelow).'),
+    ('type is the alteration or absence, and organ the organ it concerns; subtype and joins say which organs an\n'
+     'anastomosis, or a pouch joined to an organ, joins. The type never depends on a landmark. An organ the examination '
+     'saw\nis not an anatomy entry.\n',
+     'type is the alteration or absence, and organ the one organ it concerns: an alteration or absence the document '
+     'states\nof two or more organs is one anatomy entry per organ, each citing the units that state it; subtype and joins '
+     'say which\norgans an anastomosis, or a pouch joined to an organ, joins. The type never depends on a landmark. An '
+     'organ the\nexamination saw is not an anatomy entry.\n'),
+    ("device_reached, never in reached. reached_anatomy names the anatomy entry when the endoscope's furthest point is "
+     "an\nanastomosis or a pouch. completion says whether the examination reached the extent it set out to reach, as the "
+     "document\nstates it, with its words.\n",
+     'device_reached, never in reached. device_reached holds only points the endoscope itself never reached. A point '
+     'the\nendoscope reached goes in reached, even when a guidewire, catheter or capsule also reached it. Never list one '
+     'point in\nboth. When the words leave unclear whether the endoscope itself reached a point, list it in '
+     'device_reached and add a\ndoubt about extent. For example, a wire passed into the jejunum from a scope that stopped '
+     'in the duodenum puts the\njejunum in device_reached; a scope that followed the wire into the jejunum puts it in '
+     'reached. reached_anatomy names\nthe anatomy entry of an anastomosis or pouch the endoscope itself reached, at its '
+     "furthest point or on its way beyond\nit, citing the examination's own words that say so. For example, a scope that "
+     "reached a surgical junction and went on\ninto the bowel beyond it still names that junction's anatomy entry in "
+     'reached_anatomy. completion says whether the\nexamination reached the extent it set out to reach, as the document '
+     'states it, with its words.\n'),
+    ('  last place given in scope.segment. scope.covers lists every reported act the denial applies to.\n',
+     '  last place given in scope.segment. scope.covers lists every reported act the denial applies to.\n'
+     '- A denial confined to one place is single_target with that place in target.places; segment is for a stretch '
+     'named by\n  two different places. For example, a statement that nothing was done in the cecum is single_target, '
+     'and one that\n  nothing was done between the hepatic flexure and the rectum is segment.\n'),
+    ('  names after an earlier act done there is a place or a lesion, never an act.\n',
+     '  names after an earlier act done there is a place or a lesion, never an act.\n'
+     '- An act done beside a lesion to mark or reach it is not done to that lesion: give the place where it was done, '
+     'and\n  leave target.lesion empty unless the document says the act was done to the lesion itself. For example, ink '
+     'injected\n  a few folds beyond a polyp to mark its site gets the place where it was injected and no target.lesion.\n'),
+    ('value too. No\ndefault value exists anywhere.\n',
+     "value too. No\ndefault value exists anywhere.\nWhen a sentence says another act's device was not used on this act's "
+     "target, it denies that other act there. File it\nalso as a negated event of that other act's kind with this target, "
+     "and keep this act's device slot for the device it\nused. For example, a forceps removal of a polyp, with a sentence "
+     'saying that no snare was used on it, also gets a\nnegated snare event on that polyp.\n'),
+    ('choose a reading silently, and never drop a doubt because a value was given. A doubt names attributes, never '
+     'words.\n',
+     'choose a reading silently, and never drop a doubt because a value was given. A doubt names attributes, never '
+     "words.\nA mark of uncertainty inside a denial's own words (a question mark, or a word that leaves the denial open) "
+     'makes its\nstatus a doubt, never an established negation. For example, a line that denies a dilation and ends with '
+     'a question\nmark files a doubt about the status of that denial.\n'),
+    ('  document says it is distinct from, or the same as;\n',
+     "  document says it is distinct from, or the same as. A lesion's places list every segment the lesion lies in or\n"
+     '  reaches, also across a junction; give one place only when the words confine the lesion to it. For example, a '
+     'flat\n  lesion running from one segment over the flexure into the next lists both segments;\n'),
+)
+
+
+def apply_changes_3(text: str) -> tuple:
+    """``text`` with CHANGES_3 applied in order, each asserted to occur exactly once (a scripted edit proves its own
+    application), and how many applied."""
+    applied = 0
+    for old, new in CHANGES_3:
+        if text.count(old) != 1:
+            break
+        text = text.replace(old, new)
+        applied += 1
+    return text, applied
+
+
+def prose_3(instruction: str = None) -> str:
+    """INSTRUCTIONS_3 (or ``instruction``) before its ANSWER SHAPE part: what the character-level scans read."""
+    text = xp.INSTRUCTIONS_3 if instruction is None else instruction
+    return text[:text.index(f'\n{xp.ANSWER_SHAPE}\n') + 1]
+
+
+def shape_part_3() -> str:
+    """INSTRUCTIONS_3's ANSWER SHAPE part, from its title line to the end."""
+    return xp.INSTRUCTIONS_3[xp.INSTRUCTIONS_3.index(f'\n{xp.ANSWER_SHAPE}\n') + 1:]
+
+
+class Instructions3Tests(SimpleTestCase):
+    def test_the_clauses_are_instructions_2s_with_exactly_the_listed_edits(self):
+        # 2.1 items 1 and 2 and D292's six principles, and nothing else: the edits applied to INSTRUCTIONS_2's clauses
+        # give INSTRUCTIONS_3's, byte for byte
+        derived, applied = apply_changes_3(xp._CLAUSES)
+        self.assertEqual(applied, len(CHANGES_3))  # expected 8 / measured 8
+        self.assertEqual(derived, xp._CLAUSES_3)
+        # then the values under item 4's heading, and the ANSWER SHAPE part last
+        values = '\n'.join([xp._VALUES_HEAD_3] + ['- ' + xs.DEFINITIONS[item] for item in xs.ENUMERATIONS])
+        self.assertEqual(xp.INSTRUCTIONS_3, xp._CLAUSES_3 + '\n' + values + '\n\n' + xp.answer_shape_part())
+        self.assertEqual(xp.INSTRUCTIONS_3, xp._instructions_3())  # a pure function of the module's tables
+        # and INSTRUCTIONS_2, the dormant Gemini adapter's, is byte for byte as recorded (D1: gemini-events@2)
+        self.assertEqual(jsonschema.sha256_of(xp.INSTRUCTIONS_2), INSTRUCTIONS_SHA256)
+
+    def test_2_1s_four_changes_by_grep(self):
+        three, two = normalized(xp.INSTRUCTIONS_3), normalized(xp.INSTRUCTIONS_2)
+        # item 1, TECHNIQUE; FACTS' slot sentence kept as it is
+        technique = normalized(xp.clause_text(C.P14_TECHNIQUE, xp.INSTRUCTIONS_3))
+        self.assertIn(ITEM_1_NEW, technique)
+        self.assertNotIn(ITEM_1_OLD, three)
+        self.assertIn(ITEM_1_OLD, two)
+        self.assertEqual(three.count(SLOT_SENTENCE), 1)
+        self.assertIn(SLOT_SENTENCE, normalized(xp.clause_text(C.P6_FACTS, xp.INSTRUCTIONS_3)))
+        # item 2, ANATOMY
+        self.assertIn(ITEM_2_NEW, normalized(xp.clause_text(C.P21_ANATOMY, xp.INSTRUCTIONS_3)))
+        self.assertNotIn(ITEM_2_OLD, three)
+        self.assertIn(ITEM_2_OLD, two)
+        # item 3, withdrawn: TARGETS is INSTRUCTIONS_2's with D292's U4 bullet alone added, none of item 3's words
+        for words_of_item_3 in ITEM_3_WITHDRAWN:
+            self.assertNotIn(words_of_item_3, three)
+        targets_2 = bullets(xp.clause_text(C.P13_TARGET))
+        targets_3 = bullets(xp.clause_text(C.P13_TARGET, xp.INSTRUCTIONS_3))
+        self.assertEqual([bullet for bullet in targets_3 if bullet not in targets_2],
+                         ['- ' + D292['U4 TARGETS'][1][0] + ' ' + EXAMPLES_3['U4 TARGETS']])
+        self.assertEqual([bullet for bullet in targets_3 if bullet in targets_2], targets_2)
+        # item 4, the VALUES heading
+        values = xp.INSTRUCTIONS_3[xp.INSTRUCTIONS_3.index('\nVALUES\n'):]
+        self.assertEqual(values.split('\n')[2], ITEM_4_NEW)
+        self.assertNotIn(ITEM_4_OLD, xp.INSTRUCTIONS_3)
+        # item 5, the last part in place of the closing line: its title, the sentence, the shape as canonical JSON, a
+        # blank line and the closing line, which ends the instruction and stands nowhere else
+        shape = jsonschema.canonical(xs.ANSWER_SHAPE_2).decode('utf-8')
+        self.assertEqual(shape_part_3(), f'ANSWER SHAPE\n{ITEM_5_RULE}\n{shape}\n\n{CLOSING}\n')
+        self.assertTrue(xp.INSTRUCTIONS_3.endswith(f'}}\n\n{CLOSING}\n'))
+        self.assertEqual(xp.INSTRUCTIONS_3.count(CLOSING), 1)
+        self.assertLess(xp.INSTRUCTIONS_3.index('\nVALUES\n'), xp.INSTRUCTIONS_3.index('\nANSWER SHAPE\n'))
+        self.assertEqual(xp.clause_text(C.P1_SCOPE, xp.INSTRUCTIONS_3), xp.clause_text(C.P1_SCOPE))
+
+    def test_d292s_principles_each_in_its_part_after_none_but_its_example(self):
+        for name, (clause, sentences) in D292.items():
+            part = normalized(xp.clause_text(clause, xp.INSTRUCTIONS_3))
+            with self.subTest(principle=name):
+                for sentence in sentences:
+                    self.assertEqual(part.count(sentence), 1)
+                    self.assertEqual(normalized(xp.INSTRUCTIONS_3).count(sentence), 1)
+                    self.assertNotIn(sentence, normalized(xp.INSTRUCTIONS_2))  # each is new with INSTRUCTIONS_3
+                # its example follows its principle at once
+                self.assertIn(' '.join(sentences) + ' ' + EXAMPLES_3[name], part)
+        # U3 restates the reached_anatomy rule; U2 adds to BF25's rule, which stands
+        extent = normalized(xp.clause_text(C.P19_EXTENT, xp.INSTRUCTIONS_3))
+        self.assertNotIn("reached_anatomy names the anatomy entry when the endoscope's furthest point", extent)
+        self.assertIn(BORDERLINE[25][1], extent)
+        # D244's denial bullets keep their places, and U4's follows the breadth bullet
+        found = bullets(xp.clause_text(C.P22_DENIALS, xp.INSTRUCTIONS_3))
+        self.assertEqual(found[:2], [DENIED_ACT, '- ' + DENIED_PROCEDURE])
+        self.assertTrue(found[2].startswith('- scope.breadth: single_target, one target'))
+        self.assertEqual(found[3], '- ' + D292['U4 DENIALS'][1][0] + ' ' + EXAMPLES_3['U4 DENIALS'])
+
+    def test_every_clause_and_borderline_filing_stands_but_the_restated_rules(self):
+        lines = xp.INSTRUCTIONS_3.split('\n')
+        at = [lines.index(clause.value) for clause in xp.Clause]
+        self.assertEqual(at, sorted(at))  # P1 to P24 in 2.1's order, then VALUES, then ANSWER SHAPE last
+        self.assertLess(at[-1], lines.index('VALUES'))
+        self.assertLess(lines.index('VALUES'), lines.index(xp.ANSWER_SHAPE))
+        restated = {(C.P14_TECHNIQUE, CLAUSE_RULES[C.P14_TECHNIQUE][0]),
+                    (C.P19_EXTENT, CLAUSE_RULES[C.P19_EXTENT][2])}  # item 1 and U3 restate these two rules
+        for clause, rules in CLAUSE_RULES.items():
+            part = normalized(xp.clause_text(clause, xp.INSTRUCTIONS_3))
+            for rule in rules:
+                with self.subTest(clause=clause.name, rule=rule[:60]):
+                    self.assertIs(normalized(rule) in part, (clause, rule) not in restated)
+        for number, (clause, rule) in BORDERLINE.items():
+            with self.subTest(bf=number):
+                self.assertIn(normalized(rule), normalized(xp.clause_text(clause, xp.INSTRUCTIONS_3)))
+        self.assertIn(normalized(ANCHOR_WORDS), normalized(xp.clause_text(C.P5_EVENTS, xp.INSTRUCTIONS_3)))
+        self.assertIn(normalized(ID_SHAPE), normalized(xp.clause_text(C.P3_OBJECTS, xp.INSTRUCTIONS_3)))
+
+    def test_the_grep_finds_a_lost_change(self):
+        # the positive controls: each 2.1 change undone, or a principle's example taken out, is no longer found
+        undone = {
+            'item 1': xp.INSTRUCTIONS_3.replace('this act. When the document also says', 'this act; when the document says'),
+            'item 2': xp.INSTRUCTIONS_3.replace('and organ the one organ it concerns:', 'and organ the organ it concerns;'),
+            'item 4': xp.INSTRUCTIONS_3.replace(ITEM_4_NEW, ITEM_4_OLD),
+            'item 5': xp.INSTRUCTIONS_3.replace('whose "maxItems" is 1', 'whose maxItems is 1'),
+            'U8': xp.INSTRUCTIONS_3.replace(' For example, a line that denies a dilation', ' A line that denies a dilation'),
+        }
+        for name, changed in undone.items():
+            with self.subTest(control=name):
+                self.assertNotEqual(changed, xp.INSTRUCTIONS_3)
+                self.assertFalse(normalized(ITEM_1_NEW) in normalized(changed)
+                                 and normalized(ITEM_2_NEW) in normalized(changed) and ITEM_4_NEW in changed
+                                 and ITEM_5_RULE in changed and EXAMPLES_3['U8'] in normalized(changed))
+        self.assertEqual(apply_changes_3(xp._CLAUSES.replace('device_reached, never in reached.', 'device_reached.'))[1],
+                         2)  # an anchor that no longer matches stops the derivation: only the first two applied
+
+
+class DesignTextTests(SimpleTestCase):
+    """The instruction against the design's own words: AMENDMENT-2 2.1's changes and HOLDS-ANALYSIS.md section 6's
+    principles, read from the two documents (docs/gemini-migration/), so a design edit the instruction does not follow
+    fails here."""
+
+    def test_2_1s_texts_are_the_designs(self):
+        text = AMENDMENT_2.read_text(encoding='utf-8')
+        section = normalized(text[text.index('### 2.1 Pass 1: JSON mode'):text.index('### 2.2 Pass 2')])
+        pairs = re.findall(r'"([^"]+)" becomes "([^"]+)"', section)
+        self.assertEqual(pairs, [(ITEM_1_OLD, ITEM_1_NEW), (ITEM_2_OLD, ITEM_2_NEW), (ITEM_4_OLD, ITEM_4_NEW)])
+        start = section.index('"ANSWER SHAPE\\n') + len('"ANSWER SHAPE\\n')
+        self.assertEqual(section[start:section.index('\\n" +', start)], ITEM_5_RULE)
+        self.assertIn('`jsonschema.canonical(extract_schema.ANSWER_SHAPE_2)` + "\\n\\nAnswer with the JSON object only.\\n"',
+                      section)
+        self.assertIn('FACTS\' sentence "A slot holds at most one fact; ..." is kept as it is.', section)
+        self.assertIn('3. Withdrawn [R:truth-T8]', section)
+
+    def test_d292s_principles_are_holds_analysis_section_6s(self):
+        # each principle sentence stands in its block of section 6, word for word (its field names in backticks there),
+        # but U2's doubt, which the instruction names by its DOUBT_ABOUT value; each example keeps the design example's
+        # situation in the design's words, but U8's, whose design example quotes a line the instruction may not quote
+        # (2.3), so it describes that line instead
+        text = HOLDS_ANALYSIS.read_text(encoding='utf-8')
+        section = text[text.index('## 6. Instruction and contract fixes'):text.index('## 7. Proposals rejected')]
+        blocks = {block[:2]: normalized(block).replace('`', '') for block in section.split('\n- **')[1:]}
+        rendering = ('add a doubt about extent.', 'add a doubt about reached.')
+        situations = {'U2': ('a wire passed into the jejunum from a scope that stopped in the duodenum',
+                             'a scope that followed the wire into the jejunum'),
+                      'U3': ('a scope that reached a surgical junction and went on into the bowel beyond it',),
+                      'U4 DENIALS': ('nothing was done in the cecum', 'between the hepatic flexure and the rectum'),
+                      'U4 TARGETS': ('ink injected a few folds beyond a polyp to mark its site',),
+                      'U7': ('forceps', 'no snare was used on it', 'a negated snare event on that polyp'),
+                      'U8': ('dilation', 'files a'),
+                      'U9': ('a flat lesion running from one segment over the flexure into the next lists both segments',)}
+        for name, (_, sentences) in D292.items():
+            block = blocks[name[:2]]
+            with self.subTest(principle=name):
+                for sentence in sentences:
+                    self.assertIn(sentence.replace(*rendering), block)
+                for words_of_the_example in situations[name]:
+                    self.assertIn(words_of_the_example, block)
+                    self.assertIn(words_of_the_example, EXAMPLES_3[name])
+        self.assertEqual(sum(sentence.count(rendering[0]) for sentence in D292['U2'][1]), 1)  # the one rendering
+        self.assertIn('no dilation was needed?', blocks['U8'])  # the line U8's example describes, quoted in the design
+        self.assertNotIn('needed?', normalized(xp.INSTRUCTIONS_3))
+        # U6 is withdrawn [R:design-F0]: none of its words reach the instruction
+        self.assertIn('U6 WITHDRAWN', section)
+        self.assertNotIn('the basis the document says the level rests on', normalized(xp.INSTRUCTIONS_3))
+
+
+# The runs of three words INSTRUCTIONS_3's new sentences share with survey 4's quoted phrases, beyond INSTRUCTIONS_2's
+# (SHARED_RUNS), each reviewed with its reason: plain English that D292's principles and examples carry in
+# HOLDS-ANALYSIS.md section 6's own words, never a case's wording (the survey phrases that hold them are a case's
+# measurement and findings). Only these exact runs are exempt, and only for INSTRUCTIONS_3.
+SHARED_RUNS_3 = {
+    **SHARED_RUNS,
+    'in the cecum': "plain English naming the place cecum, in U4's generic example of a denial confined to one place",
+    'to the lesion': "plain English, U4's TARGETS principle as section 6 words it (done to the lesion itself)",
+    'unclear whether the': "plain English, U2's doubt route as FR-12 words it (unclear whether the endoscope reached)",
+}
+
+
+class Scan3Tests(SimpleTestCase):
+    """FINAL-V2 2.3's scans on INSTRUCTIONS_3 (AMENDMENT-2 2.1: "The 2.3 scans run on INSTRUCTIONS_3"). The word scans
+    read the whole instruction, the canonical JSON included; the two character-level scans (no quotation mark, every
+    digit in an id) read the parts before ANSWER SHAPE, and that part is pinned whole: its only quotation marks are the
+    JSON's and the two around maxItems in its fixed sentence, and its only digit is maxItems' 1."""
+
+    @skipUnless(SURVEY_4.is_file(), 'survey 4 (design-v2/survey/failures.md) is not in this environment')
+    def test_no_phrase_of_survey_4s_failure_cases(self):
+        data = SURVEY_4.read_bytes()
+        self.assertEqual(hashlib.sha256(data).hexdigest(), SURVEY_4_SHA256)
+        phrases = survey_4_phrases(data.decode('utf-8'))
+        instruction = words(xp.INSTRUCTIONS_3)
+        self.assertEqual(phrase_hits(instruction, phrases, exempt=SHARED_RUNS_3), [])
+        # the reviewed runs are exactly the runs shared today, none stale, none missing, none a whole phrase
+        self.assertEqual(phrase_hits(instruction, phrases, exempt=()), sorted(SHARED_RUNS_3))
+        for run, reason in SHARED_RUNS_3.items():
+            with self.subTest(run=run):
+                self.assertTrue(SUB_PHRASE <= len(run.split()) <= 4 and reason)
+                self.assertNotIn(tuple(run.split()), phrases)
+        long = max(phrases, key=len)  # the control: three words from the middle of a long phrase, planted, are found
+        middle = next(long[at:at + SUB_PHRASE] for at in range(2, len(long) - SUB_PHRASE + 1)
+                      if ' '.join(long[at:at + SUB_PHRASE]) not in SHARED_RUNS_3)
+        self.assertIn(' '.join(middle), phrase_hits(instruction + list(middle), phrases, exempt=SHARED_RUNS_3))
+
+    def test_no_quoted_example_of_2_1_or_2_2(self):
+        examples = design_examples(FINAL_V2.read_bytes().decode('utf-8'))
+        self.assertEqual(hashlib.sha256(examples.encode('utf-8')).hexdigest(), FINAL_V2_EXAMPLES_SHA256)
+        phrases = phrases_of(examples)
+        self.assertEqual(len(phrases), 40)
+        instruction = words(xp.INSTRUCTIONS_3)
+        self.assertEqual(phrase_hits(instruction, phrases), [])
+        self.assertLessEqual(set(phrase_hits(instruction, phrases, exempt=())), set(SHARED_RUNS))
+        planted = sorted(phrases)[0]  # the control
+        self.assertTrue(phrase_hits(instruction + list(planted), phrases))
+
+    @skipUnless(EVIDENCE.is_dir(), "the session's evidence (CPT_STUDIO_DESIGN_EVIDENCE) is not in this environment")
+    def test_no_phrase_of_a_development_document(self):
+        # the corpora of step 2a's scan, each file and text checked against the exclusion list before use (corpus_scan).
+        # A failure names a run only for a corpus that holds no document reserved for D277's pairs: for FRESH's inputs
+        # it gives the count, so no reserved document's words are printed
+        excluded = excluded_hashes()
+        instruction = words(xp.INSTRUCTIONS_3)
+        scanned = corpus_scan(instruction, excluded)
+        self.assertEqual(sum(read.refused + read.sealed + read.unread for read in scanned.values()), 0)
+        found = unreviewed(scanned)
+        fresh = 'FRESH-1 and FRESH-2 inputs'
+        self.assertEqual(len(scanned[fresh].hits), 0, f'{len(scanned[fresh].hits)} runs shared with {fresh}')
+        self.assertEqual([run for run in found if run not in scanned[fresh].hits], [])
+        self.assertEqual({name: sorted(read.hits) for name, read in scanned.items() if read.hits},
+                         {'refutation round 5h': sorted(CORPUS_SHARED_RUNS)})  # exactly INSTRUCTIONS_2's runs
+        # the control: each corpus's own run, planted in the middle of INSTRUCTIONS_3's words, is found and fails
+        plants = {name: read.plant for name, read in scanned.items()}
+        middle = len(instruction) // 2
+        again = corpus_scan(instruction[:middle] + [word for plant in plants.values() for word in plant]
+                            + instruction[middle:], excluded)
+        failed = unreviewed(again)
+        for name, plant in plants.items():
+            with self.subTest(corpus=name):
+                self.assertTrue(' '.join(plant) in again[name].hits and ' '.join(plant) in failed,
+                                "the corpus's own planted run was not found")
+
+    def test_no_code_case_date_or_measure(self):
+        prose = prose_3()
+        tokens = re.findall(r'[A-Za-z0-9_]+', prose)
+        self.assertEqual({token for token in tokens if re.search(r'\d', token)}, ID_TOKENS)  # every digit in an id
+        shape = re.findall(r'[A-Za-z0-9_]+', shape_part_3())
+        self.assertEqual({token for token in shape if re.search(r'\d', token)}, {'1'})  # maxItems' value alone
+        self.assertEqual(shape.count('1'), 38 + 1)  # the 38 slots, and the sentence's "is 1"
+        self.assertIsNone(re.search(r'\b\d{4}[0-9A-Z]\b|\b[A-Z]\d{4}\b', xp.INSTRUCTIONS_3))  # no CPT or HCPCS code
+        self.assertIsNone(re.search(r'#\s*\d', xp.INSTRUCTIONS_3))
+        tokens = set(re.findall(r'[A-Za-z0-9_-]+', xp.INSTRUCTIONS_3))
+        for source in (FINAL_V2.read_text(encoding='utf-8'),
+                       *([SURVEY_4.read_text(encoding='utf-8')] if SURVEY_4.is_file() else [])):
+            self.assertEqual(sorted(case_names(source) & tokens), [])  # no case name of the design or the survey
+
+    def test_no_second_reading_provider_or_product(self):
+        self.assertIsNone(SECOND_READING.search(xp.INSTRUCTIONS_3))
+        self.assertIsNone(VENDORS.search(xp.INSTRUCTIONS_3))
+        self.assertIsNotNone(VENDORS.search(xp.INSTRUCTIONS_3 + ' Claude'))  # the control
+
+    def test_meanings_never_surface_forms(self):
+        prose = prose_3()
+        self.assertTrue(xp.INSTRUCTIONS_3.isascii())
+        self.assertFalse(set(prose) & set('"`“”‘’«»'))
+        for match in re.finditer("'", prose):
+            before, after = prose[match.start() - 1], prose[match.start() + 1:match.start() + 3]
+            with self.subTest(at=match.start()):
+                self.assertTrue(before.isalpha() and after[:1] == 's' and not after[1:].isalpha())
+        self.assertNotIn('e.g.', xp.INSTRUCTIONS_3)
+        self.assertIsNone(re.search(r'(?i)such as "|\bi\.e\.', xp.INSTRUCTIONS_3))
+        # D276 and D292: every example is a principle's generic example, introduced as such, one each, and nothing else
+        # of the prose reads as an example
+        text = normalized(prose)
+        self.assertEqual(len(re.findall(r'(?i)for example', text)), len(EXAMPLES_3))
+        for name, example in EXAMPLES_3.items():
+            with self.subTest(example=name):
+                self.assertEqual(text.count(example), 1)
+        self.assertIsNone(re.search(r'(?i)\bsuch as\b(?! places, reached| \[S1\])|\bfor instance\b', text))
+        # the ANSWER SHAPE part's quotation marks are the JSON's and the two of its sentence
+        shape = jsonschema.canonical(xs.ANSWER_SHAPE_2).decode('utf-8')
+        self.assertEqual(shape_part_3().count('"'), shape.count('"') + 2)
+        self.assertEqual(shape_part_3().replace(shape, '').count('"maxItems"'), 1)
+
+    def test_no_expected_answer_setting_or_patient_status(self):
+        self.assertIsNone(re.search(r'(?i)\b(ready|held|excluded|approv\w*|billing context|patient status|'
+                                    r'place of service|new patient|established patient)\b', xp.INSTRUCTIONS_3))
+        self.assertIsNone(re.search(r'(?i)\bsetting', xp.INSTRUCTIONS_3))
+
+    def test_every_field_and_every_value_is_named(self):
+        named = set(words(xp.INSTRUCTIONS_3))
+        self.assertEqual(sorted(schema_fields(xs.LOCAL_SCHEMA_2) - named), [])
+        for enumeration in xs.ENUMERATIONS:  # the shape lists the places too
+            with self.subTest(enumeration=enumeration.__name__):
+                self.assertEqual([member.value for member in enumeration if member.value not in named], [])
+
+
+def all_values(value):
+    """Every key and every string, number and boolean of ``value``, as (path, value) pairs, for a full body census."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            for path, found in all_values(item):
+                yield (key,) + path, found
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            for path, found in all_values(item):
+                yield (index,) + path, found
+    else:
+        yield (), value
+
+
+# What the Fable body sends besides the instruction and the framed document, path by path (AMENDMENT-2 1.2)
+FABLE_SETTINGS = {('model',): 'claude-fable-5-2', ('max_tokens',): 128000, ('stream',): True,
+                  ('output_config', 'effort'): 'high', ('system', 0, 'type'): 'text',
+                  ('system', 0, 'cache_control', 'type'): 'ephemeral', ('messages', 0, 'role'): 'user',
+                  ('messages', 0, 'content', 0, 'type'): 'text'}
+# A2 1.1's fable_adapter.BODY_KEYS, and 1.2's "Never sent"
+BODY_KEYS_1_1 = {'model', 'max_tokens', 'stream', 'output_config', 'system', 'messages'}
+NEVER_SENT = ('thinking', 'temperature', 'top_p', 'top_k', 'tools', 'tool_choice', 'stop_sequences', 'metadata',
+              'fallbacks', 'speed', 'service_tier', 'container', 'mcp_servers', 'context_management')
+
+
+class FableBodyTests(SimpleTestCase):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(pinned_3())
+        self.framed = xp.framed(NOTE, PAGES, 'pdf')
+        self.body = xp.build_request_fable(NOTE, PAGES, 'pdf')
+
+    def test_the_body_has_exactly_the_fable_keys_and_values(self):
+        self.assertEqual(list(self.body), list(xp.FABLE_BODY_KEYS))
+        self.assertEqual(set(xp.FABLE_BODY_KEYS), BODY_KEYS_1_1)
+        self.assertEqual(self.body, {
+            'model': 'claude-fable-5-2', 'max_tokens': 128000, 'stream': True, 'output_config': {'effort': 'high'},
+            'system': [{'type': 'text', 'text': xp.INSTRUCTIONS_3, 'cache_control': {'type': 'ephemeral'}}],
+            'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': self.framed}]}]})
+        self.assertEqual(self.body['model'], interpretation.MODEL_V3)  # D275
+        self.assertEqual((xp.FABLE_MAX_TOKENS, xp.FABLE_EFFORT), (128000, 'high'))
+        self.assertIs(type(self.body['max_tokens']), int)
+        self.assertIs(self.body['stream'], True)
+        self.assertEqual(xp.build_request_fable(NOTE, PAGES, 'pdf'), xp.request_parts_fable(self.framed))
+
+    def test_it_carries_the_instruction_the_document_and_the_settings_only(self):
+        census = dict(all_values(self.body))
+        self.assertEqual(census, {**FABLE_SETTINGS, ('system', 0, 'text'): xp.INSTRUCTIONS_3,
+                                  ('messages', 0, 'content', 0, 'text'): self.framed})
+        keys = set(all_keys(self.body))
+        for field in NEVER_SENT + ('format', 'cache', 'betas', 'anthropic-beta', 'prefill'):
+            with self.subTest(never=field):
+                self.assertNotIn(field, keys)
+        self.assertEqual(len(self.body['messages']), 1)  # one user turn: no assistant prefill, no second turn
+
+    def test_the_cache_marker_is_on_the_instruction_alone(self):
+        # AMENDMENT-2 7.2: one 5-minute marker on pass 1's single system block, no TTL
+        markers = [path for path, _ in all_values(self.body) if 'cache_control' in path]
+        self.assertEqual(markers, [('system', 0, 'cache_control', 'type')])
+        self.assertEqual(self.body['system'][0]['cache_control'], {'type': 'ephemeral'})
+
+    def test_identical_inputs_give_a_byte_identical_request(self):
+        self.assertEqual(request_sha256(self.body), NOTE_PDF_FABLE_REQUEST_SHA256)
+        self.assertEqual(canonical_body(xp.build_request_fable(NOTE, PAGES, 'pdf')),
+                         canonical_body(copy.deepcopy(self.body)))
+        self.assertEqual(request_sha256(xp.build_request_fable(NOTE, tuple(reversed(PAGES)), 'pdf')),
+                         NOTE_PDF_FABLE_REQUEST_SHA256)
+        code = ('import sys, hashlib, json\n'
+                f'sys.path.insert(0, {str(APP)!r})\n'
+                'from studio import interpretation\n'
+                'from studio.interpretation.contract import extract_prompt as xp\n'
+                'from studio.types import PageSpan\n'
+                f'note = {NOTE!r}\n'
+                f'pages = (PageSpan(page=1, start=0, end={BREAK}), PageSpan(page=2, start={BREAK}, end=len(note)))\n'
+                + ''.join(f'interpretation.{name} = {value!r}\n' for name, value in PINS_3.items()) +
+                "body = json.dumps(xp.build_request_fable(note, pages, 'pdf'), sort_keys=True, separators=(',', ':'),\n"
+                "                  ensure_ascii=False).encode()\n"
+                'print(hashlib.sha256(body).hexdigest())\n')
+        outputs = set()
+        for seed in ('2', '9001'):
+            result = subprocess.run([sys.executable, '-B', '-s', '-c', code], capture_output=True, text=True,
+                                    timeout=120, cwd=APP, env={**os.environ, 'PYTHONHASHSEED': seed})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            outputs.add(result.stdout.strip())
+        self.assertEqual(outputs, {NOTE_PDF_FABLE_REQUEST_SHA256})
+
+    def test_the_body_shares_nothing_with_the_module(self):
+        self.body['system'][0]['text'] = 'changed'
+        self.body['output_config']['effort'] = 'low'
+        again = xp.build_request_fable(NOTE, PAGES, 'pdf')
+        self.assertEqual(again['system'][0]['text'], xp.INSTRUCTIONS_3)
+        self.assertEqual(request_sha256(again), NOTE_PDF_FABLE_REQUEST_SHA256)
+
+    def test_nothing_unframed_is_sent(self):
+        with self.assertRaises(TypeError):
+            xp.request_parts_fable(None)
+        from studio.interpretation import prompt as v1_prompt
+        for name, text in {'the raw text': NOTE, 'nothing': '', 'v1 framing': v1_prompt.framed(NOTE, PAGES, 'pdf'),
+                           "a participant's framing": participant_prompt.framed_document(NOTE, PAGES, 'pdf'),
+                           'a unit missing': self.framed.replace(' [S5] One small polyp was removed with forceps.', ''),
+                           'a line after the END marker': self.framed + '\nmore'}.items():
+            with self.subTest(refused=name), self.assertRaises(ValueError):
+                xp.request_parts_fable(text)
+        for kind in participant_prompt.KINDS:  # the controls: every framing framed() gives is built
+            with self.subTest(kind=kind):
+                self.assertEqual(list(xp.request_parts_fable(xp.framed(NOTE, PAGES, kind))), list(xp.FABLE_BODY_KEYS))
+        with self.assertRaises(xp.Unbuilt) as raised:
+            xp.build_request_fable(NOTE + 'See [S12] above.\n', (), 'paste')
+        self.assertIs(raised.exception.reason, xp.Unframed.LABEL)
+
+    def test_no_member_value_filename_title_or_reading_can_enter_it(self):
+        self.assertEqual(list(inspect.signature(xp.build_request_fable).parameters), ['text', 'pages', 'kind'])
+        self.assertEqual(list(inspect.signature(xp.request_parts_fable).parameters), ['framed_text'])
+        body = canonical_body(self.body)
+        for planted in ('SYNTHETIC-FILENAME-2A01', '2032-05-06', '45385', 'SYNTHETIC-READING-2A01'):
+            self.assertNotIn(planted.encode(), body)
+        self.assertIn(b'[S5] One small polyp was removed with forceps.', body)  # the control
+
+    def test_the_gemini_form_is_never_sent(self):
+        # AMENDMENT-2 2.3: the Gemini form stays for its labels and the dormant adapter, never on the Fable path
+        keys = set(all_keys(self.body))
+        self.assertFalse(keys & {'systemInstruction', 'contents', 'generationConfig', 'responseSchema', 'parts',
+                                 'thinkingConfig', 'propertyOrdering'})
+        self.assertNotIn(jsonschema.canonical(xs.RESPONSE_SCHEMA_2), canonical_body(self.body))
+        self.assertNotIn(xp.INSTRUCTIONS_2, set(all_strings(self.body)))
+        with pinned():  # and the Gemini body is as recorded: v1's three keys, INSTRUCTIONS_2, its own sha
+            self.assertEqual(request_sha256(xp.build_request(NOTE, PAGES, 'pdf')), NOTE_PDF_REQUEST_SHA256)
+
+    def test_the_connector_sends_these_keys_and_this_maximum(self):
+        # AMENDMENT-2 1.1-1.2: fable_adapter.BODY_KEYS, MAX_TOKENS and EFFORT are what this module's bodies carry, and its
+        # body_kind reads the body built here as a pass-1 body of its own, a changed maximum as none (the refutation's
+        # F2R1-3: called, not claimed). Red until step f1 lands interpretation/fable_adapter.py
+        from studio.interpretation import fable_adapter
+        self.assertEqual(set(fable_adapter.BODY_KEYS), set(xp.FABLE_BODY_KEYS))
+        self.assertEqual(fable_adapter.MAX_TOKENS, xp.FABLE_MAX_TOKENS)
+        self.assertEqual(fable_adapter.EFFORT, xp.FABLE_EFFORT)
+        self.assertEqual(fable_adapter.MODEL, self.body['model'])
+        self.assertEqual(fable_adapter.body_kind(self.body), (fable_adapter.EXTRACTION, ''))
+        self.assertEqual(fable_adapter.body_kind(dict(self.body, max_tokens=1)), ('', fable_adapter.NOT_BUILT))
+
+
+class Pin3Tests(SimpleTestCase):
+    def test_the_shas_handed_to_the_integration_owner(self):
+        self.assertEqual(xp.pins_fable(), PINS_3)
+        self.assertEqual(hashlib.sha256(xp.INSTRUCTIONS_3.encode('utf-8')).hexdigest(), INSTRUCTIONS_3_SHA256)
+        self.assertNotIn('RESPONSE_SCHEMA_SHA256_V3', vars(interpretation))  # @3 pins no RESPONSE schema
+        for name, value in PINS_3.items():  # an empty placeholder until the integration owner writes it, then this
+            with self.subTest(pin=name):
+                self.assertIn(getattr(interpretation, name), ('', value))
+
+    def test_no_fable_request_under_an_empty_or_changed_pin(self):
+        for name in PINS_3:
+            for value, refusal in (('', 'is not pinned yet'), ('0' * 64, 'no longer matches its pin')):
+                with self.subTest(pin=name, value=value[:4]), pinned_3(), mock.patch.object(interpretation, name, value):
+                    with self.assertRaisesRegex(RuntimeError, f'{name} {refusal}'):
+                        xp.build_request_fable(NOTE, PAGES, 'pdf')
+        changed_schema = copy.deepcopy(xs.LOCAL_SCHEMA_2)
+        changed_schema['properties']['doubts']['items']['properties']['about']['enum'].append('x')
+        changes = {
+            'INSTRUCTIONS_3': (xp, 'INSTRUCTIONS_3', xp.INSTRUCTIONS_3 + ' '),
+            'LOCAL_SCHEMA_2': (xs, 'LOCAL_SCHEMA_2', changed_schema),
+            'the segmentation rule': (segment, 'CLOSURE_UNITS', segment.CLOSURE_UNITS + 1),
+        }
+        for name, (module, attribute, value) in changes.items():
+            with self.subTest(changed=name), pinned_3(), mock.patch.object(module, attribute, value):
+                with self.assertRaisesRegex(RuntimeError, 'no longer matches its pin'):
+                    xp.build_request_fable(NOTE, PAGES, 'pdf')
+        with pinned_3():  # the control
+            self.assertEqual(list(xp.build_request_fable(NOTE, PAGES, 'pdf')), list(xp.FABLE_BODY_KEYS))
+
+    def test_each_form_reads_its_own_pins(self):
+        # no Gemini pin gates the Fable body, and no Fable pin the Gemini body (the dormant adapter keeps its own)
+        with pinned_3(), mock.patch.multiple(interpretation, INSTRUCTIONS_SHA256_V2='', RESPONSE_SCHEMA_SHA256_V2=''):
+            self.assertEqual(list(xp.build_request_fable(NOTE, PAGES, 'pdf')), list(xp.FABLE_BODY_KEYS))
+        with pinned(), mock.patch.object(interpretation, 'INSTRUCTIONS_SHA256_V3', ''):
+            self.assertEqual(list(xp.build_request(NOTE, PAGES, 'pdf')), list(xp.BODY_KEYS))
+
+    def test_the_fable_functions_name_no_dormant_label_or_object(self):
+        # AMENDMENT-2 8.1 [R:replay-R4]: a writer on the current path writes the new label only. The Fable functions name
+        # gemini-events@3's label, instruction and pins, never @2's label, instruction, RESPONSE schema, its pins or the
+        # Gemini builders and settings, by name or by a pin's name written as a string
+        dormant = {'INTERPRETATION_VERSION_V2', 'INSTRUCTIONS_2', 'RESPONSE_SCHEMA_2', 'INSTRUCTIONS_SHA256_V2',
+                   'RESPONSE_SCHEMA_SHA256_V2', 'request_parts', 'build_request', 'check_pins', 'TEMPERATURE',
+                   'MAX_OUTPUT_TOKENS', 'THINKING_LEVEL', 'RESPONSE_MIME_TYPE'}
+        functions = {node.name: node for node in ast.parse(MODULE.read_text(encoding='utf-8')).body
+                     if isinstance(node, ast.FunctionDef)}
+
+        def named(function) -> set:
+            return ({getattr(node, 'id', None) or getattr(node, 'attr', None) for node in ast.walk(function)
+                     if isinstance(node, (ast.Name, ast.Attribute))}
+                    | {node.value for node in ast.walk(function)
+                       if isinstance(node, ast.Constant) and isinstance(node.value, str)})
+        for name in ('request_parts_fable', 'build_request_fable', 'pins_fable', 'check_pins_fable', 'answer_shape_part',
+                     '_instructions_3'):
+            with self.subTest(function=name):
+                self.assertEqual(sorted(named(functions[name]) & dormant), [])
+        self.assertIn('INTERPRETATION_VERSION_V3', named(functions['check_pins_fable']))
+        self.assertLessEqual({'INSTRUCTIONS_2', 'check_pins'}, named(functions['request_parts']))  # the control
+
+
+class Lean3Tests(SimpleTestCase):
+    def test_the_sizes_measured(self):
+        # 2.1: the probe's instruction was 119,146 characters, 89,759 of them LOCAL_SCHEMA_2's canonical JSON. Here the
+        # prose before ANSWER SHAPE is INSTRUCTIONS_2's (closing line apart) plus the four changes and D292's principles,
+        # and the shape adds 494 characters to LOCAL_SCHEMA_2's JSON (",\"maxItems\":1" on each of the 38 slots)
+        shape = jsonschema.canonical(xs.ANSWER_SHAPE_2)
+        self.assertEqual(len(shape), 89_759 + 38 * len(',"maxItems":1'))
+        self.assertEqual((len(prose_3()), len(shape_part_3()), len(xp.INSTRUCTIONS_3)), (31_721, 90_564, 122_285))
+        self.assertEqual(len(xp.INSTRUCTIONS_2), 29_124)  # unchanged
+        self.assertLess(len(prose_3()) - len(xp.INSTRUCTIONS_2), 3_000)  # the prose grew by the changes alone
+        self.assertLess(len(prose_3()), 3 * 10_920)  # v1's growth guard, on the prose
+
+
 # --- 5.7 measure 4 over the module ---------------------------------------------------------------------------------------
 
 # every name the module imports, as from-import module plus name (the standard library, then CPT Studio's)
@@ -1588,3 +2264,5 @@ class GuardTests(SimpleTestCase):
         self.assertEqual([clause.value for clause in xp.Clause].__len__(), 24)
         self.assertEqual(xp.BODY_KEYS, tuple(key.value for key in xp.BodyKey))
         self.assertEqual({reason.value for reason in xp.Unframed}, {'marker', 'label', 'pages', 'empty'})
+        self.assertEqual(xp.FABLE_BODY_KEYS, tuple(key.value for key in xp.FableBodyKey))
+        self.assertEqual(xp.FABLE_BODY_KEYS, ('model', 'max_tokens', 'stream', 'output_config', 'system', 'messages'))

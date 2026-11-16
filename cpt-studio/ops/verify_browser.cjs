@@ -184,21 +184,34 @@ const FULL_DATE = new RegExp('(?<![\\w/-])(?:(\\d{4})-(\\d{2})-(\\d{2})|(\\d{1,2
   + `|(${MONTH_NAME})\\.?[ \\t]+(\\d{1,2})(?:st|nd|rd|th)?,?[ \\t]+(\\d{4})`
   + `|(\\d{1,2})(?:st|nd|rd|th)?(?:[ \\t]+|-)(${MONTH_NAME})\\.?(?:,?[ \\t]+|-)(\\d{4}))(?![\\w/-])`, 'gi');
 const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-// The Gemini migration's new path (studio/interpretation/__init__.py: ENGINE_VERSION, ROUTING_VERSION, PROVIDER, MODEL,
-// PURPOSE; the unit tests hold these to the source): the events engine's label, the routing stand-in's version and the
-// interpreter's one provider, model and run purpose.
+// The Gemini migration's new path (studio/interpretation/__init__.py: ENGINE_VERSION, ROUTING_VERSION, PURPOSE; the unit
+// tests hold these to the source): the events engine's label family, the routing stand-in's version and the reading
+// run's purpose.
 const EVENTS_ENGINE_PREFIX = 'cpt-studio-events@';
 const ROUTING_STAND_IN = 'gemini-routing@1';
-const INTERPRETER = Object.freeze({ provider: 'gemini', model: 'gemini-4-carbon', purpose: 'interpretation' });
+// AMENDMENT-2 (docs/gemini-migration/AMENDMENT-2.md 8.1 and section 9 [R:replay-R2]; the interpreter is Claude Fable 5.2,
+// DECISIONS D275): the current path's interpreter - interpretation.PROVIDER_V3 and MODEL_V3, for both passes - whose
+// assessments carry ENGINE_VERSION_V3. A row of an earlier label is read as stored: the design v1 cpt-studio-events@1
+// and FINAL-V2's cpt-studio-events@2 were made by the Gemini interpreter (interpretation.PROVIDER and MODEL, which keep
+// Gemini's values: STORED_INTERPRETER), so their runs are held to it, never to Fable; an assessment of an engine label
+// the walk does not know fails, never read as one it knows (an @3 assessment read as "not v2" was R2's defect).
+const INTERPRETER = Object.freeze({ provider: 'anthropic', model: 'claude-fable-5-2', purpose: 'interpretation' });
+const STORED_INTERPRETER = Object.freeze({ provider: 'gemini', model: 'gemini-4-carbon' });
+// every interpreter provider an installation may hold runs of (interpretation.READ_PROVIDERS: Fable's, and Gemini's
+// stored ones): the recorded retry releases a reading run of any of them (releasedForRetry)
+const READ_PROVIDERS = Object.freeze(['anthropic', 'gemini']);
+const EVENTS_ENGINE_V1 = 'cpt-studio-events@1';
 // Design v2 (docs/gemini-migration/FINAL-V2.md 1.1, 5.7 measure 9; step 6b; interpretation/__init__.py ENGINE_VERSION_V2,
-// ROUTING_VERSION_V2, APPRAISAL_PURPOSE): a v2 assessment is made from an inventory settled from TWO Gemini runs - pass 1
-// (purpose interpretation) and the appraisal (pass 2, purpose appraisal), the same provider and model - so its D22 record
-// and its interpretation section name both, and its sentinel record counts the retired executions too (0); its routing
-// stand-in carries the v2 label. Each is told apart by its own label, read from the source by the unit tests.
+// ROUTING_VERSION_V2, APPRAISAL_PURPOSE): a v2 assessment - FINAL-V2's @2 or AMENDMENT-2's @3 - is made from an inventory
+// settled from TWO runs of one interpreter - pass 1 (purpose interpretation) and the appraisal (pass 2, purpose
+// appraisal), the same provider and model - so its D22 record and its interpretation section name both, and its sentinel
+// record counts the retired executions too (0); its routing stand-in carries the v2 label (ROUTING_VERSION_V2, which
+// AMENDMENT-2 leaves unchanged). Each is told apart by its own label, read from the source by the unit tests.
 const EVENTS_ENGINE_V2 = 'cpt-studio-events@2';
+const EVENTS_ENGINE_V3 = 'cpt-studio-events@3';
 const ROUTING_STAND_IN_V2 = 'gemini-routing@2';
 const STAND_IN_VERSIONS = new Set([ROUTING_STAND_IN, ROUTING_STAND_IN_V2]);
-const APPRAISER = Object.freeze({ provider: 'gemini', model: 'gemini-4-carbon', purpose: 'appraisal' });
+const APPRAISER = Object.freeze({ provider: INTERPRETER.provider, model: INTERPRETER.model, purpose: 'appraisal' });
 // D3 (FINAL 4.3; interpretation.facts.MEMBER_FACTS): on the new path these come only from a member's values, never from
 // the document, so the context states each as the member's or as missing.
 const MEMBER_ONLY_FACTS = new Set(['setting', 'billing_context', 'patient_status']);
@@ -2502,8 +2515,10 @@ const RETRY_EVENT = 'interpretation.retry';
 // send. So one retry releases the one attempt after it, and an answer that was read is never sent again.
 function releasedForRetry(run, next, retries) {
   // design v2 (FINAL-V2 7.5; amendment 1, 7.2; step 6b): the recorded retry releases pass 2's attempt too (jobs.retry_reading:
-  // "pass 2 alone when its attempt is the appraisal"), audited the same way, so an appraisal run is read as pass 1's is
-  if (run.provider !== INTERPRETER.provider || ![INTERPRETER.purpose, APPRAISER.purpose].includes(run.purpose)
+  // "pass 2 alone when its attempt is the appraisal"), audited the same way, so an appraisal run is read as pass 1's is.
+  // AMENDMENT-2 section 9 [R:replay-R2]: a reading run of any interpreter provider (READ_PROVIDERS), Fable's above all -
+  // jobs.retry_target releases the reading path's own runs - so a released retry of an anthropic run is no duplicate
+  if (!READ_PROVIDERS.includes(run.provider) || ![INTERPRETER.purpose, APPRAISER.purpose].includes(run.purpose)
       || run.reconciled !== true) return false;
   const made = Date.parse(run.created_at);
   const resent = Date.parse(next?.created_at);
@@ -2683,13 +2698,20 @@ function checkInterpretation(op, trace) {
   const run = isObject(section.run) ? section.run : null;
   const record = isObject(section.record) ? section.record : null;
   const problems = [];
+  // AMENDMENT-2 (8.1, 9 [R:replay-R2]): the engine label says which interpreter made the assessment - @3 the current
+  // path's (INTERPRETER, Fable), @1 and @2 the Gemini interpreter's, read as stored (STORED_INTERPRETER) - and an @2 or
+  // @3 assessment was settled from two runs; an engine label the walk does not know is judged by none of them
+  const engine = section.engine_version;
+  const known = [EVENTS_ENGINE_V1, EVENTS_ENGINE_V2, EVENTS_ENGINE_V3].includes(engine);
+  const made = engine === EVENTS_ENGINE_V3 ? INTERPRETER : STORED_INTERPRETER;
+  if (!known) problems.push(`its engine label ${JSON.stringify(engine)} is none the walk knows (${[EVENTS_ENGINE_V1, EVENTS_ENGINE_V2, EVENTS_ENGINE_V3].join(', ')})`);
   if (!inventory) problems.push('no event inventory');
   else if (inventory.state !== 'read') problems.push(`its event inventory was ${inventory.state}`);
   if (!run) problems.push('no interpreter run');
   else {
-    if (run.provider !== INTERPRETER.provider || run.purpose !== INTERPRETER.purpose) problems.push(`its run is ${run.provider}/${run.purpose}`);
-    if (run.requested_model !== INTERPRETER.model) problems.push(`its run asked for ${JSON.stringify(run.requested_model)}`);
-    if ((run.sent || run.returned_model) && run.returned_model !== INTERPRETER.model) problems.push(`its run was answered by ${JSON.stringify(run.returned_model)}`);
+    if (run.provider !== made.provider || run.purpose !== INTERPRETER.purpose) problems.push(`its run is ${run.provider}/${run.purpose}`);
+    if (run.requested_model !== made.model) problems.push(`its run asked for ${JSON.stringify(run.requested_model)}`);
+    if ((run.sent || run.returned_model) && run.returned_model !== made.model) problems.push(`its run was answered by ${JSON.stringify(run.returned_model)}`);
     if (!SHA256.test(String(run.request_sha256 || '')) || (run.state === 'succeeded' && !SHA256.test(String(run.response_sha256 || '')))) problems.push('its run lacks its request or response sha256');
   }
   if (!record) problems.push('no D22 record');
@@ -2700,15 +2722,16 @@ function checkInterpretation(op, trace) {
   }
   // design v2 (FINAL-V2 5.7 measure 9; step 6b): a v2 assessment's inventory was settled from both runs - the appraisal
   // (pass 2) is held to the same provider and model, its hashes and its usage, and the record names it and counts no
-  // retired execution. A v1 assessment's section has no appraisal run, and none is asked of it.
-  const v2 = section.engine_version === EVENTS_ENGINE_V2;
+  // retired execution. A v1 assessment's section has no appraisal run, and none is asked of it. AMENDMENT-2: an @3
+  // assessment is a v2 one too (R2: read as not v2, its appraisal run went unchecked), its two runs Fable's.
+  const v2 = engine === EVENTS_ENGINE_V2 || engine === EVENTS_ENGINE_V3;
   const appraisal = isObject(section.appraisal_run) ? section.appraisal_run : null;
   if (v2) {
     if (!appraisal) problems.push('no appraisal run (pass 2)');
     else {
-      if (appraisal.provider !== APPRAISER.provider || appraisal.purpose !== APPRAISER.purpose) problems.push(`its appraisal run is ${appraisal.provider}/${appraisal.purpose}`);
-      if (appraisal.requested_model !== APPRAISER.model) problems.push(`its appraisal run asked for ${JSON.stringify(appraisal.requested_model)}`);
-      if ((appraisal.sent || appraisal.returned_model) && appraisal.returned_model !== APPRAISER.model) problems.push(`its appraisal run was answered by ${JSON.stringify(appraisal.returned_model)}`);
+      if (appraisal.provider !== made.provider || appraisal.purpose !== APPRAISER.purpose) problems.push(`its appraisal run is ${appraisal.provider}/${appraisal.purpose}`);
+      if (appraisal.requested_model !== made.model) problems.push(`its appraisal run asked for ${JSON.stringify(appraisal.requested_model)}`);
+      if ((appraisal.sent || appraisal.returned_model) && appraisal.returned_model !== made.model) problems.push(`its appraisal run was answered by ${JSON.stringify(appraisal.returned_model)}`);
       if (!SHA256.test(String(appraisal.request_sha256 || '')) || (appraisal.state === 'succeeded' && !SHA256.test(String(appraisal.response_sha256 || '')))) problems.push('its appraisal run lacks its request or response sha256');
       if (run && appraisal.id === run.id) problems.push('its appraisal run is its pass-1 run');
     }
@@ -4787,6 +4810,7 @@ module.exports = {
   newPath, checkStandIn, standInValues, checkInterpretation, ERROR_ACTION_BUTTONS, STEP_OF_KIND, INTERPRETER, EVENTS_ENGINE_PREFIX,
   // design v2 (step 6b): the appraisal run and the v2 labels; a v2 stand-in's facts are not judged (refutation 6b-r1 P1)
   APPRAISER, EVENTS_ENGINE_V2, ROUTING_STAND_IN_V2, STAND_IN_VERSIONS, V2_STAND_IN_UNJUDGED, standInFact,
+  STORED_INTERPRETER, READ_PROVIDERS, EVENTS_ENGINE_V1, EVENTS_ENGINE_V3,
   ROUTING_STAND_IN, MEMBER_ONLY_FACTS, OPS_POST_BODY, STAND_IN_WORDS, RETRY_EVENT, releasedForRetry,
 };
 

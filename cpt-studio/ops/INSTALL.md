@@ -15,12 +15,12 @@ run the next. Nothing here was executed by the session that wrote it.
 | image | `cpt-studio:<sha12>`, built from `git archive <revision> cpt-studio/`, label `org.opencontainers.image.revision=<revision>` |
 | database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg` |
 | web | container `cpt-studio-web`, gunicorn, read-only root, uid 10150, `127.0.0.1:9150` or `127.0.0.1:9151` → 8000: a fresh host starts on 9150, and each install after it starts the incoming web `cpt-studio-web-next` on the other port and switches to it (blue/green, **app**), so the port alternates |
-| worker | container `cpt-studio-worker`, read-only root, stop timeout 600 s (above a participant phase's 540 s tool-loop deadline, and the stale-stage sweep's 600 s bound), the only holder of the Corti credentials (live mode only) and of each harness participant's (that participant live only) |
+| worker | container `cpt-studio-worker`, read-only root, stop timeout 1,500 s (AMENDMENT-2 1.12: above every stage's deadline - a reading stage's 1,380 s, its 1,320 s send included, the longest - and every stale-stage threshold, 600 s and the reading stages' 1,440 s; a deploy may wait up to 25 minutes for it), the only holder of the Corti credentials (live mode only), of each harness participant's (that participant live only) and of the interpreter's, which is the Fable participant's file, bound once when either is live |
 | network | `cpt-studio-net` (bridge). Web and worker reach the database as `cpt-studio-db:5432` |
 | files | volume `cpt-studio-files` at `/var/lib/cpt-studio` (originals, reference copies) |
 | secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `corti-credentials.env` (10150:10150 0400), `initial-credentials.json` (root 0600), `operator-credentials.json` (root 0600, the human platform operator's login, **operators**) |
 | participant credentials (optional) | `/etc/cpt-studio/openai-credentials.env` (Astra) and `anthropic-credentials.env` (Fable), 10150:10150 0400, each copied from `/etc/cpt-studio-provider-sources/{openai,anthropic}.env` (root 0600 in a root 0700 directory) when the owner placed it; never part of the three-file set above |
-| interpreter credential | `/etc/cpt-studio/gemini.env`, 10150:10150 0400, copied unread from `/etc/cpt-studio-provider-sources/gemini.env` (root 0600, one line `GEMINI_API_KEY=<key>`) when the owner placed it; mounted read-only into the WORKER alone, and only with `--interpreter-mode live` (the web is given the mode and the path, never the file); no access check sends anything |
+| interpreter credential | AMENDMENT-2 1.11 (the interpreter is Claude Fable 5.2, DECISIONS D275): CPT Studio's existing Anthropic credential, the Fable participant's `/etc/cpt-studio/anthropic-credentials.env` (copied with the participants' from `/etc/cpt-studio-provider-sources/anthropic.env`, `ANTHROPIC_API_KEY` and an optional `ANTHROPIC_WORKSPACE_ID`); mounted read-only into the WORKER alone, once, whenever the Fable participant or the interpreter is live (the web is given the mode and the path, never the file); no access check of its own. An earlier `/etc/cpt-studio/gemini.env` is no longer copied or mounted: it is left untouched and reported (`preflight`, `secrets`), deleting it being the owner's decision |
 | passages | the CMS passage files the revision commits under `studio/reference/data/`, imported into `PassageSource`/`ReferencePassage` |
 | agent login | `/home/claude/.cpt-studio/agent-credentials.json` (0600, agent account only) |
 | operator accounts | `ops-agent` (automated agent) and `platform-operator` (human): no workspace membership, an operator grant (`manage grant_operator`); the agent's login `/home/claude/.cpt-studio/ops-agent-credentials.json` (0600, top-level `username` and `password`) |
@@ -54,10 +54,10 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | # | phase | extra arguments | changes |
 |---|---|---|---|
 | 1 | `preflight` | — | nothing (one ACME probe file written and removed) |
-| 2 | `secrets` | — | creates `/etc/cpt-studio/` and its three files, once; copies each participant credentials source the owner placed, and the interpreter's (`gemini.env`), once |
+| 2 | `secrets` | — | creates `/etc/cpt-studio/` and its three files, once; copies each participant credentials source the owner placed, once - the interpreter's is the Fable participant's file, copied with it; an earlier `gemini.env` is reported, never touched |
 | 3 | `image` | — | builds `cpt-studio:<sha12>` |
 | 4 | `db` | — | network, two volumes, database container |
-| 5 | `app` | `--provider-mode live --interpreter-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--provider-mode disabled`); `--interpreter-mode` is the Gemini interpreter's (`live`, `replay` - the recordings the image ships, nothing sent - or `disabled`: when it is not given the interpreter is installed disabled, every reading pauses, and `verify` reports it; live needs `--authorization-ref` and `/etc/cpt-studio/gemini.env`, mounted read-only into the worker alone); optional `--astra-mode live`, `--fable-mode live` (each `disabled` when not given; live needs `--authorization-ref`) and `--access-check` | migrations; web and worker containers - on a served site blue/green: the incoming web on the idle port, the worker handed over, the vhost's upstream switched (`nginx -t`, a graceful reload: the two `sudo -n` commands), the old web drained and stopped, an availability record of the public `/health/` in the receipt; with `--access-check`, one access check per live participant: one real coding request for Corti (after the OAuth token request its adapter sends first), one run of the tool loop (one request per exchange, at most `PARTICIPANT_MAX_EXCHANGES`, 4) for Astra and for Fable |
+| 5 | `app` | `--provider-mode live --interpreter-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--provider-mode disabled`); `--interpreter-mode` is the interpreter's (Claude Fable 5.2: `live`, `replay` - the recordings the image ships, nothing sent - or `disabled`: when it is not given the interpreter is installed disabled, every reading pauses, and `verify` reports it; live needs `--authorization-ref` and `/etc/cpt-studio/anthropic-credentials.env`, the Fable participant's file, mounted read-only into the worker alone, once); optional `--astra-mode live`, `--fable-mode live` (each `disabled` when not given; live needs `--authorization-ref`) and `--access-check` | migrations; web and worker containers - on a served site blue/green: the incoming web on the idle port, the worker handed over, the vhost's upstream switched (`nginx -t`, a graceful reload: the two `sudo -n` commands), the old web drained and stopped, an availability record of the public `/health/` in the receipt; with `--access-check`, one access check per live participant: one real coding request for Corti (after the OAuth token request its adapter sends first), one run of the tool loop (one request per exchange, at most `PARTICIPANT_MAX_EXCHANGES`, 4) for Astra and for Fable |
 | 6 | `reference` | `--pfs-zip <abs> --pfs-retrieved-at <ISO> --mue-zip <abs> --mue-retrieved-at <ISO>` | reference copies in the files volume; two `ReferenceSource` imports |
 | 7 | `passages` | — | each committed `studio/reference/data/` file imported (`PassageSource`, `ReferencePassage`); idempotent |
 | 8 | `license-note` | — | CPT Studio's own licence note on each imported reference source (`ReferenceSource.license_note`): exactly the old text replaced by the corrected one, nothing else; idempotent |
@@ -252,8 +252,9 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   `Assessment` whose `engine_version` is exactly `cpt-studio-events@1`, or an
   `EventInventory` whose `interpretation_version` is exactly `gemini-events@1`
   (`V1_ROWS`; the receipt's `v1_rows` names the encounters). v1 rows only: v2's
-  own rows (`cpt-studio-events@2`, `gemini-events@2/appraisal@1`) and every
-  legacy row never trip it, so a fix release after the walk, the re-install
+  own rows (`cpt-studio-events@2`, `gemini-events@2/appraisal@1`), AMENDMENT-2's
+  (`cpt-studio-events@3`, `gemini-events@3/appraisal@2`) and every legacy row
+  never trip it, so a fix release after the walk, the re-install
   after a switch-back and a same-revision re-run all pass; live never held a v1
   row, and a test instance's are read as stored and never deleted here. Then it
   **counts, and never refuses on**, what the owner is told before the switch
@@ -284,7 +285,7 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   synthetic-only, database ok, release <revision>}` there and serve its own
   sign-in page and every static file that page names (read-only GETs) - the
   old web still serves everything; **S2** the old worker is parked (`docker
-  stop --time 600`: its current stage finishes, nothing new is claimed) - the
+  stop --time 1500`: its current stage finishes, nothing new is claimed) - the
   old web still serves, and what members start waits in the queue; **S3** the
   vhost's upstream is switched to the idle port: the live file must be this
   revision's HTTPS stage for the old port, and is replaced atomically by the
@@ -351,10 +352,12 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   one-shot with the worker's mount and network for that participant: its
   credentials file read-only at the worker's path, `cpt-studio-net`, that
   participant live under the same `--authorization-ref`, every other one
-  disabled, bounded at 420 s (the participant send deadline is 330 s). The
-  command takes the installation-wide provider lock and sends nothing while
-  another request holds it, which fails the check: let the queue drain (or Stop
-  the encounters) before `app --access-check`. It writes nothing to the
+  disabled, bounded at 1,800 s. The command takes the installation-wide
+  provider lock and sends nothing while another request holds it: the installer
+  runs it with `--wait-for-lock` (AMENDMENT-2 1.11), so it waits out a reading
+  in flight - up to the interpreter's send deadline plus 60 s, 1,380 s - and
+  fails the check only after that; the bound is that wait, the participant send
+  deadline (330 s) and the container's start. It writes nothing to the
   database. What the container wrote is recorded - its JSON receipt in this
   phase's receipt (`access_checks`), its stdout and the last 8 KiB of its
   stderr in a log - only once a root helper has found no value from that
@@ -501,7 +504,7 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   starts only once it has exited (S4): no worker of the old code claims a stage
   the new web queued, and the two workers never run together. What members
   start between S2 and S4 waits in the queue (the old worker's remaining stage
-  time, about a second when idle, up to 600 s), far inside the 30 minutes a
+  time, about a second when idle, up to 1,500 s), inside the 60 minutes a
   queued stage waits. A predict the previous pair queued
   (for an upload, a date change, a Resume or a reconciliation) sends its one
   request, for the context remade under the new rules, unless a recorded
@@ -830,7 +833,7 @@ pass 2 of the read extraction) is queued for the member whose save it was,
 under the save's own key with the revert's audit row - once for that revert
 (`reapplied.requeued`). While it waits the update reads updating; a worker of
 this revision that claims it within the queue deadline (`jobs.QUEUE_DEADLINE`,
-30 minutes from the put-back) runs it, its doors sending the save's request at
+60 minutes from the put-back) runs it, its doors sending the save's request at
 most once, and one that claims it later expires it without starting it, as it
 does any queued stage past its deadline - the update then reads stopped, with
 Resume. That is what happens where no worker of this revision runs at the
@@ -901,7 +904,12 @@ FINAL-V2 6.4 names (an interpreted and appraised upload; a held, an excluded
 and a reinstated code; an approved code with a modifier and its export; a
 member answer; a second review; an interpreter hold; a queued interpret and a
 queued appraise job; a pass-2 refusal; an unhealthy appraisal; a held code
-whose item is a new fact) and fails its assertion 7 on any missing; with
+whose item is a new fact) - counting the assessments of both engine versions
+and the appraisal runs of every interpreter provider (AMENDMENT-2 8.5), and, of
+a Fable candidate, its new versions' rows too (an inventory of
+`gemini-events@3/appraisal@2`, a `cpt-studio-events@3` assessment, a run of
+its adapter, an interpreter hold with reason `declined`) - and fails its
+assertion 7 on any missing; with
 `--declared`'s `update` (`pending_before_analyze`, `pending_after_analyze`,
 `completed`, `a21`, optionally `resave: {encounter, field, value}`) its
 assertion 8 judges AMENDMENT-1's U17 - the pending encounters named, exactly
@@ -1281,16 +1289,18 @@ verified inside the image under that setting.
   values under 8 characters (they would match by chance), nor a value
   transformed (encoded, or partly printed). It reads only the checked
   participant's file.
-- The worker's stop timeout (600 s) covers a participant phase's whole tool
-  loop (deadline 540 s: at most four exchanges; one send's deadline is 330 s)
-  and equals the stale-stage sweep's bound (`STALE_RUNNING_SECONDS`, 600 s),
-  not every whole stage: a stage still running when the 600 s pass is killed
-  with the worker and settled as any stage cut short (the stale-stage sweep, or
-  an undo's close). Parking or removing a worker that is inside a loop waits up
-  to that long, so a stop in `app` or `rollback-app` can take up to ten
-  minutes: let the queue drain (or Stop the encounters) first to avoid the
-  wait. In blue/green the site stays served meanwhile, and that wait is the
-  processing pause: what members start is accepted and shown as queued.
+- The worker's stop timeout (1,500 s, AMENDMENT-2 1.12) covers every stage's
+  deadline - a participant phase's whole tool loop (540 s: at most four
+  exchanges; one send's deadline is 330 s) and a reading stage's 1,380 s, its
+  1,320 s send included - and is above every stale-stage threshold
+  (`STALE_RUNNING_SECONDS`, 600 s; the reading stages' 1,440 s): a stage still
+  running when the 1,500 s pass is killed with the worker and settled as any
+  stage cut short (the stale-stage sweep, or an undo's close). Parking or
+  removing a worker that is inside a stage waits up to that long, so a stop in
+  `app` or `rollback-app` can take up to 25 minutes: let the queue drain (or
+  Stop the encounters) first to avoid the wait. In blue/green the site stays
+  served meanwhile, and that wait is the processing pause: what members start
+  is accepted and shown as queued.
 - Blue/green residuals (the declaration states them):
   1. A request an old nginx worker accepted before the reload but proxies only
      after the drain has ended - in practice a large upload it is still
@@ -1306,9 +1316,9 @@ verified inside the image under that setting.
   3. A tab opened before the switch keeps running the old `app.js` against the
      new API until it is reloaded; the new API's response shapes must stay
      tolerant of it for one release.
-  4. Processing pauses for the old worker's remaining stage time (up to 600 s;
-     about a second when idle) plus the switch; uploads are accepted and shown
-     as queued.
+  4. Processing pauses for the old worker's remaining stage time (up to
+     1,500 s; about a second when idle) plus the switch; uploads are accepted and
+     shown as queued.
   5. `systemctl reload nginx` is host-global. It is graceful, and the switch's
      verification requires co-tenant routing and app.quillmd.com unchanged
      from the preflight baseline - read before anything starts and again right

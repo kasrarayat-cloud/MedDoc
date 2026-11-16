@@ -22,7 +22,7 @@ from unittest import mock
 
 from django.conf import settings
 from django.core.management import call_command
-from django.test import Client, override_settings
+from django.test import Client, SimpleTestCase, override_settings
 
 from studio import customer_api, models, progress, reports, review
 from studio.gi.catalogue import COMMON_BUNDLED
@@ -856,3 +856,39 @@ class CollectedStaticTests(SurfaceCase):
         self.assertTrue(names)
         self.assertFalse({'ops.js', 'ops.css'} & set(names), names)
         self.assertEqual(Client().get('/static/studio/ops.js').status_code, 404)
+
+
+class ForbiddenNetFableTests(SimpleTestCase):
+    """AMENDMENT-2 section 9 (step F8): customer_api.FORBIDDEN - the net a server-composed customer string must pass -
+    already refuses the Fable interpreter's names (claude-[a-z], fable and anthropic bounded by letters and digits, the
+    capitalized joined forms); its test gains the vectors the shared denylist's readers run
+    (ops/verification/customer-denylist.json): the model id, the product name, the joined and underscored forms, and
+    not the clinical or ordinary words that only contain a name. No clinical word is added to any list (D230 (d))."""
+    HITS = ('claude-fable-5-2', 'Claude Fable 5.2', 'CLAUDE-FABLE-5-2', 'fable_unknown', 'AnthropicTimeout',
+            'Read by claude-fable-5-2.', 'held: fable_unknown.')
+    MISSES = ('affable', 'fabled', 'fables', 'An affable nurse', "Aesop's fables", 'fabled lands')
+
+    def test_the_fable_interpreters_names_are_refused_and_words_containing_them_are_not(self):
+        for text in self.HITS:
+            with self.subTest(hit=text):
+                self.assertIsNotNone(customer_api.FORBIDDEN.search(text))
+                self.assertEqual(customer_api.plain(text), '')
+        for text in self.MISSES:
+            with self.subTest(miss=text):
+                self.assertIsNone(customer_api.FORBIDDEN.search(text))
+                self.assertEqual(customer_api.plain(text), text)
+
+    def test_the_vectors_are_the_shared_denylists_own(self):
+        denylist = json.loads((Path(settings.BASE_DIR) / 'ops' / 'verification' / 'customer-denylist.json')
+                              .read_text(encoding='utf-8'))
+        vectors = {vector['text']: vector['hits'] for vector in denylist['vectors']}
+        for text in ('Interpreted by claude-fable-5-2', 'Read by Claude Fable 5.2', 'fable_unknown', 'AnthropicTimeout'):
+            with self.subTest(text=text):
+                self.assertTrue(vectors[text])  # a hit in the shared list too
+                self.assertIsNotNone(customer_api.FORBIDDEN.search(text))
+        for text in ('An affable nurse', 'fabled', "Aesop's fables"):
+            with self.subTest(text=text):
+                self.assertEqual(vectors[text], [])
+                self.assertIsNone(customer_api.FORBIDDEN.search(text))
+        model = [p for p in denylist['patterns'] if p['id'] == 'interpreter_model'][0]['source']
+        self.assertEqual(model, r'\b(?:gemini-4-(?:argon|carbon)|claude-fable-5-2)\b')

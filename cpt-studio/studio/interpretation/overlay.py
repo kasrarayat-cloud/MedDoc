@@ -1,12 +1,13 @@
 """The read-time overlay of a design v2 assessment (docs/gemini-migration/FINAL-V2.md 4.8 "Read time", 6.2, 6.5 and 9.3;
 step 5c of its 8.1; the slice S11 overlay of design/FINAL.md 8.1, rewired): the stored rows of an assessment the
-events engine made at cpt-studio-events@2, as its CURRENT decisions and member answers leave them, recomputed at read
-time from the persisted inventory by the engine's own functions. Pure: stored rows, decisions, answers and the
-FactSet in, views out - no database, no clock, no provider, and no document text (the FactSet holds none; FINAL-V2 1.7,
+events engine made at cpt-studio-events@2 or @3 (AMENDMENT-2 8.1: READ_RECORDS), as its CURRENT decisions and member
+answers leave them, recomputed at read time from the persisted inventory by the engine's own functions. Pure: stored
+rows, decisions, answers and the FactSet in, views out - no database, no clock, no provider, and no document text (the FactSet holds none; FINAL-V2 1.7,
 D188).
 
-**What it reads** (FINAL-V2 6.5): ``completeness['event_coding']`` at event_coding@2 ONLY (``CODING_VERSION``, step 4b's
-engine/coverage.CODING_VERSION) - @1 is UNREADABLE, fail-closed - and the FactSet of the frozen settled inventory the
+**What it reads** (FINAL-V2 6.5): ``completeness['event_coding']`` at the versions of ``READ_CODINGS`` ONLY (both design
+v2 families, @2 and @3, AMENDMENT-2 8.1; the writer writes ``CODING_VERSION``, engine/coverage.CODING_VERSION, @3) - @1
+and any other version are UNREADABLE, fail-closed - and the FactSet of the frozen settled inventory the
 assessment was made from, built here by ``reading`` with engine/facts.effective against the effective date of service
 the assessment was made with (never facts.factset: the triage's hand-off 2d:R8), so assess and read time have identical
 inputs (S3's hazard 5: no date re-judge skipped, no text read). readers.EventReader loads the row through store.load_v2
@@ -32,9 +33,10 @@ implementation) - and engine/assess's ADDON row (DECISIONS D268: engine/assess.a
 calls) over the engine's own counted set and over the reviewer's; it is refused whole (fail-closed: stored stands,
 marked stale where the counted set moved) when the engine's own counted set does not reproduce a stored record - a
 stored competing or ADDON hold it does not give is never carried as a hold read time does not recompute. The ADDON row
-reads the codes assess counts for it: a primary the reviewer rejects, or a member's answer excludes, is no longer
-counted, so an add-on whose every counted primary is gone is held by the row (coding_rule:ADDON) - its item the row's,
-which quotes the document, so read time cannot word it: the stored question stands, marked stale, the add-on held and
+reads the codes assess counts for it: a primary the reviewer rejects, or a member's answer binds (read by the engine,
+or bound here, of either value: DECISIONS D283, G1-03), is no longer counted, so an add-on whose every counted primary
+is gone is held by the row (coding_rule:ADDON) - its item the row's own message, ADDON, worded from the codes alone
+(``TEXT_FREE``: DECISIONS D284, G3-15), so read time words it afresh (``recomputed``, never stale), the add-on held and
 never approvable alone - and reinstating a primary releases it. Once the decisions move the COUNTED set (a rejection, a
 reinstatement), each code's stored ``held_facts`` lose the cross-code holds of the engine's own set and gain those of
 the reviewer's at their rank (engine/questions.ranked), and
@@ -46,7 +48,8 @@ is the encounter's own question (FINAL-V2 4.8: "service_date | encounter scope";
 encounter scope): a code whose live item it is keeps no question of its own, and stays held. The separate-lesion
 modifier review is the combination's over the effective set, on every read. A changed item is worded by wording.build
 only for the messages whose sentence reads no document text (``TEXT_FREE``: the base, within, competing, same-day
-separate-visit, member-context and plain date items, its slots filled from the combination's own records); any other
+separate-visit, member-context, plain date and ADDON items, its slots filled from the combination's own records and,
+for ADDON, from the codes alone); any other
 changed item keeps the stored question and is marked stale (the code stays held). A member's answer binds to the item a
 code presents: once read time has recomputed a code's item, an answer binds only to a question about that item's fact -
 an answer to a stale question about another fact binds nothing (assess would not apply it either; the code stays held,
@@ -54,16 +57,24 @@ never excluded by it). Member answers lift no hold (session decision (e), L7-01)
 member's answer that a code is not documented - read by the engine (its marker) or applied here - removes that code
 from the competition (DECISIONS D249, 5a's Q2), so a rival with no other rival left loses its competing hold, and one
 with a rival left keeps it, naming the rivals left (engine/assess.compete_without, the one implementation assess
-reads too: DECISIONS D260); the answered code still counts for every other hold (but the ADDON row, which counts no
-answered code, as assess counts none). An answer that binds stands: the release it causes never unbinds it
-(``review_view``'s passes). "Cannot confirm" leaves the competition as it stands until a decision (D260's effect): a
+reads too: DECISIONS D260); the answered code still counts for every other hold but the ADDON row, which counts no
+code an answer binds, of either value, as assess counts none (DECISIONS D283, G1-03). The answers' passes are
+engine/assess.answer_pass, the ONE implementation assess calls too (D283 items 1-2; ``review_view``'s passes): an
+answer the engine reads (by its question's fingerprint) excludes its code and stands; an overlay-bound answer binds the
+item its code presents in each pass - so a code whose ADDON row a pass moves is read again, and its answer binds only
+the item it then presents (C7's correction) - and the competition leaves out the codes an overlay-bound "Not
+documented" binds in that pass, the ADDON count every code an answer has bound, accumulated so the passes end. An
+answer to the competing question binds nothing, at assess or here (D283, G1-01 option (c)): the competing hold is
+settled by the reviewer's rejection (D270 DQ-3). "Cannot confirm" leaves the competition as it stands until a decision
+(D260's effect): a
 rival the reviewer rejects leaves the competition whatever it was answered (DECISIONS D270 DQ-3: an engine-answered
 code counts whatever its decision, so its rejection takes it out of the competition alone), so the competition hold's
 own sentence - "reject the code the documentation does not support; the one left is then ready for review" - is true.
-An overlay-bound "Not documented" that assess read for the competition alone (DECISIONS D270 DQ-2: ``assessed_out``,
-read from the stored record) takes its code out of the engine's own competition, so read time reproduces the release
-assess recorded; the reviewer's competition takes it out only while the answer binds now, so a decision that unbinds
-it restores the competition.
+An overlay-bound "Not documented" that assess read for the competition (DECISIONS D270 DQ-2: ``assessed_out``, read
+from the stored record) takes its code out of the engine's own competition, and an overlay-bound answer of either value
+assess read for the ADDON row leaves its code out of the engine's own ADDON count (D283 item 3: ``assessed_uncounted``,
+the one derivation from the stored record), so read time reproduces what assess recorded; the reviewer's competition
+and ADDON count take a code out only while its answer binds now, so a decision that unbinds it restores both.
 
 **The seams of FINAL 8.1, at v2**: ``coding_of`` (event_coding@2's shape); ``_service`` (the session a code is matched
 to, coverage.session_of over the FactSet; event_coding@2's codes record without one); the base, within, competing and
@@ -91,7 +102,7 @@ last primary it rejects (DECISIONS D268), holds that add-on here, stale, never a
 **reviewed_completeness** (FINAL-V2 6.5): the documented-event coverage as the review leaves it - engine/coverage's
 reconcile and completeness over the FactSet with the reinstated codes counted (``counted_codes``) and the procedure day
 of the counted set (combination.procedure_day) - with the assessment's own open questions, provider state, conflicts
-and unverified attributes (``assessment_counts``; a completeness whose event coding is not event_coding@2 - a v1
+and unverified attributes (``assessment_counts``; a completeness whose event coding is not of READ_CODINGS - a v1
 row's - is refused before anything is read, UnreadableCoding): the structured counts the stored completeness records
 (this step's request R2), else derived without reading a sentence - the conflicts are the stored completeness's own
 count, the unverified attributes assess's count over the engine's own counted codes (their evaluations made again), and
@@ -117,7 +128,7 @@ from types import MappingProxyType, SimpleNamespace
 from typing import Any, Optional, cast
 
 from studio.code_shapes import UNAVAILABLE_ANSWERS, _field, service_answers  # R-2: review_view's own objects
-from studio.interpretation import ENGINE_VERSION_V2, wording
+from studio.interpretation import ENGINE_VERSION_V2, ENGINE_VERSION_V3, wording
 from studio.interpretation.contract.types import Attribute, Kind, Landmark, Reason, Result, SessionKind
 from studio.interpretation.engine import assess as engine_assess
 from studio.interpretation.engine import catalogue, combination, coverage, evaluate
@@ -158,8 +169,12 @@ CLAIMS_EXAMPLE_TOPIC = 'claims.multiple_endoscopy'
 # checks.DISTINCT_LESION_NOT_CHECKED (copied, pinned equal): what the modifier review says it does not check
 DISTINCT_LESION_NOT_CHECKED = ('NCCI procedure-to-procedure edits', 'payer modifier policy')
 
-# The event_coding version this reader reads (engine/coverage.CODING_VERSION, the writer's); any other is unreadable.
+# The event_coding version the writer writes now (engine/coverage.CODING_VERSION: cpt-studio-events@3 since AMENDMENT-2's
+# labels, 8.1), and every version this reader reads (AMENDMENT-2 8.1 [R:replay-R4]: a reader of a stored row accepts both
+# design v2 families - an @2 record, stored before AMENDMENT-2, is read as stored, the engine running over it at read time
+# as over an @3 one, and a record it does not reproduce is refused, fail-closed); any other version is unreadable.
 CODING_VERSION = coverage.CODING_VERSION
+READ_CODINGS = (ENGINE_VERSION_V2, ENGINE_VERSION_V3)
 # FINAL 8.1: the readiness blocker of a new-path assessment whose record of the documented events cannot be read.
 UNREADABLE_BLOCKER = ("This assessment's record of the documented events could not be read; it cannot be approved or "
                       'exported until it is assessed again.')
@@ -172,8 +187,10 @@ UNREADABLE_COVERAGE_REASON = ("this assessment's record of the documented events
 # The reinstatement wait the engine records for an unknown date of service: the encounter's own date question asks it
 # of every code, so it is never asked of a reinstated code again (review_view's DATE_WAIT rule).
 DATE_WAIT_FACT = 'service_date'
-# The stored record's own version (support['event_reading']): the engine that wrote it.
-RECORD_VERSION = ENGINE_VERSION_V2
+# The stored record's own version (support['event_reading']): the engine that wrote it - RECORD_VERSION, what the renderer
+# writes now (AMENDMENT-2 8.1: @3), and READ_RECORDS, every version read (both design v2 families, as READ_CODINGS).
+RECORD_VERSION = ENGINE_VERSION_V3
+READ_RECORDS = (ENGINE_VERSION_V2, ENGINE_VERSION_V3)
 # The structured counts reviewed_completeness reads of the stored completeness (FINAL-V2 6.5; this step's request R2):
 # the assessment's own open questions, unverified attributes and provider state, never parsed from its sentences.
 COUNTS = ('open_questions', 'unverified', 'provider_ok', 'conflicts')
@@ -190,6 +207,8 @@ _USER = 'user'
 # code_shapes.UNAVAILABLE_ANSWERS; pinned equal by test). At read time it removes the code it answers from the
 # competition (DECISIONS D249, 5a's Q2): the remaining code's competing hold is released when no rival is left.
 NOT_DOCUMENTED = 'not_documented'
+# both answer values (engine/assess.Answer: not documented, cannot confirm; code_shapes.UNAVAILABLE_ANSWERS)
+_ANSWER_VALUES = frozenset(answer.value for answer in engine_assess.Answer)
 # How completeness names a session whose kind names no service (DECISIONS D246; wording.SESSION_SERVICES has no entry
 # for these four kinds): a noun phrase in lower case that reads in completeness's list as the twelve services' labels do
 # ("... not listed as unresolved: colonoscopy, moderate sedation"), never a profile's capitalised title inside the
@@ -204,10 +223,14 @@ UNESTABLISHED_SERVICE_LABEL = 'service whose kind is not established'
 # family only - tests/v2/test_overlay.py proves each builds the same words over any text): the only items read time
 # words afresh. SERVICE_DATE only when it quotes no statement - and only for the encounter's renderer: its item is the
 # encounter's own question, which read time asks of no code (review_view).
+# DECISIONS D284 (build list B7, G3-15): the ADDON row's own message, worded from the codes alone (the add-on and its
+# primaries: engine/assess.primaries), so an ADDON hold read time recomputes is worded and listed ``recomputed``, never
+# ``stale``.
 TEXT_FREE = frozenset({engine_questions.MessageId.BASE_INCLUDED, engine_questions.MessageId.BASE_EXPLAINED,
                        engine_questions.MessageId.BASE_WITHIN, engine_questions.MessageId.COMPETING,
                        engine_questions.MessageId.SEPARATE_EM, engine_questions.MessageId.SETTING,
-                       engine_questions.MessageId.PATIENT_STATUS, engine_questions.MessageId.SERVICE_DATE})
+                       engine_questions.MessageId.PATIENT_STATUS, engine_questions.MessageId.SERVICE_DATE,
+                       engine_questions.MessageId.ADDON})
 # The ADDON row of engine/assess (4.3's code-specific row "43273, 91013, 99153, 99417 | its primary counted"), which
 # read time applies as assess does (DECISIONS D268): its hold's cause, and the id a view's ``recomputed`` and ``stale``
 # name it by - its own cause, since v1 had no add-on rule and so no v1 check id names it (operator data: the consumers
@@ -219,11 +242,12 @@ ADDON_CHECK = engine_assess.ADDON_CAUSE
 _RULE_IDS = {combination.BASE_CAUSE: BASE_CHECK, combination.WITHIN_CAUSE: BASE_CHECK,
              combination.COMPETING_CAUSE: COMPETING_CHECK, combination.SAME_DAY_CAUSE: SAME_DAY_EM_GATE,
              ADDON_CAUSE: ADDON_CHECK}
-# The holds read time recomputes across codes whose stored form is never carried as one read time does not recompute:
-# a stored competing hold or ADDON hold that the engine's own counted set does not give is a record that is not
-# reproduced (RecordMismatch), never a hold carried beside the recomputed ones (DECISIONS D268, D270: the readings this
-# step's repair moves; the base, within and same-day holds are read as before).
-_RECOMPUTED = frozenset({combination.COMPETING_CAUSE, ADDON_CAUSE})
+# The holds read time recomputes across codes, whose stored form is never carried as one read time does not recompute -
+# ONE rule for every cause read time recomputes (DECISIONS D283, G3-32 option (b); build list B20): a stored base,
+# base-within, competing, same-day or ADDON hold that the engine's own counted set does not give is a record that is not
+# reproduced (RecordMismatch), never a hold carried beside the recomputed ones - a carried hold is one no decision can
+# release, and it would hide an assess/read-time disagreement from the seam check (D252). Every cause _RULE_IDS names.
+_RECOMPUTED = frozenset(_RULE_IDS)
 # The member answers' record a stored completeness carries (engine/assess's member_answers: each answer it was given and
 # did not apply, with why) and the reason it gives an answer to a fact the review overlay applies (engine/assess
 # Unbound.OVERLAY_READ): the answers ``assessed_out`` reads.
@@ -284,16 +308,17 @@ def _entry_ok(entry: object) -> bool:
 
 
 def read_coding(completeness: object) -> Mapping[str, Any]:
-    """completeness['event_coding'] as this release reads it, checked: version CODING_VERSION, and every session, code
-    and lesion record in event_coding@2's shape (engine/coverage.event_coding: sessions keyed by session id with their
+    """completeness['event_coding'] as this release reads it, checked: a version of READ_CODINGS (@2 or @3; AMENDMENT-2
+    8.1), and every session, code and lesion record in event_coding's shape, the same at both versions
+    (engine/coverage.event_coding: sessions keyed by session id with their
     kind, examination, part_of, flags, events and reportable and doubted entries {event, kind, lesion, unlisted}; codes
     {session, events, lesions}; lesions {places, multiplicity, distinct_from, same_as}). Raises UnreadableCoding; never
     returns a partial record."""
     coding = completeness.get('event_coding') if isinstance(completeness, Mapping) else None
     if not isinstance(coding, Mapping):
         raise UnreadableCoding('The assessment records no event coding.')
-    if coding.get('version') != CODING_VERSION:
-        raise UnreadableCoding(f'This release reads event coding {CODING_VERSION} only.')
+    if coding.get('version') not in READ_CODINGS:
+        raise UnreadableCoding(f'This release reads event coding {" and ".join(READ_CODINGS)} only.')
     sessions, codes, lesions = coding.get('sessions'), coding.get('codes'), coding.get('lesions')
     if not (isinstance(sessions, Mapping) and isinstance(codes, Mapping) and isinstance(lesions, Mapping)):
         raise UnreadableCoding('The event coding has no sessions, codes or lesions.')
@@ -414,8 +439,8 @@ def read_record(p: Stored) -> Record:
     """The stored v2 record of ``p`` (module docstring), checked. UnreadableRecord when it is not one: another engine's
     support, kept spans that are not offsets, a held fact or a run of the wrong shape."""
     support = p.support if isinstance(p.support, Mapping) else {}
-    if support.get('event_reading') != RECORD_VERSION:
-        raise UnreadableRecord(f'The proposal was not recorded by {RECORD_VERSION}.')
+    if support.get('event_reading') not in READ_RECORDS:
+        raise UnreadableRecord(f'The proposal was not recorded by {" or ".join(READ_RECORDS)}.')
     kept: list[Span] = []
     for item in p.evidence or ():
         start, end = (item.get('start'), item.get('end')) if isinstance(item, Mapping) else (None, None)
@@ -800,13 +825,16 @@ def _without(held: Sequence[HeldFact], *taken: Iterable[HeldFact]) -> list[HeldF
 
 
 def _unchecked(frozen: bool, taken: bool) -> frozenset[str]:
-    """The causes of a stored code's holds that the reproduction check leaves out (``recount``): for a code the engine
-    excluded by a member's answer (``frozen``) and for a code assess took out of the competition by an overlay-bound
-    "Not documented" (``taken``, DECISIONS D270 DQ-2) its competing and ADDON holds - engine/assess never assesses
-    either again (_bind_in_passes), so its record keeps both as its answer found them and the later passes need not
-    reproduce them (the integration's fix of the combination for ``taken``: refute-5a-r1 P-1 = refute-5c-r1 P6, an
-    add-on taken out beside an engine-read answer that excludes its only primary); none for any other code."""
-    return frozenset({combination.COMPETING_CAUSE, ADDON_CAUSE}) if frozen or taken else frozenset()
+    """The causes of a stored code's holds that the reproduction check leaves out (``recount``), DECISIONS D283's
+    exemptions (G1-02, with C8's correction; build list B16): for a code the engine excluded by a member's answer
+    (``frozen``) its competing and ADDON holds - engine/assess never assesses it again (_bind_in_passes, read_again), so
+    its record keeps both as its answer found them and the later passes need not reproduce them; for a code assess took
+    out of the competition by an overlay-bound "Not documented" (``taken``, D270 DQ-2) its competing hold alone - it
+    competes with nothing in the engine's own competition, and engine/assess assesses it again whenever the answers move
+    its ADDON row (read_again), so its record's ADDON hold is the last pass's and is checked; none for any other code."""
+    if frozen:
+        return frozenset({combination.COMPETING_CAUSE, ADDON_CAUSE})
+    return frozenset({combination.COMPETING_CAUSE}) if taken else frozenset()
 
 
 def _stored_item_facts(p: Stored) -> tuple[str, ...]:
@@ -821,29 +849,82 @@ def _stored_item_facts(p: Stored) -> tuple[str, ...]:
     return tuple(str(q.get('fact') or '') for q in p.questions if q.get('scope') == 'proposal' and q.get('fact'))
 
 
-def assessed_out(completeness: object, rows: Sequence[Stored]) -> frozenset[str]:
-    """The keys of the codes engine/assess took out of its competition by a member's "Not documented" it read for the
-    competition alone (DECISIONS D270 DQ-2 option (b): an answer to a fact the review overlay applies, which assess
-    reads as D260 reads an engine-bound one, never excluding the code): each answer the stored completeness's member
-    answers record lists as given to assess and left to the overlay ('earlier', why read_by_the_review_overlay) with the
-    value not_documented, bound by its code, family and fact to a selected code's stored item (``_stored_item_facts``)
-    - never an answer to the competing question (COMPETING_FACT), which engine/assess.overlay_bound never reads, so
-    such a code stays in the engine's own competition and D249 binds the answer for the reviewer's alone (the
-    integration's fix of the combination: refute-5c-r1 P2 = refute-5a-r1 P-2; 5a's question Q1 as built).
-    Read from the stored record alone - never from the answers the review binds now - so the engine's own competition
-    reproduces what assess recorded whatever the decisions now unbind (``recount``). Empty for a record with no member
-    answers, or one not in that shape: the engine's own competition then keeps every code, and a record whose
-    competition assess released is not reproduced (fail-closed). Pure."""
+def _assessed_reads(completeness: object, rows: Sequence[Stored]) -> tuple[tuple[str, str, str], ...]:
+    """The ONE derivation, from the stored record alone, of the overlay-bound answers engine/assess read (DECISIONS D283
+    item 3 and G3-17; D270 DQ-2): (answer id, the key of the selected code it binds, its value) for each answer the
+    stored completeness's member answers record lists as given to assess and left to the overlay ('earlier', why
+    read_by_the_review_overlay), bound by its code, family and fact to a selected code's stored item
+    (``_stored_item_facts``) - never an answer to the competing question (COMPETING_FACT), which engine/assess.
+    overlay_bound never reads (D283, G1-01). engine/assess records an overlay-read answer so only while it binds the item
+    its code presents in the last pass (an answer whose code's item moved is recorded no_longer_asked), so these are
+    the answers its last pass bound. () for a record with no member answers, or one not in that shape. Pure."""
     record = completeness.get('member_answers') if isinstance(completeness, Mapping) else None
     entries = record.get('earlier') if isinstance(record, Mapping) else None
     if not isinstance(entries, list):
-        return frozenset()
-    read = {(entry['code'], entry['family'], entry['fact']) for entry in entries
-            if isinstance(entry, Mapping) and entry.get('why') == _OVERLAY_READ and entry.get('value') == NOT_DOCUMENTED
-            and all(isinstance(entry.get(name), str) and entry.get(name) for name in ('code', 'family', 'fact'))
-            and entry.get('fact') != COMPETING_FACT}
-    return frozenset(p.key for p in rows if p.bucket == SELECTED
-                     and any((p.code, p.family, fact) in read for fact in _stored_item_facts(p)))
+        return ()
+    read: dict[tuple[str, str, str], list[tuple[str, str]]] = {}
+    for entry in entries:
+        if (isinstance(entry, Mapping) and entry.get('why') == _OVERLAY_READ and entry.get('value') in _ANSWER_VALUES
+                and all(isinstance(entry.get(name), str) and entry.get(name) for name in ('code', 'family', 'fact'))
+                and entry.get('fact') != COMPETING_FACT):
+            answer = entry.get('answer')
+            read.setdefault((entry['code'], entry['family'], entry['fact']), []).append(
+                (answer if isinstance(answer, str) else '', entry['value']))
+    out: list[tuple[str, str, str]] = []
+    for p in rows:
+        if p.bucket != SELECTED:
+            continue
+        for fact in _stored_item_facts(p):
+            out += [(answer, p.key, value) for answer, value in read.get((p.code, p.family, fact), ())]
+    return tuple(out)
+
+
+def assessed_out(completeness: object, rows: Sequence[Stored]) -> frozenset[str]:
+    """The keys of the codes engine/assess took out of its competition by a member's "Not documented" it read for the
+    competition (DECISIONS D270 DQ-2 option (b): an answer to a fact the review overlay applies, which assess reads as
+    D260 reads an engine-bound one, never excluding the code): each answer of ``_assessed_reads`` (the one derivation)
+    with the value not_documented - never an answer to the competing question (COMPETING_FACT), which
+    engine/assess.overlay_bound never reads, so such a code stays in the engine's own competition and D249 binds the
+    answer for the reviewer's alone (the integration's fix of the combination: refute-5c-r1 P2 = refute-5a-r1 P-2; 5a's
+    question Q1 as built). Read from the stored record alone - never from the answers the review binds now - so the
+    engine's own competition reproduces what assess recorded whatever the decisions now unbind (``recount``). Empty for
+    a record with no member answers, or one not in that shape: the engine's own competition then keeps every code, and
+    a record whose competition assess released is not reproduced (fail-closed). Pure."""
+    return frozenset(key for _, key, value in _assessed_reads(completeness, rows) if value == NOT_DOCUMENTED)
+
+
+def assessed_uncounted(completeness: object, rows: Sequence[Stored]) -> frozenset[str]:
+    """The keys of the codes engine/assess left out of its ADDON count (DECISIONS D283 G1-03 and item 3; build list
+    B16), derived from the stored record by this ONE function - every recount that reproduces a record reads it
+    (``recount(..., uncounted=)``: _recount_or_none, readers.EventReader, the seam harness and the tests): every code an
+    engine-read answer excluded (its marker, ``answered_by_engine``) and every selected code an overlay-bound answer of
+    EITHER value binds (``_assessed_reads``: "Not documented" and "Cannot confirm" alike, G1-03) - so the engine's own
+    ADDON row counts what assess counted, and an add-on whose every primary such an answer binds is held by its row at
+    both halves (D268). Pure.
+
+    Its limit, stated (this step's NOTES, question Q-UNCOUNTED): engine/assess accumulates the set over its passes, and
+    its record names the overlay-bound answers of the LAST pass only; a code an overlay-bound answer bound in an earlier
+    pass whose item a later pass moved is recorded no_longer_asked, so it is not named here. Only an add-on's item moves
+    so (its ADDON row; a competing hold, rank 22, outranks only the member context, which no answer binds), and no
+    add-on is the primary of an add-on in this catalogue (tests/v2/test_overlay pins that), so the derived set counts
+    what assess counted; a record it ever failed to reproduce is a RecordMismatch - nothing recomputed, fail-closed."""
+    engine = {p.key for p in rows if answered_by_engine(p)[0]}
+    return frozenset(engine | {key for _, key, _ in _assessed_reads(completeness, rows)})
+
+
+def assessed_answers(completeness: object, rows: Sequence[Stored]) -> frozenset[str]:
+    """The ids of the overlay-bound member answers engine/assess READ (DECISIONS D283, G3-17 with RS-4's and C5's
+    correction; build list B19), from the same derivation ``assessed_out`` and ``assessed_uncounted`` read
+    (``_assessed_reads``), so they cannot drift: an answer that took a code out of its competition (a "Not documented",
+    D270 DQ-2), and an answer of either value that left a PRIMARY out of the ADDON count - a code some add-on among the
+    selected rows is reported with (engine/assess.primaries; G1-03). review._reads_a_withdrawn_answer holds readiness
+    at STALE_ANSWER_BLOCKER while one of them no longer stands, until the recompute. An answer assess did not read moves
+    nothing - one asked differently or no longer asked (never listed read_by_the_review_overlay), one to the competing
+    question, or a "Cannot confirm" that binds no primary. Pure."""
+    primary_codes = {code for p in rows if p.bucket == SELECTED for code in engine_assess.primaries(p.code)}
+    codes = {p.key: p.code for p in rows}
+    return frozenset(answer for answer, key, value in _assessed_reads(completeness, rows)
+                     if answer and (value == NOT_DOCUMENTED or codes.get(key) in primary_codes))
 
 
 def _addon(record: Record, evaluation: Evaluation, counted: Collection[str]) -> tuple[HeldFact, ...]:
@@ -860,7 +941,7 @@ def _addon(record: Record, evaluation: Evaluation, counted: Collection[str]) -> 
 def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: Iterable[str],
             coding: Mapping[str, Any], R: FactSet, *, retrieval: Any = (),
             member: Optional[engine_assess.MemberContext] = None, out_of_competition: Iterable[str] = (),
-            answered: Iterable[str] = (), assessed: Iterable[str] = ()) -> Recount:
+            answered: Iterable[str] = (), assessed: Iterable[str] = (), uncounted: Iterable[str] = ()) -> Recount:
     """The read-time engine (module docstring) over ``rows`` (one assessment's stored rows), the reviewer's counted set
     ``counted_keys`` and the engine's own ``engine_keys`` (its selected codes and those it excluded by a member's
     answer): the per-code rule run again for each (engine/evaluate.decide), the combination over each set
@@ -877,15 +958,19 @@ def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: It
     So when a decision unbinds such an answer, the reviewer's competition has the code back: read time restores the
     competition the stored record released.
 
-    The ADDON row (engine/assess's, as assess reads it): over the engine's own set it counts the codes no member's
-    answer excluded (its selected codes), over the reviewer's the counted codes no answer takes out of review - neither
-    the engine's (their marker) nor ``answered`` (the overlay's, bound now): a primary the reviewer rejects, or an
-    answer excludes, no longer counts, so an add-on whose every counted primary is gone is held by the row's witness
-    (coding_rule:ADDON), and reinstating a primary releases it.
+    The ADDON row (engine/assess's, as assess reads it; DECISIONS D283 G1-03): over the engine's own set it counts the
+    codes assess counted - none of ``uncounted``, the codes assess left out of its ADDON count, derived from the stored
+    record by ONE function (``assessed_uncounted``: an engine-read answer's exclusion, and an overlay-bound answer of
+    either value), nor any code the engine excluded by an answer (its marker) - and over the reviewer's the counted codes
+    no answer takes out of review - neither the engine's (their marker) nor ``answered`` (read time's own: the codes an
+    answer has bound in its passes, accumulated, engine/assess.answer_pass's ``uncounted``): a primary the reviewer
+    rejects, or an answer binds, no longer counts, so an add-on whose every counted primary is gone is held by the row's
+    witness (coding_rule:ADDON), and reinstating a primary releases it.
 
     Raises UnreadableRecord for a record it cannot read and RecordMismatch when the engine's own counted set does not
-    reproduce a stored code's held facts: a stored competing or ADDON hold it does not give is never carried as a hold
-    read time does not recompute (``_RECOMPUTED``)."""
+    reproduce a stored code's held facts: ONE rule for every hold read time recomputes (DECISIONS D283, G3-32 option
+    (b); ``_RECOMPUTED``) - a stored base, base-within, competing, same-day or ADDON hold the engine's own counted set
+    does not give is never carried as a hold read time does not recompute."""
     counted = [key for key in dict.fromkeys(counted_keys)]
     engine = [key for key in dict.fromkeys(engine_keys)]
     by_key = {p.key: p for p in rows}
@@ -913,7 +998,8 @@ def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: It
     # DECISIONS D268: the codes the ADDON row counts - over the engine's own set its codes no answer excluded (assess's
     # last pass: the counted codes less those a member's answer excluded), over the reviewer's the counted codes no
     # answer takes out of review (the engine's marker or the overlay's own, ``answered``)
-    engine_addon = frozenset(found.code for key, found in stored_members.items() if key not in engine_answered)
+    left_out = engine_answered | frozenset(uncounted)  # DECISIONS D283 G1-03: what assess left out of its ADDON count
+    engine_addon = frozenset(found.code for key, found in stored_members.items() if key not in left_out)
     gone = engine_answered | frozenset(answered)
     review_addon = frozenset(found.code for key, found in members.items() if key not in gone)
     live: dict[str, Live] = {}
@@ -940,9 +1026,10 @@ def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: It
             # integration's fix of the combination: refute-5a-r2 P-A, a "Cannot confirm" on one rival beside a "Not
             # documented" on another over two acts) - and so is its ADDON hold, which the later passes' counted set need
             # not reproduce either (DECISIONS D268); a code assess took out of the competition by an overlay-bound "Not
-            # documented" (D270 DQ-2) competes with nothing in the engine's own competition and is never assessed again
-            # either (engine/assess._bind_in_passes keeps its record as that answer found it), so its competing and
-            # ADDON holds are left out the same way (the integration's fix of the combination: refute-5a-r1 P-1)
+            # documented" (D270 DQ-2) competes with nothing in the engine's own competition, so its competing hold is
+            # left out the same way - but not its ADDON hold: engine/assess assesses it again whenever the answers move
+            # its ADDON row (DECISIONS D283, G1-02 with C8's correction: engine/assess.read_again), so that hold is the
+            # last pass's and is checked (``_unchecked``)
             unchecked = _unchecked(record.key in engine_answered, record.key in taken)
             checked = tuple(found for found in stored if found.cause not in unchecked)
             reproduced = tuple(found for found in stored_combo if found.cause not in unchecked)
@@ -1030,6 +1117,10 @@ def item_slots(item: engine_questions.Item, key: str, joined: combination.Combin
     if message not in TEXT_FREE:
         return None
     code, family = fill.code, fill.family
+    if message is engine_questions.MessageId.ADDON:
+        # DECISIONS D284 (build list B7): the add-on and the codes it is reported with (engine/assess.primaries, as the
+        # ADDON row reads them), from the codes alone - a true absence form when the table names none
+        return wording.Slots(code=code, family=family, codes=tuple(sorted(engine_assess.primaries(code))))
     if held.cause == combination.BASE_CAUSE:
         base = joined.bases.get(key)
         if base is None:
@@ -1238,14 +1329,15 @@ def _answerable(live: Live, stored: Sequence[Any]) -> list[Any]:
 def _recount_or_none(rows: Sequence[Stored], counted: Iterable[str], engine: Iterable[str],
                      coding: Optional[Mapping[str, Any]], facts: Optional[FactSet], retrieval: Any,
                      member: Optional[engine_assess.MemberContext], out: Iterable[str], answered: Iterable[str] = (),
-                     assessed: Iterable[str] = ()) -> Optional[Recount]:
+                     assessed: Iterable[str] = (), uncounted: Iterable[str] = ()) -> Optional[Recount]:
     """recount, or None when the coding or the FactSet cannot be read, or a record cannot be read or is not reproduced
-    by the engine's own counted set: nothing is then recomputed (fail-closed)."""
+    by the engine's own counted set: nothing is then recomputed (fail-closed). ``uncounted``: assessed_uncounted of the
+    stored record (DECISIONS D283 item 3)."""
     if coding is None or facts is None:
         return None
     try:
         return recount(rows, counted, engine, coding, facts, retrieval=retrieval, member=member,
-                       out_of_competition=out, answered=answered, assessed=assessed)
+                       out_of_competition=out, answered=answered, assessed=assessed, uncounted=uncounted)
     except (ValueError, LookupError, TypeError):  # UnreadableRecord, RecordMismatch, a record the engine cannot read
         return None
 
@@ -1289,6 +1381,33 @@ def _rival_out(p: Stored, out_codes: Collection[str]) -> bool:
     return isinstance(rivals, list) and any(isinstance(code, str) and code in out_codes for code in rivals)
 
 
+def _engine_read_keys(answers: Any) -> frozenset[tuple[str, str, str]]:
+    """The (code, family, fact) keys of the standing answers engine/assess reads itself (engine/assess.engine_reads, the
+    one rule: a code and its question's fingerprint, to a fact neither key-bound nor competing_codes nor the encounter's
+    date) - read time treats such an answer as assess does, an exclusion that stands once bound (DECISIONS D283); every
+    other answer is the overlay's, bound by its key in each pass. An answer that carries no fingerprint (the earlier
+    form, or a caller that gives none) is the overlay's."""
+    out = set()
+    for answer in answers or ():
+        code, family, fact = (str(_field(answer, name) or '') for name in ('code', 'family', 'fact'))  # type: ignore[no-untyped-call]
+        question = str(_field(answer, 'question') or '')  # type: ignore[no-untyped-call]
+        if code and engine_assess.engine_reads(cast(Any, SimpleNamespace(code=code, question=question, fact=fact))):
+            out.add((code, family, fact))
+    return frozenset(out)
+
+
+def _values(bound: Mapping[str, tuple[str, str]]) -> dict[str, engine_assess.Answer]:
+    """{key: engine/assess.Answer} of read time's bindings {key: (fact, value)} (a value no question takes is left out,
+    as engine/assess._answers_of leaves it out)."""
+    out: dict[str, engine_assess.Answer] = {}
+    for key, (_, value) in bound.items():
+        try:
+            out[key] = engine_assess.Answer(value)
+        except ValueError:
+            continue
+    return out
+
+
 def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, completeness: object = None,
                 retrieval: Any = (), reference_sources: Any = (), service_date: Optional[datetime.date] = None,
                 answers: Any = (), facts: Optional[FactSet] = None,
@@ -1314,28 +1433,38 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
     engine_counted = selected | {p.key for p in rows if answered_by_engine(p)[0]}
     engine_keys = [p.key for p in rows if p.key in engine_counted]
     counted_moved = counted != engine_counted
-    # DECISIONS D249 (5a's Q2) and D270 DQ-3: the codes out of the reviewer's competition - a member's answer that a
-    # code is not documented (the answers the engine read, their marker, from the start; the overlay's own once they
-    # bind below), and a rival the reviewer rejects, whatever it was answered ("Cannot confirm" included): an
-    # engine-answered code counts whatever its decision (``counts``: session decision (e)), so its rejection takes it
-    # out of the competition alone, which makes the competition hold's own sentence true - with no decision a "Cannot
-    # confirm" keeps the hold (D260's effect)
-    out = {p.key for p in rows if answered_by_engine(p)[1] == NOT_DOCUMENTED}
-    out |= {p.key for p in rows if answered_by_engine(p)[0] and _rejected(decided.get(p.key))}
-    # DECISIONS D270 DQ-2: the codes assess took out of its own competition by an overlay-bound "Not documented" it read
-    # for the competition alone (from the stored record: the engine's own competition reproduces it; the reviewer's
-    # takes such a code out only while its answer binds now, so a decision that unbinds it restores the competition)
+    # DECISIONS D249 (5a's Q2): a member's answer that a code is not documented takes it out of the reviewer's
+    # competition (below, by answer_pass). D270 DQ-3: a rival the reviewer rejects leaves the competition whatever it was answered ("Cannot confirm"
+    # included) - an engine-answered code counts whatever its decision (``counts``: session decision (e)), so its
+    # rejection takes it out alone, which makes the competition hold's own sentence true; with no decision a "Cannot
+    # confirm" keeps the hold (D260's effect). (A rejected code that was not answered is not counted at all.)
+    rejected_answered = {p.key for p in rows if answered_by_engine(p)[0] and _rejected(decided.get(p.key))}
+    # DECISIONS D270 DQ-2 and D283 item 3: what assess read for its own competition and its own ADDON count, from the
+    # stored record alone (the engine's own combination reproduces it; the reviewer's reads read time's own binding)
     assessed = assessed_out(completeness, rows)
-    # the codes a member's answer takes out of review - the engine's (their marker: it read the answer already) from
-    # the start, the overlay's own once they bind below; the ADDON row counts none of them (DECISIONS D268, as
-    # engine/assess counts no answered code)
-    unavailable: dict[str, tuple[str, str]] = {p.key: answered_by_engine(p) for p in rows if answered_by_engine(p)[0]}
-    while True:
+    uncounted_record = assessed_uncounted(completeness, rows)
+    # DECISIONS D283 items 1-2 (build list B16): read time's answer passes apply assess's ONE rule
+    # (engine/assess.answer_pass, the implementation both halves call). Each pass: the competition leaves out every code
+    # an answer the engine reads excluded "Not documented" and every code an overlay-bound "Not documented" binds IN THIS
+    # PASS (recomputed, so a code whose answer no longer binds is back in it - D270 DQ-2's restore); the ADDON row counts
+    # no code an answer has bound, of either value, accumulated over the passes so that they end (G1-03). An answer the
+    # engine reads (engine/assess.engine_reads: by its question's fingerprint) excludes its code and stands - assess never
+    # reads such a code again; an overlay-bound answer binds the item its code presents IN EACH PASS, so a code whose
+    # ADDON row a pass moves is read again and its answer binds only the item it then presents (C7's correction: assess
+    # and read time alike) - never "an answer that binds stands" for it.
+    reads = _engine_read_keys(answers)
+    stands: dict[str, tuple[str, str]] = {p.key: answered_by_engine(p) for p in rows if answered_by_engine(p)[0]}
+    bound_now: dict[str, tuple[str, str]] = {}
+    passed: Optional[engine_assess.AnswerPass] = None
+    found: Optional[Recount] = None
+    live_of: Mapping[str, Live] = {}
+    for _ in range(2 * len(rows) + 4):  # the passes end (bindings of an add-on are lost at most once); bounded anyway
+        passed = engine_assess.answer_pass(_values(stands), _values(bound_now), passed)
+        out = set(passed.out) | rejected_answered
         # FINAL-V2 4.8: the read-time engine over the counted set, from the frozen inventory; a record or an inventory
         # that cannot be read, or that the engine's own counted set does not reproduce, recomputes nothing (fail-closed)
-        answered_keys = frozenset(unavailable)
         found = _recount_or_none(rows, [p.key for p in candidates], engine_keys, coding, facts, retrieval, member, out,
-                                 answered_keys, assessed)
+                                 passed.uncounted, assessed, uncounted_record)
         live_of = found.live if found is not None and (counted_moved or _competition_moved(found)
                                                        or _addon_moved(found)) else {}
         # the codes whose item stays but whose words name what the decisions moved (a rejected code, a released act)
@@ -1343,12 +1472,11 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                          if not live.moved and _renamed(live.item, key, found.stored_joined, found.joined, facts)}
                         if found is not None and facts is not None else set())
         # Member answers, bound to the item the code presents now, or to its stored questions where nothing was
-        # recomputed. An answer that binds stands: one that takes a code out of the competition (D249) releases its
-        # rivals' competing holds, one that takes out an add-on's last primary holds the add-on (D268), and the codes
-        # whose items that moves are bound again on the next pass - never the answered code itself, whose answer was
-        # given to the item it presented
+        # recomputed: an answer the engine reads stands once bound; an overlay-bound one is bound again each pass
+        next_stands: dict[str, tuple[str, str]] = dict(stands)
+        next_bound: dict[str, tuple[str, str]] = {}
         for p in rows:
-            if p.key in unavailable:
+            if p.key in stands:
                 continue
             live = live_of.get(p.key)
             open_facts = [q.get('fact') for q in p.questions if q.get('scope') == 'proposal']
@@ -1356,18 +1484,25 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                 open_facts = _answerable(live, open_facts)
             if p.key in counted and p.bucket == EXCLUDED:
                 open_facts += [q['fact'] for q in _reinstatement_waits(p)]
+            # DECISIONS D283, G1-01 option (c): an answer to the competing question binds nothing, at assess or at
+            # read time (engine/assess.overlay_bound never reads one) - the competing hold is settled by the
+            # reviewer's rejection (D270 DQ-3), never by an answer
             by = next(((fact, answered[(p.code, p.family, fact)]) for fact in open_facts
-                       if answered.get((p.code, p.family, fact))), ('', ''))
+                       if fact != COMPETING_FACT and answered.get((p.code, p.family, fact))), ('', ''))
             if by[0]:
-                unavailable[p.key] = by
-        grown = out | {key for key, (_, value) in unavailable.items() if value == NOT_DOCUMENTED}
-        settled = grown == out and frozenset(unavailable) == answered_keys
-        # kept before the loop ends, so where nothing was recomputed a rival this pass's answers took out of the
-        # competition still marks the stored hold that names it stale (``_rival_out``; before, the last pass's answers
-        # were left out of ``out`` and D249's stale mark never fired for an answer the overlay binds)
-        out = grown
+                (next_stands if (p.code, p.family, by[0]) in reads else next_bound)[p.key] = by
+        settled = next_stands == stands and next_bound == bound_now
+        stands, bound_now = next_stands, next_bound
         if found is None or settled:
-            break  # the answered codes grow strictly each further pass, so at most one pass per row
+            break
+    else:  # not reached on a record the engine made (the passes end); fail-closed: nothing recomputed
+        found, live_of = None, {}
+    # the pass the last binding leaves (the bindings of the last pass, which the loop ended on): the competition's and
+    # the ADDON count's sets - kept so, where nothing was recomputed, a rival this pass's answers took out of the
+    # competition still marks the stored hold that names it stale (``_rival_out``)
+    passed = engine_assess.answer_pass(_values(stands), _values(bound_now), passed)
+    out = set(passed.out) | rejected_answered
+    unavailable: dict[str, tuple[str, str]] = {**stands, **bound_now}
     out_codes = {p.code for p in rows if p.key in out}
     # The EFFECTIVE set: the counted codes still in review, which the combination readings that hold nothing read.
     effective = [p for p in candidates if p.key not in unavailable]
@@ -1427,9 +1562,12 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                 questions_ = _proposal_questions(questions_)
                 recomputed += [_rule_id(held) for held in changed]
             elif reworded and live.worded is not None:
+                # the live question carries its item's message (DECISIONS D284, build list B7: customer_api chooses the
+                # ADDON row's fixed sentence by it, never by the fact key it shares with the status row)
                 questions_ = _proposal_questions(questions_) + [{
                     'id': '', 'scope': 'proposal', 'family': p.family, 'fact': live.worded.fact,
-                    'question': live.worded.question, 'reason': live.worded.reason}]
+                    'question': live.worded.question, 'reason': live.worded.reason,
+                    'message': live.item.message.value if live.item is not None else ''}]
                 recomputed += [_rule_id(held) for held in changed] or (
                     [_rule_id(live.item.held)] if live.item is not None else [])
             elif reworded:  # a changed item read time cannot word: the stored question stands, marked stale (held)
@@ -1631,7 +1769,7 @@ def reviewed_completeness(completeness: Mapping[str, Any], R: FactSet, counted: 
                           label: Callable[[coverage.Session], str] = session_label) -> dict[str, Any]:
     """The coverage the assessment recorded (``completeness``) as the review leaves it (reviewed_coverage), with the
     assessment's own counts as the stored completeness records them (stored_counts: this step's request R2). Pure;
-    raises UnreadableCoding for a completeness whose event coding is not event_coding@2 (FINAL-V2 6.5: a v1 row's @1 is
+    raises UnreadableCoding for a completeness whose event coding is not of READ_CODINGS (FINAL-V2 6.5: a v1 row's @1 is
     refused before anything is read), UnreadableCounts when the counts are not recorded - readers.EventReader derives
     them for a record that does not carry them (assessment_counts) and calls reviewed_coverage."""
     read_coding(completeness)
@@ -1650,8 +1788,8 @@ def reviewed_coverage(completeness: Mapping[str, Any], R: FactSet, counted: Sequ
     renderer's). ``reinstated``: (code, family) of the reinstated codes. The open questions, the provider's state, the
     conflicts and the unverified attributes are the assessment's own (``own``: assessment_counts' or stored_counts'),
     never written into the result unless the stored completeness records them. The second-review mark is
-    coverage.unresolved_record's own. Pure; UnreadableCoding for a completeness whose event coding is not
-    event_coding@2 (FINAL-V2 6.5)."""
+    coverage.unresolved_record's own. Pure; UnreadableCoding for a completeness whose event coding is not of
+    READ_CODINGS (FINAL-V2 6.5; AMENDMENT-2 8.1)."""
     read_coding(completeness)
     sessions_ = coverage.sessions(R)
     day = combination.procedure_day(R, tuple(combination.ProceduralCode(member.code, member.family, member.procedural,

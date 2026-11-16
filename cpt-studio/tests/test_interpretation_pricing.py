@@ -5,9 +5,18 @@ gemini-4-argon, read 2026-11-09, which still price the runs whose requests named
 them) - priced at the rate of the day the request was sent, from the usageMetadata the response reported, in Decimal;
 prompt tokens served from a cache (Google's implicit caching reports them without being asked) priced at the full input
 rate, a stated upper bound; no estimate rather than a guessed one. The participants' estimates are unchanged
-(tests/test_participants_pricing.py, run beside this). Pure; no I/O."""
+(tests/test_participants_pricing.py, run beside this). Pure; no I/O.
+
+AMENDMENT-2 1.7 and section 9 (DECISIONS D275; step F5): the interpreter since D275 is claude-fable-5-2, priced at the
+claude-api reference's rates of 2026-11-03 (input $8, a 5-minute cache write $10, a cache read $0.20, output $40 per
+million tokens, thinking inside the output and never priced apart, undated) from every usage field AMENDMENT-2 E.1
+reads, with E.1's real usage objects as vectors; a 1-hour cache write, usage.iterations or a STATED term the rates are
+not for leave a usage unpriced, while a term a usage does not state is the request's default (AMENDMENT-2 1.2 names
+none), so a usage built before a send - a harness's worst case for its cap (8.3), a constructed answer - is priced.
+FablePricingTests below."""
 from __future__ import annotations
 
+import itertools
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -199,7 +208,7 @@ class GeminiPricingTests(SimpleTestCase):
         reported = usage(1000, 100)
         for model in ('gemini-4-argon-001', 'Gemini-4-Argon', 'gemini-4', '', None, 'gpt-6-astra', 'claude-fable-5-1',
                       'gemini-4-carbon-001', 'Gemini-4-Carbon', 'gemini-4-carbon ', 'carbon', 'argon', 7,
-                      ('gemini-4-carbon',)):
+                      ('gemini-4-carbon',), 'claude-fable-5-2'):
             with self.subTest(model=model):
                 self.assertIsNone(pricing.estimate(model, reported, on=TRIAL_DAY))
                 self.assertIsNone(pricing.estimate_loop(model, [reported, reported], on=TRIAL_DAY))
@@ -233,3 +242,229 @@ class GeminiPricingTests(SimpleTestCase):
                     self.assertEqual(pricing.estimate(model, reported, on=on), plain)
                     self.assertEqual(pricing.estimate_loop(model, [reported, reported], on=on),
                                      pricing.estimate_loop(model, [reported, reported]))
+
+
+# --- AMENDMENT-2 1.7 (DECISIONS D275): claude-fable-5-2, the interpreter since D275 -----------------------------------
+
+FABLE_52 = 'claude-fable-5-2'
+FABLE_52_RATES = {'input': Decimal('8.00'), 'cache_write': Decimal('10.00'), 'cache_read': Decimal('0.20'),
+                  'output': Decimal('40.00')}
+FABLE_52_BASIS = ('estimated from published rates as of 2026-11-03, for a standard-tier, standard-speed, globally '
+                  'served request with a 5-minute cache write; thinking is counted in the output; not reconciled to '
+                  'an invoice')
+TERMS = {'service_tier': 'standard', 'speed': 'standard', 'inference_geo': 'global'}
+
+
+def anthropic(input_tokens, output_tokens, *, thinking, write_5m=0, write_1h=0, read=0, **extra):
+    """A usage object as AMENDMENT-2 E.1 reads every Fable answer's: all its fields, in its shape."""
+    return {'input_tokens': input_tokens, 'cache_creation_input_tokens': write_5m + write_1h,
+            'cache_read_input_tokens': read,
+            'cache_creation': {'ephemeral_5m_input_tokens': write_5m, 'ephemeral_1h_input_tokens': write_1h},
+            'output_tokens': output_tokens, **TERMS, 'output_tokens_details': {'thinking_tokens': thinking}, **extra}
+
+
+# E.1's real usage objects, read from the probes' frozen bodies (probe.anthropic_usage; anthropic-project/batches), each
+# with the estimate 1.7's rates give it: (usage, estimated_usd or None). A 1-hour write has no estimate (F3all's probe
+# cached with a 1-hour TTL; the interpreter's request marks only the 5-minute cache, AMENDMENT-2 7.2).
+RECORDED = {
+    'F2high, a short note, pass 1, no cache': (anthropic(44749, 10663, thinking=5766), '0.784512'),
+    'F2high, a 19.4 KB note, pass 1 cut at max_tokens 64,000': (anthropic(52150, 64000, thinking=29109), '2.977200'),
+    'F2high-p2, a short note, pass 2 under structured outputs': (anthropic(7538, 12562, thinking=8832), '0.562784'),
+    # 472 x $8 + 44,466 x $0.20 + 10,824 x $40 = $0.4456292, stated to a millionth half up
+    'F3all, a short note, pass 1 reading the cached instruction': (anthropic(472, 10824, thinking=6120, read=44466),
+                                                                   '0.445629'),
+    # 34,860 x $8 + 3,253 x $0.20 + 77,483 x $40 = $3.3788506
+    'F3long, a 19.4 KB note, pass 2 over 756 claims': (anthropic(34860, 77483, thinking=43623, read=3253), '3.378851'),
+    'F3all, the first pass 1: a 1-hour cache write': (anthropic(411, 9716, thinking=5023, write_1h=44466), None),
+    'F3all, the first pass 2: a 1-hour cache write': (anthropic(2376, 3636, thinking=1487, write_1h=3253), None),
+}
+
+
+class FablePricingTests(SimpleTestCase):
+    def test_the_rates_are_the_claude_api_references_of_2026_11_03(self):
+        # AMENDMENT-2 section 9: "a new one pins pricing.FABLE_52 == interpretation.MODEL_V3"
+        self.assertEqual(pricing.FABLE_52, interpretation.MODEL_V3)
+        self.assertEqual(pricing.FABLE_52, FABLE_52)
+        self.assertEqual(pricing.FABLE_52_RATES, FABLE_52_RATES)
+        self.assertEqual(pricing.FABLE_52_RATES['cache_write'], pricing.FABLE_52_RATES['input'] * Decimal('1.25'))
+        self.assertEqual((pricing.FABLE_52_RATES_AS_OF, pricing.FABLE_52_BASIS, pricing.FABLE_52_TERMS),
+                         ('2026-11-03', FABLE_52_BASIS, TERMS))
+        for stated in ('the claude-api reference, cached 2026-11-03', 'claude-fable-5-2', '$8.00', '$40.00',
+                       'thinking included', '$0.20', '5-minute cache writes $10.00', 'no dated change'):
+            with self.subTest(stated=stated):
+                self.assertIn(stated, pricing.FABLE_52_SOURCE)
+        self.assertEqual(pricing.GEMINI, interpretation.MODEL)  # Gemini's pin stays (section 9)
+
+    def test_e1s_recorded_usage_objects_price_at_1_7s_rates(self):
+        for label, (reported, expected) in RECORDED.items():
+            with self.subTest(label):
+                found = pricing.estimate(FABLE_52, reported)
+                if expected is None:
+                    self.assertIsNone(found)
+                    continue
+                self.assertEqual(found['estimated_usd'], expected)
+                tokens = found['rates']['priced_tokens']
+                self.assertEqual(tokens, {'input': reported['input_tokens'],
+                                          'cache_write': reported['cache_creation_input_tokens'],
+                                          'cache_read': reported['cache_read_input_tokens'],
+                                          'output': reported['output_tokens']})
+                self.assertEqual(Decimal(found['estimated_usd']), (sum(
+                    (tokens[kind] * FABLE_52_RATES[kind] for kind in tokens), Decimal(0)) / 1_000_000).quantize(
+                    Decimal('0.000001'), rounding='ROUND_HALF_UP'))
+                self.assertEqual(found['rates']['thinking_tokens'],
+                                 reported['output_tokens_details']['thinking_tokens'])
+                self.assertEqual(found['basis'], FABLE_52_BASIS)
+        whole = pricing.estimate(FABLE_52, RECORDED['F2high, a short note, pass 1, no cache'][0])
+        self.assertEqual(whole['rates'], {
+            'model': FABLE_52, 'as_of': '2026-11-03',
+            'usd_per_million_tokens': {'input': '8.00', 'cache_write': '10.00', 'cache_read': '0.20',
+                                       'output': '40.00'},
+            'priced_tokens': {'input': 44749, 'cache_write': 0, 'cache_read': 0, 'output': 10663},
+            'source': pricing.FABLE_52_SOURCE, 'terms': TERMS, 'thinking_tokens': 5766})
+
+    def test_a_5_minute_write_is_priced_at_1_25_times_input(self):
+        # the cache the interpreter's request writes (AMENDMENT-2 7.2): F3all's first pass 1 as a 5-minute write -
+        # 411 x $8 + 44,466 x $10 + 9,716 x $40
+        five = anthropic(411, 9716, thinking=5023, write_5m=44466)
+        self.assertEqual(pricing.estimate(FABLE_52, five)['estimated_usd'], '0.836588')
+        self.assertEqual(pricing.estimate(FABLE_52, five)['rates']['priced_tokens']['cache_write'], 44466)
+        # the same counts with the write named only in the total: the breakdown absent counts as no 5-minute write
+        bare = {key: value for key, value in five.items() if key != 'cache_creation'}
+        self.assertIsNone(pricing.estimate(FABLE_52, bare))
+        self.assertIsNotNone(pricing.estimate(FABLE_52, {**bare, 'cache_creation_input_tokens': 0}))  # control
+
+    def test_thinking_is_reported_beside_the_estimate_and_never_priced_apart(self):
+        base = anthropic(1000, 5000, thinking=0)
+        for thinking in (0, 1, 2500, 5000):
+            with self.subTest(thinking=thinking):
+                found = pricing.estimate(FABLE_52, {**base, 'output_tokens_details': {'thinking_tokens': thinking}})
+                self.assertEqual(found['estimated_usd'], '0.208000')  # 1,000 x $8 + 5,000 x $40, thinking inside
+                self.assertEqual(found['rates']['thinking_tokens'], thinking)
+        absent = {key: value for key, value in base.items() if key != 'output_tokens_details'}
+        self.assertEqual(pricing.estimate(FABLE_52, absent)['rates']['thinking_tokens'], 0)  # an absent count is zero
+
+    def test_no_rate_no_estimate(self):
+        # 1.7: a 1-hour write, a 5-minute count that is not the whole write, usage.iterations; a stated term other than
+        # E.1's; counts that do not add up or are not whole numbers - each refused, never priced at a guessed rate
+        good = anthropic(1000, 500, thinking=200, write_5m=300, read=40)
+        self.assertIsNotNone(pricing.estimate(FABLE_52, good))
+        cases = {
+            'a 1-hour write beside the 5-minute one': {**good, 'cache_creation_input_tokens': 301,
+                                                       'cache_creation': {'ephemeral_5m_input_tokens': 300,
+                                                                          'ephemeral_1h_input_tokens': 1}},
+            # the 1-hour rule alone (refutation VF51-3): the 5-minute count IS the whole write, a 1-hour count beside it
+            'a 1-hour count beside a 5-minute count that is the whole write': {
+                **good, 'cache_creation_input_tokens': 300,
+                'cache_creation': {'ephemeral_5m_input_tokens': 300, 'ephemeral_1h_input_tokens': 1}},
+            'a 1-hour count with no write at all': {
+                **good, 'cache_creation_input_tokens': 0,
+                'cache_creation': {'ephemeral_5m_input_tokens': 0, 'ephemeral_1h_input_tokens': 7}},
+            'a 5-minute count short of the write': {**good, 'cache_creation': {'ephemeral_5m_input_tokens': 299,
+                                                                              'ephemeral_1h_input_tokens': 0}},
+            'a 5-minute count beyond the write': {**good, 'cache_creation': {'ephemeral_5m_input_tokens': 301}},
+            'iterations (a fallback)': {**good, 'iterations': [{'type': 'fallback_message', 'input_tokens': 9}]},
+            'iterations (a server-side step)': {**good, 'iterations': [{'type': 'compaction', 'input_tokens': 9}]},
+            'iterations, empty': {**good, 'iterations': []},
+            'the batch tier': {**good, 'service_tier': 'batch'},
+            'the priority tier': {**good, 'service_tier': 'priority'},
+            'fast mode': {**good, 'speed': 'fast'},
+            'US-only inference': {**good, 'inference_geo': 'us'},
+            # a stated term is read as stated, whatever its form: only the rates' own value is theirs
+            'a tier stated as empty text': {**good, 'service_tier': ''},
+            'a speed stated in capitals': {**good, 'speed': 'STANDARD'},
+            'a geography stated as a list': {**good, 'inference_geo': ['global']},
+            'a speed stated as a number': {**good, 'speed': 1},
+            'fast mode stated on a usage that states no other term': {
+                **{key: value for key, value in good.items() if key not in TERMS}, 'speed': 'fast'},
+            'more thinking than output': {**good, 'output_tokens_details': {'thinking_tokens': 501}},
+            'thinking as text': {**good, 'output_tokens_details': {'thinking_tokens': '200'}},
+            'a breakdown that is not an object': {**good, 'cache_creation': [300, 0]},
+            'output details that are not an object': {**good, 'output_tokens_details': 200},
+            'no input count': {key: value for key, value in good.items() if key != 'input_tokens'},
+            'no output count': {key: value for key, value in good.items() if key != 'output_tokens'},
+            'input as a float': {**good, 'input_tokens': 1000.0}, 'a boolean': {**good, 'output_tokens': True},
+            'negative': {**good, 'cache_read_input_tokens': -1},
+            'beyond any answer': {**good, 'input_tokens': 10 ** 15},
+            'a 1-hour count as text': {**good, 'cache_creation': {'ephemeral_5m_input_tokens': 300,
+                                                                 'ephemeral_1h_input_tokens': '0'}},
+            'not an object': [1000, 500], 'nothing': None, 'no usage at all (a stream without message_delta)': {},
+        }
+        for label, reported in cases.items():
+            with self.subTest(label):
+                self.assertIsNone(pricing.estimate(FABLE_52, reported))
+        # a null iterations, a null breakdown and a null cache count are absent ones (as the module reads every count)
+        self.assertEqual(pricing.estimate(FABLE_52, {**good, 'iterations': None}), pricing.estimate(FABLE_52, good))
+        nulls = {**good, 'cache_creation_input_tokens': None, 'cache_creation': None, 'cache_read_input_tokens': None}
+        self.assertEqual(pricing.estimate(FABLE_52, nulls)['rates']['priced_tokens'],
+                         {'input': 1000, 'cache_write': 0, 'cache_read': 0, 'output': 500})
+
+    def test_a_term_a_usage_does_not_state_is_the_requests_default(self):
+        """Refutation VF51-1: AMENDMENT-2 1.2's request names no tier, speed or geography, so a term a usage does not
+        state - absent or null - is the API's default, the rates' own, and a usage built before a send states none.
+        Such a usage is priced exactly as the one stating all three, never refused for the silence alone (a STATED
+        other value is: test_no_rate_no_estimate)."""
+        good = anthropic(1000, 500, thinking=200, write_5m=300, read=40)
+        stated = pricing.estimate(FABLE_52, good)
+        self.assertEqual(stated['estimated_usd'], '0.031008')  # 1,000 x $8 + 300 x $10 + 40 x $0.20 + 500 x $40
+        for size in (1, 2, 3):
+            for silent in itertools.combinations(TERMS, size):
+                for form in ('absent', 'null'):
+                    reported = {key: value for key, value in good.items() if key not in silent}
+                    if form == 'null':
+                        reported.update({term: None for term in silent})
+                    with self.subTest(silent=silent, form=form):
+                        self.assertEqual(pricing.estimate(FABLE_52, reported), stated)
+        # the worst case a harness reserves before a send (AMENDMENT-2 8.3): the cached prefix as a 5-minute write, the
+        # rest of the body as input, max_tokens as output - Anthropic's count fields only, no term
+        reserved = {'input_tokens': 9000, 'cache_creation_input_tokens': 180000, 'cache_read_input_tokens': 0,
+                    'output_tokens': 128000,
+                    'cache_creation': {'ephemeral_5m_input_tokens': 180000, 'ephemeral_1h_input_tokens': 0}}
+        found = pricing.estimate(FABLE_52, reserved)
+        self.assertEqual(found['estimated_usd'], '6.992000')  # 9,000 x $8 + 180,000 x $10 + 128,000 x $40
+        self.assertEqual(found['rates']['terms'], TERMS)  # the terms the estimate is for, stated beside it
+        unmarked = {**reserved, 'input_tokens': 160000, 'cache_creation_input_tokens': 0,
+                    'cache_creation': {'ephemeral_5m_input_tokens': 0, 'ephemeral_1h_input_tokens': 0}}
+        self.assertEqual(pricing.estimate(FABLE_52, unmarked)['estimated_usd'], '6.400000')  # pass 2: no marker
+        self.assertEqual(pricing.estimate_loop(FABLE_52, [reserved, unmarked])['estimated_usd'], '13.392000')
+        # ... while a prefix written at a 1-hour time-to-live still has no rate (1.7), and a stated term still decides
+        self.assertIsNone(pricing.estimate(FABLE_52, {**reserved, 'cache_creation': {
+            'ephemeral_5m_input_tokens': 0, 'ephemeral_1h_input_tokens': 180000}}))
+        self.assertIsNone(pricing.estimate(FABLE_52, {**reserved, 'speed': 'fast'}))
+        # a constructed answer stating the tier alone (message_start's usage with message_delta's merged over it)
+        answer = {'input_tokens': 4210, 'cache_creation_input_tokens': 44466, 'cache_read_input_tokens': 0,
+                  'cache_creation': {'ephemeral_5m_input_tokens': 44466, 'ephemeral_1h_input_tokens': 0},
+                  'output_tokens': 15210, 'service_tier': 'standard', 'output_tokens_details': {'thinking_tokens': 9120}}
+        self.assertEqual(pricing.estimate(FABLE_52, answer)['estimated_usd'], '1.086740')  # 4,210x8+44,466x10+15,210x40
+
+    def test_the_rates_are_undated(self):
+        reported = RECORDED['F3all, a short note, pass 1 reading the cached instruction'][0]
+        plain = pricing.estimate(FABLE_52, reported)
+        self.assertNotIn('priced_on', plain['rates'])
+        for on in (TRIAL_DAY, date(2026, 12, 5), datetime(2027, 1, 1, tzinfo=timezone.utc), datetime(2026, 12, 5),
+                   'not a day', None):
+            with self.subTest(on=on):
+                self.assertEqual(pricing.estimate(FABLE_52, reported, on=on), plain)
+
+    def test_a_run_is_priced_only_by_the_model_its_request_named(self):
+        reported = RECORDED['F2high, a short note, pass 1, no cache'][0]
+        for model in ('claude-fable-5-2-preview', 'Claude-Fable-5-2', 'claude-fable-5-2 ', 'claude-fable-5', 'fable',
+                      'claude-mythos-5-2', '', None, 7, (FABLE_52,), GEMINI, ARGON):
+            with self.subTest(model=model):
+                self.assertIsNone(pricing.estimate(model, reported, on=TRIAL_DAY))
+        # the participant's Fable 5.1 prices the same counts at its own rates, never at 5.2's (and the reverse)
+        older = pricing.estimate('claude-fable-5-1', reported)
+        self.assertEqual(older['estimated_usd'], '0.980640')  # 44,749 x $10 + 10,663 x $50
+        self.assertNotEqual(older['estimated_usd'], pricing.estimate(FABLE_52, reported)['estimated_usd'])
+
+    def test_one_exchange_is_estimate_exactly_and_a_loop_adds_up_each_exchange(self):
+        first = RECORDED['F2high, a short note, pass 1, no cache'][0]
+        second = RECORDED['F3all, a short note, pass 1 reading the cached instruction'][0]
+        self.assertEqual(pricing.estimate_loop(FABLE_52, [first]), pricing.estimate(FABLE_52, first))
+        loop = pricing.estimate_loop(FABLE_52, [first, {}, second])
+        self.assertEqual(loop['estimated_usd'], '1.230141')  # $0.784512 + $0.4456292, rounded once
+        self.assertEqual((loop['rates']['exchanges'], loop['rates']['exchanges_priced'],
+                          loop['rates']['thinking_tokens'], loop['rates']['priced_tokens']),
+                         (3, 2, 5766 + 6120, {'input': 44749 + 472, 'cache_write': 0, 'cache_read': 44466,
+                                              'output': 10663 + 10824}))
+        self.assertIsNone(pricing.estimate_loop(FABLE_52, [first, RECORDED[
+            'F3all, the first pass 1: a 1-hour cache write'][0]]))  # one unpriceable exchange: no estimate

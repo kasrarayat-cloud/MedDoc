@@ -1,8 +1,9 @@
-"""Settle (docs/gemini-migration/FINAL-V2.md 1.5, 1.7, 3.1's cross-object rules, 3.2.3-3.2.6, 3.3, 3.4 and 3.6; step 3a of
-8.1): ``settle(read, checked, claim_set, indistinct, appraisal, usage)`` combines pass 1's answer, the deterministic
-checks, the claim set and pass 2's answer into ONE result per fact - per act for an inherited fact - and gives the content
-of one EventInventory row (``Settled``: its ``events`` and its ``verification`` report, which store.row_v2 binds to the
-revision, both runs and the claim list), or ``Unhealthy`` when 3.2.6's health refuses the appraisal whole.
+"""Settle (docs/gemini-migration/FINAL-V2.md 1.5, 1.7, 3.1's cross-object rules, 3.2.3-3.2.6, 3.3, 3.4 and 3.6; step 3a
+of 8.1; AMENDMENT-2 4.3.5 and DECISIONS D292's U3, step f3s): ``settle(read, checked, claim_set, indistinct, appraisal,
+usage, appraisal_version=...)`` combines pass 1's answer, the deterministic checks, the claim set and pass 2's answer
+into ONE result per fact - per act for an inherited fact - and gives the content of one EventInventory row (``Settled``:
+its ``events`` and its ``verification`` report, which store.row_v2 binds to the revision, both runs and the claim list),
+or ``Unhealthy`` when 3.2.6's health refuses the appraisal whole.
 
 **What settle reads, and never does.** It reads its inputs as data: extract_read's ReadAnswer (pass 1, with the reader's
 item-level findings), contract/checks.check's Checked (every other check of 3.1: geometry, consistency, the closures, the
@@ -44,7 +45,19 @@ it carries is the revision's own slice inside a LocatedWords that geometry made 
    evidence is stored with the appraisal, and an unrejected control's value stays possible (4.2 [R:HO-3]).
 
 The reasons of rows 1-5 are the row's own and every finding on the fact (hand-off 1c:R6: a fact's reasons are a set), so
-a check that failed on a doubted, silent or contradicted fact is still counted; rows 6-9 give their own reason. Pass 2's
+a check that failed on a doubted, silent or contradicted fact is still counted; rows 6-9 give their own reason.
+
+**An overfilled slot** (AMENDMENT-2 4.3.5; read under gemini-events@3, 4.3.1): each written fact carries the reader's
+slot_overfull, a reason in none of GEOMETRY_REASONS, LITERAL_REASONS and CONSISTENCY_REASONS, so integrity's ("an
+unforeseen reason fails integrity"), and row 4 makes it UNRESOLVED with no change to the table (rows 1-2 still take a
+contradicted written fact with passing sides, a conflict doubt or K8, and a stated or unclear doubt, first: a written
+fact is never established either way). The slot is stored as its written facts, each settled - more than one stored
+fact at a slot key, which the store accepts only under gemini-inventory@3 and only when every one carries slot_overfull
+(4.3.6) - and the engine reads them as the merged view (4.3.3). The inherited per-act fact of an overfilled section slot
+(an act's date relation, performer or performer_person) is likewise one per-act fact per written section fact, its claim
+inherited_from the section, unresolved with the same reason. Every other read of a single-valued attribute here - the
+drop rule's session of an absorbing event - reads extract_read.merged's view: never a supported value, so an unlisted
+entry naming a session is kept (fail-closed). Pass 2's
 verdict stays with the fact it was given for whatever row settled it - a fact claims.py claimed though rows 1-5 settle it
 (K8's joined members, a fact D200's object-less doubt names, which claims.py does not read yet) keeps it and is not
 lifted by it - so pass 2's doubt about a filing is never discarded (3.2.3 [R:HO-3]).
@@ -89,9 +102,14 @@ unappraised (row 6), fail-closed, though their own pair may be established (a RE
 own claim, or the store reading a shared claim per fact). A control that a claim's content also makes a pair control is
 stored in the control role. One control is read by two facts (DECISIONS D244's R-ANAT): 3.2.3 writes a reached_anatomy's
 control in its session's reach form (claims.CONTROLS: "In session {X} the endoscope did not reach the {point at anatomy
-Y}"), so when the session's reach names that point from the same units, the reach's own control and the
-reached_anatomy's are one claim of the request (claims.py makes one claim of one content), and that control appraises
-both facts (SHARED_CONTROL): each fact reads its own claim with it and each pair goes through the coherence table. It is
+Y}") - since DECISIONS D292's U3 the opposite of the reached_anatomy's own claim under gemini-appraisal@2 ("In session
+{X} the endoscope itself reached anatomy {Y}."; @1's claim, "The furthest point in session {X} was at anatomy {Y}.",
+keeps its recorded bytes) - so when the session's reach names that point from the same units, the reach's own control
+and the reached_anatomy's are one claim of the request (claims.py makes one claim of one content), and that control
+appraises both facts (SHARED_CONTROL): each fact reads its own claim with it and each pair goes through the coherence
+table. The share is pinned to the reach's own sentence (SHARED_FORM, the form the reach's control rule renders): a
+control of any other form is never read by two facts, so a reached_anatomy control reworded away from the reach's
+sentence stops sharing (fail-closed) instead of being read twice. It is
 STORED once, in the reach's appraisal - the attribute 3.2.3 writes it in - since the store reads a claim for one fact
 only (store._v2_verdicts_bound): the reached_anatomy borrows it (``borrowing``) and stores its own claim and verdict
 with no control, its result and reasons those of the pair it read, while the claim list keeps the control with pass
@@ -120,10 +138,11 @@ control acceptance - the controls not rejected (any verdict but contradicts, or 
 CONTROL_ACCEPTANCE_AT_LEAST pairs (a yes-sayer); establishment - the non-control claims established over all of them,
 refused below ESTABLISHMENT_REFUSED_BELOW with at least ESTABLISHMENT_AT_LEAST claims (a no-sayer, a detached or
 degenerate answer); completeness - the claims with no verdict over all claims of the request, refused above
-COMPLETENESS_REFUSED_ABOVE. Each threshold is an exact fraction, compared with integers. The thresholds are pinned
-(health_document, HEALTH_THRESHOLDS_SHA256 in studio/interpretation/__init__.py, 2.5): no appraisal is settled under
-thresholds nobody pinned (check_pin). A refused appraisal is never a row (7.5): settle returns Unhealthy, which the
-stage records on the appraisal run.
+COMPLETENESS_REFUSED_ABOVE. Each threshold is an exact fraction, compared with integers. The thresholds are pinned by
+label (health_document; HEALTH_THRESHOLDS_SHA256 under gemini-appraisal@1, HEALTH_THRESHOLDS_SHA256_V3 under @2, in
+studio/interpretation/__init__.py, 2.5 and AMENDMENT-2 8.2): no appraisal is settled under thresholds nobody pinned
+(check_pin, with the appraisal label the caller names). A refused appraisal is never a row (7.5): settle returns
+Unhealthy, which the stage records on the appraisal run.
 
 **The report** (1.7 verification, closed records: hand-off 1d#2): counts per attribute and result, the reasons counted,
 each doubt and the facts it was applied to, the health measures, the pairs' coherence, the unlisted statements kept and
@@ -151,7 +170,7 @@ from studio.interpretation.contract import claims, jsonschema
 from studio.interpretation.contract import extract_schema as xs
 from studio.interpretation.contract.appraise_read import ReadAppraisal, ReadUnlisted, ReadVerdict, UnlistedFinding
 from studio.interpretation.contract.extract_read import (OBJECT_LETTERS, Cited, DateOfService, FactKey, ReadAnswer,
-                                                         ReadCitation, ReadFact, ReadMember, is_id, iso_date,
+                                                         ReadCitation, ReadFact, ReadMember, is_id, iso_date, merged,
                                                          partial_date)
 from studio.interpretation.contract.types import (Appraisal, Attached, Attribute, Checked, Checks, CheckStatus,
                                                   ControlVerdict, DateState, Doubt, DoubtAbout, DoubtBasis, Fact,
@@ -220,13 +239,25 @@ def health_document() -> dict[str, object]:
                              'over': 'every claim of the request, a missing or repeated verdict having none'}}
 
 
-def check_pin() -> None:
-    """RuntimeError unless the health thresholds are byte for byte what APPRAISAL_VERSION pins (2.5; the read.check_pin
-    pattern). An empty pin (the placeholder until the integration owner writes it) is refused too: no appraisal is
-    settled under thresholds nobody pinned. Until the first recording under the label a changed threshold needs only its
-    pin recomputed (DECISIONS D202)."""
-    pinned = interpretation.HEALTH_THRESHOLDS_SHA256
-    version = interpretation.APPRAISAL_VERSION
+def health_pins() -> dict[str, str]:
+    """The health thresholds' pin under each appraisal label settle reads (AMENDMENT-2 8.1-8.2 [R:replay-R1]): one pin
+    per label, since gemini-appraisal@1 has recordings (D202); read from studio/interpretation/__init__.py when
+    asked."""
+    return {interpretation.APPRAISAL_VERSION: interpretation.HEALTH_THRESHOLDS_SHA256,
+            interpretation.APPRAISAL_VERSION_V3: interpretation.HEALTH_THRESHOLDS_SHA256_V3}
+
+
+def check_pin(version: str = interpretation.APPRAISAL_VERSION) -> None:
+    """RuntimeError unless the health thresholds are byte for byte what the appraisal label ``version`` pins (2.5; the
+    read.check_pin pattern; AMENDMENT-2 8.1: each label checks its own pin). An empty pin (the placeholder until the
+    integration owner writes it) is refused too: no appraisal is settled under thresholds nobody pinned; and so is a
+    label settle does not read. Until the first recording under the label a changed threshold needs only its pin
+    recomputed (DECISIONS D202)."""
+    pins = health_pins()
+    if version not in pins:
+        raise RuntimeError('Settle reads appraisals of gemini-appraisal@1 and gemini-appraisal@2 only; no other label '
+                           'is settled.')
+    pinned = pins[version]
     if not pinned:
         raise RuntimeError(f'The health thresholds of {version} have no pin yet; no appraisal is settled under them.')
     if jsonschema.sha256_of(health_document()) != pinned:
@@ -287,6 +318,11 @@ CONTROL_ATTRIBUTES: Mapping[Attribute, Attribute] = MappingProxyType({
 # not name never shares (a KeyError fails the import, never a settle).
 SHARED_CONTROL: tuple[Family, frozenset[Attribute]] = (
     Family.SESSION, frozenset({A.REACHED_ANATOMY, CONTROL_ATTRIBUTES[A.REACHED_ANATOMY]}))
+# The one form the shared control may take (DECISIONS D292's U3, the share re-pinned): the reach's own control sentence,
+# the form the reach's control rule renders ("In session {X} the endoscope did not reach the {point}." - CONTROLS'
+# reached row: its own value, in the negated state). A reached_anatomy control in any other form is never shared,
+# whatever its content, so a rewording of that control can only stop the share (fail-closed).
+SHARED_FORM: str = claims.FORMS[(claims.ObjectClass.SESSION, A.REACHED, FactState.NEGATED)].value
 # The attribute a claim's template is the form of, for a control no stored fact names (claims.FORMS, the first row of
 # each template; and 3.2.3's own forms).
 TEMPLATE_ATTRIBUTES: Mapping[str, Attribute] = MappingProxyType({
@@ -521,14 +557,17 @@ def measure_health(claim_set: claims.ClaimSet, verdicts: Mapping[str, ReadVerdic
 
 
 def settle(read: ReadAnswer, checked: Checked[FactKey], claim_set: claims.ClaimSet,
-           indistinct: Sequence[Sequence[str]], appraisal: ReadAppraisal, usage: Usages) -> Settled | Unhealthy:
+           indistinct: Sequence[Sequence[str]], appraisal: ReadAppraisal, usage: Usages, *,
+           appraisal_version: str = interpretation.APPRAISAL_VERSION) -> Settled | Unhealthy:
     """The settled inventory of one revision (the module's docstring): ``read``, pass 1's answer as extract_read read
     it; ``checked``, contract/checks.check of the same revision and answer; ``claim_set`` and ``indistinct``, the
     request's (appraise_prompt.Request.claim_set and .indistinct); ``appraisal``, pass 2's answer to that request as
-    appraise_read read it; ``usage``, both runs' token counts. Unhealthy when 3.2.6's health refuses the appraisal.
-    Pure: equal arguments give an equal result in every process. RuntimeError when the health thresholds are not
-    pinned (check_pin); ValueError when the inputs are not of one revision and one request."""
-    check_pin()
+    appraise_read read it; ``usage``, both runs' token counts; ``appraisal_version``, the label the appraisal was asked
+    under (gemini-appraisal@1 by default; the Fable path names gemini-appraisal@2, AMENDMENT-2 8.1), whose health
+    thresholds' pin is checked. Unhealthy when 3.2.6's health refuses the appraisal. Pure: equal arguments give an
+    equal result in every process. RuntimeError when the health thresholds are not pinned under the label
+    (check_pin); ValueError when the inputs are not of one revision and one request."""
+    check_pin(appraisal_version)
     if read.unit_count != len(checked.units):
         raise ValueError('The checks were run on another segmentation than the answer was read against.')
     verdicts = verdicts_of(claim_set, appraisal)
@@ -630,10 +669,11 @@ class _Settler:
         """Whether the fact at ``key`` may read ``control`` as its contrary control though ``readers`` already read it
         (DECISIONS D244's R-ANAT; the module's docstring): only when exactly one fact read it before, as its control,
         and the two are one session's SHARED_CONTROL facts - its reach and its reached_anatomy - and the control is
-        only ever a contrary control of the request (no fact's claim, no pair control, no completeness claim or
-        control: those keep one reader each)."""
+        the reach's own sentence (SHARED_FORM, D292's U3) and only ever a contrary control of the request (no fact's
+        claim, no pair control, no completeness claim or control: those keep one reader each)."""
         family, attributes = SHARED_CONTROL
-        if len(readers) != 1:
+        shared = self.claims.get(control)
+        if len(readers) != 1 or shared is None or shared.template != SHARED_FORM:
             return False
         first = readers[0]
         if not (first.family is family and key.family is family and first.object == key.object
@@ -698,8 +738,9 @@ class _Settler:
         return self.facts.get((family, name, attribute), [])
 
     def one(self, family: xs.Family, name: str, attribute: Attribute) -> ReadFact | None:
-        found = self.slot(family, name, attribute)
-        return found[0] if found else None
+        """The fact of a FACT or a slot as a single-valued attribute is read (extract_read.merged, AMENDMENT-2 4.3.3):
+        the merged view of an overfilled slot, never its first written fact."""
+        return merged(self.slot(family, name, attribute))
 
     def supported(self, family: xs.Family, name: str, attribute: Attribute) -> str | None:
         found = self.one(family, name, attribute)
@@ -820,13 +861,17 @@ class _Settler:
         sides = claim.state is FactState.CONTRADICTED and self.sides(found)
         return self.settled(key.attribute, key, (key,), claim, sources, sides, self.checked.literals.get(key, ()))
 
-    def inherited(self, key: FactKey) -> SettledFact:
-        """An act's effective fact taken from its containing section (1.5; the module's docstring)."""
+    def inherited(self, key: FactKey) -> SettledFact | list[SettledFact]:
+        """An act's effective fact taken from its containing section (1.5; the module's docstring). From an overfilled
+        section slot (AMENDMENT-2 4.3.5), one per-act fact per written section fact (``inherited_one``)."""
         section = self.checked.containing.get(key.object)
         if section is None:
             return self.settled(key.attribute, key, (key,), _SILENT, (), False, self.checked.literals.get(key, ()))
         base = FactKey(Family.SECTION, section, INHERITED_FROM[key.attribute], 0)
-        found = self.one(Family.SECTION, section, base.attribute)
+        written = self.slot(Family.SECTION, section, base.attribute)
+        if len(written) > 1:
+            return [self.inherited_one(key, item, section) for item in written]
+        found = written[0] if written else None
         if found is None:
             claim: SettledClaim = SettledClaim(None, '', (), (), section)
             sources: tuple[SettledSource, ...] = ()
@@ -835,6 +880,23 @@ class _Settler:
         sides = claim.state is FactState.CONTRADICTED and self.sides(found)
         literals = self.checked.literals.get(key) or self.checked.literals.get(base, ())
         return self.settled(key.attribute, key, (base, key), claim, sources, sides, literals)
+
+    def inherited_one(self, key: FactKey, item: ReadFact, section: str) -> SettledFact:
+        """The act's per-act fact for one written fact of an overfilled section slot (4.3.5): the section's fact as
+        written, inherited_from the section; rows 1-5 read that written fact's findings (its slot_overfull among them)
+        and doubts with the act's own, so it is never established; L1's per-act literals when the act has them."""
+        claim, sources = self.claim_of(item, self.checked.failed_links.get(item.key, ()), section)
+        sides = claim.state is FactState.CONTRADICTED and self.sides(item)
+        literals = self.checked.literals.get(key) or self.checked.literals.get(item.key, ())
+        return self.settled(key.attribute, key, (item.key, key), claim, sources, sides, literals)
+
+    def single(self, family: xs.Family, name: str, attribute: Attribute) -> SettledFact | list[SettledFact]:
+        """A FACT or a slot of an object's own: its one fact settled (or silent); an overfilled slot's written facts,
+        each settled (4.3.5: the list the store accepts under gemini-inventory@3, 4.3.6)."""
+        written = self.slot(family, name, attribute)
+        if len(written) > 1:
+            return [self.own(item.key, item) for item in written]
+        return self.own(FactKey(family, name, attribute, 0), written[0] if written else None)
 
     def member(self, member: ReadMember) -> SettledFact:
         """A member of a statement's scope list (targets, segment, covers, excepts): a value its statement states, its
@@ -910,7 +972,7 @@ class _Settler:
             if field.arity is xs.Arity.FACTS:
                 value: object = [self.own(item.key, item) for item in self.slot(family, name, field.attribute)]
             else:
-                value = self.own(FactKey(family, name, field.attribute, 0), self.one(family, name, field.attribute))
+                value = self.single(family, name, field.attribute)
             _put(record, field.path, value)
 
     def encounter(self) -> dict[str, object]:
@@ -925,7 +987,7 @@ class _Settler:
             others.append({'value': other['value'], 'role': self.own(found.key, found)})
         return {'date_of_service': self.own(when, self.one(Family.ENCOUNTER, '', A.DATE_OF_SERVICE)),
                 'other_dates': others,
-                'documenting_clinician': self.own(clinician, self.one(Family.ENCOUNTER, '', A.DOCUMENTING_CLINICIAN))}
+                'documenting_clinician': self.single(Family.ENCOUNTER, '', clinician.attribute)}
 
     def person(self, item: Mapping[str, Any]) -> dict[str, object]:
         name = item['id']
@@ -983,7 +1045,7 @@ class _Settler:
             elif attribute in inherits and not self.slot(Family.EVENT, name, attribute):
                 value = self.inherited(FactKey(Family.EVENT, name, attribute, 0))
             else:
-                value = self.own(FactKey(Family.EVENT, name, attribute, 0), self.one(Family.EVENT, name, attribute))
+                value = self.single(Family.EVENT, name, attribute)
             _put(record, field.path, value)
         _put(record, xs.field(Family.EVENT, A.ENTRY).path, self.inherited(FactKey(Family.EVENT, name, A.ENTRY, 0)))
         return record

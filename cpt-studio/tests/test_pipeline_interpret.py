@@ -565,7 +565,8 @@ class PauseTests(InterpretCase):
         stored = Run.objects.get(pk=run.pk)
         self.assertEqual((stored.state, stored.sent, stored.scope, stored.finished_at), ('sending', False,
                                                                                          {'mode': 'replay'}, None))
-        models.Job.objects.filter(pk=dead.pk).update(started_at=timezone.now() - timedelta(seconds=700))
+        # AMENDMENT-2 1.12: a reading stage is stale past its kind's threshold (1,440 s)
+        models.Job.objects.filter(pk=dead.pk).update(started_at=timezone.now() - timedelta(seconds=1500))
         jobs.mark_stale()  # once the stage is stale: the run is settled unknown, sent (it reached the vendor)
         stored.refresh_from_db()
         self.assertEqual((stored.state, stored.sent), ('unknown', True))
@@ -872,8 +873,8 @@ class FailedBeforeAndRetryTests(InterpretCase):
         [run] = self.interpret_runs(revision)
         self.assertEqual(run.scope['effect'], 'too_long')
         self.assertEqual(progress.encounter_progress(encounter)['error'],
-                         {'text': progress.INTERPRETATION_ERRORS['too_long'][0], 'action': 'new_document'})
-        with self.assertRaisesMessage(jobs.Refused, jobs.RETRY_TOO_LONG):
+                         {'text': progress.INTERPRETATION_ERRORS['cut_off'][0], 'action': 'new_document'})
+        with self.assertRaisesMessage(jobs.Refused, jobs.RETRY_CUT_OFF):  # AMENDMENT-2 1.5 [R:truth-T7]
             jobs.retry_reading(encounter, self.user)
         self.assertIsNone(Run.objects.get(pk=run.pk).reconciled_at)
         jobs.retry_reading(encounter, self.user, override=True)
@@ -1052,10 +1053,11 @@ class StaleSweepTests(InterpretCase):
     """FINAL 6.9 (mark_stale on a context-less interpret) with ADJUDICATION P-6."""
 
     def dead(self, revision):
-        """The interpret stage of ``revision`` claimed by a worker that died 700 s ago."""
+        """The interpret stage of ``revision`` claimed by a worker that died 1,500 s ago (past a reading stage's
+        threshold, 1,440 s: AMENDMENT-2 1.12)."""
         job = models.Job.objects.get(revision=revision, kind='interpret')
         models.Job.objects.filter(pk=job.pk).update(state=models.Job.RUNNING,
-                                                    started_at=timezone.now() - timedelta(seconds=700), attempts=1)
+                                                    started_at=timezone.now() - timedelta(seconds=1500), attempts=1)
         job.refresh_from_db()
         return job
 
@@ -1200,8 +1202,8 @@ class StaleSweepTests(InterpretCase):
         self.assertEqual(models.EventInventory.objects.get(provider_run=run).state, 'refused')
         self.assertEqual(self.interpret_runs(revision), [run])
         self.assertEqual(self.state(encounter), ('provider_failed', run))
-        self.assertEqual(progress.encounter_progress(encounter)['error'],
-                         {'text': progress.INTERPRETATION_ERRORS['too_long'][0], 'action': 'new_document'})
+        self.assertEqual(progress.encounter_progress(encounter)['error'],  # AMENDMENT-2 1.5 [R:truth-T7]
+                         {'text': progress.INTERPRETATION_ERRORS['cut_off'][0], 'action': 'new_document'})
 
     def test_the_settled_path_never_sends_for_a_request_its_run_does_not_answer_until_a_member_resumes(self):
         """FINAL 6.9: the settled path sends nothing, whatever it finds. Here the stored answer answers another request
@@ -1446,9 +1448,9 @@ class SendPurposeTests(InterpretCase):
         _, revision = self.through_extract()
         job = models.Job.objects.get(revision=revision, kind='interpret')
         job.started_at = timezone.now() - timedelta(seconds=30)
-        jobs._check_loop_time(job, interpretation.PURPOSE)  # 30 + 510 + 15 = 555 <= 560 (D49)
-        job.started_at = timezone.now() - timedelta(seconds=40)
-        with self.assertRaises(jobs.Requeue):  # 40 + 510 + 15 = 565 > 560
+        jobs._check_loop_time(job, interpretation.PURPOSE)  # 30 + 1320 + 15 = 1365 <= 1380 (AMENDMENT-2 1.12)
+        job.started_at = timezone.now() - timedelta(seconds=60)
+        with self.assertRaises(jobs.Requeue):  # 60 + 1320 + 15 = 1395 > 1380
             jobs._check_loop_time(job, interpretation.PURPOSE)
         job.kind = 'astra'
         job.started_at = timezone.now() - timedelta(seconds=20)
@@ -1495,7 +1497,7 @@ class ReviewAndProgressTests(InterpretCase):
 
     def test_the_step_and_its_wording(self):
         self.assertEqual((progress.STEP_OF['interpret'], progress.DETAILS['interpret'],
-                          progress.stage_bound('interpret')), ('identifying', 'Reading the documented procedures', 560))
+                          progress.stage_bound('interpret')), ('identifying', 'Reading the documented procedures', 1380))
         encounter, revision = self.through_extract()
         job = jobs.claim_next()
         block = progress.encounter_progress(encounter)

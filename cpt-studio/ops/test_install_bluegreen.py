@@ -388,7 +388,8 @@ class BlueGreenWorld:
         self.act('oneshot', tuple(command[:2]))
         self.oneshots.append((image_id, list(command), dict(kwargs)))
         if command[:2] == ['manage', 'shell'] and command[-1] == install.INTERPRETER_CREDENTIALS_CHECK:
-            return self.done(SimpleNamespace(returncode=0, stdout=b'gemini-credentials-parse-ok\n', stderr=b''))
+            return self.done(SimpleNamespace(
+                returncode=0, stdout=f'{install.INTERPRETER["name"]}-credentials-parse-ok\n'.encode(), stderr=b''))
         return self.done(SimpleNamespace(returncode=0, stdout=b'corti-credentials-parse-ok\n', stderr=b''))
 
     def rendered_vhosts(self, revision, port=install.WEB_PORT):
@@ -569,7 +570,7 @@ class SuccessPathTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(*ACTS), [
             ('recorder', 'start'),
             ('run', 'web', NEXT, 9151, IMAGE), ('wait', 'web', NEXT, 9151), ('smoke', 9151),          # S1
-            ('stop', WORKER, '600'), ('rename', WORKER, WORKER + '-previous'),                           # S2
+            ('stop', WORKER, '1500'), ('rename', WORKER, WORKER + '-previous'),                           # S2
             ('vhost', 'replace', 9151), ('reload', 9151), ('https', 9151, REVISION),                     # S3
             ('run', 'worker', WORKER, None, IMAGE), ('wait', 'worker', WORKER, None),                    # S4
             ('drain', 9150), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # S5
@@ -701,7 +702,7 @@ class FailureArmTests(TemporaryDirectoryTest):
         message, details = self.failed(world)
         self.assert_old_pair_serves(world)
         self.assertIn('/login/ answered 500', message)
-        self.assertNotIn(('stop', WORKER, '600'), world.events)
+        self.assertNotIn(('stop', WORKER, '1500'), world.events)
 
     def test_s2_a_worker_rename_that_fails_restarts_the_old_worker(self):
         world = BlueGreenWorld(self.tmp)
@@ -784,7 +785,7 @@ class FailureArmTests(TemporaryDirectoryTest):
         self.assert_old_pair_serves(world)
         self.assertEqual(world.acts('reload'), [('reload', 9151), ('reload', 9150)])
         order = [world.events.index(event) for event in (
-            ('stop', WORKER, '600'), ('close', IMAGE, tuple(KINDS_OLD)), ('put_back', OLD_IMAGE), ('reload', 9150),
+            ('stop', WORKER, '1500'), ('close', IMAGE, tuple(KINDS_OLD)), ('put_back', OLD_IMAGE), ('reload', 9150),
             ('https', 9150, OLD), ('drain', 9151), ('stop', NEXT, '30'), ('rename', WORKER + '-previous', WORKER),
             ('start', WORKER))]
         self.assertEqual(order, sorted(order))
@@ -936,7 +937,7 @@ class StopTimeoutBlueGreenTests(TemporaryDirectoryTest):
             for event in world.acts('stop'):
                 name, seconds = event[1], event[2]
                 if name.startswith(WORKER):
-                    self.assertEqual(seconds, '600', event)
+                    self.assertEqual(seconds, '1500', event)  # AMENDMENT-2 1.12
                 else:
                     self.assertEqual(seconds, '30', event)
 
@@ -1386,7 +1387,7 @@ class SwitchBackTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(*ACTS), [
             ('recorder', 'start'),
             ('run', 'web', NEXT, 9150, OLD_IMAGE), ('wait', 'web', NEXT, 9150), ('smoke', 9150),        # B2
-            ('stop', WORKER, '600'), ('rename', WORKER, WORKER + '-previous'),                            # B3
+            ('stop', WORKER, '1500'), ('rename', WORKER, WORKER + '-previous'),                            # B3
             ('close', IMAGE, tuple(KINDS_OLD)), ('put_back', OLD_IMAGE),                                  # B4
             ('vhost', 'replace', 9150), ('reload', 9150), ('https', 9150, OLD),                           # B5
             ('drain', 9151), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # B6
@@ -1404,7 +1405,7 @@ class SwitchBackTests(TemporaryDirectoryTest):
         self.assertIn('switched back to bbbbbbbbbbbb', details['summary'])
         # rollback-app's check, first, and again right before B4's close (refute-r2 L6-4)
         self.assertEqual(world.acts('hazards'), [('hazards', IMAGE), ('hazards', IMAGE)])
-        self.assertLess(world.events.index(('hazards', IMAGE), world.events.index(('stop', WORKER, '600'))),
+        self.assertLess(world.events.index(('hazards', IMAGE), world.events.index(('stop', WORKER, '1500'))),
                         world.events.index(('close', IMAGE, tuple(KINDS_OLD))))
 
     def test_it_refuses_before_starting_anything(self):
@@ -1973,12 +1974,12 @@ class InstallDocTests(unittest.TestCase):
         for phrase in ('`cpt-studio-web-next` starts on the idle port', "**S3** the vhost's upstream is switched",
                        '**S5** the old web is drained', 'at least 130 s', '10 consecutive one-second samples',
                        'never longer than 600 s', 'every 0.5 s', '`availability`', 'never stops the serving web',
-                       '`docker stop --time 600`', 'graceful, 30 s', 'the two differ in their `proxy_pass` line alone'):
+                       '`docker stop --time 1500`', 'graceful, 30 s', 'the two differ in their `proxy_pass` line alone'):
             self.says(phrase, app)
         self.assertEqual((install.DRAIN_MIN_SECONDS, install.DRAIN_QUIET_SECONDS, install.DRAIN_MAX_SECONDS),
                          (130, 10, 600))
         self.assertEqual((install.AVAILABILITY_INTERVAL_SECONDS, install.STOP_SECONDS),
-                         (0.5, {'web': 30, 'worker': 600}))
+                         (0.5, {'web': 30, 'worker': 1500}))  # AMENDMENT-2 1.12: the worker's outlasts a reading
         for step in ('S1', 'S2', 'S3', 'S4', 'S5'):
             self.says(f'- {step} (', app)  # one row of the failure matrix each
 
@@ -2024,9 +2025,10 @@ class InstallDocTests(unittest.TestCase):
 
 
 # --- the interpreter (the Gemini migration: design/FINAL.md 13; ADJUDICATION P-1 and P-7): the fake-host blue/green run
+# AMENDMENT-2 1.11: the interpreter's key is the Fable participant's file (install.INTERPRETER), one bind target
 
-GEMINI = install.INTERPRETER
-GEMINI_MOUNT = f'type=bind,src={GEMINI["target"]},dst={GEMINI["mounted"]},readonly'
+KEY = install.INTERPRETER
+KEY_MOUNT = f'type=bind,src={KEY["target"]},dst={KEY["mounted"]},readonly'
 INSTALLED_COPY = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'}
 NOTE_3 = '3 assessments were made from event inventories; the earlier image reads them fail-closed'
 # the review of S14, finding 1: an encounter stopped between analyze and assess, named by its current gemini context
@@ -2038,7 +2040,7 @@ NOTE_3_1 = (f'{NOTE_3}; 1 encounter holds a context derived from an event invent
 def holding_the_key(world):
     """The world's patches, its host holding the interpreter's installed copy (the file --phase secrets copies)."""
     return world.patches() + [mock.patch.object(install, 'helper_stat', side_effect=lambda paths: {
-        path: INSTALLED_COPY if path == GEMINI['target'] else {'exists': False} for path in paths})]
+        path: INSTALLED_COPY if path == KEY['target'] else {'exists': False} for path in paths})]
 
 
 def run_holding_the_key(world, phase, args):
@@ -2062,7 +2064,7 @@ def live_app_args(tmp):
 def webs_never_hold_the_key(test, world):
     for name, argv in world.runs.items():
         if argv[-1] == 'web':
-            test.assertNotIn(GEMINI_MOUNT, flags(argv, '--mount'), name)
+            test.assertNotIn(KEY_MOUNT, flags(argv, '--mount'), name)
 
 
 class InterpreterBlueGreenTests(TemporaryDirectoryTest):
@@ -2078,7 +2080,7 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(*ACTS), [  # the switch is exactly the one without the interpreter
             ('recorder', 'start'),
             ('run', 'web', NEXT, 9151, IMAGE), ('wait', 'web', NEXT, 9151), ('smoke', 9151),          # S1
-            ('stop', WORKER, '600'), ('rename', WORKER, WORKER + '-previous'),                           # S2
+            ('stop', WORKER, '1500'), ('rename', WORKER, WORKER + '-previous'),                           # S2
             ('vhost', 'replace', 9151), ('reload', 9151), ('https', 9151, REVISION),                     # S3
             ('run', 'worker', WORKER, None, IMAGE), ('wait', 'worker', WORKER, None),                    # S4
             ('drain', 9150), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # S5
@@ -2086,11 +2088,12 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
             ('recompute', IMAGE, 'all'), ('rm', WORKER + '-previous'), ('rm', WEB + '-previous')])     # S6
         self.assertEqual(world.names(), {WEB: (IMAGE, 9151, True), WORKER: (IMAGE, None, True)})
         worker, web = world.runs[WORKER], world.runs[NEXT]
-        self.assertEqual(flags(worker, '--mount')[-1], GEMINI_MOUNT)  # read-only, at the worker's path
+        self.assertEqual(flags(worker, '--mount')[-1], KEY_MOUNT)  # read-only, at the worker's path
         webs_never_hold_the_key(self, world)
         for argv in (worker, web):  # the web is given the mode and the path, and no file
             self.assertIn('CPT_STUDIO_GEMINI_MODE=live', flags(argv, '-e'))
-            self.assertIn(f'CPT_STUDIO_GEMINI_CREDENTIALS_FILE={GEMINI["mounted"]}', flags(argv, '-e'))
+            self.assertIn(f'{KEY["file_env"]}={KEY["mounted"]}', flags(argv, '-e'))
+            self.assertIn('CPT_STUDIO_FABLE_MODE=disabled', flags(argv, '-e'))  # the participant as it was given
         # the loader read the copy offline in this revision's image, before migrate and before anything started
         image, command, kwargs = world.oneshots[0]
         self.assertEqual((image, command, kwargs),
@@ -2117,7 +2120,7 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         finally:
             for patcher in reversed(patches):
                 patcher.stop()
-        self.assertIn(f'--interpreter-mode live: {GEMINI["target"]} is not the', str(caught.exception))
+        self.assertIn(f'--interpreter-mode live: {KEY["target"]} is not the', str(caught.exception))
         self.assertEqual(world.acts('run', 'stop', 'rename', 'vhost', 'oneshot', 'recorder'), [])
         self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
 
@@ -2177,7 +2180,7 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         # the previous pair, a revision before the interpreter, starts with it disabled and without its key
         for argv in (world.runs[NEXT], world.runs[WORKER]):
             self.assertIn('CPT_STUDIO_GEMINI_MODE=disabled', flags(argv, '-e'))
-            self.assertNotIn(GEMINI_MOUNT, flags(argv, '--mount'))
+            self.assertNotIn(KEY_MOUNT, flags(argv, '--mount'))
         self.assertEqual(world.acts('hazards'), [('hazards', IMAGE), ('hazards', IMAGE)])  # refusals as they were
 
     def test_a_note_that_cannot_be_read_never_stops_the_switch_back(self):
@@ -2204,7 +2207,7 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         args = switch_back_args(self.tmp, interpreter_mode='live', authorization_ref=RULING)
         details, error = run_holding_the_key(world, install.phase_switch_back, args)
         self.assertIsNone(error, error and str(error))
-        self.assertEqual(flags(world.runs[WORKER], '--mount')[-1], GEMINI_MOUNT)
+        self.assertEqual(flags(world.runs[WORKER], '--mount')[-1], KEY_MOUNT)
         webs_never_hold_the_key(self, world)
         self.assertIn('CPT_STUDIO_GEMINI_MODE=live', flags(world.runs[NEXT], '-e'))
         # its loader check ran in the PREVIOUS pair's image, before anything was started

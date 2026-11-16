@@ -2579,6 +2579,128 @@ class Monotone(SimpleTestCase):
 # --- the boundary: 5.7 measure 4, the imports, mypy --strict ------------------------------------------------------------
 
 
+# --- AMENDMENT-2 4.3.3 a and b: an overfilled slot's merged view; DECISIONS D287: classes' conflict key -------------
+
+
+def merged(*written, n: int = 1) -> Fact:
+    """An overfilled slot's merged view as engine/facts builds it (AMENDMENT-2 4.3.3): ``written`` its written facts as
+    (state, value) in written order (tests/v2/test_facts.py pins the builder to this form)."""
+    values = tuple(dict.fromkeys(value for _state, value in written))
+    stated = {value for state, value in written if state is not FactState.NEGATED}
+    return Fact(Result.UNRESOLVED, None, FactState.CONTRADICTED, values, (Reason.SLOT_OVERFULL,), (unit(n),),
+                negated_values=tuple(dict.fromkeys(value for state, value in written
+                                                   if state is FactState.NEGATED and value not in stated)))
+
+
+SUP, NEG = FactState.SUPPORTED, FactState.NEGATED
+
+
+class OverfilledSlotReaders(SimpleTestCase):
+    """AMENDMENT-2 4.3.3's reader kinds over this module's readers [R:truth-T5], each at its fail-closed side (the step's
+    NOTES questions Q1R and Q-STATED; refute-f3e-r1 F1 and F2): a possibility reader that takes an unestablished denial
+    as leaving every value open (``_open``, ``_may_name``) takes EVERY merged view so (facts.open_denial: the view cannot
+    tell whether a written fact denied a value - a value written both stated and denied carries nothing in
+    negated_values); a reader of what pass 1 STATED (b) reads nothing a view holds as stated (``_claims``, and so
+    PartFit.stated and misfit_form's INCOMPLETE form), since the view cannot tell a written value from a doubt's reading,
+    nor a value one written fact states from one another denies."""
+
+    def test_open_and_may_name_read_the_view_as_the_weakest_written_fact(self):
+        for name, found in (
+                ('supported only', merged((SUP, Completion.COMPLETE), (SUP, Completion.TERMINATED))),
+                ('a value denied', merged((SUP, Completion.COMPLETE), (NEG, Completion.TERMINATED))),
+                ('denied only', merged((NEG, Completion.COMPLETE), (NEG, Completion.TERMINATED))),
+                ('one value written both ways', merged((SUP, Completion.COMPLETE), (NEG, Completion.COMPLETE)))):
+            with self.subTest(name):
+                self.assertEqual(C._open(found, Completion), frozenset(Completion))
+        R = factset({X1: session(), X2: session(), X3: session()})
+        self.assertEqual({session_ for session_ in (X1, X2, X3)
+                          if C._may_name(unresolved(X1, state=FactState.NEGATED), session_, R)}, {X1, X2, X3})
+        for name, found in (('X1 and X2 stated', merged((SUP, X1), (SUP, X2))),
+                            ('X1 stated, X2 denied', merged((SUP, X1), (NEG, X2))),
+                            ('X2 denied twice', merged((NEG, X2), (NEG, X2))),
+                            ('X1 stated, X1 denied', merged((SUP, X1), (NEG, X1))),
+                            ('X1 denied, X1 stated', merged((NEG, X1), (SUP, X1)))):
+            with self.subTest(name):
+                self.assertEqual({session_ for session_ in (X1, X2, X3) if C._may_name(found, session_, R)},
+                                 {X1, X2, X3})
+
+    def test_t5_a_complete_enteroscopy_with_a_denied_termination_is_never_stated_incomplete(self):
+        """[R:truth-T5] demo_completion_route's input: the deeper class on an enteroscopy reaching the ileum whose
+        completion slot is overfilled. Whatever the written facts - complete stated beside terminated denied, complete and
+        terminated both stated, terminated stated and denied, incomplete denied twice - the view states nothing to the
+        stated reader: the completion part's ``stated`` is False and misfit_form gives the class form, never the
+        INCOMPLETE form ("is stated to be incomplete"). As built, terminated written stated beside complete, or written
+        both stated and denied, was read as stated - the second a denied value worded as stated (refute-f3e-r1 F1's
+        stated half). A single claim that is not a view keeps the INCOMPLETE form (the control)."""
+        for name, completion in (
+                ('complete stated, terminated denied', merged((SUP, Completion.COMPLETE), (NEG, Completion.TERMINATED))),
+                ('complete and terminated both stated', merged((SUP, Completion.COMPLETE), (SUP, Completion.TERMINATED))),
+                ('terminated stated and denied', merged((SUP, Completion.TERMINATED), (NEG, Completion.TERMINATED))),
+                ('incomplete denied twice', merged((NEG, Completion.INCOMPLETE), (NEG, Completion.INCOMPLETE)))):
+            with self.subTest(name):
+                R = ent(Extent.ILEUM, completion=completion)
+                part = next(part for part in C.class_fit(ILEAL, X1, R).parts if part.part is C.Part.COMPLETION)
+                self.assertEqual((part.truth, part.stated), (U, False))
+                self.assertEqual(part.witness.cause, 'unestablished:slot_overfull')
+                self.assertIs(C.misfit_form('44377', X1, R), C.ClassForm.CLASS)
+                self.assertFalse(any(C._claims(completion, value) for value in Completion))
+        claimed = unresolved(Completion.TERMINATED)  # the control: pass 1's one claim, not a view
+        R = ent(Extent.ILEUM, completion=claimed)
+        part = next(part for part in C.class_fit(ILEAL, X1, R).parts if part.part is C.Part.COMPLETION)
+        self.assertEqual((part.truth, part.stated), (U, True))
+        self.assertIs(C.misfit_form('44377', X1, R), C.ClassForm.INCOMPLETE)
+
+    def test_f2_a_doubts_reading_in_a_view_is_never_worded_as_stated(self):
+        """refute-f3e-r1 F2 (AMENDMENT-2 4.3.3 b; p3/p13's input): an enteroscopy to the ileum whose completion slot
+        pass 1 wrote "complete" twice, beside a doubt naming the session that reads "incomplete" - the view's options are
+        complete and incomplete (what each written fact read alone leaves possible besides; question Q-DOUBT), and as
+        built the stated reader read "incomplete" as stated: misfit_form's INCOMPLETE form, and a member sentence "is
+        stated to be incomplete" about an enteroscopy pass 1 wrote complete. Now the view states nothing: stated False,
+        the class form - as for ONE written fact "complete" beside the same doubt."""
+        view = Fact(Result.UNRESOLVED, None, FactState.CONTRADICTED, (Completion.COMPLETE, Completion.INCOMPLETE),
+                    (Reason.SLOT_OVERFULL,), (unit(1),))
+        one = doubted(Completion.COMPLETE, (Completion.INCOMPLETE,))
+        for name, completion in (('the view', view), ('one written fact beside the doubt', one)):
+            with self.subTest(name):
+                R = ent(Extent.ILEUM, completion=completion)
+                part = next(part for part in C.class_fit(ILEAL, X1, R).parts if part.part is C.Part.COMPLETION)
+                self.assertEqual((part.truth, part.stated), (U, False))
+                self.assertIs(C.misfit_form('44377', X1, R), C.ClassForm.CLASS)
+                self.assertFalse(C._claims(completion, Completion.INCOMPLETE))
+
+    def test_an_overfilled_examination_session_keeps_the_examination_of_the_session(self):
+        """An examination whose session slot is overfilled (the enteroscopy and another, stated) may be the
+        enteroscopy's: examinations() lists it, as possibility reader (a) reads it."""
+        R = factset({X1: session(reached=(Extent.ILEUM,), approach=ORAL, completion=Completion.COMPLETE),
+                     X2: session(SessionKind.EGD)},
+                    {E1: event(Kind.EXAMINATION, merged((SUP, X1), (SUP, X2), n=14), n=14)})
+        self.assertEqual(C.examinations(X1, R), (E1,))
+        self.assertEqual(C.examinations(X2, R), (E1,))
+
+
+class D287ConflictKeys(SimpleTestCase):
+    """DECISIONS D287 (G3-28; build list B9): classes' witnesses key a conflict over an act by its one label,
+    facts.established_kind - the catalogue kind of its supported kind with its supported purpose, else other - as
+    evaluate's, coverage's and questions.act_kind's keys do (as built: the claimed kind, else the first side, else the
+    part's default)."""
+
+    def test_an_examination_of_the_session_contradicted_keys_its_one_label(self):
+        for name, kind, label in (('supported', Kind.EXAMINATION, Kind.EXAMINATION),
+                                  ('unresolved', unresolved(Kind.EXAMINATION, n=14), Kind.OTHER),
+                                  ('doubted', doubted(Kind.EXAMINATION, (Kind.SNARE,), n=14), Kind.OTHER),
+                                  ('contradicted', contradicted((Kind.EXAMINATION, Kind.SNARE), n=14), Kind.OTHER),
+                                  ('overfilled', merged((SUP, Kind.EXAMINATION), (SUP, Kind.SNARE), n=14),
+                                   Kind.OTHER)):
+            with self.subTest(name):
+                R = factset({X1: session(reached=(Extent.ILEUM,), completion=Completion.COMPLETE)},
+                            {E1: event(kind, X1, n=14, status=contradicted((Status.PERFORMED,
+                                                                              Status.ATTEMPTED_NOT_COMPLETED), n=14))})
+                keys = {held_.fact for held_ in C.class_fit(ILEAL, X1, R).witnesses if held_.rank == 1}
+                self.assertEqual(keys, {f'conflict:{F.established_kind(R, E1).value}'})
+                self.assertEqual(F.established_kind(R, E1), label)
+                self.assertEqual(F.established_kind(R, E1), QS.act_kind(R, E1, ()))
+
+
 class BoundaryTests(SimpleTestCase):
     def test_the_module_keeps_measure_4(self):
         self.assertEqual(measure_4(MODULE.read_text(encoding='utf-8'), engine=True), [])

@@ -620,6 +620,185 @@ class BoundStageTests(ReadTestCase):
                                                   'accepts.')
 
 
+V2, V3 = interpretation.INTERPRETATION_VERSION_V2, interpretation.INTERPRETATION_VERSION_V3
+SLOT_FIELDS = tuple((family, field) for family, fields in xs.ATTRIBUTES.items() for field in fields
+                    if field.arity is xs.Arity.SLOT)
+
+
+def slot_values(field) -> list:
+    """Three values of a slot's domain (distinct while it has them): enumeration members, ids of its family, dates."""
+    if field.values is not None:
+        domain = [member.value for member in field.values]
+    elif field.refers_to is not None:
+        domain = {F.PERSON: ['P1', 'P2'], F.EVENT: ['E1', 'E2', 'E5'], F.SESSION: ['X1'], F.LESION: ['L1', 'L2'],
+                  F.ANATOMY: ['Y1']}[field.refers_to]
+    else:
+        domain = ['2023', '2023-04', '2026-11-09']
+    return [domain[index % len(domain)] for index in range(3)]
+
+
+def overfilled(family, field, facts) -> dict:
+    """The worked example with ``facts`` at the first object's slot (an anatomy entry Y1 added, so every family has an
+    object)."""
+    result = answer()
+    result['anatomy'] = [anatomy('Y1', fact('stoma', 'S1'))]
+    holder = result['encounter'] if family is F.ENCOUNTER else result[family.value][0]
+    put(holder, '.'.join(field.path), copy.deepcopy(facts))
+    return result
+
+
+class SlotRuleReadTests(ReadTestCase):
+    """AMENDMENT-2 4.3.1-4.3.3 and 4.3.8 (step f3s): under gemini-events@3 a slot holding more than one fact is read,
+    every written fact carrying slot_overfull beside its own findings and everything else read as before; a reader of
+    the attribute gets the merged view - contradicted, '', exactly the written values; gemini-events@2, the label every
+    recorded answer carries, keeps S1's whole-answer refusal, as does an attribute of WHOLE_ANSWER_SLOTS."""
+
+    def read_as(self, value, version, units: int = UNITS):
+        return xr.read(text(value), units, version=version)
+
+    def test_every_overfilled_slot_is_read_under_3_with_slot_overfull_and_refused_under_2(self):
+        for family, field in SLOT_FIELDS:
+            values = slot_values(field)
+            for states in (('supported', 'supported'), ('supported', 'negated', 'negated'), ('negated', 'negated')):
+                written = [fact(value, 'S1', state=state) for value, state in zip(values, states)]
+                with self.subTest(slot=f'{family.value}.{field.attribute.value}', states=states):
+                    data = overfilled(family, field, written)
+                    older = self.read_as(data, V2)
+                    self.assertIsInstance(older, xr.Refusal)
+                    self.assertEqual(older.stage, 'bounds')
+                    newer = self.read_as(data, V3)
+                    if (family, field.attribute) in xr.WHOLE_ANSWER_SLOTS:  # 4.3.8: S1's refusal kept
+                        self.assertEqual((newer.stage, newer.reason), (older.stage, older.reason))
+                        continue
+                    self.assertIsInstance(newer, xr.ReadAnswer, getattr(newer, 'reason', ''))
+                    name = '' if family is F.ENCOUNTER else data[family.value][0]['id']
+                    mine = [item for item in newer.facts
+                            if (item.key.family, item.key.object, item.key.attribute)
+                            == (family, name, field.attribute)]
+                    self.assertEqual([item.key.index for item in mine], list(range(len(written))))
+                    self.assertEqual([item.fact for item in mine], [typed(node) for node in written])  # as written
+                    for item in mine:
+                        self.assertIn(R.SLOT_OVERFULL, item.reasons)
+                    # everything else reads as it does with the slot's first written fact alone
+                    alone = self.read_as(overfilled(family, field, written[:1]), V3)
+                    others = [entry for entry in self.findings(newer)
+                              if not (isinstance(entry[0], xr.FactKey) and entry[0] in {item.key for item in mine})]
+                    theirs = [entry for entry in self.findings(alone)
+                              if not (isinstance(entry[0], xr.FactKey)
+                                      and (entry[0].family, entry[0].object, entry[0].attribute)
+                                      == (family, name, field.attribute))]
+                    self.assertEqual(others, theirs)
+
+    def test_the_merged_view_holds_exactly_the_written_values_never_the_first_written_fact(self):
+        field = xs.field(F.EVENT, A.TECHNIQUE_DEVICE)
+        cases = {  # (written facts, options, negated_values, stated_values)
+            'supported': ([fact('cold_snare', 'S6'), fact('hot_snare', 'S6')],
+                          ['cold_snare', 'hot_snare'], [], ['cold_snare', 'hot_snare']),
+            'mixed (A-v2)': ([fact('cold_snare', 'S6'), fact('hot_snare', 'S6', state='negated'),
+                              fact('electrocautery', 'S6', state='negated')],
+                             ['cold_snare', 'hot_snare', 'electrocautery'], ['hot_snare', 'electrocautery'],
+                             ['cold_snare']),
+            'negated': ([fact('cold_snare', 'S6', state='negated'), fact('hot_snare', 'S6', state='negated')],
+                        ['cold_snare', 'hot_snare'], ['cold_snare', 'hot_snare'], []),
+            'one value both ways': ([fact('cold_snare', 'S6'), fact('cold_snare', 'S6', state='negated')],
+                                    ['cold_snare'], ['cold_snare'], []),
+            'a contradicted written fact': ([contradicted(('cold_snare', 'S6'), ('hot_snare', 'S6')),
+                                             fact('electrocautery', 'S6', state='negated')],
+                                            ['cold_snare', 'hot_snare', 'electrocautery'], ['electrocautery'],
+                                            ['cold_snare', 'hot_snare']),
+        }
+        for name, (written, options, negated, stated) in cases.items():
+            with self.subTest(case=name):
+                data = changed(lambda value, written=written: put(value['events'][1], 'technique.device', written))
+                result = self.read_as(data, V3)
+                for index in range(len(written)):
+                    view = result.fact(key(F.EVENT, 'E2', A.TECHNIQUE_DEVICE, index))
+                    self.assertEqual(view, result.slot(F.EVENT, 'E2', A.TECHNIQUE_DEVICE))
+                self.assertEqual((view.fact.state, view.fact.value), (ct.FactState.CONTRADICTED, ''))
+                self.assertEqual([option.value for option in view.fact.options], options)
+                self.assertEqual((list(view.negated_values), list(view.stated_values)), (negated, stated))
+                self.assertTrue(set(view.stated_values) <= set(view.asserted_values) <= set(options))
+                self.assertEqual(view.keys, tuple(key(F.EVENT, 'E2', A.TECHNIQUE_DEVICE, index)
+                                                  for index in range(len(written))))
+                self.assertTrue(view.overfull)
+                self.assertIn(R.SLOT_OVERFULL, view.reasons)
+                self.assertNotEqual(view, result.facts[[item.key for item in result.facts].index(view.keys[0])])
+                for option in view.fact.options:  # each written value's own sources
+                    self.assertTrue(option.sources)
+        # a slot of one fact reads as that fact; a silent slot as None; neither has written facts
+        result = self.accepted(answer())
+        one = result.slot(F.EVENT, 'E2', A.TECHNIQUE_DEVICE)
+        self.assertEqual((one.fact.value, one.written, one.overfull), ('cold_snare', (), False))
+        self.assertEqual((one.stated_values, one.negated_values, one.keys),
+                         (('cold_snare',), (), (key(F.EVENT, 'E2', A.TECHNIQUE_DEVICE),)))
+        self.assertIsNone(result.slot(F.EVENT, 'E2', A.PURPOSE))
+        self.assertEqual(xr.merged([]), None)
+
+    def test_a_written_facts_own_findings_still_run_beside_slot_overfull(self):
+        written = [fact('cold_snare', 'S6'), {**fact('hot_snare', 'S6'), 'sources': []},
+                   fact('electrocautery', 'S99')]
+        data = changed(lambda value: put(value['events'][1], 'technique.device', written))
+        result = self.read_as(data, V3)
+        reasons = [item.reasons for item in result.facts
+                   if (item.key.object, item.key.attribute) == ('E2', A.TECHNIQUE_DEVICE)]
+        self.assertEqual(reasons, [(R.SLOT_OVERFULL,), (SHAPE, R.SLOT_OVERFULL), (UNIT, R.SLOT_OVERFULL)])
+
+    def test_whole_answer_slots_keep_s1s_refusal_under_3(self):
+        """4.3.8: an attribute whose overfilled slot cannot be read with 4.4's properties keeps S1's whole-answer
+        refusal. The shipped table holds the session's examination: contract/checks.py, which this step does not own,
+        reads it as the slot's first written fact (G1's session subject, G5's units) until its request lands."""
+        self.assertEqual(xr.WHOLE_ANSWER_SLOTS, frozenset({(F.SESSION, A.EXAMINATION)}))
+        self.assertTrue(xr.WHOLE_ANSWER_SLOTS <= xr.SLOTS)
+        self.assertEqual(xr.refused_slots(V2), xr.SLOTS)
+        self.assertEqual(xr.refused_slots(V3), xr.WHOLE_ANSWER_SLOTS)
+        two = [fact('cold_snare', 'S6'), fact('hot_snare', 'S6')]
+        data = changed(lambda value: put(value['events'][1], 'technique.device', two))
+        self.assertIsInstance(self.read_as(data, V3), xr.ReadAnswer)
+        with mock.patch.object(xr, 'WHOLE_ANSWER_SLOTS', frozenset({(F.EVENT, A.TECHNIQUE_DEVICE)})):
+            refused = self.read_as(data, V3)
+            self.assertEqual((refused.stage, refused.reason),
+                             ('bounds', f'{REFUSED}events[1].technique.device lists 2 facts, more than the 1 one slot '
+                                        'may have.'))
+
+    def test_the_pin_is_checked_by_label(self):
+        pin = jsonschema.sha256_of(xs.LOCAL_SCHEMA_2)
+        self.assertEqual(xr.schema_pins(), {V2: interpretation.LOCAL_SCHEMA_SHA256_V2,
+                                            V3: interpretation.LOCAL_SCHEMA_SHA256_V2})
+        xr.check_pin(V2)
+        xr.check_pin(V3)
+        for version in ('gemini-events@1', 'gemini-events@4', ''):
+            with self.subTest(version=version), self.assertRaisesRegex(RuntimeError, 'gemini-events@2 and'):
+                xr.read(text(answer()), UNITS, version=version)
+        with mock.patch.object(interpretation, 'LOCAL_SCHEMA_SHA256_V2', ''):
+            for version in (V2, V3):
+                with self.subTest(empty=version), self.assertRaisesRegex(RuntimeError, f'{version} has no pin yet'):
+                    xr.read(text(answer()), UNITS, version=version)
+        self.assertEqual(interpretation.LOCAL_SCHEMA_SHA256_V2, pin)
+
+    def test_the_two_probe_slips_shapes(self):
+        """F2high's two slot slips, as AMENDMENT-2 E.2 records them, on the worked example (synthetic): A-v2's device
+        (cold_snare supported, hot_snare negated, electrocautery negated) and A-v6's organ (two supported organs of one
+        entry). Refused whole as recorded under gemini-events@2; read under @3 with that slot unresolved and every other
+        finding the answer's own."""
+        device = [fact('cold_snare', 'S6'), fact('hot_snare', 'S6', state='negated'),
+                  fact('electrocautery', 'S6', state='negated')]
+        organs = [fact('cecum', 'S1'), fact('ascending_colon', 'S1')]
+        for name, edit, where in (
+                ('A-v2', lambda value: put(value['events'][1], 'technique.device', device), ('E2', A.TECHNIQUE_DEVICE)),
+                ('A-v6', lambda value: value.update(anatomy=[anatomy('Y1', fact('surgically_absent', 'S1'),
+                                                                     organ=organs)]), ('Y1', A.ORGAN))):
+            with self.subTest(slip=name):
+                data = changed(edit)
+                self.assertIsInstance(self.read_as(data, V2), xr.Refusal)
+                result = self.read_as(data, V3)
+                self.assertIsInstance(result, xr.ReadAnswer)
+                slot = [item for item in result.facts if (item.key.object, item.key.attribute) == where]
+                self.assertTrue(len(slot) > 1 and all(R.SLOT_OVERFULL in item.reasons for item in slot))
+                rest = [entry for entry in self.findings(result) if not (
+                    isinstance(entry[0], xr.FactKey) and (entry[0].object, entry[0].attribute) == where)]
+                self.assertFalse([entry for entry in rest if R.SLOT_OVERFULL in entry[1]])
+
+
 class SourceUnitsTests(ReadTestCase):
     """[R:CO-5]: a source or an anchor over 12 units fails its own check; the answer is never refused for it."""
 

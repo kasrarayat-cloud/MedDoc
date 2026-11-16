@@ -3798,9 +3798,10 @@ function interpretationSection() {
       encounter_facts: { reach: [{ event: 'E1', family: 'gi.flex_sig', landmark: 'sigmoid_colon', state: 'verified', reasons: [], attached: true },
         { event: 'E2', family: 'gi.colonoscopy', landmark: 'cecum', state: 'verified', reasons: [], attached: true }], visits: [] },
       open_questions: [], verification: {} },
-    // the interpreter's model as the walk names it (vb.INTERPRETER.model: the server's MODEL, DECISIONS D230)
-    run: { id: RUN_ID, provider: 'gemini', purpose: 'interpretation', state: 'succeeded', sent: true, http_status: 200, requested_model: vb.INTERPRETER.model,
-      returned_model: vb.INTERPRETER.model, adapter_version: 'gemini-generate@cptstudio-1', request_sha256: sha('request'), response_sha256: sha('response'),
+    // a design v1 row is the Gemini interpreter's, read as stored (vb.STORED_INTERPRETER: the server's PROVIDER and MODEL,
+    // DECISIONS D230); AMENDMENT-2's current path is Fable's (vb.INTERPRETER, fableSection below)
+    run: { id: RUN_ID, provider: vb.STORED_INTERPRETER.provider, purpose: 'interpretation', state: 'succeeded', sent: true, http_status: 200, requested_model: vb.STORED_INTERPRETER.model,
+      returned_model: vb.STORED_INTERPRETER.model, adapter_version: 'gemini-generate@cptstudio-1', request_sha256: sha('request'), response_sha256: sha('response'),
       usage: { promptTokenCount: 5210, candidatesTokenCount: 1840, totalTokenCount: 7050 }, estimated_cost: '0.0288', reused_from: null,
       started_at: '2026-11-09T10:00:00+00:00', finished_at: '2026-11-09T10:00:04+00:00', latency_ms: 4120 },
     hold: null,
@@ -3829,8 +3830,16 @@ test('the walk\'s new-path labels, D3 facts, step and error actions are the serv
   const labels = read('studio', 'interpretation', '__init__.py');
   const label = name => new RegExp(`^${name} = '([^']*)'`, 'm').exec(labels)?.[1];
   assert.equal(`${label('ENGINE_VERSION').split('@')[0]}@`, vb.EVENTS_ENGINE_PREFIX);
+  assert.equal(label('ENGINE_VERSION'), vb.EVENTS_ENGINE_V1);
   assert.equal(label('ROUTING_VERSION'), vb.ROUTING_STAND_IN);
-  assert.deepEqual({ ...vb.INTERPRETER }, { provider: label('PROVIDER'), model: label('MODEL'), purpose: label('PURPOSE') });
+  // AMENDMENT-2 (8.1, section 9 [R:replay-R2]): the walk's interpreter is the current path's - PROVIDER_V3 and MODEL_V3 -
+  // and a stored v1 or v2 row's is the Gemini interpreter's, PROVIDER and MODEL, which keep Gemini's values
+  assert.deepEqual({ ...vb.INTERPRETER }, { provider: label('PROVIDER_V3'), model: label('MODEL_V3'), purpose: label('PURPOSE') });
+  assert.deepEqual({ ...vb.STORED_INTERPRETER }, { provider: label('PROVIDER'), model: label('MODEL') });
+  // READ_PROVIDERS = (PROVIDER_V3, PROVIDER): every interpreter provider a released retry may name
+  const providers = /^READ_PROVIDERS = \(([A-Z_0-9]+), ([A-Z_0-9]+)\)$/m.exec(labels);
+  assert.ok(providers, 'READ_PROVIDERS not found in interpretation/__init__.py');
+  assert.deepEqual([...vb.READ_PROVIDERS], [label(providers[1]), label(providers[2])]);
   const members = /^MEMBER_FACTS = \(([^)]*)\)/m.exec(read('studio', 'interpretation', 'facts.py'));
   assert.ok(members, 'MEMBER_FACTS not found in interpretation/facts.py');
   assert.deepEqual([...members[1].matchAll(/'([a-z_]+)'/g)].map(m => m[1]).sort(), [...vb.MEMBER_ONLY_FACTS].sort());
@@ -3970,7 +3979,9 @@ test('checkInterpretation: the inventory read, the interpreter\'s one model aske
     [enc => { enc.assessment.interpretation = { engine: 'legacy', engine_version: 'cpt-studio-validation@10', record: null }; }, 'legacy'],
     [enc => { enc.assessment.interpretation.inventory.state = 'refused'; }, 'event inventory was refused'],
     [enc => { enc.assessment.interpretation.run.requested_model = 'gemini-2.5-pro'; }, 'asked for'],
-    [enc => { enc.assessment.interpretation.run.returned_model = `${vb.INTERPRETER.model}-latest`; }, 'answered by'],
+    [enc => { enc.assessment.interpretation.run.returned_model = `${vb.STORED_INTERPRETER.model}-latest`; }, 'answered by'],
+    // AMENDMENT-2: a stored v1 row answered by the current interpreter is no row the Gemini interpreter made
+    [enc => { Object.assign(enc.assessment.interpretation.run, { provider: vb.INTERPRETER.provider, requested_model: vb.INTERPRETER.model, returned_model: vb.INTERPRETER.model }); }, `its run is ${vb.INTERPRETER.provider}/interpretation`],
     [enc => { enc.assessment.interpretation.run.provider = 'corti'; }, 'corti/interpretation'],
     [enc => { enc.assessment.interpretation.run.response_sha256 = ''; }, 'sha256'],
     [enc => { enc.assessment.interpretation.record.sentinel.legacy_calls = 1; }, 'execution(s) of the legacy reader'],
@@ -4025,18 +4036,19 @@ test('checkProgressDom: the real page offers "Try reading again" for a failed re
 test('the denylist holds the interpreter\'s names and the new operator identifiers; argon in the document is no hit', () => {
   const op = newPathEncounter();
   const values = vb.denyValuesFrom(op, { interpretation: interpretationSection() });
-  for (const want of [INV, RUN_ID, vb.INTERPRETER.model, 'gemini-generate@cptstudio-1', 'cpt-studio-events@1', 'gemini-events@1', 'gemini-inventory@1', sha('request'), sha('inventory')]) {
+  for (const want of [INV, RUN_ID, vb.STORED_INTERPRETER.model, 'gemini-generate@cptstudio-1', 'cpt-studio-events@1', 'gemini-events@1', 'gemini-inventory@1', sha('request'), sha('inventory')]) {
     assert.ok(values.includes(want), want);
   }
   assert.equal(values.some(value => /^(?:argon|carbon)$/i.test(value)), false);
   const ctx = vb.scanContext({ documentText: `${TEXT}Hemostasis: argon plasma coagulation was applied.\n`, denyValues: values });
   assert.deepEqual(vb.scanJson({ why: { quotes: [{ text: 'Hemostasis: argon plasma coagulation was applied.' }] } }, ctx), []);
   assert.deepEqual(vb.scanText('Argon plasma coagulation is a treatment.', ctx, 'dom'), []);
-  assert.deepEqual(hitIds(vb.scanJson({ summary: `Read by ${vb.INTERPRETER.model}.` }, ctx)), ['deny_value', 'interpreter_model', 'model_id', 'provider_name']);
+  assert.deepEqual(hitIds(vb.scanJson({ summary: `Read by ${vb.STORED_INTERPRETER.model}.` }, ctx)), ['deny_value', 'interpreter_model', 'model_id', 'provider_name']);
   // DECISIONS D230: the interpreter's model since 2026-11-13 (gemini-4-carbon) and before it (gemini-4-argon) are each
   // named by the denylist itself, whatever run a page's record names; "carbon", like "argon", is clinical wording and no hit
   const bare = vb.scanContext({ documentText: `${TEXT}Marking: no carbon-particle tattoo was placed.\n` });
-  for (const model of ['gemini-4-carbon', 'gemini-4-argon', 'GEMINI-4-CARBON']) {
+  // AMENDMENT-2 section 9: the interpreter's model since D275 (claude-fable-5-2) is named by the denylist too
+  for (const model of ['gemini-4-carbon', 'gemini-4-argon', 'GEMINI-4-CARBON', 'claude-fable-5-2', 'CLAUDE-FABLE-5-2', vb.INTERPRETER.model]) {
     assert.deepEqual(hitIds(vb.scanJson({ summary: `Read by ${model}.` }, bare)), ['interpreter_model', 'model_id', 'provider_name'], model);
   }
   assert.deepEqual(vb.scanJson({ why: { quotes: [{ text: 'Marking: no carbon-particle tattoo was placed.' }] } }, bare), []);
@@ -4375,8 +4387,9 @@ test('design v2: the walk\'s v2 labels and the appraisal run are the server\'s o
   const labels = fs.readFileSync(path.join(ROOT, 'studio', 'interpretation', '__init__.py'), 'utf8');
   const label = name => new RegExp(`^${name} = '([^']*)'`, 'm').exec(labels)?.[1];
   assert.equal(label('ENGINE_VERSION_V2'), vb.EVENTS_ENGINE_V2);
+  assert.equal(label('ENGINE_VERSION_V3'), vb.EVENTS_ENGINE_V3);  // AMENDMENT-2 8.1 [R:replay-R2]
   assert.equal(label('ROUTING_VERSION_V2'), vb.ROUTING_STAND_IN_V2);
-  assert.deepEqual({ ...vb.APPRAISER }, { provider: label('PROVIDER'), model: label('MODEL'), purpose: label('APPRAISAL_PURPOSE') });
+  assert.deepEqual({ ...vb.APPRAISER }, { provider: label('PROVIDER_V3'), model: label('MODEL_V3'), purpose: label('APPRAISAL_PURPOSE') });
   assert.deepEqual([...vb.STAND_IN_VERSIONS].sort(), [label('ROUTING_VERSION'), label('ROUTING_VERSION_V2')].sort());
   // the operator section the server builds names both runs (report.interpretation_section_v2)
   const report = fs.readFileSync(path.join(ROOT, 'studio', 'interpretation', 'report.py'), 'utf8');
@@ -4397,7 +4410,7 @@ test('design v2: checkInterpretation holds the appraisal run to the interpreter\
     [enc => { delete enc.assessment.interpretation.appraisal_run; }, 'no appraisal run (pass 2)'],
     [enc => { enc.assessment.interpretation.appraisal_run.purpose = 'interpretation'; }, 'its appraisal run is gemini/interpretation'],
     [enc => { enc.assessment.interpretation.appraisal_run.requested_model = 'gemini-2.5-flash'; }, 'its appraisal run asked for'],
-    [enc => { enc.assessment.interpretation.appraisal_run.returned_model = `${vb.APPRAISER.model}-001`; }, 'its appraisal run was answered by'],
+    [enc => { enc.assessment.interpretation.appraisal_run.returned_model = `${vb.STORED_INTERPRETER.model}-001`; }, 'its appraisal run was answered by'],
     [enc => { enc.assessment.interpretation.appraisal_run.response_sha256 = ''; }, 'its appraisal run lacks'],
     [enc => { enc.assessment.interpretation.appraisal_run.id = RUN_ID; enc.assessment.interpretation.record.appraisal_run = RUN_ID; }, 'its appraisal run is its pass-1 run'],
     [enc => { enc.assessment.interpretation.record.appraisal_run = 'another'; }, 'the record names another appraisal run'],
@@ -4424,6 +4437,92 @@ test('design v2: checkInterpretation holds the appraisal run to the interpreter\
   const other = v2Encounter();
   other.routing.version = 'gemini-routing@3';
   assert.deepEqual(failed([vb.checkStandIn(other)]), ['routing.stand_in']);
+});
+
+// --- AMENDMENT-2 (8.1, section 9 [R:replay-R2]): the walk on a Fable run -----------------------------------------------
+// An assessment of cpt-studio-events@3 is the current path's: its two runs are the Fable interpreter's (PROVIDER_V3,
+// MODEL_V3), its inventory gemini-events@3/appraisal@2 and gemini-inventory@3; a stored @2 or @1 row keeps Gemini's, read
+// as stored. The labels are the server's own (interpretation/__init__.py, pinned above).
+
+function fableSection() {
+  const section = v2Section();
+  section.engine_version = 'cpt-studio-events@3';
+  Object.assign(section.record, { engine_version: 'cpt-studio-events@3', interpretation_version: 'gemini-events@3/appraisal@2',
+    inventory_version: 'gemini-inventory@3' });
+  Object.assign(section.inventory, { interpretation_version: 'gemini-events@3/appraisal@2', inventory_version: 'gemini-inventory@3' });
+  const fable = { provider: 'anthropic', requested_model: 'claude-fable-5-2', returned_model: 'claude-fable-5-2',
+    adapter_version: 'anthropic-messages@cptstudio-interp-1',
+    usage: { input_tokens: 5210, output_tokens: 18400, cache_creation_input_tokens: 4100, cache_read_input_tokens: 0 } };
+  Object.assign(section.run, fable);
+  Object.assign(section.appraisal_run, fable);
+  return section;
+}
+function fableEncounter() {
+  const enc = newPathEncounter();
+  enc.assessment.engine_version = 'cpt-studio-events@3';
+  enc.assessment.interpretation = fableSection();
+  enc.routing.version = 'gemini-routing@2';  // ROUTING_VERSION_V2: AMENDMENT-2 leaves it unchanged
+  return enc;
+}
+
+test('AMENDMENT-2: checkInterpretation passes a Fable run, holds both its runs to the current interpreter and reads stored rows as stored', () => {
+  assert.deepEqual({ ...vb.INTERPRETER }, { provider: 'anthropic', model: 'claude-fable-5-2', purpose: 'interpretation' });
+  const op = fableEncounter();
+  const good = vb.checkInterpretation(op, { interpretation: fableSection() });
+  assert.deepEqual(failed(good), []);
+  assert.deepEqual(ids(good), ['provenance.interpretation:pass', 'provenance.interpretation.usage:pass',
+    'provenance.interpretation.appraisal_usage:pass', 'provenance.interpretation.trace:pass']);
+  assert.match(good[0].reason, /through the anthropic run \S+ asking for claude-fable-5-2, answered by claude-fable-5-2 and its appraisal run run-appraisal/);
+  assert.ok(vb.newPath(op));
+  const broken = [
+    [enc => { enc.assessment.interpretation.run.provider = 'gemini'; }, 'its run is gemini/interpretation'],
+    [enc => { enc.assessment.interpretation.run.requested_model = 'gemini-4-carbon'; }, 'its run asked for "gemini-4-carbon"'],
+    [enc => { enc.assessment.interpretation.run.returned_model = 'claude-fable-5-1'; }, 'its run was answered by "claude-fable-5-1"'],
+    [enc => { enc.assessment.interpretation.appraisal_run.provider = 'gemini'; }, 'its appraisal run is gemini/appraisal'],
+    [enc => { enc.assessment.interpretation.appraisal_run.requested_model = 'gemini-4-carbon'; }, 'its appraisal run asked for'],
+    // R2: an @3 assessment is a v2 one - its appraisal run is required and checked, never skipped as "not v2"
+    [enc => { delete enc.assessment.interpretation.appraisal_run; }, 'no appraisal run (pass 2)'],
+    [enc => { enc.assessment.interpretation.record.appraisal_run = 'another'; }, 'the record names another appraisal run'],
+    [enc => { enc.assessment.interpretation.record.sentinel.retired_calls = 1; }, 'retired execution(s)'],
+  ];
+  for (const [mutate, word] of broken) {
+    const enc = fableEncounter();
+    mutate(enc);
+    const results = vb.checkInterpretation(enc, { interpretation: enc.assessment.interpretation });
+    assert.deepEqual(failed(results), ['provenance.interpretation'], word);
+    assert.match(results[0].reason, new RegExp(word.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')), word);
+  }
+  // the label decides which interpreter made the row: an @2 row whose runs are Fable's is no stored Gemini row
+  const mislabelled = fableEncounter();
+  mislabelled.assessment.interpretation.engine_version = 'cpt-studio-events@2';
+  assert.match(vb.checkInterpretation(mislabelled, undefined)[0].reason, /its run is anthropic\/interpretation; its run asked for "claude-fable-5-2"/);
+  // an engine label the walk does not know is judged by none of them
+  const later = fableEncounter();
+  later.assessment.interpretation.engine_version = 'cpt-studio-events@4';
+  assert.match(vb.checkInterpretation(later, undefined)[0].reason, /its engine label "cpt-studio-events@4" is none the walk knows/);
+  // stored rows of the Gemini interpreter still pass as stored: a v2 (@2) and a design v1 (@1) assessment
+  assert.deepEqual(failed(vb.checkInterpretation(v2Encounter(), { interpretation: v2Section() })), []);
+  assert.deepEqual(failed(vb.checkInterpretation(newPathEncounter(), { interpretation: interpretationSection() })), []);
+});
+
+test('AMENDMENT-2: a released retry of an anthropic run is no duplicate paid request, either pass; a provider outside READ_PROVIDERS is never released', () => {
+  const T = second => `2026-11-16T10:00:${String(second).padStart(2, '0')}+00:00`;
+  const retry = second => ({ event: 'interpretation.retry', summary: 'interpretation.retry', actor: 'Operator', actor_kind: 'human', created_at: T(second), data: { effect: 'failed' } });
+  const view = (runs, activity = []) => ({ provider_runs: runs, activity });
+  for (const purpose of ['interpretation', 'appraisal']) {
+    const run = (id, second, extra = {}) => ({ ...sent(id, { provider: 'anthropic', purpose, created_at: T(second) }), ...extra });
+    // the refused answer, released (reconciled) by the recorded retry, then sent again once: no duplicate
+    assert.deepEqual(failed(vb.checkNoDuplicateSends(view([run('a1', 1, { reconciled: true }), run('a2', 5)], [retry(3)]))), [], purpose);
+    assert.equal(vb.releasedForRetry(run('a1', 1, { reconciled: true }), run('a2', 5), [Date.parse(T(3))]), true, purpose);
+    // without the retry before it, or once the released attempt was read, the next send is a duplicate paid request
+    assert.deepEqual(failed(vb.checkNoDuplicateSends(view([run('a1', 1, { reconciled: true }), run('a2', 5)]))), ['pipeline.no_duplicate_send'], purpose);
+    assert.deepEqual(failed(vb.checkNoDuplicateSends(view([run('a1', 1, { reconciled: true }), run('a2', 5), run('a3', 9)], [retry(3)]))),
+      ['pipeline.no_duplicate_send'], purpose);
+  }
+  const other = (id, second, extra = {}) => ({ ...sent(id, { provider: 'openai', purpose: 'interpretation', created_at: T(second) }), ...extra });
+  assert.equal(vb.releasedForRetry(other('o1', 1, { reconciled: true }), other('o2', 5), [Date.parse(T(3))]), false);
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([other('o1', 1, { reconciled: true }), other('o2', 5)], [retry(3)]))), ['pipeline.no_duplicate_send']);
+  assert.deepEqual([...vb.READ_PROVIDERS], ['anthropic', 'gemini']);
 });
 
 test('design v2: both runs\' identifiers are deny values, and the joined forms are hits in this reader as in the others', () => {

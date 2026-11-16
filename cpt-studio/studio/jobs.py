@@ -29,7 +29,13 @@ from django.db.models import JSONField, Q, Value
 from django.utils import timezone
 
 from . import audit, bounded, interpretation, models, participants, provider_holds, review
-from .interpretation import adapter as interpretation_adapter
+# AMENDMENT-2 section 9 (DECISIONS D275, D279): the interpreter on the path is Claude Fable 5.2 - interpretation_adapter
+# names fable_adapter, which exposes every name the reading stages read (NotBuilt, REFUSED, TOO_LONG, EXTRACTION,
+# APPRAISAL, describe, classify, get_interpreter_v2, build_appraisal_request, read_appraisal). The dormant Gemini adapter
+# is named apart, for the test-only v1 chain's reading alone (its get_interpreter and answer_text); a stored run is
+# described and classified by the adapter of its own version (_run_adapter, holds.classify).
+from .interpretation import adapter as gemini_adapter
+from .interpretation import fable_adapter as interpretation_adapter
 from .interpretation import holds as interpretation_holds
 from .interpretation import report as interpretation_report
 from .interpretation import sentinel
@@ -98,10 +104,13 @@ MEMBER_DATE_CONFLICT_MESSAGE = ('Nothing was sent: the service date entered as e
                                 'documented one. Correct or clear the metadata (or add an addendum), and the request is '
                                 'made for the agreed date.')
 PROVIDER_LOCK_KEY = 0x435054535455  # 'CPTSTU': CPT Studio's own single-flight key
-QUEUE_DEADLINE = timedelta(minutes=30)  # a job that cannot start within this window expires
+# A job that cannot start within this window expires. AMENDMENT-2 1.12: 60 minutes - one worker runs one job at a time,
+# and a long note's two passes can hold it for about 20-27 minutes, so a job queued behind two of them still starts.
+QUEUE_DEADLINE = timedelta(minutes=60)
 Job = models.Job
 # The Gemini migration's stage and its runs (design/FINAL.md 6.1): Job.kind 'interpret', ProviderRun.purpose
-# 'interpretation' and provider 'gemini', the labels studio.interpretation owns.
+# 'interpretation' - its provider the interpreter's (AMENDMENT-2 1.1: 'anthropic', Claude Fable 5.2; 'gemini' on a run
+# stored before it, read as stored) - the labels studio.interpretation owns.
 INTERPRET = interpretation.JOB_KIND
 INTERPRETATION = interpretation.PURPOSE
 READABLE = (models.SourceRevision.OK, models.SourceRevision.PARTIAL)
@@ -109,12 +118,16 @@ READABLE = (models.SourceRevision.OK, models.SourceRevision.PARTIAL)
 # 'appraise', ProviderRun.purpose 'appraisal' - and the version pairs an EventInventory is read at. This image reads at
 # V2_VERSIONS; v1's pair is read only by the test-only v1 chain (_v1_chain), as tests/legacy_chain.py reaches the legacy
 # reader: no production switch exists.
+# AMENDMENT-2 8.1 [R:replay-R4]: every writer on the current path writes the new labels, so design v2's pair is now its
+# @3 pair (gemini-events@3/appraisal@2, gemini-inventory@3), the pair store.READ_VERSIONS lists last; a row stored at the
+# @2 pair is read AS STORED by every reader of a stored row (store, readers, overlay, review) and is never the reading
+# this image makes - a revision whose only inventory is @2 is read again, on a member's explicit act (a Resume).
 APPRAISE = interpretation.APPRAISE_JOB_KIND
 APPRAISAL = interpretation.APPRAISAL_PURPOSE
 READING_PURPOSES = (INTERPRETATION, APPRAISAL)
 READING_KINDS = (INTERPRET, APPRAISE)
 V1_VERSIONS = (interpretation.INTERPRETATION_VERSION, interpretation.INVENTORY_VERSION)
-V2_VERSIONS = (interpretation.INTERPRETATION_PAIR, interpretation.INVENTORY_VERSION_V2)
+V2_VERSIONS = (interpretation.INTERPRETATION_PAIR_V3, interpretation.INVENTORY_VERSION_V3)
 
 
 def _v1_chain() -> bool:
@@ -126,8 +139,8 @@ def _v1_chain() -> bool:
 
 
 def current_versions():
-    """The (interpretation_version, inventory_version) an EventInventory is read at now: design v2's pair
-    (gemini-events@2/appraisal@1, gemini-inventory@2), or v1's under the test-only v1 chain."""
+    """The (interpretation_version, inventory_version) an EventInventory is read at now: design v2's pair at
+    AMENDMENT-2's labels (gemini-events@3/appraisal@2, gemini-inventory@3: 8.1), or v1's under the test-only v1 chain."""
     return V1_VERSIONS if _v1_chain() else V2_VERSIONS
 
 
@@ -142,8 +155,9 @@ def _v1_rows_only():
 
 
 def _pass1_version():
-    """The pass-1 version an interpret stage's key names: gemini-events@2 (v1's gemini-events@1 under the v1 chain)."""
-    return interpretation.INTERPRETATION_VERSION if _v1_chain() else interpretation.INTERPRETATION_VERSION_V2
+    """The pass-1 version an interpret stage's key names: gemini-events@3 (AMENDMENT-2 1.9, 8.1; v1's gemini-events@1
+    under the v1 chain)."""
+    return interpretation.INTERPRETATION_VERSION if _v1_chain() else interpretation.INTERPRETATION_VERSION_V3
 
 
 class StageFailure(Exception):
@@ -1564,7 +1578,8 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
     (LOOPED_PURPOSES): its reservation names the endpoint and the model, its one exchange is recorded as turn 1
     (_finish_loop, _record_exchange), a Stop is observed before the send, an orphan is settled by
     may_have_reached_vendor, and its loop deadline is INTERPRETER_SEND_DEADLINE_SECONDS (_check_loop_time). It is
-    offered no tool: the executor it is given refuses any call (Gemini is offered none, so none is ever asked for)."""
+    offered no tool: the executor it is given refuses any call (the interpreter is offered none - AMENDMENT-2 1.2: the
+    request carries no tools - so none is ever asked for)."""
     encounter, revision = job.encounter, job.revision
     independent = purpose in LOOPED_PURPOSES
     carried = ()
@@ -1656,7 +1671,8 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
 
 
 def _no_interpretation_tool(name, arguments):
-    """The tool executor an interpretation's loop is given (FINAL 6.3: Gemini sends no tools; the executor refuses any):
+    """The tool executor an interpretation's loop is given (FINAL 6.3, AMENDMENT-2 1.2: the interpreter's request
+    carries no tools; the executor refuses any):
     CPT Studio offers the interpreter no tool, so a call is answered with a refusal and nothing is looked up."""
     return {'error': 'CPT Studio offers no tool to this request.'}, ()
 
@@ -1736,17 +1752,28 @@ UNRECORDED_REPLAY_MESSAGE = ('The {label} outcome could not be recorded whole (l
 LOOP_OUTCOMES = ('succeeded', 'failed', 'unknown', 'not_sent')
 
 
+def stale_threshold(kind) -> int:
+    """The seconds after which the periodic stale sweep takes a RUNNING stage of ``kind`` for dead (AMENDMENT-2 1.12
+    [R:connector-CONN-7]): settings.STALE_RUNNING_SECONDS_BY_KIND for a reading stage (interpret, appraise: 1,440 s,
+    above its 1,380 s stage deadline, so a live 1,320 s send is never swept), STALE_RUNNING_SECONDS (600 s) for every
+    other kind. The worker's startup sweep reads no threshold (mark_stale(startup=True))."""
+    return int(getattr(settings, 'STALE_RUNNING_SECONDS_BY_KIND', {}).get(kind, settings.STALE_RUNNING_SECONDS))
+
+
 def _check_loop_time(job, purpose=None):
-    """HARNESS.md 12.1: a phase-1 or peer job's deadline - JOB_DEADLINE_SECONDS for its kind, never past
-    STALE_RUNNING_SECONDS, where the stale-stage sweep takes a stage for dead - covers the tool loop's own deadline
-    (PARTICIPANT_LOOP_DEADLINE_SECONDS) plus the stage's bookkeeping. A stage that has already used so much of it that a
-    whole loop and its recording would no longer fit reserves and sends nothing: it is queued again (Requeue) and starts
-    afresh. The deadline is the purpose's (FINAL 6.3): INTERPRETER_SEND_DEADLINE_SECONDS (510 s, D49) for an
-    interpretation, whose stage has JOB_DEADLINE_SECONDS['interpret'] (560 s), and the participants' 540 s otherwise."""
+    """HARNESS.md 12.1: a phase-1 or peer job's deadline - JOB_DEADLINE_SECONDS for its kind, never past its stale
+    threshold (stale_threshold: where the stale-stage sweep takes a stage of its kind for dead) - covers the tool loop's
+    own deadline (PARTICIPANT_LOOP_DEADLINE_SECONDS) plus the stage's bookkeeping. A stage that has already used so much
+    of it that a whole loop and its recording would no longer fit reserves and sends nothing: it is queued again
+    (Requeue) and starts afresh. The deadline is the purpose's (FINAL 6.3): INTERPRETER_SEND_DEADLINE_SECONDS and
+    APPRAISER_SEND_DEADLINE_SECONDS (1,320 s each, AMENDMENT-2 1.12) for a reading, whose stages have
+    JOB_DEADLINE_SECONDS['interpret'] and ['appraise'] (1,380 s) under a stale threshold of 1,440 s, and the
+    participants' 540 s otherwise. With the shared 600 s threshold a reading stage's budget would be 600 s, below one
+    send, and every reading stage would be queued again forever (AMENDMENT-2 1.12's stale row)."""
     if job.started_at is None:
         return
     budget = min(settings.JOB_DEADLINE_SECONDS.get(job.kind, settings.STALE_RUNNING_SECONDS),
-                 settings.STALE_RUNNING_SECONDS)
+                 stale_threshold(job.kind))
     loop = (settings.APPRAISER_SEND_DEADLINE_SECONDS if purpose == interpretation.APPRAISAL_PURPOSE
             else settings.INTERPRETER_SEND_DEADLINE_SECONDS if purpose == INTERPRETATION
             else settings.PARTICIPANT_LOOP_DEADLINE_SECONDS)
@@ -1779,8 +1806,9 @@ def _holds_provider_lock():
 
 def _loop_label(name):
     """The word a loop's run errors name its sender by: a participant's label (Astra, Fable); 'interpretation' for the
-    interpreter, whose errors name no provider (D22)."""
-    return 'interpretation' if name == interpretation.PROVIDER else participants.LABELS.get(name, name)
+    interpreter - every provider of interpretation.READ_PROVIDERS (AMENDMENT-2 section 9) - whose errors name no
+    provider (D22)."""
+    return 'interpretation' if name in interpretation.READ_PROVIDERS else participants.LABELS.get(name, name)
 
 
 def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop, carried=(), deadline_s=None):
@@ -1854,7 +1882,8 @@ def _finish_loop(run, outcome):
             _finish_run(run, outcome.final)
             recorded = set(run.exchanges.values_list('turn', flat=True))
             _record_exchanges(run, [record for record in outcome.exchanges if record.turn not in recorded])
-            provider_holds.record(run)  # A20: with the exchanges it records (a participant's; Gemini's sets none)
+            provider_holds.record(run)  # A20: with the exchanges it records (a participant's; the interpreter's sets
+            # none here - its holds are interpretation.holds', set when the stage settles the run)
     except Exception as exc:  # noqa: BLE001 - logged; the run records why, never the internals
         log.exception('the loop outcome of participant run %s could not be recorded', run.pk)
         label = _loop_label(run.provider)
@@ -2171,10 +2200,10 @@ def stage_participant(job):
 # extract -> interpret -> analyze. One stage per revision and INTERPRETATION_VERSION, keyed
 # 'interpret:<revision>:<version>' - a recorded retry adds ':retry:<run>' (':retry-release:<run>' when it released a
 # run: DECISIONS D60, D85 - the only release mark), a reconciliation ':after-reconcile:<run>', the stale sweep
-# ':settled:<run>' - whose every outcome is a ProviderRun(provider 'gemini', purpose 'interpretation',
-# adapter_version ADAPTER_VERSION), and whose every answer read is an EventInventory row: 'read' queues
-# 'analyze:<revision>:<inventory>', 'refused' ends the stage failed with the retry door (FINAL 11.3). Gemini is the only
-# interpreter: nothing here calls the legacy reader, the stage runs under a new_path sentinel scope (run_job), its reading
+# ':settled:<run>' - whose every outcome is a ProviderRun(purpose 'interpretation', the interpreter's provider and
+# adapter version: AMENDMENT-2 1.1, Fable's), and whose every answer read is an EventInventory row: 'read' queues
+# 'analyze:<revision>:<inventory>', 'refused' ends the stage failed with the retry door (FINAL 11.3). The interpreter
+# (Claude Fable 5.2, AMENDMENT-2 section 9) is the only one: nothing here calls the legacy reader, the stage runs under a new_path sentinel scope (run_job), its reading
 # runs in a forked child counted against that scope, and the inventory insert is gated.
 #
 # Each run's meaning (interpretation.holds' effect: answered, failed, too_long, hold, unknown, none) is recorded on its
@@ -2189,8 +2218,11 @@ INTERPRET_TOO_LONG_MESSAGE = 'This document is too long to read in one piece; no
 INTERPRET_UNBUILT_MESSAGE = 'The document could not be prepared for reading; nothing was sent.'
 INTERPRET_NOT_SENT_MESSAGE = 'The interpretation request was not sent; nothing reached the interpreter.'
 INTERPRET_FAILED_MESSAGE = 'The interpretation did not succeed and was not used.'
-INTERPRET_CUT_OFF_MESSAGE = ('The interpretation was cut off at its output limit: the document is too long to be read '
-                             'in one piece, and the identical request is not sent again.')
+# AMENDMENT-2 1.5 [R:truth-T7]: running out of output tokens does not show that a document is long, so an answer cut at
+# its output limit says that limit was reached - never that the document is too long (the size and claim bounds keep
+# their too-long sentences: there the length is the cause)
+INTERPRET_CUT_OFF_MESSAGE = ('The interpretation reached its output limit before it was complete, and the identical '
+                             'request is not sent again.')
 INTERPRET_NOT_RESENT_MESSAGE = ('Nothing was sent: this document\'s reading was sent before and did not succeed, and '
                                 'the identical request is sent again only for a recorded retry.')
 INTERPRET_BLOCKED = 'a previous request has an unknown outcome; reconcile it before sending again'
@@ -2209,8 +2241,8 @@ APPRAISE_UNBUILT_MESSAGE = 'The check of the reading could not be prepared; noth
 APPRAISE_TOO_LONG_MESSAGE = ('The check of the reading would carry more claims than one request may carry; nothing was '
                              'sent, and it is not sent for this document.')
 APPRAISE_FAILED_MESSAGE = 'The check of the reading did not succeed and was not used.'
-APPRAISE_CUT_OFF_MESSAGE = ('The check of the reading was cut off at its output limit: the document is too long to be '
-                            'read in one piece, and the identical request is not sent again.')
+APPRAISE_CUT_OFF_MESSAGE = ('The check of the reading reached its output limit before it was complete, and the identical '
+                            'request is not sent again.')
 APPRAISE_NOT_RESENT_MESSAGE = ('Nothing was sent: this document\'s check of the reading was sent before and did not '
                                'succeed, and the identical request is sent again only for a recorded retry.')
 APPRAISE_SETTLED_MESSAGE = ('Nothing was sent: the stage that sent the check of this document\'s reading stopped before '
@@ -2219,6 +2251,15 @@ APPRAISE_SETTLED_MESSAGE = ('Nothing was sent: the stage that sent the check of 
 APPRAISE_UNHEALTHY_MESSAGE = ('The check of the reading was not used: its verdicts did not meet the health thresholds '
                               '({measures}).')
 APPRAISE_MOVED = 'the claim set changed since this stage was queued; the stage for the current one is queued'
+# AMENDMENT-2 1.5 [R:truth-T6]: what the member whose run set a hold reads - worded from that run, since it was sent
+# (and, for a decline after output began, billed): a request-bound hold's run (a decline, or an error event after
+# message_start: holds.request_bound_run) ends its stage FAILED with DECLINED_MESSAGE (progress' situation 'declined',
+# no action); any other hold's run ends CANCELLED with HOLD_SET_MESSAGE, which progress reads as the paused phase.
+# holds.PAUSED_MESSAGE ("Nothing was sent") stays for every run a standing hold kept unsent. No provider or model named.
+DECLINED_MESSAGE = ('This document was sent for reading, and the reading was declined, so nothing was suggested for it. '
+                    'It is not sent again.')
+HOLD_SET_MESSAGE = ('This document was sent for reading, and no usable reading came back; reading documented procedures '
+                    'is now paused on this installation. Resume once it is available again.')
 RETRY_RELEASE_NOTE = 'released for one retry'  # FINAL 11.3: the note a retry writes on the run it releases - its
 # record of who released it and when, never read as the release (DECISIONS D85: an operator writes that column too)
 # DECISIONS D60, D85: the key mark of a retry stage that RELEASED a run - the only release released_for_retry reads; a
@@ -2242,8 +2283,8 @@ def _purpose_of(job):
 
 
 def _interpret_key(revision, suffix=''):
-    """The interpret stage's key (FINAL 6.1; FINAL-V2 7.4): 'interpret:<revision>:<pass-1 version>' - gemini-events@2
-    (gemini-events@1 under the test-only v1 chain) - plus ':<suffix>' - 'retry:<run>', 'retry-release:<run>' (DECISIONS
+    """The interpret stage's key (FINAL 6.1; FINAL-V2 7.4): 'interpret:<revision>:<pass-1 version>' - gemini-events@3
+    (AMENDMENT-2 8.1; gemini-events@1 under the test-only v1 chain) - plus ':<suffix>' - 'retry:<run>', 'retry-release:<run>' (DECISIONS
     D60), 'after-reconcile:<run>', 'settled:<run>' or 'after-save:<uuid>' - always on the base, so suffixes never chain
     (a Resume adds its own, which resume keeps to one). At most 115 characters before a Resume's 44, inside the 200 the
     column holds."""
@@ -2317,8 +2358,32 @@ def _size_bound(revision):
     return ''
 
 
+# AMENDMENT-2 section 9 [R:connector-CONN-5]: where the reading stages name the interpreter's provider, model or adapter
+# version for the CURRENT path they read these three - the _V3 names (Fable), or v1's under the test-only v1 chain - and
+# no other line of this module names interpretation.PROVIDER, MODEL or ADAPTER_VERSION_V2 (a guard test reads it); where a
+# STORED run of either provider is settled, they read interpretation.READ_PROVIDERS and the run's own adapter version
+# (_run_adapter, holds.classify). interpretation.holds reads _reading_adapter_version as the version that sets a hold.
+
+def _reading_provider():
+    """ProviderRun.provider of the runs the reading stages send now."""
+    return interpretation.PROVIDER if _v1_chain() else interpretation.PROVIDER_V3
+
+
+def _reading_model():
+    """The model the reading stages' runs request now."""
+    return interpretation.MODEL if _v1_chain() else interpretation.MODEL_V3
+
+
 def _reading_adapter_version():
-    return interpretation.ADAPTER_VERSION if _v1_chain() else interpretation.ADAPTER_VERSION_V2
+    """ProviderRun.adapter_version of the runs the reading stages send now."""
+    return interpretation.ADAPTER_VERSION if _v1_chain() else interpretation.ADAPTER_VERSION_V3
+
+
+def _run_adapter(run):
+    """The adapter module that recorded reading run ``run`` - the one that describes and classifies it (AMENDMENT-2 1.5,
+    1.10): fable_adapter for ADAPTER_VERSION_V3, the dormant Gemini adapter for its versions (interpretation.holds'
+    CLASSIFIERS, the one dispatch by version); None for a run of any other version, which nothing here reads."""
+    return interpretation_holds.CLASSIFIERS.get(run.adapter_version)
 
 
 def _interpretation_not_sent(job, error, *, mode, interpreter=None, request=None, started=False, purpose=None,
@@ -2330,9 +2395,10 @@ def _interpretation_not_sent(job, error, *, mode, interpreter=None, request=None
     'effect' for a run the stage kept from sending."""
     now = timezone.now()
     identity = (_participant_identity(interpreter) if interpreter is not None
-                else {'endpoint': '', 'requested_model': interpretation.MODEL})
+                else {'endpoint': '', 'requested_model': _reading_model()})
     return models.ProviderRun.objects.create(
-        encounter=job.encounter, revision=job.revision, provider=interpretation.PROVIDER,
+        encounter=job.encounter, revision=job.revision,
+        provider=interpreter.name if interpreter is not None else _reading_provider(),
         adapter_version=interpreter.adapter_version if interpreter is not None else _reading_adapter_version(),
         request_sha256=request.canonical_sha256 if request is not None else '',
         request_body=request.body if request is not None else {},
@@ -2395,10 +2461,12 @@ def interpretation_effect(run) -> str:
     stored = _recorded_effect(run)
     if stored is not None:
         return stored
+    # AMENDMENT-2 1.5: by the adapter that recorded the run (its adapter version), never the one in use now
     if run.state in (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED):
         return interpretation_holds.classify(run.state, run.http_status, bytes(run.response_bytes or b''),
-                                             refused=_answer_refusal(run), purpose=run.purpose).effect
-    return interpretation_holds.classify(run.state, purpose=run.purpose).effect
+                                             refused=_answer_refusal(run), purpose=run.purpose,
+                                             adapter_version=run.adapter_version).effect
+    return interpretation_holds.classify(run.state, purpose=run.purpose, adapter_version=run.adapter_version).effect
 
 
 def released_for_retry(run) -> bool:
@@ -2437,7 +2505,7 @@ def _read_extraction(revision, mode=None, request=None):
     given; None when there is none. The extraction an appraise stage reads; its existence decides whether a Resume
     queues interpret or appraise."""
     runs = models.ProviderRun.objects.filter(
-        revision=revision, provider=interpretation.PROVIDER, adapter_version=interpretation.ADAPTER_VERSION_V2,
+        revision=revision, provider=_reading_provider(), adapter_version=_reading_adapter_version(),
         purpose=INTERPRETATION, state=models.ProviderRun.SUCCEEDED, scope__effect=interpretation_holds.ANSWERED)
     if mode is not None:
         runs = runs.filter(scope__mode=mode)
@@ -2486,20 +2554,116 @@ def _retained_interpretation(encounter, interpreter, request, purpose=None):
     return None
 
 
+def _not_resent(run) -> bool:
+    """Whether ``run`` - a SENT reading run of either pass, FAILED or SUCCEEDED - holds its identical request against a
+    new send: a definite failure of the attempt (a failed request, a reading refused, an appraisal settle refused:
+    effect failed), an answer cut off at its output limit (too_long: never re-sent for a member, C5), or - AMENDMENT-2
+    1.5 [R:connector-CONN-1] - an answer whose hold is REQUEST-BOUND (holds.request_bound_run: a decline, or an error
+    event after message_start), which says something about that request, so its release ends the installation's pause,
+    never the block on its request. Never another hold (an operator's release ends it) and never an unknown outcome
+    (reconciled)."""
+    effect = interpretation_effect(run)
+    if effect in (interpretation_holds.FAILED, interpretation_holds.TOO_LONG):
+        return True
+    return effect == interpretation_holds.HOLD and interpretation_holds.request_bound_run(run)
+
+
+def _never_resent(run) -> bool:
+    """Whether ``run`` is a SENT attempt (FAILED or SUCCEEDED) whose identical request is never sent again for a member:
+    an answer cut off at its output limit (too_long: C5) or an answer that set a request-bound hold (AMENDMENT-2 1.5
+    [R:connector-CONN-1]: a decline, or an error event after message_start). Only an operator's recorded override sends
+    that request again, once each time (_override_unspent)."""
+    if not run.sent or run.state not in (models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED):
+        return False
+    effect = interpretation_effect(run)
+    return effect == interpretation_holds.TOO_LONG or (
+        effect == interpretation_holds.HOLD and interpretation_holds.request_bound_run(run))
+
+
+def _same_request(run):
+    """This encounter's reading runs of ``run``'s identical request: its provider, adapter version, purpose and request
+    sha256 (the identity the failed-before door matches), any state."""
+    return models.ProviderRun.objects.filter(encounter_id=run.encounter_id, provider=run.provider,
+                                             adapter_version=run.adapter_version, purpose=run.purpose,
+                                             request_sha256=run.request_sha256)
+
+
+def _member_block(run):
+    """The newest SENT attempt of ``run``'s identical request (_same_request) that is never sent again for a member
+    (_never_resent: cut off at its output limit, or a request-bound hold), else None (and None for a run that names no
+    request). AMENDMENT-2 1.5 [R:connector-CONN-1] and C5, whenever an attempt of a request was cut off or declined: the
+    block is the request's, so a later attempt of it - an operator's override that failed transiently, or whose outcome
+    is unknown - never lifts it for a member. What retry_reading refuses by, what the failed-before door holds by
+    (_interpretation_failed_before) and what progress words a failed reading by."""
+    if not run.request_sha256:
+        return None
+    attempts = _same_request(run).filter(sent=True, state__in=(models.ProviderRun.FAILED,
+                                                               models.ProviderRun.SUCCEEDED))
+    for attempt in attempts.order_by('-created_at', '-pk'):
+        if _never_resent(attempt):
+            return attempt
+    return None
+
+
+def _newest_attempt(run):
+    """The newest run of ``run``'s identical request (_same_request) that may have been sent - sent, or left sending or
+    unknown (an outcome a member may have reconciled) - else None."""
+    return (_same_request(run).filter(Q(sent=True) | Q(state__in=(models.ProviderRun.SENDING,
+                                                                  models.ProviderRun.UNKNOWN)))
+            .order_by('-created_at', '-pk').first())
+
+
+def _override_unspent(run) -> bool:
+    """Whether a release of ``run``'s identical request is standing for one attempt not yet made (FINAL 11.3: one
+    release, one attempt): the newest release - the retry stage retry_reading queued for an attempt of that request,
+    keyed '...:retry-release:<attempt>' (the only release mark, released_for_retry's; a member's Resume of that stage,
+    its key plus ':resume:<uuid>', re-runs the release and is never a new one) - is newer than every attempt of the
+    request that may have been sent (_newest_attempt). Read only for a request _member_block holds: retry_reading
+    releases such a request for no member (RETRY_DECLINED, RETRY_CUT_OFF), so a release newer than its blocking attempt
+    is an operator's recorded override (AMENDMENT-2 1.5 [R:connector-CONN-1]: "an operator override sending once"), and
+    the attempt it allowed spends it whatever came back - a transient failure, an unknown outcome reconciled - so the
+    next member act sends nothing and only another override sends again."""
+    pks = list(_same_request(run).values_list('pk', flat=True))
+    if not pks:
+        return False
+    kind = APPRAISE if run.purpose == APPRAISAL else INTERPRET
+    marks = Q()
+    for pk in pks:
+        marks |= Q(idempotency_key__contains=f':{RETRY_RELEASE}:{pk}')
+    released_at = (Job.objects.filter(marks, kind=kind, encounter_id=run.encounter_id)
+                   .exclude(idempotency_key__contains=':resume:').order_by('-created_at')
+                   .values_list('created_at', flat=True).first())
+    if released_at is None:
+        return False
+    newest = _newest_attempt(run)
+    return newest is None or released_at > newest.created_at
+
+
 def _interpretation_failed_before(encounter, interpreter, request, purpose=None):
-    """FINAL 6.3's failed-before door (as _failed_before, for the interpreter; FINAL-V2 7.4 door 4 for pass 2): this
-    encounter's newest attempt of the identical request that was SENT and did not succeed - failed, a reading refused,
-    cut off, or an appraisal settle refused (effects failed and too_long); never a hold, which an operator's release
-    ends, and never an unknown outcome, which is reconciled - or None. A run released for one retry (FINAL 11.3) does
-    not block: its retry is the one attempt it was released for."""
-    attempts = models.ProviderRun.objects.filter(
+    """FINAL 6.3's failed-before door (as _failed_before, for the interpreter; FINAL-V2 7.4 door 4 for pass 2;
+    AMENDMENT-2 1.9 door 4): this encounter's newest attempt of the identical request that was SENT and holds that
+    request against a new send (_not_resent: failed, a reading refused, cut off, an appraisal settle refused, or an
+    answer that set a request-bound hold [R:connector-CONN-1]) - never another hold, which an operator's release ends,
+    and never an unknown outcome, which is reconciled - or None. A run released for one retry (FINAL 11.3) does not
+    block: its retry is the one attempt it was released for.
+
+    AMENDMENT-2 1.5 [R:connector-CONN-1] and C5, whenever an attempt of the identical request was cut off at its output
+    limit or set a request-bound hold (_member_block): that attempt is returned unless an operator's recorded override
+    released the request for an attempt not yet made (_override_unspent) - so after an override's one attempt, whatever
+    it came back as (a transient failure, an unknown outcome a member reconciled), no member act sends it again."""
+    attempts = list(models.ProviderRun.objects.filter(
         encounter=encounter, provider=interpreter.name, adapter_version=interpreter.adapter_version,
         request_sha256=request.canonical_sha256, purpose=purpose or INTERPRETATION, sent=True,
-        state__in=(models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED)).order_by('-created_at', '-pk')
+        state__in=(models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED)).order_by('-created_at', '-pk'))
     for run in attempts:
-        if interpretation_effect(run) not in (interpretation_holds.FAILED, interpretation_holds.TOO_LONG):
+        if not _not_resent(run):
             continue
-        return None if released_for_retry(run) else run
+        if not released_for_retry(run):
+            return run
+        break
+    for run in attempts:
+        if _never_resent(run):
+            return None if _override_unspent(run) else run
     return None
 
 
@@ -2527,14 +2691,17 @@ def _settle_from_exchange(run) -> bool:
     _settle_interpretation, _settle_appraisal): nothing is sent. The effect a stage recorded on it ('unknown') is
     dropped, since it described the run as it was and never its answer (refutation of S09, finding 1). Every other run
     is left as it is (False)."""
-    if (run.provider != interpretation.PROVIDER or run.purpose not in READING_PURPOSES
+    recorded_by = _run_adapter(run)
+    if (run.provider not in interpretation.READ_PROVIDERS or recorded_by is None
+            or run.purpose not in READING_PURPOSES
             or run.state not in (models.ProviderRun.SENDING, models.ProviderRun.UNKNOWN)):
         return False
     exchange = _turn_one_exchange(run)
     if exchange is None or exchange.state != models.ProviderRun.SUCCEEDED or exchange.http_status != 200:
         return False
     data = bytes(exchange.response_bytes or b'')
-    _, model, response_id = interpretation_adapter.describe(data)
+    # AMENDMENT-2 1.10: the describe of the run's own adapter version (a Fable stream, or a stored Gemini body)
+    _, model, response_id = recorded_by.describe(data)
     usage = dict(exchange.usage or {})
     scope = {key: value for key, value in (run.scope or {}).items() if key != 'effect'}
     settled = models.ProviderRun.objects.filter(pk=run.pk, state=run.state).update(
@@ -2600,7 +2767,7 @@ def _interpretation_child(request, response_bytes, text):
     from .interpretation import normalize
     from .interpretation import read as interpretation_read
 
-    answer = interpretation_adapter.answer_text(request, response_bytes)
+    answer = gemini_adapter.answer_text(request, response_bytes)  # v1's envelope: the v1 chain's answers are Gemini's
     if isinstance(answer, interpretation_read.Refusal):
         return 'refused', answer.stage, answer.reason
     parsed = interpretation_read.read(answer)
@@ -2727,15 +2894,19 @@ def _appraisal_child(text, pages, kind, extraction_request, extraction_bytes, ap
     read = interpretation_adapter.read_appraisal(built, appraisal_request, appraisal_bytes)
     if not hasattr(read, 'verdicts'):  # a Refusal: the envelope, the JSON, the schema, the bounds or the claims
         return 'refused', read.stage, read.reason
+    # AMENDMENT-2 8.1-8.2: settled under the appraisal label the request was built under (gemini-appraisal@2), whose
+    # health thresholds' pin settle checks
     settled = contract_settle.settle(built.answer, holder['checked'], built.built.claim_set, built.built.indistinct,
-                                     read, contract_settle.Usages(*usages))
+                                     read, contract_settle.Usages(*usages),
+                                     appraisal_version=interpretation.APPRAISAL_VERSION_V3)
     if isinstance(settled, contract_settle.Unhealthy):
         health = settled.health
         return 'unhealthy', {'pairs': health.pairs, 'not_rejected': health.not_rejected, 'claims': health.claims,
                              'established': health.established, 'verdicts': health.verdicts, 'missing': health.missing,
                              'refused': [item.value for item in health.refused]}
+    # AMENDMENT-2 8.1: every writer on the current path writes the new labels - the row at current_versions()' pair
     fields = inventory_store.row_v2(revision_text=text, events=settled.events, verification=settled.verification,
-                                    **bindings)
+                                    versions=V2_VERSIONS, **bindings)
     return 'read', fields
 
 
@@ -2768,7 +2939,8 @@ def _refused_extraction_row(job, run, built):
         fields = inventory_store.refused_row_v2(
             SimpleNamespace(stage=built['stage'], reason=built['refusal']), encounter_id=job.encounter_id,
             revision_id=revision.pk, provider_run_id=run.pk, text_sha256=revision.text_sha256,
-            request_sha256=run.request_sha256, response_sha256=run.response_sha256)
+            request_sha256=run.request_sha256, response_sha256=run.response_sha256,
+            versions=current_versions())  # AMENDMENT-2 8.1: the pair this image reads at (the @3 pair)
     except (inventory_store.StoreError, TypeError, ValueError):
         log.exception('the refused reading of interpretation run %s could not be stored', run.pk)
         raise StageFailure(READ_FAILED_MESSAGE) from None
@@ -2776,16 +2948,34 @@ def _refused_extraction_row(job, run, built):
     return models.EventInventory.objects.create(**{name: fields[name] for name in inventory_store.FIELDS_V2})
 
 
+def _hold_ending(run, hold, failed_message):
+    """(job state, error) of a reading stage whose run's own answer is a HOLD (AMENDMENT-2 1.5 [R:truth-T6]), worded
+    from that run, which was sent: a request-bound hold's run (holds.request_bound_run: a decline, or an error event
+    after message_start) FAILED with DECLINED_MESSAGE - its request is not sent again for a member, whatever the
+    release; any other hold its answer set and that still stands, CANCELLED with HOLD_SET_MESSAGE (the paused phase);
+    an answer whose hold was released meanwhile (or that set none) FAILED with ``failed_message`` - it is never read.
+    The test-only v1 chain keeps v1's recorded wording (the paused message for a standing hold), as the record of v1's
+    mechanics."""
+    if _v1_chain():
+        return (Job.CANCELLED, interpretation_holds.PAUSED_MESSAGE) if hold is not None else (Job.FAILED,
+                                                                                               failed_message)
+    if interpretation_holds.request_bound_run(run):
+        return Job.FAILED, DECLINED_MESSAGE
+    if hold is not None:
+        return Job.CANCELLED, HOLD_SET_MESSAGE
+    return Job.FAILED, failed_message
+
+
 def _settle_outcome(run, outcome, hold, *, failed_message, cut_off_message):
-    """What a reading stage does with a definite outcome other than a read answer (interpretation.holds' table): a
-    standing hold ends the stage paused; a cut-off answer TOO_LONG; anything else a definite failure, with the recorded
-    retry door (FINAL 11.3; FINAL-V2 7.5)."""
-    if outcome.effect == interpretation_holds.HOLD and hold is not None:
-        raise StageCancelled(interpretation_holds.PAUSED_MESSAGE)
+    """What a reading stage does with a definite outcome other than a read answer (interpretation.holds' table): a hold
+    ends the stage as its run's own answer says (_hold_ending: declined, or paused by the hold that run set); a cut-off
+    answer TOO_LONG, worded as a reading that reached its output limit (AMENDMENT-2 1.5 [R:truth-T7]); anything else a
+    definite failure, with the recorded retry door (FINAL 11.3; FINAL-V2 7.5)."""
+    if outcome.effect == interpretation_holds.HOLD:
+        state, error = _hold_ending(run, hold, failed_message)
+        raise (StageCancelled if state == Job.CANCELLED else StageFailure)(error)
     if outcome.effect == interpretation_holds.TOO_LONG:
         raise StageFailure(cut_off_message)
-    if outcome.effect == interpretation_holds.HOLD:  # an answer that is never read, whose hold was released (or unsent)
-        raise StageFailure(failed_message)
     raise StageFailure(f'{failed_message} {outcome.why}'.strip())
 
 
@@ -2849,7 +3039,7 @@ def _interpreter_or_pause(job, purpose=None):
     paused, interpreter, why = interpretation_holds.paused_reason(), None, interpretation_holds.PAUSED_MESSAGE
     if paused is None:
         try:
-            interpreter = (interpretation_adapter.get_interpreter() if _v1_chain()
+            interpreter = (gemini_adapter.get_interpreter() if _v1_chain()
                            else interpretation_adapter.get_interpreter_v2())
         except ProviderUnavailable as exc:  # misconfigured: as disabled until an operator configures it
             paused, why = interpretation_holds.HELD_DISABLED, str(exc)
@@ -2859,6 +3049,31 @@ def _interpreter_or_pause(job, purpose=None):
         _interpretation_not_sent(job, why, mode=interpretation_holds.mode(), held=paused, purpose=purpose)
         raise StageCancelled(interpretation_holds.PAUSED_MESSAGE)
     return interpreter
+
+
+def _interpreter_unpaused():
+    """The configured design-v2 interpreter read WITHOUT the hold door, as stage_appraise reads it for the run its key
+    names (AMENDMENT-2 1.5 [R:truth-T6]: a run is settled from its own stored answer, which sends nothing): None when
+    this process's mode is disabled or the interpreter cannot be configured (the stage then meets
+    _interpreter_or_pause, door 6, as before)."""
+    if interpretation_holds.paused_reason() == interpretation_holds.HELD_DISABLED:
+        return None
+    try:
+        return interpretation_adapter.get_interpreter_v2()
+    except ProviderUnavailable:
+        return None
+
+
+def _send_scope(interpreter, **extra):
+    """The scope a reading run sent by ``interpreter`` is recorded with: its mode, ``extra``, and - for an interpreter
+    that sends one (the Fable connector) - the anthropic-version header value it sends, ``api_version`` (AMENDMENT-2 1.2
+    and 8.4 [R:replay-R8]: the header is outside the body and moves no request sha256, so each run records the value it
+    sent; a changed value is a new adapter version)."""
+    scope = {'mode': interpreter.mode, **extra}
+    api_version = getattr(interpreter, 'api_version', None)
+    if isinstance(api_version, str) and api_version:
+        scope['api_version'] = api_version
+    return scope
 
 
 def _send_gates(job, interpreter, request, purpose):
@@ -2884,8 +3099,8 @@ def _send_gates(job, interpreter, request, purpose):
 
 
 def stage_interpret(job):
-    """The revision's interpretation (FINAL 6.3; FINAL-V2 7.4's pass 1): Gemini reads the documented clinical events
-    once; design v2 then reads, checks and claims the answer and queues pass 2, the appraisal.
+    """The revision's interpretation (FINAL 6.3; FINAL-V2 7.4's pass 1): the interpreter (AMENDMENT-2 section 9:
+    Claude Fable 5.2) reads the documented clinical events once; design v2 then reads, checks and claims the answer and queues pass 2, the appraisal.
 
     Before anything is built: a reconciliation's stage settles the run it was released for from its recorded exchange
     when it can (ADJUDICATION P-6; it never sends); then the start check (FINAL-V2 amendment 1, 3.4: superseded when
@@ -2897,7 +3112,9 @@ def stage_interpret(job):
     predict's order: an inventory already read for this revision and versions (no send: analyze); design v2: an
     extraction already read for the identical request (no send: appraise); the run a settled or after-reconcile key
     names, settled itself when it holds the answer to the identical request and no stage settled it yet
-    (_settled_answer); a stored answer to the identical request (reused, nothing sent; P-2); the encounter-wide
+    (_settled_answer; such a stage reads the interpreter without the hold up to here, so a run whose own answer set the
+    hold is worded from that run, AMENDMENT-2 1.5 [R:truth-T6], and meets the mode and the hold just after it); a stored
+    answer to the identical request (reused, nothing sent; P-2); the encounter-wide
     unknown-outcome block; the failed-before door (skipping a run released for one retry); the stale sweep's settled
     path stops here, recording that nothing was sent, resumable (FINAL 6.9); the live gate and the write gate asked
     before the send; then one send (_send, purpose 'interpretation'), and its outcome settled
@@ -2918,12 +3135,20 @@ def stage_interpret(job):
         _interpretation_not_sent(job, INTERPRET_TOO_LONG_MESSAGE, mode=interpretation_holds.mode(), refused=SIZE,
                                  bound=bound, effect=interpretation_holds.TOO_LONG)
         raise StageFailure(INTERPRET_TOO_LONG_MESSAGE)
-    interpreter = _interpreter_or_pause(job)
+    # AMENDMENT-2 1.5 [R:truth-T6]: a stage that settles the run its key names (the stale sweep's settled path, a
+    # reconciliation's: keyed_interpretation_run) reads that run before the hold door, as stage_appraise does - so the
+    # run whose own answer set the hold (recorded meanwhile by another stage's send gate, _record_unsettled_holds) is
+    # worded from the run itself: declined, or the hold it set, never "Nothing was sent". Door 6 (the mode and the
+    # hold) stands for everything else such a stage meets after the run it settles
+    settling = None if _v1_chain() or keyed_interpretation_run(job) is None else _interpreter_unpaused()
+    interpreter = settling if settling is not None else _interpreter_or_pause(job)
     text, pages, kind = _document_of(revision)
     try:
         request = (interpreter.build_request(text, pages, kind) if _v1_chain()
                    else interpreter.build_extraction_request(text, pages, kind))
     except ProviderUnavailable as exc:
+        if settling is not None:
+            interpreter = _interpreter_or_pause(job)  # no request, so no run to settle: door 6 first, as before
         _interpretation_not_sent(job, str(exc), mode=interpreter.mode, interpreter=interpreter, refused=UNBUILT,
                                  effect=interpretation_holds.NONE, unframed=getattr(exc, 'unframed', ''))
         raise StageFailure(INTERPRET_UNBUILT_MESSAGE) from None
@@ -2941,6 +3166,8 @@ def stage_interpret(job):
         # FINAL 6.9 and P-6: the answer the keyed run holds is settled as the stage that sent it would have settled it -
         # read, its hold recorded against it, or its refused or cut-off reading failed - and never paid for again
         return _settle_interpretation(job, settled, reused=settled.reused_from_id is not None)
+    if settling is not None:
+        interpreter = _interpreter_or_pause(job)  # door 6, where the doors above it read without it (T6)
     prior = _retained_interpretation(encounter, interpreter, request)
     if prior is not None:
         return _settle_interpretation(job, _reused_participant_run(job, prior, INTERPRETATION), reused=True)
@@ -2960,7 +3187,7 @@ def stage_interpret(job):
                                  request=request, started=True, refused=SETTLED, effect=interpretation_holds.NONE)
         raise StageCancelled(INTERPRET_SETTLED_MESSAGE)
     _send_gates(job, interpreter, request, INTERPRETATION)
-    run = _send(job, interpreter, request, service_date=None, purpose=INTERPRETATION, scope={'mode': interpreter.mode})
+    run = _send(job, interpreter, request, service_date=None, purpose=INTERPRETATION, scope=_send_scope(interpreter))
     return _settle_interpretation(job, run)
 
 
@@ -2973,7 +3200,7 @@ def _extraction_of(job):
     run = models.ProviderRun.objects.filter(pk=pk, encounter_id=job.encounter_id, revision_id=job.revision_id,
                                             purpose=INTERPRETATION).first()
     if (run is None or run.state != models.ProviderRun.SUCCEEDED
-            or run.adapter_version != interpretation.ADAPTER_VERSION_V2
+            or run.adapter_version != _reading_adapter_version()
             or _recorded_effect(run) != interpretation_holds.ANSWERED):
         return None
     return run
@@ -3099,8 +3326,8 @@ def _settle_appraisal(job, run, extraction, *, reused=False):
 
 
 def stage_appraise(job):
-    """Pass 2, the appraisal (FINAL-V2 7.4): a second Gemini call judges each claim CPT Studio made of pass 1's answer
-    against the document, and settle makes the ONE EventInventory row every later stage reads.
+    """Pass 2, the appraisal (FINAL-V2 7.4): a second call to the interpreter (AMENDMENT-2 section 9) judges each claim
+    CPT Studio made of pass 1's answer against the document, and settle makes the ONE EventInventory row every later stage reads.
 
     The start check (FINAL-V2 amendment 1, 3.4) comes first, after a reconciliation's P-6 settle; then the extraction
     the key names must be this revision's read pass-1 answer. The doors, in predict's order (7.4): 0. the request
@@ -3166,7 +3393,7 @@ def stage_appraise(job):
     interpreter = _interpreter_or_pause(job, APPRAISAL)  # door 6: disabled, misconfigured or held
     _send_gates(job, interpreter, request, APPRAISAL)
     run = _send(job, interpreter, request, service_date=None, purpose=APPRAISAL,
-                scope={'mode': interpreter.mode, 'claims': claims, 'extraction': str(extraction.pk)})
+                scope=_send_scope(interpreter, claims=claims, extraction=str(extraction.pk)))
     return _settle_appraisal(job, run, extraction)
 
 
@@ -4096,12 +4323,13 @@ def _assess_events(job):
         for record in records.values():
             record['frozen'] = frozen
     try:
+        # the D22 record names the engine that made it and both runs (FINAL-V2 1.7): for a v2 row the engine version is
+        # the result's own (AMENDMENT-2 8.1: what engine/assess wrote; report.interpretation_record_v2 checks it is one
+        # design v2 reads, and names the appraisal run), so the record and the row agree (step f5's request R2)
         record = interpretation_report.interpretation_record(
             inventory=inventory, context=context, member_date_state=member_date_state,
-            sentinel_record=sentinel.record(name=ASSESS_SCOPE))
-        if v2:  # the D22 record names the engine that made it and both runs (FINAL-V2 1.7; request to 5c's report.py)
-            record = {**record, 'engine_version': interpretation.ENGINE_VERSION_V2,
-                      'appraisal_run': str(inventory.appraisal_run_id)}
+            sentinel_record=sentinel.record(name=ASSESS_SCOPE),
+            **({'engine_version': result.engine_version} if v2 else {}))
         assessment = review.persist_assessment(
             encounter=encounter, revision=revision, context=context, routing_run=routing_run, provider_run=run,
             result=result, second_run=second, retrieval=retrieval,
@@ -4236,7 +4464,7 @@ def stage_assess(job):
 # (held_facts as engine/assess.jsonable writes a HeldFact, kept_words, procedural, origin, competes, the reinstatement
 # waits and the member-answer marker).
 
-V2_CHECK_SOURCE = f'cpt-studio:{interpretation.ENGINE_VERSION_V2}'
+V2_CHECK_SOURCE = f'cpt-studio:{interpretation.ENGINE_VERSION_V3}'  # AMENDMENT-2 8.1: the engine that wrote the check
 V2_STATUS_DETAIL = {'ready': 'Every fact this code requires is established in the document.',
                     'needs_clarification': 'A fact this code requires is not established; the item says which.',
                     'excluded': 'The code is excluded: the reason is recorded with it.'}
@@ -4454,7 +4682,7 @@ def _render_code(found: _Assessed, *, combination: Any, R: Any, text: str, pages
     # kept runs (C-10's: None reads every offset of a kept span, fail-closed); whether assess counted it a procedure
     # (engine/assess.procedural over its own PFS row, so read time's combination reads what assess's read)
     support = {'origin': found.origin.value, 'proposed_by': list(found.proposed_by), 'family': family,
-               'session': found.session, 'event_reading': interpretation.ENGINE_VERSION_V2,
+               'session': found.session, 'event_reading': interpretation.ENGINE_VERSION_V3,
                'acts': [{'id': act} for act in (found.evaluation.supporting if found.evaluation is not None else ())],
                'held_facts': engine_assess.jsonable(found.held_facts),
                **held_fact_messages(found),
@@ -4578,7 +4806,7 @@ def _render_alternative(found, *, text, pages):
         modifier_considerations=(), units=1,
         fingerprint=hashlib.sha256(f'alternative|{found.key}|{found.code}|{found.why.value}'.encode()).hexdigest(),
         support=_plain({'origin': found.origin.value, 'proposed_by': list(found.proposed_by), 'family': family,
-                        'not_added': found.why.value, 'event_reading': interpretation.ENGINE_VERSION_V2}))
+                        'not_added': found.why.value, 'event_reading': interpretation.ENGINE_VERSION_V3}))
 
 
 def _render_v2(found: _EngineAssessment, *, R: Any, text: str, pages: Any, context: Any, provider_status: str,
@@ -4630,13 +4858,13 @@ def _render_v2(found: _EngineAssessment, *, R: Any, text: str, pages: Any, conte
     completeness['versions'] = dict(found.versions)
     completeness[review.SERVICE_QUESTIONS] = service_question_records(found.service_questions)  # D270 (5b P3)
     selected = [item for item in proposals if item.bucket == 'selected']
-    summary = {'engine_version': interpretation.ENGINE_VERSION_V2, 'provider_status': provider_status,
+    summary = {'engine_version': interpretation.ENGINE_VERSION_V3, 'provider_status': provider_status,
                'proposals': len(proposals), 'selected': len(selected),
                'ready': sum(1 for item in selected if item.status == 'ready'),
                'needs_clarification': sum(1 for item in selected if item.status == 'needs_clarification'),
                'service_date': day.isoformat() if day is not None else None}
     return AssessmentResult(
-        profiles_version=PROFILES_VERSION, engine_version=interpretation.ENGINE_VERSION_V2, proposals=tuple(proposals),
+        profiles_version=PROFILES_VERSION, engine_version=interpretation.ENGINE_VERSION_V3, proposals=tuple(proposals),
         encounter_checks=tuple(encounter_checks), clarifications=tuple(clarifications), unsupported=(),
         reference_sources=validation_checks.reference_source_entries(sources, day), summary=summary,
         services=_plain(dict(found.services)), completeness=completeness)  # type: ignore[no-untyped-call]
@@ -5148,23 +5376,28 @@ def _record_unsettled_holds():
     not settled it yet). Its turn-1 exchange, read as P-6 reads it (_turn_one_exchange) and recorded with an HTTP
     status, is classified from its outcome, status and bytes (adapter.classify, through holds.classify), and a HOLD is
     recorded against the run. A run left sending counts as sent by may_have_reached_vendor's rule - the one the stale
-    sweep settles it by - for the hold only. Nothing else changes: the run is neither settled, marked nor written."""
-    runs = models.ProviderRun.objects.filter(provider=interpretation.PROVIDER, purpose__in=READING_PURPOSES, sent=True,
-                                             state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED)
-                                             ).exclude(scope__has_key='effect')
+    sweep settles it by - for the hold only. Nothing else changes: the run is neither settled, marked nor written.
+
+    AMENDMENT-2 1.5 and 1.10 (DECISIONS D289, G2-02): only the runs of the adapter version the reading stages send now
+    (_reading_adapter_version: Fable's) are asked - holds.record sets a hold for no other, so a stored Gemini or v1 run
+    is never a source of a new hold - and each is classified by its own adapter version (holds.classify's dispatch)."""
+    current = models.ProviderRun.objects.filter(provider=_reading_provider(), adapter_version=_reading_adapter_version(),
+                                                purpose__in=READING_PURPOSES)
+    runs = current.filter(sent=True, state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED)
+                          ).exclude(scope__has_key='effect')
     for run in runs:
         outcome = interpretation_holds.classify_run(run)
         if outcome.effect == interpretation_holds.HOLD:
             interpretation_holds.record(run, outcome)
-    unsettled = models.ProviderRun.objects.filter(provider=interpretation.PROVIDER, purpose__in=READING_PURPOSES)
-    for kept in (unsettled.filter(state=models.ProviderRun.UNKNOWN, sent=True),
-                 may_have_reached_vendor(unsettled.filter(state=models.ProviderRun.SENDING))):
+    for kept in (current.filter(state=models.ProviderRun.UNKNOWN, sent=True),
+                 may_have_reached_vendor(current.filter(state=models.ProviderRun.SENDING))):
         for run in kept:
             exchange = _turn_one_exchange(run)
             if exchange is None or exchange.http_status is None:
                 continue
             outcome = interpretation_holds.classify(exchange.state, exchange.http_status,
-                                                    bytes(exchange.response_bytes or b''))
+                                                    bytes(exchange.response_bytes or b''), purpose=run.purpose,
+                                                    adapter_version=run.adapter_version)
             if outcome.effect == interpretation_holds.HOLD:
                 run.sent = True  # a run left sending: may_have_reached_vendor's rule, in memory only (never saved)
                 interpretation_holds.record(run, outcome)
@@ -5198,8 +5431,9 @@ def _stale_interpretation(job, run):
     if run.state == models.ProviderRun.FAILED:
         outcome, hold = interpretation_holds.settle(run)
         _mark_effect(run, outcome.effect)
-        if outcome.effect == interpretation_holds.HOLD and hold is not None:
-            return Job.CANCELLED, interpretation_holds.PAUSED_MESSAGE, result
+        if outcome.effect == interpretation_holds.HOLD:  # worded from the run that set it (AMENDMENT-2 1.5 [R:truth-T6])
+            state, error = _hold_ending(run, hold, INTERPRET_FAILED_MESSAGE)
+            return state, error, result
         return Job.FAILED, f'{INTERPRET_FAILED_MESSAGE} {outcome.why}'.strip(), result
     if (run.scope or {}).get('held'):
         return Job.CANCELLED, interpretation_holds.PAUSED_MESSAGE, result
@@ -5227,10 +5461,26 @@ def _stale_predict(job, run):
     return Job.FAILED, f'{UPDATE_REVIEW_FAILED} {run.error}'.strip()
 
 
-def mark_stale():
-    """Settle jobs a dead worker left 'running'. A send in flight becomes UNKNOWN, never resent."""
-    cutoff = timezone.now() - timedelta(seconds=settings.STALE_RUNNING_SECONDS)
-    for job in Job.objects.filter(state=Job.RUNNING, started_at__lt=cutoff):
+def mark_stale(*, startup=False):
+    """Settle jobs a dead worker left 'running'. A send in flight becomes UNKNOWN, never resent.
+
+    AMENDMENT-2 1.12 [R:connector-CONN-7]: a RUNNING stage is a dead worker's once it is older than its kind's stale
+    threshold (stale_threshold: 1,440 s for a reading stage, 600 s for every other), so a reading stage whose 1,320 s send
+    is still in flight is never swept. ``startup``: the worker's own first sweep (work), which settles every RUNNING job
+    whatever its age - at most one worker runs (ops/install.py's I-worker invariant: the old one is stopped before the new
+    one starts), so a starting worker has no live peer and every running job is a dead worker's; without it a short
+    note's stage left by a crash would stay busy for up to 24 minutes, refusing Resume, Retry and Reconcile."""
+    now = timezone.now()
+    cutoff = now - timedelta(seconds=settings.STALE_RUNNING_SECONDS)
+    running = Job.objects.filter(state=Job.RUNNING)
+    if not startup:
+        shortest = min([settings.STALE_RUNNING_SECONDS,
+                        *getattr(settings, 'STALE_RUNNING_SECONDS_BY_KIND', {}).values()])
+        running = running.filter(started_at__lt=now - timedelta(seconds=shortest))
+    for job in running.order_by('started_at', 'pk'):
+        if not startup and (job.started_at is None
+                            or job.started_at >= now - timedelta(seconds=stale_threshold(job.kind))):
+            continue  # not yet older than its own kind's threshold
         with transaction.atomic():
             # A predict whose run had already FINISHED when the worker died (its outcome recorded, the assess not
             # yet queued) is settled by that run, exactly as the stage would have settled it, so a Resume can
@@ -5242,7 +5492,7 @@ def mark_stale():
                 # was recorded answered (HTTP 200, a sha256 that checks), is settled SUCCEEDED from that exchange
                 for run in models.ProviderRun.objects.filter(
                         revision=job.revision, created_at__gte=job.started_at, state=models.ProviderRun.SENDING,
-                        provider=interpretation.PROVIDER, purpose=SENDING_PURPOSES[job.kind]):
+                        provider__in=interpretation.READ_PROVIDERS, purpose=SENDING_PURPOSES[job.kind]):
                     _settle_from_exchange(run)
             # FINAL 6.9: a reading stage carries no context, and its finished run is the interpreter's
             if sends and (job.context_id or job.kind in READING_KINDS):
@@ -5262,7 +5512,7 @@ def mark_stale():
                 elif job.kind in Job.PEER_KINDS:
                     runs = runs.filter(provider=PEER_OF[job.kind])  # and both peer reviews are 'peer_review'
                 elif job.kind in READING_KINDS:
-                    runs = runs.filter(provider=interpretation.PROVIDER)
+                    runs = runs.filter(provider__in=interpretation.READ_PROVIDERS)
                 finished = runs.order_by('-created_at').first()
             sending = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.SENDING)
             reserved = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.RESERVED)
@@ -5439,8 +5689,11 @@ def worker_responding(*, now=None, name=WORKER_NAME):
 
 
 def work(should_stop, *, poll_seconds=1.0, clock=time.monotonic):
+    """The worker loop: the startup sweep first (mark_stale(startup=True): every RUNNING job is a dead worker's when this
+    worker starts, AMENDMENT-2 1.12 [R:connector-CONN-7]), then claim and run jobs, sweeping again every
+    STALE_SWEEP_SECONDS by each kind's stale threshold."""
     remove_stale_ingest_dirs()
-    mark_stale()
+    mark_stale(startup=True)
     swept = clock()
     while not should_stop():
         # A worker that died mid-stage and came straight back must still settle that stage
@@ -5641,28 +5894,55 @@ RETRY_PAUSED = ('Reading documented procedures is paused on this installation; r
 RETRY_TOO_LONG = ('This document is too long to be read in one piece, so the same request would be cut off again; it is '
                   'not sent again. Shorten it or split it, then upload it again.')
 RETRY_UNBUILT = 'This document could not be prepared for reading; upload it again.'
+# AMENDMENT-2 1.5: a reading cut at its output limit is refused for a member as what happened, never as a cause the run
+# does not show [R:truth-T7] (RETRY_TOO_LONG stays for the size and claim bounds, where the length is the cause); a
+# request whose answer set a request-bound hold is never sent again for a member [R:connector-CONN-1]
+RETRY_CUT_OFF = ('The reading of this document reached its output limit before it was complete, and the same request '
+                 'would most likely stop there again, so it is not sent again. If the document is long, shorten it or '
+                 'split it, then upload it again.')
+RETRY_DECLINED = "This document's reading was declined, so the same request is not sent again."
 
 
-def retry_target(revision, purpose=None):
+def _blocking_attempt(newest):
+    """The attempt reading run ``newest`` stands for: itself, or - for a run the failed-before door kept unsent - the
+    attempt that door named (scope 'failed')."""
+    if (newest.scope or {}).get('refused') == FAILED_BEFORE:
+        return models.ProviderRun.objects.filter(pk=(newest.scope or {}).get('failed'),
+                                                 encounter_id=newest.encounter_id).first() or newest
+    return newest
+
+
+def _declined_attempt(run) -> bool:
+    """Whether ``run`` is a SENT attempt whose answer set a request-bound hold (AMENDMENT-2 1.5 [R:connector-CONN-1]:
+    holds.request_bound_run - a decline, or an error event after message_start): its request is never sent again for a
+    member, before or after the release."""
+    return (run.sent and run.state in (models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED)
+            and interpretation_effect(run) == interpretation_holds.HOLD and interpretation_holds.request_bound_run(run))
+
+
+def retry_target(revision, purpose=None, *, override=False):
     """(the attempt a retry of ``revision``'s reading answers, the run it would release or None) - FINAL 11.3; FINAL-V2
     7.5 and amendment 1, 7.2 (5b extends it to the appraisal runs: a retry of pass 2 re-sends pass 2 only) - or (None,
-    None) when there is no attempt. The attempt is the revision's newest reading run (of ``purpose`` when given, else of
-    either pass) that is not a pause (scope.held). The run released is the newest attempt that was SENT and did not
-    succeed - failed, or an answer whose reading was refused, cut off or whose appraisal settle was refused
-    (interpretation_effect failed or too_long) - which the failed-before door would otherwise hold against the request:
-    the attempt itself, or, for a run that door kept unsent, the attempt it names. A request that never left, or an
-    answer still unread, needs no release: the retry tries it again, or reads it again with nothing sent."""
-    newest = (models.ProviderRun.objects.filter(revision=revision, provider=interpretation.PROVIDER,
+    None) when there is no attempt. The attempt is the revision's newest reading run of the reading path's provider
+    (_reading_provider: AMENDMENT-2 section 9 [R:connector-CONN-5]) - of ``purpose`` when given, else of either pass -
+    that is not a pause (scope.held). The run released is the newest attempt that was SENT and did not succeed - failed,
+    or an answer whose reading was refused, cut off or whose appraisal settle was refused (interpretation_effect failed
+    or too_long) - which the failed-before door would otherwise hold against the request: the attempt itself, or, for a
+    run that door kept unsent, the attempt it names (_blocking_attempt). An attempt whose answer set a request-bound
+    hold (a decline) is released only for an operator's recorded ``override`` (AMENDMENT-2 1.5 [R:connector-CONN-1]: the
+    override C5 already gives a cut-off answer). A request that never left, or an answer still unread, needs no release:
+    the retry tries it again, or reads it again with nothing sent."""
+    newest = (models.ProviderRun.objects.filter(revision=revision, provider=_reading_provider(),
+                                                adapter_version=_reading_adapter_version(),
                                                 purpose__in=(purpose,) if purpose else READING_PURPOSES)
               .exclude(scope__has_key='held').order_by('-created_at', '-pk').first())
     if newest is None:
         return None, None
-    blocking = newest
-    if (newest.scope or {}).get('refused') == FAILED_BEFORE:
-        blocking = models.ProviderRun.objects.filter(pk=(newest.scope or {}).get('failed'),
-                                                     encounter_id=newest.encounter_id).first() or newest
-    released = (blocking if blocking.sent and blocking.state in (models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED)
-                and interpretation_effect(blocking) in (interpretation_holds.FAILED, interpretation_holds.TOO_LONG)
+    blocking = _blocking_attempt(newest)
+    sent = blocking.sent and blocking.state in (models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED)
+    released = (blocking if sent and (interpretation_effect(blocking) in (interpretation_holds.FAILED,
+                                                                          interpretation_holds.TOO_LONG)
+                                      or (override and _declined_attempt(blocking)))
                 else None)
     return newest, released
 
@@ -5687,8 +5967,13 @@ def retry_reading(encounter, user, *, override=False):
     that releases nothing is keyed 'retry:<run>', which is never read as a release. Refused (Refused) while a stage
     runs or an outcome is unknown, when the encounter is fresh (nothing is owed: RETRY_NOTHING, amendment 1), when the
     revision was read or was never attempted, while a hold stands, for a document over the size bound or that cannot be
-    prepared, for a claim set over pass 2's bound, and for an answer cut off at its output limit (C5) unless
-    ``override`` - an operator's recorded override. Returns the queued job."""
+    prepared, for a claim set over pass 2's bound (RETRY_TOO_LONG), and - unless ``override``, an operator's recorded
+    override - for an answer cut off at its output limit (C5: RETRY_CUT_OFF, AMENDMENT-2 1.5 [R:truth-T7]) and for a
+    request whose answer set a request-bound hold (a decline: RETRY_DECLINED, [R:connector-CONN-1]), which the override
+    releases for its one attempt. Both are the REQUEST's (_member_block): any sent attempt of the identical request cut
+    off or declined refuses a member, whatever a later attempt - an override's that failed transiently - came back as;
+    each further override releases one more attempt (a fresh release once the last one was spent: _override_unspent).
+    Returns the queued job."""
     with transaction.atomic():
         encounter = _locked(encounter)
         if busy(encounter):
@@ -5702,7 +5987,7 @@ def retry_reading(encounter, user, *, override=False):
             raise Refused(RETRY_READ)
         if _unreconciled_unknown(encounter):
             raise Refused(RETRY_UNKNOWN)
-        newest, released = retry_target(revision)
+        newest, released = retry_target(revision, override=override)
         if newest is None:
             raise Refused(RETRY_NOTHING)
         refused = (newest.scope or {}).get('refused')
@@ -5712,24 +5997,37 @@ def retry_reading(encounter, user, *, override=False):
             raise Refused(RETRY_UNBUILT)
         if interpretation_holds.is_held():  # every attempt would pause while a hold stands
             raise Refused(RETRY_PAUSED)
+        blocked = _member_block(_blocking_attempt(newest))
+        if not override and blocked is not None:
+            # AMENDMENT-2 1.5 [R:connector-CONN-1] and C5: a request any attempt of which was declined (a request-bound
+            # hold) or cut off at its output limit is never re-sent for a member - whatever a later attempt (an
+            # operator's override that failed transiently) came back as
+            raise Refused(RETRY_DECLINED if _declined_attempt(blocked) else RETRY_CUT_OFF)
         effect = interpretation_effect(released or newest)
         if effect == interpretation_holds.TOO_LONG and not override:
-            raise Refused(RETRY_TOO_LONG)
-        mark = RETRY
+            raise Refused(RETRY_CUT_OFF)  # an answer cut at its output limit (C5; [R:truth-T7]), a replayed one too
+        mark, target = RETRY, released
         if released is not None and not released_for_retry(released):
-            locked = models.ProviderRun.objects.select_for_update().get(pk=released.pk)
+            mark = RETRY_RELEASE
+        elif released is not None and blocked is not None and not _override_unspent(released):
+            # an operator's override (a member is refused above) of a request _member_block holds, whose last override's
+            # one attempt was made - a transient failure, an unknown outcome reconciled: a fresh release, naming the
+            # request's newest attempt that may have been sent, so this override sends once more (FINAL 11.3: one
+            # release, one attempt; AMENDMENT-2 1.5 [R:connector-CONN-1]: "an operator override sending once")
+            target, mark = _newest_attempt(released) or released, RETRY_RELEASE
+        if mark == RETRY_RELEASE:
+            locked = models.ProviderRun.objects.select_for_update().get(pk=target.pk)
             if locked.reconciled_at is None:
                 locked.reconciled_by, locked.reconciled_at = user, timezone.now()
                 locked.reconciliation_note = RETRY_RELEASE_NOTE
                 locked.save(update_fields=['reconciled_by', 'reconciled_at', 'reconciliation_note'])
-            mark = RETRY_RELEASE
         clear_stop(encounter)
-        kind, key = _retry_key(revision, released or newest, mark)
+        kind, key = _retry_key(revision, target or newest, mark)
         if Job.objects.filter(idempotency_key=key).exists():  # asked again for the same attempt: a stage of its own
             key = f'{key}:resume:{uuid.uuid4()}'
         job = enqueue(kind, encounter=encounter, revision=revision, key=key, requested_by=user)
         audit.record(encounter.workspace, 'interpretation.retry', encounter=encounter, actor=user,
-                     run=str((released or newest).pk), released=released is not None, effect=effect,
+                     run=str((target or newest).pk), released=released is not None, effect=effect,
                      override=bool(override))
         review.refresh_state(encounter)
     return job

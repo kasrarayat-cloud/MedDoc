@@ -1310,8 +1310,33 @@ class ExtentTests(SimpleTestCase):
         self.assertEqual(extent.own, frozenset({doc.findings}))
         self.assertNotIn(doc.denial, extent.acts)
         self.assertEqual(geometry.EXTENT_ATTRIBUTES[0].value, 'reached')
+        # reached_anatomy joins G5's attributes by DECISIONS D292's U3 (fail-closed)
         self.assertEqual({attribute.value for attribute in geometry.EXTENT_ATTRIBUTES},
-                         {'reached', 'completion', 'stations', 'approach', 'through'})
+                         {'reached', 'completion', 'stations', 'approach', 'through', 'reached_anatomy'})
+
+    def test_reached_anatomy_is_inferred_from_an_acts_words_and_read_from_the_examinations(self):
+        """DECISIONS D292's U3, the guard: reached_anatomy names the anatomy entry the endoscope itself reached, so G5
+        reads its sources as it reads the reach's - in the examination's statement, or in a unit no act is told in; in
+        an act's anchor alone it is extent_inferred (contract/checks.check, the orchestration that applies G5)."""
+        import json
+        from studio.interpretation.contract import checks, extract_read
+        from tests.v2 import test_settle as notes
+
+        def reached_anatomy(units, words, link='statement'):
+            data = notes.note_answer()
+            data['sessions'][0]['reached_anatomy'] = [notes.fact('Y1', notes.src(units, words, link))]
+            read = extract_read.read(json.dumps(data), len(segment.units(notes.NOTE)))
+            assert not isinstance(read, extract_read.Refusal), read
+            key = extract_read.FactKey(extract_read.Family.SESSION, 'X1', geometry.Attribute.REACHED_ANATOMY, 0)
+            return checks.check(notes.NOTE, (), read).findings.get(key, ())
+
+        self.assertEqual(reached_anatomy(['S6'], 'advanced to the cecum'), ())  # the examination's own statement
+        # a unit no act is told in, and a denial's anchor, which is no act's (D198): G5 passes (G1 reads the link)
+        self.assertNotIn(Reason.EXTENT_INFERRED, reached_anatomy(['S10'], 'ileocolic anastomosis', 'other_statement'))
+        self.assertNotIn(Reason.EXTENT_INFERRED, reached_anatomy(['S9'], 'Neither biopsy', 'other_statement'))
+        # the snare's sentence: extent_inferred, as the reach's would be
+        self.assertIn(Reason.EXTENT_INFERRED, reached_anatomy(['S7'], 'sigmoid colon', 'other_statement'))
+        self.assertIn(Reason.EXTENT_INFERRED, reached_anatomy(['S7'], 'sigmoid colon'))
 
 
 # --- every failure is a closed-list reason, and nothing raises --------------------------------------------------------

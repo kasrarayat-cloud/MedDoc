@@ -67,10 +67,12 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from django.test import SimpleTestCase
 
-from studio.interpretation import ENGINE_VERSION_V2, INTERPRETATION_PAIR, INVENTORY_VERSION_V2, REQUIREMENTS_VERSION
+from studio.interpretation import (ENGINE_VERSION_V2, ENGINE_VERSION_V3, INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3,
+                                   REQUIREMENTS_VERSION)
 from studio.interpretation.contract import types as ct
 from studio.interpretation.engine import assess as AS
 from studio.interpretation.engine import catalogue as CAT
@@ -1149,7 +1151,13 @@ class AddonTests(SimpleTestCase):
                 self.assertEqual(found.evaluation.held_facts, ())  # the per-code rule alone would leave it READY
                 self.assert_addon_hold(found)
                 self.assertEqual(found.item.held, addon_facts(found)[0])
-                self.assertEqual(found.item.message, Q.MessageId.STATUS)
+                # DECISIONS D284 (build list B7): its own message, ADDON, from the codes alone
+                self.assertEqual(found.item.message, Q.MessageId.ADDON)
+        # D284 (B7): 99417 beside 99213, a code of its family that is not one of its primaries - the same item
+        # (its sentence naming the primaries is pinned through the renderer: test_questions.D284AddonItems)
+        found = by_code(run(office_prolonged().build(), ('99213', 1), ('99417', 2)))['99417']
+        self.assert_addon_hold(found)
+        self.assertEqual(found.item.message, Q.MessageId.ADDON)
 
     def test_an_add_on_beside_its_primary_meets_the_row(self):
         """A primary counted - READY or held - meets the row: 43273 beside 43262 READY; 99417 beside 99215 READY, and
@@ -1326,13 +1334,14 @@ class MemberAnswerTests(SimpleTestCase):
         self.assertNotIn(rival.key, found.combination.competes)
         self.assertEqual([held.fact for held in found.combination.held[rival.key]], [])
         self.assertEqual([(item.answer, item.code) for item in found.answers], [('a1', '43249')])
-        # a competing_codes answer is the read-time overlay's, never the engine's (v1's engine_reads) - and D270's DQ-2
-        # reading leaves it out too: the competing question offers no answer (OverlayAnswerTests)
+        # a competing_codes answer is never the engine's (v1's engine_reads) - and D270's DQ-2 reading leaves it out
+        # too: the competing question offers no answer (OverlayAnswerTests). DECISIONS D283 (G1-01, option (c))
+        # restates its record: applied by nothing (not_applied), as read time binds none to it either
         rivals = by_code(run(one_dilation().build(), ('43249', 2), ('43233', 2)))
         given = answer(rivals['43233'])
         self.assertEqual(given.fact, 'competing_codes')
         found = run(one_dilation().build(), ('43249', 2), ('43233', 2), answers=(given,))
-        self.assertEqual([item.why for item in found.earlier_answers], [AS.Unbound.OVERLAY_READ])
+        self.assertEqual([item.why for item in found.earlier_answers], [AS.Unbound.NOT_APPLIED])
         self.assertEqual(found.codes, run(one_dilation().build(), ('43249', 2), ('43233', 2)).codes)
 
     def test_answers_the_engine_does_not_bind(self):
@@ -1384,10 +1393,12 @@ class MemberAnswerTests(SimpleTestCase):
         self.assertFalse([item for item in asked.service_questions if item.item.item.fact == 'extent'])
 
     def test_each_service_answer_closes_the_question_it_was_given_to(self):
-        """Two done EGDs that state no extent ask two service questions of one (family, fact), each its own fingerprint
-        (the refutation's P2: the second answer was applied nowhere and recorded nowhere). Each answer closes its own;
-        an answer naming only a question already closed is recorded as not applied; an answer recorded with no
-        fingerprint closes every question of its (family, fact) not yet closed."""
+        """Two done EGDs that state no extent ask two service questions of one (family, fact), each its own fingerprint.
+        DECISIONS D283 (G3-16, option (b); 5b Q1): a service answer binds as read time binds the key - by the FIRST
+        question's fingerprint (review.stored_service_questions) - so an answer with it closes every question of the
+        key not yet closed, one carrying another question's fingerprint is asked differently (recorded, never applied
+        nowhere), an answer naming only questions already closed is recorded as not applied, and an answer recorded
+        with no fingerprint closes every question of its (family, fact) not yet closed."""
         doc = EF.Doc()
         for n in (1, 2):
             doc.session(n, SessionKind.EGD)
@@ -1405,16 +1416,20 @@ class MemberAnswerTests(SimpleTestCase):
         def closed(assessment):
             return [item.closed for item in assessment.service_questions if item.item.item.fact == 'extent']
 
-        each = run(R, answers=(given('s1', first.question), given('s2', second.question)))
-        self.assertEqual(closed(each), [('s1',), ('s2',)])
-        self.assertEqual([(item.answer, item.scope) for item in each.answers],
-                         [('s1', AS.Scope.SERVICE), ('s2', AS.Scope.SERVICE)])
-        self.assertEqual(each.earlier_answers, ())
+        one = run(R, answers=(given('s1', first.question),))
+        self.assertEqual(closed(one), [('s1',), ('s1',)])
+        self.assertEqual([(item.answer, item.scope) for item in one.answers], [('s1', AS.Scope.SERVICE)])
+        self.assertEqual(one.earlier_answers, ())
         self.assertIn('2 open questions', found.completeness['reasons'])
-        self.assertFalse([reason for reason in each.completeness['reasons'] if 'open question' in reason])
+        self.assertFalse([reason for reason in one.completeness['reasons'] if 'open question' in reason])
+        other = run(R, answers=(given('s2', second.question),))
+        self.assertEqual(closed(other), [(), ()])
+        self.assertEqual([(item.answer, item.why) for item in other.earlier_answers],
+                         [('s2', AS.Unbound.ASKED_DIFFERENTLY)])
         again = run(R, answers=(given('s1', first.question), given('s2', second.question), given('s3', first.question)))
-        self.assertEqual(closed(again), [('s1',), ('s2',)])
-        self.assertEqual([(item.answer, item.why) for item in again.earlier_answers], [('s3', AS.Unbound.NOT_APPLIED)])
+        self.assertEqual(closed(again), [('s1',), ('s1',)])
+        self.assertEqual([(item.answer, item.why) for item in again.earlier_answers],
+                         [('s2', AS.Unbound.ASKED_DIFFERENTLY), ('s3', AS.Unbound.NOT_APPLIED)])
         keyed = run(R, answers=(given('s1', ''), given('s2', '')))
         self.assertEqual(closed(keyed), [('s1',), ('s1',)])
         self.assertEqual([(item.answer, item.why) for item in keyed.earlier_answers], [('s2', AS.Unbound.NOT_APPLIED)])
@@ -1918,6 +1933,188 @@ class AnswerPassTests(SimpleTestCase):
                                  1 if rivals else 0)
 
 
+# --- DECISIONS D283's assess half (G1-02, G1-03 with C7's correction): one implementation of the answers' passes -----
+
+
+class D279SessionViewTests(SimpleTestCase):
+    """refute-f3e-r1 F1 (critical; AMENDMENT-2 4.3.3 a and 4.4 [R:truth-T1]), through engine/assess: an EGD X1 (its
+    examination E1 done today, the second portion of the duodenum reached) beside an upper EUS X2 whose only examination
+    E2 is done today, E2's session slot overfilled with X1 written stated and X1 written denied. Read alone, the denial
+    leaves E2 possibly in the EUS and holds 43235 within it (base_within); the statement alone places E2 in the EGD and
+    leaves 43235 READY. As built the view carried X1 in its options and nothing in negated_values, so every possibility
+    reader read it as the statement alone: 43235 READY beside a same-day EUS - a false READY, since the true reading
+    (E2 in X2) holds it. Each possibility reader now reads every view as a written denial (facts.open_denial; the step's
+    NOTES question Q1R), so the view holds 43235 as the denial does: never stronger than a written fact read alone."""
+
+    def assess(self, e2_session: Fact) -> object:
+        doc = EF.Doc()
+        doc.session(1, SessionKind.EGD, tract=sup(ct.Tract.UPPER), reached=[sup(ct.Extent.SECOND_PORTION_DUODENUM)])
+        doc.session(2, SessionKind.EUS, tract=sup(ct.Tract.UPPER))
+        doc.exam(1, device=sup(ct.Device.ENDOSCOPE))
+        doc.exam(2, session=e2_session, device=sup(ct.Device.ENDOSCOPE))
+        return by_code(run(doc.build(), ('43235', 1)))['43235']
+
+    def test_a_view_of_one_session_written_both_ways_holds_43235_within_the_eus(self):
+        within = ('base_included', CO.WITHIN_CAUSE)
+
+        def view(*written):
+            return Fact(ct.Result.UNRESOLVED, None, ct.FactState.CONTRADICTED, tuple(dict.fromkeys(v for _s, v in written)),
+                        (ct.Reason.SLOT_OVERFULL,), (EF.unit(2),))  # nothing only denied: negated_values empty
+
+        S_, N_ = ct.FactState.SUPPORTED, ct.FactState.NEGATED
+        for name, e2_session, held in (
+                ('the true reading: E2 in X2', sup(X(2)), within),
+                ('the denial read alone', Fact(ct.Result.UNRESOLVED, X(1), N_, (), (ct.Reason.SLOT_OVERFULL,),
+                                               (EF.unit(2),)), within),
+                ('the statement read alone', Fact(ct.Result.UNRESOLVED, X(1), S_, (), (ct.Reason.SLOT_OVERFULL,),
+                                                  (EF.unit(2),)), None),
+                ('the view of X1 stated and X1 denied', view((S_, X(1)), (N_, X(1))), within),
+                ('the view of X1 denied and X1 stated', view((N_, X(1)), (S_, X(1))), within)):
+            with self.subTest(name):
+                found = self.assess(e2_session)
+                if held is None:
+                    self.assertEqual((found.status, found.item), (Outcome.READY, None))
+                else:
+                    self.assertEqual(found.status, Outcome.NEEDS_CLARIFICATION)
+                    self.assertEqual((found.item.held.fact, found.item.held.cause), held)
+
+
+class D286AddOnReadTimeTests(SimpleTestCase):
+    """DECISIONS D286 ruling E (G3-12), B12's overlay pin: an act of a kind a COUNTED add-on covers, and no non-add-on code
+    of the family, is accounted by that add-on - so the read-time engine, which counts what the reviewer keeps, holds
+    43260 base_included again once 43273 is rejected (the unlisted cholangioscopy read by base rule (c), as without the
+    add-on), and keeps it free of that hold while 43273 is kept."""
+
+    def test_with_43273_rejected_43260_is_held_base_included(self):
+        from studio.interpretation import overlay
+        from tests.v2 import test_overlay as TO  # imported here: test_overlay imports this module
+
+        built = EF.Doc()
+        built.session(1, SessionKind.ERCP)
+        built.exam(1)
+        built.act(2, Kind.CANNULATION, access=EF.sup(ct.AccessOutcome.ACHIEVED), duct=EF.sup(ct.Duct.BILIARY))
+        built.act(3, Kind.CHOLANGIOSCOPY, duct=EF.sup(ct.Duct.BILIARY))
+        built.unlisted.append(EF.unlisted(ct.UnlistedWhat.ACT, Kind.CHOLANGIOSCOPY, EF.X(1), Span(900, 940)))
+        case = TO.Case(built.build(), ('43260', 1), ('43273', 3))
+        self.assertEqual({p.code: p.status for p in case.assessment.codes},
+                         {'43260': Outcome.READY, '43273': Outcome.READY})
+        keys = {row.code: row.key for row in case.rows}
+        kept = case.recount()
+        rejected = case.recount(counted=[key for key in case.engine_keys if key != keys['43273']])
+        self.assertIsInstance(rejected, overlay.Recount)
+        self.assertNotIn(CO.BASE_CAUSE, [held.cause for held in kept.joined.held.get(keys['43260'], ())])
+        self.assertIn(CO.BASE_CAUSE, [held.cause for held in rejected.joined.held.get(keys['43260'], ())])
+
+
+class D283AnswerPasses(SimpleTestCase):
+    """DECISIONS D283 items 1-2 (refute-5a-r1 P-1, P-4; refute-5c-r1 P4-P6; refute-consistency C7): in each pass of the
+    answers the ADDON count leaves out every code an engine-read answer excluded and every primary an overlay-bound
+    answer of either value binds (accumulated); the competition leaves out every code an overlay-bound "Not documented"
+    binds in that pass (recomputed); a code whose ADDON row the pass moves is read again, and its answer binds only the
+    item it then presents - an answer that no longer binds is recorded no longer asked. engine/assess.answer_pass and
+    read_again are that rule, the one implementation read time calls too (step f6's half)."""
+
+    def test_answer_pass_and_read_again_are_the_rule(self):
+        nd, cc = AS.Answer.NOT_DOCUMENTED, AS.Answer.CANNOT_CONFIRM
+        first = AS.answer_pass({'k1': nd}, {'k2': cc, 'k3': nd})
+        self.assertEqual((first.out, first.withdrawn, first.uncounted),
+                         (frozenset({'k1', 'k3'}), frozenset({'k3'}), frozenset({'k1', 'k2', 'k3'})))
+        second = AS.answer_pass({'k1': nd}, {'k2': cc}, first)  # k3's answer binds no more: back in the competition
+        self.assertEqual((second.out, second.withdrawn, second.uncounted),
+                         (frozenset({'k1'}), frozenset(), frozenset({'k1', 'k2', 'k3'})))  # uncounted accumulates
+        self.assertFalse(AS.read_again('k1', first, excluded=True, competition_moved=True, addon_moved=True))
+        self.assertFalse(AS.read_again('k3', first, excluded=False, competition_moved=True, addon_moved=False))
+        self.assertTrue(AS.read_again('k3', first, excluded=False, competition_moved=False, addon_moved=True))
+        self.assertTrue(AS.read_again('k2', first, excluded=False, competition_moved=True, addon_moved=False))
+        self.assertFalse(AS.read_again('k2', first, excluded=False, competition_moved=False, addon_moved=False))
+
+    def test_g1_02_a_taken_add_on_whose_addon_row_moves_is_read_again(self):
+        """G1-02 (S2, I2's residual): em_chain, a1 "Not documented" to 99215's item as asked (engine-read: 99215
+        excluded) and a2 "Not documented" to 99417's item with no fingerprint (overlay-read). 99417 is read again once
+        its ADDON row moves: its item is the ADDON row's (performed_status, coding_rule:ADDON), a2 binds nothing and is
+        recorded no longer asked, and 99417 is back in the competition with 99214 (as built: 99417 frozen with its
+        event_time item and out of the competition, 99214 alone)."""
+        R = em_chain().build()
+        before = by_code(run(R, *CHAIN))
+        a1, a2 = answer(before['99215']), answer(before['99417'], question='', answer_id='a2')
+        found = run(R, *CHAIN, answers=(a1, a2))
+        after = by_code(found)
+        self.assertEqual((after['99417'].status, after['99417'].item.held.fact, after['99417'].item.held.cause,
+                          after['99417'].competes), (Outcome.NEEDS_CLARIFICATION, 'performed_status', AS.ADDON_CAUSE,
+                                                     ('99214',)))
+        self.assertEqual(after['99214'].competes, ('99417',))
+        self.assertEqual([(item.answer, item.code) for item in found.answers], [('a1', '99215')])
+        self.assertEqual([(item.answer, item.code, item.why) for item in found.earlier_answers],
+                         [('a2', '99417', AS.Unbound.NO_LONGER_ASKED)])
+
+    def test_g1_03_an_overlay_bound_answer_on_the_only_primary_holds_the_add_on(self):
+        """G1-03 (S3; 5a Q3 option (b), both values): office_prolonged (99215, 99214, 99417), "Not documented" or
+        "Cannot confirm" to 99215's base question (overlay-bound): 99215 is not counted for ADDON, so 99417 is held by its
+        ADDON row (as built READY, an add-on approvable with no counted primary); without the answer 99417 is READY."""
+        R = office_prolonged().build()
+        codes = (('99215', 1), ('99214', 1), ('99417', 2))
+        plain = by_code(run(R, *codes, member=ENTERED))
+        self.assertEqual((plain['99417'].status, plain['99215'].item.held.fact), (Outcome.READY, 'base_included'))
+        for value in ('not_documented', 'cannot_confirm'):
+            with self.subTest(value=value):
+                found = run(R, *codes, member=ENTERED, answers=(answer(plain['99215'], value=value),))
+                addon = by_code(found)['99417']
+                self.assertEqual((addon.status, addon.item.held.fact, addon.item.held.cause),
+                                 (Outcome.NEEDS_CLARIFICATION, 'performed_status', AS.ADDON_CAUSE))
+                self.assertEqual([item.why for item in found.earlier_answers], [AS.Unbound.OVERLAY_READ])
+
+    def test_c7_an_office_visit_its_prolonged_time_and_a_sigmoidoscopy(self):
+        """C7's scene: an office visit, its prolonged time and a same-day flexible sigmoidoscopy; 99215, 99417, 45330;
+        "Not documented" to both separate_em items (overlay-bound). 99215's answer uncounts it for ADDON, so 99417's row
+        moves: 99417 is read again, its item the ADDON row's, and its own separate_em answer binds nothing - recorded no
+        longer asked, as read time lists it (as built on g1's prototype read time read 99417 detail unavailable by that
+        answer while the record held it)."""
+        doc = office_and_sigmoidoscopy()
+        doc.act(3, Kind.EM_PROLONGED, session=X(1))
+        R = doc.build()
+        codes = (('99215', 1), ('99417', 3), ('45330', 2))
+        plain = by_code(run(R, *codes, member=ENTERED))
+        self.assertEqual({code: p.item.held.fact if p.item else None for code, p in plain.items()},
+                         {'99215': 'separate_em', '99417': 'separate_em', '45330': None})
+        given = (answer(plain['99215'], answer_id='a1'), answer(plain['99417'], answer_id='a2'))
+        found = run(R, *codes, member=ENTERED, answers=given)
+        after = by_code(found)
+        self.assertEqual((after['99417'].status, after['99417'].item.held.cause),
+                         (Outcome.NEEDS_CLARIFICATION, AS.ADDON_CAUSE))
+        self.assertEqual(after['45330'].status, Outcome.READY)
+        self.assertEqual([(item.answer, item.why) for item in found.earlier_answers],
+                         [('a1', AS.Unbound.OVERLAY_READ), ('a2', AS.Unbound.NO_LONGER_ASKED)])
+
+    def test_the_passes_end_on_every_answer_combination(self):
+        """AnswerPassTests' termination over D283's scenes: every subset of the codes' items answered, either value, as
+        asked or with no fingerprint, on em_chain, office_prolonged and C7's scene - the passes end, every answer is
+        recorded exactly once (applied or not), and no code is assessed again more often than there are answers and
+        codes (each pass needs a newly excluded or uncounted code)."""
+        doc = office_and_sigmoidoscopy()
+        doc.act(3, Kind.EM_PROLONGED, session=X(1))
+        scenes = ((em_chain().build(), CHAIN, AS.MemberContext()),
+                  (office_prolonged().build(), (('99215', 1), ('99214', 1), ('99417', 2)), ENTERED),
+                  (doc.build(), (('99215', 1), ('99417', 3), ('45330', 2)), ENTERED))
+        runs = 0
+        for R, codes, member in scenes:
+            plain = by_code(run(R, *codes, member=member))
+            asked = [p for p in plain.values() if p.item is not None]
+            for size in range(1, len(asked) + 1):
+                for chosen in itertools.combinations(asked, size):
+                    for value in ('not_documented', 'cannot_confirm'):
+                        for question in (None, ''):
+                            given = tuple(answer(p, value=value, question=question, answer_id=f'a{index}')
+                                          for index, p in enumerate(chosen))
+                            with mock.patch.object(AS, '_assessed', wraps=AS._assessed) as again:
+                                found = run(R, *codes, member=member, answers=given)
+                            recorded = [item.answer for item in found.answers] + [
+                                item.answer for item in found.earlier_answers]
+                            self.assertEqual(sorted(recorded), sorted(item.answer_id for item in given))
+                            self.assertLessEqual(again.call_count, len(codes) * (len(given) + 2))
+                            runs += 1
+        self.assertGreater(runs, 40)
+
+
 # --- DECISIONS D270 (DQ-2): an overlay-bound "Not documented" read at assess for the competition alone, as read time
 # reads it (repair round w9r's step 5a) ---
 
@@ -1963,8 +2160,11 @@ def read_time(build, codes, given, member: AS.MemberContext = ENTERED, answered=
            and views[row.key].answer == 'not_documented' and not overlay.answered_by_engine(row)[0]}
     if answered:
         return out, None, views
+    # DECISIONS D283 item 3: every recount that reproduces a record reads the codes assess left out of its ADDON
+    # count, derived from the stored record by one function (overlay.assessed_uncounted)
     found = overlay.recount(case.rows, case.engine_keys, case.engine_keys, case.coding, case.R, member=case.member,
-                            out_of_competition=out)
+                            out_of_competition=out,
+                            uncounted=overlay.assessed_uncounted(case.completeness, case.rows))
     return out, found.live, views
 
 
@@ -2109,6 +2309,10 @@ class OverlayAnswerTests(SimpleTestCase):
              lambda by: (variant(by['43249'], question='0' * 64),), set()),
         )
         asked_differently = {'scene 677: technique asked differently'}  # the engine reads it and records it so
+        # DECISIONS D283: the competing question's answer is applied by nothing (G1-01), and an overlay-read answer that
+        # binds no item a selected code presents is no longer asked, as read time lists it (item 1; questions.bind)
+        not_applied = {'one dilation: competing_codes asked differently'}
+        no_longer_asked = {'office: another family', 'office: a fact its item does not ask'}
         for name, build, codes, member, make, expected in cases:
             with self.subTest(case=name):
                 plain = run(build().build(), *codes, member=member)
@@ -2126,7 +2330,9 @@ class OverlayAnswerTests(SimpleTestCase):
                         self.assertEqual(p.competes, tuple(found.combination.competes.get(p.key, ())))
                 if not expected:
                     self.assertEqual(found.codes, plain.codes)
-                why = AS.Unbound.ASKED_DIFFERENTLY if name in asked_differently else AS.Unbound.OVERLAY_READ
+                why = (AS.Unbound.ASKED_DIFFERENTLY if name in asked_differently
+                       else AS.Unbound.NOT_APPLIED if name in not_applied
+                       else AS.Unbound.NO_LONGER_ASKED if name in no_longer_asked else AS.Unbound.OVERLAY_READ)
                 self.assertEqual([(item.answer, item.why) for item in found.earlier_answers], [('a1', why)])
 
     def test_dq2_with_a_rival_left_the_hold_names_only_the_rivals_left_and_binds_beside_an_applied_answer(self):
@@ -2173,9 +2379,9 @@ class OverlayAnswerTests(SimpleTestCase):
         """The competing question offers no answer (studio/answers.py: codes competing for one act are settled by
         rejecting one, P-ADMIT2), so D270's reading leaves an answer to it out whatever it carries - as asked, or with
         no fingerprint: the assessment is the one made without it (43249 keeps its competing hold naming 43233), the
-        answer recorded as the overlay's. Read time still binds such an answer (D249) and releases 43249 - the residual
-        this step's NOTES, question Q1, names (a code it took out would keep a competing item the Assessment's
-        combination no longer words alike: P-WORDED)."""
+        answer recorded as applied by nothing (DECISIONS D283, G1-01 option (c), restating this pin's "the overlay's":
+        read time binds none to it either - review.answer_states lists it not_applied, F6's half - and the competing
+        hold is settled by the reviewer's rejection, D270 DQ-3)."""
         R = one_dilation().build()
         plain = run(R, ('43249', 2), ('43233', 2))
         rivals = by_code(plain)
@@ -2187,7 +2393,7 @@ class OverlayAnswerTests(SimpleTestCase):
                 found = run(R, ('43249', 2), ('43233', 2), answers=(given,))
                 self.assertEqual((found.codes, found.combination), (plain.codes, plain.combination))
                 self.assertEqual([(item.answer, item.why) for item in found.earlier_answers],
-                                 [('a1', AS.Unbound.OVERLAY_READ)])
+                                 [('a1', AS.Unbound.NOT_APPLIED)])  # D283 (G1-01)
 
     def test_the_key_bound_facts_are_reviews_own(self):
         """The engine's key-bound facts (read without a fingerprint, as read time binds them) are
@@ -2196,6 +2402,9 @@ class OverlayAnswerTests(SimpleTestCase):
 
         self.assertEqual(AS._KEY_BOUND_FACTS, frozenset(VQ.KEY_BOUND_FACTS))
         self.assertLess(AS._KEY_BOUND_FACTS, AS._OVERLAY_FACTS)
+        # and the engine's own rule, requirements.KEY_BOUND (rules_canonical's 'key_bound'): three spellings, one rule
+        # (DECISIONS D290, G4-04)
+        self.assertEqual(AS._KEY_BOUND_FACTS, frozenset(RQ.fact_key(fact) for fact in RQ.KEY_BOUND))
 
 
 class SecondReviewTests(SimpleTestCase):
@@ -2222,19 +2431,24 @@ class RecordTests(SimpleTestCase):
         self.assertEqual(dict(AS.SERVICES_STUB, version=v1.SERVICES_STUB['version']),
                          {key: tuple(value) if isinstance(value, list) else value
                           for key, value in v1.SERVICES_STUB.items()})
-        self.assertEqual(AS.SERVICES_STUB['version'], ENGINE_VERSION_V2)
+        self.assertEqual(AS.SERVICES_STUB['version'], ENGINE_VERSION_V3)  # AMENDMENT-2 8.1: the writer's label
         found = run(two_sessions().build(), *TWO)
-        self.assertEqual(dict(found.services), {'version': ENGINE_VERSION_V2, 'services': [], 'conflicts': [],
+        self.assertEqual(dict(found.services), {'version': ENGINE_VERSION_V3, 'services': [], 'conflicts': [],
                                                 'attributions': [], 'problems': []})
         self.assertEqual(found.completeness['inventory_problems'], list(v1.INVENTORY_PROBLEMS))
 
     def test_the_d22_fields(self):
         found = run(two_sessions().build(), *TWO)
-        self.assertEqual(dict(found.versions), {'interpretation': INTERPRETATION_PAIR,
-                                                'inventory': INVENTORY_VERSION_V2,
-                                                'requirements': REQUIREMENTS_VERSION, 'engine': ENGINE_VERSION_V2})
-        self.assertEqual(AS.ENGINE_VERSION, 'cpt-studio-events@2')
-        self.assertEqual(found.event_coding['version'], ENGINE_VERSION_V2)
+        # AMENDMENT-2 8.1 [R:replay-R4]: every writer on the current path writes the _V3 labels - the pair, the
+        # inventory, the engine (and event_coding@3) - and REQUIREMENTS_VERSION, which DECISIONS D292 moves with E1j's
+        # read-set (the integration's label)
+        self.assertEqual(dict(found.versions), {'interpretation': INTERPRETATION_PAIR_V3,
+                                                'inventory': INVENTORY_VERSION_V3,
+                                                'requirements': REQUIREMENTS_VERSION, 'engine': ENGINE_VERSION_V3})
+        self.assertEqual((AS.ENGINE_VERSION, INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3),
+                         ('cpt-studio-events@3', 'gemini-events@3/appraisal@2', 'gemini-inventory@3'))
+        self.assertEqual(found.event_coding['version'], ENGINE_VERSION_V3)
+        self.assertNotEqual(ENGINE_VERSION_V3, ENGINE_VERSION_V2)  # a new label beside v2's, never in its place
 
     def test_completeness_and_event_coding(self):
         found = run(two_sessions().build(), *TWO)
@@ -2399,3 +2613,78 @@ class BoundaryTests(SimpleTestCase):
                            '    return found.status.startswith("r")\n')
         self.assertEqual(probe.returncode, 1, probe.stdout + probe.stderr)
         self.assertIn('has no attribute "startswith"', probe.stdout)
+
+
+class D293DanglingSessionTests(SimpleTestCase):
+    """DECISIONS D293 (refute-f3e-r2 N1): a session fact that is not established and that engine/combination reads as
+    naming any session - an overfilled slot's merged view, or a negated claim left open - keeps every id it names that
+    the FactSet does not hold (a dangling id: settle's I4) in ``possible_sessions``, first, as a single unestablished
+    claim of that id does (DECISIONS D227 R2-2): its family read stays fail-closed, so the reading is never narrower
+    than its written facts read alone (AMENDMENT-2 4.3.3 a, 4.4). Before the rule the views dropped the id: 43239 READY
+    beside a rival 45380, and 99214 READY beside a possible procedure of the day, where the stated written fact read
+    alone holds each. Synthetic FactSets only (refute-f3e-r2's probes q5 and q6)."""
+
+    @staticmethod
+    def shapes(unit: int) -> dict:
+        from tests.v2.test_combination import overfilled
+        S_, N_ = State.SUPPORTED, State.NEGATED
+        dangling = (Reason.REFERENCE_INVALID,)
+        return {'alone: X9 stated, unresolved': Fact(Res.UNRESOLVED, X(9), S_, (), dangling, (EF.unit(unit),)),
+                'alone: not in X9, unresolved': Fact(Res.UNRESOLVED, X(9), N_, (), dangling, (EF.unit(unit),)),
+                'view [X9 S, X9 S]': overfilled((S_, X(9)), (S_, X(9))),
+                'view [X9 S, X1 S]': overfilled((S_, X(9)), (S_, X(1))),
+                'view [X9 N, X1 S]': overfilled((N_, X(9)), (S_, X(1)))}
+
+    @staticmethod
+    def egd(e3_session: Fact) -> FactSet:
+        """An EGD X1 (E1), its established cold-forceps biopsy E2 in the antrum (43239's act), and a second cold-forceps
+        biopsy E3 in the gastric body whose session fact is ``e3_session``."""
+        doc = EF.egd()
+        doc.act(2, Kind.BIOPSY, places=[sup(Landmark.GASTRIC_ANTRUM)], device=sup(Device.COLD_FORCEPS))
+        doc.act(3, Kind.BIOPSY, session=e3_session, places=[sup(Landmark.GASTRIC_BODY)],
+                device=sup(Device.COLD_FORCEPS))
+        return doc.build()
+
+    @staticmethod
+    def office(e2_session: Fact) -> FactSet:
+        """An office visit X1 (this encounter, its visit E1 by medical decision making) and a counseling act E2 done
+        today whose session fact is ``e2_session``: only its session's family can make it a procedure of the day."""
+        doc = EF.Doc()
+        doc.session(1, SessionKind.OFFICE_EM, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER))
+        doc.act(1, Kind.EM_VISIT, basis=sup(ct.EmBasis.MEDICAL_DECISION_MAKING))
+        doc.act(2, Kind.OTHER, session=e2_session, other_class=sup(ct.OtherClass.COUNSELING))
+        return doc.build()
+
+    def test_a_dangling_id_keeps_the_rival_family_open(self):
+        control = self.egd(sup(X(1)))
+        self.assertEqual(CO.possible_sessions(control, E(3)), (X(1),))
+        self.assertEqual(by_code(run(control, ('43239', 2), ('45380', 7)))['43239'].status.value, 'ready')
+        for label, fact in self.shapes(3).items():
+            with self.subTest(label):
+                R = self.egd(fact)
+                self.assertEqual(CO.possible_sessions(R, E(3))[0], X(9))
+                self.assertTrue(CO.may_be_of_family(R, E(3), SessionKind.COLONOSCOPY))
+                found = by_code(run(R, ('43239', 2), ('45380', 7)))['43239']
+                self.assertEqual(found.status.value, 'needs_clarification')
+                self.assertEqual((found.item.held.fact, found.item.held.cause),
+                                 ('competing_codes', 'coding_rule:competing_codes'))
+                self.assertIn('45380', list(found.competes))
+
+    def test_a_dangling_id_keeps_a_possible_procedure_of_the_day(self):
+        control = self.office(sup(X(1)))
+        self.assertFalse(CO._procedural_family(control, E(2)))
+        self.assertEqual(by_code(run(control, ('99214', 1)))['99214'].status.value, 'ready')
+        for label, fact in self.shapes(2).items():
+            with self.subTest(label):
+                R = self.office(fact)
+                self.assertTrue(CO._procedural_family(R, E(2)))
+                found = by_code(run(R, ('99214', 1)))['99214']
+                self.assertEqual(found.status.value, 'needs_clarification')
+                self.assertEqual((found.item.held.fact, found.item.held.cause),
+                                 ('separate_em', 'coding_rule:same_day_em'))
+
+    def test_an_id_the_factset_holds_adds_no_session(self):
+        """The rule keeps only ids the FactSet does not hold: a view of held sessions reads every session, as before."""
+        from tests.v2.test_combination import overfilled
+        R = self.egd(overfilled((State.SUPPORTED, X(1)), (State.NEGATED, X(1))))
+        self.assertEqual(CO.possible_sessions(R, E(3)), tuple(R.sessions))

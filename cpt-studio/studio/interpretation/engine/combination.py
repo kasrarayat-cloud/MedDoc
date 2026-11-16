@@ -24,9 +24,11 @@ itself first, and reads every session after it, as for no card):
   where step 4b's event_coding would list its filed doubted form among the session's doubted acts
   (``_listed_doubted``: a reportable kind of a family the session may be) - DECISIONS D256 P1, the step's question
   Q-CARD option (c), "exactly what coverage.doubted_in admits for the filed doubted form", worded as the carded form
-  is; one with no card that names no kind holds the base code when the document tells one session - counting the
-  sessions that are not established not done today (D269) - and stays out in a document of more than one (D256: the
-  named residual Q-UNNAMED, measured at D2-D3);
+  is; one with no card that names no kind holds the base code when the document tells one session - counting beside
+  the held session only a session that one of its own filed events establishes as performed today and that its own
+  established examinations do not establish not done today (DECISIONS D285 ruling A.1, D269's count) - and stays out
+  in a document of more than one (D256: the named residual Q-UNNAMED, counted in D276's replays since D277 runs no
+  D2-D3, D285 A.4);
 - D119's PEG arm (D231 row 3: "whose card may be the feeding tube's session"), the claims' D55 and D118 openings (row 4:
   "whose card may be of the code's family") and the competition over the act itself (row 5: "an unlisted act with a
   card", ``synthetic_claims``): a CARDED act only - those rows name a card (refute-r4d-r1 of build-v2/w7r, F3);
@@ -67,7 +69,12 @@ it", the inverse of ADDON_PRIMARIES). Rules (b) and (c) read no act that a count
 supporting act (``addon_acts``: the add-on's E*; DECISIONS D268, refute-r4d-r1 V8R4D1-1: an ERCP's cholangioscopy
 beside a counted 43273 held 43260 base_explained, "which this diagnostic code does not account for", steering the
 reviewer to reject the primary and leave the add-on approvable alone) - 43260 beside 43273 with the cholangioscopy
-documented is READY, as 43273 is; without the add-on counted, the rules read as built. The reportable and doubted acts
+documented is READY, as 43273 is - and, by DECISIONS D286 ruling E (G3-12, amending D268's narrowing, refute-r4d-r1
+V9R4D1-4), no act of a kind that a counted add-on code of S covers and that no non-add-on code of S's family covers
+(``addon_kinds``, catalogue profiles): an act filed with its kind supported so, or a kept unlisted entry naming it
+(a duplicate mention of 43273's cholangioscopy no longer holds 43260: D255's effect "43260 beside 43273 alone is
+READY"); a kindless entry, or an act whose kind is not established, is still read. Without the add-on counted, the
+rules read as built. The reportable and doubted acts
 are step 4b's (engine/coverage's event_coding@2, 4.7's "reportable / doubted | v1's shapes" row), handed in as
 ``coding`` (SessionActs per session), never re-derived here: two derivations would drift. DECISIONS D119: an upper
 endoscopy's base code reads, as (b) and (c), the PEG acts of every feeding-tube session too (a session whose kind may be
@@ -81,11 +88,13 @@ the same act filed in doubt with its session slot silent: event_coding would lis
 Q-CARD option (c): read as no session, a one-session colonoscopy's 45378 went READY beside an unlisted biopsy whose card
 pass 2 left empty (refute-r4d-r2 P1). One with no card that names no kind holds S's base code only when S is the
 document's one session (D256; beside more than one session it stays out, the named residual Q-UNNAMED - refute-r4d-r1
-F1's office visit beside a colonoscopy, whose hold could name nothing), the sessions counted being those that are not
-established not done today (DECISIONS D269, refute-r4d-r1 V8R4D1-3: a planned repeat colonoscopy filed as a session of
-its own no longer turns the hold off). D177(1): the codes the hold NAMES are those of the base code's own EUS tract
-(catalogue.eus_tract); with none, the hold names the acts; with neither, every code beside it (the recorded residual:
-naming nothing would drop the hold). The hold is an EXPLANATION (F, 4.8) when
+F1's office visit beside a colonoscopy, whose hold could name nothing), the sessions counted beside it being only those
+one of whose own filed events establishes them performed today and whose own established examinations do not establish
+them not done today (DECISIONS D285 ruling A.1, amending D269's count, refute-r4d-r1 V8R4D1-3 and V9R4D1-1: a planned
+repeat colonoscopy filed as a session of its own no longer turns the hold off, and neither does a session only possibly
+done today, whatever a weakening does to its facts). D177(1): the codes the hold NAMES are those of the base code's
+own EUS tract (catalogue.eus_tract); with none, the hold names the acts; with neither, every code beside it (the
+recorded residual: naming nothing would drop the hold). The hold is an EXPLANATION (F, 4.8) when
 the examination is established included - (b), a reportable act - and a QUESTION (U) when only (a), counted codes
 beside it (a proposal with no act documented is one), or doubted or synthetic acts hold it; it never reads another
 code's support, which rests on facts outside its closure (4.9). ``coding`` must list every session it is asked about:
@@ -288,10 +297,9 @@ from enum import Enum, unique
 from types import MappingProxyType
 from typing import TypeVar
 
-from studio.interpretation.contract.types import (Attribute, DateRelation, Device, EmBasis, EncounterRelation,
-                                                  FactState, Kind, Landmark, OtherClass, Performer, Purpose,
-                                                  Qualifier2, Reason, Result, Separate, SessionKind, Status, Tract,
-                                                  UnlistedWhat, VerdictValue)
+from studio.interpretation.contract.types import (Attribute, DateRelation, Device, EmBasis, EncounterRelation, Kind,
+                                                  Landmark, OtherClass, Performer, Purpose, Qualifier2, Reason, Result,
+                                                  Separate, SessionKind, Status, Tract, UnlistedWhat, VerdictValue)
 from studio.interpretation.engine import anatomy, catalogue, pairing, reading, requirements_table
 from studio.interpretation.engine import facts as facts_
 from studio.interpretation.engine import requirements as rq
@@ -451,9 +459,10 @@ class BaseIncluded:
     code of its session accounts for as its supporting act (DECISIONS D268: ``addon_acts``), ``unlisted`` the indices in
     FactSet.unlisted of the synthetic acts that hold it (3.2.6 rule 3 as D231, D232 and D256 read it: the kept unlisted
     acts and doubts carded to its session; those with no card that name a kind whose filed doubted form step 4b would
-    list doubted there; in a document of one session - counted as D269 counts it, ``_one_session`` - those with no
-    card that name no kind; and, for an upper endoscopy's code, those of kind PEG or none carded to a session that may
-    be the feeding tube's - D231 row 3),
+    list doubted there; in a document of one session - counted as D285 ruling A.1 counts it, ``_one_session``: beside
+    it only a session established performed today by one of its own filed events and not established not done today
+    by its own established examinations - those with no card that name no kind; and, for an upper endoscopy's code,
+    those of kind PEG or none carded to a session that may be the feeding tube's - D231 row 3),
     and ``unlisted_kinds`` the kinds those entries name, each once (an entry that names none can be named by no
     kind)."""
     key: str
@@ -656,11 +665,14 @@ def _named_sessions(R: FactSet, event: Id) -> tuple[Id, ...] | None:
     options when not established; None (any session) when the slot is silent, negated, or names no id - and when a
     NEGATED claim is not established (its state negated, its result open): "not in X1" left open may be in any
     session, so weakening an established negation never narrows the sessions (9.4 P-MONO; read as its claimed value
-    alone, it shrank a code's claims)."""
+    alone, it shrank a code's claims). An overfilled session slot's merged view (AMENDMENT-2 4.3.3 a) names any session,
+    as a written denial read alone would - every view, since it cannot tell whether a written fact denied a session
+    (facts.open_denial; the step's NOTES question Q1R: a view of X1 written stated and X1 written denied, read as X1
+    alone, left a same-day EUS's done examination out of the EUS, and 43235 READY beside it)."""
     found = _fact(R, event, _A.SESSION)
     if found.result is Result.SUPPORTED:
         return (found.value,) if isinstance(found.value, Id) else None
-    if facts_.silent(found) or found.result is Result.NEGATED or found.state is FactState.NEGATED:
+    if facts_.silent(found) or found.result is Result.NEGATED or facts_.open_denial(found):
         return None
     named = tuple(dict.fromkeys(value for value in (found.value, *found.options) if isinstance(value, Id)))
     return named or None
@@ -673,13 +685,31 @@ def possible_sessions(R: FactSet, event: Id) -> tuple[Id, ...]:
     unresolved, reference_invalid), the event may be in ANY session of the FactSet for membership (FINAL-V2 4.11: a
     missing identifier manufactures neither a match nor a non-match), as step 4b's coverage.sessions_of reads it: the
     named ids first, then every session of the FactSet. The dangling id itself is kept, so its family read stays
-    fail-closed as before: its kind reads as silent, so any family (``may_be_of_family``, ``_procedural_family``)."""
+    fail-closed as before: its kind reads as silent, so any family (``may_be_of_family``, ``_procedural_family``).
+    DECISIONS D293 (refute-f3e-r2 N1): so is every id named by a fact that is not established and that the sessions are
+    read as open for (``_open_ids``: a negated claim not established, or an overfilled slot's merged view) - kept
+    first, then every session of the FactSet - so that reading is never narrower than its written facts read alone
+    (AMENDMENT-2 4.3.3 a, 4.4)."""
     named = _named_sessions(R, event)
     if named is None:
-        return tuple(R.sessions)
+        open_ids = _open_ids(R, event)
+        return tuple(dict.fromkeys((*open_ids, *R.sessions))) if open_ids else tuple(R.sessions)
     if any(session not in R.sessions for session in named):
         return tuple(dict.fromkeys((*named, *R.sessions)))
     return named
+
+
+def _open_ids(R: FactSet, event: Id) -> tuple[Id, ...]:
+    """The session ids ``event``'s session fact names that the FactSet does not hold (dangling: settle's I4), when the
+    fact is not established and ``_named_sessions`` reads it as naming any session (a negated claim left open, or an
+    overfilled slot's merged view, ``facts.open_denial``): the event may be in that undefined session too, so its family
+    read stays fail-closed (DECISIONS D227 R2-2; D293). An established fact (supported, or a negation that holds) and
+    a silent slot name none."""
+    found = _fact(R, event, _A.SESSION)
+    if found.result in (Result.SUPPORTED, Result.NEGATED) or facts_.silent(found):
+        return ()
+    return tuple(dict.fromkeys(value for value in (found.value, *found.options)
+                               if isinstance(value, Id) and value not in R.sessions))
 
 
 def _session_may_be(R: FactSet, session: Id, family: SessionKind) -> bool:
@@ -1206,18 +1236,38 @@ def _peg_acts(R: FactSet, coding: Mapping[Id, SessionActs], session: Id) -> Sess
 
 
 def _one_session(R: FactSet, session: Id) -> bool:
-    """DECISIONS D256 as D269 counts it (refute-r4d-r1 V8R4D1-3, option (a)): whether ``session`` is the one session the
-    document tells - the one session of the FactSet that is not established not done today (``not_done_today``; an
-    entry with no card is in no session established not done today, D256 P2), a planned repeat or an earlier
-    examination filed as a session of its own aside. With no such session at all, the document's only session is still
-    its one session, as before the ruling (the step's question Q-COUNT: D269 counts the sessions that are not
-    established not done today and says nothing of a count of none; the fail-closed reading keeps the hold). A session
-    the FactSet does not hold is none."""
+    """DECISIONS D256 as D269 counts it, amended by D285 ruling A.1 (Q-COUNT; refute-r4d-r1 V9R4D1-1): whether
+    ``session`` is the one session the document tells - beside it the count counts only a session that one of its OWN
+    filed events establishes as performed on the date of service (``_performed_today``: an event whose session is
+    supported that session and which is done, 4.3 rows 2-5, a digital examination excepted) and whose own established
+    examinations do not establish it not done today (``_examinations_not_done_today``, not_done_today's first arm, the
+    one derivation both read; D256 P2's reading). A session told only by planned, earlier, denied, doubted or open
+    events, a session with no event, a session only possibly done today, and every kept unlisted entry leave the
+    kindless one-session hold on; a settled session never counts, whatever its acts (D269). The count reads neither
+    not_done_today's second arm nor ``_claims_session``, so AMENDMENT-2 4.3.3 c's repair of the claimed-value readers
+    moves only D269's exemption, never this count (D285, built in one commit with it). Both conditions need established
+    facts or their absence over established examinations, so no 9.4 weakening adds a counted session: as built, D269's
+    count counted every session that was not established not done today, so a single weakening of the second session's
+    planned examination (its kind, session, status or date) released 45378's hold (count_probe: 8, 12 and 12 releasing
+    weakenings per shape). Its one release under a weakening is named with Q-UNNAMED (D285 A.1): a second session whose
+    examination is established planned or earlier but which holds an established done event of its own today; weakening
+    that examination leaves a session established performed today by a filed event, D256's two-session reading. Two
+    sessions established performed today keep D256's named residual Q-UNNAMED (an office visit beside a colonoscopy). A
+    session the FactSet does not hold is none."""
     if session not in R.sessions:
         return False
-    if any(other != session and not not_done_today(R, other) for other in R.sessions):
-        return False  # another session may be done today: the document tells more than one
-    return not not_done_today(R, session) or len(R.sessions) == 1
+    return not any(other != session and _performed_today(R, other) and not _examinations_not_done_today(R, other)
+                   for other in R.sessions)
+
+
+def _performed_today(R: FactSet, session: Id) -> bool:
+    """DECISIONS D285 ruling A.1: one of ``session``'s own filed events establishes it as performed on the date of
+    service - its session supported ``session`` (facts.holds) and it is done (4.3 rows 2-5, reading.done), a digital
+    examination excepted (E13, ``_digital``). Established facts only: no weakening and no kept unlisted entry adds
+    one."""
+    view = reading.Reading.of(R)
+    return any(facts_.holds(_fact(R, event, _A.SESSION), session) and reading.done(view, event)
+               and not _digital(R, event) for event in R.events)
 
 
 def _unlisted_acts(R: FactSet, session: Id) -> tuple[int, ...]:
@@ -1237,10 +1287,11 @@ def _unlisted_acts(R: FactSet, session: Id) -> tuple[int, ...]:
     - one with no card that names no kind, when the session is the document's one session (D256); in a document of
       more than one session it stays out - the named residual Q-UNNAMED, measured at D2-D3 (refute-r4d-r1 F1: read in
       every session, it held an office visit's base code beside a colonoscopy with nothing the hold could name).
-      DECISIONS D269 (refute-r4d-r1 V8R4D1-3, option (a)): "a document that tells one session" counts the sessions
-      that are not established not done today (``not_done_today``: an entry with no card is in none of them, D256 P2),
-      so a planned repeat colonoscopy filed as a session of its own leaves the colonoscopy done today the document's
-      one session (``_one_session``).
+      DECISIONS D269 as D285 ruling A.1 counts it (refute-r4d-r1 V8R4D1-3, V9R4D1-1): "a document that tells one
+      session" counts beside the held session only a session one of its own filed events establishes as performed
+      today and whose own established examinations do not establish it not done today (``_one_session``), so a planned
+      repeat colonoscopy filed as a session of its own leaves the colonoscopy done today the document's one session,
+      and so does a second session only possibly done today.
     Every entry is still consumed by its other rules (completeness; an overlapped code; rule 4 for a doubt; the same-day
     rule; rows 1 and 2 here)."""
     alone: bool | None = None  # read once, and only for a kindless entry with no card
@@ -1280,11 +1331,29 @@ def addon_acts(members: Sequence[Member], session: Id) -> frozenset[Id]:
     """DECISIONS D268 (refute-r4d-r1 V8R4D1-1; r4d's Q-ADDON-ACT option (b), narrowed): the acts a counted add-on code
     (``is_addon``) matched to ``session`` accounts for as its supporting acts (its E*, ``Member.supporting``) - the
     cholangioscopy beside a counted 43273. Base rules (b) and (c) read none of them: the add-on is reported WITH its
-    primary (assess's ADDON row), so the act it accounts for is never one "this diagnostic code does not account for".
-    Read over the counted set alone (the engine's, or a reviewer's at read time): with the add-on not counted the rules
-    read as built."""
+    primary (assess's ADDON row), so the act it accounts for is never one "this diagnostic code does not account for";
+    DECISIONS D286 ruling E widens this by kind (``addon_kinds``). Read over the counted set alone (the engine's, or a
+    reviewer's at read time): with the add-on not counted the rules read as built."""
     return frozenset(event for other in members if other.session == session and is_addon(other.code)
                      for event in other.supporting)
+
+
+def addon_kinds(members: Sequence[Member], session: Id, family: SessionKind) -> frozenset[Kind]:
+    """DECISIONS D286 ruling E (G3-12; amending D268's narrowing, which read the add-on's supporting act alone): the act
+    kinds a counted add-on code (``is_addon``) matched to ``session`` covers (catalogue.Profile.covers) that no
+    non-add-on code of ``family`` covers (catalogue profiles) - whenever a counted add-on of the session accounts for
+    every act of a kind its family's other codes do not, an act of that kind is the add-on's, never one the base code
+    "does not account for". On this catalogue only office_em (em_prolonged, 99417) and ERCP (cholangioscopy, 43273) have
+    an add-on and base codes, and each kind is covered by its add-on alone (tests/v2/test_combination.py pins that, so a
+    catalogue change fails the gate). Empty with no add-on counted: the base rules then read as built."""
+    covered: set[Kind] = set()
+    for other in members:
+        profile = catalogue.code_profile(other.code)
+        if other.session == session and is_addon(other.code) and profile is not None:
+            covered.update(profile.covers)
+    others = {kind for profile in catalogue.CODES.values() if profile.family is family and not profile.addon
+              for kind in profile.covers}
+    return frozenset(covered - others)
 
 
 def base_included(members: Sequence[Member], coding: Mapping[Id, SessionActs], R: FactSet) -> tuple[BaseIncluded, ...]:
@@ -1292,8 +1361,11 @@ def base_included(members: Sequence[Member], coding: Mapping[Id, SessionActs], R
     matched to S that accounts for an act, never an add-on (DECISIONS D255: ``is_addon``), (b) S's reportable acts, or
     (c) S's doubted acts and the synthetic acts that hold it (``_unlisted_acts``: carded to S, or D256's readings of an
     entry with no card) (module docstring), in member order - rules (b) and (c) never reading an act a counted add-on
-    code of S accounts for as its supporting act (DECISIONS D268: ``addon_acts``). ValueError when ``coding`` does not
-    list S (or, for D119, a session that may be the feeding tube's): step 4b lists every session (``session_acts``)."""
+    code of S accounts for as its supporting act (DECISIONS D268: ``addon_acts``), nor, by DECISIONS D286 ruling E
+    (amending D268's narrowing), an act of a kind a counted add-on code of S covers that no non-add-on code of the base
+    code's family covers (``addon_kinds``): a filed act whose kind is supported so, or a kept unlisted entry that names
+    that kind. ValueError when ``coding`` does not list S (or, for D119, a session that may be the feeding tube's): step
+    4b lists every session (``session_acts``)."""
     found: list[BaseIncluded] = []
     for index, member in enumerate(members):
         session = member.session
@@ -1312,9 +1384,12 @@ def base_included(members: Sequence[Member], coding: Mapping[Id, SessionActs], R
             reportable, doubted = reportable + pegs.reportable, doubted + pegs.doubted
             unlisted = tuple(dict.fromkeys(unlisted + _unlisted_pegs(R, session)))  # D231 row 3
         accounted = addon_acts(members, session)  # D268: rules (b) and (c) read none of the add-on's own acts
+        covered = addon_kinds(members, session, member.family)  # D286 ruling E: nor an act of the add-on's own kind
+        accounted = accounted | frozenset(event for event in (*reportable, *doubted)
+                                          if any(facts_.holds(_fact(R, event, _A.KIND), kind) for kind in covered))
         reportable = tuple(event for event in _ordered(R, reportable) if event not in accounted)
         doubted = tuple(event for event in _ordered(R, doubted) if event not in reportable and event not in accounted)
-        unlisted = tuple(sorted(unlisted))
+        unlisted = tuple(sorted(index for index in unlisted if R.unlisted[index].kind not in covered))
         if beside or reportable or doubted or unlisted:
             named = tuple(dict.fromkeys(kind for kind in (R.unlisted[index].kind for index in unlisted)
                                         if kind is not None))
@@ -1343,12 +1418,14 @@ def _digital(R: FactSet, event: Id) -> bool:
     manual - supported manual, or, not established, manual its claimed value or one of its readings (facts.possibly over
     a device that is not silent). Each 9.4 weakening keeps a claimed value, so a weakened device never turns a digital
     examination into the session's own examination or into an act that makes it done; a silent device, one established
-    as another device, and manual negated claim none. engine/evaluate imports this module through engine/questions, so
-    its predicate is read here, and tests/v2/test_combination.py pins the two equal (``_examinations`` empty exactly
-    where evaluate.act_only holds)."""
+    as another device, and manual negated claim none. An overfilled device slot's merged view (AMENDMENT-2 4.3.3 c
+    [R:truth-T2]) claims manual whenever a written fact states it or a doubt offers it, as that fact read alone would:
+    a manual only denied (``negated_values``: every written fact naming it denies it, and no doubt offers it) is no
+    claim, so an endoscope written beside a denied manual never turns the examination into a digital one. engine/evaluate imports this module through engine/questions, so its predicate is read here, and
+    tests/v2/test_combination.py pins the two equal (``_examinations`` empty exactly where evaluate.act_only holds)."""
     device = _fact(R, event, _A.TECHNIQUE_DEVICE)
     return (facts_.possibly(_fact(R, event, _A.KIND), Kind.EXAMINATION) and facts_.possibly(device, Device.MANUAL)
-            and not facts_.silent(device))
+            and Device.MANUAL not in device.negated_values and not facts_.silent(device))
 
 
 def _examinations(R: FactSet, session: Id) -> tuple[Id, ...]:
@@ -1403,13 +1480,17 @@ def session_done(R: FactSet, session: Id) -> bool:
 
 
 def _claims_session(R: FactSet, event: Id, session: Id) -> bool:
-    """Whether ``event``'s session fact CLAIMS ``session``: its supported value, or - not established - its claimed
-    value; never a doubt's reading, a contradiction's side or an empty slot a doubt names alone, never a negated claim.
-    Each 9.4 weakening keeps a claimed value (an established fact to unresolved, an added doubt), so an event placed in
-    a session by its session fact stays placed in it under every weakening."""
-    found = _fact(R, event, _A.SESSION)
-    return (found.value == session and not facts_.silent(found) and found.result is not Result.NEGATED
-            and found.state is not FactState.NEGATED)
+    """Whether ``event``'s session fact CLAIMS ``session`` (facts.claimed_values, AMENDMENT-2 4.3.3 c and DECISIONS D279
+    item 5 [R:truth-T1]): its supported value, or - not established - its claimed value, and each side of a
+    contradiction: pass 1's own contradicted session (its settled value empty, its sides the options), a session fact
+    settled contradicted, and an overfilled session slot's written sessions that it does not deny - never a doubt's
+    reading of a claim that is not contradicted, an empty slot a doubt names alone, or a negated claim. As built the
+    reader saw only the claimed value, so pass 1's own contradicted session claimed nothing, and a planned examination
+    beside it made its session established not done today (demo_within_contradicted: 43235 READY beside a same-day EUS
+    whose done examination's session pass 1 contradicted). Each 9.4 weakening keeps a claimed value (an established fact
+    to unresolved, an added doubt) and never removes a side, so an event placed in a session by its session fact stays
+    placed in it under every weakening, value-erasing contradictions included (4.4)."""
+    return session in facts_.claimed_values(_fact(R, event, _A.SESSION))
 
 
 def _open_examination(R: FactSet, session: Id, event: Id) -> bool:
@@ -1424,22 +1505,42 @@ def _open_examination(R: FactSet, session: Id, event: Id) -> bool:
             and pairing.positive(R, event) and not pairing.other_date(R, event) and not _manual(R, event))
 
 
+def _examinations_not_done_today(R: FactSet, session: Id) -> bool:
+    """not_done_today's FIRST arm (DECISIONS D256 P2's reading; D285 ruling A.1: the one derivation that not_done_today
+    and D269's count, ``_one_session``, both read): the session has an established examination (``_examinations``: kind
+    supported examination, session supported, a digital examination excepted) and each of them is established as not
+    done today - none possibly positive with its date relation not established as another (pairing.positive,
+    pairing.other_date). It reads established examinations only, never another event's session claim."""
+    exams = _examinations(R, session)
+    return bool(exams) and not any(pairing.positive(R, event) and not pairing.other_date(R, event) for event in exams)
+
+
 def not_done_today(R: FactSet, session: Id) -> bool:
     """DECISIONS D256 P2 and D269: the session's examination is established, and established not done on the date of
-    service - it has an established examination (``_examinations``: kind supported examination, session supported, a
-    digital examination excepted), and nothing that may be its examination may be done today: no event whose session
-    fact claims it and whose kind may be the examination is possibly positive with its date not established as another
-    (``_open_examination``) - so each established examination is established as not done today (its status established
-    as not positive - planned, or denied - or its date relation established as another date), and no other event the
-    document places in the session may be its examination done today. The second arm is the step's question Q-NDT
-    (DECISIONS D269's exemption over D256 P2's first reading, the established examinations alone, released a hold under
-    a 9.4 weakening: a session whose examination done today is weakened out of the established set - its session or its
-    kind to unresolved, or its device given a doubt reading manual - became "established not done" beside its planned
-    examination, and every act of it exempt). Every input of either arm only weakens toward not settled, so a weakening
-    only ever undoes this (P-MONO). A session the FactSet does not hold reads its events the same way."""
-    if not _examinations(R, session):
+    service - its first arm (``_examinations_not_done_today``: an established examination, each established as not done
+    today - its status established as not positive, planned or denied, or its date relation established as another
+    date) - and nothing that may be its examination may be done today: no event whose session fact claims it
+    (``_claims_session``: its claimed value, a contradiction's sides and an overfilled slot's written sessions it does
+    not deny, AMENDMENT-2 4.3.3 c) and whose kind may be the examination is possibly positive with its date not
+    established as another (``_open_examination``), and no kept unlisted act or doubt of kind examination or none is
+    carded to it (DECISIONS D285 ruling A.3, Q-CARDEXAM option (b): the arm is an absence condition, so it reads the
+    synthetic act as it reads that entry's filed doubted form, whose session fact claims the session - D216, D231's
+    unlisted-versus-filed-doubted pair; an entry with no card stays unread here, as a silent session slot is, D256 P2's
+    filed half). The second arm is the step's question Q-NDT option (a), kept by D285 ruling A.2 for D269's EXEMPTION
+    (``session_possibly_done``, ``wholes`` and coverage's mirror read this function, and a settled session there holds
+    less): an event the document places in the session that may be its examination done today keeps the session from
+    being established not done (D256 P2's first reading, the established examinations alone, released a hold under a
+    9.4 weakening - a session whose examination done today is weakened out of the established set became "established
+    not done" beside its planned examination, and every act of it exempt). D269's COUNT reads the first arm alone
+    (``_one_session``, D285 A.1), so this arm only ever adds holds. Every input of either arm only weakens toward not
+    settled, so a weakening only ever undoes this (P-MONO). A session the FactSet does not hold reads its events the
+    same way."""
+    if not _examinations_not_done_today(R, session):
         return False
-    return not any(_open_examination(R, session, event) for event in R.events)
+    if any(_open_examination(R, session, event) for event in R.events):
+        return False
+    return not any(_card(R, R.unlisted[index]) == session and Kind.EXAMINATION in _synthetic_kinds(R.unlisted[index])
+                   for index in synthetic(R))  # D285 A.3 (Q-CARDEXAM)
 
 
 def _synthetic_possibly_in(R: FactSet, entry: UnlistedStatement, session: Id) -> bool:
@@ -1483,13 +1584,17 @@ def wholes(R: FactSet, session: Id) -> tuple[Whole, ...]:
     FactSet's session order, each once (an established whole before a possible one of the same session). DECISIONS
     D269: a session established not done on the date of service (``not_done_today``) is never a whole - not by C3's
     supported claim, not by D70's claim not established, and never by C-4 (``session_possibly_done`` is False for it) -
-    so a planned EUS is never named as the whole of today's EGD (the integration's I4 residual)."""
+    so a planned EUS is never named as the whole of today's EGD (the integration's I4 residual). D70's claim not
+    established names exactly its claimed value and its options - a contradiction's sides, a doubt's readings and an
+    EMPTY slot's doubt included (DECISIONS D286, G3-14 option (a): an empty slot a doubt names is read by its readings,
+    3.3 row 2, never as no claim), an overfilled slot's written sessions (AMENDMENT-2 4.3.3 a) - never a session nothing
+    names; a pure empty slot names none. ``_named_wholes`` and coverage._part_of_session read this one set (D227)."""
     found: dict[Id, bool] = {}
     part = _fact(R, session, _A.PART_OF_SESSION)
     if part.result is Result.SUPPORTED and isinstance(part.value, Id) and part.value != session:
         if not not_done_today(R, part.value):  # D269
             found[part.value] = True  # C3
-    elif part.result in facts_.OPEN and not facts_.silent(part):
+    elif part.result in facts_.OPEN:  # D286: an empty slot a doubt names is read by its readings
         for value in (part.value, *part.options):
             if isinstance(value, Id) and value != session and not not_done_today(R, value):  # D269
                 found.setdefault(value, False)  # D70, by possibly
@@ -1514,12 +1619,13 @@ def wholes(R: FactSet, session: Id) -> tuple[Whole, ...]:
 
 def _named_wholes(R: FactSet, session: Id) -> frozenset[Id]:
     """The sessions ``session``'s own part_of_session claim names - C3's supported value, and D70's claimed value and
-    readings when the claim is not established (``wholes``' first two arms) - never itself: the wholes the document
-    STATES the session is part of, as opposed to C-4's structural inference."""
+    options when the claim is not established, an empty slot's doubt included (DECISIONS D286: ``wholes``' first two
+    arms, the one set coverage._part_of_session reads too) - never itself: the wholes the document STATES the session is
+    part of, as opposed to C-4's structural inference."""
     part = _fact(R, session, _A.PART_OF_SESSION)
     if part.result is Result.SUPPORTED:
         return frozenset({part.value} - {session}) if isinstance(part.value, Id) else frozenset()
-    if part.result in facts_.OPEN and not facts_.silent(part):
+    if part.result in facts_.OPEN:  # D286: an empty slot a doubt names is read by its readings
         return frozenset(value for value in (part.value, *part.options) if isinstance(value, Id) and value != session)
     return frozenset()
 

@@ -788,13 +788,14 @@ class Precision(Enum):
 class Reason(Enum):
     """Why a fact settled as it did: the closed list settle.REASONS is drawn from and store.load checks (FINAL-V2 1.7,
     3.3). In 3.3's row order: a contradiction (row 1), a doubt (row 2), silence (row 3), each check's reasons (row 4:
-    3.1's S2, I1-I4, G1-G5, K1's structure_<rule> - one per rule of 3.1 K1, with consistency.Structure's values
-    (DECISIONS D186) - K2-K7 and L1, then the cross-object anchor rule), a qualifier (row 5: qualified:<q> for every
-    Qualifier but approximate), a fact outside CLAIMED (row 6), indistinct cards (row 7), and the appraisal (row 9:
-    3.2.3's coherence table, appraisal_qualified:<q> for every Qualifier2, then appraisal_qualified, a qualified verdict
-    that names no qualifier, D186). G6 ignores a restatement and K8 settles as row 1, so neither has a reason of its
-    own; the cross-object rules of 3.1 add none either, since an inherited fact carries its section fact's reasons
-    (D186)."""
+    3.1's S2, I1-I4, then slot_overfull - AMENDMENT-2 4.3's item-level finding on every fact of a single-valued slot
+    that holds more than one, which leaves that attribute unresolved instead of refusing the whole answer - G1-G5, K1's
+    structure_<rule> - one per rule of 3.1 K1, with consistency.Structure's values (DECISIONS D186) - K2-K7 and L1, then
+    the cross-object anchor rule), a qualifier (row 5: qualified:<q> for every Qualifier but approximate), a fact
+    outside CLAIMED (row 6), indistinct cards (row 7), and the appraisal (row 9: 3.2.3's coherence table,
+    appraisal_qualified:<q> for every Qualifier2, then appraisal_qualified, a qualified verdict that names no qualifier,
+    D186). G6 ignores a restatement and K8 settles as row 1, so neither has a reason of its own; the cross-object rules
+    of 3.1 add none either, since an inherited fact carries its section fact's reasons (D186)."""
     CONTRADICTED_BY_PASS1 = 'contradicted_by_pass1'
     DOUBT_STATED = 'doubt_stated'
     DOUBT_UNCLEAR = 'doubt_unclear'
@@ -807,6 +808,7 @@ class Reason(Enum):
     SOURCE_TOO_LONG = 'source_too_long'
     ANCHOR_WORDS = 'anchor_words'
     REFERENCE_INVALID = 'reference_invalid'
+    SLOT_OVERFULL = 'slot_overfull'
     GEOMETRY_STATEMENT = 'geometry_statement'
     GEOMETRY_SECTION = 'geometry_section'
     GEOMETRY_FRAME = 'geometry_frame'

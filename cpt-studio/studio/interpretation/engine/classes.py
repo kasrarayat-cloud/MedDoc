@@ -105,11 +105,12 @@ reading_contradicted, appraisal:<verdict or coherence>, unestablished:<reason>; 
 over established facts), and its fact key and rank are RANK's for what it rests on (4.8; requirements.py: "A
 contradicted fact of any requirement asks rank 1 (conflict:<kind>) and a doubt on status rank 2, whatever the
 requirement"): a contradicted fact asks conflict:<kind> at rank 1 (D217) - the kind is the session's examination for a
-session's or an anatomy entry's fact, an event's own claimed kind (its first possible side, else the part's default)
-for an event's -; a status a doubt names asks performed_status at rank 2; any other the part's own row: procedure
-(rank 8) for the family, approach and route parts and a supporting act's session, extent (rank 14) for the reach, the
-completion and the examinations. Every witness is kept (4.4: a hold carries all its unresolved facts); which one is
-asked is RANK's choice (4.8), and D89's "one item naming both doubts" is the wording's, over held_facts (step 3c).
+session's or an anatomy entry's fact, an event's one label (facts.established_kind: DECISIONS D287, its supported
+catalogue kind, else other) for an event's -; a status a doubt names asks performed_status at rank 2; any other the
+part's own row: procedure (rank 8) for the family, approach and route parts and a supporting act's session, extent (rank
+14) for the reach, the completion and the examinations. Every witness is kept (4.4: a hold carries all its unresolved
+facts); which one is asked is RANK's choice (4.8), and D89's "one item naming both doubts" is the wording's, over
+held_facts (step 3c).
 misfit_form gives v1's question form (class_hold's CLASS, INCOMPLETE, EXTENT or ROUTE) over the same parts, for that
 wording; its INCOMPLETE form ("is stated to be incomplete") needs the stopping short STATED by a deeper part's own claim
 (PartFit.stated).
@@ -368,13 +369,15 @@ def _open(found: Fact, domain: type[_E]) -> frozenset[_E]:
     """The values of ``domain`` a single-valued ``found`` leaves open, in any state (module docstring): its value when
     supported; every other value when negated; when it is not established, every value for an empty slot (silent, or
     named by a doubt: 4.2) and for a denial (state negated), else its claimed value and its options. A value outside
-    ``domain`` (never in a FactSet facts.py built) leaves every value open. Weakening a fact (FINAL-V2 9.4 P-MONO) can
-    only widen what it leaves open."""
+    ``domain`` (never in a FactSet facts.py built) leaves every value open. An overfilled slot's merged view
+    (AMENDMENT-2 4.3.3 a, facts.overfilled) leaves every value open, as a written denial read alone would - every view,
+    since it cannot tell whether a written fact denied a value (facts.open_denial: the fail-closed reading, the step's
+    NOTES question Q1R). Weakening a fact (FINAL-V2 9.4 P-MONO) can only widen what it leaves open."""
     if found.result is Result.SUPPORTED:
         return frozenset({found.value}) if isinstance(found.value, domain) else frozenset(domain)
     if found.result is Result.NEGATED:
         return frozenset(member for member in domain if member != found.value)
-    if found.state is None or found.state is FactState.NEGATED:
+    if found.state is None or facts_.open_denial(found):
         return frozenset(domain)
     return frozenset(value for value in (found.value, *found.options) if isinstance(value, domain))
 
@@ -415,14 +418,16 @@ def _may_name(found: Fact, subject: Id, R: FactSet) -> bool:
     4.2) and for a denial (the denial may be wrong), else when it is its claimed value or an option. And always when it
     names a session the FactSet does not hold (_unheld: 4.11, D227's 4d R2-2), in any state but negated - so an
     examination established begun whose session is a dangling id makes the deeper class U with a question on its
-    session, never T. Weakening the fact can only turn False into True."""
+    session, never T. An overfilled session slot's merged view (AMENDMENT-2 4.3.3 a) leaves every session possible, as
+    a written denial read alone would - every view, since it cannot tell whether a written fact denied a session
+    (facts.open_denial; the step's NOTES question Q1R). Weakening the fact can only turn False into True."""
     if _unheld(found, R):
         return True
     if found.result is Result.SUPPORTED:
         return found.value == subject
     if found.result is Result.NEGATED:
         return found.value != subject
-    if found.state is None or found.state is FactState.NEGATED:
+    if found.state is None or facts_.open_denial(found):
         return True
     return found.value == subject or subject in found.options
 
@@ -452,7 +457,13 @@ def _doubted(found: Fact) -> bool:
 
 def _claims(found: Fact, value: object) -> bool:
     """Whether pass 1's own claim of ``found`` states ``value``, whatever settle made of it: claimed supported as it, or
-    contradicted with it a side."""
+    contradicted with it a side - never for an overfilled slot's merged view (AMENDMENT-2 4.3.3 b [R:truth-T5]: a denied
+    or unwritten value is never worded as stated, and the view's options cannot tell a written value from a doubt's
+    reading, nor a value one written fact states from one another denies; so a view states nothing here, and its class
+    hold takes the class form, never "is stated to be incomplete" - the fail-closed wording, the step's NOTES question
+    Q-STATED)."""
+    if facts_.overfilled(found):
+        return False
     return ((found.state is FactState.SUPPORTED and found.value == value)
             or (found.state is FactState.CONTRADICTED and value in found.options))
 
@@ -492,15 +503,14 @@ def _cause(found: Fact) -> str:
     return f'{UNESTABLISHED}:{reason.value}'
 
 
-def _conflict_kind(subject: Id, R: FactSet, default: Kind) -> Kind:
-    """The kind conflict:<kind> names (4.8 rank 1): for an event, its claimed kind, else its first possible side, else
-    ``default``; for a session's or an anatomy entry's fact, the session's examination (SESSION_CONFLICT_KIND)."""
+def _conflict_kind(subject: Id, R: FactSet) -> Kind:
+    """The kind conflict:<kind> names (4.8 rank 1): for an event, its one label (facts.established_kind: the catalogue
+    kind of its supported kind with its supported purpose, else Kind.OTHER - DECISIONS D287, D267's heading: every fact
+    key that names an act names that kind, as evaluate's, coverage's and questions.act_kind do); for a session's or an
+    anatomy entry's fact, the session's examination (SESSION_CONFLICT_KIND)."""
     if subject.family is not _EVENT:
         return SESSION_CONFLICT_KIND
-    found = facts_.fact(R, subject, _A.KIND)
-    if isinstance(found.value, Kind):
-        return found.value
-    return next((option for option in found.options if isinstance(option, Kind)), default)
+    return facts_.established_kind(R, subject)
 
 
 def _ordered(spans: Iterable[Span]) -> tuple[Span, ...]:
@@ -514,7 +524,7 @@ def _reach_spans(session: Id, R: FactSet) -> tuple[Span, ...]:
 
 
 def _witness(question: bool, key: FactKey, rank: Rank, attribute: Attribute, subject: Id, found: Fact,
-             spans: tuple[Span, ...], R: FactSet, default: Kind = Kind.OTHER) -> HeldFact:
+             spans: tuple[Span, ...], R: FactSet) -> HeldFact:
     """A witness resting on ``found`` (module docstring, the witnesses): a QUESTION (U: its cause from the fact, the
     fact's first reason when it is not established; its fact key and rank RANK's - conflict:<kind> at rank 1 for a
     contradicted fact, performed_status at rank 2 for a status a doubt names, else ``key`` at ``rank``) or an
@@ -522,7 +532,7 @@ def _witness(question: bool, key: FactKey, rank: Rank, attribute: Attribute, sub
     reason = found.reasons[0] if question and found.reasons and not facts_.established(found) else None
     fact, at = fact_key(key), rank
     if question and found.result is Result.CONTRADICTED:
-        fact, at = fact_key(FactKey.CONFLICT, _conflict_kind(subject, R, default)), Rank.CONFLICT
+        fact, at = fact_key(FactKey.CONFLICT, _conflict_kind(subject, R)), Rank.CONFLICT
     elif question and attribute is _A.STATUS and _doubted(found):
         fact, at = fact_key(FactKey.PERFORMED_STATUS), Rank.DOUBT
     return HeldFact(fact=fact, attribute=attribute, subject=subject, result=found.result,
@@ -531,12 +541,11 @@ def _witness(question: bool, key: FactKey, rank: Rank, attribute: Attribute, sub
 
 
 def _part(part: Part, truth: Truth, key: FactKey, rank: Rank, attribute: Attribute, subject: Id, found: Fact,
-          spans: tuple[Span, ...], R: FactSet, stated: bool = False, default: Kind = Kind.OTHER) -> PartFit:
+          spans: tuple[Span, ...], R: FactSet, stated: bool = False) -> PartFit:
     """A part's truth and its witness: none for T; a question for U; an explanation for F (_witness)."""
     if truth is Truth.T:
         return PartFit(part, truth, None)
-    return PartFit(part, truth, _witness(truth is Truth.U, key, rank, attribute, subject, found, spans, R, default),
-                   stated)
+    return PartFit(part, truth, _witness(truth is Truth.U, key, rank, attribute, subject, found, spans, R), stated)
 
 
 # --- the routes an anatomy entry opens (classes.routes, doubted_routes, over the session's through) ---------------------
@@ -694,7 +703,7 @@ def _examination_doubt(event: Id, session: Id, status: Fact, R: FactSet) -> Part
     stated = (_claims(status, Status.ATTEMPTED_NOT_COMPLETED) and _claims(kind, Kind.EXAMINATION)
               and _claims(placed, session))
     return _part(Part.EXAMINATION, Truth.U, FactKey.EXTENT, Rank.EXTENT, attribute, event, found,
-                 found.spans or status.spans or _reach_spans(session, R), R, stated, Kind.EXAMINATION)
+                 found.spans or status.spans or _reach_spans(session, R), R, stated)
 
 
 def _unlisted_doubt(session: Id, entry: UnlistedStatement) -> PartFit:

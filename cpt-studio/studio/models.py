@@ -632,6 +632,8 @@ class InterpreterHold(ImmutableModel):
     (interpretation.holds) owns its values, so a new one needs no migration (the installer's gate refuses
     AlterField)."""
     AUTH, PERMISSION, QUOTA, MODEL = 'auth', 'permission', 'quota', 'model'
+    # AMENDMENT-2 1.5: a request of the version refused as invalid; the model declined to answer (request-bound)
+    REFUSED, DECLINED = 'refused', 'declined'
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     reason = models.CharField(max_length=20)
     http_status = models.PositiveIntegerField(null=True, blank=True)

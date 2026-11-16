@@ -17,7 +17,7 @@
     {"id": "model_id", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
      "source": "\\b(?:gpt|claude|gemini)-[a-z0-9]"},
     {"id": "interpreter_model", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
-     "source": "\\bgemini-4-(?:argon|carbon)\\b"},
+     "source": "\\b(?:gemini-4-(?:argon|carbon)|claude-fable-5-2)\\b"},
     {"id": "adapter_version", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
      "source": "@cptstudio-\\d|\\bcpt-studio:[a-z]"},
     {"id": "versioned_id", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
@@ -216,6 +216,15 @@
     {"surface": "dom", "text": "the readingGemini step", "hits": ["provider_name_joined"]},
     {"surface": "bundle", "text": "const OpenAIClient = 1;", "hits": ["provider_name_joined"]},
     {"surface": "dom", "text": "AstraZeneca", "hits": ["provider_name_joined"]},
-    {"surface": "dom", "text": "Gemini_unknown", "hits": ["provider_name"]}
+    {"surface": "dom", "text": "Gemini_unknown", "hits": ["provider_name"]},
+    {"surface": "file", "text": "Interpreted by claude-fable-5-2", "hits": ["interpreter_model", "model_id", "provider_name"]},
+    {"surface": "header", "text": "CLAUDE-FABLE-5-2", "hits": ["interpreter_model", "model_id", "provider_name"]},
+    {"surface": "bundle", "text": "const MODEL = 'claude-fable-5-2';", "hits": ["interpreter_model", "model_id", "provider_name"]},
+    {"surface": "dom", "text": "Read by Claude Fable 5.2", "hits": ["provider_name"]},
+    {"surface": "json", "text": "fable_unknown", "hits": ["provider_name"]},
+    {"surface": "json", "text": "AnthropicTimeout", "hits": ["provider_name_joined"]},
+    {"surface": "dom", "text": "An affable nurse", "hits": []},
+    {"surface": "json", "text": "fabled", "hits": []},
+    {"surface": "file", "text": "Aesop's fables", "hits": []}
   ]
 }

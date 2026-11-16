@@ -398,9 +398,9 @@ class NewPathConsumerTests(NewPathCase):
         self.assertEqual(opened.count(sentinel.NEW_PATH), 0)
         self.assertTrue(saved['answer_ids'])
         self.settle()  # the recompute (AGAIN): a new new-path assessment that read the answer
-        # (on design v2's path the recompute records this door-saved answer as asked differently and read time applies
-        # it - the open question Q1 of step q02's repair NOTES; tests.test_pipeline_assess_events.AgainTests.
-        # test_an_answer_saved_through_the_details_door_is_applied_by_the_recompute_as_read_time_applies_it)
+        # (on design v2's path the recompute applies this door-saved answer as read time does: since DECISIONS D259 the
+        # door records, and assess and read time bind, the item's stored fingerprint; tests.test_pipeline_assess_events.
+        # AgainTests.test_an_answer_saved_through_the_details_door_is_applied_by_the_recompute_as_read_time_applies_it)
         with sentinel.strict('S11 the recomputed assessment', retired=True) as opened:
             served = read_everything(self, encounter, self.membership, self.user)
             answer = models.MemberAnswer.objects.get(pk=saved['answer_ids'][0])

@@ -36,7 +36,7 @@ from django.db import transaction
 from django.test import SimpleTestCase, TestCase
 
 from studio import interpretation, jobs, models
-from studio.interpretation import adapter, sentinel
+from studio.interpretation import adapter, fable_adapter, sentinel
 from studio.interpretation.contract import checks, extract_read, segment
 from tests import v2_documents, v2_replay
 from tests.support import pipeline_factories as pf
@@ -158,11 +158,12 @@ class PathTests(TestCase):
         interpreter = v2_replay.start(self, ((v2_documents.TWO_PROCEDURES, v2_documents.two_procedures_answer),))
         self.assertFalse(jobs._v1_chain())
         self.assertTrue(sentinel.retired_armed())
-        self.assertIs(adapter.get_interpreter_v2(), interpreter)
+        self.assertIs(fable_adapter.get_interpreter_v2(), interpreter)
         with self.assertRaises(AssertionError) as refused:
             adapter.get_interpreter()
         self.assertEqual(str(refused.exception), v2_replay.V1_BUILT)
         self.assertNotEqual(interpretation.HEALTH_THRESHOLDS_SHA256, '')
+        self.assertNotEqual(interpretation.HEALTH_THRESHOLDS_SHA256_V3, '')
 
     def test_the_control_an_unmarked_test_of_a_class_c_class_keeps_the_v1_chain(self):
         from tests.test_pipeline_api import PipelineApiTests

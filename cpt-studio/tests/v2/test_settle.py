@@ -67,6 +67,7 @@ import sys
 import uuid
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import hypothesis
@@ -2799,6 +2800,467 @@ class DemotionTests(Case):
                     for key, (result, _reasons) in after.items():
                         if result in (Result.SUPPORTED, Result.NEGATED):
                             self.assertEqual(base[key][0], result, key)
+
+
+# --- AMENDMENT-2 4.3: the slot rule end to end, the 38-attribute plant (step f3s) -------------------------------------
+
+V3, APPRAISAL_V3 = interpretation.INTERPRETATION_VERSION_V3, interpretation.APPRAISAL_VERSION_V3
+PAIR_V3 = (interpretation.INTERPRETATION_PAIR_V3, interpretation.INVENTORY_VERSION_V3)
+SLOT_FIELDS = tuple((family, field) for family in xs.Family for field in xs.ATTRIBUTES[family]
+                    if field.arity is xs.Arity.SLOT)  # the 38 slots of pass 1's answer
+# where each family's slots are planted (NOTE's answer): the documenting clinician; the Findings part N2, which E1-E5
+# inherit from; the colonoscopy X1; the anastomosis Y1; the polyp L1; the snare removal E2 and the biopsy denial E4
+PLANT_OBJECTS = {F.ENCOUNTER: ('',), F.SECTION: ('N2',), F.SESSION: ('X1',), F.ANATOMY: ('Y1',), F.LESION: ('L1',),
+                 F.EVENT: ('E2', 'E4')}
+PLANT_UNITS = {'': 'S3', 'N2': 'S6', 'X1': 'S6', 'Y1': 'S10', 'L1': 'S7', 'E2': 'S7', 'E4': 'S9'}
+# 4.3.3: supported only (A-v6), one supported and negated others (A-v2), negated only
+SHAPES = ('supported', 'mixed', 'negated')
+# the date slot's written values, each citing words that state it (refute-f3s-r1 finding 2: a written date's words are
+# what L1 reads into the act's date relation, so the plant cites them): the date of service (S2's 03/14/2031), the
+# history's 2027 (S5: a date the relation E2 and E4 inherit from N2, on the date of service, cannot hold) and a month
+# value read against S2's day literal
+PLANT_DATES = ('2031-03-14', '2027', '2031-03')
+PLANT_DATE_WORDS = {'2031-03-14': ('S2', '03/14/2031'), '2027': ('S5', '2027'), '2031-03': ('S2', '03/14/2031')}
+IDS = {F.PERSON: ('P1', 'P2', 'P1'), F.SESSION: ('X1', 'X2', 'X1'), F.ANATOMY: ('Y1', 'Y2', 'Y1'),
+       F.LESION: ('L1', 'L2', 'L1'), F.EVENT: ('E3', 'E7', 'E6')}
+
+
+def plant_answer():
+    """NOTE's answer with a second anatomy entry (Y2, the gastric antrum's surgical absence, cited at S12) and a second
+    lesion (L2, cited at S12), so that every id slot of a planted object has two values to name; the clip E3 is done to
+    L2, so that E2's target lesion has a control chosen among the lesions of its session (3.2.3)."""
+    data = note_answer()
+    data['anatomy'].append({'id': 'Y2', 'type': fact('surgically_absent', src(['S12'], 'gastric antrum')),
+                            'organ': [], 'subtype': [], 'joins': []})
+    data['lesions'].append(lesion('L2', src(['S12'], 'gastric antrum')))
+    event_of(data, 'E3')['target']['lesion'] = [fact('L2', src(['S8']))]
+    return data
+
+
+def written_values(family, field, count):
+    """``count`` values of a slot's domain, deterministic and distinct while the domain has them (enumeration members,
+    ids of the family it refers to, dates); a domain with fewer values repeats them in order (a one-value enumeration
+    is overfilled by pass 1 writing its value twice, or with both polarities)."""
+    if field.values is not None:
+        domain = [member.value for member in field.values]
+    elif field.refers_to is not None:
+        domain = list(IDS[field.refers_to])
+    else:
+        domain = list(PLANT_DATES)
+    return [domain[index % len(domain)] for index in range(count)]
+
+
+def written_facts(family, field, name, shape):
+    """The written facts of one planted slot: two supported (supported), one supported and two negated (mixed: an id
+    slot names its first value again, negated - pass 1 writing one value with both polarities), or two negated."""
+    unit = PLANT_UNITS[name]
+    link = 'document_frame' if family is F.ENCOUNTER else 'statement'
+    states = {'supported': ('supported', 'supported'), 'mixed': ('supported', 'negated', 'negated'),
+              'negated': ('negated', 'negated')}[shape]
+    values = written_values(family, field, len(states))
+    if field.attribute is A.DATE:  # a date cites the words that state it (PLANT_DATE_WORDS)
+        return [fact(value, src([PLANT_DATE_WORDS[value][0]], PLANT_DATE_WORDS[value][1], link), state=state)
+                for value, state in zip(values, states)]
+    return [fact(value, src([unit], '', link), state=state) for value, state in zip(values, states)]
+
+
+def put_slot(data, family, field, name, facts):
+    """``facts`` at the slot of object ``name`` (the encounter for '')."""
+    item = data['encounter'] if family is F.ENCOUNTER else next(
+        record for record in data[family.value] if record['id'] == name)
+    for part in field.path[:-1]:
+        item = item[part]
+    item[field.path[-1]] = facts
+    return data
+
+
+def plants():
+    """Every (family, field, object, shape) the plant runs: each of the 38 slots on its object(s), in each shape."""
+    for family, field in SLOT_FIELDS:
+        for name in PLANT_OBJECTS[family]:
+            for shape in SHAPES:
+                yield family, field, name, shape
+
+
+def planted(family, field, name, shape, single=None):
+    """The plant answer with that slot overfilled in ``shape`` - or holding only its written fact ``single`` (an index),
+    the slot read alone - and the written facts."""
+    facts = written_facts(family, field, name, shape)
+    chosen = facts if single is None else [facts[single]]
+    return put_slot(plant_answer(), family, field, name, copy.deepcopy(chosen)), facts
+
+
+class PreparedV3(Prepared):
+    """A revision and pass 1's answer read under gemini-events@3, checked and built into a gemini-appraisal@2 claim
+    set (what the Fable path asks), settled under that label's pin."""
+
+    def __init__(self, text, data):  # noqa: D107 - Prepared's, under the @3 labels
+        self.text, self.data = text, data
+        self.units = segment.units(text)
+        found = extract_read.read(json.dumps(data), len(self.units), version=V3)
+        assert not isinstance(found, extract_read.Refusal), found
+        self.read = found
+        self.checked = checks.check(text, (), found)
+        basis = appraise_prompt.basis(text, (), found, findings=self.checked.findings)
+        self.claim_set = claims.build(basis, appraise_prompt.seed(text, found), version=APPRAISAL_V3)
+        self.request = SimpleNamespace(claim_set=self.claim_set,
+                                       indistinct=appraise_prompt.indistinct(self.claim_set, text))
+        self.roles = roles_of(self.claim_set)
+
+    def settle(self, oracle=faithful, unlisted=()):
+        with mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256_V3', HEALTH_PIN):
+            return settle.settle(self.read, self.checked, self.claim_set, self.request.indistinct,
+                                 self.appraisal(oracle, unlisted), USAGE, appraisal_version=APPRAISAL_V3)
+
+
+def yes_man(claim, role, claim_set):
+    """A degenerate second reading that supports every claim, controls included (health may refuse it whole)."""
+    return verdict(claim, 'supports')
+
+
+def settled_paths(events):
+    """Every settled fact of a settled inventory by (family value, object, attribute value, position): a list at any
+    attribute (a FACTS list, or an overfilled slot's written facts) by each member's position."""
+    found = {}
+
+    def walk(family, name, record, fields):
+        for field in fields:
+            if field.attribute is A.RESTATEMENTS_ROLE:
+                for index, item in enumerate(record['restatements']):
+                    found[(family.value, name, field.attribute.value, index)] = item['role']
+                continue
+            node = record
+            for part in field.path:
+                node = node[part]
+            for index, fact_ in enumerate(node if isinstance(node, list) else [node]):
+                found[(family.value, name, field.attribute.value, index)] = fact_
+
+    walk(F.ENCOUNTER, '', events['encounter'], [field for field in xs.ATTRIBUTES[F.ENCOUNTER]
+                                                 if field.attribute is not A.OTHER_DATES_ROLE])
+    for family in (F.PERSON, F.SECTION, F.SESSION, F.ANATOMY, F.LESION, F.EVENT):
+        for record in events[family.value]:
+            walk(family, record['id'], record, [field for field in xs.ATTRIBUTES[family]
+                                                if field.arity is not xs.Arity.OTHER or field.attribute is A.ENTRY])
+    return found
+
+
+def established(events, excluded):
+    """The paths of every established fact (supported or negated) outside ``excluded`` (a predicate on a path)."""
+    return {path for path, fact_ in settled_paths(events).items()
+            if fact_.result in (Result.SUPPORTED, Result.NEGATED) and not excluded(path)}
+
+
+def slot_paths(family, field, name, prepared):
+    """A predicate on settled paths: the planted slot itself and, for a section's occasion, performer or
+    performer_person, the per-act facts the events it contains inherit from it (1.5: an act's own slot silent; a
+    statement inherits its date relation only)."""
+    inherited = {A.OCCASION: A.DATE_RELATION, A.PERFORMER: A.PERFORMER, A.PERFORMER_PERSON: A.PERFORMER_PERSON}
+    heirs = set()
+    if family is F.SECTION and field.attribute in inherited:
+        attribute = inherited[field.attribute]
+        for item in prepared.read.answer['events']:
+            own = item
+            for part in xs.field(F.EVENT, attribute).path:
+                own = own[part]
+            statement = item['status']['state'] == 'negated'
+            if (prepared.checked.containing.get(item['id']) == name and not own
+                    and (attribute is A.DATE_RELATION or not statement)):
+                heirs.add((F.EVENT.value, item['id'], attribute.value))
+    return lambda path: (path[:3] == (family.value, name, field.attribute.value) or path[:3] in heirs)
+
+
+class SlotRuleTests(Case):
+    """AMENDMENT-2 4.3 (step f3s's contract places): a slot holding more than one fact, read under gemini-events@3, is
+    read with that attribute unresolved and everything else read; on each of the 38 slots, in each of 4.3.3's three
+    shapes, nothing derived from the slot is established (4.4: the overfilled reading is never stronger than any single
+    written fact read alone, under a faithful and under a yes-saying second reading), the slot settles as its written
+    facts - non-silent, unresolved, exactly the written values, each carrying slot_overfull - with its inherited
+    per-act facts likewise, and the row stores under gemini-inventory@3 alone."""
+
+    def test_the_plant_covers_every_slot_in_every_shape(self):
+        self.assertEqual(len(SLOT_FIELDS), 38)
+        self.assertEqual({(family, field.attribute) for family, field in SLOT_FIELDS}, set(extract_read.SLOTS))
+        for family, field, name, shape in plants():
+            facts = written_facts(family, field, name, shape)
+            with self.subTest(slot=(family.value, field.attribute.value, name), shape=shape):
+                self.assertGreater(len(facts), 1)
+                states = {item['state'] for item in facts}
+                self.assertEqual(states, {'supported': {'supported'}, 'mixed': {'supported', 'negated'},
+                                          'negated': {'negated'}}[shape])
+
+    def test_each_overfilled_slot_settles_as_its_written_facts_unresolved_and_establishes_nothing(self):
+        for family, field, name, shape in plants():
+            slot = (family, field.attribute)
+            with self.subTest(slot=(family.value, field.attribute.value, name), shape=shape):
+                data, facts = planted(family, field, name, shape)
+                if slot in extract_read.WHOLE_ANSWER_SLOTS:
+                    refused = extract_read.read(json.dumps(data), len(segment.units(NOTE)), version=V3)
+                    self.assertIsInstance(refused, extract_read.Refusal)
+                    self.assertEqual(refused.stage, 'bounds')
+                    continue
+                prepared = PreparedV3(NOTE, data)
+                # 4.3.4: no fact of the slot is claimed, controlled or asked about by a pair control
+                self.assertFalse([item for item in prepared.claim_set.appraised
+                                  if (item.key.family, item.key.object, item.key.attribute) == (family, name,
+                                                                                               field.attribute)])
+                over = prepared.settle()
+                stored_slot = at(over.events, 'encounter', field.attribute.value) if family is F.ENCOUNTER else at(
+                    over.events, family.value, name, field.attribute.value)
+                # 4.3.5-4.3.6: the written facts, each settled, non-silent, never established, each with slot_overfull
+                self.assertIsInstance(stored_slot, list)
+                self.assertEqual([(item.claim.state.value, item.claim.value) for item in stored_slot],
+                                 [(item['state'], item['value']) for item in facts])
+                for item in stored_slot:
+                    self.assertIsNotNone(item.claim.state)
+                    self.assertIn(item.result, (Result.UNRESOLVED, Result.UNKNOWN, Result.CONTRADICTED))
+                    self.assertIn(R.SLOT_OVERFULL, item.reasons)
+                    self.assertIsNone(item.appraisal)
+                excluded = slot_paths(family, field, name, prepared)
+                for path, fact_ in settled_paths(over.events).items():
+                    if excluded(path):
+                        self.assertNotIn(fact_.result, (Result.SUPPORTED, Result.NEGATED), path)
+                        if path[:3] != (family.value, name, field.attribute.value):
+                            self.assertIn(R.SLOT_OVERFULL, fact_.reasons, path)  # an inherited per-act fact
+                            self.assertEqual(fact_.claim.inherited_from, name, path)
+                # 4.4: never stronger than any single written fact read alone, under either second reading
+                singles = [PreparedV3(NOTE, planted(family, field, name, shape, index)[0])
+                           for index in range(len(facts))]
+                # and no fact the overfilled answer claims lacks a control a single written fact's answer gives it
+                controlled = {item.key: item.control is not None for item in prepared.claim_set.appraised}
+                for single in singles:
+                    for item in single.claim_set.appraised:
+                        if item.control is not None and item.key in controlled:
+                            self.assertTrue(controlled[item.key], item.key)
+                for oracle in (faithful, yes_man):
+                    mine = over if oracle is faithful else prepared.settle(oracle)
+                    if isinstance(mine, settle.Unhealthy):
+                        continue
+                    for index, single in enumerate(singles):
+                        alone = single.settle(oracle)
+                        if isinstance(alone, settle.Unhealthy):
+                            continue
+                        extra = established(mine.events, excluded) - established(alone.events, excluded)
+                        self.assertFalse(extra, (oracle.__name__, index, sorted(extra)))
+                # 4.3.6: the row stores under gemini-inventory@3 and only there
+                fields, _factset = stored_v3(prepared, over)
+                self.assertEqual((fields['interpretation_version'], fields['inventory_version']), PAIR_V3)
+                with self.assertRaises(store.UnknownShape):
+                    stored_row(prepared, over)
+
+
+class RulePlantSettleTests(Case):
+    """The plant per rule end to end (AMENDMENT-2 4.4 at settle; T3's "a plant test runs per K rule"; refute-f3s-r1
+    findings 1 and 2): every plant of tests/v2/test_consistency.rule_plants() - each rule of 3.1 and each attribute it
+    reads to decide a finding on another fact, in 4.3.3's three shapes and as pass 1's own contradiction - read under
+    gemini-events@3, claimed under gemini-appraisal@2 and settled under a faithful and a yes-saying second reading:
+    every target of a shape that states or offers the firing value (every shape, for an absence rule) is unestablished,
+    and nothing outside the planted attribute and the per-act facts that inherit it is established that one of its
+    written facts, read alone, leaves unestablished (the 38-slot plant above cites no word a rule reads, so it cannot
+    see this)."""
+
+    def test_nothing_derived_from_a_planted_attribute_is_established_beyond_each_written_fact_alone(self):
+        from tests.v2 import test_consistency as rules  # imported here, as test_consistency imports this module
+        for plant in rules.rule_plants():
+            field = xs.field(plant.family, plant.attribute)
+            alone: dict = {}
+
+            def single(facts, oracle, plant=plant, alone=alone):
+                name = (json.dumps(facts, sort_keys=True), oracle.__name__)
+                if name not in alone:
+                    alone[name] = PreparedV3(plant.text, plant.planted(facts)).settle(oracle)
+                return alone[name]
+            for name, written, states, singles in plant.shapes():
+                with self.subTest(rule=plant.rule, attribute=plant.attribute.value, shape=name):
+                    prepared = PreparedV3(plant.text, plant.planted(written))
+                    excluded = slot_paths(plant.family, field, plant.object_id, prepared)
+                    over = prepared.settle()
+                    self.assertNotIsInstance(over, settle.Unhealthy)
+                    if states or plant.absence:
+                        found = settled_paths(over.events)
+                        for target in plant.targets:
+                            path = (target.family.value, target.object, target.attribute.value, target.index)
+                            self.assertNotIn(found[path].result, (Result.SUPPORTED, Result.NEGATED), path)
+                    for oracle in (faithful, yes_man):
+                        mine = over if oracle is faithful else prepared.settle(oracle)
+                        if isinstance(mine, settle.Unhealthy):
+                            continue
+                        for index, facts in enumerate(singles):
+                            read_alone = single(facts, oracle)
+                            if isinstance(read_alone, settle.Unhealthy):
+                                continue
+                            extra = established(mine.events, excluded) - established(read_alone.events, excluded)
+                            self.assertFalse(extra, (oracle.__name__, index, sorted(extra)))
+
+
+class SlotRuleRowTests(Case):
+    """AMENDMENT-2 4.3.5 row by row (step f3s): a written fact of an overfilled slot settles through rows 1-4 with
+    slot_overfull among its reasons - a stated doubt naming it row 2, a contradicted written fact with passing sides row
+    1, every other row 4 - never established; an act's inherited fact of an overfilled section slot is one per-act fact
+    per written section fact; the drop rule reads an absorbing event's session through the merged view."""
+
+    def device(self, *written, doubts=()):
+        data = plant_answer()
+        event_of(data, 'E2')['technique']['device'] = list(written)
+        data['doubts'] = list(doubts)
+        prepared = PreparedV3(NOTE, data)
+        return prepared, at(prepared.settle().events, 'events', 'E2', 'technique.device')
+
+    def test_rows_one_two_and_four_each_keep_slot_overfull(self):
+        _prepared, stored_ = self.device(fact('cold_snare', src(['S7'])), fact('hot_snare', src(['S7']),
+                                                                               state='negated'))
+        self.assertEqual([(item.result, item.reasons) for item in stored_],
+                         [(Result.UNRESOLVED, (R.SLOT_OVERFULL,))] * 2)
+        _prepared, stored_ = self.device(fact('cold_snare', src(['S7'])), fact('hot_snare', src(['S7'])),
+                                         doubts=[doubt('technique', ['E2'], ['S7'])])
+        self.assertEqual({(item.result, item.reasons) for item in stored_},
+                         {(Result.UNKNOWN, (R.DOUBT_STATED, R.SLOT_OVERFULL))})
+        side = {'value': 'cold_snare', 'sources': [src(['S7'])]}
+        _prepared, stored_ = self.device(fact('', src(['S7']), state='contradicted',
+                                              options=[side, {'value': 'hot_snare', 'sources': [src(['S7'])]}]),
+                                         fact('electrocautery', src(['S7']), state='negated'))
+        self.assertEqual([(item.result, R.SLOT_OVERFULL in item.reasons) for item in stored_],
+                         [(Result.CONTRADICTED, True), (Result.UNRESOLVED, True)])
+
+    def test_an_overfilled_section_slot_gives_each_inheriting_act_its_written_facts(self):
+        data = plant_answer()
+        next(item for item in data['sections'] if item['id'] == 'N2')['performer'] = [
+            fact('documenting_team', frame(['S3'])), fact('other_clinician', frame(['S3']))]
+        prepared = PreparedV3(NOTE, data)
+        events = prepared.settle().events
+        for name in ('E1', 'E2', 'E3'):  # acts of N2 whose own performer slot is silent
+            with self.subTest(act=name):
+                stored_ = at(events, 'events', name, 'performer')
+                self.assertEqual([(item.claim.state, item.claim.value, item.claim.inherited_from) for item in stored_],
+                                 [(FactState.SUPPORTED, 'documenting_team', 'N2'),
+                                  (FactState.SUPPORTED, 'other_clinician', 'N2')])
+                self.assertEqual({item.result for item in stored_}, {Result.UNRESOLVED})
+                self.assertTrue(all(R.SLOT_OVERFULL in item.reasons for item in stored_))
+        self.assertIsInstance(at(events, 'events', 'E4', 'performer'), settle.SettledFact)  # a statement's is its own
+        self.assertFalse([item for item in prepared.claim_set.appraised if item.key.attribute is A.PERFORMER
+                          and item.key.object in ('E1', 'E2', 'E3')])
+
+    def test_an_acts_date_relation_is_judged_with_every_date_its_slot_states_or_offers(self):
+        """refute-f3s-r1 finding 1 end to end (AMENDMENT-2 4.3.3 [R:truth-T9], 4.4): an act's date relation - its own
+        on the date of service, or the one it inherits from N0's - settles unresolved (literal_mismatch, unappraised)
+        when its overfilled date slot states a date its words contradict, whatever the written order; it stays as a
+        single same-day date leaves it when the only other written date is denied, or when both are (a denied date is
+        no evidence, D193). Synthetic: tests/v2/test_consistency's DATES, E2 at S7."""
+        from tests.v2 import test_consistency as rules  # imported here, as test_consistency imports this module
+        before = rules.fact('2026-11-08', 'S7', words='11/08/2026')
+        today = rules.fact('2026-11-09', 'S8', words='11/09/2026')
+        own = [rules.fact('on_date_of_service', 'S7', words='was taken')]
+
+        def denied(item):
+            return dict(item, state='negated')
+        for inherits in (False, True):
+            for name, slot, held in (('the date alone', [today], False),
+                                     ('the day before, the date', [before, today], True),
+                                     ('the date, the day before', [today, before], True),
+                                     ('the date, the day before denied', [today, denied(before)], False),
+                                     ('both denied', [denied(today), denied(before)], False)):
+                with self.subTest(inherited=inherits, slot=name):
+                    fields = {'date': slot} if inherits else {'date': slot, 'date_relation': own}
+                    prepared = PreparedV3(rules.DATES, rules._dated_act(**fields)())
+                    relation = at(prepared.settle().events, 'events', 'E2', 'date_relation')
+                    self.assertEqual(relation.claim.inherited_from, 'N0' if inherits else None)
+                    if held:
+                        self.assertEqual(relation.result, Result.UNRESOLVED)
+                        self.assertIn(R.LITERAL_MISMATCH, relation.reasons)
+                        self.assertIsNone(relation.appraisal)
+                    else:
+                        self.assertEqual((relation.result, relation.reasons), (Result.SUPPORTED, ()))
+
+    def test_the_drop_rule_reads_an_absorbing_events_session_through_the_merged_view(self):
+        def kept(session_slot):
+            data = plant_answer()
+            event_of(data, 'E2')['session'] = session_slot
+            prepared = PreparedV3(NOTE, data)
+            card = next(card.id for card in prepared.claim_set.cards
+                        if prepared.claim_set.objects[card.id] == (F.SESSION, 'X1'))
+            out = prepared.settle(unlisted=[unlisted_entry(['S7'], 'act', 'snare', card)])
+            return len(out.events['unlisted']), [item.event for item in out.verification.unlisted.dropped]
+        self.assertEqual(kept([fact('X1', src(['S7']))]), (0, ['E2']))  # absorbed by E2, in X1
+        self.assertEqual(kept([fact('X1', src(['S7'])), fact('X2', src(['S7']))]), (1, []))  # E2's session unknown
+
+
+class PinByLabelTests(Case):
+    """AMENDMENT-2 8.1-8.2 (step f3s): settle checks the health thresholds' pin of the appraisal label it settles
+    under - HEALTH_THRESHOLDS_SHA256 under gemini-appraisal@1 (the default), HEALTH_THRESHOLDS_SHA256_V3 under @2."""
+
+    def test_each_label_checks_its_own_pin_and_no_other_label_is_settled(self):
+        self.assertEqual(settle.health_pins(),
+                         {interpretation.APPRAISAL_VERSION: interpretation.HEALTH_THRESHOLDS_SHA256,
+                          APPRAISAL_V3: interpretation.HEALTH_THRESHOLDS_SHA256_V3})
+        prepared = PreparedV3(NOTE, plant_answer())
+        appraisal = prepared.appraisal()
+        arguments = (prepared.read, prepared.checked, prepared.claim_set, (), appraisal, USAGE)
+        with mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256', HEALTH_PIN), \
+                mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256_V3', ''):
+            self.assertIsInstance(settle.settle(*arguments), settle.Settled)
+            with self.assertRaisesRegex(RuntimeError, 'gemini-appraisal@2 have no pin yet'):
+                settle.settle(*arguments, appraisal_version=APPRAISAL_V3)
+        with mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256', ''), \
+                mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256_V3', HEALTH_PIN):
+            self.assertIsInstance(settle.settle(*arguments, appraisal_version=APPRAISAL_V3), settle.Settled)
+            with self.assertRaisesRegex(RuntimeError, 'gemini-appraisal@1 have no pin yet'):
+                settle.settle(*arguments)
+        with mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256_V3', '0' * 64):
+            with self.assertRaisesRegex(RuntimeError, 'no longer match'):
+                settle.settle(*arguments, appraisal_version=APPRAISAL_V3)
+        for version in ('gemini-appraisal@3', 'gemini-events@3', ''):
+            with self.subTest(version=version), self.assertRaisesRegex(RuntimeError, 'gemini-appraisal@1 and'):
+                settle.check_pin(version)
+
+
+class SharedFormTests(Case):
+    """DECISIONS D292's U3 with D244 (step f3s): the share is pinned to the reach's own sentence - SHARED_FORM, the form
+    the reach's control rule renders, which a reached_anatomy control takes; a control of any other form is never read
+    by two facts, so a rewording of that control stops the share (fail-closed) and never reads one verdict twice."""
+
+    def test_the_shared_form_is_the_reachs_own_control_sentence(self):
+        rule = claims.control_rule(claims.ObjectClass.SESSION, A.REACHED, FactState.SUPPORTED, None)
+        self.assertEqual(settle.SHARED_FORM, claims.FORMS[(claims.ObjectClass.SESSION, A.REACHED,
+                                                           rule.as_state)].value)
+        self.assertEqual(settle.SHARED_FORM, claims.TemplateId.SESSION_REACHED_NEGATED.value)
+        anatomy = claims.control_rule(claims.ObjectClass.SESSION, A.REACHED_ANATOMY, FactState.SUPPORTED, None)
+        self.assertEqual((anatomy.as_attribute, anatomy.as_state), (A.REACHED, FactState.NEGATED))
+        for version in claims.VERSIONS:  # under both labels the control's sentence is the reach's own
+            self.assertEqual(claims.template(claims.TemplateId.SESSION_REACHED_NEGATED, version),
+                             'In session {session} the endoscope did not reach the {point}.')
+
+    def test_a_control_of_another_form_is_never_shared(self):
+        for version in (interpretation.APPRAISAL_VERSION, APPRAISAL_V3):
+            with self.subTest(version=version):
+                prepared = Prepared(SHARED_REACH, shared_answer()) if version == interpretation.APPRAISAL_VERSION \
+                    else PreparedV3(SHARED_REACH, shared_answer())
+                reach, anatomy = prepared.appraised(A.REACHED, 'X1'), prepared.appraised(A.REACHED_ANATOMY, 'X1')
+                self.assertEqual(reach.control, anatomy.control)
+                out = prepared.settle()
+                self.assertSettled(at(out.events, 'sessions', 'X1', 'reached_anatomy'), Result.SUPPORTED)
+                with mock.patch.object(settle, 'SHARED_FORM', claims.TemplateId.SESSION_REACHED.value):
+                    reworded = prepared.settle()
+                self.assertSettled(at(reworded.events, 'sessions', 'X1', 'reached', 0), Result.SUPPORTED)
+                self.assertSettled(at(reworded.events, 'sessions', 'X1', 'reached_anatomy'), Result.UNRESOLVED,
+                                   R.UNAPPRAISED)
+
+
+def stored_v3(prepared, out):
+    """The settled inventory written by store.row_v2 at gemini-inventory@3's pair and read back by store.load_v2 (the
+    engine's FactSet over an overfilled slot is step f3e's)."""
+    text_sha256 = hashlib.sha256(prepared.text.encode('utf-8')).hexdigest()
+    fields = stored_row(prepared, out, versions=PAIR_V3)
+    loaded = store.load_v2(fields, text_sha256=text_sha256, response_sha256='3' * 64,
+                           appraisal_response_sha256='5' * 64)
+    return fields, loaded
+
+
+def stored_row(prepared, out, versions=None):
+    text_sha256 = hashlib.sha256(prepared.text.encode('utf-8')).hexdigest()
+    return store.row_v2(encounter_id=uuid.uuid4(), revision_id=uuid.uuid4(), provider_run_id=uuid.uuid4(),
+                        appraisal_run_id=uuid.uuid4(), revision_text=prepared.text, text_sha256=text_sha256,
+                        request_sha256='2' * 64, response_sha256='3' * 64, appraisal_request_sha256='4' * 64,
+                        appraisal_response_sha256='5' * 64, events=out.events, verification=out.verification,
+                        versions=versions)
 
 
 # --- the module ----------------------------------------------------------------------------------------------------------

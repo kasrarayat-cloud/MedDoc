@@ -5,9 +5,9 @@ classes) and FRESH-C (a stratified sample of the U32 registry) inputs - recorded
 TEST instance under the live gate, and frozen before any evaluation - is kept in tests/fixtures/interpretation
 (MANIFEST.json, FREEZE.sha256, documents/, gemini/, variance/). Labels: each recording is FRESH; reading one here is
 REPLAY, and nothing is ever sent. Since DECISIONS D230 (2026-11-13) the interpreter's model is gemini-4-carbon; these
-recordings stay labelled gemini-4-argon and are replayed as Argon's (D272): the read path checks each against the model
-its own request named, which for a v1 request (gemini-generate@cptstudio-1) of record is Argon (adapter.READ_MODELS),
-never by changing MODEL for the test.
+recordings stay labelled gemini-4-argon and are replayed as Argon's (D272): the read path checks each against the models
+v1's requests have named (adapter.READ_MODELS: gemini-4-argon, which every v1 request of record named, or MODEL), never
+by changing MODEL for the test.
 
 What is asserted is the READING's structure, never a code:
 - the fixture files are the frozen ones (FREEZE.sha256);

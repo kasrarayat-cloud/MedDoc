@@ -919,7 +919,8 @@ class CallCheckTests(SentinelCase):
 
 RETIRED_NAMES = ('prompt', 'schema', 'read', 'normalize', 'verify', 'literals', 'identity', 'lexicon', 'relations',
                  'mapping', 'classes', 'ercp', 'facts', 'events', 'coverage', 'combination', 'assess')  # FINAL-V2 5.0
-KEPT = ('__init__', 'adapter', 'holds', 'sentinel', 'readers', 'overlay', 'store', 'wording', 'report', 'replay', 'dates')
+KEPT = ('__init__', 'adapter', 'holds', 'sentinel', 'readers', 'overlay', 'store', 'wording', 'report', 'replay', 'dates',
+        'fable_adapter')  # AMENDMENT-2 section 9: sentinel.KEPT gains fable_adapter
 
 
 def retired_call():

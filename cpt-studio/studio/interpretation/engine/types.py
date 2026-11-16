@@ -128,7 +128,8 @@ class Cited:
 @dataclass(frozen=True, slots=True)
 class Fact:
     """One settled fact as the engine reads it (FINAL-V2 4.1: Fact(result, value, state, options, reasons, spans)), with
-    the three text-free fields DECISIONS D188 adds, each empty by default, so 4.1's six-field constructor keeps working.
+    the three text-free fields DECISIONS D188 adds and the one AMENDMENT-2 4.3.3 adds, each empty by default, so 4.1's
+    six-field constructor keeps working.
 
     result: supported | negated | contradicted | unknown | unresolved (Result; 3.3). value: the claimed value in any
     state (an Enum member, an Id or an IsoDate); None only when the slot is silent or the claim value is empty (pass 1's
@@ -144,7 +145,12 @@ class Fact:
     section an act's fact was inherited from (1.5; 1.7 claim.inherited_from), None when it is the act's own slot; 4.5's
     performer row reads "D's own statement names a performer" as a performer fact that is not silent and has no
     inherited_from. counter: the spans of the evidence units of a contradicts or qualified verdict (3.2.5), quoted in
-    the hold question; empty otherwise."""
+    the hold question; empty otherwise.
+
+    negated_values (AMENDMENT-2 4.3.3): for the one fact a single-valued slot holding more than one written fact is read
+    as - unresolved, contradicted, value None, reason slot_overfull, and options every value the slot's facts wrote,
+    each once in written order - the written values whose fact was negated, in written order; empty for every other
+    fact. A reader of what pass 1 stated reads the options less these, so a denied value is never read as stated."""
     result: Result
     value: Value | None
     state: FactState | None
@@ -154,6 +160,7 @@ class Fact:
     cited: tuple[Cited, ...] = ()
     inherited_from: Id | None = None
     counter: tuple[Span, ...] = ()
+    negated_values: tuple[Value, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

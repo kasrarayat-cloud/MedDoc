@@ -1,11 +1,14 @@
 """Unit tests for ops/rollback_check.py, the D15 rollback runtime test (design/FINAL.md 12.3; design/ADJUDICATION.md
-P-1): the comparison it judges by, and the refusals it makes before anything runs. No Docker, database or network:
-the one-shot transport is replaced where a test reaches it.
+P-1): the comparison it judges by, and the refusals it makes before anything runs. No Docker or network: the one-shot
+transport is replaced where a test reaches it. AMENDMENT-2 8.5 [R:replay-R6]: the record kinds' SQL also runs on a
+disposable PostgreSQL the Fable candidate's rows fill, when one is configured the way CI configures it
+(test_install_harness2's DatabaseTest); without one those tests are skipped, never passed.
 
 Run from cpt-studio/:  python3 -B -m unittest discover -s ops -p 'test_*.py' -v
 """
 import base64
 import contextlib
+import importlib.util
 import io
 import json
 import subprocess
@@ -17,6 +20,26 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rollback_check as rc  # noqa: E402
+from test_install_harness2 import module_constants  # noqa: E402
+from test_install_interpreter import FableRows  # noqa: E402  (helpers only: no test of its own)
+
+APP_ROOT = Path(__file__).resolve().parents[1]
+
+
+def tearDownModule():
+    harness2 = sys.modules.get('test_install_harness2')
+    if harness2 is not None and 'connection' in harness2._DATABASE:  # this module's database tests made it
+        connection = harness2._DATABASE.pop('connection')
+        connection.creation.destroy_test_db(harness2._DATABASE.pop('old_name'), verbosity=0)
+
+
+def labels():
+    """studio/interpretation/__init__.py's labels, loaded from its file alone (it imports nothing: its docstring)."""
+    spec = importlib.util.spec_from_file_location('cpt_rollback_check_labels',
+                                                  APP_ROOT / 'studio' / 'interpretation' / '__init__.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def code(pk, status, actions=()):
@@ -377,6 +400,98 @@ class ScenarioV2(unittest.TestCase):
         self.assertTrue(problems[1].startswith('pass2_refusal: not counted'))
         self.assertEqual(len(rc.scenario_problems({})), len(rc.SCENARIO_V2))
         self.assertEqual(len(rc.scenario_problems(None)), len(rc.SCENARIO_V2))
+
+
+class ScenarioAmendment2(unittest.TestCase):
+    """AMENDMENT-2 8.5 [R:replay-R6]: the record kinds read both engine versions and every interpreter provider, and a
+    Fable candidate's run must hold its new versions' rows; every literal is the server's own label."""
+
+    def test_the_literals_are_the_servers_labels(self):
+        found = labels()
+        self.assertEqual(rc.V2_ENGINES, (found.ENGINE_VERSION_V2, found.ENGINE_VERSION_V3))
+        self.assertEqual(rc.READ_PROVIDERS, found.READ_PROVIDERS)
+        self.assertEqual((rc.PAIR_V3, rc.INVENTORY_V3, rc.ENGINE_V3, rc.ADAPTER_V3),
+                         (found.INTERPRETATION_PAIR_V3, found.INVENTORY_VERSION_V3, found.ENGINE_VERSION_V3,
+                          found.ADAPTER_VERSION_V3))
+        self.assertEqual(rc.DECLINED, module_constants(APP_ROOT / 'studio' / 'models.py', ('DECLINED',),
+                                                       within='InterpreterHold')['DECLINED'])
+        self.assertEqual(rc.READ_PROVIDERS, ('anthropic', 'gemini'))  # Fable's, and Gemini's stored runs
+
+    def test_each_kind_reads_both_engine_versions_and_every_interpreter_provider(self):
+        engines, providers = rc.sql_strings(rc.V2_ENGINES), rc.sql_strings(rc.READ_PROVIDERS)
+        self.assertEqual((engines, providers), ("('cpt-studio-events@2', 'cpt-studio-events@3')", "('anthropic', 'gemini')"))
+        by_key = {key: sql for key, _, sql in rc.SCENARIO_V2}
+        for key in ('held_code', 'excluded_code', 'reinstated_code', 'approved_with_modifier', 'approved_export',
+                    'member_answer', 'second_review', 'held_new_fact'):
+            with self.subTest(key=key):
+                self.assertIn(f'engine_version in {engines}', by_key[key])
+        for key in ('pass2_refusal', 'unhealthy_appraisal'):
+            with self.subTest(key=key):
+                self.assertIn(f'provider in {providers}', by_key[key])
+        joined = ' '.join(sql for _, _, sql in rc.SCENARIO_V2 + rc.SCENARIO_V3)
+        self.assertNotIn("engine_version = '", joined)
+        self.assertNotIn("provider = '", joined)
+        for statement in (sql for _, _, sql in rc.SCENARIO_V3):
+            self.assertTrue(statement.startswith('select count(*) from studio_'), statement)
+        self.assertEqual([key for key, _, _ in rc.SCENARIO_V3],
+                         ['fable_inventory', 'fable_assessment', 'fable_run', 'declined_hold'])
+        for wrong in ((), ("x'); drop table studio_job; --",), ('CPT-STUDIO',), (None,)):
+            with self.subTest(wrong=wrong), self.assertRaises(ValueError):
+                rc.sql_strings(wrong)
+
+    def test_a_fable_candidate_is_judged_on_its_new_versions_rows_too(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import install
+        self.assertTrue(rc.fable_candidate(install))  # this revision's installer installs the Fable interpreter
+        self.assertFalse(rc.fable_candidate(SimpleNamespace(INTERPRETER={'name': 'gemini'})))  # an earlier one
+        self.assertFalse(rc.fable_candidate(SimpleNamespace()))
+        found = {key: 1 for key, _, _ in rc.SCENARIO_V2 + rc.SCENARIO_V3}
+        self.assertEqual(rc.scenario_problems(found, rc.SCENARIO_V2 + rc.SCENARIO_V3), [])
+        problems = rc.scenario_problems({**found, 'declined_hold': 0, 'fable_run': 'RuntimeError: psql failed'},
+                                        rc.SCENARIO_V2 + rc.SCENARIO_V3)
+        self.assertEqual(problems, ["fable_run: not counted ('RuntimeError: psql failed')",
+                                    'declined_hold: the run holds no an interpreter hold with reason declined'])
+        self.assertEqual(rc.scenario_problems({**found, 'declined_hold': 0}), [])  # 6.4's kinds alone: as before
+
+
+class ScenarioOnAFableFilledDatabase(FableRows):
+    """AMENDMENT-2 8.5 [R:replay-R6]: SCENARIO_V2's and SCENARIO_V3's statements run as SQL on a database the Fable
+    candidate filled - every record kind on cpt-studio-events@3 rows and anthropic runs only - each count non-zero, so
+    assertion 7 passes; with the literals before the repair (cpt-studio-events@2, 'gemini') ten of the thirteen kinds
+    counted 0 on the same rows."""
+
+    def counts(self, kinds):
+        from django.db import connection
+        found = {}
+        with connection.cursor() as cursor:
+            for key, _, statement in kinds:
+                cursor.execute(statement)
+                found[key] = cursor.fetchone()[0]
+        return found
+
+    def test_every_record_kind_counts_non_zero_and_assertion_7_passes(self):
+        self.fill_d15()
+        found = self.counts(rc.SCENARIO_V2 + rc.SCENARIO_V3)
+        self.assertEqual(len(found), 18)  # 6.4's thirteen kinds (the export counted on its own) and 8.5's four
+        self.assertEqual([key for key, count in found.items() if count < 1], [])
+        self.assertEqual(rc.scenario_problems(found, rc.SCENARIO_V2 + rc.SCENARIO_V3), [])
+        from studio import models
+        self.assertFalse(models.Assessment.objects.filter(engine_version='cpt-studio-events@2').exists())  # none @2
+        self.assertFalse(models.ProviderRun.objects.filter(provider='gemini').exists())  # and no Gemini run
+
+    def test_the_literals_before_the_repair_count_ten_kinds_zero_on_the_same_rows(self):
+        self.fill_d15()
+        engines, providers = rc.sql_strings(rc.V2_ENGINES), rc.sql_strings(rc.READ_PROVIDERS)
+        before = tuple((key, title, sql.replace(f'engine_version in {engines}', "engine_version = 'cpt-studio-events@2'")
+                        .replace(f'provider in {providers}', "provider = 'gemini'"))
+                       for key, title, sql in rc.SCENARIO_V2)
+        self.assertEqual(sum(old != new for (_, _, old), (_, _, new) in zip(before, rc.SCENARIO_V2)), 10)
+        found = self.counts(before)
+        self.assertEqual(sorted(key for key, count in found.items() if count == 0),
+                         sorted(['held_code', 'excluded_code', 'reinstated_code', 'approved_with_modifier',
+                                 'approved_export', 'member_answer', 'second_review', 'held_new_fact', 'pass2_refusal',
+                                 'unhealthy_appraisal']))
+        self.assertEqual(len(rc.scenario_problems(found)), 10)
 
 
 class UpdateRows(unittest.TestCase):

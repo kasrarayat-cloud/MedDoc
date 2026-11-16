@@ -679,7 +679,8 @@ predict -> astra -> fable -> assess #1 -> astra_peer -> fable_peer -> assess #2
   when that run answers the request, the context is current and nothing else blocks a send - and an attempt recorded
   not sent, phase 1 or peer review, is never retried behind a reconcile or a context change.
 - **Worker deadlines:** a phase-1 or peer job's deadline covers `PARTICIPANT_LOOP_DEADLINE_SECONDS` (540 s) plus its
-  own bookkeeping, below `STALE_RUNNING_SECONDS` (600 s); the installer's stop timeout (600 s) is above both.
+  own bookkeeping, below `STALE_RUNNING_SECONDS` (600 s); the installer's stop timeout (1,500 s since AMENDMENT-2 1.12)
+  is above both.
 
 ### 12.2 The CMS tool executor (`studio/reference/tools.py`)
 
@@ -986,8 +987,8 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
 - **12.1, the upgrade mark.** A chain started by the upgrade's predict marks its peer stages `:after-upgrade`; they stop
   where they would send until a member's Resume, as its phase-1 stages do.
 - **12.1, deadlines.** A phase-1 or peer job's deadline is 580 s: the 540 s loop, 15 s to record its outcome and 25 s of
-  the stage's own work before the loop. It ends 20 s before `STALE_RUNNING_SECONDS` (600 s); the installer's 600 s stop
-  timeout outlasts it. A stage left with less than a whole loop's time is queued again, having reserved and sent nothing.
+  the stage's own work before the loop. It ends 20 s before `STALE_RUNNING_SECONDS` (600 s); the installer's 1,500 s
+  stop timeout (AMENDMENT-2 1.12) outlasts it. A stage left with less than a whole loop's time is queued again, having reserved and sent nothing.
 - **12.3 and 12.4, the frozen list and what a peer sees of Corti.** `frozen` lists `corti` when its run has response
   bytes, and a model participant whenever a reading was produced. Corti is shown to a peer only from a read, unrefused
   answer, with `modifiers: []`, `units` as the number of its entries, and `evidence` only as exact passages of the
@@ -4737,9 +4738,12 @@ again" on legacy encounters and closes the class-b item.
 `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`; RULINGS.md; DECISIONS D230, built by round w9r's step cb, D272).
 - **The model.** The interpreter's model, D13's code constant (`studio/interpretation/__init__.py` MODEL, named by the
   request's URL), is `gemini-4-carbon`: every request built names it, and an answer naming any other model sets the
-  model hold (P-5). The trial above, the FRESH recordings and the slips under `tests/fixtures/interpretation` were
-  answered by `gemini-4-argon` and stay labelled so: they are replayed as Argon's, the adapter reading each against the
-  model its own request named (a v1 request of record named Argon).
+  model hold (P-5). The trial above and the FRESH recordings were answered by `gemini-4-argon`, and the twelve
+  SYNTHETIC-SLIP answers under `tests/fixtures/interpretation/synthetic/`, hand-written and answered by no model, are
+  labelled `gemini-4-argon` (DECISIONS D274); all stay labelled so and are replayed as Argon's: the adapter reads a v1
+  answer against the models v1's requests have named (`gemini-4-argon`, which every v1 request of record named, or
+  MODEL, which a v1 request built since D230 names) and a design v2 answer against MODEL alone; the classifier holds any
+  answer that does not name MODEL.
 - **The request.** Both passes ask for thinking level high, the model's documented maximum, and 65,536 output tokens,
   its synchronous limit, which thinking tokens count toward; temperature stays in the body (the model ignores it and does
   not reject it). The bytes change before the first recording, so no version moves (D202). The HTTP timeouts stay until

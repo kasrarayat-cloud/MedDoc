@@ -16358,3 +16358,59 @@ four refutation lenses (false READY, design, reproduction, generality: 40 findin
     wrong READY 1 -> 0 (the restatement artifact), wrong exclusions 0 (F3all 8/9 and 1/9; the two 19 KB notes 0/7); the
     held-out batches 6/17 -> 10/16, 9/17 -> 6/16, wrong READY 2 -> 0, wrong exclusions 0. tests.v2: 2,496 tests, five
     named deliberate failures (the re-pins above).
+
+- **D293 The a2b integration's items for the lead (a2b/final/NOTES.md section 10), the reserved short document read in
+  the build, and the owner's budget directive of 2026-11-16 (session 31dfc45d, 2026-11-16).**
+  - Q-ERASE (step f3e; the gate's one red id), option (a). The 16 states release a code through a value-erasing
+    contradiction (pass 1's own contradiction of a fact, or an overfilled slot) of a fact whose classic weakening a named
+    release already takes: E1's support facts (D262_QM), an inherited act's status (D262_STATUS), its inherited
+    performer or date (D228_DQ2), and D264_CLEAN's clean-row release. They are accepted under one name, D293_ERASE, and
+    held to D264's every-row rule like every named release: each released code must keep every act still supporting it
+    meeting every row of evaluate's reading after the contradiction, so a named release can never be a false READY.
+    Reasons: D264 Q7 already reads a conflict doubt (CONTRADICTED) on these facts as UNRESOLVED and UNKNOWN; pass 1's own
+    contradiction and an overfilled slot erase the same value, so (b) would make the two routes to the same contradiction
+    disagree; (c) is a large capability loss on the commonest slots. OPEN_RELEASES is empty again and OpenQuestionsTests
+    stays as the guard for the next unruled release. Measured on the lead's tree: the 16 states under the fixtures' own
+    verdicts and 711 states under the 64 drawn verdict patterns of r4a QM's fixture all meet the every-row rule; both
+    counts are pinned.
+  - refute-f3e-r2 N1 (critical false READY), repaired by the refuter's rule, stated for the class: whenever a session fact
+    is not established and combination reads it as naming any session (an overfilled slot's merged view, or a negated
+    claim left open), possible_sessions keeps first every id it names that the FactSet does not hold (a dangling id),
+    then every session, as D227 R2-2 keeps a single unestablished claim's. Its family read stays fail-closed, so the
+    reading is never narrower than its written facts read alone (AMENDMENT-2 4.3.3 a, 4.4). This adds holds only, and
+    only on an undefined session id. coverage.sessions_of is a membership reader and keeps no undefined id for any fact;
+    it is unchanged. Pinned by the refuter's two inputs (43239 held competing_codes beside 45380; 99214 held separate_em)
+    over five shapes; mutant MN1 (the rule undone) fails 8 assertions.
+  - refute-f3e-r2 N2, option (b): 4.4 names the T2 device exception. A device view whose manual value is only denied
+    claims no manual examination (4.3.3 c; the design's T2), so 45378 is READY under it, while a single unresolved
+    written "manual denied" read alone holds 45378 not documented. That single reading is a pre-existing over-hold (a
+    hold, never a release), left as built. Option (a)'s repair is built only if a pair shows it.
+  - N3 and O4 (= f3e's R9): the fail-closed readings stand (every view leaves its sessions and lesions open; nothing a
+    view holds is worded as stated; negated_values as built). They add holds, never a READY. R9's two fields are not
+    built; they are revisited only on a pair's evidence.
+  - O9: HEALTH_THRESHOLDS_SHA256_V3 = 68591d1982640551c215a7714e1b2eba7e46102afd52f98b54f3c52d1812c848, the sha256 of
+    settle.health_document() with 3.2.6's thresholds unchanged. 8.2 sets it from D3, which D277 does not run. The paid
+    probes measured establishment 0.93-1.00 (refused below 1/2) and control acceptance at most 4.1% (refused above
+    1/2). HEALTH_THRESHOLDS_SHA256 (gemini-appraisal@1) stays unwritten, so no Gemini appraisal is settled (D275).
+  - refute-f3s-r2: F1 (critical) is closed by the integration's I3, as built. F2 (medium) is closed: a test row puts the
+    sides' words at the options only, and the refuter's mutant MD (the branch deleted) now fails it. F3 and F4 (design;
+    holds, never a release) and F5/F6 (text, a literal) stay as built and are named.
+  - The integration's choices are confirmed as built: I1-I3, T-I1, T-I2, A1-A21, the seam harness's e37 and e38. O1 is
+    not applied (both halves word ADDON through overlay.item_slots). O2 and O11 (fail-closed choices) stay as built. O3:
+    AMENDMENT-2 4.3.3 [R:truth-T3] supersedes D193's contradicted-date clause for L1, as built. O5-O7 and O10 are not
+    built (no ruling names them; text or the shared gate tool only). O8 is applied at the install:
+    RULED_ACT_MAX_SECS >= 7,800 on the ruled-mutation invocation.
+  - The reserved short documents. B/fb01 (S04) was read by step t's baseline test run and two of its expected outcomes
+    were seen (step t's DISCLOSURE 1), and B/fb09 became that test's fixture in its place. Both are withdrawn: never a
+    test document. The tools' pre-registered list gains `withdrawn` (full sha256 and why); the rule skips a withdrawn
+    document as it skips one read in a probe, before the family cap; and the set is restated by the rule. S01-S03 and
+    S08-S10 are unchanged. S04 is C/C2CL-021, S05 B/fb13, S06 C/C2CL-008, and S07 B/fb07 (the rule's next). Every other
+    mention of a short document in the built tree or the tools is an id in a list or a v1-era reference whose count is
+    unchanged from the base tree.
+  - The owner's directive, 2026-11-16 (class d, money), verbatim: "Dont ask me if it is past jsut do ityou have my
+    permision but try to handle the budget tho dont run any unneccry test". D279 item 4's $100 test-total stop is no
+    longer an approval gate. The session manages the budget: TEST_TOTAL_USD = $120, a protective ceiling that keeps a
+    reserve for the live site's reader on the shared account. At the ceiling the sends stop and the owner is told the
+    account needs topping up. No unnecessary paid test: only the ten pairs; a failed pair's document is never re-sent
+    (its fix is re-checked free by replay, and the next new pair confirms it); no confidence batches; no re-run of a
+    passed pair; a minimal post-install walk.

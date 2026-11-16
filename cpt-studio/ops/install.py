@@ -39,6 +39,7 @@ import threading
 import time
 import traceback
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = 'cpt-studio'
@@ -60,12 +61,17 @@ DB_VOLUME = 'cpt-studio-pg'
 FILES_VOLUME = 'cpt-studio-files'
 DB_CONTAINER = 'cpt-studio-db'
 SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
-# A stopped worker finishes the stage it is in (run_worker), which may be inside a harness participant phase's tool
-# loop: that ends by settings.PARTICIPANT_LOOP_DEADLINE_SECONDS (540 s for at most 4 exchanges; one send by 330 s,
-# Corti's by 150 s) and must be recorded before Docker kills the worker, or a request that reached the vendor is left
-# 'sending' (HARNESS.md 8, 11.2). 600 s is settings.STALE_RUNNING_SECONDS, the stale-stage sweep's bound: a stage still
-# running when the stop timeout passes is one that sweep settles as cut short anyway, so waiting longer buys nothing.
-STOP_SECONDS = {'web': 30, 'worker': 600}
+# A stopped worker finishes the stage it is in (run_worker), which may be inside a send: a harness participant phase's
+# tool loop (settings.PARTICIPANT_LOOP_DEADLINE_SECONDS, 540 s for at most 4 exchanges; one send by 330 s, Corti's by
+# 150 s), or one of the interpreter's two readings - one stream of up to settings.INTERPRETER_SEND_DEADLINE_SECONDS
+# (APPRAISER_SEND_DEADLINE_SECONDS for pass 2; 1,320 s each) inside its stage's JOB_DEADLINE_SECONDS (1,380 s). The
+# stage must be recorded before Docker kills the worker, or a request that reached the vendor is left 'sending' and a
+# reading's send is cut into an UNKNOWN outcome (HARNESS.md 8, 11.2; AMENDMENT-2 1.12). AMENDMENT-2 1.12 (DECISIONS
+# D289's G2-01): 1,500 s outlasts every stage's deadline (JOB_DEADLINE_SECONDS, the reading stages' 1,380 s the longest)
+# and every stale-stage threshold (STALE_RUNNING_SECONDS, 600 s, and STALE_RUNNING_SECONDS_BY_KIND, 1,440 s for the two
+# reading stages): a stage still running when the stop timeout passes is one the stale-stage sweep settles as cut short
+# anyway, so waiting longer buys nothing. A deploy may so wait up to 25 minutes for the old worker to stop.
+STOP_SECONDS = {'web': 30, 'worker': 1500}
 # The incoming web of a blue/green install, renamed to SERVICES['web'] once the old web is drained and stopped.
 INCOMING_WEB = SERVICES['web'] + '-next'
 # The old web's drain after the switch (drain_web): at least DRAIN_MIN_SECONDS, above gunicorn's 120 s request timeout
@@ -117,27 +123,40 @@ PARTICIPANTS = {
               'required': ('ANTHROPIC_API_KEY',), 'optional': ('ANTHROPIC_WORKSPACE_ID',)},
 }
 PARTICIPANT_FILE_LIMIT = 32_000  # the size the application's loaders accept (HARNESS.md 8)
-# The interpreter's credential (the Gemini migration: design/FINAL.md 13, DECISIONS D14), beside the participants' and
-# never one of them: it has its own mode (--interpreter-mode, CPT_STUDIO_GEMINI_MODE) and no access check. The owner's
-# source is root 0600, one line GEMINI_API_KEY=<key>; it is copied unread, by the participants' own helper and rules
-# (H_PARTICIPANT_SECRETS: key NAMES only), to /etc/cpt-studio/gemini.env (10150:10150 0400), and mounted read-only into
-# the WORKER alone when the interpreter is live. The web is given the mode and the path and no file, as for Corti and
-# the participants (a web that builds what the worker would send needs the worker's configuration, and only the worker
-# sends; service_problems refuses any bind in a web). A missing source leaves the interpreter installable only disabled
-# or replayed. Replay reads the recordings the image ships (tests/fixtures/interpretation/gemini/, kept in the image by
-# deploy/.dockerignore) and sends nothing. The model and the endpoint are the adapter's constants, never the
-# installer's.
-INTERPRETER = {'name': 'gemini', 'source': f'{PROVIDER_SOURCES}/gemini.env', 'target': f'{ETC_DIR}/gemini.env',
-               'mounted': '/run/cpt-studio/gemini.env', 'file_env': 'CPT_STUDIO_GEMINI_CREDENTIALS_FILE',
-               'mode_env': 'CPT_STUDIO_GEMINI_MODE', 'replay_env': 'CPT_STUDIO_GEMINI_REPLAY_DIR',
-               'replay_dir': '/app/tests/fixtures/interpretation', 'module': 'studio.interpretation.adapter',
-               'loader': 'load_gemini_credentials', 'setting': 'GEMINI_CREDENTIALS_FILE',
-               'required': ('GEMINI_API_KEY',), 'optional': ()}
+# The interpreter's credential (AMENDMENT-2 1.11; DECISIONS D275: the interpreter is Claude Fable 5.2 and reads CPT
+# Studio's existing Anthropic credential; D14's rule, the key in the worker only, is unchanged): the Fable participant's
+# file - the same source, target and mount as PARTICIPANTS[INTERPRETER_SHARES] - so the participants' run of the secrets
+# phase copies it, once (unread, by key NAME only: H_PARTICIPANT_SECRETS), and the WORKER alone binds it read-only,
+# once, whenever the Fable participant or the interpreter is live (one bind target: worker_credential_mounts). The
+# interpreter keeps its own mode (--interpreter-mode, CPT_STUDIO_GEMINI_MODE: the historical name, which sets the
+# interpreter whatever its provider) and has no access check of its own. The web is given the mode and the path and no
+# file, as for Corti and the participants (a web that builds what the worker would send needs the worker's
+# configuration, and only the worker sends; service_problems refuses any bind in a web). A missing source leaves the
+# interpreter installable only disabled or replayed. Replay reads the recordings the image ships
+# (tests/fixtures/interpretation/: anthropic/ holds Fable's, gemini/ Gemini's; kept in the image by
+# deploy/.dockerignore) and sends nothing. The model and the endpoint are the adapter's constants
+# (studio/interpretation/fable_adapter.py), never the installer's. The installer no longer copies or mounts the earlier
+# interpreter's key copy, LEGACY_INTERPRETER_COPY: one left on a host stays untouched and is reported (preflight,
+# secrets), because deleting a key copy is the owner's decision (class d).
+INTERPRETER = {'name': 'anthropic', 'source': f'{PROVIDER_SOURCES}/anthropic.env',
+               'target': f'{ETC_DIR}/anthropic-credentials.env', 'mounted': '/run/cpt-studio/anthropic-credentials.env',
+               'file_env': 'CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE', 'mode_env': 'CPT_STUDIO_GEMINI_MODE',
+               'replay_env': 'CPT_STUDIO_GEMINI_REPLAY_DIR', 'replay_dir': '/app/tests/fixtures/interpretation',
+               'module': 'studio.interpretation.fable_adapter', 'loader': 'load_anthropic_credentials',
+               'setting': 'ANTHROPIC_CREDENTIALS_FILE', 'required': ('ANTHROPIC_API_KEY',),
+               'optional': ('ANTHROPIC_WORKSPACE_ID',)}
+INTERPRETER_SHARES = 'fable'  # the participant whose credentials file the interpreter reads (AMENDMENT-2 1.11)
+LEGACY_INTERPRETER_COPY = f'{ETC_DIR}/gemini.env'  # the Gemini interpreter's own key copy, never written or read now
 INTERPRETER_MODES = ('disabled', 'live', 'replay')  # FINAL 13: --interpreter-mode live|replay|disabled
 # An access check sends one coding request (Corti, after the OAuth token request its adapter sends first) or one run of
-# the pipeline's tool loop, one request per exchange and at most PARTICIPANT_MAX_EXCHANGES (Astra, Fable): its deadline is the participant send deadline (330 s), plus the container's
-# start.
-ACCESS_CHECK_SECONDS = 420
+# the pipeline's tool loop, one request per exchange and at most PARTICIPANT_MAX_EXCHANGES (Astra, Fable): the
+# participant send deadline (330 s) and the container's start, 420 s. Before it sends it takes the installation-wide
+# provider lock, which a reading's send holds for its whole stream, and the installer asks it to wait for that lock
+# (ACCESS_CHECK_WAIT_FLAG): up to the interpreter's longest send deadline plus 60 s (1,380 s, the command computes it
+# from settings), so a reading in flight never fails an install (AMENDMENT-2 1.11 [R:cost-F-COST-8]). The one-shot's
+# timeout covers that wait as well: 1,380 + 420 = 1,800 s.
+ACCESS_CHECK_SECONDS = 1800
+ACCESS_CHECK_WAIT_FLAG = '--wait-for-lock'
 ACCESS_CHECK_OUTPUT_LIMIT = 64 * 1024
 # The CMS passage files the revision commits (HARNESS.md 5), in the repository and as the image ships them (/app is the
 # image's copy of cpt-studio/, built from git archive of the revision).
@@ -391,7 +410,8 @@ def parse_args(argv=None):
     parser.add_argument('--astra-mode', choices=('disabled', 'live'), help='Astra (OpenAI); disabled when not given')
     parser.add_argument('--fable-mode', choices=('disabled', 'live'), help='Fable (Anthropic); disabled when not given')
     parser.add_argument('--interpreter-mode', choices=INTERPRETER_MODES,
-                        help='the interpreter (Gemini; design/FINAL.md 13): disabled when not given, which pauses '
+                        help='the interpreter (Claude Fable 5.2, AMENDMENT-2: the Fable participant\'s Anthropic key; '
+                             'design/FINAL.md 13): disabled when not given, which pauses '
                              "every upload's reading (verify reports an app phase that did not give it); live sends "
                              'under --authorization-ref; replay reads the recordings the image ships and sends nothing')
     parser.add_argument('--access-check', action='store_true', default=None,
@@ -1247,11 +1267,35 @@ def participant_secrets() -> dict:
     return copied_credentials(PARTICIPANTS, 'participant')
 
 
-def interpreter_secrets() -> dict:
-    """The interpreter's credential (design/FINAL.md 13, D14), copied by the same helper and rules as the participants'
-    - unread, checked by key name only, 10150:10150 0400 - in a run of its own, so the participants' set is exactly as
-    it was and a refusal of either writes nothing for it. {'gemini': {state, source, key_names}}."""
-    return copied_credentials({INTERPRETER['name']: INTERPRETER}, 'interpreter')
+def interpreter_secrets(participants: object) -> dict[Any, Any]:
+    """The interpreter's credential (AMENDMENT-2 1.11): the file of the participant INTERPRETER_SHARES names, so the
+    participants' run of the secrets phase copied it - unread, checked by key name only, 10150:10150 0400 - and nothing
+    is copied again for the interpreter: its entry is that participant's, read from ``participants``
+    (participant_secrets' answer) and named the interpreter's. An answer that does not say what was done with that
+    file refuses (DECISIONS D66: never read as "none"). {INTERPRETER['name']: {state, source, key_names,
+    shared_with}}."""
+    entry = participants.get(INTERPRETER_SHARES) if isinstance(participants, dict) else None
+    if not (isinstance(entry, dict) and isinstance(entry.get('state'), str)):
+        raise InstallError(f"The copy of the participants' credentials did not say what it did with the "
+                           f"{INTERPRETER_SHARES} participant's file, which the interpreter reads (AMENDMENT-2 1.11).",
+                           details={'participant_credentials': participants})
+    return {INTERPRETER['name']: {**entry, 'shared_with': INTERPRETER_SHARES}}
+
+
+LEGACY_COPY_NOTE = (f"{LEGACY_INTERPRETER_COPY}, the earlier Gemini interpreter's key copy, is left untouched: "
+                    "nothing copies, mounts or reads it now, and deleting it is the owner's decision (class d)")
+
+
+def legacy_copy_state(paths: object) -> Any:
+    """What ``paths`` (helper_stat's answer) says of LEGACY_INTERPRETER_COPY (AMENDMENT-2 1.11): {'path', 'state':
+    'present' | 'absent' | 'not read', and LEGACY_COPY_NOTE's 'note' when it is present}. Reported, never a problem:
+    the installer neither writes nor removes it."""
+    found = paths.get(LEGACY_INTERPRETER_COPY) if isinstance(paths, dict) else None
+    if not isinstance(found, dict):
+        return {'path': LEGACY_INTERPRETER_COPY, 'state': 'not read'}
+    if not found.get('exists'):
+        return {'path': LEGACY_INTERPRETER_COPY, 'state': 'absent'}
+    return {'path': LEGACY_INTERPRETER_COPY, 'state': 'present', 'note': LEGACY_COPY_NOTE}
 
 
 def copied_credentials(specs, what) -> dict:
@@ -1274,7 +1318,8 @@ def copied_credentials(specs, what) -> dict:
 
 
 def credentials_target(name) -> str:
-    """The installed credentials file of 'corti', of a harness participant, or of the interpreter ('gemini')."""
+    """The installed credentials file of 'corti', of a harness participant, or of the interpreter (INTERPRETER['name'],
+    'anthropic': the Fable participant's file, AMENDMENT-2 1.11)."""
     if name == 'corti':
         return CORTI_TARGET
     return INTERPRETER['target'] if name == INTERPRETER['name'] else PARTICIPANTS[name]['target']
@@ -1929,8 +1974,19 @@ def participant_mount(name) -> str:
 
 
 def interpreter_mount() -> str:
-    """The interpreter's credentials file, read-only at the worker's path (design/FINAL.md 13, D14)."""
+    """The interpreter's credentials file, read-only at the worker's path (D14; AMENDMENT-2 1.11: the Fable
+    participant's file, so this is participant_mount(INTERPRETER_SHARES) to the byte)."""
     return f'type=bind,src={INTERPRETER["target"]},dst={INTERPRETER["mounted"]},readonly'
+
+
+def worker_credential_mounts(participants: list[str] | tuple[str, ...], interpreter: bool) -> list[str]:
+    """The credentials binds of a worker - or of a one-shot in its layout - that holds the files of ``participants``
+    (participant names) and, when ``interpreter`` is true, the interpreter's: each file bound ONCE (AMENDMENT-2 1.11:
+    the interpreter's file is the Fable participant's, so a worker with both live binds it one time; Docker refuses a
+    container that names one destination twice). The participants' come first, in their order, then the interpreter's
+    when it is a file of its own."""
+    binds = [participant_mount(name) for name in participants] + ([interpreter_mount()] if interpreter else [])
+    return list(dict.fromkeys(binds))
 
 
 def runtime_env(provider_mode, authorization_ref, *, credentials=False, participants=None, files=(), interpreter=None,
@@ -1988,15 +2044,15 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref, par
         # sends. Without the path, live mode had no provider in the web, so every setting or billing save
         # re-predicted and the worker re-sent a failed or not-sent request (pre-install review, 2026-10-26).
         # A live harness participant alike: its adapter builds requests without credentials (HARNESS.md 8). And the
-        # interpreter alike (design/FINAL.md 13; its adapter reads the key only to send, interpretation.adapter).
+        # interpreter alike (design/FINAL.md 13; its adapter reads the key only to send, interpretation.fable_adapter).
         return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{port}:8000', *environment,
                 image_id, 'web']
     extra = ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
-    for name, mode in modes.items():
-        if mode == 'live':
-            extra += ['--mount', participant_mount(name)]
-    if interpreting == 'live':  # the worker alone holds the interpreter's key (D14)
-        extra += ['--mount', interpreter_mount()]
+    # the worker alone holds a live participant's key and the live interpreter's (D14), each file once: the
+    # interpreter's is the Fable participant's (AMENDMENT-2 1.11), one bind target whichever of them is live
+    for bind in worker_credential_mounts([name for name, mode in modes.items() if mode == 'live'],
+                                         interpreting == 'live'):
+        extra += ['--mount', bind]
     return [*common, *hardening('1536m', 256, '1g'), '--no-healthcheck', *extra, *environment, image_id, 'worker']
 
 
@@ -2016,13 +2072,11 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
     """A --rm container of the app image with provider calls disabled - Corti's, every participant's and the
     interpreter's (design/FINAL.md 13) - unless ``environment`` gives its -e flags; returns the completed process.
     ``credentials``, ``participant_files`` (participant names) and ``interpreter_file`` mount those credentials files
-    read-only at the worker's paths."""
+    read-only at the worker's paths, each file once (worker_credential_mounts)."""
     name = f'cpt-studio-oneshot-{secrets.token_hex(8)}'
     if credentials:
         mounts = [*mounts, f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly']
-    mounts = [*mounts, *(participant_mount(participant) for participant in participant_files)]
-    if interpreter_file:
-        mounts = [*mounts, interpreter_mount()]
+    mounts = [*mounts, *worker_credential_mounts(participant_files, interpreter_file)]
     if environment is None:
         environment = runtime_env('disabled', '', credentials=credentials, files=participant_files,
                                   interpreter_file=interpreter_file)
@@ -2050,9 +2104,12 @@ PARTICIPANT_CREDENTIALS_CHECKS = {
            f'{spec["loader"]}(settings.{spec["setting"]})\n'
            f"print('{name}-credentials-parse-ok')\n")
     for name, spec in PARTICIPANTS.items()}
-# The interpreter's, likewise (design/FINAL.md 13: "the offline loader check follows the existing pattern"): its own
-# loader (interpretation.adapter.load_gemini_credentials, by the participants' rules with GEMINI_API_KEY its one key),
-# in the worker's mount layout, offline, with the interpreter itself disabled.
+# The interpreter's, likewise (design/FINAL.md 13: "the offline loader check follows the existing pattern"): the loader
+# its adapter reads the key with (AMENDMENT-2 1.11: interpretation.fable_adapter.load_anthropic_credentials, the
+# participants' own loader of the shared Fable file, ANTHROPIC_API_KEY required and ANTHROPIC_WORKSPACE_ID optional), in
+# the worker's mount layout, offline, with the interpreter itself disabled. It proves, too, that this revision's image
+# imports the adapter the interpreter sends through; an earlier image that has none fails it, so a switch-back to a
+# revision before AMENDMENT-2 runs its interpreter disabled or replayed only.
 INTERPRETER_CREDENTIALS_CHECK = ('from django.conf import settings\n'
                                  f'from {INTERPRETER["module"]} import {INTERPRETER["loader"]}\n'
                                  f'{INTERPRETER["loader"]}(settings.{INTERPRETER["setting"]})\n'
@@ -2069,8 +2126,8 @@ APP_SCRIPT_PRELUDE = 'import base64, json\nP = json.loads(base64.b64decode({payl
 COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 # The Gemini migration's stage kind 'interpret' (interpretation.JOB_KIND) is not among them (design/FINAL.md 12.1,
 # 13): no worker before it runs one, so CLOSE_STAGES closes an open interpret stage on every undo whose next worker
-# lacks it, settling the Gemini run it had in flight as any other (sending: unknown, reserved: not sent), and an older
-# revision's app phase refuses while one is open (UNRUNNABLE_STAGES), as for the participants' stages.
+# lacks it, settling the interpreter's run it had in flight as any other (sending: unknown, reserved: not sent), and
+# an older revision's app phase refuses while one is open (UNRUNNABLE_STAGES), as for the participants' stages.
 # Design v2 (docs/gemini-migration/FINAL-V2.md 6.4, step 6b): pass 2's stage kind 'appraise'
 # (interpretation.APPRAISE_JOB_KIND) is not among them either - the old worker would die on STAGES['appraise'] - so both
 # scripts treat it exactly as interpret: CLOSE_STAGES closes it on every undo whose next worker lacks it (the appraisal
@@ -2778,9 +2835,11 @@ print(ANSWER + json.dumps({'interpretation': made}))
 # Design v2 (FINAL-V2 6.2 [R:MO-1]; step 6b): the app phase asserts on the target, before the switch, that NO DESIGN V1
 # ROW exists - no Assessment whose engine_version is V1_ENGINE_VERSION and no EventInventory row whose
 # interpretation_version is V1_INTERPRETATION_VERSION - and refuses otherwise. v1 rows only, by exact version: v2's own
-# rows (cpt-studio-events@2, gemini-events@2/appraisal@1) and every legacy row never trip it, so a fix release after the
-# walk, the re-install after a switch-back and a same-revision app re-run (a provider-mode switch, the access check run
-# again, the recovery of a failed app: D83) all pass. (The pre-refutation predicate, the family cpt-studio-events@% and
+# rows (cpt-studio-events@2, gemini-events@2/appraisal@1, read as stored), AMENDMENT-2's that the Fable interpreter
+# writes (8.5: cpt-studio-events@3, gemini-events@3/appraisal@2 with gemini-inventory@3) and every legacy row never trip
+# it, so a fix release after the walk, the re-install after a switch-back and a same-revision app re-run (a
+# provider-mode switch, the access check run again, the recovery of a failed app: D83) all pass. (The pre-refutation
+# predicate, the family cpt-studio-events@% and
 # any EventInventory row, refused every install after v2's first row, on append-only tables only a deletion could
 # clear.) The branch was never installed, so live holds no v1 row; a test instance's v1 rows are read as stored by
 # EventReader's V1 branch and are never deleted here. The versions are the design's literals, given as P (the script
@@ -3469,8 +3528,9 @@ def with_update_note(note, closes) -> dict:
 REQUEUE_REASONS = ('reading_failed', 'no_stage', 'no_save', 'queued_before', 'not_readable')
 REQUEUED_KINDS = READING_STAGE_KINDS
 # studio.jobs.QUEUE_DEADLINE of this revision's image (a test pins the two equal): a queued stage waits that long for a
-# worker to claim it, then claim_next expires it before it starts (refutation w7r 6b-r1 R3)
-QUEUE_DEADLINE_MINUTES = 30
+# worker to claim it, then claim_next expires it before it starts (refutation w7r 6b-r1 R3). AMENDMENT-2 1.12: 60
+# minutes, since the one worker may hold a long note's two readings for about 20-27 minutes before it claims the next.
+QUEUE_DEADLINE_MINUTES = 60
 COALESCED_KINDS = ('extract',) + READING_STAGE_KINDS
 
 
@@ -5253,7 +5313,10 @@ def interpreter_source_problems(paths) -> list:
     """The interpreter's source (design/FINAL.md 13), read as a participant's: optional here - preflight does not know
     the mode the app phase will be given, and the app phase refuses --interpreter-mode live without its copy - but one
     that is there must be a root-owned 0600 regular file, or the secrets phase refuses it. ``paths``: helper_stat's
-    answer, the source included (its directory is participant_source_problems')."""
+    answer, the source included (its directory is participant_source_problems'). AMENDMENT-2 1.11: the source is a
+    participant's (INTERPRETER_SHARES), judged once, by participant_source_problems, so nothing is said of it twice."""
+    if INTERPRETER['source'] in {spec['source'] for spec in PARTICIPANTS.values()}:
+        return []
     found = paths[INTERPRETER['source']]
     if found.get('exists') and found != {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o600'}:
         return [f'{INTERPRETER["source"]} is not a root-owned 0600 regular file']
@@ -5304,8 +5367,11 @@ def phase_preflight(ctx) -> dict:
     if not all(details['images'].values()):
         problems.append('a pinned image (helper or postgres) is not present locally')
     participant_paths = [path for spec in PARTICIPANTS.values() for path in (spec['source'], spec['target'])]
-    details['paths'] = helper_stat([CORTI_SOURCE, ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR, PROVIDER_SOURCES,
-                                    *participant_paths, INTERPRETER['source'], INTERPRETER['target']])
+    # each path once: the interpreter's source and copy are the Fable participant's (AMENDMENT-2 1.11), and the earlier
+    # interpreter's own key copy is stat'd only to be reported (LEGACY_INTERPRETER_COPY; never a problem)
+    details['paths'] = helper_stat(list(dict.fromkeys([
+        CORTI_SOURCE, ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR, PROVIDER_SOURCES, *participant_paths,
+        INTERPRETER['source'], INTERPRETER['target'], LEGACY_INTERPRETER_COPY])))
     if not details['paths'][CORTI_SOURCE].get('exists'):
         problems.append(f'{CORTI_SOURCE} is missing')
     problems += participant_source_problems(details['paths'])
@@ -5313,6 +5379,7 @@ def phase_preflight(ctx) -> dict:
     details['participant_sources'] = {name: 'present' if details['paths'][spec['source']].get('exists') else 'absent'
                                       for name, spec in PARTICIPANTS.items()}
     details['interpreter_source'] = 'present' if details['paths'][INTERPRETER['source']].get('exists') else 'absent'
+    details['legacy_interpreter_copy'] = legacy_copy_state(details['paths'])
     details['letsencrypt'] = le_state()
     if not all(details['letsencrypt']['dirs'].values()):
         problems.append('a Let\'s Encrypt or webroot directory is missing')
@@ -5350,13 +5417,17 @@ def phase_secrets(ctx) -> dict:
     # The harness participants' credentials, after the set above and never part of it (HARNESS.md 8).
     participants = participant_secrets()
     states = ', '.join(f'{name} {entry["state"]}' for name, entry in participants.items())
-    # Then the interpreter's (design/FINAL.md 13, D14), in a run of its own: copied unread, by key name only.
-    interpreter = interpreter_secrets()
-    copied = ', '.join(f'{name} {entry["state"]}' for name, entry in interpreter.items())
+    # Then the interpreter's (AMENDMENT-2 1.11, D14): the Fable participant's file, which the run above copied - unread,
+    # by key name only - and nothing is copied again; the earlier interpreter's own key copy is only reported.
+    interpreter = interpreter_secrets(participants)
+    copied = ', '.join(f'{name} {entry["state"]} (the {entry["shared_with"]} participant\'s file)'
+                       for name, entry in interpreter.items())
+    legacy = legacy_copy_state(helper_stat([LEGACY_INTERPRETER_COPY]))
     return {'etc_dir': etc['etc_dir'], **result, 'participant_credentials': participants,
-            'interpreter_credentials': interpreter,
+            'interpreter_credentials': interpreter, 'legacy_interpreter_copy': legacy,
             'summary': f'secrets {result["state"]}; participant credentials: {states}; interpreter credentials: '
-                       f'{copied}; values never left the helper'}
+                       f'{copied}; values never left the helper'
+                       + (f'; {legacy["note"]}' if legacy['state'] == 'present' else '')}
 
 
 # --- migrations ----------------------------------------------------------------------
@@ -5793,7 +5864,12 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
     status alone and never with a cause the installer does not know: its receipt's error, else the last non-empty line
     of its stderr, each scanned with the rest and repeated only whole and only up to 300 characters (otherwise named,
     never cut). Only the end of stderr is kept and scanned, so a line that began before it is never taken for a whole
-    one."""
+    one.
+
+    It is asked to wait for the installation-wide provider lock (ACCESS_CHECK_WAIT_FLAG; AMENDMENT-2 1.11
+    [R:cost-F-COST-8]): the new worker may be in a reading's send, which holds that lock for up to the interpreter's
+    send deadline, and the check waits that out (the deadline plus 60 s) before it would refuse, inside
+    ACCESS_CHECK_SECONDS."""
     if name == 'corti':
         environment = runtime_env('live', authorization_ref, credentials=True)
         files = {'credentials': True}
@@ -5801,8 +5877,9 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
         environment = runtime_env('disabled', authorization_ref, participants={name: 'live'})
         files = {'participant_files': (name,)}
     try:
-        result = oneshot(image_id, ['manage', 'participant_access_check', '--participant', name], env_bytes,
-                         network=NETWORK, environment=environment, timeout=ACCESS_CHECK_SECONDS, **files)
+        command = ['manage', 'participant_access_check', ACCESS_CHECK_WAIT_FLAG, '--participant', name]
+        result = oneshot(image_id, command, env_bytes, network=NETWORK, environment=environment,
+                         timeout=ACCESS_CHECK_SECONDS, **files)
     except InstallError as error:  # it did not finish: whether its request reached the vendor is not known
         return {'ok': False, 'recorded': False, 'problem': f'{error} Whether its request reached the vendor is not '
                                                            'known; nothing it wrote was recorded.'}
@@ -6043,7 +6120,9 @@ def phase_switch_back(ctx) -> dict:
     in reverse. rollback-app's checks run first and refuse, stopping nothing, while
     this revision recorded what an older revision would act on, or show, wrongly (undo_hazards). ``--provider-mode``,
     the participant modes and ``--interpreter-mode`` are the previous pair's, as its own app phase was given them (a
-    revision before the Gemini migration has no interpreter: leave it disabled). What this revision made from event
+    revision before the Gemini migration has no interpreter: leave it disabled; one before AMENDMENT-2 has no Fable
+    adapter, so its interpreter's loader check fails live: give it disabled or replay). What this revision made from
+    event
     inventories is never a refusing reason: the receipt declares it in a note and the switch goes on (ADJUDICATION
     P-1). DECISIONS D59, D65, D82, D95 and D110: it refuses only on encounters with a record created since
     replaced_since's time - the earliest time recorded by the app receipt the pair is read from and by every app
@@ -7159,7 +7238,10 @@ def other_lineages(le: dict) -> tuple:
 # disabled as in every one-shot (a one-shot's mode is its own, so the worker's is read from the worker's configuration).
 # Nothing is written or sent. Every check of its self-test named here must have run and passed - one that ran fewer
 # checks proves less than it says - and the hold state is reported beside it, never judged here (a standing hold is the
-# operator's to release, with `manage interpreter_hold --release`).
+# operator's to release, with `manage interpreter_hold --release`). AMENDMENT-2 8.5 and section 9: 'model constant'
+# is the report's comparison of interpretation.MODEL_V3, fable_adapter.MODEL and fable_adapter.ENDPOINT with the
+# written-out report.D275_MODEL and report.D275_ENDPOINT (and the dormant Gemini adapter's with D13_MODEL and
+# FINAL_ENDPOINT), each with its literal, never with each other; the installer requires it run and passed, by name.
 INTERPRETATION_SELF_TEST = ('sentinel installed', 'deny set as pinned', 'positive control', 'positive control trips',
                             'model constant', 'no new-path legacy execution recorded',
                             'every new-path assessment carries its record', 'no sentinel trip',
@@ -7168,14 +7250,18 @@ INTERPRETATION_REPORT_SECONDS = 180
 INTERPRETATION_REPORT_LIMIT = 1024 * 1024  # bytes of the report's JSON that are read; more is refused, never cut
 
 
-def worker_interpreter_mode(container):
-    """The interpreter mode ``container`` was started with: its one CPT_STUDIO_GEMINI_MODE, read from Docker's record
-    of its environment, and nothing else of that record is read out (the env-file's values are there too). None when it
-    names none, or more than one."""
+def worker_mode_of(container: Any, variable: Any) -> str | None:
+    """The mode ``container`` was started with in ``variable`` (a mode variable: CPT_STUDIO_GEMINI_MODE, or a
+    participant's CPT_STUDIO_<NAME>_MODE), read from Docker's record of its environment, and nothing else of that record
+    is read out (the env-file's values are there too). None when it names none, or more than one."""
     env = ((container or {}).get('Config') or {}).get('Env') or []
-    found = [entry.split('=', 1)[1] for entry in env
-             if isinstance(entry, str) and entry.startswith(INTERPRETER['mode_env'] + '=')]
+    found = [entry.split('=', 1)[1] for entry in env if isinstance(entry, str) and entry.startswith(variable + '=')]
     return found[0] if len(found) == 1 else None
+
+
+def worker_interpreter_mode(container: Any) -> str | None:
+    """The interpreter mode ``container`` was started with: its one CPT_STUDIO_GEMINI_MODE (worker_mode_of)."""
+    return worker_mode_of(container, INTERPRETER['mode_env'])
 
 
 def holds_interpreter_key(container) -> bool:
@@ -7200,15 +7286,21 @@ def interpretation_evidence(ctx, image_id, worker) -> tuple:
     new-worker start (ADJUDICATION P-7: S4 of a blue/green switch, the worker's start of a swap - never the install's
     start: the old worker runs until S2, and its legacy assessments are not this revision's). The worker's interpreter
     mode must be the one that receipt installed, which is disabled only where --interpreter-mode said so (FINAL 13: the
-    install uses live); a live one's worker must hold its key, and no other worker may. A worker that names no
-    interpreter mode and holds no key, with no app receipt of this revision beside it, is no pair this installer
+    install uses live). The interpreter's key is the Fable participant's file (AMENDMENT-2 1.11), so the worker must
+    hold it whenever its interpreter or that participant is live, and a bind is reported only when neither is
+    [R:replay-R3]: a worker with the participant live and the interpreter disabled or replayed holds it rightly, and
+    verifies clean (D14's rule, the key in the worker only, is unchanged). A worker that names no interpreter mode and
+    holds no key but the live participant's, with no app receipt of this revision beside it, is no pair this installer
     started (every pair it starts names one): there is nothing of the interpreter to read, and the evidence says so.
-    With an app receipt, or a worker that names a mode or holds the key, every missing piece is a problem."""
+    With an app receipt, or a worker that names a mode or holds the key for no live holder, every missing piece is a
+    problem."""
     app = latest_receipt(ctx.receipts, 'app', ctx.revision)
     mode = worker_interpreter_mode(worker)
-    evidence = {'worker_mode': mode, 'worker_holds_key': holds_interpreter_key(worker)}
+    sharing = worker_mode_of(worker, PARTICIPANTS[INTERPRETER_SHARES]['mode_env'])
+    evidence = {'worker_mode': mode, 'worker_holds_key': holds_interpreter_key(worker),
+                'key_shared_with': {INTERPRETER_SHARES: sharing}}
     if app is None:
-        if mode is None and not evidence['worker_holds_key']:
+        if mode is None and (not evidence['worker_holds_key'] or sharing == 'live'):
             return ({**evidence, 'self_test': 'not run',
                      'summary': 'interpretation self-test not run: the worker names no interpreter mode and no app '
                                 'receipt of this revision names its new worker'}, [])
@@ -7231,10 +7323,16 @@ def interpretation_evidence(ctx, image_id, worker) -> tuple:
                         "given, so every upload's reading is paused (design/FINAL.md 11.2; the install uses live, "
                         'FINAL 13): rerun --phase app with --interpreter-mode live, or with --interpreter-mode '
                         'disabled to keep it paused')
+    # AMENDMENT-2 1.11 [R:replay-R3]: the shared file is expected whenever the interpreter or the participant whose file
+    # it is is live, and a bind is reported only when neither is
     if mode == 'live' and not evidence['worker_holds_key']:
         problems.append(f"the live interpreter's worker does not hold {INTERPRETER['target']} read-only")
-    if mode != 'live' and evidence['worker_holds_key']:
-        problems.append(f'the worker holds {INTERPRETER["target"]}, but its interpreter is not live')
+    elif sharing == 'live' and not evidence['worker_holds_key']:
+        problems.append(f"the worker of the live {INTERPRETER_SHARES} participant does not hold "
+                        f"{INTERPRETER['target']} read-only")
+    if mode != 'live' and sharing != 'live' and evidence['worker_holds_key']:
+        problems.append(f'the worker holds {INTERPRETER["target"]}, but neither its interpreter nor the '
+                        f'{INTERPRETER_SHARES} participant is live')
     asked = utc_moment(since) if isinstance(since, str) else None
     if asked is None:
         problems.append("the app receipt names no new worker's start, so the interpretation self-test was not read "

@@ -1051,7 +1051,7 @@ class Record(SimpleTestCase):
     def test_the_event_coding_record(self):
         R = snare_only()
         coding = C.event_coding(R, C.sessions(R), {'sel:0': (X1, (E1,)), 'sel:1': (X1, (E2,))})
-        self.assertEqual(coding['version'], 'cpt-studio-events@2')
+        self.assertEqual(coding['version'], 'cpt-studio-events@3')  # AMENDMENT-2 8.1: event_coding@3, the writer's
         found = coding['sessions']['X1']
         self.assertEqual((found['event'], found['kind'], found['part_of'], found['possibly_part_of']),
                          ('E1', 'colonoscopy', None, None))
@@ -1262,6 +1262,342 @@ class Monotone(SimpleTestCase):
 
 
 # --- the text-free boundary (5.7 measure 4, measure 5) -----------------------------------------------------------------
+
+
+# --- DECISIONS D287 (B9), D286 ruling F (B13) and G3-14 (B14), D292's E1j ------------------------------------------
+
+
+class D287ConflictKeys(SimpleTestCase):
+    """DECISIONS D287 (G3-28; build list B9 (i)): whenever a fact key names an act, it names facts.established_kind -
+    the catalogue kind of its supported kind with its supported purpose, else Kind.OTHER. For an act whose kind is
+    silent, unresolved, doubted, contradicted, negated, supported, or a clip supported for hemostasis, each beside a
+    broad denial of its kind and with its own status contradicted: every conflict key from coverage.Reader.conflicts,
+    act_witnesses and the bundling verdict, and classes' witnesses, is conflict:<established_kind> - and a relation's
+    conflict over an act whose label is OTHER is conflict:other, as in evaluate (as built: the claimed kind, else the
+    first side, so an act CPT Studio's reading does not establish was "the snare removal" in a key)."""
+
+    KINDS = (('silent', None, None), ('unresolved', unres(Kind.SNARE), None), ('doubted', doubted(Kind.SNARE, Kind.BIOPSY),
+                                                                              None),
+             ('contradicted', contra(Kind.SNARE, Kind.BIOPSY), None), ('negated', neg(Kind.SNARE), None),
+             ('supported', sup(Kind.SNARE), None), ('a clip supported for hemostasis', sup(Kind.CLIP),
+                                                    sup(Purpose.HEMOSTASIS)))
+
+    def scene(self, kind, purpose) -> FactSet:
+        act_ = act(Kind.SNARE, kind=kind, status=contra(PERFORMED, PLANNED), purpose=purpose)
+        if kind is None:
+            act_.pop(A.KIND, None)
+        part = act(Kind.INJECTION, part_of=sup(E2), relation=sup(ct.PartRelation.LIFT_FOR))
+        return build({E1: exam(), E2: act_, E3: denial(Kind.SNARE if purpose is None else Kind.CLIP), E4: part})
+
+    def test_every_conflict_key_names_the_acts_one_label(self):
+        from studio.interpretation.engine import classes as CL
+
+        for name, kind, purpose in self.KINDS:
+            with self.subTest(name):
+                R = self.scene(kind, purpose)
+                label = F.established_kind(R, E2)
+                wanted = f'conflict:{label.value}'
+                keys = {held.fact for held in C.Reader.of(R).conflicts(E2)}
+                keys |= {held.fact for held in C.act_witnesses(R, E2) if held.fact.startswith('conflict:')}
+                self.assertTrue(keys, name)
+                self.assertEqual(keys, {wanted}, name)
+                verdict_keys = {held.fact for held in C.verdict(R, E4).held if held.fact.startswith('conflict:')}
+                self.assertLessEqual(verdict_keys, {wanted}, name)
+                self.assertEqual(label, Q.act_kind(R, E2, ()))  # questions.act_kind: the same derivation
+                self.assertEqual(CL._conflict_kind(E2, R), label)
+
+    def test_a_relation_conflict_over_another_act_is_conflict_other(self):
+        """B9 (i) and (iv), g3c's shape 2: the act PERFORMED beside the denial of its kind, so pairing gives the relation
+        CONTRADICTION (with its own status contradicted the relation is a doubt, and Reader.conflicts' pair branch is
+        never read): over an act whose kind is not established the relation's conflict is conflict:other, the act's one
+        label, as evaluate's _row_clean keys it (as built: the denial's kind, "the snare removal"); over a supported snare
+        it is conflict:snare. Over a supported clip for hemostasis the pair branch names the first kind through which
+        the statement concerns it (conflict:clip), as evaluate does (this step's NOTES, question Q-RELKEY)."""
+        for name, kind, purpose, wanted in (
+                ('silent', None, None, 'conflict:other'), ('unresolved', unres(Kind.SNARE), None, 'conflict:other'),
+                ('doubted', doubted(Kind.SNARE, Kind.BIOPSY), None, 'conflict:other'),
+                ('contradicted', contra(Kind.SNARE, Kind.BIOPSY), None, 'conflict:other'),
+                ('supported', sup(Kind.SNARE), None, 'conflict:snare'),
+                ('a clip supported for hemostasis', sup(Kind.CLIP), sup(Purpose.HEMOSTASIS), 'conflict:clip')):
+            with self.subTest(name):
+                act_ = act(Kind.SNARE, kind=kind, status=sup(PERFORMED), purpose=purpose)
+                if kind is None:
+                    act_.pop(A.KIND, None)
+                R = build({E1: exam(), E2: act_, E3: denial(Kind.SNARE if purpose is None else Kind.CLIP)})
+                relation = {held.fact for held in C.Reader.of(R).conflicts(E2) if held.cause == C.RELATION_CONTRADICTION}
+                self.assertEqual(relation, {wanted}, name)
+                if wanted == 'conflict:other':
+                    self.assertIs(F.established_kind(R, E2), Kind.OTHER)
+
+    def test_a_population_of_conflict_keys_names_established_kinds(self):
+        """B9 (iii): over the module's generated agreement scenes, every held fact keyed conflict:<k> on an event that
+        Reader.conflicts or act_witnesses gives has k equal to that event's established kind."""
+        rng = random.Random(20261116)
+        checked = 0
+        for _ in range(300):
+            R = agreement_scene(rng)
+            for event_ in R.events:
+                for held in (*C.Reader.of(R).conflicts(event_), *C.act_witnesses(R, event_)):
+                    if held.fact.startswith('conflict:') and held.subject == event_:
+                        self.assertEqual(held.fact, f'conflict:{F.established_kind(R, event_).value}')
+                        checked += 1
+        self.assertGreater(checked, 50)
+
+
+class D286DoneWhole(SimpleTestCase):
+    """DECISIONS D286 ruling F (G3-13 option (b); refute-r4b-r1 V9R4B1-1): coverage.inclusion_asks_no_code answers no
+    unless the including session is done, so beside a C3 whole that is not done - weakened, or told by nothing - the
+    EGD keeps its no_proposal item and completeness reads incomplete (as built: no item, "Every documented service has a
+    proposal to review."). Beside a done whole nothing moves; no assessed code's reading moves."""
+    SEP = (sup(ct.EncounterRelation.SEPARATE_ENCOUNTER),)
+    LATER_ = ct.DateRelation.LATER_DATE
+
+    def scene(self, e2=None, part_of=sup(X2)) -> FactSet:
+        events = {E1: exam(session=sup(X1))}
+        if e2 is not None:
+            events[E2] = e2
+        return build(events, sessions={X1: session(SessionKind.EGD, part_of=part_of),
+                                       X2: {**session(SessionKind.EUS, tract=ct.Tract.UPPER), A.ENCOUNTER: self.SEP}})
+
+    def items(self, R, counted=()):
+        cov = C.reconcile(R, list(counted), procedure_day=True)
+        comp = C.completeness(cov, C.sessions(R), open_questions=0, provider_ok=True, conflicts=0,
+                              label=lambda s: str(s.id))
+        return [(item.reason, item.detail) for item in cov.unresolved if item.session == X1], comp['state']
+
+    def test_c3_completeness_beside_a_whole_not_done(self):
+        """refute-r4b-r1's c3_completeness grid and c3_told_by_nothing: the planned EUS's examination weakened (its kind
+        or session unresolved, a doubt on its device reading manual), or the EUS told by nothing - the EGD's no_proposal
+        item is listed and completeness is incomplete; as filed (the EUS settled: no whole) the same as before; with
+        43235 counted the EGD is covered by its own code."""
+        planned = dict(status=sup(PLANNED), date=sup(self.LATER_))
+        no_proposal = [(C.ItemReason.NO_PROPOSAL, C.Detail.SESSION_PERFORMED)]
+        counted = [C.Counted('sel:0', '43235', SessionKind.EGD, (E1,))]
+        for name, e2 in (('as filed (settled)', exam(session=sup(X2), **planned)),
+                         ('weakened: kind unresolved', exam(session=sup(X2), kind=unres(Kind.EXAMINATION), **planned)),
+                         ('weakened: session unresolved', exam(session=unres(X2), **planned)),
+                         ('weakened: device doubt reading manual',
+                          exam(session=sup(X2), device=doubted(ct.Device.ENDOSCOPE, ct.Device.MANUAL), **planned)),
+                         ('told by nothing', None)):
+            with self.subTest(name):
+                R = self.scene(e2)
+                record = C.sessions(R)
+                self.assertFalse(record[X2].done)
+                self.assertEqual(self.items(R), (no_proposal, 'incomplete'))
+                self.assertEqual(self.items(R, counted)[0], [])
+                if record[X1].part_of is not None:
+                    self.assertFalse(C.inclusion_asks_no_code(record, record[X1], []))
+
+    def test_c3_counted_eus_weakened_row_lists_the_egd(self):
+        """c3_counted_eus.py: 43259 counted for the EUS (supporting E2), E2's kind weakened to unresolved: the EGD's
+        no_proposal item is listed (as built the C3 whole, not done, swallowed it)."""
+        counted = [C.Counted('sel:1', '43259', SessionKind.EUS, (E2,))]
+        R = self.scene(exam(session=sup(X2), status=sup(PLANNED), date=sup(self.LATER_), kind=unres(Kind.EXAMINATION)))
+        self.assertIn((C.ItemReason.NO_PROPOSAL, C.Detail.SESSION_PERFORMED), self.items(R, counted)[0])
+
+    def test_beside_a_done_whole_the_part_asks_no_code(self):
+        """c3_done_whole_control.py: the EUS done today (its examination E2 done, same encounter): X1 asks no code, as
+        v1 read it - with nothing counted X2 carries its own item, and with 43259 counted completeness is
+        complete_pending_review."""
+        R = build({E1: exam(session=sup(X1)), E2: exam(session=sup(X2))},
+                  sessions={X1: session(SessionKind.EGD, part_of=sup(X2)),
+                            X2: session(SessionKind.EUS, tract=ct.Tract.UPPER)})
+        record = C.sessions(R)
+        self.assertTrue(record[X2].done)
+        self.assertTrue(C.inclusion_asks_no_code(record, record[X1], []))
+        self.assertEqual(self.items(R)[0], [])
+        self.assertEqual(self.items(R, [C.Counted('sel:0', '43259', SessionKind.EUS, (E2,))]),
+                         ([], 'complete_pending_review'))
+
+    def test_a_generated_pin_over_the_four_states(self):
+        """The module's P-MONO at the records ("What a weakening may not release, reconcile keeps listed"), over the
+        including session's four states - done today, possibly done (its date open), settled (planned), told by
+        nothing - and each C3 claim form: the part asks no code of its own exactly when the whole it is read in is
+        done."""
+        planned = exam(session=sup(X2), status=sup(PLANNED), date=sup(self.LATER_))
+        for state, e2 in (('done', exam(session=sup(X2))), ('possibly done', exam(session=sup(X2), date=unres(ON))),
+                          ('settled', planned), ('told by nothing', None)):
+            for claim in (sup(X2), unres(X2), doubted_empty(X2)):
+                with self.subTest(state=state, claim=claim.result.value):
+                    R = self.scene(e2, claim)
+                    record = C.sessions(R)
+                    asks_none = C.inclusion_asks_no_code(record, record[X1], [])
+                    whole = record[X1].part_of
+                    self.assertEqual(asks_none, whole is not None and record[whole].done)
+                    listed = (C.ItemReason.NO_PROPOSAL, C.Detail.SESSION_PERFORMED) in self.items(R)[0]
+                    self.assertEqual(listed, not asks_none)
+
+
+class D286EmptySlotClaim(SimpleTestCase):
+    """DECISIONS D286 (G3-14 option (a); refute-r4b-r1 V9R4B1-2 = r4b Q1): coverage._part_of_session and 4d's
+    combination.wholes read one set - a not-established part_of_session's claimed value and options, an empty slot's
+    doubt included, never a session nothing names (as built coverage read facts.possibly, true for every session over
+    an empty slot, and 4d read such a slot as no claim)."""
+
+    def egd_beside(self, eus, part_of, *, x3=False) -> FactSet:
+        events = {E1: exam(session=sup(X1))}
+        if eus == 'planned':
+            events[E2] = exam(session=sup(X2), status=sup(PLANNED), date=sup(ct.DateRelation.LATER_DATE))
+        elif eus == 'earlier':
+            events[E2] = exam(session=sup(X2), date=sup(EARLIER))
+        elif eus == 'today':
+            events[E2] = exam(session=sup(X2))
+        elif eus == 'date open':
+            events[E2] = exam(session=sup(X2), date=unres(ON))
+        eus_record = {**session(SessionKind.EUS, tract=ct.Tract.UPPER), A.ENCOUNTER:
+                      (sup(ct.EncounterRelation.SEPARATE_ENCOUNTER),)}
+        sessions_ = {X1: session(SessionKind.EGD, part_of=part_of), X2: eus_record}
+        if x3:
+            sessions_[X3] = eus_record
+        return build(events, sessions=sessions_)
+
+    def answers(self, R):
+        record = C.sessions(R)[X1]
+        mine = ([(record.part_of, True)] if record.part_of is not None
+                else [(record.possibly_part_of, False)] if record.possibly_part_of is not None else [])
+        return mine, [(whole.session, whole.established) for whole in CB.wholes(R, X1)]
+
+    def test_every_claim_form_gives_one_answer_in_both_modules(self):
+        """r4b Q1's grid (g314_claim_probe.py): the EGD's own claim - C3 supported X2, D70 unresolved X2, D70 claimed X1
+        with a doubt reading X2, an empty slot a doubt names (X2), contradicted X1|X2 - beside the planned, the earlier,
+        the done, the date-open or the told-by-nothing EUS: coverage's whole equals 4d's in every row (as built the
+        empty slot's row differed beside the EUS told by nothing). Beside the EUS told by nothing, the empty slot a
+        doubt names makes X2 a possible whole in both, and base_within holds 43235 as for the unresolved claim."""
+        member = CB.Member('sel:0', '43235', SessionKind.EGD, X1, (E1,), procedural=True, supported=True)
+        for eus in ('planned', 'earlier', 'today', 'date open', None):
+            for name, part_of in (('C3 supported X2', sup(X2)), ('D70 unresolved X2', unres(X2)),
+                                  ('D70 claimed X1, reading X2', doubted(X1, X2)),
+                                  ('an empty slot, a doubt naming X2', doubted_empty(X2)),
+                                  ('contradicted X1|X2', contra(X1, X2))):
+                with self.subTest(eus=eus, claim=name):
+                    R = self.egd_beside(eus, part_of)
+                    mine, theirs = self.answers(R)
+                    self.assertEqual(mine, theirs)
+        for name, part_of in (('an empty slot, a doubt naming X2', doubted_empty(X2)), ('unresolved X2', unres(X2))):
+            with self.subTest(told_by_nothing=name):
+                R = self.egd_beside(None, part_of)
+                self.assertEqual(self.answers(R), ([(X2, False)], [(X2, False)]))
+                self.assertEqual([(found.wholes, found.established) for found in CB.base_within([member], R)],
+                                 [((X2,), False)])
+
+    def test_v9r4b1_2_an_empty_slot_naming_a_settled_session_names_nothing(self):
+        """V9R4B1-2's input (g314_emptyclaim_x3.py): the EGD's part_of_session an empty slot whose doubt names only X2, X2
+        planned at a later date (settled), a second upper EUS X3 told by nothing - both modules name no whole, and
+        event_coding records (None, None) (as built coverage named X3, which nothing names); a doubt naming X2 and X3
+        names X3 in both."""
+        R = self.egd_beside('planned', doubted_empty(X2), x3=True)
+        self.assertEqual(self.answers(R), ([], []))
+        coded = C.event_coding(R, C.sessions(R), {})['sessions']['X1']
+        self.assertEqual((coded['part_of'], coded['possibly_part_of']), (None, None))
+        R = self.egd_beside('planned', doubted_empty(X2, X3), x3=True)
+        self.assertEqual(self.answers(R), ([(X3, False)], [(X3, False)]))
+
+
+def e1j_colon(*, lesions=None, extra=None, controls_=None) -> FactSet:
+    """A colonoscopy X1 to the cecum (its examination E1) with the acts ``extra`` and the lesions ``lesions``."""
+    events = {E1: exam()}
+    events.update(extra or {})
+    return build(events, lesions=lesions, controls=controls_)
+
+
+class D292BiopsyElsewhere(SimpleTestCase):
+    """DECISIONS D292's E1j (HOLDS-ANALYSIS.md, THE FINAL FIX LIST item 1; FINAL-V2 4.7, 4.11, 5.1 row 10): whenever a
+    biopsy's target.lesion is a pure empty slot and its place list is established, the bundling rule
+    biopsy_of_removed_lesion is F when one supported place of the biopsy, for EVERY removal the rule could pair it with,
+    is disjoint from each of that removal's places (its target.places together with its target lesion's established
+    places), that removal was asked about it by a rejected pair control, and no place pair control asked of the biopsy or
+    of those removals is unrejected. The judge's G2 inputs (build-v2/holds/judge/g2/cases_j.py, synthetic, written for
+    the G2 set - outside every development set), at the bundling rule."""
+    P_ = A.TARGET_PLACES
+
+    def bundled(self, R, biopsy) -> list:
+        return [(bundle.rule, bundle.whole, bundle.truth) for bundle in C.bundles(R, biopsy)
+                if bundle.rule is C.Rule.BIOPSY_OF_REMOVED_LESION]
+
+    def snare(self, lesion_id, *places, device=ct.Device.COLD_SNARE, kind=Kind.SNARE) -> dict:
+        return act(kind, lesion=None if lesion_id is None else sup(lesion_id), places=tuple(sup(p) for p in places),
+                   device=sup(device))
+
+    def biopsy(self, *places) -> dict:
+        return act(Kind.BIOPSY, places=tuple(sup(p) for p in places), device=sup(ct.Device.COLD_FORCEPS))
+
+    def test_the_g2_releases(self):
+        """JS01 (a sigmoid polyp snared; random biopsies of the right and the left colon), JR01 (two left-sided polyps
+        snared, each asked about the right colon), JM03 (a removal whose lesion slot is purely silent): the biopsy was done
+        in the right colon, apart from every removal and its lesion, each removal asked about it and rejected - no
+        bundle (the biopsy code proceeds on its own rows)."""
+        sig, des, right, left = (Landmark.SIGMOID_COLON, Landmark.DESCENDING_COLON, Landmark.RIGHT_COLON,
+                                 Landmark.LEFT_COLON)
+        for name, R, biopsy in (
+                ('JS01', e1j_colon(lesions={L1: lesion(ct.Multiplicity.SINGLE, places=(sig,))},
+                                   extra={E2: self.snare(L1, sig), E3: self.biopsy(right, left)},
+                                   controls_={(E2, self.P_, right): True}), E3),
+                ('JR01', e1j_colon(lesions={L1: lesion(ct.Multiplicity.SINGLE, places=(des,)),
+                                            L2: lesion(ct.Multiplicity.SINGLE, places=(sig,))},
+                                   extra={E2: self.snare(L1, des), E3: self.snare(L2, sig),
+                                          E4: self.biopsy(right, left)},
+                                   controls_={(E2, self.P_, right): True, (E3, self.P_, right): True}), E4),
+                ('JM03', e1j_colon(extra={E2: self.snare(None, sig), E3: self.biopsy(right, left)},
+                                   controls_={(E2, self.P_, right): True}), E3)):
+            with self.subTest(name):
+                self.assertEqual(self.bundled(R, biopsy), [])
+                self.assertTrue(C._biopsy_elsewhere(C._Asker(R, biopsy, C.Reader.of(R))))
+
+    def test_the_g2_holds(self):
+        """JS02 (the 'elsewhere' place is the removed lesion's own: a polyp spanning the sigmoid and the descending colon,
+        its snare filed at the sigmoid), JS03 (the snare's lesion a doubt between two polyps), JR02 (FR-5: a lesion over
+        two segments, the EMR filed at one), JR03 (the removed lesion's place a doubt), JR10 (a place control left
+        unrejected), the biopsy naming a lesion, a removal place not established, and a synthetic removal: the biopsy
+        stays bundled in doubt (U), as built."""
+        sig, des, right, left, trans, splenic, hep, rect = (
+            Landmark.SIGMOID_COLON, Landmark.DESCENDING_COLON, Landmark.RIGHT_COLON, Landmark.LEFT_COLON,
+            Landmark.TRANSVERSE_COLON, Landmark.SPLENIC_FLEXURE, Landmark.HEPATIC_FLEXURE, Landmark.RECTUM)
+        single = ct.Multiplicity.SINGLE
+        doubtful_place = {L1: {A.PLACES: (doubted(hep, hep, trans),), A.DISTINCT_FROM: (), A.SAME_AS: (),
+                               A.MULTIPLICITY: (sup(single),)}}
+        named = self.biopsy(right, left)
+        named[A.TARGET_LESION] = (sup(L1),)
+        cases = (
+            ('JS02', e1j_colon(lesions={L1: lesion(single, places=(sig, des))},
+                               extra={E2: self.snare(L1, sig, device=ct.Device.HOT_SNARE), E3: self.biopsy(sig, des)},
+                               controls_={(E2, self.P_, des): True}), E3),
+            ('JS03', e1j_colon(lesions={L1: lesion(single, places=(sig,)), L2: lesion(single, places=(Landmark.CECUM,))},
+                               extra={E2: act(Kind.SNARE, lesion=doubted(L1, L1, L2), places=(sup(sig),),
+                                              device=sup(ct.Device.COLD_SNARE)), E3: self.biopsy(right, left)},
+                               controls_={(E2, self.P_, right): True}), E3),
+            ('JR02', e1j_colon(lesions={L1: lesion(single, places=(splenic, trans))},
+                               extra={E2: self.snare(L1, splenic, kind=Kind.EMR, device=ct.Device.SNARE),
+                                      E3: self.biopsy(trans, splenic)},
+                               controls_={(E2, self.P_, trans): True}), E3),
+            ('JR03', e1j_colon(lesions=doubtful_place, extra={E2: self.snare(L1, hep), E3: self.biopsy(right, trans)},
+                               controls_={(E2, self.P_, trans): True}), E3),
+            ('JR10', e1j_colon(lesions={L1: lesion(single, places=(sig,)), L2: lesion(single, places=(rect,))},
+                               extra={E2: self.snare(L1, sig, device=ct.Device.HOT_SNARE), E3: self.snare(L2, rect),
+                                      E4: self.biopsy(right, left)},
+                               controls_={(E2, self.P_, right): True, (E3, self.P_, right): False}), E4),
+            ('the biopsy names a lesion', e1j_colon(lesions={L1: lesion(single, places=(sig,))},
+                                                    extra={E2: self.snare(L1, sig), E3: named},
+                                                    controls_={(E2, self.P_, right): True}), E3),
+            ('a removal place not established', e1j_colon(
+                lesions={L1: lesion(single, places=(sig,))},
+                extra={E2: act(Kind.SNARE, lesion=sup(L1), places=(unres(sig),), device=sup(ct.Device.COLD_SNARE)),
+                       E3: self.biopsy(right, left)}, controls_={(E2, self.P_, right): True}), E3),
+            ('a synthetic removal beside', build({E1: exam(), E3: self.biopsy(right, left)},
+                                                 unlisted=(UnlistedStatement(units=(unit(40),), what=ct.UnlistedWhat.ACT,
+                                                                             kind=Kind.SNARE, session=X1),)), E3))
+        for name, R, biopsy in cases:
+            with self.subTest(name):
+                found = self.bundled(R, biopsy)
+                self.assertTrue(found, name)  # never F: bundled, or in doubt, as built
+                self.assertFalse(C._biopsy_elsewhere(C._Asker(R, biopsy, C.Reader.of(R))), name)
+                if name != 'the biopsy names a lesion':  # that one is bundled outright (the removed lesion, T)
+                    self.assertTrue(all(truth is U for _rule, _whole, truth in found), (name, found))
+
+    def test_the_read_set_holds_a_lesions_places_and_the_requirements_name_it(self):
+        """P-INDEP: E1j reads a whole's target lesion's places, so BUNDLING's read-set holds (lesion, places) (D292;
+        REQUIREMENTS_VERSION moves with it, the integration's label)."""
+        reads = {(item.role, item.attribute) for item in rq.RULES[rq.Requirement.BUNDLING].reads}
+        self.assertIn((rq.Role.LESION, A.PLACES), reads)
 
 
 class BoundaryTests(SimpleTestCase):
@@ -2597,6 +2933,48 @@ class NegationLeftOpen(SimpleTestCase):
                                  (frozenset({X1, X2}), {'X1': {'E3'}, 'X2': {'E3'}}))
 
 
+class OverfilledViewLeftOpen(SimpleTestCase):
+    """refute-f3e-r1 F1 (critical) and F3b (AMENDMENT-2 4.3.3 a, 4.4 [R:truth-T1]): coverage's two possibility readers
+    that take an unestablished denial as leaving every value open - sessions_of and _lesion_values - take EVERY
+    overfilled slot's merged view so (facts.open_denial). A view of one value written both ways ("X1" stated and "X1"
+    denied) carries nothing in negated_values, since the claimed-value readers must claim X1, so a reader widening only
+    on negated_values read it as X1 alone, narrower than the denial read alone; the view cannot tell whether a written
+    fact denied a value, so each reader reads it as the denial would (the step's NOTES question Q1R). Without the
+    widening in either reader, its test fails."""
+
+    def test_sessions_of_reads_every_session_view_as_a_written_denial(self):
+        from tests.v2.test_combination import overfilled
+
+        S_, N_ = State.SUPPORTED, State.NEGATED
+        denial = two_sessions(unres(X1, state=State.NEGATED))
+        expected = (frozenset({X1, X2}), {'X1': {'E3'}, 'X2': {'E3'}})
+        self.assertEqual((C.sessions_of(denial, E3), entries(denial)), expected)  # the denial read alone
+        stated = two_sessions(unres(X1))
+        self.assertEqual(C.sessions_of(stated, E3), frozenset({X1}))  # the statement read alone
+        for name, view in (('X1 stated, X1 denied', overfilled((S_, X1), (N_, X1))),
+                           ('X1 denied, X1 stated', overfilled((N_, X1), (S_, X1))),
+                           ('X1 stated, X2 denied', overfilled((S_, X1), (N_, X2))),
+                           ('X1 and X2 stated', overfilled((S_, X1), (S_, X2))),
+                           ('X1 stated twice', overfilled((S_, X1), (S_, X1)))):
+            with self.subTest(name):
+                R = two_sessions(view)
+                self.assertEqual((C.sessions_of(R, E3), entries(R)), expected)
+
+    def test_lesion_values_reads_every_lesion_view_as_a_written_denial(self):
+        from tests.v2.test_combination import overfilled
+
+        S_, N_ = State.SUPPORTED, State.NEGATED
+        R = build({E1: exam()}, lesions={L1: lesion(), L2: lesion()})
+        self.assertEqual(C._lesion_values(R, unres(L1, state=State.NEGATED)), frozenset({L1, L2}))  # the denial
+        self.assertEqual(C._lesion_values(R, unres(L1)), frozenset({L1}))  # the statement read alone
+        for name, view in (('L1 stated, L1 denied', overfilled((S_, L1), (N_, L1))),
+                           ('L1 denied, L1 stated', overfilled((N_, L1), (S_, L1))),
+                           ('L1 stated, L2 denied', overfilled((S_, L1), (N_, L2))),
+                           ('L1 and L2 stated', overfilled((S_, L1), (S_, L2)))):
+            with self.subTest(name):
+                self.assertEqual(C._lesion_values(R, view), frozenset({L1, L2}))
+
+
 # --- repair r4b, round 2 (refute-r4b-r1 R1-R5), each pinned by a test -----------------------------------------------
 
 
@@ -3857,7 +4235,10 @@ D269_SLOTS = (('its slot silent', None), ('its slot empty, a doubt naming X2', d
 D269_DATES = (('dated today', sup(ON)), ('undated: silent', None), ('undated: unresolved', unres(ON)),
               ('undated: a doubt', doubted(ON, ON, EARLIER)))
 D269_CLAIMS = (('no claim', None), ('C3: supported X2', sup(X2)), ('D70: unresolved X2', unres(X2)),
-               ('D70: claimed X1, a doubt reading X2', doubted(X1, X2)))
+               ('D70: claimed X1, a doubt reading X2', doubted(X1, X2)),
+               # DECISIONS D286 (G3-14): an empty slot a doubt names is a claim, read by its readings in both modules
+               ('D70: an empty slot, a doubt naming X2', doubted_empty(X2)),
+               ('D70: an empty slot, a doubt naming X1 and X2', doubted_empty(X1, X2)))
 
 
 def p2_reference_left_open(R: FactSet, session_: Id) -> tuple:
@@ -3920,7 +4301,8 @@ def p2_scene(rng: random.Random) -> FactSet:
                                          None]),
                              rng.choice([None, None, X1, X2, X9]), n=40 + index)
                     for index in range(rng.choice([0, 1, 1, 2])))
-    part_of = rng.choice([None, None, None, None, sup(X2), unres(X2), doubted(X1, X2)])
+    part_of = rng.choice([None, None, None, None, sup(X2), unres(X2), doubted(X1, X2), doubted_empty(X2),
+                          doubted_empty(X1, X2)])  # D286: doubted-empty claims in the generated agreement
     return build(events, sessions={X1: session(SessionKind.EGD, part_of=part_of), X2: {
         **session(SessionKind.EUS, tract=ct.Tract.UPPER), A.ENCOUNTER: (sup(SEPARATE),)}}, unlisted=entries)
 
@@ -3946,9 +4328,10 @@ class EstablishedNotDoneTodayIsNeverPossiblyDone(SimpleTestCase):
     def one_answer(self, R: FactSet) -> list:
         """Coverage's reading of X2 for the EGD X1 against step 4d's, on one FactSet: coverage's part_of (established)
         or possibly_part_of (possible) of X1, as [(session, established)], equals combination.wholes(X1); event_coding
-        records it; with no part_of_session claim of the EGD's own (the structural C-4 and D70 arms alone), X1 is part
-        of X2 in either sense exactly when 4d reads X2 possibly done - C3's and D70's claims name X2 whatever X2's
-        acts; and X2's possible examinations are 4d's reading (p2_reference_left_open) - none, and no whole by any arm,
+        records it; with no part_of_session claim of the EGD's own - a PURE empty slot: an empty slot a doubt names is
+        a claim, read by its readings in both modules (DECISIONS D286, G3-14) - X1 is part of X2 in either sense (the
+        structural C-4 and D70 arms alone) exactly when 4d reads X2 possibly done - C3's and D70's claims name X2
+        whatever X2's acts; and X2's possible examinations are 4d's reading (p2_reference_left_open) - none, and no whole by any arm,
         when 4d reads X2 established not done today (D269). Returns coverage's."""
         sessions_ = C.sessions(R)
         record = sessions_[X1]
@@ -3959,7 +4342,7 @@ class EstablishedNotDoneTodayIsNeverPossiblyDone(SimpleTestCase):
         self.assertEqual((coded['part_of'], coded['possibly_part_of']),
                          (None if record.part_of is None else str(record.part_of),
                           None if record.possibly_part_of is None else str(record.possibly_part_of)))
-        if F.silent(F.fact(R, X1, A.PART_OF_SESSION)):
+        if C._pure_silent(F.fact(R, X1, A.PART_OF_SESSION)):
             self.assertEqual(bool(mine), CB.session_possibly_done(R, X2))
         self.assertEqual(sessions_[X2].possible, p2_reference_left_open(R, X2))
         if CB.not_done_today(R, X2):
@@ -4089,7 +4472,9 @@ class EstablishedNotDoneTodayIsNeverPossiblyDone(SimpleTestCase):
 
     def test_p2_possible_examinations(self):
         """possible_examinations reads D269: beside a planned or an earlier EUS X2, an examination - or an act of no
-        kind - not done (its status performed or a doubt; its date silent, unresolved, a doubt or today), whose session
+        kind - (its status performed or a doubt; its date silent, unresolved, a doubt or today; done only in the 16 rows
+        of status performed and date today, a done act being no possible examination of any session whatever D269
+        says, which ``widened`` does not count), whose session
         slot does not claim X2 (silent; empty, a doubt naming X2, or X1 and X2; claimed X1 with a doubt reading X2), is
         no possible examination of X2, whatever its date or slot (equal to 4d's reading; round w8r listed it unless its
         slot was silent and its date not established: D256 P2's letter), and X2 is neither unresolved nor done; X1's

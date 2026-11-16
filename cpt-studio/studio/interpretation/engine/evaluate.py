@@ -4,7 +4,9 @@ P9, and its refutation refute-r4a-r1's F1, F4, F7; repair r4a of round w7r: D232
 refutation's P1 - a digital examination never makes a session non-act-only - and P5; repair r4a of round w8r: D253, a
 digital examination is never the session's done examination either, and, after its refutation refute-r4a-r1, never
 supports an examination code - P1; repair r4a of round w9r: D265, a digital examination never words, binds or changes
-an item, and D267's conflict key): one proposed code against the settled, text-free FactSet - its
+an item, and D267's conflict key; step f3w of AMENDMENT-2's build round: D280.1, row 7 reads no examination established
+as a digital examination, and D287, every conflict key names facts.established_kind): one proposed code against the
+settled, text-free FactSet - its
 candidates, its supporting acts (E*), every unresolved or failed requirement of every positive candidate, the binding of
 each held group, and its exclusion. Forked from v1's events.py and ercp.py with their readers deleted (5.5): the rules
 read results, ids and integer spans only, through engine/facts.py's predicates and engine/pairing.py's relations.
@@ -71,7 +73,12 @@ read results, ids and integer spans only, through engine/facts.py's predicates a
    passes rows 2-5 (an examination begun counts as done, as v1's done does), except that beside the session's own done
    examination - never a digital one (FINAL 5.6 E13, D253: as ``act_only`` and D227's session_done read it) - an event
    established as of another occasion (a plan, another date, another performer) adds nothing; a session with none is
-   the act's own (T). Another act's own facts never touch it (K2). A synthetic examination act of
+   the act's own (T). An examination ESTABLISHED as a digital examination (pairing.established_digital: kind supported
+   examination, device supported manual - E13's established reading, D227, D253) is read by no part of row 7: it is
+   neither the session's done examination nor one whose rows 2-5 must pass (DECISIONS D280.1), so it never words, binds
+   or changes an item; one whose device only claims manual is read as before and keeps QD2's hold (D280.3, D271),
+   worded by engine/questions (DIGITAL_SCOPE). Another act's own facts never touch it (K2). A synthetic examination act
+   of
    the session (D216: a kept unlisted act or doubt that may be its examination) is one that is never done: its doubt
    holds - in an act-only session only (D232: no event established as the session's examination, a digital examination
    excepted as combination.session_done's act-only arm excepts it - FINAL 5.6 E13, D227, refute-r4a-r1 P1; beside an
@@ -79,7 +86,8 @@ read results, ids and integer spans only, through engine/facts.py's predicates a
 8. no CONTRADICTION, DOUBT or UNRESOLVED relation from any paired statement (engine/pairing.py, 4.5) - each its rank-1,
    rank-2 or row's item - and no unlisted denial or doubt pairing with it (statement_scope, cause unlisted). A
    contradicted fact among rows 1-7 asks rank 1 (conflict:<kind>) on its own row, a doubt on status rank 2; an act
-   whose kind is not supported is conflict:other (D267: questions.act_kind's Kind.OTHER, its item's one label).
+   whose kind is not supported is conflict:other (D267, D287: facts.established_kind's Kind.OTHER, its item's one
+   label, which questions.act_kind, coverage's and classes' keys read too).
 E/M (the EM templates): the visit's session encounter supported this_encounter (event_time, rank 6).
 
 **An established failure with no explanation.** 4.8 makes an F an explanation; where neither 4.3 nor
@@ -478,12 +486,15 @@ def _held(fact: str, rank: rq.Rank | None, kind: ItemKind, attribute: Attribute 
 
 
 def _conflict_kind(R: FactSet, event: Id | None, group: Sequence[Kind]) -> Kind:
-    """The kind a conflict over ``event`` is keyed by (conflict:<kind>): questions.act_kind's - an act whose kind is not
-    SUPPORTED (negated, doubted, unresolved, contradicted, silent) or is other is Kind.OTHER, so its conflict is keyed
-    conflict:other, the one label its item names it by (DECISIONS D267, r4a-2 Q1 QK option (b): "the snare removal"
-    beside "another act" for one act is gone); no act, the code's group's first kind."""
-    found = questions.act_kind(R, event, group)
-    return found if found is not None else Kind.OTHER
+    """The kind a conflict over ``event`` is keyed by (conflict:<kind>): facts.established_kind - the catalogue kind of
+    its SUPPORTED kind with its supported purpose; an act whose kind is not SUPPORTED (negated, doubted, unresolved,
+    contradicted, silent) or is other is Kind.OTHER, so its conflict is keyed conflict:other, the one label its item names
+    it by (DECISIONS D287, build list B9: the one derivation questions.act_kind, coverage's and classes' keys read;
+    D267, r4a-2 Q1 QK option (b): "the snare removal" beside "another act" for one act is gone); no act, the code's
+    group's first kind (Kind.OTHER for none)."""
+    if event is not None:
+        return facts_.established_kind(R, event)
+    return group[0] if group else Kind.OTHER
 
 
 def _open(found: Fact, ask: rq.Item, attribute: Attribute, subject: Id, act: Id | None, group: Sequence[Kind],
@@ -798,6 +809,13 @@ def _row_done(c: _Code, group: Sequence[Kind], R: FactSet, event: Id) -> Row:
       examination filed as the colonoscopy's examination, "Colonoscopy in 2019 was normal." (or a planned repeat) filed
       in the session holds 45385 exactly as without the DRE line - so row 7's two readings of the session's examination,
       ``done`` and ``act_only``, agree with D227's session_done, and a fact E13 says never counts releases nothing.
+    - An examination ESTABLISHED as a digital examination (pairing.established_digital: kind supported examination,
+      device supported manual) is read by no part of row 7 (DECISIONS D280.1, build list B1): it is neither the
+      session's done examination nor one whose rows 2-5 must pass, so "The digital rectal examination was deferred."
+      filed as the colonoscopy's examination beside the colonoscope's done examination leaves 45385 READY, as the
+      document without the DRE line. One whose device only CLAIMS manual (unresolved, doubted, contradicted, an
+      overfilled slot) is read below and keeps QD2's hold (D280.3, D271); a 9.4 weakening never creates a supported
+      device, so this never releases under a weakening.
     - Otherwise each event's witnesses are recorded: F when it is established as the session's examination and an
       established fact fails rows 2-5, else U, with the witnesses of its kind and session when not established.
     - In an act-only session (``act_only``: no event established as its examination, a digital examination excepted:
@@ -821,7 +839,7 @@ def _row_done(c: _Code, group: Sequence[Kind], R: FactSet, event: Id) -> Row:
     done = any(is_examination_of(R, exam, session) and not rows[exam][0] and not _digital(R, exam) for exam in exams)
     for exam in exams:
         held, exam_failed = rows[exam]
-        if not held or (done and another_occasion(R, exam)):
+        if not held or (done and another_occasion(R, exam)) or pairing.established_digital(R, exam):  # D280.1
             continue
         if is_examination_of(R, exam, session):
             failed = failed or exam_failed

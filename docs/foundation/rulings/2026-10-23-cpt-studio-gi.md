@@ -3503,3 +3503,25 @@ about $100 of the $200 stays for the site's reader.
 
 (c) The probes of 2026-11-15 ($42.17 by the harness's upper bound) were sent on the same account before this answer;
 whether the $200 is counted before or after them is not known, and either way the test fits.
+
+## Owner directive, 2026-11-16 — no approval stop on the test spend; the session manages the budget
+
+Received 2026-11-16 in session 31dfc45d, answering the session's note that the owner would be asked only if the test's
+spend went past $100. Verbatim:
+
+> Dont ask me if it is past jsut do ityou have my permision but try to handle the budget tho dont run any unneccry test
+
+### Session interpretation, 2026-11-16 (31dfc45d, on receipt) — recorded, not owner-ruled (DECISIONS D293)
+
+(a) The $100 test-total stop of the previous answer is no longer an approval gate. The paid-test tools hold a protective
+ceiling of $120 (`TEST_TOTAL_USD`). It keeps a reserve for the installed site's Fable 5.1 second reader on the shared
+account, whether the owner's $200 is counted before or after the 2026-11-15 probes ($42.17). At the ceiling the sends
+stop and the owner is told that the account needs topping up. The owner is not asked for leave.
+
+(b) No unnecessary paid test. Only the ten pairs are sent. A failed pair's document is never re-sent: its fix is
+re-checked free by replay, and the next new pair confirms it. There are no confidence batches and no re-runs of a passed
+pair, and the post-install walk is kept to the minimum that verifies the install.
+
+(c) The pre-registered short set is restated by its own rule (DECISIONS D293). Two documents exposed during the build
+are withdrawn: B/fb01, which a build step's test run read, and B/fb09, which became that test's fixture in its place.
+Nothing else about the test protocol changes.

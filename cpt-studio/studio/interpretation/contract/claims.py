@@ -94,7 +94,17 @@ candidate is such a value (two lesions, each the other's only contrary: then the
 two pair controls asking one object the same question stay one claim. The claims are ordered by sha256 of (seed,
 content key) - a seed the caller derives from the request's inputs - and numbered K1.. in that order, so the order is a
 pure function of the inputs and tells nothing about which claim is a control or what pass 1 listed first. A claim set
-over CLAIM_BOUND (1.8: 640 claims per request) is never sent (7.4 door 0).
+over the bound of its label (claim_bound: CLAIM_BOUND, 640 claims, under gemini-appraisal@1; CLAIM_BOUND_V3, derived
+from measured figures for the size bound, under @2: AMENDMENT-2 section 3) is never sent (7.4 door 0).
+
+**Two appraisal labels** (AMENDMENT-2 8.1-8.2): ``build(..., version=...)`` builds gemini-appraisal@1's claims by
+default - the dormant Gemini path and every recorded request, byte for byte under its pins - or @2's, the Fable path:
+TEMPLATES_V3 and STATEMENT_TEMPLATES_V3 (DECISIONS D292's U3, the reached_anatomy claim naming the entry the endoscope
+itself reached, and U1, a doubted kind's statement facts in kind-neutral forms, KIND_NEUTRAL), and the controls chosen
+among the other objects of an act's session never dropped by a slot it reads that states or offers a value it does not
+establish (``unwritable_of_session``: the fact is not claimed). Every slot read here reads a single fact
+(``supported``, ``claimed_value``: an overfilled slot holds none) or the merged view (``offered``), and a fact carrying
+any finding - an overfilled slot's slot_overfull included - is never claimed (AMENDMENT-2 4.3.4).
 
 **What this module never does** (5.6, 5.7 measure 4; P1): it copies no text - cards and claims carry unit ids and
 spans, and the document reaches pass 2 through the framing - reads no word of the document, compares no value with
@@ -111,7 +121,9 @@ controls_document() (CONTROLS_SHA256: CONTROLS, its tables, the contrast and oth
 selection with the kind pairs and read kinds it admits, the completeness rule, UNCONTROLLED and the seed rule) and
 claim_bound_document() (CLAIM_BOUND_SHA256); contract/appraise_prompt.py checks them, with CLAIMED's, before a request
 is built. The integration owner writes them after the wave's last repair; until the first recording under the label a
-changed object needs only its pin recomputed, after it a new APPRAISAL_VERSION (DECISIONS D202).
+changed object needs only its pin recomputed, after it a new APPRAISAL_VERSION (DECISIONS D202). Each document takes
+the label (``version``): gemini-appraisal@1's is the recorded one, @2's its own (TEMPLATES_SHA256_V3,
+STATEMENT_TEMPLATES_SHA256_V3, CONTROLS_SHA256_V3, CLAIM_BOUND_SHA256_V3).
 """
 from __future__ import annotations
 
@@ -121,10 +133,11 @@ from enum import Enum, unique
 from types import MappingProxyType
 from typing import cast
 
+from studio import interpretation
 from studio.interpretation.contract import extract_schema as xs
 from studio.interpretation.contract import jsonschema
 from studio.interpretation.contract.extract_read import (Cited, DateOfService, FactKey, ReadAnswer, ReadCitation,
-                                                         ReadFact, ReadMember)
+                                                         ReadFact, ReadMember, merged)
 from studio.interpretation.contract.types import (AccessOutcome, AnastomosisSubtype, AnatomyType, Approach, Attribute,
                                                   Breadth, Card, CardType, Cause, Claim, Completion, DateRelation,
                                                   DateState, Device, Duct, EmBasis, EncounterRelation, Extent, Fact,
@@ -139,17 +152,105 @@ Family = xs.Family
 ObjectClass = rq.ObjectClass
 _A = Attribute
 
-# --- the per-request bound (FINAL-V2 1.8 [R:MO-3]) ---------------------------------------------------------------------
+# --- the per-request bound (FINAL-V2 1.8 [R:MO-3]; AMENDMENT-2 section 3 and 8.2; DECISIONS D278) ---------------------
 
-# At most this many claims (controls, pair controls and the completeness claim included) in one request: the bound times
-# the output per verdict (about 24 tokens) plus the largest thinking measured on FRESH-2 (16,776 tokens) stays under the
-# 32,768-token cap. Recomputed from D2's measured output per verdict and pinned (CLAIM_BOUND_SHA256).
+# At most this many claims (controls, pair controls and the completeness claim included) in one request of the
+# dormant Gemini path: the bound times the output per verdict (about 24 tokens) plus the largest thinking measured
+# on FRESH-2 (16,776 tokens) stayed under the 32,768-token cap of the first build; DECISIONS D230 raised that
+# path's cap to 65,536 and left the bound as it was. Kept for the dormant adapter beside CLAIM_BOUND_V3
+# (AMENDMENT-2 8.2) and pinned (CLAIM_BOUND_SHA256); never recomputed.
 CLAIM_BOUND = 640
 
+# CLAIM_BOUND_V3, the bound on the Fable path (gemini-appraisal@2), is DERIVED here from measured figures (AMENDMENT-2
+# section 3; DECISIONS D278: "the claim bound sized for" the size bound; D276: never what two notes needed). Every
+# figure is a frozen batch's MANIFEST value, read after its freeze (E.1):
+# - the size bound: settings.INTERPRET_MAX_CHARS, 20,000 characters (D25; D278 keeps it);
+# - the demand at that bound: the claim sets of the ten notes F3all and F3long read with Fable (characters, claims) -
+#   the eight short notes of F3all and the two long notes of F3long - read two ways, the larger kept: the line through
+#   all ten (claims = a + b x characters, least squares, exact rationals) and the largest claims per character of a
+#   long note (at least CLAIM_BOUND_REALISTIC_CHARACTERS: the two 19 KB notes, which D278 calls stress material - a note
+#   as physicians write it is about two pages; a short note's rate carries the claims every document has, so it does
+#   not extrapolate to the size bound); rounded up;
+# - the capacity: Fable's output maximum, 128,000 tokens (fable_adapter.MAX_TOKENS, AMENDMENT-2 1.2 and 1.12), within
+#   G-SIZE's 85% (11.3), over the largest measured pass-2 output per claim on the long notes (F3long: output tokens,
+#   claims; section 3 sizes pass 2 at the long notes' rate and leaves a short note's small set, mostly thinking, to
+#   G-SIZE); rounded down to a whole number of claims;
+# - the bound: the capacity rounded down to a whole hundred (a pinned bound moves only with a new label, D202, so a
+#   re-measurement's last digits do not set it), and never below the demand: no note inside the size bound is refused
+#   at door 0 for its claim count at the measured rates, and a set at the bound fits 85% of the output maximum.
+# Measured: demand 780 (the long notes' 0.0390 claims per character; the line gives 755), capacity 1,061 (102.5 tokens
+# per claim), bound 1,000 - the value F3long ran under, whose pin is 8.2's 3fe08a5c... (CLAIM_BOUND_SHA256_V3).
+CLAIM_BOUND_SIZE_CHARACTERS = 20_000
+CLAIM_BOUND_NOTES: tuple[tuple[int, int], ...] = (  # (characters, claims): F3all's eight short notes, F3long's two
+    (576, 47), (741, 41), (639, 67), (551, 70), (1_205, 76), (1_403, 104), (1_417, 108), (898, 77),
+    (19_398, 756), (19_460, 711))
+# The length from which a note's claims per character are read as extrapolating to the size bound: the two 19 KB
+# notes, which D278 calls stress material (a realistic note, about two pages, is shorter). The name is kept as the
+# first build of step f3s defined it; it names a threshold of length, never a claim that those notes are realistic.
+CLAIM_BOUND_REALISTIC_CHARACTERS = 10_000
+CLAIM_BOUND_OUTPUT_TOKENS = 128_000
+CLAIM_BOUND_PASS2: tuple[tuple[int, int], ...] = ((77_483, 756), (70_263, 711))  # F3long: (output tokens, claims)
+CLAIM_BOUND_MARGIN = (85, 100)
+CLAIM_BOUND_ROUNDING = 100
 
-def claim_bound_document() -> dict[str, object]:
-    """The per-request bound's canonical form, whose sha256 the integration owner pins (CLAIM_BOUND_SHA256)."""
-    return {'claims_per_request': CLAIM_BOUND}
+
+@dataclass(frozen=True, slots=True)
+class BoundDerivation:
+    """CLAIM_BOUND_V3's derivation (the comment above): the demand at the size bound, by the line through every note and
+    by the long notes' largest rate (each rounded up), the capacity, and the bound."""
+    demand_line: int
+    demand_rate: int
+    capacity: int
+    bound: int
+
+    @property
+    def demand(self) -> int:
+        return max(self.demand_line, self.demand_rate)
+
+
+def _ceiling(numerator: int, denominator: int) -> int:
+    return -(-numerator // denominator)
+
+
+def claim_bound_derivation(notes: Sequence[tuple[int, int]] = CLAIM_BOUND_NOTES,
+                           pass2: Sequence[tuple[int, int]] = CLAIM_BOUND_PASS2,
+                           size: int = CLAIM_BOUND_SIZE_CHARACTERS,
+                           output_tokens: int = CLAIM_BOUND_OUTPUT_TOKENS) -> BoundDerivation:
+    """The Fable path's claim bound from measured figures (the comment above), in exact integer and rational arithmetic.
+    RuntimeError when the capacity cannot hold the demand: no bound fits both, which is the owner's (class b)."""
+    count = len(notes)
+    sum_x, sum_y = sum(x for x, _ in notes), sum(y for _, y in notes)
+    sum_xx, sum_xy = sum(x * x for x, _ in notes), sum(x * y for x, y in notes)
+    # claims at ``size`` on the least-squares line: (sum_y * sum_xx - sum_x * sum_xy + size * (count * sum_xy -
+    # sum_x * sum_y)) / (count * sum_xx - sum_x ** 2), rounded up
+    denominator = count * sum_xx - sum_x * sum_x
+    demand_line = _ceiling(sum_y * sum_xx - sum_x * sum_xy + size * (count * sum_xy - sum_x * sum_y), denominator)
+    long_notes = [(x, y) for x, y in notes if x >= CLAIM_BOUND_REALISTIC_CHARACTERS]
+    demand_rate = max(_ceiling(size * y, x) for x, y in long_notes)
+    numerator, denominator_margin = CLAIM_BOUND_MARGIN
+    capacity = min(output_tokens * numerator * claims // (denominator_margin * tokens) for tokens, claims in pass2)
+    bound = capacity // CLAIM_BOUND_ROUNDING * CLAIM_BOUND_ROUNDING
+    derived = BoundDerivation(demand_line=demand_line, demand_rate=demand_rate, capacity=capacity, bound=bound)
+    if bound < derived.demand:
+        raise RuntimeError('No claim bound holds the demand at the size bound within the output maximum; a bound that '
+                           'refuses notes inside the size bound is the owner\'s (class b).')
+    return derived
+
+
+CLAIM_BOUND_V3 = claim_bound_derivation().bound
+
+
+def claim_bound(version: str = interpretation.APPRAISAL_VERSION) -> int:
+    """The per-request claim bound under the appraisal label ``version``: CLAIM_BOUND under gemini-appraisal@1 (the
+    dormant Gemini path and its recordings), CLAIM_BOUND_V3 under @2 (the Fable path, AMENDMENT-2 8.2). KeyError for a
+    label this module does not build."""
+    return {interpretation.APPRAISAL_VERSION: CLAIM_BOUND, interpretation.APPRAISAL_VERSION_V3: CLAIM_BOUND_V3}[version]
+
+
+def claim_bound_document(version: str = interpretation.APPRAISAL_VERSION) -> dict[str, object]:
+    """The per-request bound's canonical form under the label, whose sha256 the integration owner pins
+    (CLAIM_BOUND_SHA256 under gemini-appraisal@1, CLAIM_BOUND_SHA256_V3 under @2)."""
+    return {'claims_per_request': claim_bound(version)}
 
 
 # --- the templates (FINAL-V2 3.2.2) ------------------------------------------------------------------------------------
@@ -241,6 +342,20 @@ class TemplateId(Enum):
     STMT_TARGET_ANATOMY = 'statement.target.anatomy'
     STMT_TARGET_DUCT = 'statement.target.duct'
     STMT_DEVICE = 'statement.technique.device'
+    # DECISIONS D292's U1 (gemini-appraisal@2 only): the kind-neutral forms of a statement whose kind is doubted
+    STMT_NOT_DONE_ANY = 'statement.status.negated.any_kind'
+    STMT_DONE_ANY = 'statement.status.done.any_kind'
+    STMT_DATE_RELATION_ANY = 'statement.date_relation.any_kind'
+    STMT_PERFORMER_ANY = 'statement.performer.any_kind'
+    STMT_PERFORMER_PERSON_ANY = 'statement.performer_person.any_kind'
+    STMT_TARGET_LESION_ANY = 'statement.target.lesion.any_kind'
+    STMT_TARGET_PLACE_ANY = 'statement.target.places.any_kind'
+    STMT_TARGET_SEGMENT_ANY = 'statement.scope.segment.any_kind'
+    STMT_DEVICE_ANY = 'statement.technique.device.any_kind'
+    STMT_BREADTH_ALL_ANY = 'statement.scope.breadth.all_of_kind.any_kind'
+    STMT_BREADTH_EXCEPTIVE_ANY = 'statement.scope.breadth.exceptive.any_kind'
+    STMT_BREADTH_TARGETED_ANY = 'statement.scope.breadth.targeted.any_kind'
+    STMT_BREADTH_EXCEPT_TARGETS_ANY = 'statement.scope.breadth.exceptive_targets.any_kind'
 
 
 @unique
@@ -394,10 +509,79 @@ NAMES_THE_KIND: frozenset[TemplateId] = frozenset({
     T.STMT_BREADTH_EXCEPT_TARGETS})
 
 
-def template(template_id: TemplateId) -> str:
-    """The sentence of ``template_id``, from TEMPLATES or STATEMENT_TEMPLATES."""
-    found = TEMPLATES.get(template_id)
-    return found if found is not None else STATEMENT_TEMPLATES[template_id]
+# --- gemini-appraisal@2's tables (AMENDMENT-2 8.1-8.2; DECISIONS D292's U1 and U3) ------------------------------------
+# gemini-appraisal@1 has recordings (D1v, D1w), so its tables above keep their bytes and pins (D202), and the Fable path
+# renders from these: TEMPLATES_V3 and STATEMENT_TEMPLATES_V3, their pins TEMPLATES_SHA256_V3 and
+# STATEMENT_TEMPLATES_SHA256_V3. Pinned OUTPUT tables, rendered into the request and compared with nothing.
+#
+# U3: the reached_anatomy claim names the anatomy entry the endoscope itself reached (the instruction's reached_anatomy,
+# D292); its control (CONTROLS' reached_anatomy row, D244's shared control) is the reach's own negated sentence, "In
+# session {session} the endoscope did not reach the {point}." - now the claim's opposite.
+#
+# U1: whenever a statement's kind is doubted (a doubt of pass 1 names it), the claims of its status, date relation, own
+# performer (its performer and performer_person), places, lesion, device, breadth, listed targets and segment - with
+# their controls and the statement-side pair controls - are rendered in kind-neutral statement forms (KIND_NEUTRAL: each
+# form that names the kind, and the form that names none), so they are claimed and appraised; the kind itself stays
+# unestablished (D191, HO-5: its own claim is never made). Every other form keeps its rule: a statement whose kind is
+# not claimable for any other reason, and a doubted kind's anatomy and duct forms (which U1 does not list), name the
+# kind and are not claimed (Unclaimable.KIND).
+TEMPLATES_V3: Mapping[TemplateId, str] = MappingProxyType({
+    **TEMPLATES,
+    T.SESSION_REACHED_ANATOMY: 'In session {session} the endoscope itself reached anatomy {anatomy}.',
+    T.STMT_BREADTH_ALL_ANY:
+        'This statement says that no act of the kind it names at all was done in session {session}.',
+    T.STMT_BREADTH_EXCEPTIVE_ANY: 'This statement denies only acts of the kind it names other than acts {acts}.',
+    T.STMT_BREADTH_TARGETED_ANY: 'This statement denies the act it names, of {target}.',
+    T.STMT_BREADTH_EXCEPT_TARGETS_ANY: 'This statement denies only acts of the kind it names other than those of '
+                                       '{target}.',
+})
+STATEMENT_TEMPLATES_V3: Mapping[TemplateId, str] = MappingProxyType({
+    **STATEMENT_TEMPLATES,
+    T.STMT_NOT_DONE_ANY: 'This statement says that the act it names was not done.',
+    T.STMT_DONE_ANY: 'This statement says that the act it names was done.',
+    T.STMT_DATE_RELATION_ANY: 'This statement is about the act it names, {date_relation}.',
+    T.STMT_PERFORMER_ANY: 'This statement is about the act it names, by {performer}.',
+    T.STMT_PERFORMER_PERSON_ANY: 'This statement is about the act it names, by the person named at {person}.',
+    T.STMT_TARGET_LESION_ANY: 'This statement is about the act it names, of lesion {lesion}.',
+    T.STMT_TARGET_PLACE_ANY: 'This statement is about the act it names, in the {place}.',
+    T.STMT_TARGET_SEGMENT_ANY: 'This statement is about the act it names, from the {first} to the {last}.',
+    T.STMT_DEVICE_ANY: 'This statement is about the act it names, with {device}.',
+})
+# U1's forms: each statement form that names the kind, and its kind-neutral form (gemini-appraisal@2 only).
+KIND_NEUTRAL: Mapping[TemplateId, TemplateId] = MappingProxyType({
+    T.STMT_NOT_DONE: T.STMT_NOT_DONE_ANY, T.STMT_DONE: T.STMT_DONE_ANY,
+    T.STMT_DATE_RELATION: T.STMT_DATE_RELATION_ANY, T.STMT_PERFORMER: T.STMT_PERFORMER_ANY,
+    T.STMT_PERFORMER_PERSON: T.STMT_PERFORMER_PERSON_ANY, T.STMT_TARGET_LESION: T.STMT_TARGET_LESION_ANY,
+    T.STMT_TARGET_PLACE: T.STMT_TARGET_PLACE_ANY, T.STMT_TARGET_SEGMENT: T.STMT_TARGET_SEGMENT_ANY,
+    T.STMT_DEVICE: T.STMT_DEVICE_ANY, T.STMT_BREADTH_ALL: T.STMT_BREADTH_ALL_ANY,
+    T.STMT_BREADTH_EXCEPTIVE: T.STMT_BREADTH_EXCEPTIVE_ANY, T.STMT_BREADTH_TARGETED: T.STMT_BREADTH_TARGETED_ANY,
+    T.STMT_BREADTH_EXCEPT_TARGETS: T.STMT_BREADTH_EXCEPT_TARGETS_ANY,
+})
+# The kind-named form each kind-neutral one stands for (its slots are that form's, without the kind's).
+KIND_NAMED: Mapping[TemplateId, TemplateId] = MappingProxyType(
+    {neutral: form for form, neutral in KIND_NEUTRAL.items()})
+# The appraisal labels this module builds claims for.
+VERSIONS: tuple[str, ...] = (interpretation.APPRAISAL_VERSION, interpretation.APPRAISAL_VERSION_V3)
+
+
+def tables(version: str = interpretation.APPRAISAL_VERSION) -> tuple[Mapping[TemplateId, str],
+                                                                        Mapping[TemplateId, str]]:
+    """(TEMPLATES, STATEMENT_TEMPLATES) under the appraisal label: gemini-appraisal@1's, or @2's (the _V3 tables).
+    KeyError for a label this module does not build."""
+    return {interpretation.APPRAISAL_VERSION: (TEMPLATES, STATEMENT_TEMPLATES),
+            interpretation.APPRAISAL_VERSION_V3: (TEMPLATES_V3, STATEMENT_TEMPLATES_V3)}[version]
+
+
+def template(template_id: TemplateId, version: str = interpretation.APPRAISAL_VERSION) -> str:
+    """The sentence of ``template_id`` under the appraisal label, from its TEMPLATES or STATEMENT_TEMPLATES; a form only
+    gemini-appraisal@2 has (U1's) reads @2's sentence under either label - a build under @1 never makes one - so every
+    TemplateId has its sentence."""
+    for label in (version, *(other for other in VERSIONS if other != version)):
+        acts, statements = tables(label)
+        found = acts.get(template_id, statements.get(template_id))
+        if found is not None:
+            return found
+    raise KeyError(template_id)
 
 
 # --- the label tables (3.2.2: "labels come from fixed tables"): pinned OUTPUT tables -----------------------------------
@@ -1456,9 +1640,11 @@ class ClaimSet:
         return jsonschema.sha256_of(self.canonical())
 
 
-def over_bound(claim_set: ClaimSet) -> bool:
-    """Whether ``claim_set`` holds more claims than CLAIM_BOUND (1.8): such a set is never sent (7.4 door 0, 7.5)."""
-    return len(claim_set.claims) > CLAIM_BOUND
+def over_bound(claim_set: ClaimSet, version: str = interpretation.APPRAISAL_VERSION) -> bool:
+    """Whether ``claim_set`` holds more claims than the bound of the appraisal label it was built under (1.8;
+    claim_bound: CLAIM_BOUND, or CLAIM_BOUND_V3 under gemini-appraisal@2): such a set is never sent (7.4 door 0,
+    7.5)."""
+    return len(claim_set.claims) > claim_bound(version)
 
 
 # --- building ------------------------------------------------------------------------------------------------------------
@@ -1535,12 +1721,13 @@ class _Fact:
 # A pair control's role, which its content key carries (_Spec.content): settle stores a claim of it with role
 # pair_control, the role the engine's FactSet reads pair controls by.
 _PAIR_ROLE = 'pair_control'
-# The place forms a place control renders (an act's, a statement's, a lesion's): the controls another place fact of the
-# same object prefers not to repeat (_Builder.contrary).
-_PLACE_FORMS = frozenset({T.ACT_TARGET_PLACE, T.STMT_TARGET_PLACE, T.LESION_PLACES})
-# The lesion forms a lesion control renders (an act's target lesion, a statement's target lesion and listed targets):
-# the controls another lesion fact of the same object never repeats (DECISIONS D234; _Builder.lesions_taken).
-_LESION_FORMS = frozenset({T.ACT_TARGET_LESION, T.STMT_TARGET_LESION})
+# The place forms a place control renders (an act's, a statement's - its kind-neutral form too, D292's U1 - a
+# lesion's): the controls another place fact of the same object prefers not to repeat (_Builder.contrary).
+_PLACE_FORMS = frozenset({T.ACT_TARGET_PLACE, T.STMT_TARGET_PLACE, T.STMT_TARGET_PLACE_ANY, T.LESION_PLACES})
+# The lesion forms a lesion control renders (an act's target lesion, a statement's target lesion and listed targets,
+# in either form): the controls another lesion fact of the same object never repeats (DECISIONS D234;
+# _Builder.lesions_taken).
+_LESION_FORMS = frozenset({T.ACT_TARGET_LESION, T.STMT_TARGET_LESION, T.STMT_TARGET_LESION_ANY})
 _CARD_TYPE: Mapping[xs.Family, CardType] = MappingProxyType({
     Family.EVENT: CardType.ACT, Family.SESSION: CardType.SESSION, Family.SECTION: CardType.SECTION,
     Family.LESION: CardType.LESION, Family.ANATOMY: CardType.ANATOMY})
@@ -1587,18 +1774,23 @@ ANATOMY_POINT: Mapping[AnatomyType, Extent] = MappingProxyType({
 _TARGETED = frozenset({Breadth.SINGLE_TARGET, Breadth.LISTED_TARGETS, Breadth.SEGMENT})
 
 
-def build(basis: Basis, seed: str) -> ClaimSet:
+def build(basis: Basis, seed: str, *, version: str = interpretation.APPRAISAL_VERSION) -> ClaimSet:
     """The claims of one request from pass 1's answer and its geometry (``basis``), ordered by ``seed`` (the module's
-    docstring). Pure: equal arguments give an equal ClaimSet in every process (no set or hash order is read)."""
-    return _Builder(basis, seed).run()
+    docstring), under the appraisal label ``version``: gemini-appraisal@1 by default (the dormant Gemini path and its
+    recordings, byte for byte), or @2 (the Fable path: TEMPLATES_V3 and STATEMENT_TEMPLATES_V3, D292's U1 and U3).
+    Pure: equal arguments give an equal ClaimSet in every process (no set or hash order is read). KeyError for a label
+    this module does not build."""
+    tables(version)
+    return _Builder(basis, seed, version).run()
 
 
 class _Builder:
     """One build: the answer's indexes, the specs gathered, and their numbering."""
 
-    def __init__(self, basis: Basis, seed: str) -> None:
+    def __init__(self, basis: Basis, seed: str, version: str = interpretation.APPRAISAL_VERSION) -> None:
         self.basis = basis
         self.seed = seed
+        self.version = version
         answer = basis.answer
         self.position = {unit.id: index for index, unit in enumerate(basis.units)}
         self.facts: dict[tuple[xs.Family, str, Attribute], list[ReadFact]] = {}
@@ -1845,18 +2037,35 @@ class _Builder:
                 return Unclaimable.NO_TEMPLATE
         slots: list[tuple[Slot, _Value]] = []
         params: list[str] = []
+        shown = form
         if form in NAMES_THE_KIND or form is T.STMT_KIND:
             kind = Kind(value) if form is T.STMT_KIND else self.statement_kind(subject.object)
             if kind is None:
-                return Unclaimable.KIND
-            bare, _article, plural = KIND_LABELS[kind]
-            slots += [(Slot.KIND, bare), (Slot.KINDS, plural)]
-            if form is not T.STMT_KIND:
-                params.append(kind.value)
+                neutral = self.kind_neutral(form, subject)
+                if neutral is None:
+                    return Unclaimable.KIND
+                shown = neutral  # D292's U1: the kind-neutral form; the kind stays unestablished, so nothing names it
+            else:
+                bare, _article, plural = KIND_LABELS[kind]
+                slots += [(Slot.KIND, bare), (Slot.KINDS, plural)]
+                if form is not T.STMT_KIND:
+                    params.append(kind.value)
         why = self.fill(form, attribute, value, member, subject, slots, params)
         if why is not None:
             return why
-        return _Spec(form, subject, value, units, tuple(params), tuple(slots))
+        return _Spec(shown, subject, value, units, tuple(params), tuple(slots))
+
+    def kind_neutral(self, form: TemplateId, subject: Ref) -> TemplateId | None:
+        """D292's U1 (gemini-appraisal@2 only): the kind-neutral form of a statement form that names the kind, for a
+        statement whose kind a doubt of pass 1 names - None under @1, for a form U1 does not list (the kind itself, the
+        anatomy and duct forms), and for a statement whose kind is not claimable for another reason (a finding, a
+        qualifier, a contradiction with no doubt): those keep Unclaimable.KIND, the fail-closed reading of U1's class
+        ("whenever a statement's kind is doubted")."""
+        if (self.version != interpretation.APPRAISAL_VERSION_V3 or subject.family is not Family.EVENT
+                or self.object_class(subject.object) is not _STMT
+                or not self.is_doubted(Family.EVENT, subject.object, _A.KIND)):
+            return None
+        return KIND_NEUTRAL.get(form)
 
     def statement_kind(self, event: str) -> Kind | None:
         """A statement's kind when its kind fact is itself claimable (a statement-phrased sentence names it)."""
@@ -2109,20 +2318,63 @@ class _Builder:
             return None if point is None else point.value
         session = self.supported(Family.EVENT, subject.object, _A.SESSION)
         if session is None:
-            return None
+            # gemini-appraisal@2: an act whose session slot states or offers sessions it does not establish (pass 1's
+            # own contradiction, or an overfilled slot) has a contrary of its session that cannot be told
+            return self.unwritable_of_session(how, fact, subject, self.offered(Family.EVENT, subject.object,
+                                                                               _A.SESSION))
         if how is Contrary.ANOTHER_LESION_OF_SESSION:
             of_session = {self.supported(Family.EVENT, event, _A.TARGET_LESION) for event in self.ids[Family.EVENT]
                           if event != subject.object and self.supported(Family.EVENT, event, _A.SESSION) == session}
             own = [fact.value, *self.own_lesions(subject.object)]
             asked_lesions = sorted(self.asked_of(subject, _A.TARGET_LESION))
-            return (self.first_other(Family.LESION, [*own, *asked_lesions], lambda name: name in of_session)
-                    or self.first_other(Family.LESION, own, lambda name: name in of_session))
+            lesion = (self.first_other(Family.LESION, [*own, *asked_lesions], lambda name: name in of_session)
+                      or self.first_other(Family.LESION, own, lambda name: name in of_session))
+            return lesion if lesion is not None else self.unwritable_of_session(how, fact, subject, (session,))
         if how is Contrary.ANOTHER_POSITIVE_ACT:
             own = [subject.object, *self.values_of(Family.EVENT, subject.object, _A.CAUSE_EVENT)]
-            return self.first_other(Family.EVENT, own, lambda name: (
+            act = self.first_other(Family.EVENT, own, lambda name: (
                 self.supported(Family.EVENT, name, _A.SESSION) == session
                 and self.supported(Family.EVENT, name, _A.STATUS) == Status.PERFORMED.value))
+            return act if act is not None else self.unwritable_of_session(how, fact, subject, (session,))
         raise RuntimeError(f'Unknown contrary {how}.')  # pragma: no cover
+
+    def offered(self, family: xs.Family, name: str, attribute: Attribute) -> tuple[str, ...]:
+        """The values a slot states or offers, read through extract_read.merged's view (AMENDMENT-2 4.3.3): a supported
+        value, each side of pass 1's own contradiction, each value an overfilled slot's facts that are not negated
+        write; () for a silent slot or a negated fact."""
+        view = merged(self.slot(family, name, attribute))
+        return () if view is None else view.asserted_values
+
+    def unwritable_of_session(self, how: Contrary, fact: _Fact, subject: Ref,
+                              sessions: Sequence[str]) -> Unclaimable | None:
+        """Where a control chosen among the other objects of the act's session finds none by the values the slots
+        establish (``sessions``: the session the act's own slot establishes, else the ones it states or offers):
+        under gemini-appraisal@2, when a slot the choice reads - the act's session, another event's session, target
+        lesion or status, read through the merged view - states or offers a value under which a candidate exists, the
+        control exists in the document but cannot be written, so the fact is not claimed (Unclaimable.CONTROL: the
+        module's rule for an unwritable control; AMENDMENT-2 4.4, nothing claimed from a slot it cannot establish and no
+        control dropped by one). A candidate is what ``first_other`` admits - an object of its family, none of the
+        fact's own values, that a card can show - so the class is exactly a slot that states or offers a value it does
+        not establish: on an answer whose every slot the choice reads is established this returns None, as it does when
+        the only other object of the session has no card (refute-f3s-r1 finding 3). Otherwise there is no contrary
+        (None), as under gemini-appraisal@1, whose bytes are recorded (D202)."""
+        if self.version != interpretation.APPRAISAL_VERSION_V3 or not sessions:
+            return None
+        others = [event for event in self.ids[Family.EVENT] if event != subject.object
+                  and any(session in self.offered(Family.EVENT, event, _A.SESSION) for session in sessions)]
+        if how is Contrary.ANOTHER_LESION_OF_SESSION:
+            own = {fact.value, *self.own_lesions(subject.object)}
+            candidates = {lesion for event in others for lesion in self.offered(Family.EVENT, event, _A.TARGET_LESION)}
+            found = any(self.showable(Family.LESION, lesion) for lesion in candidates - own)
+        else:
+            own = {subject.object, *self.values_of(Family.EVENT, subject.object, _A.CAUSE_EVENT)}
+            found = any(event not in own and self.showable(Family.EVENT, event)
+                        and Status.PERFORMED.value in self.offered(Family.EVENT, event, _A.STATUS) for event in others)
+        return Unclaimable.CONTROL if found else None
+
+    def showable(self, family: xs.Family, name: str) -> bool:
+        """Whether ``name`` is an object of ``family`` that a card can show: the candidates ``first_other`` admits."""
+        return name in self.ids[family] and bool(self.card_units(family, name))
 
     def asked_of(self, subject: Ref, attribute: Attribute) -> set[str]:
         """The places (target.places) or lesions (target.lesion) the pair controls ask ``subject`` about; none for an
@@ -2161,7 +2413,7 @@ class _Builder:
         statement misfiled as all_of_kind."""
         kind = self.statement_kind(subject.object)
         if kind is None:
-            return None
+            return self.reported_acts_unwritable(subject)
         session = self.claimed_value(Family.EVENT, subject.object, _A.SESSION)
         reported = [name for name in self.ids[Family.EVENT]
                     if name != subject.object and self.object_class(name) is _ACT
@@ -2182,6 +2434,22 @@ class _Builder:
             (Slot.KIND, bare), (Slot.KINDS, plural), (Slot.ACTS, tuple(Ref(Family.EVENT, name) for _at, name in acts)))
         return _Spec(T.STMT_BREADTH_EXCEPTIVE, subject, Breadth.EXCEPTIVE.value, units,
                      (kind.value, *(name for _at, name in acts)), slots)
+
+    def reported_acts_unwritable(self, subject: Ref) -> Unclaimable | None:
+        """An all_of_kind breadth's control when the statement's kind is not claimable - reached only under
+        gemini-appraisal@2, where D292's U1 renders the doubted kind's breadth in its kind-neutral form: the control
+        lists the reported acts of a kind the statement covers (D210), which cannot be told while the kind is not
+        established. When an act pass 1 asserts performed may lie in the statement's session (its claimable session is
+        the statement's, or is not established), the control exists but cannot be written: Unclaimable.CONTROL, so the
+        breadth is not claimed (fail-closed; the module's rule for an unwritable control). When none may, no reported
+        act of any kind exists, and there is no control (3.2.3: "only when reported acts of the kind exist")."""
+        session = self.claimed_value(Family.EVENT, subject.object, _A.SESSION)
+        candidates = [name for name in self.ids[Family.EVENT]
+                      if name != subject.object and self.object_class(name) is _ACT
+                      and any(value == Status.PERFORMED.value
+                              for value in self.asserted_values(Family.EVENT, name, _A.STATUS))
+                      and self.claimed_value(Family.EVENT, name, _A.SESSION) in (None, session)]
+        return Unclaimable.CONTROL if candidates else None
 
     # -- the objects --
 
@@ -2605,7 +2873,7 @@ class _Builder:
             made = by_key[content]
             identifier = claim_id[content]
             claims.append(Claim(identifier, made.template.value, made.subject.object, made.value, made.units, content))
-            sentences[identifier] = _sentence(made, card_of)
+            sentences[identifier] = _sentence(made, card_of, self.version)
             about[identifier] = card_of.get((made.subject.family, made.subject.object), '')
         appraised: list[Appraised] = []
         unclaimed = list(self.unclaimed)
@@ -2743,8 +3011,9 @@ def joined(items: list[str]) -> str:
     return ', '.join(items[:-1]) + ' and ' + items[-1]
 
 
-def _sentence(made: _Spec, card_of: Mapping[tuple[xs.Family, str], str]) -> str:
-    """A spec's sentence: its template filled, every object named by its card's id."""
+def _sentence(made: _Spec, card_of: Mapping[tuple[xs.Family, str], str],
+              version: str = interpretation.APPRAISAL_VERSION) -> str:
+    """A spec's sentence: its template under the appraisal label filled, every object named by its card's id."""
     def card(ref: Ref) -> str:
         return card_of[(ref.family, ref.object)]
 
@@ -2758,7 +3027,7 @@ def _sentence(made: _Spec, card_of: Mapping[tuple[xs.Family, str], str]) -> str:
             rendered[slot.value] = joined([card(item) for item in value])
         else:
             rendered[slot.value] = value
-    return template(made.template).format_map(rendered)
+    return template(made.template, version).format_map(rendered)
 
 
 # --- the pins (FINAL-V2 2.5) ---------------------------------------------------------------------------------------------
@@ -2768,11 +3037,14 @@ def _members(values: Iterable[Enum]) -> list[str]:
     return sorted(str(member.value) for member in values)
 
 
-def templates_document() -> dict[str, object]:
-    """TEMPLATES' canonical form, whose sha256 the integration owner pins (TEMPLATES_SHA256): the templates, every label
-    table, and which template renders each (class, attribute, state) and value."""
-    return {
-        'templates': {key.value: sentence for key, sentence in TEMPLATES.items()},
+def templates_document(version: str = interpretation.APPRAISAL_VERSION) -> dict[str, object]:
+    """TEMPLATES' canonical form under the appraisal label, whose sha256 the integration owner pins (TEMPLATES_SHA256;
+    TEMPLATES_SHA256_V3 under gemini-appraisal@2): the templates, every label table, and which template renders each
+    (class, attribute, state) and value - under @2 also U1's kind-neutral forms (KIND_NEUTRAL), with the rule that
+    chooses them. gemini-appraisal@1's document is byte for byte the recorded one."""
+    acts, _statements = tables(version)
+    found: dict[str, object] = {
+        'templates': {key.value: sentence for key, sentence in acts.items()},
         'names_the_kind': _members(NAMES_THE_KIND),
         'kind_labels': {kind.value: list(forms) for kind, forms in KIND_LABELS.items()},
         'labels': [[type(member).__name__, str(member.value), text] for member, text in LABELS.items()],
@@ -2789,14 +3061,21 @@ def templates_document() -> dict[str, object]:
         'negated_values': [[object_class.value, attribute.value, _members(values)]
                            for (object_class, attribute), values in NEGATED_VALUES.items()],
     }
+    if version == interpretation.APPRAISAL_VERSION_V3:
+        found['kind_neutral'] = [[form.value, neutral.value] for form, neutral in KIND_NEUTRAL.items()]
+        found['kind_neutral_when'] = ("a statement's form that names its kind, when a doubt of pass 1 names that kind "
+                                      '(D292 U1); every other statement whose kind is not claimable keeps no claim')
+    return found
 
 
-def statement_templates_document() -> dict[str, str]:
-    """STATEMENT_TEMPLATES' canonical form (STATEMENT_TEMPLATES_SHA256)."""
-    return {key.value: sentence for key, sentence in STATEMENT_TEMPLATES.items()}
+def statement_templates_document(version: str = interpretation.APPRAISAL_VERSION) -> dict[str, str]:
+    """STATEMENT_TEMPLATES' canonical form under the appraisal label (STATEMENT_TEMPLATES_SHA256; under
+    gemini-appraisal@2 STATEMENT_TEMPLATES_V3's, STATEMENT_TEMPLATES_SHA256_V3)."""
+    _acts, statements = tables(version)
+    return {key.value: sentence for key, sentence in statements.items()}
 
 
-def controls_document() -> dict[str, object]:
+def controls_document(version: str = interpretation.APPRAISAL_VERSION) -> dict[str, object]:
     """The CONTROLS generator's canonical form (CONTROLS_SHA256): its rules, its tables (KIND_SIBLINGS,
     SESSION_SIBLINGS, CONTRAST_PLACES with each place's candidates in order, DEVICE_SIBLINGS, TYPE_SIBLINGS,
     SUBTYPE_SIBLINGS and the contrary tables), the anatomy points, the contrast rule with the tract order a segment's
@@ -2820,8 +3099,9 @@ def controls_document() -> dict[str, object]:
                     for place, candidates in CONTRAST_PLACES.items()]
         return [[str(key.value), str(value.value)] for key, value in table(name).items()]
 
+    tables(version)
     acts, wholes = BUNDLING_PAIR_KINDS
-    return {
+    found: dict[str, object] = {
         'rules': [rule(item) for item in CONTROLS],
         'tables': {name.value: rows(name) for name in Table},
         'anatomy_point': [[key.value, value.value] for key, value in ANATOMY_POINT.items()],
@@ -2901,3 +3181,23 @@ def controls_document() -> dict[str, object]:
                      'its role (pair_control), so it is never one claim with a control of the same sentence '
                      '(refute-r2c-r1)',
     }
+    if version == interpretation.APPRAISAL_VERSION_V3:
+        # gemini-appraisal@2 (D292): U1's kind-neutral controls and pair controls, and U3's shared control restated
+        found['kind_neutral'] = ("a doubted kind's statement controls and its statement-side pair controls take the "
+                                 'kind-neutral form of the form they would take (KIND_NEUTRAL); an all_of_kind '
+                                 "breadth's control, which lists the reported acts of the statement's kind, cannot "
+                                 'be written while that kind is not claimable: when an act asserted performed may lie '
+                                 "in the statement's session the breadth is not claimed (control), else it has no "
+                                 'control')
+        found['reached_anatomy_control'] = ("the reach's own negated sentence about the point of the anatomy entry "
+                                            '(SESSION_REACHED_NEGATED): the opposite of the claim that the endoscope '
+                                            'itself reached that entry (D292 U3), and the one control a reach and its '
+                                            'reached_anatomy share (D244)')
+        # AMENDMENT-2 4.4 at the session's other objects (refute-f3s-r1 finding 3: the class stated and pinned)
+        found['session_others'] = ("another lesion or another act of the act's session: when none exists by the "
+                                   'values the slots establish, but one a card can show (none of the fact\'s own '
+                                   'values) exists by a value the act\'s session, another event\'s session, target '
+                                   'lesion or status states or offers without establishing it, the fact is not '
+                                   'claimed (control); when none exists by any value those slots state or offer, '
+                                   'there is no contrary, as under gemini-appraisal@1')
+    return found

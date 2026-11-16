@@ -295,7 +295,7 @@ SESSION = {                                    # [C] the object; [B] through; [J
   'through': SLOT(ID),                         # the anatomy entry the scope went through (a stoma, a pouch)
   'reached': FACTS(EXTENTS),                   # the ENDOSCOPE's reach: supported = reached; negated = stated not reached
   'device_reached': FACTS(EXTENTS),            # points only a guidewire, catheter or capsule reached; no rule reads it [R:CO-8]
-  'reached_anatomy': SLOT(ID),                 # the anatomy entry the endoscope's furthest point is (an anastomosis, a pouch)
+  'reached_anatomy': SLOT(ID),                 # an anastomosis or pouch entry the endoscope itself reached, as its furthest point or on its way beyond it [D292 U3]
   'completion': SLOT(COMPLETIONS),             # against the examination's own intended extent [R:CO-8]
   'stations': FACTS(STATIONS),                 # supported = examined; negated = explicitly not examined
   'part_of_session': SLOT(ID)}                 # this session is the endoscopic portion of that one (C3, C-4, N3)
@@ -632,10 +632,10 @@ only on documents outside the acceptance set (9.6).
   `target.duct` [B].
 - **P19 Extent** [R:CO-8]. `reached` holds the points the endoscope ITSELF reached (supported) and the points the
   document says it did not reach (negated); a point only a guidewire, catheter or capsule reached goes in
-  `device_reached`, never in `reached`; `reached_anatomy` names the anatomy entry when the endoscope's furthest point is an
-  anastomosis or pouch; `completion` says whether the examination reached the extent it set out to reach, as the document
-  states it: complete, incomplete (stopped short of it) or terminated (stopped early for a stated reason), with its words
-  (S4, BF7).
+  `device_reached`, never in `reached`; `reached_anatomy` names the anastomosis or pouch entry the endoscope itself
+  reached, at its furthest point or on its way beyond it, citing the examination's own words that say so [D292 U3];
+  `completion` says whether the examination reached the extent it set out to reach, as the document states it: complete,
+  incomplete (stopped short of it) or terminated (stopped early for a stated reason), with its words (S4, BF7).
 - **P20 Stations.** One fact per station the document mentions: examined (supported) or not examined (negated). A
   statement that only some stations were examined makes the others negated. A reach is not a station, and a station is
   not the reach (S1, S2, BF6).
@@ -782,7 +782,7 @@ Each of the three can only demote. None can lift a fact to established by itself
 | G2 | **section geometry**: starts strictly increasing by offset; each start located; N0 at the text start; a span runs from its start to the next start, or to its closing source; an overlap or an unlocated start makes that section's owner, occasion and performer unresolved [A][B] | offsets | `section_order`, `section_start_unlocated` | offsets |
 | G3 | **statement tie**: a target fact with link `statement` has its words inside the anchor units; `target.lesion`'s description unit is the anchor, a restatement or an antecedent of the event (identity rule 1, generalised; rules 2-5 retire) [C][A] | offsets | `target_detached` | offsets |
 | G4 | **inheritance edge**: an inherited fact is attached only when the act's anchor lies inside the section's span and the section's fact passed its own checks [A][J] | offsets | `inherit_unattached` | offsets |
-| G5 | **examination evidence** (D36, restated) [R:CO-6]: each of a session's reached, completion, stations, approach and through sources lies in its examination's anchor or one of its restatements, or in a unit that is the anchor of NO act; a source lying only in other acts' anchors, of this session or another, is inferred from where they were done (D36). There is no section test, so an examination told across several parts passes (GI Note #8 tells its insertion, its completion and the neo-terminal ileum in three sections). The pre-refutation wording, "a unit stating an act of that session", was undefined, and its natural reading admitted exactly what D36 forbids (W1S-399's reach from a biopsy sentence) [A][J] | offsets, anchors | `extent_inferred` | offsets |
+| G5 | **examination evidence** (D36, restated) [R:CO-6]: each of a session's reached, reached_anatomy [D292 U3], completion, stations, approach and through sources lies in its examination's anchor or one of its restatements, or in a unit that is the anchor of NO act; a source lying only in other acts' anchors, of this session or another, is inferred from where they were done (D36). There is no section test, so an examination told across several parts passes (GI Note #8 tells its insertion, its completion and the neo-terminal ileum in three sections). The pre-refutation wording, "a unit stating an act of that session", was undefined, and its natural reading admitted exactly what D36 forbids (W1S-399's reach from a biopsy sentence) [A][J] | offsets, anchors | `extent_inferred` | offsets |
 | G6 | **restatement geometry**: restatement units are not anchor units; a `title` restatement lies in N0 or in a section start | offsets | the restatement is ignored | offsets |
 | K1 | **values allowed together** [C][A]: scope only on negated or stated-doubt statements; yield only on extraction kinds; access_outcome only on cannulation; cause and cause_event only with purpose hemostasis; part_of and part_relation together; reached, stations and completion only on endoscopic sessions; visit facts only on em_visit; other_class only on kind other; performed or attempted with later_date, or planned with earlier_date, inconsistent; exceptive needs non-empty excepts, each existing, of a kind the statement covers, and asserted positive; listed_targets needs 2 or more targets; single_target a lesion or a place; segment two landmarks; the umbrella `intervention` only on statements | values | `structure_<rule>` | values |
 | K2 | **session consistency** [C][A][R:HO-7]: an event's session exists; a session's examination names it; an act's session kind admits its kind (`catalogue.family_codes_act`); an act's own claimed date relation that differs from its session examination's claimed one makes the ACT'S `session` fact unresolved. The examination's facts are never touched, and different performers in one session are legitimate: there is no performer arm (a surgeon called in to place clips does not unresolve the endoscopist's examination) | ids, values, catalogue | `session_inconsistent`, `session_conflict` | values |

@@ -38,6 +38,7 @@ from studio import answers, customer_api as c, jobs, progress
 from studio.interpretation import wording
 from studio.interpretation.contract.types import Kind
 from studio.interpretation.engine import requirements
+from studio.interpretation.engine.types import ItemKind
 from studio.models import Decision, Proposal
 from studio.validation import questions
 from tests.v2.test_wording import HARD
@@ -638,13 +639,17 @@ class D267HeldFactWords(SimpleTestCase):
     PROCEDURE = 'A detail is needed: in which procedure the act was done.'  # v1's MISSING['procedure'], pinned
     ASKS = {
         'procedure': PROCEDURE,
-        'another_tract': 'A detail is needed: which part of the digestive tract the endoscopic ultrasound examined.',
+        # D284, G1-08 (step f3w; build list B8): the three explanations state an established route or tract and ask
+        # whether the class the code describes was performed - restated from "which part of the digestive tract ..." and
+        # "the route of ...", phrases of the attribute each states
+        'another_tract': 'A detail is needed: whether the endoscopic ultrasound this code describes was performed.',
         'enteroscopy_route': 'A detail is needed: the route of the enteroscopy.',
-        'enteroscopy_approach': 'A detail is needed: the route of the enteroscopy.',
+        'enteroscopy_approach': 'A detail is needed: whether the enteroscopy this code describes was performed.',
         'examination_route': 'A detail is needed: the route of the endoscopic ultrasound.',
-        'examination_approach': 'A detail is needed: the route of the endoscopic ultrasound.',
+        'examination_approach': 'A detail is needed: whether the endoscopic ultrasound this code describes was performed.',
         'enteroscopy_through': 'A detail is needed: the altered anatomy the enteroscopy was passed through.',
     }
+    EXPLANATIONS = ('another_tract', 'enteroscopy_approach', 'examination_approach')
 
     def test_conflict_other_reads_another_act(self):
         """F4's input: held_fact_words('conflict:other') said "which statement about the other is right for this date";
@@ -691,10 +696,21 @@ class D267HeldFactWords(SimpleTestCase):
                 self.assertEqual(c.held_fact_words('procedure', wording.Message(value)), words)
                 if value != 'procedure':  # the procedure is known: never v1's procedure sentence
                     self.assertNotIn('in which procedure', words)
-        for value, words in c.HELD_FACT_ASKS.items():  # wording's own phrases, said of the session by its service
-            self.assertIn(words, {phrase.format(session=session) for phrase in wording.ATTRIBUTE_PHRASES.values()
-                                  if '{act}' not in phrase for session in ('enteroscopy', 'endoscopic ultrasound')},
-                          value)
+        phrases = {phrase.format(session=session) for phrase in wording.ATTRIBUTE_PHRASES.values()
+                   if '{act}' not in phrase for session in ('enteroscopy', 'endoscopic ultrasound')}
+        for value, words in c.HELD_FACT_ASKS.items():
+            with self.subTest(message=value):
+                spec = wording.MESSAGES[wording.Message(value)]
+                if value in self.EXPLANATIONS:  # D284 G1-08 (B8): the class phrase, no phrase of the attribute stated
+                    self.assertEqual(spec.kind, ItemKind.EXPLANATION)
+                    self.assertRegex(words, r'^whether the (?:enteroscopy|endoscopic ultrasound) this code describes was '
+                                            r'performed$')
+                    self.assertNotIn(words, phrases)
+                    for stated in ('route', 'tract', 'passed through'):
+                        self.assertNotIn(stated, words)
+                else:  # a question: wording's own phrase, said of the session by its service
+                    self.assertEqual(spec.kind, ItemKind.QUESTION)
+                    self.assertIn(words, phrases, value)
 
     def test_no_message_keeps_v1s_sentence(self):
         self.assertEqual(c.held_fact_words('procedure'), self.PROCEDURE)
@@ -725,3 +741,71 @@ class D267HeldFactWords(SimpleTestCase):
                 self.assertFalse([cause for cause in c.HELD_FACT_CAUSES if cause in words], words)
                 self.assertEqual(c.plain(words), words)
         self.assertGreater(shown, 3000)
+
+
+class D284AddonWords(SimpleTestCase):
+    """DECISIONS D284 (G3-15; build list B7), customer_api's half: an add-on its ADDON row holds reads a fixed sentence
+    chosen by the item's MESSAGE (wording.Message.ADDON's value), never by its key - never QUESTION_WORDS'
+    performed_status sentence ("could not confirm ... done", untrue of an add-on whose act is established) and never
+    STALE_WORDS - in the three states a view shows it: a stored question (its row id; the record's item, step 5b's
+    support['item'], is ADDON), a question read time words live (its own ``message``), and a reinstated add-on the row
+    withholds (``withheld_by`` overlay.ADDON_CHECK)."""
+
+    @staticmethod
+    def proposal(item_message):
+        support = {'held_facts': [{'fact': 'performed_status', 'cause': 'coding_rule:ADDON', 'rank': 4}],
+                   'family': 'gi.em', 'state': 'uncertain', 'reason': 'held'}
+        if item_message is not None:
+            support['item'] = {'message': item_message, 'fact': 'performed_status'}
+        return SimpleNamespace(support=support, family='gi.em', bucket=Proposal.SELECTED, checks=[],
+                               status=Proposal.NEEDS_CLARIFICATION, code='99417')
+
+    @staticmethod
+    def view(questions=(), withheld_by=''):
+        return SimpleNamespace(questions=list(questions), withheld_by=withheld_by, same_day_held=False, reason='',
+                               blocker='', stale=(), modifier_review=None, checks=[],
+                               status=Proposal.NEEDS_CLARIFICATION, summary='', answer='')
+
+    def test_the_three_states(self):
+        stored = {'id': 7, 'fact': 'performed_status', 'scope': 'proposal'}
+        live = {'fact': 'performed_status', 'message': wording.Message.ADDON.value}
+        for name, proposal, view, words in (
+                ('stored', self.proposal('addon'), self.view([stored]), c.ADDON_WORDS),
+                ('live', self.proposal(None), self.view([live]), c.ADDON_WORDS),
+                ('live, beside a stored item of another message', self.proposal('status'), self.view([live]),
+                 c.ADDON_WORDS),
+                ('reinstated, withheld', self.proposal('addon'), self.view(withheld_by=c.ADDON_CHECK),
+                 c.WITHHELD_WORDS[c.ADDON_CHECK])):
+            with self.subTest(state=name):
+                shown = c._qualifications(proposal, 'needs_detail', view, '99417')
+                self.assertIn(words, shown)
+                self.assertNotIn(c.QUESTION_WORDS['performed_status'], shown)
+                self.assertNotIn(c.STALE_WORDS, shown)
+
+    def test_the_message_chooses_never_the_key(self):
+        """The same key with any other message (or none) keeps QUESTION_WORDS' sentence: a live question of another
+        message, a stored one whose record's item is another message or of another fact, one with no row id."""
+        for name, proposal, question in (
+                ('live, status', self.proposal('addon'), {'fact': 'performed_status', 'message': 'status'}),
+                ('stored, status item', self.proposal('status'), {'id': 7, 'fact': 'performed_status'}),
+                ('stored, no item', self.proposal(None), {'id': 7, 'fact': 'performed_status'}),
+                ('no row id', self.proposal('addon'), {'fact': 'performed_status'})):
+            with self.subTest(case=name):
+                shown = c._qualifications(proposal, 'needs_detail', self.view([question]), '99417')
+                self.assertIn(c.QUESTION_WORDS['performed_status'], shown)
+                self.assertNotIn(c.ADDON_WORDS, shown)
+        proposal = self.proposal('addon')
+        proposal.support['item']['fact'] = 'event_entry'
+        shown = c._qualifications(proposal, 'needs_detail', self.view([{'id': 7, 'fact': 'performed_status'}]), '99417')
+        self.assertNotIn(c.ADDON_WORDS, shown)
+
+    def test_the_sentences_pass_the_customer_guard(self):
+        self.assertEqual(c.ADDON_CHECK, 'coding_rule:ADDON')
+        for text in (c.ADDON_WORDS, c.WITHHELD_WORDS[c.ADDON_CHECK]):
+            with self.subTest(text=text):
+                self.assertEqual(c.plain(text), text)
+                self.assertIsNone(c.FORBIDDEN.search(text), text)
+                self.assertEqual([pattern.pattern for pattern in HARD if pattern.search(text)], [], text)
+                self.assertFalse([cause for cause in c.HELD_FACT_CAUSES if cause in text], text)
+                self.assertNotIn('could not confirm', text)
+                self.assertNotIn('ADDON', text)

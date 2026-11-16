@@ -1,6 +1,6 @@
-"""The strict reader of pass 1's answer (gemini-events@2; docs/gemini-migration/FINAL-V2.md 3.1 rows S1, S2, I1, I3's
-per-source bound and I4, and 1.8; step 1b of 8.1): read(answer_text, unit_count) gives the answer with its item-level
-findings (ReadAnswer), or a Refusal of the WHOLE answer.
+"""The strict reader of pass 1's answer (gemini-events@2 and @3; docs/gemini-migration/FINAL-V2.md 3.1 rows S1, S2, I1,
+I3's per-source bound and I4, and 1.8; step 1b of 8.1; AMENDMENT-2 4.3, step f3s): read(answer_text, unit_count,
+version=...) gives the answer with its item-level findings (ReadAnswer), or a Refusal of the WHOLE answer.
 
 **S1: the whole answer, in this order; the first failure refuses it and nothing of it is read** (as v1's read.py):
 1. JSON, strictly (participants.reading.strict_json_text): a repeated key, NaN or Infinity, a number too large, NUL or a
@@ -8,8 +8,9 @@ findings (ReadAnswer), or a Refusal of the WHOLE answer.
 2. LOCAL_SCHEMA_2, by CPT Studio's own validator (participants.reading.schema_error): types, enumerations, every
    required field, no other field (stage ``schema``). Gemini's responseSchema is a hint, never trusted.
 3. BOUNDS_2 (1.8), each named by count, never truncated (stage ``bounds``): the lists 1.8 numbers (a section's closing
-   signatures are not one of them: only the cited units bound them), each slot at one fact, each words value at 600
-   characters, and the unit ids cited in the whole answer.
+   signatures are not one of them: only the cited units bound them), each slot at one fact under gemini-events@2 (under
+   @3 only the slots of WHOLE_ANSWER_SLOTS: AMENDMENT-2 4.3.1 and 4.3.8), each words value at 600 characters, and the
+   unit ids cited in the whole answer.
 4. The ids, in one grammar (stage ``ids``; DECISIONS D185): every object id is its family's letter (Family.letter: P, N,
    X, Y, L, E) followed by its number in canonical decimal digits - 0, or at most 9 ASCII digits not opening with 0
    ('E1', 'N0'; never 'E01', 'e1' or 'E 1') - and unique in its family; every id-valued reference (a FACT's value but
@@ -23,6 +24,15 @@ findings (ReadAnswer), or a Refusal of the WHOLE answer.
 
 **Item-level findings never refuse the answer** (3.1; 1.8). Each makes the fact it touches UNRESOLVED when settle
 applies it (3.3 row 4), with a reason from the closed list types.Reason:
+- S1.3's slot bound, under gemini-events@3 (AMENDMENT-2 4.3.1) ``slot_overfull``: a slot holding more than one fact (a
+  SLOT of extract_schema.ATTRIBUTES, every one of the 38) is read with every fact drafted as written, index 0..n-1, and
+  each of them carries slot_overfull beside its own S2, I1, I3 and I4 findings. Nothing is removed or rewritten.
+  BOUNDS_2[Bound.SLOT] keeps its value 1 and decides the finding, not a refusal; under gemini-events@2 (the label the
+  recorded answers carry, DECISIONS D202) and for an attribute of WHOLE_ANSWER_SLOTS (4.3.8) it stays S1.3's
+  whole-answer refusal. A reader of such a slot reads ONE fact, the merged view (``merged``, ReadAnswer.fact and
+  ReadAnswer.slot; 4.3.3): state contradicted, value '', the options every value the slot's facts wrote, each once in
+  written order, supported or negated - the values pass 1 itself put in the slot, never a value it did not write - and
+  ``written`` the written facts, whose states give ``negated_values``.
 - S2 ``shape_inconsistent``: a fact whose value is not empty exactly when it is contradicted, a supported or negated fact
   with no source or with options, a contradicted fact with fewer than two options, two options of one value, or an
   option with no source; a source citing no unit (1.2 rule 7: a source cites one or more units); the date of service's
@@ -53,15 +63,18 @@ repeats the model's text (I9). Refusal, refuse, iso_date and partial_date are v1
 path runs no v1 code (5.7: store's v2 reader imports them from here), with v1's regular expressions replaced by
 character tests; tests/v2/test_extract_read.py proves each equal to v1's.
 
-Versions (1.1): S1 is a read rule of INTERPRETATION_VERSION_V2; the item-level checks are checks of
-INVENTORY_VERSION_V2, re-run on stored pass-1 bytes by a re-settle. An answer is read only under LOCAL_SCHEMA_2's pin
-(check_pin), which stays empty until the integration owner writes it (2.5): until then no answer is read.
+Versions (1.1; AMENDMENT-2 8.1): S1 is a read rule of the pass-1 label the answer was asked under - gemini-events@2
+(INTERPRETATION_VERSION_V2, the default: the dormant Gemini adapter and every recorded answer) or gemini-events@3
+(INTERPRETATION_VERSION_V3, the Fable path), which moves the slot finding out of S1; the item-level checks are checks of
+the inventory version (gemini-inventory@3's slot_overfull among them), re-run on stored pass-1 bytes by a re-settle. An
+answer is read only under LOCAL_SCHEMA_2's pin, checked by label (check_pin: both labels pin the one LOCAL_SCHEMA_2,
+8.2's unchanged object), and an empty pin refuses it (2.5).
 
 This module imports no regular-expression or text module (5.6 lists it nowhere): it reads ids, values and counts.
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum, unique
@@ -179,12 +192,23 @@ def unit_known(value: str, unit_count: int) -> bool:
 # --- the pin -----------------------------------------------------------------------------------------------------------
 
 
-def check_pin() -> None:
-    """RuntimeError unless LOCAL_SCHEMA_2 is byte for byte what INTERPRETATION_VERSION_V2 pins (2.5, v1's read.check_pin
-    pattern). An empty pin (the placeholder before the integration owner writes it) is refused too: no answer is read
-    under a schema nobody pinned."""
-    pinned = interpretation.LOCAL_SCHEMA_SHA256_V2
-    version = interpretation.INTERPRETATION_VERSION_V2
+def schema_pins() -> dict[str, str]:
+    """The pin of LOCAL_SCHEMA_2 under each pass-1 label this reader reads (2.5; AMENDMENT-2 8.2: gemini-events@3 pins
+    the unchanged object, LOCAL_SCHEMA_SHA256_V2), by label, read from studio/interpretation/__init__.py when asked."""
+    return {interpretation.INTERPRETATION_VERSION_V2: interpretation.LOCAL_SCHEMA_SHA256_V2,
+            interpretation.INTERPRETATION_VERSION_V3: interpretation.LOCAL_SCHEMA_SHA256_V2}
+
+
+def check_pin(version: str = interpretation.INTERPRETATION_VERSION_V2) -> None:
+    """RuntimeError unless LOCAL_SCHEMA_2 is byte for byte what the pass-1 label ``version`` pins (2.5, v1's
+    read.check_pin pattern; AMENDMENT-2 8.1-8.2: each label checks its own pin). An empty pin (the placeholder before
+    the integration owner writes it) is refused too: no answer is read under a schema nobody pinned; and so is a label
+    this reader does not read."""
+    pins = schema_pins()
+    if version not in pins:
+        raise RuntimeError('This reader reads pass-1 answers of gemini-events@2 and gemini-events@3 only; no answer of '
+                           'another label is read.')
+    pinned = pins[version]
     if not pinned:
         raise RuntimeError(f'The local schema of {version} has no pin yet; an answer is read only under its pin.')
     if jsonschema.sha256_of(xs.LOCAL_SCHEMA_2) != pinned:
@@ -231,14 +255,65 @@ class DateOfService:
 @dataclass(frozen=True, slots=True)
 class ReadFact:
     """One fact of the answer, read. key: where it is. fact: as pass 1 wrote it (types.Fact; the date of service as
-    DateOfService). reasons: every finding of this reader on it (S2, I1, I3's per-source bound, I4), in Reason order,
-    () when it passed them. sides: each option's own findings - its sources', its value's and its shape's - aligned
-    with fact.options, so settle can tell a contradiction whose sides all pass from one with a failing side (3.3 row
-    1); reasons includes them."""
+    DateOfService). reasons: every finding of this reader on it (S2, I1, I3's per-source bound, I4, slot_overfull), in
+    Reason order, () when it passed them. sides: each option's own findings - its sources', its value's and its shape's
+    - aligned with fact.options, so settle can tell a contradiction whose sides all pass from one with a failing side
+    (3.3 row 1); reasons includes them.
+
+    written: () for a fact of the answer; for the MERGED VIEW of an overfilled slot (``merged``, AMENDMENT-2 4.3.3) the
+    slot's written facts, in written order, each as read (each carrying slot_overfull) - the view itself is never a fact
+    of ReadAnswer.facts, and its key is the slot's index 0."""
     key: FactKey
     fact: Fact | DateOfService
     reasons: tuple[Reason, ...]
     sides: tuple[tuple[Reason, ...], ...]
+    written: tuple[ReadFact, ...] = ()
+
+    @property
+    def overfull(self) -> bool:
+        """Whether this is the merged view of a slot holding more than one fact (4.3.3)."""
+        return len(self.written) > 1
+
+    @property
+    def keys(self) -> tuple[FactKey, ...]:
+        """Where the facts this reading stands for are: each written fact's key for the merged view, else its own
+        (a finding on the view lands on every fact of the slot)."""
+        return tuple(item.key for item in self.written) if self.written else (self.key,)
+
+    @property
+    def negated_values(self) -> tuple[str, ...]:
+        """The written values whose fact was negated, each once in written order (4.3.3: engine/types.Fact's
+        negated_values, the contract's side): () for every fact but the merged view."""
+        return _values(item for item in self.written if _state(item) is FactState.NEGATED)
+
+    @property
+    def stated_values(self) -> tuple[str, ...]:
+        """What this reading states or offers (4.3.3 b, c and the K rules): a supported fact's value, each side of pass
+        1's own contradiction, and - for the merged view - each value a supported or contradicted written fact writes
+        that no negated written fact writes (the options less negated_values: a denied or unwritten value is never
+        stated); () for a silent slot, a negated fact or the date of service."""
+        fact = self.fact
+        if self.written:
+            denied = set(self.negated_values)
+            return tuple(value for value in _values(item for item in self.written
+                                                    if _state(item) is not FactState.NEGATED) if value not in denied)
+        if not isinstance(fact, Fact):
+            return ()
+        if fact.state is FactState.SUPPORTED:
+            return (fact.value,) if fact.value != '' else ()
+        if fact.state is FactState.CONTRADICTED:
+            return tuple(dict.fromkeys(option.value for option in fact.options if option.value != ''))
+        return ()
+
+    @property
+    def asserted_values(self) -> tuple[str, ...]:
+        """Every value a supported or contradicted fact this reading stands for writes, each once in written order -
+        stated_values, and for the merged view also a value one written fact states and another denies. The K rules'
+        positive triggers fire on it (4.3.3: firing only demotes, so a value pass 1 both wrote and denied in one
+        overfilled slot fires them too: the reading that demotes more)."""
+        if self.written:
+            return _values(item for item in self.written if _state(item) is not FactState.NEGATED)
+        return self.stated_values
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,19 +382,94 @@ class ReadAnswer:
     doubts: tuple[ReadDoubt, ...]
 
     def fact(self, key: FactKey) -> ReadFact | None:
-        """The fact at ``key``, None when the answer has none there (a silent slot)."""
+        """The fact at ``key``, None when the answer has none there (a silent slot). A key of a slot - every SLOT of
+        extract_schema.ATTRIBUTES, at any index - reads the slot as a single-valued attribute is read (``slot``): its
+        one fact, or the merged view of an overfilled slot (AMENDMENT-2 4.3.3), never its first written fact."""
+        if (key.family, key.attribute) in SLOTS:
+            return self.slot(key.family, key.object, key.attribute)
         return next((item for item in self.facts if item.key == key), None)
+
+    def slot(self, family: xs.Family, object_id: str, attribute: Attribute) -> ReadFact | None:
+        """The one fact a reader of that object's single-valued attribute reads (``merged``): None when it is silent,
+        the merged view when it holds more than one fact."""
+        return merged([item for item in self.facts if item.key.family is family and item.key.object == object_id
+                       and item.key.attribute is attribute])
+
+
+# --- the merged view of an overfilled slot (AMENDMENT-2 4.3.3) -------------------------------------------------------
+
+
+def _state(item: ReadFact) -> FactState | None:
+    """A read fact's state (None for the date of service, which has states of its own)."""
+    return item.fact.state if isinstance(item.fact, Fact) else None
+
+
+def _values(items: Iterable[ReadFact]) -> tuple[str, ...]:
+    """Every value the facts write - each one's value, then its options' (a contradicted written fact's sides) - each
+    once, in written order; '' writes nothing."""
+    found: dict[str, None] = {}
+    for item in items:
+        if isinstance(item.fact, Fact):
+            for value in (item.fact.value, *(option.value for option in item.fact.options)):
+                if value != '':
+                    found.setdefault(value)
+    return tuple(found)
+
+
+def _ordered_sources(sources: Iterable[Source]) -> tuple[Source, ...]:
+    return tuple(dict.fromkeys(sources))
+
+
+def merged(found: Sequence[ReadFact]) -> ReadFact | None:
+    """What a reader of a single-valued attribute reads (AMENDMENT-2 4.3.3): None for a silent slot; the slot's one
+    fact; and for a slot holding more than one fact (an overfilled slot, read under gemini-events@3) ONE fact, never the
+    first written one and never silence: state contradicted, value '', qualifiers every written fact's (each once),
+    sources every written fact's (each once, in order), options every value the slot's facts wrote - each fact's value
+    and a contradicted written fact's sides - each once in written order, supported or negated, its sources those of the
+    facts that wrote it; reasons every written fact's (slot_overfull among them), sides each option's writers' findings,
+    and ``written`` the written facts, from which negated_values and stated_values are read. The view establishes
+    nothing: settle never makes a contradicted claim supported or negated, and claims.py claims no fact carrying a
+    finding (4.3.4)."""
+    items = tuple(found)
+    if not items:
+        return None
+    if len(items) == 1:
+        return items[0]
+    values = _values(items)
+    options: list[Option] = []
+    sides: list[tuple[Reason, ...]] = []
+    for value in values:
+        writers = [item for item in items if isinstance(item.fact, Fact)
+                   and value in (item.fact.value, *(option.value for option in item.fact.options))]
+        sources: list[Source] = []
+        for item in writers:
+            assert isinstance(item.fact, Fact)
+            sources += item.fact.sources if item.fact.value == value else [
+                source for option in item.fact.options if option.value == value for source in option.sources]
+        options.append(Option(value=value, sources=_ordered_sources(sources)))
+        sides.append(_ordered(reason for item in writers for reason in item.reasons))
+    qualifiers = tuple(dict.fromkeys(qualifier for item in items if isinstance(item.fact, Fact)
+                                     for qualifier in item.fact.qualifiers))
+    view = Fact(state=FactState.CONTRADICTED, value='', qualifiers=qualifiers,
+                sources=_ordered_sources(source for item in items for source in item.fact.sources),
+                options=tuple(options))
+    first = items[0].key
+    return ReadFact(FactKey(first.family, first.object, first.attribute, 0), view,
+                    _ordered(reason for item in items for reason in item.reasons), tuple(sides), items)
 
 
 # --- reading ------------------------------------------------------------------------------------------------------------
 
 
-def read(answer: object, unit_count: int) -> Refusal | ReadAnswer:
+def read(answer: object, unit_count: int, *,
+         version: str = interpretation.INTERPRETATION_VERSION_V2) -> Refusal | ReadAnswer:
     """The answer, parsed, checked whole as S1 says and then item by item, or the Refusal of all of it. ``unit_count`` is
-    the number of units contract/segment.py cut the revision into (I1). Nothing is repaired, coerced, truncated or
-    dropped. RuntimeError when LOCAL_SCHEMA_2 is not pinned or no longer matches its pin; ValueError for a unit count
-    that is not a whole number of at least 0."""
-    check_pin()
+    the number of units contract/segment.py cut the revision into (I1); ``version`` is the pass-1 label the answer was
+    asked under (gemini-events@2 by default; gemini-events@3 reads an overfilled slot as an item-level finding, 4.3.1).
+    Nothing is repaired, coerced, truncated or dropped. RuntimeError when LOCAL_SCHEMA_2 is not pinned under the label
+    or no longer matches its pin, or the label is not one this reader reads; ValueError for a unit count that is not a
+    whole number of at least 0."""
+    check_pin(version)
     if type(unit_count) is not int or unit_count < 0:
         raise ValueError('The unit count is a whole number of at least 0.')
     if not isinstance(answer, str):
@@ -332,7 +482,7 @@ def read(answer: object, unit_count: int) -> Refusal | ReadAnswer:
     if error:
         return refuse('schema', f'the answer breaks the interpretation schema: {error}')
     parsed = cast(dict[str, Any], parsed)  # the schema's root is an object
-    error = bound_error(parsed)
+    error = bound_error(parsed, slots=refused_slots(version))
     if error:
         return refuse('bounds', error)
     error = id_error(parsed)
@@ -342,6 +492,27 @@ def read(answer: object, unit_count: int) -> Refusal | ReadAnswer:
     if error:
         return refuse('schema', error)
     return _Items(parsed, unit_count).read()
+
+
+# --- S1.3: the slot bound, by label (AMENDMENT-2 4.3.1, 4.3.8) --------------------------------------------------------
+
+# 4.3.8: the slots whose overfill keeps S1's whole-answer refusal under gemini-events@3, each named in DECISIONS by the
+# integration owner - an attribute whose overfilled slot cannot be read with 4.4's properties. One is held here, the
+# fail-closed reading until its reader is routed: a session's examination, which contract/checks.py (outside this
+# step's files) reads as the slot's FIRST written fact - the session's G1 subject and G5's units - where 4.3.3 forbids
+# reading anything but the merged view (step f3s's REQUEST: route _Check.one through merged, then empty this). Every
+# other slot's contract places are proved (tests/v2/test_settle.py SlotRuleTests); a step that finds another asks the
+# integration owner to add it.
+WHOLE_ANSWER_SLOTS: frozenset[tuple[xs.Family, Attribute]] = frozenset({(Family.SESSION, Attribute.EXAMINATION)})
+# Every slot of the answer (extract_schema.ATTRIBUTES' SLOT arity): the 38 attributes the slot bound reads.
+SLOTS: frozenset[tuple[xs.Family, Attribute]] = frozenset(
+    (family, field.attribute) for family in xs.Family for field in xs.ATTRIBUTES[family] if field.arity is Arity.SLOT)
+
+
+def refused_slots(version: str) -> frozenset[tuple[xs.Family, Attribute]]:
+    """The slots S1.3 bounds at one fact, refusing the whole answer above it: every slot under gemini-events@2 (and any
+    label but @3), WHOLE_ANSWER_SLOTS under gemini-events@3 (4.3.1, 4.3.8)."""
+    return WHOLE_ANSWER_SLOTS if version == interpretation.INTERPRETATION_VERSION_V3 else SLOTS
 
 
 # --- S1.3: the bounds --------------------------------------------------------------------------------------------------
@@ -396,8 +567,10 @@ def _at(item: Mapping[str, Any], field: xs.Field) -> Any:
     return value
 
 
-def _field_bound(item: Mapping[str, Any], field: xs.Field, path: str) -> str:
-    """The first bound one attribute of one object breaks."""
+def _field_bound(item: Mapping[str, Any], family: xs.Family, field: xs.Field, path: str,
+                 slots: frozenset[tuple[xs.Family, Attribute]]) -> str:
+    """The first bound one attribute of one object of ``family`` breaks. A slot's count is a bound only for the slots
+    of ``slots`` (refused_slots); every other slot is bounded by each fact's own bounds alone (4.3.1)."""
     if field.arity is Arity.FACT:
         return _fact_bound(_at(item, field), path)
     if field.arity is Arity.LIST:
@@ -407,14 +580,16 @@ def _field_bound(item: Mapping[str, Any], field: xs.Field, path: str) -> str:
         if field.bound is None:
             raise RuntimeError(f'{field.attribute.name} has no bound in ATTRIBUTES.')
         owner = 'slot' if field.arity is Arity.SLOT else f'list of {field.attribute.value}'
-        error = _too_many(facts, field.bound, path, 'facts', owner)
+        counted = field.arity is Arity.FACTS or (family, field.attribute) in slots
+        error = _too_many(facts, field.bound, path, 'facts', owner) if counted else ''
         for index, fact in enumerate(facts):
             error = error or _fact_bound(fact, f'{path}[{index}]')
         return error
     return ''  # OTHER: no list of its own here
 
 
-def _object_bound(family: xs.Family, item: Mapping[str, Any], path: str) -> str:
+def _object_bound(family: xs.Family, item: Mapping[str, Any], path: str,
+                  slots: frozenset[tuple[xs.Family, Attribute]]) -> str:
     """The first bound one object breaks: its own citations and lists, then its attributes in ATTRIBUTES' order. A
     section's closing signatures take no count of their own (1.8 numbers none: only the cited units bound them), and
     each one's words take the words bound."""
@@ -434,7 +609,7 @@ def _object_bound(family: xs.Family, item: Mapping[str, Any], path: str) -> str:
                  or _too_many(item['restatements'], Bound.RESTATEMENTS, f'{path}.restatements', 'restatements',
                               'event'))
     for field in xs.ATTRIBUTES[family]:
-        error = error or _field_bound(item, field, f'{path}.{field.attribute.value}')
+        error = error or _field_bound(item, family, field, f'{path}.{field.attribute.value}', slots)
     return error
 
 
@@ -456,12 +631,14 @@ def _cited(answer: Mapping[str, Any]) -> int:
     return count
 
 
-def bound_error(answer: Mapping[str, Any]) -> str:
+def bound_error(answer: Mapping[str, Any], *, slots: frozenset[tuple[xs.Family, Attribute]] = SLOTS) -> str:
     """The first bound of BOUNDS_2 a schema-valid answer breaks, named by count, or ''. In order: the top-level lists
     (1.8's order: events, sections, sessions, people, anatomy entries, lesions), the other dates and the doubts; then
-    every object in the answer's order (the encounter, then each family), its citations and lists, each slot, each fact's
-    sources and options and every words value; then each doubt's objects and readings; last, the unit ids cited in the
-    whole answer. A source over 12 units is not here: that bound is item-level (I3)."""
+    every object in the answer's order (the encounter, then each family), its citations and lists, each slot of
+    ``slots`` (every slot by default, gemini-events@2's S1; refused_slots gives the label's), each fact's sources and
+    options and every words value; then each doubt's objects and readings; last, the unit ids cited in the whole answer.
+    A source over 12 units is not here: that bound is item-level (I3), as an overfilled slot outside ``slots`` is
+    (slot_overfull, 4.3.1)."""
     for family, bound in ((Family.EVENT, Bound.EVENTS), (Family.SECTION, Bound.SECTIONS),
                           (Family.SESSION, Bound.SESSIONS), (Family.PERSON, Bound.PEOPLE),
                           (Family.ANATOMY, Bound.ANATOMY), (Family.LESION, Bound.LESIONS)):
@@ -478,13 +655,14 @@ def bound_error(answer: Mapping[str, Any]) -> str:
     error = _fact_bound(encounter['date_of_service'], 'encounter.date_of_service')
     for index, other in enumerate(encounter['other_dates']):
         error = error or _fact_bound(other['role'], f'encounter.other_dates[{index}].role')
-    error = error or _field_bound(encounter, xs.field(Family.ENCOUNTER, Attribute.DOCUMENTING_CLINICIAN),
-                                  'encounter.documenting_clinician')
+    error = error or _field_bound(encounter, Family.ENCOUNTER,
+                                  xs.field(Family.ENCOUNTER, Attribute.DOCUMENTING_CLINICIAN),
+                                  'encounter.documenting_clinician', slots)
     for family in xs.Family:
         if family is Family.ENCOUNTER:
             continue
         for index, item in enumerate(answer[family.value]):
-            error = error or _object_bound(family, item, f'{family.value}[{index}]')
+            error = error or _object_bound(family, item, f'{family.value}[{index}]', slots)
     for index, doubt in enumerate(answer['doubts']):
         error = (error or _too_many(doubt['objects'], Bound.DOUBT_OBJECTS, f'doubts[{index}].objects', 'ids', 'doubt')
                  or _too_many(doubt['readings'], Bound.DOUBT_READINGS, f'doubts[{index}].readings', 'readings',
@@ -778,7 +956,20 @@ class _Items:
                         drafts += [self.fact(FactKey(family, item['id'], field.attribute, index), field, node)
                                    for index, node in enumerate(_at(item, field))]
         self.acyclic(drafts)
+        self.overfull(drafts)
         return drafts
+
+    def overfull(self, drafts: list[_Draft]) -> None:
+        """4.3.1: every fact of a slot holding more than one fact carries slot_overfull, beside its own findings (S1.3
+        refused every other such answer before this step). Nothing is removed or rewritten."""
+        counts: dict[tuple[xs.Family, str, Attribute], int] = {}
+        for draft in drafts:
+            if (draft.key.family, draft.key.attribute) in SLOTS:
+                place = (draft.key.family, draft.key.object, draft.key.attribute)
+                counts[place] = counts.get(place, 0) + 1
+        for draft in drafts:
+            if counts.get((draft.key.family, draft.key.object, draft.key.attribute), 0) > 1:
+                draft.reasons.add(Reason.SLOT_OVERFULL)
 
     def acyclic(self, drafts: list[_Draft]) -> None:
         """I4: part_of, cause_event and part_of_session acyclic. An edge is a supported value or a contradicted fact's

@@ -49,6 +49,33 @@ on withdrawal, a polypectomy of a gastric body polyp" filed in the enteroscopy i
 are fixed when the row is read: 9.4's weakenings, which act on the FactSet, leave them as they were, so a weakening
 never narrows the sessions.
 
+**An overfilled slot** (AMENDMENT-2 4.3.3, 4.4, adopted by DECISIONS D279 [R:truth-T1][R:truth-T2][R:truth-T5]
+[R:truth-T9]): whenever one of the 38 single-valued slot attributes (``SLOTS``: every single-valued attribute of
+DOMAINS but the required facts ``REQUIRED_FACTS``) holds more than one stored fact - a list at its key, which store.py
+accepts for a gemini-inventory@3 row only and only when every one of them carries ``slot_overfull`` (4.3.6) - the
+builder reads it as ONE Fact, the merged view (``_overfilled``): result unresolved, value None, state contradicted,
+reason slot_overfull alone, its spans and cited sources every written fact's, ``options`` every value the slot's facts
+wrote - each fact's claimed value and, for a fact pass 1 wrote contradicted, its sides - each once in written order,
+supported or negated, followed by what each written fact read alone would leave possible besides (a doubt naming its
+object, read as ``_fact`` reads one): never a value pass 1 did not write and never the attribute's domain; and
+``negated_values`` the written values only denied - denied by a written fact, stated by none, and left possible by no
+written fact read alone (a value one written fact denies and another states, or a doubt offers, is not only denied: the
+claimed-value readers 4.3.3 c names read it as claimed, as each written fact read alone would - NOTES questions Q1 and
+Q1R). Never the first written fact, never silence: ``silent`` is False for it, and ``holds``, ``denied`` and
+``established`` are False, so nothing rests on it as established (4.4). Each reader kind of 4.3.3 reads it, and since
+the two fields cannot carry what all three kinds need for a value written both stated and denied (whether a written
+fact denies, for the possibility readers; whether one states, for the claimed-value readers), each reads it at its
+fail-closed side (NOTES question Q1R): ``possibly`` (a) takes every written value as possible, and every possibility
+reader that takes an unestablished denial as leaving every value open takes EVERY merged view so (``open_denial``),
+whether or not a written fact denied a value - the weakest of its written facts read alone is never narrower; a reader
+of what pass 1 STATED (b) reads nothing a merged view holds as stated (classes._claims), since it cannot tell a written
+value from a doubt's reading, nor a value one written fact states from one another denies; a claimed-value reader (c)
+reads each option not in ``negated_values`` as claimed (``claimed_values``). A written fact that carried K3's
+``session_unreachable`` keeps the merged session view widened as that fact alone would be (below), and the literals of
+an overfilled occasion are every written fact's, so its acts' inherited date relations are re-judged on all of them
+(L1 only demotes). A list of fewer than two facts, a fact without ``slot_overfull``, or a list at a required fact or a
+multi-valued attribute is refused (FactSetError), as store.py refuses it.
+
 **The predicates** (4.2): ``holds``, ``denied``, ``established``, ``possibly`` - with the status arm: a status that is
 not established leaves every status possible [R:HO-1][R:HO-3] - and ``possibly_of_family``, the kind arm a statement
 (4.5) and an exclusion's condition 5 (4.6) read: a kind that is not established leaves every kind of its session's
@@ -193,6 +220,16 @@ _WANTS: Mapping[DateRelation, int] = MappingProxyType({DateRelation.ON_DATE_OF_S
 PAIR_ATTRIBUTES: frozenset[Attribute] = frozenset({Attribute.TARGET_PLACES, Attribute.TARGET_LESION})
 # The timing facts L1 re-judges at assess and read time (an inherited date relation is stored per act, 1.5).
 TIMING: frozenset[tuple[IdFamily, Attribute]] = frozenset({(_E, _A.DATE_RELATION), (_N, _A.OCCASION)})
+# The single-valued attributes pass 1 reports as exactly one FACT, never as a SLOT (FINAL-V2 1.4; contract/
+# extract_schema's FACT arity, and the encounter's date of service and an act's entry, which pass 1 does not report as
+# a slot): none of them can be overfilled.
+REQUIRED_FACTS: frozenset[tuple[IdFamily | None, Attribute]] = frozenset({
+    (None, _A.DATE_OF_SERVICE), (_P, _A.ROLE), (_N, _A.OWNER), (_X, _A.KIND), (_Y, _A.TYPE), (_E, _A.KIND),
+    (_E, _A.STATUS), (_E, _A.ENTRY)})
+# The 38 single-valued slot attributes (AMENDMENT-2 4.3.3): the only places an overfilled slot - more than one stored
+# fact at one key, each carrying slot_overfull - is read, as one merged view (module docstring).
+SLOTS: frozenset[tuple[IdFamily | None, Attribute]] = frozenset(
+    key for key, domain in DOMAINS.items() if not domain.many and key not in REQUIRED_FACTS)
 
 # A slot with nothing in it, and what an object or attribute the FactSet does not hold reads as (fail-closed: unknown,
 # never established, every value possible).
@@ -334,6 +371,9 @@ class _Context:
     rejudge: bool
     service: datetime.date | None
     occasions: dict[str, tuple[IsoDate | None, ...]] = field(default_factory=dict)
+    # the events whose overfilled session slot holds a written fact K3 demoted (session_unreachable): the merged view
+    # is widened as that fact alone would be (module docstring, an overfilled slot)
+    unreachable: set[Id] = field(default_factory=set)
 
     def span(self, units: Sequence[object], where: str) -> Span | None:
         """The span from the first cited unit's start to the last one's end; None when a unit is unknown (an item-level
@@ -507,6 +547,72 @@ def _fact(record: object, domain: Domain, subject: str, attribute: Attribute, fa
                 cited=cited, inherited_from=inherited_from, counter=counter)
 
 
+def _written(record: object, value: Value | None, domain: Domain, where: str) -> tuple[Value, ...]:
+    """The values one stored fact's claim writes (AMENDMENT-2 4.3.3): its claimed value, and, for a claim pass 1 wrote
+    contradicted, each of its sides (claim.options) parsed into ``domain`` - in written order, each once. A doubt's
+    reading or a control's value is no written value."""
+    claim = _mapping(_field(_mapping(record, where), 'claim', where), f'{where}.claim')
+    out: list[Value] = [value] if value is not None else []
+    for index, option in enumerate(_sequence(_field(claim, 'options', f'{where}.claim'), f'{where}.claim.options')):
+        place = f'{where}.claim.options[{index}]'
+        raw = _string(_field(_mapping(option, place), 'value', place), f'{place}.value')
+        parsed = _maybe(raw, domain) if raw != '' else None
+        if parsed is not None and parsed not in out:
+            out.append(parsed)
+    return tuple(out)
+
+
+def _overfilled(records: Sequence[object], domain: Domain, subject: str, attribute: Attribute,
+                family: IdFamily | None, context: _Context, where: str) -> Fact:
+    """An overfilled slot as ONE Fact, the merged view (AMENDMENT-2 4.3.3; module docstring, an overfilled slot): result
+    unresolved, value None, state contradicted, reason slot_overfull, the spans, cited sources and counters of every
+    written fact, options every written value (each fact's claimed value and a written contradiction's sides) in written
+    order and then what each written fact read alone leaves possible besides, each once; ``negated_values`` the written
+    values only denied: every written fact of which was negated, and which no written fact read alone leaves possible
+    besides (a doubt's reading of the object, which ``_digital``'s claimed-manual reading takes as a claim - NOTES
+    question Q1R); ``inherited_from`` the written facts' section when they all name one. FactSetError for fewer than two
+    facts, for a slot that is none of SLOTS, and for a fact without slot_overfull (store.py refuses such a row)."""
+    if (family, attribute) not in SLOTS or len(records) < 2:
+        raise FactSetError(f'The stored inventory is not readable: {where} holds more than one fact.')
+    timing = family is _N and (family, attribute) in TIMING
+    written: list[Value] = []
+    denied: list[Value] = []
+    stated: set[Value] = set()
+    besides: list[Value] = []
+    offered: set[Value] = set()
+    literals: list[IsoDate | None] = []
+    found: list[Fact] = []
+    for index, record in enumerate(records):
+        place = f'{where}[{index}]'
+        one = _fact(record, domain, subject, attribute, family, context, place)
+        if Reason.SLOT_OVERFULL not in one.reasons:
+            raise FactSetError(f'The stored inventory is not readable: {place} is not overfilled.')
+        if timing:
+            literals.extend(context.occasions.get(subject, ()))
+        values = _written(record, one.value, domain, place)
+        written.extend(value for value in values if value not in written)
+        if one.state is FactState.NEGATED:
+            denied.extend(value for value in values if value not in denied)
+        else:
+            stated.update(values)
+        besides.extend(value for value in one.options if value not in besides)
+        offered.update(value for value in one.options if value not in values)  # a doubt's reading, never a side
+        found.append(one)
+    if timing:
+        context.occasions[subject] = tuple(literals)
+    if family is _E and attribute is Attribute.SESSION and any(
+            Reason.SESSION_UNREACHABLE in one.reasons for one in found):
+        context.unreachable.add(_id(subject, where))
+    sections = {one.inherited_from for one in found}
+    return Fact(result=Result.UNRESOLVED, value=None, state=FactState.CONTRADICTED,
+                options=tuple(dict.fromkeys((*written, *besides))), reasons=(Reason.SLOT_OVERFULL,),
+                spans=tuple(dict.fromkeys(span for one in found for span in one.spans)),
+                cited=tuple(cited for one in found for cited in one.cited),
+                inherited_from=sections.pop() if len(sections) == 1 else None,
+                counter=tuple(dict.fromkeys(span for one in found for span in one.counter)),
+                negated_values=tuple(value for value in denied if value not in stated and value not in offered))
+
+
 def _literal(record: object, where: str) -> IsoDate | None:
     """A stored L1 literal ({value, precision}) as an IsoDate, None when it is not written at its precision (such a
     literal never meets a date: fail-closed)."""
@@ -522,7 +628,8 @@ def _literal(record: object, where: str) -> IsoDate | None:
 def _object_facts(record: Mapping[str, object], family: IdFamily | None, subject: str, context: _Context,
                   where: str) -> dict[Attribute, tuple[Fact, ...]]:
     """Every fact of one object (or of the encounter, family None), by attribute: each single-valued attribute present
-    exactly once, each multi-valued one as its members in order (none when its list is empty)."""
+    exactly once - an overfilled slot (a list of facts at a slot's key) as its one merged view (``_overfilled``) -, each
+    multi-valued one as its members in order (none when its list is empty)."""
     found: dict[Attribute, list[Fact]] = {}
     for attribute, value, listed, path in _paths(record, '', False):
         place = f'{where}.{path}'
@@ -539,6 +646,8 @@ def _object_facts(record: Mapping[str, object], family: IdFamily | None, subject
             members.append(_fact(value, domain, subject, attribute, family, context, place))
         elif listed or members:
             raise FactSetError(f'The stored inventory is not readable: {place} holds more than one fact.')
+        elif isinstance(value, list | tuple):
+            members.append(_overfilled(value, domain, subject, attribute, family, context, place))  # AMENDMENT-2 4.3.3
         else:
             members.append(_fact(value, domain, subject, attribute, family, context, place))
     for (owner, attribute), domain in DOMAINS.items():
@@ -712,15 +821,17 @@ def _places(members: Sequence[Fact]) -> tuple[Landmark, ...] | None:
     return tuple(out) if out else None
 
 
-def _k3_widened(sessions: Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]],
-                held: Mapping[Attribute, tuple[Fact, ...]]) -> Mapping[Attribute, tuple[Fact, ...]]:
+def _k3_widened(sessions: Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]], held: Mapping[Attribute, tuple[Fact, ...]],
+                overfilled: bool = False) -> Mapping[Attribute, tuple[Fact, ...]]:
     """One event's facts with its session fact widened when K3 demoted it (DECISIONS D244 Q-N1 option (b)): a session
     fact that is not established and carries ``session_unreachable`` gains, after its own options, every other session
     of ``sessions`` (in pass 1's order) that may be of a family whose reach holds any place the act may be at
-    (``_reach_holds``, ``_families``, ``_places``; questions R2D-K3 and R2D-K3P). Any other event's facts are returned
-    as they are."""
+    (``_reach_holds``, ``_families``, ``_places``; questions R2D-K3 and R2D-K3P). ``overfilled``: the event's session
+    slot is overfilled and one of its written facts carried session_unreachable (AMENDMENT-2 4.3.3: the merged view is
+    never narrower than that fact read alone). Any other event's facts are returned as they are."""
     found = held.get(Attribute.SESSION, ())
-    if not found or found[0].result not in OPEN or Reason.SESSION_UNREACHABLE not in found[0].reasons:
+    if not found or found[0].result not in OPEN or not (
+            overfilled or Reason.SESSION_UNREACHABLE in found[0].reasons):
         return held
     session = found[0]
     places = _places(held.get(Attribute.TARGET_PLACES, ()))
@@ -765,7 +876,8 @@ def _build(inventory: object, rejudge: bool, service: datetime.date | None) -> F
                                                                  f'{where}.completeness'), f'{where}.completeness.result')
         objects[family] = found
     # a session fact K3 demoted is possibly any session whose reach holds the act's place (DECISIONS D244 Q-N1)
-    objects[_E] = {subject: _k3_widened(objects[_X], held) for subject, held in objects[_E].items()}
+    objects[_E] = {subject: _k3_widened(objects[_X], held, subject in context.unreachable)
+                   for subject, held in objects[_E].items()}
     return FactSet(encounter=encounter, people=objects[_P], sections=objects[_N], sessions=objects[_X],
                    anatomy=objects[_Y], lesions=objects[_L], events=objects[_E], anchors=anchors,
                    unlisted=_unlisted(events, context), pair_controls=_pair_controls(context),
@@ -973,6 +1085,57 @@ def possible_kinds(R: FactSet, event: Id, *, of_family: bool) -> frozenset[Kind]
     if of_family:
         return frozenset(kind for kind in Kind if possibly_of_family(R, event, kind))
     return frozenset(kind for kind in Kind if possibly(found, kind))
+
+
+def established_kind(R: FactSet, event: Id) -> Kind:
+    """The one label of an act (DECISIONS D287, D267's heading, D254 rule 2; build list B9): the catalogue kind of its
+    SUPPORTED kind with its supported purpose (catalogue.catalogue_kind: a clip or an injection supported for hemostasis
+    is a bleeding control), else Kind.OTHER - an act whose kind is negated, doubted, unresolved, contradicted, silent or
+    an overfilled slot's, or other, is "another act". Every fact key that names an act names this kind
+    (questions.act_kind, evaluate's, coverage's and classes' conflict keys read this one derivation)."""
+    found = fact(R, event, Attribute.KIND)
+    if found.result is Result.SUPPORTED and isinstance(found.value, Kind):
+        purpose = fact(R, event, Attribute.PURPOSE)
+        named = catalogue.catalogue_kind(found.value, purpose.value if purpose.result is Result.SUPPORTED
+                                         and isinstance(purpose.value, Purpose) else None)
+        if named is not None:
+            return named
+    return Kind.OTHER
+
+
+def overfilled(f: Fact) -> bool:
+    """The merged view of an overfilled slot (AMENDMENT-2 4.3.3; module docstring): unresolved for slot_overfull, its
+    state contradicted."""
+    return f.state is FactState.CONTRADICTED and Reason.SLOT_OVERFULL in f.reasons
+
+
+def open_denial(f: Fact) -> bool:
+    """Whether a fact that is not established reads, for a possibility reader that takes an unestablished denial as
+    leaving every value open (classes._open and _may_name, combination._named_sessions, coverage.sessions_of and
+    _lesion_values: AMENDMENT-2 4.3.3 a), as such a denial: a claim pass 1 wrote negated (state negated), and every
+    overfilled slot's merged view (``overfilled``). Whenever a written fact of the view denies a value, the view must
+    leave every value open, as that denial read alone would (4.4: never stronger than any single written fact read
+    alone, for any reader); and the view cannot tell from its options and ``negated_values`` whether one does, since a
+    value one written fact states and another denies is not only denied (the claimed-value readers must claim it), so
+    every view is read so - the fail-closed reading of NOTES question Q1R: a view of written values that are all stated
+    leaves open more than 4.3.3 a asks, never less. The caller reads an established fact first."""
+    return f.state is FactState.NEGATED or overfilled(f)
+
+
+def claimed_values(f: Fact) -> tuple[Value, ...]:
+    """The values pass 1's own claim of ``f`` states, as AMENDMENT-2 4.3.3 c's claimed-value readers read them: its
+    value when its claim is supported (in any result but negated); a contradiction's sides - pass 1's own contradicted
+    claim, whose settled value is empty, a fact settled contradicted, and an overfilled slot's merged view - its value
+    and each option not in ``negated_values`` (for the view: every value a written fact states, a value another written
+    fact denies included, and every reading a doubt offers - never a value only denied); nothing for a silent slot, a
+    negated claim or a negated result. Each 9.4 weakening keeps a claimed value (an established fact to unresolved, an
+    added doubt), and a weakening never removes a side, so these only grow under a weakening."""
+    if silent(f) or f.result is Result.NEGATED or f.state is FactState.NEGATED:
+        return ()
+    if f.state is FactState.CONTRADICTED or f.result is Result.CONTRADICTED:
+        return tuple(value for value in dict.fromkeys((f.value, *f.options))
+                     if value is not None and value not in f.negated_values)
+    return (f.value,) if f.value is not None else ()
 
 
 def _supported(R: FactSet, subject: Id, attribute: Attribute) -> tuple[Value, ...] | None:

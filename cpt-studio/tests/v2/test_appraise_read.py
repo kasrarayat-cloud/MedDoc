@@ -5,11 +5,15 @@ Proved, item by item (9.3: "extract_read, appraise_read: every refusal stage and
 the evidence check"): each refusal stage (json, schema, bounds) with a planted case, each bound by count; the item-level
 findings (an unknown claim id ignored, a repeated one read for none, a missing verdict, an unknown evidence unit
 ignoring the evidence, an unlisted entry kept with its unknown units and session dropped); the evidence attachment check
-of 3.2.5; every verdict bound to its claim's content key [R:MO-5]; the pin; 5.7 measure 4.
+of 3.2.5; every verdict bound to its claim's content key [R:MO-5]; the pin; 5.7 measure 4. And AMENDMENT-2's step F2
+(8.1-8.2 [R:replay-R4]): the pin is checked by the label the request was built under, gemini-appraisal@1 by default and
+@2 on the Fable path, both reading an answer alike under the one LOCAL schema pin, any other label refused before the
+answer is read, and each refusal naming its label (LabelTests).
 """
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 from pathlib import Path
 from unittest import mock
@@ -192,6 +196,64 @@ class EvidenceTests(SimpleTestCase):
             verdict['evidence'] = ['S4']
         found = read(data, claims_)
         self.assertTrue(all(not item.attached_evidence for item in found.verdicts))
+
+
+class LabelTests(SimpleTestCase):
+    """AMENDMENT-2 8.1-8.2 [R:replay-R4]: the pin is checked by the label the request was built under - gemini-appraisal@1
+    (the default: the dormant Gemini adapter's reading, unchanged) or @2 (the Fable path's) - both under
+    APPRAISAL_LOCAL_SCHEMA_SHA256, and any other label is refused."""
+
+    def test_both_labels_read_an_answer_alike(self):
+        claims_ = claim_set()
+        data = answer_for(claims_, unlisted=[{'units': ['S7'], 'what': 'denial', 'kind': '', 'session': ''}])
+        data['verdicts'][1].update(verdict='contradicts', attached='no', evidence=['S4'])
+        with mock.patch.multiple(interpretation, **PIN):
+            readings = [appraise_read.read(json.dumps(data), claims_, UNITS),
+                        appraise_read.read(json.dumps(data), claims_, UNITS, version=interpretation.APPRAISAL_VERSION),
+                        appraise_read.read(json.dumps(data), claims_, UNITS, version=interpretation.APPRAISAL_VERSION_V3)]
+        self.assertIsInstance(readings[0], appraise_read.ReadAppraisal)
+        self.assertEqual(readings[1], readings[0])
+        self.assertEqual(readings[2], readings[0])
+        self.assertEqual((interpretation.APPRAISAL_VERSION, interpretation.APPRAISAL_VERSION_V3),
+                         ('gemini-appraisal@1', 'gemini-appraisal@2'))
+        # a refusal of the answer is the same under either label too
+        with mock.patch.multiple(interpretation, **PIN):
+            refusals = {appraise_read.read('{"verdicts": [', claims_, UNITS, version=label)
+                        for label in (None, interpretation.APPRAISAL_VERSION, interpretation.APPRAISAL_VERSION_V3)}
+        self.assertEqual(len(refusals), 1)
+
+    def test_an_unknown_label_is_refused_before_the_answer_is_read(self):
+        claims_ = claim_set()
+        for label in ('gemini-appraisal@3', 'gemini-events@3', '', interpretation.APPRAISAL_VERSION + ' '):
+            for answer in (json.dumps(answer_for(claims_)), 'not json'):
+                with self.subTest(label=label, answer=answer[:8]), mock.patch.multiple(interpretation, **PIN):
+                    with self.assertRaisesMessage(RuntimeError, 'No pin of the local schema is held for the label'):
+                        appraise_read.read(answer, claims_, UNITS, version=label)
+        with mock.patch.multiple(interpretation, **PIN):  # the control: the labels it holds read
+            appraise_read.check_pin(interpretation.APPRAISAL_VERSION_V3)
+            appraise_read.check_pin()
+
+    def test_a_refusal_names_the_label_it_was_read_under(self):
+        claims_ = claim_set()
+        answer = json.dumps(answer_for(claims_))
+        version = interpretation.APPRAISAL_VERSION_V3
+        with mock.patch.object(interpretation, 'APPRAISAL_LOCAL_SCHEMA_SHA256', ''):
+            with self.assertRaisesMessage(RuntimeError, f'The local schema of {version} has no pin yet'):
+                appraise_read.read(answer, claims_, UNITS, version=version)
+        with mock.patch.object(interpretation, 'APPRAISAL_LOCAL_SCHEMA_SHA256', '0' * 64):
+            with self.assertRaisesMessage(RuntimeError, f'no longer matches the {version} pin'):
+                appraise_read.read(answer, claims_, UNITS, version=version)
+            with self.assertRaisesMessage(RuntimeError, f'no longer matches the {interpretation.APPRAISAL_VERSION} pin'):
+                appraise_read.read(answer, claims_, UNITS)
+
+    def test_the_label_is_a_keyword_whose_default_is_the_dormant_adapters(self):
+        for function in (appraise_read.read, appraise_read.check_pin):
+            parameter = inspect.signature(function).parameters['version']
+            with self.subTest(function=function.__name__):
+                self.assertIsNone(parameter.default)
+        self.assertIs(inspect.signature(appraise_read.read).parameters['version'].kind, inspect.Parameter.KEYWORD_ONLY)
+        with self.assertRaises(TypeError):
+            appraise_read.read('{}', claim_set(), UNITS, interpretation.APPRAISAL_VERSION_V3)
 
 
 class PinAndGuardTests(SimpleTestCase):

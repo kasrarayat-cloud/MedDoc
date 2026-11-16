@@ -76,6 +76,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from django.test import SimpleTestCase
@@ -705,28 +706,34 @@ def placeholders(sentence):
 
 class TemplateTests(SimpleTestCase):
     def test_every_template_is_in_one_table_and_fills_only_its_slots(self):
-        self.assertEqual(set(claims.TEMPLATES) | set(claims.STATEMENT_TEMPLATES), set(claims.TemplateId))
+        # gemini-appraisal@1's tables hold every template but D292 U1's kind-neutral forms, which only @2's hold
+        neutral = set(claims.KIND_NEUTRAL.values())
+        self.assertEqual(set(claims.TEMPLATES) | set(claims.STATEMENT_TEMPLATES), set(claims.TemplateId) - neutral)
         self.assertFalse(set(claims.TEMPLATES) & set(claims.STATEMENT_TEMPLATES))
+        self.assertEqual(set(claims.TEMPLATES_V3) | set(claims.STATEMENT_TEMPLATES_V3), set(claims.TemplateId))
+        self.assertFalse(set(claims.TEMPLATES_V3) & set(claims.STATEMENT_TEMPLATES_V3))
         slots = {slot.value for slot in claims.Slot}
-        for template_id in claims.TemplateId:
-            with self.subTest(template=template_id.value):
-                sentence = claims.template(template_id)
-                self.assertTrue(placeholders(sentence) <= slots, placeholders(sentence) - slots)
-                self.assertTrue(sentence.endswith('.') and sentence[0].isupper())
-        # every statement-phrased template begins with "This statement", and so do breadth and covers
-        for template_id in claims.TemplateId:
-            statement = template_id.value.startswith('statement.')
-            self.assertEqual(claims.template(template_id).startswith('This statement'), statement, template_id)
+        for version in claims.VERSIONS:
+            for template_id in claims.TemplateId:
+                with self.subTest(template=template_id.value, version=version):
+                    sentence = claims.template(template_id, version)
+                    self.assertTrue(placeholders(sentence) <= slots, placeholders(sentence) - slots)
+                    self.assertTrue(sentence.endswith('.') and sentence[0].isupper())
+                    # every statement-phrased template begins with "This statement", and so do breadth and covers
+                    statement = template_id.value.startswith('statement.')
+                    self.assertEqual(sentence.startswith('This statement'), statement, template_id)
 
     def test_every_template_is_filled_by_one_arm(self):
         import inspect
         source = inspect.getsource(claims._Builder.fill)
         for template_id in claims.TemplateId:
-            arms = (template_id in claims._LABEL_SLOT) + (template_id in claims._REF_SLOT) + (
-                f'T.{template_id.name}' in source)
+            # a kind-neutral form (D292 U1) is filled by the arm of the kind-named form it stands for (render)
+            filled_as = claims.KIND_NAMED.get(template_id, template_id)
+            arms = (filled_as in claims._LABEL_SLOT) + (filled_as in claims._REF_SLOT) + (
+                f'T.{filled_as.name}' in source)
             with self.subTest(template=template_id.value):
                 self.assertGreaterEqual(arms, 1)
-                self.assertFalse(template_id in claims._LABEL_SLOT and template_id in claims._REF_SLOT)
+                self.assertFalse(filled_as in claims._LABEL_SLOT and filled_as in claims._REF_SLOT)
 
     def test_a_template_for_every_attribute_and_state(self):
         for object_class, entries in rq.CLAIMED.items():
@@ -3926,11 +3933,12 @@ class PinTests(SimpleTestCase):
 # The module's pinned OUTPUT tables (FINAL-V2 5.7 NoWordLists: claims.TEMPLATES and the label tables), the only
 # module-level collections of string literals it may hold.
 OUTPUT_TABLES = ('TEMPLATES', 'STATEMENT_TEMPLATES', 'KIND_LABELS', 'LABELS', 'PLACE_LABELS', 'STATEMENT_DATE_PHRASES',
-                 'CARD_PHRASES')
+                 'CARD_PHRASES', 'TEMPLATES_V3', 'STATEMENT_TEMPLATES_V3')  # gemini-appraisal@2's two (D292)
 ALLOWED_IMPORTS = {
     '__future__.annotations', 'collections.abc.Callable', 'collections.abc.Iterable', 'collections.abc.Mapping',
     'collections.abc.Sequence', 'dataclasses.dataclass', 'dataclasses.field', 'enum.Enum', 'enum.unique',
-    'types.MappingProxyType', 'typing.cast', 'studio.interpretation.contract.extract_schema',
+    'types.MappingProxyType', 'typing.cast', 'studio.interpretation',  # the package's labels (AMENDMENT-2 8.1)
+    'studio.interpretation.contract.extract_schema',
     'studio.interpretation.contract.jsonschema', 'studio.interpretation.engine.anatomy',
     'studio.interpretation.engine.catalogue', 'studio.interpretation.engine.requirements'}
 
@@ -3996,3 +4004,445 @@ class GuardTests(SimpleTestCase):
                                                                               'date_literals')}
         self.assertFalse((retired | text_modules) & set(loaded), loaded)
         self.assertIn('studio.interpretation.contract.claims', loaded)
+
+
+# --- AMENDMENT-2 and DECISIONS D292 (step f3s): gemini-appraisal@2's claims ------------------------------------------
+
+APPRAISAL_V3 = interpretation.APPRAISAL_VERSION_V3
+T = claims.TemplateId
+# a doubted kind's statement facts U1 lists (D292), each rendered kind-neutral under gemini-appraisal@2
+U1_ATTRIBUTES = frozenset({A.STATUS, A.DATE_RELATION, A.PERFORMER, A.PERFORMER_PERSON, A.TARGET_PLACES,
+                           A.TARGET_LESION, A.TECHNIQUE_DEVICE, A.SCOPE_BREADTH, A.SCOPE_TARGETS, A.SCOPE_SEGMENT,
+                           A.SCOPE_EXCEPTS})
+STATEMENTS = ('SYNTHETIC COLONOSCOPY NOTE U1\n'                                                         # S1
+              'Date of service: 06/02/2031\n'                                                           # S2
+              'Endoscopist: Q. R. Vance, MD (fictional)\n'                                              # S3
+              '\n'
+              'Findings: The colonoscope was advanced to the cecum.\n'                                  # S4
+              'A 5 mm polyp in the transverse colon was removed with a cold snare.\n'                   # S5
+              'No biopsies were taken by me with cold forceps from the rectum on this date.\n'          # S6
+              'A 6 mm polyp in the sigmoid colon was seen.\n'                                           # S7
+              'Neither polyp was removed with a hot snare.\n'                                           # S8
+              'No tattoo was placed from the descending colon to the rectum.\n'                         # S9
+              'Nothing else was removed apart from the transverse polyp.\n'                             # S10
+              'No dilation of the anastomosis or the bile duct was done.\n')                            # S11
+NOTES['STATEMENTS'] = STATEMENTS
+
+
+def doubt_on_kind(event_id, unit):
+    return {'about': 'kind', 'objects': [event_id], 'units': [unit], 'basis': 'stated', 'readings': []}
+
+
+def statements_answer(doubted=(), kind_finding=False):
+    """STATEMENTS' answer: a colonoscopy X1 (E1) and a cold-snare removal of L1 (E2); a forceps biopsy denial with its
+    own performer, person, device, place and date relation (E3, single target); a lesion L2 (S7); a hot-snare denial of
+    the two listed polyps (E4); a tattoo denial over a segment (E5); an exceptive removal denial excepting E2 (E6); and
+    a dilation denial at an anatomy entry and in a duct (E7) - ``doubted`` the statements a kind doubt names."""
+    data = answer(
+        sections=[
+            section('N0', src([], '', 'section'), role=[fact('header', src(['S1'], '', 'document_frame'))],
+                    occasion=[fact('on_date_of_service', src(['S2'], '', 'document_frame'))],
+                    performer=[fact('documenting_team', src(['S3'], '', 'document_frame'))]),
+            section('N1', src(['S4'], 'Findings:', 'section'),
+                    role=[fact('findings', src(['S4'], 'Findings:', 'section'))],
+                    occasion=[fact('on_date_of_service', src(['S2'], '', 'document_frame'))],
+                    performer=[fact('documenting_team', src(['S3'], '', 'document_frame'))])],
+        sessions=[session('X1', 'colonoscopy', src(['S1'], 'COLONOSCOPY', 'document_frame'), fact('E1', src(['S4'])),
+                          reached=[fact('cecum', src(['S4'], 'advanced to the cecum'))])],
+        anatomy=[{'id': 'Y1', 'type': fact('anastomosis', src(['S11'], 'anastomosis')), 'organ': [],
+                  'subtype': [], 'joins': []}],
+        lesions=[lesion('L1', ['S5'], 'A 5 mm polyp in the transverse colon',
+                        places=[fact('transverse_colon', src(['S5'], 'transverse colon'))]),
+                 lesion('L2', ['S7'], 'A 6 mm polyp in the sigmoid colon',
+                        places=[fact('sigmoid_colon', src(['S7'], 'sigmoid colon'))])],
+        events=[
+            event('E1', ['S4'], 'colonoscope', 'was advanced', 'examination', session=[fact('X1', src(['S4']))]),
+            event('E2', ['S5'], 'removed with a cold snare', 'was removed', 'snare', session=[fact('X1', src(['S5']))],
+                  target__lesion=[fact('L1', src(['S5'], 'A 5 mm polyp'))],
+                  target__places=[fact('transverse_colon', src(['S5'], 'transverse colon'))],
+                  technique__device=[fact('cold_snare', src(['S5'], 'cold snare'))]),
+            event('E3', ['S6'], 'biopsies', 'No biopsies were taken', 'biopsy', neg('performed', src(['S6'], 'No')),
+                  session=[fact('X1', src(['S6']))], date_relation=[fact('on_date_of_service', src(['S6'],
+                                                                                                   'on this date'))],
+                  performer=[fact('documenting_team', src(['S6'], 'by me'))],
+                  performer_person=[fact('P1', src(['S6'], 'by me'))],
+                  technique__device=[fact('cold_forceps', src(['S6'], 'cold forceps'))],
+                  scope__breadth=[fact('single_target', src(['S6'], 'from the rectum'))],
+                  target__places=[fact('rectum', src(['S6'], 'rectum'))]),
+            event('E4', ['S8'], 'removed with a hot snare', 'Neither polyp was removed', 'snare',
+                  neg('performed', src(['S8'], 'Neither')), session=[fact('X1', src(['S8']))],
+                  scope__breadth=[fact('listed_targets', src(['S8'], 'Neither polyp'))],
+                  scope__targets=['L1', 'L2'], technique__device=[fact('hot_snare', src(['S8'], 'hot snare'))]),
+            event('E5', ['S9'], 'tattoo', 'No tattoo was placed', 'tattoo', neg('performed', src(['S9'], 'No')),
+                  session=[fact('X1', src(['S9']))],
+                  scope__breadth=[fact('segment', src(['S9'], 'from the descending colon to the rectum'))],
+                  scope__segment=['descending_colon', 'rectum']),
+            event('E6', ['S10'], 'removed', 'Nothing else was removed', 'removal',
+                  neg('performed', src(['S10'], 'Nothing else')), session=[fact('X1', src(['S10']))],
+                  scope__breadth=[fact('exceptive', src(['S10'], 'apart from the transverse polyp'))],
+                  scope__excepts=['E2'], target__lesion=[fact('L2', src(['S10'], 'Nothing else'))]),
+            event('E7', ['S11'], 'dilation', 'No dilation', 'dilation', neg('performed', src(['S11'], 'No')),
+                  session=[fact('X1', src(['S11']))],
+                  target__anatomy=[fact('Y1', src(['S11'], 'the anastomosis'))],
+                  target__duct=[fact('biliary', src(['S11'], 'the bile duct'))])],
+        doubts=[doubt_on_kind(name, {'E3': 'S6', 'E4': 'S8', 'E5': 'S9', 'E6': 'S10', 'E7': 'S11'}[name])
+                for name in doubted])
+    return data
+
+
+def build_as(text, data, version, findings=None):
+    found = read(text, data)
+    return claims.build(appraise_prompt.basis(text, (), found, findings=findings or {}),
+                        appraise_prompt.seed(text, found), version=version)
+
+
+def kind_words():
+    """Every kind label form (KIND_LABELS): a sentence that names a kind holds one of them."""
+    return {form for forms in claims.KIND_LABELS.values() for form in forms}
+
+
+class KindNeutralTests(SimpleTestCase):
+    """DECISIONS D292's U1 (gemini-appraisal@2 only): whenever a statement's kind is doubted, its status, date
+    relation, own performer, places, lesion, device, breadth, targets and segment claims, their controls and its
+    statement-side pair controls are rendered in kind-neutral statement forms; the kind stays unestablished (D191);
+    gemini-appraisal@1 is unchanged."""
+
+    def test_a_doubted_kind_statements_listed_facts_are_claimed_kind_neutral_under_appraisal_2_alone(self):
+        doubted = ('E3', 'E4', 'E5', 'E6', 'E7')
+        data = statements_answer(doubted=doubted)
+        before = build_as(STATEMENTS, data, interpretation.APPRAISAL_VERSION)
+        after = build_as(STATEMENTS, data, APPRAISAL_V3)
+        for name in doubted:
+            with self.subTest(statement=name):
+                # @1: every form that names the kind stays unclaimable, as recorded
+                self.assertFalse([item for item in before.appraised if item.key.object == name
+                                  and item.key.attribute in U1_ATTRIBUTES])
+                # @2: the kind itself is never claimed; every claimed U1 fact and its control read kind-neutral
+                self.assertFalse(appraised(after, A.KIND, name))
+                for item in after.appraised:
+                    if item.key.object != name:
+                        continue
+                    for claim_id in (item.claim, item.control):
+                        if claim_id is None:
+                            continue
+                        claim = after.claim(claim_id)
+                        sentence = after.sentences[claim_id]
+                        self.assertNotIn(T(claim.template), claims.NAMES_THE_KIND, sentence)
+                        self.assertFalse([words for words in kind_words() if words in sentence], sentence)
+        claimed = {(item.key.object, item.key.attribute) for item in after.appraised}
+        for expected in (('E3', A.STATUS), ('E3', A.DATE_RELATION), ('E3', A.PERFORMER), ('E3', A.PERFORMER_PERSON),
+                         ('E3', A.TECHNIQUE_DEVICE), ('E3', A.SCOPE_BREADTH), ('E3', A.TARGET_PLACES),
+                         ('E4', A.SCOPE_TARGETS), ('E4', A.SCOPE_BREADTH), ('E4', A.TECHNIQUE_DEVICE),
+                         ('E5', A.SCOPE_SEGMENT), ('E5', A.SCOPE_BREADTH), ('E6', A.TARGET_LESION),
+                         ('E6', A.SCOPE_EXCEPTS), ('E6', A.SCOPE_BREADTH)):
+            with self.subTest(claimed=expected):
+                self.assertIn(expected, claimed)
+        status = appraised(after, A.STATUS, 'E3')[0]
+        self.assertEqual(after.sentences[status.claim], 'This statement says that the act it names was not done.')
+        self.assertEqual(after.sentences[status.control], 'This statement says that the act it names was done.')
+        places = appraised(after, A.TARGET_PLACES, 'E3')[0]
+        self.assertEqual(after.sentences[places.claim], 'This statement is about the act it names, in the rectum.')
+        self.assertEqual(T(after.claim(places.control).template), T.STMT_TARGET_PLACE_ANY)
+
+    def test_the_anatomy_and_duct_forms_and_a_kind_not_claimable_without_a_doubt_keep_no_claim(self):
+        after = build_as(STATEMENTS, statements_answer(doubted=('E7',)), APPRAISAL_V3)
+        why = {(item.key.object, item.key.attribute): item.why for item in after.unclaimed}
+        self.assertEqual(why[('E7', A.TARGET_ANATOMY)], claims.Unclaimable.KIND)  # U1 does not list them
+        self.assertEqual(why[('E7', A.TARGET_DUCT)], claims.Unclaimable.KIND)
+        # a statement whose kind fails a check (no doubt names it) is outside U1's class: its forms stay unclaimable
+        findings = {FactKey(F.EVENT, 'E3', A.KIND, 0): (Reason.GEOMETRY_STATEMENT,)}
+        failed = build_as(STATEMENTS, statements_answer(), APPRAISAL_V3, findings=findings)
+        self.assertFalse([item for item in failed.appraised if item.key.object == 'E3'
+                          and item.key.attribute in U1_ATTRIBUTES])
+        self.assertEqual({item.why for item in failed.unclaimed if item.key.object == 'E3'
+                          and item.key.attribute is A.STATUS}, {claims.Unclaimable.KIND})
+
+    def test_an_all_of_kind_breadth_with_a_doubted_kind_has_no_control_that_can_be_written(self):
+        data = statements_answer(doubted=('E6',))
+        statement = next(item for item in data['events'] if item['id'] == 'E6')
+        statement['scope'] = {'breadth': [fact('all_of_kind', src(['S10'], 'Nothing else'))], 'targets': [],
+                              'segment': [], 'covers': [], 'excepts': []}
+        after = build_as(STATEMENTS, data, APPRAISAL_V3)
+        why = {(item.key.object, item.key.attribute): item.why for item in after.unclaimed}
+        # E2, a removal asserted performed in E6's session, may be of the doubted kind: the control cannot be written
+        self.assertEqual(why[('E6', A.SCOPE_BREADTH)], claims.Unclaimable.CONTROL)
+        # the examination E1 is an act of the session too, of a kind a doubted kind may be (fail-closed); with no act
+        # asserted performed that may lie in the session there is no reported act of any kind: no control
+        alone = copy.deepcopy(data)
+        alone['events'] = [item for item in alone['events'] if item['id'] not in ('E1', 'E2')]
+        lone = build_as(STATEMENTS, alone, APPRAISAL_V3)
+        breadth = appraised(lone, A.SCOPE_BREADTH, 'E6')
+        self.assertTrue(breadth)
+        self.assertEqual(lone.sentences[breadth[0].claim],
+                         'This statement says that no act of the kind it names at all was done in session X1.')
+
+    def test_statement_side_pair_controls_are_kind_neutral_and_the_act_side_unchanged(self):
+        data = statements_answer(doubted=('E3',))
+        # E3 denies a snare removal from the rectum, so it pairs with the snare removal E2 (3.2.3: a compatible kind)
+        denial = next(item for item in data['events'] if item['id'] == 'E3')
+        denial['kind'] = fact('snare', src(['S6'], 'biopsies'))
+        before = build_as(STATEMENTS, data, interpretation.APPRAISAL_VERSION)
+        after = build_as(STATEMENTS, data, APPRAISAL_V3)
+        asked_of = {(pair.subject[1], pair.attribute, pair.value) for pair in after.pair_controls}
+        statement_side = [pair for pair in after.pair_controls if pair.subject[1] == 'E3']
+        self.assertTrue(statement_side)  # asked of the statement about the snare's place
+        for pair in statement_side:
+            self.assertIn(T(after.claim(pair.claim).template), (T.STMT_TARGET_PLACE_ANY, T.STMT_TARGET_LESION_ANY))
+        self.assertFalse([pair for pair in before.pair_controls if pair.subject[1] == 'E3'])
+        # the act side is asked about the statement's place under both labels, in the act's own form
+        self.assertIn(('E2', A.TARGET_PLACES, 'rectum'), asked_of)
+        self.assertIn(('E2', A.TARGET_PLACES, 'rectum'),
+                      {(pair.subject[1], pair.attribute, pair.value) for pair in before.pair_controls})
+
+
+class ReachedAnatomyTests(SimpleTestCase):
+    """DECISIONS D292's U3 (gemini-appraisal@2): the reached_anatomy claim names the entry the endoscope itself reached;
+    its control is the reach's own negated sentence, now the claim's opposite (D244's shared control)."""
+
+    def answer(self):
+        data = note_answer()
+        data['anatomy'] = [{'id': 'Y1', 'type': fact('anastomosis', src(['S5'], '')), 'organ': [], 'subtype': [],
+                            'joins': []}]
+        data['sessions'][0]['reached_anatomy'] = [fact('Y1', src(['S5'], 'advanced to the cecum'))]
+        return data
+
+    def test_the_claim_and_its_control_under_each_label(self):
+        for version, sentence in ((interpretation.APPRAISAL_VERSION, 'The furthest point in session X1 was at anatomy '
+                                                                     'Y1.'),
+                                  (APPRAISAL_V3, 'In session X1 the endoscope itself reached anatomy Y1.')):
+            with self.subTest(version=version):
+                built = build_as(NOTE, self.answer(), version)
+                item = appraised(built, A.REACHED_ANATOMY, 'X1')[0]
+                self.assertEqual(built.sentences[item.claim], sentence)
+                control = built.claim(item.control)
+                self.assertEqual(T(control.template), T.SESSION_REACHED_NEGATED)  # the reach's own sentence
+                self.assertEqual(built.sentences[item.control], 'In session X1 the endoscope did not reach the '
+                                 f'{claims.PLACE_LABELS[Landmark.ANASTOMOSIS]}.')
+        self.assertEqual(claims.TEMPLATES_V3[T.SESSION_REACHED_ANATOMY],
+                         'In session {session} the endoscope itself reached anatomy {anatomy}.')
+        self.assertEqual(claims.TEMPLATES[T.SESSION_REACHED_ANATOMY],
+                         'The furthest point in session {session} was at anatomy {anatomy}.')
+
+
+# The figures CLAIM_BOUND_V3 is derived from, restated from the frozen batches' MANIFESTs (AMENDMENT-2 E.1; F3all
+# 2026-11-15T19:18:05Z, F3long 19:38:01Z): (characters, claims) of the ten notes, and F3long's pass-2 output per note.
+MEASURED_NOTES = {'A-v2': (576, 47), 'A-v6': (741, 41), 'A-v3': (639, 67), 'A-v5': (551, 70), 'B-fb02': (1205, 76),
+                  'B-fb05': (1403, 104), 'B-fb10': (1417, 108), 'C-PAIR-4-W2': (898, 77), 'A-note8': (19398, 756),
+                  'C-C2MEM-023': (19460, 711)}
+MEASURED_PASS2 = {'A-note8': (77483, 756), 'C-C2MEM-023': (70263, 711)}
+
+
+class ClaimBoundTests(SimpleTestCase):
+    """CLAIM_BOUND_V3 (AMENDMENT-2 section 3, 8.2; DECISIONS D278): derived from the measured claim counts and the
+    measured pass-2 output per claim for the 20,000-character size bound and Fable's 128,000-token output, never
+    "what two notes needed"; CLAIM_BOUND kept for the dormant path (B22)."""
+
+    def test_the_bound_is_its_derivation_from_the_measured_figures(self):
+        self.assertEqual(sorted(claims.CLAIM_BOUND_NOTES), sorted(MEASURED_NOTES.values()))
+        self.assertEqual(sorted(claims.CLAIM_BOUND_PASS2), sorted(MEASURED_PASS2.values()))
+        self.assertEqual(claims.CLAIM_BOUND_SIZE_CHARACTERS, 20_000)
+        self.assertEqual(claims.CLAIM_BOUND_OUTPUT_TOKENS, 128_000)
+        derived = claims.claim_bound_derivation()
+        # an independent computation (floating point, written here): the line through the ten notes, the long notes'
+        # largest rate, the capacity at 85% over the largest per-claim output, the bound a whole hundred below it
+        xs_, ys_ = [x for x, _ in MEASURED_NOTES.values()], [y for _, y in MEASURED_NOTES.values()]
+        mean_x, mean_y = sum(xs_) / len(xs_), sum(ys_) / len(ys_)
+        slope = (sum((x - mean_x) * (y - mean_y) for x, y in zip(xs_, ys_))
+                 / sum((x - mean_x) ** 2 for x in xs_))
+        line = mean_y + slope * (20_000 - mean_x)
+        rate = max(20_000 * claims_ / chars for chars, claims_ in MEASURED_NOTES.values() if chars >= 10_000)
+        # the rate is the two 19 KB notes' (D278: stress material, never a realistic note's), the line every note's
+        self.assertEqual(sorted(chars for chars, _ in claims.CLAIM_BOUND_NOTES
+                                if chars >= claims.CLAIM_BOUND_REALISTIC_CHARACTERS), [19_398, 19_460])
+        per_claim = max(tokens / claims_ for tokens, claims_ in MEASURED_PASS2.values())
+        capacity = 0.85 * 128_000 / per_claim
+        self.assertEqual(derived.demand_line, -(-int(line * 1000) // 1000))  # 754.3 claims, rounded up: 755
+        self.assertEqual((derived.demand_line, derived.demand_rate, derived.capacity, derived.bound),
+                         (755, 780, 1061, 1000))
+        self.assertAlmostEqual(rate, 779.46, places=2)
+        self.assertAlmostEqual(capacity, 1061.56, places=2)
+        self.assertEqual(derived.bound, int(capacity) // 100 * 100)
+        self.assertLessEqual(derived.demand, derived.bound)  # no note inside the size bound refused at door 0
+        self.assertLessEqual(derived.bound * per_claim, 0.85 * 128_000)  # a set at the bound fits 85% of the output
+        self.assertEqual(claims.CLAIM_BOUND_V3, 1000)
+        # 8.2's pin, the value F3long ran under
+        self.assertEqual(jsonschema.sha256_of(claims.claim_bound_document(APPRAISAL_V3)),
+                         '3fe08a5c8ec23575e2df78032d5b4b18dcff0927ce1c628743c47946b9415628')
+
+    def test_the_derivation_moves_with_its_figures_and_refuses_a_bound_that_cannot_hold_the_demand(self):
+        # a slower measured output per claim lowers the capacity, and so the bound
+        slower = claims.claim_bound_derivation(pass2=((90_000, 756),))
+        self.assertEqual((slower.capacity, slower.bound), (913, 900))
+        # a denser long note raises the demand above every capacity: no bound fits, which is the owner's
+        with self.assertRaisesRegex(RuntimeError, 'owner'):
+            claims.claim_bound_derivation(notes=((20_000, 1_200), (19_000, 1_100)))
+
+    def test_each_label_reads_its_own_bound(self):
+        self.assertEqual(claims.claim_bound(interpretation.APPRAISAL_VERSION), claims.CLAIM_BOUND)
+        self.assertEqual(claims.CLAIM_BOUND, 640)
+        self.assertEqual(claims.claim_bound(APPRAISAL_V3), claims.CLAIM_BOUND_V3)
+        self.assertEqual(jsonschema.sha256_of(claims.claim_bound_document()), interpretation.CLAIM_BOUND_SHA256)
+        built = build(NOTE, note_answer())
+        many = SimpleNamespace(claims=(None,) * (claims.CLAIM_BOUND + 1))
+        self.assertTrue(claims.over_bound(many))
+        self.assertFalse(claims.over_bound(many, APPRAISAL_V3))
+        self.assertTrue(claims.over_bound(SimpleNamespace(claims=(None,) * (claims.CLAIM_BOUND_V3 + 1)),
+                                          APPRAISAL_V3))
+        self.assertFalse(claims.over_bound(built))
+        with self.assertRaises(KeyError):
+            claims.claim_bound('gemini-appraisal@9')
+
+    def test_b22_the_dormant_bounds_comment_names_the_first_builds_cap(self):
+        lines = [line for line in MODULE.read_text(encoding='utf-8').splitlines() if '32,768' in line]
+        self.assertEqual(len(lines), 1)
+        self.assertIn('first build', lines[0])
+
+
+def session_answer(e2_session, e3_session=None, e3_lesion=None):
+    """NOTE's answer with a clip E3 in the colonoscopy (cited at S6) done to another lesion L2: E2's target lesion is
+    controlled by "another lesion of its session" (3.2.3) - ``e2_session`` E2's session slot, and E3's own."""
+    data = note_answer()
+    data['lesions'].append(lesion('L2', ['S7'], 'rectum'))
+    data['events'].append(event('E9', ['S6'], 'removed', 'was removed', 'clip', session=e3_session or
+                                [fact('X1', src(['S6']))],
+                                target__lesion=e3_lesion or [fact('L2', src(['S6']))]))
+    next(item for item in data['events'] if item['id'] == 'E2')['session'] = e2_session
+    return data
+
+
+class SessionControlTests(SimpleTestCase):
+    """AMENDMENT-2 4.3.3-4.4 at claims.py's session reads (step f3s): a control chosen among the other objects of the
+    act's session ("another lesion of the session", "another act of the session") is never dropped by a session slot
+    that states or offers a session it does not establish - pass 1's own contradiction or an overfilled slot: under
+    gemini-appraisal@2 the fact is then not claimed (control), as an unwritable control leaves it; @1 is unchanged."""
+
+    def test_an_unestablished_session_leaves_the_target_lesion_unclaimed_never_uncontrolled(self):
+        x1, x2 = fact('X1', src(['S6'])), fact('X2', src(['S6']))
+        two_sessions = note_answer()
+        two_sessions['sessions'].append(session('X2', 'egd', src(['S1'], '', 'document_frame')))
+        cases = {'contradicted': [fact('', src(['S6']), state='contradicted',
+                                       options=[{'value': 'X1', 'sources': [src(['S6'])]},
+                                                {'value': 'X2', 'sources': [src(['S6'])]}])],
+                 'overfilled': [x1, x2]}
+        for name, slot in cases.items():
+            with self.subTest(slot=name):
+                data = session_answer(slot)
+                data['sessions'].append(session('X2', 'egd', src(['S1'], '', 'document_frame')))
+                version = interpretation.INTERPRETATION_VERSION_V3
+                with mock.patch.object(interpretation, 'LOCAL_SCHEMA_SHA256_V2',
+                                       jsonschema.sha256_of(extract_schema.LOCAL_SCHEMA_2)):
+                    found = extract_read.read(json.dumps(data), len(appraise_prompt.segment.units(NOTE)),
+                                              version=version)
+                basis = appraise_prompt.basis(NOTE, (), found, findings={})
+                newer = claims.build(basis, 'seed', version=APPRAISAL_V3)
+                self.assertFalse(appraised(newer, A.TARGET_LESION, 'E2'))
+                self.assertIn(claims.Unclaimable.CONTROL, {item.why for item in newer.unclaimed
+                                                           if item.key.object == 'E2'
+                                                           and item.key.attribute is A.TARGET_LESION})
+                if name == 'contradicted':  # @1 keeps its recorded bytes: claimed, no control
+                    older = claims.build(basis, 'seed')
+                    self.assertIsNone(appraised(older, A.TARGET_LESION, 'E2')[0].control)
+        # an established session: the control names the other lesion of the session, under both labels
+        for version in claims.VERSIONS:
+            built = build_as(NOTE, session_answer([x1]), version)
+            item = appraised(built, A.TARGET_LESION, 'E2')[0]
+            self.assertEqual(built.sentences[item.control], 'This act was done to lesion L2.')
+
+    def test_an_other_acts_unestablished_session_or_lesion_never_empties_the_candidates(self):
+        x1 = fact('X1', src(['S5']))
+        contradicted_session = [fact('', src(['S6']), state='contradicted',
+                                     options=[{'value': 'X1', 'sources': [src(['S6'])]},
+                                              {'value': 'X2', 'sources': [src(['S6'])]}])]
+        for e3_session, e3_lesion in ((contradicted_session, None),
+                                      (None, [fact('', src(['S6']), state='contradicted',
+                                                   options=[{'value': 'L2', 'sources': [src(['S6'])]},
+                                                            {'value': 'L1', 'sources': [src(['S6'])]}])])):
+            with self.subTest(session=e3_session is not None):
+                data = session_answer([x1], e3_session, e3_lesion)
+                data['sessions'].append(session('X2', 'egd', src(['S1'], '', 'document_frame')))
+                newer = build_as(NOTE, data, APPRAISAL_V3)
+                self.assertFalse(appraised(newer, A.TARGET_LESION, 'E2'))
+                older = build_as(NOTE, data, interpretation.APPRAISAL_VERSION)
+                self.assertIsNone(appraised(older, A.TARGET_LESION, 'E2')[0].control)
+
+    def test_a_candidate_no_card_can_show_is_none_and_never_leaves_an_established_fact_unclaimed(self):
+        """refute-f3s-r1 finding 3: the session-control rule's class is exactly a slot that states or offers a value it
+        does not establish. A candidate is what first_other admits - one a card can show - so on an answer whose every
+        slot the choice reads is established, a session whose only other lesion (or every other act) has no card
+        leaves the fact claimed with no control under gemini-appraisal@2, as under @1; with the card shown, both labels
+        control it. And an other act's overfilled session offering the session never makes a card-less lesion a
+        candidate."""
+        x1 = fact('X1', src(['S6']))
+        for description, expected in ((['S7'], 'This act was done to lesion L2.'), (['S99'], None)):
+            data = session_answer([x1])
+            next(item for item in data['lesions'] if item['id'] == 'L2')['description'] = src(description, 'rectum')
+            for version in claims.VERSIONS:
+                with self.subTest(description=description, version=version):
+                    built = build_as(NOTE, data, version)
+                    item = appraised(built, A.TARGET_LESION, 'E2')
+                    self.assertTrue(item)
+                    self.assertEqual(built.sentences.get(item[0].control), expected)
+        # the other act E9's session overfilled (X1 offered, never established; read under gemini-events@3): its
+        # lesion card-less, no candidate
+        def built_v3(data):
+            with mock.patch.object(interpretation, 'LOCAL_SCHEMA_SHA256_V2',
+                                   jsonschema.sha256_of(extract_schema.LOCAL_SCHEMA_2)):
+                found = extract_read.read(json.dumps(data), len(appraise_prompt.segment.units(NOTE)),
+                                          version=interpretation.INTERPRETATION_VERSION_V3)
+            return claims.build(appraise_prompt.basis(NOTE, (), found, findings={}), 'seed', version=APPRAISAL_V3)
+        data = session_answer([x1], [fact('X1', src(['S6'])), fact('X2', src(['S6']))])
+        data['sessions'].append(session('X2', 'egd', src(['S1'], '', 'document_frame')))
+        next(item for item in data['lesions'] if item['id'] == 'L2')['description'] = src(['S99'], 'rectum')
+        item = appraised(built_v3(data), A.TARGET_LESION, 'E2')
+        self.assertTrue(item)
+        self.assertIsNone(item[0].control)
+        # with its card shown, that unestablished session's lesion is a candidate: the fact is not claimed (control)
+        next(item for item in data['lesions'] if item['id'] == 'L2')['description'] = src(['S7'], 'rectum')
+        newer = built_v3(data)
+        self.assertFalse(appraised(newer, A.TARGET_LESION, 'E2'))
+        self.assertIn(claims.Unclaimable.CONTROL, {item.why for item in newer.unclaimed if item.key.object == 'E2'
+                                                   and item.key.attribute is A.TARGET_LESION})
+        # "another positive act of the session" (a cause other than act_of_this_session): every other act of X2
+        # card-less (anchors citing a unit the revision lacks) is no candidate under either label
+        for hidden, expected in (((), 'The bleeding this act treated was caused by act A4.'),
+                                 (('E4', 'E5', 'E6', 'E9'), None)):
+            data = rich_answer()
+            data['events'][6]['cause'] = [fact('pre_existing_lesion', src(['S13'], 'Bleeding'))]
+            data['events'][6]['cause_event'] = []
+            for item in data['events']:
+                if item['id'] in hidden:
+                    item['anchor']['units'] = ['S99']
+            for version in claims.VERSIONS:
+                with self.subTest(hidden=hidden, version=version):
+                    built = build_as(RICH, data, version)
+                    (cause,) = appraised(built, A.CAUSE, 'E7')
+                    self.assertEqual(built.sentences.get(cause.control), expected)
+
+
+class VersionDocumentTests(SimpleTestCase):
+    """The pinned documents by label (AMENDMENT-2 8.2): gemini-appraisal@1's byte for byte its recorded pins;
+    gemini-appraisal@2's its own objects, D292's U1 and U3 in them."""
+
+    def test_appraisal_1s_documents_are_its_pins_and_appraisal_2s_differ_by_d292(self):
+        for name, document in (('TEMPLATES_SHA256', claims.templates_document),
+                               ('STATEMENT_TEMPLATES_SHA256', claims.statement_templates_document),
+                               ('CONTROLS_SHA256', claims.controls_document),
+                               ('CLAIM_BOUND_SHA256', claims.claim_bound_document)):
+            with self.subTest(pin=name):
+                self.assertEqual(jsonschema.sha256_of(document()), getattr(interpretation, name))
+                self.assertEqual(document(), document(interpretation.APPRAISAL_VERSION))
+                self.assertNotEqual(jsonschema.sha256_of(document(APPRAISAL_V3)), getattr(interpretation, name))
+        templates = claims.templates_document(APPRAISAL_V3)
+        self.assertEqual(templates['templates'][T.SESSION_REACHED_ANATOMY.value],
+                         'In session {session} the endoscope itself reached anatomy {anatomy}.')
+        self.assertEqual(templates['kind_neutral'], [[form.value, neutral.value]
+                                                     for form, neutral in claims.KIND_NEUTRAL.items()])
+        statements = claims.statement_templates_document(APPRAISAL_V3)
+        self.assertEqual(statements[T.STMT_NOT_DONE_ANY.value], 'This statement says that the act it names was not '
+                                                                 'done.')
+        self.assertIn('kind_neutral', claims.controls_document(APPRAISAL_V3))
+        self.assertIn('reached_anatomy_control', claims.controls_document(APPRAISAL_V3))
+        self.assertIn('session_others', claims.controls_document(APPRAISAL_V3))  # refute-f3s-r1 finding 3's class
+        self.assertNotIn('session_others', claims.controls_document())
+        with self.assertRaises(KeyError):
+            claims.build(claims.Basis(answer=read(NOTE, note_answer()), units=()), 'seed', version='gemini-appraisal@9')

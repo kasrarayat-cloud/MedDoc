@@ -40,9 +40,12 @@ the ENGINE AS ASSEMBLED - engine/assess.assess_facts, every rule together - and 
   accepted (6a's Q4) - D240's site fit under weakening, 4.4's class it extends: ONE OF THE LEAVING ACT'S OWN SUPPORT
   FACTS weakened moves it out of the supporting acts BY ITS SUPPORT while it held the code only by a code row, and the
   acts left, each supporting before, make the code READY; D264_CLEAN - the states that narrowing no longer accepts
-  (refute-6a-r2 F2), a class of their own: an act leaves failing EXACTLY its clean row (4.3 row 8) after a weakening -
-  another event's status, a pair control made not rejected - puts a relation on it, any other leaving act being the
-  weakened act out by its own support fact, the rest as QM, their count pinned; D264_SITE (with D240: D29's installed site fit, whose exception D240's preamble names here; w7r's
+  (refute-6a-r2 F2), a class of their own: an act leaves failing EXACTLY its clean row (4.3 row 8) after ANY 9.4
+  weakening - another event's status, a pair control, or the leaving act's own place, weakened or deleted - any other
+  leaving act being the weakened act out by its own support fact, the rest as QM, their count pinned (DECISIONS D288,
+  ruling B QA (a): the class D264's sentence names, of which F2's 36 states - another event's status, a pair control
+  made not rejected - are the measured instance; read literally, P-MONO's verdict on one FactSet would depend on the
+  order of two commuting weakenings, refute-6a-r1 p06's 20 order-twins); D264_SITE (with D240: D29's installed site fit, whose exception D240's preamble names here; w7r's
   O13, repair r4d's R2) - a deleted member of an act's target.places, or of its target lesion's places, sets the act
   outside a code's SITE class, so the act leaves a code's supporting acts by its SITE row (evaluate's site fit) or a
   code's claims (combination's site fit) and so a competition, releasing that code or its rival, and the claims that
@@ -59,11 +62,15 @@ the ENGINE AS ASSEMBLED - engine/assess.assess_facts, every rule together - and 
   ruling names goes to the owner, never into a pass. The single-weakening census runs under every pattern of pass 2's
   verdicts the random states can draw too (PMonoVerdicts0Tests-PMonoVerdicts5Tests, ``drawn_verdicts``: refute-6a-r1
   F2 - P-MONO was green only by its seed), so whatever the seed, no single weakening's release escapes it.
-  OPEN_RELEASES - the releases a design question governs that the owner has not ruled - is EMPTY since D264 ruled both
-  of its entries (refute-6a-r1 F3 and F5); it stays, with OpenQuestionsTests, as the guard for the next unruled release:
-  such a release is never accepted - the other tests route it to OpenQuestionsTests, which fails on every one a single
-  weakening under a fixture's own verdicts reaches, RED BY DESIGN until the owner rules (DECISIONS D245: "A release no
-  ruling names still fails"), and each test that routes says in a comment what it then discards.
+  OPEN_RELEASES - the releases a design question governs that the owner has not ruled - was emptied by D264 (it ruled
+  refute-6a-r1 F3 and F5); it stays, with OpenQuestionsTests, as the guard for the next unruled release: such a release
+  is never accepted - the other tests route it to OpenQuestionsTests, which fails on every one a single weakening under a
+  fixture's own verdicts reaches, RED BY DESIGN until the owner rules (DECISIONS D245: "A release no ruling names still
+  fails"), and each test that routes says in a comment what it then discards. AMENDMENT-2's build (step f3e) found 4.4's
+  value-erasing contradictions (ERASING, which 9.4's generator gains) releasing, on two fixtures, the codes D262_QM,
+  D262_STATUS and D228_DQ2 name for the classic weakening of the same fact, by the same transition (question Q-ERASE);
+  DECISIONS D293 ruled them option (a): accepted under D293_ERASE, held to D264's every-row rule like every named
+  release, their states pinned (ERASING_ACCEPTED), so OPEN_RELEASES is empty again.
 - P-INDEP (IndependenceTests): perturbing any fact outside requirements.dependencies(code) leaves the code's status,
   its item (the held fact it asks and its message) and its held facts unchanged - test_assess's perturbation harness
   (repair 5a's R5), over every fixture here.
@@ -125,6 +132,7 @@ from __future__ import annotations
 import ast
 import collections
 import contextlib
+import datetime
 import functools
 import hashlib
 import inspect
@@ -181,6 +189,13 @@ LISTS = (A.PLACES, A.TARGET_PLACES, A.STATIONS, A.REACHED)
 TABLES = {None: 'encounter', IdFamily.PERSON: 'people', IdFamily.SECTION: 'sections', IdFamily.EVENT: 'events',
           IdFamily.SESSION: 'sessions', IdFamily.LESION: 'lesions', IdFamily.ANATOMY: 'anatomy'}
 HOWS = ('unresolved', 'doubt stated', 'doubt unclear', 'doubt conflict')
+# AMENDMENT-2 4.4's value-erasing contradictions, which 9.4's generator gains [R:truth-T1]: an established single fact
+# turned into (i) pass 1's own contradiction of its value and another (its settled value empty, the two its sides), and
+# (ii) - on a slot attribute (facts.SLOTS) - an overfilled slot of its value plus another value written supported, or
+# negated, read as engine/facts reads one (the merged view: unresolved, value None, state contradicted, slot_overfull,
+# the written values its options, those only denied its negated_values). Each erases the claimed value, which no HOWS
+# weakening does, so P-MONO runs on both (AMENDMENT-2 4.4): no HELD becomes READY or EXCLUDED and no rival is released.
+ERASING = ('contradiction', 'overfilled stated', 'overfilled denied')
 Kind, Landmark, Extent, Station = ct.Kind, ct.Landmark, ct.Extent, ct.Station
 sup, unres, L = EF.sup, EF.unres, EF.L
 P1, P2, N1 = Id(IdFamily.PERSON, 1), Id(IdFamily.PERSON, 2), Id(IdFamily.SECTION, 1)
@@ -578,6 +593,60 @@ def _weakened_fact(found: Fact, how: str) -> Fact | None:
     raise ValueError(how)
 
 
+def another_value(found: Fact, family, attribute, R):
+    """The other value a value-erasing contradiction writes beside ``found``'s (ERASING), deterministic: for an
+    enumeration the first member of the attribute's domain (facts.DOMAINS) that is not its value; for an id the first
+    object of the same family the FactSet holds that is not it, else an id of that family the FactSet does not hold; for a
+    date the next day at its precision; None when the attribute has no domain or no other value."""
+    domain = F.DOMAINS.get((family, attribute))
+    if domain is None or domain.many:
+        return None
+    value = found.value
+    if domain.enum is not None:
+        return next((member for member in domain.enum if member != value), None)
+    if domain.family is not None:
+        held = {IdFamily.EVENT: R.events, IdFamily.SESSION: R.sessions, IdFamily.SECTION: R.sections,
+                IdFamily.LESION: R.lesions, IdFamily.ANATOMY: R.anatomy, IdFamily.PERSON: R.people}[domain.family]
+        return next((other for other in held if other != value), Id(domain.family, 99))
+    if isinstance(value, IsoDate):
+        return IsoDate(value.value + datetime.timedelta(days=1), value.precision)
+    return None
+
+
+def erased_fact(found: Fact, how: str, other) -> Fact | None:
+    """``found`` turned into AMENDMENT-2 4.4's value-erasing contradiction ``how`` (ERASING) with ``other``, or None when
+    it does not apply (not established, or no other value)."""
+    if found.result not in ESTABLISHED or other is None or other == found.value:
+        return None
+    if how == 'contradiction':  # pass 1's own contradiction (3.3 row 1): the settled value empty, the sides its options
+        return Fact(result=Res.CONTRADICTED, value=None, state=ct.FactState.CONTRADICTED, options=(found.value, other),
+                    reasons=(ct.Reason.CONTRADICTED_BY_PASS1,), spans=found.spans, cited=found.cited,
+                    inherited_from=found.inherited_from)
+    if how in ('overfilled stated', 'overfilled denied'):  # facts._overfilled's merged view of the two written facts
+        written = ((found.state, found.value),
+                   (ct.FactState.SUPPORTED if how == 'overfilled stated' else ct.FactState.NEGATED, other))
+        stated = {value for state, value in written if state is not ct.FactState.NEGATED}
+        return Fact(result=Res.UNRESOLVED, value=None, state=ct.FactState.CONTRADICTED,
+                    options=(found.value, other), reasons=(ct.Reason.SLOT_OVERFULL,), spans=found.spans,
+                    cited=found.cited, inherited_from=found.inherited_from,
+                    negated_values=tuple(value for state, value in written
+                                         if state is ct.FactState.NEGATED and value not in stated))
+    raise ValueError(how)
+
+
+def _erasings(R, subject, attribute, found):
+    """The value-erasing contradictions (ERASING) of one established single fact: (how, the erased fact) - the
+    contradiction for every single-valued attribute, the two overfilled slots for a slot attribute (facts.SLOTS)."""
+    family = subject.family if subject is not None else None
+    other = another_value(found, family, attribute, R)
+    for how in ERASING:
+        if how != 'contradiction' and (family, attribute) not in F.SLOTS:
+            continue
+        new = erased_fact(found, how, other)
+        if new is not None:
+            yield how, new
+
+
 def _objects(R, name):
     """(subject, its facts by attribute) of one table: the encounter's facts are one object, subject None."""
     table = getattr(R, name)
@@ -595,10 +664,12 @@ def _subject(subject) -> str:
     return 'encounter' if subject is None else str(subject)
 
 
-def weakenings(R):
+def weakenings(R, *, erasing: bool = True):
     """Every single 9.4 weakening of ``R``: (label, the weakened FactSet, what was weakened) - ``what`` is (subject,
     attribute, position, the fact as it was) for a fact, the key for a pair control, the session for a completeness
-    claim. Over every table (TABLES); a list member is deleted only when it is established (DECISIONS D245)."""
+    claim. Over every table (TABLES); a list member is deleted only when it is established (DECISIONS D245); and
+    AMENDMENT-2 4.4's value-erasing contradictions of every established single fact (ERASING; ``erasing=False`` leaves
+    them out, for a census pinned before them)."""
     for name in TABLES.values():
         for subject, attributes in _objects(R, name):
             for attribute, members in attributes.items():
@@ -607,6 +678,14 @@ def weakenings(R):
                         new = _weakened_fact(found, how)
                         if new is None:
                             continue
+                        changed = {**attributes, attribute: members[:position] + (new,) + members[position + 1:]}
+                        yield (f'{how} {_subject(subject)} {attribute.value}[{position}]',
+                               _with(R, name, subject, changed), (subject, attribute, position, found))
+                    family = subject.family if subject is not None else None
+                    domain = F.DOMAINS.get((family, attribute))
+                    if not erasing or domain is None or domain.many:
+                        continue
+                    for how, new in _erasings(R, subject, attribute, found):
                         changed = {**attributes, attribute: members[:position] + (new,) + members[position + 1:]}
                         yield (f'{how} {_subject(subject)} {attribute.value}[{position}]',
                                _with(R, name, subject, changed), (subject, attribute, position, found))
@@ -746,7 +825,7 @@ def _how(label) -> str | None:
     """The 9.4 weakening the label's last segment names: one of HOWS, or 'deleted'; None for a pair control made not
     rejected or a completeness claim made unresolved (their ``what`` is a key or a session, not a fact)."""
     last = label.split('; ')[-1]
-    return next((how for how in ('deleted',) + HOWS if last.startswith(how + ' ')), None)
+    return next((how for how in ('deleted',) + HOWS + ERASING if last.startswith(how + ' ')), None)
 
 
 def reweakened(label, what, R):
@@ -761,7 +840,12 @@ def reweakened(label, what, R):
     members = attributes[attribute]
     if members[position] != found:
         raise ValueError(f'{label}: {found} is not member {position} of {attribute.value}')
-    changed = members[:position] + ((() if how == 'deleted' else (_weakened_fact(found, how),))) + members[position + 1:]
+    if how in ERASING:
+        new = erased_fact(found, how, another_value(found, subject.family if subject is not None else None, attribute,
+                                                    R))
+    else:
+        new = None if how == 'deleted' else _weakened_fact(found, how)
+    changed = members[:position] + ((() if how == 'deleted' else (new,))) + members[position + 1:]
     return _with(R, name, subject, {**attributes, attribute: changed})
 
 
@@ -1156,6 +1240,8 @@ D262_NC = "DECISIONS D262: repair r3d's R3D-NC (D238's production shape, measure
 D228_DQ2 = "DECISIONS D228: DQ2 stays as built (3d's Q4, the which-pairs corner)"
 D264_CLEAN = "DECISIONS D264: D264_CLEAN (6a's Q4; refute-6a-r2 F2's states, the leaving act failing only its clean row)"
 D264_SITE = "DECISIONS D264: D264_SITE with D240 (6a's Q6; D29's site fit read from a deleted place member; w7r's O13)"
+D293_ERASE = ("DECISIONS D293: Q-ERASE option (a) - a value-erasing contradiction of a fact whose classic weakening a "
+              "named release takes, accepted under that class and held to D264's every-row rule")
 ACCEPTED_RELEASES = (
     ('the deleted beyond point of a jejunal enteroscopy', D218, _jejunal_beyond_deletion),
     ('a deleted place member that overlapped the other object\'s place, every control between them rejected', D245_Q2,
@@ -1190,10 +1276,54 @@ ACCEPTED_SHRINKS = (
 # OpenQuestionsTests.test_no_release_waits_on_an_open_question, which fails naming its question until the owner rules -
 # (a) accepted: the entry moves to ACCEPTED_RELEASES under its ruling; (b) the engine repaired: the release is gone - so
 # the other tests keep guarding every other release (DECISIONS D245: "A release no ruling names still fails"). EMPTY:
-# DECISIONS D264 ruled both entries it held (refute-6a-r1 F3, 6a's Q6: D264_SITE; F5, Q7: D262_STATUS); it stays as the
-# guard for the next unruled release - an entry is (description, question, predicate(label, what, code, R)), and its
-# predicate also routes a shrunk claim (the claim's code in place of a released one).
+# DECISIONS D264 ruled both entries it held (refute-6a-r1 F3, 6a's Q6: D264_SITE; F5, Q7: D262_STATUS), and DECISIONS
+# D293 the one AMENDMENT-2's build added (step f3e's Q-ERASE: the value-erasing contradictions of a fact whose classic
+# weakening a ruling names, option (a), D293_ERASE); it stays as the guard for the next unruled release - an entry is
+# (description, question, predicate(label, what, code, R)), and its predicate also routes a shrunk claim (the claim's
+# code in place of a released one).
+
+
+def _classic_label(label: str) -> str:
+    """The label of the classic 9.4 weakening ('unresolved') of the fact a value-erasing label names: the same subject,
+    attribute and position."""
+    head, _sep, last = label.rpartition('; ')
+    how = _how(last) or ''
+    return (head + '; ' if head else '') + 'unresolved' + last[len(how):]
+
+
+def _erasing_in_a_named_class(label, what, code, R, transition=None) -> bool:
+    """D293_ERASE's states: a value-erasing contradiction (ERASING) whose release of ``code`` a ruled shape takes - the
+    fact's classic weakening ('unresolved') named by a ruled predicate (D262_QM's site-fit weakening, D262_STATUS's
+    status weakening, D228_DQ2's which-pairs corner), or the erasing state itself taken by a predicate that reads any
+    9.4 weakening (D264_CLEAN's clean-row release). DECISIONS D293 (Q-ERASE option (a)) accepts them under D293_ERASE,
+    held to D264's every-row rule (``PMonoTests.check``: ROW_RULED); the other rulings' predicates only, never this
+    entry's own."""
+    if _how(label) not in ERASING or not isinstance(what, tuple) or len(what) != 4:
+        return False
+    classic = _classic_label(label)
+    return any(predicate(classic, what, code, R) or predicate(label, what, code, R, transition)
+               for _description, ruling, predicate in ACCEPTED_RELEASES if ruling != D293_ERASE)
+
+
+ACCEPTED_RELEASES = (*ACCEPTED_RELEASES,
+                     ("a value-erasing contradiction (pass 1's own contradiction of a fact's value and another, or an "
+                      "overfilled slot) of a fact whose classic 9.4 weakening a named release takes, by the same "
+                      "transition (AMENDMENT-2 4.4; step f3e's question Q-ERASE)", D293_ERASE,
+                      _erasing_in_a_named_class))
+ROW_RULED = frozenset(ruling for _description, ruling, _predicate in ACCEPTED_RELEASES)
 OPEN_RELEASES: tuple = ()
+# D293_ERASE's states under the fixtures' own verdicts, (code, label), pinned - r4a QM's fixture (43249: E1's support
+# facts, as D262_QM names their classic weakening) and R3D-ST's (45380: E2's status, as D262_STATUS, and its inherited
+# performer, as D228_DQ2); no other fixture's value-erasing contradiction releases
+ERASING_ACCEPTED: list = [
+    ('43249', 'contradiction E1 date_relation[0]'), ('43249', 'contradiction E1 entry[0]'),
+    ('43249', 'contradiction E1 kind[0]'), ('43249', 'contradiction E1 performer[0]'),
+    ('43249', 'contradiction E1 session[0]'), ('43249', 'contradiction E1 status[0]'),
+    ('43249', 'overfilled denied E1 date_relation[0]'), ('43249', 'overfilled denied E1 performer[0]'),
+    ('43249', 'overfilled denied E1 session[0]'), ('43249', 'overfilled stated E1 date_relation[0]'),
+    ('43249', 'overfilled stated E1 performer[0]'), ('43249', 'overfilled stated E1 session[0]'),
+    ('45380', 'contradiction E2 performer[0]'), ('45380', 'contradiction E2 status[0]'),
+    ('45380', 'overfilled denied E2 performer[0]'), ('45380', 'overfilled stated E2 performer[0]')]
 
 
 def _waiting(label, what, code, R) -> str | None:
@@ -1210,9 +1340,11 @@ D264_SITE_TERMS = ("DECISIONS D264 names D264_SITE only for a deleted member of 
                    'fit alone - the act leaving its supporting acts by its SITE row, or a claim and so a competition - '
                    'its shrunk claims dropping only that act (or a claim of D118 resting on it)')
 D264_CLEAN_TERMS = ("DECISIONS D264 names D264_CLEAN only for acts that held the code by a code row alone leaving the "
-                    "supporting acts, one failing exactly its clean row (refute-6a-r2 F2: another event's status or a "
-                    'pair control weakened) and any other the weakened act out by that support fact, the acts left - '
-                    'each supporting before - making it READY')
+                    "supporting acts, one failing exactly its clean row after any 9.4 weakening (another event's "
+                    "status, a pair control, or the leaving act's own place weakened or deleted: DECISIONS D288's "
+                    'class, refute-6a-r2 F2 its measured instance, read so that two commuting weakenings give one '
+                    'verdict) and any other the weakened act out by that support fact, the acts left - each supporting '
+                    'before - making it READY')
 
 
 def _open_question(label, what, R=None) -> str:
@@ -1274,7 +1406,11 @@ def _release(before, after) -> tuple:
 def _named(label, what, code, R, transition=None) -> str | None:
     """The ruling whose shape takes the release of ``code`` under the weakening (``label``, ``what``) of ``R`` - the first
     of ACCEPTED_RELEASES whose predicate holds - or None. ``transition``: the assessments before and after that weakening
-    (D264_SITE reads the competition there)."""
+    (D264_SITE reads the competition there). A value-erasing contradiction (ERASING) is named D293_ERASE when its
+    release is in a ruled class (``_erasing_in_a_named_class``: DECISIONS D293, Q-ERASE option (a)) and nothing
+    otherwise - never under another ruling's name, so the census counts these states apart."""
+    if _how(label) in ERASING:
+        return D293_ERASE if _erasing_in_a_named_class(label, what, code, R, transition) else None
     return next((ruling for _, ruling, predicate in ACCEPTED_RELEASES if predicate(label, what, code, R, transition)),
                 None)
 
@@ -1343,7 +1479,7 @@ class PMonoTests(SimpleTestCase):
         last weakening applied - the state ``after`` reads); one that fails it fails here, its ruling and the rows named
         ("a routed state that fails this ... fails P-MONO"). A shrunk claim a ruling accepts (ACCEPTED_SHRINKS:
         D264_SITE's) passes, and is appended to ``shrinks`` (a list, when given) as (code, ruling, label). A release or a
-        shrunk claim an open question governs (OPEN_RELEASES - empty since D264) is never accepted: given ``waiting`` (a
+        shrunk claim an open question governs (OPEN_RELEASES; empty since D293) is never accepted: given ``waiting`` (a
         list), it is appended there as (code, question, label) for OpenQuestionsTests to fail on - and so DISCARDED by
         this check, which a caller passing ``waiting`` says in a comment; without it, it fails here, its question
         named."""
@@ -1387,14 +1523,17 @@ class PMonoTests(SimpleTestCase):
         return [ruling for ruling in rulings if ruling]
 
     def test_every_single_weakening_of_every_fixture(self):
-        counted, named, waiting, shrinks = 0, [], [], []
+        counted, named, waiting, shrinks, erasing = 0, [], [], [], []
         for name, R, codes in fixtures():
             base = assessed(R, codes)
             for label, changed, what in weakenings(R):
                 with self.subTest(fixture=name, weakening=label):
                     counted += 1
-                    named += self.check(base, assessed(changed, codes), label, what, R, waiting=waiting,
-                                        shrinks=shrinks)
+                    after = assessed(changed, codes)
+                    named += self.check(base, after, label, what, R, waiting=waiting, shrinks=shrinks)
+                    grown_ready, grown_excluded, _shrunk = _release(base, after)
+                    erasing += [(code, label) for code in sorted(grown_ready | grown_excluded)
+                                if _named(label, what, code, R, (base, after)) == D293_ERASE]
         self.assertGreater(counted, 2500)
         # every accepted release met, each named by its own ruling: D218's fixture, r2d-2's Q2 shape, r3d's case (b) where
         # pair controls exist, and DECISIONS D262's and D264's - R3D-NC's production shape (the D228 fixture's two
@@ -1403,19 +1542,24 @@ class PMonoTests(SimpleTestCase):
         # inherited performer's four), r4a QM's 24 (E1's six support facts, four ways each, the narrowed binding's own;
         # test_evaluate's weakening, two ways, counted r4a's 12) and D264_SITE's four (43249 and 43245 released when the
         # dilation's distal esophagus is deleted, from its own places and from its target lesion's). D264_CLEAN is met
-        # only under drawn verdicts (an unrejected control): DRAWN_RELEASES pins its count on r4a QM's fixture
-        self.assertEqual(collections.Counter(named), {D218: 1, D245_Q2: 1, D245_B: 1, D262_NC: 2, D262_STATUS: 4,
-                                                      D228_DQ2: 4, D262_QM: 24, D264_SITE: 4})
-        self.assertEqual(set(named) | {D264_CLEAN}, {ruling for _description, ruling, _predicate in ACCEPTED_RELEASES})
+        # only under drawn verdicts (an unrejected control): DRAWN_RELEASES pins its count on r4a QM's fixture. DECISIONS
+        # D292's E1j removes D245_Q2's one: r2d-2 Q2's base is READY (a biopsy done elsewhere than the snare, every place
+        # control rejected - D245's own reasoning), so deleting its stomach releases nothing; D245's ruling and its
+        # predicate stay, met directly by test_the_rulings_accept_their_shapes_alone
+        # DECISIONS D293: D293_ERASE's sixteen (ERASING_ACCEPTED), each held to D264's rule by the check
+        self.assertEqual(collections.Counter(named), {D218: 1, D245_B: 1, D262_NC: 2, D262_STATUS: 4,
+                                                      D228_DQ2: 4, D262_QM: 24, D264_SITE: 4, D293_ERASE: 16})
+        self.assertEqual(set(named) | {D264_CLEAN, D245_Q2},
+                         {ruling for _description, ruling, _predicate in ACCEPTED_RELEASES})
         # the shrunk claims a ruling accepts, pinned: D264_SITE's - 43249's claim drops the dilation when its distal
         # esophagus is deleted, and 43245's when its duodenal bulb is, on its own places and on its target lesion's
         self.assertEqual(collections.Counter(ruling for _code, ruling, _label in shrinks), {D264_SITE: 4})
         self.assertEqual(sorted((code, label) for code, _ruling, label in shrinks),
                          [('43245', 'deleted E1 target.places[1]'), ('43245', 'deleted L1 places[1]'),
                           ('43249', 'deleted E1 target.places[0]'), ('43249', 'deleted L1 places[0]')])
-        # nothing waits on an open question: OPEN_RELEASES is empty (D264 ruled F3 and F5); were one added, this pin
-        # names what the single weakenings of the fixtures' own verdicts route to it
+        # nothing waits on an open question (DECISIONS D293 emptied OPEN_RELEASES); D293_ERASE's states pinned
         self.assertEqual(waiting, [])
+        self.assertEqual(sorted(set(erasing)), ERASING_ACCEPTED)
 
     def test_a_deleted_members_unrejected_control_keeps_the_pair_on_every_path(self):
         """Refutation 6a-r2b P1 (DECISIONS D220): beside every deletion of an established place member, the control that
@@ -1434,8 +1578,10 @@ class PMonoTests(SimpleTestCase):
                 with self.subTest(fixture=name, weakening=label):
                     base = assessed(base_R, codes)
                     # waiting=[]: a release or shrunk claim an OPEN_RELEASES entry governs is routed into this list and
-                    # DISCARDED here - OpenQuestionsTests reads the fixtures' own verdicts only, never these states, so
-                    # such a release would go unfailed; none can be routed while OPEN_RELEASES is empty (D264)
+                    # DISCARDED here; each state here (one control left unrejected, then the deletion) is also a state
+                    # of the drawn census, which fails on a question the fixture's own verdicts do not show and leaves
+                    # one they show to OpenQuestionsTests (red on its own-verdict state; this drawn-only state goes
+                    # unfailed); DECISIONS D293 accepted Q-ERASE's states (D293_ERASE), held to D264's rule
                     named += self.check(base, assessed(after_R, codes), label, what, base_R, waiting=[])
                     paths[path] += 1
                     cases += 1
@@ -1486,7 +1632,7 @@ class PMonoTests(SimpleTestCase):
         base = assessed(R, codes)
         self.assertIn('45385', ready(base))
         dated = [(label, changed) for label, changed, what in weakenings(R)
-                 if what[:2] == (None, A.DATE_OF_SERVICE)]
+                 if what[:2] == (None, A.DATE_OF_SERVICE) and _how(label) in HOWS]  # the classic four (9.4)
         self.assertEqual(len(dated), len(HOWS))
         for label, changed in dated:
             with self.subTest(weakening=label):
@@ -1545,10 +1691,13 @@ class PMonoTests(SimpleTestCase):
         self.assertIn('D220', str(caught.exception))
 
     def test_the_rulings_accept_their_shapes_alone(self):
-        """DECISIONS D245, through the engine as assembled. r2d-2's Q2 (option (a)): the biopsy's stomach - overlapping
-        the snare's esophagus - deleted, every control between them rejected, releases 43239, named D245's; with the
-        control asking the snare about the stomach NOT rejected nothing is released (D220), and the predicate refuses
-        that state anyway. r3d's Q1 case (b): the possible statement's transverse colon deleted releases 45380, named
+        """DECISIONS D245, through the engine as assembled. r2d-2's Q2 (option (a)), re-pinned by DECISIONS D292 (E1j)
+        on D245's own reasoning: the biopsy names no lesion and one of its places, the duodenum, is disjoint from every
+        place of the esophageal snare and of its lesion, asked of the snare by a rejected control with every place
+        control rejected, so it was done elsewhere than the removal - 43239 is READY as filed, and deleting its stomach
+        (overlapping the snare's esophagus) releases nothing; D245's predicate still names that deletion, the shape it
+        accepts. With the control asking the snare about the stomach NOT rejected, E1j does not apply: 43239 is held as
+        filed and the deletion releases nothing (D220), and the predicate refuses that state anyway. r3d's Q1 case (b): the possible statement's transverse colon deleted releases 45380, named
         D245's with D228 and D238; beside a place control between them not rejected the predicate refuses it (D238: an
         unrejected one holds) - two biopsies, a pair claims never controls with no control between them, is the production
         shape DECISIONS D262 names R3D-NC's (D245's case (b) where controls exist: test_d262_r3d_nc_...). No predicate
@@ -1557,11 +1706,12 @@ class PMonoTests(SimpleTestCase):
         [(label, changed, what)] = [found for found in weakenings(R) if found[0].startswith('deleted E3 target.places')
                                     and found[2][3].value is Landmark.STOMACH]
         base = assessed(R, codes)
-        self.assertNotIn('43239', ready(base))
-        self.assertEqual(_release(base, assessed(changed, codes))[0], {'43239'})
+        self.assertIn('43239', ready(base))  # D292 E1j: READY as filed (a biopsy elsewhere than the snare)
+        self.assertEqual(_release(base, assessed(changed, codes))[0], frozenset())
         self.assertEqual(_accepted(label, what, ['43239'], R), [D245_Q2])
         self.assertIn("r2d-2's Q2", _open_question(label, what, R))
         open_ = replace(R, pair_controls={**R.pair_controls, (EF.E(2), A.TARGET_PLACES, Landmark.STOMACH): False})
+        self.assertNotIn('43239', ready(assessed(open_, codes)))  # an unrejected place control: E1j does not apply
         self.assertEqual(_accepted(label, what, ['43239'], open_), [None])
         self.assertIn('D220', _open_question(label, what, open_))
         self.assertEqual(_release(assessed(open_, codes), assessed(replace(changed, pair_controls=open_.pair_controls),
@@ -1595,10 +1745,12 @@ class PMonoTests(SimpleTestCase):
         once-weakened FactSet it was applied to (read in the once- and twice-weakened assessments)."""
         (name, base_R, codes), (label, what, once), drawn = random_states(data)
         base, first = assessed(base_R, codes), assessed(once, codes)
-        # waiting=[] in both checks: a release or shrunk claim an OPEN_RELEASES entry governs is routed into the list and
-        # DISCARDED here - OpenQuestionsTests fails only on the single weakenings of the fixtures' own verdicts, so one
-        # reached only under drawn verdicts or at depth 2 goes unfailed (the census in step 6a's NOTES counts what each
-        # name accepts there); none can be routed while OPEN_RELEASES is empty (D264)
+        # waiting=[] in both checks: a release or shrunk claim an OPEN_RELEASES entry governs is routed into the list
+        # and DISCARDED here - OpenQuestionsTests fails on the single weakenings of the fixtures' own verdicts, and the
+        # drawn census on a single weakening under drawn verdicts whose question the own verdicts do not show, so only a
+        # state at depth 2, or a drawn-only state of a question the own verdicts show (OpenQuestionsTests then red on
+        # it), goes unfailed (the census in step 6a's NOTES counts what each name accepts there); DECISIONS D293
+        # accepted Q-ERASE's states (D293_ERASE), held to D264's rule like every named release
         self.check(base, first, label, what, base_R, waiting=[])
         if drawn is None:
             return
@@ -1695,7 +1847,8 @@ class PMonoTests(SimpleTestCase):
         self.assertNotIn('45380', ready(base))
         self.assertTrue(_inherited_statement(R, EF.E(2)))
         self.assertEqual(D228_STATUS_RESULTS, (Res.UNRESOLVED, Res.UNKNOWN, Res.CONTRADICTED))
-        statuses = [(label, changed, what) for label, changed, what in weakenings(R) if what[:2] == (EF.E(2), A.STATUS)]
+        statuses = [(label, changed, what) for label, changed, what in weakenings(R)
+                    if what[:2] == (EF.E(2), A.STATUS) and _how(label) in HOWS]  # the classic four (9.4)
         self.assertEqual(len(statuses), len(HOWS))
         results = []
         for label, changed, what in statuses:
@@ -1723,7 +1876,8 @@ class PMonoTests(SimpleTestCase):
         self.assertFalse(_inherited_statement(own, EF.E(2)))
         own_status = (EF.E(2), A.STATUS, 0, own.events[EF.E(2)][A.STATUS][0])
         self.assertFalse(_d228_status_weakening(label, own_status, '45380', own))
-        performers = [(label, what) for label, _changed, what in weakenings(R) if what[:2] == (EF.E(2), A.PERFORMER)]
+        performers = [(label, what) for label, _changed, what in weakenings(R)
+                      if what[:2] == (EF.E(2), A.PERFORMER) and _how(label) in HOWS]  # the classic four (9.4)
         self.assertEqual(len(performers), len(HOWS))
         for label, what in performers:
             with self.subTest(weakening=label):
@@ -1795,7 +1949,8 @@ class PMonoTests(SimpleTestCase):
         R = replace(R0, pair_controls={**R0.pair_controls, key: False})
         base = assessed(R, codes)
         self.assertNotIn('43249', ready(base))
-        statuses = [(label, changed, what) for label, changed, what in weakenings(R) if what[:2] == (EF.E(4), A.STATUS)]
+        statuses = [(label, changed, what) for label, changed, what in weakenings(R)
+                    if what[:2] == (EF.E(4), A.STATUS) and _how(label) in HOWS]  # the classic four (9.4)
         self.assertEqual(len(statuses), len(HOWS))
         for label, changed, what in statuses:
             with self.subTest(weakening=label):
@@ -2050,6 +2205,10 @@ VERDICT_PARTS = 6  # the drawn-verdict census runs as this many test classes, on
 # weakenings: E4's status, four ways, under the three patterns leaving a control between E1 and E4 not rejected; on
 # refute-6a-r1 F3's, over its 8 patterns, D264_SITE's two releases and two shrunk claims each
 DRAWN_QM, DRAWN_CLEAN, DRAWN_SITE, DRAWN_SITE_SHRINKS = 1296, 12, 16, 16
+# DECISIONS D293 (Q-ERASE option (a)): on r4a QM's fixture, over its 64 patterns, the value-erasing contradictions of E1's
+# support facts whose classic weakening D262_QM names (and the erasing states D264_CLEAN's predicate takes), every one
+# held to D264's every-row rule by the census's own check (measured on the lead's tree, 2026-11-16)
+DRAWN_ERASE = 711
 # D220's unrejected-control states beside a deletion: the D264_SITE releases among them (F3's dilation: 43249 and 43245
 # when its distal esophagus is deleted beside the control asking E2 about it, left unrejected)
 D220_SITE_RELEASES = 2
@@ -2088,9 +2247,11 @@ def verdict_parts() -> tuple:
 # releases each name accepts and, for D264_SITE, the shrunk claims it accepts. A fixture with pair controls not listed
 # here accepts nothing under any name. Step 6a's NOTES give the same per pattern, at depth 1 and depth 2.
 DRAWN_RELEASES = {
-    QM_FIXTURE: {D262_QM: DRAWN_QM, D264_CLEAN: DRAWN_CLEAN},
+    QM_FIXTURE: {D262_QM: DRAWN_QM, D264_CLEAN: DRAWN_CLEAN, D293_ERASE: DRAWN_ERASE},
     F3_FIXTURE: {D264_SITE: DRAWN_SITE},
-    'a snare beside a biopsy of two places (EGD)': {D245_Q2: 1},  # as filed only: any control left unrejected holds it
+    # DECISIONS D292's E1j: r2d-2 Q2's fixture accepts nothing - its base is READY as filed (a biopsy elsewhere than the
+    # snare, every place control rejected), and with any control left unrejected the biopsy is held as before
+    'a snare beside a biopsy of two places (EGD)': {},
     'a possible statement beside a biopsy and a snare, its controls rejected (D245)': {D245_B: 1},  # likewise
 }
 DRAWN_SHRINKS = {F3_FIXTURE: {D264_SITE: DRAWN_SITE_SHRINKS}}
@@ -2124,7 +2285,7 @@ def drawn_verdict_census(part: int):
                 # the routed releases are DISCARDED here but for their question: one whose question the fixture's own
                 # verdicts also show is left to OpenQuestionsTests, which fails on the own-verdict states alone (the
                 # drawn-only states of that question go unfailed); a question seen only under drawn verdicts fails here.
-                # None can be routed while OPEN_RELEASES is empty (D264)
+                # (DECISIONS D293 accepted Q-ERASE's states under D293_ERASE: they are counted in DRAWN_RELEASES)
                 questions = {question for _code, question, _label in waiting}
                 own = questions if own is None else own  # 'as filed' comes first: the fixture's own verdicts
                 with self.subTest(fixture=name, verdicts=pattern):
@@ -2166,6 +2327,124 @@ class PMonoVerdicts5Tests(SimpleTestCase):
     test_every_single_weakening_under_every_drawn_verdict = drawn_verdict_census(5)
 
 
+class ExemptionMonoTests(SimpleTestCase):
+    """DECISIONS D285 ruling A (r4d's mono_probe; refute-r4d-r1 V9R4D1-3): the exemption's P-MONO census over random
+    EGD and upper EUS shapes, beside P-MONO's other censuses: in test_combination, P-WORDED's harvest of that module
+    (WORDED_MODULES) worded each of its 32,000 combinations one by one and the census tripled the gate's longest unit;
+    the member sentences of P-MONO's states are P-WORDED's here, through p_mono_scenes (every fixture's single
+    weakenings, the value-erasing contradictions included). The scenes, the seed and the calls are test_combination's
+    D285Count probes', unchanged."""
+
+    def test_mono_probe_no_whole_side_release(self):
+        """mono_probe.py's census (seeded; the exemption's P-MONO): an EGD beside an upper EUS of several shapes, 0-3
+        more events and 0-2 kept unlisted entries; no single weakening (``weakenings``, the value-erasing contradictions
+        included) loses a whole of X1, turns session_possibly_done(X2) from True to False, or releases 43235's
+        combination hold."""
+        import random as random_
+
+        from tests.v2 import test_combination as T
+
+        members = [T.member('sel:0', '43235', T.X1, (T.E1,), procedural=True, supported=True)]
+        rng = random_.Random(20261116)
+        checked = 0
+        for _ in range(250):
+            events = {T.E1: T.act(T.Kind.EXAMINATION, T.X1)}
+            shape = rng.choice(['planned', 'planned', 'earlier', 'denied', 'today', 'date open', None])
+            if shape == 'planned':
+                events[T.E2] = T.act(T.Kind.EXAMINATION, T.X2, status=T.sup(T.PLANNED),
+                                     date=rng.choice([T.sup(T.LATER_), None]))
+            elif shape == 'earlier':
+                events[T.E2] = T.act(T.Kind.EXAMINATION, T.X2, date=T.sup(T.EARLIER))
+            elif shape == 'denied':
+                events[T.E2] = T.act(T.Kind.EXAMINATION, T.X2, status=T.neg(T.PERFORMED))
+            elif shape == 'today':
+                events[T.E2] = T.act(T.Kind.EXAMINATION, T.X2)
+            elif shape == 'date open':
+                events[T.E2] = T.act(T.Kind.EXAMINATION, T.X2, date=T.unres(T.ON))
+            for number in range(3, 3 + rng.randint(0, 3)):
+                kind = rng.choice([T.sup(T.Kind.EXAMINATION), T.sup(T.Kind.EXAMINATION), None, T.sup(T.Kind.FNA),
+                                   T.sup(T.Kind.EM_VISIT)])
+                made = T.act(kind if kind is not None else T.Kind.EXAMINATION,
+                             status=rng.choice([T.sup(T.PERFORMED), T.sup(T.PERFORMED), T.doubted(T.PERFORMED),
+                                                T.sup(T.PLANNED)]),
+                             session=rng.choice([None, T.sup(T.X2), T.sup(T.X2), T.unres(T.X2), T.doubted(T.X1, T.X2),
+                                                 T.sup(T.X1)]),
+                             date=rng.choice([None, T.sup(T.ON), T.sup(T.ON), T.unres(T.ON), T.sup(T.EARLIER),
+                                              T.sup(T.LATER_)]),
+                             device=rng.choice([None, None, T.sup(T.Device.ENDOSCOPE), T.sup(T.Device.MANUAL)]))
+                if kind is None:
+                    del made[T.A.KIND]
+                events[T.Id(T.IdFamily.EVENT, number)] = made
+            entries = tuple(T.entry_of(rng.choice([T.Kind.EXAMINATION, T.Kind.FNA, None, T.Kind.EM_VISIT]),
+                                       rng.choice([None, T.X2, T.X1, T.X9]), rng.choice([T.ACT_, T.DOUBT_]),
+                                       at=900 + 50 * index)
+                            for index in range(rng.choice([0, 0, 1, 2])))
+            R = T.build(events, {T.X1: T.session_of(T.SessionKind.EGD),
+                                 T.X2: T.session_of(T.SessionKind.EUS, tract=T.UPPER)}, unlisted=entries)
+
+            def answer(S):
+                return ({whole.session for whole in T.C.wholes(S, T.X1)}, T.C.session_possibly_done(S, T.X2),
+                        bool(T.C.combine(members, T.coding_of(S), S).held['sel:0']))
+
+            before = answer(R)
+            for label, W, _what in weakenings(R):
+                after = answer(W)
+                checked += 1
+                self.assertFalse((not before[0] <= after[0]) or (before[1] and not after[1])
+                                 or (before[2] and not after[2]), label)
+        self.assertGreater(checked, 5000)
+
+
+class ViewAloneTests(SimpleTestCase):
+    """AMENDMENT-2 4.4's first property for the merged view, over F1's class (refute-f3e-r1 F1, critical): "never
+    stronger than any single written fact read alone, for any reader". Over every fixture, every ESTABLISHED single
+    slot fact (facts.SLOTS) of value v is replaced by the merged view of v written stated and v written denied (in both
+    orders) - tests/v2/test_combination.overfilled's form, to which tests/v2/test_facts pins engine/facts._overfilled -
+    and by each of its written facts read alone (unresolved for slot_overfull, v claimed, supported or negated): no code
+    is READY or EXCLUDED under the view that is not READY, resp. EXCLUDED, under each written fact alone. 4.4's
+    generator writes [v, another value] only, so it never wrote one value both ways; as built, four states released
+    (43239 three times, beside a competing_codes rival; 45380 once), where the view's empty negated_values left each
+    possibility reader reading v alone. The step's NOTES, question Q1R."""
+
+    def test_no_view_of_one_value_written_both_ways_is_stronger_than_a_written_fact(self):
+        from tests.v2.test_combination import overfilled
+
+        S_, N_ = ct.FactState.SUPPORTED, ct.FactState.NEGATED
+
+        def written(state, found):
+            return Fact(result=Res.UNRESOLVED, value=found.value, state=state, options=(),
+                        reasons=(ct.Reason.SLOT_OVERFULL,), spans=found.spans, cited=found.cited,
+                        inherited_from=found.inherited_from)
+
+        checked = 0
+        for name, R, codes in fixtures():
+            for table in TABLES.values():
+                for subject, attributes in _objects(R, table):
+                    family = subject.family if subject is not None else None
+                    for attribute, members in attributes.items():
+                        if (family, attribute) not in F.SLOTS or len(members) != 1:
+                            continue
+                        found = members[0]
+                        if found.result is not Res.SUPPORTED or found.value is None:
+                            continue
+
+                        def outcome(new):
+                            got = assessed(_with(R, table, subject, {**attributes, attribute: (new,)}), codes)
+                            return ready(got), excluded(got)
+
+                        alone = [outcome(written(state, found)) for state in (S_, N_)]
+                        for order in ((S_, N_), (N_, S_)):
+                            view = replace(overfilled(*((state, found.value) for state in order)), spans=found.spans,
+                                           cited=found.cited, inherited_from=found.inherited_from)
+                            got = outcome(view)
+                            where = f'{name} | {_subject(subject)} {attribute.value} = {found.value} | {order}'
+                            for each in alone:
+                                self.assertLessEqual(got[0], each[0], where)
+                                self.assertLessEqual(got[1], each[1], where)
+                            checked += 1
+        self.assertGreater(checked, 500)
+
+
 def waiting_releases() -> list:
     """Every release and shrunk claim an open question governs (OPEN_RELEASES) that a single weakening of a fixture
     reaches under the fixture's own verdicts, as (code, question, label) - what OpenQuestionsTests fails on."""
@@ -2181,9 +2460,10 @@ def waiting_releases() -> list:
 class OpenQuestionsTests(SimpleTestCase):
     """The releases a design question governs that the owner has not ruled (OPEN_RELEASES), RED BY DESIGN while one is
     seen (DECISIONS D245: "A release no ruling names still fails"; P6), so the gate goes to the owner rather than into a
-    pass; the other P-MONO tests route these releases here and keep guarding every other. OPEN_RELEASES is empty since
-    DECISIONS D264 ruled both of its entries (refute-6a-r1 F3: D264_SITE; F5: D262_STATUS); the class stays as the guard
-    for the next unruled release, its positive control planting one."""
+    pass; the other P-MONO tests route these releases here and keep guarding every other. DECISIONS D264 emptied
+    OPEN_RELEASES (refute-6a-r1 F3: D264_SITE; F5: D262_STATUS), and DECISIONS D293 emptied it again (step f3e's
+    question Q-ERASE, 4.4's value-erasing contradictions in a ruled class: option (a), D293_ERASE); its positive control
+    plants one more."""
     maxDiff = None  # the failure names every waiting release, with its question
 
     def test_every_drawn_verdict_part_is_a_class_and_every_fixture_with_controls_is_in_one(self):
@@ -2205,10 +2485,10 @@ class OpenQuestionsTests(SimpleTestCase):
     def test_no_release_waits_on_an_open_question(self):
         """Every single weakening of every fixture under its own verdicts: a release or a shrunk claim an open question
         governs fails here, named with its question and its weakening, until the owner rules - (a) accepted: the entry
-        moves from OPEN_RELEASES to ACCEPTED_RELEASES under its ruling; (b) the engine repaired: the release is gone. On
-        this tree OPEN_RELEASES is empty (D264), so nothing waits."""
-        self.assertEqual(OPEN_RELEASES, ())
+        moves from OPEN_RELEASES to ACCEPTED_RELEASES under its ruling; (b) the engine repaired: the release is gone.
+        OPEN_RELEASES is empty on this tree (DECISIONS D293 ruled Q-ERASE, option (a))."""
         self.assertEqual([f'{code} under {label}: {question}' for code, question, label in waiting_releases()], [])
+        self.assertEqual(OPEN_RELEASES, ())  # D264: empty; checked after the routing, so a failure names what waits
 
     def test_the_guard_still_fails_on_an_unruled_release(self):
         """The guard's positive control: with D264_SITE taken out of the rulings and planted as an open question for the
@@ -2223,7 +2503,7 @@ class OpenQuestionsTests(SimpleTestCase):
 
         accepted = tuple(entry for entry in ACCEPTED_RELEASES if entry[1] != D264_SITE)
         with mock.patch(f'{__name__}.ACCEPTED_RELEASES', accepted), mock.patch(f'{__name__}.ACCEPTED_SHRINKS', ()), \
-                mock.patch(f'{__name__}.OPEN_RELEASES', (('planted', question, planted),)):
+                mock.patch(f'{__name__}.OPEN_RELEASES', (('planted', question, planted), *OPEN_RELEASES)):
             waiting = waiting_releases()
             self.assertEqual(sorted((code, label) for code, found, label in waiting if found == question),
                              [('43245', 'deleted E1 target.places[0]'), ('43245', 'deleted E1 target.places[1] (a claim '

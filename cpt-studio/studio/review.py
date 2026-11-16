@@ -30,6 +30,12 @@ from django.utils import timezone
 
 from . import audit, candidates, participants
 from . import interpretation as interpretation_labels  # the Gemini migration's labels only (no module of it loads)
+# AMENDMENT-2 8.1 [R:replay-R4]: the readers of a stored row accept both design v2 families - the engine versions
+# cpt-studio-events@2 (rows stored before AMENDMENT-2, read as stored) and @3 (what engine/assess writes now) - so the
+# fingerprint binding of D259 and D270 is kept for both, and an inventory of either v2 pair stands in through
+# gemini-routing@2 (engine/derive: ROUTING_VERSION_V2, unchanged by AMENDMENT-2)
+V2_ENGINES = (interpretation_labels.ENGINE_VERSION_V2, interpretation_labels.ENGINE_VERSION_V3)
+V2_PAIRS = (interpretation_labels.INTERPRETATION_PAIR, interpretation_labels.INTERPRETATION_PAIR_V3)
 from .gi.context import charge_date_problem
 from .participants import loop as participant_loop
 from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, EventInventory,
@@ -331,8 +337,9 @@ def stored_questions(assessment: Any, proposals: Iterable[Any]) -> dict[tuple[st
     by the first in stored order, as engine/assess binds an answer to every proposal of a key by the first one's
     question (its proposals keep the engine's order: persist_assessment's positions). A proposal whose support carries
     no question (a code with no item, an alternative) names nothing. {} for any other assessment: v1's binding, and the
-    legacy engine's, are unchanged."""
-    if getattr(assessment, 'engine_version', None) != interpretation_labels.ENGINE_VERSION_V2:
+    legacy engine's, are unchanged. A design v2 assessment is one of V2_ENGINES (cpt-studio-events@2 or @3: AMENDMENT-2
+    8.1)."""
+    if getattr(assessment, 'engine_version', None) not in V2_ENGINES:
         return {}
     found: dict[tuple[str, str, str], str] = {}
     for proposal in sorted(proposals, key=lambda item: item.position):
@@ -354,9 +361,9 @@ def stored_service_questions(assessment: Any) -> dict[tuple[str, str, str], str]
     service questions carry is bound by the first in stored order (D259's rule for a key two proposals carry; the
     details row answers both with one answer, and engine/assess closes only the questions that carry that fingerprint:
     repair round w9r's 5b NOTES, question Q1). An entry that does not name a family, a fact and a fingerprint as strings
-    names nothing. {} for any other assessment, and for a design v2 assessment whose completeness records no such list
-    (made before D270): questions.group's binding."""
-    if getattr(assessment, 'engine_version', None) != interpretation_labels.ENGINE_VERSION_V2:
+    names nothing. {} for any other assessment, and for a design v2 assessment (V2_ENGINES) whose completeness records
+    no such list (made before D270): questions.group's binding."""
+    if getattr(assessment, 'engine_version', None) not in V2_ENGINES:
         return {}
     completeness = getattr(assessment, 'completeness', None)
     recorded = completeness.get(SERVICE_QUESTIONS) if isinstance(completeness, dict) else None
@@ -390,8 +397,9 @@ def answered_items(assessment: Any, proposals: Iterable[Any] | None = None) -> l
     engine/assess's Answered) is the record of the answers the assessment applied and of the question they closed (the
     item's fact key, ``fact``), as an ANSWERED Clarification row is the installed release's record - the design v2
     renderer writes no clarification for an excluded code. ``proposals``: the assessment's, when the caller has them
-    (read otherwise). [] for any other assessment: v1's record and the legacy engine's are their Clarification rows."""
-    if getattr(assessment, 'engine_version', None) != interpretation_labels.ENGINE_VERSION_V2:
+    (read otherwise). [] for any other assessment: v1's record and the legacy engine's are their Clarification rows. A
+    design v2 assessment is one of V2_ENGINES (AMENDMENT-2 8.1)."""
+    if getattr(assessment, 'engine_version', None) not in V2_ENGINES:
         return []
     rows = list(assessment.proposals.all()) if proposals is None else list(proposals)
     out: list[tuple[Any, str, frozenset[str]]] = []
@@ -454,6 +462,22 @@ def answer_states(assessment: Any, current: Mapping[Any, Any] | None = None,
             ids = {answer.pk for answer in superseding}
             bound += superseding
             earlier = [(answer, why) for answer, why in earlier if answer.pk not in ids]
+    if readers.for_assessment(assessment).kind == readers.EVENTS:
+        # DECISIONS D283, G1-01 option (c) (build list B15): the competing question takes no answer - codes competing for
+        # one act are settled by rejecting one (studio/answers.py), and the competing hold by the reviewer's rejection
+        # (D270 DQ-3) - so on an events-reader assessment a standing answer to it (one recorded before the question
+        # stopped taking answers) binds nothing at read time, as engine/assess binds nothing to it, and is listed not
+        # applied: never "no longer asked" (the question is still shown) nor "asked differently" (it cannot be answered)
+        from .interpretation.engine.assess import Unbound  # the engine's own record of an answer applied to nothing
+        from .interpretation.overlay import COMPETING_FACT  # the competing question's fact key (pinned to v1's)
+
+        competing = [answer for answer in bound if questions._field(answer, 'fact') == COMPETING_FACT]
+        competing += [answer for answer, _ in earlier if questions._field(answer, 'fact') == COMPETING_FACT]
+        if competing:
+            ids = {answer.pk for answer in competing}
+            bound = [answer for answer in bound if answer.pk not in ids]
+            earlier = [(answer, why) for answer, why in earlier if answer.pk not in ids]
+            earlier += [(answer, Unbound.NOT_APPLIED.value) for answer in competing]
     return applied, bound, earlier
 
 
@@ -466,7 +490,7 @@ def _closed_pairs(assessment: Any, proposals: Sequence[Any]) -> list[tuple[tuple
     engine/assess excluded by a member's answer (answered_items, DECISIONS D270: the record is the proposal's
     support['answered'], no Clarification row), keyed by its code, family and the item's fact key and bound by the item's
     stored fingerprint - named only where stored_questions names that key, so no other fingerprint ever binds it. Read for
-    an answer saved to such a question since (answer_states). One query (two on a design v2 assessment)."""
+    an answer saved to such a question since (answer_states). One query."""
     text = assessment.revision.text
     acts = questions.acts_of(assessment.services)
     by_pk = {proposal.pk: proposal for proposal in proposals}
@@ -511,8 +535,11 @@ def asked_fingerprints(assessment: Any, current: Mapping[Any, Any] | None = None
 
 
 def _answer_effect(answer) -> dict:
+    """One bound answer as the read-time overlay applies it - with the fingerprint it was recorded with (``question``),
+    by which a design v2 overlay tells an answer engine/assess reads itself (engine_reads: an exclusion that stands)
+    from one the overlay binds by its key in each pass (DECISIONS D283, build list B16)."""
     return {'code': answer.code, 'family': answer.family, 'fact': answer.fact, 'value': answer.value,
-            'answer_id': str(answer.pk)}
+            'answer_id': str(answer.pk), 'question': str(getattr(answer, 'question', '') or '')}
 
 
 def _member_answers(assessment, current=None, inputs=None):
@@ -682,14 +709,20 @@ def approved_items(assessment):
     return items
 
 
-def _actions(proposal, current, text, same_day_held=False, view=None):
+def _actions(proposal, current, text, same_day_held=False, view=None, named_rival=False):
     """``same_day_held``: an E/M that a reviewer's reinstatement of a same-day procedure now holds (no approve).
     ``view``: the proposal's effective review view (effective_view; CORE-UX-DESIGN.md 4) - its status, its reinstatement
-    gate and a member answer's exclusion are read in place of the stored row's; None reads the stored row."""
+    gate and a member answer's exclusion are read in place of the stored row's; None reads the stored row.
+    ``named_rival``: another counted code's open competing question names this code as its rival (``_named_rivals``)."""
     if current is not None and current.action in (APPROVE, REJECT, CONFIRM):
         return [REVOKE]
     if view is not None and view.reason == DETAIL_UNAVAILABLE:
-        return [REVOKE] if current else []  # a needed detail is answered as unavailable: nothing to decide
+        # a needed detail is answered as unavailable: nothing to decide - but the rejection a counted code's open
+        # competing question asks for (DECISIONS D283, G1-04 option (a); build list B17): its own sentence says
+        # "reject the code or codes the documentation does not support; the one left is then ready for review" (D270
+        # DQ-3), so a rival it names offers REJECT (REVOKE once decided, above) though a member's answer leaves it
+        # detail unavailable
+        return [REVOKE] if current else ([REJECT] if named_rival else [])
     status = proposal.status if view is None else view.status
     exact = bool(exact_evidence(proposal.evidence, text))
     if proposal.bucket == SELECTED and status in BUCKET_STATUSES[SELECTED]:
@@ -705,6 +738,30 @@ def _actions(proposal, current, text, same_day_held=False, view=None):
         clear = _reinstatement_clear(proposal) if view is None else view.reinstatement_clear
         return ([APPROVE] if exact and clear and not same_day_held else []) + [REJECT, REVOKE]
     return [REVOKE] if current else []
+
+
+def _named_rivals(assessment, views) -> frozenset:
+    """The codes an OPEN competing question of a counted code names as its rivals (DECISIONS D283, G1-04; D270 DQ-3):
+    for every proposal whose effective view is active and asks the competing question (its fact COMPETING_FACT), the
+    codes its stored record competes with (support['competes'], the rivals its renderer named) that are still in the
+    competition at read time. Read time's live rivals are those less every code out of the competition - a rival only
+    ever leaves it - and whenever a member answered a code "Not documented" (its view detail unavailable by that answer)
+    that code is out of the competition (DECISIONS D249, the overlay's answer passes), so no live competing question
+    names it, whatever the size of the competition (refute-f6-r1 F6R1-3: a three-code competition). Read on a design
+    v2 assessment's views."""
+    from .interpretation.overlay import COMPETING_FACT, NOT_DOCUMENTED  # the competing fact (v1's); D249's answer
+
+    out_of_competition = {view.code for view in views.values()
+                          if view.reason == DETAIL_UNAVAILABLE and view.answer == NOT_DOCUMENTED}
+    out: set[str] = set()
+    for proposal in assessment.proposals.all():
+        view = views.get(proposal.key)
+        if view is None or not view.active or not any(q.get('fact') == COMPETING_FACT for q in view.questions):
+            continue
+        rivals = (proposal.support or {}).get('competes') if isinstance(proposal.support, dict) else None
+        out.update(code for code in (rivals if isinstance(rivals, list) else ())
+                   if isinstance(code, str) and code not in out_of_competition)
+    return frozenset(out)
 
 
 def _reinstatement_clear(proposal):
@@ -785,9 +842,14 @@ def _allowed(proposal, assessment, membership, encounter, views=None):
         return []
     if not fresh(encounter):
         return []  # FINAL-V2 amendment 1, A7 and 4.3: codes from before the latest change are never decided on
-    view = (effective_view(assessment) if views is None else views).get(proposal.key)
+    views = effective_view(assessment) if views is None else views
+    view = views.get(proposal.key)
+    # D283 G1-04: a rival an open competing question names keeps the rejection that question asks for (_actions)
+    named_rival = (view is not None and view.reason == DETAIL_UNAVAILABLE
+                   and proposal.code in _named_rivals(assessment, views))
     actions = _actions(proposal, _current_decision(proposal), assessment.revision.text,
-                       view.same_day_held if view is not None else _same_day_held(proposal, assessment), view)
+                       view.same_day_held if view is not None else _same_day_held(proposal, assessment), view,
+                       named_rival=named_rival)
     if actions and actions != [REVOKE] and _events_unreadable(assessment):
         # D50: the blocker says the record "cannot be approved or exported until it is assessed again", and the decision
         # path enforces it - no approve, reject, confirm or reinstate on a record this release cannot read (each would be
@@ -1285,9 +1347,10 @@ def _check_event_inputs(encounter, revision, context, routing_run, event_invento
         raise ValueError('The event inventory was not read whole, so nothing is assessed from it.')
     if context.event_inventory_id != event_inventory.pk:
         raise ValueError('The encounter context was not derived from this event inventory.')
-    # FINAL-V2 1.1: a design v2 inventory's stand-in is gemini-routing@2 (engine/derive), a v1 inventory's @1
+    # FINAL-V2 1.1: a design v2 inventory's stand-in is gemini-routing@2 (engine/derive), a v1 inventory's @1;
+    # AMENDMENT-2 8.1: for an inventory of either design v2 pair (V2_PAIRS)
     expected = (interpretation_labels.ROUTING_VERSION_V2
-                if event_inventory.interpretation_version == interpretation_labels.INTERPRETATION_PAIR
+                if event_inventory.interpretation_version in V2_PAIRS
                 else interpretation_labels.ROUTING_VERSION)
     if (routing_run.version != expected
             or (routing_run.result or {}).get('inventory') != str(event_inventory.pk)):
@@ -1720,14 +1783,26 @@ def _could_bill(proposal, decision):
 
 def _reads_a_withdrawn_answer(assessment) -> bool:
     """Whether ``assessment`` was made with a member's answer that no longer stands (STALE_ANSWER_BLOCKER): a question it
-    closed with an answer (Clarification.answer) or a code it excluded by one (support 'answered') names an answer that
-    is not among its revision's standing answers. Two queries."""
+    closed with an answer (Clarification.answer), a code it excluded by one (support 'answered'), or - on a design v2
+    assessment (V2_ENGINES) - an overlay-bound answer engine/assess READ (DECISIONS D283, G3-17 with RS-4's and C5's
+    correction; build list B19): one that took a code out of its competition (D270 DQ-2) or left a primary out of its
+    ADDON count (G1-03), named by overlay.assessed_answers from the stored record (the derivation recount reads, so the
+    two cannot drift) - names an answer that is not among its revision's standing answers. An answer assess did not read
+    moves nothing. Two queries."""
     standing = {answer.pk for answer in _standing(assessment)}
     if assessment.clarifications.filter(answer__isnull=False).exclude(answer__in=standing).exists():
         return True
-    for proposal in assessment.proposals.all():
+    held = {str(pk) for pk in standing}
+    proposals = list(assessment.proposals.all())
+    for proposal in proposals:
         marker = (proposal.support or {}).get(questions.ANSWERED_SUPPORT) if isinstance(proposal.support, dict) else None
-        if isinstance(marker, dict) and {str(item) for item in marker.get('answers') or ()} - {str(pk) for pk in standing}:
+        if isinstance(marker, dict) and {str(item) for item in marker.get('answers') or ()} - held:
+            return True
+    if getattr(assessment, 'engine_version', None) in V2_ENGINES:
+        from .interpretation import overlay  # the read-time overlay's one derivation of what assess read
+
+        rows = [overlay.stored_from(proposal, ()) for proposal in proposals]
+        if overlay.assessed_answers(assessment.completeness, rows) - held:
             return True
     return False
 
@@ -2593,12 +2668,15 @@ def estimated_cost(run):
     is no estimate of the run), and where pricing cannot price the usage: an estimate is informational, so it never
     fails the page or a report (its error is logged).
 
-    The interpreter's runs (provider 'gemini', design/FINAL.md 3.2 and 6.3) are priced too: one exchange, at the rate of
-    the UTC day its request was sent (pricing.estimate(..., on=run.started_at): Gemini's rates are dated, so a run with
-    no recorded start has no estimate). Astra's and Fable's rates are undated and do not read the day."""
-    from .interpretation import PROVIDER as INTERPRETER
+    The interpreter's runs (design/FINAL.md 3.2 and 6.3) are priced too - every provider of interpretation.READ_PROVIDERS
+    (AMENDMENT-2 9: Fable's runs, provider 'anthropic', and the stored runs of Gemini; step f5's request R3) - one
+    exchange, by the model the run's request named, at the rate of the UTC day its request was sent where the rates are
+    dated (pricing.estimate(..., on=run.started_at): Gemini's rates are dated, so such a run with no recorded start has
+    no estimate). Astra's and Fable's rates (the participant's and the interpreter's) are undated and do not read the
+    day."""
+    from .interpretation import READ_PROVIDERS as INTERPRETERS
 
-    if run is None or run.provider not in participants.PARTICIPANTS + (INTERPRETER,) or not run.usage:
+    if run is None or run.provider not in participants.PARTICIPANTS + tuple(INTERPRETERS) or not run.usage:
         return None
     try:
         pricing = importlib.import_module(PRICING_MODULE)

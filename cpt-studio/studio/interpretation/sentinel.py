@@ -84,6 +84,15 @@ retired codes unarmed. Their twins are pinned as the legacy ones are (EXEMPT_PAT
 contract/date_literals copies for L1, 5.6's allowlist, and the bare ISO date shape the participants and the reference
 tools compile from the same source), so a new-path read of any other retired pattern - lexicon's, literals' size, a
 normalize or verify vocabulary - is counted and refuses its write.
+
+AMENDMENT-2 (docs/gemini-migration/AMENDMENT-2.md section 9; its step F7; DECISIONS D275, D279): the interpreter is Claude
+Fable 5.2, and its connector, studio/interpretation/fable_adapter.py, is a KEPT module beside adapter.py (KEPT gains
+fable_adapter): it is neither retired nor denied, so none of its code objects is armed, and without it in KEPT
+``expected_retired`` would read it as a module neither kept nor retired and every install would refuse. It imports
+nothing the sentinel denies (tests/test_guard_static.py's FableConnectorTests read it with the new package's rule, the
+retired-reference rule and its whole import closure; tests/v2/test_retirement_manifest.py lists it as kept). The deny
+set, the retired set and their pinned sizes are unchanged, and so are the new-path write gate and the D22 record's
+``legacy_calls`` and ``retired_calls``.
 """
 from __future__ import annotations
 
@@ -263,9 +272,11 @@ DENY_SIZE = sum(LEGACY_SIZES.values())  # the legacy deny set: the D22 record's 
 # --- design v2: the RETIRED kind (FINAL-V2 5.0, 5.7 measures 1-3) ----------------------------------------------------------
 
 INTERPRETATION = 'studio.interpretation'
-# The kept modules of studio/interpretation (FINAL-V2 5.0), edited where they imported a retired one; every other module
-# file there is retired (expected_retired).
-KEPT = ('__init__', 'adapter', 'holds', 'sentinel', 'readers', 'overlay', 'store', 'wording', 'report', 'replay', 'dates')
+# The kept modules of studio/interpretation (FINAL-V2 5.0), edited where they imported a retired one, and the Fable
+# connector beside adapter.py (AMENDMENT-2 section 9: "sentinel.KEPT gains fable_adapter"); every other module file there
+# is retired (expected_retired).
+KEPT = ('__init__', 'adapter', 'holds', 'sentinel', 'readers', 'overlay', 'store', 'wording', 'report', 'replay', 'dates',
+        'fable_adapter')
 # FINAL-V2 5.0: the 17 v1 interpretation modules, denied whole, in its order
 RETIRED_NAMES = ('prompt', 'schema', 'read', 'normalize', 'verify', 'literals', 'identity', 'lexicon', 'relations',
                  'mapping', 'classes', 'ercp', 'facts', 'events', 'coverage', 'combination', 'assess')

@@ -11,6 +11,13 @@ What is proved:
   included - and a missing or unsafe recording is not sent (RefusalTests);
 - v1's ReplayInterpreter is unchanged: it never replays a design v2 request, and v2's never replays v1's
   (RefusalTests); its own tests (tests/test_interpretation_adapter.py, tests/test_interpretation_replay.py) stay green.
+
+AMENDMENT-2 (docs/gemini-migration/AMENDMENT-2.md 1.8; step F1): ReplayInterpreterF replays fable_adapter's two request
+kinds from GEMINI_REPLAY_DIR/anthropic/<request sha256>.sse, the raw stream of a complete 200 answer, with the answer
+streams of tests/v2/test_fable_adapter.py. What is proved: an .sse recording is read exactly as the same bytes read
+live (FableReplayTests); an incomplete recording replays as an unknown outcome with its bytes, the path a live one takes
+(FableRecordingTests, FableReplayTests); a changed instruction byte finds no recording ("No recorded response for this
+request.") (FableReplayTests); Gemini's folder and Fable's never answer each other's requests (FableReplayTests).
 """
 from __future__ import annotations
 
@@ -21,11 +28,16 @@ from unittest import mock
 from studio import interpretation
 from studio.interpretation import adapter, holds
 from studio.interpretation.contract import appraise_read, extract_read
-from studio.interpretation.replay import USAGE_BASIS, ReplayInterpreter, ReplayInterpreterV2
+from studio.interpretation import fable_adapter
+from studio.interpretation.contract import extract_prompt
+from studio.interpretation.replay import (INCOMPLETE_RECORDING, USAGE_BASIS, ReplayInterpreter, ReplayInterpreterF,
+                                          ReplayInterpreterV2)
+from studio.participants import http as participants_http
 from studio.participants import loop as participants_loop
 from studio.types import ProviderRequest
 from tests.test_interpretation_adapter import encoded, envelope, with_parts
-from tests.test_participants_support import OfflineTestCase, write_file
+from tests.test_participants_support import FakeResponse, FakeSession, OfflineTestCase, anthropic_env, write_file
+from tests.v2 import test_fable_adapter as streams
 from tests.v2.test_adapter import KIND, PAGES, TEXT, Pinned, appraisal_answer, request_with, stored_answer
 
 
@@ -177,3 +189,153 @@ class RefusalTests(ReplayCase):
                 exchange = replay.send(request, deadline_s=5)
                 self.assertEqual((exchange.outcome, exchange.response_bytes), ('not_sent', None))
                 self.assertIn('different provider or adapter version', exchange.error)
+
+
+# --- AMENDMENT-2 (1.8): the Fable recordings ------------------------------------------------------------------------------
+
+class FableRecordingTests(OfflineTestCase):
+    """_Recordings for ReplayInterpreterF, read directly: the folder and the suffix are its interpreter's, and the
+    stream's end test decides whether a recording is a whole answer."""
+
+    def setUp(self):
+        super().setUp()
+        self.folder = self.tmp / 'anthropic'
+        self.folder.mkdir(mode=0o700)
+        self.replay = ReplayInterpreterF(self.tmp)
+
+    def test_a_complete_recording_replays_as_an_answer(self):
+        raw = streams.answer_stream()
+        write_file(self.folder / f'{"a" * 64}.sse', raw)
+        exchange = self.replay.recorded('a' * 64)
+        self.assertEqual((exchange.outcome, exchange.sent, exchange.http_status, exchange.response_bytes,
+                          exchange.response_sha256, exchange.usage, exchange.usage_basis, exchange.endpoint,
+                          exchange.requested_model, exchange.returned_model, exchange.response_id, exchange.error),
+                         ('succeeded', False, None, raw, hashlib.sha256(raw).hexdigest(), {}, USAGE_BASIS, '',
+                          'claude-fable-5-2', 'claude-fable-5-2', streams.MESSAGE_ID, ''))
+        self.assertEqual((self.replay.recording_folder, self.replay.recording_suffix, self.replay.mode,
+                          self.replay.endpoint, self.replay.name, self.replay.adapter_version),
+                         ('anthropic', '.sse', 'replay', '', 'anthropic', interpretation.ADAPTER_VERSION_V3))
+        # Gemini's replay interpreters keep their folder and suffix
+        self.assertEqual((ReplayInterpreterV2.recording_folder, ReplayInterpreterV2.recording_suffix,
+                          ReplayInterpreter.recording_folder, ReplayInterpreter.recording_suffix),
+                         ('gemini', '.json', 'gemini', '.json'))
+
+    def test_an_incomplete_recording_replays_unknown_with_its_bytes(self):
+        events = streams.answer_events()
+        for number, raw in enumerate((streams.sse(*events[:-1]), streams.sse(*events)[:-1],
+                                      streams.sse(*events[:3]), b'')):
+            with self.subTest(size=len(raw)):
+                sha = f'{number:064x}'
+                write_file(self.folder / f'{sha}.sse', raw)
+                exchange = self.replay.recorded(sha)
+                self.assertEqual((exchange.outcome, exchange.sent, exchange.response_bytes, exchange.usage,
+                                  exchange.usage_basis, exchange.error),
+                                 ('unknown', False, raw, {}, USAGE_BASIS, INCOMPLETE_RECORDING))
+                self.assertIsNone(fable_adapter.classify(exchange.outcome, exchange.http_status,
+                                                         exchange.response_bytes))
+                self.assertEqual(holds.classify(exchange.outcome, exchange.http_status, exchange.response_bytes,
+                                                adapter_version=interpretation.ADAPTER_VERSION_V3).effect,
+                                 holds.UNKNOWN)
+
+    def test_a_missing_or_unsafe_recording_is_not_sent(self):
+        self.assertEqual(self.replay.recorded('b' * 64).error, 'No recorded response for this request.')
+        write_file(self.tmp / 'gemini.json', streams.answer_stream())
+        (self.tmp / 'gemini').mkdir()
+        write_file(self.tmp / 'gemini' / f'{"c" * 64}.json', streams.answer_stream())
+        self.assertEqual(self.replay.recorded('c' * 64).error, 'No recorded response for this request.')
+        self.assertEqual(ReplayInterpreterF(self.tmp / 'absent').recorded('c' * 64).error,
+                         'The replay directory is not available.')
+        small = ReplayInterpreterF(self.tmp, max_response_bytes=64)
+        write_file(self.folder / f'{"d" * 64}.sse', streams.answer_stream())
+        self.assertEqual(small.recorded('d' * 64).error, 'The recorded response is larger than 64 bytes.')
+        with self.assertRaises(ValueError):
+            ReplayInterpreterF('')
+
+
+class FableReplayTests(streams.FablePinned, OfflineTestCase):
+    def setUp(self):
+        super().setUp()
+        self.folder = self.tmp / 'anthropic'
+        self.folder.mkdir(mode=0o700)
+        self.replay = ReplayInterpreterF(self.tmp)
+        self.extracted = self.replay.build_extraction_request(TEXT, PAGES, KIND)
+        self.data = streams.answer_stream(streams.pass_1_answer())
+        self.appraised = self.replay.build_appraisal_request(TEXT, PAGES, KIND, self.extracted, self.data,
+                                                             check=streams.no_findings)
+        self.answer = streams.answer_stream(streams.verdicts_for(self.appraised.built))
+
+    def record(self, request: ProviderRequest, raw: bytes):
+        return write_file(self.folder / f'{request.canonical_sha256}.sse', raw)
+
+    def live(self, request, raw):
+        """The same bytes as a live exchange (a fake session behind the network guard)."""
+        credentials = write_file(self.tmp / f'anthropic-{request.canonical_sha256[:8]}.env', anthropic_env())
+        session = FakeSession(FakeResponse(200, raw, headers={'request-id': streams.REQUEST_ID}))
+        return fable_adapter.FableInterpreter(credentials, session_factory=lambda: session).send(request,
+                                                                                                deadline_s=60)
+
+    def test_an_sse_recording_is_read_exactly_as_live(self):
+        self.record(self.extracted, self.data)
+        self.record(self.appraised.request, self.answer)
+        for request, raw, purpose in ((self.extracted, self.data, fable_adapter.EXTRACTION),
+                                      (self.appraised.request, self.answer, fable_adapter.APPRAISAL)):
+            with self.subTest(purpose=purpose):
+                self.assertEqual(self.replay.purpose(request), purpose)
+                replayed, live = self.replay.send(request, deadline_s=5), self.live(request, raw)
+                self.assertEqual((replayed.outcome, replayed.sent, replayed.usage, replayed.usage_basis,
+                                  replayed.endpoint), ('succeeded', False, {}, USAGE_BASIS, ''))
+                self.assertEqual((live.outcome, live.sent), ('succeeded', True))
+                for field in ('response_bytes', 'response_sha256', 'returned_model', 'response_id', 'requested_model'):
+                    self.assertEqual(getattr(replayed, field), getattr(live, field), field)
+                self.assertEqual(fable_adapter.classify(replayed.outcome, replayed.http_status,
+                                                        replayed.response_bytes),
+                                 fable_adapter.classify(live.outcome, None, live.response_bytes))
+                recorded = []
+                with participants_loop.recording(recorded.append):
+                    outcome = self.replay.send_loop(request, deadline_s=540)
+                self.assertEqual((outcome.outcome, outcome.final.sent, len(outcome.exchanges)), ('succeeded', False, 1))
+                self.assertEqual((recorded[0].turn, recorded[0].request_sha256), (1, request.canonical_sha256))
+        read = self.replay.read_extraction(self.extracted, self.replay.send(self.extracted, deadline_s=5).response_bytes,
+                                           self.appraised.unit_count)
+        self.assertEqual(read, self.appraised.answer)
+        appraised = self.replay.read_appraisal(self.appraised, self.appraised.request,
+                                               self.replay.send(self.appraised.request, deadline_s=5).response_bytes)
+        self.assertEqual([verdict.content for verdict in appraised.verdicts],
+                         [claim.content for claim in self.appraised.built.claim_set.claims])
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()),
+                         sorted(f'{sha}.sse' for sha in (self.extracted.canonical_sha256,
+                                                         self.appraised.request.canonical_sha256)))
+
+    def test_an_incomplete_recording_replays_unknown_as_a_live_one_does(self):
+        raw = streams.sse(*streams.answer_events(streams.pass_1_answer())[:-1])
+        self.record(self.extracted, raw)
+        outcome = self.replay.send_loop(self.extracted, deadline_s=540)
+        self.assertEqual((outcome.outcome, outcome.final.response_bytes, outcome.final.usage, outcome.final.error),
+                         ('unknown', raw, {}, INCOMPLETE_RECORDING))
+        live = self.live(self.extracted, raw)
+        self.assertEqual((live.outcome, live.response_bytes, live.usage), ('unknown', raw, {}))
+        self.assertIn('ended before its end event', live.error)
+
+    def test_a_changed_instruction_byte_finds_no_recording(self):
+        self.record(self.extracted, self.data)
+        self.assertEqual(self.replay.send(self.extracted, deadline_s=5).outcome, 'succeeded')
+        with mock.patch.object(extract_prompt, 'INSTRUCTIONS_3', extract_prompt.INSTRUCTIONS_3 + ' '):
+            changed = self.replay.build_extraction_request(TEXT, PAGES, KIND)
+            self.assertNotEqual(changed.canonical_sha256, self.extracted.canonical_sha256)
+            exchange = self.replay.send(changed, deadline_s=5)
+        self.assertEqual((exchange.outcome, exchange.sent, exchange.error),
+                         ('not_sent', False, 'No recorded response for this request.'))
+
+    def test_gemini_and_fable_never_replay_each_others_requests(self):
+        gemini = ReplayInterpreterV2(self.tmp)
+        (self.tmp / 'gemini').mkdir()
+        self.record(self.extracted, self.data)
+        for replay, request in ((gemini, self.extracted), (self.replay, gemini.build_extraction_request(TEXT, PAGES,
+                                                                                                      KIND))):
+            with self.subTest(replay=type(replay).__name__):
+                exchange = replay.send(request, deadline_s=5)
+                self.assertEqual((exchange.outcome, exchange.response_bytes), ('not_sent', None))
+                self.assertIn('different provider or adapter version', exchange.error)
+        with mock.patch.object(ReplayInterpreterF, 'recorded', side_effect=AssertionError('read')):
+            stopped = self.replay.send_loop(self.extracted, deadline_s=540, should_stop=lambda: True)
+        self.assertEqual((stopped.outcome, stopped.stopped, stopped.exchanges), ('not_sent', True, ()))

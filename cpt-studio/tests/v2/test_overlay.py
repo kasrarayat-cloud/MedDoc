@@ -48,13 +48,13 @@ from unittest import mock
 from django.test import SimpleTestCase
 
 from studio import jobs, review
-from studio.interpretation import ENGINE_VERSION_V2, dates, overlay, wording
+from studio.interpretation import ENGINE_VERSION_V2, ENGINE_VERSION_V3, dates, overlay, wording
 from studio.interpretation.contract import types as ct
 from studio.interpretation.engine import assess as AS
 from studio.interpretation.engine import combination, coverage
 from studio.interpretation.engine import facts as F
 from studio.interpretation.engine import questions as Q
-from studio.interpretation.engine.types import ItemKind, Result
+from studio.interpretation.engine.types import HeldFact, ItemKind, Result
 from studio.validation import checks, review_view
 from tests.v2 import evaluate_fixtures as EF
 from tests.v2 import test_assess as TA
@@ -156,7 +156,7 @@ def persist(assessment, R, text=TA.TEXT):
             questions_.append({'id': f'q-{p.key}', 'scope': 'proposal', 'family': slug, 'fact': fact,
                                'question': question, 'reason': reason})
             holds.append(fact)
-        support = {'event_reading': ENGINE_VERSION_V2, 'held_facts': AS.jsonable(p.held_facts),
+        support = {'event_reading': overlay.RECORD_VERSION, 'held_facts': AS.jsonable(p.held_facts),
                    'kept_words': AS.jsonable(p.evidence.runs) if p.evidence.runs is not None else None,
                    'procedural': AS.procedural(SimpleNamespace(family=p.family, evaluation=p.evaluation), p.pfs),
                    'origin': p.origin.value, 'competes': list(p.competes), 'summary': f'summary of {p.code}',
@@ -203,7 +203,9 @@ class Case:
     def recount(self, counted=None, **kw):
         """The read-time engine over ``counted`` (the engine's own codes by default), the engine's own competition read
         without the codes assess took out of it by an overlay-bound "Not documented" (overlay.assessed_out, as
-        review_view reads it: DECISIONS D270 DQ-2)."""
+        review_view reads it: DECISIONS D270 DQ-2) and its ADDON row without the codes assess left out of its count
+        (overlay.assessed_uncounted, the one derivation from the stored record: DECISIONS D283 item 3)."""
+        kw.setdefault('uncounted', overlay.assessed_uncounted(self.completeness, self.rows))
         return overlay.recount(self.rows, self.engine_keys if counted is None else counted, self.engine_keys,
                                self.coding, self.R, member=self.member,
                                assessed=overlay.assessed_out(self.completeness, self.rows), **kw)
@@ -720,7 +722,13 @@ class AnsweredRivalTests(SimpleTestCase):
     """DECISIONS D249 (5a's Q2, its request R7 to 5c): at read time a member's answer that a rival is not documented
     removes it from the competition, and the remaining code's competing hold is released when no rival is left. The
     answered code still counts for every other hold (session decision (e)); an answer of "Cannot confirm" leaves the
-    competition as it stands (the ruling names "not documented": the fail-closed reading, the step's NOTES question)."""
+    competition as it stands (the ruling names "not documented": the fail-closed reading, the step's NOTES question).
+
+    DECISIONS D283, G1-01 option (c) (build list B15; restated in AMENDMENT-2's build, step f6): an answer to the
+    COMPETING question binds nothing, at assess or at read time - the competing hold is settled by the reviewer's
+    rejection (D270 DQ-3) - so the tests that took a rival out by answering its competing question now take it out by
+    the rejection the hold's own sentence asks for, or by an answer to another of its items (the technique, here: a
+    rank above the competition's, so the answer binds the item its code presents in every pass)."""
 
     @staticmethod
     def answer(row, value='not_documented', fact=None):
@@ -750,31 +758,38 @@ class AnsweredRivalTests(SimpleTestCase):
         self.assertEqual((live.held, live.item), (stored.held_facts, stored.item))
 
     def test_with_no_rival_left_the_remaining_code_is_ready_as_assess_gives_it_alone(self):
-        """One balloon dilation proposed as 43249 and 43233, each held by the competition alone. A member's "Not
-        documented" to 43233's question (the overlay's to apply: the engine reads no competing_codes answer) takes
-        43233 out: 43249 has no rival left and reads READY with no question - as assess gives 43249 proposed alone."""
+        """One balloon dilation proposed as 43249 and 43233, each held by the competition alone. D283 G1-01 (c): a
+        member's answer to 43233's competing question binds nothing - 43233 stays in review and 43249's competing hold
+        stands, as stored, for either value. The reviewer's rejection of 43233 (D270 DQ-3) takes it out: 43249 has no
+        rival left and reads READY with no question - as assess gives 43249 proposed alone."""
         case = Case(TA.one_dilation().build(), ('43249', 2), ('43233', 2))
         alone = Case(TA.one_dilation().build(), ('43249', 2))
         first, rival = case.rows
         self.assertEqual([q['fact'] for q in first.questions], ['competing_codes'])
-        views = case.views(answers=self.answer(rival))
-        self.assertEqual((views[rival.key].reason, views[rival.key].answer), (overlay.DETAIL_UNAVAILABLE,
-                                                                              'not_documented'))
-        view = views[first.key]
+        for value in ('not_documented', 'cannot_confirm'):
+            with self.subTest(value=value):
+                views = case.views(answers=self.answer(rival, value))
+                self.assertEqual((views[rival.key].reason, views[rival.key].answer), ('', ''))
+                self.assertEqual((views[first.key].status, views[first.key].questions, views[first.key].released,
+                                  views[first.key].stale), ('needs_clarification', first.questions, (), ()))
+        view = case.views({rival.key: 'reject'})[first.key]
         self.assertEqual((view.status, view.questions, view.released, view.recomputed, view.stale),
                          ('ready', (), ('competing_codes',), (overlay.COMPETING_CHECK,), ()))
         self.assertEqual((alone.rows[0].status, alone.rows[0].questions), (view.status, view.questions))
         # an approval of 43249 is no longer blocked by a hold it no longer has
-        self.assertEqual(case.views({first.key: 'approve'}, answers=self.answer(rival))[first.key].blocker, '')
+        self.assertEqual(case.views({first.key: 'approve', rival.key: 'reject'})[first.key].blocker, '')
 
     def test_with_a_rival_left_the_hold_stays_naming_the_rivals_left(self):
-        """Three codes for one balloon dilation; "Not documented" on 43220's question takes it out: 43249 still
-        competes with 43233, held, and its question names 43233 alone - exactly as assess words 43249 beside 43233."""
+        """Three codes for one balloon dilation; the reviewer's rejection of 43220 (D283 G1-01 (c): never an answer to
+        its competing question) takes it out: 43249 still competes with 43233, held, and its question names 43233
+        alone - exactly as assess words 43249 beside 43233."""
         case = Case(TA.one_dilation().build(), ('43249', 2), ('43233', 2), ('43220', 2))
         pair = Case(TA.one_dilation().build(), ('43249', 2), ('43233', 2))
         by = {row.code: row for row in case.rows}
         self.assertIn('43220', by['43249'].questions[0]['question'])
-        view = case.views(answers=self.answer(by['43220']))[by['43249'].key]
+        unchanged = case.views(answers=self.answer(by['43220']))[by['43249'].key]  # the answer binds nothing
+        self.assertEqual((unchanged.questions, unchanged.recomputed), (by['43249'].questions, ()))
+        view = case.views({by['43220'].key: 'reject'})[by['43249'].key]
         expected = next(row for row in pair.rows if row.code == '43249')
         self.assertEqual((view.status, view.released, view.stale), ('needs_clarification', (), ()))
         self.assertEqual([(q['fact'], q['question'], q['reason']) for q in view.questions],
@@ -782,11 +797,14 @@ class AnsweredRivalTests(SimpleTestCase):
         self.assertNotIn('43220', view.questions[0]['question'])
 
     def test_an_answer_that_binds_stands_when_its_own_item_is_released(self):
-        """Both rivals answered: each answer binds to the item its code presented, and each code stays out (detail
-        unavailable) although the other's answer releases its competing hold - an answer is never unbound by the
-        release it causes (no code flips back into review)."""
-        case = Case(TA.one_dilation().build(), ('43249', 2), ('43233', 2))
-        first, rival = case.rows
+        """Both rivals of one dilation whose device is not stated (each asks its technique and competes) answered on
+        their technique item, by key (the overlay's to bind in each pass, D283): each answer binds the item its code
+        presents in every pass - the technique outranks the competition, so the release one answer causes never moves
+        the other code's item - and each code stays out (detail unavailable): no code flips back into review."""
+        case = Case(unknown_dilation().build(), ('43249', 2), ('43248', 2))
+        by = {row.code: row for row in case.rows}
+        first, rival = by['43249'], by['43248']
+        self.assertEqual([q['fact'] for q in first.questions], ['technique'])
         for values in (('not_documented', 'not_documented'), ('cannot_confirm', 'not_documented')):
             with self.subTest(values=values):
                 views = case.views(answers=self.answer(first, values[0]) + self.answer(rival, values[1]))
@@ -796,10 +814,14 @@ class AnsweredRivalTests(SimpleTestCase):
     def test_cannot_confirm_leaves_the_competition_as_it_stands(self):
         """The fail-closed reading of D249's "not documented": "Cannot confirm" takes the answered code out of review
         (detail unavailable) but not out of the competition, so the rival keeps its competing hold, as stored - read
-        by the overlay or by the engine."""
-        case = Case(TA.one_dilation().build(), ('43249', 2), ('43233', 2))
-        first, rival = case.rows
-        view = case.views(answers=self.answer(rival, 'cannot_confirm'))[first.key]
+        by the overlay (an answer to 43248's technique item, by key: D283's competing question binds no answer) or by
+        the engine."""
+        case = Case(unknown_dilation().build(), ('43249', 2), ('43248', 2))
+        by = {row.code: row for row in case.rows}
+        first, rival = by['43249'], by['43248']
+        views = case.views(answers=self.answer(rival, 'cannot_confirm'))
+        self.assertEqual(views[rival.key].reason, overlay.DETAIL_UNAVAILABLE)
+        view = views[first.key]
         self.assertEqual((view.status, view.released, view.questions), ('needs_clarification', (), first.questions))
         held = next(p for p in Case(unknown_dilation().build(), ('43249', 2), ('43248', 2)).assessment.codes
                     if p.code == '43248')
@@ -1376,8 +1398,13 @@ class D268AddonTests(SimpleTestCase):
     """DECISIONS D268's read-time half (refute-r4d-r1 V8R4D1-1, high; TRIAGE G2-08): read time applies the ADDON row as
     engine/assess does (D260's agreement). A primary the reviewer rejects - or a member's answer excludes - is no longer
     counted, so an add-on whose every counted primary is gone is held by the row's witness (coding_rule:ADDON) and is
-    not approvable alone; reinstating the primary releases it. The row's item quotes the document (STATUS), so read
-    time cannot word it: the stored question stands, marked stale (ADDON_CHECK), the add-on held."""
+    not approvable alone; reinstating the primary releases it.
+
+    DECISIONS D284, G3-15 (build list B7; restated in AMENDMENT-2's build, step f6): the row's item is worded by its own
+    message, ADDON, from the codes alone (TEXT_FREE: the add-on and its primaries, engine/assess.primaries) - so read
+    time words it afresh: the view's questions carry the ADDON question (with its message, which customer_api reads),
+    ``recomputed`` names the row (ADDON_CHECK) and nothing is stale. (Before, the item was STATUS's, which quotes the
+    document: the stored question stood, marked stale.)"""
 
     def test_the_leads_probe_a_rejected_primary_holds_its_add_on_and_it_is_not_approvable(self):
         """The lead's probe: 43260 and 43273 proposed, 43273 READY on the cholangioscopy (its primary counted). With
@@ -1395,8 +1422,15 @@ class D268AddonTests(SimpleTestCase):
         self.assertEqual(review._actions(proposal_of(addon), None, TA.TEXT, view=view), [review.APPROVE, review.REJECT])
         rejected = {primary.key: 'reject'}
         view = case.views(rejected)[addon.key]
+        worded = wording.build(wording.Message.ADDON, wording.Slots(code='43273', family=alone.item.fill.family,
+                                                                    codes=tuple(sorted(AS.primaries('43273')))), '')
+        self.assertIs(alone.item.message, Q.MessageId.ADDON)
         self.assertEqual((view.status, view.questions, view.added, view.released, view.recomputed, view.stale),
-                         ('needs_clarification', (), ('performed_status',), (), (), (overlay.ADDON_CHECK,)))
+                         ('needs_clarification', ({'id': '', 'scope': 'proposal', 'family': addon.family,
+                                                   'fact': worded.fact, 'question': worded.question,
+                                                   'reason': worded.reason, 'message': 'addon'},),
+                          ('performed_status',), (), (overlay.ADDON_CHECK,), ()))
+        self.assertIn('43260', worded.question)  # it names the primaries, from the codes alone
         self.assertEqual(view.same_day_held, False)
         self.assertEqual(review._actions(proposal_of(addon), None, TA.TEXT, view=view), [review.REJECT])
         live = case.recount([addon.key]).live[addon.key]
@@ -1445,12 +1479,13 @@ class D268AddonTests(SimpleTestCase):
                 views = case.views(answers=answers)
                 self.assertEqual(views[primary.key].reason, overlay.DETAIL_UNAVAILABLE)
                 view = views[addon.key]
-                self.assertEqual((view.status, view.added, view.stale, view.same_day_held),
-                                 ('needs_clarification', ('performed_status',), (overlay.ADDON_CHECK,), False))
+                self.assertEqual((view.status, view.added, view.recomputed, view.stale, view.same_day_held),
+                                 ('needs_clarification', ('performed_status',), (overlay.ADDON_CHECK,), (), False))
+                self.assertEqual([q.get('message') for q in view.questions], ['addon'])  # B7: worded afresh
                 self.assertEqual(review._actions(proposal_of(addon), None, TA.TEXT, view=view), [review.REJECT])
         view = case.views({primary.key: 'reject'})[addon.key]
-        self.assertEqual((view.status, view.added, view.stale, view.same_day_held),
-                         ('needs_clarification', ('performed_status',), (overlay.ADDON_CHECK,), False))
+        self.assertEqual((view.status, view.added, view.recomputed, view.stale, view.same_day_held),
+                         ('needs_clarification', ('performed_status',), (overlay.ADDON_CHECK,), (), False))
 
     def test_where_nothing_can_be_recomputed_a_rejected_primary_still_holds_the_add_on(self):
         """Fail-closed with no FactSet (DECISIONS D268; overlay._addon_unrecomputed, from the codes alone): a rejection
@@ -1499,9 +1534,12 @@ class D268AddonTests(SimpleTestCase):
 
     def test_the_rows_are_reproduced_and_a_stored_hold_the_inventory_does_not_give_is_refused(self):
         """The engine's own counted set reproduces a stored ADDON hold (assess's last pass: its codes no answer
-        excluded); a stored ADDON hold the inventory does not give - removed from a held add-on, or added to a ready
-        one - or a competing hold whose rival is not proposed is a record that is not reproduced (RecordMismatch:
-        nothing is recomputed from it), never a hold carried beside the recomputed ones."""
+        excluded); ONE rule for every hold read time recomputes (DECISIONS D283, G3-32 option (b); build list B20): a
+        stored hold of a cause read time recomputes that the inventory does not give - an ADDON hold removed from a held
+        add-on or added to a ready one, a competing hold whose rival is not proposed, and a base, base-within or same-day
+        hold added to a code the engine does not hold so - is a record that is not reproduced (RecordMismatch: nothing
+        is recomputed from it), never a hold carried beside the recomputed ones (a hold REMOVED from a stored record
+        already fails the ranked comparison)."""
         denied = Case(denied_stone_ercp().build(), ('43264', DENIED_STONE), ('43273', 3))
         by = {row.code: row for row in denied.rows}
         stored = TA.by_code(denied.assessment)['43273']
@@ -1513,17 +1551,38 @@ class D268AddonTests(SimpleTestCase):
         dilation = Case(TA.one_dilation().build(), ('43249', 2), ('43233', 2))
         first = dilation.rows[0]
         self.assertIn('competing_codes', [found['fact'] for found in first.support['held_facts']])
+        # B20: a base, base-within and same-day hold planted on a code the engine does not hold so (a colonoscopy's
+        # 45385 alone), each in the form the combination stores it (engine/assess.jsonable of a HeldFact of the cause)
+        alone = Case(EF.colonoscopy().build(), ('45385', 2))
+        [snare] = alone.rows
+        self.assertEqual(snare.status, 'ready')
+        tampered = {}
+        for cause, fact in ((combination.BASE_CAUSE, 'base_included'), (combination.WITHIN_CAUSE, 'base_included'),
+                            (combination.SAME_DAY_CAUSE, 'separate_em')):
+            held = HeldFact(fact=fact, attribute=None, subject=None, result=None, kind=ItemKind.QUESTION, cause=cause,
+                            reason=None, spans=(), rank=None)
+            tampered[cause] = [replace(snare, support={**snare.support, 'held_facts': [AS.jsonable(held)]})]
         for name, case, rows, counted in (
                 ('the ADDON hold removed', denied,
                  [replace(by['43273'], support={**by['43273'].support, 'held_facts': []}), by['43264']], None),
                 ('an ADDON hold added', pair,
                  [row if row is not ready else replace(ready, support={**ready.support, 'held_facts': [planted]})
                   for row in pair.rows], None),
-                ('a competing hold whose rival is not proposed', dilation, [first], [first.key])):
+                ('a competing hold whose rival is not proposed', dilation, [first], [first.key]),
+                ('a base hold added', alone, tampered[combination.BASE_CAUSE], None),
+                ('a base-within hold added', alone, tampered[combination.WITHIN_CAUSE], None),
+                ('a same-day hold added', alone, tampered[combination.SAME_DAY_CAUSE], None)):
             with self.subTest(name):
                 keys = counted if counted is not None else case.engine_keys
                 with self.assertRaises(overlay.RecordMismatch):
-                    overlay.recount(rows, keys, keys, case.coding, case.R, member=case.member)
+                    overlay.recount(rows, keys, keys, case.coding, case.R, member=case.member,
+                                    uncounted=overlay.assessed_uncounted(case.completeness, rows))
+        # the control: the untampered record is reproduced, and the rule is every cause read time recomputes
+        overlay.recount(alone.rows, alone.engine_keys, alone.engine_keys, alone.coding, alone.R, member=alone.member)
+        self.assertEqual(overlay._RECOMPUTED, frozenset(overlay._RULE_IDS))
+        self.assertEqual(overlay._RECOMPUTED, frozenset({combination.BASE_CAUSE, combination.WITHIN_CAUSE,
+                                                        combination.COMPETING_CAUSE, combination.SAME_DAY_CAUSE,
+                                                        AS.ADDON_CAUSE}))
 
 
 def office_with_denied_biopsy() -> EF.Doc:
@@ -1629,16 +1688,21 @@ class D270AnswerTests(SimpleTestCase):
 
     def test_d249_where_nothing_can_be_recomputed_an_answer_the_overlay_binds_marks_the_stored_hold_stale(self):
         """The module docstring's UNREADABLE paragraph, made true: with no FactSet a member's "Not documented" the
-        overlay binds to 43233's competing question takes 43233 out of the competition, whose release cannot be
+        overlay binds to 43248's technique item takes 43248 out of the competition, whose release cannot be
         recomputed - 43249's stored competing hold stands, marked stale. (Before, the last pass's answers never
-        reached overlay._rival_out, and nothing was marked.) The reverse (no answer): nothing stale."""
-        case = Case(TA.one_dilation().build(), ('43249', 2), ('43233', 2))
-        first, rival = case.rows
-        answers = [{'code': rival.code, 'family': rival.family, 'fact': 'competing_codes', 'value': 'not_documented'}]
+        reached overlay._rival_out, and nothing was marked.) The reverse (no answer): nothing stale. An answer to the
+        competing question binds nothing (D283 G1-01 (c)): nothing stale either."""
+        case = Case(unknown_dilation().build(), ('43249', 2), ('43248', 2))
+        by = {row.code: row for row in case.rows}
+        first, rival = by['43249'], by['43248']
+        self.assertIn(combination.COMPETING_CAUSE, [found['cause'] for found in first.support['held_facts']])
+        answers = [{'code': rival.code, 'family': rival.family, 'fact': 'technique', 'value': 'not_documented'}]
         view = case.views(answers=answers, facts=None)[first.key]
         self.assertEqual((view.status, view.questions, view.stale),
                          ('needs_clarification', first.questions, (overlay.COMPETING_CHECK,)))
         self.assertEqual(case.views(facts=None)[first.key].stale, ())
+        competing = [{'code': rival.code, 'family': rival.family, 'fact': 'competing_codes', 'value': 'not_documented'}]
+        self.assertEqual(case.views(answers=competing, facts=None)[first.key].stale, ())
 
     def test_5a_dq2_assess_and_read_time_agree_on_an_overlay_bound_not_documented(self):
         """D270 DQ-2 option (b), with step 5a (assess reads an overlay-bound "Not documented" for the competition
@@ -1713,7 +1777,8 @@ class D270AnswerTests(SimpleTestCase):
                 # while its answer binds: nothing moved
                 found = overlay.recount(rows, case.engine_keys, case.engine_keys, overlay.read_coding(completeness),
                                         case.R, member=case.member, out_of_competition=[answered.key],
-                                        assessed=overlay.assessed_out(completeness, rows))
+                                        assessed=overlay.assessed_out(completeness, rows),
+                                        uncounted=overlay.assessed_uncounted(completeness, rows))
                 live = found.live[visit.key]
                 self.assertNotIn(combination.COMPETING_CAUSE, [h.cause for h in live.held])
                 self.assertEqual((live.holds, live.moved), (live.stored_holds, False))
@@ -1726,7 +1791,8 @@ class D270AnswerTests(SimpleTestCase):
                     self.assertEqual([q['fact'] for q in view.questions], ['separate_em'])
                 reinstated = overlay.recount(rows, [*case.engine_keys, keyed['45380'].key], case.engine_keys,
                                              overlay.read_coding(completeness), case.R, member=case.member,
-                                             assessed=overlay.assessed_out(completeness, rows))
+                                             assessed=overlay.assessed_out(completeness, rows),
+                                             uncounted=overlay.assessed_uncounted(completeness, rows))
                 for row in (visit, answered):
                     self.assertEqual([h for h in reinstated.live[row.key].holds
                                       if h.cause == combination.COMPETING_CAUSE],
@@ -1744,7 +1810,7 @@ class D270AnswerTests(SimpleTestCase):
         held = TA.by_code(Case(office_with_denied_biopsy().build(), *VISITS_AND_DENIAL).assessment)['99214']
         case = Case(office_with_denied_biopsy().build(), *VISITS_AND_DENIAL, answers=(TA.answer(held),))
         rows, completeness = released_by_assess(case, held.key, frozen=False)
-        assessment = SimpleNamespace(engine_version=ENGINE_VERSION_V2, completeness=completeness, retrieval=(),
+        assessment = SimpleNamespace(engine_version=ENGINE_VERSION_V3, completeness=completeness, retrieval=(),
                                      context_id=None, pk='synthetic', _v2_read_facts=case.R)
         found = readers.EventReader()._recounted_coverage(assessment, completeness, rows, [('45380', 'gi.colonoscopy')])
         self.assertIsNotNone(found)
@@ -1893,9 +1959,10 @@ class W9rCombinationTests(SimpleTestCase):
     def test_i1_an_answer_to_the_competing_question_takes_nothing_out_of_the_engines_competition(self):
         """refute-5c-r1 P2 = refute-5a-r1 P-2: engine/assess never reads an answer to the competing question (step 5a's
         question Q1 as built), so overlay.assessed_out never names its code: the engine's own competition keeps 43233,
-        the record is reproduced, and read time binds the answer for the reviewer's competition alone (D249) - 43249
-        released, as before the round - and a reinstatement's reviewed coverage is re-run, never UNREADABLE. Before
-        the fix: assessed_out named 43233 and every read raised RecordMismatch (43249 stale, coverage None)."""
+        the record is reproduced, and a reinstatement's reviewed coverage is re-run, never UNREADABLE. Before the fix:
+        assessed_out named 43233 and every read raised RecordMismatch (43249 stale, coverage None). D283 G1-01 (c)
+        (restated in AMENDMENT-2's build, step f6): read time binds the answer to nothing either - every view equals
+        its stored record, 43233 stays in review - and the reviewer's rejection of 43233 releases 43249 (D270 DQ-3)."""
         from studio.interpretation import readers
         for kw in ({}, {'question': ''}):
             with self.subTest(fingerprint='as asked' if not kw else 'none'):
@@ -1905,12 +1972,15 @@ class W9rCombinationTests(SimpleTestCase):
                 stored = TA.by_code(case.assessment)
                 self.assertIn(combination.COMPETING_CAUSE, [found.cause for found in stored['43249'].held_facts])
                 case.recount()  # reproduced: no RecordMismatch
-                standing = [{'code': given.code, 'family': given.family, 'fact': given.fact, 'value': given.value}]
+                standing = [{'code': given.code, 'family': given.family, 'fact': given.fact, 'value': given.value,
+                             'question': given.question}]
                 views = case.views(answers=standing)
-                self.assertEqual((views[by['43249'].key].status, views[by['43249'].key].released),
-                                 ('ready', ('competing_codes',)))
-                self.assertEqual(views[by['43233'].key].reason, overlay.DETAIL_UNAVAILABLE)
-                assessment = SimpleNamespace(engine_version=ENGINE_VERSION_V2, completeness=case.completeness,
+                for row in case.rows:
+                    self.assertEqual((views[row.key].status, views[row.key].reason, views[row.key].recomputed,
+                                      views[row.key].stale), (row.status, '', (), ()), row.code)
+                rejected = case.views({by['43233'].key: 'reject'}, answers=standing)[by['43249'].key]
+                self.assertEqual((rejected.status, rejected.released), ('ready', ('competing_codes',)))
+                assessment = SimpleNamespace(engine_version=ENGINE_VERSION_V3, completeness=case.completeness,
                                              retrieval=(), context_id=None, pk='synthetic', _v2_read_facts=case.R)
                 found = readers.EventReader()._recounted_coverage(assessment, case.completeness, case.rows,
                                                                   [('45380', by['45380'].family)])
@@ -1919,24 +1989,216 @@ class W9rCombinationTests(SimpleTestCase):
     def test_i2_an_add_on_taken_out_beside_an_answer_that_excludes_its_primary_is_reproduced(self):
         """refute-5a-r1 P-1 = refute-5c-r1 P6: em_chain (99215, 99417, 99214); a1 "Not documented" to 99215's item as
         asked (the engine reads it: 99215 EXCLUDED, 99417's only primary gone), a2 "Not documented" to 99417's item
-        with no fingerprint (the earlier form: assess takes 99417 out of the competition and never assesses it again,
-        so its record keeps no ADDON hold). Read time leaves a taken code's ADDON hold out of the reproduction check,
-        as an engine-answered code's: the record is reproduced (before: RecordMismatch for the whole assessment), and
-        99417 is never ready at read time."""
+        with no fingerprint (the earlier form, bound by the overlay's key).
+
+        Restated by DECISIONS D283, G1-02 (build list B16): a code an overlay-bound "Not documented" takes out of the
+        competition is read again when its ADDON row moves, at assess as at read time. Its ADDON row moves (its only
+        primary excluded), so 99417 is stored with the ADDON row's item (coding_rule:ADDON), a2 no longer binds it
+        (recorded no longer asked), and 99417 is back in the competition with 99214. overlay.assessed_out names
+        nothing; the record is reproduced, its ADDON hold CHECKED (a taken code's ADDON hold is no longer exempt:
+        overlay._unchecked); read time with a2 standing and no decision equals the record - nothing added, released,
+        recomputed or stale - and 99417 is never ready at read time."""
         plain = TA.by_code(TA.run(TA.em_chain().build(), *TA.CHAIN))
         a1 = TA.answer(plain['99215'], answer_id='a1')
         a2 = TA.answer(plain['99417'], question='', answer_id='a2')
         case = Case(TA.em_chain().build(), *TA.CHAIN, answers=(a1, a2))
         by = {row.code: row for row in case.rows}
-        self.assertEqual(overlay.assessed_out(case.completeness, case.rows), frozenset({by['99417'].key}))
         stored = TA.by_code(case.assessment)
-        self.assertNotIn(overlay.ADDON_CAUSE, [found.cause for found in stored['99417'].held_facts])
-        case.recount()  # reproduced: no RecordMismatch
+        self.assertEqual((stored['99417'].item.held.cause, stored['99417'].item.message),
+                         (overlay.ADDON_CAUSE, Q.MessageId.ADDON))
+        self.assertEqual(stored['99417'].competes, ('99214',))
+        self.assertEqual(stored['99214'].competes, ('99417',))
+        self.assertEqual([(entry.answer, entry.why) for entry in case.assessment.earlier_answers if entry.answer == 'a2'],
+                         [('a2', AS.Unbound.NO_LONGER_ASKED)])
+        self.assertEqual(overlay.assessed_out(case.completeness, case.rows), frozenset())
+        self.assertEqual(overlay.assessed_uncounted(case.completeness, case.rows), frozenset({by['99215'].key}))
+        self.assertEqual(overlay._unchecked(False, True), frozenset({combination.COMPETING_CAUSE}))
+        case.recount()  # reproduced: no RecordMismatch, the ADDON hold checked
         standing = [{'code': a.code, 'family': a.family, 'fact': a.fact, 'value': a.value} for a in (a2,)]
+        views = case.views(answers=standing)
+        for row in case.rows:
+            with self.subTest(code=row.code):
+                view = views[row.key]
+                if overlay.answered_by_engine(row)[0]:
+                    self.assertEqual(view.reason, overlay.DETAIL_UNAVAILABLE)
+                    continue
+                self.assertEqual((view.status, view.added, view.released, view.recomputed, view.stale),
+                                 (row.status, (), (), (), ()))
         for decisions in ({}, {by['99214'].key: 'reject'}):
             with self.subTest(decisions=sorted(decisions.values())):
                 view = case.views(decisions, answers=standing)[by['99417'].key]
                 self.assertNotEqual(view.status, 'ready')
+        # a planted record of the taken code without its ADDON hold (the frozen record the round before kept) is not
+        # reproduced: the hold is checked now - RecordMismatch, nothing recomputed (fail-closed)
+        support = by['99417'].support
+        frozen = [found for found in support['held_facts'] if found.get('cause') != overlay.ADDON_CAUSE]
+        self.assertLess(len(frozen), len(support['held_facts']))
+        planted = [row if row.key != by['99417'].key else replace(row, support={**support, 'held_facts': frozen})
+                   for row in case.rows]
+        with self.assertRaises(overlay.RecordMismatch):
+            overlay.recount(planted, case.engine_keys, case.engine_keys, case.coding, case.R, member=case.member,
+                            assessed=overlay.assessed_out(case.completeness, planted),
+                            uncounted=overlay.assessed_uncounted(case.completeness, planted))
+
+
+def c7_scene() -> EF.Doc:
+    """refute-consistency C7's scene: an office visit X1 (this encounter; the visit E1, its basis total time), its
+    prolonged time E3, and a flexible sigmoidoscopy X2 to the sigmoid colon (E2) on the same day: 99215 and 99417 each
+    ask the separately identifiable visit (separate_em), 45330 is READY."""
+    doc = TA.office_and_sigmoidoscopy()
+    doc.act(3, TA.Kind.EM_PROLONGED, session=TA.X(1))
+    return doc
+
+
+C7_CODES = (('99215', 1), ('99417', 3), ('45330', 2))
+PROLONGED_CODES = (('99215', 1), ('99214', 1), ('99417', 2))
+
+
+def gate6_separate_em():
+    """test_gate6's 99417 scene in which 99215 and 99417 each ask the separately identifiable visit: the perturbation
+    C3+SEP, state F, of 99417's baseline (an office visit with its prolonged time) - the scene g1's prototype read
+    differently before and with the answers (DECISIONS D283 item 2; judge/logs/f10c-g1all-2mod.json)."""
+    from tests.v2 import test_gate6 as G
+
+    [requirement] = [found for found in G.RQ.requirements_of('99417') if found.value == 'C3+SEP']
+    built, _ = G.perturb('99417', requirement, 'F')
+    return built
+
+
+class D283ReadTimeTests(SimpleTestCase):
+    """DECISIONS D283 items 1-3 at read time (G1-02 and G1-03 with C7's and C8's corrections; build list B16):
+    overlay.review_view's answer passes call engine/assess.answer_pass, the implementation assess calls, so the stored
+    record, read time over it, and read time over the record made BEFORE the answers (the AGAIN not yet run) give one
+    view (D252, D270). For each named scene and answer plan:
+    - the record made with the answers is reproduced (overlay.recount with the derived sets: no RecordMismatch);
+    - read time over it, the answers standing and no decision, equals it - every code an answer does not leave detail
+      unavailable keeps its stored status, nothing added, released, recomputed or stale;
+    - read time over the record made before the answers, the same answers standing, gives every code the same status
+      and reason;
+    - the passes end well inside their bound (engine/assess.answer_pass is called fewer times than the loop allows)."""
+
+    def agree(self, R_of, codes, given, member=TA.ENTERED, date=TA.DAY):
+        """The four properties above over ``R_of()`` (a FactSet each call) with ``given`` (MemberAnswerInputs), passed
+        as review passes the standing answers (each with its fingerprint); returns (the with-record Case, its views)."""
+        from unittest import mock
+
+        before = Case(R_of(), *codes, member=member, date=date)
+        found = Case(R_of(), *codes, member=member, date=date, answers=given)
+        found.recount()  # reproduced: no RecordMismatch
+        standing = [{'code': g.code, 'family': g.family, 'fact': g.fact, 'value': g.value, 'question': g.question}
+                    for g in given]
+        with mock.patch.object(AS, 'answer_pass', wraps=AS.answer_pass) as passes:
+            views = found.views(answers=standing)
+        self.assertLess(passes.call_count, 2 * len(found.rows) + 5)  # settled before the bound (fail-closed beyond)
+        for row in found.rows:
+            view = views[row.key]
+            if view.reason == overlay.DETAIL_UNAVAILABLE:
+                continue
+            self.assertEqual((view.status, view.added, view.released, view.recomputed, view.stale),
+                             (row.status, (), (), (), ()), row.code)
+        earlier = before.views(answers=standing)
+        by_code = {row.code: earlier[row.key] for row in before.rows}
+        for row in found.rows:
+            self.assertEqual((views[row.key].status, views[row.key].reason),
+                             (by_code[row.code].status, by_code[row.code].reason), row.code)
+        return found, views
+
+    def test_s3_an_overlay_bound_answer_on_the_only_primary_holds_99417_at_both_halves(self):
+        """The integration's S3 (G1-03; also test_combination's 99215 base_included scene, AddOnCodes: 99215 beside
+        99214 and 99417 on one office visit with its prolonged time): "Not documented" or "Cannot confirm" to 99215's
+        base question, bound by the overlay. 99215 is counted for ADDON at neither half: the record holds 99417 by its
+        ADDON row (its item the row's own message) and read time equals it; without the answer 99417 is READY."""
+        plain = TA.by_code(TA.run(TA.office_prolonged().build(), *PROLONGED_CODES))
+        self.assertEqual((plain['99417'].status, plain['99215'].item.held.fact), (TA.Outcome.READY, 'base_included'))
+        for value in ('not_documented', 'cannot_confirm'):
+            with self.subTest(value=value):
+                given = (TA.answer(plain['99215'], value=value),)
+                found, views = self.agree(lambda: TA.office_prolonged().build(), PROLONGED_CODES, given)
+                addon = TA.by_code(found.assessment)['99417']
+                self.assertEqual((addon.status, addon.item.held.cause, addon.item.message),
+                                 (TA.Outcome.NEEDS_CLARIFICATION, AS.ADDON_CAUSE, Q.MessageId.ADDON))
+                by = {row.code: row for row in found.rows}
+                self.assertEqual(overlay.assessed_uncounted(found.completeness, found.rows), frozenset({by['99215'].key}))
+                self.assertEqual(views[by['99215'].key].reason, overlay.DETAIL_UNAVAILABLE)
+
+    def test_c7_an_office_visit_its_prolonged_time_and_a_same_day_sigmoidoscopy(self):
+        """C7's scene, "Not documented" to both separate_em items, and every pair of values: 99215's answer uncounts it
+        for ADDON, so 99417's row moves - read again, its item the ADDON row's, its own answer binding nothing at assess
+        (recorded no longer asked) and at read time alike (before the fix read time bound it: 99417 detail unavailable
+        while the record held it). 45330 stays READY."""
+        plain = TA.by_code(TA.run(c7_scene().build(), *C7_CODES))
+        self.assertEqual({code: p.item.held.fact if p.item else None for code, p in plain.items()},
+                         {'99215': 'separate_em', '99417': 'separate_em', '45330': None})
+        for first in ('not_documented', 'cannot_confirm'):
+            for second in ('not_documented', 'cannot_confirm'):
+                with self.subTest(values=(first, second)):
+                    given = (TA.answer(plain['99215'], value=first, answer_id='a1'),
+                             TA.answer(plain['99417'], value=second, answer_id='a2'))
+                    found, views = self.agree(lambda: c7_scene().build(), C7_CODES, given)
+                    by = {row.code: row for row in found.rows}
+                    self.assertEqual((by['99417'].status, views[by['99417'].key].status, views[by['99417'].key].reason),
+                                     ('needs_clarification', 'needs_clarification', ''))
+                    stored = TA.by_code(found.assessment)['99417']
+                    self.assertEqual((stored.item.held.cause, stored.item.message), (AS.ADDON_CAUSE, Q.MessageId.ADDON))
+                    self.assertEqual(views[by['99417'].key].questions, by['99417'].questions)  # as stored
+                    self.assertEqual([(entry.answer, entry.why) for entry in found.assessment.earlier_answers],
+                                     [('a1', AS.Unbound.OVERLAY_READ), ('a2', AS.Unbound.NO_LONGER_ASKED)])
+                    self.assertEqual(views[by['45330'].key].status, 'ready')
+
+    def test_gate6s_99417_and_99215_each_answered_on_separate_em(self):
+        """test_gate6's scene (gate6_separate_em): 99417 and 99215 each answered on their own separate_em item, every
+        pair of values - on g1's prototype read time over the record made with the answers held 99417 and over the
+        record made before them read it detail unavailable (4 "read before vs with differs"); now one view."""
+        built = gate6_separate_em()
+        plain = TA.by_code(TA.run(built.doc.build(), *built.codes, date=built.date, member=built.member))
+        self.assertEqual({code: p.item.held.fact for code, p in plain.items()},
+                         {'99215': 'separate_em', '99417': 'separate_em'})
+        for first in ('not_documented', 'cannot_confirm'):
+            for second in ('not_documented', 'cannot_confirm'):
+                with self.subTest(values=(first, second)):
+                    given = (TA.answer(plain['99417'], value=first, answer_id='a1'),
+                             TA.answer(plain['99215'], value=second, answer_id='a2'))
+                    found, views = self.agree(lambda: built.doc.build(), built.codes, given, member=built.member,
+                                              date=built.date)
+                    by = {row.code: row for row in found.rows}
+                    self.assertNotEqual(views[by['99417'].key].status, 'ready')
+
+    def test_the_passes_end_and_agree_on_every_answer_combination(self):
+        """AnswerPassTests' read-time half: every subset of the held codes' items answered, either value, as asked or
+        with no fingerprint, on em_chain, office_prolonged and C7's scene - read time agrees with the record and with
+        the record made before the answers, and its passes end inside their bound."""
+        import itertools
+
+        scenes = ((TA.em_chain, TA.CHAIN, AS.MemberContext()), (TA.office_prolonged, PROLONGED_CODES, TA.ENTERED),
+                  (c7_scene, C7_CODES, TA.ENTERED))
+        runs = 0
+        for doc, codes, member in scenes:
+            plain = TA.by_code(TA.run(doc().build(), *codes, member=member))
+            asked = [p for p in plain.values() if p.item is not None]
+            for size in range(1, len(asked) + 1):
+                for chosen in itertools.combinations(asked, size):
+                    for value in ('not_documented', 'cannot_confirm'):
+                        for question in (None, ''):
+                            given = tuple(TA.answer(p, value=value, question=question, answer_id=f'a{index}')
+                                          for index, p in enumerate(chosen))
+                            with self.subTest(scene=doc.__name__, codes=[p.code for p in chosen], value=value,
+                                              fingerprint=question is None):
+                                self.agree(lambda: doc().build(), codes, given, member=member)
+                            runs += 1
+        self.assertGreater(runs, 40)
+
+    def test_no_add_on_is_the_primary_of_an_add_on(self):
+        """overlay.assessed_uncounted's stated limit (this step's NOTES, question Q-UNCOUNTED): only an add-on's item
+        moves between the passes (its ADDON row), so the set derived from the last pass's record equals the one assess
+        accumulated while no add-on is a primary of an add-on - pinned here, so a catalogue change that makes one fails
+        the gate rather than the reproduction."""
+        addons = {str(code) for code in AS.ADDON_PRIMARIES}
+        self.assertEqual(addons, {'43273', '91013', '99153', '99417'})
+        for addon, primaries in AS.ADDON_PRIMARIES.items():
+            with self.subTest(addon=addon):
+                self.assertTrue(primaries)
+                self.assertEqual({str(code) for code in primaries} & addons, set())
+                self.assertEqual(AS.primaries(str(addon)) & addons, frozenset())
 
 
 class StoredRowTests(SimpleTestCase):
@@ -1990,7 +2252,7 @@ class FailClosedTests(SimpleTestCase):
         broken = {
             'no record': {},
             'v1 (event_coding@1)': {'event_coding': {**coding, 'version': 'cpt-studio-events@1'}},
-            'a later version': {'event_coding': {**coding, 'version': 'cpt-studio-events@3'}},
+            'a later version': {'event_coding': {**coding, 'version': 'cpt-studio-events@4'}},
             'no lesions': {'event_coding': {**coding, 'lesions': None}},
             'a session keyed by a family': {'event_coding': {**coding, 'sessions': {'gi.colonoscopy': {}}}},
             'a session flag that is no bool': {'event_coding': {**coding, 'sessions': {
@@ -2006,6 +2268,13 @@ class FailClosedTests(SimpleTestCase):
                 with self.assertRaises(overlay.UnreadableCoding):
                     overlay.read_coding(value)
                 self.assertIsNone(overlay.coding_of(value))
+        # AMENDMENT-2 8.1 [R:replay-R4]: both design v2 families are read - @3, what the engine writes now, and @2, a
+        # record stored before it, read as stored
+        self.assertEqual(coding['version'], ENGINE_VERSION_V3)
+        for version in (ENGINE_VERSION_V2, ENGINE_VERSION_V3):
+            with self.subTest(read=version):
+                value = {'event_coding': {**coding, 'version': version}}
+                self.assertEqual(overlay.read_coding(value)['version'], version)
 
     def test_an_unreadable_coding_record_or_factset_recomputes_nothing_and_marks_the_moved_holds_stale(self):
         case = Case(EF.colonoscopy(snare=False).build(), ('45378', 1), ('45385', 1))
@@ -2139,7 +2408,9 @@ class WordsTests(SimpleTestCase):
                          (checks.CLAIMS_EXAMPLE_CODES, checks.CLAIMS_EXAMPLE_PASSAGE, checks.CLAIMS_EXAMPLE_TOPIC))
         self.assertEqual(overlay.UNREADABLE_BLOCKER, review.UNREADABLE_EVENTS_BLOCKER)
         self.assertEqual(overlay._USER, dates.USER)
-        self.assertEqual(overlay.CODING_VERSION, ENGINE_VERSION_V2)
+        # AMENDMENT-2 8.1: the engine's own coding is written at @3, and both design v2 families are read
+        self.assertEqual((overlay.CODING_VERSION, overlay.READ_CODINGS), (ENGINE_VERSION_V3,
+                                                                         (ENGINE_VERSION_V2, ENGINE_VERSION_V3)))
         self.assertEqual((overlay.COMPETING_CHECK, overlay.COMPETING_FACT), ('proposals.competing', 'competing_codes'))
         # _pfs_rows reads the field's prefix by a slice: the same rows as review_view's
         retrieval = [{'code': '45385', 'facts': [{'field': 'pfs.global_days', 'value': '000', 'source_key': 's'},

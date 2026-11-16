@@ -30,8 +30,14 @@ What is proved here, against the done-when of 8.1 step 2b and 9.3's consistency 
 And the arbiter triage's repairs of waves 1 and 2 under the rulings: K1's reasons are types.Reason members (D186;
 ModuleTests, NeverChangesTests); K2's kind arm reads the family-kinds table (D191; K2Tests) and K3 a reach typed over
 Region (D192; K3Tests, VocabularyTests); K8 joins act places only (2b#3; K8Tests); L1 judges a month or a year against
-on_date_of_service, an event's own date against the relation it inherits, and only a supported date (D193, 2b#5;
+on_date_of_service, an event's own date against the relation it inherits, and never a negated date (D193, 2b#5;
 L1Tests, InheritedDateTests, RejudgeTests); and no citation names a report the harness refused (D207; ModuleTests).
+
+And AMENDMENT-2's slot rule at consistency's places (step f3s; [R:truth-T3][R:truth-T9]): every rule fires on each value
+a slot or a contradiction states or offers (StatedOrOfferedTests), proved per rule over 4.3.3's three shapes and
+pass 1's own contradiction (RulePlantTests, rule_plants(): T3's "a plant test runs per K rule"), including L1's
+judgment of an act's date relation with every date its slot states or offers (refute-f3s-r1 findings 1 and 2); and
+the 38-slot plant of tests/v2/test_settle.py (PlantMonotoneTests).
 """
 from __future__ import annotations
 
@@ -849,6 +855,575 @@ class K5Tests(Case):
         self.assertFound(self.performed('documenting_team', 'P2', object_id='N2'), {})  # P2 is the nurse
 
 
+class StatedOrOfferedTests(Case):
+    """AMENDMENT-2 4.3.3 [R:truth-T3] (step f3s): every K rule and L1 fires for each value a slot's fact states or
+    offers - its supported value, each side of pass 1's own contradiction, each written value of an overfilled slot
+    that is not negated, and for a rule reading two slots every combination - wherever its firing demotes another fact;
+    a finding on an overfilled slot lands on every one of its written facts. Answers are read under gemini-events@3, the
+    label that reads an overfilled slot (4.3.1)."""
+
+    def read(self, value: dict, text: str = TEXT) -> xr.ReadAnswer:
+        layout = geometry.Layout.of(text)
+        found = xr.read(json.dumps(value), len(layout.units), version=interpretation.INTERPRETATION_VERSION_V3)
+        self.assertIsInstance(found, xr.ReadAnswer, getattr(found, 'reason', ''))
+        return found
+
+    def on(self, value, *keys):
+        """The reasons found on each of ``keys`` (empty where none)."""
+        found = self.found(value)
+        return [found.get(item, set()) for item in keys]
+
+    def test_k2s_date_arm_fires_on_each_side_and_each_written_value(self):
+        conflict = {'session_conflict'}
+        session_key = key(F.EVENT, 'E2', A.SESSION)
+        for name, own, expected in (
+                ('contradicted', [contradicted(('on_date_of_service', 'S6'), ('earlier_date', 'S6'))], conflict),
+                ('overfilled', [fact('on_date_of_service', 'S6'), fact('earlier_date', 'S6')], conflict),
+                ('one denied', [fact('on_date_of_service', 'S6'), fact('earlier_date', 'S6', state='negated')], set()),
+                ('both denied', [fact('earlier_date', 'S6', state='negated'),
+                                 fact('later_date', 'S6', state='negated')], set()),
+                ('today denied', [fact('on_date_of_service', 'S6', state='negated'),
+                                  fact('later_date', 'S6', state='negated')], conflict)):
+            with self.subTest(own=name):
+                value = changed(lambda item, own=own: put(at(item, 'E2'), 'date_relation', own))
+                self.assertEqual(self.on(value, session_key), [expected])
+        # the examination's own relation overfilled: E2's today against its later side
+        value = changed(lambda item: (put(at(item, 'E1'), 'date_relation', [fact('on_date_of_service', 'S5'),
+                                                                              fact('later_date', 'S5')]),
+                                      put(at(item, 'E2'), 'date_relation', [fact('on_date_of_service', 'S6')])))
+        self.assertEqual(self.on(value, session_key), [conflict])
+
+    def test_k2s_examination_link_arm_demotes_the_link_unless_every_written_fact_names_the_session(self):
+        link = key(F.SESSION, 'X1', A.EXAMINATION)
+
+        def sessions(slot):
+            def edit(value):
+                value['sessions'].append(session('X2', fact('egd', 'S1')))
+                at(value, 'E1')['session'] = slot
+            return changed(edit)
+        for name, slot, demoted in (
+                ('contradicted', [contradicted(('X1', 'S5'), ('X2', 'S5'))], True),  # its X2 side fires (T3)
+                ('overfilled', [fact('X1', 'S5'), fact('X2', 'S5')], True),
+                ('one denied', [fact('X1', 'S5'), fact('X2', 'S5', state='negated')], True),  # 4.4: never stronger
+                ('twice X1', [fact('X1', 'S5'), fact('X1', 'S5')], False),
+                ('X1', [fact('X1', 'S5')], False)):
+            with self.subTest(slot=name):
+                self.assertEqual(self.on(sessions(slot), link), [{'session_inconsistent'} if demoted else set()])
+        # an overfilled examination link fires on each examination it offers, on every written fact of the link (the
+        # reader holds that slot whole for now, 4.3.8 - extract_read.WHOLE_ANSWER_SLOTS - so the rule is read here
+        # with the hold lifted, as it will be once its other reader is routed)
+        def links(value):
+            value['sessions'].append(session('X2', fact('egd', 'S1')))
+            value['sessions'][0]['examination'] = [fact('E1', 'S5'), fact('E5', 'S5')]
+            at(value, 'E5')['session'] = [fact('X2', 'S9')]
+        with mock.patch.object(xr, 'WHOLE_ANSWER_SLOTS', frozenset()):
+            found = self.found(changed(links))
+        self.assertEqual(found[key(F.SESSION, 'X1', A.EXAMINATION, 0)], {'session_inconsistent'})
+        self.assertEqual(found[key(F.SESSION, 'X1', A.EXAMINATION, 1)], {'session_inconsistent'})
+
+    def test_k2s_kind_arm_and_k3_fire_on_each_offered_kind_session_and_family(self):
+        def ercp(value):
+            value['sessions'].append(session('X2', fact('ercp', 'S1')))
+            at(value, 'E5')['kind'] = contradicted(('snare', 'S9'), ('sphincterotomy', 'S9'))
+            put(at(value, 'E5'), 'session', [fact('X2', 'S9')])
+        self.assertEqual(self.on(changed(ercp), key(F.EVENT, 'E5', A.SESSION)), [{'session_inconsistent'}])
+
+        def two_sessions(value):  # E2 at the sigmoid colon in X1 (a colonoscopy) or X2 (an EGD): K3 fires on X2
+            value['sessions'].append(session('X2', fact('egd', 'S1')))
+            put(at(value, 'E2'), 'session', [fact('X1', 'S6'), fact('X2', 'S6')])
+        found = self.found(changed(two_sessions))
+        for index in (0, 1):
+            self.assertIn('session_unreachable', found[key(F.EVENT, 'E2', A.SESSION, index)])
+        offered_family = changed(lambda value: value['sessions'][0].update(
+            kind=contradicted(('colonoscopy', 'S1'), ('egd', 'S1'))))
+        self.assertIn('session_unreachable', self.found(offered_family)[key(F.EVENT, 'E2', A.SESSION)])
+
+    def test_k4_fires_on_each_offered_organ_and_type_never_on_a_denied_organ(self):
+        conflict = {'anatomy_conflict'}
+
+        def organ(slot, type_=None):
+            return changed(lambda value: value['anatomy'].append(
+                anatomy('Y1', type_ or fact('surgically_absent', 'S4'), organ=slot)))
+        reach, place = key(F.SESSION, 'X1', A.REACHED), key(F.EVENT, 'E2', A.TARGET_PLACES)
+        # A-v6's shape: two supported organs of one entry - the colon's reach and place demoted (another fact)
+        for name, slot in (('overfilled', [fact('stomach', 'S4'), fact('colon', 'S4')]),
+                           ('contradicted', [contradicted(('stomach', 'S4'), ('colon', 'S4'))])):
+            with self.subTest(organ=name):
+                self.assertEqual(self.on(organ(slot), reach, place), [conflict, conflict])
+        self.assertEqual(self.on(organ([fact('stomach', 'S4'), fact('colon', 'S4', state='negated')]), reach, place),
+                         [set(), set()])
+        self.assertEqual(self.on(organ([fact('stomach', 'S4', state='negated'), fact('colon', 'S4', state='negated')]),
+                                 reach, place), [set(), set()])
+        offered_type = organ([fact('colon', 'S4')], contradicted(('surgically_absent', 'S4'), ('anastomosis', 'S4')))
+        self.assertEqual(self.on(offered_type, reach, place), [conflict, conflict])
+        found = self.found(organ([fact('stomach', 'S4'), fact('colon', 'S4')]))
+        self.assertEqual((found[key(F.ANATOMY, 'Y1', A.ORGAN, 0)], found[key(F.ANATOMY, 'Y1', A.ORGAN, 1)]),
+                         (conflict, conflict))
+
+    def test_k5_fires_on_every_combination_of_offered_performers_persons_roles_and_documenting_clinicians(self):
+        conflict = {'person_conflict'}
+        performer, person_key = key(F.EVENT, 'E2', A.PERFORMER), key(F.EVENT, 'E2', A.PERFORMER_PERSON)
+
+        def performed(performers, persons, clinicians=None, role=None):
+            def edit(value):
+                value['people'].append(person('P3', 'referring', 'S6'))
+                if role is not None:
+                    value['people'][1]['role'] = role
+                if clinicians is not None:
+                    value['encounter']['documenting_clinician'] = clinicians
+                at(value, 'E2').update(performer=performers, performer_person=persons)
+            return changed(edit)
+        self.assertEqual(self.on(performed([fact('documenting_team', 'S6'), fact('other_clinician', 'S6')],
+                                           [fact('P1', 'S6')]), performer, person_key), [conflict, conflict])
+        self.assertEqual(self.on(performed([fact('documenting_team', 'S6')], [fact('P2', 'S6'), fact('P3', 'S6')]),
+                                 performer, person_key), [conflict, conflict])
+        self.assertEqual(self.on(performed([fact('other_clinician', 'S6')], [fact('P3', 'S6')],
+                                           clinicians=[fact('P1', 'S3'), fact('P3', 'S3')]), performer, person_key),
+                         [conflict, conflict])
+        self.assertEqual(self.on(performed([fact('documenting_team', 'S6')], [fact('P2', 'S6')],
+                                           role=contradicted(('nurse', 'S8'), ('referring', 'S8'))),
+                                 performer, person_key), [conflict, conflict])
+        # a denied performer offers nothing
+        self.assertEqual(self.on(performed([fact('documenting_team', 'S6'), fact('other_clinician', 'S6',
+                                                                                 state='negated')],
+                                           [fact('P1', 'S6')]), performer, person_key), [set(), set()])
+
+    def test_k7_fires_on_an_offered_framed_role_and_not_on_a_denied_one(self):
+        occasion = key(F.SECTION, 'N2', A.OCCASION)
+        for name, role, expected in (
+                ('overfilled', [fact('findings', 'S5', link='section'), fact('history', 'S5', link='section')],
+                 {'frame_role'}),
+                ('one denied', [fact('findings', 'S5', link='section'),
+                                fact('history', 'S5', link='section', state='negated')], set())):
+            with self.subTest(role=name):
+                value = changed(lambda item, role=role: section_at(item, 'N2').update(role=role))
+                self.assertEqual(self.on(value, occasion), [expected])
+
+    def test_k1s_status_against_timing_fires_on_each_offered_status_and_relation(self):
+        timing = key(F.EVENT, 'E2', A.DATE_RELATION)
+        status = key(F.EVENT, 'E2', A.STATUS)
+        value = changed(lambda item: (at(item, 'E2').update(status=contradicted(('performed', 'S6'),
+                                                                                  ('planned', 'S6'))),
+                                      put(at(item, 'E2'), 'date_relation', [fact('later_date', 'S6')])))
+        self.assertEqual(self.on(value, status, timing), [{'structure_status_time'}, {'structure_status_time'}])
+        value = changed(lambda item: put(at(item, 'E2'), 'date_relation', [fact('on_date_of_service', 'S6'),
+                                                                           fact('later_date', 'S6')]))
+        found = self.found(value)
+        self.assertIn('structure_status_time', found[status])
+        self.assertIn('structure_status_time', found[key(F.EVENT, 'E2', A.DATE_RELATION, 1)])
+
+    def test_l1_judges_each_written_date_and_each_offered_relation(self):
+        """[R:truth-T9]: the date slot's written dates, each against its own words; and a timing fact's offered
+        relations, each against the literals, the finding on every written fact and on an act's inherited key."""
+        value = changed(lambda item: at(item, 'E6').update(date=[fact('2023', 'S4', words='2023'),
+                                                                 fact('2024', 'S4', words='2023')]))
+        found = self.found(value)
+        self.assertNotIn(key(F.EVENT, 'E6', A.DATE, 0), found)
+        self.assertEqual(found[key(F.EVENT, 'E6', A.DATE, 1)], {'literal_mismatch'})
+        occasions = [fact('earlier_date', 'S4', words='Prior colonoscopy in 2023', link='section'),
+                     fact('on_date_of_service', 'S4', words='Prior colonoscopy in 2023', link='section')]
+        found = self.found(changed(lambda item: section_at(item, 'N1').update(occasion=occasions)))
+        for index in (0, 1):
+            self.assertIn('literal_mismatch', found[key(F.SECTION, 'N1', A.OCCASION, index)])
+
+    def test_l1_judges_an_acts_date_relation_with_every_date_its_slot_states_or_offers(self):
+        """refute-f3s-r1 finding 1 (4.3.3 [R:truth-T3][R:truth-T9]; 4.4): an act's date relation - its own, or the one
+        it inherits - is judged with the words of EVERY date its slot states or offers (each written date of an
+        overfilled slot that is not negated, each side of pass 1's own contradiction), so it fails whenever any one of
+        them, read with it alone, would; a negated date is never read. E2 at S7, on the date of service by its own
+        words (no literal) or by N0's occasion; 11/08/2026 (S7) the day before, 11/09/2026 (S8) the date, 11/10/2026
+        (S9) the day after."""
+        mismatch, relation_key = {'literal_mismatch'}, key(F.EVENT, 'E2', A.DATE_RELATION)
+        before = fact('2026-11-08', 'S7', words='11/08/2026')
+        today = fact('2026-11-09', 'S8', words='11/09/2026')
+        after = fact('2026-11-10', 'S9', words='11/10/2026')
+
+        def denied(item):
+            return dict(item, state='negated')
+        side = {'2026-11-08': ('S7', '11/08/2026'), '2026-11-09': ('S8', '11/09/2026'),
+                '2026-11-10': ('S9', '11/10/2026')}
+
+        def contradiction(*values):
+            return {'state': 'contradicted', 'value': '', 'qualifiers': [],
+                    'sources': [src(side[value][0], words=side[value][1]) for value in values],
+                    'options': [{'value': value, 'sources': [src(side[value][0], words=side[value][1])]}
+                                for value in values]}
+
+        def sides_only(*values):
+            """refute-f3s-r2 F2: pass 1's own contradiction citing, at its own level, a unit with no date literal (S12)
+            and each side's words at its option only (S2 accepts it: sources and two sourced options) - so only the
+            sides' sources carry the dates L1 must read."""
+            return {'state': 'contradicted', 'value': '', 'qualifiers': [], 'sources': [src('S12')],
+                    'options': [{'value': value, 'sources': [src(side[value][0], words=side[value][1])]}
+                                for value in values]}
+        own = [fact('on_date_of_service', 'S7', words='was taken')]
+        for name, slot, expected in (
+                ('the day before alone', [before], mismatch), ('the date alone', [today], set()),
+                ('overfilled, the day before first', [before, today], mismatch),
+                ('overfilled, the date first', [today, before], mismatch),
+                ('overfilled, no date of service', [before, after], mismatch),
+                ('the day before stated, the date denied', [before, denied(today)], mismatch),
+                ('the date stated, the day before denied', [today, denied(before)], set()),
+                ('both denied', [denied(before), denied(after)], set()),
+                ("pass 1's own contradiction", [contradiction('2026-11-08', '2026-11-09')], mismatch),
+                ("pass 1's own contradiction, no date of service", [contradiction('2026-11-08', '2026-11-10')],
+                 mismatch),
+                ("pass 1's own contradiction, its sides' words at its options only",
+                 [sides_only('2026-11-08', '2026-11-09')], mismatch)):
+            for inherits in (False, True):
+                with self.subTest(slot=name, inherited=inherits):
+                    fields = {'date': copy.deepcopy(slot)} if inherits else {'date': copy.deepcopy(slot),
+                                                                             'date_relation': own}
+                    value = _dated_act(**fields)()
+                    found = self.found(value, DATES)
+                    self.assertEqual(found.get(relation_key, set()) & mismatch, expected)
+        # what is stored for the re-judge: every literal of every date the slot states or offers, never a denied one's
+        lit, day = ct.StoredLiteral, ct.Precision.DAY
+        stored = self.check(_dated_act(date=[before, denied(after), today], date_relation=own)(), DATES).literals
+        self.assertEqual(stored[key(F.EVENT, 'E2', A.DATE_RELATION)], (lit('2026-11-08', day), lit('2026-11-09', day)))
+        stored = self.check(_dated_act(date=[contradiction('2026-11-08', '2026-11-10')])(), DATES).literals
+        self.assertEqual(stored[relation_key],  # N0's occasion, then each side's words once
+                         (lit('2026-11-09', day), lit('2026-11-08', day), lit('2026-11-10', day)))
+        # the denied-only slot inherits nothing: no date is stated, so the act's relation is the section's own
+        self.assertNotIn(relation_key, self.check(_dated_act(date=[denied(before), denied(after)])(), DATES).literals)
+
+
+# --- the plant per rule (AMENDMENT-2 4.3.3-4.4 [R:truth-T3]: "a plant test runs per K rule"; refute-f3s-r1 2) -----
+
+
+@dataclasses.dataclass(frozen=True)
+class RulePlant:
+    """One rule of 3.1 (K1-K5, K7, L1) and one attribute it reads whose value decides a finding on ANOTHER fact.
+    Written alone, ``fires`` (value, unit, words) makes the rule put ``reason`` on every one of ``targets`` (keys
+    outside the planted attribute) and ``holds`` (in ``holds_state``) does not. A positive rule fires on a value a
+    fact states or offers; an ABSENCE rule (``absence``) fires unless ``holds`` is established - K2's examination-link
+    arm and K1's rules that read "no established value" - so no overfilled slot and no contradiction stops it. A SLOT
+    (one of the 38) is planted in 4.3.3's three shapes - supported only (A-v6's), one supported value with a negated
+    other (A-v2's; both ways round) and negated only - and as pass 1's own contradiction; a FACT (always one fact: an
+    event's kind and status, a session's kind, an anatomy entry's type, a person's role, a section's owner) as the
+    contradiction only."""
+    rule: str
+    text: str
+    base: Callable[[], dict]
+    family: xs.Family
+    object_id: str
+    attribute: ct.Attribute
+    fires: tuple[str, str, str]
+    holds: tuple[str, str, str]
+    targets: tuple[xr.FactKey, ...]
+    reason: str
+    absence: bool = False
+    link: str = 'statement'
+    holds_state: str = 'supported'
+
+    @property
+    def slot(self) -> bool:
+        return xs.field(self.family, self.attribute).arity is xs.Arity.SLOT
+
+    def written(self, which: tuple[str, str, str], state: str = 'supported') -> dict:
+        value, unit, words = which
+        return fact(value, unit, state=state, words=words, link=self.link)
+
+    def contradiction(self) -> dict:
+        """Pass 1's own contradiction of the two values, each side citing its own words."""
+        sides = (self.fires, self.holds)
+        return {'state': 'contradicted', 'value': '', 'qualifiers': [],
+                'sources': [src(unit, words=words, link=self.link) for _, unit, words in sides],
+                'options': [{'value': value, 'sources': [src(unit, words=words, link=self.link)]}
+                            for value, unit, words in sides]}
+
+    def planted(self, facts: list) -> dict:
+        """The base answer with the attribute holding ``facts`` (a SLOT: the list; a FACT: its one fact)."""
+        data = self.base()
+        item = data['encounter'] if self.family is F.ENCOUNTER else next(
+            record for record in data[self.family.value] if record['id'] == self.object_id)
+        path = xs.field(self.family, self.attribute).path
+        for part in path[:-1]:
+            item = item[part]
+        item[path[-1]] = copy.deepcopy(list(facts) if self.slot else facts[0])
+        return data
+
+    def alone(self, which: str) -> list:
+        """The one written fact ``fires`` or ``holds`` (in ``holds_state``), read alone."""
+        return [self.written(self.fires)] if which == 'fires' else [self.written(self.holds, self.holds_state)]
+
+    def shapes(self) -> list:
+        """(name, written facts, whether the shape states or offers ``fires``, the single written facts each read
+        alone): the contradiction (its sides read alone as supported facts), and for a SLOT 4.3.3's three shapes - but
+        for a slot that keeps S1's whole-answer refusal (extract_read.WHOLE_ANSWER_SLOTS, 4.3.8), whose overfilled
+        answer is never read."""
+        f, h, w = self.fires, self.holds, self.written
+        found = [('contradicted', [self.contradiction()], True, [[w(f)], [w(h)]])]
+        if self.slot and (self.family, self.attribute) not in xr.WHOLE_ANSWER_SLOTS:
+            for name, written, states in (
+                    ('supported', [w(f), w(h)], True), ('supported, reversed', [w(h), w(f)], True),
+                    ('mixed', [w(f), w(h, 'negated')], True), ('mixed, reversed', [w(h), w(f, 'negated')], False),
+                    ('negated', [w(f, 'negated'), w(h, 'negated')], False)):
+                found.append((name, written, states, [[item] for item in written]))
+        return found
+
+
+def _with(base: Callable[[], dict], *edits: Callable[[dict], object]) -> Callable[[], dict]:
+    def build() -> dict:
+        value = base()
+        for edit in edits:
+            edit(value)
+        return value
+    return build
+
+
+def _p3(value: dict) -> None:
+    value['people'].append(person('P3', 'referring', 'S6'))
+
+
+def _y1(organ: list) -> Callable[[dict], object]:
+    return lambda value: value['anatomy'].append(anatomy('Y1', fact('surgically_absent', 'S4'), organ=organ))
+
+
+def _dated_act(**fields) -> Callable[[], dict]:
+    """DATES' answer with E2, a biopsy told in S7, and N0's occasion on the date of service (S2's literal)."""
+    def build() -> dict:
+        act = event('E2', ['S7'], fact('biopsy', 'S7', words='biopsy'), fact('performed', 'S7', words='was taken'),
+                    kind_words='biopsy', status_words='was taken', session=[fact('X1', 'S7')], **fields)
+        return dated(act, occasion=fact('on_date_of_service', 'S2', words='11/09/2026', link='document_frame'))
+    return build
+
+
+def _e2(attribute_path: str, value) -> Callable[[dict], object]:
+    return lambda item: put(at(item, 'E2'), attribute_path, value)
+
+
+def rule_plants() -> tuple[RulePlant, ...]:
+    """Every plant: for each SLOT a rule reads to decide a finding on another fact (RULE_READ_SLOTS) at least one, and
+    for the FACT attributes the rules read, each as pass 1's own contradiction."""
+    E, N, X, Y, P, ENC = F.EVENT, F.SECTION, F.SESSION, F.ANATOMY, F.PERSON, F.ENCOUNTER
+    today = _e2('date_relation', [fact('on_date_of_service', 'S6')])
+    later = _e2('date_relation', [fact('later_date', 'S6')])
+    return (
+        # K1, status against timing: a positive status with a later date (each fact demotes the other)
+        RulePlant('K1 status_time', TEXT, answer, E, 'E2', A.DATE_RELATION, ('later_date', 'S6', ''),
+                  ('on_date_of_service', 'S6', ''), (key(E, 'E2', A.STATUS),), 'structure_status_time'),
+        RulePlant('K1 status_time', TEXT, _with(answer, later), E, 'E2', A.STATUS, ('performed', 'S6', ''),
+                  ('planned', 'S6', ''), (key(E, 'E2', A.DATE_RELATION),), 'structure_status_time'),
+        # K2's date arm: the act's own relation, the examination's own, the examination's section occasion
+        RulePlant('K2 date', TEXT, answer, E, 'E2', A.DATE_RELATION, ('later_date', 'S6', ''),
+                  ('on_date_of_service', 'S6', ''), (key(E, 'E2', A.SESSION),), 'session_conflict'),
+        RulePlant('K2 date', TEXT, _with(answer, today), E, 'E1', A.DATE_RELATION, ('later_date', 'S5', ''),
+                  ('on_date_of_service', 'S5', ''), (key(E, 'E2', A.SESSION),), 'session_conflict'),
+        RulePlant('K2 date', TEXT, _with(answer, today), N, 'N2', A.OCCASION, ('later_date', 'S2', ''),
+                  ('on_date_of_service', 'S2', ''), (key(E, 'E2', A.SESSION),), 'session_conflict',
+                  link='document_frame'),
+        # ... and the session's examination it reads them through: E6, the history's removal, inherits N1's
+        # earlier_date (a whole-answer slot for now, 4.3.8: planted as pass 1's own contradiction only)
+        RulePlant('K2 date', TEXT, _with(answer, today), X, 'X1', A.EXAMINATION, ('E6', 'S5', ''), ('E1', 'S5', ''),
+                  (key(E, 'E2', A.SESSION),), 'session_conflict'),
+        # K2's kind arm: an act's kind, a session's kind its family does not admit
+        RulePlant('K2 kind', TEXT, answer, E, 'E2', A.KIND, ('sphincterotomy', 'S6', ''), ('snare', 'S6', ''),
+                  (key(E, 'E2', A.SESSION),), 'session_inconsistent'),
+        RulePlant('K2 kind', TEXT, answer, X, 'X1', A.KIND, ('ercp', 'S1', ''), ('colonoscopy', 'S1', ''),
+                  (key(E, 'E2', A.SESSION),), 'session_inconsistent', link='document_frame'),
+        # K2's examination-link arm (an absence rule: the examination's session must establish the session)
+        RulePlant('K2 examination link', TEXT,
+                  _with(answer, lambda value: value['sessions'].append(session('X2', fact('egd', 'S1')))),
+                  E, 'E1', A.SESSION, ('X2', 'S5', ''), ('X1', 'S5', ''), (key(X, 'X1', A.EXAMINATION),),
+                  'session_inconsistent', absence=True),
+        # K3: a session's kind whose family cannot reach the act's place
+        RulePlant('K3', TEXT, answer, X, 'X1', A.KIND, ('egd', 'S1', ''), ('colonoscopy', 'S1', ''),
+                  (key(E, 'E2', A.SESSION),), 'session_unreachable', link='document_frame'),
+        # K4: an anatomy entry's organ and type
+        RulePlant('K4', TEXT, _with(answer, _y1([])), Y, 'Y1', A.ORGAN, ('colon', 'S4', ''), ('stomach', 'S4', ''),
+                  (key(X, 'X1', A.REACHED), key(E, 'E2', A.TARGET_PLACES)), 'anatomy_conflict'),
+        RulePlant('K4', TEXT, _with(answer, _y1([fact('colon', 'S4')])), Y, 'Y1', A.TYPE,
+                  ('surgically_absent', 'S4', ''), ('anastomosis', 'S4', ''),
+                  (key(X, 'X1', A.REACHED), key(E, 'E2', A.TARGET_PLACES), key(Y, 'Y1', A.ORGAN)),
+                  'anatomy_conflict'),
+        # K5: performers, persons, a person's role and the documenting clinician, for an act and for a section
+        RulePlant('K5', TEXT, _with(answer, _e2('performer_person', [fact('P1', 'S6')])), E, 'E2', A.PERFORMER,
+                  ('other_clinician', 'S6', ''), ('documenting_team', 'S6', ''), (key(E, 'E2', A.PERFORMER_PERSON),),
+                  'person_conflict'),
+        RulePlant('K5', TEXT, _with(answer, _p3, _e2('performer', [fact('documenting_team', 'S6')])), E, 'E2',
+                  A.PERFORMER_PERSON, ('P3', 'S6', ''), ('P1', 'S6', ''), (key(E, 'E2', A.PERFORMER),),
+                  'person_conflict'),
+        RulePlant('K5', TEXT, _with(answer, lambda value: section_at(value, 'N2').update(
+            performer_person=[fact('P1', 'S3', link='document_frame')])), N, 'N2', A.PERFORMER,
+                  ('other_clinician', 'S3', ''), ('documenting_team', 'S3', ''), (key(N, 'N2', A.PERFORMER_PERSON),),
+                  'person_conflict', link='document_frame'),
+        RulePlant('K5', TEXT, _with(answer, _p3), N, 'N2', A.PERFORMER_PERSON, ('P3', 'S3', ''), ('P1', 'S3', ''),
+                  (key(N, 'N2', A.PERFORMER),), 'person_conflict', link='document_frame'),
+        RulePlant('K5', TEXT, _with(answer, _e2('performer', [fact('documenting_team', 'S6')]),
+                                    _e2('performer_person', [fact('P2', 'S6')])), P, 'P2', A.ROLE,
+                  ('referring', 'S8', ''), ('nurse', 'S8', ''),
+                  (key(E, 'E2', A.PERFORMER), key(E, 'E2', A.PERFORMER_PERSON)), 'person_conflict'),
+        RulePlant('K5', TEXT, _with(answer, _p3, _e2('performer', [fact('other_clinician', 'S6')]),
+                                    _e2('performer_person', [fact('P3', 'S6')])), ENC, '', A.DOCUMENTING_CLINICIAN,
+                  ('P3', 'S3', ''), ('P1', 'S3', ''), (key(E, 'E2', A.PERFORMER), key(E, 'E2', A.PERFORMER_PERSON)),
+                  'person_conflict', link='document_frame'),
+        # K7: a section's role and owner framing its occasion and performer from outside
+        RulePlant('K7', TEXT, answer, N, 'N2', A.ROLE, ('history', 'S5', ''), ('findings', 'S5', ''),
+                  (key(N, 'N2', A.OCCASION), key(N, 'N2', A.PERFORMER)), 'frame_role', link='section'),
+        RulePlant('K7', TEXT, answer, N, 'N2', A.OWNER, ('outside_record', 'S5', ''),
+                  ('documenting_clinician', 'S5', ''), (key(N, 'N2', A.OCCASION), key(N, 'N2', A.PERFORMER)),
+                  'frame_role', link='section'),
+        # L1: an act's date read into its own relation and into the relation it inherits; a section's occasion
+        # judged with the date of an act that inherits it (refute-f3s-r1 finding 1)
+        RulePlant('L1', DATES, _dated_act(date_relation=[fact('on_date_of_service', 'S7', words='was taken')]),
+                  E, 'E2', A.DATE, ('2026-11-08', 'S7', '11/08/2026'), ('2026-11-09', 'S8', '11/09/2026'),
+                  (key(E, 'E2', A.DATE_RELATION),), 'literal_mismatch'),
+        RulePlant('L1', DATES, _dated_act(), E, 'E2', A.DATE, ('2026-11-08', 'S7', '11/08/2026'),
+                  ('2026-11-09', 'S8', '11/09/2026'), (key(E, 'E2', A.DATE_RELATION),), 'literal_mismatch'),
+        RulePlant('L1', DATES, _dated_act(date=[fact('2026-11-08', 'S7', words='11/08/2026')]), N, 'N0', A.OCCASION,
+                  ('on_date_of_service', 'S1', ''), ('earlier_date', 'S1', ''), (key(E, 'E2', A.DATE_RELATION),),
+                  'literal_mismatch', link='document_frame'),
+        # K1's absence rules: the cause without hemostasis, a single target with no lesion, the scope of an act, the
+        # yield of a kind that extracts nothing, the facets of a session that is not endoscopic
+        RulePlant('K1 cause', TEXT, _with(answer, _e2('cause', [fact('spontaneous', 'S6')])), E, 'E2', A.PURPOSE,
+                  ('removal', 'S6', ''), ('hemostasis', 'S6', ''), (key(E, 'E2', A.CAUSE),), 'structure_cause',
+                  absence=True),
+        RulePlant('K1 single_target', TEXT,
+                  _with(answer, lambda value: put(at(value, 'E3'), 'scope.breadth', [fact('single_target', 'S7')])),
+                  E, 'E3', A.TARGET_LESION, ('L9', 'S7', ''), ('L1', 'S7', ''), (key(E, 'E3', A.SCOPE_BREADTH),),
+                  'structure_single_target', absence=True),
+        RulePlant('K1 scope', TEXT, answer, E, 'E3', A.STATUS, ('planned', 'S7', ''),
+                  ('performed', 'S7', 'Neither biopsy nor tattoo was performed'), (key(E, 'E3', A.SCOPE_BREADTH),),
+                  'structure_scope', absence=True, holds_state='negated'),
+        RulePlant('K1 yield', TEXT, _with(answer, _e2('yield', [fact('tissue', 'S6')])), E, 'E2', A.KIND,
+                  ('snare', 'S6', ''), ('removal', 'S6', ''), (key(E, 'E2', A.YIELD),), 'structure_yield',
+                  absence=True),
+        RulePlant('K1 endoscopic', TEXT, answer, X, 'X1', A.KIND, ('office_em', 'S1', ''), ('colonoscopy', 'S1', ''),
+                  (key(X, 'X1', A.REACHED),), 'structure_endoscopic', absence=True, link='document_frame'),
+        # K1's exceptive rule reads each excepted act's status; K4 reads an act's places only when it is an act
+        RulePlant('K1 exceptive', TEXT, _with(answer, lambda value: (
+            at(value, 'E3').update(kind=fact('removal', 'S7')),
+            put(at(value, 'E3'), 'scope.breadth', [fact('exceptive', 'S7')]),
+            put(at(value, 'E3'), 'scope.excepts', ['E2']))), E, 'E2', A.STATUS, ('planned', 'S6', ''),
+                  ('performed', 'S6', ''), (key(E, 'E3', A.SCOPE_BREADTH),), 'structure_exceptive', absence=True),
+        RulePlant('K4 act', TEXT, _with(answer, _y1([fact('colon', 'S4')])), E, 'E2', A.STATUS, ('performed', 'S6', ''),
+                  ('planned', 'S6', ''), (key(E, 'E2', A.TARGET_PLACES),), 'anatomy_conflict', absence=True,
+                  holds_state='negated'),
+    )
+
+
+# Every SLOT one of 3.1's rules reads to decide a finding on ANOTHER fact (consistency.py): K1's status against timing
+# and K2's date arm (an event's date_relation; a section's occasion, inherited by the examination), K2's
+# examination-link arm (the examination's session), K1's cause and single-target rules (purpose, target.lesion), K4's
+# organ, K5's performer and performer_person (an event's, a section's) and the documenting clinician, K7's role, and
+# L1's relation judgment (an act's date; a section's occasion, for an act that inherits it). A slot a rule reads only
+# to demote that slot itself (an act's own session for K2's other arms and K3, a breadth, the lists K1 names, a
+# session's completion) needs no plant here: every fact of an overfilled slot is unresolved already; nor does one whose
+# SILENCE alone decides (K1's part_of and part_relation, each of which demotes the other only when that other is
+# silent: no written fact of either fires it, alone or overfilled). K2's date arm also reads the session's examination,
+# a slot that keeps S1's whole-answer refusal for now (extract_read.WHOLE_ANSWER_SLOTS, 4.3.8): its overfilled answer
+# is never read, so it is planted as pass 1's own contradiction only.
+RULE_READ_SLOTS = frozenset({
+    (F.EVENT, A.DATE_RELATION), (F.EVENT, A.DATE), (F.EVENT, A.SESSION), (F.EVENT, A.PERFORMER),
+    (F.EVENT, A.PERFORMER_PERSON), (F.EVENT, A.PURPOSE), (F.EVENT, A.TARGET_LESION), (F.SECTION, A.OCCASION),
+    (F.SECTION, A.PERFORMER), (F.SECTION, A.PERFORMER_PERSON), (F.SECTION, A.ROLE),
+    (F.ENCOUNTER, A.DOCUMENTING_CLINICIAN), (F.ANATOMY, A.ORGAN), (F.SESSION, A.EXAMINATION)})
+# and every FACT the rules read so: an event's kind and status, a session's kind, an anatomy entry's type, a person's
+# role and a section's owner (each always one fact, so only pass 1's own contradiction offers two values)
+RULE_READ_FACTS = frozenset({(F.EVENT, A.KIND), (F.EVENT, A.STATUS), (F.SESSION, A.KIND), (F.ANATOMY, A.TYPE),
+                             (F.PERSON, A.ROLE), (F.SECTION, A.OWNER)})
+
+
+class RulePlantTests(Case):
+    """The plant per rule (AMENDMENT-2 4.3.3 [R:truth-T3]: "A plant test runs per K rule"; 4.4; refute-f3s-r1 finding
+    2: the 38-slot plant of tests/v2/test_settle.py does not trigger most rules). For each rule_plants() entry: the
+    plant can see its rule (``fires`` alone fires it, ``holds`` alone does not); every shape that states or offers
+    ``fires`` - and every shape at all for an absence rule - fires it on every target; and every shape demotes, on every
+    fact outside the planted attribute, at least what each of its written facts demotes read alone. Answers are read
+    under gemini-events@3, which reads an overfilled slot (4.3.1)."""
+
+    def read(self, value: dict, text: str = TEXT) -> xr.ReadAnswer:
+        layout = geometry.Layout.of(text)
+        found = xr.read(json.dumps(value), len(layout.units), version=interpretation.INTERPRETATION_VERSION_V3)
+        self.assertIsInstance(found, xr.ReadAnswer, getattr(found, 'reason', ''))
+        return found
+
+    def outside(self, plant: RulePlant, facts: list) -> dict:
+        """Every finding of the planted answer on a fact outside the planted attribute."""
+        found = self.found(plant.planted(facts), plant.text)
+        return {item: reasons for item, reasons in found.items()
+                if (item.family, item.object, item.attribute) != (plant.family, plant.object_id, plant.attribute)}
+
+    def test_the_plants_cover_every_rule_and_every_attribute_a_rule_reads_for_another_fact(self):
+        plants = rule_plants()
+        self.assertEqual({plant.rule.split()[0] for plant in plants}, {'K1', 'K2', 'K3', 'K4', 'K5', 'K7', 'L1'})
+        self.assertEqual({(plant.family, plant.attribute) for plant in plants if plant.slot}, RULE_READ_SLOTS)
+        self.assertEqual({(plant.family, plant.attribute) for plant in plants if not plant.slot}, RULE_READ_FACTS)
+        self.assertLessEqual(RULE_READ_SLOTS, set(xr.SLOTS))
+        every_shape = ['contradicted', 'supported', 'supported, reversed', 'mixed', 'mixed, reversed', 'negated']
+        for plant in plants:  # a FACT, and a whole-answer slot (4.3.8), as pass 1's own contradiction only
+            alone = not plant.slot or (plant.family, plant.attribute) in xr.WHOLE_ANSWER_SLOTS
+            self.assertEqual([name for name, *_rest in plant.shapes()], every_shape[:1] if alone else every_shape)
+        for plant in plants:
+            with self.subTest(rule=plant.rule, attribute=plant.attribute.value):
+                self.assertTrue(plant.targets)
+                for target in plant.targets:
+                    self.assertNotEqual((target.family, target.object, target.attribute),
+                                        (plant.family, plant.object_id, plant.attribute))
+
+    def test_each_plant_can_see_its_rule(self):
+        for plant in rule_plants():
+            with self.subTest(rule=plant.rule, attribute=plant.attribute.value):
+                fired = self.outside(plant, plant.alone('fires'))
+                held = self.outside(plant, plant.alone('holds'))
+                for target in plant.targets:
+                    self.assertIn(plant.reason, fired.get(target, set()), target)
+                    self.assertNotIn(plant.reason, held.get(target, set()), target)
+
+    def test_every_rule_fires_on_each_value_a_slot_or_a_contradiction_states_or_offers(self):
+        for plant in rule_plants():
+            for name, written, states, _singles in plant.shapes():
+                if not (states or plant.absence):
+                    continue
+                with self.subTest(rule=plant.rule, attribute=plant.attribute.value, shape=name):
+                    found = self.outside(plant, written)
+                    for target in plant.targets:
+                        self.assertIn(plant.reason, found.get(target, set()), target)
+
+    def test_every_shape_demotes_at_least_what_each_written_fact_demotes_read_alone(self):
+        for plant in rule_plants():
+            for name, written, _states, singles in plant.shapes():
+                with self.subTest(rule=plant.rule, attribute=plant.attribute.value, shape=name):
+                    over = self.outside(plant, written)
+                    for index, single in enumerate(singles):
+                        for item, reasons in self.outside(plant, single).items():
+                            self.assertLessEqual(reasons, over.get(item, set()), (index, item))
+
+
+class PlantMonotoneTests(Case):
+    """AMENDMENT-2 4.4 at consistency's places (step f3s): on each of the 38 slots, in each of 4.3.3's three shapes (the
+    plant of tests/v2/test_settle.py), every K rule and L1 finding on a fact outside the slot that any single written
+    fact read alone gives, the overfilled slot gives too - offering more values only demotes more."""
+
+    def test_an_overfilled_slot_demotes_every_other_fact_each_single_written_fact_demotes(self):
+        from tests.v2 import test_settle as plant
+        layout = geometry.Layout.of(plant.NOTE)
+
+        def findings(data):
+            read = xr.read(json.dumps(data), len(layout.units), version=interpretation.INTERPRETATION_VERSION_V3)
+            if isinstance(read, xr.Refusal):
+                return None
+            found = cs.check(read, VOCABULARY, located(layout), sections_of(layout, data))
+            keys = [*found.structure, *found.consistency, *found.literal, *found.qualified]
+            return {item: set(found.reasons(item)) for item in dict.fromkeys(keys)}
+
+        for family, field, name, shape in plant.plants():
+            with self.subTest(slot=(family.value, field.attribute.value, name), shape=shape):
+                data, facts = plant.planted(family, field, name, shape)
+                over = findings(data)
+                if over is None:
+                    self.assertIn((family, field.attribute), xr.WHOLE_ANSWER_SLOTS)
+                    continue
+                own = (family, name, field.attribute)
+                for index in range(len(facts)):
+                    alone = findings(plant.planted(family, field, name, shape, index)[0])
+                    for item, reasons in alone.items():
+                        if (item.family, item.object, item.attribute) == own:
+                            continue  # the slot's own facts: every one is unresolved (slot_overfull)
+                        self.assertLessEqual(reasons, over.get(item, set()), (index, item))
+
+
 class K6Tests(Case):
     def test_a_point_the_endoscope_and_a_device_both_reached(self):
         def device(point, state='supported'):
@@ -1024,10 +1599,12 @@ class L1Tests(Case):
         dated_2023 = dated(relation('E2', 'on_date_of_service', 'S12', date=[fact('2023', 'S3', words='2023')]))
         self.assertEqual(self.found(dated_2023, DATES), {key(F.EVENT, 'E2', A.DATE_RELATION): {'literal_mismatch'}})
 
-    def test_only_a_supported_date_is_read_into_a_relation(self):
+    def test_a_negated_date_is_never_read_into_a_relation_and_a_contradicted_one_on_each_side(self):
         """DECISIONS D193 and the arbiter triage's repair 2b#5: a NEGATED date is no evidence of when the act was done.
         E2's own on_date_of_service cites S12 (no literal) and its date is denied, 2026-11-08 citing "11/08/2026": no
-        reason, and the relation stores no literal; the same date supported is literal_mismatch."""
+        reason, and the relation stores no literal; the same date supported is literal_mismatch. A contradicted date is
+        read on each side (AMENDMENT-2 4.3.3 [R:truth-T3]: L1 fires for each side of pass 1's own contradiction, which
+        supersedes 2b#5's "a contradicted one states no date"; refute-f3s-r1 finding 1)."""
         own = key(F.EVENT, 'E2', A.DATE_RELATION)
         denied = dated(relation('E2', 'on_date_of_service', 'S12',
                                 date=[fact('2026-11-08', 'S7', state='negated', words='11/08/2026')]))
@@ -1037,7 +1614,10 @@ class L1Tests(Case):
         self.assertEqual(self.found(stated, DATES), {own: {'literal_mismatch'}})
         contradicted_date = dated(relation('E2', 'on_date_of_service', 'S12',
                                            date=[contradicted(('2026-11-08', 'S7'), ('2026-11-10', 'S9'))]))
-        self.assertEqual(self.check(contradicted_date, DATES).literals[own], ())  # a contradicted date states none
+        lit, day = ct.StoredLiteral, ct.Precision.DAY
+        self.assertEqual(self.check(contradicted_date, DATES).literals[own],  # each side's whole unit, read
+                         (lit('2026-11-08', day), lit('2026-11-10', day)))
+        self.assertEqual(self.found(contradicted_date, DATES), {own: {'literal_mismatch'}})
 
     def test_earlier_date_needs_every_literal_to_end_before_it(self):
         mismatch, own = {'literal_mismatch'}, key(F.EVENT, 'E2', A.DATE_RELATION)
@@ -1155,7 +1735,7 @@ class InheritedDateTests(Case):
         self.assertEqual(self.check(dated(own, occasion=self.ON), DATES, {'E2': 'N0'}).literals[self.INHERITED],
                          (ct.StoredLiteral('2023', ct.Precision.YEAR),))  # its own words and its date's only
 
-    def test_nothing_is_inherited_without_a_supported_date_a_section_or_an_occasion(self):
+    def test_nothing_is_inherited_without_a_stated_date_a_section_or_an_occasion(self):
         for value, containing in ((dated(self.act(state='negated'), occasion=self.ON), None),
                                   (dated(event('E2', ['S12'], fact('biopsy', 'S12'), fact('performed', 'S12')),
                                          occasion=self.ON), None),

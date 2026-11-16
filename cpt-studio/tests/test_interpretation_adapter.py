@@ -1221,6 +1221,12 @@ class ReplayTests(OfflineTestCase):
 # --- the configured interpreter and its settings -------------------------------------------------------------------------
 
 class ConfiguredTests(SimpleTestCase):
+    """The configured interpreter and the settings the pipeline reads, restated with AMENDMENT-2 1.12 (D289's G2-01;
+    W9R-BUILD-LIST B21): v1's configured interpreter reads the shared settings, so its default-settings expectations
+    are the settings (1.12's 1,320 s), never D49's literals, which stay the dormant adapter's own constants; the
+    settings are 1.12's literal assignments; and pass 1's settings hold the output maximum of the module that sends on
+    the interpreter's path (fable_adapter.MAX_TOKENS), with the read, the stage and its stale threshold above them."""
+
     def test_the_configured_interpreter_for_each_mode(self):
         with override_settings(GEMINI_MODE='disabled'):
             self.assertIsNone(adapter.get_interpreter())
@@ -1232,7 +1238,9 @@ class ConfiguredTests(SimpleTestCase):
             live = adapter.get_interpreter()  # the file is read at send time, never here
         self.assertIsInstance(live, GeminiInterpreter)
         self.assertEqual((live.mode, live.endpoint, live.credentials_path, live.connect_timeout, live.read_timeout,
-                          live.send_deadline), ('live', ENDPOINT, '/nonexistent/gemini.env', 10, 480, 510))
+                          live.send_deadline), ('live', ENDPOINT, '/nonexistent/gemini.env', 10,
+                                                settings.INTERPRETER_READ_TIMEOUT_SECONDS,
+                                                settings.INTERPRETER_SEND_DEADLINE_SECONDS))
         with override_settings(GEMINI_MODE='replay', GEMINI_REPLAY_DIR=''):
             with self.assertRaisesMessage(ProviderUnavailable, 'Replay interpretation needs CPT_STUDIO_GEMINI_REPLAY_DIR.'):
                 adapter.get_interpreter()
@@ -1240,25 +1248,33 @@ class ConfiguredTests(SimpleTestCase):
             replayed = adapter.get_interpreter()
         self.assertIsInstance(replayed, ReplayInterpreter)
         self.assertEqual((replayed.mode, replayed.endpoint, replayed.replay_dir, replayed.send_deadline),
-                         ('replay', '', Path('/nonexistent/recordings'), 510))
+                         ('replay', '', Path('/nonexistent/recordings'), settings.INTERPRETER_SEND_DEADLINE_SECONDS))
         with override_settings(GEMINI_MODE='live', GEMINI_CREDENTIALS_FILE='/x.env'):
             self.assertIsNone(adapter.get_interpreter('disabled'))  # an explicit mode wins
         with self.assertRaises(ValueError):
             adapter.get_interpreter('bogus')
 
-    def test_the_settings_the_pipeline_reads(self):
+    def test_pass_1_fits_the_bounds_the_senders_output_maximum_sets(self):
         from studio import jobs
+        from studio.interpretation import fable_adapter
 
+        deadline, interpret = settings.INTERPRETER_SEND_DEADLINE_SECONDS, settings.JOB_DEADLINE_SECONDS['interpret']
+        # 1.12: the output maximum at 100 tokens per second, plus 40 s for the connection, the prefill and the tail
+        self.assertLessEqual(fable_adapter.MAX_TOKENS / 100 + 40, deadline)
+        self.assertLessEqual(settings.INTERPRETER_READ_TIMEOUT_SECONDS, deadline)  # never cuts before the deadline
+        # FINAL 6.3 as 1.12 restates it: the send, its recording and 45 s of work fit the stage, and the stage ends
+        # before its own stale-stage threshold
+        self.assertLessEqual(deadline + jobs.LOOP_RECORDING_SECONDS + 45, interpret)
+        self.assertLess(interpret, settings.STALE_RUNNING_SECONDS_BY_KIND['interpret'])
+
+    def test_the_settings_the_pipeline_reads(self):
         self.assertEqual(settings.GEMINI_MODE, 'disabled')  # the default: nothing is sent
-        self.assertEqual(settings.INTERPRETER_SEND_DEADLINE_SECONDS, adapter.SEND_DEADLINE_SECONDS)
-        self.assertEqual(settings.INTERPRETER_READ_TIMEOUT_SECONDS, adapter.READ_TIMEOUT_SECONDS)  # D49
-        self.assertLess(settings.INTERPRETER_READ_TIMEOUT_SECONDS, settings.INTERPRETER_SEND_DEADLINE_SECONDS)
-        interpret = settings.JOB_DEADLINE_SECONDS['interpret']
-        self.assertEqual(interpret, 560)  # D49
-        # FINAL 6.3: the send and its recording fit the stage, and the stage ends before the stale-stage sweep
-        self.assertLess(settings.INTERPRETER_SEND_DEADLINE_SECONDS + jobs.LOOP_RECORDING_SECONDS, interpret)
-        self.assertLess(interpret, settings.STALE_RUNNING_SECONDS)
-        self.assertEqual((settings.INTERPRET_MAX_CHARS, settings.INTERPRET_MAX_PAGES), (20_000, 40))  # DECISIONS D25
+        # 1.12's values; the dormant adapter keeps D49's as its own constants, no longer the settings'
+        stale = settings.STALE_RUNNING_SECONDS_BY_KIND
+        self.assertEqual((settings.INTERPRETER_SEND_DEADLINE_SECONDS, settings.INTERPRETER_READ_TIMEOUT_SECONDS,
+                          settings.JOB_DEADLINE_SECONDS['interpret'], stale['interpret']), (1320, 1320, 1380, 1440))
+        self.assertEqual((adapter.SEND_DEADLINE_SECONDS, adapter.READ_TIMEOUT_SECONDS), (510, 480))  # D49
+        self.assertEqual((settings.INTERPRET_MAX_CHARS, settings.INTERPRET_MAX_PAGES), (20_000, 40))  # D25, D278
         self.assertEqual(len(interpretation.JOB_KIND), 9)
         source = (APP / 'cptstudio' / 'settings.py').read_text(encoding='utf-8')
         # the form the installer's tests pin a credentials setting by (ops/test_install_harness.py)
@@ -1271,8 +1287,8 @@ class ConfiguredTests(SimpleTestCase):
                 except (ValueError, TypeError, SyntaxError):
                     pass
         self.assertEqual((literals['INTERPRETER_SEND_DEADLINE_SECONDS'], literals['INTERPRET_MAX_CHARS'],
-                          literals['INTERPRET_MAX_PAGES'], literals['JOB_DEADLINE_SECONDS']['interpret']),
-                         (510, 20_000, 40, 560))
+                          literals['INTERPRET_MAX_PAGES'], literals['JOB_DEADLINE_SECONDS']['interpret'],
+                          literals['STALE_RUNNING_SECONDS_BY_KIND']['interpret']), (1320, 20_000, 40, 1380, 1440))
 
     def run_settings(self, **environment):
         script = 'import cptstudio.settings as s\nprint(s.GEMINI_MODE)\n'

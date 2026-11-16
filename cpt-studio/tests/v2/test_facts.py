@@ -1917,12 +1917,276 @@ class K3SessionTests(SimpleTestCase):
                 self.assertEqual((found['status'], found['item'], found['item_kind']), wanted)
                 self.assertTrue(F.possibly(F.fact(run.R, E3, A.SESSION), X1))  # the EGD's session
         # the positive control: without the widening, (ii) and (iii) read the claimed session alone: 43235 READY
-        with mock.patch.object(F, '_k3_widened', lambda sessions, held: held):
+        with mock.patch.object(F, '_k3_widened', lambda sessions, held, overfilled=False: held):
             for variant in ('ii', 'iii'):
                 run = FC.run.__wrapped__('N1', variant)
                 with self.subTest(variant=variant, widening='off'):
                     self.assertEqual(FC.outcomes(run.assessment)['43235']['status'], 'ready')
                     self.assertFalse(F.possibly(F.fact(run.R, E3, A.SESSION), X1))
+
+
+# --- AMENDMENT-2 4.3.3: an overfilled slot read as one merged view; DECISIONS D287's established_kind ---------------
+
+
+def written_fact(state: str, value: str, units=('S5',), *, options=(), reasons=('slot_overfull',)) -> dict:
+    """One written fact of an overfilled slot as store.textfree_v2 gives it (AMENDMENT-2 4.3.1, 4.3.6): its claim as
+    pass 1 wrote it, never claimed (no appraisal), unresolved for slot_overfull."""
+    return {'claim': claim(state, value, options=options), 'sources': [{'units': list(units), 'link': 'statement',
+                                                                         'at': None, 'geometry': 'ok'}],
+            'checks': checks(), 'appraisal': None, 'result': 'unresolved', 'reasons': list(reasons)}
+
+
+def planted(view_: typing.Mapping, family, subject: str, attribute, facts: list) -> dict:
+    """``view_`` (a text-free view) with ``subject``'s single-valued ``attribute`` an overfilled slot holding ``facts``:
+    a list at the slot's key, as store.py stores one for a gemini-inventory@3 row (4.3.6)."""
+    events = json.loads(json.dumps(view_))
+    record = events['encounter'] if family is None else next(
+        item for item in events[TABLE_OF[family]] if item['id'] == subject)
+    *path, key = attribute.value.split('.')
+    for name in path:
+        record = record[name]
+    record[key] = facts
+    return events
+
+
+TABLE_OF = {IdFamily.PERSON: 'people', IdFamily.SECTION: 'sections', IdFamily.SESSION: 'sessions',
+            IdFamily.ANATOMY: 'anatomy', IdFamily.LESION: 'lesions', IdFamily.EVENT: 'events'}
+SUBJECTS = {None: '', IdFamily.PERSON: 'P1', IdFamily.SECTION: 'N1', IdFamily.SESSION: 'X1', IdFamily.ANATOMY: 'Y1',
+            IdFamily.LESION: 'L1', IdFamily.EVENT: 'E2'}
+
+
+def three_values(family, attribute) -> list:
+    """Three distinct values of the attribute's domain, as pass 1 writes them (facts.DOMAINS)."""
+    domain = F.DOMAINS[(family, attribute)]
+    if domain.enum is not None:
+        found = [member.value for member in list(domain.enum)[:3]]
+        return found + found[-1:] * (3 - len(found))  # a two-member domain writes its second value twice
+    if domain.family is not None:
+        return [f'{domain.family.value}{number}' for number in (1, 2, 3)]
+    return ['2026-11-09', '2026-11-08', '2026-11-07']
+
+
+def parsed(family, attribute, raw: str):
+    return F._value(raw, F.DOMAINS[(family, attribute)], 'a test value')
+
+
+class OverfilledSlotTests(SimpleTestCase):
+    """AMENDMENT-2 4.3.3 and 4.4 [R:truth-T1][R:truth-T2][R:truth-T5][R:truth-T9], the FactSet's half of the plant test:
+    on EACH of the 38 slot attributes, an overfilled slot - supported values only (A-v6's shape), one supported value
+    beside negated others (A-v2's), negated values only - is read as ONE Fact: unresolved, value None, state contradicted,
+    reason slot_overfull alone, the written values its options in written order (never a value pass 1 did not write,
+    never the domain), the denied ones its negated_values; never silent and never established, so nothing derived from
+    the slot is. The store's acceptance of such a row (4.3.6) is step f3s's; these rows are the text-free view as it gives
+    one."""
+
+    def test_the_slots_are_the_answers_38_slot_attributes(self):
+        from studio.interpretation.contract import extract_schema as XS
+
+        families = {XS.Family.ENCOUNTER: None, XS.Family.PERSON: IdFamily.PERSON, XS.Family.SECTION: IdFamily.SECTION,
+                    XS.Family.SESSION: IdFamily.SESSION, XS.Family.ANATOMY: IdFamily.ANATOMY,
+                    XS.Family.LESION: IdFamily.LESION, XS.Family.EVENT: IdFamily.EVENT}
+        slots = {(families[family], field_.attribute) for family, fields_ in XS.ATTRIBUTES.items() for field_ in fields_
+                 if field_.arity is XS.Arity.SLOT}
+        self.assertEqual(len(slots), 38)
+        self.assertEqual(F.SLOTS, slots)
+        self.assertEqual(F.REQUIRED_FACTS & F.SLOTS, frozenset())
+
+    def test_every_slot_attribute_in_every_shape_is_one_merged_view(self):
+        base = view(colonoscopy())
+        checked = 0
+        for family, attribute in sorted(F.SLOTS, key=lambda key: (str(key[0]), key[1].value)):
+            v1, v2, v3 = three_values(family, attribute)
+            subject = SUBJECTS[family]
+            for shape, written in (('supported only (A-v6)', [('supported', v1), ('supported', v2)]),
+                                   ('one supported, others negated (A-v2)',
+                                    [('supported', v1), ('negated', v2), ('negated', v3)]),
+                                   ('negated only', [('negated', v1), ('negated', v2)])):
+                with self.subTest(attribute=attribute.value, family=family, shape=shape):
+                    facts = [written_fact(state, value, units=(f'S{index + 5}',))
+                             for index, (state, value) in enumerate(written)]
+                    R = F.factset(planted(base, family, subject, attribute, facts))
+                    found = F.fact(R, None if family is None else Id.parse(subject), attribute)
+                    values = tuple(dict.fromkeys(parsed(family, attribute, value) for _state, value in written))
+                    stated = {parsed(family, attribute, value) for state, value in written if state != 'negated'}
+                    denied = tuple(dict.fromkeys(parsed(family, attribute, value) for state, value in written
+                                                 if state == 'negated' and parsed(family, attribute, value)
+                                                 not in stated))
+                    self.assertEqual((found.result, found.value, found.state, found.reasons),
+                                     (ct.Result.UNRESOLVED, None, ct.FactState.CONTRADICTED,
+                                      (ct.Reason.SLOT_OVERFULL,)))
+                    self.assertEqual((found.options, found.negated_values), (values, denied))
+                    self.assertEqual(found.spans, tuple(unit_span(index + 5) for index in range(len(written))))
+                    self.assertEqual(len(found.cited), len(written))
+                    self.assertTrue(F.overfilled(found))
+                    self.assertTrue(F.open_denial(found))  # 4.3.3 a, read fail-closed (the step's NOTES, Q1R)
+                    self.assertFalse(F.silent(found) or F.established(found))
+                    self.assertFalse(any(F.holds(found, value) or F.denied(found, value) for value in values))
+                    self.assertTrue(all(F.possibly(found, value) for value in values))  # 4.3.3 a: every written value
+                    self.assertEqual(F.claimed_values(found), tuple(value for value in values if value not in denied))
+                    checked += 1
+        self.assertEqual(checked, 38 * 3)
+
+    def test_the_view_carries_only_written_values_and_reads_like_test_combination_builds_it(self):
+        """The options are the written values - a written contradiction's sides among them - then what each written
+        fact read alone leaves possible besides (a doubt naming the object); a value written both supported and negated
+        is stated, never in negated_values (the fail-closed reading for the claimed-value readers, this step's NOTES
+        question Q1), and so is a denied value a doubt offers (question Q1R: the written fact the doubt names, read
+        alone, leaves it possible); and the builder's view equals the form tests/v2/test_combination.overfilled builds."""
+        from tests.v2 import test_combination as TC
+
+        base = view(colonoscopy())
+        both = F.factset(planted(base, IdFamily.EVENT, 'E2', A.TECHNIQUE_DEVICE, [
+            written_fact('supported', 'manual'), written_fact('negated', 'manual'),
+            written_fact('negated', 'hot_snare')]))
+        device = F.fact(both, E2, A.TECHNIQUE_DEVICE)
+        self.assertEqual((device.options, device.negated_values),
+                         ((ct.Device.MANUAL, ct.Device.HOT_SNARE), (ct.Device.HOT_SNARE,)))
+        self.assertEqual(device, dataclasses.replace(
+            TC.overfilled((ct.FactState.SUPPORTED, ct.Device.MANUAL), (ct.FactState.NEGATED, ct.Device.MANUAL),
+                          (ct.FactState.NEGATED, ct.Device.HOT_SNARE)), spans=device.spans, cited=device.cited))
+        sides = F.factset(planted(base, IdFamily.EVENT, 'E2', A.TECHNIQUE_DEVICE, [
+            written_fact('contradicted', '', options=[{'value': 'cold_snare', 'sources': []},
+                                                      {'value': 'hot_snare', 'sources': []}]),
+            written_fact('supported', 'endoscope')]))
+        self.assertEqual(F.fact(sides, E2, A.TECHNIQUE_DEVICE).options,
+                         (ct.Device.COLD_SNARE, ct.Device.HOT_SNARE, ct.Device.ENDOSCOPE))
+        doubted_ = F.factset(planted(base, IdFamily.EVENT, 'E3', A.PERFORMER, [
+            written_fact('supported', 'documenting_team'), written_fact('supported', 'other_clinician')]))
+        performer = F.fact(doubted_, E3, A.PERFORMER)  # the colonoscopy's doubt names E3's performer
+        self.assertEqual(performer.options, (ct.Performer.DOCUMENTING_TEAM, ct.Performer.OTHER_CLINICIAN,
+                                             ct.Performer.OTHER_FACILITY))  # the written values, then the reading
+        plain_device = F.fact(F.factset(planted(base, IdFamily.EVENT, 'E2', A.TECHNIQUE_DEVICE, [
+            written_fact('supported', 'endoscope'), written_fact('supported', 'endoscope')])), E2, A.TECHNIQUE_DEVICE)
+        self.assertEqual(plain_device.options, (ct.Device.ENDOSCOPE,))  # never a value nobody wrote, never the domain
+        offered = F.fact(F.factset(planted(base, IdFamily.EVENT, 'E3', A.PERFORMER, [
+            written_fact('supported', 'other_clinician'), written_fact('negated', 'other_facility')])), E3, A.PERFORMER)
+        # the colonoscopy's doubt names E3's performer and reads documenting_team and other_facility: other_facility,
+        # denied by a written fact, is offered by the doubt, so it is not only denied (as built, it was negated_values')
+        self.assertEqual((offered.options, offered.negated_values),
+                         ((ct.Performer.OTHER_CLINICIAN, ct.Performer.OTHER_FACILITY, ct.Performer.DOCUMENTING_TEAM), ()))
+        self.assertEqual(F.claimed_values(offered), offered.options)
+        self.assertEqual(offered, dataclasses.replace(
+            TC.overfilled((ct.FactState.SUPPORTED, ct.Performer.OTHER_CLINICIAN),
+                          (ct.FactState.NEGATED, ct.Performer.OTHER_FACILITY),
+                          readings=(ct.Performer.DOCUMENTING_TEAM, ct.Performer.OTHER_FACILITY)),
+            spans=offered.spans, cited=offered.cited))
+
+    def test_a_list_the_slot_rule_does_not_make_is_refused(self):
+        base = view(colonoscopy())
+        for name, family, subject, attribute, facts in (
+                ('one fact in a list', IdFamily.EVENT, 'E2', A.TECHNIQUE_DEVICE, [written_fact('supported', 'manual')]),
+                ('a fact without slot_overfull', IdFamily.EVENT, 'E2', A.TECHNIQUE_DEVICE,
+                 [written_fact('supported', 'manual'), written_fact('supported', 'endoscope', reasons=('unappraised',))]),
+                ('a required fact (kind)', IdFamily.EVENT, 'E2', A.KIND,
+                 [written_fact('supported', 'snare'), written_fact('supported', 'biopsy')]),
+                ('a required fact (status)', IdFamily.EVENT, 'E2', A.STATUS,
+                 [written_fact('supported', 'performed'), written_fact('supported', 'planned')]),
+                ('a value outside the domain', IdFamily.EVENT, 'E2', A.TECHNIQUE_DEVICE,
+                 [written_fact('supported', 'manual'), written_fact('supported', 'lasso')])):
+            with self.subTest(name), self.assertRaises(F.FactSetError):
+                F.factset(planted(base, family, subject, attribute, facts))
+
+    def test_a_written_fact_k3_demoted_keeps_the_merged_session_widened(self):
+        """4.4's property for the K3 reader: an overfilled session slot one of whose written facts carries
+        session_unreachable is widened as that fact alone would be (DECISIONS D244 Q-N1), never narrower; without the
+        finding it reads its written sessions only."""
+        def row(reasons):
+            base = json.loads(json.dumps(view(k3_row())))
+            event_ = next(item for item in base['events'] if item['id'] == 'E3')
+            event_['session'] = [written_fact('supported', 'X2', units=('S6',), reasons=reasons),
+                                 written_fact('supported', 'X5', units=('S6',))]
+            return F.factset(base)
+
+        widened = F.fact(row(('slot_overfull', 'session_unreachable')), E3, A.SESSION)
+        plain = F.fact(row(('slot_overfull',)), E3, A.SESSION)
+        self.assertEqual(plain.options, (Id(IdFamily.SESSION, 2), Id(IdFamily.SESSION, 5)))
+        self.assertIn(X1, widened.options)  # the EGD, whose reach holds the gastric body
+        self.assertEqual(widened.options[:2], plain.options)
+        self.assertEqual(widened.reasons, (ct.Reason.SLOT_OVERFULL,))
+
+    def test_an_overfilled_occasion_re_judges_its_acts_on_every_written_literal(self):
+        """L1 only demotes: an act's inherited date relation stored with no literal of its own is re-judged on the
+        literals of EVERY written fact of its section's overfilled occasion."""
+        events = json.loads(json.dumps(view(colonoscopy())))
+        section_ = next(item for item in events['sections'] if item['id'] == 'N2')
+        day, year = {'value': '2026-11-09', 'precision': 'day'}, {'value': '2023', 'precision': 'year'}
+        section_['occasion'] = [dict(written_fact('supported', 'on_date_of_service'), checks=checks([day])),
+                                dict(written_fact('supported', 'earlier_date'), checks=checks([year]))]
+        for item in events['events']:
+            if item['id'] == 'E1':
+                item['date_relation']['checks']['literals'] = []
+        R = F.effective(events, datetime.date(2026, 11, 9))
+        self.assertIn(ct.Reason.LITERAL_MISMATCH, F.fact(R, E1, A.DATE_RELATION).reasons)  # 2023 fails the day
+
+
+class EstablishedKindTests(SimpleTestCase):
+    """DECISIONS D287 (G3-28; build list B9): facts.established_kind, the one label of an act - questions.act_kind's
+    event branch moved here, which every conflict key reads."""
+
+    def test_the_one_label_by_state(self):
+        def R_with(kind, purpose=None):
+            facts_ = {A.KIND: (kind,)}
+            if purpose is not None:
+                facts_[A.PURPOSE] = (purpose,)
+            return FactSet(encounter={}, people={}, sections={}, sessions={}, anatomy={}, lesions={}, events={E1: facts_},
+                           anchors={}, unlisted=(), pair_controls={}, completeness={})
+
+        clip, snare = ct.Kind.CLIP, ct.Kind.SNARE
+        for name, kind, purpose, label in (
+                ('supported', sup(snare), None, snare), ('silent', F.SILENT, None, ct.Kind.OTHER),
+                ('unresolved', unresolved(snare), None, ct.Kind.OTHER), ('doubted', doubted(snare), None, ct.Kind.OTHER),
+                ('negated', neg(snare), None, ct.Kind.OTHER),
+                ('contradicted', Fact(result=ct.Result.CONTRADICTED, value=None, state=ct.FactState.CONTRADICTED,
+                                      options=(snare, clip), reasons=(), spans=()), None, ct.Kind.OTHER),
+                ('overfilled', Fact(result=ct.Result.UNRESOLVED, value=None, state=ct.FactState.CONTRADICTED,
+                                    options=(snare,), reasons=(ct.Reason.SLOT_OVERFULL,), spans=()), None, ct.Kind.OTHER),
+                ('kind other', sup(ct.Kind.OTHER), None, ct.Kind.OTHER),
+                ('a clip supported for hemostasis', sup(clip), sup(ct.Purpose.HEMOSTASIS), ct.Kind.BLEEDING_CONTROL),
+                ('a clip whose purpose is unresolved', sup(clip), unresolved(ct.Purpose.HEMOSTASIS), clip)):
+            with self.subTest(name):
+                R = R_with(kind, purpose)
+                self.assertEqual(F.established_kind(R, E1), label)
+                from studio.interpretation.engine import questions as Q
+                self.assertEqual(Q.act_kind(R, E1, ()), label)  # the label questions.act_kind gives: one derivation
+
+    def test_open_denial_by_state(self):
+        """facts.open_denial (AMENDMENT-2 4.3.3 a; refute-f3e-r1 F1, the step's NOTES question Q1R): what a possibility
+        reader that takes an unestablished denial as leaving every value open reads so - a claim written negated, in any
+        result but negated, and EVERY overfilled slot's merged view, whatever its written facts; never a supported,
+        unresolved, doubted or contradicted claim that is not a view, nor a silent slot."""
+        def view(options, negated=()):
+            return Fact(result=ct.Result.UNRESOLVED, value=None, state=ct.FactState.CONTRADICTED, options=options,
+                        reasons=(ct.Reason.SLOT_OVERFULL,), spans=(), negated_values=negated)
+
+        X2_ = Id(IdFamily.SESSION, 2)
+        for name, found, expected in (
+                ('supported', sup(X1), False), ('unresolved', unresolved(X1), False), ('doubted', doubted(X1), False),
+                ('silent', F.SILENT, False),
+                ('contradicted', Fact(result=ct.Result.CONTRADICTED, value=None, state=ct.FactState.CONTRADICTED,
+                                      options=(X1, X2_), reasons=(ct.Reason.CONTRADICTED_BY_PASS1,), spans=()), False),
+                ('a negated claim left unresolved', dataclasses.replace(unresolved(X1), state=ct.FactState.NEGATED),
+                 True),
+                ('a view of X1 written stated and denied', view((X1,)), True),
+                ('a view of X1 and X2 stated', view((X1, X2_)), True),
+                ('a view denying X2', view((X1, X2_), (X2_,)), True)):
+            with self.subTest(name):
+                self.assertEqual(F.open_denial(found), expected)
+
+    def test_claimed_values_by_state(self):
+        X2_ = Id(IdFamily.SESSION, 2)
+        for name, found, claimed in (
+                ('supported', sup(X1), (X1,)), ('unresolved', unresolved(X1), (X1,)), ('doubted', doubted(X1), (X1,)),
+                ('a doubt reading beside a claim', dataclasses.replace(doubted(X1), options=(X2_,)), (X1,)),
+                ('negated', neg(X1), ()),
+                ('silent', F.SILENT, ()),
+                ('contradicted', Fact(result=ct.Result.CONTRADICTED, value=None, state=ct.FactState.CONTRADICTED,
+                                      options=(X1, X2_), reasons=(), spans=()), (X1, X2_)),
+                ('overfilled, X2 denied', Fact(result=ct.Result.UNRESOLVED, value=None,
+                                               state=ct.FactState.CONTRADICTED, options=(X1, X2_),
+                                               reasons=(ct.Reason.SLOT_OVERFULL,), spans=(),
+                                               negated_values=(X2_,)), (X1,))):
+            with self.subTest(name):
+                self.assertEqual(F.claimed_values(found), claimed)
 
 
 # --- effective(): L1 re-judged (4.2, 6.5) ---------------------------------------------------------------------------------

@@ -2004,12 +2004,29 @@ class D265DigitalExaminationTests(SimpleTestCase):
                 self.assertFalse(P.paired(R, E1, E2))
 
     def test_the_statement_side_is_read_as_before(self):
-        """A digital examination that is a statement - "No digital rectal examination was performed." (kind examination,
-        device manual, status negated) - still pairs with the session's endoscopic examination (as built: the step's
-        NOTES, question Q-R4A-DRES - removing it would release under 9.4's device weakening)."""
+        """Restated for DECISIONS D280.2 (step f3w; build list B2, G3-24's option (b) read on the ESTABLISHED device): a
+        digital examination ESTABLISHED as one that is a statement - "No digital rectal examination was performed."
+        (kind supported examination, device supported manual, status negated) - concerns no examination act and is never
+        paired with the session's endoscopic examination (before: paired, the step's NOTES' Q-R4A-DRES); one whose device
+        only CLAIMS manual (unresolved, doubted, contradicted) keeps pairing, as built (option (a)): a 9.4 weakening never
+        creates a supported device, so neither reading releases under one."""
         R = build({E1: denial(kind=sup(Kind.EXAMINATION), device=sup(Device.MANUAL)), E2: examination()})
+        self.assertTrue(P.established_digital(R, E1))
+        self.assertEqual(P.statement_kinds(R, E1), frozenset())
+        self.assertFalse(P.paired(R, E1, E2))
+        self.assertEqual(P.pairs_of(R, E2), ())
+        for name, device in CLAIMING[1:]:
+            with self.subTest(device=name):
+                R = build({E1: denial(kind=sup(Kind.EXAMINATION), device=device), E2: examination()})
+                self.assertFalse(P.established_digital(R, E1))
+                self.assertEqual(P.statement_kinds(R, E1), frozenset({Kind.EXAMINATION}))
+                self.assertTrue(P.paired(R, E1, E2))
+                self.assertIsNot(relation_of(R).relation, P.Relation.INDEPENDENT)
+        # a statement whose kind is not established keeps every kind of its family, its device supported manual or not
+        R = build({E1: denial(kind=unres(Kind.EXAMINATION), device=sup(Device.MANUAL)), E2: examination()})
+        self.assertFalse(P.established_digital(R, E1))
+        self.assertIn(Kind.EXAMINATION, P.statement_kinds(R, E1))
         self.assertTrue(P.paired(R, E1, E2))
-        self.assertIsNot(relation_of(R).relation, P.Relation.INDEPENDENT)
 
     def test_one_derivation_with_questions_and_combination(self):
         """``digital_examination`` is engine/questions.digital_examination's derivation (that function calls it), and
@@ -2024,6 +2041,357 @@ class D265DigitalExaminationTests(SimpleTestCase):
                     self.assertEqual(P.digital_examination(R, E2), questions.digital_examination(R, E2))
                     if F.possibly(F.fact(R, E2, A.KIND), Kind.EXAMINATION):
                         self.assertEqual(P.digital_examination(R, E2), combination._digital(R, E2))
+        # AMENDMENT-2 4.3.3 c [R:truth-T2] (step f3w, request R1 of step f3e): the overfilled device slots, the twin read
+        for name, device in OVERFILLED_DEVICES:
+            for kind in kinds:
+                with self.subTest(device=name, kind=kind.value):
+                    R = build({E2: examination(kind=kind, device=device)})
+                    self.assertEqual(P.digital_examination(R, E2), questions.digital_examination(R, E2))
+                    if F.possibly(F.fact(R, E2, A.KIND), Kind.EXAMINATION):
+                        self.assertEqual(P.digital_examination(R, E2), combination._digital(R, E2))
+
+
+def overfilled(*written) -> Fact:
+    """An overfilled slot's merged view as engine/facts._overfilled builds it (AMENDMENT-2 4.3.3; tests/v2/
+    test_combination.overfilled's form): ``written`` its written facts as (state, value)."""
+    values = tuple(dict.fromkeys(value for _state, value in written))
+    stated = {value for state, value in written if state is not State.NEGATED}
+    denied = tuple(dict.fromkeys(value for state, value in written if state is State.NEGATED and value not in stated))
+    return Fact(result=Res.UNRESOLVED, value=None, state=State.CONTRADICTED, options=values,
+                reasons=(ct.Reason.SLOT_OVERFULL,), spans=(), negated_values=denied)
+
+
+# (name, the device slot's merged view, whether it claims manual): AMENDMENT-2 4.3.3 c's claimed-value reading
+OVERFILLED_DEVICES = (
+    ('[endoscope, endoscope]', overfilled((State.SUPPORTED, Device.ENDOSCOPE), (State.SUPPORTED, Device.ENDOSCOPE))),
+    ('[endoscope stated, manual denied]', overfilled((State.SUPPORTED, Device.ENDOSCOPE), (State.NEGATED, Device.MANUAL))),
+    ('[manual stated, endoscope stated]', overfilled((State.SUPPORTED, Device.MANUAL), (State.SUPPORTED, Device.ENDOSCOPE))),
+    ('[manual stated, manual denied]', overfilled((State.SUPPORTED, Device.MANUAL), (State.NEGATED, Device.MANUAL))),
+    ('[manual denied, endoscope denied]', overfilled((State.NEGATED, Device.MANUAL), (State.NEGATED, Device.ENDOSCOPE))),
+)
+OVERFILLED_CLAIMS = {'[endoscope, endoscope]': False, '[endoscope stated, manual denied]': False,
+                     '[manual stated, endoscope stated]': True, '[manual stated, manual denied]': True,
+                     '[manual denied, endoscope denied]': False}
+
+
+class OverfilledDeviceTests(SimpleTestCase):
+    """AMENDMENT-2 4.3.3 c [R:truth-T2] (step f3w; step f3e's request R1): ``digital_examination`` is a claimed-value
+    reader - an overfilled device slot claims manual only when a written fact states it, so a manual every written fact
+    denies (``negated_values``) is no claim: an endoscope written twice, or beside a denied manual, is the session's
+    examination (an examination statement pairs with it); manual stated beside an endoscope keeps it a digital
+    examination (QD2's hold, D280.3: never established, so never ``established_digital``). A value written both stated
+    and denied is stated (step f3e's question Q1, the fail-closed reading)."""
+
+    def test_the_claimed_values_are_the_stated_ones(self):
+        for name, device in OVERFILLED_DEVICES:
+            with self.subTest(device=name):
+                R = build({E1: denial(kind=sup(Kind.EXAMINATION)), E2: examination(device=device)})
+                self.assertEqual(P.digital_examination(R, E2), OVERFILLED_CLAIMS[name])
+                self.assertFalse(P.established_digital(R, E2))
+                self.assertEqual(Kind.EXAMINATION in P.act_kinds(R, E2), not OVERFILLED_CLAIMS[name])
+                self.assertEqual(P.paired(R, E1, E2), not OVERFILLED_CLAIMS[name])
+                # on the statement side an overfilled device never establishes a digital examination: it keeps pairing
+                R = build({E1: denial(kind=sup(Kind.EXAMINATION), device=device), E2: examination()})
+                self.assertTrue(P.paired(R, E1, E2))
+                self.assertEqual(P.row(R, P.Row.TECHNIQUE, E1, E2), UNRESOLVED)  # the device not established
+
+
+# --- DECISIONS D280.2 through assess: g3b's G3-24 grid and refute-safety's dre_statement (build list B2) -----------------
+
+
+def _assessed(R: FactSet, *codes) -> dict:
+    """engine/assess over ``R`` (tests/v2/test_assess.run): {code: (status, held facts, item)}."""
+    from tests.v2 import test_assess as TA
+    return {found.code: (found.status.value, found.held_facts, found.item) for found in TA.run(R, *codes).codes}
+
+
+class D280StatementGridTests(SimpleTestCase):
+    """DECISIONS D280.2 (build list B2): g3b's 18-shape G3-24 grid - a digital examination E1 that is a statement (its
+    status unresolved, doubted, or an all-of-kind denial), its device supported manual, unresolved manual or manual
+    negated, in X1 or with its session open, beside the colonoscope's done examination E2, 45378 kept on E2 - and
+    refute-safety's dre_statement shapes. Every established-device row is READY with no held fact, as the document
+    without the DRE line (before: held statement_scope, technique, or the DRE's own rows); every claimed or
+    negated-device row is held (a claimed device keeps QD2's hold and its pairing; a negated manual is no digital
+    examination, an examination statement of its own). P-MONO: a 9.4 weakening never creates a supported device, so no
+    established row is the weakening of a held one."""
+
+    STATUSES = (('status unresolved', dict(status=unres(PERFORMED))), ('status doubted', dict(status=doubted(PERFORMED))),
+                ('denial, all of kind', dict(status=neg(PERFORMED), breadth=sup(Breadth.ALL_OF_KIND))))
+    DEVICES = (('device supported manual', sup(Device.MANUAL), 'ready'),
+               ('device unresolved manual', unres(Device.MANUAL), 'needs_clarification'),
+               ('device negated manual', neg(Device.MANUAL), 'needs_clarification'))
+
+    def test_g3_24s_18_shapes(self):
+        from tests.v2 import test_evaluate as TE
+        rows = 0
+        for status_name, status in self.STATUSES:
+            for device_name, device, expected in self.DEVICES:
+                for session_name, session in (('in X1', {}), ('session open', dict(session=unres(X1)))):
+                    with self.subTest(status=status_name, device=device_name, session=session_name):
+                        doc = TE.dre_alone(endoscopic={}, dre=False)
+                        doc.act(1, Kind.EXAMINATION, device=device, **status, **session)
+                        R = doc.build()
+                        found = _assessed(R, ('45378', 2))['45378']
+                        self.assertEqual(found[0], expected)
+                        if expected == 'ready':
+                            self.assertEqual((found[1], found[2]), ((), None))
+                            self.assertFalse(P.pairs_of(R, E2))
+                        rows += 1
+        self.assertEqual(rows, 18)
+        self.assertEqual(_assessed(TE.dre_alone(endoscopic={}, dre=False).build(), ('45378', 2))['45378'][:2],
+                         ('ready', ()))
+
+    def test_refute_safetys_dre_statement_shapes(self):
+        from tests.v2 import test_evaluate as TE
+        for name, over, expected in (
+                ('established, status negated', dict(device=sup(Device.MANUAL), status=neg(PERFORMED)), 'ready'),
+                ('established, status unresolved', dict(device=sup(Device.MANUAL), status=unres(PERFORMED)), 'ready'),
+                ('established, status doubted', dict(device=sup(Device.MANUAL),
+                                                     status=doubted(PERFORMED, Status.PLANNED)), 'ready'),
+                ('established, done', dict(device=sup(Device.MANUAL)), 'ready'),
+                ('claimed, status negated', dict(device=unres(Device.MANUAL), status=neg(PERFORMED)),
+                 'needs_clarification')):
+            with self.subTest(dre=name):
+                doc = TE.dre_alone(endoscopic={}, dre=False)
+                doc.exam(1, **over)
+                found = _assessed(doc.build(), ('45378', 2))['45378']
+                self.assertEqual(found[0], expected)
+                if expected == 'ready':
+                    self.assertEqual(found[1], ())
+
+
+# --- DECISIONS D292's E5j: electrocautery covers the devices that deliver high-frequency current -----------------------
+
+# The judge's G2 inputs for E5j (build-v2/holds/judge/g2/cases_j.py, built from scratch with tests/v2/evaluate_fixtures:
+# each docstring's sentence was written for that file and is never read by the engine), ported: (id, what the design
+# asks, the codes proposed with their units, the code read, the FactSet's builder).
+
+
+def _colon():
+    from tests.v2 import evaluate_fixtures as EF
+    doc = EF.Doc()
+    doc.session(1, SessionKind.COLONOSCOPY, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER),
+                reached=[sup(ct.Extent.CECUM)])
+    doc.exam(1)
+    return doc
+
+
+def _egd():
+    from tests.v2 import evaluate_fixtures as EF
+    return EF.egd()
+
+
+def _denial(doc, n, kind, *, places=(), lesion_id=None, breadth=Breadth.SINGLE_TARGET, device=None):
+    """A filed statement: the act of ``kind`` not done today, every fact established (the judge's ``denial``)."""
+    return doc.event(n, kind=kind if isinstance(kind, Fact) else sup(kind), status=neg(PERFORMED), session=sup(X1),
+                     date=sup(ON), breadth=sup(breadth), places=[sup(place) for place in places] if places else None,
+                     lesion=sup(lesion_id) if lesion_id is not None else None,
+                     device=sup(device) if device is not None else None)
+
+
+def js06():
+    """"Argon plasma coagulation was applied to two ascending colon angioectasias. No electrocautery ablation was
+    performed in the ascending colon." Every fact established."""
+    doc = _colon()
+    doc.act(2, Kind.ABLATION, places=[sup(Landmark.ASCENDING_COLON)], device=sup(Device.ARGON_PLASMA))
+    _denial(doc, 3, Kind.ABLATION, places=(Landmark.ASCENDING_COLON,), device=Device.ELECTROCAUTERY)
+    return doc.build()
+
+
+def js07():
+    """"Radiofrequency ablation was applied to Barrett mucosa in the distal esophagus. No electrocautery ablation was
+    performed in the distal esophagus.\""""
+    doc = _egd()
+    doc.act(2, Kind.ABLATION, places=[sup(Landmark.DISTAL_ESOPHAGUS)], device=sup(Device.RADIOFREQUENCY))
+    _denial(doc, 3, Kind.ABLATION, places=(Landmark.DISTAL_ESOPHAGUS,), device=Device.ELECTROCAUTERY)
+    return doc.build()
+
+
+def js08():
+    """Cryotherapy, no electrosurgical device, beside "No electrocautery ablation was performed.\""""
+    doc = _egd()
+    doc.act(2, Kind.ABLATION, places=[sup(Landmark.DISTAL_ESOPHAGUS)], device=sup(Device.CRYOTHERAPY))
+    _denial(doc, 3, Kind.ABLATION, places=(Landmark.DISTAL_ESOPHAGUS,), device=Device.ELECTROCAUTERY)
+    return doc.build()
+
+
+def js09():
+    """A thermal probe (a heater or a bipolar probe) for a gastric body ulcer beside "No electrocautery was used for
+    hemostasis in the stomach.\""""
+    doc = _egd()
+    doc.act(2, Kind.BLEEDING_CONTROL, places=[sup(Landmark.GASTRIC_BODY)], device=sup(Device.THERMAL_PROBE),
+            cause=sup(ct.Cause.PRE_EXISTING_LESION), purpose=sup(ct.Purpose.HEMOSTASIS))
+    _denial(doc, 3, Kind.BLEEDING_CONTROL, places=(Landmark.GASTRIC_BODY,), device=Device.ELECTROCAUTERY)
+    return doc.build()
+
+
+def js10():
+    """The release direction (named, definitional): a snare polypectomy "without electrocautery" (its device
+    electrocautery NEGATED) beside "No hot snare was used on that polyp.\""""
+    doc = _colon()
+    doc.lesion(1, lesion_places=[sup(Landmark.SIGMOID_COLON)], multiplicity=sup(ct.Multiplicity.SINGLE))
+    doc.act(2, Kind.SNARE, lesion=sup(L1), places=[sup(Landmark.SIGMOID_COLON)], device=neg(Device.ELECTROCAUTERY))
+    _denial(doc, 3, Kind.SNARE, places=(Landmark.SIGMOID_COLON,), lesion_id=L1, device=Device.HOT_SNARE)
+    return doc.build()
+
+
+def jr05():
+    """Argon plasma in the cecum, a cold snare in the sigmoid colon, and an impression "no cautery was used in the cecum"
+    whose kind is doubted (bleeding control or ablation), its device, place and status established."""
+    doc = _colon()
+    doc.act(2, Kind.ABLATION, places=[sup(Landmark.CECUM)], device=sup(Device.ARGON_PLASMA))
+    doc.lesion(1, lesion_places=[sup(Landmark.SIGMOID_COLON)], multiplicity=sup(ct.Multiplicity.SINGLE))
+    doc.act(3, Kind.SNARE, lesion=sup(L1), places=[sup(Landmark.SIGMOID_COLON)], device=sup(Device.COLD_SNARE))
+    doc.event(4, kind=doubted(Kind.BLEEDING_CONTROL, Kind.BLEEDING_CONTROL, Kind.ABLATION), status=neg(PERFORMED),
+              session=sup(X1), date=sup(ON), breadth=sup(Breadth.SINGLE_TARGET), places=[sup(Landmark.CECUM)],
+              device=sup(Device.ELECTROCAUTERY))
+    return doc.build()
+
+
+def jr06():
+    """A cold snare, then two hemoclips on an oozing ascending angioectasia, beside "No electrocautery was used for
+    hemostasis in the ascending colon.\""""
+    doc = _colon()
+    doc.lesion(1, lesion_places=[sup(Landmark.TRANSVERSE_COLON)], multiplicity=sup(ct.Multiplicity.SINGLE))
+    doc.act(2, Kind.SNARE, lesion=sup(L1), places=[sup(Landmark.TRANSVERSE_COLON)], device=sup(Device.COLD_SNARE))
+    doc.act(3, Kind.BLEEDING_CONTROL, places=[sup(Landmark.ASCENDING_COLON)], device=sup(Device.CLIP),
+            cause=sup(ct.Cause.PRE_EXISTING_LESION), purpose=sup(ct.Purpose.HEMOSTASIS))
+    _denial(doc, 4, Kind.BLEEDING_CONTROL, places=(Landmark.ASCENDING_COLON,), device=Device.ELECTROCAUTERY)
+    return doc.build()
+
+
+def jr07():
+    """The release direction (realistic): a snare polypectomy without electrocautery beside an addendum "no hot snare
+    was used anywhere today" (all of kind)."""
+    doc = _colon()
+    doc.lesion(1, lesion_places=[sup(Landmark.SIGMOID_COLON)], multiplicity=sup(ct.Multiplicity.SINGLE))
+    doc.act(2, Kind.SNARE, lesion=sup(L1), places=[sup(Landmark.SIGMOID_COLON)], device=neg(Device.ELECTROCAUTERY))
+    _denial(doc, 3, Kind.SNARE, breadth=Breadth.ALL_OF_KIND, device=Device.HOT_SNARE)
+    return doc.build()
+
+
+def jr08():
+    """An injection and a multipolar thermal probe on a bleeding duodenal bulb ulcer beside "no electrocautery was
+    used".\""""
+    doc = _egd()
+    doc.act(2, Kind.INJECTION, places=[sup(Landmark.DUODENAL_BULB)], device=sup(Device.NEEDLE))
+    doc.act(3, Kind.BLEEDING_CONTROL, places=[sup(Landmark.DUODENAL_BULB)], device=sup(Device.THERMAL_PROBE),
+            cause=sup(ct.Cause.PRE_EXISTING_LESION), purpose=sup(ct.Purpose.HEMOSTASIS))
+    _denial(doc, 4, Kind.BLEEDING_CONTROL, places=(Landmark.DUODENAL_BULB,), device=Device.ELECTROCAUTERY)
+    return doc.build()
+
+
+def jm01():
+    """An ERCP sphincterotomy with a sphincterotome (it cuts with or without current) beside "no electrocautery was used
+    at the papilla".\""""
+    from tests.v2 import evaluate_fixtures as EF
+    doc = EF.Doc()
+    doc.session(1, SessionKind.ERCP, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER))
+    doc.exam(1)
+    doc.act(4, Kind.CANNULATION, duct=sup(ct.Duct.BILIARY), access=sup(ct.AccessOutcome.ACHIEVED))
+    doc.act(2, Kind.SPHINCTEROTOMY, places=[sup(Landmark.AMPULLA)], device=sup(Device.SPHINCTEROTOME),
+            duct=sup(ct.Duct.BILIARY))
+    _denial(doc, 3, Kind.SPHINCTEROTOMY, places=(Landmark.AMPULLA,), device=Device.ELECTROCAUTERY)
+    return doc.build()
+
+
+def jm02():
+    """A bleeding vessel treated without electrocautery beside "No thermal probe was used": the act may have used a
+    heater probe (a negated electrocautery leaves a thermal probe possible: no release)."""
+    doc = _egd()
+    doc.act(2, Kind.BLEEDING_CONTROL, places=[sup(Landmark.GASTRIC_BODY)], device=neg(Device.ELECTROCAUTERY),
+            cause=sup(ct.Cause.PRE_EXISTING_LESION), purpose=sup(ct.Purpose.HEMOSTASIS))
+    _denial(doc, 3, Kind.BLEEDING_CONTROL, places=(Landmark.GASTRIC_BODY,), device=Device.THERMAL_PROBE)
+    return doc.build()
+
+
+# (id, the code read, its expected status, every code proposed (code, unit), the builder). D292: holds JS06, JS07, JS09,
+# JR05, JR08, JM01 (READY before E5j); stays READY JS08, JR06 (and JR05's cold snare); the release direction JS10,
+# JR07 (HELD before); no release for a may-be device JM02.
+E5J_CASES = (
+    ('JS06', '45388', 'needs_clarification', (('45388', 2),), js06),
+    ('JS07', '43270', 'needs_clarification', (('43270', 2),), js07),
+    ('JS08', '43270', 'ready', (('43270', 2),), js08),
+    ('JS09', '43255', 'needs_clarification', (('43255', 2),), js09),
+    ('JS10', '45385', 'ready', (('45385', 2),), js10),
+    ('JR05', '45388', 'needs_clarification', (('45388', 2), ('45385', 3)), jr05),
+    ('JR05 (the cold snare)', '45385', 'ready', (('45388', 2), ('45385', 3)), jr05),
+    ('JR06', '45382', 'ready', (('45385', 2), ('45382', 3)), jr06),
+    ('JR07', '45385', 'ready', (('45385', 2),), jr07),
+    ('JR08', '43255', 'needs_clarification', (('43255', 3),), jr08),
+    ('JM01', '43262', 'needs_clarification', (('43262', 2),), jm01),
+    ('JM02', '43255', 'needs_clarification', (('43255', 2),), jm02),
+)
+
+
+class E5jTests(SimpleTestCase):
+    """DECISIONS D292's E5j (HOLDS-ANALYSIS.md, THE FINAL FIX LIST item 2; the judge's reference diff ported): whenever a
+    device fact names electrocautery it covers the hot snare, the hot forceps, argon plasma and radiofrequency (each
+    delivers high-frequency current by definition; D222), so a statement naming electrocautery is never set apart by
+    technique from an act done with one of them, and a negated electrocautery is none of them (the release direction,
+    definitional and named); a thermal probe and a sphincterotome MAY be electrosurgical (DEVICE_MAY_BE): between two
+    supported devices one of which may be the other's kind the technique row is UNRESOLVED, and a negated electrocautery
+    never excludes them. E2 and E3 are rejected (D292) and are not here."""
+
+    COVERED = (Device.HOT_SNARE, Device.HOT_FORCEPS, Device.ARGON_PLASMA, Device.RADIOFREQUENCY)
+    MAY_BE = (Device.THERMAL_PROBE, Device.SPHINCTEROTOME)
+    APART = (Device.COLD_SNARE, Device.COLD_FORCEPS, Device.CRYOTHERAPY, Device.CLIP, Device.BAND, Device.NEEDLE)
+
+    @staticmethod
+    def technique(statement_device: Fact, act_device: Fact) -> P.RowResult:
+        R = build({E1: denial(kind=sup(Kind.ABLATION), device=statement_device),
+                   E2: act(kind=sup(Kind.ABLATION), device=act_device)})
+        return row_of(R, P.Row.TECHNIQUE)
+
+    def test_the_technique_row_over_every_device_class(self):
+        for device in self.COVERED:  # covered: the statement concerns the act; the act's electrocautery never apart
+            with self.subTest(statement='electrocautery', act=device):
+                self.assertEqual(self.technique(sup(Device.ELECTROCAUTERY), sup(device)), SAME)
+                self.assertEqual(self.technique(sup(device), sup(Device.ELECTROCAUTERY)), UNRESOLVED)
+                self.assertEqual(self.technique(sup(device), neg(Device.ELECTROCAUTERY)), INDEPENDENT)  # the release
+        for device in self.MAY_BE:  # may be: never covered, never apart, either way; a negated one leaves it possible
+            with self.subTest(statement='electrocautery', act=device):
+                self.assertEqual(self.technique(sup(Device.ELECTROCAUTERY), sup(device)), UNRESOLVED)
+                self.assertEqual(self.technique(sup(device), sup(Device.ELECTROCAUTERY)), UNRESOLVED)
+                self.assertEqual(self.technique(sup(device), neg(Device.ELECTROCAUTERY)), UNRESOLVED)
+                self.assertEqual(self.technique(neg(Device.ELECTROCAUTERY), sup(device)), SAME)
+        for device in self.APART:  # a device with no current: apart from electrocautery, as before
+            with self.subTest(statement='electrocautery', act=device):
+                self.assertEqual(self.technique(sup(Device.ELECTROCAUTERY), sup(device)), INDEPENDENT)
+                self.assertEqual(self.technique(sup(device), sup(Device.ELECTROCAUTERY)), INDEPENDENT)
+        # the may-be reading needs two SUPPORTED devices: any device not established is UNRESOLVED as before
+        for state in ('unresolved', 'doubted', 'contradicted'):
+            with self.subTest(state=state):
+                self.assertEqual(self.technique(in_state(state, Device.ELECTROCAUTERY, Device.CLIP),
+                                                sup(Device.THERMAL_PROBE)), UNRESOLVED)
+        # v1's rows are unchanged
+        self.assertEqual(self.technique(sup(Device.SNARE), sup(Device.COLD_SNARE)), SAME)
+        self.assertEqual(self.technique(sup(Device.HOT_SNARE), sup(Device.COLD_SNARE)), INDEPENDENT)
+
+    def test_the_judges_g2_inputs_through_assess(self):
+        """The judge's G2 table on the final set (HOLDS-ANALYSIS 4J, D292): JS06, JS07, JS09, JR05, JR08, JM01 held (READY
+        before E5j: argon plasma, radiofrequency, a thermal probe, a sphincterotome beside "no electrocautery"); JS08 and
+        JR06 READY (cryotherapy, clips: no current), JR05's cold snare READY; JS10 and JR07 READY (the named release
+        direction: an act without electrocautery beside "no hot snare"; HELD before); JM02 held (a negated
+        electrocautery leaves a thermal probe possible)."""
+        for name, code, expected, codes, builder in E5J_CASES:
+            with self.subTest(case=name):
+                self.assertEqual(_assessed(builder(), *codes)[code][0], expected)
+
+    def test_the_holds_rest_on_the_technique_row(self):
+        """Each E5j hold is the pair's own: the statement and the act pair, and the technique row is what is not
+        INDEPENDENT (a hold of no other row, which an E5j removal releases)."""
+        for name, act_number, builder in (('JS06', E2, js06), ('JS09', E2, js09), ('JR08', E3, jr08), ('JM01', E2, jm01)):
+            with self.subTest(case=name):
+                R = builder()
+                statement = next(event for event in R.events if event != act_number and P.paired(R, event, act_number)
+                                 and F.fact(R, event, A.TECHNIQUE_DEVICE).value is Device.ELECTROCAUTERY)
+                pair = P.relation(R, statement, act_number)
+                self.assertIsNot(pair.relation, P.Relation.INDEPENDENT)
+                self.assertIsNot(pair.result(P.Row.TECHNIQUE), INDEPENDENT)
+        R = js10()
+        self.assertEqual(P.relation(R, E3, E2).relation, P.Relation.INDEPENDENT)  # the release: the technique row
+        self.assertEqual(P.relation(R, E3, E2).row, P.Row.TECHNIQUE)
 
 
 # --- properties (9.4, at the pairing level; hypothesis) ----------------------------------------------------------------
@@ -2858,12 +3226,26 @@ class ScBTests(SimpleTestCase):
 
 
 class TableTests(SimpleTestCase):
+    # DECISIONS D292's E5j: the one row of v2's table v1's lacks, named - electrocautery covers the devices that deliver
+    # high-frequency current by definition (D222)
+    E5J_ROW = {'electrocautery': frozenset({'hot_snare', 'hot_forceps', 'argon_plasma', 'radiofrequency'})}
+
     def test_device_contains_equals_v1s_by_value(self):
+        """v1's rows by value, and v2's table is v1's plus exactly E5j's electrocautery row (D292: "the v1-parity pin
+        amended to v2's table with the departure named"); DEVICE_MAY_BE (a thermal probe, a sphincterotome) covers
+        nothing."""
         # v1's relations.DEVICE_CONTAINS (retired, 5.0), read here only: engine/ never imports it
         from studio.interpretation import relations as v1_relations
         ported = {device.value: frozenset(inner.value for inner in contained)
                   for device, contained in P.DEVICE_CONTAINS.items()}
-        self.assertEqual(ported, {key: frozenset(value) for key, value in v1_relations.DEVICE_CONTAINS.items()})
+        v1 = {key: frozenset(value) for key, value in v1_relations.DEVICE_CONTAINS.items()}
+        self.assertEqual({key: value for key, value in ported.items() if key not in self.E5J_ROW}, v1)
+        self.assertEqual(ported, {**v1, **self.E5J_ROW})
+        self.assertFalse(set(self.E5J_ROW) & set(v1))  # the departure: a row v1 never had
+        self.assertEqual({key.value: frozenset(item.value for item in value) for key, value in P.DEVICE_MAY_BE.items()},
+                         {'electrocautery': frozenset({'thermal_probe', 'sphincterotome'})})
+        covered = {device for value in P.DEVICE_CONTAINS.values() for device in value}
+        self.assertFalse(covered & {device for value in P.DEVICE_MAY_BE.values() for device in value})
 
     def test_the_segment_range_equals_contract_claims_by_value(self):
         # one rule, two places (the engine imports no claim builder); request R2 moves it into engine/anatomy.py
@@ -2874,8 +3256,8 @@ class TableTests(SimpleTestCase):
                                  (first, last))
 
     def test_the_modules_collections_hold_enumeration_members_only(self):
-        for name in ('DEVICE_CONTAINS', 'OTHER_DATES', 'OTHER_PERFORMERS', 'TARGETED', 'UNTARGETED', 'POSITIVE',
-                     'TRACT_ORDER'):
+        for name in ('DEVICE_CONTAINS', 'DEVICE_MAY_BE', 'OTHER_DATES', 'OTHER_PERFORMERS', 'TARGETED', 'UNTARGETED',
+                     'POSITIVE', 'TRACT_ORDER'):
             table = getattr(P, name)
             values = list(table) + [item for value in getattr(table, 'values', lambda: [])() for item in value]
             with self.subTest(table=name):

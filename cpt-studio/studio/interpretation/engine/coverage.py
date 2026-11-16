@@ -40,7 +40,15 @@ sets them apart; with fewer than two sessions nothing can, as in 4.5's session r
   the bleeding control's code proceeds on its own rows.
 - BIOPSY_OF_REMOVED_LESION (C-2): a biopsy of the same lesion as a removal (snare, EMR, hot biopsy, ESD, or the removal
   umbrella, each of whose methods is one), where that lesion is single or the two anchors share a unit; an established
-  group in separate units un-bundles it (DECISIONS D196: lesion.multiplicity is read on the READY path).
+  group in separate units un-bundles it (DECISIONS D196: lesion.multiplicity is read on the READY path). DECISIONS D292
+  E1j (HOLDS-ANALYSIS's final fix 1; FINAL-V2 4.7's bundling identity over supported places, 4.11, 5.1 row 10): it is
+  F for a biopsy done, at least in part, where no removal was (``_biopsy_elsewhere``) - whenever the biopsy's
+  target.lesion is a pure empty slot and its place list is established, and one supported place of it, for EVERY
+  removal the rule could pair it with, is disjoint from each of that removal's places (its target.places together with
+  its target lesion's established places), that removal was asked about it by a rejected pair control, and no place
+  pair control asked of the biopsy or of those removals is unrejected. A removal whose lesion claim is neither a
+  supported lesion with established places nor a pure empty slot, a removal whose places are not established
+  landmarks, and a synthetic removal (no place) leave the rule as it was.
 - DRAINAGE_STEP (G3, D171, D177): a fine-needle aspiration whose part_of names a drainage, or of the same lesion as one;
   the drainage may be performed or begun.
 
@@ -134,7 +142,9 @@ another as no examination of that session, step 4d's reference as possibly any s
 session its part_of_session names when supported (of another kind, or a kind not established), else (C-4, structural
 over supported session kinds and tracts: 4.7's base_within row) the done EUS session whose tract is supported upper,
 for a done EGD session with one done examination (v1's ``own``); ``possibly_part_of`` (D70) the session it may be
-part of otherwise - a part_of_session not established, or a session that may be an EUS (its kind supported EUS, or not
+part of otherwise - a part_of_session not established, naming exactly its claimed value and its options (a
+contradiction's sides, a doubt's readings, an empty slot's doubt included: DECISIONS D286, the one set step 4d's wholes
+reads; never a session nothing names), or a session that may be an EUS (its kind supported EUS, or not
 established with EUS among what it leaves open: 4.7's "possibly_part_of by possibly") and may be upper (its tract not
 established, or pancreatobiliary) and may be done: 4d's combination.session_possibly_done, the reference (D227's one
 derivation; D231 row 2, coverage's C3: a synthetic act that may be in it makes it possibly done; an entry with no card
@@ -211,7 +221,7 @@ from enum import Enum, unique
 from types import MappingProxyType
 from typing import TypeVar
 
-from studio.interpretation import ENGINE_VERSION_V2
+from studio.interpretation import ENGINE_VERSION_V3
 from studio.interpretation.contract.types import (Attribute, Cause, DateRelation, Duct, FactState, Kind,
                                                   Landmark, Multiplicity, Owner, PartRelation, Performer, Purpose,
                                                   Qualifier2, Reason, Result, SessionKind, Status, Tract, UnlistedWhat,
@@ -228,7 +238,7 @@ _A = Attribute
 # The completeness record's second-review bound (v1's coverage.SECOND_REVIEW_CHECKED = engine.SECOND_REVIEW_CHECKED).
 SECOND_REVIEW_CHECKED = 64
 # event_coding's version: the read-time overlay (step 5c) reads @2 only (FINAL-V2 6.5).
-CODING_VERSION = ENGINE_VERSION_V2
+CODING_VERSION = ENGINE_VERSION_V3
 
 
 # --- the vocabulary ----------------------------------------------------------------------------------------------------
@@ -427,19 +437,18 @@ def _doubted(found: Fact) -> bool:
 
 
 def _kind_of(R: FactSet, event: Id) -> Kind:
-    """The kind an item about ``event`` names (conflict:<kind>): its claimed kind, else its first possible side, else
-    other."""
-    found = facts_.fact(R, event, _A.KIND)
-    if isinstance(found.value, Kind):
-        return found.value
-    return next((option for option in found.options if isinstance(option, Kind)), Kind.OTHER)
+    """The kind an item about ``event`` names (conflict:<kind>): its one label, facts.established_kind - the catalogue
+    kind of its supported kind with its supported purpose, else Kind.OTHER (DECISIONS D287, D267's heading, D254 rule
+    2: an act whose kind CPT Studio's reading does not establish is "another act" in every fact key, as evaluate's and
+    questions.act_kind's; a clip supported for hemostasis is the bleeding control)."""
+    return facts_.established_kind(R, event)
 
 
 class _Asker:
     """Who a conjunct's doubts are about and how they are asked: the FactSet, the part and its kind, and the Reader
     whose pairs a whole's contradictions are read from (None outside one: no whole is judged then)."""
 
-    __slots__ = ('R', 'part', 'kind', 'reader', '_same')
+    __slots__ = ('R', 'part', 'kind', 'reader', '_same', '_elsewhere')
 
     def __init__(self, R: FactSet, part: Id, reader: Reader | None = None) -> None:
         self.R = R
@@ -447,6 +456,14 @@ class _Asker:
         self.kind = _kind_of(R, part)
         self.reader = reader
         self._same: _SameAs | None = None
+        self._elsewhere: bool | None = None
+
+    def biopsy_elsewhere(self) -> bool:
+        """``_biopsy_elsewhere`` for this part over this asker's FactSet, computed once (it reads no whole of its own:
+        the rule asks it per whole, DECISIONS D248 G5's cost)."""
+        if self._elsewhere is None:
+            self._elsewhere = _biopsy_elsewhere(self)
+        return self._elsewhere
 
     def doubt(self, subject: Id, attribute: Attribute, found: Fact, key: rq.FactKey) -> Judged:
         kind = self.kind if subject == self.part or subject.family is not IdFamily.EVENT else _kind_of(self.R, subject)
@@ -564,7 +581,10 @@ def sessions_of(R: FactSet, event: Id) -> frozenset[Id]:
     non-match (4.11), and a doubt is never an absence (4.2). So does a fact that is not established and whose claim is
     a negation ("not in X1" left unresolved, doubted or contradicted: facts.possibly would read its claimed value alone,
     so weakening an established negation would narrow every other session to X1, against 9.4 P-MONO), or that names no
-    session at all - step 4d's possible_sessions reads both so (repair r4b; DECISIONS D227's one membership)."""
+    session at all - step 4d's possible_sessions reads both so (repair r4b; DECISIONS D227's one membership) - and an
+    overfilled session slot's merged view (AMENDMENT-2 4.3.3 a: never narrower than a written denial read alone; every
+    view, since it cannot tell whether a written fact denied a session: facts.open_denial, the step's NOTES question
+    Q1R)."""
     found = facts_.fact(R, event, _A.SESSION)
     every = frozenset(R.sessions)
     if found.result is Result.NEGATED:
@@ -572,8 +592,7 @@ def sessions_of(R: FactSet, event: Id) -> frozenset[Id]:
     if found.result is Result.SUPPORTED:
         return frozenset({found.value}) if isinstance(found.value, Id) and found.value in every else every
     named = tuple(value for value in (found.value, *found.options) if isinstance(value, Id))
-    if facts_.silent(found) or found.state is FactState.NEGATED or not named or any(
-            value not in every for value in named):
+    if facts_.silent(found) or facts_.open_denial(found) or not named or any(value not in every for value in named):
         return every
     return frozenset(named)
 
@@ -1172,7 +1191,9 @@ def _lesion_values(R: FactSet, found: Fact) -> frozenset[Id]:
     """The lesions a target.lesion fact may name: supported, its value; negated, every other lesion of the FactSet; not
     established, its claimed value and its options (facts.possibly) - every lesion for an empty slot a doubt names, a
     negation left open ("not L2" unresolved) or a value naming no lesion of the FactSet, supported or not (4.11: a
-    missing identifier manufactures neither a match nor a non-match)."""
+    missing identifier manufactures neither a match nor a non-match); an overfilled target.lesion slot's merged view
+    reads as a written denial alone would (AMENDMENT-2 4.3.3 a; every view, since it cannot tell whether a written fact
+    denied a lesion: facts.open_denial, the step's NOTES question Q1R)."""
     every = frozenset(R.lesions)
     if found.result is Result.SUPPORTED:
         if not isinstance(found.value, Id):
@@ -1181,8 +1202,7 @@ def _lesion_values(R: FactSet, found: Fact) -> frozenset[Id]:
     if found.result is Result.NEGATED:
         return frozenset(lesion for lesion in every if lesion != found.value)
     named = frozenset(value for value in (found.value, *found.options) if isinstance(value, Id))
-    if facts_.silent(found) or found.state is FactState.NEGATED or not named or any(
-            value not in every for value in named):
+    if facts_.silent(found) or facts_.open_denial(found) or not named or any(value not in every for value in named):
         return every | named
     return named
 
@@ -1254,13 +1274,82 @@ def _not_adjunct(R: FactSet, part: Id, whole: Id) -> bool:
 
 
 def _biopsy(ask: _Asker, whole: Id) -> Judged:
-    """BIOPSY_OF_REMOVED_LESION (C-2, D196): a biopsy of the lesion a removal removed, single or in a shared unit. The
-    whole and the kind are read first, the identity only where neither is F (the same result; D248 G5's cost)."""
+    """BIOPSY_OF_REMOVED_LESION (C-2, D196): a biopsy of the lesion a removal removed, single or in a shared unit; F
+    for a biopsy done elsewhere than every removal (DECISIONS D292 E1j: ``_biopsy_elsewhere``). The whole and the kind
+    are read first, the identity only where neither is F (the same result; D248 G5's cost)."""
     whole_ = _whole(ask, ask.part, whole, _REMOVALS, _PERFORMED)
     kind = _kind_in(ask, ask.part, _BIOPSIES, rq.FactKey.ACT_PART) if whole_.truth is not Truth.F else _FALSE
     if Truth.F in (whole_.truth, kind.truth):
         return _FALSE
+    if ask.biopsy_elsewhere():  # DECISIONS D292 E1j
+        return _FALSE
     return _both(_same_lesion(ask, ask.part, whole), kind, whole_, _single_or_shared(ask, ask.part, whole))
+
+
+def _landmarks(values: tuple[object, ...] | None) -> tuple[Landmark, ...] | None:
+    """An established place list read as landmarks: None when it is not established (facts._supported's None) or a
+    member is no landmark (a place the anatomy chain cannot compare)."""
+    if values is None:
+        return None
+    found = tuple(value for value in values if isinstance(value, Landmark))
+    return found if len(found) == len(values) else None
+
+
+def _biopsy_elsewhere(ask: _Asker) -> bool:
+    """DECISIONS D292 E1j (HOLDS-ANALYSIS.md, THE FINAL FIX LIST item 1; FINAL-V2 4.7's bundling identity over supported
+    places, 4.11 - a place difference counts only with its pair controls rejected -, 5.1 row 10 - "target.places and the
+    lesion's places" -, D216 rules 2-3): whether the biopsy ``ask.part`` was done, at least in part, where no removal
+    was, so it is not wholly a biopsy of a removed lesion. Whenever
+    - the biopsy names no lesion (its target.lesion a pure empty slot: no claim and no doubt naming it, P13), and its
+      place list is established (facts._supported: every member established, one supported, every one a landmark);
+    - for EVERY event the rule could pair it with as a removal (``_whole`` not F for this rule, over the asker's
+      FactSet: a synthetic removal, read over its own FactSet, has no place established and keeps the rule as it was),
+      that removal's places are established landmarks: its target.places TOGETHER WITH its target lesion's established
+      places when that lesion claim is supported (a lesion claim neither supported with established places nor a pure
+      empty slot keeps the rule as it was: the removed lesion may lie anywhere);
+    - no place pair control asked of the biopsy or of any such removal is unrejected (DECISIONS D220's every-control
+      scan, apart_by_place's instrument); and
+    - one supported place of the biopsy is disjoint (engine/anatomy) from each place of every such removal, and each
+      removal was asked about that place by a pair control pass 2 REJECTED -
+    it is True, read existentially on the biopsy's side only (the code needs one specimen elsewhere). Its lesion claim
+    names nothing, so D239's guard (_may_be_one_finding) is False there. The named residual (D292): a lesion that
+    reaches a junction filed at one segment and sampled on its other side, with pass 2 rejecting the removal-place
+    control - two reading errors, accepted under FINAL-V2 4.13, which dropped D58/D77's adjacency. Under 9.4's
+    weakenings it moves as apart_by_place does: a place, a lesion or a control weakened, or an added doubt, fails a
+    condition that needs an established fact, a pure empty slot or a rejected control; a deleted removal place could
+    release only where a rejected control asked that removal about the very place deleted (D245's Q2 shape), and its
+    control, when one exists, stays read. tests/v2/test_properties.py runs P-MONO over it."""
+    R, part = ask.R, ask.part
+    if not _pure_silent(facts_.fact(R, part, _A.TARGET_LESION)):
+        return False
+    mine = _landmarks(facts_._supported(R, part, _A.TARGET_PLACES))
+    if mine is None:
+        return False
+    wholes = [other for other in R.events
+              if other != part and _whole(ask, part, other, _REMOVALS, _PERFORMED).truth is not Truth.F]
+    if not wholes:
+        return False
+    theirs: dict[Id, tuple[Landmark, ...]] = {}
+    for other in wholes:
+        places = _landmarks(facts_._supported(R, other, _A.TARGET_PLACES))
+        if places is None:
+            return False
+        lesion = facts_.fact(R, other, _A.TARGET_LESION)
+        if lesion.result is Result.SUPPORTED and isinstance(lesion.value, Id):
+            held = _landmarks(facts_._supported(R, lesion.value, _A.PLACES))
+            if held is None:
+                return False
+            places += held  # 5.1 row 10: the removed lesion's own places
+        elif not _pure_silent(lesion):
+            return False
+        theirs[other] = places
+    asked = frozenset(wholes) | {part}
+    if any(not rejected for (subject, about, _value), rejected in R.pair_controls.items()
+           if about is _A.TARGET_PLACES and subject in asked):
+        return False
+    return any(all(all(anatomy.disjoint(place, theirs_place) for theirs_place in theirs[other])
+                   and R.pair_controls.get((other, _A.TARGET_PLACES, place)) is True for other in wholes)
+               for place in mine)
 
 
 def _drainage(ask: _Asker, whole: Id) -> Judged:
@@ -1516,7 +1605,10 @@ class Reader:
                                        _ordered(own + found.spans), 'conflict'))
             for pair in self.pairs(event):
                 if pair.relation is pairing.Relation.CONTRADICTION:
-                    named = kind if kind in pair.kinds else min(pair.kinds, key=list(Kind).index, default=kind)
+                    # DECISIONS D287: a relation's conflict over an act whose label is OTHER is conflict:other, as in
+                    # evaluate (its _row_clean); else the act's label, or the first kind through which it is concerned
+                    named = (kind if kind is Kind.OTHER or kind in pair.kinds
+                             else min(pair.kinds, key=list(Kind).index, default=kind))
                     status = facts_.fact(R, event, _A.STATUS)
                     out.append(HeldFact(fact=rq.fact_key(rq.FactKey.CONFLICT, named), attribute=_A.STATUS,
                                         subject=event, result=status.result, kind=ItemKind.QUESTION,
@@ -1870,7 +1962,10 @@ def _part_of_session(R: FactSet, found: Mapping[Id, Session], record: Session) -
     it is no whole, D70's part_of_session not established names it as no possible whole, and the structural arms read
     it not done (C-4) and not possibly done by any act, placed or supported, whatever its date or session slot (D70:
     session_possibly_done reads not_done_today first) - so a planned or an earlier EUS is never the whole of today's
-    EGD, and the EGD keeps its own items."""
+    EGD, and the EGD keeps its own items. D70's part_of_session not established names exactly its claimed value and its
+    options - an empty slot a doubt names by its readings, never a session nothing names (DECISIONS D286, G3-14 option
+    (a); refute-r4b-r1 V9R4B1-2: facts.possibly over an empty slot named the first session not settled, one nothing
+    named) - the one set 4d's combination.wholes and _named_wholes read (D227)."""
     stated = facts_.fact(R, record.id, _A.PART_OF_SESSION)
     whole = _supported_id(stated)
     if (whole is not None and whole != record.id and whole in found
@@ -1879,7 +1974,11 @@ def _part_of_session(R: FactSet, found: Mapping[Id, Session], record: Session) -
         return whole, None
     possibly: Id | None = None
     if not facts_.established(stated) and not _pure_silent(stated):
-        possibly = next((other for other in found if other != record.id and facts_.possibly(stated, other)
+        # DECISIONS D286 (G3-14): exactly the claim's value and options - an empty slot's doubt by its readings, never a
+        # session nothing names (facts.possibly is True for every session over an empty slot) - step 4d's one set
+        # (combination.wholes, _named_wholes), AMENDMENT-2 4.3.3's claimed-value read routed by this step's list
+        possibly = next((other for other in found if other != record.id
+                         and (other == stated.value or other in stated.options)
                          and not combination.not_done_today(R, other)), None)  # D269
     if record.kind is SessionKind.EGD and record.done and len(record.examinations) == 1:  # v1's ``own``
         for other in found.values():
@@ -2202,9 +2301,13 @@ class Coverage:
 
 def inclusion_asks_no_code(sessions_: Mapping[Id, Session], session: Session, counted: Sequence[Counted]) -> bool:
     """v1's inclusion_asks_no_code over sessions: a session read as included in another asks for no code of its own
-    while that other session has no counted code, or when one of its counted codes includes the examination."""
+    while that other session has no counted code, or when one of its counted codes includes the examination - beside a
+    DONE whole only (DECISIONS D286 ruling F, G3-13 option (b), refute-r4b-r1 V9R4B1-1: v1's rule presumes a whole that
+    reconcile itself lists when it has no code, and reconcile lists only done sessions; beside a C3 whole that is not
+    done - weakened, planned, or told by nothing - the part keeps its own no_proposal item and completeness reads
+    incomplete). The filter is this rule's alone and never filters D70's possible wholes (D286)."""
     including = sessions_.get(session.part_of) if session.part_of is not None else None
-    if including is None or including.kind is None or session.kind is None:
+    if including is None or including.kind is None or session.kind is None or not including.done:  # D286 ruling F
         return False
     codes = [item.code for item in counted if item.family is including.kind]
     return not codes or any(catalogue.includes_examination(code, session.kind) for code in codes)

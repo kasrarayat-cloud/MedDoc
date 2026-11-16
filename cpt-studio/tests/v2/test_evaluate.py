@@ -74,7 +74,7 @@ from studio.interpretation.engine import facts as facts_module
 from studio.interpretation.engine import questions as Q
 from studio.interpretation.engine import requirements as rq
 from studio.interpretation.engine.requirements_table import Tag
-from studio.interpretation.engine.types import (Cover, Evaluation, FactSet, HeldFact, Id, ItemKind, Span,
+from studio.interpretation.engine.types import (Cover, Evaluation, Fact, FactSet, HeldFact, Id, ItemKind, Span,
                                                 UnlistedStatement)
 from tests.v2.evaluate_fixtures import (DC, DRE_CLAIMING, DRE_KEPT, DRE_OTHERS, DRE_REACHES, DRE_SESSIONS,
                                         DRE_STATEMENTS, EARLIER, ON, TEAM, Doc, E, L, Landmark, Owner, Performer,
@@ -2924,6 +2924,7 @@ def all_fixtures() -> list:
     out += w8r_fixtures()
     out += w8r_refuted_fixtures()
     out += w9r_fixtures()
+    out += f3w_fixtures()
     return out
 
 
@@ -3238,4 +3239,194 @@ def w9r_fixtures() -> list:
         out.append(('45385', colonoscopy(kind=kind).build(), ()))
     out.append(('45385', colonoscopy(kind=facts_module.SILENT,  # QK: conflict:other
                                      status=contra(Status.PERFORMED, Status.PLANNED)).build(), ()))
+    return out
+
+
+# --- step f3w of AMENDMENT-2's build round (DECISIONS D280.1, D280.3, D287; build list B1, B9) -------------------------
+
+
+def qd2_shape(over=None, *, beside=True) -> Doc:
+    """refute-safety's qd2_steer and refute-r4a-r1's v9_dre_own_rows shapes (ported, synthetic): a colonoscopy X1 to the
+    cecum, E1 filed as its examination with ``over`` (its device among them; None: no E1, the document without the DRE
+    line), the cold snare E2 of L1 at the sigmoid colon, and (``beside``) the colonoscope's examination E3 done today."""
+    doc = Doc()
+    doc.session(1, SessionKind.COLONOSCOPY, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER),
+                reached=[sup(Extent.CECUM)])
+    if over is not None:
+        over = dict(over)
+        doc.act(1, over.pop('kind', Kind.EXAMINATION), **over)
+    doc.lesion(1, lesion_places=[sup(Landmark.SIGMOID_COLON)])
+    doc.act(2, Kind.SNARE, places=[sup(Landmark.SIGMOID_COLON)], lesion=sup(L(1)), device=sup(Device.COLD_SNARE))
+    if beside:
+        doc.exam(3)
+    return doc
+
+
+def overfilled(*written) -> Fact:
+    """An overfilled slot's merged view as engine/facts builds it (AMENDMENT-2 4.3.3): ``written`` its written facts as
+    (state, value)."""
+    values = tuple(dict.fromkeys(value for _state, value in written))
+    stated = {value for state, value in written if state is not ct.FactState.NEGATED}
+    denied = tuple(dict.fromkeys(value for state, value in written
+                                 if state is ct.FactState.NEGATED and value not in stated))
+    return Fact(result=Res.UNRESOLVED, value=None, state=ct.FactState.CONTRADICTED, options=values,
+                reasons=(ct.Reason.SLOT_OVERFULL,), spans=(), negated_values=denied)
+
+
+# QD2's own rows of the DRE (D271's class) and v9_dre_own_rows': each leaves one of its rows 2-5 not met
+QD2_ROWS = (('status unresolved', dict(status=unres(Status.PERFORMED))),
+            ('status doubted', dict(status=doubted(Status.PERFORMED))),
+            ('status negated', dict(status=neg(Status.PERFORMED))),
+            ('status contradicted', dict(status=contra(Status.PERFORMED, Status.PLANNED))),
+            ('date open', dict(date=unres(ON))), ('performer open', dict(performer=unres(TEAM))),
+            ('entry nursing', dict(entry=sup(Owner.NURSING))), ('entry open', dict(entry=unres(DC))))
+# A device that CLAIMS manual without establishing it (D280.3; the overfilled slot of AMENDMENT-2 4.3.3 c included)
+CLAIMED = (('unresolved', unres(Device.MANUAL)), ('doubted', doubted(Device.MANUAL)),
+           ('contradicted', contra(Device.MANUAL, Device.ENDOSCOPE)),
+           ('overfilled', overfilled((ct.FactState.SUPPORTED, Device.MANUAL), (ct.FactState.SUPPORTED, Device.ENDOSCOPE))))
+
+
+class D280Row7(SimpleTestCase):
+    """DECISIONS D280.1 (build list B1; G3-09): row 7 reads no examination ESTABLISHED as a digital examination (kind
+    supported examination, device supported manual: pairing.established_digital) - neither as the session's done
+    examination nor as one whose rows 2-5 must pass - so the DRE's own open rows (QD2, held as built by D271) no longer
+    hold 45385: READY, with no held fact and no item, the decision of the document without the DRE line. A device that
+    only CLAIMS manual keeps QD2's hold (its witness on E1), worded by engine/questions (DIGITAL_SCOPE, D280.3); G2-28's
+    input is pinned held (mutant: row 7 skipping the claimed digital examination). A 9.4 weakening never creates a
+    supported device, so the reading never releases under one."""
+
+    def test_an_established_dre_is_read_by_no_part_of_row_7(self):
+        for name, over in QD2_ROWS:
+            for beside in (True, False):
+                with self.subTest(dre=name, beside=beside):
+                    R = qd2_shape(dict(over, device=sup(Device.MANUAL)), beside=beside).build()
+                    gone = without_events(R, E(1))
+                    evaluation = decide('45385', R)
+                    self.assertTrue(ready(evaluation))
+                    self.assertEqual((evaluation.supporting, evaluation.held_facts, evaluation.exclusion),
+                                     (decide('45385', gone).supporting, (), None))
+                    self.assertIsNone(item('45385', R))
+                    self.assertEqual(truths('45385', R, E(2))[rq.Requirement.SUP_SESSION_DONE], T)
+                    if beside:
+                        for kept in (1, 3):
+                            self.assertEqual(status_of(decide('45378', R, (unit(kept),))),
+                                             status_of(decide('45378', gone, (unit(kept),))))
+
+    def test_a_claimed_device_keeps_qd2s_hold_on_e1(self):
+        for name, over in QD2_ROWS:
+            for device_name, device in CLAIMED:
+                for beside in (True, False):
+                    with self.subTest(dre=name, device=device_name, beside=beside):
+                        R = qd2_shape(dict(over, device=device), beside=beside).build()
+                        evaluation = decide('45385', R)
+                        self.assertFalse(ready(evaluation))
+                        self.assertIn(E(1), [entry.subject for entry in evaluation.held_facts])
+                        self.assertNotEqual(truths('45385', R, E(2))[rq.Requirement.SUP_SESSION_DONE], T)
+                        self.assertIs(item('45385', R).message, Q.MessageId.DIGITAL_SCOPE)
+
+    def test_g2_28_pinned_held(self):
+        """G2-28's input: the colonoscope's examination E1, its device doubted (endoscope or manual), its status open,
+        beside the snare - held, its witness on E1's status, with or without another examination E3."""
+        for beside in (False, True):
+            with self.subTest(beside=beside):
+                R = qd2_shape(dict(device=doubted(Device.ENDOSCOPE, Device.ENDOSCOPE, Device.MANUAL),
+                                   status=unres(Status.PERFORMED)), beside=beside).build()
+                evaluation = decide('45385', R)
+                self.assertFalse(ready(evaluation))
+                self.assertEqual([(entry.fact, entry.rank, entry.subject) for entry in evaluation.held_facts
+                                  if entry.subject == E(1)], [('performed_status', 4, E(1))])
+
+    def test_no_weakening_creates_an_established_digital_examination(self):
+        """P-MONO's direction for D280.1: every 9.4 weakening of a supported manual device (unresolved, a doubt added,
+        contradicted) or of a supported examination kind leaves the examination not established, so it is read again
+        (held), never released; the established reading is reached only by strengthening."""
+        from studio.interpretation.engine import pairing
+        base = dict(status=unres(Status.PERFORMED))
+        R = qd2_shape(dict(base, device=sup(Device.MANUAL))).build()
+        self.assertTrue(pairing.established_digital(R, E(1)))
+        for name, over in (('device unresolved', dict(device=unres(Device.MANUAL))),
+                           ('device doubted', dict(device=doubted(Device.MANUAL, Device.MANUAL, Device.ENDOSCOPE))),
+                           ('device contradicted', dict(device=contra(Device.MANUAL, Device.ENDOSCOPE))),
+                           ('kind unresolved', dict(device=sup(Device.MANUAL), kind=unres(Kind.EXAMINATION))),
+                           ('kind doubted', dict(device=sup(Device.MANUAL),
+                                                 kind=doubted(Kind.EXAMINATION, Kind.EXAMINATION, Kind.SNARE)))):
+            with self.subTest(weakened=name):
+                R = qd2_shape(dict(base, **over)).build()
+                self.assertFalse(pairing.established_digital(R, E(1)))
+                self.assertFalse(ready(decide('45385', R)))
+
+
+class D287ConflictKey(SimpleTestCase):
+    """DECISIONS D287 (G3-28; build list B9), evaluate's half: the kind a conflict over an act is keyed by is
+    facts.established_kind (questions.act_kind's derivation moved there, not copied) - Kind.OTHER for every kind not
+    SUPPORTED, the catalogue kind of a supported kind with its supported purpose; with no act the code's group's first
+    kind, Kind.OTHER for none."""
+
+    def test_the_key_over_every_kind_state(self):
+        group = (Kind.SNARE,)
+        for name, kind, expected in (('silent', facts_module.SILENT, Kind.OTHER),
+                                     ('unresolved', unres(Kind.SNARE), Kind.OTHER),
+                                     ('doubted', doubted(Kind.SNARE, Kind.SNARE, Kind.BIOPSY), Kind.OTHER),
+                                     ('contradicted', contra(Kind.SNARE, Kind.BIOPSY), Kind.OTHER),
+                                     ('negated', neg(Kind.SNARE), Kind.OTHER), ('supported', sup(Kind.SNARE), Kind.SNARE),
+                                     ('supported other', sup(Kind.OTHER), Kind.OTHER)):
+            with self.subTest(kind=name):
+                R = colonoscopy(kind=kind, status=contra(Status.PERFORMED, Status.PLANNED)).build()
+                self.assertIs(facts_module.established_kind(R, E(2)), expected)
+                self.assertIs(EV._conflict_kind(R, E(2), group), expected)
+                self.assertIs(Q.act_kind(R, E(2), group), expected)
+                held = [entry.fact for entry in decide('45385', R).held_facts if entry.fact.startswith('conflict:')]
+                self.assertTrue(set(held) <= {f'conflict:{expected.value}'}, held)
+        doc = colonoscopy(snare=False)
+        doc.act(2, Kind.CLIP, purpose=sup(ct.Purpose.HEMOSTASIS), cause=sup(ct.Cause.PRE_EXISTING_LESION),
+                places=[sup(Landmark.SIGMOID_COLON)], status=contra(Status.PERFORMED, Status.PLANNED))
+        R = doc.build()
+        self.assertIs(EV._conflict_kind(R, E(2), (Kind.BLEEDING_CONTROL,)), Kind.BLEEDING_CONTROL)
+        self.assertEqual([entry.fact for entry in decide('45382', R).held_facts if entry.fact.startswith('conflict:')],
+                         ['conflict:bleeding_control'])
+        self.assertIs(EV._conflict_kind(R, None, group), Kind.SNARE)
+        self.assertIs(EV._conflict_kind(R, None, ()), Kind.OTHER)
+
+    def test_b9_iii_the_population(self):
+        """Build list B9 (iii): over every fixture of this module (all_fixtures), every per-code conflict held fact
+        whose subject is an event is keyed conflict:<facts.established_kind(subject)> - its own row's and a relation's
+        alike."""
+        checked = 0
+        for code, R, kept in all_fixtures():
+            for held in decide(code, R, kept).held_facts:
+                if held.fact.startswith('conflict:') and held.subject is not None \
+                        and held.subject.family.value == 'E':
+                    with self.subTest(code=code, held=held.fact, subject=str(held.subject)):
+                        self.assertEqual(held.fact, f'conflict:{facts_module.established_kind(R, held.subject).value}')
+                    checked += 1
+        self.assertGreater(checked, 10)
+
+
+def f3w_fixtures() -> list:
+    """(code, FactSet, kept) for step f3w of AMENDMENT-2's build round (DECISIONS D280, D281, D287): OneItem builds each
+    held code's one item (D182) and P-MONO weakens each - QD2's own rows with a claimed device (DIGITAL_SCOPE), G2-28's
+    input, a claimed DRE statement beside the colonoscope's examination, G1-07's kind states beside an unlisted doubt or
+    denial (no card, carded X1), and G3-28's kinds beside a broad denial with their status contradicted."""
+    out = []
+    for name, over in QD2_ROWS[:6]:
+        for device_name, device in CLAIMED[::3]:
+            out.append(('45385', qd2_shape(dict(over, device=device)).build(), ()))
+    out.append(('45385', qd2_shape(dict(device=doubted(Device.ENDOSCOPE, Device.ENDOSCOPE, Device.MANUAL),
+                                        status=unres(Status.PERFORMED)), beside=False).build(), ()))
+    for status in (neg(Status.PERFORMED), unres(Status.PERFORMED)):
+        doc = dre_alone(endoscopic={}, dre=False)
+        doc.exam(1, device=unres(Device.MANUAL), status=status)
+        out.append(('45378', doc.build(), (unit(2),)))
+    for kind in (sup(Kind.EXAMINATION), unres(Kind.EXAMINATION), doubted(Kind.EXAMINATION, Kind.EXAMINATION, Kind.SNARE),
+                 facts_module.SILENT):
+        for what in (ct.UnlistedWhat.DOUBT, ct.UnlistedWhat.DENIAL):
+            for card in (None, X(1)):
+                doc = colonoscopy(snare=False)
+                doc.act(1, kind)
+                doc.unlisted.append(unlisted(what, Kind.EXAMINATION, card, unit(9)))
+                out.append(('45378', doc.build(), (unit(1),)))
+    for kind in (facts_module.SILENT, unres(Kind.SNARE), sup(Kind.SNARE)):
+        doc = colonoscopy(kind=kind, status=contra(Status.PERFORMED, Status.PLANNED))
+        denial_event(doc, number=3, kind=Kind.SNARE)
+        out.append(('45385', doc.build(), ()))
     return out

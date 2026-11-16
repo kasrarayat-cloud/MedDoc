@@ -41,7 +41,7 @@ from unittest import mock
 from django.test import override_settings
 
 from studio import interpretation, jobs, models
-from studio.interpretation import adapter, sentinel
+from studio.interpretation import adapter, fable_adapter, sentinel
 
 MARK = 'd243_v2_replay'  # the attribute ``applied`` sets on a test method
 NOT_RECORDED = 'No recorded synthetic pass-1 answer for this document (tests/v2_replay.py); nothing was sent.'
@@ -102,7 +102,7 @@ def _interpreter_class():
             text = self._request.contexts[0]
             if text not in self.answers:
                 self.unrecorded.append(text)
-                return http.not_sent(NOT_RECORDED, interpretation.MODEL)
+                return http.not_sent(NOT_RECORDED, interpretation.MODEL_V3)
             answer_dict = self._dict(self.answers[text])
             if purpose == EXTRACTION:
                 return answered(body(answer_dict))
@@ -120,17 +120,19 @@ def start(test_case, documents=(), **kwargs):
     refused, and the checks made when the test ends (every document asked for was answered; no v1 row was written).
     ``kwargs`` go to the interpreter (``oracle``, ``script``)."""
     from tests.v2.test_adapter import measured_pins
+    from tests.v2.test_jobs import fable_pins
     from tests.v2.test_settle import HEALTH_PIN
 
     status = sentinel.install()
     test_case.assertEqual(status['state'], 'ok', status)
     test_case.assertFalse(jobs._v1_chain(), 'the v1 chain is on')
     test_case.assertTrue(sentinel.retired_armed(), 'the retired code objects are not armed')
-    test_case.enterContext(mock.patch.multiple(interpretation, HEALTH_THRESHOLDS_SHA256=HEALTH_PIN, **measured_pins()))
+    test_case.enterContext(mock.patch.multiple(interpretation, HEALTH_THRESHOLDS_SHA256=HEALTH_PIN,
+                                               **{**measured_pins(), **fable_pins()}))
     test_case.enterContext(override_settings(GEMINI_MODE='replay', GEMINI_REPLAY_DIR='/nonexistent-replay-dir',
                                              INTERPRET_MAX_CHARS=20_000, INTERPRET_MAX_PAGES=40))
     interpreter = _interpreter_class()(documents, **kwargs)
-    test_case.enterContext(mock.patch.object(adapter, 'get_interpreter_v2', return_value=interpreter))
+    test_case.enterContext(mock.patch.object(fable_adapter, 'get_interpreter_v2', return_value=interpreter))
     test_case.enterContext(mock.patch.object(adapter, 'get_interpreter', side_effect=AssertionError(V1_BUILT)))
     test_case.addCleanup(_ended, test_case, interpreter)
     return interpreter

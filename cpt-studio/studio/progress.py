@@ -124,12 +124,21 @@ WAITING_FOR_EARLIER = ('Your change is saved. A step started before it is finish
                        'it still applies.')
 # The interpretation's own outcomes (design/FINAL.md 6.11 and 11): a failed interpret stage leaves an existing state
 # (review._failed_stage_state: provider_failed with its run, or provider_not_run), worded here from that run - a document
-# over the size bound or cut off at the output limit (C5: never offered a paid retry), one that could not be prepared,
-# or any other definite failure, which offers the recorded retry ('retry_reading': FINAL 11.3) - and an interpreter that
-# is disabled or held reads as the existing stopped state with the paused phase (FINAL 11.2). Never a vendor's name.
+# over the size bound or pass 2's claim bound ('too_long'), a reading cut off at its output limit ('cut_off', C5: never
+# offered a paid retry), a reading the model declined ('declined': never sent again for a member), one that could not
+# be prepared, or any other definite failure, which offers the recorded retry ('retry_reading': FINAL 11.3) - and an
+# interpreter that is disabled or held reads as the existing stopped state with the paused phase (FINAL 11.2). Never a
+# vendor's name.
+# AMENDMENT-2 1.5: running out of output tokens does not show that a document is long, so a cut-off reading says what
+# happened and never a cause the run does not show [R:truth-T7]; a declined reading's member is told it was sent and
+# declined, never "Nothing was sent", and no action is offered [R:truth-T6][R:connector-CONN-1].
 INTERPRETATION_ERRORS = {
     'too_long': ('This document is too long to be read in one piece, so nothing was suggested for it. Shorten it or '
                  'split it, then upload it again.', 'new_document'),
+    'cut_off': ('The reading of this document reached its output limit before it was complete, so nothing was '
+                'suggested for it. If the document is long, shorten it or split it, then upload it again.',
+                'new_document'),
+    'declined': (jobs.DECLINED_MESSAGE, 'none'),
     'unprepared': ('This document could not be prepared for reading, so nothing was suggested for it. Upload it again.',
                    'new_document'),
     'failed': ('Reading the documented procedures could not be completed for this document, so no codes were '
@@ -137,6 +146,9 @@ INTERPRETATION_ERRORS = {
     'not_run': ('Reading documented procedures is not available right now, so no codes were suggested.', 'none'),
 }
 INTERPRETATION_PAUSED = interpretation_holds.PAUSED_MESSAGE
+# AMENDMENT-2 1.5 [R:truth-T6]: the stage of the run whose own answer set a hold (any but a request-bound one) ends
+# CANCELLED with this sentence - that document was sent - and reads as the paused phase, Resume once available
+INTERPRETATION_HOLD_SET = jobs.HOLD_SET_MESSAGE
 
 
 def _iso(value):
@@ -378,6 +390,16 @@ def interpreter_paused(encounter):
             and latest.error == INTERPRETATION_PAUSED)
 
 
+def interpreter_hold_set(encounter):
+    """Whether the current revision's latest stage is a reading stage whose OWN run's answer set the installation-wide
+    hold (AMENDMENT-2 1.5 [R:truth-T6]: it ended CANCELLED with jobs.HOLD_SET_MESSAGE - that document was sent, and no
+    usable reading came back): the paused phase, worded from that run, never "Nothing was sent". Read from the stage's
+    own record."""
+    latest = review.latest_job(encounter)
+    return (latest is not None and latest.kind in READING_KINDS and latest.state == Job.CANCELLED
+            and latest.error == INTERPRETATION_HOLD_SET)
+
+
 def provider_paused(encounter):
     """FINAL-V2 amendment 1, 7.1 (A16) [R2:truth-RT6][R3:truth-R3T-7]: whether the latest target job is a predict that
     Corti's provider hold ended paused - it recorded a held not-sent run, or its own run set the hold, and ended
@@ -394,19 +416,24 @@ def provider_paused(encounter):
 def interpretation_error(encounter, state, run):
     """(text, action) of a failed interpret stage (FINAL 6.11), or None when the failed state is not an interpret
     stage's: ``state`` and ``run`` are review._state_and_run's (the run is the stage's own, which explains it). Too long -
-    the size bound, or an answer cut off at its output limit (C5) - or a document that could not be prepared: upload it
-    again; any other failure offers the recorded retry; no request made: not available now."""
+    the size bound, or pass 2's claim bound - or a reading cut off at its output limit (C5; AMENDMENT-2 1.5
+    [R:truth-T7]: worded as the limit reached), or a document that could not be prepared: upload it again; a declined
+    reading (AMENDMENT-2 1.5 [R:truth-T6]): sent, declined, not sent again - no action; any other failure offers the
+    recorded retry; no request made: not available now."""
     situation = _reading_situation(encounter, state, run)
     if situation is None:
         return None
-    return INTERPRETATION_ERRORS[{'reading_unbuilt': 'unprepared', 'too_long': 'too_long', 'not_run': 'not_run'}.get(
-        situation, 'failed')]
+    return INTERPRETATION_ERRORS[{'reading_unbuilt': 'unprepared', 'too_long': 'too_long', 'cut_off': 'cut_off',
+                                  'declined': 'declined', 'not_run': 'not_run'}.get(situation, 'failed')]
 
 
 def _reading_situation(encounter, state, run):
-    """What a failed reading stage (pass 1 or pass 2) means (FINAL 6.11; FINAL-V2 7.5): 'not_run', 'reading_unbuilt',
-    'too_long' (the size bound, an answer cut off, or pass 2's claim set over its bound: C5), 'appraisal_failed' or
-    'reading_failed' - or None when the failed state is not a reading stage's."""
+    """What a failed reading stage (pass 1 or pass 2) means (FINAL 6.11; FINAL-V2 7.5; AMENDMENT-2 1.5): 'not_run',
+    'reading_unbuilt', 'too_long' (the size bound, or pass 2's claim set over its bound: the length is the cause),
+    'cut_off' (an answer cut at its output limit, sent or replayed, C5 [R:truth-T7]), 'declined' (a sent answer whose
+    hold is request-bound: a decline [R:truth-T6][R:connector-CONN-1]) - each also for a later attempt of a request an
+    earlier attempt of which was cut off or declined (jobs._member_block: a member's retry of it is refused) -
+    'appraisal_failed' or 'reading_failed' - or None when the failed state is not a reading stage's."""
     latest = review.latest_job(encounter)
     if latest is None or latest.kind not in READING_KINDS or latest.state not in (Job.FAILED, Job.UNKNOWN):
         return None
@@ -420,9 +447,21 @@ def _reading_situation(encounter, state, run):
     if scope.get('refused') == jobs.FAILED_BEFORE:
         # the failed-request door kept it unsent: worded by the attempt that failed (a cut-off answer stays too long)
         run = encounter.provider_runs.filter(pk=scope.get('failed'), purpose=run.purpose).first() or run
-    if (scope.get('refused') in (jobs.SIZE, jobs.CLAIMS)
-            or jobs.interpretation_effect(run) == interpretation_holds.TOO_LONG):
+    if scope.get('refused') in (jobs.SIZE, jobs.CLAIMS):
         return 'too_long'
+    if jobs.interpretation_effect(run) == interpretation_holds.TOO_LONG:
+        # an answer cut at its output limit, sent or replayed (a replayed run is recorded not sent): what happened, never
+        # a cause the run does not show [R:truth-T7] - the size and claim bounds, the only too-long effects whose cause
+        # is the length, are the refusals read above
+        return 'cut_off'
+    if jobs._declined_attempt(run):
+        return 'declined'
+    blocked = jobs._member_block(run)
+    if blocked is not None:
+        # AMENDMENT-2 1.5 [R:connector-CONN-1] and C5: an earlier attempt of the identical request was declined or cut
+        # off, so a member's retry is refused (jobs.retry_reading) whatever this later attempt - an operator's override
+        # that failed - came back as: worded by that attempt, never offered the retry
+        return 'declined' if jobs._declined_attempt(blocked) else 'cut_off'
     return 'appraisal_failed' if run.purpose == jobs.APPRAISAL else 'reading_failed'
 
 
@@ -437,7 +476,8 @@ def stage_bound(kind):
     if kind == Job.EXTRACT:
         return settings.EXTRACTION_TIMEOUT_SECONDS
     if kind in READING_KINDS:
-        return settings.JOB_DEADLINE_SECONDS.get(kind)  # its one send's deadline and its reading (D49: 560 s)
+        # its one send's deadline and its reading (AMENDMENT-2 1.12: 1,320 s and the stage's 1,380 s)
+        return settings.JOB_DEADLINE_SECONDS.get(kind)
     if kind in SENDING_KINDS:
         return settings.PROVIDER_READ_TIMEOUT_SECONDS + 30
     if kind in (Job.ANALYZE, Job.ASSESS) + CHECK_KINDS:
@@ -666,6 +706,11 @@ def _update_situation(encounter, state, run):
     the update's state is its own (updating, or a state 7.1 does not name)."""
     reading = _reading_situation(encounter, state, run)
     if reading is not None:
+        if reading in ('cut_off', 'declined'):
+            # AMENDMENT-2 1.5: 7.1 has no row for a reading cut at its output limit or declined, and its too_long row
+            # names a cause the run does not show [R:truth-T7] - so the failed row of the pass, whose sentence is true
+            # of both ("could not be completed"); its retry is refused with RETRY_CUT_OFF or RETRY_DECLINED, as asked
+            return 'appraisal_failed' if run is not None and run.purpose == jobs.APPRAISAL else 'reading_failed'
         return 'too_long' if reading == 'too_long' else (
             'appraisal_failed' if reading == 'appraisal_failed' else
             'interpreter_paused' if reading == 'not_run' else 'reading_failed')
@@ -703,9 +748,17 @@ def update_error(encounter, state, run, *, kind, restorable, stopped_by_member):
     from . import customer_api  # local import: customer_api imports this module at its top
 
     latest = review.latest_job(encounter)
+    phase = None  # the row's own phase unless a reading's hold set it (below)
     if state == 'stopped':
         if interpreter_paused(encounter):
             situation = 'interpreter_paused'
+        elif interpreter_hold_set(encounter):
+            # AMENDMENT-2 1.5 [R:truth-T6]: the update's own reading set the hold - the paused phase, as on a first
+            # processing. 7.1's interpreter_paused row says "nothing was sent", untrue of a run that was sent, so its
+            # words are the row that names no cause it cannot show (the update paused before it finished; Resume to
+            # finish it - a Resume while the hold stands pauses again, and then reads interpreter_paused, true for
+            # that unsent stage)
+            situation, phase = 'stopped_by_system', 'paused'
         elif provider_paused(encounter):
             situation = 'review_held'
         elif latest is not None and latest.error == jobs.PROVIDER_DISABLED_MESSAGE:
@@ -718,9 +771,14 @@ def update_error(encounter, state, run, *, kind, restorable, stopped_by_member):
         return None
     row = customer_api.UPDATE_TEXTS[situation]
     action = row.action
+    if state != 'stopped':
+        # AMENDMENT-2 1.5: a reading cut at its output limit or declined is worded by its pass's failed row (above), but
+        # its action is never the retry that would be refused (RETRY_CUT_OFF, RETRY_DECLINED): a cut-off reading offers
+        # a new document, as on a first processing [R:truth-T7]; a declined one offers nothing [R:connector-CONN-1]
+        action = {'cut_off': 'new_document', 'declined': 'none'}.get(_reading_situation(encounter, state, run), action)
     if action == 'resume' and not review.can_resume(encounter):
         action = 'none'
-    return row.phase, {'text': customer_api.update_text(situation, kind, restorable), 'action': action}
+    return phase or row.phase, {'text': customer_api.update_text(situation, kind, restorable), 'action': action}
 
 
 def encounter_progress(encounter, now=None) -> dict:
@@ -774,6 +832,11 @@ def encounter_progress(encounter, now=None) -> dict:
             # paused message; Resume once it is available again
             phase = 'paused'
             error = {'text': INTERPRETATION_PAUSED, 'action': 'resume' if review.can_resume(encounter) else 'none'}
+        elif state == 'stopped' and interpreter_hold_set(encounter):
+            # AMENDMENT-2 1.5 [R:truth-T6]: this document's own reading set the hold - the paused phase, worded from
+            # that run (it was sent), never "Nothing was sent"; Resume once it is available again
+            phase = 'paused'
+            error = {'text': INTERPRETATION_HOLD_SET, 'action': 'resume' if review.can_resume(encounter) else 'none'}
         elif state == 'stopped' and provider_paused(encounter):
             # amendment 1, 7.1 [R2:truth-RT6][R3:truth-R3T-7]: a first processing paused under Corti's standing hold
             phase = 'paused'

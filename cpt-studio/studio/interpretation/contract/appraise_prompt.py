@@ -1,6 +1,7 @@
 """What pass 2 is asked (gemini-appraisal@1; docs/gemini-migration/FINAL-V2.md 2.3-2.5, 3.2 and 7.4; step 2c of 8.1):
 INSTRUCTIONS, the system instruction; the user turn - the same framed, segmented document pass 1 reads, then the cards
-and the claims in their seeded order; and the request body (``request_parts``, ``build_request``).
+and the claims in their seeded order; and the request body (``request_parts``, ``build_request``); and the Fable
+request of gemini-appraisal@2 (``request_parts_fable``, ``build_request_fable``; AMENDMENT-2 1.2, step F2).
 
 **INSTRUCTIONS** is written from 2.4's clauses A1-A7, one titled part per clause (the Clause enumeration names each
 clause's part, clause_text returns it, and tests/v2/test_appraise_prompt.py pins each clause's rule by a grep), after a
@@ -37,6 +38,34 @@ too. The integration owner writes them after the wave's last repair; until the f
 changed object needs only its pin recomputed, after it a new APPRAISAL_VERSION (DECISIONS D202). The LOCAL schema is
 read, never sent: appraise_read.check_pin checks it.
 
+**The Fable request** (gemini-appraisal@2; AMENDMENT-2 1.2, 2.2 and 8.1-8.2, adopted by DECISIONS D279; step F2):
+build_request_fable makes the request build_request makes - the same framed document, then the cards and the claims, in
+one user turn - with four differences the label brings. The claims are gemini-appraisal@2's: step f3s's claims.build
+under APPRAISAL_VERSION_V3, so the objects DECISIONS D292 changes for that label (U1's kind-neutral forms of a doubted
+kind's statements, U3's reached_anatomy claim and the control it shares with the reach) are the ones built and sent,
+never the recorded @1 tables. Every label-aware object of claims.py the Fable path reads is read under that one label:
+the claims, the three documents its pins hash and the claim bound's document. The claims' order is seeded by
+APPRAISAL_VERSION_V3 (seed_fable; 8.1: the seed rule reads the label, so the order changes). A claim set over
+claims.CLAIM_BOUND_V3 (step f3s's bound, sized for the size bound: D278, 8.2) is never built into a request (OverBound
+naming that bound; over_bound_fable). And the body is request_parts_fable's: exactly extract_prompt.FABLE_BODY_KEYS -
+model (interpretation.MODEL_V3), max_tokens (extract_prompt.FABLE_MAX_TOKENS), stream (true), output_config (effort
+extract_prompt.FABLE_EFFORT, and format, a json_schema over a copy of appraise_schema.LOCAL_SCHEMA: Anthropic's
+structured outputs, 2.2), system (one text block holding INSTRUCTIONS, with no cache marker: 7.2) and messages (one user
+turn holding the turn). INSTRUCTIONS is unchanged byte for byte and names no provider, response schema or Gemini form.
+request_parts, build_request, check_pins, TEMPERATURE, MAX_OUTPUT_TOKENS, THINKING_LEVEL and RESPONSE_MIME_TYPE keep
+serving the dormant Gemini adapter, and the Fable path sends none of them (2.3).
+
+**The Fable pins** (8.2): a Fable body is built only when INSTRUCTIONS (APPRAISAL_INSTRUCTIONS_SHA256), LOCAL_SCHEMA
+(APPRAISAL_LOCAL_SCHEMA_SHA256, now also the structured-output schema the body sends), the templates, the statement
+templates and the controls of APPRAISAL_VERSION_V3 (claims.templates_document, statement_templates_document and
+controls_document under that label: TEMPLATES_SHA256_V3, STATEMENT_TEMPLATES_SHA256_V3, CONTROLS_SHA256_V3 - DECISIONS
+D292's U1 and U3 change those objects, and gemini-appraisal@1, which shares the v2 names, has recordings, so the changed
+objects take names of their own: D202), CLAIMED (CLAIMED_SHA256), the claim bound (CLAIM_BOUND_SHA256_V3:
+claims.claim_bound_document under that label, which holds CLAIM_BOUND_V3) and the segmentation rule
+(SEGMENTATION_SHA256) match their pins (check_pins_fable). The label pins no RESPONSE schema; its health thresholds are
+settle's pin (HEALTH_THRESHOLDS_SHA256_V3), read when an appraisal is settled. After the first recording under
+gemini-appraisal@2, a changed object needs gemini-appraisal@3.
+
 The module touches the revision text only to frame it and to quote the anchor words claims.py located: it hands the text
 to contract/extract_prompt.framed (which hands it to contract/segment.py and participants.prompt.marker) and to
 contract/geometry.py (where pass 1's citations sit, and their sentence closures). It holds no word, phrase, marker or
@@ -53,6 +82,7 @@ from typing import Any
 
 from studio import interpretation
 from studio.interpretation.contract import appraise_schema, claims, extract_schema, geometry, jsonschema, segment
+from studio.interpretation.contract.extract_prompt import FABLE_EFFORT, FABLE_MAX_TOKENS
 from studio.interpretation.contract.extract_prompt import Unbuilt as Unbuilt
 from studio.interpretation.contract.extract_prompt import Unframed as Unframed
 from studio.interpretation.contract.extract_prompt import document_line as document_line
@@ -187,12 +217,16 @@ def clause_text(clause: Clause) -> str:
 
 
 class OverBound(ValueError):
-    """build_request's refusal of a claim set over claims.CLAIM_BOUND (1.8; 7.4 door 0: the stage ends TOO_LONG)."""
+    """build_request's refusal of a claim set over claims.CLAIM_BOUND (1.8; 7.4 door 0: the stage ends TOO_LONG), and
+    build_request_fable's over claims.CLAIM_BOUND_V3 (AMENDMENT-2 8.2): ``count`` the claims, ``bound`` the bound it
+    passed (CLAIM_BOUND when not given)."""
 
-    def __init__(self, count: int) -> None:
-        super().__init__(f'The claim set holds {count:,} claims, more than the {claims.CLAIM_BOUND:,} one request may '
-                         'carry; no request is built and nothing is sent.')
+    def __init__(self, count: int, bound: int | None = None) -> None:
+        limit = claims.CLAIM_BOUND if bound is None else bound
+        super().__init__(f'The claim set holds {count:,} claims, more than the {limit:,} one request may carry; no '
+                         'request is built and nothing is sent.')
         self.count = count
+        self.bound = limit
 
 
 # --- what claims.py is given: the geometry of pass 1's citations --------------------------------------------------------
@@ -265,8 +299,17 @@ def basis(text: str, pages: Sequence[segment.Page], answer: ReadAnswer, *,
 def seed(text: str, answer: ReadAnswer) -> str:
     """The seed of the claims' order: the sha256 of APPRAISAL_VERSION, the text's sha256 and the answer's canonical
     sha256 - a pure function of the request's inputs (claims.controls_document's seed rule)."""
-    return jsonschema.sha256_of([interpretation.APPRAISAL_VERSION, jsonschema.sha256_of(text),
-                                 jsonschema.sha256_of(answer.answer)])
+    return _seed(interpretation.APPRAISAL_VERSION, text, answer)
+
+
+def seed_fable(text: str, answer: ReadAnswer) -> str:
+    """The seed of the Fable request's claim order: seed's rule under APPRAISAL_VERSION_V3, the label the request is
+    built under (AMENDMENT-2 8.1: the seed rule reads the label, so the claim order changes)."""
+    return _seed(interpretation.APPRAISAL_VERSION_V3, text, answer)
+
+
+def _seed(version: str, text: str, answer: ReadAnswer) -> str:
+    return jsonschema.sha256_of([version, jsonschema.sha256_of(text), jsonschema.sha256_of(answer.answer)])
 
 
 # --- the cards and the claims, written ------------------------------------------------------------------------------------
@@ -388,6 +431,61 @@ def build_request(text: str, pages: Sequence[segment.Page], kind: str, answer: R
     return Request(request_parts(turn), claim_set, framed_document, turn, indistinct(claim_set, text))
 
 
+# --- the Fable request body (AMENDMENT-2 1.2, 2.2; DECISIONS D275) --------------------------------------------------------
+
+
+def request_parts_fable(turn: str) -> dict[str, Any]:
+    """Pass 2's Fable request body (AMENDMENT-2 1.2): exactly extract_prompt.FABLE_BODY_KEYS - model
+    (interpretation.MODEL_V3), max_tokens (FABLE_MAX_TOKENS), stream (true), output_config (effort FABLE_EFFORT, and
+    format: a json_schema over a copy of appraise_schema.LOCAL_SCHEMA, Anthropic's structured outputs, 2.2), system (one
+    text block holding INSTRUCTIONS, no cache marker: 7.2) and messages (one user turn holding ``turn``). No thinking
+    setting, sampling parameter, prefill, tool, stop sequence, metadata or fallback model (D275). Pure; the body shares
+    nothing with this module. TypeError when ``turn`` is not a str; RuntimeError when a pin does not match
+    (check_pins_fable)."""
+    if not isinstance(turn, str):
+        raise TypeError('The user turn must be a string.')
+    check_pins_fable()
+    return {
+        'model': interpretation.MODEL_V3,
+        'max_tokens': FABLE_MAX_TOKENS,
+        'stream': True,
+        'output_config': {'effort': FABLE_EFFORT,
+                          'format': {'type': 'json_schema', 'schema': copy.deepcopy(appraise_schema.LOCAL_SCHEMA)}},
+        'system': [{'type': 'text', 'text': INSTRUCTIONS}],
+        'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': turn}]}],
+    }
+
+
+def over_bound_fable(claim_set: claims.ClaimSet) -> bool:
+    """Whether ``claim_set`` holds more claims than claims.CLAIM_BOUND_V3, the bound of a Fable request (AMENDMENT-2
+    8.2): such a set is never built into a request (7.4 door 0, 7.5: TOO_LONG)."""
+    return len(claim_set.claims) > claims.CLAIM_BOUND_V3
+
+
+def build_request_fable(text: str, pages: Sequence[segment.Page], kind: str, answer: ReadAnswer, *,
+                        findings: Mapping[FactKey, tuple[Reason, ...]]) -> Request:
+    """The Fable appraisal request for a revision and pass 1's answer to it (gemini-appraisal@2; AMENDMENT-2 1.2): as
+    build_request - the pins checked (check_pins_fable), the document framed by contract/extract_prompt.framed, the claims
+    built from the answer, its geometry and the required check findings (DECISIONS D206), the bound checked, the user
+    turn written - with the claims built under APPRAISAL_VERSION_V3 (claims.build's label: gemini-appraisal@2's
+    templates, statement templates and controls, DECISIONS D292's U1 and U3) and ordered by seed_fable, the bound
+    claims.CLAIM_BOUND_V3, and request_parts_fable's body. Unbuilt when the text cannot be framed; OverBound (naming
+    CLAIM_BOUND_V3) over the bound; RuntimeError on a pin; TypeError when ``findings`` is not given by name."""
+    check_pins_fable()
+    framed_document = framed(text, pages, kind)
+    if framed_document is None:
+        reason = unframed(text, pages)
+        if reason is None:  # framed() returns None exactly when unframed() names a reason; a pure function
+            raise RuntimeError('framed() refused a text unframed() accepts; nothing is built.')
+        raise Unbuilt(reason)
+    claim_set = claims.build(basis(text, pages, answer, findings=findings), seed_fable(text, answer),
+                             version=interpretation.APPRAISAL_VERSION_V3)
+    if over_bound_fable(claim_set):
+        raise OverBound(len(claim_set.claims), claims.CLAIM_BOUND_V3)
+    turn = user_turn(framed_document, claim_set, text)
+    return Request(request_parts_fable(turn), claim_set, framed_document, turn, indistinct(claim_set, text))
+
+
 # --- the pins (2.5) -------------------------------------------------------------------------------------------------------
 
 
@@ -418,6 +516,49 @@ def check_pins() -> None:
     for name, measured in pins().items():
         if name == 'APPRAISAL_LOCAL_SCHEMA_SHA256':
             continue  # read, never sent: appraise_read.check_pin
+        pinned = getattr(interpretation, name)
+        if not pinned:
+            raise RuntimeError(f'{name} is not pinned yet; no {version} request is built under an unpinned object.')
+        if measured != pinned:
+            raise RuntimeError(f'{name} no longer matches its pin; a changed object needs its pin recomputed before '
+                               f'the first recording under {version}, and a new APPRAISAL_VERSION after it '
+                               '(DECISIONS D202).')
+
+
+def claim_bound_document_v3() -> dict[str, object]:
+    """The Fable request's claim bound in the per-request bound's canonical form: claims.claim_bound_document under
+    APPRAISAL_VERSION_V3, step f3s's one form, which holds claims.CLAIM_BOUND_V3 (``{"claims_per_request": N}``), whose
+    sha256 CLAIM_BOUND_SHA256_V3 pins (AMENDMENT-2 8.2: at 1,000 claims, 3fe08a5c...)."""
+    return claims.claim_bound_document(version=interpretation.APPRAISAL_VERSION_V3)
+
+
+def pins_fable() -> dict[str, str]:
+    """The sha256 of each pinned object a Fable appraisal request is built under, by its pin's name in
+    studio/interpretation/__init__.py (AMENDMENT-2 8.2, with DECISIONS D292's three changed objects under their _V3
+    names): what this step hands the integration owner. The templates, the statement templates, the controls and the
+    claim bound are claims.py's documents under APPRAISAL_VERSION_V3, the label the request's claims are built under
+    (build_request_fable), so the pins guard the objects the request sends and never the recorded @1 objects of the same
+    tables. LOCAL_SCHEMA is checked here too: the body now sends it."""
+    version = interpretation.APPRAISAL_VERSION_V3
+    return {
+        'APPRAISAL_INSTRUCTIONS_SHA256': jsonschema.sha256_of(INSTRUCTIONS),
+        'APPRAISAL_LOCAL_SCHEMA_SHA256': jsonschema.sha256_of(appraise_schema.LOCAL_SCHEMA),
+        'TEMPLATES_SHA256_V3': jsonschema.sha256_of(claims.templates_document(version=version)),
+        'STATEMENT_TEMPLATES_SHA256_V3': jsonschema.sha256_of(claims.statement_templates_document(version=version)),
+        'CONTROLS_SHA256_V3': jsonschema.sha256_of(claims.controls_document(version=version)),
+        'CLAIMED_SHA256': requirements.claimed_sha256(),
+        'CLAIM_BOUND_SHA256_V3': jsonschema.sha256_of(claim_bound_document_v3()),
+        'SEGMENTATION_SHA256': jsonschema.sha256_of(segment.rule_constants()),
+    }
+
+
+def check_pins_fable() -> None:
+    """RuntimeError unless every object a Fable appraisal request is built under (pins_fable) matches its pin
+    (AMENDMENT-2 8.2): the instruction, the LOCAL schema the body sends, the templates, the statement templates, the
+    controls, CLAIMED, the claim bound and the segmentation rule. An empty pin is refused too. After the first recording
+    under APPRAISAL_VERSION_V3 a changed object needs gemini-appraisal@3 (DECISIONS D202)."""
+    version = interpretation.APPRAISAL_VERSION_V3
+    for name, measured in pins_fable().items():
         pinned = getattr(interpretation, name)
         if not pinned:
             raise RuntimeError(f'{name} is not pinned yet; no {version} request is built under an unpinned object.')

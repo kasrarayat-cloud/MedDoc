@@ -20,6 +20,7 @@ What is proved here (the step's done-when):
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import hashlib
 import json
@@ -54,16 +55,20 @@ CODES = (('45385', cite(6)), ('45378', cite(5)))
 
 class V2World:
     """One v2 encounter: the revision TF.TEXT, pass 1's and the appraisal's runs, the v2 inventory written by
-    store.row_v2 from TF.colonoscopy(), its gemini-context@2, the engine's assessment over the stored row persisted as
-    the renderer persists it (tests/v2/test_overlay.persist: its completeness exactly what step 5a records, worded
-    with the renderer's label, overlay.session_label - step 5a's request R1), and the encounter pointing at both.
+    store.row_v2 from TF.colonoscopy() (at store's default pair unless ``versions`` names one of store.READ_VERSIONS),
+    its gemini-context@2, the engine's assessment over the stored row persisted as the renderer persists it
+    (tests/v2/test_overlay.persist: its completeness exactly what step 5a records, worded with the renderer's label,
+    overlay.session_label - step 5a's request R1) at the engine version engine/assess writes (``engine_version``:
+    AS.ENGINE_VERSION by default, step f5's request R1: the engine's own label, AMENDMENT-2 8.1; ``record_version`` a
+    record another release wrote, its rows' event_reading and its coding's version), and the encounter pointing at
+    both.
     ``record``: (completeness, the engine's Assessment, R) -> the completeness stored instead (a later record's).
     ``answered``: (code, value) of a member's answer the engine reads at assess - given to that code's one item as the
     engine asked it (its fingerprint from the same assessment made without it), so the code is EXCLUDED with the
     answer's marker, as an assessment recomputed after the answer records it."""
 
     def __init__(self, codes=CODES, *, excluded=None, transform=None, sentinel_record=None, record=None,
-                 answered=None):
+                 answered=None, versions=None, engine_version=None, record_version=None):
         self.ws = f.workspace()
         self.user = f.member(self.ws)
         self.enc = f.encounter(self.ws, self.user)
@@ -76,7 +81,7 @@ class V2World:
                               request_sha256=self.first.request_sha256, response_sha256=self.first.response_sha256,
                               appraisal_request_sha256=self.second.request_sha256,
                               appraisal_response_sha256=self.second.response_sha256, events=content,
-                              verification=TF.report(len(content['unlisted'])))
+                              verification=TF.report(len(content['unlisted'])), versions=versions)
         self.fields = json.loads(json.dumps(fields))
         if transform is not None:
             self.fields = transform(self.fields)
@@ -112,6 +117,10 @@ class V2World:
             answers = (TA.answer(asked, value=value),)
         self.engine = assess(answers)
         rows, completeness = persist(self.engine, self.R, TF.TEXT)
+        if record_version is not None:  # a record a release wrote at another engine version (its rows and coding)
+            rows = [dataclasses.replace(row, support={**row.support, 'event_reading': record_version}) for row in rows]
+            completeness = {**completeness,
+                            'event_coding': {**completeness['event_coding'], 'version': record_version}}
         if record is not None:
             completeness = json.loads(json.dumps(record(completeness, self.engine, self.R)))
         if excluded is not None:
@@ -126,7 +135,7 @@ class V2World:
                                                   sentinel_record=dict(sentinel_record))
         self.assessment = models.Assessment.objects.create(
             encounter=self.enc, revision=self.rev, context=self.context, routing=routing,
-            profiles_version='gi-profiles@test', engine_version=interpretation.ENGINE_VERSION_V2,
+            profiles_version='gi-profiles@test', engine_version=engine_version or AS.ENGINE_VERSION,
             completeness=completeness, retrieval=[], reference_sources=[], sha256='0' * 64,
             event_inventory=self.inventory, interpretation=record)
         self.proposals = {}
@@ -172,7 +181,7 @@ def excluded_row(key='exc:0', code='45386') -> overlay.Stored:
                           checks=({'id': overlay.REINSTATEMENT_CHECK, 'label': 'Approval after reinstatement',
                                    'status': 'pass', 'detail': '', 'source': ''},),
                           holds=(), questions=(),
-                          support={'event_reading': interpretation.ENGINE_VERSION_V2, 'kept_words': None,
+                          support={'event_reading': interpretation.ENGINE_VERSION_V3, 'kept_words': None,
                                    'procedural': True, 'origin': 'primary', 'competes': [],
                                    'reinstatement_waits': []},
                           evidence=({'start': at.start, 'end': at.end, 'text': TF.TEXT[at.start:at.end]},))
@@ -209,7 +218,9 @@ class V2ReadTests(TestCase):
         rows = [overlay.stored_from(p, ()) for p in assessment.proposals.order_by('position')]
         counted = overlay.counted_codes(rows, {'exc:0'}, world.R)
         members = overlay.recount(rows, [item.key for item in counted], [row.key for row in rows[:2]],
-                                  overlay.read_coding(assessment.completeness), world.R).members
+                                  overlay.read_coding(assessment.completeness), world.R,
+                                  assessed=overlay.assessed_out(assessment.completeness, rows),
+                                  uncounted=overlay.assessed_uncounted(assessment.completeness, rows)).members
         own = overlay.assessment_counts(assessment.completeness, world.R, rows)
         self.assertEqual(own, TO.counts(world.engine, world.R, label=overlay.session_label))
         expected = overlay.reviewed_coverage(assessment.completeness, world.R, counted,
@@ -299,8 +310,8 @@ class V2ReadTests(TestCase):
         pair (simulated: an earlier pair beside the current one, with the current shapes); a pair it does not list
         is unreadable, never read with another pair's rules."""
         store._v2()
-        earlier = ('gemini-events@2/appraisal@0', interpretation.INVENTORY_VERSION_V2)
         current = store.READ_VERSIONS[-1]
+        earlier = ('gemini-events@2/appraisal@0', current[1])
         name = 'gemini-events@2/appraisal@0+inventory@2'
 
         def stored_earlier(fields):
@@ -312,7 +323,7 @@ class V2ReadTests(TestCase):
         with mock.patch.object(store, 'READ_VERSIONS', (earlier, current)), \
                 mock.patch.dict(store._V2_SHAPES, {earlier: store._V2_SHAPES[current]}), \
                 mock.patch.dict(store._V2_LABELS, {earlier: name}):
-            world = V2World(transform=stored_earlier)
+            world = V2World(transform=stored_earlier, versions=current)
             assessment = world.fresh()
             reader = readers.for_assessment(assessment)
             self.assertEqual(assessment.event_inventory.interpretation_version, earlier[0])
@@ -339,6 +350,38 @@ class V2ReadTests(TestCase):
         self.assertEqual(reviewed['reasons'][-1], overlay.UNREADABLE_COVERAGE_REASON)
         self.assertEqual(reviewed['state'], 'incomplete')
         self.assertIn(review.UNREADABLE_EVENTS_BLOCKER, review._assessment_blockers(world.enc, assessment))
+
+    def test_an_assessment_of_design_v2s_first_labels_is_read_as_stored(self):
+        """AMENDMENT-2 8.1 [R:replay-R4]: every reader of a stored row accepts both design v2 families - a row stored
+        before AMENDMENT-2 (its inventory at the @2 pair, its assessment, records and coding at cpt-studio-events@2) is
+        read as stored: the V2 branch, its FactSet read, every view its stored proposal, nothing unreadable, a
+        reinstatement's coverage re-run, and the fingerprint binding of D259 kept (review.stored_questions)."""
+        world = V2World(excluded=excluded_row(), versions=store.READ_VERSIONS[0],
+                        engine_version=interpretation.ENGINE_VERSION_V2, record_version=interpretation.ENGINE_VERSION_V2)
+        assessment = world.fresh()
+        self.assertEqual((assessment.engine_version, assessment.event_inventory.interpretation_version,
+                          assessment.completeness['event_coding']['version']),
+                         (interpretation.ENGINE_VERSION_V2, interpretation.INTERPRETATION_PAIR,
+                          interpretation.ENGINE_VERSION_V2))
+        reader = readers.for_assessment(assessment)
+        self.assertEqual(reader.branch(assessment), readers.V2)
+        self.assertEqual(reader.reading(assessment), world.R)
+        views = review.effective_view(assessment)
+        for row in world.rows:
+            with self.subTest(code=row.code):
+                self.assertEqual((views[row.key].status, views[row.key].recomputed, views[row.key].stale),
+                                 (row.status, (), ()))
+        self.assertFalse(reader.unreadable(assessment))
+        world.decide('45386', models.Decision.REINSTATE)
+        self.assertFalse(reader.unreadable(world.fresh(), [('45386', 'gi.colonoscopy')]))
+        proposals = list(assessment.proposals.all())
+        self.assertEqual(review.stored_questions(assessment, proposals),
+                         review.stored_questions(SimpleNamespace(engine_version=interpretation.ENGINE_VERSION_V3),
+                                                 proposals))
+        # the control: a later events version (@4) is not read
+        assessment.engine_version = 'cpt-studio-events@4'
+        self.assertEqual(readers.for_assessment(assessment).branch(assessment), readers.UNKNOWN)
+        self.assertEqual(review.stored_questions(assessment, proposals), {})
 
     def test_the_operators_section_names_both_runs(self):
         world = V2World()
@@ -444,7 +487,7 @@ class LabelTests(SimpleTestCase):
     def test_the_label_follows_the_events_version(self):
         v2 = SimpleNamespace(engine_version=interpretation.ENGINE_VERSION_V2)
         v1 = SimpleNamespace(engine_version=interpretation.ENGINE_VERSION)
-        later = SimpleNamespace(engine_version='cpt-studio-events@3')
+        later = SimpleNamespace(engine_version='cpt-studio-events@4')
         legacy = SimpleNamespace(engine_version='cpt-studio-validation@10')
         context2 = SimpleNamespace(version=interpretation.CONTEXT_VERSION_V2)
         context1 = SimpleNamespace(version=interpretation.CONTEXT_VERSION)
@@ -460,13 +503,22 @@ class LabelTests(SimpleTestCase):
                 self.assertEqual(readers.label_of(encounter), expected)
 
     def test_each_branch_of_the_event_reader(self):
-        for version, branch in ((interpretation.ENGINE_VERSION_V2, readers.V2),
-                                (interpretation.ENGINE_VERSION, readers.V1), ('cpt-studio-events@3', readers.UNKNOWN)):
+        # AMENDMENT-2 8.1 [R:replay-R4]: the V2 branch reads both design v2 families - @3, what engine/assess writes now,
+        # and @2, rows stored before it, read as stored - and a later events version (@4) is not read
+        for version, branch in ((interpretation.ENGINE_VERSION_V3, readers.V2),
+                                (interpretation.ENGINE_VERSION_V2, readers.V2),
+                                (interpretation.ENGINE_VERSION, readers.V1), ('cpt-studio-events@4', readers.UNKNOWN)):
             with self.subTest(version=version):
                 row = SimpleNamespace(engine_version=version, completeness={}, event_inventory_id=None)
                 reader = readers.for_assessment(row)
                 self.assertIsInstance(reader, readers.EventReader)
                 self.assertEqual(reader.branch(row), branch)
                 self.assertTrue(reader.unreadable(row))  # no coding: unreadable at every branch
-        self.assertEqual(readers.READ_ENGINES, (interpretation.ENGINE_VERSION_V2,))
-        self.assertEqual(overlay.CODING_VERSION, readers.READ_ENGINES[0])
+        self.assertEqual(readers.READ_ENGINES, (interpretation.ENGINE_VERSION_V2, interpretation.ENGINE_VERSION_V3))
+        self.assertEqual(readers.READ_CONTEXTS, (interpretation.CONTEXT_VERSION_V2,))  # contexts unchanged by 8.1
+        # the overlay reads both families' codings and records, and writes the engine's own
+        self.assertEqual(overlay.READ_CODINGS, readers.READ_ENGINES)
+        self.assertEqual(overlay.READ_RECORDS, readers.READ_ENGINES)
+        self.assertEqual((overlay.CODING_VERSION, overlay.RECORD_VERSION),
+                         (interpretation.ENGINE_VERSION_V3, interpretation.ENGINE_VERSION_V3))
+        self.assertEqual(overlay.CODING_VERSION, AS.ENGINE_VERSION)  # what the engine writes is what is read

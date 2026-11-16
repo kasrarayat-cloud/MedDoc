@@ -75,7 +75,8 @@ from studio.interpretation.read import STAGES, Refusal, iso_date
 from studio.types import sha256_json, to_jsonable
 
 # design v2 (the section ``design v2`` below): the package's labels here, and contract/ on first use only (_v2)
-from studio.interpretation import INTERPRETATION_PAIR, INVENTORY_VERSION_V2
+from studio.interpretation import (INTERPRETATION_PAIR, INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V2,
+                                   INVENTORY_VERSION_V3)
 
 READ, REFUSED = 'read', 'refused'
 STATES = (READ, REFUSED)
@@ -780,6 +781,11 @@ class _v1_reader:  # noqa: N801 - the name FINAL-V2 5.7 gives it
 #   [SOURCE], checks {integrity, geometry, literal, consistency (ok | failed), literals [{value ISO, precision}],
 #   qualified}, appraisal: null | {claim K, content, verdict, attached, qualifiers [Qualifier2], evidence UNITS,
 #   control: null | {claim K, verdict}}, result Result, reasons [Reason]}
+# Under the @3 pair (gemini-events@3/appraisal@2, gemini-inventory@3; AMENDMENT-2 4.3.6) a slot - each of the 38 SLOT
+#   attributes of contract/extract_read.SLOTS - holds its FACT, or for an overfilled slot its written facts, each
+#   settled: a list of two or more FACTs, every one carrying slot_overfull (never established: the fact rules below),
+#   which the engine reads as one merged fact (4.3.3); its closed reason list holds slot_overfull, the @2 pair's does
+#   not, and any list at a slot key of an @2 row is refused, as before.
 # SOURCE (contract/types.SettledSource): {units UNITS, link Link, words WORDS|null (null: the whole units), geometry}
 # WORDS (contract/types.LocatedWords): {start, end, text}: text is the revision's own slice there (row_v2 proves it, P9)
 #
@@ -814,9 +820,16 @@ FIELDS_V2 = HASHED_V2 + ('sha256',)
 # Every v2 version pair this release reads AS STORED (FINAL-V2 6.2 [R:MO-5]), as the adapter keeps READ_VERSIONS: a
 # later INVENTORY_VERSION is added beside the earlier pair with its own shapes and label (_V2_SHAPES, _V2_LABELS) and
 # never replaces it, so no stored v2 inventory becomes unreadable when a version moves. A pair is
-# (EventInventory.interpretation_version, inventory_version). Rows are written at the last pair only.
-READ_VERSIONS = ((INTERPRETATION_PAIR, INVENTORY_VERSION_V2),)
+# (EventInventory.interpretation_version, inventory_version). AMENDMENT-2 (8.1 [R:replay-R4]) adds its pair,
+# gemini-events@3/appraisal@2 with gemini-inventory@3, whose shapes differ from the @2 pair's in one way: a slot may
+# hold its written facts, more than one, every one carrying slot_overfull (4.3.6; _V2Slot), and slot_overfull is one of
+# its reasons; the @2 pair keeps its closed lists as shipped (shape_signature_v2's pin). A row is written at the pair
+# its writer names (row_v2's ``versions``); the @2 pair is the default until the pipeline names the @3 one (step f6), so
+# a writer that names none writes what the pipeline before AMENDMENT-2 wrote.
+READ_VERSIONS = ((INTERPRETATION_PAIR, INVENTORY_VERSION_V2), (INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3))
 LABEL_V2 = f"{INTERPRETATION_PAIR}+{INVENTORY_VERSION_V2.removeprefix('gemini-')}"  # names the pair in the report
+# the @3 pair's label: LABEL_V2's successor
+LABEL_V3 = f"{INTERPRETATION_PAIR_V3}+{INVENTORY_VERSION_V3.removeprefix('gemini-')}"
 
 # A refused row records a refused PASS-1 answer only (FINAL-V2 6.3; 3.1 S1, "as v1"): its stage is one of pass 1's
 # refusal stages and its one problem CPT Studio's sentence, opening with the refusal prefix and ending with a full stop.
@@ -845,7 +858,8 @@ CLAIM_IDENTITY = ('id', 'role', 'template', 'subject', 'attribute', 'value', 'un
 ID_LETTERS_V2 = ('E', 'X', 'N', 'L', 'Y', 'P', 'S')  # engine/types.IdFamily's letters: events, sessions .. units
 CLAIM_LETTER = 'K'
 
-_V2_CURRENT = READ_VERSIONS[-1]
+# the pair a writer that names none writes (row_v2's ``versions``): the @2 pair, until f6
+_V2_CURRENT = READ_VERSIONS[0]
 _V2_OBJECT_LETTERS = ID_LETTERS_V2[:-1]  # every object family but the units
 # Each object family's letter and the events list that holds its objects (1.7), for the ids an established value names.
 _V2_FAMILIES = (('E', 'events'), ('X', 'sessions'), ('N', 'sections'), ('L', 'lesions'), ('Y', 'anatomy'),
@@ -866,6 +880,7 @@ xr: Any = None  # contract/extract_read: pass 1's refusal STAGES and REFUSED, is
 _V2_BUILT = False
 _V2_LOCK = threading.Lock()
 _V2_DOMAINS: dict = {}  # (object family letter, '' for the encounter; attribute) -> the domain of its facts
+_V2_SLOTS: frozenset = frozenset()  # (letter, attribute) of every SLOT of contract/extract_schema (_v2_build)
 
 # The names _v2_build binds on first use: None until then, and every v2 entry point calls _v2() before reading one.
 _A: Any = None
@@ -894,6 +909,7 @@ _V2_REPORT_READ: Any = None
 _V2_REPORT_REFUSED: Any = None
 _V2_SHAPES: Any = None
 _V2_LABELS: Any = None
+_V2_FACTS: Any = None  # each pair's settled-fact shape (its closed reason list: shape_signature_v2)
 
 
 def _v2() -> None:
@@ -1207,11 +1223,11 @@ class _V2Fact(_V2Spec):
     """One settled fact of ``attribute`` (FINAL-V2 1.7; contract/types.SettledFact), its value in ``domain``, held to
     the module's fact rules (the comment at the head of design v2)."""
 
-    def __init__(self, attribute, domain: _V2Domain) -> None:
-        self.attribute, self.domain = attribute, domain
+    def __init__(self, attribute, domain: _V2Domain, shape: Optional[_V2Spec] = None) -> None:
+        self.attribute, self.domain, self.shape = attribute, domain, shape
 
     def problem(self, value, path):
-        problem = _V2_FACT_SHAPE.problem(value, path)
+        problem = (self.shape or _V2_FACT_SHAPE).problem(value, path)
         if problem:
             return problem
         claim, checks, appraisal = value['claim'], value['checks'], value['appraisal']
@@ -1255,10 +1271,10 @@ class _V2Completeness(_V2Spec):
     supported, only as an established pair, or unresolved with a reason - and its reasons. CPT Studio's claim, not a
     fact of pass 1, so it has no claim record."""
 
-    def __init__(self) -> None:
+    def __init__(self, reasons=None) -> None:
         self.shape = _V2Obj({'appraisal': _V2_APPRAISAL,
                              'result': _V2Closed((ct.Result.SUPPORTED.value, ct.Result.UNRESOLVED.value)),
-                             'reasons': _V2List(_V2Closed(_v2_values(ct.Reason)))})
+                             'reasons': _V2List(_V2Closed(_v2_values(ct.Reason) if reasons is None else reasons))})
 
     def problem(self, value, path):
         problem = self.shape.problem(value, path)
@@ -1278,10 +1294,53 @@ class _V2Completeness(_V2Spec):
         return ['completeness', self.shape.describe()]
 
 
-def _v2_fact(letter: str, attribute, domain: _V2Domain, many: bool = False) -> _V2Spec:
+class _V2Slot(_V2Spec):
+    """A slot under gemini-inventory@3 (AMENDMENT-2 4.3.6): its one settled fact, as every pair stores a slot, or - an
+    overfilled slot, read under gemini-events@3 (4.3.1) - its written facts, each settled: a list of two or more, every
+    one carrying ``reason`` (slot_overfull). Any other list - one fact, or a fact without the reason - is UnknownShape,
+    as every list at a slot key is under the @2 pair; settle never makes such a fact established (4.4)."""
+
+    def __init__(self, fact: _V2Fact, reason: str) -> None:
+        self.fact, self.reason = fact, reason
+
+    def problem(self, value, path):
+        if not isinstance(value, list):
+            return self.fact.problem(value, path)
+        if len(value) < 2:
+            return (f'{path} lists fewer than two facts: a slot holds one fact, or the written facts of an '
+                    'overfilled one')
+        for index, item in enumerate(value):
+            problem = self.fact.problem(item, f'{path}[{index}]')
+            if problem:
+                return problem
+            if self.reason not in item['reasons']:
+                return (f'{path}[{index}] is one of several facts at a slot and does not carry {self.reason} '
+                        '(AMENDMENT-2 4.3.6)')
+        return ''
+
+    def facts(self, value, path, subject):
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                yield from self.fact.facts(item, f'{path}[{index}]', subject)
+        else:
+            yield from self.fact.facts(value, path, subject)
+
+    def describe(self):
+        return ['slot', self.fact.describe(), self.reason]
+
+
+def _v2_fact(letter: str, attribute, domain: _V2Domain, many: bool = False, shape: Optional[_V2Spec] = None,
+             overfull: Optional[str] = None) -> _V2Spec:
+    """One fact's spec (a list of them for a FACTS attribute, ``many``), its value in ``domain``, held to ``shape`` (the
+    pair's settled-fact shape); under a pair that reads overfilled slots (``overfull``: the slot_overfull reason) a SLOT
+    attribute is a _V2Slot (AMENDMENT-2 4.3.6)."""
     _V2_DOMAINS[(letter, attribute.value)] = domain
-    spec = _V2Fact(attribute, domain)
-    return _V2List(spec) if many else spec
+    spec = _V2Fact(attribute, domain, shape)
+    if many:
+        return _V2List(spec)
+    if overfull is not None and (letter, attribute.value) in _V2_SLOTS:
+        return _V2Slot(spec, overfull)
+    return spec
 
 
 def _v2_enum(enumeration) -> _V2Domain:
@@ -1369,11 +1428,13 @@ class _V2Units(_V2Spec):
 
 def _v2_build() -> None:
     """Import contract/ and build every shape that reads its enumerations (called once, by _v2). The shapes are the
-    comment at the head of design v2, field for field."""
+    comment at the head of design v2, field for field: the parts every pair shares once, then each pair's own
+    (``pair``): the @2 pair's closed reason list without slot_overfull (as shipped: shape_signature_v2's pin), and the
+    @3 pair's with it and a slot that may hold its written facts (_V2Slot, AMENDMENT-2 4.3.6)."""
     global ct, sha256_of, xr, _A, _V2_ESTABLISHED, _V2_PAIR_ATTRIBUTES, _V2_VALUE_ENUMERATIONS, _V2_ANY_VALUE, _V2_CHECK
     global _V2_SOURCE, _V2_CONTROL, _V2_APPRAISAL, _V2_FACT_SHAPE, _V2_ENCOUNTER, _V2_PERSON, _V2_SECTION, _V2_SESSION
     global _V2_ANATOMY, _V2_LESION, _V2_EVENT, _V2_DOUBT, _V2_UNLISTED, _V2_VERDICT, _V2_CLAIM, _V2_EVENTS
-    global _V2_REPORT_READ, _V2_REPORT_REFUSED, _V2_SHAPES, _V2_LABELS, CLAIM_ROLES
+    global _V2_REPORT_READ, _V2_REPORT_REFUSED, _V2_SHAPES, _V2_LABELS, CLAIM_ROLES, _V2_FACTS, _V2_SLOTS
     from studio.interpretation.contract import extract_read as xr
     from studio.interpretation.contract import types as ct
     from studio.interpretation.contract.jsonschema import sha256_of
@@ -1402,110 +1463,10 @@ def _v2_build() -> None:
         'qualifiers': _V2List(_V2Closed(_v2_values(ct.Qualifier2))), 'evidence': _V2_UNITS,
         'control': _V2Nullable(_V2_CONTROL),
     }, _v2_appraisal_check)
-    _V2_FACT_SHAPE = _V2Obj({
-        'claim': _V2Obj({'state': _V2Nullable(_V2Closed(_v2_values(ct.FactState))), 'value': _V2_STR,
-                         'qualifiers': _V2List(_V2Closed(_v2_values(ct.Qualifier))),
-                         'options': _V2List(_V2Obj({'value': _V2_STR, 'sources': _V2List(_V2_SOURCE)})),
-                         'inherited_from': _V2Nullable(_v2_object_id('N'))}),
-        'sources': _V2List(_V2_SOURCE),
-        'checks': _V2Obj({'integrity': _V2_CHECK, 'geometry': _V2_CHECK, 'literal': _V2_CHECK,
-                          'literals': _V2List(_V2Obj({'value': _V2_STR,
-                                                      'precision': _V2Closed(_v2_values(ct.Precision))},
-                                                     _v2_literal_check)),
-                          'consistency': _V2_CHECK, 'qualified': _V2_BOOL}),
-        'appraisal': _V2Nullable(_V2_APPRAISAL),
-        'result': _V2Closed(_v2_values(ct.Result)),
-        'reasons': _V2List(_V2Closed(_v2_values(ct.Reason))),
-    })
-
-    _V2_ENCOUNTER = _V2Obj({
-        'date_of_service': _v2_fact('', _A.DATE_OF_SERVICE, _V2_DATE),
-        'other_dates': _V2List(_V2Obj({'value': _V2_ISO,
-                                       'role': _v2_fact('', _A.OTHER_DATES_ROLE, _v2_enum(ct.DateRole))})),
-        'documenting_clinician': _v2_fact('', _A.DOCUMENTING_CLINICIAN, _v2_ids('P')),
-    })
-    _V2_PERSON = _V2Obj({'id': _v2_object_id('P'), 'name': _V2_SOURCE,
-                         'role': _v2_fact('P', _A.ROLE, _v2_enum(ct.PersonRole))})
-    _V2_SECTION = _V2Obj({
-        'id': _v2_object_id('N'), 'start': _V2_SOURCE, 'end': _V2List(_V2_SOURCE),
-        'owner': _v2_fact('N', _A.OWNER, _v2_enum(ct.Owner)),
-        'role': _v2_fact('N', _A.ROLE, _v2_enum(ct.SectionRole)),
-        'occasion': _v2_fact('N', _A.OCCASION, _v2_enum(ct.DateRelation)),
-        'performer': _v2_fact('N', _A.PERFORMER, _v2_enum(ct.Performer)),
-        'performer_person': _v2_fact('N', _A.PERFORMER_PERSON, _v2_ids('P')),
-    })
-    _V2_SESSION = _V2Obj({
-        'id': _v2_object_id('X'),
-        'examination': _v2_fact('X', _A.EXAMINATION, _v2_ids('E')),
-        'kind': _v2_fact('X', _A.KIND, _v2_enum(ct.SessionKind)),
-        'encounter': _v2_fact('X', _A.ENCOUNTER, _v2_enum(ct.EncounterRelation)),
-        'tract': _v2_fact('X', _A.TRACT, _v2_enum(ct.Tract)),
-        'approach': _v2_fact('X', _A.APPROACH, _v2_enum(ct.Approach)),
-        'through': _v2_fact('X', _A.THROUGH, _v2_ids('Y')),
-        'reached': _v2_fact('X', _A.REACHED, _v2_enum(ct.Extent), many=True),
-        'device_reached': _v2_fact('X', _A.DEVICE_REACHED, _v2_enum(ct.Extent), many=True),
-        'reached_anatomy': _v2_fact('X', _A.REACHED_ANATOMY, _v2_ids('Y')),
-        'completion': _v2_fact('X', _A.COMPLETION, _v2_enum(ct.Completion)),
-        'stations': _v2_fact('X', _A.STATIONS, _v2_enum(ct.Station), many=True),
-        'part_of_session': _v2_fact('X', _A.PART_OF_SESSION, _v2_ids('X')),
-        'completeness': _V2Nullable(_V2Completeness()),
-    })
-    _V2_ANATOMY = _V2Obj({
-        'id': _v2_object_id('Y'),
-        'type': _v2_fact('Y', _A.TYPE, _v2_enum(ct.AnatomyType)),
-        'organ': _v2_fact('Y', _A.ORGAN, _v2_enum(ct.Landmark)),
-        'subtype': _v2_fact('Y', _A.SUBTYPE, _v2_enum(ct.AnastomosisSubtype)),
-        'joins': _v2_fact('Y', _A.JOINS, _v2_enum(ct.Landmark), many=True),
-    })
-    _V2_LESION = _V2Obj({
-        'id': _v2_object_id('L'), 'description': _V2_SOURCE,
-        'multiplicity': _v2_fact('L', _A.MULTIPLICITY, _v2_enum(ct.Multiplicity)),
-        'places': _v2_fact('L', _A.PLACES, _v2_enum(ct.Landmark), many=True),
-        'distinct_from': _v2_fact('L', _A.DISTINCT_FROM, _v2_ids('L'), many=True),
-        'same_as': _v2_fact('L', _A.SAME_AS, _v2_ids('L'), many=True),
-    })
-    _V2_EVENT = _V2Obj({
-        'id': _v2_object_id('E'),
-        'anchor': _V2Obj({'units': _V2_UNITS, 'kind_words': _V2Nullable(_V2Located()),
-                          'status_words': _V2Nullable(_V2Located())}),
-        'restatements': _V2List(_V2Obj({'units': _V2_UNITS, 'role': _v2_fact('E', _A.RESTATEMENTS_ROLE,
-                                                                             _v2_enum(ct.RestatementRole))})),
-        'kind': _v2_fact('E', _A.KIND, _v2_enum(ct.Kind)),
-        'other_class': _v2_fact('E', _A.OTHER_CLASS, _v2_enum(ct.OtherClass)),
-        'status': _v2_fact('E', _A.STATUS, _v2_enum(ct.Status)),
-        'session': _v2_fact('E', _A.SESSION, _v2_ids('X')),
-        'date_relation': _v2_fact('E', _A.DATE_RELATION, _v2_enum(ct.DateRelation)),
-        'date': _v2_fact('E', _A.DATE, _V2_DATE),
-        'performer': _v2_fact('E', _A.PERFORMER, _v2_enum(ct.Performer)),
-        'performer_person': _v2_fact('E', _A.PERFORMER_PERSON, _v2_ids('P')),
-        'entry': _v2_fact('E', _A.ENTRY, _v2_enum(ct.Owner)),
-        'target': _V2Obj({
-            'lesion': _v2_fact('E', _A.TARGET_LESION, _v2_ids('L')),
-            'structure': _v2_fact('E', _A.TARGET_STRUCTURE, _v2_enum(ct.Structure)),
-            'places': _v2_fact('E', _A.TARGET_PLACES, _v2_enum(ct.Landmark), many=True),
-            'anatomy': _v2_fact('E', _A.TARGET_ANATOMY, _v2_ids('Y')),
-            'duct': _v2_fact('E', _A.TARGET_DUCT, _v2_enum(ct.Duct)),
-        }),
-        'technique': _V2Obj({'device': _v2_fact('E', _A.TECHNIQUE_DEVICE, _v2_enum(ct.Device)),
-                             'route': _v2_fact('E', _A.TECHNIQUE_ROUTE, _v2_enum(ct.Route))}),
-        'purpose': _v2_fact('E', _A.PURPOSE, _v2_enum(ct.Purpose)),
-        'cause': _v2_fact('E', _A.CAUSE, _v2_enum(ct.Cause)),
-        'cause_event': _v2_fact('E', _A.CAUSE_EVENT, _v2_ids('E')),
-        'part_of': _v2_fact('E', _A.PART_OF, _v2_ids('E')),
-        'part_relation': _v2_fact('E', _A.PART_RELATION, _v2_enum(ct.PartRelation)),
-        'yield': _v2_fact('E', _A.YIELD, _v2_enum(ct.Material)),
-        'access_outcome': _v2_fact('E', _A.ACCESS_OUTCOME, _v2_enum(ct.AccessOutcome)),
-        'scope': _V2Obj({
-            'breadth': _v2_fact('E', _A.SCOPE_BREADTH, _v2_enum(ct.Breadth)),
-            'targets': _v2_fact('E', _A.SCOPE_TARGETS, _v2_ids('L'), many=True),
-            'segment': _v2_fact('E', _A.SCOPE_SEGMENT, _v2_enum(ct.Landmark), many=True),
-            'covers': _v2_fact('E', _A.SCOPE_COVERS, _v2_ids('E'), many=True),
-            'excepts': _v2_fact('E', _A.SCOPE_EXCEPTS, _v2_ids('E'), many=True),
-        }),
-        'visit': _V2Obj({'basis': _v2_fact('E', _A.VISIT_BASIS, _v2_enum(ct.EmBasis)),
-                         'separately_identifiable': _v2_fact('E', _A.VISIT_SEPARATELY_IDENTIFIABLE,
-                                                             _v2_enum(ct.Separate))}),
-    })
+    # every SLOT of pass 1's answer (contract/extract_read.SLOTS, extract_schema's SLOT arity) by its family's id
+    # letter ('' for the encounter, as the store keys it): the 38 keys an overfilled slot may hold its written facts at
+    # under gemini-inventory@3
+    _V2_SLOTS = frozenset((family.letter, attribute.value) for family, attribute in xr.SLOTS)
     _V2_DOUBT = _V2Obj({'about': _V2Closed(_v2_values(ct.DoubtAbout)), 'objects': _V2List(_V2_ANY_ID),
                         'units': _V2_UNITS, 'basis': _V2Closed(_v2_values(ct.DoubtBasis)),
                         'readings': _V2List(_V2_VALUE)})
@@ -1519,52 +1480,179 @@ def _v2_build() -> None:
                         'subject': _V2_SUBJECT, 'attribute': _V2Closed(_v2_values(ct.Attribute)), 'value': _V2_VALUE,
                         'units': _V2_UNITS, 'content': _V2_SHA, 'verdict': _V2Nullable(_V2_VERDICT)},
                        _v2_claim_check)
-    _V2_EVENTS = _V2Obj({
-        'units': _V2Units(), 'encounter': _V2_ENCOUNTER, 'people': _V2List(_V2_PERSON),
-        'sections': _V2List(_V2_SECTION), 'sessions': _V2List(_V2_SESSION), 'anatomy': _V2List(_V2_ANATOMY),
-        'lesions': _V2List(_V2_LESION), 'events': _V2List(_V2_EVENT), 'doubts': _V2List(_V2_DOUBT),
-        'claims': _V2Claims(), 'unlisted': _V2List(_V2_UNLISTED),
-    })
-    # settle's report records, field for field (contract/types' DoubtApplied, Health, Coherence and Usage; P9: no
-    # free-form JSON is stored; DECISIONS D229, hand-off 1d#2)
-    doubt_applied = _V2Obj({'index': _V2_INT, 'about': _V2Closed(_v2_values(ct.DoubtAbout)),
-                            'basis': _V2Closed(_v2_values(ct.DoubtBasis)), 'objects': _V2List(_V2_ANY_ID),
-                            'malformed': _V2_BOOL, 'applied': _V2_INT, 'unlisted': _V2_BOOL})
-    health = _V2Obj({'pairs': _V2_INT, 'not_rejected': _V2_INT, 'claims': _V2_INT, 'established': _V2_INT,
-                     'verdicts': _V2_INT, 'missing': _V2_INT,
-                     'refused': _V2List(_V2Closed(_v2_values(ct.HealthRefusal)))})
-    coherence = _V2Obj({outcome.value: _V2_INT for outcome in ct.PairOutcome})  # one count per outcome
-    usage = _V2Obj({'prompt': _V2_INT, 'candidates': _V2_INT, 'thoughts': _V2_INT, 'total': _V2_INT,
-                    'cached': _V2_INT, 'tool_use_prompt': _V2_INT})
-    _V2_REPORT_READ = _V2Obj({
-        'label': _V2_STR, 'request_sha256': _V2_SHA, 'response_sha256': _V2_SHA, 'appraisal_request_sha256': _V2_SHA,
-        'appraisal_response_sha256': _V2_SHA, 'claims_sha256': _V2_SHA, 'refused': _V2Const(False),
-        'counts': _V2Map(_V2Map(_V2_INT, keys=_v2_values(ct.Result)), keys=_v2_values(ct.Attribute)),
-        'reasons': _V2Map(_V2_INT, keys=_v2_values(ct.Reason)),
-        'doubts': _V2List(doubt_applied), 'health': health, 'coherence': coherence,
-        'unlisted': _V2Obj({'kept': _V2_INT,
-                            'dropped': _V2List(_V2Obj({'units': _V2_UNITS,
-                                                       'what': _V2Closed(_v2_values(ct.UnlistedWhat)),
-                                                       'kind': _V2Nullable(_V2Closed(_v2_values(ct.Kind))),
-                                                       'session': _V2Nullable(_v2_object_id('X')),
-                                                       'event': _v2_object_id('E')}))}),
-        'usage': _V2Obj({'interpretation': usage, 'appraisal': usage}),
-    })
-    _V2_REPORT_REFUSED = _V2Obj({'label': _V2_STR, 'request_sha256': _V2_SHA, 'response_sha256': _V2_SHA,
-                                 'refused': _V2Const(True), 'stage': _V2Closed(xr.STAGES),
-                                 'problems': _V2List(_V2_STR)})
 
-    # What each read v2 version pair stores, by state, and its report label. A pair added to READ_VERSIONS brings its
-    # own shapes beside these, and these never change under a shipped pair (shape_signature_v2).
+    def pair(reasons: frozenset, overfull: Optional[str]) -> dict:
+        """One version pair's shapes: its settled-fact shape (its closed reason list ``reasons``), the inventory and
+        both reports; ``overfull`` the reason an overfilled slot's written facts carry (slot_overfull), or None where
+        a slot holds one fact."""
+        def fact(letter: str, attribute, domain: _V2Domain, many: bool = False) -> _V2Spec:
+            return _v2_fact(letter, attribute, domain, many, fact_shape, overfull)
+
+        fact_shape = _V2Obj({
+            'claim': _V2Obj({'state': _V2Nullable(_V2Closed(_v2_values(ct.FactState))), 'value': _V2_STR,
+                             'qualifiers': _V2List(_V2Closed(_v2_values(ct.Qualifier))),
+                             'options': _V2List(_V2Obj({'value': _V2_STR, 'sources': _V2List(_V2_SOURCE)})),
+                             'inherited_from': _V2Nullable(_v2_object_id('N'))}),
+            'sources': _V2List(_V2_SOURCE),
+            'checks': _V2Obj({'integrity': _V2_CHECK, 'geometry': _V2_CHECK, 'literal': _V2_CHECK,
+                              'literals': _V2List(_V2Obj({'value': _V2_STR,
+                                                          'precision': _V2Closed(_v2_values(ct.Precision))},
+                                                         _v2_literal_check)),
+                              'consistency': _V2_CHECK, 'qualified': _V2_BOOL}),
+            'appraisal': _V2Nullable(_V2_APPRAISAL),
+            'result': _V2Closed(_v2_values(ct.Result)),
+            'reasons': _V2List(_V2Closed(reasons)),
+        })
+
+        encounter = _V2Obj({
+            'date_of_service': fact('', _A.DATE_OF_SERVICE, _V2_DATE),
+            'other_dates': _V2List(_V2Obj({'value': _V2_ISO,
+                                           'role': fact('', _A.OTHER_DATES_ROLE, _v2_enum(ct.DateRole))})),
+            'documenting_clinician': fact('', _A.DOCUMENTING_CLINICIAN, _v2_ids('P')),
+        })
+        person = _V2Obj({'id': _v2_object_id('P'), 'name': _V2_SOURCE,
+                             'role': fact('P', _A.ROLE, _v2_enum(ct.PersonRole))})
+        section = _V2Obj({
+            'id': _v2_object_id('N'), 'start': _V2_SOURCE, 'end': _V2List(_V2_SOURCE),
+            'owner': fact('N', _A.OWNER, _v2_enum(ct.Owner)),
+            'role': fact('N', _A.ROLE, _v2_enum(ct.SectionRole)),
+            'occasion': fact('N', _A.OCCASION, _v2_enum(ct.DateRelation)),
+            'performer': fact('N', _A.PERFORMER, _v2_enum(ct.Performer)),
+            'performer_person': fact('N', _A.PERFORMER_PERSON, _v2_ids('P')),
+        })
+        session = _V2Obj({
+            'id': _v2_object_id('X'),
+            'examination': fact('X', _A.EXAMINATION, _v2_ids('E')),
+            'kind': fact('X', _A.KIND, _v2_enum(ct.SessionKind)),
+            'encounter': fact('X', _A.ENCOUNTER, _v2_enum(ct.EncounterRelation)),
+            'tract': fact('X', _A.TRACT, _v2_enum(ct.Tract)),
+            'approach': fact('X', _A.APPROACH, _v2_enum(ct.Approach)),
+            'through': fact('X', _A.THROUGH, _v2_ids('Y')),
+            'reached': fact('X', _A.REACHED, _v2_enum(ct.Extent), many=True),
+            'device_reached': fact('X', _A.DEVICE_REACHED, _v2_enum(ct.Extent), many=True),
+            'reached_anatomy': fact('X', _A.REACHED_ANATOMY, _v2_ids('Y')),
+            'completion': fact('X', _A.COMPLETION, _v2_enum(ct.Completion)),
+            'stations': fact('X', _A.STATIONS, _v2_enum(ct.Station), many=True),
+            'part_of_session': fact('X', _A.PART_OF_SESSION, _v2_ids('X')),
+            'completeness': _V2Nullable(_V2Completeness(reasons)),
+        })
+        anatomy = _V2Obj({
+            'id': _v2_object_id('Y'),
+            'type': fact('Y', _A.TYPE, _v2_enum(ct.AnatomyType)),
+            'organ': fact('Y', _A.ORGAN, _v2_enum(ct.Landmark)),
+            'subtype': fact('Y', _A.SUBTYPE, _v2_enum(ct.AnastomosisSubtype)),
+            'joins': fact('Y', _A.JOINS, _v2_enum(ct.Landmark), many=True),
+        })
+        lesion = _V2Obj({
+            'id': _v2_object_id('L'), 'description': _V2_SOURCE,
+            'multiplicity': fact('L', _A.MULTIPLICITY, _v2_enum(ct.Multiplicity)),
+            'places': fact('L', _A.PLACES, _v2_enum(ct.Landmark), many=True),
+            'distinct_from': fact('L', _A.DISTINCT_FROM, _v2_ids('L'), many=True),
+            'same_as': fact('L', _A.SAME_AS, _v2_ids('L'), many=True),
+        })
+        event = _V2Obj({
+            'id': _v2_object_id('E'),
+            'anchor': _V2Obj({'units': _V2_UNITS, 'kind_words': _V2Nullable(_V2Located()),
+                              'status_words': _V2Nullable(_V2Located())}),
+            'restatements': _V2List(_V2Obj({'units': _V2_UNITS, 'role': fact('E', _A.RESTATEMENTS_ROLE,
+                                                                                 _v2_enum(ct.RestatementRole))})),
+            'kind': fact('E', _A.KIND, _v2_enum(ct.Kind)),
+            'other_class': fact('E', _A.OTHER_CLASS, _v2_enum(ct.OtherClass)),
+            'status': fact('E', _A.STATUS, _v2_enum(ct.Status)),
+            'session': fact('E', _A.SESSION, _v2_ids('X')),
+            'date_relation': fact('E', _A.DATE_RELATION, _v2_enum(ct.DateRelation)),
+            'date': fact('E', _A.DATE, _V2_DATE),
+            'performer': fact('E', _A.PERFORMER, _v2_enum(ct.Performer)),
+            'performer_person': fact('E', _A.PERFORMER_PERSON, _v2_ids('P')),
+            'entry': fact('E', _A.ENTRY, _v2_enum(ct.Owner)),
+            'target': _V2Obj({
+                'lesion': fact('E', _A.TARGET_LESION, _v2_ids('L')),
+                'structure': fact('E', _A.TARGET_STRUCTURE, _v2_enum(ct.Structure)),
+                'places': fact('E', _A.TARGET_PLACES, _v2_enum(ct.Landmark), many=True),
+                'anatomy': fact('E', _A.TARGET_ANATOMY, _v2_ids('Y')),
+                'duct': fact('E', _A.TARGET_DUCT, _v2_enum(ct.Duct)),
+            }),
+            'technique': _V2Obj({'device': fact('E', _A.TECHNIQUE_DEVICE, _v2_enum(ct.Device)),
+                                 'route': fact('E', _A.TECHNIQUE_ROUTE, _v2_enum(ct.Route))}),
+            'purpose': fact('E', _A.PURPOSE, _v2_enum(ct.Purpose)),
+            'cause': fact('E', _A.CAUSE, _v2_enum(ct.Cause)),
+            'cause_event': fact('E', _A.CAUSE_EVENT, _v2_ids('E')),
+            'part_of': fact('E', _A.PART_OF, _v2_ids('E')),
+            'part_relation': fact('E', _A.PART_RELATION, _v2_enum(ct.PartRelation)),
+            'yield': fact('E', _A.YIELD, _v2_enum(ct.Material)),
+            'access_outcome': fact('E', _A.ACCESS_OUTCOME, _v2_enum(ct.AccessOutcome)),
+            'scope': _V2Obj({
+                'breadth': fact('E', _A.SCOPE_BREADTH, _v2_enum(ct.Breadth)),
+                'targets': fact('E', _A.SCOPE_TARGETS, _v2_ids('L'), many=True),
+                'segment': fact('E', _A.SCOPE_SEGMENT, _v2_enum(ct.Landmark), many=True),
+                'covers': fact('E', _A.SCOPE_COVERS, _v2_ids('E'), many=True),
+                'excepts': fact('E', _A.SCOPE_EXCEPTS, _v2_ids('E'), many=True),
+            }),
+            'visit': _V2Obj({'basis': fact('E', _A.VISIT_BASIS, _v2_enum(ct.EmBasis)),
+                             'separately_identifiable': fact('E', _A.VISIT_SEPARATELY_IDENTIFIABLE,
+                                                                 _v2_enum(ct.Separate))}),
+        })
+        events = _V2Obj({
+            'units': _V2Units(), 'encounter': encounter, 'people': _V2List(person),
+            'sections': _V2List(section), 'sessions': _V2List(session), 'anatomy': _V2List(anatomy),
+            'lesions': _V2List(lesion), 'events': _V2List(event), 'doubts': _V2List(_V2_DOUBT),
+            'claims': _V2Claims(), 'unlisted': _V2List(_V2_UNLISTED),
+        })
+        # settle's report records, field for field (contract/types' DoubtApplied, Health, Coherence and Usage; P9: no
+        # free-form JSON is stored; DECISIONS D229, hand-off 1d#2)
+        doubt_applied = _V2Obj({'index': _V2_INT, 'about': _V2Closed(_v2_values(ct.DoubtAbout)),
+                                'basis': _V2Closed(_v2_values(ct.DoubtBasis)), 'objects': _V2List(_V2_ANY_ID),
+                                'malformed': _V2_BOOL, 'applied': _V2_INT, 'unlisted': _V2_BOOL})
+        health = _V2Obj({'pairs': _V2_INT, 'not_rejected': _V2_INT, 'claims': _V2_INT, 'established': _V2_INT,
+                         'verdicts': _V2_INT, 'missing': _V2_INT,
+                         'refused': _V2List(_V2Closed(_v2_values(ct.HealthRefusal)))})
+        coherence = _V2Obj({outcome.value: _V2_INT for outcome in ct.PairOutcome})  # one count per outcome
+        usage = _V2Obj({'prompt': _V2_INT, 'candidates': _V2_INT, 'thoughts': _V2_INT, 'total': _V2_INT,
+                        'cached': _V2_INT, 'tool_use_prompt': _V2_INT})
+        report_read = _V2Obj({
+            'label': _V2_STR, 'request_sha256': _V2_SHA, 'response_sha256': _V2_SHA,
+            'appraisal_request_sha256': _V2_SHA, 'appraisal_response_sha256': _V2_SHA, 'claims_sha256': _V2_SHA,
+            'refused': _V2Const(False),
+            'counts': _V2Map(_V2Map(_V2_INT, keys=_v2_values(ct.Result)), keys=_v2_values(ct.Attribute)),
+            'reasons': _V2Map(_V2_INT, keys=reasons),
+            'doubts': _V2List(doubt_applied), 'health': health, 'coherence': coherence,
+            'unlisted': _V2Obj({'kept': _V2_INT,
+                                'dropped': _V2List(_V2Obj({'units': _V2_UNITS,
+                                                           'what': _V2Closed(_v2_values(ct.UnlistedWhat)),
+                                                           'kind': _V2Nullable(_V2Closed(_v2_values(ct.Kind))),
+                                                           'session': _V2Nullable(_v2_object_id('X')),
+                                                           'event': _v2_object_id('E')}))}),
+            'usage': _V2Obj({'interpretation': usage, 'appraisal': usage}),
+        })
+        report_refused = _V2Obj({'label': _V2_STR, 'request_sha256': _V2_SHA, 'response_sha256': _V2_SHA,
+                                     'refused': _V2Const(True), 'stage': _V2Closed(xr.STAGES),
+                                     'problems': _V2List(_V2_STR)})
+
+        return {'fact': fact_shape, 'encounter': encounter, 'person': person, 'section': section,
+                'session': session, 'anatomy': anatomy, 'lesion': lesion, 'event': event, 'events': events,
+                'report_read': report_read, 'report_refused': report_refused}
+
+    reasons_2 = _v2_values(ct.Reason) - {ct.Reason.SLOT_OVERFULL.value}  # the @2 pair's list as shipped (R8)
+    two = pair(reasons_2, None)
+    three = pair(_v2_values(ct.Reason), ct.Reason.SLOT_OVERFULL.value)
+    # the @2 pair's shapes keep their module names (the facts readers and tests reach)
+    _V2_FACT_SHAPE, _V2_ENCOUNTER = two['fact'], two['encounter']
+    _V2_PERSON, _V2_SECTION = two['person'], two['section']
+    _V2_SESSION, _V2_ANATOMY, _V2_LESION, _V2_EVENT = two['session'], two['anatomy'], two['lesion'], two['event']
+    _V2_EVENTS, _V2_REPORT_READ, _V2_REPORT_REFUSED = two['events'], two['report_read'], two['report_refused']
+
+    # What each read v2 version pair stores, by state, its settled-fact shape and its report label. A pair added to
+    # READ_VERSIONS brings its own shapes beside these, and these never change under a shipped pair
+    # (shape_signature_v2).
     _V2_SHAPES = {
-        READ_VERSIONS[0]: {
-            READ: {'events': _V2_EVENTS, 'encounter_facts': _V2Const({}), 'open_questions': _V2Const([]),
-                   'verification': _V2_REPORT_READ},
+        versions: {
+            READ: {'events': shapes['events'], 'encounter_facts': _V2Const({}), 'open_questions': _V2Const([]),
+                   'verification': shapes['report_read']},
             REFUSED: {'events': _V2Const({}), 'encounter_facts': _V2Const({}), 'open_questions': _V2Const([]),
-                      'verification': _V2_REPORT_REFUSED},
-        },
-    }
-    _V2_LABELS = {READ_VERSIONS[0]: LABEL_V2}
+                      'verification': shapes['report_refused']},
+        } for versions, shapes in ((READ_VERSIONS[0], two), (READ_VERSIONS[1], three))}
+    _V2_FACTS = {READ_VERSIONS[0]: two['fact'], READ_VERSIONS[1]: three['fact']}
+    _V2_LABELS = {READ_VERSIONS[0]: LABEL_V2, READ_VERSIONS[1]: LABEL_V3}
 
 
 def shape_signature_v2(versions: tuple) -> str:
@@ -1577,7 +1665,7 @@ def shape_signature_v2(versions: tuple) -> str:
     shapes = _V2_SHAPES[versions]
     return sha256_of({
         'shapes': {state: {name: spec.describe() for name, spec in parts.items()} for state, parts in shapes.items()},
-        'fact': _V2_FACT_SHAPE.describe(), 'label': _V2_LABELS[versions], 'fields': list(FIELDS_V2),
+        'fact': _V2_FACTS[versions].describe(), 'label': _V2_LABELS[versions], 'fields': list(FIELDS_V2),
         'refusal': [list(xr.STAGES), xr.REFUSED], 'roles': list(CLAIM_ROLES),
         'controls': sorted([fact, control] for fact, control in CONTROL_ATTRIBUTES.items()),
         'pair_controls': list(_V2_PAIR_ATTRIBUTES),
@@ -1643,8 +1731,10 @@ class StoredInventoryV2:
 
 def row_v2(*, encounter_id, revision_id, provider_run_id, appraisal_run_id, revision_text: str, text_sha256: str,
            request_sha256: str, response_sha256: str, appraisal_request_sha256: str, appraisal_response_sha256: str,
-           events, verification) -> dict:
-    """The FIELDS_V2 of the row for an inventory both passes settled, at the current version pair, with its sha256.
+           events, verification, versions: Optional[tuple] = None) -> dict:
+    """The FIELDS_V2 of the row for an inventory both passes settled, at the version pair ``versions`` - one of
+    READ_VERSIONS; None writes the @2 pair, until the pipeline names the @3 one (AMENDMENT-2 8.1: every writer on the
+    current path writes the new labels; step f6) - with its sha256.
     ``events`` is the settled inventory (JSON data, or contract/types records and Enum members, converted) and
     ``verification`` settle's report, which gets the label, both runs' request and response sha256, claims_sha256 (of
     events.claims) and ``refused`` false where it does not carry them; a value it carries must already be right
@@ -1653,6 +1743,7 @@ def row_v2(*, encounter_id, revision_id, provider_run_id, appraisal_run_id, revi
     words record must be its own slice at its offsets (Mismatch; FINAL-V2 3.1 B1, P9). StoreError otherwise;
     TypeError when ``revision_text`` is not a string."""
     _v2()
+    versions = _v2_written(versions)
     if not isinstance(revision_text, str):
         raise TypeError('The revision text must be a string.')
     content = _v2_jsonable(events, 'events')
@@ -1665,7 +1756,8 @@ def row_v2(*, encounter_id, revision_id, provider_run_id, appraisal_run_id, revi
         claims = claims_sha256_v2(content['claims'])
     except (KeyError, TypeError, ValueError):
         raise UnknownShape('The stored interpretation is not readable: events.claims is not a claim list.') from None
-    for key, value in (('label', LABEL_V2), ('request_sha256', request_sha256), ('response_sha256', response_sha256),
+    for key, value in (('label', _V2_LABELS[versions]), ('request_sha256', request_sha256),
+                       ('response_sha256', response_sha256),
                        ('appraisal_request_sha256', appraisal_request_sha256),
                        ('appraisal_response_sha256', appraisal_response_sha256), ('claims_sha256', claims),
                        ('refused', False)):
@@ -1673,7 +1765,7 @@ def row_v2(*, encounter_id, revision_id, provider_run_id, appraisal_run_id, revi
             raise Mismatch(f'The verification report names another {key.replace("_", " ")} than this row.')
         report[key] = value
     fields = {**_v2_bound(encounter_id, revision_id, provider_run_id, appraisal_run_id),
-              'interpretation_version': _V2_CURRENT[0], 'inventory_version': _V2_CURRENT[1], 'text_sha256': text_sha256,
+              'interpretation_version': versions[0], 'inventory_version': versions[1], 'text_sha256': text_sha256,
               'request_sha256': request_sha256, 'response_sha256': response_sha256, 'state': READ, 'events': content,
               'encounter_facts': {}, 'open_questions': [], 'verification': report}
     fields = _v2_finished(fields, appraisal_response_sha256)
@@ -1684,24 +1776,35 @@ def row_v2(*, encounter_id, revision_id, provider_run_id, appraisal_run_id, revi
 
 
 def refused_row_v2(refusal, *, encounter_id, revision_id, provider_run_id, text_sha256: str, request_sha256: str,
-                   response_sha256: str) -> dict:
+                   response_sha256: str, versions: Optional[tuple] = None) -> dict:
     """The FIELDS_V2 of the row for a PASS-1 answer refused whole (FINAL-V2 6.3; 3.1 S1, as v1): state ``refused``, no
     appraisal run, no events, and a report holding the refusal's sentence as its one problem and its stage.
     ``refusal`` is an object with the ``stage`` and ``reason`` of the refusal (contract's, or v1's read.Refusal); there
     is no way to give it an appraisal run, because a refused or unhealthy pass-2 answer is never stored as a row - it
     is recorded on its ProviderRun and the stage, and a row with an appraisal run is a read row. TypeError when
-    ``refusal`` is not one; StoreError for a stage or sentence load_v2 refuses."""
+    ``refusal`` is not one; StoreError for a stage or sentence load_v2 refuses. ``versions``: the pair the row is
+    written at, as row_v2's."""
     _v2()
+    versions = _v2_written(versions)
     stage, reason = getattr(refusal, 'stage', None), getattr(refusal, 'reason', None)
     if not isinstance(stage, str) or not isinstance(reason, str) or getattr(refusal, 'refused', True) is not True:
         raise TypeError('A refused row records the refusal of a pass-1 answer: its stage and its reason.')
-    report = {'label': LABEL_V2, 'request_sha256': request_sha256, 'response_sha256': response_sha256,
+    report = {'label': _V2_LABELS[versions], 'request_sha256': request_sha256, 'response_sha256': response_sha256,
               'refused': True, 'stage': stage, 'problems': [reason]}
     fields = {**_v2_bound(encounter_id, revision_id, provider_run_id, None),
-              'interpretation_version': _V2_CURRENT[0], 'inventory_version': _V2_CURRENT[1], 'text_sha256': text_sha256,
+              'interpretation_version': versions[0], 'inventory_version': versions[1], 'text_sha256': text_sha256,
               'request_sha256': request_sha256, 'response_sha256': response_sha256, 'state': REFUSED, 'events': {},
               'encounter_facts': {}, 'open_questions': [], 'verification': report}
     return _v2_finished(fields, None)
+
+
+def _v2_written(versions: Optional[tuple]) -> tuple:
+    """The version pair a row is written at: ``versions`` when it is one of READ_VERSIONS, the @2 pair for None
+    (_V2_CURRENT); UnknownVersion for any other, so no row is written under a pair this release cannot read back."""
+    found = _V2_CURRENT if versions is None else tuple(versions) if isinstance(versions, (tuple, list)) else versions
+    if found not in _V2_SHAPES:
+        raise UnknownVersion('This release writes design v2 interpretations at the version pairs it reads only.')
+    return found
 
 
 def _v2_bound(encounter_id, revision_id, provider_run_id, appraisal_run_id) -> dict:
@@ -1926,15 +2029,16 @@ def _v2_consistent(fields: Mapping, versions: tuple, state: str) -> None:
             if item['id'] in seen:
                 raise UnknownShape(f'The stored interpretation is not readable: events.{key}[{index}] repeats an id.')
             seen.add(item['id'])
-    _v2_established_bound(events)
+    shape = _V2_SHAPES[versions][READ]['events']
+    _v2_established_bound(events, shape)
     if report['claims_sha256'] != claims_sha256_v2(events['claims']):
         raise Mismatch('The stored verification report names another claim list than its row holds.')
     if report['unlisted']['kept'] != len(events['unlisted']):
         raise Mismatch('The stored verification report counts other unlisted statements than its row keeps.')
-    _v2_verdicts_bound(events)
+    _v2_verdicts_bound(events, shape)
 
 
-def _v2_established_bound(events: Mapping) -> None:
+def _v2_established_bound(events: Mapping, shape: Optional[_V2Spec] = None) -> None:
     """UnknownShape unless every ESTABLISHED fact rests on the row itself (FINAL-V2 3.3 row 8, read as integrity with
     3.1 I1 and I4; arbiter triage 1d#3): each unit its sources cite and each evidence unit of its appraisal is one of
     the row's units, and an id value names an object of its family in the row (E2's session X9 with no session X9 is
@@ -1944,7 +2048,7 @@ def _v2_established_bound(events: Mapping) -> None:
     units = {unit['id'] for unit in events['units']}
     objects = {letter: {item['id'] for item in events[key]} for letter, key in _V2_FAMILIES}
     unreadable = 'The stored interpretation is not readable: '
-    for path, _subject, spec, record in _V2_EVENTS.facts(events, 'events', ''):
+    for path, _subject, spec, record in (shape or _V2_EVENTS).facts(events, 'events', ''):
         if isinstance(spec, _V2Completeness):
             if record['result'] == ct.Result.SUPPORTED.value and not set(record['appraisal']['evidence']) <= units:
                 raise UnknownShape(f'{unreadable}{path} is supported on evidence that names a unit the row does not '
@@ -1971,7 +2075,7 @@ def _v2_refusal_sentence(reason: object) -> bool:
             and len(reason) > len(xr.REFUSED) + 1 and reason.endswith('.'))
 
 
-def _v2_verdicts_bound(events: Mapping) -> None:
+def _v2_verdicts_bound(events: Mapping, shape: Optional[_V2Spec] = None) -> None:
     """Mismatch unless every verdict a fact (or a completeness record) stores is the one stored with the claim it names,
     and that claim is the one made for THAT fact: role claim (completeness), the fact's subject, attribute and value,
     the same content key; its control a control (completeness control) of the same subject, with the same verdict. No
@@ -1980,7 +2084,7 @@ def _v2_verdicts_bound(events: Mapping) -> None:
     (CONTROL_ATTRIBUTES): E2's kind is never read against the control of E2's status (arbiter triage 1d#4)."""
     claims = {claim['id']: claim for claim in events['claims']}
     read = set()
-    for path, subject, spec, record in _V2_EVENTS.facts(events, 'events', ''):
+    for path, subject, spec, record in (shape or _V2_EVENTS).facts(events, 'events', ''):
         appraisal = record['appraisal']
         if appraisal is None:
             continue

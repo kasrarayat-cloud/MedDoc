@@ -1,6 +1,7 @@
 """Statements against acts: the pairing table (docs/gemini-migration/FINAL-V2.md 4.5, with 4.2, 4.10, 4.11 and 3.2.6
 rule 4; step 3d of 8.1, repaired by r3d in two rounds; DECISIONS D188, D191, D220, D228, D238 and D239; D265, by repair
-r4a of round w9r). Which
+r4a of round w9r; D280.2, AMENDMENT-2 4.3.3 c [R:truth-T2] and D292's E5j, by step f3w of AMENDMENT-2's build round).
+Which
 statements pair with which acts, each of 4.5's six rows evaluated on settled facts, and each pair's relation -
 INDEPENDENT, UNRESOLVED(row), CONTRADICTION or DOUBT - with the item 4.8 ranks it at. The forked rules read it:
 SUPPORT's clean requirement (4.3 row 8, step 4a), an exclusion's "no DOUBT relation" (4.6 condition 5) and the doubted
@@ -21,9 +22,16 @@ the step's NOTES record this reading (question Q1, request R1). A digital examin
 device claims manual (``digital_examination``) is never the examination, so no examination statement - filed, possible
 or unlisted (3.2.6 rule 4) - pairs with it as with the session's examination ("No colonoscopy was performed today."
 beside the digital rectal examination filed as the colonoscopy's examination pairs with nothing: r4a-2 Q4, refute-r4a-r2
-Q4+); any other kind it may be (its kind not established) still pairs, and so does an unlisted entry of no kind. The
-statement side is read as before: a digital examination that is a statement still pairs with the acts its kind covers
-(the step's NOTES, question Q-R4A-DRES).
+Q4+); any other kind it may be (its kind not established) still pairs, and so does an unlisted entry of no kind. An
+overfilled device slot's merged view (AMENDMENT-2 4.3.3 c [R:truth-T2], a claimed-value reader) claims manual only when a
+written fact states it: a manual every written fact denies (its ``negated_values``) is no claim, so an endoscope written
+beside a denied manual is the session's examination (combination._digital's twin again). On the statement side
+(DECISIONS D280.2; build list B2, G3-24's option (b) read on the ESTABLISHED device): a statement established as a
+digital examination - its kind supported examination and its device supported manual (``established_digital``, E13's
+established reading, D227, D253) - concerns no examination act (``statement_kinds``), so it pairs with no examination as
+with the session's: "No digital rectal examination was performed." beside the colonoscope's examination pairs with
+nothing. A statement whose device only CLAIMS manual keeps pairing (option (a)): a 9.4 weakening never creates a
+supported device, so neither reading releases under a weakening.
 
 **The rows** (4.5), each INDEPENDENT, UNRESOLVED or SAME, every one evaluated [R:HO-2]:
 - session (C-8): INDEPENDENT when both sessions are established (supported) and different; UNRESOLVED when either is not
@@ -92,9 +100,16 @@ statement side is read as before: a digital examination that is a statement stil
   independence (4.11).
 - technique (C-16): when D names no device (its device fact silent), SAME. Otherwise UNRESOLVED unless both devices are
   established; INDEPENDENT when the devices D's statement concerns and the devices A may have used are disjoint, SAME
-  when A's are among D's, UNRESOLVED otherwise. A device covers its own kinds (DEVICE_CONTAINS, v1's relations table by
-  value: a snare covers the cold and the hot snare, forceps the cold and the hot forceps), so a snare is never "another
-  device" than a cold snare, and two "other" devices are never the same one.
+  when A's are among D's, UNRESOLVED otherwise. A device covers its own kinds (DEVICE_CONTAINS: v1's relations table by
+  value - a snare covers the cold and the hot snare, forceps the cold and the hot forceps - and, departing from it,
+  DECISIONS D292's E5j: electrocautery covers the devices that deliver high-frequency current by definition, the hot
+  snare, the hot forceps, argon plasma and radiofrequency; D222), so a snare is never "another device" than a cold
+  snare, "no electrocautery" never sets apart an act done with one of those four - and an act done "without
+  electrocautery" is none of them: the release direction, definitional and named - and two "other" devices are never
+  the same one. A device that MAY be another's kind (DEVICE_MAY_BE: a thermal probe, a heater or a bipolar probe, and a
+  sphincterotome, which cuts with or without current, may be electrosurgical) is never covered by it: between two
+  SUPPORTED devices one of which may be the other's kind the row is UNRESOLVED, never INDEPENDENT (``_may_be``), and a
+  negated electrocautery leaves such a device possible, so it never excludes one.
 
 **The relation** (4.5): INDEPENDENT when at least one row proves it, unless the pair is ``claimed`` (D's scope.covers
 names A, in any state), which is UNRESOLVED instead - Gemini says D applies to A while the facts say apart, and the
@@ -217,11 +232,21 @@ class UnlistedPair:
 
 # --- the tables (module docstring) -------------------------------------------------------------------------------------
 
-# A device's own kinds (v1's relations.DEVICE_CONTAINS, by value; tests/v2/test_pairing.py proves it equal): a snare
-# covers the cold and the hot snare, forceps the cold and the hot forceps.
+# A device's own kinds: v1's relations.DEVICE_CONTAINS by value - a snare covers the cold and the hot snare, forceps the
+# cold and the hot forceps - and DECISIONS D292's E5j, the departure tests/v2/test_pairing.py names: electrocautery
+# covers the devices that deliver high-frequency current by definition (D222: argon plasma coagulation delivers it) -
+# the hot snare, the hot forceps, argon plasma and radiofrequency.
 DEVICE_CONTAINS: Mapping[Device, frozenset[Device]] = MappingProxyType({
     Device.SNARE: frozenset({Device.COLD_SNARE, Device.HOT_SNARE}),
     Device.FORCEPS: frozenset({Device.COLD_FORCEPS, Device.HOT_FORCEPS}),
+    Device.ELECTROCAUTERY: frozenset({Device.HOT_SNARE, Device.HOT_FORCEPS, Device.ARGON_PLASMA,
+                                      Device.RADIOFREQUENCY}),
+})
+# The devices that MAY be one of another's kinds (DECISIONS D292's E5j): a thermal probe (a heater or a bipolar probe)
+# and a sphincterotome (it cuts with or without current) may be electrocautery - never covered by it, never INDEPENDENT
+# of it in the technique row (``_may_be``), and left possible by a negated electrocautery.
+DEVICE_MAY_BE: Mapping[Device, frozenset[Device]] = MappingProxyType({
+    Device.ELECTROCAUTERY: frozenset({Device.THERMAL_PROBE, Device.SPHINCTEROTOME}),
 })
 # The other date relations and performers (reading.OTHER_DATES and OTHER_PERFORMERS): a statement's "established as
 # another" (4.5), and the documenting values whose negation establishes another.
@@ -374,11 +399,25 @@ def digital_examination(R: FactSet, event: Id) -> bool:
     or, not established, manual its claimed value or one of its readings (facts.possibly over a device that is not
     silent). Each 9.4 weakening keeps a claimed value, so a weakened manual device still claims it. A silent device (the
     endoscopic examination's usual filing: "The colonoscope was advanced to the cecum."), one established as another
-    device, and manual negated claim none. The one derivation: engine/questions.digital_examination reads it, and through
-    it engine/evaluate's rows 1 and 7 and the items (step r4d's combination._digital, a copy with a kind gate, is pinned
-    equal where an event may be the examination by tests/v2/test_combination.py)."""
+    device, and manual negated claim none. An overfilled device slot's merged view (AMENDMENT-2 4.3.3 c [R:truth-T2]: a
+    claimed-value reader) claims manual only when a written fact states it - a manual every written fact denies
+    (``negated_values``) is no claim. The one derivation: engine/questions.digital_examination reads it, and through it
+    engine/evaluate's rows 1 and 7 and the items (step r4d's combination._digital, a copy with a kind gate, is pinned
+    equal where an event may be the examination by tests/v2/test_combination.py and tests/v2/test_pairing.py)."""
     device = facts_.fact(R, event, _A.TECHNIQUE_DEVICE)
-    return facts_.possibly(device, Device.MANUAL) and not facts_.silent(device)
+    return (facts_.possibly(device, Device.MANUAL) and not facts_.silent(device)
+            and Device.MANUAL not in device.negated_values)
+
+
+def established_digital(R: FactSet, event: Id) -> bool:
+    """A digital examination ESTABLISHED as one (DECISIONS D280.1 and D280.2; E13's established reading, D227, D253): the
+    event's kind supported examination and its device supported manual. Such an examination is neither a session's done
+    examination nor one whose rows 2-5 must pass (engine/evaluate's row 7 reads none), and as a statement it concerns no
+    examination act (``statement_kinds``): it never words, binds or changes an item. A device only CLAIMING manual
+    (``digital_examination`` but not supported manual: unresolved, doubted, contradicted, an overfilled slot) is not
+    established; a 9.4 weakening never creates a supported device, so the reading never releases under one."""
+    return (facts_.holds(facts_.fact(R, event, _A.KIND), Kind.EXAMINATION)
+            and facts_.holds(facts_.fact(R, event, _A.TECHNIQUE_DEVICE), Device.MANUAL))
 
 
 def act_kinds(R: FactSet, act: Id) -> frozenset[Kind]:
@@ -399,8 +438,13 @@ def statement_kinds(R: FactSet, statement: Id) -> frozenset[Kind]:
     """Every kind ``statement`` may be on the statement side of a pair: facts.possibly_of_family on its kind - a kind
     not established is every kind of its session's family (requirements_table.FAMILY_KINDS, DECISIONS D191), every kind
     when the session is not established either [R:HO-5]. A statement's purpose is never claimed (3.2.1), so the
-    catalogue's reading adds nothing here."""
-    return facts_.possible_kinds(R, statement, of_family=True)
+    catalogue's reading adds nothing here. A statement established as a digital examination (``established_digital``:
+    kind supported examination, device supported manual) concerns no examination act - its kinds less Kind.EXAMINATION
+    (DECISIONS D280.2, G3-24's option (b)); one whose device only claims manual keeps its kinds (option (a))."""
+    kinds = facts_.possible_kinds(R, statement, of_family=True)
+    if Kind.EXAMINATION in kinds and established_digital(R, statement):
+        return kinds - {Kind.EXAMINATION}
+    return kinds
 
 
 def shared_kinds(R: FactSet, statement: Id, act: Id) -> frozenset[Kind]:
@@ -748,12 +792,25 @@ def _technique_row(R: FactSet, p: _Context) -> RowResult:
     own = facts_.fact(R, p.statement, _A.TECHNIQUE_DEVICE)
     if facts_.silent(own):
         return RowResult.SAME  # D names no device
-    covered, used = _devices(own), _devices(facts_.fact(R, p.act, _A.TECHNIQUE_DEVICE))
+    used_fact = facts_.fact(R, p.act, _A.TECHNIQUE_DEVICE)
+    covered, used = _devices(own), _devices(used_fact)
     if covered is None or used is None:
         return RowResult.UNRESOLVED
-    if not covered & used:
-        return RowResult.INDEPENDENT
+    if not covered & used:  # E5j: a device that may be the other's kind is never apart from it
+        return RowResult.UNRESOLVED if _may_be(own, used_fact) else RowResult.INDEPENDENT
     return RowResult.SAME if used <= covered and Device.OTHER not in used else RowResult.UNRESOLVED
+
+
+def _may_be(one: Fact, other: Fact) -> bool:
+    """DECISIONS D292's E5j: two SUPPORTED devices one of which may be the other's kind (DEVICE_MAY_BE, either way: a
+    thermal probe or a sphincterotome beside electrocautery). Read only to keep the technique row UNRESOLVED where the two
+    device sets are disjoint; it never covers, so a negated electrocautery leaves such a device possible."""
+    if one.result is not Result.SUPPORTED or other.result is not Result.SUPPORTED:
+        return False
+    first, second = one.value, other.value
+    if not isinstance(first, Device) or not isinstance(second, Device):
+        return False
+    return second in DEVICE_MAY_BE.get(first, frozenset()) or first in DEVICE_MAY_BE.get(second, frozenset())
 
 
 _ROWS: Mapping[Row, Callable[[FactSet, _Context], RowResult]] = MappingProxyType({

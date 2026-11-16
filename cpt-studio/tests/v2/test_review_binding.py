@@ -41,10 +41,14 @@ from types import SimpleNamespace
 from django.test import SimpleTestCase
 
 from studio import answers, interpretation, jobs, models, review
+from studio.interpretation import overlay
+from studio.interpretation.engine import assess as AS
 from studio.validation import questions
 from tests import v2_documents
 from tests.test_pipeline_api import FakeProvider
+from tests.v2 import test_assess as TA
 from tests.v2.test_jobs import PipelineCase
+from tests.v2.test_settle import answer as pass_one, event, fact, frame, session, src
 
 Job = models.Job
 KEY = ('45385', 'gi.colonoscopy', 'extent')  # TWO_PROCEDURES v2: 45385 is held on its colonoscopy's extent
@@ -65,7 +69,7 @@ class DoorBindingCase(PipelineCase):
         self.assertTrue(all(job.state == Job.SUCCEEDED for job in done), [(job.kind, job.error) for job in done])
         encounter.refresh_from_db()
         final = encounter.current_assessment
-        self.assertEqual(final.engine_version, interpretation.ENGINE_VERSION_V2)
+        self.assertEqual(final.engine_version, interpretation.ENGINE_VERSION_V3)
         return encounter, final, list(final.proposals.order_by('position'))
 
     def held(self, proposals):
@@ -295,6 +299,14 @@ class AppliedAnswerTests(DoorBindingCase):
         encounter, again, answer = self.answered()
         revocation = answers.revoke_answer(encounter, self.user, answer.pk)
         self.assertEqual(revocation.reason, models.MemberAnswerRevocation.WITHDRAWN)
+        # DECISIONS D290, G4-05 (build list B27; refute-5b-r1 R1's mutant V8): between the withdrawal and its recompute
+        # the AGAIN is live and the stored exclusion stands, as the overlay reads it - so no 45385 row is asked (V8 gave
+        # the withdrawn answer's row back, to be answered by key alone) and no earlier answer is listed
+        self.assertTrue(Job.objects.filter(encounter=encounter, kind=Job.ASSESS, state=Job.QUEUED).exists())
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.current_assessment_id, again.pk)
+        self.assertEqual([item for item in answers.details_needed(encounter, again) if '45385' in item['affects']], [])
+        self.assertEqual(answers.earlier_answers(encounter, again), [])
         _, after = self.recompute(encounter)
         self.assertNotEqual(after.pk, again.pk)
         [held] = [p for p in after.proposals.all() if p.code == '45385']
@@ -402,7 +414,7 @@ class ServiceQuestionCase(PipelineCase):
         self.assertTrue(all(job.state == Job.SUCCEEDED for job in done), [(job.kind, job.error) for job in done])
         encounter.refresh_from_db()
         final = encounter.current_assessment
-        self.assertEqual(final.engine_version, interpretation.ENGINE_VERSION_V2)
+        self.assertEqual(final.engine_version, interpretation.ENGINE_VERSION_V3)
         self.assertEqual([(p.code, p.bucket, p.status) for p in final.proposals.all()], [('45378', 'selected', 'ready')])
         return encounter, final
 
@@ -547,3 +559,404 @@ class StoredServiceQuestionsTests(SimpleTestCase):
                           ('', 'gi.colonoscopy', 'extent'): grouped[('', 'gi.colonoscopy', 'extent')]})
         # a recorded question no pair asks binds nothing
         self.assertNotIn(('', 'gi.egd', 'extent'), review.bound_fingerprints(self.assessment(recorded), rows, pairs[1:]))
+
+
+# --- DECISIONS D283 (build list B15, B17, B19): the review half of one implementation of member answers --------------
+
+BALLOON = 'The distal esophagus was dilated with a balloon.'  # test_assess.one_dilation: one balloon dilation
+DILATED = 'The distal esophagus was dilated.'  # test_assess.egd_dilation: a dilation whose device is not stated
+
+
+def dilation_document(sentence: str) -> str:
+    """An EGD note (fictional endoscopist, no real patient): the gastroscope advanced to the second portion of the
+    duodenum, then one dilation of the distal esophagus told by ``sentence``."""
+    return (v2_documents.HEAD                                  # S1
+            + 'Date of service: 11/09/2026.\n'                 # S2
+            + v2_documents.ENDOSCOPIST + '\n'                  # S3
+            + v2_documents.G1 + '\n'                           # S4
+            + sentence + '\n')                                 # S5
+
+
+def dilation_answer(device: bool):
+    """Pass 1's answer to dilation_document: the EGD X1 (its examination E1) and the dilation E2 of the distal esophagus,
+    its device the balloon S5 states (``device``) or none (test_assess.one_dilation and egd_dilation, read through the
+    pipeline)."""
+    D = v2_documents
+    technique = {'technique__device': [fact('balloon', src(['S5'], 'balloon'))]} if device else {}
+
+    def build() -> dict:
+        return pass_one(
+            sections=[D._opening('S3', 'S2', 'S1'), D._labelled('N1', 'S4', 'EGD:', 'procedure', 'S3', 'S2')],
+            people=D._people('S3', 'Endoscopist'),
+            clinician=[fact('P1', frame(['S3'], D.NAME))],
+            sessions=[session('X1', fact('egd', src(['S4'], 'gastroscope')), examination=[fact('E1', src(['S4']))],
+                              reached=[fact('second_portion_duodenum',
+                                            src(['S4'], 'advanced to the second portion of the duodenum'))])],
+            events=[event('E1', ['S4'], 'gastroscope', 'was advanced', 'examination',
+                          session=[fact('X1', src(['S4']))]),
+                    event('E2', ['S5'], 'dilated', 'was dilated', 'dilation', session=[fact('X1', src(['S5']))],
+                          target__places=[fact('distal_esophagus', src(['S5'], 'distal esophagus'))], **technique)],
+            when=D._when('S2', '11/09/2026', '2026-11-09'))
+    return build
+
+
+class DilationCase(PipelineCase):
+    """A dilation document through design v2's pipeline (pass 1 written by hand, pass 2 the faithful oracle), the
+    proposal provider selecting ``CODES`` on the dilation's sentence."""
+    SENTENCE, DEVICE, CODES = BALLOON, True, ('43249', '43233')
+
+    def setUp(self):
+        super().setUp()
+        self.document = dilation_document(self.SENTENCE)
+        self.interpreter.answers[self.document] = dilation_answer(self.DEVICE)
+        self.provider = FakeProvider([(code, self.SENTENCE) for code in self.CODES])
+
+    def finished(self):
+        """(encounter, final assessment, {code: proposal}), the pipeline drained."""
+        encounter, _ = self.upload(self.document)
+        done = self.drain()
+        self.assertTrue(all(job.state == Job.SUCCEEDED for job in done), [(job.kind, job.error) for job in done])
+        encounter.refresh_from_db()
+        final = encounter.current_assessment
+        self.assertEqual(final.engine_version, interpretation.ENGINE_VERSION_V3)
+        return encounter, final, {p.code: p for p in final.proposals.all()}
+
+    def membership(self):
+        return models.Membership.objects.get(workspace=self.ws, user=self.user)
+
+    def decide(self, encounter, proposal, action):
+        return review.record_decision(encounter=models.Encounter.objects.get(pk=encounter.pk), proposal=proposal,
+                                      action=action, user=self.user, membership=self.membership(),
+                                      note='Synthetic decision.',
+                                      acknowledgement=review.ACKNOWLEDGEMENTS.get(self.user.actor_kind, ''))
+
+    def view_of(self, assessment, code):
+        [view] = [view for view in review.effective_view(assessment).values() if view.code == code]
+        return view
+
+    def recompute(self, encounter):
+        [job] = self.drain()
+        self.assertEqual((job.kind, job.state, job.result['mode']), ('assess', Job.SUCCEEDED, 'again'))
+        encounter.refresh_from_db()
+        return encounter.current_assessment
+
+
+class CompetingAnswerTests(DilationCase):
+    """DECISIONS D283, G1-01 option (c) (the integration's S1; build list B15): one balloon dilation proposed as 43249 and
+    43233, each held by the competition alone. An answer to 43233's competing question - recorded before the question
+    stopped taking answers (studio/answers.py refuses one since L4-6), so written here as such a record - binds nothing
+    at read time, as engine/assess binds nothing to it: review.answer_states binds none and lists it not_applied, the
+    review overlay reads every code as stored (both held, no detail unavailable), and the reviewer's rejection of 43233
+    - what the competing hold's own sentence asks for (D270 DQ-3) - releases 43249. As asked (the item's stored
+    fingerprint) and with no fingerprint (the earlier form, bound by key); "Not documented" and "Cannot confirm"."""
+
+    def test_b15_an_answer_to_the_competing_question_binds_nothing_and_the_rejection_releases_the_rival(self):
+        for value in (models.MemberAnswer.NOT_DOCUMENTED, models.MemberAnswer.CANNOT_CONFIRM):
+            for asked in (True, False):
+                with self.subTest(value=value, fingerprint='as asked' if asked else 'none'):
+                    encounter, final, by = self.finished()
+                    for code, rival in (('43249', '43233'), ('43233', '43249')):
+                        self.assertEqual((by[code].status, by[code].support['item']['fact'],
+                                          by[code].support['competes']), ('needs_clarification', 'competing_codes',
+                                                                          [rival]))
+                    rival = by['43233']
+                    given = models.MemberAnswer.objects.create(
+                        encounter=encounter, revision=final.revision, assessment=final, code=rival.code,
+                        family=rival.family, fact=overlay.COMPETING_FACT, value=value,
+                        question=rival.support['question'] if asked else '', answered_by=self.user)
+                    applied, bound, earlier = review.answer_states(final)
+                    self.assertEqual((applied, bound, [(item.pk, why) for item, why in earlier]),
+                                     ([], [], [(given.pk, AS.Unbound.NOT_APPLIED.value)]))
+                    for proposal in by.values():
+                        view = self.view_of(final, proposal.code)
+                        self.assertEqual((view.status, view.reason, view.answered, view.released, view.recomputed,
+                                          view.stale), (proposal.status, '', '', (), (), ()), proposal.code)
+                    self.decide(encounter, rival, review.REJECT)
+                    view = self.view_of(final, '43249')
+                    self.assertEqual((view.status, view.released), ('ready', (overlay.COMPETING_FACT,)))
+
+
+class NamedRivalTests(DilationCase):
+    """DECISIONS D283, G1-04 option (a) (the integration's S4 = O3; build list B17): an EGD dilation whose device is not
+    stated, 43249 and 43213 proposed for it (test_assess.egd_dilation). "Cannot confirm" to 43249's technique, saved
+    through the details door and read at assess by the recompute it queues, excludes 43249 but leaves it in the
+    competition, so 43213's competing question names it. The rejection that question asks for is offered: 43249 allows
+    [reject] (detail unavailable, no decision), the rejection is recorded, 43213 then reads ready (its competing hold
+    released) and 43249 allows [revoke]. Controls: "Not documented" (43249 out of the competition, no question names
+    it) and a code a member's answer leaves detail unavailable that no competing question names allow nothing."""
+    SENTENCE, DEVICE, CODES = DILATED, False, ('43249', '43213')
+
+    def answered(self, value, codes=None):
+        """(encounter, the AGAIN assessment, {code: proposal}) after ``value`` saved to 43249's technique row."""
+        encounter, final, by = self.finished()
+        self.assertEqual(by['43249'].support['item']['fact'], 'technique')
+        [row] = [item for item in answers.details_needed(encounter, final) if item['affects'] == ['43249']]
+        answers.save_details(encounter, self.user, [{'id': row['id'], 'fact': row['fact'], 'value': value}])
+        again = self.recompute(encounter)
+        return encounter, again, {p.code: p for p in again.proposals.all()}
+
+    def test_b17_the_rival_an_open_competing_question_names_offers_the_rejection_it_asks_for(self):
+        encounter, again, by = self.answered(models.MemberAnswer.CANNOT_CONFIRM)
+        self.assertEqual((by['43249'].bucket, by['43249'].support['answered']['value']),
+                         ('excluded', models.MemberAnswer.CANNOT_CONFIRM))
+        self.assertEqual((by['43213'].status, by['43213'].support['item']['fact'], by['43213'].support['competes']),
+                         ('needs_clarification', overlay.COMPETING_FACT, ['43249']))
+        self.assertEqual(self.view_of(again, '43249').reason, review.DETAIL_UNAVAILABLE)
+        self.assertEqual(review.allowed_actions(by['43249'], again, self.membership()), [review.REJECT])
+        self.decide(encounter, by['43249'], review.REJECT)
+        view = self.view_of(again, '43213')
+        self.assertEqual((view.status, view.released), ('ready', (overlay.COMPETING_FACT,)))
+        self.assertEqual(review.allowed_actions(by['43249'], again, self.membership()), [review.REVOKE])
+
+    def test_b17_controls_a_code_no_competing_question_names_offers_nothing(self):
+        encounter, again, by = self.answered(models.MemberAnswer.NOT_DOCUMENTED)
+        self.assertEqual(by['43249'].bucket, 'excluded')
+        self.assertEqual((by['43213'].status, by['43213'].support.get('competes') or []), ('ready', []))
+        self.assertEqual(review.allowed_actions(by['43249'], again, self.membership()), [])
+
+
+class NamedRivalAloneTests(NamedRivalTests):
+    """B17's second control: 43249 proposed alone for the dilation whose device is not stated - "Cannot confirm" to its
+    technique leaves it detail unavailable with no rival, so no competing question names it: it allows nothing."""
+    CODES = ('43249',)
+
+    def test_b17_the_rival_an_open_competing_question_names_offers_the_rejection_it_asks_for(self):
+        encounter, again, by = self.answered(models.MemberAnswer.CANNOT_CONFIRM)
+        self.assertEqual(by['43249'].bucket, 'excluded')
+        self.assertEqual(self.view_of(again, '43249').reason, review.DETAIL_UNAVAILABLE)
+        self.assertEqual(review.allowed_actions(by['43249'], again, self.membership()), [])
+
+    def test_b17_controls_a_code_no_competing_question_names_offers_nothing(self):
+        pass  # the parent's control needs 43213
+
+
+class NamedRivalThreeWayTests(NamedRivalTests):
+    """refute-f6-r1 F6R1-3 (D276: B17 as its class, whatever the size of the competition): the dilation whose device is
+    not stated proposed as 43249, 43213 and 43248, all three competing. "Not documented" to 43249's technique takes
+    43249 out of the competition (D249): the two left still compete and their open competing question names them
+    alone, so 43249 allows nothing - at read time (the recompute it queues not run) and after it. "Cannot confirm"
+    leaves 43249 in the competition, named by the open competing question: [reject] at read time and after the
+    recompute, the rejection recorded, then [revoke]."""
+    CODES = ('43249', '43213', '43248')
+
+    def saved(self, value):
+        """(encounter, the assessment read time reads - its recompute queued, not run -, {code: proposal}) after
+        ``value`` saved to 43249's technique row through the details door."""
+        encounter, final, by = self.finished()
+        self.assertEqual({code: sorted(by[code].support.get('competes') or []) for code in self.CODES},
+                         {'43249': ['43213', '43248'], '43213': ['43248', '43249'], '43248': ['43213', '43249']})
+        [row] = [item for item in answers.details_needed(encounter, final) if item['affects'] == ['43249']]
+        answers.save_details(encounter, self.user, [{'id': row['id'], 'fact': row['fact'], 'value': value}])
+        return encounter, final, by
+
+    def test_b17_the_rival_an_open_competing_question_names_offers_the_rejection_it_asks_for(self):
+        encounter, final, by = self.saved(models.MemberAnswer.CANNOT_CONFIRM)
+        view = self.view_of(final, '43249')
+        self.assertEqual((view.reason, view.answer), (review.DETAIL_UNAVAILABLE, models.MemberAnswer.CANNOT_CONFIRM))
+        self.assertEqual(review.allowed_actions(by['43249'], final, self.membership()), [review.REJECT])
+        again = self.recompute(encounter)
+        mine = {p.code: p for p in again.proposals.all()}
+        self.assertEqual(review.allowed_actions(mine['43249'], again, self.membership()), [review.REJECT])
+        self.decide(encounter, mine['43249'], review.REJECT)
+        self.assertEqual(review.allowed_actions(mine['43249'], again, self.membership()), [review.REVOKE])
+
+    def test_b17_controls_a_code_no_competing_question_names_offers_nothing(self):
+        encounter, final, by = self.saved(models.MemberAnswer.NOT_DOCUMENTED)
+        view = self.view_of(final, '43249')
+        self.assertEqual((view.reason, view.answer), (review.DETAIL_UNAVAILABLE, models.MemberAnswer.NOT_DOCUMENTED))
+        self.assertTrue(any(q.get('fact') == overlay.COMPETING_FACT for q in self.view_of(final, '43213').questions))
+        self.assertEqual(review.allowed_actions(by['43249'], final, self.membership()), [])
+        again = self.recompute(encounter)
+        mine = {p.code: p for p in again.proposals.all()}
+        self.assertEqual(review.allowed_actions(mine['43249'], again, self.membership()), [])
+
+
+class AssessedAnswersTests(SimpleTestCase):
+    """DECISIONS D283, G3-17 with RS-4's and C5's correction (build list B19), over records (test_overlay.Case: the
+    engine's assessment persisted as the renderer persists it): overlay.assessed_answers names every answer assess read
+    that the overlay binds - the competition's overlay-bound "Not documented" (D270 DQ-2) and an overlay-bound answer of
+    either value on a primary (G1-03) - and nothing else: not one asked differently, one no longer asked, one to the
+    competing question, or a "Cannot confirm" that binds no primary. review._reads_a_withdrawn_answer holds readiness
+    (STALE_ANSWER_BLOCKER) while one it names no longer stands, and never for an answer it does not name."""
+
+    @staticmethod
+    def case(doc, codes, given):
+        from tests.v2 import test_overlay as TO  # imported here: test_overlay imports test_assess
+
+        return TO.Case(doc.build(), *codes, answers=given)
+
+    @staticmethod
+    def withdrawn(case, standing):
+        """review._reads_a_withdrawn_answer over ``case``'s record, with ``standing`` (answer ids) its standing answers."""
+        from unittest import mock
+
+        none = SimpleNamespace(filter=lambda **kw: SimpleNamespace(
+            exclude=lambda **kw: SimpleNamespace(exists=lambda: False)))
+        assessment = SimpleNamespace(engine_version=interpretation.ENGINE_VERSION_V3, completeness=case.completeness,
+                                     clarifications=none, proposals=SimpleNamespace(all=lambda: list(case.rows)))
+        with mock.patch.object(review, '_standing', return_value=[SimpleNamespace(pk=pk) for pk in standing]):
+            return review._reads_a_withdrawn_answer(assessment)
+
+    def test_b19_the_answers_assess_read_and_the_ones_it_did_not(self):
+        doc = TA.office_and_sigmoidoscopy
+        prolonged = TA.office_prolonged
+        prolonged_codes = (('99215', 1), ('99214', 1), ('99417', 2))
+        plain = TA.by_code(TA.run(prolonged().build(), *prolonged_codes, member=TA.ENTERED))
+        day = TA.by_code(TA.run(doc().build(), *TA.OFFICE_DAY, member=TA.ENTERED))
+        c7 = doc()
+        c7.act(3, TA.Kind.EM_PROLONGED, session=TA.X(1))
+        c7_codes = (('99215', 1), ('99417', 3), ('45330', 2))
+        c7_plain = TA.by_code(TA.run(c7.build(), *c7_codes, member=TA.ENTERED))
+        dilation_codes = (('43249', 2), ('43213', 2))
+        dilation = TA.by_code(TA.run(TA.egd_dilation().build(), *dilation_codes))
+        read, unasked, other = AS.Unbound.OVERLAY_READ, AS.Unbound.NO_LONGER_ASKED, AS.Unbound.ASKED_DIFFERENTLY
+        rows = []
+        for value in ('not_documented', 'cannot_confirm'):
+            rows.append(('G1-03: an answer on the only primary', prolonged(), prolonged_codes,
+                         (TA.answer(plain['99215'], value=value, answer_id='a1'),), {'a1'}, {'a1': read}))
+        rows += [
+            ('D270 DQ-2: the competition\'s "Not documented"', doc(), TA.OFFICE_DAY,
+             (TA.answer(day['99214'], answer_id='a1'),), {'a1'}, {'a1': read}),
+            ('an unbound "Cannot confirm": no primary, the competition as it stands', doc(), TA.OFFICE_DAY,
+             (TA.answer(day['99214'], value='cannot_confirm', answer_id='a1'),), set(), {'a1': read}),
+            ('asked differently (an item the engine binds by its fingerprint)', TA.egd_dilation(), dilation_codes,
+             (TA.answer(dilation['43249'], question='0' * 64, answer_id='a1'),), set(), {'a1': other}),
+            ('no longer asked (C7: 99417\'s item moved to its ADDON row)', c7, c7_codes,
+             (TA.answer(c7_plain['99215'], answer_id='a1'), TA.answer(c7_plain['99417'], answer_id='a2')), {'a1'},
+             {'a1': read, 'a2': unasked}),
+        ]
+        for name, built, codes, given, named, whys in rows:
+            with self.subTest(name, values=[item.value for item in given]):
+                case = self.case(built, codes, given)
+                self.assertEqual({entry.answer: entry.why for entry in case.assessment.earlier_answers}, whys)
+                self.assertEqual(overlay.assessed_answers(case.completeness, case.rows), frozenset(named))
+                every = {item.answer_id for item in given}
+                self.assertFalse(self.withdrawn(case, every))  # every answer standing
+                for gone in every:
+                    self.assertEqual(self.withdrawn(case, every - {gone}), gone in named, gone)
+
+    def test_b19_an_answer_to_the_competing_question_is_never_read(self):
+        found = TA.by_code(TA.run(TA.one_dilation().build(), ('43249', 2), ('43233', 2)))
+        given = (TA.answer(found['43233'], answer_id='a1', fact=overlay.COMPETING_FACT),)
+        case = self.case(TA.one_dilation(), (('43249', 2), ('43233', 2)), given)
+        self.assertEqual(overlay.assessed_answers(case.completeness, case.rows), frozenset())
+        self.assertFalse(self.withdrawn(case, set()))
+
+
+OFFICE_VISIT = 'Office visit: established patient seen in the office.'
+TOTAL_TIME = 'Total time on the date of the encounter was 74 minutes.'
+PROLONGED = 'Prolonged service time beyond the visit was 15 minutes.'
+SIGMOIDOSCOPY = 'Flexible sigmoidoscopy: the sigmoidoscope was advanced to the sigmoid colon.'
+
+
+def office_document(prolonged: bool) -> str:
+    """An office note (fictional clinician, no real patient): the visit and its total time, its prolonged time
+    (``prolonged``), and a flexible sigmoidoscopy to the sigmoid colon on the same day."""
+    return (v2_documents.HEAD                                  # S1
+            + 'Date of service: 11/09/2026.\n'                 # S2
+            + v2_documents.CLINICIAN + '\n'                    # S3
+            + OFFICE_VISIT + '\n'                              # S4
+            + TOTAL_TIME + '\n'                                # S5
+            + (PROLONGED + '\n' if prolonged else '')          # S6
+            + SIGMOIDOSCOPY + '\n')                            # S6 or S7
+
+
+def office_answer(prolonged: bool):
+    """Pass 1's answer to office_document: the office visit X1 (this encounter; the visit E1, its basis the stated total
+    time, and its prolonged time E3 when stated) and the flexible sigmoidoscopy X2 to the sigmoid colon (E2) - test_assess's
+    office_and_sigmoidoscopy, and with the prolonged time refute-consistency C7's scene, read through the pipeline."""
+    D = v2_documents
+    sig = 'S7' if prolonged else 'S6'
+
+    def build() -> dict:
+        events = [event('E1', ['S4'], 'Office visit', 'seen', 'em_visit', session=[fact('X1', src(['S4']))],
+                        visit__basis=[fact('total_time', src(['S5'], '74 minutes', 'placing'))]),
+                  event('E2', [sig], 'sigmoidoscope', 'was advanced', 'examination', session=[fact('X2', src([sig]))])]
+        if prolonged:
+            events.append(event('E3', ['S6'], 'Prolonged service time', 'was 15 minutes', 'em_prolonged',
+                                session=[fact('X1', src(['S6']))]))
+        return pass_one(
+            sections=[D._opening('S3', 'S2', 'S1')],
+            people=D._people('S3', 'Clinician'),
+            clinician=[fact('P1', frame(['S3'], D.NAME))],
+            sessions=[session('X1', fact('office_em', src(['S4'], 'Office')), examination=[fact('E1', src(['S4']))],
+                              encounter=[fact('this_encounter', frame(['S2']))]),
+                      session('X2', fact('flex_sig', src([sig], 'Flexible sigmoidoscopy')),
+                              examination=[fact('E2', src([sig]))],
+                              reached=[fact('sigmoid_colon', src([sig], 'advanced to the sigmoid colon'))])],
+            events=events,
+            when=D._when('S2', '11/09/2026', '2026-11-09'))
+    return build
+
+
+class WithdrawnReadAnswerTests(PipelineCase):
+    """DECISIONS D283, G3-17 with RS-4's and C5's correction (build list B19), through the product's doors: an
+    assessment that READ a member's overlay-bound answer holds readiness at STALE_ANSWER_BLOCKER once that answer no
+    longer stands, until the recompute. (a) A key-bound "Not documented" assess read for the competition (D270 DQ-2:
+    99214 beside 99213 on one office visit, a same-day flexible sigmoidoscopy asking each the separately identifiable
+    visit); (b) an answer of either value assess read for the ADDON row (G1-03: 99215's separately identifiable visit
+    answered, 99417's only primary). Each withdrawn through the door with the recompute it queues stopped: the blocker
+    stands; resumed and recomputed: it is gone."""
+
+    VALUES = {'setting': 'office', 'patient_status': 'established'}
+
+    def finished(self, prolonged, codes):
+        document = office_document(prolonged)
+        self.interpreter.answers[document] = office_answer(prolonged)
+        self.provider = FakeProvider(list(codes))
+        encounter, _ = self.upload(document, values=self.VALUES)
+        done = self.drain()
+        self.assertTrue(all(job.state == Job.SUCCEEDED for job in done), [(job.kind, job.error) for job in done])
+        encounter.refresh_from_db()
+        final = encounter.current_assessment
+        self.assertEqual(final.engine_version, interpretation.ENGINE_VERSION_V3)
+        return encounter, final
+
+    def fresh(self, encounter):
+        return models.Encounter.objects.get(pk=encounter.pk)
+
+    def stale(self, encounter):
+        return review.STALE_ANSWER_BLOCKER in review.readiness(self.fresh(encounter))['blockers']
+
+    def read_then_withdrawn(self, encounter, final, code, value):
+        """``value`` saved to ``code``'s row through the door, its AGAIN run (assess reads it: overlay.assessed_answers
+        names it), then withdrawn with the AGAIN that queues stopped; the blocker checked before and after the
+        recompute."""
+        [row] = [item for item in answers.details_needed(encounter, final) if code in item['affects']]
+        saved = answers.save_details(encounter, self.user, [{'id': row['id'], 'fact': row['fact'], 'value': value}])
+        [answer_id] = saved['answer_ids']
+        [job] = self.drain()
+        self.assertEqual((job.kind, job.state, job.result['mode']), ('assess', Job.SUCCEEDED, 'again'))
+        again = self.fresh(encounter).current_assessment
+        rows = [overlay.stored_from(p, ()) for p in again.proposals.all()]
+        self.assertEqual(overlay.assessed_answers(again.completeness, rows), frozenset({str(answer_id)}))
+        self.assertFalse(self.stale(encounter))
+        answers.revoke_answer(encounter, self.user, answer_id)
+        jobs.stop_encounter(self.fresh(encounter), self.user)
+        self.assertEqual(self.fresh(encounter).current_assessment_id, again.pk)  # the recompute has not run
+        self.assertTrue(self.stale(encounter))
+        jobs.resume(self.fresh(encounter), self.user)
+        self.drain()
+        self.assertNotEqual(self.fresh(encounter).current_assessment_id, again.pk)
+        self.assertFalse(self.stale(encounter))
+
+    def test_b19_a_key_bound_not_documented_assess_read_for_the_competition(self):
+        encounter, final = self.finished(False, (('99213', TOTAL_TIME), ('99214', TOTAL_TIME),
+                                                 ('45330', SIGMOIDOSCOPY)))
+        by = {p.code: p for p in final.proposals.all()}
+        self.assertEqual({code: (p.status, (p.support.get('item') or {}).get('fact')) for code, p in by.items()},
+                         {'99213': ('needs_clarification', 'separate_em'),
+                          '99214': ('needs_clarification', 'separate_em'), '45330': ('ready', None)})
+        self.read_then_withdrawn(encounter, final, '99214', models.MemberAnswer.NOT_DOCUMENTED)
+
+    def test_b19_an_answer_of_either_value_assess_read_for_the_addon_row(self):
+        for value in (models.MemberAnswer.NOT_DOCUMENTED, models.MemberAnswer.CANNOT_CONFIRM):
+            with self.subTest(value=value):
+                encounter, final = self.finished(True, (('99215', TOTAL_TIME), ('99417', PROLONGED),
+                                                        ('45330', SIGMOIDOSCOPY)))
+                by = {p.code: p for p in final.proposals.all()}
+                self.assertEqual({code: (p.status, (p.support.get('item') or {}).get('fact'))
+                                  for code, p in by.items()},
+                                 {'99215': ('needs_clarification', 'separate_em'),
+                                  '99417': ('needs_clarification', 'separate_em'), '45330': ('ready', None)})
+                self.read_then_withdrawn(encounter, final, '99215', value)

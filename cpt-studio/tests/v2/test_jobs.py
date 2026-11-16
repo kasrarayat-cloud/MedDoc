@@ -72,8 +72,8 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from studio import interpretation, jobs, models, progress, provider_holds, review
-from studio.interpretation import adapter, holds, overlay, sentinel, wording
-from studio.interpretation.contract import appraise_prompt, jsonschema
+from studio.interpretation import adapter, fable_adapter, holds, overlay, sentinel, wording
+from studio.interpretation.contract import appraise_prompt, extract_prompt, jsonschema
 from studio.interpretation.contract import types as ct
 from studio.interpretation.engine import assess as engine_assess
 from studio.interpretation.engine import combination, coverage
@@ -81,17 +81,30 @@ from studio.interpretation.engine import questions as engine_questions
 from studio.providers.base import request_sha256
 from studio.types import CodeReference, RawExchange
 from tests.support import factories as f
-from tests.test_interpretation_adapter import encoded, envelope, error_body, with_parts
 from tests.test_pipeline_api import FakeProvider
 from tests.v2 import evaluate_fixtures as EF
 from tests.v2 import test_assess as TA
 from tests.v2.test_adapter import measured_pins
+from tests.v2.test_fable_adapter import (FINAL_USAGE, answer_stream, block_start, block_stop, error_event, message_delta,
+                                        sse, start, stop, text_delta)
+from tests.v2.test_fable_adapter import error_body as fable_error_body
 from tests.v2.test_settle import HEALTH_PIN, colonoscopy, event, fact, faithful, roles_of, src
 
 AUTH = 'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md'
 Run, Job = models.ProviderRun, models.Job
-EXTRACTION, APPRAISAL = adapter.EXTRACTION, adapter.APPRAISAL
-USAGE = {'promptTokenCount': 1000, 'candidatesTokenCount': 200, 'totalTokenCount': 1200}
+# AMENDMENT-2 (D275, D279): the interpreter of both passes is Claude Fable 5.2 through studio/interpretation/
+# fable_adapter.py, and jobs.interpretation_adapter names it (section 9)
+EXTRACTION, APPRAISAL = fable_adapter.EXTRACTION, fable_adapter.APPRAISAL
+USAGE = copy.deepcopy(FINAL_USAGE)  # Anthropic's usage, final at message_delta (A2 1.4, 1.7)
+
+
+def fable_pins() -> dict:
+    """Every pin a Fable request of either pass is built and read under (AMENDMENT-2 8.2), set to the sha its owning
+    step's own function measures on this tree (contract/extract_prompt.pins_fable, contract/appraise_prompt.pins_fable),
+    as the integration owner writes them after the build's last repair (D202); and the @2 health thresholds' pin, which
+    8.2 sets from D3 (D277 runs none), set to the thresholds' own document (test_settle.HEALTH_PIN). The pin tests of
+    steps F0, F2 and F3 judge the written values."""
+    return {**extract_prompt.pins_fable(), **appraise_prompt.pins_fable(), 'HEALTH_THRESHOLDS_SHA256_V3': HEALTH_PIN}
 
 # --- the synthetic documents, written for these tests -----------------------------------------------------------------
 
@@ -127,33 +140,60 @@ ANSWERS = {NOTE: note_answer, POLYP: polyp_answer}
 
 
 def body(answer_dict) -> bytes:
-    """A generateContent 200 body carrying ``answer_dict`` as its one text part."""
-    return encoded(envelope(json.dumps(answer_dict)))
+    """A complete 200 answer stream of the Fable connector (A2 1.4: message_start naming claude-fable-5-2, a thinking
+    block, one text block carrying ``answer_dict`` as JSON, message_delta at end_turn, message_stop)."""
+    return answer_stream(json.dumps(answer_dict))
+
+
+def stream_of(text, *, stop_reason='end_turn', stop_details=None) -> bytes:
+    """A complete 200 stream whose one text block is ``text`` and whose turn stopped for ``stop_reason``."""
+    return answer_stream(text, stop_reason=stop_reason, stop_details=stop_details)
+
+
+def declined_stream() -> bytes:
+    """A complete 200 stream the model declined (stop_reason refusal; a category, no answer text): A2 1.5's
+    request-bound hold, reason declined."""
+    return answer_stream(None, stop_reason='refusal', stop_details={'type': 'refusal', 'category': 'cyber'})
+
+
+def error_after_start(kind='invalid_request_error') -> bytes:
+    """A complete 200 stream that opened with message_start and ended with an error event of ``kind`` (A2 1.5: a hold an
+    error event sets after message_start is request-bound; an overload FAILED)."""
+    return sse(start(), error_event(kind))
+
+
+def error_first(kind='overloaded_error') -> bytes:
+    """A complete 200 stream whose first event is an error event (A2 1.5 precedence (2) [R:connector-CONN-4])."""
+    return sse(error_event(kind))
 
 
 def answered(data: bytes, *, status=200, usage=True) -> RawExchange:
-    """A live-like exchange that reached the vendor and was answered (``status``)."""
+    """A live-like exchange that reached the vendor and was answered (``status``): a 200 stream, or an error body."""
     ok = status == 200
     return RawExchange(outcome='succeeded' if ok else 'failed', sent=True, http_status=status, response_bytes=data,
                        response_sha256=hashlib.sha256(data).hexdigest(), latency_ms=9.5,
-                       usage=dict(USAGE) if ok and usage else {}, usage_basis='provider_reported_tokens' if ok else '',
-                       requested_model=interpretation.MODEL, returned_model=interpretation.MODEL if ok else '',
-                       error='' if ok else f'Google answered HTTP {status}; the response body is retained.')
+                       usage=copy.deepcopy(USAGE) if ok and usage else {},
+                       usage_basis='provider_reported_tokens' if ok and usage else '',
+                       requested_model=interpretation.MODEL_V3, returned_model=interpretation.MODEL_V3 if ok else '',
+                       error='' if ok else f'The interpreter answered HTTP {status}; the response body is retained.')
 
 
 UNKNOWN = RawExchange(outcome='unknown', sent=True, error='Read timed out after the request was sent.',
-                      requested_model=interpretation.MODEL)
-BARE_429 = error_body(429, 'RESOURCE_EXHAUSTED', message='synthetic: monthly spending cap')
-HTTP_402 = encoded({'error': {'code': 402, 'message': 'synthetic: payment required'}})
-HTTP_500 = encoded({'error': {'code': 500, 'message': 'synthetic', 'status': 'INTERNAL'}})
+                      requested_model=interpretation.MODEL_V3)
+# A2 1.5's rows: an HTTP 429 whose body names no rate_limit_error holds quota (D39's fail-closed reading); a 402
+# (billing_error) holds quota; a 500 (api_error) fails, retry later
+BARE_429 = b'Synthetic: too many requests (no error type named).'
+HTTP_402 = fable_error_body('billing_error')
+HTTP_500 = fable_error_body('api_error')
+HTTP_400 = fable_error_body('invalid_request_error')
 
 
 def appraisal_for(text, pages, kind, answer_dict):
     """The appraisal request the production builder makes for ``text`` and pass 1's ``answer_dict`` (the claims the
-    oracle answers)."""
-    extraction = adapter.build_extraction_request(text, pages, kind)
-    return adapter.build_appraisal_request(text, pages, kind, extraction, body(answer_dict),
-                                           check=jobs._checked_findings({}))
+    oracle answers): fable_adapter's (A2 1.2), pass 1's stored answer a Fable stream."""
+    extraction = fable_adapter.build_extraction_request(text, pages, kind)
+    return fable_adapter.build_appraisal_request(text, pages, kind, extraction, body(answer_dict),
+                                                 check=jobs._checked_findings({}))
 
 
 def oracle_answer(built, oracle=faithful, unlisted=()) -> bytes:
@@ -164,14 +204,16 @@ def oracle_answer(built, oracle=faithful, unlisted=()) -> bytes:
     return body({'verdicts': verdicts, 'unlisted': list(unlisted)})
 
 
-class ScriptedInterpreterV2(adapter.InterpreterV2):
-    """Design v2's InterpreterV2 (its request checks, one-exchange loop, Stop check, envelope and classifier are the
-    production code's) whose one exchange is answered here: pass 1 by the registered answer of the document the request
-    carries, pass 2 by the oracle over the claim set the production builder makes for it - unless ``script`` holds
-    RawExchanges for the purpose, given in turn first. Its endpoint is set, so a run reads as having called a vendor;
-    its mode is 'replay', so no live gate applies. ``sent``: (purpose, request sha256) of every exchange made."""
+class ScriptedInterpreterV2(fable_adapter.InterpreterF):
+    """The Fable interpreter (fable_adapter.InterpreterF, AMENDMENT-2 section 1: its request checks, one-exchange loop,
+    Stop check, stream reader, envelope and classifier are the production code's) whose one exchange is answered here:
+    pass 1 by the registered answer of the document the request carries, pass 2 by the oracle over the claim set the
+    production builder makes for it - each a complete answer stream - unless ``script`` holds RawExchanges for the
+    purpose, given in turn first. Its endpoint is set, so a run reads as having called a vendor; its mode is 'replay', so
+    no live gate applies. ``sent``: (purpose, request sha256) of every exchange made. (The class keeps design v2's name:
+    tests/v2_replay.py and the guard matrix subclass it.)"""
     mode = 'replay'
-    endpoint = 'https://interpreter.invalid/v2/synthetic:generateContent'
+    endpoint = 'https://interpreter.invalid/v1/messages'
 
     def __init__(self, answers=None, *, oracle=faithful, script=None):
         super().__init__()
@@ -220,7 +262,8 @@ class PipelineCase(TestCase):
 
     def setUp(self):
         super().setUp()
-        self.enterContext(mock.patch.multiple(interpretation, HEALTH_THRESHOLDS_SHA256=HEALTH_PIN, **measured_pins()))
+        self.enterContext(mock.patch.multiple(interpretation, HEALTH_THRESHOLDS_SHA256=HEALTH_PIN,
+                                              **{**measured_pins(), **fable_pins()}))
         self.ws = f.workspace()
         self.user = f.member(self.ws, f.user(), role=models.Membership.REVIEWER)
         self.interpreter = self.scripted()
@@ -231,7 +274,7 @@ class PipelineCase(TestCase):
 
     def scripted(self, **kwargs):
         interpreter = ScriptedInterpreterV2(ANSWERS, **kwargs)
-        patcher = mock.patch.object(adapter, 'get_interpreter_v2', return_value=interpreter)
+        patcher = mock.patch.object(fable_adapter, 'get_interpreter_v2', return_value=interpreter)
         patcher.start()
         self.addCleanup(patcher.stop)
         self.interpreter = interpreter
@@ -290,10 +333,18 @@ class PipelineTests(PipelineCase):
         self.assertEqual((len(first), len(second)), (1, 1))
         self.assertEqual((first[0].state, first[0].sent, second[0].state, second[0].sent),
                          (Run.SUCCEEDED, True, Run.SUCCEEDED, True))
-        self.assertEqual({run.adapter_version for run in first + second}, {interpretation.ADAPTER_VERSION_V2})
+        # AMENDMENT-2: both runs are Fable's (provider, adapter version, the model asked, the anthropic-version each
+        # sent: 1.1, 1.2 [R:replay-R8]), and every writer writes the new labels (8.1 [R:replay-R4])
+        self.assertEqual({(run.provider, run.adapter_version, run.requested_model, run.scope.get('api_version'))
+                          for run in first + second},
+                         {(interpretation.PROVIDER_V3, interpretation.ADAPTER_VERSION_V3, interpretation.MODEL_V3,
+                           interpretation.API_VERSION_V3)})
         [inventory] = models.EventInventory.objects.filter(revision=revision)
         self.assertEqual((inventory.state, inventory.interpretation_version, inventory.inventory_version),
-                         ('read', interpretation.INTERPRETATION_PAIR, interpretation.INVENTORY_VERSION_V2))
+                         ('read', interpretation.INTERPRETATION_PAIR_V3, interpretation.INVENTORY_VERSION_V3))
+        self.assertTrue(first[0].scope.get('mode') == second[0].scope.get('mode') == 'replay')
+        self.assertEqual(Job.objects.get(encounter=encounter, kind=jobs.INTERPRET).idempotency_key,
+                         f'interpret:{revision.pk}:{interpretation.INTERPRETATION_VERSION_V3}')  # 1.9's key
         self.assertEqual((inventory.provider_run_id, inventory.appraisal_run_id), (first[0].pk, second[0].pk))
         appraise = Job.objects.get(encounter=encounter, kind=jobs.APPRAISE)
         self.assertEqual(appraise.idempotency_key,
@@ -303,7 +354,11 @@ class PipelineTests(PipelineCase):
                          (interpretation.CONTEXT_VERSION_V2, inventory.pk))
         assessment = encounter.current_assessment
         self.assertEqual((assessment.engine_version, assessment.event_inventory_id, assessment.context_id),
-                         (interpretation.ENGINE_VERSION_V2, inventory.pk, context.pk))
+                         (interpretation.ENGINE_VERSION_V3, inventory.pk, context.pk))
+        self.assertEqual(assessment.interpretation.get('engine_version'), interpretation.ENGINE_VERSION_V3)
+        self.assertEqual({p.support.get('event_reading') for p in assessment.proposals.all()},
+                         {interpretation.ENGINE_VERSION_V3})
+        self.assertEqual(assessment.completeness['event_coding']['version'], interpretation.ENGINE_VERSION_V3)
         self.assertTrue(review.fresh(encounter))
         self.assertEqual([item[0] for item in self.interpreter.sent], [EXTRACTION, APPRAISAL])
 
@@ -350,7 +405,7 @@ class PipelineTests(PipelineCase):
         self.assertEqual([job.kind for job in done][-1], 'assess', [(job.kind, job.state, job.error) for job in done])
         encounter.refresh_from_db()
         assessment = encounter.current_assessment
-        self.assertEqual(assessment.engine_version, interpretation.ENGINE_VERSION_V2)
+        self.assertEqual(assessment.engine_version, interpretation.ENGINE_VERSION_V3)
         base = assessment.proposals.get(code='45378')
         [question] = list(base.clarifications.filter(state=models.Clarification.OPEN))
         self.assertEqual((base.status, question.scope, question.fact, question.proposal_id),
@@ -361,7 +416,9 @@ class PipelineTests(PipelineCase):
         self.assertIsNotNone(R)  # the stored inventory read back (store.load_v2, overlay.reading)
         coding = overlay.read_coding(assessment.completeness)
         engine = [p.key for p in stored if p.bucket == 'selected']
-        recount = overlay.recount(stored, engine, engine, coding, R, member=member)
+        recount = overlay.recount(stored, engine, engine, coding, R, member=member,
+                                  assessed=overlay.assessed_out(assessment.completeness, stored),
+                                  uncounted=overlay.assessed_uncounted(assessment.completeness, stored))
         live = recount.live[base.key]
         self.assertEqual(live.item.message, engine_questions.MessageId.BASE_EXPLAINED)
         again = wording.build(wording.Message(live.item.message.value),
@@ -509,7 +566,7 @@ class FailureTests(PipelineCase):
         self.assertTrue(review.fresh(models.Encounter.objects.get(pk=encounter.pk)))
 
     def test_a_pass_1_answer_the_reader_refuses_is_a_refused_row_with_the_retry_door(self):
-        self.scripted(script={EXTRACTION: [answered(encoded(envelope('{"not": "the schema"')))]})
+        self.scripted(script={EXTRACTION: [answered(stream_of('{"not": "the schema"'))]})
         encounter, revision = self.through('extract', 'interpret')
         [run] = self.runs(encounter, EXTRACTION)
         [row] = models.EventInventory.objects.filter(revision=revision)
@@ -522,7 +579,7 @@ class FailureTests(PipelineCase):
                                                           jobs._interpret_key(revision, f'retry-release:{run.pk}')))
 
     def test_a_pass_2_answer_the_reader_refuses_is_recorded_on_its_run_with_no_row(self):
-        self.scripted(script={APPRAISAL: [answered(encoded(envelope('{"verdicts": "no"}')))]})
+        self.scripted(script={APPRAISAL: [answered(stream_of('{"verdicts": "no"}'))]})
         encounter, revision = self.through('extract', 'interpret', 'appraise')
         [run] = self.runs(encounter, APPRAISAL)
         self.assertEqual((run.scope.get('effect'), run.scope.get('refused')), (holds.FAILED, jobs.READING_REFUSED))
@@ -531,21 +588,30 @@ class FailureTests(PipelineCase):
         self.assertEqual(jobs.retry_reading(encounter, self.user).kind, jobs.APPRAISE)
 
     def test_max_tokens_is_too_long_and_never_resent_for_a_member(self):
-        cut = encoded(with_parts({'text': '{"events": ['}, finish='MAX_TOKENS'))
+        # AMENDMENT-2 1.5 [R:truth-T7]: stop_reason max_tokens keeps C5's effect (TOO_LONG, never re-sent for a member)
+        # and is worded as a reading that reached its output limit - never as a document too long
+        cut = stream_of('{"events": [', stop_reason='max_tokens')
         self.scripted(script={EXTRACTION: [answered(cut)]})
         encounter, revision = self.through('extract', 'interpret')
         [run] = self.runs(encounter, EXTRACTION)
         self.assertEqual(run.scope.get('effect'), holds.TOO_LONG)
-        self.assertEqual(progress.encounter_progress(encounter)['error']['action'], 'new_document')
+        job = Job.objects.get(encounter=encounter, kind=jobs.INTERPRET)
+        self.assertEqual((job.state, job.error), (Job.FAILED, jobs.INTERPRET_CUT_OFF_MESSAGE))
+        self.assertNotIn('too long', jobs.INTERPRET_CUT_OFF_MESSAGE + jobs.APPRAISE_CUT_OFF_MESSAGE)
+        block = progress.encounter_progress(encounter)
+        self.assertEqual(block['error'], {'text': progress.INTERPRETATION_ERRORS['cut_off'][0],
+                                          'action': 'new_document'})
+        self.assertNotIn('too long', block['error']['text'])
         with self.assertRaises(jobs.Refused) as refused:
             jobs.retry_reading(encounter, self.user)
-        self.assertEqual(str(refused.exception), jobs.RETRY_TOO_LONG)
+        self.assertEqual(str(refused.exception), jobs.RETRY_CUT_OFF)
 
     def test_a_claim_set_over_the_bound_is_too_long_and_not_sent(self):
         from studio.interpretation.contract import claims
 
-        self.enterContext(mock.patch.object(claims, 'CLAIM_BOUND', 1))
-        self.enterContext(mock.patch.multiple(interpretation, **measured_pins()))
+        # the Fable path's bound (A2 8.2: claims.CLAIM_BOUND_V3), its pin measured again for the planted value
+        self.enterContext(mock.patch.object(claims, 'CLAIM_BOUND_V3', 1))
+        self.enterContext(mock.patch.multiple(interpretation, **fable_pins()))
         encounter, revision = self.through('extract', 'interpret', 'appraise')
         [run] = self.runs(encounter, APPRAISAL)
         self.assertEqual((run.state, run.sent, run.scope.get('refused'), run.scope.get('effect')),
@@ -585,7 +651,8 @@ class FailureTests(PipelineCase):
             job = jobs.claim_next()
             with self.assertRaises(KeyboardInterrupt), jobs._stage_scope(job):
                 jobs.STAGES[jobs.APPRAISE](job)  # as the worker runs it, until it dies (the job stays running)
-        Job.objects.filter(pk=appraise.pk).update(started_at=timezone.now() - timedelta(seconds=700))
+        # older than a reading stage's stale threshold (AMENDMENT-2 1.12: 1,440 s; settings.STALE_RUNNING_SECONDS_BY_KIND)
+        Job.objects.filter(pk=appraise.pk).update(started_at=timezone.now() - timedelta(seconds=1500))
         jobs.mark_stale()
         appraise.refresh_from_db()
         self.assertEqual((appraise.state, appraise.result.get('settled')), (Job.SUCCEEDED, jobs.STALE_INTERPRETATION))
@@ -647,7 +714,7 @@ class D261Tests(PipelineCase):
         encounter.refresh_from_db()
         revision.refresh_from_db()  # the text the extract stage stored
         assessment = encounter.current_assessment
-        self.assertEqual(assessment.engine_version, interpretation.ENGINE_VERSION_V2)
+        self.assertEqual(assessment.engine_version, interpretation.ENGINE_VERSION_V3)
         return {p.code: p for p in assessment.proposals.exclude(bucket='alternative')}, revision
 
     def test_d261_the_denial_quoted_with_its_stop_excludes_45385_and_leaves_45378_ready_as_without_it(self):
@@ -933,7 +1000,9 @@ class RendererTests(TestCase):
         decision, assessment_counts)."""
         coding = overlay.read_coding(completeness)
         engine = [p.key for p in rows if p.bucket == 'selected' or overlay.answered_by_engine(p)[0]]
-        return (overlay.recount(rows, engine, engine, coding, R, member=member),
+        return (overlay.recount(rows, engine, engine, coding, R, member=member,
+                                assessed=overlay.assessed_out(completeness, rows),
+                                uncounted=overlay.assessed_uncounted(completeness, rows)),
                 overlay.review_view(rows, {}, completeness=completeness, facts=R, member=member),
                 overlay.assessment_counts(completeness, R, rows))
 
@@ -1247,3 +1316,954 @@ class V1RowsTests(TestCase):
                 with self.assertRaises(AssertionError):
                     jobs._stand_in(None, v1, None, None)
             self.assertEqual(reached, ['routing_stand_in'])
+
+
+# --- AMENDMENT-2's pipeline (step F6 of its section 10): the Fable interpreter through the stages -------------------------
+#
+# Everything below runs the production stages (jobs.stage_interpret, jobs.stage_appraise, their settle, the doors, the
+# stale sweep, retry_reading and resume) over the Fable connector's own reading of constructed answer streams and error
+# bodies (tests/v2/test_fable_adapter's builders: SSE bytes and error bodies built in the test). Nothing is sent.
+
+REAL_GET_INTERPRETER = fable_adapter.get_interpreter_v2  # the configured interpreter, as the worker builds it
+# A2 1.5: the holds that are REQUEST-BOUND - a decline (stop_reason refusal), or a hold an error event set after
+# message_start (here, an authentication_error event inside the stream) - by the labels of test_fable_adapter.table()
+REQUEST_BOUND_ROWS = frozenset({'a refusal, any category', 'a refusal with no category',
+                                'authentication_error (a stream error event)'})
+# no member sentence names a provider or a model (D22; A2 1.5 and 9)
+PROVIDER_NAMES = ('anthropic', 'claude', 'fable', 'gemini', 'google', 'opus', 'sonnet', 'corti', 'astra')
+
+
+def exchange_of(outcome, status, data) -> RawExchange:
+    """The exchange the connector records for one row of A2 1.5's table: a 200 stream (outcome 'succeeded', as http.post
+    records a whole body the complete hook accepts) or an error body (outcome 'failed')."""
+    return RawExchange(outcome=outcome, sent=True, http_status=status, response_bytes=data,
+                       response_sha256=hashlib.sha256(data).hexdigest(), latency_ms=7.0, usage={},
+                       requested_model=interpretation.MODEL_V3, returned_model='',
+                       error='' if status == 200 else f'The interpreter answered HTTP {status}.')
+
+
+class FableCase(PipelineCase):
+    """PipelineCase with the helpers AMENDMENT-2's stage tests share: a fresh workspace per encounter (no stored answer
+    reused across scenes), the operator's release of every standing hold, and the member sentence a stage left."""
+
+    def fresh_encounter(self, text=NOTE):
+        workspace = f.workspace(f'Synthetic practice {models.Encounter.objects.count()}')
+        f.member(workspace, self.user, role=models.Membership.REVIEWER)
+        return self.upload(text, workspace=workspace)
+
+    def release_holds(self, note='Synthetic release: the cause was reviewed.'):
+        operator = f.user('synthetic-operator-' + str(models.User.objects.count()))
+        from tests.support import operator as ops
+
+        ops.grant(operator)
+        return holds.release(user=operator, note=note)
+
+    def cancel_queued(self):
+        Job.objects.filter(state=Job.QUEUED).update(state=Job.CANCELLED, error='synthetic: cleared between scenes')
+
+    def run_to(self, purpose):
+        """Upload NOTE in a workspace of its own and run its stages through the stage of ``purpose`` (pass 1's
+        interpret, or pass 2's appraise after an answered pass 1): (encounter, the reading stage's job, its newest
+        run of ``purpose``)."""
+        encounter, _ = self.fresh_encounter()
+        self.run_next('extract')
+        job = self.run_next(jobs.INTERPRET)
+        if purpose == APPRAISAL:
+            self.assertEqual(job.state, Job.SUCCEEDED, job.error)
+            job = self.run_next(jobs.APPRAISE)
+        return encounter, job, self.runs(encounter, purpose)[-1]
+
+    def assert_named_no_provider(self, *texts):
+        for text in texts:
+            for name in PROVIDER_NAMES:
+                self.assertNotIn(name, (text or '').lower())
+
+
+class FableReplayTests(FableCase):
+    """A2 1.8 and the F6 row's "replay stage tests for both passes on the Fable interpreter": the configured interpreter
+    in replay (fable_adapter.get_interpreter_v2 -> interpretation/replay.ReplayInterpreterF), its recordings the raw
+    answer streams at GEMINI_REPLAY_DIR/anthropic/<request sha256>.sse - pass 1's for the request the pipeline builds,
+    pass 2's for the appraisal request the production builder makes of that answer. Nothing is sent: both runs are
+    recorded not sent, with the replay's usage basis and the model and message id the streams name; the inventory is
+    read at the @3 pair and the assessment made by the @3 engine."""
+
+    def setUp(self):
+        super().setUp()
+        import tempfile
+
+        self.replay_dir = self.enterContext(tempfile.TemporaryDirectory(prefix='f6-replay-'))
+        self.enterContext(mock.patch.object(fable_adapter, 'get_interpreter_v2', REAL_GET_INTERPRETER))
+        self.enterContext(override_settings(GEMINI_MODE='replay', GEMINI_REPLAY_DIR=self.replay_dir))
+
+    def record(self, request, data):
+        from pathlib import Path
+
+        folder = Path(self.replay_dir) / 'anthropic'
+        folder.mkdir(exist_ok=True)
+        (folder / f'{request.canonical_sha256}.sse').write_bytes(data)
+
+    def test_both_passes_replay_from_their_recorded_streams(self):
+        encounter, revision = self.fresh_encounter()
+        self.run_next('extract')
+        revision.refresh_from_db()
+        text, pages, kind = jobs._document_of(revision)
+        first = fable_adapter.build_extraction_request(text, pages, kind)
+        self.record(first, body(note_answer()))
+        second = appraisal_for(text, pages, kind, note_answer())
+        self.record(second.request, oracle_answer(second))
+        self.assertIsInstance(fable_adapter.get_interpreter_v2(), __import__(
+            'studio.interpretation.replay', fromlist=['ReplayInterpreterF']).ReplayInterpreterF)
+        done = self.drain()
+        self.assertEqual([job.kind for job in done], ['interpret', 'appraise', 'analyze', 'predict', 'assess'],
+                         [(job.kind, job.state, job.error) for job in done])
+        runs = self.runs(encounter, EXTRACTION) + self.runs(encounter, APPRAISAL)
+        self.assertEqual([(run.state, run.sent, run.usage, run.usage_basis, run.returned_model, run.request_sha256)
+                          for run in runs],
+                         [(Run.SUCCEEDED, False, {}, 'historical_replay_not_new_usage', interpretation.MODEL_V3, sha)
+                          for sha in (first.canonical_sha256, second.request.canonical_sha256)])
+        self.assertEqual({(run.provider, run.adapter_version, run.scope.get('api_version')) for run in runs},
+                         {(interpretation.PROVIDER_V3, interpretation.ADAPTER_VERSION_V3,
+                           interpretation.API_VERSION_V3)})
+        [inventory] = models.EventInventory.objects.filter(revision=revision)
+        self.assertEqual((inventory.state, inventory.interpretation_version, inventory.inventory_version),
+                         ('read', interpretation.INTERPRETATION_PAIR_V3, interpretation.INVENTORY_VERSION_V3))
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.current_assessment.engine_version, interpretation.ENGINE_VERSION_V3)
+        self.assertTrue(review.fresh(encounter))
+
+    def test_a_recording_that_did_not_reach_its_end_replays_as_an_unknown_outcome_and_nothing_is_read(self):
+        encounter, revision = self.fresh_encounter()
+        self.run_next('extract')
+        revision.refresh_from_db()
+        first = fable_adapter.build_extraction_request(*jobs._document_of(revision))
+        self.record(first, sse(*[event for event in __import__('tests.v2.test_fable_adapter', fromlist=['answer_events'])
+                                 .answer_events(json.dumps(note_answer()))][:-2]))  # no message_delta, no message_stop
+        job = self.run_next(jobs.INTERPRET)
+        [run] = self.runs(encounter, EXTRACTION)
+        self.assertEqual((run.state, run.sent, run.usage, run.scope.get('effect')), (Run.UNKNOWN, False, {}, 'unknown'))
+        self.assertEqual(job.state, Job.SUCCEEDED)  # left to the reconcile flow
+        self.assertFalse(models.EventInventory.objects.filter(revision=revision).exists())
+        self.assertFalse(Job.objects.filter(encounter=encounter, kind=jobs.APPRAISE).exists())
+
+    def test_a_replayed_answer_cut_at_its_output_limit_reads_as_cut_off(self):
+        """refute-f6-r1 F6R1-4 (A2 1.5 [R:truth-T7]): a replayed run is recorded not sent, and an answer cut at its
+        output limit is still worded as what happened - progress' 'cut_off', never the size bound's 'too_long' - and a
+        member's retry is refused with RETRY_CUT_OFF. The control: a document over the size bound reads 'too_long'."""
+        encounter, revision = self.fresh_encounter()
+        self.run_next('extract')
+        revision.refresh_from_db()
+        self.record(fable_adapter.build_extraction_request(*jobs._document_of(revision)), cut_off_stream())
+        job = self.run_next(jobs.INTERPRET)
+        [run] = self.runs(encounter, EXTRACTION)
+        self.assertEqual((run.sent, run.scope.get('effect'), job.state, job.error),
+                         (False, holds.TOO_LONG, Job.FAILED, jobs.INTERPRET_CUT_OFF_MESSAGE))
+        self.assertEqual(progress.encounter_progress(models.Encounter.objects.get(pk=encounter.pk))['error'],
+                         {'text': progress.INTERPRETATION_ERRORS['cut_off'][0], 'action': 'new_document'})
+        with self.assertRaises(jobs.Refused) as refused:
+            jobs.retry_reading(encounter, self.user)
+        self.assertEqual(str(refused.exception), jobs.RETRY_CUT_OFF)
+        with override_settings(INTERPRET_MAX_CHARS=40):
+            long_one, _ = self.fresh_encounter()
+            self.run_next('extract')
+            self.assertEqual(self.run_next(jobs.INTERPRET).error, jobs.INTERPRET_TOO_LONG_MESSAGE)
+            self.assertEqual(progress.encounter_progress(models.Encounter.objects.get(pk=long_one.pk))['error'],
+                             {'text': progress.INTERPRETATION_ERRORS['too_long'][0], 'action': 'new_document'})
+
+
+class FableTableTests(FableCase):
+    """A2 1.5's table through the stages, both passes (the F6 row: "every row of 1.5 through the stage
+    (_settle_interpretation, _settle_outcome), with the member sentence of the run that set each hold [R:truth-T6] and
+    of a cut-off answer [R:truth-T7]"): every row of tests/v2/test_fable_adapter.table() (its constructed stream or
+    error body) answers pass 1, and again pass 2 after an answered pass 1, and each ends its stage as 1.5 says:
+    - answered: the stage succeeds (pass 1 queues pass 2; pass 2 writes the inventory and queues the analyze);
+    - too long (max_tokens): FAILED with the cut-off sentence, which says the output limit was reached and never that
+      the document is too long; the member reads progress' 'cut_off' (a new document), and a retry is refused with
+      RETRY_CUT_OFF;
+    - a request-bound hold (a decline; an error event after message_start): FAILED with DECLINED_MESSAGE - the document
+      was sent - progress' 'declined' (no action), and a retry refused with RETRY_DECLINED;
+    - any other hold: CANCELLED with HOLD_SET_MESSAGE, read as the paused phase with Resume - never "Nothing was sent";
+      the hold stands with its reason, every other document pauses unsent (holds.PAUSED_MESSAGE), and an operator's
+      release ends it;
+    - failed: FAILED with the failed sentence and the recorded retry door (retry_reading).
+    No sentence names a provider or a model (D22)."""
+
+    def assert_row(self, purpose, label, outcome, status, data, kind, hold):
+        failed = jobs.INTERPRET_FAILED_MESSAGE if purpose == EXTRACTION else jobs.APPRAISE_FAILED_MESSAGE
+        cut = jobs.INTERPRET_CUT_OFF_MESSAGE if purpose == EXTRACTION else jobs.APPRAISE_CUT_OFF_MESSAGE
+        if kind == 'answered':
+            # the row's stream, carrying the document's own pass-1 answer (the table's synthetic object is no answer the
+            # reader takes: an answered envelope whose reading is refused is FAILED, the next test's 'answered' half)
+            data = answer_stream(json.dumps(note_answer()))
+        self.scripted(script={purpose: [exchange_of(outcome, status, data)]})
+        encounter, job, run = self.run_to(purpose)
+        block = progress.encounter_progress(models.Encounter.objects.get(pk=encounter.pk))
+        self.assert_named_no_provider(job.error, (block.get('error') or {}).get('text'), block['message'])
+        if kind == 'answered':
+            self.assertEqual((job.state, run.scope.get('effect')), (Job.SUCCEEDED, holds.ANSWERED))
+            follower = jobs.APPRAISE if purpose == EXTRACTION else Job.ANALYZE
+            self.assertTrue(Job.objects.filter(encounter=encounter, kind=follower, state=Job.QUEUED).exists())
+        elif kind == 'too_long':
+            self.assertEqual((job.state, job.error, run.scope.get('effect')), (Job.FAILED, cut, holds.TOO_LONG))
+            self.assertNotIn('too long', job.error)
+            self.assertEqual(block['error'], {'text': progress.INTERPRETATION_ERRORS['cut_off'][0],
+                                              'action': 'new_document'})
+            with self.assertRaises(jobs.Refused) as refused:
+                jobs.retry_reading(encounter, self.user)
+            self.assertEqual(str(refused.exception), jobs.RETRY_CUT_OFF)
+        elif kind == 'hold' and label in REQUEST_BOUND_ROWS:
+            self.assertEqual((job.state, job.error, run.scope.get('effect')), (Job.FAILED, jobs.DECLINED_MESSAGE,
+                                                                               holds.HOLD))
+            self.assertEqual((block['phase'], block['error']), ('failed', {'text': jobs.DECLINED_MESSAGE,
+                                                                           'action': 'none'}))
+            self.assertEqual(models.InterpreterHold.objects.get(run=run).reason, hold)
+            self.release_holds()
+            with self.assertRaises(jobs.Refused) as refused:
+                jobs.retry_reading(encounter, self.user)
+            self.assertEqual(str(refused.exception), jobs.RETRY_DECLINED)
+        elif kind == 'hold':
+            self.assertEqual((job.state, job.error, run.scope.get('effect')), (Job.CANCELLED, jobs.HOLD_SET_MESSAGE,
+                                                                               holds.HOLD))
+            self.assertNotIn('Nothing was sent', job.error)
+            self.assertEqual((block['phase'], block['error']['text']), ('paused', jobs.HOLD_SET_MESSAGE))
+            self.assertEqual(models.InterpreterHold.objects.get(run=run).reason, hold)
+            # every other document pauses unsent while it stands: the standing hold's own sentence
+            self.cancel_queued()
+            other, _ = self.fresh_encounter()
+            self.run_next('extract')
+            paused = self.run_next(jobs.INTERPRET)
+            self.assertEqual((paused.state, paused.error), (Job.CANCELLED, holds.PAUSED_MESSAGE))
+            self.release_holds()
+        else:
+            self.assertEqual((job.state, run.scope.get('effect')), (Job.FAILED, holds.FAILED))
+            self.assertTrue(job.error.startswith(failed), job.error)
+            self.assertEqual(block['error']['action'], 'retry_reading')
+        self.assertFalse(holds.is_held())
+        self.cancel_queued()
+
+    def test_every_row_of_1_5_through_pass_1s_stage(self):
+        from tests.v2.test_fable_adapter import table
+
+        for label, outcome, status, data, kind, hold, _ in table():
+            with self.subTest(label):
+                self.assert_row(EXTRACTION, label, outcome, status, data, kind, hold)
+
+    def test_an_answered_envelope_whose_reading_is_refused_fails_with_the_retry_door(self):
+        """1.5's first row: ANSWERED is read; a reader refusal makes it FAILED (holds.classify's ``refused``): the
+        table's own stream (a JSON object that is no pass-1 answer) - pass 1's refused row, the retry door."""
+        from tests.v2.test_fable_adapter import table
+
+        label, outcome, status, data, kind, _, _ = table()[0]
+        self.assertEqual(kind, 'answered')
+        self.scripted(script={EXTRACTION: [exchange_of(outcome, status, data)]})
+        encounter, job, run = self.run_to(EXTRACTION)
+        self.assertEqual((job.state, run.scope.get('effect')), (Job.FAILED, holds.FAILED))
+        self.assertEqual(models.EventInventory.objects.get(provider_run=run).state, 'refused')
+        self.assertEqual(jobs.retry_reading(encounter, self.user).kind, jobs.INTERPRET)
+
+    def test_every_row_of_1_5_through_pass_2s_stage(self):
+        from tests.v2.test_fable_adapter import table
+
+        for label, outcome, status, data, kind, hold, _ in table():
+            if kind == 'answered':
+                continue  # pass 2's answer is the oracle's over the claim set (the other tests)
+            with self.subTest(label):
+                self.assert_row(APPRAISAL, label, outcome, status, data, kind, hold)
+
+    def test_a_refusal_pauses_both_passes(self):
+        """A non-request-bound hold set by pass 1's answer (a 402) pauses every request of both passes: another
+        document's pass 2, queued behind it, records a held not-sent run and sends nothing."""
+        self.scripted()
+        other, _ = self.fresh_encounter()
+        self.run_next('extract')
+        self.run_next(jobs.INTERPRET)  # the other document's pass 1, answered: its pass 2 is queued
+        self.interpreter.script = {EXTRACTION: [exchange_of('failed', 402, HTTP_402)]}
+        Job.objects.filter(encounter=other, state=Job.QUEUED).update(created_at=timezone.now() + timedelta(hours=1))
+        encounter, _ = self.fresh_encounter()
+        self.run_next('extract')
+        setting = self.run_next(jobs.INTERPRET)
+        self.assertEqual((setting.state, setting.error), (Job.CANCELLED, jobs.HOLD_SET_MESSAGE))
+        sent = list(self.interpreter.sent)
+        paused = self.run_next(jobs.APPRAISE)
+        self.assertEqual((paused.state, paused.error), (Job.CANCELLED, holds.PAUSED_MESSAGE))
+        [held] = self.runs(other, APPRAISAL)
+        self.assertEqual((held.state, held.sent, held.scope.get('held')), (Run.NOT_SENT, False, holds.HELD_HOLD))
+        self.assertEqual(self.interpreter.sent, sent)
+
+
+class DeclinedRequestTests(FableCase):
+    """A2 1.5's request-bound holds [R:connector-CONN-1], both passes (the F6 row: "a decline held, released, then a
+    Resume and a Retry refused and an operator override sending once"): the declined run's hold pauses the installation
+    (D275); the operator's release ends the pause but never the block on the declined request - a Resume sends nothing
+    (the failed-before door returns the declined run for its identical request: a not-resent run), a member's Retry is
+    refused with RETRY_DECLINED - and only an operator's recorded override (retry_reading(override=True)) sends it,
+    once."""
+
+    def declined_then_released(self, purpose):
+        self.scripted(script={purpose: [answered(declined_stream())]})
+        encounter, job, run = self.run_to(purpose)
+        self.assertEqual((job.state, job.error), (Job.FAILED, jobs.DECLINED_MESSAGE))
+        hold = models.InterpreterHold.objects.get(run=run)
+        self.assertEqual((hold.reason, holds.request_bound(hold)), (holds.DECLINED, True))
+        self.assertTrue(holds.is_held())
+        [released] = self.release_holds()
+        self.assertEqual(holds.release_report(released)['request_bound'], True)
+        self.assertFalse(holds.is_held())
+        return encounter, run
+
+    def check(self, purpose):
+        stage = jobs.INTERPRET if purpose == EXTRACTION else jobs.APPRAISE
+        encounter, declined = self.declined_then_released(purpose)
+        sent = list(self.interpreter.sent)
+        # a Resume: the stage the member's Resume would run - the reading stage again under a resume key
+        resumed = jobs.resume(encounter, self.user)
+        if resumed is None:  # FAILED (declined) reads failed, not stopped: no Resume is offered at all ...
+            base = Job.objects.filter(encounter=encounter, kind=stage).latest('created_at')
+            resumed = jobs.enqueue(stage, encounter=encounter, revision=encounter.current_revision,
+                                   key=f"{base.idempotency_key.split(':resume:', 1)[0]}:resume:synthetic",
+                                   requested_by=self.user)  # ... and one queued under a Resume key sends nothing
+        done = self.run_next(stage)
+        self.assertEqual(done.state, Job.FAILED)
+        self.assertEqual(self.interpreter.sent, sent)  # nothing sent: the declined request stays blocked
+        not_resent = self.runs(encounter, purpose)[-1]
+        self.assertEqual((not_resent.scope.get('refused'), not_resent.scope.get('failed'), not_resent.sent),
+                         (jobs.FAILED_BEFORE, str(declined.pk), False))
+        self.assertEqual(progress.encounter_progress(models.Encounter.objects.get(pk=encounter.pk))['error'],
+                         {'text': jobs.DECLINED_MESSAGE, 'action': 'none'})
+        # a member's Retry is refused
+        with self.assertRaises(jobs.Refused) as refused:
+            jobs.retry_reading(encounter, self.user)
+        self.assertEqual(str(refused.exception), jobs.RETRY_DECLINED)
+        self.assertEqual(jobs.retry_target(encounter.current_revision, override=False)[1], None)
+        # the operator's recorded override sends it once: released for that one attempt
+        self.assertEqual(jobs.retry_target(encounter.current_revision, override=True)[1], declined)
+        job = jobs.retry_reading(encounter, self.user, override=True)
+        self.assertTrue(job.idempotency_key.endswith(f':retry-release:{declined.pk}'), job.idempotency_key)
+        self.drain()
+        self.assertEqual(len(self.sent(purpose)), len([item for item in sent if item[0] == purpose]) + 1)
+        self.assertTrue(review.fresh(models.Encounter.objects.get(pk=encounter.pk)))
+        with self.assertRaises(jobs.Refused):  # read now: nothing left to retry, and nothing is sent again
+            jobs.retry_reading(encounter, self.user, override=True)
+
+    def test_pass_1(self):
+        self.check(EXTRACTION)
+
+    def test_pass_2(self):
+        self.check(APPRAISAL)
+
+    def test_an_error_event_after_message_start_is_request_bound_too(self):
+        self.scripted(script={EXTRACTION: [answered(error_after_start('invalid_request_error'))]})
+        encounter, job, run = self.run_to(EXTRACTION)
+        self.assertEqual((job.state, job.error), (Job.FAILED, jobs.DECLINED_MESSAGE))
+        self.assertEqual(models.InterpreterHold.objects.get(run=run).reason, holds.REFUSED)
+        self.release_holds()
+        with self.assertRaises(jobs.Refused) as refused:
+            jobs.retry_reading(encounter, self.user)
+        self.assertEqual(str(refused.exception), jobs.RETRY_DECLINED)
+
+    def test_the_control_an_account_hold_releases_and_the_next_resume_sends(self):
+        """Every other hold is about the account, the version or the model: a 401's release lets the stopped document's
+        Resume send, once (A2 1.5; CONN-5's 'resumed after a release')."""
+        self.scripted(script={EXTRACTION: [answered(fable_error_body('authentication_error'), status=401)]})
+        encounter, job, run = self.run_to(EXTRACTION)
+        self.assertEqual((job.state, job.error), (Job.CANCELLED, jobs.HOLD_SET_MESSAGE))
+        self.assertFalse(holds.request_bound(models.InterpreterHold.objects.get(run=run)))
+        self.release_holds()
+        self.assertIsNotNone(jobs.resume(encounter, self.user))
+        self.drain()
+        self.assertEqual([item[0] for item in self.interpreter.sent], [EXTRACTION, EXTRACTION, APPRAISAL])
+        self.assertTrue(review.fresh(models.Encounter.objects.get(pk=encounter.pk)))
+
+
+class FableRetryTests(FableCase):
+    """A2 section 9 [R:connector-CONN-5]: the retry door finds the Fable run (retry_target reads the reading path's
+    provider and adapter version, never interpretation.PROVIDER's 'gemini'): a FAILED Fable reading is retried once - pass
+    1, and pass 2 alone - and an identical failed request is never re-sent by a Resume (the failed-before door)."""
+
+    def test_a_failed_pass_1_is_retried_once(self):
+        self.scripted(script={EXTRACTION: [answered(HTTP_500, status=500)]})
+        encounter, job, run = self.run_to(EXTRACTION)
+        self.assertEqual((run.provider, run.adapter_version, job.state), (interpretation.PROVIDER_V3,
+                                                                          interpretation.ADAPTER_VERSION_V3, Job.FAILED))
+        newest, released = jobs.retry_target(encounter.current_revision)
+        self.assertEqual((newest, released), (run, run))
+        jobs.retry_reading(encounter, self.user)
+        self.drain()
+        self.assertEqual([item[0] for item in self.interpreter.sent], [EXTRACTION, EXTRACTION, APPRAISAL])
+        with self.assertRaises(jobs.Refused) as refused:
+            jobs.retry_reading(encounter, self.user)
+        self.assertEqual(str(refused.exception), jobs.RETRY_NOTHING)  # fresh: nothing owed, nothing sent again
+
+    def test_a_failed_pass_2_is_retried_alone(self):
+        self.scripted(script={APPRAISAL: [answered(fable_error_body('overloaded_error'), status=529)]})
+        encounter, job, run = self.run_to(APPRAISAL)
+        self.assertEqual(jobs.retry_target(encounter.current_revision), (run, run))
+        self.assertEqual(jobs.retry_reading(encounter, self.user).kind, jobs.APPRAISE)
+        self.drain()
+        self.assertEqual([item[0] for item in self.interpreter.sent], [EXTRACTION, APPRAISAL, APPRAISAL])
+
+    def test_an_error_first_stream_is_failed_retry_later_never_a_model_hold(self):
+        """A2 1.5 precedence (2) [R:connector-CONN-4]: an overload as the stream opened is FAILED (retry later), never
+        HOLD model: no hold, and the retry door is offered."""
+        self.scripted(script={EXTRACTION: [answered(error_first('overloaded_error'))]})
+        encounter, job, run = self.run_to(EXTRACTION)
+        self.assertEqual((job.state, run.scope.get('effect'), holds.is_held()), (Job.FAILED, holds.FAILED, False))
+        self.assertEqual(jobs.retry_reading(encounter, self.user).kind, jobs.INTERPRET)
+
+    def test_a_resume_never_re_sends_a_failed_request(self):
+        self.scripted(script={EXTRACTION: [answered(HTTP_500, status=500)]})
+        encounter, job, run = self.run_to(EXTRACTION)
+        base = Job.objects.get(encounter=encounter, kind=jobs.INTERPRET)
+        jobs.enqueue(jobs.INTERPRET, encounter=encounter, revision=encounter.current_revision,
+                     key=f'{base.idempotency_key}:resume:synthetic', requested_by=self.user)
+        self.run_next(jobs.INTERPRET)
+        self.assertEqual(len(self.interpreter.sent), 1)
+        self.assertEqual(self.runs(encounter, EXTRACTION)[-1].scope.get('refused'), jobs.FAILED_BEFORE)
+
+
+def cut_off_stream() -> bytes:
+    """A complete 200 stream cut at its output limit (stop_reason max_tokens): A2 1.5's TOO_LONG row (C5)."""
+    return stream_of('{"events": [', stop_reason='max_tokens')
+
+
+OVERLOADED = fable_error_body('overloaded_error')  # A2 1.5: HTTP 529 overloaded_error, FAILED, retry later
+
+
+class RequestBlockTests(FableCase):
+    """refute-f6-r1 F6R1-1, widened to its class (D276): whenever an attempt of a request was declined (a request-bound
+    hold, A2 1.5 [R:connector-CONN-1]) or cut off at its output limit (C5), the block is the REQUEST's
+    (jobs._member_block), so a later attempt of it - the one an operator's recorded override sent, answered by a
+    transient failure (HTTP 529) or left unknown and reconciled by a member - never lifts it for a member: the member's
+    Retry is refused (RETRY_DECLINED, RETRY_CUT_OFF), a Resume and a reconcile send nothing, progress offers no retry;
+    and each further operator override sends it once (jobs._override_unspent). Both passes. The control: an ordinary
+    failure is released for one attempt by each member retry, as before."""
+
+    def stage_of(self, purpose):
+        return jobs.INTERPRET if purpose == EXTRACTION else jobs.APPRAISE
+
+    def overridden(self, purpose, first, second):
+        """``first`` answers the request of ``purpose`` (a 200 stream); a standing hold is released by the operator;
+        the operator's recorded override sends the identical request once more and ``second`` answers that attempt.
+        (encounter, the first attempt, the override's attempt, the sends of ``purpose`` so far)."""
+        self.scripted(script={purpose: [answered(first), second]})
+        encounter, job, blocked = self.run_to(purpose)
+        self.assertEqual(job.state, Job.FAILED)
+        if holds.is_held():
+            self.release_holds()
+        override = jobs.retry_reading(encounter, self.user, override=True)
+        self.assertTrue(override.idempotency_key.endswith(f':retry-release:{blocked.pk}'), override.idempotency_key)
+        self.run_next(self.stage_of(purpose))
+        attempt = self.runs(encounter, purpose)[-1]
+        self.assertEqual((attempt.request_sha256, attempt.sent), (blocked.request_sha256, True))
+        self.assertEqual(len(self.sent(purpose)), 2)
+        return models.Encounter.objects.get(pk=encounter.pk), blocked, attempt, 2
+
+    def assert_member_refused(self, encounter, sentence, situation, purpose, sends):
+        text, action = progress.INTERPRETATION_ERRORS[situation]
+        self.assertEqual(progress.encounter_progress(models.Encounter.objects.get(pk=encounter.pk))['error'],
+                         {'text': text, 'action': action})
+        self.assertNotEqual(action, 'retry_reading')
+        with self.assertRaises(jobs.Refused) as refused:
+            jobs.retry_reading(encounter, self.user)
+        self.assertEqual(str(refused.exception), sentence)
+        self.assertEqual(len(self.sent(purpose)), sends)
+
+    def resume_sends_nothing(self, encounter, purpose, sends):
+        """A member's Resume of the reading stage (queued under a Resume key: a failed stage offers none): nothing sent."""
+        stage = self.stage_of(purpose)
+        base = Job.objects.filter(encounter=encounter, kind=stage).latest('created_at')
+        jobs.enqueue(stage, encounter=encounter, revision=encounter.current_revision,
+                     key=f"{base.idempotency_key.split(':resume:', 1)[0]}:resume:synthetic-{len(self.sent())}",
+                     requested_by=self.user)
+        self.assertEqual(self.run_next(stage).state, Job.FAILED)
+        self.assertEqual(len(self.sent(purpose)), sends)
+        self.assertEqual(self.runs(encounter, purpose)[-1].scope.get('refused'), jobs.FAILED_BEFORE)
+
+    def another_override_sends_once(self, encounter, purpose, sends):
+        jobs.retry_reading(encounter, self.user, override=True)
+        self.drain()
+        self.assertEqual(len(self.sent(purpose)), sends + 1)
+        self.assertTrue(review.fresh(models.Encounter.objects.get(pk=encounter.pk)))
+
+    def check_transient(self, purpose, first, sentence, situation):
+        encounter, blocked, attempt, sends = self.overridden(purpose, first, answered(OVERLOADED, status=529))
+        self.assertEqual((attempt.state, attempt.http_status, attempt.scope.get('effect')), (Run.FAILED, 529,
+                                                                                             holds.FAILED))
+        self.assertEqual(jobs._member_block(attempt), blocked)
+        self.assert_member_refused(encounter, sentence, situation, purpose, sends)
+        self.resume_sends_nothing(encounter, purpose, sends)
+        self.assert_member_refused(encounter, sentence, situation, purpose, sends)  # the not-resent run changes nothing
+        self.another_override_sends_once(encounter, purpose, sends)
+
+    def test_a_declined_request_after_the_overrides_attempt_failed_pass_1(self):
+        self.check_transient(EXTRACTION, declined_stream(), jobs.RETRY_DECLINED, 'declined')
+
+    def test_a_declined_request_after_the_overrides_attempt_failed_pass_2(self):
+        self.check_transient(APPRAISAL, declined_stream(), jobs.RETRY_DECLINED, 'declined')
+
+    def test_an_error_event_hold_after_the_overrides_attempt_failed(self):
+        self.check_transient(EXTRACTION, error_after_start('invalid_request_error'), jobs.RETRY_DECLINED, 'declined')
+
+    def test_a_cut_off_request_after_the_overrides_attempt_failed_pass_1(self):
+        self.check_transient(EXTRACTION, cut_off_stream(), jobs.RETRY_CUT_OFF, 'cut_off')
+
+    def test_a_cut_off_request_after_the_overrides_attempt_failed_pass_2(self):
+        self.check_transient(APPRAISAL, cut_off_stream(), jobs.RETRY_CUT_OFF, 'cut_off')
+
+    def check_unknown(self, purpose, first, sentence, situation):
+        encounter, blocked, attempt, sends = self.overridden(purpose, first, UNKNOWN)
+        self.assertEqual(attempt.state, Run.UNKNOWN)
+        self.assertTrue(jobs.reconcile(encounter, attempt, self.user, 'Synthetic: the outcome was checked.'))
+        done = self.run_next(self.stage_of(purpose))  # the reconciliation's stage: the request stays blocked
+        self.assertEqual(done.state, Job.FAILED)
+        self.assertEqual(len(self.sent(purpose)), sends)
+        kept = self.runs(encounter, purpose)[-1]
+        self.assertEqual((kept.scope.get('refused'), kept.scope.get('failed'), kept.sent),
+                         (jobs.FAILED_BEFORE, str(blocked.pk), False))
+        self.assert_member_refused(encounter, sentence, situation, purpose, sends)
+        self.resume_sends_nothing(encounter, purpose, sends)
+        self.another_override_sends_once(encounter, purpose, sends)  # a fresh release: the last one was spent
+
+    def test_a_declined_request_after_the_overrides_attempt_was_unknown_and_reconciled_pass_1(self):
+        self.check_unknown(EXTRACTION, declined_stream(), jobs.RETRY_DECLINED, 'declined')
+
+    def test_a_declined_request_after_the_overrides_attempt_was_unknown_and_reconciled_pass_2(self):
+        self.check_unknown(APPRAISAL, declined_stream(), jobs.RETRY_DECLINED, 'declined')
+
+    def test_a_cut_off_request_after_the_overrides_attempt_was_unknown_and_reconciled(self):
+        self.check_unknown(EXTRACTION, cut_off_stream(), jobs.RETRY_CUT_OFF, 'cut_off')
+
+    def test_an_override_stopped_before_it_sent_still_sends_once(self):
+        """The override's one attempt not yet made (its stage stopped before it ran): the operator's override asked again
+        sends once - the standing release is not spent - and a member's retry after it is still refused."""
+        self.scripted(script={EXTRACTION: [answered(declined_stream()), answered(OVERLOADED, status=529)]})
+        encounter, job, declined = self.run_to(EXTRACTION)
+        self.release_holds()
+        first = jobs.retry_reading(encounter, self.user, override=True)
+        Job.objects.filter(pk=first.pk).update(state=Job.CANCELLED, error='Stopped by a workspace member.')
+        self.assertTrue(jobs._override_unspent(declined))
+        again = jobs.retry_reading(encounter, self.user, override=True)
+        self.assertEqual(again.idempotency_key, jobs._interpret_key(encounter.current_revision, f'retry:{declined.pk}'))
+        self.run_next(jobs.INTERPRET)
+        self.assertEqual(len(self.sent(EXTRACTION)), 2)
+        self.assertFalse(jobs._override_unspent(declined))
+        self.assert_member_refused(models.Encounter.objects.get(pk=encounter.pk), jobs.RETRY_DECLINED, 'declined',
+                                   EXTRACTION, 2)
+
+    def test_the_control_an_ordinary_failure_is_released_once_per_member_retry(self):
+        self.scripted(script={EXTRACTION: [answered(HTTP_500, status=500), answered(OVERLOADED, status=529)]})
+        encounter, job, failed = self.run_to(EXTRACTION)
+        self.assertIsNone(jobs._member_block(failed))
+        jobs.retry_reading(encounter, self.user)
+        self.run_next(jobs.INTERPRET)
+        self.assertEqual(len(self.sent(EXTRACTION)), 2)
+        self.assertEqual(progress.encounter_progress(models.Encounter.objects.get(pk=encounter.pk))['error']['action'],
+                         'retry_reading')
+        jobs.retry_reading(encounter, self.user)
+        self.drain()
+        self.assertEqual([item[0] for item in self.interpreter.sent], [EXTRACTION, EXTRACTION, EXTRACTION, APPRAISAL])
+        self.assertTrue(review.fresh(models.Encounter.objects.get(pk=encounter.pk)))
+
+
+class SettledPathHoldTests(FableCase):
+    """refute-f6-r1 F6R1-2 (A2 1.5 [R:truth-T6]: "jobs._settle_outcome and mark_stale's settled path word that run from
+    the run itself ... PAUSED_MESSAGE stays for every run a standing hold kept unsent"), widened to its class: every
+    stage that settles the run its key names (the stale sweep's ':settled:<run>', a reconciliation's
+    ':after-reconcile:<run>') reads that run before the hold door, so a run whose own answer set the hold - recorded
+    meanwhile by another stage's send gate (_record_unsettled_holds, D53/D53b) - ends as its run says: a request-bound
+    hold FAILED with DECLINED_MESSAGE, any other CANCELLED with HOLD_SET_MESSAGE, never "Nothing was sent"; the control:
+    a settled path whose run is already settled meets the hold and pauses (nothing was sent by it)."""
+
+    def dead_stage_after(self, data):
+        """Pass 1 answered by ``data`` (a 200 stream); the worker dies after the run was recorded, before the stage
+        settled it: (encounter, the RUNNING job, the SUCCEEDED run, no effect recorded)."""
+        self.scripted(script={EXTRACTION: [answered(data)]})
+        encounter, _ = self.fresh_encounter()
+        self.run_next('extract')
+        with mock.patch.object(jobs, '_settle_interpretation', side_effect=KeyboardInterrupt):
+            job = jobs.claim_next()
+            self.assertEqual(job.kind, jobs.INTERPRET)
+            with self.assertRaises(KeyboardInterrupt), jobs._stage_scope(job):
+                jobs.STAGES[jobs.INTERPRET](job)
+        job.refresh_from_db()
+        [run] = self.runs(encounter, EXTRACTION)
+        self.assertEqual((job.state, run.state, run.sent, (run.scope or {}).get('effect')),
+                         (Job.RUNNING, Run.SUCCEEDED, True, None))
+        return encounter, job, run
+
+    def settled_with_the_hold_standing(self, data, reason):
+        encounter, job, run = self.dead_stage_after(data)
+        jobs._record_unsettled_holds()  # another stage's send gate (D53's last ask)
+        self.assertEqual(models.InterpreterHold.objects.get(run=run).reason, reason)
+        self.assertTrue(holds.is_held())
+        jobs.mark_stale(startup=True)
+        settled = self.run_next(jobs.INTERPRET)
+        self.assertIn(':settled:', settled.idempotency_key)
+        self.assertEqual(len(self.sent(EXTRACTION)), 1)
+        return encounter, settled
+
+    def test_a_declined_run_is_worded_declined(self):
+        encounter, settled = self.settled_with_the_hold_standing(declined_stream(), holds.DECLINED)
+        self.assertEqual((settled.state, settled.error), (Job.FAILED, jobs.DECLINED_MESSAGE))
+        self.assertEqual(progress.encounter_progress(models.Encounter.objects.get(pk=encounter.pk))['error'],
+                         {'text': jobs.DECLINED_MESSAGE, 'action': 'none'})
+
+    def test_a_model_hold_run_is_worded_by_the_hold_it_set(self):
+        encounter, settled = self.settled_with_the_hold_standing(
+            answer_stream(json.dumps(note_answer()), model='claude-fable-5-1'), holds.MODEL)
+        self.assertEqual((settled.state, settled.error), (Job.CANCELLED, jobs.HOLD_SET_MESSAGE))
+        block = progress.encounter_progress(models.Encounter.objects.get(pk=encounter.pk))
+        self.assertEqual((block['phase'], block['error']['text']), ('paused', jobs.HOLD_SET_MESSAGE))
+        self.assertNotIn('Nothing was sent', block['error']['text'])
+
+    def test_the_worker_restarts_with_another_document_queued(self):
+        """By the pipeline's order alone: document B's interpret stage queued before the worker died in A's stage; the
+        startup sweep queues A's settled path after it; B's send gate records A's hold (B pauses: true for B, nothing
+        of B was sent); A's settled path then words A's run as declined."""
+        self.scripted(script={EXTRACTION: [answered(declined_stream())]})
+        first, _ = self.fresh_encounter()
+        self.run_next('extract')
+        other, _ = self.fresh_encounter()
+        with mock.patch.object(jobs, '_settle_interpretation', side_effect=KeyboardInterrupt):
+            job = jobs.claim_next()
+            self.assertEqual((job.kind, job.encounter_id), (jobs.INTERPRET, first.pk))
+            with self.assertRaises(KeyboardInterrupt), jobs._stage_scope(job):
+                jobs.STAGES[jobs.INTERPRET](job)
+        self.run_next('extract')
+        jobs.mark_stale(startup=True)
+        done = self.drain()
+        mine = [(item.state, item.error) for item in done if item.encounter_id == first.pk and item.kind == jobs.INTERPRET]
+        theirs = [(item.state, item.error) for item in done if item.encounter_id == other.pk]
+        self.assertEqual(mine, [(Job.FAILED, jobs.DECLINED_MESSAGE)])
+        self.assertEqual(theirs, [(Job.CANCELLED, holds.PAUSED_MESSAGE)])
+        self.assertEqual(len(self.sent(EXTRACTION)), 1)
+
+    def test_a_reconciled_unknown_run_whose_exchange_holds_a_decline_is_worded_declined(self):
+        """The after-reconcile half: a run left UNKNOWN whose one exchange recorded a declined 200 stream (decision (k));
+        D53b records its hold; the member's reconciliation settles it from that exchange (P-6) and words it declined."""
+        encounter, revision = self.fresh_encounter()
+        self.run_next('extract')
+        self.cancel_queued()
+        revision.refresh_from_db()
+        request = fable_adapter.build_extraction_request(*jobs._document_of(revision))
+        data = declined_stream()
+        run = Run.objects.create(encounter=encounter, revision=revision, provider=interpretation.PROVIDER_V3,
+                                 adapter_version=interpretation.ADAPTER_VERSION_V3,
+                                 request_sha256=request.canonical_sha256, request_body={}, contexts=[],
+                                 state=Run.UNKNOWN, sent=True, endpoint='https://interpreter.invalid/v1/messages',
+                                 purpose=EXTRACTION, scope={'mode': 'replay'}, started_at=timezone.now())
+        models.ProviderExchange.objects.create(
+            run=run, turn=1, request_body={}, request_sha256=request.canonical_sha256, state=Run.SUCCEEDED,
+            http_status=200, response_bytes=data, response_sha256=hashlib.sha256(data).hexdigest(), latency_ms=5.0,
+            usage={}, provider_request_id='', response_id='', error='', started_at=timezone.now(),
+            finished_at=timezone.now())
+        jobs._record_unsettled_holds()
+        self.assertTrue(holds.is_held())
+        self.assertTrue(jobs.reconcile(encounter, run, self.user, 'Synthetic: the outcome was checked.'))
+        done = self.run_next(jobs.INTERPRET)
+        self.assertIn(':after-reconcile:', done.idempotency_key)
+        self.assertEqual((done.state, done.error), (Job.FAILED, jobs.DECLINED_MESSAGE))
+        self.assertEqual(self.sent(), [])
+
+    def test_the_control_a_settled_path_whose_run_was_settled_meets_the_hold(self):
+        """PAUSED_MESSAGE stays for every run a standing hold kept unsent: the settled path of a run already settled
+        (its effect recorded) reads nothing of its own and pauses at the hold - a held not-sent run, nothing sent."""
+        encounter, job, run = self.dead_stage_after(body(note_answer()))
+        jobs._mark_effect(run, holds.FAILED)  # settled before (a refused reading): nothing for the settled path to read
+        models.InterpreterHold.objects.create(reason=holds.QUOTA, http_status=429, run=run)
+        jobs.mark_stale(startup=True)
+        settled = self.run_next(jobs.INTERPRET)
+        self.assertEqual((settled.state, settled.error), (Job.CANCELLED, holds.PAUSED_MESSAGE))
+        self.assertTrue(self.runs(encounter, EXTRACTION)[-1].scope.get('held'))
+        self.assertEqual(len(self.sent(EXTRACTION)), 1)
+
+
+class SettleByVersionTests(FableCase):
+    """A2 1.10 and 1.5 (the F6 row: "P-6 and _record_unsettled_holds by adapter version"): a run is described and
+    classified by the adapter that recorded it - fable_adapter for ADAPTER_VERSION_V3, the dormant Gemini adapter for a
+    stored Gemini run - and only a run of the version the reading stages send now sets a hold (DECISIONS D289, G2-02: no
+    stored Gemini run is a source of a new hold)."""
+
+    def unsettled(self, encounter, revision, *, provider, version, body_bytes, status=200, state=Run.SENDING):
+        sha = 'c' * 64
+        run = Run.objects.create(encounter=encounter, revision=revision, provider=provider, adapter_version=version,
+                                 request_sha256=sha, request_body={}, contexts=[], state=state, sent=True,
+                                 endpoint='https://interpreter.invalid/v1/messages', purpose=interpretation.PURPOSE,
+                                 scope={'mode': 'replay'}, started_at=timezone.now())
+        models.ProviderExchange.objects.create(
+            run=run, turn=1, request_body={}, request_sha256=sha, state=Run.SUCCEEDED if status == 200 else Run.FAILED,
+            http_status=status, response_bytes=body_bytes, response_sha256=hashlib.sha256(body_bytes).hexdigest(),
+            latency_ms=5.0, usage={}, provider_request_id='', response_id='', error='', started_at=timezone.now(),
+            finished_at=timezone.now())
+        return run
+
+    def test_p6_settles_a_fable_run_by_fable_adapter_describe(self):
+        encounter, revision = self.fresh_encounter()
+        self.cancel_queued()
+        run = self.unsettled(encounter, revision, provider=interpretation.PROVIDER_V3,
+                             version=interpretation.ADAPTER_VERSION_V3, body_bytes=body(note_answer()))
+        self.assertTrue(jobs._settle_from_exchange(run))
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.returned_model, run.response_id), (Run.SUCCEEDED, interpretation.MODEL_V3,
+                                                                             'msg_synthetic_0001'))
+
+    def test_p6_settles_a_stored_gemini_run_by_the_dormant_adapters_describe(self):
+        from tests.test_interpretation_adapter import encoded, envelope
+
+        encounter, revision = self.fresh_encounter()
+        self.cancel_queued()
+        data = encoded(envelope(json.dumps(note_answer())))
+        run = self.unsettled(encounter, revision, provider=interpretation.PROVIDER,
+                             version=interpretation.ADAPTER_VERSION_V2, body_bytes=data)
+        self.assertTrue(jobs._settle_from_exchange(run))
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.returned_model), (Run.SUCCEEDED, adapter.describe(data)[1]))
+        # a run of a version no adapter here records is left as it is
+        other = self.unsettled(encounter, revision, provider=interpretation.PROVIDER_V3,
+                               version='synthetic-messages@0', body_bytes=body(note_answer()))
+        self.assertFalse(jobs._settle_from_exchange(other))
+
+    def test_unsettled_holds_are_recorded_for_fable_runs_only(self):
+        from tests.test_interpretation_adapter import encoded
+
+        encounter, revision = self.fresh_encounter()
+        self.cancel_queued()
+        quota = encoded({'error': {'code': 429, 'status': 'RESOURCE_EXHAUSTED', 'message': 'synthetic cap'}})
+        gemini = self.unsettled(encounter, revision, provider=interpretation.PROVIDER,
+                                version=interpretation.ADAPTER_VERSION_V2, body_bytes=quota, status=429,
+                                state=Run.UNKNOWN)
+        jobs._record_unsettled_holds()
+        self.assertFalse(models.InterpreterHold.objects.filter(run=gemini).exists())  # G2-02
+        fable = self.unsettled(encounter, revision, provider=interpretation.PROVIDER_V3,
+                               version=interpretation.ADAPTER_VERSION_V3, body_bytes=declined_stream(),
+                               state=Run.UNKNOWN)
+        jobs._record_unsettled_holds()
+        self.assertEqual(models.InterpreterHold.objects.get(run=fable).reason, holds.DECLINED)  # by fable's classify
+        self.assertEqual(models.InterpreterHold.objects.count(), 1)
+
+
+class StaleThresholdTests(FableCase):
+    """A2 1.12 [R:connector-CONN-7] (the F6 row: "the per-kind stale threshold in mark_stale and _check_loop_time, and the
+    startup sweep settling a 70 s-old RUNNING stage"; 11.1: "a 1,000 s-old interpret stage not swept by the periodic
+    sweep, a 700 s-old predict swept, and any RUNNING stage settled by the worker's startup sweep")."""
+
+    def running(self, kind, seconds):
+        encounter, revision = self.fresh_encounter()
+        self.cancel_queued()
+        job = Job.objects.create(encounter=encounter, revision=revision, kind=kind, state=Job.RUNNING,
+                                 idempotency_key=f'{kind}:{revision.pk}:synthetic-stale', attempts=1,
+                                 started_at=timezone.now() - timedelta(seconds=seconds),
+                                 deadline_at=timezone.now() + jobs.QUEUE_DEADLINE)
+        return job
+
+    def test_the_thresholds_are_settings_per_kind(self):
+        from django.conf import settings
+
+        self.assertEqual((jobs.stale_threshold(jobs.INTERPRET), jobs.stale_threshold(jobs.APPRAISE)), (1440, 1440))
+        self.assertEqual(jobs.stale_threshold(Job.PREDICT), settings.STALE_RUNNING_SECONDS)
+        with override_settings(STALE_RUNNING_SECONDS_BY_KIND={'interpret': 2000}):
+            self.assertEqual((jobs.stale_threshold(jobs.INTERPRET), jobs.stale_threshold(jobs.APPRAISE)),
+                             (2000, settings.STALE_RUNNING_SECONDS))
+
+    def test_the_periodic_sweep_keeps_a_1000_s_old_reading_stage_and_sweeps_a_700_s_old_predict(self):
+        interpret = self.running(jobs.INTERPRET, 1000)
+        appraise = self.running(jobs.APPRAISE, 1000)
+        predict = self.running(Job.PREDICT, 700)
+        jobs.mark_stale()
+        for job, state in ((interpret, Job.RUNNING), (appraise, Job.RUNNING)):
+            job.refresh_from_db()
+            self.assertEqual(job.state, state, job.kind)
+        predict.refresh_from_db()
+        self.assertNotEqual(predict.state, Job.RUNNING)
+        Job.objects.filter(pk=interpret.pk).update(started_at=timezone.now() - timedelta(seconds=1441))
+        jobs.mark_stale()  # past its kind's threshold: swept
+        interpret.refresh_from_db()
+        self.assertNotEqual(interpret.state, Job.RUNNING)
+        appraise.refresh_from_db()
+        self.assertEqual(appraise.state, Job.RUNNING)
+
+    def test_the_startup_sweep_settles_a_70_s_old_running_stage(self):
+        job = self.running(jobs.INTERPRET, 70)
+        jobs.mark_stale()
+        job.refresh_from_db()
+        self.assertEqual(job.state, Job.RUNNING)  # the periodic sweep keeps it ...
+        jobs.mark_stale(startup=True)
+        job.refresh_from_db()
+        self.assertEqual(job.state, Job.CANCELLED)  # ... the worker's startup sweep settles it, resumable
+        self.assertTrue(review.can_resume(job.encounter))
+
+    def test_the_worker_starts_with_the_startup_sweep(self):
+        job = self.running(jobs.APPRAISE, 70)
+        with mock.patch.object(jobs, 'remove_stale_ingest_dirs'):
+            jobs.work(lambda: True)
+        job.refresh_from_db()
+        self.assertEqual(job.state, Job.CANCELLED)
+
+    def test_the_loop_budget_of_a_reading_stage_is_its_deadline_under_its_kinds_threshold(self):
+        # 1,320 s send + 15 s recording within the stage's 1,380 s (min with the 1,440 s threshold)
+        for kind, purpose in ((jobs.INTERPRET, INTERPRETATION_PURPOSE), (jobs.APPRAISE, APPRAISAL)):
+            with self.subTest(kind=kind):
+                fits = SimpleNamespace(kind=kind, started_at=timezone.now() - timedelta(seconds=30))
+                jobs._check_loop_time(fits, purpose)  # 30 + 1320 + 15 = 1365 <= 1380
+                late = SimpleNamespace(kind=kind, started_at=timezone.now() - timedelta(seconds=60))
+                with self.assertRaises(jobs.Requeue):
+                    jobs._check_loop_time(late, purpose)  # 60 + 1320 + 15 = 1395 > 1380
+        # a participant's stage keeps the shared 600 s threshold
+        from django.conf import settings
+
+        participant = SimpleNamespace(kind=Job.ASTRA, started_at=timezone.now() - timedelta(seconds=40))
+        budget = min(settings.JOB_DEADLINE_SECONDS.get(Job.ASTRA, settings.STALE_RUNNING_SECONDS),
+                     settings.STALE_RUNNING_SECONDS)
+        if 40 + settings.PARTICIPANT_LOOP_DEADLINE_SECONDS + jobs.LOOP_RECORDING_SECONDS > budget:
+            with self.assertRaises(jobs.Requeue):
+                jobs._check_loop_time(participant)
+        else:
+            jobs._check_loop_time(participant)
+
+
+INTERPRETATION_PURPOSE = interpretation.PURPOSE
+
+
+class QueueDeadlineTests(FableCase):
+    """A2 1.12: QUEUE_DEADLINE is 60 minutes - a job queued behind two long readings still starts."""
+
+    def test_sixty_minutes(self):
+        self.assertEqual(jobs.QUEUE_DEADLINE, timedelta(minutes=60))
+        encounter, revision = self.fresh_encounter()
+        [queued] = Job.objects.filter(encounter=encounter, state=Job.QUEUED)
+        self.assertAlmostEqual((queued.deadline_at - queued.created_at).total_seconds(), 3600, delta=5)
+        with mock.patch.object(timezone, 'now', return_value=queued.created_at + timedelta(minutes=59)):
+            self.assertEqual(jobs.claim_next().state, Job.RUNNING)
+        Job.objects.filter(pk=queued.pk).update(state=Job.QUEUED, started_at=None)
+        with mock.patch.object(timezone, 'now', return_value=queued.created_at + timedelta(minutes=61)):
+            expired = jobs.claim_next()
+        self.assertEqual((expired.state, expired.error), (Job.CANCELLED, 'The stage expired before it could start; '
+                                                                         'resume to run it.'))
+
+
+class DoorOrderTests(FableCase):
+    """A2 1.9's doors, in their order, on the appraise stage (the interpret stage's are FINAL 6.3's, unchanged): the
+    unknown-outcome block (door 3) before the failed-before door (door 4); the failed-before door - a request-bound
+    hold's run among its runs - before the interpreter's mode and the hold (door 6); door 0's claim bound before any
+    stored answer is reused (door 2)."""
+
+    def test_the_unknown_outcome_block_comes_before_the_failed_before_door(self):
+        self.scripted(script={APPRAISAL: [answered(HTTP_500, status=500)]})
+        encounter, job, failed = self.run_to(APPRAISAL)
+        self.assertEqual(job.state, Job.FAILED)
+        Run.objects.create(encounter=encounter, revision=encounter.current_revision, provider='corti',
+                           adapter_version='synthetic', request_sha256='d' * 64, request_body={}, contexts=[],
+                           state=Run.UNKNOWN, sent=True, purpose=models.ProviderRun.PRIMARY)
+        base = job.idempotency_key.split(':resume:', 1)[0]
+        jobs.enqueue(jobs.APPRAISE, encounter=encounter, revision=encounter.current_revision,
+                     key=f'{base}:resume:synthetic', requested_by=self.user)
+        done = self.run_next(jobs.APPRAISE)
+        self.assertEqual(done.result, {'blocked': jobs.INTERPRET_BLOCKED})
+        self.assertEqual(self.runs(encounter, APPRAISAL), [failed])  # no not-resent run: door 3 answered first
+
+    def test_the_failed_before_door_comes_before_the_hold(self):
+        self.scripted(script={APPRAISAL: [answered(declined_stream())]})
+        encounter, job, declined = self.run_to(APPRAISAL)
+        self.assertTrue(holds.is_held())  # the decline's hold stands (not released)
+        base = job.idempotency_key.split(':resume:', 1)[0]
+        jobs.enqueue(jobs.APPRAISE, encounter=encounter, revision=encounter.current_revision,
+                     key=f'{base}:resume:synthetic', requested_by=self.user)
+        self.run_next(jobs.APPRAISE)
+        newest = self.runs(encounter, APPRAISAL)[-1]
+        self.assertEqual((newest.scope.get('refused'), newest.scope.get('failed'), newest.scope.get('held')),
+                         (jobs.FAILED_BEFORE, str(declined.pk), None))  # door 4, never door 6's held run
+
+    def test_the_claim_bound_comes_before_a_stored_answer(self):
+        from studio.interpretation.contract import claims
+
+        self.scripted()
+        first, _ = self.upload()
+        self.drain()  # a stored answer of both passes in this workspace
+        self.enterContext(mock.patch.object(claims, 'CLAIM_BOUND_V3', 1))
+        self.enterContext(mock.patch.multiple(interpretation, **fable_pins()))
+        second, _ = self.upload()
+        self.drain()
+        [run] = self.runs(second, APPRAISAL)
+        self.assertEqual((run.state, run.scope.get('refused'), run.reused_from_id), (Run.NOT_SENT, jobs.CLAIMS, None))
+
+
+class GuardTests(TestCase):
+    """A2 section 9 and 8.1 (the F6 row: "the guard test of section 9's path list" [R:connector-CONN-5]; 8.1's guard
+    [R:replay-R4]): no line of jobs.py names interpretation.PROVIDER, MODEL or ADAPTER_VERSION_V2 but the three
+    _reading_* functions (which give v1's names under the test-only v1 chain and the _V3 names otherwise); no
+    current-path writer of jobs.py names a design v2 @2 (or @1) label; every reader of a stored row accepts both
+    families."""
+
+    JOBS = __import__('pathlib').Path(jobs.__file__)
+
+    def names(self, wanted):
+        """[(enclosing function, attribute, line)] of every interpretation.<wanted> attribute read in jobs.py."""
+        import ast
+
+        tree = ast.parse(self.JOBS.read_text(encoding='utf-8'))
+        found = []
+
+        def visit(node, function):
+            for child in ast.iter_child_nodes(node):
+                inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else function
+                if (isinstance(child, ast.Attribute) and isinstance(child.value, ast.Name)
+                        and child.value.id == 'interpretation' and child.attr in wanted):
+                    found.append((function, child.attr, child.lineno))
+                visit(child, inner)
+        visit(tree, None)
+        return found
+
+    def test_no_other_line_names_the_v1_and_v2_interpreter(self):
+        import ast
+
+        found = self.names({'PROVIDER', 'MODEL', 'ADAPTER_VERSION_V2'})
+        self.assertEqual({(function, name) for function, name, _ in found},
+                         {('_reading_provider', 'PROVIDER'), ('_reading_model', 'MODEL')})
+        # nor by another route: no name imported from the package, and no alias of the package itself
+        tree = ast.parse(self.JOBS.read_text(encoding='utf-8'))
+        imported = [(node.module, alias.name, alias.asname) for node in ast.walk(tree)
+                    if isinstance(node, ast.ImportFrom) for alias in node.names]
+        self.assertFalse([item for item in imported if item[1] in ('PROVIDER', 'MODEL', 'ADAPTER_VERSION_V2')])
+        self.assertEqual([item for item in imported if item[1] == 'interpretation'],
+                         [(None, 'interpretation', None)])  # `from . import ..., interpretation, ...`, unaliased
+        with mock.patch.object(jobs, '_v1_chain', return_value=True):
+            self.assertEqual((jobs._reading_provider(), jobs._reading_model(), jobs._reading_adapter_version()),
+                             (interpretation.PROVIDER, interpretation.MODEL, interpretation.ADAPTER_VERSION))
+        self.assertEqual((jobs._reading_provider(), jobs._reading_model(), jobs._reading_adapter_version()),
+                         (interpretation.PROVIDER_V3, interpretation.MODEL_V3, interpretation.ADAPTER_VERSION_V3))
+        self.assertIs(jobs.interpretation_adapter, fable_adapter)
+        self.assertEqual(holds.current_adapter_version(), interpretation.ADAPTER_VERSION_V3)
+
+    def test_no_current_path_writer_names_an_earlier_label_and_every_reader_reads_both(self):
+        from studio.interpretation import readers, store
+
+        earlier = {'INTERPRETATION_VERSION_V2', 'APPRAISAL_VERSION', 'INVENTORY_VERSION_V2', 'ENGINE_VERSION_V2',
+                   'INTERPRETATION_PAIR'}
+        self.assertEqual(self.names(earlier), [])
+        self.assertEqual(jobs.current_versions(), (interpretation.INTERPRETATION_PAIR_V3,
+                                                   interpretation.INVENTORY_VERSION_V3))
+        self.assertEqual(jobs._pass1_version(), interpretation.INTERPRETATION_VERSION_V3)
+        self.assertEqual(jobs.V2_CHECK_SOURCE, f'cpt-studio:{interpretation.ENGINE_VERSION_V3}')
+        both_engines = {interpretation.ENGINE_VERSION_V2, interpretation.ENGINE_VERSION_V3}
+        self.assertEqual(set(readers.READ_ENGINES), both_engines)
+        self.assertEqual(set(overlay.READ_CODINGS), both_engines)
+        self.assertEqual(set(overlay.READ_RECORDS), both_engines)
+        self.assertEqual(set(review.V2_ENGINES), both_engines)
+        self.assertEqual(set(review.V2_PAIRS), {interpretation.INTERPRETATION_PAIR, interpretation.INTERPRETATION_PAIR_V3})
+        self.assertTrue({(interpretation.INTERPRETATION_PAIR, interpretation.INVENTORY_VERSION_V2),
+                         (interpretation.INTERPRETATION_PAIR_V3, interpretation.INVENTORY_VERSION_V3)}
+                        <= set(store.READ_VERSIONS))
+        self.assertTrue(all(jobs._is_v2_inventory(SimpleNamespace(interpretation_version=pair,
+                                                                  inventory_version=inventory))
+                            for pair, inventory in store.READ_VERSIONS))
+
+    def test_the_new_sentences_name_no_provider_or_model(self):
+        texts = (jobs.DECLINED_MESSAGE, jobs.HOLD_SET_MESSAGE, jobs.RETRY_DECLINED, jobs.RETRY_CUT_OFF,
+                 jobs.INTERPRET_CUT_OFF_MESSAGE, jobs.APPRAISE_CUT_OFF_MESSAGE,
+                 progress.INTERPRETATION_ERRORS['cut_off'][0], progress.INTERPRETATION_ERRORS['declined'][0])
+        for text in texts:
+            for name in PROVIDER_NAMES:
+                self.assertNotIn(name, text.lower())
+        from studio import customer_api
+
+        for text in texts:
+            self.assertIsNone(customer_api.FORBIDDEN.search(text), text)

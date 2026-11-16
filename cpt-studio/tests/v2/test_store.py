@@ -41,8 +41,8 @@ from django.db import IntegrityError, transaction
 from django.test import SimpleTestCase, TestCase
 
 from studio import types as studio_types
-from studio.interpretation import (INTERPRETATION_PAIR, INTERPRETATION_VERSION, INVENTORY_VERSION,
-                                   INVENTORY_VERSION_V2, read, store)
+from studio.interpretation import (INTERPRETATION_PAIR, INTERPRETATION_PAIR_V3, INTERPRETATION_VERSION,
+                                   INVENTORY_VERSION, INVENTORY_VERSION_V2, INVENTORY_VERSION_V3, read, store)
 from studio.interpretation.contract import claims as contract_claims
 from studio.interpretation.contract import extract_read, settle
 from studio.interpretation.contract import types as ct
@@ -86,8 +86,13 @@ DOCUMENT_WORDS = ('sessile polyp', 'Synthetic Endoscopist', 'colonoscope', 'anas
 # asks), from int0's 17ad573f... (D186's Reason), which the same signature without those two entries still gives;
 # and again by DECISIONS D229 (hand-off 1d#2, before the first install), from ab62877b...: the report's doubts,
 # health, coherence and usage closed to settle's records (contract/types), where they were free-form JSON.
+# AMENDMENT-2 (step f3s) adds the @3 pair beside it, its shapes the @2 pair's but for slot_overfull among its reasons
+# and a slot that may hold an overfilled slot's written facts (4.3.6); the @2 pair's pin is unmoved (f0's R8:
+# contract/types' new reason never reaches the @2 pair's closed list).
+PAIR_V3 = (INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3)
 SHAPE_PINS = {(INTERPRETATION_PAIR, INVENTORY_VERSION_V2):
-              'fdef536fe56facd4d52c4e4b79af37796ade63dec1acb22f36ded684212ac613'}
+              'fdef536fe56facd4d52c4e4b79af37796ade63dec1acb22f36ded684212ac613',
+              PAIR_V3: 'f799cafabd486937cb0a9502a1aae91783beabbcb1b9fed1e3015f7a704cfd9b'}
 
 
 # --- the synthetic settled inventory ----------------------------------------------------------------------------------
@@ -626,10 +631,20 @@ class VersionTests(SimpleTestCase):
                         load(variant(fields, setter(name, value=value), rehash=False))
 
     def test_every_shipped_version_pair_is_read_as_stored_with_its_own_shapes_and_label(self):
-        self.assertEqual(store.READ_VERSIONS, ((INTERPRETATION_PAIR, INVENTORY_VERSION_V2),))
+        self.assertEqual(store.READ_VERSIONS, ((INTERPRETATION_PAIR, INVENTORY_VERSION_V2), PAIR_V3))
         self.assertEqual(set(store._V2_SHAPES), set(store.READ_VERSIONS))
         self.assertEqual(set(store._V2_LABELS), set(store.READ_VERSIONS))
-        self.assertEqual(store._V2_CURRENT, store.READ_VERSIONS[-1])  # rows are written at the last pair only
+        self.assertEqual(set(store._V2_FACTS), set(store.READ_VERSIONS))
+        self.assertEqual(store._V2_LABELS[PAIR_V3], store.LABEL_V3)
+        self.assertEqual(store.LABEL_V3, 'gemini-events@3/appraisal@2+inventory@3')
+        # a writer that names no pair writes the @2 pair (until the pipeline names the @3 one, step f6); one that names
+        # a pair writes it; one that names a pair this release does not read writes nothing
+        self.assertEqual(store._V2_CURRENT, store.READ_VERSIONS[0])
+        self.assertEqual(load(read_row(versions=PAIR_V3)).label, store.LABEL_V3)
+        self.assertEqual(load(refused_row(versions=PAIR_V3)).inventory_version, INVENTORY_VERSION_V3)
+        for unknown in (('gemini-events@3/appraisal@2', INVENTORY_VERSION_V2), ('x', 'y'), 'gemini-inventory@3'):
+            with self.subTest(versions=unknown), self.assertRaises(store.UnknownVersion):
+                read_row(versions=unknown)
         for versions in store.READ_VERSIONS:
             with self.subTest(versions=versions):
                 self.assertEqual(set(store._V2_SHAPES[versions]), {'read', 'refused'})
@@ -818,9 +833,18 @@ class ShapeTests(SimpleTestCase):
             for member in enumeration:
                 with self.subTest(path=path, value=member.value):
                     load(variant(fields, setter('events', *path, value=member.value)))
+        newer = read_row(versions=PAIR_V3)
         for member in ct.Reason:
             with self.subTest(reason=member.value):
-                load(variant(fields, setter('events', 'events', 2, 'performer', 'reasons', value=[member.value])))
+                # the @2 pair's closed list is the one it shipped: every reason but AMENDMENT-2's slot_overfull,
+                # which only an @3 row holds (4.3.6); the @3 pair reads every one
+                edit = setter('events', 'events', 2, 'performer', 'reasons', value=[member.value])
+                load(variant(newer, edit))
+                if member is ct.Reason.SLOT_OVERFULL:
+                    with self.assertRaises(store.UnknownShape):
+                        load(variant(fields, edit))
+                else:
+                    load(variant(fields, edit))
         for member in ct.Link:
             with self.subTest(link=member.value):
                 load(variant(fields, setter('events', 'events', 1, 'kind', 'sources', 0, 'link', value=member.value)))
@@ -852,6 +876,73 @@ class ShapeTests(SimpleTestCase):
         self.assertIn('events.events[1].kind.claim.value', message)
         message = self.assert_unknown(setter('events', 'events', 1, 'Synthetic Endoscopist, MD', value=1))
         self.assertIn('a key of 25 characters', message)
+
+
+def slot_paths_of(events):
+    """Every slot of a stored inventory - each of the 38 SLOT attributes of contract/extract_read.SLOTS on each object
+    that has it - by its path in the row's events, with its family's letter and attribute."""
+    found = [(('encounter', 'documenting_clinician'), '', 'documenting_clinician')]
+    families = {'P': 'people', 'N': 'sections', 'X': 'sessions', 'Y': 'anatomy', 'L': 'lesions', 'E': 'events'}
+    for family, attribute in sorted(extract_read.SLOTS, key=lambda item: (item[0].value, item[1].value)):
+        if not family.letter:
+            continue
+        for index, _record in enumerate(events[families[family.letter]]):
+            found.append(((families[family.letter], index, *attribute.value.split('.')), family.letter,
+                          attribute.value))
+    return found
+
+
+def overfilled(fields, path, letter, attribute, reasons=('slot_overfull',)):
+    """``fields`` with the slot at ``path`` holding two written facts, each settled unresolved (AMENDMENT-2 4.3.5), of
+    two values of its domain."""
+    domain = store._V2_DOMAINS[(letter, attribute)]
+    values = (sorted(domain.values)[:2] if domain.values is not None else ['E1', 'X1'] if domain.letter
+              else ['2026-11-09', '2026-11'])
+    written = [fact(value, [src(['S6'])], state=state, result='unresolved', reasons=reasons)
+               for value, state in zip(values * 2, ('supported', 'negated'))]
+    return variant(fields, setter('events', *path, value=written))
+
+
+class SlotShapeTests(SimpleTestCase):
+    """AMENDMENT-2 4.3.6 (step f3s): row_v2 and load_v2 accept more than one stored fact at a slot key only for an
+    inventory of gemini-inventory@3, and only when every one of them carries slot_overfull; any other multi-fact slot is
+    refused as a shape violation, as before."""
+
+    def test_every_slot_holds_an_overfilled_slots_written_facts_under_the_3_pair_alone(self):
+        newer, older = read_row(versions=PAIR_V3), read_row()
+        paths = slot_paths_of(newer['events'])
+        self.assertEqual({(letter, attribute) for _path, letter, attribute in paths},
+                         {(family.letter, attribute.value) for family, attribute in extract_read.SLOTS})
+        for path, letter, attribute in paths:
+            with self.subTest(slot=path):
+                loaded = load(overfilled(newer, path, letter, attribute))
+                self.assertEqual(len(node(loaded.events, *path)), 2)
+                view = node(store.textfree_v2(loaded), *path)  # the engine's view keeps the list, text-free
+                self.assertEqual([item['claim']['value'] for item in view],
+                                 [item['claim']['value'] for item in node(loaded.events, *path)])
+                self.assertEqual(set(view[0]['sources'][0]), {'units', 'link', 'at', 'geometry'})
+                with self.assertRaisesRegex(store.UnknownShape, 'is not an object'):
+                    load(overfilled(older, path, letter, attribute))
+                # a fact without slot_overfull, or a list of one, is no overfilled slot
+                with self.assertRaisesRegex(store.UnknownShape, 'slot_overfull'):
+                    load(overfilled(newer, path, letter, attribute, reasons=('unappraised',)))
+                lone = variant(newer, setter('events', *path, value=[node(newer['events'], *path)]))
+                with self.assertRaisesRegex(store.UnknownShape, 'fewer than two facts'):
+                    load(lone)
+
+    def test_a_list_at_a_fact_key_and_an_established_written_fact_stay_refused(self):
+        newer = read_row(versions=PAIR_V3)
+        for path in (('events', 1, 'kind'), ('events', 1, 'status'), ('sessions', 0, 'kind'), ('anatomy', 0, 'type'),
+                     ('sections', 0, 'owner'), ('people', 0, 'role'), ('events', 1, 'entry')):
+            with self.subTest(fact=path), self.assertRaises(store.UnknownShape):
+                load(variant(newer, setter('events', *path, value=[node(newer['events'], *path)] * 2)))
+        # a written fact of an overfilled slot is never established (the fact rules: an established result has no
+        # reason, and every written fact carries slot_overfull)
+        path = ('events', 1, 'technique', 'device')
+        written = overfilled(newer, path, 'E', 'technique.device')
+        node(written['events'], *path)[0]['result'] = 'supported'
+        with self.assertRaisesRegex(store.UnknownShape, 'without what establishing it needs'):
+            load(rehashed(written))
 
 
 class FactRuleTests(SimpleTestCase):
@@ -1776,7 +1867,8 @@ class ImportTests(SimpleTestCase):
                   and statement.module == 'studio.interpretation'
                   and 'INTERPRETATION_PAIR' in [alias.name for alias in statement.names]]
         self.assertEqual([[alias.name for alias in statement.names] for statement in labels],
-                         [['INTERPRETATION_PAIR', 'INVENTORY_VERSION_V2']])
+                         [['INTERPRETATION_PAIR', 'INTERPRETATION_PAIR_V3', 'INVENTORY_VERSION_V2',
+                           'INVENTORY_VERSION_V3']])  # AMENDMENT-2 8.1: the @3 pair's labels beside the @2 pair's
 
     def test_importing_the_store_loads_no_contract_module_until_v2_is_used(self):
         # importing store loads what v1's store did (tests/test_interpretation_prompt.py pins that set); the first v2

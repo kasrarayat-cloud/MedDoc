@@ -57,14 +57,16 @@ Failure: ``geometry_<link>``.
 units; target.lesion's description units are among the act's anchor units or among a valid restatement's units (G6) -
 never their sentence closure (3.1 G3: the description unit IS the anchor or a restatement) - or the description ends
 before the act's own words (an antecedent, D207): ``target_detached``. **G5** (``extent_units``, ``extent_reasons``;
-D36 restated [R:CO-6], D198): a session's reached, completion, stations, approach and through sources lie - where their
-words are - in a unit of its examination's anchor or of one of the examination's valid restatements, or in a unit no act
-is told in. The acts are the events whose claimed status is not negated, other than the session's own examination, each
-told in its anchor's units and its valid restatements' units; a denial's anchor is no act's. A source lying only in
-acts' units, of this session or another, is ``extent_inferred``; there is no section test, so an examination told
-across several parts passes. **G6** (``restatement_valid``): a restatement's units are a valid run and no event's anchor
-units (``anchored_units``: any event's, D198 keeps the broad reading), and a ``title`` restatement lies in N0 or in a
-section start; any other restatement is ignored.
+D36 restated [R:CO-6], D198): a session's reached, completion, stations, approach, through and reached_anatomy sources
+lie - where their words are - in a unit of its examination's anchor or of one of the examination's valid restatements,
+or in a unit no act is told in (reached_anatomy since DECISIONS D292's U3: it names the anatomy entry the endoscope
+itself reached, so its words are the examination's, as the reach's are; fail-closed). The acts are the events whose
+claimed status is not negated, other than the session's own examination, each told in its anchor's units and its valid
+restatements' units; a denial's anchor is no act's. A source lying only in acts' units, of this session or another, is
+``extent_inferred``; there is no section test, so an examination told across several parts passes. **G6**
+(``restatement_valid``): a restatement's units are a valid run and no event's anchor units (``anchored_units``: any
+event's, D198 keeps the broad reading), and a ``title`` restatement lies in N0 or in a section start; any other
+restatement is ignored.
 
 **R1's kept runs** (``word_runs``; DECISIONS D261 and its note). The letter-or-digit runs of a span R1 kept - C-10's
 ``kept_words`` (FINAL-V2 4.6 condition 4), which engine/assess hands engine/evaluate when its caller's Integrity gives
@@ -82,7 +84,9 @@ units, a text or words that are not a str, or repeated section ids (which 3.1 S1
 characters one at a time; nothing here names a word, holds a word, phrase, marker or frame list, imports ``re`` or a text
 module, compares with a string literal longer than one character, or calls a str method but ``isspace`` and ``isalnum``.
 Geometry reads offsets, unit ids, link types, restatement roles and the state of an event's claimed status (G5, D198) -
-enumeration members - and never what a word means.
+enumeration members - and never what a word means. It reads no slot of the answer (AMENDMENT-2 4.3.3's "any slot read
+in geometry": none): its caller hands it sources, anchors and statuses, so an overfilled slot reaches it only as its
+written facts' sources, each measured as it is.
 """
 from __future__ import annotations
 
@@ -96,8 +100,10 @@ from studio.interpretation.contract.types import (Attribute, FactState, Link, Lo
 
 SOURCE_UNITS = 12  # 1.8 and 3.1 I3: a source, or an anchor, cites at most this many units (an item-level bound) [R:CO-5]
 
-# G5's attributes: the session facts whose sources must lie in the examination's statement or in no act's anchor
-EXTENT_ATTRIBUTES = (Attribute.REACHED, Attribute.COMPLETION, Attribute.STATIONS, Attribute.APPROACH, Attribute.THROUGH)
+# G5's attributes: the session facts whose sources must lie in the examination's statement or in no act's anchor;
+# reached_anatomy joins them by DECISIONS D292's U3 (FINAL-V2's G5 row, as the integration owner restated it)
+EXTENT_ATTRIBUTES = (Attribute.REACHED, Attribute.COMPLETION, Attribute.STATIONS, Attribute.APPROACH, Attribute.THROUGH,
+                     Attribute.REACHED_ANATOMY)
 
 _GEOMETRY = {Link.STATEMENT: Reason.GEOMETRY_STATEMENT, Link.SECTION: Reason.GEOMETRY_SECTION,
              Link.FRAME: Reason.GEOMETRY_FRAME, Link.PLACING: Reason.GEOMETRY_PLACING,

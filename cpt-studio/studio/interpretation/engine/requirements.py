@@ -1,5 +1,6 @@
 """The requirement table of design v2 (docs/gemini-migration/FINAL-V2.md 4.3, 4.8, 4.9, 3.2.1 and Appendix A; step 1f of
-8.1; labelled REQUIREMENTS_VERSION, cpt-requirements@1): what each code requires, what each requirement reads and what
+8.1; labelled REQUIREMENTS_VERSION - cpt-requirements@1, and cpt-requirements@2 once DECISIONS D292's E1j read-set
+lands, the integration's label): what each code requires, what each requirement reads and what
 it raises, the fixed RANK of a held code's items, the CLAIMED table pass 2's claims are selected from, and each code's
 requirement closure, dependencies(code).
 
@@ -420,13 +421,17 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     # 4.3 bundling, 4.7's rules: the act's part_of, cause and lesion identity, the whole read by possibly. part_of,
     # part_relation, cause_event and same_as only bundle (UNCONTROLLED: a yes-bias can only hold); a difference of
     # lesion, place or duct sets the act apart, so it is read on the READY path, and so is the lesion's multiplicity:
-    # an established group un-bundles a biopsy of a removed lesion (4.7, C-2; DECISIONS D196).
+    # an established group un-bundles a biopsy of a removed lesion (4.7, C-2; DECISIONS D196). DECISIONS D292 E1j: a
+    # biopsy done elsewhere than every removal reads each removal's places together with its target lesion's places
+    # (FINAL-V2 5.1 row 10), so a lesion's places are read on the READY path too (P-INDEP); REQUIREMENTS_VERSION moves
+    # with this read-set (cpt-requirements@2, the integration's label).
     Requirement.BUNDLING: Rule((
         _r(_ACT, _A.PART_OF, _HOLD), _r(_ACT, _A.PART_RELATION, _HOLD), _r(_ACT, _A.CAUSE, _HOLD, _ADJUNCT_KINDS),
         _r(_ACT, _A.CAUSE_EVENT, _HOLD, _ADJUNCT_KINDS), _r(_ACT, _A.PURPOSE, _HOLD, frozenset({Kind.INJECTION})),
         _r(_ACT, _A.TARGET_LESION, kinds=_SAME_LESION_KINDS), _r(_ACT, _A.TARGET_PLACES, kinds=_SAME_LESION_KINDS),
         _r(_ACT, _A.TARGET_DUCT, kinds=_DUCT_KINDS), _r(Role.LESION, _A.SAME_AS, _HOLD),
         _r(Role.LESION, _A.DISTINCT_FROM), _r(Role.LESION, _A.MULTIPLICITY),
+        _r(Role.LESION, _A.PLACES),  # D292 E1j: a whole's target lesion's places (biopsy elsewhere)
         _r(_WHOLE, _A.KIND, _HOLD), _r(_WHOLE, _A.STATUS, _HOLD), _r(_WHOLE, _A.DATE_RELATION, _HOLD),
         _r(_WHOLE, _A.SESSION, _HOLD), _r(_WHOLE, _A.TARGET_LESION, kinds=_WHOLE_LESION_KINDS),
         _r(_WHOLE, _A.TARGET_PLACES, kinds=_WHOLE_LESION_KINDS), _r(_WHOLE, _A.TARGET_DUCT, kinds=_STENT_KINDS),

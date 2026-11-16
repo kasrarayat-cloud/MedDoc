@@ -1,6 +1,7 @@
 """The shape pass 1 answers in (gemini-events@2; docs/gemini-migration/FINAL-V2.md 1.3-1.8 and 2.1, step 1b of 8.1): the
 enumerations it uses with their one-line definitions, LOCAL_SCHEMA_2 with ``doubts`` and ``device_reached``,
-RESPONSE_SCHEMA_2 derived from it mechanically, and BOUNDS_2.
+RESPONSE_SCHEMA_2 derived from it mechanically, and BOUNDS_2; and, for the Fable request (gemini-events@3; AMENDMENT-2
+2.1, step F2), ANSWER_SHAPE_2, derived from LOCAL_SCHEMA_2 mechanically too.
 
 **LOCAL_SCHEMA_2 is the source**, written in v1's LOCAL form (1.4): every object requires every property it declares,
 in the design's order, and forbids any other; there is no nullable union; the types are object, array and string (the
@@ -37,6 +38,15 @@ RESPONSE_SCHEMA_2 or DEFINITIONS changes what is asked. Until the first recordin
 only recomputed pins; after it, gemini-events@3 (2.5; DECISIONS D202). BOUNDS_2 is read, never sent.
 DOUBT_ATTRIBUTES and ATTRIBUTES' values feed checks and the doubt mapping, which INVENTORY_VERSION_V2 names (1.1): a
 change of them alone re-settles stored answers with no send.
+
+**ANSWER_SHAPE_2** (AMENDMENT-2 2.1, gemini-events@3, adopted by DECISIONS D279) is the shape the Fable request's
+instruction shows: pass 1 goes in JSON mode, since neither provider accepts LOCAL_SCHEMA_2 as a decoding constraint, so
+contract/extract_prompt.INSTRUCTIONS_3 writes it out in its ANSWER SHAPE part. It is derived mechanically from
+LOCAL_SCHEMA_2, as RESPONSE_SCHEMA_2 is: a fresh copy with ``"maxItems"`` set, on the array node of each SLOT attribute
+of ATTRIBUTES (the 38 of Arity.SLOT), to that attribute's bound (Bound.SLOT: 1), and nothing else changed. It is shown,
+never validated: contract/extract_read.py validates every answer against LOCAL_SCHEMA_2, and an overfilled slot is an
+item-level finding there (AMENDMENT-2 4.3), never a schema refusal. It has no pin of its own: INSTRUCTIONS_SHA256_V3
+covers it (AMENDMENT-2 8.2), and LOCAL_SCHEMA_SHA256_V2 its source.
 
 Pure: imports only the standard library and the contract's types and jsonschema; touches no document text.
 """
@@ -577,3 +587,28 @@ LOCAL_SCHEMA_2: dict[str, Any] = _local_schema()
 # --- RESPONSE_SCHEMA_2 (1.4): derived, never written by hand -----------------------------------------------------------
 
 RESPONSE_SCHEMA_2: dict[str, Any] = jsonschema.gemini_schema(LOCAL_SCHEMA_2)
+
+# --- ANSWER_SHAPE_2 (AMENDMENT-2 2.1): derived, never written by hand ---------------------------------------------------
+
+
+def _answer_shape() -> dict[str, Any]:
+    """ANSWER_SHAPE_2, built fresh from LOCAL_SCHEMA_2's builder (no node shared with LOCAL_SCHEMA_2): for each SLOT
+    attribute of ATTRIBUTES, the array node at its path - under the encounter's object, or under the items of its
+    family's list - gains ``maxItems``, the attribute's bound (BOUNDS_2[Bound.SLOT], 1). Nothing else is added, removed
+    or reordered, so the shape differs from LOCAL_SCHEMA_2 by those nodes alone (tests/v2/test_extract_schema.py proves
+    it node by node). KeyError when a SLOT attribute's path is no node of LOCAL_SCHEMA_2."""
+    shape = _local_schema()
+    for family, fields in ATTRIBUTES.items():
+        for item in fields:
+            if item.arity is not Arity.SLOT or item.bound is None:
+                continue
+            node = shape['properties'][family.value]
+            if family is not Family.ENCOUNTER:  # the encounter is one object; every other family a list of objects
+                node = node['items']
+            for key in item.path:
+                node = node['properties'][key]
+            node['maxItems'] = BOUNDS_2[item.bound]
+    return shape
+
+
+ANSWER_SHAPE_2: dict[str, Any] = _answer_shape()

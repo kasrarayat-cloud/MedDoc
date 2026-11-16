@@ -19,6 +19,12 @@ methods"), so no code object of its own exists to be armed. The test pins exactl
 no method of its own - and asserts that both functions of the list that construct or read it (Draft._defaulted and
 Draft._fall_back) are armed: what decides with it is counted, and building the record alone decides nothing. 5.3's other
 five normalize names are methods of normalize.Draft (the table gives their lines), resolved as Draft.<name>.
+
+THE KEPT MODULES (AMENDMENT-2 section 9, its step F7: "tests/v2/test_retirement_manifest.py lists it as kept"). KEPT lists
+studio/interpretation's kept modules - FINAL-V2 5.0's eleven and the Fable connector, fable_adapter - as sentinel.KEPT
+holds them. None is retired: no name of the manifest lies in one, and no code object of one (sentinel._live_codes, the
+walk the sentinel arms the retired files with) is in the RETIRED set or the legacy deny set, or armed. The positive
+control: the same walk over a retired file finds code objects that are every one armed and RETIRED.
 """
 from __future__ import annotations
 
@@ -190,6 +196,10 @@ TOTAL = 145
 # the one entry with no code object of its own (module docstring): a frozen dataclass of normalize.py; the listed
 # functions that read it (each takes one, its parameter annotated _Default), and the function that builds it
 CLASSES = {('normalize', '_Default'): {'read by': ('Draft._defaulted', 'Draft._fall_back'), 'built by': 'Draft._event'}}
+# the kept modules of studio/interpretation (FINAL-V2 5.0), and the Fable connector beside adapter.py (AMENDMENT-2 section
+# 9: "sentinel.KEPT gains fable_adapter; tests/v2/test_retirement_manifest.py lists it as kept")
+KEPT = ('__init__', 'adapter', 'holds', 'sentinel', 'readers', 'overlay', 'store', 'wording', 'report', 'replay', 'dates',
+        'fable_adapter')
 
 
 def _module(name):
@@ -316,3 +326,52 @@ class ManifestTests(SimpleTestCase):
         v1_day = [code for code in found.get(('facts', 'day_of'), [])]
         self.assertEqual(len(v1_day), 1)
         self.assertTrue(v1_day[0].co_filename.endswith('studio/interpretation/facts.py'))
+
+
+def _kept_module(name: str) -> types.ModuleType:
+    """The live module of a kept stem ('__init__' is the package itself)."""
+    return importlib.import_module(sentinel.INTERPRETATION if name == '__init__' else f'{sentinel.INTERPRETATION}.{name}')
+
+
+class KeptTests(SimpleTestCase):
+    """AMENDMENT-2 section 9 (module docstring, THE KEPT MODULES): the kept modules - the Fable connector among them - are
+    listed as kept, none is retired, and none of their code is armed."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        status = sentinel.install()
+        assert status['state'] == 'ok', status
+
+    def test_the_kept_list_names_the_fable_connector_and_no_manifest_name_lies_in_a_kept_module(self) -> None:
+        self.assertEqual(sentinel.KEPT, KEPT)
+        self.assertIn('fable_adapter', KEPT)
+        self.assertFalse(set(KEPT) & set(sentinel.RETIRED_NAMES))
+        folder = Path(sentinel.__file__).resolve().parent
+        self.assertEqual({path.stem for path in folder.glob('*.py')}, set(KEPT) | set(sentinel.RETIRED_NAMES))
+        self.assertFalse({module for _, module, _, _ in MANIFEST} & set(KEPT))
+        self.assertFalse([key for key in resolved() if key[0] in KEPT])  # the RETIRED set holds no kept file's code
+
+    def test_no_code_object_of_a_kept_module_is_armed_and_every_one_of_a_retired_module_is(self) -> None:
+        retired, deny = sentinel.retired_set(), sentinel.deny_set()
+        monitoring = sys.monitoring
+        modules = {name: _kept_module(name) for name in KEPT}
+        live = sentinel._live_codes([module.__file__ for module in modules.values()], list(modules.values()))
+        for name, module in modules.items():
+            with self.subTest(kept=name):
+                found = live[module.__file__]
+                self.assertTrue(found, f'{name}: the walk found no code object')  # it read the module
+                self.assertFalse([code.co_qualname for key, code in found.items() if key in retired or key in deny])
+                self.assertFalse([code.co_qualname for code in found.values()
+                                  if monitoring.get_local_events(sentinel.TOOL_ID, code)])
+        self.assertGreater(len(live[modules['fable_adapter'].__file__]), 50)  # the connector's functions, read
+        # the positive control: the same module walk over a retired file finds code objects every one RETIRED and armed
+        lexicon = importlib.import_module(f'{sentinel.INTERPRETATION}.lexicon')
+        codes: dict[int, types.CodeType] = {}
+        for function in sentinel._module_functions(lexicon):
+            if function.__code__.co_filename == lexicon.__file__:
+                sentinel._tree(function.__code__, codes)
+        self.assertGreater(len(codes), 10)
+        self.assertTrue(all(key in retired and sentinel.kind_of(key) == sentinel.RETIRED for key in codes))
+        self.assertTrue(all(monitoring.get_local_events(sentinel.TOOL_ID, code) & monitoring.events.PY_START
+                            for code in codes.values()))

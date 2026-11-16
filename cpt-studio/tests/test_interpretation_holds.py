@@ -20,7 +20,7 @@ from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import interpretation, models, operator
-from studio.interpretation import adapter, holds, read, store
+from studio.interpretation import adapter, fable_adapter, holds, read, store
 from studio.types import sha256_json
 from tests.support import factories as f
 from tests.test_interpretation_adapter import (PER_DAY, PER_MINUTE, TRIAL_429, encoded, envelope, error_body,
@@ -127,9 +127,11 @@ class ClassifyTableTests(SimpleTestCase):
                 self.assertEqual((outcome.effect, outcome.verdict, outcome.retry), (holds.NONE, None, False))
 
     def test_the_reasons_are_the_hold_tables_and_the_adapters(self):
-        self.assertEqual(holds.REASONS, adapter.HOLD_REASONS)
+        # AMENDMENT-2 1.5: the union of the two adapters' reasons (Fable adds 'refused' and 'declined')
+        self.assertEqual(holds.REASONS, tuple(dict.fromkeys(adapter.HOLD_REASONS + fable_adapter.HOLD_REASONS)))
         self.assertEqual(holds.REASONS, (models.InterpreterHold.AUTH, models.InterpreterHold.PERMISSION,
-                                         models.InterpreterHold.QUOTA, models.InterpreterHold.MODEL))
+                                         models.InterpreterHold.QUOTA, models.InterpreterHold.MODEL,
+                                         models.InterpreterHold.REFUSED, models.InterpreterHold.DECLINED))
         self.assertEqual(set(holds.REASON_TEXT), set(holds.REASONS))
         self.assertIn('model', holds.REASONS)  # P-5
 
@@ -188,6 +190,9 @@ def an_operator(username='synthetic-operator'):
 class HoldRecordTests(TestCase):
     def setUp(self):
         self.ws, self.usr, self.enc, self.rev = scene()
+        # AMENDMENT-2 1.5: only a run of the current adapter version sets a hold; these runs are v1's
+        self.enterContext(mock.patch.object(holds, 'current_adapter_version',
+                                            return_value=interpretation.ADAPTER_VERSION))
 
     def test_a_hold_records_exactly_what_the_adapter_read(self):
         raw = TRIAL_429.read_bytes()
@@ -337,6 +342,8 @@ class ReleaseTests(TestCase):
     def setUp(self):
         self.ws, self.usr, self.enc, self.rev = scene()
         self.operator = an_operator()
+        self.enterContext(mock.patch.object(holds, 'current_adapter_version',
+                                            return_value=interpretation.ADAPTER_VERSION))
 
     def hold(self, status=401):
         return holds.settle(gemini_run(self.enc, self.rev, http_status=status))[1]
@@ -391,6 +398,8 @@ class CommandTests(TestCase):
     def setUp(self):
         self.ws, self.usr, self.enc, self.rev = scene()
         self.operator = an_operator()
+        self.enterContext(mock.patch.object(holds, 'current_adapter_version',
+                                            return_value=interpretation.ADAPTER_VERSION))
 
     def run_command(self, *args):
         out = io.StringIO()

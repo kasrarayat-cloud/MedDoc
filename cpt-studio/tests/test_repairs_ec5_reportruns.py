@@ -90,7 +90,7 @@ def usage_lines(txt):
     provider's name; its line is not one of these (a class on the legacy chain has none, so these are all of them)."""
     block = txt[txt.index('\nPROVIDER USAGE\n'):txt.index('\nREFERENCE SOURCES\n')]
     return [line for line in block.split('\n') if line.startswith('  - ')
-            and not line.startswith(f'  - {interpretation.PROVIDER} · ')]
+            and not line.startswith((f'  - {interpretation.PROVIDER} · ', f'  - {interpretation.PROVIDER_V3} · '))]
 
 
 def review_status(txt):
