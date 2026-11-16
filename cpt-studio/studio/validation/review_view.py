@@ -138,6 +138,9 @@ class View:
     # the fact of the question that answer answered (completion repair 2026-11-06: the engine records it on the code it
     # excludes, engine._MemberAnswers), '' when no answer made it detail_unavailable
     answered: str = ''
+    # r2 (DECISIONS D294): the member form of that question (studio.interpretation.wording.member_form; '' for its fact
+    # key's own row), so the row that shows the answer in effect asks what the member answered
+    answered_form: str = ''
 
 
 def stored_from(proposal, clarifications=None) -> Stored:

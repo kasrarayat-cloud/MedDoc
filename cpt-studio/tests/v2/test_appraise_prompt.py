@@ -80,7 +80,12 @@ MODULE = APP / 'studio' / 'interpretation' / 'contract' / 'appraise_prompt.py'
 FINAL_V2 = APP / 'docs' / 'gemini-migration' / 'FINAL-V2.md'
 # D178's adopted design, with step f0's restatement of P19 and G5 for DECISIONS D292's U3 (AMENDMENT-2's build; it moved
 # the pin from 9d650797...): the quoted examples and clause examples this module scans for are unchanged (40 and 7)
-FINAL_V2_SHA256 = '6b2b09cc7f388489f75b5b46bd6c36a44b405cc3b79a27ea7314463a2d0256fb'
+# DECISIONS D295 (2026-11-16): FINAL-V2's LINKS row and 3.1 G1 row for document_frame restated (the frame part); the
+# scanned sections 2.1-2.4 are byte for byte unchanged (r2/frame/NOTES.md), so the scan's verdict stands. Was
+# 6b2b09cc7f388489f75b5b46bd6c36a44b405cc3b79a27ea7314463a2d0256fb.
+# DECISIONS D296 (2026-11-16): FINAL-V2 4.2's apart_by_lesion amended (the lesion pair claim); the scanned sections
+# 2.1-2.4 again byte for byte unchanged. Was 1d182de3013a550dede0e8f2ca6d7f4dc1e83d88cb99404b1ce4fe31cd596b96.
+FINAL_V2_SHA256 = '5067cf6518cc0614c34b10c26f8a7dfe1ff5e47ef0270db4a27bbcd8b78f6b92'
 DEV_EXCLUSION = APP / 'docs' / 'gemini-migration' / 'acceptance-a1' / 'DEV-EXCLUSION.sha256'
 EVIDENCE = Path(os.environ.get('CPT_STUDIO_DESIGN_EVIDENCE', '/home/claude/cpt-studio-completion-20261106'))
 SURVEY_4 = EVIDENCE / 'gemini-migration' / 'design-v2' / 'survey' / 'failures.md'

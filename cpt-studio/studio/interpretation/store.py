@@ -1481,10 +1481,11 @@ def _v2_build() -> None:
                         'units': _V2_UNITS, 'content': _V2_SHA, 'verdict': _V2Nullable(_V2_VERDICT)},
                        _v2_claim_check)
 
-    def pair(reasons: frozenset, overfull: Optional[str]) -> dict:
+    def pair(reasons: frozenset, overfull: Optional[str], lesion_pairs: bool = False) -> dict:
         """One version pair's shapes: its settled-fact shape (its closed reason list ``reasons``), the inventory and
         both reports; ``overfull`` the reason an overfilled slot's written facts carry (slot_overfull), or None where
-        a slot holds one fact."""
+        a slot holds one fact; ``lesion_pairs``, whether its inventory stores the settled lesion pair claims (DECISIONS
+        D296: the @3 pair only)."""
         def fact(letter: str, attribute, domain: _V2Domain, many: bool = False) -> _V2Spec:
             return _v2_fact(letter, attribute, domain, many, fact_shape, overfull)
 
@@ -1592,12 +1593,19 @@ def _v2_build() -> None:
                              'separately_identifiable': fact('E', _A.VISIT_SEPARATELY_IDENTIFIABLE,
                                                                  _v2_enum(ct.Separate))}),
         })
-        events = _V2Obj({
+        inventory = {
             'units': _V2Units(), 'encounter': encounter, 'people': _V2List(person),
             'sections': _V2List(section), 'sessions': _V2List(session), 'anatomy': _V2List(anatomy),
             'lesions': _V2List(lesion), 'events': _V2List(event), 'doubts': _V2List(_V2_DOUBT),
             'claims': _V2Claims(), 'unlisted': _V2List(_V2_UNLISTED),
-        })
+        }
+        if lesion_pairs:  # DECISIONS D296: each lesion pair claim with its settled outcome, bound to its two claims
+            inventory['lesion_pairs'] = _V2List(_V2Obj({
+                'lesion': _v2_object_id('L'), 'other': _v2_object_id('L'), 'claim': _V2_CLAIM_ID,
+                'control': _V2_CLAIM_ID,
+                'result': _V2Closed({ct.Result.SUPPORTED.value, ct.Result.UNRESOLVED.value}),
+                'reasons': _V2List(_V2Closed(reasons))}, check=_v2_lesion_pair))
+        events = _V2Obj(inventory, check=_v2_lesion_pairs_bound if lesion_pairs else None)
         # settle's report records, field for field (contract/types' DoubtApplied, Health, Coherence and Usage; P9: no
         # free-form JSON is stored; DECISIONS D229, hand-off 1d#2)
         doubt_applied = _V2Obj({'index': _V2_INT, 'about': _V2Closed(_v2_values(ct.DoubtAbout)),
@@ -1634,7 +1642,7 @@ def _v2_build() -> None:
 
     reasons_2 = _v2_values(ct.Reason) - {ct.Reason.SLOT_OVERFULL.value}  # the @2 pair's list as shipped (R8)
     two = pair(reasons_2, None)
-    three = pair(_v2_values(ct.Reason), ct.Reason.SLOT_OVERFULL.value)
+    three = pair(_v2_values(ct.Reason), ct.Reason.SLOT_OVERFULL.value, lesion_pairs=True)
     # the @2 pair's shapes keep their module names (the facts readers and tests reach)
     _V2_FACT_SHAPE, _V2_ENCOUNTER = two['fact'], two['encounter']
     _V2_PERSON, _V2_SECTION = two['person'], two['section']
@@ -1653,6 +1661,43 @@ def _v2_build() -> None:
         } for versions, shapes in ((READ_VERSIONS[0], two), (READ_VERSIONS[1], three))}
     _V2_FACTS = {READ_VERSIONS[0]: two['fact'], READ_VERSIONS[1]: three['fact']}
     _V2_LABELS = {READ_VERSIONS[0]: LABEL_V2, READ_VERSIONS[1]: LABEL_V3}
+
+
+def _v2_lesion_pair(value, path) -> str:
+    """One stored lesion pair (DECISIONS D296): two different lesions, two different claims, and an outcome its
+    reasons agree with - supported with none (the coherence table established it), unresolved with one at least."""
+    if value['lesion'] == value['other']:
+        return f'{path} pairs a lesion with itself'
+    if value['claim'] == value['control']:
+        return f'{path} is its own control'
+    if (value['result'] == ct.Result.SUPPORTED.value) == bool(value['reasons']):
+        return f'{path} gives an outcome its reasons do not agree with'
+    return ''
+
+
+def _v2_lesion_pairs_bound(value, path) -> str:
+    """The @3 inventory's lesion pairs bound to what the row holds (DECISIONS D296): each pair's lesions are lesions of
+    the inventory, each lesion pair once, its claim stored in the claim role as "Lesions {lesion} and {other} are
+    different lesions." and its control in the control role as "... the same lesion.", both about the pair's first lesion
+    and naming its second - so an outcome is never read for a claim the row does not hold."""
+    lesions = {item['id'] for item in value['lesions']}
+    claims = {item['id']: item for item in value['claims']}
+    seen: set = set()
+    for index, item in enumerate(value['lesion_pairs']):
+        where = f'{path}.lesion_pairs[{index}]'
+        key = frozenset((item['lesion'], item['other']))
+        if not key <= lesions:
+            return f'{where} names a lesion the inventory does not hold'
+        if key in seen:
+            return f'{where} repeats a lesion pair'
+        seen.add(key)
+        for name, role, template in (('claim', ct.ClaimRole.CLAIM.value, 'lesion.distinct_from'),
+                                     ('control', ct.ClaimRole.CONTROL.value, 'lesion.same_as')):
+            found = claims.get(item[name])
+            if (found is None or found['role'] != role or found['template'] != template
+                    or found['subject'] != item['lesion'] or found['value'] != item['other']):
+                return f'{where} names as its {name} no stored claim of that form'
+    return ''
 
 
 def shape_signature_v2(versions: tuple) -> str:
@@ -1752,6 +1797,13 @@ def row_v2(*, encounter_id, revision_id, provider_run_id, appraisal_run_id, revi
         raise UnknownShape('The stored interpretation is not readable: verification is not an object.')
     if not isinstance(content, dict):
         raise UnknownShape('The stored interpretation is not readable: events is not an object.')
+    if versions != READ_VERSIONS[1] and 'lesion_pairs' in content:
+        # DECISIONS D296: only the @3 pair stores lesion pair claims (claims.build asks none under gemini-appraisal@1);
+        # settle's empty list is no field of an older pair, and a non-empty one is refused, never dropped
+        if content['lesion_pairs']:
+            raise UnknownShape('The stored interpretation is not readable: lesion pairs are stored at the @3 pair '
+                               'only.')
+        content = {key: value for key, value in content.items() if key != 'lesion_pairs'}
     try:
         claims = claims_sha256_v2(content['claims'])
     except (KeyError, TypeError, ValueError):

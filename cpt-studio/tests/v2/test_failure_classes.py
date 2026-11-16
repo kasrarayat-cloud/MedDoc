@@ -212,7 +212,9 @@ def pipeline(text: str, answer1: dict, rule: dict, data: dict) -> Run:
     read = extract_read.read(json.dumps(answer1), len(units))
     if isinstance(read, extract_read.Refusal):
         raise AssertionError(f'pass 1 refused: {read}')
-    checked = checks.check(text, (), read)
+    # the recorded labels throughout - pass 1 read at gemini-events@2, the @1 request, the row at the @2 pair - so the
+    # checks are made for gemini-inventory@2 (DECISIONS D294 F2: a recorded label keeps the rule it was recorded with)
+    checked = checks.check(text, (), read, inventory_version=interpretation.INVENTORY_VERSION_V2)
     request = appraise_prompt.build_request(text, (), 'txt', read, findings=checked.findings)
     answer2 = materialize(rule, request.claim_set)
     appraisal = appraise_read.read(json.dumps(answer2), request.claim_set, len(units))

@@ -909,7 +909,12 @@ and the appraisal runs of every interpreter provider (AMENDMENT-2 8.5), and, of
 a Fable candidate, its new versions' rows too (an inventory of
 `gemini-events@3/appraisal@2`, a `cpt-studio-events@3` assessment, a run of
 its adapter, an interpreter hold with reason `declined`) - and fails its
-assertion 7 on any missing; with
+assertion 7 on any missing that a test instance makes through the product's
+own flows (replay, a free live outcome such as a refused key, or the
+scenario's own steps); a kind only a paid or nondeterministic provider outcome
+can make - the `declined` hold, which replay never records and no free live
+outcome is - is counted and reported in the transcript, never required
+(DECISIONS D294 F1); with
 `--declared`'s `update` (`pending_before_analyze`, `pending_after_analyze`,
 `completed`, `a21`, optionally `resave: {encounter, field, value}`) its
 assertion 8 judges AMENDMENT-1's U17 - the pending encounters named, exactly

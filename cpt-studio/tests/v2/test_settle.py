@@ -405,6 +405,9 @@ def roles_of(claim_set):
         roles.setdefault(complete.control, 'completeness_control')
     for pair in claim_set.pair_controls:
         roles.setdefault(pair.claim, 'pair_control')
+    for lesion_pair in claim_set.lesion_pairs:  # DECISIONS D296: a lesion pair claim is a claim, its sameness a control
+        roles.setdefault(lesion_pair.claim, 'claim')
+        roles.setdefault(lesion_pair.control, 'control')
     for claim in claim_set.claims:
         roles.setdefault(claim.id, 'control')
     return roles

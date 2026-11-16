@@ -92,7 +92,9 @@ DOCUMENT_WORDS = ('sessile polyp', 'Synthetic Endoscopist', 'colonoscope', 'anas
 PAIR_V3 = (INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3)
 SHAPE_PINS = {(INTERPRETATION_PAIR, INVENTORY_VERSION_V2):
               'fdef536fe56facd4d52c4e4b79af37796ade63dec1acb22f36ded684212ac613',
-              PAIR_V3: 'f799cafabd486937cb0a9502a1aae91783beabbcb1b9fed1e3015f7a704cfd9b'}
+              # DECISIONS D296 (2026-11-16): the @3 pair (unshipped) stores the settled lesion pair claims; restated by
+              # store.shape_signature_v2, was f799cafabd486937cb0a9502a1aae91783beabbcb1b9fed1e3015f7a704cfd9b
+              PAIR_V3: '8a4213496d8533a860947b79a2623b6a461db2e50d30063db6f674d04b4ee581'}
 
 
 # --- the synthetic settled inventory ----------------------------------------------------------------------------------
@@ -340,6 +342,9 @@ def read_arguments(**changes) -> dict:
                  'appraisal_request_sha256': APPRAISAL_REQUEST_SHA256,
                  'appraisal_response_sha256': APPRAISAL_RESPONSE_SHA256, 'events': events, 'verification': verification}
     arguments.update(changes)
+    if arguments.get('versions') == store.READ_VERSIONS[1] and 'lesion_pairs' not in arguments['events']:
+        # DECISIONS D296: at the @3 pair the inventory holds settle's lesion pairs (none here), as settle writes it
+        arguments['events'] = {**arguments['events'], 'lesion_pairs': []}
     return arguments
 
 

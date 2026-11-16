@@ -744,11 +744,11 @@ def _digital(R: FactSet, event: Id) -> bool:
     """FINAL 5.6 E13's digital examination (DECISIONS D69; D227: combination.session_done, the reference derivation of
     "a session is done", excepts it - "a digital examination ... is no session"; D253, QE13 option (a)): an event whose
     device CLAIMS manual - supported manual, or, not established, manual its claimed value or one of its readings
-    (facts.possibly over a device that is not silent) - questions.digital_examination, the one derivation the item's
-    examination words read too. Read so that 9.4's weakenings never turn a digital examination into the session's own
-    (each keeps the claimed value: an established manual device weakened still claims it), so the session it was told
-    in stays act-only and its digital examination never its done one (P-MONO; refute-r4a-r1 P1, refute-r4a-r2 A2). A
-    silent device (the endoscopic examination's usual filing: "The colonoscope was advanced to the cecum."), one
+    (facts.possibly_written over a device that is not silent) - questions.digital_examination, the one derivation the
+    item's examination words read too. Read so that 9.4's weakenings never turn a digital examination into the session's
+    own (each keeps the claimed value: an established manual device weakened still claims it), so the session it was
+    told in stays act-only and its digital examination never its done one (P-MONO; refute-r4a-r1 P1, refute-r4a-r2 A2).
+    A silent device (the endoscopic examination's usual filing: "The colonoscope was advanced to the cecum."), one
     established as another device, and manual negated claim none."""
     return questions.digital_examination(R, event)
 
@@ -1739,6 +1739,105 @@ def exclusion(code: str, group: Sequence[Kind], kept: Sequence[Span], R: FactSet
               kept_words: Sequence[Span] | None = None) -> Excluded:
     """4.6 for ``code``'s ``group`` (module docstring), with 3.2.6 rule 2's doubt on the kept evidence."""
     return _exclusion(_code(code), group, kept, R, kept_words, bool(on_evidence(kept, R)))
+
+
+# --- an exclusion that is possible (DECISIONS D294 RD-2: the ADDON row's primary) --------------------------------------
+
+
+def _surely_positive(R: FactSet, group: Sequence[Kind], event: Id) -> bool:
+    """``event`` a positive candidate of ``group`` (4.4) under every reading of the facts that are not established: its
+    kind supported and a candidate of the group by it (``candidate_kinds``; a clip's or an injection's purpose
+    established, which decides whether it is a bleeding control), its status supported performed or begun, and neither
+    another date nor another performer possible for it (facts.possibly over its effective date relation and performer).
+    Such an act stays a positive candidate however the rest is resolved, so 4.6 (a code with no supporting act and no
+    positive candidate) never excludes its group."""
+    kind, status = _fact(R, event, _A.KIND), _fact(R, event, _A.STATUS)
+    if kind.result is not Result.SUPPORTED or not isinstance(kind.value, Kind):
+        return False
+    if kind.value in catalogue.HEMOSTASIS_KINDS and not facts_.established(_fact(R, event, _A.PURPOSE)):
+        return False
+    if not candidate_kinds(R, group, event):
+        return False
+    if status.result is not Result.SUPPORTED or status.value not in _POSITIVE:
+        return False
+    date, performer = _fact(R, event, _A.DATE_RELATION), _fact(R, event, _A.PERFORMER)
+    return (not any(facts_.possibly(date, value) for value in _OTHER_DATES)
+            and not any(facts_.possibly(performer, value) for value in _OTHER_PERFORMERS))
+
+
+def _may_concern(c: _Code, group: Sequence[Kind], R: FactSet, statement: Id) -> bool:
+    """4.6 condition 1 (``_concerns``) read with the possibility readers: the statement's kind possibly one covering the
+    group (4.2's statement arm, ``_possible_kinds``; a digital examination's examination kind never, DECISIONS D265, as
+    ``possibly_here`` reads it), and possibly of the code's family - route (a): its session supported and that session's
+    kind possibly the family, or, not supported, some session it may be in (``_may_be_in``, an id the FactSet does not
+    hold included) whose kind may be the family; route (b): no supported place of it outside the code's regions."""
+    kinds = _possible_kinds(R, statement)
+    if _digital(R, statement):
+        kinds -= {Kind.EXAMINATION}
+    if not any(_covers_group(kind, group) for kind in kinds):
+        return False
+    if c.link.route is catalogue.LinkRoute.UNRECONCILED:
+        return not any(member.result is Result.SUPPORTED and isinstance(member.value, Landmark)
+                       and not anatomy.in_regions(member.value, c.link.regions)
+                       for member in _members(R, statement, _A.TARGET_PLACES))
+    found = _fact(R, statement, _A.SESSION)
+    held = _id(found)
+    if held is not None:
+        return facts_.possibly(_fact(R, held, _A.KIND), c.link.family)
+    named = (found.value, *found.options)
+    if found.result is not Result.NEGATED and any(isinstance(value, Id) and value not in R.sessions
+                                                  for value in named):
+        return True  # an id the FactSet does not hold may be any session, of any family (4.11; D227 R2-2)
+    return any(_may_be_in(R, statement, session) and facts_.possibly(_fact(R, session, _A.KIND), c.link.family)
+               for session in R.sessions)
+
+
+def _may_exclude_by(c: _Code, group: Sequence[Kind], kept: Sequence[Span], R: FactSet,
+                    kept_words: Sequence[Span] | None, statement: Id) -> bool:
+    """Whether ``statement`` may exclude ``c``'s ``group`` - 4.6's conditions 1-4 read with the possibility readers,
+    condition 5 never read (a citation a doubt blocks still may exclude): it may concern the group (``_may_concern``);
+    and, the code covering it by citation or partly (an exclusion, a citation blocked only by doubt, or a statement_scope
+    question), a deciding fact possibly established - a plan, another date or another performer, which carries no
+    breadth (K1), or a denial (status negated performed) whose breadth is possibly not exceptive - or, the code not
+    covering it, a statement_scope question possible: a denial possibly of the date of service whose breadth may be
+    all_of_kind (4.10's broad denial) or whose session or date relation is not established (``possibly_here``). A fact
+    not established is read as each value it may take (facts.possibly), so a statement whose deciding fact, breadth,
+    session or date is not established but would exclude if it were may exclude."""
+    if not _may_concern(c, group, R, statement):
+        return False
+    status, date = _fact(R, statement, _A.STATUS), _fact(R, statement, _A.DATE_RELATION)
+    breadth, performer = _fact(R, statement, _A.SCOPE_BREADTH), _fact(R, statement, _A.PERFORMER)
+    denial = facts_.denied(status, Status.PERFORMED) or not facts_.established(status)
+    unbroad = (facts_.holds(status, Status.PLANNED) or not facts_.established(status)
+               or any(facts_.possibly(date, value) for value in _OTHER_DATES)
+               or any(facts_.possibly(performer, value) for value in _OTHER_PERFORMERS))
+    if cover(R, statement, kept, kept_words) is not Covered.NONE:
+        return unbroad or (denial and any(facts_.possibly(breadth, value) for value in Breadth
+                                          if value is not Breadth.EXCEPTIVE))
+    unplaced = not facts_.established(_fact(R, statement, _A.SESSION)) or not facts_.established(date)
+    return (denial and facts_.possibly(date, DateRelation.ON_DATE_OF_SERVICE)
+            and (facts_.possibly(breadth, Breadth.ALL_OF_KIND) or unplaced))
+
+
+def may_exclude(code: str, kept: Sequence[Span], R: FactSet, *, kept_words: Sequence[Span] | None = None) -> bool:
+    """DECISIONS D294 RD-2: whether some statement MAY exclude ``code`` with its kept spans ``kept`` - 4.6 read with the
+    possibility readers. A group some act fills as a positive candidate whatever is resolved (``_surely_positive``) is
+    never excluded (4.6's premise); any other group may be, by a statement that may meet 4.6's conditions
+    (``_may_exclude_by``): a citation blocked only by doubt, a statement_scope question, or a statement whose deciding
+    fact, breadth, session or date is not established but would exclude if it were. What holds the code is never read
+    (its hold cause is never the test), and an excluded code may be excluded. Every fact it reads it reads through
+    facts.possibly, which only widens under a 9.4 weakening, so a weakening never turns it False: the ADDON row
+    (engine/assess) counts no primary for which it is True, and so a weakened exclusion never releases an add-on."""
+    c = _code(code)
+    groups_ = catalogue.requirements(c.link)
+    if not c.link.linked or not groups_ or catalogue.recognised_only(c.link):
+        return False
+    for group in groups_:
+        if any(_surely_positive(R, group, event) for event in candidates(R, group)):
+            continue
+        if any(_may_exclude_by(c, group, kept, R, kept_words, statement) for statement in R.events):
+            return True
+    return False
 
 
 # --- the never-READY holds and not documented ---------------------------------------------------------------------------

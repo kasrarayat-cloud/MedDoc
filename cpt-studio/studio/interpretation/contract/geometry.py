@@ -48,7 +48,9 @@ an encounter or anatomy fact's units need only exist (D207). ``section``: the so
 lie inside the place of the containing section's start source or of one of its closing sources, by offsets, so neither
 the next section's mid-unit label nor a framing sentence after the label is the start; ``frame`` lies inside the
 containing section's span; ``placing`` is any unit that is not the object's own anchor (its meaning is pass 2's)
-[R:CO-2]; ``document_frame`` lies inside N0's span and every unit is a source of an encounter fact (the frame units);
+[R:CO-2]; ``document_frame`` lies inside the document's frame part (``frame_part``; DECISIONS D295: N0 and the leading
+sections before the first event is told - before D295, N0's span alone) and every unit is a source of an encounter fact
+(the frame units);
 ``antecedent``: the source's units end before the first unit of the object's own statement starts (3.1 G1: it precedes
 the anchor), so the anaphoric frame inside the anchor is not its own antecedent; ``other_statement`` units exist.
 Failure: ``geometry_<link>``.
@@ -561,10 +563,51 @@ def frame_units(sources: Iterable[Source]) -> frozenset[str]:
     return frozenset(unit_id for source in sources for unit_id in source.units)
 
 
+def first_told(layout: Layout, anchors: Iterable[AnchorCitation]) -> int | None:
+    """DECISIONS D295: the first offset at which any event of the answer is told - the earliest start of the events'
+    located anchor places (``locate_anchor``; acts and denials alike). An anchor that does not locate is placed
+    fail-closed at the earliest start its run, else its known units, give, and one with no known unit at offset 0 (it
+    may be told anywhere, so no labelled part is known to precede it). None when the answer tells no event."""
+    starts: list[int] = []
+    for found in anchors:
+        if found.place is not None:
+            starts.append(found.place.start)
+        elif found.span is not None:
+            starts.append(found.span.start)
+        else:
+            known = [unit.start for unit in (layout.unit(unit_id) for unit_id in found.units) if unit is not None]
+            starts.append(min(known) if known else 0)
+    return min(starts) if starts else None
+
+
+def frame_part(sections: Sections, told: int | None) -> Span | None:
+    """DECISIONS D295 (P1-FRAME): the document's frame part, where a ``document_frame`` source lies (G1). N0's span,
+    joined with each following section in the answer's order while that section has its own G2 span, starts where the
+    part so far ends (contiguous) and ends at or before ``told`` (``first_told``): the leading labelled parts of a
+    header - a title, then a patient-information part and a procedure-details part, say - before the first event is
+    told. A section without a span, a gap or a section reaching past ``told`` ends the walk. None when N0 has no span
+    (DECISIONS D199: an empty or a failed opening part leaves no frame part, as before D295); N0's span alone when no
+    event is told (``told`` None). Offsets only."""
+    opening = sections.opening
+    if opening is None or opening.span is None:
+        return None
+    part = opening.span
+    if told is None:
+        return part
+    for place in sections.places[1:]:
+        span = place.span
+        if span is None or span.start != part.end or span.end > told:
+            break
+        part = Span(part.start, span.end)
+    return part
+
+
 def link_reasons(layout: Layout, sections: Sections, subject: Subject, source: Source,
-                 frame: frozenset[str] = frozenset()) -> tuple[Reason, ...]:
+                 frame: frozenset[str] = frozenset(), part: Span | None = None) -> tuple[Reason, ...]:
     """G1 on one source of a fact about ``subject``: () when its link's geometry holds, else (geometry_<link>,). The
-    geometry of each link is the module's docstring; ``frame`` is ``frame_units``. Only offsets and unit ids are read."""
+    geometry of each link is the module's docstring; ``frame`` is ``frame_units``; ``part`` is ``frame_part`` (when not
+    given, N0's span - which is also frame_part's own value whenever N0 has no span). Only offsets and unit ids are
+    read."""
     units = tuple(source.units)
     known = bool(units) and all(layout.unit(unit_id) is not None for unit_id in units)
     link = source.link
@@ -576,9 +619,10 @@ def link_reasons(layout: Layout, sections: Sections, subject: Subject, source: S
         holds = subject.section is not None and _within(locate(layout, source).place, subject.section.span)
     elif link is Link.PLACING:
         holds = known and not any(unit_id in subject.own for unit_id in units)
-    elif link is Link.DOCUMENT_FRAME:
+    elif link is Link.DOCUMENT_FRAME:  # DECISIONS D295: inside the frame part (N0's span alone before D295)
         opening = sections.opening
-        holds = (known and opening is not None and _within(locate(layout, source).place, opening.span)
+        within = part if part is not None else (opening.span if opening is not None else None)
+        holds = (known and _within(locate(layout, source).place, within)
                  and all(unit_id in frame for unit_id in units))
     elif link is Link.ANTECEDENT:
         found = locate(layout, source)

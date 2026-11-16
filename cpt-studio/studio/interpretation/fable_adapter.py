@@ -27,10 +27,12 @@ content-type application/json, and anthropic-workspace-id when the credential fi
 THE SEND (1.3). One exchange per run (InterpreterF.send_loop: participants.loop.run with max_exchanges 1, no tool
 executor called, a member's Stop asked once right before the send, a continuation refused), one participants.http.post
 under its discipline (no retry, no redirect, no proxies, a watched socket, the deadline checked per 64 KiB chunk, a
-capped read). VENDOR names the stream's end test (``complete``): a 200 whose stream did not reach message_stop or an
-error event, or whose read stopped early (a connection reset or a broken chunk, the deadline, the byte cap), is
-recorded 'unknown' with the bytes read so far and no usage - never read, never priced as a whole answer
-[R:connector-CONN-6][R:connector-CONN-2][R:connector-CONN-3].
+capped read). VENDOR names the stream's end test (``complete``): a 200 whose kept bytes do not reach message_stop or
+an error event - a body read whole without its end event, or a read that stopped early (a connection reset or a broken
+chunk, the deadline, the byte cap) before it - is recorded 'unknown' with the bytes read so far and no usage - never
+read, never priced as a whole answer [R:connector-CONN-6][R:connector-CONN-2][R:connector-CONN-3]; bytes kept from a
+read that stopped early but already end with the end event are the whole stream they are (DECISIONS D294,
+CONN-RF-3).
 
 THE STREAM (1.4). ``assemble`` reads the raw SSE bytes into one answer, purely: strict UTF-8 lines, events separated by
 one empty line, comments skipped, one optional event: line and exactly one data: line per event (strict JSON, its type
@@ -38,8 +40,10 @@ the event's name); pings skipped anywhere, an unknown event type skipped and cou
 an error event), naming the model; text, thinking and redacted_thinking blocks only, each opened at the next index,
 fed only its own deltas and closed; message_delta once after every block closed (stop reason, the refusal's category as
 one word, the usage merged over message_start's); message_stop last; an error event ends the stream wherever it comes.
-``describe`` gives the usage only for a stream that reached message_delta and ended with message_stop: a cut, early or
-error-ended stream records none [R:connector-CONN-3].
+``describe`` gives the usage only for a stream that reached message_delta and ended with message_stop, and only when
+message_delta stated its usage (an object with its output count, output_tokens): a cut, early or error-ended stream, or
+one whose message_delta states no usage, records none - never message_start's partial count [R:connector-CONN-3]
+(DECISIONS D294, CONN-RF-5).
 
 THE ENVELOPE (1.4, 1.6). ``answer_text`` reads an answer only as ADAPTER_VERSION_V3 recorded it, only when the stream
 names exactly claude-fable-5-2 (checked first of everything it says, D13; D275: no fallback model, so a fallback block or
@@ -167,8 +171,9 @@ def _words(value: object, limit: int = 40) -> str:
 class Stream:
     """One answer stream, read (1.4). ``model`` and ``message_id``: message_start's, as stated ('' when it states none
     that fits); ``usage``: message_start's usage with message_delta's merged over it field by field (Anthropic's
-    message_delta usage is cumulative) - final only when ``final_usage``; ``stop_reason`` and ``refusal_category``
-    (stop_details.category, one vendor word, never the explanation): message_delta's, '' when none; ``texts``: each text
+    message_delta usage is cumulative) - final only when ``final_usage`` (message_delta stated its usage, CONN-RF-5);
+    ``stop_reason`` and ``refusal_category`` (stop_details.category, one vendor word, never the explanation):
+    message_delta's, '' when none; ``texts``: each text
     block's text, in order; ``blocks``: every block's type, in order; ``error_type``: an error event's error.type as
     stated ('' when none or not a string), ``errored`` whether one ended the stream and ``error_after_start`` whether
     message_start came before it; ``unknown_events``: the events of types this reader does not know, skipped (kept for
@@ -218,6 +223,7 @@ class _Scan:
         self.message_id = ''
         self.usage: dict[str, Any] = {}
         self.delta = False
+        self.delta_usage = False  # message_delta stated its usage: an object with its output count (CONN-RF-5)
         self.stop_reason = ''
         self.refusal_category = ''
         self.texts: list[str] = []
@@ -244,8 +250,11 @@ class _Scan:
 
     @property
     def final_usage(self) -> bool:
-        """Whether the usage is Anthropic's final one: message_delta arrived and the stream ended with message_stop."""
-        return self.complete and self.ended == MESSAGE_STOP and self.delta
+        """Whether the usage is Anthropic's final one: message_delta arrived stating its usage - an object with its
+        output count, the one count message_start states only as the answer began - and the stream ended with
+        message_stop. DECISIONS D294 (CONN-RF-5), whenever message_delta states no usage: the stream has no final usage,
+        so its message_start's partial count is never taken for it (unpriced; the harness counts it at its bound)."""
+        return self.complete and self.ended == MESSAGE_STOP and self.delta and self.delta_usage
 
     def stream(self) -> Stream:
         return Stream(model=self.model, message_id=self.message_id, usage=MappingProxyType(dict(self.usage)),
@@ -479,6 +488,8 @@ def _message_delta(found: _Scan, data: dict[str, Any]) -> None:
     found.refusal_category = _words(category) if isinstance(category, str) and category.strip() else ''
     if isinstance(usage, dict):
         found.usage = {**found.usage, **usage}  # cumulative: message_delta's fields replace message_start's
+        count = usage.get('output_tokens')
+        found.delta_usage = isinstance(count, int) and not isinstance(count, bool) and count >= 0
 
 
 def assemble(raw: object) -> tuple[Optional[Stream], str, str]:
@@ -510,9 +521,10 @@ def complete(raw: object) -> bool:
 
 def describe(raw: object) -> tuple[dict[str, Any], str, str]:
     """(usage, model, id) as an answer stream states them: message_start's model and message id, and the usage merged
-    over message_delta's - only when a message_delta arrived and the stream ended with message_stop (Anthropic's usage
-    is final there); a stream that was cut, ended early or ended by an error event records none, its message_start
-    usage staying readable in its kept bytes [R:connector-CONN-3]. An error body (a non-200) states none of them. It
+    over message_delta's - only when a message_delta arrived stating its usage and the stream ended with message_stop
+    (Anthropic's usage is final there); a stream that was cut, ended early or ended by an error event, or whose
+    message_delta states no usage (DECISIONS D294, CONN-RF-5), records none, its message_start usage staying readable in
+    its kept bytes [R:connector-CONN-3]. An error body (a non-200) states none of them. It
     never raises (participants.http.described's contract)."""
     try:
         found = _scan(raw)

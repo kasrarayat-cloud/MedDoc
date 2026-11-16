@@ -1361,8 +1361,9 @@ def _class_reach(R: FactSet, session: Id,
 def digital_examination(R: FactSet, event: Id) -> bool:
     """FINAL 5.6 E13's digital examination (DECISIONS D69; D227: combination.session_done excepts it - "a digital
     examination ... is no session"; D253, QE13 option (a)): an event whose device CLAIMS manual - supported manual, or,
-    not established, manual its claimed value or one of its readings (facts.possibly over a device that is not silent).
-    Read so that 9.4's weakenings never turn a digital examination into the session's own (each keeps the claimed value:
+    not established, manual its claimed value or one of its readings (facts.possibly_written over a device that is not
+    silent: a claimed value, never DECISIONS D294 RD-3's open denial). Read so that 9.4's weakenings never turn a
+    digital examination into the session's own (each keeps the claimed value:
     an established manual device weakened still claims it; refute-r4a-r1 P1). A silent device (the endoscopic
     examination's usual filing: "The colonoscope was advanced to the cecum."), one established as another device, and
     manual negated claim none. The one derivation, engine/pairing.digital_examination (the module lowest in the engine's
@@ -1509,9 +1510,24 @@ def _held_session(R: FactSet, rest: _Rest, groups: Sequence[Group], acts: Sequen
 
 
 def _techniques(R: FactSet, event: Id) -> bool:
-    """More than one technique stated for ``event`` (D280.3's open fact): its device fact claims two values or more
-    (facts.claimed_values: an overfilled slot's written values or a contradiction's sides, the denied ones left out)."""
-    return len(facts_.claimed_values(facts_.fact(R, event, _A.TECHNIQUE_DEVICE))) > 1
+    """More than one technique stated for ``event`` (D280.3's open fact): its device fact STATES two values or more.
+
+    r2 (DECISIONS D294, WORDS-F4): the sentence says what the document states, so it reads what pass 1's own claim of
+    the device writes as stated (``_states_several``: AMENDMENT-2 4.3.3 b's reader, as classes._claims reads it) - never
+    a claimed-value set (facts.claimed_values, 4.3.3 c, which by design claims a value a doubt only offers, a value a
+    written fact denied included) nor a possibility reader's."""
+    return _states_several(facts_.fact(R, event, _A.TECHNIQUE_DEVICE))
+
+
+def _states_several(found: Fact) -> bool:
+    """r2 (DECISIONS D294, WORDS-F4): whether pass 1's own claim of ``found`` writes more than one value as STATED
+    (AMENDMENT-2 4.3.3 b): pass 1's own contradiction does - its written sides, two at least (the S2 shape check refuses
+    fewer), whatever settle made of it; a claim written supported states its one value (a doubt's reading or a
+    control's value, or pass 2's counter-evidence, is no written value), a silent slot or a claim written negated
+    states none; and an overfilled slot's merged view states nothing here - its options cannot tell a written value from
+    a doubt's reading, nor a value one written fact states from one another denies (the fail-closed reading of NOTES
+    question Q1R, as classes._claims reads the view)."""
+    return found.state is FactState.CONTRADICTED and not facts_.overfilled(found)
 
 
 def _digital_fill(base: Fill, held: HeldFact, code: CodeFacts, R: FactSet, rest: _Rest, groups: Sequence[Group],

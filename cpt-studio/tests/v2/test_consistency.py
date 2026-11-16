@@ -1665,8 +1665,11 @@ class L1Tests(Case):
 
     def test_claim_time_takes_no_member_value(self):
         """[R:MO-5] the claim set depends on the revision and pass 1's bytes alone: check() is given the answer, the
-        tables, the located words and the sections, and no date of any member; its reference is pass 1's own."""
-        self.assertEqual(list(inspect.signature(cs.check).parameters), ['answer', 'vocabulary', 'words', 'containing'])
+        tables, the located words and the sections - and the inventory version the findings are made for, a label and
+        never a member value (DECISIONS D294 F2) - and no date of any member; its reference is pass 1's own."""
+        self.assertEqual(list(inspect.signature(cs.check).parameters),
+                         ['answer', 'vocabulary', 'words', 'containing', 'inventory_version'])
+        self.assertIs(inspect.signature(cs.check).parameters['inventory_version'].kind, inspect.Parameter.KEYWORD_ONLY)
         findings = self.check(dated(relation('E2', 'on_date_of_service', 'S9')), DATES)
         self.assertEqual((findings.document_date, findings.literal[key(F.EVENT, 'E2', A.DATE_RELATION)]),
                          (date(2026, 11, 9), (R.LITERAL_MISMATCH,)))
@@ -2049,9 +2052,11 @@ class ModuleTests(SimpleTestCase):
         self.assertTrue(measure_4(self.source + "\nNEGATORS = ('no', 'neither')\n", engine=False))  # the control
 
     def test_the_one_text_module_is_date_literals_and_the_engine_is_read_by_the_type_checker_only(self):
-        """The module's run-time imports are contract's (date_literals the one text module); its one import of the
-        engine is engine/anatomy.py's Region, under TYPE_CHECKING, for the Vocabulary's types (DECISIONS D192), so the
-        step keeps 1b and 1c as its only dependencies at run time (the seam DECISIONS D207 accepts)."""
+        """The module's run-time imports are contract's (date_literals the one text module) and the labels package
+        (studio.interpretation, which holds the labels only and loads nothing else: K2's date arm reads the inventory
+        version the findings are made for, DECISIONS D294 F2); its one import of the engine is engine/anatomy.py's
+        Region, under TYPE_CHECKING, for the Vocabulary's types (DECISIONS D192), so the step keeps 1b and 1c as its
+        only dependencies at run time (the seam DECISIONS D207 accepts)."""
         tree = ast.parse(self.source)
         guarded = [node for node in tree.body if isinstance(node, ast.If) and isinstance(node.test, ast.Name)
                    and node.test.id == 'TYPE_CHECKING']
@@ -2065,8 +2070,11 @@ class ModuleTests(SimpleTestCase):
         imported = {node.module for node in runtime if isinstance(node, ast.ImportFrom)}
         imported |= {alias.name for node in runtime if isinstance(node, ast.Import) for alias in node.names}
         studio_modules = sorted(name for name in imported if name and name.startswith('studio'))
-        self.assertEqual(studio_modules, ['studio.interpretation.contract', 'studio.interpretation.contract.extract_read',
+        self.assertEqual(studio_modules, ['studio', 'studio.interpretation.contract',
+                                          'studio.interpretation.contract.extract_read',
                                           'studio.interpretation.contract.types'])
+        self.assertEqual({alias.name for node in runtime if isinstance(node, ast.ImportFrom) and node.module == 'studio'
+                          for alias in node.names}, {'interpretation'})  # the labels package (D294 F2)
         named = {alias.name for node in runtime if isinstance(node, ast.ImportFrom)
                  and node.module == 'studio.interpretation.contract' for alias in node.names}
         self.assertEqual(named, {'date_literals', 'extract_schema'})

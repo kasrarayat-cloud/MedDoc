@@ -75,7 +75,7 @@ class V2World:
         self.rev = f.pasted_revision(self.enc, self.user, TF.TEXT)
         self.first = self.run(interpretation.PURPOSE, FIRST)
         self.second = self.run(interpretation.APPRAISAL_PURPOSE, SECOND)
-        content = TF.colonoscopy()
+        content = {**TF.colonoscopy(), 'lesion_pairs': []}  # as settle writes it (DECISIONS D296; @3 keeps it)
         fields = store.row_v2(encounter_id=self.enc.pk, revision_id=self.rev.pk, provider_run_id=self.first.pk,
                               appraisal_run_id=self.second.pk, revision_text=TF.TEXT, text_sha256=self.rev.text_sha256,
                               request_sha256=self.first.request_sha256, response_sha256=self.first.response_sha256,

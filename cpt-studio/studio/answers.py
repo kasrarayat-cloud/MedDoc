@@ -63,7 +63,8 @@ from . import audit, jobs, models, review
 from .code_shapes import act_label  # the act labels, re-homed (ADJUDICATION R-2): reconcile's own object
 from .gi import context as gi_context
 from .gi.profiles import PROFILES
-from .interpretation import readers, sentinel
+from .interpretation import readers, sentinel, wording
+from .interpretation.contract.types import Kind
 from .interpretation.wording import MISSING as EVENT_FACTS_MISSING
 from .validation import questions
 from .validation.engine import COMPETING_FACT
@@ -126,7 +127,9 @@ PROMPTS = {
     'act_cause': 'What caused the bleeding this act treated?',
     'act_part': 'Was this act part of another act?',
 }
-CONFLICT_PROMPT = 'The record has conflicting statements about the {act}. Which is right for this date?'
+# r2 (DECISIONS D294, WORDS-F5): the act a conflict key names is given with its article (``conflict_act``), so a key that
+# names no act kind (conflict:other) is "another act" on every member sentence (D254 rule 2), never "the other"
+CONFLICT_PROMPT = 'The record has conflicting statements about {act}. Which is right for this date?'
 DEFAULT_PROMPT = 'CPT Studio could not confirm a detail this code depends on.'  # U9: CPT Studio's reading
 DATE_PROMPTS = {'member': 'The date of service entered for this document differs from the date in the document.',
                 'document': 'The document states more than one date of service.',
@@ -144,7 +147,7 @@ USE_DOCUMENT_LABELS = {DATE: 'Use document date', CHOICE: 'Use what the document
 # not confirm, never that the document does not state it (only a passage says that; a conflict's row says the record
 # states it both ways, which its passages show)
 STATEMENT = 'From the document, CPT Studio could not confirm {missing}.'
-CONFLICT_STATEMENT = ('The document states the {act} in more than one way, and CPT Studio could not confirm which '
+CONFLICT_STATEMENT = ('The document states {act} in more than one way, and CPT Studio could not confirm which '
                       'statement is right for this date.')
 COMPETING_STATEMENT = ('More than one code is proposed for the same documented act, and CPT Studio does not choose '
                        'between them.')
@@ -153,6 +156,28 @@ CODING_STATEMENTS = {
     'base_included': ('This diagnostic examination is normally included in the other procedures documented with it; '
                       'CPT Studio does not decide whether it is reported separately.'),
 }
+# r2 (DECISIONS D294, member words; WORDS-F1, F3, F6 and their class): the row of a held item whose message asks something
+# else than its fact key's row (wording.member_form; the forms are named there) - its own fixed prompt and what CPT
+# Studio could not confirm, each true of every item of its form - instead of the key's (PROMPTS, CONFLICT_PROMPT,
+# STATEMENT). customer_api words the code's qualification from FORM_MISSING, so the code and its row say one thing.
+DONE_IN_PART_PROMPT = f'Is the examination of this procedure {wording.DONE_IN_PART}?'
+FORM_PROMPTS = {
+    wording.FORM_DIGITAL_SCOPE: DONE_IN_PART_PROMPT,
+    wording.FORM_UNLISTED_SCOPE: DONE_IN_PART_PROMPT,
+    wording.FORM_SESSION_DOUBT: DONE_IN_PART_PROMPT,
+    wording.FORM_ADDON: ('Is one of the primary codes this add-on code is reported with documented as performed on the '
+                         'date of service?'),
+    wording.FORM_DESCRIBED: 'Was the procedure this code describes performed on the date of service?',
+    wording.FORM_ACCOUNTED: 'Was the act this code accounts for performed on the date of service?',
+    wording.FORM_SEPARATE: 'Was a separate act that this code accounts for performed on the date of service?',
+    wording.FORM_ANOTHER_ENTRY: ('Was the act documented only in another entry performed in this procedure on the date '
+                                'of service?'),
+    wording.FORM_PART: PROMPTS['act_part'],
+}
+FORM_MISSING = wording.FORM_MISSING  # what CPT Studio could not confirm, per form: wording's ONE table
+# a coding statement, not a documentation one (D284): the add-on's primary codes are not counted, whatever its act
+ADDON_STATEMENT = 'This add-on code is reported only together with a primary code, and none is counted for this encounter.'
+FORM_STATEMENTS = {wording.FORM_ADDON: ADDON_STATEMENT}
 MAX_ROW_PASSAGES = 4  # a row asked for several codes shows each code's passages, a short list in all
 # Why a standing answer is listed as an earlier answer (questions.bind's reasons), as a member reads it
 EARLIER_WHY = {
@@ -195,10 +220,35 @@ class InvalidAnswer(ValueError):
     """An answer the detail does not allow (the API answers 400 with the message, which is from the fixed table)."""
 
 
-def detail_id(fact: str, family: str, code: str) -> str:
+def detail_id(fact: str, family: str, code: str, form: str = '') -> str:
     """A detail's stable id: the same question about the same code is the same detail across re-assessments (a service
-    fact's question, asked once for the service, has the code '')."""
-    return 'd' + hashlib.sha256('\x1f'.join((fact, family, code)).encode()).hexdigest()[:15]
+    fact's question, asked once for the service, has the code ''). r2 (D294): a row of a member form (wording.member_form)
+    asks another question than its key's row, so its id names the form too - an answer the door takes for one row is
+    never taken for the other; a key's own row keeps its id."""
+    parts = (fact, family, code) if not form else (fact, family, code, form)
+    return 'd' + hashlib.sha256('\x1f'.join(parts).encode()).hexdigest()[:15]
+
+
+def conflict_act(subject: str) -> str:
+    """r2 (DECISIONS D294, WORDS-F5): the act a conflict key (``conflict:<subject>``) names, with its article, as every
+    member sentence of the key names it: D254 rule 2's NO_KIND_LABEL ('another act') for the kind that names no act
+    (Kind.OTHER: an act of kind other, or one whose kind is not established, D267, D287) - as customer_api's held-fact
+    sentence and the item name it - else 'the' and the act's label."""
+    return wording.NO_KIND_LABEL if subject == Kind.OTHER.value else f'the {act_label(subject)}'
+
+
+def conflict_missing(subject: str) -> str:
+    """What a conflict row says CPT Studio could not confirm: which statement about its act is right for this date."""
+    return f'which statement about {conflict_act(subject)} is right for this date'
+
+
+def row_prompt(fact: str, form: str = '') -> str:
+    """The prompt of the member's row for a fact key and member form: the form's own (FORM_PROMPTS), a conflict's
+    (CONFLICT_PROMPT over conflict_act), else the key's (PROMPTS)."""
+    if form in FORM_PROMPTS:
+        return FORM_PROMPTS[form]
+    subject = fact.split(':', 1)[1] if fact.startswith('conflict:') else ''
+    return CONFLICT_PROMPT.format(act=conflict_act(subject)) if subject else PROMPTS.get(fact, DEFAULT_PROMPT)
 
 
 DETAIL_ID = re.compile(r'd[0-9a-f]{15}')
@@ -403,10 +453,12 @@ class _Row:
     passages: list = field(default_factory=list)
     missing: str = ''
     statement: str = ''
+    # r2 (DECISIONS D294): the member form of the question the row asks (wording.member_form; '' for its key's own row)
+    form: str = ''
 
     @property
     def id(self):
-        return detail_id(self.fact, self.family, self.code)
+        return detail_id(self.fact, self.family, self.code, self.form)
 
     @property
     def control(self):
@@ -473,9 +525,17 @@ def effective_view(assessment):
     return view_of(assessment) if callable(view_of) and assessment is not None else None
 
 
-# (scope, fact, family, code, position): one question _questions finds, as _rows reads it - the first four the stored
-# rows' own values (a Clarification's, a Proposal's)
-_Asked = tuple[Any, Any, Any, Any, tuple[int, int]]
+# (scope, fact, family, code, position, form): one question _questions finds, as _rows reads it - the first four the
+# stored rows' own values (a Clarification's, a Proposal's), the last its member form (r2, D294: wording.asked_form)
+_Asked = tuple[Any, Any, Any, Any, tuple[int, int], str]
+
+
+def _stored_form(proposal: Any, fact: Any) -> str:
+    """r2 (DECISIONS D294): the member form of a stored question of ``proposal`` about ``fact`` - its record's item's
+    (wording.recorded_form) when the item is of that fact, '' otherwise (a v1 question, a question of no item)."""
+    support = proposal.support if proposal is not None and isinstance(proposal.support, dict) else {}
+    item = support.get('item')
+    return wording.recorded_form(item) if isinstance(item, dict) and item.get('fact') == fact else ''
 
 
 def _questions(encounter: Any, assessment: Any, view: Optional[Mapping[str, Any]],
@@ -501,9 +561,10 @@ def _questions(encounter: Any, assessment: Any, view: Optional[Mapping[str, Any]
     for item in stored.order_by('created_at', 'pk'):
         proposal = item.proposal
         if proposal is not None:
-            out.append(('proposal', item.fact, item.family or proposal.family, proposal.code, (2, proposal.position)))
+            out.append(('proposal', item.fact, item.family or proposal.family, proposal.code, (2, proposal.position),
+                        _stored_form(proposal, item.fact)))
         else:
-            out.append((item.scope, item.fact, item.family, '', (0 if item.scope == 'encounter' else 1, 0)))
+            out.append((item.scope, item.fact, item.family, '', (0 if item.scope == 'encounter' else 1, 0), ''))
     # completion repair (2026-11-06, U11): a question the assessment closed with a member's answer it read
     read = {answer.pk for answer in applied}
     # refutation cycle 3 (answers C3-3): and a closed question a standing answer now supersedes (bound to it by
@@ -519,9 +580,9 @@ def _questions(encounter: Any, assessment: Any, view: Optional[Mapping[str, Any]
             continue
         if proposal is not None:
             closed.append(('proposal', item.fact, item.family or proposal.family, proposal.code,
-                           (2, proposal.position)))
+                           (2, proposal.position), _stored_form(proposal, item.fact)))
         else:
-            closed.append((item.scope, item.fact, item.family, '', (0 if item.scope == 'encounter' else 1, 0)))
+            closed.append((item.scope, item.fact, item.family, '', (0 if item.scope == 'encounter' else 1, 0), ''))
     # DECISIONS D270 (refute-5b-r1 P1): on a design v2 assessment a code engine/assess excluded by a member's answer has no
     # clarification row - its support['answered'] is the record (review.answered_items) - and the question it answered is
     # closed with that answer the same way: its row stays, the answer shown in effect and withdrawable, while the answer
@@ -530,7 +591,8 @@ def _questions(encounter: Any, assessment: Any, view: Optional[Mapping[str, Any]
     for proposal, fact, ids in review.answered_items(assessment):
         key = (fact, proposal.family, proposal.code)
         if ids & applied_ids or key in superseding:
-            closed.append(('proposal', fact, proposal.family, proposal.code, (2, proposal.position)))
+            closed.append(('proposal', fact, proposal.family, proposal.code, (2, proposal.position),
+                           _stored_form(proposal, fact)))
     if view is None:
         return out + closed
     proposals = {proposal.key: proposal for proposal in assessment.proposals.all()}
@@ -543,7 +605,8 @@ def _questions(encounter: Any, assessment: Any, view: Optional[Mapping[str, Any]
             continue
         for spec in getattr(item, 'questions', ()) or ():
             fact, family = spec.get('fact') or '', spec.get('family') or ''
-            held.append(('proposal', fact, family or proposal.family, proposal.code, (2, proposal.position)))
+            held.append(('proposal', fact, family or proposal.family, proposal.code, (2, proposal.position),
+                         wording.asked_form(spec, proposal.support)))
     # A code an answer the overlay applies excluded (review.DETAIL_UNAVAILABLE) holds no open question in its view - the
     # answer closed it - and the question may be the overlay's own, with no stored row: its answered rows stay, so the
     # member still sees the answer in effect and can withdraw it.
@@ -552,19 +615,28 @@ def _questions(encounter: Any, assessment: Any, view: Optional[Mapping[str, Any]
     for answer in bound:
         proposal = excluded.get(answer.code) if answer.code else None
         if proposal is not None:
+            # r2 (D294): the row shows the answer in effect asking what the member answered - the form of the question
+            # the overlay bound it to (View.answered_form), else its stored question's
+            shown = view.get(proposal.key)
+            form = (getattr(shown, 'answered_form', '') if getattr(shown, 'answered', '') == answer.fact
+                    else _stored_form(proposal, answer.fact))
             held.append(('proposal', answer.fact, answer.family or proposal.family, answer.code,
-                         (2, proposal.position)))
+                         (2, proposal.position), form))
     return held + closed
 
 
-def _row_key(fact, family, code):
+def _row_key(fact, family, code, form=''):
     """The row a question is asked in: the date of service once for the document; a service fact once for its service
-    (refutation r2, L7-08), whichever of its codes asks it; any other question once for its code."""
+    (refutation r2, L7-08), whichever of its codes asks it; any other question once for its code. r2 (DECISIONS D294):
+    a question of a member form (wording.member_form) is its code's own row, keyed by its form too - items whose
+    questions differ never share a row, and its id names the form (detail_id)."""
     if fact == DATE_FACT:
-        return (DATE_FACT, '', '')
+        return (DATE_FACT, '', '', '')
+    if form:
+        return (fact, family, code, form)
     if code and fact in SERVICE_FACTS:
-        return (fact, family, '')
-    return (fact, family, code)
+        return (fact, family, '', '')
+    return (fact, family, code, '')
 
 
 def _states(encounter, assessment):
@@ -620,17 +692,18 @@ def _rows(encounter, assessment, view=None, states=None):
     selected = [proposal.code for proposal in assessment.proposals.filter(bucket=models.Proposal.SELECTED)] \
         if assessment is not None else []
     if hold or _date_in_use(context, saved):  # the date of service, which every selected code depends on
-        rows[(DATE_FACT, '', '')] = _Row(DATE_FACT, '', '', 'encounter', (0, -1), codes=list(selected))
-    for scope, fact, family, code, position in _questions(encounter, assessment, view, states):
+        rows[(DATE_FACT, '', '', '')] = _Row(DATE_FACT, '', '', 'encounter', (0, -1), codes=list(selected))
+    for scope, fact, family, code, position, form in _questions(encounter, assessment, view, states):
         if hold and fact != DATE_FACT:
             # While a member's date conflicts with the document nothing is sent: the date is the one detail asked.
             # Every other question belongs to a reading made without a settled date, and the assessment that follows
             # the member's choice asks again what it still needs (an answer saved before stays bound to its detail).
             continue
-        key = _row_key(fact, family, code)
+        key = _row_key(fact, family, code, form)
         row = rows.get(key)
         if row is None:
-            row = rows[key] = _Row(key[0], key[1], key[2], 'encounter' if fact == DATE_FACT else scope, position)
+            row = rows[key] = _Row(key[0], key[1], key[2], 'encounter' if fact == DATE_FACT else scope, position,
+                                   form=key[3])
         elif position < row.position:
             row.position = position
         if fact == DATE_FACT:
@@ -668,16 +741,20 @@ def _rows(encounter, assessment, view=None, states=None):
             row.allow = [] if row.scope == 'encounter' or row.fact == COMPETING_FACT \
                 else [NOT_DOCUMENTED, CANNOT_CONFIRM]
             subject = row.fact.split(':', 1)[1] if row.fact.startswith('conflict:') else ''
-            row.prompt = CONFLICT_PROMPT.format(act=act_label(subject)) if subject else PROMPTS.get(row.fact,
-                                                                                                   DEFAULT_PROMPT)
+            row.prompt = row_prompt(row.fact, row.form)
             # completion repair (2026-11-06, U10): the question shows the passages it concerns and names the fact
             # CPT Studio could not confirm - never that the document leaves it out (the new path's facts in their own
-            # words: interpretation.wording.MISSING)
-            row.missing = (EVENT_FACTS_MISSING.get(row.fact)
-                           or questions.missing(row.fact, act_label(subject) if subject else ''))
-            row.statement = (CONFLICT_STATEMENT.format(act=act_label(subject)) if subject
-                             else COMPETING_STATEMENT if row.fact == COMPETING_FACT
-                             else CODING_STATEMENTS.get(row.fact) or STATEMENT.format(missing=row.missing))
+            # words: interpretation.wording.MISSING). r2 (D294): a row of a member form says its form's own words (the
+            # question its item asks), whatever its key; a conflict names its act as every member sentence does
+            if row.form in FORM_PROMPTS:
+                row.missing = FORM_MISSING[row.form]
+                row.statement = FORM_STATEMENTS.get(row.form) or STATEMENT.format(missing=row.missing)
+            else:
+                row.missing = (EVENT_FACTS_MISSING.get(row.fact)
+                               or (conflict_missing(subject) if subject else questions.missing(row.fact)))
+                row.statement = (CONFLICT_STATEMENT.format(act=conflict_act(subject)) if subject
+                                 else COMPETING_STATEMENT if row.fact == COMPETING_FACT
+                                 else CODING_STATEMENTS.get(row.fact) or STATEMENT.format(missing=row.missing))
             row.passages = _passages_of(assessment, row.members, by_code)
         out.append(row)
     return out
@@ -881,10 +958,14 @@ def _save_details(encounter, user, parsed, gate) -> dict:
             raise jobs.Refused(readers.MOVED)
         assessment = review.live_assessment(encounter)
         states = _states(encounter, assessment)
-        rows = {row.id: row for row in _rows(encounter, assessment, effective_view(assessment), states)}
+        views = effective_view(assessment)
+        rows = {row.id: row for row in _rows(encounter, assessment, views, states)}
         # the question each member of a row is asked now (review.asked_fingerprints), which its answer binds to; one a
-        # standing answer the assessment read answers is that answer's question (its row shows it, closed)
-        asked = review.asked_fingerprints(assessment) if assessment is not None else {}
+        # standing answer the assessment read answers is that answer's question (its row shows it, closed). r2 (DECISIONS
+        # D294): with the member forms of those questions (review.asked_questions), so an answer is bound to a
+        # question's fingerprint only from a row that asks that question (_bound_question)
+        asked, asked_forms = review.asked_questions(assessment) if assessment is not None else ({}, {})
+        shown: dict = {}
         # refutation cycle 3 (answers C3-4): a question the assessment closed with an answer it read is asked as the
         # engine recorded it (completeness member_answers 'asked'), so a new answer to that row is bound to it, never
         # recorded in the earlier, key-only form
@@ -958,14 +1039,17 @@ def _save_details(encounter, user, parsed, gate) -> dict:
                     models.MemberAnswerRevocation.objects.create(answer=standing, revoked_by=user,
                                                                  reason=models.MemberAnswerRevocation.SUPERSEDED)
                 fact, family, code = member
-                question = asked.get(questions.member_key(code, family, fact)) or (
-                    standing.question if standing is not None else '')
+                question = _bound_question(assessment, views, row, questions.member_key(code, family, fact), asked,
+                                           asked_forms, shown) or (standing.question if standing is not None else '')
                 answer = models.MemberAnswer.objects.create(
                     encounter=encounter, revision=encounter.current_revision, assessment=assessment, fact=fact,
                     family=family, code=code, value=value, answered_by=user, question=question)
                 saved_ids.append(str(answer.pk))
+                # r2 (D294): the member form of the row answered (operator data: ids and codes only), so an answer
+                # listed later as an earlier one shows the question it was given to (_answered_form)
                 audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=fact,
-                             family=family, code=code, value=value, answer=str(answer.pk))
+                             family=family, code=code, value=value, answer=str(answer.pk),
+                             **({'form': row.form} if row.form else {}))
         for answer in superseded:
             models.MemberAnswerRevocation.objects.create(answer=answer, revoked_by=user,
                                                          reason=models.MemberAnswerRevocation.SUPERSEDED)
@@ -1009,6 +1093,27 @@ def _save_details(encounter, user, parsed, gate) -> dict:
     return {'saved': len(recorded) + len(changed) + len(withdrawn) + (1 if confirming is not None else 0),
             'unchanged': unchanged, 'answer_ids': saved_ids, 'reassessing': updating or recompute is not None,
             'restored': bool(saved_context is not None and saved_context.restored)}
+
+
+def _bound_question(assessment, views, row, key, asked, asked_forms, shown) -> str:
+    """r2 (DECISIONS D294, member words): the fingerprint the door records a member's answer to ``row`` with, for its
+    member ``key`` - the question the binding reading asks under the key (review.asked_questions: the overlay with the
+    current decisions alone, which read time binds by), but only where that question is of the row's member form, so
+    the answer is bound to an item's fingerprint only from a row that asks that item's question. Where the binding
+    reading asks another form under the key than the row shows (a member's earlier answer moved the item the row shows:
+    D283's passes), the answer is bound to the question the row shows - its fingerprint over the views the rows were
+    read from (review.bound_fingerprints with their forms) - never to the other one's. ``shown``: those fingerprints,
+    filled on first need."""
+    fingerprint = asked.get(key) or ''
+    if not fingerprint or asked_forms.get(key, frozenset({row.form})) == frozenset({row.form}):
+        return fingerprint
+    if 'fingerprints' not in shown:
+        proposals = list(assessment.proposals.all())
+        views = views or {}
+        shown['fingerprints'] = review.bound_fingerprints(assessment, proposals,
+                                                          review.question_pairs(assessment, proposals, views),
+                                                          review.question_forms(assessment, proposals, views))
+    return shown['fingerprints'].get(key, '')
 
 
 def _siblings(encounter, answer):
@@ -1072,19 +1177,49 @@ def _revoke_answer(encounter, user, answer_id, gate):
     return revocations[0]
 
 
+def _answered_form(answer, items: dict) -> str:
+    """r2 (DECISIONS D294): the member form of the question a standing answer was recorded against - the form of the row
+    the door saved it from (its detail.answered audit row's ``form``), else the item of the assessment it was answered on
+    (MemberAnswer.assessment) whose code, family, fact and fingerprint it carries (support['item'] and
+    support['question'], as the door records an item's fingerprint: review.stored_questions); '' for any other (a key's
+    own row, a question of no stored item, the earlier key-only form). ``items``: a cache, {answer id: form} of the
+    audit rows and {assessment id: {(code, family, fact, fingerprint): form}}."""
+    if 'audit' not in items:
+        items['audit'] = {}
+        for event in models.AuditEvent.objects.filter(encounter_id=answer.encounter_id, event='detail.answered'):
+            data = event.data if isinstance(event.data, dict) else {}
+            if isinstance(data.get('answer'), str) and isinstance(data.get('form'), str):
+                items['audit'][data['answer']] = data['form']
+    if str(answer.pk) in items['audit']:
+        form = items['audit'][str(answer.pk)]
+        return form if form in wording.FORMS else ''
+    if not answer.question or not answer.code:
+        return ''
+    if answer.assessment_id not in items:
+        found = {}
+        for proposal in models.Proposal.objects.filter(assessment_id=answer.assessment_id):
+            support = proposal.support if isinstance(proposal.support, dict) else {}
+            item, question = support.get('item'), support.get('question')
+            if isinstance(item, dict) and isinstance(question, str) and question:
+                found.setdefault((proposal.code, proposal.family, item.get('fact'), question),
+                                 wording.recorded_form(item))
+        items[answer.assessment_id] = found
+    return items[answer.assessment_id].get((answer.code, answer.family, answer.fact, answer.question), '')
+
+
 def earlier_answers(encounter, assessment) -> list[dict]:
     """The standing answers of the current revision that no question the live assessment asks now takes (completion
     repair 2026-11-06, U11): answered to a question no longer asked, or asked differently. Kept, never applied, each
     listed with who gave it, when, the code it was given for and why it is not applied (EARLIER_WHY), and withdrawable.
-    Every sentence is from the fixed tables above."""
+    Every sentence is from the fixed tables above. r2 (DECISIONS D294): its prompt is the row it answered - the member
+    form of the item it was recorded against (_answered_form), a conflict's act as every member sentence names it."""
     out = []
+    items: dict = {}
     for answer, why in _states(encounter, assessment)[2]:
-        subject = answer.fact.split(':', 1)[1] if answer.fact.startswith('conflict:') else ''
         out.append({
             'answer_id': str(answer.pk), 'fact': answer.fact,
             'family_label': PROFILES[answer.family].label if answer.family in PROFILES else '',
-            'prompt': (CONFLICT_PROMPT.format(act=act_label(subject)) if subject
-                       else PROMPTS.get(answer.fact, DEFAULT_PROMPT)),
+            'prompt': row_prompt(answer.fact, _answered_form(answer, items)),
             'affects': [answer.code] if answer.code else [],
             'value': answer.value, 'label': ANSWER_LABELS.get(answer.value, ''),
             'by': answer.answered_by.label(), 'at': _iso(answer.answered_at),

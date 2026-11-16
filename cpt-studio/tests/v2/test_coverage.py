@@ -1600,6 +1600,191 @@ class D292BiopsyElsewhere(SimpleTestCase):
         self.assertIn((rq.Role.LESION, A.PLACES), reads)
 
 
+UNAPPRAISED = ct.Reason.UNAPPRAISED
+
+
+class R2BRemovedFindingTests(SimpleTestCase):
+    """DECISIONS D294 G1 (refute generality G1; repair round r2): whenever E1j reads a removal's target lesion it reads
+    the removed FINDING - every lesion entry a same_as member, in ANY state, may join to that lesion, directly or
+    through other entries and in either direction - and it is F only when every entry's places are established
+    landmarks, each disjoint from the biopsy's place (the removal asked about it, rejected); an entry whose places are
+    not established, or an id the FactSet does not hold, keeps the rule as it was. same_as is read in the hold direction
+    only: whatever a member's state it names its value, so no same_as state releases, and (lesion, same_as) stays a
+    hold-only read of BUNDLING (CLAIMED and every pass-2 request unchanged). The scenes were written for this round,
+    outside every development set: a polyp at the hepatic flexure reaching into the transverse colon, its hot-snare
+    removal filed at the flexure and cold-forceps biopsies of the transverse colon naming no lesion (45385, 45380); and
+    an antral polyp reaching into the gastric body, snared at the antrum, the body biopsied (43251, 43239)."""
+
+    P_ = A.TARGET_PLACES
+    HEP, TRANS, DES = Landmark.HEPATIC_FLEXURE, Landmark.TRANSVERSE_COLON, Landmark.DESCENDING_COLON
+    L3, L9 = Id(IdFamily.LESION, 3), Id(IdFamily.LESION, 9)  # L9: an id the FactSet does not hold
+
+    @staticmethod
+    def entry(places, same=(), distinct=()) -> dict:
+        """A single lesion entry: its places, its same_as and its distinct_from members (a landmark or an id is read
+        supported; a Fact as given)."""
+        def as_fact(value):
+            return value if isinstance(value, Fact) else sup(value)
+        return {A.PLACES: tuple(as_fact(place) for place in places), A.SAME_AS: tuple(as_fact(item) for item in same),
+                A.DISTINCT_FROM: tuple(as_fact(item) for item in distinct),
+                A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}
+
+    def scene(self, lesions, *, biopsy=(Landmark.TRANSVERSE_COLON,)) -> FactSet:
+        """E2 a hot-snare removal of L1 filed at the hepatic flexure; E3 cold-forceps biopsies at ``biopsy`` naming no
+        lesion; E2 asked about each biopsy place and rejected (it was done at the flexure)."""
+        return e1j_colon(lesions=lesions, extra={
+            E2: act(Kind.SNARE, lesion=sup(L1), places=(sup(self.HEP),), device=sup(ct.Device.HOT_SNARE)),
+            E3: act(Kind.BIOPSY, places=tuple(sup(place) for place in biopsy), device=sup(ct.Device.COLD_FORCEPS))},
+            controls_={(E2, self.P_, place): True for place in biopsy})
+
+    @staticmethod
+    def elsewhere(R) -> bool:
+        return C._biopsy_elsewhere(C._Asker(R, E3, C.Reader.of(R)))
+
+    @staticmethod
+    def biopsy_rule(R) -> list:
+        return [bundle.truth for bundle in C.bundles(R, E3) if bundle.rule is C.Rule.BIOPSY_OF_REMOVED_LESION]
+
+    # every state a same_as member naming ``value`` can be in (DECISIONS D294 G1: "in any state")
+    @staticmethod
+    def states(value) -> tuple:
+        return (('supported', sup(value)), ('negated, established', neg(value)), ('unresolved', unres(value)),
+                ('a negation left open', unres(value, state=State.NEGATED)), ('doubted', doubted(value)),
+                ('contradicted', contra(value, value)))
+
+    def split(self, member_on_l1, member_on_l2, partner_places) -> dict:
+        """The finding filed as two entries: L1 (the removal's target, at the flexure) and L2 at ``partner_places``,
+        joined by the member given on L1 (naming L2) or on L2 (naming L1)."""
+        return {L1: self.entry((self.HEP,), same=() if member_on_l1 is None else (member_on_l1,)),
+                L2: self.entry(partner_places, same=() if member_on_l2 is None else (member_on_l2,))}
+
+    def test_a_finding_filed_as_two_entries_is_read_whole(self):
+        """The rule must change these: the finding reaches the biopsy's place through an entry joined by same_as -
+        either direction, every member state (an established negation included: no state narrows the finding), a chain
+        through a third entry, a doubt's reading - or an entry of it holds no established place, or names an id the
+        FactSet does not hold. E1j keeps the rule as it was: the biopsy stays bundled in doubt (U), never F."""
+        cases = []
+        for name, member in self.states(L2):
+            cases.append((f'L1 -> L2 {name}, L2 spans', self.split(member, None, (self.HEP, self.TRANS))))
+            cases.append((f'L1 -> L2 {name}, L2 only the transverse part', self.split(member, None, (self.TRANS,))))
+        for name, member in self.states(L1):
+            cases.append((f'L2 -> L1 {name}, L2 spans', self.split(None, member, (self.HEP, self.TRANS))))
+        cases += [
+            ('L2 places unappraised (no act targets it)',
+             self.split(sup(L2), None, tuple(fact(Res.UNRESOLVED, place, State.SUPPORTED, reasons=(UNAPPRAISED,))
+                                             for place in (self.HEP, self.TRANS)))),
+            ('a chain L1 -> L2 -> L3, L3 the transverse part',
+             {L1: self.entry((self.HEP,), same=(L2,)), L2: self.entry((self.HEP,), same=(self.L3,)),
+              self.L3: self.entry((self.TRANS,))}),
+            ("a doubt's reading names the transverse part (L2 or L3)",
+             {L1: self.entry((self.HEP,), same=(doubted(L2, L2, self.L3),)), L2: self.entry((self.HEP,)),
+              self.L3: self.entry((self.TRANS,))}),
+            ('an id the FactSet does not hold', {L1: self.entry((self.HEP,), same=(self.L9,))}),
+        ]
+        for name, lesions in cases:
+            with self.subTest(name):
+                R = self.scene(lesions)
+                self.assertFalse(self.elsewhere(R))
+                self.assertEqual(self.biopsy_rule(R), [U])
+
+    def test_a_finding_whose_every_entry_lies_apart_still_releases(self):
+        """The boundary the rule must leave alone: every entry of the finding established at the flexure (either
+        direction, every member state, a chain), and two entries that are NOT one finding (a distinct_from, no link at
+        all) with the other polyp in the transverse colon - the biopsy was done where no removal was, as built."""
+        cases = []
+        for name, member in self.states(L2):
+            cases.append((f'L1 -> L2 {name}', self.split(member, None, (self.HEP,))))
+        for name, member in self.states(L1):
+            cases.append((f'L2 -> L1 {name}', self.split(None, member, (self.HEP,))))
+        cases += [
+            ('a chain L1 -> L2 -> L3, every entry at the flexure',
+             {L1: self.entry((self.HEP,), same=(L2,)), L2: self.entry((self.HEP,), same=(self.L3,)),
+              self.L3: self.entry((self.HEP,))}),
+            ('L1 distinct_from L2, L2 in the transverse colon',
+             {L1: self.entry((self.HEP,), distinct=(L2,)), L2: self.entry((self.TRANS,))}),
+            ('two entries, no link, L2 in the transverse colon', {L1: self.entry((self.HEP,)),
+                                                                  L2: self.entry((self.TRANS,))}),
+        ]
+        for name, lesions in cases:
+            with self.subTest(name):
+                R = self.scene(lesions)
+                self.assertTrue(self.elsewhere(R))
+                self.assertEqual(self.biopsy_rule(R), [])
+
+    def test_no_weakening_of_the_finding_releases_it(self):
+        """9.4's weakenings on the held split (L1 -> L2 supported, L2 spanning): the same_as member made unresolved,
+        doubted or a contradiction, a place of either entry made unresolved, the removal's control left unrejected -
+        each keeps E1j from releasing."""
+        lesions = self.split(sup(L2), None, (self.HEP, self.TRANS))
+        self.assertFalse(self.elsewhere(self.scene(lesions)))
+        weakened = {
+            'same_as unresolved': self.split(unres(L2), None, (self.HEP, self.TRANS)),
+            'same_as doubted': self.split(doubted(L2, L2, self.L3), None, (self.HEP, self.TRANS)),
+            'same_as contradicted': self.split(contra(L2, self.L3), None, (self.HEP, self.TRANS)),
+            "L2's transverse place unresolved": self.split(sup(L2), None, (self.HEP, unres(self.TRANS))),
+            "L1's place unresolved": {L1: self.entry((unres(self.HEP),), same=(L2,)),
+                                      L2: self.entry((self.HEP, self.TRANS))},
+        }
+        for name, weak in weakened.items():
+            with self.subTest(name):
+                self.assertFalse(self.elsewhere(self.scene(weak)))
+        import dataclasses
+        held = self.scene(lesions)
+        open_control = dataclasses.replace(held, pair_controls={key: False for key in held.pair_controls})
+        self.assertFalse(self.elsewhere(open_control))
+
+    def test_the_finding_reads_every_member_state_and_its_reach(self):
+        """_SameAs.finding: the component of the graph of every id a member names in ANY state (_any_state_ids) - a
+        negation's value, a doubt's readings, a contradiction's sides, every lesion for a silent member - directly or
+        through other entries, either direction; the bundling identity's own graph (_member_ids) is unchanged."""
+        R = build({E1: exam()}, lesions={L1: self.entry((self.HEP,), same=(neg(L2),)), L2: self.entry((self.HEP,)),
+                                         self.L3: self.entry((self.TRANS,), same=(contra(L2, self.L9),))})
+        same = C._SameAs(R)
+        self.assertEqual(same.finding(L1), frozenset({L1, L2, self.L3, self.L9}))
+        self.assertEqual(same.finding(self.L9), same.finding(L1))  # one component, either direction
+        self.assertFalse(same.one_finding(L1, L2))  # the negation joins nothing for the bundling identity
+        self.assertNotIn(L2, C._walk(C._same_as_graph(R), (L1,)))
+        silent = build({E1: exam()}, lesions={L1: self.entry((self.HEP,), same=(SILENT,)),
+                                              L2: self.entry((self.TRANS,)), self.L3: self.entry((self.DES,))})
+        self.assertEqual(C._SameAs(silent).finding(L1), frozenset({L1, L2, self.L3}))
+        alone = build({E1: exam()}, lesions={L1: self.entry((self.HEP,)),
+                                             L2: self.entry((self.TRANS,), distinct=(L1,))})
+        self.assertEqual(C._SameAs(alone).finding(L1), frozenset({L1}))
+
+    def test_through_the_engine_the_held_code_and_its_boundary(self):
+        """Through engine/assess on the EGD scene (tests/v2/evaluate_fixtures): the antral polyp L1 same_as L2, which
+        reaches into the gastric body; 43251 a hot-snare removal of L1 at the antrum, 43239 cold-forceps biopsies of the
+        body naming no lesion, the snare asked about the body and rejected. Held: 43239 in doubt (act_target), 43251
+        READY. Its boundary: L2 at the antrum alone - 43239 READY."""
+        from tests.v2 import evaluate_fixtures as EF
+        from tests.v2 import test_assess as TA
+        antrum, body = Landmark.GASTRIC_ANTRUM, Landmark.GASTRIC_BODY
+
+        def egd(partner_places):
+            doc = EF.egd()
+            doc.lesion(1, lesion_places=[sup(antrum)], multiplicity=sup(ct.Multiplicity.SINGLE), same_as=[sup(L2)])
+            doc.lesion(2, lesion_places=[sup(place) for place in partner_places],
+                       multiplicity=sup(ct.Multiplicity.SINGLE))
+            doc.act(2, Kind.SNARE, lesion=sup(L1), places=[sup(antrum)], device=sup(ct.Device.HOT_SNARE))
+            doc.act(3, Kind.BIOPSY, places=[sup(body)], device=sup(ct.Device.COLD_FORCEPS))
+            doc.controls[(E2, A.TARGET_PLACES, body)] = True
+            found = TA.by_code(TA.run(doc.build(), ('43251', 2), ('43239', 3)))
+            return {code: (item.status.value, None if item.item is None else item.item.held.fact)
+                    for code, item in found.items()}
+
+        self.assertEqual(egd((antrum, body)),
+                         {'43251': ('ready', None), '43239': ('needs_clarification', 'act_target')})
+        self.assertEqual(egd((antrum,)), {'43251': ('ready', None), '43239': ('ready', None)})
+
+    def test_same_as_stays_a_hold_only_read(self):
+        """The request invariant (D294): E1j reads same_as in the hold direction only, so BUNDLING's read of (lesion,
+        same_as) stays on the hold path - no control, no claim and no pass-2 request changes - and (lesion, places)
+        stays the READY-path read D292's E1j added."""
+        paths = {(item.role, item.attribute): item.paths for item in rq.RULES[rq.Requirement.BUNDLING].reads}
+        self.assertEqual(paths[(rq.Role.LESION, A.SAME_AS)], frozenset({rq.Path.HOLD}))
+        self.assertEqual(paths[(rq.Role.LESION, A.PLACES)], frozenset({rq.Path.READY}))
+
+
 class BoundaryTests(SimpleTestCase):
     def test_measure_4(self):
         self.assertEqual(measure_4(MODULE.read_text(encoding='utf-8'), engine=True), [])

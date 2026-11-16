@@ -2394,6 +2394,165 @@ class E5jTests(SimpleTestCase):
         self.assertEqual(P.relation(R, E3, E2).row, P.Row.TECHNIQUE)
 
 
+# DECISIONS D294 G2: every Device member's class against electrocautery, beside the contract definition it is read from
+# (contract/claims.py's label for it; contract/extract_schema.py's Device list names every member): always (it delivers
+# high-frequency current by definition), may (its definition admits a device that does and one that does not) or never.
+R2B_DEVICE_CLASSES = (
+    (Device.ENDOSCOPE, 'never', 'an endoscope'),
+    (Device.COLD_SNARE, 'never', 'a cold snare'),
+    (Device.HOT_SNARE, 'always', 'a hot snare'),
+    (Device.SNARE, 'may', 'a snare the document does not call cold or hot'),
+    (Device.COLD_FORCEPS, 'never', 'cold forceps'),
+    (Device.HOT_FORCEPS, 'always', 'hot forceps'),
+    (Device.FORCEPS, 'may', 'forceps the document does not call cold or hot'),
+    (Device.NEEDLE, 'never', 'a needle'),
+    (Device.INJECTION, 'never', 'an injection device'),
+    (Device.BALLOON, 'never', 'a dilating balloon'),
+    (Device.WIRE_BOUGIE, 'never', 'dilators passed over a guide wire'),
+    (Device.BOUGIE, 'never', 'a bougie passed without a guide wire'),
+    (Device.CLIP, 'never', 'a clip'),
+    (Device.BAND, 'never', 'a band'),
+    (Device.ARGON_PLASMA, 'always', 'argon plasma coagulation'),
+    (Device.RADIOFREQUENCY, 'always', 'radiofrequency energy'),
+    (Device.CRYOTHERAPY, 'never', 'cryotherapy'),
+    (Device.THERMAL_PROBE, 'may', 'a thermal probe'),
+    (Device.ELECTROCAUTERY, 'always', 'electrocautery'),
+    (Device.STENT, 'never', 'a stent'),
+    (Device.BASKET, 'never', 'a basket'),
+    (Device.EXTRACTION_BALLOON, 'never', 'an extraction balloon'),
+    (Device.SPHINCTEROTOME, 'may', 'a sphincterotome'),
+    (Device.LITHOTRIPTER, 'never', 'a lithotripter'),
+    (Device.CHOLANGIOSCOPE, 'never', 'a cholangioscope'),
+    (Device.CAPSULE, 'never', 'a capsule'),
+    (Device.CATHETER, 'may', 'a catheter'),
+    (Device.MANUAL, 'never', 'manual pressure or handling, without a device'),
+    (Device.OTHER, 'may', 'a device of another kind'),
+)
+
+
+def r2b_unclassified(table) -> set:
+    """The Device members a classification table leaves unclassified (DECISIONS D294 G2: none may be)."""
+    return {device for device in Device if device not in table}
+
+
+class R2BDeviceClassTests(SimpleTestCase):
+    """DECISIONS D294 G2 (refute generality G2; repair round r2): every Device member is classified against
+    electrocautery from its contract definition - always (covered), may (thermal probe, sphincterotome, catheter, a
+    device of another kind, and the snare and the forceps the document does not call cold or hot) or never (the rest,
+    the needle included) - in ONE table (pairing.DEVICE_CURRENT), from which DEVICE_CONTAINS' electrocautery row and
+    DEVICE_MAY_BE are derived; a member left unclassified fails here, and the engine reads one as may (never
+    INDEPENDENT by omission). A may device keeps the technique row UNRESOLVED against electrocautery, either way. The
+    end-to-end scenes were written for this round, outside every development set."""
+
+    def test_every_member_is_classified_and_the_tables_derive_from_it(self):
+        self.assertEqual(r2b_unclassified(P.DEVICE_CURRENT), set())
+        # the check's positive control: a table missing a member names it
+        self.assertEqual(r2b_unclassified({device: klass for device, klass in P.DEVICE_CURRENT.items()
+                                           if device is not Device.CATHETER}), {Device.CATHETER})
+        self.assertEqual({device: klass.value for device, klass in P.DEVICE_CURRENT.items()},
+                         {device: klass for device, klass, _label in R2B_DEVICE_CLASSES})
+        always = {device for device, klass, _label in R2B_DEVICE_CLASSES if klass == 'always'}
+        may = {device for device, klass, _label in R2B_DEVICE_CLASSES if klass == 'may'}
+        self.assertEqual(P.DEVICE_CONTAINS[Device.ELECTROCAUTERY], frozenset(always - {Device.ELECTROCAUTERY}))
+        self.assertEqual(dict(P.DEVICE_MAY_BE), {Device.ELECTROCAUTERY: frozenset(may)})
+        # D294's own reading of the definitions
+        self.assertLessEqual({Device.HOT_SNARE, Device.HOT_FORCEPS, Device.ARGON_PLASMA, Device.RADIOFREQUENCY}, always)
+        self.assertLessEqual({Device.THERMAL_PROBE, Device.SPHINCTEROTOME, Device.CATHETER, Device.OTHER}, may)
+        self.assertIs(P.DEVICE_CURRENT[Device.NEEDLE], P.Current.NEVER)  # "a needle" carries no current
+
+    def test_the_class_is_read_from_the_contract_definition(self):
+        """Each class sits beside the definition it was read from: a changed label, or a member the contract adds, turns
+        this red until the member is classified again."""
+        from studio.interpretation.contract import extract_schema
+        self.assertEqual([device for device, _klass, _label in R2B_DEVICE_CLASSES], list(Device))
+        for device, _klass, label in R2B_DEVICE_CLASSES:
+            with self.subTest(device=device.value):
+                self.assertEqual(contract_claims.LABELS[device], label)
+                self.assertIn(device.value, extract_schema.DEFINITIONS[Device])
+
+    def test_a_member_the_table_does_not_hold_reads_as_may(self):
+        """The engine's own default for an unclassified member is the hold direction (DECISIONS D294 G2)."""
+        trimmed = {device: klass for device, klass in P.DEVICE_CURRENT.items() if device is not Device.CLIP}
+        with mock.patch.object(P, 'DEVICE_CURRENT', trimmed):
+            self.assertIs(P._current(Device.CLIP), P.Current.MAY)
+        self.assertIs(P._current(Device.CLIP), P.Current.NEVER)
+
+    @staticmethod
+    def technique(statement_device: Fact, act_device: Fact) -> P.RowResult:
+        R = build({E1: denial(kind=sup(Kind.ABLATION), device=statement_device),
+                   E2: act(kind=sup(Kind.ABLATION), device=act_device)})
+        return row_of(R, P.Row.TECHNIQUE)
+
+    def test_the_technique_row_by_class(self):
+        """always: a statement naming electrocautery concerns the act (SAME), an act without electrocautery is none of
+        them (the named release); may: UNRESOLVED either way, and a negated electrocautery never sets one apart; never:
+        INDEPENDENT either way."""
+        for device, klass, _label in R2B_DEVICE_CLASSES:
+            with self.subTest(device=device.value, klass=klass):
+                forward = self.technique(sup(Device.ELECTROCAUTERY), sup(device))
+                backward = self.technique(sup(device), sup(Device.ELECTROCAUTERY))
+                if klass == 'always':
+                    self.assertEqual(forward, SAME)
+                    if device is not Device.ELECTROCAUTERY:
+                        self.assertEqual(backward, UNRESOLVED)
+                        self.assertEqual(self.technique(sup(device), neg(Device.ELECTROCAUTERY)), INDEPENDENT)
+                elif klass == 'may':
+                    self.assertEqual((forward, backward), (UNRESOLVED, UNRESOLVED))
+                    self.assertIsNot(self.technique(neg(Device.ELECTROCAUTERY), sup(device)), INDEPENDENT)
+                    self.assertEqual(self.technique(sup(device), neg(Device.ELECTROCAUTERY)), UNRESOLVED)
+                else:
+                    self.assertEqual((forward, backward), (INDEPENDENT, INDEPENDENT))
+
+    @staticmethod
+    def egd_bleeding(device, *, denial_place=Landmark.DUODENAL_BULB):
+        """A bleeding duodenal bulb ulcer treated with ``device`` (its cause a lesion present before the session, its
+        purpose hemostasis) beside "No electrocautery was used for hemostasis in <denial_place>." - every fact
+        established; a denial of another place is asked of the act's place, and the act of its, each rejected."""
+        doc = _egd()
+        doc.act(2, Kind.BLEEDING_CONTROL, places=[sup(Landmark.DUODENAL_BULB)], device=sup(device),
+                cause=sup(ct.Cause.PRE_EXISTING_LESION), purpose=sup(ct.Purpose.HEMOSTASIS))
+        _denial(doc, 3, Kind.BLEEDING_CONTROL, places=(denial_place,), device=Device.ELECTROCAUTERY)
+        if denial_place is not Landmark.DUODENAL_BULB:
+            doc.controls.update({(E2, A.TARGET_PLACES, denial_place): True,
+                                 (E3, A.TARGET_PLACES, Landmark.DUODENAL_BULB): True})
+        return doc.build()
+
+    @staticmethod
+    def colon_ablation(device):
+        """A transverse colon angioectasia ablated with ``device`` beside "No electrocautery ablation was performed in
+        the transverse colon." - every fact established."""
+        doc = _colon()
+        doc.act(2, Kind.ABLATION, places=[sup(Landmark.TRANSVERSE_COLON)], device=sup(device))
+        _denial(doc, 3, Kind.ABLATION, places=(Landmark.TRANSVERSE_COLON,), device=Device.ELECTROCAUTERY)
+        return doc.build()
+
+    def test_a_may_device_beside_a_denial_of_electrocautery_holds_the_code(self):
+        """The rule must change these: a catheter, and a device of another kind, beside a denial of electrocautery at
+        the act's own place - held on the technique row (READY before: INDEPENDENT by omission)."""
+        for device in (Device.CATHETER, Device.OTHER):
+            with self.subTest(scene='EGD hemostasis', device=device.value):
+                R = self.egd_bleeding(device)
+                self.assertEqual(_assessed(R, ('43255', 2))['43255'][0], 'needs_clarification')
+                pair = P.relation(R, E3, E2)
+                self.assertEqual((pair.relation, pair.row, pair.result(P.Row.TECHNIQUE)),
+                                 (P.Relation.UNRESOLVED, P.Row.TECHNIQUE, UNRESOLVED))
+            with self.subTest(scene='colonoscopy ablation', device=device.value):
+                self.assertEqual(_assessed(self.colon_ablation(device), ('45388', 2))['45388'][0],
+                                 'needs_clarification')
+
+    def test_a_device_without_current_or_a_denial_elsewhere_stays_ready(self):
+        """The boundary it must leave alone: a never device (a clip, an injection device, a needle; cryotherapy) beside
+        the same denial, and a may device beside a denial of another place (the place row sets them apart) - READY."""
+        for device in (Device.CLIP, Device.INJECTION, Device.NEEDLE):
+            with self.subTest(scene='EGD hemostasis', device=device.value):
+                self.assertEqual(_assessed(self.egd_bleeding(device), ('43255', 2))['43255'][0], 'ready')
+        self.assertEqual(_assessed(self.colon_ablation(Device.CRYOTHERAPY), ('45388', 2))['45388'][0], 'ready')
+        for device in (Device.CATHETER, Device.OTHER):
+            with self.subTest(scene='the denial names the gastric antrum', device=device.value):
+                R = self.egd_bleeding(device, denial_place=Landmark.GASTRIC_ANTRUM)
+                self.assertEqual(_assessed(R, ('43255', 2))['43255'][0], 'ready')
+
+
 # --- properties (9.4, at the pairing level; hypothesis) ----------------------------------------------------------------
 
 
@@ -3232,8 +3391,9 @@ class TableTests(SimpleTestCase):
 
     def test_device_contains_equals_v1s_by_value(self):
         """v1's rows by value, and v2's table is v1's plus exactly E5j's electrocautery row (D292: "the v1-parity pin
-        amended to v2's table with the departure named"); DEVICE_MAY_BE (a thermal probe, a sphincterotome) covers
-        nothing."""
+        amended to v2's table with the departure named"); DEVICE_MAY_BE covers nothing - D292's thermal probe and
+        sphincterotome, and since DECISIONS D294 G2 every may member of pairing.DEVICE_CURRENT (the catheter, the device
+        of another kind, and the snare and the forceps the document does not call cold or hot: R2BDeviceClassTests)."""
         # v1's relations.DEVICE_CONTAINS (retired, 5.0), read here only: engine/ never imports it
         from studio.interpretation import relations as v1_relations
         ported = {device.value: frozenset(inner.value for inner in contained)
@@ -3243,7 +3403,8 @@ class TableTests(SimpleTestCase):
         self.assertEqual(ported, {**v1, **self.E5J_ROW})
         self.assertFalse(set(self.E5J_ROW) & set(v1))  # the departure: a row v1 never had
         self.assertEqual({key.value: frozenset(item.value for item in value) for key, value in P.DEVICE_MAY_BE.items()},
-                         {'electrocautery': frozenset({'thermal_probe', 'sphincterotome'})})
+                         {'electrocautery': frozenset({'thermal_probe', 'sphincterotome', 'catheter', 'other', 'snare',
+                                                       'forceps'})})  # DECISIONS D294 G2 (was D292's two)
         covered = {device for value in P.DEVICE_CONTAINS.values() for device in value}
         self.assertFalse(covered & {device for value in P.DEVICE_MAY_BE.values() for device in value})
 

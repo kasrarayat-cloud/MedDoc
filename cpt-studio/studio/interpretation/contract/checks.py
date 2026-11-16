@@ -16,8 +16,10 @@ themselves (5.7 WordsNeverDecide, which binds them, is unchanged; this module is
 - G1 on every source of a fact and of its options, against the fact's subject (geometry.link_reasons): an event's
   anchor; a session's examination's anchor (its supported examination link); a lesion's description; a person's name;
   a section itself; the encounter and an anatomy entry anywhere. ``document_frame`` reads the frame units - every unit a
-  source of the date of service, of the documenting clinician or of a session's kind cites (geometry.frame_units). A
-  source whose geometry fails is listed in ``failed_links`` under its fact (settle stores its geometry from there).
+  source of the date of service, of the documenting clinician or of a session's kind cites (geometry.frame_units) - and
+  the frame part those units must lie in (geometry.frame_part over geometry.first_told; DECISIONS D295: N0 and the
+  leading sections before the first event is told, where it was N0 alone). A source whose geometry fails is listed in
+  ``failed_links`` under its fact (settle stores its geometry from there).
 - G2 (geometry.Sections): section_order and section_start_unlocated on a section's owner, occasion and performer, the
   three facts 3.1 G2 names (DECISIONS D186).
 - G3 (geometry.target_reasons, lesion_reasons): target_detached on an event's target facts whose ``statement`` source
@@ -57,6 +59,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+from studio import interpretation
 from studio.interpretation.contract import consistency, geometry, segment
 from studio.interpretation.contract import extract_schema as xs
 from studio.interpretation.contract.extract_read import Cited, DateOfService, FactKey, ReadAnswer, ReadFact
@@ -92,17 +95,20 @@ VOCABULARY = consistency.Vocabulary(contains=anatomy.contains, region=anatomy.re
                                     extraction=requirements.EXTRACTION_KINDS)
 
 
-def check(text: str, pages: Sequence[segment.Page], read: ReadAnswer) -> Checked[FactKey]:
+def check(text: str, pages: Sequence[segment.Page], read: ReadAnswer, *,
+          inventory_version: str = interpretation.INVENTORY_VERSION_V3) -> Checked[FactKey]:
     """Every check of 3.1 the reader does not run, over pass 1's answer ``read`` to the revision ``text`` and its
-    ``pages`` (the module's docstring), as one Checked record. Pure: equal arguments give an equal Checked in every
-    process. ValueError when ``read`` was read against another segmentation than this text's (its unit count is not the
-    number of units contract/segment.py cuts ``text`` into); TypeError and ValueError as geometry.Layout.of for a text
-    or pages that are not a revision's."""
+    ``pages`` (the module's docstring), as one Checked record, made for ``inventory_version`` - the inventory version
+    the row they settle into is written at (gemini-inventory@3, the current path's, by default; consistency.check
+    applies that label's rules: DECISIONS D294 F2). Pure: equal arguments give an equal Checked in every process.
+    ValueError when ``read`` was read against another segmentation than this text's (its unit count is not the number
+    of units contract/segment.py cuts ``text`` into); TypeError and ValueError as geometry.Layout.of for a text or
+    pages that are not a revision's."""
     layout = geometry.Layout.of(text, pages)
     if len(layout.units) != read.unit_count:
         raise ValueError(f'The answer was read against {read.unit_count:,} units, and this text has '
                          f'{len(layout.units):,}: it is not this revision\'s answer.')
-    return _Check(layout, read).run()
+    return _Check(layout, read, inventory_version).run()
 
 
 # --- the orchestration ------------------------------------------------------------------------------------------------
@@ -147,9 +153,11 @@ def _runs(value: object) -> list[tuple[str, ...]]:
 class _Check:
     """One check: the layout and the answer, indexed, and the findings as they are gathered."""
 
-    def __init__(self, layout: geometry.Layout, read: ReadAnswer) -> None:
+    def __init__(self, layout: geometry.Layout, read: ReadAnswer,
+                 inventory_version: str = interpretation.INVENTORY_VERSION_V3) -> None:
         self.layout = layout
         self.read = read
+        self.inventory_version = inventory_version
         raw = read.answer
         self.raw = raw
         self.sections = geometry.Sections(layout, [
@@ -183,6 +191,8 @@ class _Check:
             if section is not None:
                 self.containing[name] = section.id
         self.frame = geometry.frame_units(self.frame_sources())
+        # DECISIONS D295: the frame part a document_frame source lies in, from the events' located anchors
+        self.part = geometry.frame_part(self.sections, geometry.first_told(self.layout, self.located.values()))
 
     # -- reading the answer --
 
@@ -279,7 +289,8 @@ class _Check:
             if citation.cited is Cited.RESTATEMENT:
                 self.add(FactKey(Family.EVENT, citation.object, A.RESTATEMENTS_ROLE, citation.index), citation.reasons)
         inherited = self.inherited()
-        found = consistency.check(self.read, VOCABULARY, self.words, self.containing)
+        found = consistency.check(self.read, VOCABULARY, self.words, self.containing,
+                                  inventory_version=self.inventory_version)
         for mapping in (found.structure, found.consistency, found.literal, found.qualified):
             for key, reasons in mapping.items():
                 self.add(key, reasons)
@@ -305,7 +316,7 @@ class _Check:
             self.add(key, self.cite(source).reasons)
         subject = self.subject(key.family, key.object)
         for source in sources:
-            failed = geometry.link_reasons(self.layout, self.sections, subject, source, self.frame)
+            failed = geometry.link_reasons(self.layout, self.sections, subject, source, self.frame, self.part)
             if failed:
                 self.add(key, failed)
                 if source not in self.failed.setdefault(key, []):

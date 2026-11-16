@@ -222,8 +222,14 @@ HELD_FACT_ASKS: Mapping[str, str] = MappingProxyType({
 # words live), never QUESTION_WORDS['performed_status'] ("could not confirm ... done", untrue of an established add-on
 # act) and never STALE_WORDS (the row was recomputed). ADDON_CHECK names the same row's withholding of a reinstated
 # add-on (overlay.ADDON_CHECK, review_view's withheld_by).
-ADDON_WORDS = 'This add-on code is reported only together with a primary code, and none is counted for this encounter.'
+ADDON_WORDS = answers.ADDON_STATEMENT  # r2 (D294): the add-on row's own statement too (one sentence, one source)
 ADDON_CHECK = overlay.ADDON_CHECK
+# r2 (DECISIONS D294, member words; WORDS-F1, F3, F6 and their class): the code's qualification for an item of a member
+# form (wording.member_form) - its form's own sentence, the same words its details row says (answers.FORM_MISSING),
+# never its key's QUESTION_WORDS: ADDON_WORDS for the add-on row, "could not confirm" what the form's row asks otherwise
+FORM_WORDS = {form: (ADDON_WORDS if form == wording.FORM_ADDON
+                     else f'CPT Studio could not confirm from the document {missing}.')
+              for form, missing in answers.FORM_MISSING.items()}
 
 
 def held_fact_words(fact: object, message: object = None) -> str:
@@ -1118,15 +1124,9 @@ WITHHELD_WORDS = {
 def _addon_question(question: object, support: object) -> bool:
     """Whether an open question a view shows is the ADDON row's (DECISIONS D284, build list B7), by the item's message: a
     question read time words live carries its message (``question['message']``); a stored one (it has a row id) is the
-    stored item's when the record's item (``support['item']``, the message step 5b records) is ADDON and of its fact."""
-    if not isinstance(question, dict):
-        return False
-    message = question.get('message')
-    if isinstance(message, str):
-        return message == wording.Message.ADDON.value
-    item = support.get('item') if isinstance(support, dict) else None
-    return (bool(question.get('id')) and question.get('scope', 'proposal') == 'proposal' and isinstance(item, dict)
-            and item.get('message') == wording.Message.ADDON.value and item.get('fact') == question.get('fact'))
+    stored item's when the record's item (``support['item']``, the message step 5b records) is ADDON and of its fact.
+    r2 (D294): the ADDON form of wording.asked_form, the one reading of a question's form."""
+    return wording.asked_form(question, support) == wording.FORM_ADDON
 
 
 STALE_WORDS = ('After the review decisions, a check that depends on the other codes could not be recomputed for this '
@@ -1164,8 +1164,9 @@ def _qualifications(proposal, status, view, code):
             elif fact == 'separate_em' and same_day:
                 # the visit a reinstated same-day procedure holds (refutation round 3, B-05): the gate's own sentence
                 out.append(WITHHELD_WORDS[review.SAME_DAY_EM_GATE])
-            elif _addon_question(question, support):  # D284 (B7): chosen by the item's message, never by its key
-                out.append(ADDON_WORDS)
+            elif wording.asked_form(question, support) in FORM_WORDS:
+                # D284 (B7) and r2 (D294): chosen by the item's message (its form), never by its key
+                out.append(FORM_WORDS[wording.asked_form(question, support)])
             elif fact in QUESTION_WORDS:
                 out.append(QUESTION_WORDS[fact])
         if status == 'needs_detail' and not out:
@@ -1904,19 +1905,27 @@ def _row_status(proposal) -> str:
 def _row_facts(assessment):
     """{proposal id: the fact of its row's detail} (6.2 step 3): the first clarification of ``assessment`` naming the
     proposal (by creation order), else the first service-scoped clarification whose family is the proposal's. The
-    clarification's own fact, never its state (a later assessment withdraws it)."""
-    clarifications = list(assessment.clarifications.order_by('created_at', 'pk'))
+    clarification's own fact, never its state (a later assessment withdraws it). r2 (DECISIONS D294): with the member
+    form of that question (wording.recorded_form of the proposal's item, when the item is of its fact), as (fact, form):
+    the detail a row asks is its fact AND its form."""
+    clarifications = list(assessment.clarifications.select_related('proposal').order_by('created_at', 'pk'))
     named, by_family = {}, {}
     for item in clarifications:
         if item.proposal_id is not None:
-            named.setdefault(item.proposal_id, item.fact)
+            support = item.proposal.support if isinstance(item.proposal.support, dict) else {}
+            stored = support.get('item')
+            form = (wording.recorded_form(stored) if isinstance(stored, dict) and stored.get('fact') == item.fact
+                    else '')
+            named.setdefault(item.proposal_id, (item.fact, form))
         elif item.scope == 'service':
-            by_family.setdefault(item.family, item.fact)
-    return lambda proposal: named.get(proposal.pk) or by_family.get(proposal.family) or ''
+            by_family.setdefault(item.family, (item.fact, ''))
+    return lambda proposal: named.get(proposal.pk) or by_family.get(proposal.family) or ('', '')
 
 
-def _detail_prompt(fact) -> str:
-    return answers.PROMPTS.get(fact, answers.DEFAULT_PROMPT)
+def _detail_prompt(fact, form='') -> str:
+    """The prompt of the detail a code needs: its member form's row (answers.FORM_PROMPTS) when it has one, else its
+    key's (answers.PROMPTS)."""
+    return answers.FORM_PROMPTS.get(form) or answers.PROMPTS.get(fact, answers.DEFAULT_PROMPT)
 
 
 def _what_changed_codes(earlier, now):
@@ -1971,7 +1980,7 @@ def _what_changed_codes(earlier, now):
                     and before_fact(before) != after_fact(after)):
                 found = True
                 entries.append({'code': code, 'change': 'detail', 'text': WHAT_CHANGED_ITEM.format(
-                    code=code, before=_detail_prompt(before_fact(before)), after=_detail_prompt(after_fact(after)))})
+                    code=code, before=_detail_prompt(*before_fact(before)), after=_detail_prompt(*after_fact(after)))})
             if not found:
                 unchanged += 1
     return entries, unchanged

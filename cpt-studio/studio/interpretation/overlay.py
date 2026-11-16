@@ -920,8 +920,14 @@ def assessed_answers(completeness: object, rows: Sequence[Stored]) -> frozenset[
     selected rows is reported with (engine/assess.primaries; G1-03). review._reads_a_withdrawn_answer holds readiness
     at STALE_ANSWER_BLOCKER while one of them no longer stands, until the recompute. An answer assess did not read moves
     nothing - one asked differently or no longer asked (never listed read_by_the_review_overlay), one to the competing
-    question, or a "Cannot confirm" that binds no primary. Pure."""
-    primary_codes = {code for p in rows if p.bucket == SELECTED for code in engine_assess.primaries(p.code)}
+    question, or a "Cannot confirm" that binds no primary.
+
+    r2 (DECISIONS D294, WORDS-F7): the add-ons whose primaries are read are every add-on assess passed - a selected one
+    AND one its own answer excluded (``answered_by_engine``: assess counted it, and it presented the ADDON item the
+    primary's answer made before its own answer bound) - so an answer assess read for the ADDON count is named whatever
+    became of the add-on, and its withdrawal holds readiness until the recompute. Pure."""
+    primary_codes = {code for p in rows if p.bucket == SELECTED or answered_by_engine(p)[0]
+                     for code in engine_assess.primaries(p.code)}
     codes = {p.key: p.code for p in rows}
     return frozenset(answer for answer, key, value in _assessed_reads(completeness, rows)
                      if answer and (value == NOT_DOCUMENTED or codes.get(key) in primary_codes))
@@ -965,7 +971,9 @@ def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: It
     no answer takes out of review - neither the engine's (their marker) nor ``answered`` (read time's own: the codes an
     answer has bound in its passes, accumulated, engine/assess.answer_pass's ``uncounted``): a primary the reviewer
     rejects, or an answer binds, no longer counts, so an add-on whose every counted primary is gone is held by the row's
-    witness (coding_rule:ADDON), and reinstating a primary releases it.
+    witness (coding_rule:ADDON), and reinstating a primary releases it. A primary that some statement may exclude is
+    not counted (DECISIONS D294 RD-2: engine/assess.addon_uncounted, the rule assess's count reads) - over the engine's
+    own set always, over the reviewer's unless the reviewer reinstated it.
 
     Raises UnreadableRecord for a record it cannot read and RecordMismatch when the engine's own counted set does not
     reproduce a stored code's held facts: ONE rule for every hold read time recomputes (DECISIONS D283, G3-32 option
@@ -998,9 +1006,17 @@ def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: It
     # DECISIONS D268: the codes the ADDON row counts - over the engine's own set its codes no answer excluded (assess's
     # last pass: the counted codes less those a member's answer excluded), over the reviewer's the counted codes no
     # answer takes out of review (the engine's marker or the overlay's own, ``answered``)
-    left_out = engine_answered | frozenset(uncounted)  # DECISIONS D283 G1-03: what assess left out of its ADDON count
+    # DECISIONS D294 RD-2: a primary of an add-on here that some statement may exclude is not counted, as assess counted
+    # it (engine/assess.addon_uncounted, the one rule assess's count reads) - in the engine's own set always, in the
+    # reviewer's unless the reviewer reinstated it (an exclusion the reviewer undid: DECISIONS D268, reinstating a
+    # primary releases its add-on)
+    wanted = frozenset(primary for record in records for primary in engine_assess.primaries(record.code))
+    unsure = frozenset(record.key for record in records if record.code in wanted
+                       and engine_assess.addon_uncounted(record.code, record.kept, R, record.kept_words))
+    reinstated = frozenset(counted) - frozenset(engine)
+    left_out = engine_answered | frozenset(uncounted) | unsure  # D283 G1-03: what assess left out of its ADDON count
     engine_addon = frozenset(found.code for key, found in stored_members.items() if key not in left_out)
-    gone = engine_answered | frozenset(answered)
+    gone = engine_answered | frozenset(answered) | (unsure - reinstated)
     review_addon = frozenset(found.code for key, found in members.items() if key not in gone)
     live: dict[str, Live] = {}
     for record in records:
@@ -1323,7 +1339,79 @@ def _answerable(live: Live, stored: Sequence[Any]) -> list[Any]:
         return []
     if live.worded is not None:
         return [live.worded.fact]
+    if _released_item(live):  # r2 (D294, WORDS-F2): the live item is asked in fixed words (_unworded_question)
+        return [live.item.held.fact]
     return [fact for fact in stored if fact == live.item.held.fact]
+
+
+def _bound_form(p: Stored, live: Optional[Live], reworded: bool, fact: str) -> str:
+    """r2 (DECISIONS D294): the member form of the question an answer to ``fact`` binds on ``p`` - the live item's where
+    read time asks it (worded, or in fixed words where its released hold gave way: ``_answerable``), else the stored
+    question's of that fact (wording.asked_form over the record's item), '' for a reinstatement's wait."""
+    if (live is not None and reworded and live.item is not None and fact == live.item.held.fact
+            and (live.worded is not None or _released_item(live))):
+        return _live_form(live)
+    return next((wording.asked_form(q, p.support) for q in p.questions
+                 if q.get('scope') == 'proposal' and q.get('fact') == fact), '')
+
+
+def _engine_form(p: Stored) -> str:
+    """The member form of the question a member's answer the engine read excluded ``p`` on (answered_by_engine): its
+    record's item, which engine/assess bound the answer to by its fingerprint, when the item is of the answered fact."""
+    item = (p.support or {}).get('item') if isinstance(p.support, Mapping) else None
+    fact = answered_by_engine(p)[0]
+    return wording.recorded_form(item) if isinstance(item, Mapping) and item.get('fact') == fact else ''
+
+
+def _released_item(live: Live) -> bool:
+    """r2 (DECISIONS D294, WORDS-F2): whether the recount released the hold the stored item rests on - a cross-code hold
+    of the stored record (the combination's or the ADDON row's) that the counted set no longer gives - while the code
+    is still held by another item: nothing read time shows may rest on the released hold."""
+    return (live.stored_item is not None and live.item is not None
+            and live.stored_item.held not in live.held)
+
+
+def _live_form(live: Live) -> str:
+    """The member form of the live item (wording.member_form over its message and the slots its Fill gives)."""
+    if live.item is None:
+        return ''
+    fill = live.item.fill
+    return wording.member_form(wording.Message(live.item.message.value),
+                               wording.Slots(act=fill.act, family=fill.family))
+
+
+# r2 (D294, WORDS-F2): each conflict key a held fact can carry (conflict:<kind>, RANK row 1), by its kind - read by key,
+# never by a string operation on a value (FINAL-V2 5.7 measure 4)
+_CONFLICT_KEYS: Mapping[str, Kind] = MappingProxyType({f'conflict:{kind.value}': kind for kind in Kind})
+
+
+def _fact_sentence(fact: str, form: str = '') -> str:
+    """CPT Studio's fixed sentence for a held fact's key, naming no cause and quoting nothing: what read time asks of an
+    item it cannot word (``_unworded_question``) - an item of a member form by its form's own words
+    (wording.FORM_MISSING: never its key's where the key's row asks something else, D294 - "in which procedure the act
+    was done" is never said of a route or tract whose procedure is known, D267), else the fact in the member's own words
+    (wording.MISSING for the facts of D181 and the new path, else studio.validation.questions.missing), a conflict's act
+    by its one label (D254 rule 2: 'another act' for a kind that names none)."""
+    missing = wording.FORM_MISSING.get(form)
+    if missing is not None:
+        return f'CPT Studio could not confirm from the document {missing}.'
+    kind = _CONFLICT_KEYS.get(fact)
+    if kind is not None:
+        about = (questions.missing('conflict:', wording.kind_words(kind)) if wording.named_kind(kind) else
+                 f'which statement about {wording.NO_KIND_LABEL} is right for this date')
+    else:
+        about = wording.MISSING.get(fact) or questions.missing(fact)
+    return f'A detail is needed: {about}.'
+
+
+def _unworded_question(p: Stored, live: Live) -> dict[str, Any]:
+    """r2 (D294, WORDS-F2): the question of a live item read time cannot word, given way to by a released hold: its fact,
+    its message and its form, in CPT Studio's fixed sentence for its key (``_fact_sentence``)."""
+    item = cast(engine_questions.Item, live.item)  # _released_item: a live item
+    form = _live_form(live)
+    words = _fact_sentence(item.held.fact, form)
+    return {'id': '', 'scope': 'proposal', 'family': p.family, 'fact': item.held.fact, 'question': words,
+            'reason': words, 'message': item.message.value, 'form': form}
 
 
 def _recount_or_none(rows: Sequence[Stored], counted: Iterable[str], engine: Iterable[str],
@@ -1455,6 +1543,9 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
     reads = _engine_read_keys(answers)
     stands: dict[str, tuple[str, str]] = {p.key: answered_by_engine(p) for p in rows if answered_by_engine(p)[0]}
     bound_now: dict[str, tuple[str, str]] = {}
+    # r2 (DECISIONS D294): the member form of the question each binding answers (``_bound_form``), which the view of a
+    # code an answer leaves detail_unavailable carries (View.answered_form) for the row that shows the answer in effect
+    answered_forms: dict[str, str] = {p.key: _engine_form(p) for p in rows if p.key in stands}
     passed: Optional[engine_assess.AnswerPass] = None
     found: Optional[Recount] = None
     live_of: Mapping[str, Live] = {}
@@ -1491,6 +1582,8 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                        if fact != COMPETING_FACT and answered.get((p.code, p.family, fact))), ('', ''))
             if by[0]:
                 (next_stands if (p.code, p.family, by[0]) in reads else next_bound)[p.key] = by
+                answered_forms[p.key] = _bound_form(p, live, live is not None and (live.moved or p.key in renamed_keys),
+                                                    by[0])
         settled = next_stands == stands and next_bound == bound_now
         stands, bound_now = next_stands, next_bound
         if found is None or settled:
@@ -1536,7 +1629,7 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                 blocker=(f'{p.code} was approved, but a detail it needs was answered as {words}: revoke the approval'
                          if action == APPROVE else ''),
                 recomputed=(), stale=(), modifier_review=None, modifiers=chosen, summary=summary(p),
-                answer=value, answered=fact)
+                answer=value, answered=fact, answered_form=answered_forms.get(p.key, ''))
             continue
         items = [dict(c) for c in p.checks]
         questions_ = [dict(q) for q in p.questions
@@ -1563,13 +1656,25 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                 recomputed += [_rule_id(held) for held in changed]
             elif reworded and live.worded is not None:
                 # the live question carries its item's message (DECISIONS D284, build list B7: customer_api chooses the
-                # ADDON row's fixed sentence by it, never by the fact key it shares with the status row)
+                # ADDON row's fixed sentence by it, never by the fact key it shares with the status row; r2, D294: so do
+                # the member's row and the door - a TEXT_FREE message's form is its message's, wording.asked_form)
                 questions_ = _proposal_questions(questions_) + [{
                     'id': '', 'scope': 'proposal', 'family': p.family, 'fact': live.worded.fact,
                     'question': live.worded.question, 'reason': live.worded.reason,
                     'message': live.item.message.value if live.item is not None else ''}]
                 recomputed += [_rule_id(held) for held in changed] or (
                     [_rule_id(live.item.held)] if live.item is not None else [])
+            elif reworded and _released_item(live):
+                # r2 (DECISIONS D294, WORDS-F2): the recount released the hold the stored item rests on, so nothing
+                # shown rests on it - the stored question is no longer the code's open question, whether or not the
+                # next item can be worded; the live item, which read time cannot word, is asked in CPT Studio's fixed
+                # sentence for its fact key, with its fact, message and form (the customer's sentence and the member's
+                # row are chosen from the live holds: customer_api, answers), an answer binds to it (``_answerable``),
+                # and the released hold is listed recomputed, never stale (a hold the decisions ADDED, which read time
+                # cannot word, stays stale as before)
+                questions_ = _proposal_questions(questions_) + [_unworded_question(p, live)]
+                recomputed += [_rule_id(held) for held in live.released]
+                stale += [_rule_id(held) for held in live.added]
             elif reworded:  # a changed item read time cannot word: the stored question stands, marked stale (held)
                 stale += [_rule_id(held) for held in changed] or (
                     _stale_ids(p) or [BASE_CHECK] if live.moved or live.item is None else [_rule_id(live.item.held)])

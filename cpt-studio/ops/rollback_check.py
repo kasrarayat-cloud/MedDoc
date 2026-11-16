@@ -60,10 +60,15 @@ AMENDMENT-2 (the interpreter is Claude Fable 5.2, DECISIONS D275; its 8.5 [R:rep
 AMENDMENT-2's labels, so the record kinds count the assessments of both engine versions a design v2 row may carry
 (V2_ENGINES: FINAL-V2's cpt-studio-events@2, read as stored, and AMENDMENT-2's cpt-studio-events@3) and the appraisal
 runs of every interpreter provider an installation may hold (READ_PROVIDERS: 'anthropic', and Gemini's stored runs), and
-for a Fable candidate (its installer's INTERPRETER is the Anthropic one) assertion 7 also requires 8.5's own rows
+for a Fable candidate (its installer's INTERPRETER is the Anthropic one) assertion 7 also counts 8.5's own rows
 (SCENARIO_V3: an inventory of gemini-events@3/appraisal@2 and gemini-inventory@3, a cpt-studio-events@3 assessment, a
 run of anthropic-messages@cptstudio-interp-1, an interpreter hold with reason declined). With @2 and 'gemini' alone,
 ten of the thirteen kinds counted 0 on a database the Fable candidate filled and assertion 7 blocked the install late.
+Assertion 7 REQUIRES every kind a test instance makes through the product's own flows - replay, a free live outcome
+(a refused key's 401 sets an 'auth' interpreter hold) or the scenario's own steps - and COUNTS AND REPORTS, never
+requires, a kind only a paid or nondeterministic provider outcome can make (MADE_BY; DECISIONS D294 F1): the hold a
+decline sets, which replay never records (holds.record sets no hold for a run that was not sent) and no free live
+outcome is (a non-200 is failed, auth, permission, quota or refused, never declined).
 The literals are the server's (studio/interpretation/__init__.py), held to it by ops/test_rollback_check.py, since
 this runner imports no module of the application.
 
@@ -421,9 +426,10 @@ SCENARIO_V2 = (
      f"select count(*) from studio_clarification where fact = 'event_entry' and assessment_id in {_V2_ASSESSMENTS}"),
 )
 # AMENDMENT-2 8.5: "The D15 runtime test's migrated database gains rows of the new versions" - each counted as
-# SCENARIO_V2's kinds are, and required by assertion 7 of a Fable candidate (fable_candidate): its inventory pair and
-# inventory version (interpretation.INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3), its engine (ENGINE_VERSION_V3), a run
-# of its adapter (ADAPTER_VERSION_V3) and the hold a decline sets (InterpreterHold.DECLINED). Literals, as above.
+# SCENARIO_V2's kinds are, by assertion 7 of a Fable candidate (fable_candidate): its inventory pair and inventory
+# version (interpretation.INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3), its engine (ENGINE_VERSION_V3) and a run of its
+# adapter (ADAPTER_VERSION_V3), each required, and the hold a decline sets (InterpreterHold.DECLINED), counted and
+# reported, never required (MADE_BY, DECISIONS D294 F1). Literals, as above.
 PAIR_V3, INVENTORY_V3 = 'gemini-events@3/appraisal@2', 'gemini-inventory@3'
 ENGINE_V3, ADAPTER_V3, DECLINED = 'cpt-studio-events@3', 'anthropic-messages@cptstudio-interp-1', 'declined'
 SCENARIO_V3 = (
@@ -437,6 +443,25 @@ SCENARIO_V3 = (
     ('declined_hold', f'an interpreter hold with reason {DECLINED}',
      f"select count(*) from studio_interpreterhold where reason in {sql_strings((DECLINED,))}"),
 )
+# DECISIONS D294 F1: how a test instance makes each record kind, which decides what assertion 7 does with it.
+# MADE_ON_TEST: the product's own flows make it on a test instance with no paid or nondeterministic provider outcome -
+# replay, a free live outcome (a refused key's HTTP 401 sets an 'auth' interpreter hold) or the D15 scenario's own steps
+# - so assertion 7 REQUIRES it (scenario_problems). MADE_BY_PROVIDER_OUTCOME: only a paid or nondeterministic provider
+# outcome makes it - the hold a decline sets is a 200 stream the model stopped for refusal: replay never records it
+# (holds.record sets no hold for a run that was not sent; every replayed exchange is unsent) and no free live outcome is
+# a decline - so assertion 7 COUNTS AND REPORTS it (scenario_reported) and never requires it. A kind missing here is
+# required (fail-closed, ``required``); ops/test_r2r_records.py fails on any kind of SCENARIO_V2 or SCENARIO_V3 this
+# table does not classify.
+MADE_ON_TEST, MADE_BY_PROVIDER_OUTCOME = 'made_on_test', 'made_by_provider_outcome'
+MADE_BY = {
+    'interpreted_and_appraised': MADE_ON_TEST, 'held_code': MADE_ON_TEST, 'excluded_code': MADE_ON_TEST,
+    'reinstated_code': MADE_ON_TEST, 'approved_with_modifier': MADE_ON_TEST, 'approved_export': MADE_ON_TEST,
+    'member_answer': MADE_ON_TEST, 'second_review': MADE_ON_TEST, 'interpreter_hold': MADE_ON_TEST,
+    'queued_interpret': MADE_ON_TEST, 'queued_appraise': MADE_ON_TEST, 'pass2_refusal': MADE_ON_TEST,
+    'unhealthy_appraisal': MADE_ON_TEST, 'held_new_fact': MADE_ON_TEST,
+    'fable_inventory': MADE_ON_TEST, 'fable_assessment': MADE_ON_TEST, 'fable_run': MADE_ON_TEST,
+    'declined_hold': MADE_BY_PROVIDER_OUTCOME,
+}
 UPDATE_SETS = ('pending_before_analyze', 'pending_after_analyze', 'completed', 'a21')
 UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')  # an id put into SQL is one
 UPDATE_REASON_OF = {'pending_before_analyze': 'values_saved', 'pending_after_analyze': 'assessment_off_context',
@@ -446,22 +471,56 @@ CONTEXT_FIELDS = ('service_date', 'setting', 'billing_context', 'patient_status'
 
 def fable_candidate(installer: object) -> bool:
     """Whether the candidate's installer installs the Fable interpreter (AMENDMENT-2 1.11: its INTERPRETER is the
-    Anthropic credential's), so that the D15 database must hold AMENDMENT-2 8.5's rows (SCENARIO_V3)."""
+    Anthropic credential's), so that assertion 7 counts AMENDMENT-2 8.5's rows (SCENARIO_V3) too: the D15 database must
+    hold each a test instance makes, and the rest are reported (MADE_BY)."""
     spec = getattr(installer, 'INTERPRETER', None)
     return isinstance(spec, dict) and bool(spec.get('name') == 'anthropic')
 
 
+def required(key: str) -> bool:
+    """Whether assertion 7 requires the record kind ``key``: every kind but one only a paid or nondeterministic provider
+    outcome can make (MADE_BY, DECISIONS D294 F1); a kind MADE_BY does not classify is required (fail-closed)."""
+    return MADE_BY.get(key, MADE_ON_TEST) != MADE_BY_PROVIDER_OUTCOME
+
+
 def scenario_problems(found: dict, kinds: tuple[tuple[str, str, str], ...] = SCENARIO_V2) -> list:
     """Assertion 7: the record kinds of FINAL-V2 6.4 (and, given ``kinds`` with SCENARIO_V3, of AMENDMENT-2 8.5) the
-    test database did not hold before the switch-back (``found``: {key: count, or an error text})."""
+    test database did not hold before the switch-back (``found``: {key: count, or an error text}) - each kind it
+    requires (``required``); a kind only a paid or nondeterministic provider outcome can make is never a problem, it is
+    counted and reported (scenario_reported; DECISIONS D294 F1)."""
     problems = []
     for key, title, _ in kinds:
+        if not required(key):
+            continue
         count = found.get(key) if isinstance(found, dict) else None
         if type(count) is not int:
             problems.append(f'{key}: not counted ({count!r})')
         elif count < 1:
             problems.append(f'{key}: the run holds no {title}')
     return problems
+
+
+def scenario_reported(found: dict, kinds: tuple[tuple[str, str, str], ...] = SCENARIO_V2) -> dict:
+    """Assertion 7's counted-and-reported kinds (DECISIONS D294 F1): {key: its count, or why it was not counted} of each
+    kind of ``kinds`` assertion 7 never requires (``required``: one only a paid or nondeterministic provider outcome can
+    make) - evidence, never a problem."""
+    reported = {}
+    for key, _, _ in kinds:
+        if required(key):
+            continue
+        count = found.get(key) if isinstance(found, dict) else None
+        reported[key] = count if type(count) is int else f'not counted ({count!r})'
+    return reported
+
+
+def assertion_7(found: dict, v2: bool, fable: bool) -> tuple[list, dict]:
+    """Assertion 7 of a candidate (FINAL-V2 6.4; AMENDMENT-2 8.5 for a Fable candidate; DECISIONS D294 F1): (its
+    problems - each record kind it requires that the run did not hold - and the kinds it counts and reports, never
+    requires) over ``found``, the counts before the switch-back; nothing of either for a candidate that is not v2."""
+    if not v2:
+        return [], {}
+    kinds = SCENARIO_V2 + (SCENARIO_V3 if fable else ())
+    return scenario_problems(found, kinds), scenario_reported(found, kinds)
 
 
 def member_values(raw) -> dict:
@@ -1450,8 +1509,7 @@ class Check:
         if self.v2 and not reading_settled_before(reading, worker.get('started_at')):
             a6.append('the interpret and appraise stages were not each settled by CLOSE_STAGES before the previous '
                       'worker started')
-        a7 = (scenario_problems(sb.get('scenario_v2'), SCENARIO_V2 + (SCENARIO_V3 if self.fable else ()))
-              if self.v2 else [])
+        a7, reported7 = assertion_7(sb.get('scenario_v2'), self.v2, self.fable)
         update = (self.declared or {}).get('update') if isinstance(self.declared, dict) else None
         upd = sb.get('update') or {}
         a8 = (update_problems(update, {'update_pending': upd.get('update_pending'), 'reverted': upd.get('reverted')},
@@ -1487,9 +1545,11 @@ class Check:
                            'interpret_jobs_at_start': worker.get('interpret_jobs_at_start'),
                            'reading_jobs_at_start': worker.get('reading_jobs_at_start'),
                            'worker_started_at': worker.get('started_at'), 'worker': worker.get('at_end')}),
-            assertion(7, 'FINAL-V2 6.4 (and AMENDMENT-2 8.5 for a Fable candidate): the run holds each v2 record kind',
-                      a7, {'v2_candidate': self.v2, 'fable_candidate': self.fable, 'scenario_v2': sb.get('scenario_v2'),
-                       'install_reads': sb.get('install_reads')}),
+            assertion(7, 'FINAL-V2 6.4 (and AMENDMENT-2 8.5 for a Fable candidate): the run holds each v2 record kind '
+                         'a test instance makes; a kind only a paid or nondeterministic provider outcome makes is '
+                         'reported', a7,
+                      {'v2_candidate': self.v2, 'fable_candidate': self.fable, 'scenario_v2': sb.get('scenario_v2'),
+                       'reported_not_required': reported7, 'install_reads': sb.get('install_reads')}),
             assertion(8, 'AMENDMENT-1 U17: the pending updates named, the unapplied saves reverted and listed, the value '
                          'saved again taking effect on the previous web', a8,
                       {'v2_candidate': self.v2, 'declared': update, 'update': upd, 'note': sb.get('note'),
@@ -1514,7 +1574,8 @@ class Check:
                    f'{(sb.get("note") or {}).get("context_only")}; exact: {not note_issues}; refusing reasons {reasons}',
                 6: f'closed {[row[1] for row in sb.get("closed_stages") or ()]}; open at the worker start '
                    f'{worker.get("open_at_start")}',
-                7: f'v2 candidate {self.v2}; Fable candidate {self.fable}; record kinds {sb.get("scenario_v2")}',
+                7: f'v2 candidate {self.v2}; Fable candidate {self.fable}; record kinds {sb.get("scenario_v2")}; '
+                   f'reported, never required: {reported7}',
                 8: f'named {sorted(((sb.get("update") or {}).get("update_pending") or {}))}, reverted '
                    f'{sorted(((sb.get("update") or {}).get("reverted") or {}))}, resave {http_rec.get("resave")}'}
         for item in rec['assertions']:

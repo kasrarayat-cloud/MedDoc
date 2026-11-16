@@ -377,17 +377,69 @@ def stored_service_questions(assessment: Any) -> dict[tuple[str, str, str], str]
 
 
 def bound_fingerprints(assessment: Any, proposals: Iterable[Any],
-                       pairs: Iterable[tuple[tuple[str, str, str], dict[str, Any]]]
+                       pairs: Iterable[tuple[tuple[str, str, str], dict[str, Any]]],
+                       forms: Mapping[tuple[str, str, str], frozenset[str]] | None = None
                        ) -> dict[tuple[str, str, str], str]:
     """{member key: fingerprint} of ``pairs`` ((member key, questions.instance), as question_pairs and _closed_pairs give
     them): questions.group's, but a key a design v2 proposal's stored item names is bound by that item's stored
     fingerprint (stored_questions; DECISIONS D259), and a key a design v2 service question names by the engine
     fingerprint its renderer recorded (stored_service_questions; DECISIONS D270) - so what a member's answer is recorded
     with (asked_fingerprints, the details door) and what read time binds it by (answer_states) are the fingerprint
-    engine/assess binds it by. Only a key ``pairs`` asks is named: a stored item no question asks now binds nothing."""
+    engine/assess binds it by. Only a key ``pairs`` asks is named: a stored item no question asks now binds nothing.
+
+    r2 (DECISIONS D294, member words: the door binds an answer to an item's fingerprint only for a row that asks that
+    item's question): with ``forms`` - question_forms of the views ``pairs`` were read from - a key a stored item names is
+    bound by that item's fingerprint only where every question shown for it asks the stored item's form
+    (wording.recorded_form; the member's row is worded by it); where read time shows another item under the key (a
+    live ADDON question beside a stored status item, a live item given way to by a released ADDON hold: D284, WORDS-F2),
+    the key is bound by the shown question's own fingerprint, which the stored item's engine binding never takes - so an
+    answer to the shown question is never recorded, nor bound, as an answer to the stored item. Without ``forms`` (the
+    questions an assessment closed: its stored items) as before."""
     grouped = questions.group(pairs)
     stored = {**stored_service_questions(assessment), **stored_questions(assessment, proposals)}
-    return {key: stored.get(key, fingerprint) for key, fingerprint in grouped.items()}
+    items = stored_forms(assessment, proposals) if forms is not None else {}
+    out: dict[tuple[str, str, str], str] = {}
+    for key, fingerprint in grouped.items():
+        shown = forms.get(key) if forms is not None else None
+        asks_stored = key not in items or shown is None or shown == frozenset({items[key]})
+        out[key] = stored.get(key, fingerprint) if asks_stored else fingerprint
+    return out
+
+
+def stored_forms(assessment: Any, proposals: Iterable[Any]) -> dict[tuple[str, str, str], str]:
+    """r2 (DECISIONS D294): {member key: the member form of the stored item stored_questions binds it by} - the form
+    the renderer recorded with the item (wording.recorded_form of ``support['item']``), keyed and chosen exactly as
+    stored_questions keys and chooses (the first proposal of a key in stored order)."""
+    from .interpretation import wording  # local import: the interpretation package reads this module
+
+    if getattr(assessment, 'engine_version', None) not in V2_ENGINES:
+        return {}
+    found: dict[tuple[str, str, str], str] = {}
+    for proposal in sorted(proposals, key=lambda item: item.position):
+        support = proposal.support if isinstance(proposal.support, dict) else {}
+        question, item = support.get('question'), support.get('item')
+        fact = item.get('fact') if isinstance(item, dict) else None
+        if (proposal.bucket != Proposal.ALTERNATIVE and isinstance(question, str) and question
+                and isinstance(fact, str) and fact):
+            found.setdefault(questions.member_key(proposal.code, proposal.family, fact), wording.recorded_form(item))
+    return found
+
+
+def question_forms(assessment: Any, proposals: Iterable[Any], views: Mapping[str, Any]
+                   ) -> dict[tuple[str, str, str], frozenset[str]]:
+    """r2 (DECISIONS D294): {member key: the member forms of the questions ``views`` show for it} - each proposal's view
+    questions, as question_pairs reads them, each by wording.asked_form (a live question's own form, a stored one's
+    record's item). The forms bound_fingerprints compares with the stored item's."""
+    from .interpretation import wording  # local import: the interpretation package reads this module
+
+    out: dict[tuple[str, str, str], set[str]] = {}
+    for proposal in proposals:
+        view = views.get(proposal.key)
+        for item in (view.questions if view is not None else ()):
+            family = item.get('family') or proposal.family
+            out.setdefault(questions.member_key(proposal.code, family, item.get('fact')), set()).add(
+                wording.asked_form(item, proposal.support))
+    return {key: frozenset(forms) for key, forms in out.items()}
 
 
 def answered_items(assessment: Any, proposals: Iterable[Any] | None = None) -> list[tuple[Any, str, frozenset[str]]]:
@@ -449,7 +501,8 @@ def answer_states(assessment: Any, current: Mapping[Any, Any] | None = None,
     proposals, stored, decided, kwargs = _overlay_inputs(assessment, current) if inputs is None else inputs
     views = readers.for_assessment(assessment).views(assessment, stored, decided, kwargs, answers=())
     bound, earlier = questions.bind(rest, bound_fingerprints(assessment, proposals,
-                                                             question_pairs(assessment, proposals, views)))
+                                                             question_pairs(assessment, proposals, views),
+                                                             question_forms(assessment, proposals, views)))
     unasked = [answer for answer, why in earlier if why == questions.NO_LONGER_ASKED]
     if unasked:
         # refutation cycle 2 (answers W6; cycle 1's F5): an answer to a question the assessment closed with another
@@ -524,14 +577,23 @@ def asked_fingerprints(assessment: Any, current: Mapping[Any, Any] | None = None
     design v2 assessment a proposal's item is recorded with the fingerprint engine/assess stored for it, and a service
     question with the engine fingerprint its renderer recorded (bound_fingerprints; DECISIONS D259, D270), the one the
     recompute the save queues binds the answer by."""
+    return asked_questions(assessment, current)[0]
+
+
+def asked_questions(assessment: Any, current: Mapping[Any, Any] | None = None
+                    ) -> tuple[dict[tuple[str, str, str], str], dict[tuple[str, str, str], frozenset[str]]]:
+    """(asked_fingerprints, the member forms of the questions it names: question_forms) - r2 (DECISIONS D294): the door
+    (studio/answers.py) binds an answer to the fingerprint a key names only for a row that asks the form of that key's
+    question."""
     from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
 
     if assessment is None or not getattr(assessment, 'pk', None):
-        return {}
+        return {}, {}
     current = current_decisions(assessment) if current is None else current
     proposals, stored, decided, kwargs = _overlay_inputs(assessment, current)
     views = readers.for_assessment(assessment).views(assessment, stored, decided, kwargs, answers=())
-    return bound_fingerprints(assessment, proposals, question_pairs(assessment, proposals, views))
+    forms = question_forms(assessment, proposals, views)
+    return bound_fingerprints(assessment, proposals, question_pairs(assessment, proposals, views), forms), forms
 
 
 def _answer_effect(answer) -> dict:

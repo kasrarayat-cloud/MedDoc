@@ -16414,3 +16414,157 @@ four refutation lenses (false READY, design, reproduction, generality: 40 findin
     account needs topping up. No unnecessary paid test: only the ten pairs; a failed pair's document is never re-sent
     (its fix is re-checked free by replay, and the next new pair confirms it); no confidence batches; no re-run of a
     passed pair; a minimal post-install walk.
+- **D294 The mandatory refutation of the finished diff (wf_b6f0d880-140: five lenses, 18 agents; notes under
+  build-v2/a2b/rf/) and repair round r2's rulings (session 31dfc45d, 2026-11-16).** Every critical, high and medium
+  finding was reproduced by an independent verifier on its own copy, and the lead read each against the code. None is
+  accepted by D178-D293. Severity is the verifier's.
+  - Engine, false READY (fixed, each as the class rule, adding holds only):
+    - RD-1 (medium): facts._overfilled reads `offered` through each written fact's options, from which _fact removes
+      the fact's own value, so a doubt's reading of a value every written fact writes is lost and lands in
+      negated_values (45378 READY on [manual N, manual N] plus a doubt reading manual). Rule: a value any doubt naming
+      the slot's object (the subject or its inherited section) reads is offered and never in negated_values, compared
+      with the written values directly. D293 N2's T2 exception (no doubt) is unchanged.
+    - RD-2 (medium; design question, ruled fail-closed): the ADDON row counts a primary as soon as it is counted, so
+      weakening any fact of the primary's exclusion releases the add-on (29 P-MONO states; 20 also on the base tree).
+      Rule: the ADDON row counts only a primary that no statement may exclude (4.6's conditions read with the
+      possibility readers: a citation blocked only by doubt, a statement_scope question, or a statement whose deciding
+      fact, breadth, session or date is not established but would exclude if it were). The primary's hold cause is never
+      the test. D264's every-row check reads assess's ADDON row, and a P-MONO fixture carries an add-on whose only
+      primary is excluded.
+    - RD-3 (low, pre-existing; fixed with the class): a negated single-valued claim that is not established leaves every
+      value of its domain open for every possibility reader (as facts.open_denial makes classes._open read it), the kind
+      readers included (coverage.may_be, facts.possible_kinds). A P-MONO fixture carries an established denial of a kind.
+    - G1 (medium): D292's E1j reads the removal's target entry's own places only, so a finding filed as two entries
+      joined by same_as releases 45380 that the one-entry filing and the base tree hold. Rule: E1j reads the removed
+      FINDING, every lesion entry the target's same_as component may join (bundling's own identity); it is F only when
+      every entry's places are established and disjoint from the biopsy's; an entry without established places, or an
+      id the FactSet does not hold, leaves the rule as it was. (LESION, SAME_AS) becomes a READY-path read of BUNDLING.
+      cpt-requirements@2 is this unshipped build's label, so its read set moves under it and its pins are rewritten by
+      their owning functions.
+    - G2 (high): DEVICE_MAY_BE classifies 12 of 29 devices, so a denial of electrocautery is INDEPENDENT of an act whose
+      device is a catheter or other (45388 READY where the installed release holds VR10b's words). Rule: every Device
+      member is classified against electrocautery from its contract definition (claims.py's labels and extract_schema's
+      list) as always (covered: hot snare, hot forceps, argon plasma, radiofrequency), may (thermal probe,
+      sphincterotome, catheter, other) or never (the rest, needle included: "a needle" carries no current); a may device
+      keeps the technique row UNRESOLVED; a test fails on any unclassified member. Any other may-be pair the definitions
+      show is reported for a ruling, not built.
+    - G3 (low; over-hold, U2's extent doubt demotes every reached point): not built; built only if a pair shows it, as
+      D293 N2.
+  - Member words (fixed as one class): the details row a member answers is worded by fact key (answers._rows: PROMPTS,
+    STATEMENT, CONFLICT_PROMPT), so a held item whose message asks something else is never shown, and the door records
+    the member's answer to the shown question against that item's fingerprint. WORDS-F1 (high: DIGITAL_SCOPE, D280),
+    WORDS-F6 (medium: D281's begun UNLISTED_SCOPE), WORDS-F3 (medium: D284's ADDON). Rule: a held code's details row
+    and its qualification are worded from the held item's own message wherever the key's fixed prompt asks something
+    else; items with different messages never share a row; the door binds an answer to an item's fingerprint only for a
+    row that asks that item's question. With them: WORDS-F2 (medium): a hold read time's recount releases shows nothing
+    resting on it (not the open question; the customer's sentence chosen from the live holds; listed recomputed, never
+    stale; an answer binds only a question read time still asks). WORDS-F7 (low): assessed_answers names every
+    overlay-bound answer assess read for the ADDON count, whatever became of the add-on, so its withdrawal holds
+    readiness until the recompute. WORDS-F5 (low): conflict:other is "another act" on every member sentence (D254 rule
+    2). WORDS-F4 (low): a wording reader that says what the document states reads the written stated values, never a
+    claimed-value or possibility set.
+  - The paid-test harness and the connector (fixed; each guards the budget): CONN-RF-1: --project-dir and
+    --ledger-root must be absolute, and the project record binds the test's ledger root once (a batch under another
+    root is refused). CONN-RF-2: a byte-identical request (its canonical sha256) already sent, or reserved and unsettled,
+    in any ledger of the project record is refused unless an operator's recorded override names that sha256 for one
+    attempt. CONN-RF-4: the start check and the gate read the ledgers' hold stops and unsettled reservations as standing
+    holds, not HOLD.json alone. CONN-RF-5: a stream whose message_delta carries no usage has no final usage (unpriced;
+    the harness counts it at its bound). CONN-RF-6: a case-run's pass 1 is admitted only with its pass 2's worst case
+    in the same check. CONN-RF-3 (product, studio/participants/http.py): kept bytes that already end with the stream's
+    end event are classified as the whole stream they are; only bytes short of it are UNKNOWN.
+  - Records (fixed): F1: rollback_check's assertion 7 counts and reports a record kind only a paid or nondeterministic
+    provider outcome can make (SCENARIO_V3 declined_hold), never requires it. F2: K2's widened session_conflict reading
+    is gated on gemini-inventory@3; under @2 a contradicted date relation states no value, as before. F3: a product-level
+    test drives an @3 slot list through the pipeline and every reader of the stored row. F4: install.py's docstrings
+    state the 1,500 s park bound.
+  - r2 changes no pass-1 instruction, schema or claim builder output at the current labels (gemini-events@3,
+    gemini-appraisal@2, gemini-inventory@3), so every recorded request stays byte-identical. The ten pairs therefore
+    continue on de28c5187's test image while r2 is built, one pair at a time; every pair is re-scored free by replay
+    through r2's tree before the install, and a failure still stops the sends (D277).
+- **D295 Pair 1 of the ten-pair test (D277), its failure class P1-FRAME, and the replay tool's Fable path (session
+  31dfc45d, 2026-11-16).**
+  - Pair 1 (S01 = C/W1-u30a-reg-p23-guard-handoff-006, L01 = blind-long 3ba7c89a0b21) on the test image
+    cpt-studio-test:de28c5187a57: 4 sends, no stream breach, $3.296367 (the test's spend so far). Scored by replay
+    (devsets/pair-01/score-de28-r2): S01 45385 READY, correct. L01: 45378, 45384 and 45398 held, correct; 45380 and
+    45385 held where READY is expected (unnecessary holds). No wrong READY, no wrong exclusion. The pair fails (D277: a
+    hold the expectation does not ask for); the sends stop until its class is fixed.
+  - LT-1 (the replay tool, found scoring pair 1): replay_v2 settled a Fable recording under the default appraisal label
+    (gemini-appraisal@1, never pinned: D293 O9) and stored the row at the older pair, so pair 1 replayed as
+    settle_refused; the tools' tests patched both pins and composed their reference the same way, so they agreed with
+    it. Fixed by calling the product's own stage_appraise child (jobs._appraisal_child) on the Fable path: settled under
+    the label the request was built under and stored at jobs.V2_VERSIONS. The new tests fail on the old tool (settle
+    refused; row labels gemini-events@2/appraisal@1 against the product's @3/appraisal@2); 177 tool tests pass on the
+    pairs' tree and on the integration's tree. Applied to tools/v2 (r2/lead-tools/lead-tools.diff).
+  - P1-FRAME (the class): FINAL-V2 3.1 G1 reads a `document_frame` source only inside N0. L01's header is three
+    labelled sections (pass 1's roles: header, header, header), its date line lies in N1 and its author line in N2, so
+    every frame fact (the date of service, the documenting clinician, every section's owner, occasion and performer
+    from the frame) settles unresolved (geometry_document_frame), every act loses its entry, date and performer, and
+    every code is held. A header in labelled parts is common in real notes. Rule: G1's `document_frame` holds for a
+    unit of the document's FRAME PART - N0 and each following section, contiguous from N0 and with its G2 span, whose
+    span ends at or before the first offset at which any event is told (the leading sections that tell no act) - that
+    is a source of an encounter fact (the frame-unit condition is unchanged). An N0 that fails G2 leaves no frame part,
+    as before; a frame line in a section after an act is told still fails; K7 (frame by role) stands. Every fact the
+    rule admits becomes a claim pass 2 appraises, so the release rests on pass 2's support (P-INDEP). It changes the
+    claim set (the pass-2 request) of a document whose frame lines lie outside N0: a deliberate exception to D294's
+    request invariant, named here. Re-check: L01's recorded pass 1 with a faithful pass 2, before and after (free); the
+    confirmation is the next pair, sent on an image that carries the fix. r2's own changes still move no request, so
+    every pair is re-scored by replay through the final tree before the install.
+- **D296 Pair 1's second hold class P1-LESION: a lesion pair claim (FINAL-V2 4.2; D292's open group 6) (session
+  31dfc45d, 2026-11-16).**
+  - With P1-FRAME built and a faithful pass 2, L01's 45380 and 45385 stay held (relation:unresolved ->
+    statement_scope on E7, E5, E6). The only non-INDEPENDENT pairs are the denial E8 (an intervention negated on L4, a
+    group with no places, breadth single) against the performed removals E5 (L1), E6 (L2) and the biopsy E7 (L3): the
+    target row is UNRESOLVED because apart_by_lesion needs an established distinct_from (none written) and apart_by_place
+    needs E8's places (none). Fable rejected every lesion pair control between E8 and E5-E7, in both directions.
+  - The design asks for this hold as it stands: 4.2 sets two lesions apart only on an established distinct_from with
+    the pair controls rejected [R:SC-B]; a rejected control alone is one "no" judgment, and D292 rejected E3 (apart by
+    disjoint places) for R06b's split polyp. The judge left group 6 as a design question needing a new control.
+  - Rule (P1-LESION): for each statement whose target names a lesion and each act of the same session whose target names
+    a different lesion, with no same_as or distinct_from written between the two, the claim set asks pass 2 a lesion
+    pair claim, "<the statement's lesion> is a different lesion from <the act's lesion>", with its contrary control,
+    "... is the same lesion as ..." (or the existing pair control where it already asserts sameness). Settle
+    establishes the distinctness only when pass 2 supports the claim AND rejects the control (two judgments in opposite
+    directions, robust to a yes-bias and a no-bias); otherwise it is not established (never a release). apart_by_lesion
+    reads an established appraised distinctness as it reads a written distinct_from, the pair controls still rejected.
+    A split polyp (R06b) stays held: pass 2 supports sameness. FINAL-V2 4.2 is amended (D296). It changes the claim set
+    (the pass-2 request) of a document with such a pair - named with D295's exception; gemini-appraisal@2 is this
+    unshipped build's label, so its request form moves under it and its pins are rewritten by their owning functions.
+  - Measured free where it can be (L01's recorded pass 1 with a faithful pass 2; the rig); confirmed by the next pair on
+    an image that carries P1-FRAME and P1-LESION.
+- **D297 Repair round r2's results (wf_94d533c7-86e: five builders, each refuted, serious findings reproduced) and the
+  rulings on its questions (session 31dfc45d, 2026-11-16).**
+  - Built and green (each with red-then-green tests, killed mutants, tests.v2 OK, the rig 0 of 84 rows moved, no request
+    changed): eng-a (RD-1, RD-2, RD-3), eng-b (G1, G2), words (WORDS-F1..F7), tools (CONN-RF-1..5; RF-3 in the product),
+    records (F1-F4). Built outside the workflow: P1-FRAME (D295) and P1-LESION (D296), not yet refuted.
+  - Refuted, reproduced, to be fixed in round r2b as class rules: ENGA-F1 (medium: RD-2's may_exclude reads E13's
+    digital exception claimed, so a weakening that makes a device claim manual drops the statement's examination kind
+    and releases 43273; read it ESTABLISHED, pairing.established_digital), ENGA-F3 (medium test gap: the ADDON P-MONO
+    fixture excludes by a status denial only; one exclusion per deciding fact 4.6 reads: a denial, a plan, another date,
+    another performer), ENGB-1 (medium, pre-existing: every reader of an act's target lesion's places - E1j, SITE's
+    _places_of, D240's site_outside - reads the whole finding, the same_as component in any state; an entry without
+    established places or an id the FactSet does not hold leaves the rule held and open), W2R-1 (medium: an answer
+    bound to an item whose hold read time's recount releases no longer excludes at read time, before or after the
+    AGAIN), W2R-2 (medium: an item whose act is not the code's own act is worded naming that act, with that act's
+    passages, chosen by the item's slots), W2R-3 (medium: codes share a service row only when their items ask the
+    service's one question; any other message keyed by a service fact gets its code's own row, and the door binds each
+    fingerprint only from its own row). Lows, also built: ENGA-F2 (a digital examination is never 4.6's surely-positive
+    act), ENGA-F4, W2R-4, tools F2 (the test root binds only to a root the registry already holds), F3 (the harness
+    applies the no-final-usage reading itself, whatever --tree), F4/F5 (tests pin the override's sha and the release's
+    own holds), R2RX-1 with records Q1/Q3 (every K rule AMENDMENT-2 widened reads as recorded under gemini-inventory@2,
+    and the replay tool labels its Gemini path), R2RX-2/3/4, records Q2 (the install text names no Fable recordings the
+    image does not ship).
+  - Questions ruled: eng-a Q1 ratified (the property generator keeps a negated claim negated, as settle does); Q2
+    confirmed (RD-3 in facts.possibly opens a merged view's values for every possibility reader; the id-claim readers
+    stay as built, named); Q3 confirmed (a reinstated primary counts for the reviewer's ADDON row at read time, D268);
+    Q4 confirmed, with ENGA-F2. eng-b Q1 confirmed (snare and forceps not called cold or hot are "may"); Q2 confirmed
+    (E1j's finding is joined by a same_as in any state, an established negation included - fail-closed, required by the
+    request invariant; the C1 over-hold is named); Q3 BUILT in r2b (the may-be relation beyond electrocautery: a
+    catheter may be a device delivered through a catheter, a needle may be an injection device; measured on the rig).
+    words Q1 named (a merged view's stated values need a new field), Q2 BUILT (every explanation whose row statement is
+    untrue of an established failing fact gets its own form), Q3/Q4 built where W2R-1's rule reaches them, else named,
+    Q5 BUILT (conflict:em_prolonged worded as the items word it), Q6 named. tools Q1/F1 (CONN-RF-6): not built; before
+    each pair the plan's worst cases are read and the pair's cap is set so that every pass 1's worst case plus the
+    largest pass 2's worst case fits (D293's practice); Q2-Q4 as stated.
+  - Order: int1 = the lead tree + P1-FRAME + P1-LESION + r2's five patches + tools (product parts) and the tools/v2
+    patch, integrated and tested; pair 2 is sent on int1's test image (r2b changes no request); r2b builds on copies of
+    int1; the final refutation runs over the whole diff from the lead tree before any merge.

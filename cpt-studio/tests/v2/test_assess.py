@@ -1247,6 +1247,175 @@ class AddonTests(SimpleTestCase):
         self.assertIsNone(AS.addon_hold('45385', (), ()))
 
 
+# --- DECISIONS D294, repair r2 (builder R2A): RD-2's ADDON count and RD-3's denial left open, through the engine --------
+
+
+R2A_CITED = EvidenceSpan(0, 600, 660, TEXT[600:660], True)  # E6's kind and status words
+
+
+def r2a_denial(kind=Kind.STONE_EXTRACTION, **over) -> EF.Doc:
+    """ercp(stone=False) with E6, a denial of ``kind`` (status negated performed, breadth all_of_kind) whose kind and
+    status words lie at 600-660 (R2A_CITED); ``over`` replaces E6's facts."""
+    doc = ercp(stone=False)
+    facts = dict(status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.ALL_OF_KIND), kind_words=Span(600, 630),
+                 status_words=Span(630, 660))
+    facts.update(over)
+    doc.act(6, kind, **facts)
+    return doc
+
+
+def r2a_weakened(found: Fact, how: str) -> Fact:
+    """``found`` weakened as 9.4 names it - unresolved, a stated doubt, or a conflict doubt (settle's row 1: result
+    contradicted, pass 1's claim and its state kept) - the claimed value kept."""
+    reasons = {'unresolved': Reason.APPRAISAL_UNCLEAR, 'stated': Reason.DOUBT_STATED, 'conflict': Reason.DOUBT_UNCLEAR}
+    result = {'unresolved': Res.UNRESOLVED, 'stated': Res.UNKNOWN, 'conflict': Res.CONTRADICTED}[how]
+    return replace(found, result=result, options=(found.value,) if how == 'conflict' else (), reasons=(reasons[how],))
+
+
+def r2a_with(doc: EF.Doc, event, attribute, new: Fact) -> EF.Doc:
+    doc.events[event] = {**doc.events[event], attribute: (new,)}
+    return doc
+
+
+class R2AAddonPrimaryMayBeExcludedTests(SimpleTestCase):
+    """DECISIONS D294 RD-2 (repair r2, builder R2A): the ADDON row counts only a primary that no statement may exclude -
+    4.6's conditions read with the possibility readers (engine/evaluate.may_exclude; engine/assess.addon_uncounted): a
+    citation blocked only by doubt, a statement_scope question, or a statement whose deciding fact, breadth, session or
+    date is not established but would exclude if it were. The primary's hold cause is never the test. As built, the row
+    counted a primary as soon as it was counted, so weakening any fact of its exclusion released the add-on."""
+
+    def assert_addon_held(self, found: AS.Assessed) -> None:
+        self.assertEqual(found.status, Outcome.NEEDS_CLARIFICATION)
+        self.assertEqual([held.cause for held in found.held_facts], [AS.ADDON_CAUSE])
+        self.assertIn(('ADDON', 'U'), [(row.requirement, row.truth.value) for row in found.trace])
+
+    def test_a_weakened_exclusion_never_counts_its_primary(self):
+        """The primary 43264 excluded by its cited denial E6, then each fact of the exclusion weakened - E6's breadth
+        unresolved (not_documented), its status a stated doubt (E6 a possible act), its session pass 1's contradiction
+        of X1 and an id the FactSet does not hold, the examination E1's kind unresolved (E1 may be a stone extraction:
+        the citation blocked by doubt): 43264 is no longer excluded, held for four different causes, and 43273 stays
+        held by its row in every one (as built: READY in every one)."""
+        for name, doc in (('breadth unresolved', r2a_with(r2a_denial(), E(6), A.SCOPE_BREADTH,
+                                                          r2a_weakened(sup(ct.Breadth.ALL_OF_KIND), 'unresolved'))),
+                          ('status doubted', r2a_with(r2a_denial(), E(6), A.STATUS,
+                                                      r2a_weakened(EF.neg(ct.Status.PERFORMED), 'stated'))),
+                          ('session contradicted', r2a_with(r2a_denial(), E(6), A.SESSION, EF.contra(X(1), X(99)))),
+                          ('a kind that doubts the citation', r2a_with(r2a_denial(), E(1), A.KIND,
+                                                                       r2a_weakened(sup(Kind.EXAMINATION),
+                                                                                    'unresolved')))):
+            with self.subTest(name):
+                R = doc.build()
+                found = by_code(run(R, ('43264', R2A_CITED), ('43273', 3)))
+                self.assertIsNone(found['43264'].evaluation.exclusion)
+                self.assertEqual(found['43264'].status, Outcome.NEEDS_CLARIFICATION)
+                self.assert_addon_held(found['43273'])
+                self.assertTrue(AS.addon_uncounted('43264', found['43264'].evidence.kept, dated(R),
+                                                   found['43264'].evidence.runs))
+
+    def test_the_rule_reads_every_primary_and_a_primarys_own_doubted_act(self):
+        """Not keyed to one primary: 43274 (a stent placement) excluded by a cited stent denial whose breadth is then
+        unresolved leaves 43273 held; and 43264 whose only act E5 is a doubt (a possible statement it cites, its breadth
+        silent) holds 43273 too - the act possibly not done may be its primary's exclusion (as built: READY in both)."""
+        stent = r2a_with(r2a_denial(Kind.STENT), E(6), A.SCOPE_BREADTH,
+                         r2a_weakened(sup(ct.Breadth.ALL_OF_KIND), 'unresolved'))
+        found = by_code(run(stent.build(), ('43274', R2A_CITED), ('43273', 3)))
+        self.assertEqual(found['43274'].status, Outcome.NEEDS_CLARIFICATION)
+        self.assert_addon_held(found['43273'])
+        doubted = r2a_with(ercp(), E(5), A.STATUS, EF.doubted(ct.Status.PERFORMED))
+        found = by_code(run(doubted.build(), ('43264', 5), ('43273', 3)))
+        self.assertEqual(found['43264'].status, Outcome.NEEDS_CLARIFICATION)
+        self.assert_addon_held(found['43273'])
+
+    def test_a_primary_surely_done_or_one_nothing_may_exclude_keeps_its_add_on_ready(self):
+        """The boundary, each READY as built: 43264 held by YIELD on an act surely done (E5); 43264 READY although its
+        evidence also cites a planned stone extraction (a statement, but its group has an act surely done: 4.6's
+        premise fails whatever is resolved); 43264 held not_documented beside a stone-extraction denial of an EGD
+        session (another family: it never concerns 43264); 43264 held by its act's session left unresolved (the act is
+        surely done, no statement anywhere). Beside the twin the rule changes: the same cited plan beside 43264 whose
+        act's status is a doubt (no act surely done) holds 43273."""
+        twin = r2a_with(ercp(), E(5), A.STATUS, EF.doubted(ct.Status.PERFORMED))
+        twin.act(7, Kind.STONE_EXTRACTION, status=sup(ct.Status.PLANNED), date=sup(ct.DateRelation.LATER_DATE),
+                 duct=sup(ct.Duct.BILIARY))
+        found = by_code(run(twin.build(), ('43264', EvidenceSpan(0, 500, 760, TEXT[500:760], True)), ('43273', 3)))
+        self.assert_addon_held(found['43273'])
+        planned = r2a_with(ercp(), E(5), A.YIELD, sup(ct.Material.STONES))
+        planned.act(7, Kind.STONE_EXTRACTION, status=sup(ct.Status.PLANNED), date=sup(ct.DateRelation.LATER_DATE),
+                    duct=sup(ct.Duct.BILIARY))
+        egd = ercp(stone=False)
+        egd.session(2, SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+        egd.exam(8, session=X(2))
+        egd.act(7, Kind.STONE_EXTRACTION, session=X(2), status=EF.neg(ct.Status.PERFORMED),
+                breadth=sup(ct.Breadth.ALL_OF_KIND))
+        unsettled = r2a_with(ercp(), E(5), A.SESSION, r2a_weakened(sup(X(1)), 'unresolved'))
+        for name, doc, primary, status in (
+                ('held by YIELD', ercp(), ('43264', 5), Outcome.NEEDS_CLARIFICATION),
+                ('READY beside a cited plan', planned, ('43264', EvidenceSpan(0, 500, 760, TEXT[500:760], True)),
+                 Outcome.READY),
+                ("another family's denial", egd, ('43264', 4), Outcome.NEEDS_CLARIFICATION),
+                ('its session unresolved', unsettled, ('43264', 5), Outcome.NEEDS_CLARIFICATION)):
+            with self.subTest(name):
+                R = doc.build()
+                found = by_code(run(R, primary, ('43273', 3)))
+                self.assertEqual(found['43264'].status, status)
+                self.assertFalse(AS.addon_uncounted('43264', found['43264'].evidence.kept, dated(R),
+                                                    found['43264'].evidence.runs))
+                self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+
+
+class R2AKindDenialLeftOpenTests(SimpleTestCase):
+    """DECISIONS D294 RD-3 (repair r2, builder R2A): a negated single-valued claim that is not established leaves every
+    value of its domain open for every possibility reader (engine/facts.possibly, ``open_denial``), the kind readers
+    included - so weakening an established denial of an act's kind never narrows what the act may be to the denied kind
+    (as built: coverage.may_be read the weakened "not an examination" as an examination alone, releasing the bundling
+    hold the denial gave)."""
+
+    def denied(self, event, kind) -> tuple:
+        doc = enriched()
+        found = doc.events[event][A.KIND][0]
+        return doc, replace(found, result=Res.NEGATED, state=State.NEGATED, value=kind)
+
+    def test_a_weakened_denial_of_a_kind_releases_nothing(self):
+        """test_assess's enriched() with E1 "not an examination", E3 "not a biopsy" or E4 "not an examination"
+        established - each holding a code by what the act may be - then that denial unresolved, doubted or in conflict:
+        the code stays held (as built, READY in each of the nine)."""
+        for event, kind, code in ((E(1), Kind.EXAMINATION, '45385'), (E(3), Kind.BIOPSY, '45385'),
+                                  (E(4), Kind.EXAMINATION, '43239')):
+            doc, denial = self.denied(event, kind)
+            base = by_code(run(r2a_with(doc, event, A.KIND, denial).build(), *TWO))
+            self.assertEqual(base[code].status, Outcome.NEEDS_CLARIFICATION)
+            for how in ('unresolved', 'stated', 'conflict'):
+                with self.subTest(event=str(event), how=how):
+                    doc, denial = self.denied(event, kind)
+                    weak = r2a_weakened(denial, how)
+                    self.assertIs(weak.state, State.NEGATED)
+                    found = by_code(run(r2a_with(doc, event, A.KIND, weak).build(), *TWO))
+                    self.assertEqual(found[code].status, Outcome.NEEDS_CLARIFICATION)
+
+    def test_an_established_denial_a_stated_claim_and_a_claimed_device_read_as_before(self):
+        """The boundary: the established denials hold what they held (E4's leaves 45385 READY); E1's kind stated and
+        unresolved is read by its claimed value alone (4.2's candidate arm) - 45385 READY as before; and an examination's
+        device "endoscope" negated and unresolved claims no manual (a claimed-value reader, D253), so 45378 is READY,
+        where "manual" negated and unresolved claims it and holds 45378 - each as built; beside the twin the rule changes
+        (E1's denial left open holds 45385)."""
+        doc, denial = self.denied(E(1), Kind.EXAMINATION)
+        twin = by_code(run(r2a_with(doc, E(1), A.KIND, r2a_weakened(denial, 'unresolved')).build(), *TWO))
+        self.assertEqual(twin['45385'].status, Outcome.NEEDS_CLARIFICATION)
+        doc, denial = self.denied(E(4), Kind.EXAMINATION)
+        self.assertEqual(by_code(run(r2a_with(doc, E(4), A.KIND, denial).build(), *TWO))['45385'].status,
+                         Outcome.READY)
+        stated = enriched()
+        r2a_with(stated, E(1), A.KIND, r2a_weakened(sup(Kind.EXAMINATION), 'unresolved'))
+        found = by_code(run(stated.build(), *TWO))
+        self.assertEqual({code: found[code].status for code in ('45385', '43239')},
+                         {'45385': Outcome.READY, '43239': Outcome.READY})
+        for device, status in ((Device.ENDOSCOPE, Outcome.READY), (Device.MANUAL, Outcome.NEEDS_CLARIFICATION)):
+            with self.subTest(device=device.value):
+                exam = EF.Doc()
+                exam.session(1, SessionKind.COLONOSCOPY, reached=[sup(Extent.CECUM)])
+                exam.exam(1, device=Fact(Res.UNRESOLVED, device, State.NEGATED, (), (Reason.APPRAISAL_UNCLEAR,), ()))
+                self.assertEqual(by_code(run(exam.build(), ('45378', 1)))['45378'].status, status)
+
+
 # --- the combination (4.7), member answers (4.8) and the second review (D10) ------------------------------------------
 
 

@@ -109,7 +109,12 @@ supported device, so neither reading releases under a weakening.
   the same one. A device that MAY be another's kind (DEVICE_MAY_BE: a thermal probe, a heater or a bipolar probe, and a
   sphincterotome, which cuts with or without current, may be electrosurgical) is never covered by it: between two
   SUPPORTED devices one of which may be the other's kind the row is UNRESOLVED, never INDEPENDENT (``_may_be``), and a
-  negated electrocautery leaves such a device possible, so it never excludes one.
+  negated electrocautery leaves such a device possible, so it never excludes one. DECISIONS D294 G2: both electrocautery
+  rows are DERIVED from one classification of EVERY Device member against electrocautery by its contract definition
+  (DEVICE_CURRENT: always, may or never deliver high-frequency current; contract/claims.py's device labels and
+  contract/extract_schema.py's Device list) - DEVICE_CONTAINS' electrocautery row is the "always" members, DEVICE_MAY_BE
+  the "may" members (a catheter and a device of another kind among them) - and a member the table does not classify
+  is read as "may" (UNRESOLVED, never INDEPENDENT by omission), which tests/v2/test_pairing.py turns red.
 
 **The relation** (4.5): INDEPENDENT when at least one row proves it, unless the pair is ``claimed`` (D's scope.covers
 names A, in any state), which is UNRESOLVED instead - Gemini says D applies to A while the facts say apart, and the
@@ -232,21 +237,62 @@ class UnlistedPair:
 
 # --- the tables (module docstring) -------------------------------------------------------------------------------------
 
+
+@unique
+class Current(Enum):
+    """Whether a Device member delivers high-frequency current - electrocautery's kind - by its contract definition
+    (DECISIONS D294 G2): ALWAYS, by definition (electrocautery covers it: DEVICE_CONTAINS); MAY, its definition admits a
+    device that does and one that does not (DEVICE_MAY_BE: never covered by electrocautery, never INDEPENDENT of it in the
+    technique row); NEVER, its definition excludes it."""
+    ALWAYS = 'always'
+    MAY = 'may'
+    NEVER = 'never'
+
+
+# DECISIONS D294 G2: EVERY Device member classified against electrocautery from its contract definition (the device
+# labels of contract/claims.py and the Device list of contract/extract_schema.py; tests/v2/test_pairing.py pins each
+# member's class beside its label and fails on a member left unclassified). ALWAYS: electrocautery itself, the hot snare,
+# the hot forceps, argon plasma coagulation (D222: high-frequency current through ionised argon) and radiofrequency
+# energy. MAY: a thermal probe (a heater or a bipolar probe), a sphincterotome (it cuts with or without current), a
+# catheter (a bipolar coagulation catheter is one), a device of another kind (an electrosurgical knife is one), and the
+# snare and the forceps the document does not call cold or hot (each may be the hot one; DEVICE_CONTAINS already reads
+# them so, by their hot member). NEVER: every other member - the needle included ("a needle" carries no current).
+DEVICE_CURRENT: Mapping[Device, Current] = MappingProxyType({
+    Device.ENDOSCOPE: Current.NEVER, Device.COLD_SNARE: Current.NEVER, Device.HOT_SNARE: Current.ALWAYS,
+    Device.SNARE: Current.MAY, Device.COLD_FORCEPS: Current.NEVER, Device.HOT_FORCEPS: Current.ALWAYS,
+    Device.FORCEPS: Current.MAY, Device.NEEDLE: Current.NEVER, Device.INJECTION: Current.NEVER,
+    Device.BALLOON: Current.NEVER, Device.WIRE_BOUGIE: Current.NEVER, Device.BOUGIE: Current.NEVER,
+    Device.CLIP: Current.NEVER, Device.BAND: Current.NEVER, Device.ARGON_PLASMA: Current.ALWAYS,
+    Device.RADIOFREQUENCY: Current.ALWAYS, Device.CRYOTHERAPY: Current.NEVER, Device.THERMAL_PROBE: Current.MAY,
+    Device.ELECTROCAUTERY: Current.ALWAYS, Device.STENT: Current.NEVER, Device.BASKET: Current.NEVER,
+    Device.EXTRACTION_BALLOON: Current.NEVER, Device.SPHINCTEROTOME: Current.MAY, Device.LITHOTRIPTER: Current.NEVER,
+    Device.CHOLANGIOSCOPE: Current.NEVER, Device.CAPSULE: Current.NEVER, Device.CATHETER: Current.MAY,
+    Device.MANUAL: Current.NEVER, Device.OTHER: Current.MAY,
+})
+
+
+def _current(device: Device) -> Current:
+    """A member's class (DEVICE_CURRENT); one the table does not classify is read as MAY - the hold direction: never
+    covered, never INDEPENDENT of electrocautery by omission (DECISIONS D294 G2)."""
+    return DEVICE_CURRENT.get(device, Current.MAY)
+
+
 # A device's own kinds: v1's relations.DEVICE_CONTAINS by value - a snare covers the cold and the hot snare, forceps the
 # cold and the hot forceps - and DECISIONS D292's E5j, the departure tests/v2/test_pairing.py names: electrocautery
 # covers the devices that deliver high-frequency current by definition (D222: argon plasma coagulation delivers it) -
-# the hot snare, the hot forceps, argon plasma and radiofrequency.
+# the hot snare, the hot forceps, argon plasma and radiofrequency: since DECISIONS D294 G2 the ALWAYS members of
+# DEVICE_CURRENT but electrocautery itself.
 DEVICE_CONTAINS: Mapping[Device, frozenset[Device]] = MappingProxyType({
     Device.SNARE: frozenset({Device.COLD_SNARE, Device.HOT_SNARE}),
     Device.FORCEPS: frozenset({Device.COLD_FORCEPS, Device.HOT_FORCEPS}),
-    Device.ELECTROCAUTERY: frozenset({Device.HOT_SNARE, Device.HOT_FORCEPS, Device.ARGON_PLASMA,
-                                      Device.RADIOFREQUENCY}),
+    Device.ELECTROCAUTERY: frozenset(device for device in Device
+                                     if device is not Device.ELECTROCAUTERY and _current(device) is Current.ALWAYS),
 })
-# The devices that MAY be one of another's kinds (DECISIONS D292's E5j): a thermal probe (a heater or a bipolar probe)
-# and a sphincterotome (it cuts with or without current) may be electrocautery - never covered by it, never INDEPENDENT
-# of it in the technique row (``_may_be``), and left possible by a negated electrocautery.
+# The devices that MAY be one of another's kinds (DECISIONS D292's E5j; D294 G2: the MAY members of DEVICE_CURRENT, an
+# unclassified member among them): each may be electrocautery - never covered by it, never INDEPENDENT of it in the
+# technique row (``_may_be``), and left possible by a negated electrocautery.
 DEVICE_MAY_BE: Mapping[Device, frozenset[Device]] = MappingProxyType({
-    Device.ELECTROCAUTERY: frozenset({Device.THERMAL_PROBE, Device.SPHINCTEROTOME}),
+    Device.ELECTROCAUTERY: frozenset(device for device in Device if _current(device) is Current.MAY),
 })
 # The other date relations and performers (reading.OTHER_DATES and OTHER_PERFORMERS): a statement's "established as
 # another" (4.5), and the documenting values whose negation establishes another.
@@ -396,16 +442,18 @@ def _catalogue_reading(R: FactSet, event: Id, kinds: frozenset[Kind]) -> frozens
 def digital_examination(R: FactSet, event: Id) -> bool:
     """FINAL 5.6 E13's digital examination (DECISIONS D69; D227: combination.session_done excepts it - "a digital
     examination ... is no session"; D253, QE13 option (a); D265): an event whose device CLAIMS manual - supported manual,
-    or, not established, manual its claimed value or one of its readings (facts.possibly over a device that is not
-    silent). Each 9.4 weakening keeps a claimed value, so a weakened manual device still claims it. A silent device (the
-    endoscopic examination's usual filing: "The colonoscope was advanced to the cecum."), one established as another
-    device, and manual negated claim none. An overfilled device slot's merged view (AMENDMENT-2 4.3.3 c [R:truth-T2]: a
-    claimed-value reader) claims manual only when a written fact states it - a manual every written fact denies
+    or, not established, manual its claimed value or one of its readings (facts.possibly_written over a device that is
+    not silent: a claimed value, never DECISIONS D294 RD-3's open denial). Each 9.4 weakening keeps a claimed value, so
+    a weakened manual device still claims it. A silent device (the endoscopic examination's usual filing: "The
+    colonoscope was advanced to the cecum."), one established as another device, and manual negated claim none. An
+    overfilled device slot's merged view (AMENDMENT-2 4.3.3 c [R:truth-T2]: a claimed-value reader) claims manual only
+    when a written fact states it - a manual every written fact denies
     (``negated_values``) is no claim. The one derivation: engine/questions.digital_examination reads it, and through it
     engine/evaluate's rows 1 and 7 and the items (step r4d's combination._digital, a copy with a kind gate, is pinned
     equal where an event may be the examination by tests/v2/test_combination.py and tests/v2/test_pairing.py)."""
     device = facts_.fact(R, event, _A.TECHNIQUE_DEVICE)
-    return (facts_.possibly(device, Device.MANUAL) and not facts_.silent(device)
+    # a CLAIMED value (4.3.3 c): read without DECISIONS D294 RD-3's open denial, which is the possibility readers'
+    return (facts_.possibly_written(device, Device.MANUAL) and not facts_.silent(device)
             and Device.MANUAL not in device.negated_values)
 
 
@@ -540,7 +588,7 @@ def _breadth_row(R: FactSet, p: _Context) -> RowResult:
     excepts = facts_.members(R, p.statement, _A.SCOPE_EXCEPTS)
     if any(facts_.holds(member, p.act) for member in excepts):
         return RowResult.INDEPENDENT
-    if any(facts_.possibly(member, p.act) for member in excepts):
+    if any(facts_.possibly_written(member, p.act) for member in excepts):  # a list's members: never D294 RD-3's
         return RowResult.UNRESOLVED  # possibly excepted, not established
     if facts_.established(facts_.fact(R, p.act, _A.STATUS)):
         return RowResult.UNRESOLVED  # a "no other" against an act it does not except
@@ -615,18 +663,22 @@ def _same_lesion(R: FactSet, one: Id, other: Id) -> bool:
 
 def _possibly_same(R: FactSet, one: Id, other: Id) -> bool:
     """Possibly one lesion: the same id, or a same_as member in either lesion's list that possibly names the other
-    (facts.possibly: supported, or not established with it as its claimed value or one of its options). The guard
-    against setting such a pair apart by lesion: same_as is UNCONTROLLED because it only joins (3.2.3), so it may hold
-    and never release, and read by possibly a weakened same_as still holds (P-MONO). The same lesion in SAME reads
-    _same_lesion (established)."""
-    return one == other or any(facts_.possibly(member, other) for member in facts_.members(R, one, _A.SAME_AS)) or any(
-        facts_.possibly(member, one) for member in facts_.members(R, other, _A.SAME_AS))
+    (facts.possibly_written: supported, or not established with it as its claimed value or one of its options - a
+    list's member, which DECISIONS D294 RD-3's open denial does not reach). The guard against setting such a pair apart
+    by lesion: same_as is UNCONTROLLED because it only joins (3.2.3), so it may hold and never release, and read by
+    possibly a weakened same_as still holds (P-MONO). The same lesion in SAME reads _same_lesion (established)."""
+    return one == other or any(facts_.possibly_written(member, other)
+                               for member in facts_.members(R, one, _A.SAME_AS)) or any(
+        facts_.possibly_written(member, one) for member in facts_.members(R, other, _A.SAME_AS))
 
 
 def _distinct(R: FactSet, one: Id, other: Id) -> bool:
-    """distinct_from supported between two lesions, in either lesion's list (facts.apart_by_lesion's arm)."""
+    """distinct_from supported between two lesions, in either lesion's list, or the two established distinct by a
+    lesion pair claim (DECISIONS D296: facts.appraised_distinct) - facts.apart_by_lesion's arm, read by the listed,
+    segment and own targets to set two lesions apart, never to join them."""
     return any(facts_.holds(member, other) for member in facts_.members(R, one, _A.DISTINCT_FROM)) or any(
-        facts_.holds(member, one) for member in facts_.members(R, other, _A.DISTINCT_FROM))
+        facts_.holds(member, one) for member in facts_.members(R, other, _A.DISTINCT_FROM)) or \
+        facts_.appraised_distinct(R, one, other)
 
 
 def _disjoint(first: frozenset[Landmark] | None, second: frozenset[Landmark] | None) -> bool:
@@ -803,8 +855,9 @@ def _technique_row(R: FactSet, p: _Context) -> RowResult:
 
 def _may_be(one: Fact, other: Fact) -> bool:
     """DECISIONS D292's E5j: two SUPPORTED devices one of which may be the other's kind (DEVICE_MAY_BE, either way: a
-    thermal probe or a sphincterotome beside electrocautery). Read only to keep the technique row UNRESOLVED where the two
-    device sets are disjoint; it never covers, so a negated electrocautery leaves such a device possible."""
+    MAY member of DEVICE_CURRENT beside electrocautery - a thermal probe, a sphincterotome, a catheter, a device of
+    another kind: D294 G2). Read only to keep the technique row UNRESOLVED where the two device sets are disjoint; it
+    never covers, so a negated electrocautery leaves such a device possible."""
     if one.result is not Result.SUPPORTED or other.result is not Result.SUPPORTED:
         return False
     first, second = one.value, other.value

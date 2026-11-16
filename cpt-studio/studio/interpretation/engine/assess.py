@@ -50,8 +50,11 @@ With no supporting act the session rows hold nothing more: SUPPORT already holds
 
 **ADDON** (4.3's row "43273, 91013, 99153, 99417 | its primary counted"; Appendix A's tag; engine/evaluate.py leaves it
 to assess): an add-on code with a supporting act is T when one of its primaries (``ADDON_PRIMARIES``: the catalogue codes
-of its family CPT reports it with) is counted - proposed, admitted by R1, not excluded, and not excluded by a member's
-answer (the answers' passes recompute an add-on whose every counted primary an answer excluded) - else U: its witness
+of its family CPT reports it with) is counted - proposed, admitted by R1, not excluded, no statement able to exclude it
+(DECISIONS D294 RD-2, ``addon_uncounted``: 4.6's conditions read with the possibility readers, engine/evaluate's
+may_exclude - never the primary's hold cause - so weakening a fact of a primary's exclusion never releases an add-on),
+and not excluded by a member's answer (the answers' passes recompute an add-on whose every counted primary an answer
+excluded) - else U: its witness
 (``addon_hold``) is code-level, as D80's and D197's are (performed_status at RANK's status row, subject, attribute and
 result None, the kept spans), a question (4.3 puts the row's non-T in its "unmet" column), cause coding_rule:ADDON. The
 design names neither the primary sets nor the item ("as today"; v1 has no add-on rule): both are the narrowest
@@ -1396,6 +1399,20 @@ def primaries(code: str) -> frozenset[str]:
         else frozenset()
 
 
+_PRIMARY_CODES: frozenset[str] = frozenset(str(primary) for found in ADDON_PRIMARIES.values() for primary in found)
+
+
+def addon_uncounted(code: str, kept: Sequence[Span], R: FactSet, kept_words: Sequence[Span] | None = None) -> bool:
+    """DECISIONS D294 RD-2: whether the ADDON row leaves ``code`` uncounted although it is proposed, admitted and not
+    excluded - a primary of an add-on (``ADDON_PRIMARIES``) that some statement MAY exclude (engine/evaluate.may_exclude:
+    4.6's conditions read with the possibility readers - a citation blocked only by doubt, a statement_scope question, or
+    a statement whose deciding fact, breadth, session or date is not established but would exclude if it were), whatever
+    holds it: its hold cause is never the test. So weakening any fact of a primary's exclusion never releases an add-on
+    (9.4 P-MONO). The one rule assess's count (``assess_facts``) and read time's (interpretation/overlay.recount) read,
+    so the engine's own counted set at read time reproduces the stored record."""
+    return code in _PRIMARY_CODES and evaluate.may_exclude(code, kept, R, kept_words=kept_words)
+
+
 def addon_hold(code: str, counted: Iterable[str], kept: Sequence[Span]) -> HeldFact | None:
     """4.3's ADDON row of ``code`` over the ``counted`` codes: None when ``code`` carries no ADDON tag or one of its
     primaries is counted (T); otherwise its witness (U) - code-level, as D80's and D197's holds are (performed_status at
@@ -2088,10 +2105,15 @@ def assess_facts(R: FactSet, *, date_of_service: datetime.date | None, text: str
                                                       and not s.evaluation.held_facts))
                for key, s in counted}
     joined = combination.combine(tuple(members.values()), session_acts(coding), R)
+    # the codes ADDON counts: the counted codes, less a primary of a proposed add-on that a statement may exclude
+    # (DECISIONS D294 RD-2, addon_uncounted: the possibility reading of 4.6, never the primary's hold cause)
+    wanted = frozenset(primary for s in selections for primary in primaries(s.code))
     enc = _Encounter(R=R, reader=reader, sessions=sessions_, date_of_service=date_of_service, member=member,
                      refs=refs, joined=joined, members=members,
                      primary=response.provider if response is not None else '',
-                     counted=frozenset(s.code for _, s in counted))
+                     counted=frozenset(s.code for _, s in counted
+                                       if s.code not in wanted
+                                       or not addon_uncounted(s.code, s.evidence.kept, R, s.evidence.runs)))
     proposals_ = [_assessed(key, s, enc, harness.disagreements(s.code) if harness is not None and s.decidable else ())
                   for key, s in zip(keys, selections)]
     proposals_ = [p for p in proposals_ if p.bucket is Bucket.SELECTED] + \

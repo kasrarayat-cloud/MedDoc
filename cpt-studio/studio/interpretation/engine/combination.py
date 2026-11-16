@@ -1415,8 +1415,9 @@ def _digital(R: FactSet, event: Id) -> bool:
     """FINAL 5.6 E13's digital examination as ``session_done`` reads it - evaluate._digital's reading (DECISIONS D253,
     QE13 option (a): "the claimed-manual reading (monotone) holds in evaluate and in combination alike", repair r4a's
     R2): an event that may be an examination (its kind possibly the examination, facts.possibly) whose device CLAIMS
-    manual - supported manual, or, not established, manual its claimed value or one of its readings (facts.possibly over
-    a device that is not silent). Each 9.4 weakening keeps a claimed value, so a weakened device never turns a digital
+    manual - supported manual, or, not established, manual its claimed value or one of its readings
+    (facts.possibly_written over a device that is not silent: a claimed value, never DECISIONS D294 RD-3's open
+    denial). Each 9.4 weakening keeps a claimed value, so a weakened device never turns a digital
     examination into the session's own examination or into an act that makes it done; a silent device, one established
     as another device, and manual negated claim none. An overfilled device slot's merged view (AMENDMENT-2 4.3.3 c
     [R:truth-T2]) claims manual whenever a written fact states it or a doubt offers it, as that fact read alone would:
@@ -1424,7 +1425,9 @@ def _digital(R: FactSet, event: Id) -> bool:
     claim, so an endoscope written beside a denied manual never turns the examination into a digital one. engine/evaluate imports this module through engine/questions, so its predicate is read here, and
     tests/v2/test_combination.py pins the two equal (``_examinations`` empty exactly where evaluate.act_only holds)."""
     device = _fact(R, event, _A.TECHNIQUE_DEVICE)
-    return (facts_.possibly(_fact(R, event, _A.KIND), Kind.EXAMINATION) and facts_.possibly(device, Device.MANUAL)
+    # the kind a possibility, the device a CLAIMED value (4.3.3 c): read without DECISIONS D294 RD-3's open denial
+    return (facts_.possibly(_fact(R, event, _A.KIND), Kind.EXAMINATION)
+            and facts_.possibly_written(device, Device.MANUAL)
             and Device.MANUAL not in device.negated_values and not facts_.silent(device))
 
 

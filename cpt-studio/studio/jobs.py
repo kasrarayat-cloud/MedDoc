@@ -2848,7 +2848,8 @@ def _checked_findings(holder):
     def check(text, pages, answer):
         from .interpretation.contract import checks as contract_checks
 
-        holder['checked'] = contract_checks.check(text, pages, answer)
+        # made for the inventory version the row is written at (V2_VERSIONS; DECISIONS D294 F2)
+        holder['checked'] = contract_checks.check(text, pages, answer, inventory_version=V2_VERSIONS[1])
         return holder['checked'].findings
     return check
 
@@ -4690,8 +4691,15 @@ def _render_code(found: _Assessed, *, combination: Any, R: Any, text: str, pages
                               else None),
                'procedural': engine_assess.procedural(SimpleNamespace(family=found.family,  # type: ignore[arg-type]
                                                                       evaluation=found.evaluation), found.pfs),
+               # r2 (D294, WORDS-F1/F3/F6): the form of the member's row that asks the item's question
+               # (wording.member_form over the item's message and slots), which the details row, the code's
+               # qualification and the door read (wording.recorded_form)
                'item': ({'message': found.item.message.value, 'fact': found.item.held.fact,
-                         'kind': found.item.held.kind.value} if found.item is not None else None),
+                         'kind': found.item.held.kind.value,
+                         'form': wording.member_form(wording.Message(found.item.message.value),
+                                                     wording.Slots(act=found.item.fill.act,
+                                                                   family=found.item.fill.family))}
+                        if found.item is not None else None),
                'question': found.question}
     if status == 'excluded' and found.reinstatable:
         # what a reviewer's reinstatement would wait for (refutation 5b-r1, X5): the installed release's gate - the

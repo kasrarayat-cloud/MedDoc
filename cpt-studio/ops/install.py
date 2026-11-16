@@ -4223,7 +4223,8 @@ def retire_parked(parked):
 #            verified, nor while a verified switch could still be undone.
 #   I-worker at most one worker runs; the old one is stopped before any new-revision web takes traffic, and the new one
 #            starts only after the old one has exited (no stale-stage sweep races a live stage).
-#   I-jobs   the old worker's current stage finishes (docker stop --time 600); queued stages wait for the new worker.
+#   I-jobs   the old worker's current stage finishes (docker stop --time 1500, STOP_SECONDS['worker']); queued stages
+#            wait for the new worker.
 #   I-state  the stored list states are recomputed only once both old containers have stopped (phase_app).
 #   I-undo   every failure leaves the site served by a healthy web; today's hazard semantics are kept, and switching
 #            back replaces restarting a stopped web.
@@ -4740,8 +4741,8 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
 
       S1  start the incoming web, INCOMING_WEB, on the idle port; it must answer health_ok for this revision and serve
           its own sign-in page and static files (smoke_web) - the old web still serves everything
-      S2  park the old worker (docker stop --time 600: its current stage finishes; nothing new is claimed) - the old web
-          still serves, and what members start waits in the queue
+      S2  park the old worker (docker stop --time 1500, STOP_SECONDS['worker']: its current stage finishes; nothing
+          new is claimed) - the old web still serves, and what members start waits in the queue
       S3  switch the vhost's upstream to the idle port (switch_upstream: atomic replace, nginx -t, graceful reload,
           /health/ = this revision through the public path, co-tenants unchanged)
       S4  start the new worker - processing resumes under the new rules
@@ -5260,7 +5261,7 @@ def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, 
     live, idle = plan['live'], plan['idle']
     worker = SERVICES['worker']
     log_tail(ctx, worker, 'worker', 'worker-failed')
-    stop_service_container(worker, 'worker')  # its current stage finishes (600 s)
+    stop_service_container(worker, 'worker')  # its current stage finishes (STOP_SECONDS['worker'], 1,500 s)
     keep = keep_note(live, idle)
     details = {} if details is None else details
     first_at = dt.datetime.now(dt.timezone.utc)

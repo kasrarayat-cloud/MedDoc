@@ -70,7 +70,11 @@ the ENGINE AS ASSEMBLED - engine/assess.assess_facts, every rule together - and 
   value-erasing contradictions (ERASING, which 9.4's generator gains) releasing, on two fixtures, the codes D262_QM,
   D262_STATUS and D228_DQ2 name for the classic weakening of the same fact, by the same transition (question Q-ERASE);
   DECISIONS D293 ruled them option (a): accepted under D293_ERASE, held to D264's every-row rule like every named
-  release, their states pinned (ERASING_ACCEPTED), so OPEN_RELEASES is empty again.
+  release, their states pinned (ERASING_ACCEPTED), so OPEN_RELEASES is empty again. DECISIONS D294 (repair r2) adds two
+  fixtures that release nothing under any weakening - an add-on whose only primary a cited denial excludes (RD-2) and an
+  established denial of a kind (RD-3); D264's every-row check reads assess's ADDON row for a READY add-on
+  (``addon_row_met``); and the generator keeps a negated claim negated, as settle does: a conflict doubt on a denial is
+  a contradicted denial, and a denial has no pass-1 contradiction of its value (its sides would be stated).
 - P-INDEP (IndependenceTests): perturbing any fact outside requirements.dependencies(code) leaves the code's status,
   its item (the held fact it asks and its message) and its held facts unchanged - test_assess's perturbation harness
   (repair 5a's R5), over every fixture here.
@@ -170,7 +174,7 @@ from studio.interpretation.engine import pairing as P
 from studio.interpretation.engine import questions as Q
 from studio.interpretation.engine import requirements as RQ
 from studio.interpretation.engine.requirements_table import Tag
-from studio.interpretation.engine.types import (Fact, FactSet, HeldFact, Id, IdFamily, IsoDate, ItemKind, Outcome,
+from studio.interpretation.engine.types import (Fact, FactSet, HeldFact, Id, IdFamily, IsoDate, ItemKind, Outcome, Span,
                                                UnlistedStatement)
 from studio.types import EvidenceSpan, NormalizedResponse, ProviderCode
 from tests.v2 import evaluate_fixtures as EF
@@ -473,6 +477,32 @@ def possible_statement_beside_a_biopsy_and_a_snare():
     return doc.build()
 
 
+def addon_beside_its_excluded_primary():
+    """DECISIONS D294 RD-2's P-MONO fixture (repair r2, builder R2A): test_assess's ERCP - an examination E1, a biliary
+    cannulation E2 achieved, a cholangioscopy E3 and a sphincterotomy E4 of the bile duct - with a stone-extraction
+    denial E6 (status negated performed, breadth all_of_kind) whose kind and status words 43264 is cited on: 43264
+    EXCLUDED and the add-on 43273 (on E3) held by ADDON, its only primary excluded. No weakening of any fact of that
+    exclusion may release the add-on (engine/assess.addon_uncounted: a primary a statement may exclude is not counted)."""
+    doc = TA.ercp(stone=False)
+    doc.act(6, Kind.STONE_EXTRACTION, status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.ALL_OF_KIND),
+            kind_words=Span(600, 630), status_words=Span(630, 660))
+    return doc.build()
+
+
+ADDON_CODES = (('43264', EvidenceSpan(0, 600, 660, TA.TEXT[600:660], True)), ('43273', 3))
+
+
+def denial_of_a_kind():
+    """DECISIONS D294 RD-3's P-MONO fixture (repair r2, builder R2A): test_assess's enriched() two sessions with the
+    colonoscopy's examination E1 an established denial of its kind (result and state negated: "E1 is not an
+    examination", FillTests' own perturbation) - every other kind is what E1 may be (coverage.may_be), so 45385 is held
+    beside it - and no weakening of that denial may narrow what E1 may be to the denied kind."""
+    R = TA.enriched().build()
+    found = R.events[EF.E(1)][A.KIND][0]
+    denial = replace(found, result=Res.NEGATED, state=ct.FactState.NEGATED, value=Kind.EXAMINATION)
+    return replace(R, events={**R.events, EF.E(1): {**R.events[EF.E(1)], A.KIND: (denial,)}})
+
+
 def fixtures():
     """(name, the settled FactSet, the proposals) the properties run over: test_assess's assess fixtures, and the SC-B
     fixtures (refutation 6a-r1 F1) - two_sessions and r2d-2's Q2 and Q3 shapes and two targeted denials, each with the
@@ -483,8 +513,9 @@ def fixtures():
     clinician (D228_STATUS), r4a QM's three dilations (D240's site fit under weakening), R3D-NC's doubted snare filed in
     full (D238's production shape) - with D245's case (b) where pair controls exist; and DECISIONS D264's D264_SITE:
     refute-6a-r1 F3's dilation filed in two site classes (6a's Q6), on its own places and on its target lesion's places
-    (D264_CLEAN's states are r4a QM's fixture under drawn verdicts). Each is dated here, once (``assessed`` never re-dates
-    a FactSet)."""
+    (D264_CLEAN's states are r4a QM's fixture under drawn verdicts); and DECISIONS D294's two (repair r2): an add-on whose
+    only primary a cited denial excludes (RD-2) and an established denial of a kind (RD-3). Each is dated here, once
+    (``assessed`` never re-dates a FactSet)."""
     return (
         ('two sessions', TA.dated(TA.two_sessions().build()), TA.TWO),
         ('enriched', TA.dated(TA.enriched().build()), TA.TWO),
@@ -525,12 +556,16 @@ def fixtures():
          TA.dated(paired(a_dilation_filed_in_two_classes_beside_one_within())), (('43249', 2), ('43245', 1))),
         (LESION_SITE_FIXTURE, TA.dated(paired(a_dilation_filed_in_two_classes_beside_one_within(on_its_lesion=True))),
          (('43249', 2), ('43245', 1))),
+        (ADDON_FIXTURE, TA.dated(addon_beside_its_excluded_primary()), ADDON_CODES),
+        (KIND_DENIAL_FIXTURE, TA.dated(denial_of_a_kind()), TA.TWO),
     )
 
 
 F3_FIXTURE = 'a dilation filed in two site classes beside one within (refute-6a-r1 F3)'
 LESION_SITE_FIXTURE = 'a dilation of a stricture filed in two site classes beside one within (D264, its lesion places)'
 QM_FIXTURE = 'two esophageal dilations and a duodenal one (D262, r4a QM)'
+ADDON_FIXTURE = 'an add-on whose only primary a cited denial excludes (D294 RD-2)'
+KIND_DENIAL_FIXTURE = 'an established denial of a kind (D294 RD-3)'
 
 
 def fixture(name):
@@ -588,7 +623,11 @@ def _weakened_fact(found: Fact, how: str) -> Fact | None:
         reason = ct.Reason.DOUBT_STATED if how == 'doubt stated' else ct.Reason.DOUBT_UNCLEAR
         return replace(found, result=Res.UNKNOWN, options=(), reasons=(reason,))
     if how == 'doubt conflict':  # 3.3 row 1: a conflict doubt contradicts, keeping the claimed value
-        return replace(found, result=Res.CONTRADICTED, state=ct.FactState.CONTRADICTED, options=(found.value,),
+        # and pass 1's claim: settle keeps the claim's state, which the FactSet reads, so a conflict doubt on a denial
+        # is a contradicted DENIAL - never a stated side, which would erase the negation (no weakening of it: the ready
+        # lens's RD-3 artifacts, DECISIONS D294); any other claim keeps the generator's contradicted state
+        state = ct.FactState.NEGATED if found.state is ct.FactState.NEGATED else ct.FactState.CONTRADICTED
+        return replace(found, result=Res.CONTRADICTED, state=state, options=(found.value,),
                        reasons=(ct.Reason.DOUBT_UNCLEAR,))
     raise ValueError(how)
 
@@ -617,6 +656,11 @@ def erased_fact(found: Fact, how: str, other) -> Fact | None:
     """``found`` turned into AMENDMENT-2 4.4's value-erasing contradiction ``how`` (ERASING) with ``other``, or None when
     it does not apply (not established, or no other value)."""
     if found.result not in ESTABLISHED or other is None or other == found.value:
+        return None
+    if how == 'contradiction' and found.state is ct.FactState.NEGATED:
+        # pass 1's own contradiction STATES each side: of a denial ("not X") it would state X - erasing the negation,
+        # no weakening of the denial (the ready lens's RD-3 artifacts, DECISIONS D294); a denial's value-erasing
+        # contradictions are its two overfilled views (a slot), none for a required fact
         return None
     if how == 'contradiction':  # pass 1's own contradiction (3.3 row 1): the settled value empty, the sides its options
         return Fact(result=Res.CONTRADICTED, value=None, state=ct.FactState.CONTRADICTED, options=(found.value, other),
@@ -960,13 +1004,37 @@ def _support_reads(code, R, act_) -> list:
             for group in groups if act_ in evaluate.candidates(R, group)]
 
 
-def every_row_met(code, R, *, ready=True) -> tuple:
+def addon_row_met(code, R, assessment) -> bool:
+    """engine/assess's ADDON row of the add-on ``code`` over ``R`` (DECISIONS D294 RD-2), read apart from the engine's
+    held facts: one of its primaries (engine/assess.addon_hold, the function assess's row calls) among the codes
+    ``assessment`` proposed is counted - admitted by R1, not excluded by engine/evaluate over ``R`` with its kept spans,
+    and no statement able to exclude it (engine/assess.addon_uncounted). False without the proposals (fail-closed)."""
+    from studio.interpretation.engine import evaluate
+
+    if assessment is None:
+        return False
+    counted = set()
+    for found in assessment.codes:
+        if found.code == code or found.evaluation is None:  # R1 refused it: never counted
+            continue
+        kept, runs = found.evidence.kept, found.evidence.runs
+        if evaluate.decide(found.code, kept, R, kept_words=runs).exclusion is not None:
+            continue
+        if AS.addon_uncounted(found.code, kept, R, runs):
+            continue
+        counted.add(found.code)
+    return AS.addon_hold(code, counted, ()) is None
+
+
+def every_row_met(code, R, *, ready=True, assessment=None) -> tuple:
     """DECISIONS D264's rule for every named release: every act still supporting ``code`` in ``R`` - engine/evaluate's
     supporting acts after the weakening (E*, D240's site fit applied) - meets every row of evaluate's reading: in some
     requirement group it is a candidate of, its support rows and code-specific rows are all T (``_support_reads``, read
     act by act through evaluate.support and code_rows, never from the engine's own held facts or outcome); and a READY
     release (``ready``) has a supporting act. An act a candidate of no group of the code (43276's two-act pair is read by
-    its parts' groups) fails, fail-closed. Returns (met, {act: the rows it fails} or the reason)."""
+    its parts' groups) fails, fail-closed. And a READY add-on meets assess's ADDON row too (DECISIONS D294 RD-2:
+    ``addon_row_met`` over the codes ``assessment`` - the assessment of ``R`` - proposed beside it; without it an add-on
+    fails, fail-closed). Returns (met, {act or 'ADDON': the rows it fails} or the reason)."""
     from studio.interpretation.engine import evaluate
 
     supporting = evaluate.decide(code, (), R).supporting
@@ -978,6 +1046,8 @@ def every_row_met(code, R, *, ready=True) -> tuple:
         if not any(all(row.truth is evaluate.Truth.T for row in rows) for rows in reads):
             failing[act_] = sorted({str(row.requirement.value) for rows in reads for row in rows
                                     if row.truth is not evaluate.Truth.T}) or ['a candidate of no group of the code']
+    if ready and AS.primaries(code) and not addon_row_met(code, R, assessment):
+        failing['ADDON'] = ['its primary counted (engine/assess.addon_hold over the codes proposed beside it)']
     return not failing, failing
 
 
@@ -1505,7 +1575,7 @@ class PMonoTests(SimpleTestCase):
         final = weakened_state(label, what, R)
         if final is None and released:
             raise ValueError(f'{label}: no FactSet to hold the release to D264\'s rule')
-        rows = {code: (ruling, every_row_met(code, final, ready=code in grown_ready))
+        rows = {code: (ruling, every_row_met(code, final, ready=code in grown_ready, assessment=after))
                 for code, ruling in zip(released, rulings) if ruling in ROW_RULED}
         failed = {code: (ruling, found[1]) for code, (ruling, found) in rows.items() if not found[0]}
         self.assertEqual(failed, {}, (label, "a named release fails DECISIONS D264's rule - an act still supporting the "
@@ -4083,3 +4153,88 @@ class SixShapesTests(SimpleTestCase):
             scenes = [Scene('six shapes', label, R, TA.TEXT, assessed(R, codes))
                       for label, R, codes, code, probe in six_shapes()]
             self.assertLessEqual(messages, set(findings(scenes)))
+
+
+class R2APMonoFixtureTests(SimpleTestCase):
+    """DECISIONS D294, repair r2 (builder R2A): P-MONO's two fixtures for RD-2 and RD-3, D264's every-row check reading
+    assess's ADDON row (RD-2), and the generator keeping a negated claim negated, as settle does. The census itself
+    (``PMonoTests.test_every_single_weakening_of_every_fixture``) runs over both fixtures with every other; here each
+    fixture's own shape and its releases are asserted directly, so a mutant that brings one back fails by name."""
+
+    def test_no_weakening_of_the_primarys_exclusion_releases_the_add_on(self):
+        """RD-2: every single weakening of the ADDON fixture - the classic four, the value-erasing contradictions and
+        views - leaves 43273 held: its primary 43264, which a statement still may exclude, is never counted (as built,
+        29 states released it: E1's and E4's kind, E6's status, session and breadth, each weakened)."""
+        R, codes = fixture(ADDON_FIXTURE)
+        found = TA.by_code(assessed(R, codes))  # the fixture's shape: 43264 excluded, 43273 held by its row alone
+        self.assertIsNotNone(found['43264'].evaluation.exclusion)
+        self.assertEqual([held.cause for held in found['43273'].held_facts], [AS.ADDON_CAUSE])
+        checked = 0
+        for label, changed, _what in weakenings(R):
+            with self.subTest(weakening=label):
+                found = TA.by_code(assessed(changed, codes))
+                self.assertNotEqual(found['43273'].status, Outcome.READY)
+                if found['43264'].status is not Outcome.EXCLUDED and found['43264'].evaluation is not None:
+                    self.assertTrue(AS.addon_uncounted('43264', found['43264'].evidence.kept, changed,
+                                                       found['43264'].evidence.runs), label)
+                checked += 1
+        self.assertGreater(checked, 150)
+
+    def test_no_weakening_of_the_denial_of_a_kind_narrows_or_releases(self):
+        """RD-3: each 9.4 weakening of E1's established kind denial leaves every kind open for coverage.may_be and for
+        both arms of facts.possible_kinds (every other kind before, every kind after - never the denied kind alone), and
+        releases nothing (as built, 45385 went READY under each: E1 read as an examination only)."""
+        from studio.interpretation.engine import coverage
+
+        R, codes = fixture(KIND_DENIAL_FIXTURE)
+        base = assessed(R, codes)
+        kind = F.fact(R, EF.E(1), A.KIND)  # the fixture's shape: E1's kind an established denial, 45385 held
+        self.assertEqual((kind.result, kind.state, kind.value), (Res.NEGATED, ct.FactState.NEGATED, Kind.EXAMINATION))
+        self.assertEqual(TA.by_code(base)['45385'].status, Outcome.NEEDS_CLARIFICATION)
+        before = coverage.may_be(F.fact(R, EF.E(1), A.KIND))
+        self.assertNotIn(Kind.EXAMINATION, before)
+        self.assertGreater(len(before), 30)  # every other kind, an umbrella read as its members
+        checked = 0
+        for label, changed, what in weakenings(R):
+            if what[:2] != (EF.E(1), A.KIND):
+                continue
+            with self.subTest(weakening=label):
+                found = F.fact(changed, EF.E(1), A.KIND)
+                self.assertLessEqual(before | {Kind.EXAMINATION}, coverage.may_be(found))  # the denial may be wrong
+                for of_family in (False, True):
+                    self.assertEqual(F.possible_kinds(changed, EF.E(1), of_family=of_family), frozenset(Kind))
+                after = assessed(changed, codes)
+                self.assertEqual(_release(base, after)[:2], (frozenset(), frozenset()))
+                checked += 1
+        self.assertEqual(checked, len(HOWS))  # a required fact: no value-erasing contradiction of a denial
+
+    def test_every_row_met_reads_assess_addon_row(self):
+        """RD-2: D264's every-row check holds a READY add-on to assess's ADDON row over the codes proposed beside it - in
+        the ADDON fixture 43273's support rows are all T but its only primary is excluded, so the check fails it there
+        (naming the row) and without the proposals (fail-closed); beside 43264 held by YIELD (an act surely done) it
+        meets the row."""
+        R, codes = fixture(ADDON_FIXTURE)
+        met, failing = every_row_met('43273', R, assessment=assessed(R, codes))
+        self.assertFalse(met)
+        self.assertEqual(list(failing), ['ADDON'])
+        self.assertFalse(every_row_met('43273', R)[0])
+        held = TA.dated(TA.ercp().build())
+        proposals = (('43264', 5), ('43273', 3))
+        self.assertEqual(every_row_met('43273', held, assessment=assessed(held, proposals)), (True, {}))
+        self.assertEqual(every_row_met('45385', fixture('enriched')[0]), (True, {}))  # no add-on: no ADDON row
+
+    def test_the_generator_keeps_a_negated_claim_negated(self):
+        """A conflict doubt on a denial is a contradicted denial (settle keeps pass 1's claim and its state, which the
+        FactSet reads), and a denial has no pass-1 contradiction of its value (its sides would be stated); a stated claim
+        is weakened as before. The contradicted denial, read so, releases nothing (as built, 45385 went READY)."""
+        R, codes = fixture(KIND_DENIAL_FIXTURE)
+        denial = F.fact(R, EF.E(1), A.KIND)
+        conflict = _weakened_fact(denial, 'doubt conflict')
+        self.assertEqual((conflict.result, conflict.state, conflict.value), (Res.CONTRADICTED, ct.FactState.NEGATED,
+                                                                             Kind.EXAMINATION))
+        changed = _with(R, 'events', EF.E(1), {**R.events[EF.E(1)], A.KIND: (conflict,)})
+        self.assertEqual(TA.by_code(assessed(changed, codes))['45385'].status, Outcome.NEEDS_CLARIFICATION)
+        self.assertIsNone(erased_fact(denial, 'contradiction', Kind.BIOPSY))
+        stated = F.fact(R, EF.E(2), A.KIND)
+        self.assertEqual(_weakened_fact(stated, 'doubt conflict').state, ct.FactState.CONTRADICTED)
+        self.assertEqual(erased_fact(stated, 'contradiction', Kind.BIOPSY).options, (stated.value, Kind.BIOPSY))

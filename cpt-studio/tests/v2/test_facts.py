@@ -2119,6 +2119,169 @@ class OverfilledSlotTests(SimpleTestCase):
         self.assertIn(ct.Reason.LITERAL_MISMATCH, F.fact(R, E1, A.DATE_RELATION).reasons)  # 2023 fails the day
 
 
+def r2a_doubted(row: typing.Mapping, objects, readings, about='technique') -> dict:
+    """``row`` (a text-free view) with one more doubt (basis unclear, cited on S5) naming ``objects`` and reading
+    ``readings`` (DECISIONS D294 RD-1's inputs)."""
+    events = json.loads(json.dumps(row))
+    events['doubts'] = list(events['doubts']) + [{'about': about, 'objects': list(objects), 'units': ['S5'],
+                                                  'basis': 'unclear', 'readings': list(readings)}]
+    return events
+
+
+def r2a_inherited(state: str, value: str, section: str) -> dict:
+    """One written fact of an overfilled slot (``written_fact``) that the act inherited from ``section`` (1.5)."""
+    found = written_fact(state, value)
+    found['claim'] = claim(state, value, inherited_from=section)
+    return found
+
+
+class R2AOverfilledDoubtTests(SimpleTestCase):
+    """DECISIONS D294 RD-1 (repair r2, builder R2A): a value any doubt naming an overfilled slot's object - the subject,
+    or a section a written fact inherits from - reads is offered and never in negated_values, compared with the written
+    values directly: a reading of the value EVERY written fact writes and denies included (as built, _fact removed each
+    fact's own value from its options, so the doubt's reading was lost and the value read as only denied - 45378 READY
+    on [manual N, manual N] beside a doubt reading manual). D293 N2's T2 exception (no doubt) is unchanged."""
+
+    def device_view(self, readings=None, objects=('E1',)):
+        written = [written_fact('negated', 'manual', units=('S5',)), written_fact('negated', 'manual', units=('S5',))]
+        row = planted(view(colonoscopy()), IdFamily.EVENT, 'E1', A.TECHNIQUE_DEVICE, written)
+        if readings is not None:
+            row = r2a_doubted(row, objects, readings)
+        return F.fact(F.factset(row), E1, A.TECHNIQUE_DEVICE)
+
+    def test_a_doubt_reading_the_value_every_written_fact_denies_offers_it(self):
+        from tests.v2 import test_combination as TC
+
+        M, N_ = ct.Device.MANUAL, ct.FactState.NEGATED
+        device = self.device_view(['manual'])
+        self.assertEqual((device.options, device.negated_values, F.claimed_values(device)), ((M,), (), (M,)))
+        self.assertEqual(device, dataclasses.replace(TC.overfilled((N_, M), (N_, M), readings=(M,)), spans=device.spans,
+                                                     cited=device.cited))
+        # three written denials, and a doubt reading the denied value beside another: both read, neither only denied
+        three = planted(view(colonoscopy()), IdFamily.EVENT, 'E1', A.TECHNIQUE_DEVICE,
+                        [written_fact('negated', 'manual', units=(unit,)) for unit in ('S5', 'S6', 'S7')])
+        both = F.fact(F.factset(r2a_doubted(three, ['E1'], ['manual', 'endoscope'])), E1, A.TECHNIQUE_DEVICE)
+        self.assertEqual((both.options, both.negated_values), ((M, ct.Device.ENDOSCOPE), ()))
+        # the session slot: [X2 N, X2 N] beside a doubt naming the act and reading X2 claims X2 (as the doubt-free view
+        # claims nothing)
+        sessions = planted(view(colonoscopy()), IdFamily.EVENT, 'E2', A.SESSION,
+                           [written_fact('negated', 'X2', units=('S6',)), written_fact('negated', 'X2', units=('S6',))])
+        found = F.fact(F.factset(r2a_doubted(sessions, ['E2'], ['X2'], about='session')), E2, A.SESSION)
+        self.assertEqual((found.negated_values, F.claimed_values(found)), ((), (X2,)))
+        # an inherited slot: the doubt names the SECTION the written facts inherit from (N2), not the act
+        inherited = planted(view(colonoscopy()), IdFamily.EVENT, 'E1', A.PERFORMER,
+                            [r2a_inherited('negated', 'other_clinician', 'N2'),
+                             r2a_inherited('negated', 'other_clinician', 'N2')])
+        performer = F.fact(F.factset(r2a_doubted(inherited, ['N2'], ['other_clinician'], about='performer')), E1,
+                           A.PERFORMER)
+        self.assertEqual((performer.negated_values, performer.inherited_from), ((), Id(IdFamily.SECTION, 2)))
+        self.assertEqual(F.claimed_values(performer), (ct.Performer.OTHER_CLINICIAN,))
+
+    def test_only_a_doubt_naming_the_object_and_reading_the_denied_value_offers_it(self):
+        """The boundary, beside its twin the rule changes (a doubt naming the act and reading manual offers it): no doubt
+        (D293 N2's T2 exception), a doubt naming another object, a doubt naming the act but reading another value, and a
+        doubt whose reading is no value of the slot's domain leave manual only denied."""
+        M = ct.Device.MANUAL
+        self.assertEqual(self.device_view(['manual']).negated_values, ())  # the twin
+        for name, device in (('no doubt', self.device_view()),
+                             ('a doubt naming another act', self.device_view(['manual'], objects=('E2',))),
+                             ('a doubt reading another value', self.device_view(['endoscope'])),
+                             ('a reading of another attribute', self.device_view(['performed']))):
+            with self.subTest(name):
+                self.assertEqual(device.negated_values, (M,))
+                self.assertEqual(F.claimed_values(device), tuple(value for value in device.options if value != M))
+        self.assertEqual(self.device_view(['endoscope']).options, (M, ct.Device.ENDOSCOPE))
+
+    def test_45378_is_held_beside_the_doubt_and_ready_without_it(self):
+        """The engine on the builder's view (the refute-f3e-r2 q3 scene: a colonoscopy X1 reaching the cecum, its
+        examination E1 done today, 45378 proposed on E1): [manual N, manual N] beside a doubt naming E1 that reads
+        manual claims manual (a possibly digital examination) - 45378 held, as the written fact read alone holds it;
+        with no doubt, READY (D293 N2's T2 exception)."""
+        from studio.interpretation.engine.types import Outcome
+        from tests.v2 import evaluate_fixtures as EF
+        from tests.v2 import test_assess as TA
+
+        def status(device):
+            doc = EF.Doc()
+            doc.session(1, ct.SessionKind.COLONOSCOPY, tract=EF.sup(ct.Tract.LOWER), reached=[EF.sup(ct.Extent.CECUM)])
+            doc.exam(1, device=dataclasses.replace(device, spans=(EF.unit(1),), cited=()))
+            return TA.by_code(TA.run(doc.build(), ('45378', 1)))['45378']
+
+        held = status(self.device_view(['manual']))
+        self.assertEqual(held.status, Outcome.NEEDS_CLARIFICATION)
+        self.assertEqual((held.item.held.fact, held.item.held.cause), ('performed_status', 'coding_rule:not_documented'))
+        self.assertEqual(status(self.device_view()).status, Outcome.READY)
+
+
+class R2ANegatedClaimOpenTests(SimpleTestCase):
+    """DECISIONS D294 RD-3 (repair r2, builder R2A): a claim pass 1 wrote negated that is not established leaves every
+    value of its domain open for facts.possibly and every possibility reader built on it - the kind readers included
+    (facts.possible_kinds and possibly_of_family; coverage.may_be reads possibly) - as facts.open_denial makes
+    classes._open read it; an overfilled slot's merged view reads so too (AMENDMENT-2 4.4: never narrower than a
+    written denial read alone). As built, possibly read such a claim's denied value alone, so a weakened "not an
+    examination" narrowed the kinds the act may be from every other kind to the examination. An established fact, a
+    stated claim that is not established (4.2's candidate arm: its claimed value, readings and control's sibling), and
+    ``possibly_written`` - the claimed-value readers' and the list members' reading - are as before."""
+
+    def kind_denial(self, result=ct.Result.UNRESOLVED, reasons=(ct.Reason.APPRAISAL_UNCLEAR,), state=ct.FactState.NEGATED,
+                    value=ct.Kind.SNARE) -> Fact:
+        return Fact(result=result, value=value, state=state, options=(), reasons=reasons, spans=())
+
+    def factset(self, kind: Fact) -> FactSet:
+        from tests.v2 import evaluate_fixtures as EF
+
+        doc = EF.colonoscopy()
+        doc.events[E2] = {**doc.events[E2], A.KIND: (kind,)}
+        return doc.build()
+
+    def test_a_denial_left_open_leaves_every_value_possible(self):
+        from studio.interpretation.engine import coverage
+
+        for how, found in (('unresolved', self.kind_denial()),
+                           ('doubted', self.kind_denial(ct.Result.UNKNOWN, (ct.Reason.DOUBT_STATED,))),
+                           ('a conflict doubt', self.kind_denial(ct.Result.CONTRADICTED, (ct.Reason.DOUBT_UNCLEAR,)))):
+            with self.subTest(how):
+                self.assertTrue(F.open_denial(found))
+                self.assertTrue(all(F.possibly(found, kind) for kind in ct.Kind))
+                self.assertFalse(F.possibly_written(found, ct.Kind.BIOPSY))  # the claimed value alone, as before
+                R = self.factset(found)
+                for of_family in (False, True):
+                    self.assertEqual(F.possible_kinds(R, E2, of_family=of_family), frozenset(ct.Kind))
+                self.assertIn(ct.Kind.SNARE, coverage.may_be(found))
+                self.assertIn(ct.Kind.BIOPSY, coverage.may_be(found))
+        session = Fact(ct.Result.UNRESOLVED, X1, ct.FactState.NEGATED, (), (ct.Reason.APPRAISAL_UNCLEAR,), ())
+        self.assertTrue(F.possibly(session, X2))  # "not in X1", the denial may be wrong either way
+        from tests.v2 import test_combination as TC
+
+        view = TC.overfilled((ct.FactState.SUPPORTED, ct.Device.ENDOSCOPE), (ct.FactState.SUPPORTED, ct.Device.HOT_SNARE))
+        self.assertTrue(F.possibly(view, ct.Device.MANUAL))  # every view, as open_denial reads it (Q1R)
+        self.assertFalse(F.possibly_written(view, ct.Device.MANUAL))  # never a value pass 1 did not write
+
+    def test_an_established_fact_and_a_stated_claim_read_as_before(self):
+        """The boundary, beside its twin the rule changes (the same denial left open leaves another kind possible): the
+        denial established, and the claim stated (not negated) and left open, read as before; possibly_written is
+        possibly for each."""
+        from studio.interpretation.engine import coverage
+
+        self.assertTrue(F.possibly(self.kind_denial(), ct.Kind.BIOPSY))  # the twin
+        established = self.kind_denial(ct.Result.NEGATED, ())
+        self.assertFalse(any(F.possibly(established, kind) for kind in ct.Kind))
+        from studio.interpretation.engine import catalogue
+
+        others = frozenset(member for kind in ct.Kind if kind is not ct.Kind.SNARE
+                           for member in catalogue.UMBRELLAS.get(kind, (kind,)))
+        self.assertEqual(coverage.may_be(established), others)  # every OTHER kind, an umbrella read as its members
+        R = self.factset(established)
+        self.assertEqual(F.possible_kinds(R, E2, of_family=False), frozenset())
+        stated = self.kind_denial(state=ct.FactState.SUPPORTED)  # "a snare", unresolved: 4.2's candidate arm
+        self.assertFalse(F.open_denial(stated))
+        self.assertEqual(F.possible_kinds(self.factset(stated), E2, of_family=False), frozenset({ct.Kind.SNARE}))
+        self.assertEqual(coverage.may_be(stated), frozenset({ct.Kind.SNARE}))
+        for f in (established, stated):
+            for kind in ct.Kind:
+                self.assertEqual(F.possibly(f, kind), F.possibly_written(f, kind))
+
+
 class EstablishedKindTests(SimpleTestCase):
     """DECISIONS D287 (G3-28; build list B9): facts.established_kind, the one label of an act - questions.act_kind's
     event branch moved here, which every conflict key reads."""

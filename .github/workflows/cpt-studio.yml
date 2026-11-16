@@ -28,9 +28,11 @@ jobs:
     name: CPT Studio checks and tests
     runs-on: ubuntu-latest
     # The Django suite alone took 29 minutes of the 30 on GitHub's runner by refutation round 9 (5,243 tests), and the
-    # job was cut off before the browser-verifier tests and the dependency audit ran (run 41633767311): 45 minutes keeps
-    # every step's evidence.
-    timeout-minutes: 45
+    # job was cut off before the browser-verifier tests and the dependency audit ran (run 41633767311): 45 minutes kept
+    # every step's evidence. main's job took about 41 of the 45 minutes on 2026-11-14 (run 43542274234); the Fable
+    # interpreter branch adds design v2's suite (tests/v2, about 3,000 tests run serially here), and its first run was
+    # cut off at 45 minutes (run 43861500788, cancelled, no test failed): 150 minutes keeps every step's evidence again.
+    timeout-minutes: 150
     services:
       postgres:
         image: postgres:17

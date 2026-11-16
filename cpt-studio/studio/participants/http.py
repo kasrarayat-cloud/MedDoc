@@ -22,11 +22,15 @@ reached it, the model the verified request names, and the model, id and usage th
 
 A STREAM WITH AN END EVENT (docs/gemini-migration/AMENDMENT-2.md 1.3; the interpreter's connector, studio/
 interpretation/fable_adapter.py). A vendor may name a ``complete`` test: whether a 200's bytes reached the stream's end.
-When it does, a 200 whose stream did not end - its body read whole without its end event, or a read that stopped early
-for a connection reset or a broken chunk, the deadline or the byte cap - is 'unknown' (sent, HTTP 200) with the bytes
-read before the stop kept and their sha256, and no usage: the operator's evidence for the reconcile, never an answer
-and never priced as one [R:connector-CONN-6][R:connector-CONN-2][R:connector-CONN-3]. A vendor that names none (Corti's
-discipline, Astra, Fable 5.1, the dormant Gemini adapter) keeps every path exactly as before.
+When it does, the test decides from the bytes kept: a 200 whose kept bytes do not reach the end - its body read whole
+without its end event, or a read that stopped early for a connection reset or a broken chunk, the deadline or the byte
+cap before the end event came - is 'unknown' (sent, HTTP 200) with the bytes read before the stop kept and their
+sha256, and no usage: the operator's evidence for the reconcile, never an answer and never priced as one
+[R:connector-CONN-6][R:connector-CONN-2][R:connector-CONN-3]. Whenever the bytes kept from a read that stopped early
+already end with the stream's end event, they are the whole stream they are (DECISIONS D294, CONN-RF-3): 'succeeded',
+read, described and priced as a whole answer - so its outcome is never left for a reconcile to pay for again. A vendor
+that names none (Corti's discipline, Astra, Fable 5.1, the dormant Gemini adapter) keeps every path exactly as
+before.
 
 A PDF original travels by reference (HARNESS.md 3). The stored request body holds {"$original_sha256": hex,
 "$original_bytes": n} where the vendor's file data goes, and the request's sha256 is of that stored form. At send time
@@ -77,9 +81,10 @@ class Vendor:
     # OpenAI and Anthropic state them; Gemini states them as usageMetadata, modelVersion and responseId
     # (studio/interpretation/adapter.py). What a hook returns is kept only where it fits the record (described).
     describe: Optional[Callable[[bytes], tuple]] = None
-    # AMENDMENT-2 1.3: the vendor's end test, ``complete(raw) -> bool``, for a response that is a stream with an end event
-    # (the interpreter's Fable connector). Set, a 200 whose stream did not end, or whose read stopped early, is 'unknown'
-    # with the bytes read so far kept (_cut); None (every participant) keeps every path as it was.
+    # AMENDMENT-2 1.3: the vendor's end test, ``complete(raw) -> bool``, for a response that is a stream with an
+    # end event (the interpreter's Fable connector). Set, a 200 whose kept bytes do not reach the end - read whole, or a
+    # read that stopped early - is 'unknown' with the bytes read so far kept (_cut), and kept bytes that reach it are
+    # the whole stream (D294, CONN-RF-3); None (every participant) keeps every path as it was.
     complete: Optional[Callable[[bytes], bool]] = None
 
 
@@ -412,8 +417,8 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
                 request_id = _request_id(response.headers, vendor.request_id_header)
                 if vendor.complete is not None and status == 200:  # AMENDMENT-2 1.3: every early stop keeps its bytes
                     raw, stop = _read_kept(response, max_response_bytes, deadline)
-                    if watch.disarm():  # the deadline cut the read: the bytes before the cut are kept, never an answer
-                        stop = _BodyError(DEADLINE_READING)
+                    if watch.disarm():  # the deadline cut the read: the bytes before the cut are kept (the end test
+                        stop = _BodyError(DEADLINE_READING)  # below decides whether they are the whole stream)
                 else:
                     raw = _read_capped(response, max_response_bytes, deadline)
                     if watch.disarm():  # the deadline cut the read: what was read is not the whole answer
@@ -426,7 +431,9 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
                 with suppress(Exception):
                     response.close()
         latency = _elapsed_ms(started)
-        if vendor.complete is not None and status == 200 and (stop is not None or not _ended(vendor, raw)):
+        # D294 (CONN-RF-3): the kept bytes decide, whatever stopped the read - bytes that already end with the stream's
+        # end event are the whole stream they are; only bytes short of it are unknown
+        if vendor.complete is not None and status == 200 and not _ended(vendor, raw):
             return _cut(vendor, raw, stop, latency, url, requested_model, request_id)
         usage, returned_model, response_id = described(vendor, raw)
         error = ''
@@ -526,7 +533,8 @@ def _read_kept(response, cap: int, deadline: float) -> tuple:
     reset or a broken chunk raised inside iter_content (requests' ChunkedEncodingError or ConnectionError: a chunked
     body cut without its terminating chunk raises before an end is seen), the deadline or the cap - hands back the
     chunks read whole before it instead of dropping them (AMENDMENT-2 1.3 [R:connector-CONN-6]). A chunk that would
-    pass the cap is not kept, so the bytes kept never pass it."""
+    pass the cap is not kept, so the bytes kept never pass it. The vendor's end test then reads the bytes kept: bytes
+    that already end with the end event are the whole stream, whatever stopped the read (D294, CONN-RF-3)."""
     chunks, size = [], 0
     try:
         for chunk in response.iter_content(CHUNK_BYTES):
@@ -557,10 +565,11 @@ CUT_STREAM = ('The request reached {label}, but its answer stream was cut before
 
 def _cut(vendor: Vendor, raw: bytes, stop, latency: float, url: str, requested_model: str,
          request_id: str) -> RawExchange:
-    """The unknown exchange of a 200 whose stream did not reach its end (AMENDMENT-2 1.3): ``stop`` None for a body read
-    whole without its end event (INCOMPLETE_STREAM), else why the read stopped early (CUT_STREAM). Sent, HTTP 200, the
-    bytes read so far kept with their sha256 - P-6 never reads an unknown exchange - and no usage: a cut stream is never
-    priced as a whole answer [R:connector-CONN-3]. The model and id its bytes state are kept for the operator."""
+    """The unknown exchange of a 200 whose kept bytes do not reach the stream's end (AMENDMENT-2 1.3; D294, CONN-RF-3:
+    only such bytes are unknown): ``stop`` None for a body read whole without its end event (INCOMPLETE_STREAM), else
+    why the read stopped early, before the end event (CUT_STREAM). Sent, HTTP 200, the bytes read so far kept with their
+    sha256 - P-6 never reads an unknown exchange - and no usage: a cut stream is never priced as a whole answer
+    [R:connector-CONN-3]. The model and id its bytes state are kept for the operator."""
     data = bytes(raw)
     _, returned_model, response_id = described(vendor, data)
     why = (INCOMPLETE_STREAM.format(label=vendor.label) if stop is None

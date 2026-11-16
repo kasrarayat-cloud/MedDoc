@@ -1600,6 +1600,30 @@ def office_with_denied_biopsy() -> EF.Doc:
 VISITS_AND_DENIAL = (('99213', 1), ('99214', 1), ('45380', TA.DENIAL_SPAN))
 
 
+class R2AReadTimeAddonCountTests(SimpleTestCase):
+    """DECISIONS D294 RD-2 at read time (repair r2, builder R2A): read time counts the ADDON row's primaries as assess
+    does (engine/assess.addon_uncounted, the one rule): a primary that a statement may exclude is not counted over the
+    engine's own set, so the stored ADDON hold of an add-on beside such a primary is reproduced (never a RecordMismatch)
+    and kept live - and, over the reviewer's set, a primary the reviewer reinstated counts (D268: test_overlay's
+    D268AddonTests.test_reinstating_the_primary_releases_the_add_on)."""
+
+    def test_an_add_on_beside_a_primary_a_statement_may_exclude_stays_held_at_read_time(self):
+        doc = denied_stone_ercp()
+        doc.events[EF.E(6)] = {**doc.events[EF.E(6)], ct.Attribute.SCOPE_BREADTH: (EF.unres(ct.Breadth.ALL_OF_KIND),)}
+        case = Case(doc.build(), ('43264', DENIED_STONE), ('43273', 3))
+        by = {row.code: row for row in case.rows}
+        addon, primary = by['43273'], by['43264']
+        self.assertEqual((primary.bucket, primary.status, addon.status),
+                         ('selected', 'needs_clarification', 'needs_clarification'))
+        stored = TA.by_code(case.assessment)['43273']
+        self.assertEqual([held.cause for held in stored.held_facts], [AS.ADDON_CAUSE])
+        live = case.recount().live[addon.key]  # the engine's own set reproduces the stored record
+        self.assertEqual((live.held, live.item), (stored.held_facts, stored.item))
+        self.assertEqual(addon_holds(live.holds), addon_holds(stored.held_facts))
+        view = case.views()[addon.key]
+        self.assertEqual((view.status, view.added, view.released, view.stale), ('needs_clarification', (), (), ()))
+
+
 def released_by_assess(case: Case, key: str, *, frozen: bool) -> tuple[list, dict]:
     """(rows, completeness) of ``case`` - assessed with a member's overlay-bound "Not documented" to ``key``'s item -
     as DECISIONS D270 DQ-2's assess half records it (step 5a: assess reads that answer for the competition alone, as

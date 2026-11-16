@@ -361,6 +361,155 @@ class OneImplementationTests(SimpleTestCase):
         self.assertEqual(dict(basis.findings), dict(found.findings))
 
 
+# --- DECISIONS D295 (P1-FRAME): a header in labelled parts frames the document --------------------------------------
+
+
+def header_answer(date_unit='S4', date_words='03/14/2031'):
+    """test_geometry.HEADER's pass-1 answer (built by hand, as every answer here): N0 the title; N1 and N2 the labelled
+    header parts (role header); N3 the findings part with the colonoscopy X1 (E1) to the cecum and a cold-snare removal
+    of L1 (E2); N4 an addendum. The date of service, every part's occasion and the session's encounter are cited at
+    ``date_unit``, the documenting clinician, every part's owner and performer at the author line S6 - all through the
+    document frame."""
+    from tests.v2.test_settle import answer, lesion
+
+    owner = fact('documenting_clinician', frame(['S6']))
+    occasion = fact('on_date_of_service', frame([date_unit]))
+    team = fact('documenting_team', frame(['S6']))
+
+    def part(sid, unit, label, role):
+        return section(sid, src([unit], label, 'section'), owner, role=[fact(role, src([unit], label, 'section'))],
+                       occasion=[occasion], performer=[team])
+
+    return answer(
+        sections=[section('N0', src([], '', 'section'), owner, role=[fact('header', src(['S1'], '', 'frame'))],
+                          occasion=[occasion], performer=[team]),
+                  part('N1', 'S2', 'PATIENT INFORMATION', 'header'),
+                  part('N2', 'S5', 'PROCEDURE DETAILS', 'header'),
+                  part('N3', 'S8', 'Findings:', 'findings'),
+                  part('N4', 'S10', 'Addendum:', 'addendum')],
+        when={'state': 'stated', 'value': '2031-03-14', 'sources': [frame([date_unit], date_words)], 'options': []},
+        clinician=[fact('P1', frame(['S6'], 'Corvin Ashdale'))],
+        people=[{'id': 'P1', 'name': src(['S6'], 'Corvin Ashdale'),
+                 'role': fact('documenting_clinician', src(['S6'], 'Endoscopist'))}],
+        sessions=[session('X1', fact('colonoscopy', src(['S8'], 'colonoscope')), examination=[fact('E1', src(['S8']))],
+                          encounter=[fact('this_encounter', frame([date_unit]))],
+                          reached=[fact('cecum', src(['S8'], 'advanced to the cecum'))])],
+        lesions=[lesion('L1', src(['S9'], 'A 5 mm polyp'), multiplicity=[fact('single', src(['S9'], 'A 5 mm polyp'))],
+                        places=[fact('sigmoid_colon', src(['S9'], 'sigmoid colon'))])],
+        events=[event('E1', ['S8'], 'colonoscope', 'was advanced', 'examination', session=[fact('X1', src(['S8']))]),
+                event('E2', ['S9'], 'cold snare', 'was removed', 'snare', session=[fact('X1', src(['S9']))],
+                      target__lesion=[fact('L1', src(['S9'], 'A 5 mm polyp'))],
+                      target__places=[fact('sigmoid_colon', src(['S9'], 'sigmoid colon'))],
+                      technique__device=[fact('cold_snare', src(['S9'], 'cold snare'))])])
+
+
+FRAMED = ((F.ENCOUNTER, '', A.DATE_OF_SERVICE), (F.ENCOUNTER, '', A.DOCUMENTING_CLINICIAN), (F.SECTION, 'N3', A.OWNER),
+          (F.SECTION, 'N3', A.OCCASION), (F.SECTION, 'N3', A.PERFORMER), (F.SESSION, 'X1', A.ENCOUNTER))
+
+
+class R2FFrameCheckTests(SimpleTestCase):
+    """DECISIONS D295: check() measures a document_frame source against the frame part - N0 and the leading parts
+    before the first event is told - so a header in labelled parts frames the document; a date line after the acts does
+    not."""
+
+    def setUp(self):
+        from tests.v2.test_geometry import HEADER
+
+        self.text = HEADER
+        self.assertEqual([unit.id for unit in segment.units(HEADER)], [f'S{k}' for k in range(1, 11)])
+
+    def test_a_labelled_header_frames_the_date_the_author_and_every_part(self):
+        found = checked(header_answer(), self.text)
+        for family, name, attribute in FRAMED:
+            with self.subTest(fact=(name, attribute.value)):
+                self.assertNotIn(R.GEOMETRY_DOCUMENT_FRAME, findings(found, family, name, attribute))
+        self.assertEqual(found.findings.get(key(F.ENCOUNTER, '', A.DATE_OF_SERVICE), ()), ())
+
+    def test_a_date_line_after_the_first_act_frames_nothing(self):
+        found = checked(header_answer('S10'), self.text)
+        for family, name, attribute in ((F.ENCOUNTER, '', A.DATE_OF_SERVICE), (F.SECTION, 'N3', A.OCCASION),
+                                        (F.SESSION, 'X1', A.ENCOUNTER)):
+            with self.subTest(fact=(name, attribute.value)):
+                self.assertIn(R.GEOMETRY_DOCUMENT_FRAME, findings(found, family, name, attribute))
+        # the author line still lies in the frame part
+        self.assertNotIn(R.GEOMETRY_DOCUMENT_FRAME, findings(found, F.ENCOUNTER, '', A.DOCUMENTING_CLINICIAN))
+
+
+class R2FFramePipelineTests(SimpleTestCase):
+    """DECISIONS D295 end to end: HEADER's pass-1 answer read, checked, claimed, appraised by a faithful second reading,
+    settled under the Fable path's label (gemini-appraisal@2) and stored at the product's pair, then assessed: the
+    cold-snare polypectomy (45385) is READY; before D295 every frame fact settled unresolved and it was held."""
+
+    def assessment(self, data):
+        import datetime
+        import uuid
+
+        from studio import interpretation, jobs
+        from studio.interpretation import store
+        from studio.interpretation.contract import settle
+        from studio.interpretation.engine import assess as engine_assess
+        from studio.interpretation.engine import derive
+        from studio.types import EvidenceSpan, NormalizedResponse, ProviderCode
+        from tests.v2.test_geometry import HEADER
+        from tests.v2.test_settle import USAGE, Prepared
+
+        prepared = Prepared(HEADER, data)
+        settled = settle.settle(prepared.read, prepared.checked, prepared.claim_set, prepared.request.indistinct,
+                                prepared.appraisal(), USAGE, appraisal_version=interpretation.APPRAISAL_VERSION_V3)
+        self.assertFalse(isinstance(settled, settle.Unhealthy), settled)
+        text_sha = jsonschema_sha(HEADER)
+        fields = store.row_v2(encounter_id=uuid.UUID(int=1), revision_id=uuid.UUID(int=2),
+                              provider_run_id=uuid.UUID(int=3), appraisal_run_id=uuid.UUID(int=4), revision_text=HEADER,
+                              text_sha256=text_sha, request_sha256='2' * 64, response_sha256='3' * 64,
+                              appraisal_request_sha256='4' * 64, appraisal_response_sha256='5' * 64,
+                              events=settled.events, verification=settled.verification, versions=jobs.V2_VERSIONS)
+        view = store.textfree_v2(store.load_v2(fields, text_sha256=text_sha, response_sha256='3' * 64,
+                                               appraisal_response_sha256='5' * 64))
+        effective = derive.derive(view, {}).effective
+        quote = 'A 5 mm polyp in the sigmoid colon was removed with a cold snare.'
+        at = HEADER.index(quote)
+        proposals = NormalizedResponse('replay', 'test@1', (ProviderCode(
+            'selected', 'cpt', '45385', 'UNVERIFIED PROVIDER WORDING',
+            (EvidenceSpan(0, at, at + len(quote), quote, True),)),))
+        found = engine_assess.assess(
+            inventory=view, date_of_service=datetime.date.fromisoformat(effective) if effective else None, text=HEADER,
+            pages=(), integrity=jobs._Integrity(), provider_status='succeeded', proposals=proposals,
+            reference=_NoReference(), member=engine_assess.MemberContext(), label=lambda session: str(session.id))
+        return effective, found
+
+    def test_a_labelled_header_lets_the_polypectomy_be_ready(self):
+        effective, found = self.assessment(header_answer())
+        self.assertEqual(effective, '2031-03-14')
+        self.assertEqual(_status(found, '45385'), 'ready')
+
+    def test_a_date_line_after_the_acts_still_holds_it(self):
+        effective, found = self.assessment(header_answer('S10'))
+        self.assertIsNone(effective)
+        self.assertEqual(_status(found, '45385'), 'needs_clarification')
+
+
+class _NoReference:
+    """No reference row for any code (R9 is records only)."""
+
+    def lookup(self, code, service_date):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(pfs=None, mue=None)
+
+
+def jsonschema_sha(text):
+    import hashlib
+
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def _status(found, code):
+    """The status of ``code`` in an engine/assess Assessment (its one proposal of that code)."""
+    statuses = [item.status.value for item in found.codes if item.code == code]
+    assert len(statuses) == 1, (code, [(item.code, item.status) for item in found.codes])
+    return statuses[0]
+
+
 class ModuleTests(SimpleTestCase):
     source = MODULE.read_text(encoding='utf-8')
 

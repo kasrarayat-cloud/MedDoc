@@ -1334,7 +1334,7 @@ def _doubt(s: Slots, text: str) -> tuple[str, str]:
     examination too; every other act keeps v1's question."""
     act = the_act(text, s)
     words = _words(s, text, 'doubt')
-    if s.act is Kind.EXAMINATION and s.family is not None:  # the held session's examination (B6): row 7's done
+    if session_examination(s):  # the held session's examination (B6): row 7's done
         question = f'Confirm whether {act}{_shown(words)} is {DONE_IN_PART}.'
     else:
         question = f'Confirm whether {act}{_shown(words)} was done on the date of service.'
@@ -1359,6 +1359,13 @@ DENIAL_SCOPE = 'a statement that an act was not done'
 # D281 (B6, G3-27): row 7's done, as a question about the held session's examination says it (a begun examination is
 # done for row 7: evaluate._done_rows, combination.session_done) - UNLISTED_SCOPE, the session's DOUBT and DIGITAL_SCOPE
 DONE_IN_PART = 'documented as performed, in full or in part, on the date of service'
+
+
+def session_examination(s: Slots) -> bool:
+    """D281 (B6, G3-27): whether an item's act is the held session's examination - an examination named by its service
+    (``family`` given) - whose question says row 7's done (DONE_IN_PART). The ONE rule DOUBT's question and the member's
+    row of it (``member_form``) read, so the two never disagree."""
+    return s.act is Kind.EXAMINATION and s.family is not None
 
 
 def _scope(s: Slots, text: str) -> tuple[str, str]:
@@ -2751,3 +2758,107 @@ def explanation(message: Message, slots: Slots, text: str) -> str:
     """The explanation builder: why the code is held (build's reason) - the explanation of an explanation item, the
     reason of a question."""
     return build(message, slots, text).reason
+
+
+# --- r2 (DECISIONS D294, member words: WORDS-F1, F3, F6 and their class) -------------------------------------------------
+#
+# The member answers a held code's item on its details row (studio/answers.py), and reads why the code is held in its
+# qualification (studio/customer_api.py): fixed sentences, never the item's own question or reason (which quote the
+# document). Each fact key has its fixed row (answers.PROMPTS, CONFLICT_PROMPT; customer_api.QUESTION_WORDS). Whenever an
+# item's message asks something else than its key's fixed row - a message that takes its key from another fact
+# (DIGITAL_SCOPE, fact_key), or one that shares its key with items of another subject - the row and the qualification
+# are worded from the item's own message: its FORM below names the fixed row that asks the item's question ('' for the
+# key's own row). Forms (each a question every item of it asks, whatever its slots):
+# - DIGITAL_SCOPE, UNLISTED_SCOPE and the session's DOUBT (D280.3, D258, D281 B6): whether the held session's
+#   examination is documented as performed, in full or in part, on the date of service (DONE_IN_PART), each with what
+#   CPT Studio could not confirm about it - never "this procedure was performed", whose truthful "Not documented" about
+#   a begun examination, or about the claimed examination, excludes a code the document supports (D258);
+# - ADDON (D284): whether one of the add-on's primary codes is documented - never a fact of the add-on's own act;
+# - the class an established route, tract, approach, reach or station misfits, or a route or anatomy not established
+#   (the procedure-keyed explanations and questions D267 words by customer_api.HELD_FACT_ASKS, and the extent and
+#   station class explanations): whether the procedure this code describes was performed - never "In which procedure
+#   was this act done?" where the procedure is known, nor how far the instrument was advanced where the reach is known;
+# - ANOTHER_TECHNIQUE and ANOTHER_SITE: whether the act this code accounts for was performed;
+# - BUNDLED: whether a separate act this code accounts for was performed;
+# - ANOTHER_ENTRY: whether the act told only in another role's entry was performed in this procedure - never whose entry
+#   it is, which is established;
+# - BUNDLING_TARGET: whether the act was part of another act (the act_part key's own row, which its question asks).
+FORM_DIGITAL_SCOPE = 'digital_scope'
+FORM_UNLISTED_SCOPE = 'unlisted_scope'
+FORM_SESSION_DOUBT = 'session_doubt'
+FORM_ADDON = 'addon'
+FORM_DESCRIBED = 'described'
+FORM_ACCOUNTED = 'accounted'
+FORM_SEPARATE = 'separate'
+FORM_ANOTHER_ENTRY = 'another_entry'
+FORM_PART = 'part'
+FORMS: frozenset[str] = frozenset({FORM_DIGITAL_SCOPE, FORM_UNLISTED_SCOPE, FORM_SESSION_DOUBT, FORM_ADDON,
+                                   FORM_DESCRIBED, FORM_ACCOUNTED, FORM_SEPARATE, FORM_ANOTHER_ENTRY, FORM_PART})
+# What CPT Studio could not confirm, in each form's own words (true of every item of the form): the member's row
+# (studio/answers.py: its statement), the code's qualification (customer_api.FORM_WORDS) and read time's sentence for an
+# item it cannot word (overlay._fact_sentence) all read this ONE table, so they never say two things.
+FORM_MISSING: Mapping[str, str] = MappingProxyType({
+    FORM_DIGITAL_SCOPE: 'the technique of an examination the document states, which may be the examination of this '
+                        'procedure',
+    FORM_UNLISTED_SCOPE: 'whether a statement that names no procedure session is about the examination of this procedure',
+    FORM_SESSION_DOUBT: 'that the examination of this procedure was performed, in full or in part, on the date of service',
+    FORM_ADDON: 'that a primary code this add-on code is reported with is counted for this encounter',
+    FORM_DESCRIBED: 'that the procedure this code describes was performed on the date of service',
+    FORM_ACCOUNTED: 'that the act this code accounts for was performed on the date of service',
+    FORM_SEPARATE: 'a separate act that this code accounts for',
+    FORM_ANOTHER_ENTRY: 'that the act documented only in another entry was performed in this procedure',
+    FORM_PART: MISSING['act_part'],
+})
+# The forms a message gives whatever its slots; the session's DOUBT is the one form its slots choose (session_examination)
+_MESSAGE_FORMS: Mapping[Message, str] = MappingProxyType({
+    Message.DIGITAL_SCOPE: FORM_DIGITAL_SCOPE, Message.UNLISTED_SCOPE: FORM_UNLISTED_SCOPE, Message.ADDON: FORM_ADDON,
+    Message.ANOTHER_TRACT: FORM_DESCRIBED, Message.ENTEROSCOPY_ROUTE: FORM_DESCRIBED,
+    Message.ENTEROSCOPY_APPROACH: FORM_DESCRIBED, Message.ENTEROSCOPY_THROUGH: FORM_DESCRIBED,
+    Message.EXAMINATION_ROUTE: FORM_DESCRIBED, Message.EXAMINATION_APPROACH: FORM_DESCRIBED,
+    Message.EXAMINATION_CLASS: FORM_DESCRIBED, Message.ENTEROSCOPY_CLASS: FORM_DESCRIBED,
+    Message.STATION_CLASS: FORM_DESCRIBED,
+    Message.ANOTHER_TECHNIQUE: FORM_ACCOUNTED, Message.ANOTHER_SITE: FORM_ACCOUNTED,
+    Message.BUNDLED: FORM_SEPARATE, Message.ANOTHER_ENTRY: FORM_ANOTHER_ENTRY, Message.BUNDLING_TARGET: FORM_PART,
+})
+
+
+def member_form(message: object, slots: Optional[Slots] = None) -> str:
+    """The form of the member's row that asks an item's question (the comment above): '' where its fact key's fixed row
+    asks it. ``message``: a Message or its value (anything else has no form); ``slots``: the item's slots, which choose
+    the session's DOUBT (``session_examination``) - None where they are not known (a record made before forms were
+    recorded), which reads the message alone."""
+    found = message if isinstance(message, Message) else next(
+        (member for member in Message if member.value == message), None) if isinstance(message, str) else None
+    if found is None:
+        return ''
+    if found is Message.DOUBT:
+        return FORM_SESSION_DOUBT if slots is not None and session_examination(slots) else ''
+    return _MESSAGE_FORMS.get(found, '')
+
+
+def asked_form(question: object, support: object) -> str:
+    """The form of a question a view shows (``question``: review_view's question dict) - the ONE reading the details row,
+    the code's qualification and the door read: a question read time words carries its item's ``form`` (else its
+    ``message``); a stored question (it has a row id) is its record's item's - ``support['item']`` (the renderer's
+    record: its message and fact, and the form it recorded) - when that item is of its fact; '' for any other (a
+    reinstatement's wait, a question of no item)."""
+    if not isinstance(question, Mapping):
+        return ''
+    if 'form' in question or 'message' in question:
+        form = question.get('form')
+        return form if isinstance(form, str) and form in FORMS else member_form(question.get('message'))
+    item = support.get('item') if isinstance(support, Mapping) else None
+    if not (question.get('id') and question.get('scope', 'proposal') == 'proposal' and isinstance(item, Mapping)
+            and item.get('fact') == question.get('fact')):
+        return ''
+    return recorded_form(item)
+
+
+def recorded_form(item: object) -> str:
+    """The form a stored item record (``support['item']``) asks: the form the renderer recorded, else its message's."""
+    if not isinstance(item, Mapping):
+        return ''
+    form = item.get('form')
+    if isinstance(form, str):
+        return form if form in FORMS else ''
+    return member_form(item.get('message'))

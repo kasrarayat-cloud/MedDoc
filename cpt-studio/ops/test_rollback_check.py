@@ -449,8 +449,11 @@ class ScenarioAmendment2(unittest.TestCase):
         self.assertEqual(rc.scenario_problems(found, rc.SCENARIO_V2 + rc.SCENARIO_V3), [])
         problems = rc.scenario_problems({**found, 'declined_hold': 0, 'fable_run': 'RuntimeError: psql failed'},
                                         rc.SCENARIO_V2 + rc.SCENARIO_V3)
-        self.assertEqual(problems, ["fable_run: not counted ('RuntimeError: psql failed')",
-                                    'declined_hold: the run holds no an interpreter hold with reason declined'])
+        # DECISIONS D294 F1: the declined hold, which only a paid or nondeterministic provider outcome makes, is
+        # counted and reported, never required (ops/test_r2r_records.py)
+        self.assertEqual(problems, ["fable_run: not counted ('RuntimeError: psql failed')"])
+        self.assertEqual(rc.scenario_reported({**found, 'declined_hold': 0}, rc.SCENARIO_V2 + rc.SCENARIO_V3),
+                         {'declined_hold': 0})
         self.assertEqual(rc.scenario_problems({**found, 'declined_hold': 0}), [])  # 6.4's kinds alone: as before
 
 

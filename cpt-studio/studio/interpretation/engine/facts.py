@@ -61,13 +61,18 @@ object, read as ``_fact`` reads one): never a value pass 1 did not write and nev
 ``negated_values`` the written values only denied - denied by a written fact, stated by none, and left possible by no
 written fact read alone (a value one written fact denies and another states, or a doubt offers, is not only denied: the
 claimed-value readers 4.3.3 c names read it as claimed, as each written fact read alone would - NOTES questions Q1 and
-Q1R). Never the first written fact, never silence: ``silent`` is False for it, and ``holds``, ``denied`` and
-``established`` are False, so nothing rests on it as established (4.4). Each reader kind of 4.3.3 reads it, and since
-the two fields cannot carry what all three kinds need for a value written both stated and denied (whether a written
-fact denies, for the possibility readers; whether one states, for the claimed-value readers), each reads it at its
-fail-closed side (NOTES question Q1R): ``possibly`` (a) takes every written value as possible, and every possibility
-reader that takes an unestablished denial as leaving every value open takes EVERY merged view so (``open_denial``),
-whether or not a written fact denied a value - the weakest of its written facts read alone is never narrower; a reader
+Q1R); a doubt offers every value it reads whenever it names the slot's object (the subject, or a section a written
+fact inherits from), compared with the written values directly - a reading of the value every written fact writes and
+denies included (DECISIONS D294 RD-1), so the exception D293 N2 rules (a manual ONLY denied) is a slot no doubt reads
+the denied value of. Never the first written fact, never silence: ``silent`` is False for it, and ``holds``,
+``denied`` and ``established`` are False, so nothing rests on it as established (4.4). Each reader kind of 4.3.3 reads
+it, and since the two fields cannot carry what all three kinds need for a value written both stated and denied
+(whether a written fact denies, for the possibility readers; whether one states, for the claimed-value readers), each
+reads it at its fail-closed side (NOTES question Q1R): ``possibly`` (a) takes every written value as possible, and every
+possibility reader that takes an unestablished denial as leaving every value open - ``possibly`` itself among them since
+DECISIONS D294 RD-3 - takes EVERY merged view so (``open_denial``), whether or not a written fact denied a value - the
+weakest of
+its written facts read alone is never narrower; a reader
 of what pass 1 STATED (b) reads nothing a merged view holds as stated (classes._claims), since it cannot tell a written
 value from a doubt's reading, nor a value one written fact states from one another denies; a claimed-value reader (c)
 reads each option not in ``negated_values`` as claimed (``claimed_values``). A written fact that carried K3's
@@ -81,7 +86,11 @@ not established leaves every status possible [R:HO-1][R:HO-3] - and ``possibly_o
 (4.5) and an exclusion's condition 5 (4.6) read: a kind that is not established leaves every kind of its session's
 family possible - requirements_table.FAMILY_KINDS, the one table K2 reads too (DECISIONS D191), never computed here -
 and every kind when the session or its kind is not established [R:HO-5]. As a candidate for a code (4.4) an act's kind
-is read by ``possibly`` alone: its claimed value, its readings and its control's sibling. ``apart_by_lesion``
+is read by ``possibly`` alone: its claimed value, its readings and its control's sibling. A claim pass 1 wrote negated
+that is not established (and a merged view) leaves every value possible for ``possibly`` and every reader built on it,
+the kind readers included (DECISIONS D294 RD-3, ``open_denial``): weakening an established denial never narrows what
+the fact may be. ``possibly_written`` is the reading without that widening, for the claimed-value readers (4.3.3 c) and
+the readers of a multi-valued list's members, which RD-3 (a single-valued claim) does not reach. ``apart_by_lesion``
 and ``apart_by_place`` set two objects apart only on established, different (disjoint) targets AND rejected pair
 controls in both directions: a short list never sets anything apart, and a pair control that was not generated is not
 rejected [R:SC-B]. ``apart_by_place`` reads every pair control between the two objects, whatever place it asks about
@@ -570,7 +579,10 @@ def _overfilled(records: Sequence[object], domain: Domain, subject: str, attribu
     order and then what each written fact read alone leaves possible besides, each once; ``negated_values`` the written
     values only denied: every written fact of which was negated, and which no written fact read alone leaves possible
     besides (a doubt's reading of the object, which ``_digital``'s claimed-manual reading takes as a claim - NOTES
-    question Q1R); ``inherited_from`` the written facts' section when they all name one. FactSetError for fewer than two
+    question Q1R) - every reading of a doubt naming the object (the subject, or a section a written fact inherits from)
+    compared with the written values directly, so a reading of the value every written fact writes and denies is
+    offered too (DECISIONS D294 RD-1; ``_fact`` removes a fact's own value from its options, so they cannot carry it);
+    ``inherited_from`` the written facts' section when they all name one. FactSetError for fewer than two
     facts, for a slot that is none of SLOTS, and for a fact without slot_overfull (store.py refuses such a row)."""
     if (family, attribute) not in SLOTS or len(records) < 2:
         raise FactSetError(f'The stored inventory is not readable: {where} holds more than one fact.')
@@ -600,6 +612,13 @@ def _overfilled(records: Sequence[object], domain: Domain, subject: str, attribu
         found.append(one)
     if timing:
         context.occasions[subject] = tuple(literals)
+    # DECISIONS D294 RD-1: a value any doubt naming the slot's object - the subject, or a section a written fact
+    # inherits from - reads is offered, compared with the written values directly: never through a written fact's
+    # options, from which _fact removes the fact's own value, so a reading of the value EVERY written fact writes is
+    # offered too (never in negated_values). With no such doubt nothing is offered (D293 N2's T2 exception unchanged).
+    named = [subject, *dict.fromkeys(str(one.inherited_from) for one in found if one.inherited_from is not None)]
+    offered.update(parsed for parsed in (_maybe(raw, domain) if raw != '' else None
+                                         for raw in context.readings(named, family is None)) if parsed is not None)
     if family is _E and attribute is Attribute.SESSION and any(
             Reason.SESSION_UNREACHABLE in one.reasons for one in found):
         context.unreachable.add(_id(subject, where))
@@ -701,6 +720,30 @@ def _claims(events: Mapping[str, object]) -> dict[str, Mapping[str, object]]:
     for index, claim in enumerate(_sequence(_field(events, 'claims', 'the inventory'), 'claims')):
         record = _mapping(claim, f'claims[{index}]')
         out[_string(_field(record, 'id', f'claims[{index}]'), f'claims[{index}].id')] = record
+    return out
+
+
+def _lesion_pairs(events: Mapping[str, object]) -> dict[tuple[Id, Attribute, Value], bool]:
+    """DECISIONS D296: each settled lesion pair claim of the row (the @3 pair's ``lesion_pairs``; an older row has
+    none), keyed (the statement's lesion, distinct_from, the act's lesion) in FactSet.pair_controls: True when settle
+    established the two lesions distinct (the claim supported, its sameness control rejected), False otherwise. One
+    lesion pair asked twice is established only when every asking was (fail-closed). Read by ``appraised_distinct``
+    alone, so only ever to set two lesions apart, never to join them; every reader of pair_controls by an event's
+    place or lesion ignores these keys (another family's subject, another attribute)."""
+    out: dict[tuple[Id, Attribute, Value], bool] = {}
+    found = events.get('lesion_pairs')
+    if found is None:
+        return out
+    for index, item in enumerate(_sequence(found, 'lesion_pairs')):
+        where = f'lesion_pairs[{index}]'
+        record = _mapping(item, where)
+        lesion = _id(_field(record, 'lesion', where), f'{where}.lesion')
+        other = _id(_field(record, 'other', where), f'{where}.other')
+        if lesion.family is not _L or other.family is not _L or lesion == other:
+            raise FactSetError(f'The stored inventory is not readable: {where} is no pair of two lesions.')
+        result = _enum(Result, _field(record, 'result', where), f'{where}.result')
+        key = (lesion, Attribute.DISTINCT_FROM, other)
+        out[key] = out.get(key, True) and result is Result.SUPPORTED
     return out
 
 
@@ -880,7 +923,8 @@ def _build(inventory: object, rejudge: bool, service: datetime.date | None) -> F
                    for subject, held in objects[_E].items()}
     return FactSet(encounter=encounter, people=objects[_P], sections=objects[_N], sessions=objects[_X],
                    anatomy=objects[_Y], lesions=objects[_L], events=objects[_E], anchors=anchors,
-                   unlisted=_unlisted(events, context), pair_controls=_pair_controls(context),
+                   unlisted=_unlisted(events, context),
+                   pair_controls={**_pair_controls(context), **_lesion_pairs(events)},
                    completeness=completeness)
 
 
@@ -1031,7 +1075,33 @@ def possibly(f: Fact, v: Value) -> bool:
     value, one of the options (a contradicted fact's sides, a doubt's readings, the value of a control pass 2 did not
     reject), or the fact is silent. A status (``v`` a Status) that is not established leaves every status possible
     [R:HO-1][R:HO-3]. An established fact makes possible exactly its supported value (none when negated). This is the
-    fail-closed doubt arm: a doubt is never an absence."""
+    fail-closed doubt arm: a doubt is never an absence.
+
+    DECISIONS D294 RD-3: a claim pass 1 wrote negated that is not established leaves EVERY value of its domain possible
+    (``open_denial``, as classes._open reads it): the denial may be wrong, and a reader that reads the established
+    denial as every other value (coverage.may_be: the kinds an act may be) must never read its weakening as the denied
+    value alone - so weakening an established denial never narrows what the fact may be, for this predicate and every
+    reader built on it (the kind readers, facts.possible_kinds and possibly_of_family, among them). An overfilled slot's
+    merged view reads so too, as a written denial read alone now would (AMENDMENT-2 4.4; every view, the fail-closed
+    reading of ``open_denial``). The claimed-value readers (AMENDMENT-2 4.3.3 c: the digital examination's device) and
+    the readers of a multi-valued list's members, which RD-3 (a single-valued claim) does not reach, read
+    ``possibly_written``."""
+    if holds(f, v):
+        return True
+    if f.result not in OPEN:
+        return False
+    if isinstance(v, Status):
+        return True
+    return silent(f) or open_denial(f) or f.value == v or v in f.options
+
+
+def possibly_written(f: Fact, v: Value) -> bool:
+    """4.2's ``possibly`` over what the fact itself carries - its supported value; not established, its claimed value,
+    its options, or any value when it is silent; a status not established, every status - never D294 RD-3's open
+    denial: read by the claimed-value readers (AMENDMENT-2 4.3.3 c: pairing.digital_examination and combination._digital
+    read a device that CLAIMS manual, DECISIONS D253's claimed-manual reading) and by the readers of a multi-valued
+    list's members (a statement's excepts, a lesion's same_as, an other date's role), which RD-3 does not reach - so
+    each keeps the reading it was built and ruled with."""
     if holds(f, v):
         return True
     if f.result not in OPEN:
@@ -1080,7 +1150,8 @@ def possibly_of_family(R: FactSet, event: Id, kind: Kind) -> bool:
 
 def possible_kinds(R: FactSet, event: Id, *, of_family: bool) -> frozenset[Kind]:
     """Every Kind ``event`` may be: by ``possibly`` (a candidate, 4.4), or by ``possibly_of_family`` (a statement or an
-    exclusion's condition 5)."""
+    exclusion's condition 5) - in both, every kind for a kind claim pass 1 wrote negated that is not established
+    (DECISIONS D294 RD-3: the denial may be wrong)."""
     found = fact(R, event, Attribute.KIND)
     if of_family:
         return frozenset(kind for kind in Kind if possibly_of_family(R, event, kind))
@@ -1112,7 +1183,8 @@ def overfilled(f: Fact) -> bool:
 def open_denial(f: Fact) -> bool:
     """Whether a fact that is not established reads, for a possibility reader that takes an unestablished denial as
     leaving every value open (classes._open and _may_name, combination._named_sessions, coverage.sessions_of and
-    _lesion_values: AMENDMENT-2 4.3.3 a), as such a denial: a claim pass 1 wrote negated (state negated), and every
+    _lesion_values: AMENDMENT-2 4.3.3 a; and, by DECISIONS D294 RD-3, ``possibly`` itself and every reader built on it),
+    as such a denial: a claim pass 1 wrote negated (state negated), and every
     overfilled slot's merged view (``overfilled``). Whenever a written fact of the view denies a value, the view must
     leave every value open, as that denial read alone would (4.4: never stronger than any single written fact read
     alone, for any reader); and the view cannot tell from its options and ``negated_values`` whether one does, since a
@@ -1182,9 +1254,18 @@ def apart_by_controls(R: FactSet, a: Id, b: Id, attribute: Attribute, of_a: Iter
             and all(R.pair_controls.get((b, attribute, value)) is True for value in of_a))
 
 
+def appraised_distinct(R: FactSet, one: Id, other: Id) -> bool:
+    """DECISIONS D296: two lesions established distinct by a lesion pair claim - its claim supported and its sameness
+    control rejected (settle's coherence table) - in either orientation (R.pair_controls keyed (lesion, distinct_from,
+    lesion), True). Read only where 4.2's apart_by_lesion reads distinct_from, to set two lesions apart."""
+    return (R.pair_controls.get((one, Attribute.DISTINCT_FROM, other)) is True
+            or R.pair_controls.get((other, Attribute.DISTINCT_FROM, one)) is True)
+
+
 def apart_by_lesion(R: FactSet, a: Id, b: Id) -> bool:
     """FINAL-V2 4.2 [R:SC-B], DECISIONS D235: both target lesions established (supported) and different, distinct_from
-    established (supported) between them in either lesion's list, and the lesion pair controls BETWEEN the two objects,
+    established (supported) between them in either lesion's list - or, by DECISIONS D296, the two established distinct
+    by a lesion pair claim (``appraised_distinct``) - and the lesion pair controls BETWEEN the two objects,
     as their target lesions name them, rejected: ``a`` asked about ``b``'s lesion and ``b`` about ``a``'s ("This act was
     done to lesion {L}."), (a, lb) and (b, la). target.lesion is single-valued and no 9.4 weakening deletes or changes
     it, so these two are exactly the lesion controls between the pair: a lesion control asked of either object about a
@@ -1198,7 +1279,7 @@ def apart_by_lesion(R: FactSet, a: Id, b: Id) -> bool:
     if not isinstance(la, Id) or not isinstance(lb, Id) or la == lb:
         return False
     distinct = any(holds(member, lb) for member in members(R, la, Attribute.DISTINCT_FROM)) or any(
-        holds(member, la) for member in members(R, lb, Attribute.DISTINCT_FROM))
+        holds(member, la) for member in members(R, lb, Attribute.DISTINCT_FROM)) or appraised_distinct(R, la, lb)
     return (distinct and R.pair_controls.get((a, Attribute.TARGET_LESION, lb)) is True
             and R.pair_controls.get((b, Attribute.TARGET_LESION, la)) is True)
 

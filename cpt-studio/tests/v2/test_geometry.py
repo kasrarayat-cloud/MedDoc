@@ -152,6 +152,21 @@ LISTED = ('Findings: A sigmoid polyp was removed with a cold snare.\n'
           '- Sigmoid polyp, removed\n'
           '- Rectal polyp, left in place\n')
 
+# DECISIONS D295 (P1-FRAME): a header in labelled parts - the title in N0, the date line in a patient-information part,
+# the author line in a procedure-details part - before the first act is told; an addendum after the acts
+HEADER = ('SYNTHETIC COLONOSCOPY NOTE\n'                                              # S1: N0, the title
+          'PATIENT INFORMATION\n'                                                     # S2: N1's label
+          'Patient: synthetic patient Q-17\n'                                         # S3
+          'Date of service: 03/14/2031\n'                                             # S4: the date line, in N1
+          'PROCEDURE DETAILS\n'                                                       # S5: N2's label
+          'Endoscopist: Corvin Ashdale, MD (fictional)\n'                             # S6: the author line, in N2
+          'Instrument: adult colonoscope\n'                                           # S7: no encounter fact's source
+          '\n'
+          'Findings: The colonoscope was advanced to the cecum.\n'                    # S8: N3, the first act
+          'A 5 mm polyp in the sigmoid colon was removed with a cold snare.\n'        # S9
+          '\n'
+          'Addendum: Date of service 03/14/2031 confirmed.\n')                        # S10: N4, after the acts
+
 
 class Doc:
     """DOC cut into units, its sections as pass 1 would file them, and its events' anchors."""
@@ -235,7 +250,7 @@ class FixtureTests(SimpleTestCase):
         self.assertTrue(excluded and all(len(value) == 64 for value in excluded), 'the exclusion list is readable')
         documents = {'NOTE8': NOTE8, 'W1S399': W1S399, 'DOC': DOC, 'CLOSED': CLOSED, 'MIDUNIT': MIDUNIT,
                      'E3_DOC': E3_DOC, 'SHARED': SHARED, 'FINDINGS': FINDINGS, 'IMPRESSION': IMPRESSION,
-                     'INTUBATION': INTUBATION, 'LISTED': LISTED}
+                     'INTUBATION': INTUBATION, 'LISTED': LISTED, 'HEADER': HEADER}
         listed = [name for name, text in documents.items()
                   if {hashlib.sha256(text.encode('utf-8')).hexdigest(),
                       hashlib.sha256(text.strip().encode('utf-8')).hexdigest()} & excluded]
@@ -994,6 +1009,115 @@ class LinkTests(SimpleTestCase):
 
 
 # --- G3, G4, G6 ---------------------------------------------------------------------------------------------------------
+
+
+class R2FFramePartTests(SimpleTestCase):
+    """DECISIONS D295 (P1-FRAME): a document_frame source lies in the document's frame part - N0 and the leading
+    sections, contiguous from N0, that end before the first event is told - where it was N0 alone. HEADER is a header in
+    labelled parts: its date line lies in the second part and its author line in the third, both before any act."""
+
+    def setUp(self):
+        self.layout = layout = Layout.of(HEADER)
+        self.ids = ids = {name: unit_with(layout, fragment) for name, fragment in (
+            ('title', 'SYNTHETIC COLONOSCOPY NOTE'), ('patient', 'PATIENT INFORMATION'), ('date', 'Date of service:'),
+            ('details', 'PROCEDURE DETAILS'), ('author', 'Endoscopist: Corvin'), ('instrument', 'Instrument: adult'),
+            ('findings', 'Findings: The colonoscope'), ('snare', 'A 5 mm polyp'), ('addendum', 'Addendum:'))}
+        self.sections = Sections(layout, (
+            Section('N0', src((), '', Link.SECTION), ()),
+            Section('N1', src((ids['patient'],), 'PATIENT INFORMATION', Link.SECTION), ()),
+            Section('N2', src((ids['details'],), 'PROCEDURE DETAILS', Link.SECTION), ()),
+            Section('N3', src((ids['findings'],), 'Findings:', Link.SECTION), ()),
+            Section('N4', src((ids['addendum'],), 'Addendum:', Link.SECTION), ())))
+        self.anchors = (Anchor((ids['findings'],), 'colonoscope', 'was advanced'),
+                        Anchor((ids['snare'],), 'cold snare', 'was removed'))
+        self.told = geometry.first_told(layout, [geometry.locate_anchor(layout, anchor) for anchor in self.anchors])
+        self.part = geometry.frame_part(self.sections, self.told)
+        self.frame = geometry.frame_units((src((ids['date'],), '03/14/2031', Link.DOCUMENT_FRAME),
+                                           src((ids['author'],), 'Corvin Ashdale, MD', Link.DOCUMENT_FRAME),
+                                           src((ids['title'],), 'COLONOSCOPY', Link.DOCUMENT_FRAME)))
+        self.subject = geometry.unplaced_subject()
+
+    def links(self, source, frame=None, part=..., sections=None):
+        return geometry.link_reasons(self.layout, sections or self.sections, self.subject, source,
+                                     self.frame if frame is None else frame, self.part if part is ... else part)
+
+    def test_the_frame_part_is_n0_and_the_leading_labelled_parts(self):
+        self.assertEqual([place.reasons for place in self.sections.places], [()] * 5)
+        self.assertEqual(self.told, offset_of(HEADER, 'colonoscope was advanced'))
+        self.assertEqual(self.part, Span(0, offset_of(HEADER, 'Findings:')))
+
+    def test_the_date_and_author_lines_of_a_labelled_header_pass(self):
+        ids = self.ids
+        self.assertEqual(self.links(src((ids['date'],), '03/14/2031', Link.DOCUMENT_FRAME)), ())
+        self.assertEqual(self.links(src((ids['author'],), 'Corvin Ashdale, MD', Link.DOCUMENT_FRAME)), ())
+        self.assertEqual(self.links(src((ids['title'],), '', Link.DOCUMENT_FRAME)), ())
+        # measured against N0's span alone - the rule before D295 - both lines fail
+        n0 = self.sections.opening.span
+        self.assertEqual(n0, Span(0, offset_of(HEADER, 'PATIENT INFORMATION')))
+        for unit, words in ((ids['date'], '03/14/2031'), (ids['author'], 'Corvin Ashdale, MD')):
+            self.assertEqual(self.links(src((unit,), words, Link.DOCUMENT_FRAME), part=n0),
+                             (Reason.GEOMETRY_DOCUMENT_FRAME,))
+
+    def test_a_frame_line_after_the_first_act_still_fails(self):
+        ids = self.ids
+        self.assertEqual(self.links(src((ids['addendum'],), '03/14/2031', Link.DOCUMENT_FRAME),
+                                    frame=self.frame | {ids['addendum']}), (Reason.GEOMETRY_DOCUMENT_FRAME,))
+        self.assertEqual(self.links(src((ids['findings'],), '', Link.DOCUMENT_FRAME),
+                                    frame=self.frame | {ids['findings']}), (Reason.GEOMETRY_DOCUMENT_FRAME,))
+
+    def test_a_unit_that_is_no_frame_unit_still_fails(self):
+        self.assertEqual(self.links(src((self.ids['instrument'],), 'adult colonoscope', Link.DOCUMENT_FRAME)),
+                         (Reason.GEOMETRY_DOCUMENT_FRAME,))
+        self.assertEqual(self.links(src((self.ids['date'], self.ids['details']), '', Link.DOCUMENT_FRAME)),
+                         (Reason.GEOMETRY_DOCUMENT_FRAME,))
+
+    def test_an_opening_part_that_fails_g2_leaves_no_frame_part(self):
+        ids = self.ids
+        broken = Sections(self.layout, (
+            Section('N0', src((ids['patient'],), 'PATIENT INFORMATION', Link.SECTION), ()),
+            Section('N1', src((ids['details'],), 'PROCEDURE DETAILS', Link.SECTION), ()),
+            Section('N2', src((ids['findings'],), 'Findings:', Link.SECTION), ())))
+        self.assertTrue(broken.opening.reasons, 'N0 is not at the text start (G2)')
+        self.assertIsNone(broken.opening.span)
+        part = geometry.frame_part(broken, self.told)
+        self.assertIsNone(part)
+        self.assertEqual(self.links(src((ids['date'],), '03/14/2031', Link.DOCUMENT_FRAME), part=part,
+                                    sections=broken), (Reason.GEOMETRY_DOCUMENT_FRAME,))
+
+    def test_an_empty_opening_part_leaves_no_frame_part(self):
+        # DECISIONS D199, unchanged: an N0 of length zero before a part at the first character has no span
+        layout = Layout.of(E3_DOC)
+        sections = Sections(layout, (Section('N0', src((), '', Link.SECTION), ()),
+                                     Section('N1', src(('S1',), 'Per nursing note:', Link.SECTION), ()),
+                                     Section('N2', src(('S2',), 'Endoscopist:', Link.SECTION), ())))
+        self.assertIsNone(geometry.frame_part(sections, len(E3_DOC)))
+
+    def test_the_walk_stops_at_the_part_an_event_is_told_in_and_at_a_gap(self):
+        ends = (offset_of(HEADER, 'PATIENT INFORMATION'), offset_of(HEADER, 'PROCEDURE DETAILS'),
+                offset_of(HEADER, 'Findings:'))
+        # told inside N2 (its instrument line): N0 and N1 only; told inside N1: N0 only; no event told: N0 alone
+        self.assertEqual(geometry.frame_part(self.sections, offset_of(HEADER, 'Instrument:')), Span(0, ends[1]))
+        self.assertEqual(geometry.frame_part(self.sections, offset_of(HEADER, 'Patient:')), Span(0, ends[0]))
+        self.assertEqual(geometry.frame_part(self.sections, None), Span(0, ends[0]))
+        # a part closed before the next starts leaves a gap: the walk stops at it
+        ids = self.ids
+        closed = Sections(self.layout, (
+            Section('N0', src((), '', Link.SECTION), ()),
+            Section('N1', src((ids['patient'],), 'PATIENT INFORMATION', Link.SECTION),
+                    (src((ids['patient'],), 'PATIENT INFORMATION', Link.SECTION),)),
+            Section('N2', src((ids['details'],), 'PROCEDURE DETAILS', Link.SECTION), ()),
+            Section('N3', src((ids['findings'],), 'Findings:', Link.SECTION), ())))
+        self.assertEqual(closed.places[1].span.end, offset_of(HEADER, 'PATIENT INFORMATION') + len('PATIENT INFORMATION'))
+        self.assertEqual(geometry.frame_part(closed, self.told), Span(0, closed.places[1].span.end))
+
+    def test_an_anchor_that_does_not_locate_is_placed_fail_closed(self):
+        ids, layout = self.ids, self.layout
+        words_fail = geometry.locate_anchor(layout, Anchor((ids['snare'],), 'forceps', 'was removed'))
+        self.assertIsNone(words_fail.place)
+        self.assertEqual(geometry.first_told(layout, [words_fail]), offset_of(HEADER, 'A 5 mm polyp'))
+        unknown = geometry.locate_anchor(layout, Anchor(('S99',), 'snare', 'removed'))
+        self.assertEqual(geometry.first_told(layout, [unknown]), 0)
+        self.assertEqual(geometry.frame_part(self.sections, 0), Span(0, offset_of(HEADER, 'PATIENT INFORMATION')))
 
 
 class TargetTests(SimpleTestCase):

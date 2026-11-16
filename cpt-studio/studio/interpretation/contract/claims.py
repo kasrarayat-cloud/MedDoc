@@ -106,6 +106,14 @@ establish (``unwritable_of_session``: the fact is not claimed). Every slot read 
 (``supported``, ``claimed_value``: an overfilled slot holds none) or the merged view (``offered``), and a fact carrying
 any finding - an overfilled slot's slot_overfull included - is never claimed (AMENDMENT-2 4.3.4).
 
+**The lesion pair claim** (DECISIONS D296; FINAL-V2 4.2 as amended), under gemini-appraisal@2 only: where a statement
+whose single, listed or segment target names a lesion meets an act its pair controls ask about whose target names a
+different lesion, and pass 1 wrote no same_as or distinct_from between the two lesions (nor doubted either's), the claim
+set asks "Lesions {L} and {M} are different lesions." with its contrary "Lesions {L} and {M} are the same lesion." (the
+forms a written distinct_from and its control take), citing both lesions' description runs; each lesion pair once
+(``lesion_pair``; ClaimSet.lesion_pairs). Settle establishes the distinctness only on a supported claim with its
+control rejected, and only 4.2's apart_by_lesion reads it - to set two lesions apart, never to join them.
+
 **What this module never does** (5.6, 5.7 measure 4; P1): it copies no text - cards and claims carry unit ids and
 spans, and the document reaches pass 2 through the framing - reads no word of the document, compares no value with
 text, and imports neither re nor a text module (segment, geometry, fold, date_literals) nor any retired v1 module. Its
@@ -1586,6 +1594,19 @@ class PairControl:
 
 
 @dataclass(frozen=True, slots=True)
+class LesionPair:
+    """A lesion pair claim (DECISIONS D296; FINAL-V2 4.2 as amended), built under gemini-appraisal@2 only: claim, the id
+    of "Lesions {lesion} and {other} are different lesions."; control, the id of its contrary, "Lesions {lesion} and
+    {other} are the same lesion."; lesion, the statement's target lesion; other, the act's. Settle establishes the two
+    lesions distinct only when pass 2 supports the claim and rejects the control (settle.appraise's coherence table);
+    apart_by_lesion reads that as it reads a written distinct_from, the pair controls still rejected."""
+    claim: str
+    control: str
+    lesion: str
+    other: str
+
+
+@dataclass(frozen=True, slots=True)
 class Completeness:
     """The completeness claim of an upper EUS session whose station list is empty (3.2.2 [R:SC-B]): session, its id;
     claim and control, the two claims' ids."""
@@ -1607,9 +1628,10 @@ class ClaimSet:
     """The claims of one request (2.4): cards, in card order; claims, in the seeded order (K1..); sentences and about,
     each claim's sentence and the card it is about (a claim about the encounter names none: ''); appraised,
     pair_controls and completeness, which claim appraises what (settle's input); unclaimed; objects, each card's object
-    (family, id); controls, the ids of the claims that serve as a control - a contrary control, a pair control or a
-    completeness control - never the id of a real claim (DECISIONS D196: a control never asserts what a real claim
-    about the same object asserts, and build() asserts it); seed, the order's seed."""
+    (family, id); controls, the ids of the claims that serve as a control - a contrary control, a pair control, a
+    completeness control or a lesion pair's sameness control - never the id of a real claim (DECISIONS D196: a control
+    never asserts what a real claim about the same object asserts, and build() asserts it); seed, the order's seed;
+    lesion_pairs, the lesion pair claims (DECISIONS D296; none under gemini-appraisal@1)."""
     cards: tuple[Card, ...]
     claims: tuple[Claim, ...]
     sentences: Mapping[str, str]
@@ -1621,6 +1643,7 @@ class ClaimSet:
     objects: Mapping[str, tuple[xs.Family, str]]
     controls: frozenset[str]
     seed: str
+    lesion_pairs: tuple[LesionPair, ...] = ()
 
     def claim(self, claim_id: str) -> Claim | None:
         """The claim of that id, None when the set has none."""
@@ -1721,6 +1744,11 @@ class _Fact:
 # A pair control's role, which its content key carries (_Spec.content): settle stores a claim of it with role
 # pair_control, the role the engine's FactSet reads pair controls by.
 _PAIR_ROLE = 'pair_control'
+# A lesion pair claim's and its sameness control's roles (DECISIONS D296), which their content keys carry: each is a
+# claim of its own beside any fact's claim or control of the same sentence, and settle stores them as a claim and a
+# control.
+_LESION_PAIR_ROLE = 'lesion_pair'
+_LESION_PAIR_CONTROL_ROLE = 'lesion_pair_control'
 # The place forms a place control renders (an act's, a statement's - its kind-neutral form too, D292's U1 - a
 # lesion's): the controls another place fact of the same object prefers not to repeat (_Builder.contrary).
 _PLACE_FORMS = frozenset({T.ACT_TARGET_PLACE, T.STMT_TARGET_PLACE, T.STMT_TARGET_PLACE_ANY, T.LESION_PLACES})
@@ -1815,6 +1843,10 @@ class _Builder:
         self.appraised: list[tuple[_Fact, _Spec, _Spec | None]] = []
         self.pairs: list[tuple[_Spec, tuple[xs.Family, str], tuple[xs.Family, str], Attribute, str]] = []
         self.complete: list[tuple[str, _Spec, _Spec]] = []
+        # DECISIONS D296: the lesion pair claims (claim, control, the statement's lesion, the act's), each lesion pair
+        # once (lesion_pairs_seen)
+        self.lesion_pair_specs: list[tuple[_Spec, _Spec, str, str]] = []
+        self.lesion_pairs_seen: set[frozenset[str]] = set()
         self.unclaimed: list[Unclaimed] = []
         # the claims of facts left unclaimed because their control cannot be written (Unclaimable.CONTROL)
         self.withdrawn: list[_Spec] = []
@@ -2789,6 +2821,7 @@ class _Builder:
                 if session is not None and act_session is not None and act_session != session:
                     continue
                 self.pair(statement, act)
+                self.lesion_pair(statement, act)  # DECISIONS D296 (gemini-appraisal@2 only)
         for index, first in enumerate(acts):
             for second in acts[index + 1:]:
                 one = self.claimed_value(Family.EVENT, first, _A.SESSION)
@@ -2823,6 +2856,57 @@ class _Builder:
             made = _Spec(made.template, made.subject, made.value, made.units, made.params, made.slots, _PAIR_ROLE)
             self.pairs.append((made, (Family.EVENT, asked), (Family.EVENT, other), attribute, value))
 
+    def lesion_pair(self, statement: str, act: str) -> None:
+        """DECISIONS D296 (P1-LESION; FINAL-V2 4.2 as amended), under gemini-appraisal@2 only: a statement whose target
+        names a lesion meets an act its pair controls ask about (pair_controls: a compatible or sibling kind, not
+        established in another session) whose target names a DIFFERENT lesion, and pass 1 wrote no same_as or
+        distinct_from between the two (lesion_identity_written): the claim set asks the lesion pair claim "Lesions
+        {lesion} and {other} are different lesions." with its contrary control "Lesions {lesion} and {other} are the
+        same lesion." - the two forms a written distinct_from and its control take (LESION_DISTINCT, LESION_SAME; no
+        pair control asserts a sameness of two lesions, so none is reused) - citing both lesions' description runs in
+        their sentence closures. The cards name the lesions and nothing names a kind. Each lesion pair is asked once,
+        whichever statements and acts meet it; a lesion with no description run gives no claim (fail-closed: the pair
+        then stays unestablished)."""
+        if self.version != interpretation.APPRAISAL_VERSION_V3:
+            return
+        for mine in self.lesions(statement):
+            for theirs in self.lesions(act):
+                key = frozenset({mine, theirs})
+                if mine == theirs or key in self.lesion_pairs_seen or self.lesion_identity_written(mine, theirs):
+                    continue
+                self.lesion_pairs_seen.add(key)
+                first = self.closure(self.statement_run(Family.LESION, mine))
+                second = self.closure(self.statement_run(Family.LESION, theirs))
+                if first is None or second is None:
+                    continue
+                units, subject = self.ordered((*first, *second)), Ref(Family.LESION, mine)
+                claim = self.render(_LES_C, _A.DISTINCT_FROM, FactState.SUPPORTED, theirs, subject, units)
+                control = self.render(_LES_C, _A.SAME_AS, FactState.SUPPORTED, theirs, subject, units)
+                if isinstance(claim, Unclaimable) or isinstance(control, Unclaimable):
+                    continue
+                self.lesion_pair_specs.append((
+                    _Spec(claim.template, claim.subject, claim.value, claim.units, claim.params, claim.slots,
+                          _LESION_PAIR_ROLE),
+                    _Spec(control.template, control.subject, control.value, control.units, control.params,
+                          control.slots, _LESION_PAIR_CONTROL_ROLE), mine, theirs))
+
+    def lesion_identity_written(self, one: str, other: str) -> bool:
+        """Whether pass 1 wrote a same_as or distinct_from between two lesions - in either lesion's list, in any state
+        (a contradicted one by any side's value) - or a doubt names either lesion's same_as or distinct_from: the
+        identity is then pass 1's own fact, claimed, doubted or contradicted as it stands, and no lesion pair claim
+        asks it again (DECISIONS D296; fail-closed for a doubted identity)."""
+        for first, second in ((one, other), (other, one)):
+            for attribute in (_A.SAME_AS, _A.DISTINCT_FROM):
+                if self.is_doubted(Family.LESION, first, attribute):
+                    return True
+                for item in self.slot(Family.LESION, first, attribute):
+                    fact = item.fact
+                    values = [getattr(fact, 'value', '')]
+                    values += [getattr(option, 'value', '') for option in getattr(fact, 'options', ())]
+                    if second in values:
+                        return True
+        return False
+
     def completeness(self) -> None:
         """The completeness claim (3.2.2 [R:SC-B]) for every upper EUS session whose station list is empty, cited at its
         examination's sentence closure, with its limitation-form control. The claim renders the session's kind and
@@ -2853,6 +2937,8 @@ class _Builder:
             specs += [made] if control is None else [made, control]
         specs += [made for made, *_rest in self.pairs]
         for _session, claim, control in self.complete:
+            specs += [claim, control]
+        for claim, control, _lesion, _other in self.lesion_pair_specs:
             specs += [claim, control]
         cards, card_of = self.cards([ref for made in specs for ref in made.refs()])
 
@@ -2898,12 +2984,21 @@ class _Builder:
             if shown(claim) and shown(control):
                 complete.append(Completeness(session, claim_id[claim.content()], claim_id[control.content()]))
                 controls.add(claim_id[control.content()])
+        lesion_pairs: list[LesionPair] = []
+        for claim, control, lesion, other in self.lesion_pair_specs:  # DECISIONS D296
+            if shown(claim) and shown(control):
+                found = LesionPair(claim_id[claim.content()], claim_id[control.content()], lesion, other)
+                if found not in lesion_pairs:
+                    lesion_pairs.append(found)
+                    controls.add(found.control)
         # DECISIONS D196: no control asserts what a real claim about the same object asserts, whatever units each
         # cites (no_control_is_a_claim leaves none); one that did would be a defect, and no claim set is built
         real = {made.assertion() for _fact, made, _control in self.appraised if shown(made)}
+        real |= {claim.assertion() for claim, _control, _lesion, _other in self.lesion_pair_specs if shown(claim)}
         written = [control for _fact, _made, control in self.appraised if control is not None]
         written += [made for made, *_rest in self.pairs] + [control for _session, _claim, control in self.complete]
-        if controls & {item.claim for item in appraised} or any(
+        written += [control for _claim, control, _lesion, _other in self.lesion_pair_specs]
+        if controls & ({item.claim for item in appraised} | {pair.claim for pair in lesion_pairs}) or any(
                 shown(control) and control.assertion() in real for control in written):
             raise RuntimeError('A control asserts what a real claim about the same object asserts (DECISIONS D196); '
                                'no claim set is built.')
@@ -2912,7 +3007,7 @@ class _Builder:
             about=MappingProxyType(about), appraised=tuple(appraised), pair_controls=tuple(pairs),
             completeness=tuple(complete), unclaimed=tuple(unclaimed),
             objects=MappingProxyType({card_id: object_ for object_, card_id in card_of.items()}),
-            controls=frozenset(controls), seed=self.seed)
+            controls=frozenset(controls), seed=self.seed, lesion_pairs=tuple(lesion_pairs))
 
     def cards(self, refs: list[Ref]) -> tuple[list[Card], dict[tuple[xs.Family, str], str]]:
         """One card per object named, numbered by type in document order (sections from N0, the others from 1); an
@@ -3193,6 +3288,14 @@ def controls_document(version: str = interpretation.APPRAISAL_VERSION) -> dict[s
                                             '(SESSION_REACHED_NEGATED): the opposite of the claim that the endoscope '
                                             'itself reached that entry (D292 U3), and the one control a reach and its '
                                             'reached_anatomy share (D244)')
+        # DECISIONS D296 (P1-LESION): the lesion pair claim and its control, stated and pinned
+        found['lesion_pairs'] = ("a statement whose single, listed or segment target names a lesion, against each act "
+                                 'its pair controls ask about whose target names a different lesion, with no same_as '
+                                 'or distinct_from of pass 1 between the two and neither doubted: the claim that the '
+                                 'two are different lesions (LESION_DISTINCT) with its contrary, that they are the '
+                                 'same lesion (LESION_SAME), both citing the two lesions\' description runs in their '
+                                 'closures; each lesion pair once; its content key carries its role (lesion_pair, '
+                                 'lesion_pair_control)')
         # AMENDMENT-2 4.4 at the session's other objects (refute-f3s-r1 finding 3: the class stated and pinned)
         found['session_others'] = ("another lesion or another act of the act's session: when none exists by the "
                                    'values the slots establish, but one a card can show (none of the fact\'s own '

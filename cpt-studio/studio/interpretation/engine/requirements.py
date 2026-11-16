@@ -424,7 +424,9 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     # an established group un-bundles a biopsy of a removed lesion (4.7, C-2; DECISIONS D196). DECISIONS D292 E1j: a
     # biopsy done elsewhere than every removal reads each removal's places together with its target lesion's places
     # (FINAL-V2 5.1 row 10), so a lesion's places are read on the READY path too (P-INDEP); REQUIREMENTS_VERSION moves
-    # with this read-set (cpt-requirements@2, the integration's label).
+    # with this read-set (cpt-requirements@2, the integration's label). DECISIONS D294 G1: those places are the removed
+    # FINDING's - every entry a same_as member in any state may join to the target lesion - so E1j reads same_as only
+    # to widen what it must find established, in the hold direction: same_as stays a hold-only read, unchanged here.
     Requirement.BUNDLING: Rule((
         _r(_ACT, _A.PART_OF, _HOLD), _r(_ACT, _A.PART_RELATION, _HOLD), _r(_ACT, _A.CAUSE, _HOLD, _ADJUNCT_KINDS),
         _r(_ACT, _A.CAUSE_EVENT, _HOLD, _ADJUNCT_KINDS), _r(_ACT, _A.PURPOSE, _HOLD, frozenset({Kind.INJECTION})),

@@ -208,7 +208,8 @@ def date_record(found: facts_.EncounterDates) -> dict[str, object]:
     else:
         state = 'stated'
     # another date possibly given for this encounter leaves a stated date unverified (v1's date_mismatch; 2d#4)
-    second = any(facts_.possibly(other.role, DateRole.THIS_ENCOUNTER) and other.value != fact.value
+    # an other date's role is a member of a multi-valued list: read without DECISIONS D294 RD-3's open denial
+    second = any(facts_.possibly_written(other.role, DateRole.THIS_ENCOUNTER) and other.value != fact.value
                  for other in found.others)
     verified = (state == 'stated' and fact.result is Result.SUPPORTED and _day(fact.value) is not None
                 and not second)
@@ -217,7 +218,7 @@ def date_record(found: facts_.EncounterDates) -> dict[str, object]:
     if state == 'several' and fact.result is Result.CONTRADICTED and found.checks_passed:
         candidates = sorted({day for day in (_day(side) for side in found.sides) if day})
     elsewhere = {other.value.iso for other in found.others
-                 if any(facts_.possibly(other.role, role) for role in OTHER_ROLES)}
+                 if any(facts_.possibly_written(other.role, role) for role in OTHER_ROLES)}
     readings: list[str] = []
     if fact.state is FactState.SUPPORTED and not verified:  # a stated date only: never a several one's (2d#3)
         readings = sorted({day for day in (_day(literal) for literal in found.literals)
@@ -226,7 +227,7 @@ def date_record(found: facts_.EncounterDates) -> dict[str, object]:
     for other in found.others:
         located = _located(other.role)
         for role in OTHER_ROLES:
-            if facts_.possibly(other.role, role):
+            if facts_.possibly_written(other.role, role):
                 others[role.value].append({'value': other.value.iso, 'verified': True, 'words': located,
                                            'passages': [], 'reasons': []})
     return {'state': state, 'value': _day(fact.value) if verified else None, 'verified': verified,

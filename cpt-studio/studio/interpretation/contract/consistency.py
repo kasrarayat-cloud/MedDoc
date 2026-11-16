@@ -100,7 +100,12 @@ own located words, which only contract/date_literals.py's parsers read (the one 
 consistency import); it calls no string method, holds no word, phrase, marker or frame list (every module-level
 collection holds enumeration members), and imports no regular-expression module itself. Versions: the checks belong to
 the inventory version (gemini-inventory@3 since AMENDMENT-2's stated-or-offered reading): a changed rule re-settles
-stored pass-1 bytes (1.1, 2.5).
+stored pass-1 bytes (1.1, 2.5). ``check`` is given the inventory version the findings are made for (the version the
+row they settle into is written at: gemini-inventory@3 on the current path, the default), and a label's rule does not
+change after its first recording (D202): K2's date arm reads the stated-or-offered reading under gemini-inventory@3,
+and under gemini-inventory@2, recorded before AMENDMENT-2, a contradicted date relation states no value and the arm
+reads the act's and the examination link's supported sessions, as that label always did (``_date_conflict``; DECISIONS
+D294 F2).
 """
 from __future__ import annotations
 
@@ -111,6 +116,7 @@ from enum import Enum, unique
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from studio import interpretation
 from studio.interpretation.contract import date_literals
 from studio.interpretation.contract import extract_schema as xs
 from studio.interpretation.contract.extract_read import DateOfService, FactKey, ReadAnswer, ReadFact, merged
@@ -415,18 +421,22 @@ class _Out:
 
 
 def check(answer: ReadAnswer, vocabulary: Vocabulary, words: Words,
-          containing: Mapping[str, str] | None = None) -> Findings:
+          containing: Mapping[str, str] | None = None, *,
+          inventory_version: str = interpretation.INVENTORY_VERSION_V3) -> Findings:
     """K1-K8, L1 and Q1 over one read answer. ``vocabulary`` holds the catalogue and anatomy tables (Vocabulary);
     ``words`` gives the text of a source's located words (Words), which L1 alone reads; ``containing`` maps an event id
     to the id of the section its anchor lies in when G4's edge holds (geometry.Sections.attached): K2's date arm reads
     it to find an examination's inherited date relation, and L1 to find the occasion an event with no date relation of
-    its own inherits (DECISIONS D193). The answer is read, never changed, and no member value is read: the findings
-    depend on the revision and pass 1's bytes alone."""
+    its own inherits (DECISIONS D193). ``inventory_version``: the inventory version the findings are made for - the one
+    the row they settle into is written at - whose rules they apply (gemini-inventory@3, the current path's, by
+    default; K2's date arm reads gemini-inventory@2's rule under that label: _stated_or_offered_dates, DECISIONS D294
+    F2). The answer is read, never changed, and no member value is read: the findings depend on the revision, pass 1's
+    bytes and the label alone."""
     indexed = _Answer(answer)
     out = _Out()
     sections = containing or {}
     _k1(indexed, vocabulary, out)
-    _k2(indexed, vocabulary, sections, out)
+    _k2(indexed, vocabulary, sections, out, _stated_or_offered_dates(inventory_version))
     _k3(indexed, vocabulary, out)
     _k4(indexed, vocabulary, out)
     _k5(indexed, out)
@@ -552,12 +562,14 @@ def _covered(vocabulary: Vocabulary, statement: Kind, act: Kind | None) -> bool:
 # --- K2: session consistency [R:HO-7] -------------------------------------------------------------------------------------
 
 
-def _k2(answer: _Answer, vocabulary: Vocabulary, containing: Mapping[str, str], out: _Out) -> None:
+def _k2(answer: _Answer, vocabulary: Vocabulary, containing: Mapping[str, str], out: _Out, offered_dates: bool) -> None:
     """K2. Each read of a slot whose value decides the rule reads every value it states or offers (_offered,
     [R:truth-T3]): the examination link, the act's session, its kind, the session's kind, and the date relations K2's
     date arm compares - for two slots, every combination - so a contradicted or overfilled slot fires the rule on each
-    of its values instead of switching it off. What K2 demotes is unchanged: the act's session fact and the session's
-    examination link, on every fact of an overfilled slot (ReadFact.keys)."""
+    of its values instead of switching it off. The date arm (session_conflict) reads so only for findings made for
+    gemini-inventory@3 (``offered_dates``: _stated_or_offered_dates); under gemini-inventory@2 it reads as that label
+    was recorded (_date_conflict; DECISIONS D294 F2). What K2 demotes is unchanged: the act's session fact and the
+    session's examination link, on every fact of an overfilled slot (ReadFact.keys)."""
     sessions = frozenset(answer.ids[Family.SESSION])
     events = frozenset(answer.ids[Family.EVENT])
     for event_id in answer.ids[Family.EVENT]:  # an event's session exists
@@ -575,23 +587,57 @@ def _k2(answer: _Answer, vocabulary: Vocabulary, containing: Mapping[str, str], 
         if found is None or not _act(answer, event_id):
             continue
         kinds = _offered(answer.one(Family.EVENT, event_id, A.KIND), Kind)
-        own = answer.one(Family.EVENT, event_id, A.DATE_RELATION)
         for session in _offered_ids(found):
             if session not in sessions:
                 continue
             families = _offered(answer.one(Family.SESSION, session, A.KIND), SessionKind)
             if any(not vocabulary.family_admits(family, kind) for kind in kinds for family in families):
                 out.reason(found.keys, Reason.SESSION_INCONSISTENT)  # an act's session kind admits its kind (D191)
-            if own is None:
+        if _date_conflict(answer, event_id, found, sessions, events, containing, offered_dates):
+            out.reason(found.keys, Reason.SESSION_CONFLICT)  # the act's own other date: its session fact only
+
+
+def _stated_or_offered_dates(inventory_version: str) -> bool:
+    """Whether K2's date arm reads AMENDMENT-2's stated-or-offered reading (4.3.3 [R:truth-T3]) for findings made for
+    ``inventory_version``: it is gemini-inventory@3's rule, and gemini-inventory@2 - whose first recording (D1) was made
+    with the reading before AMENDMENT-2 - keeps the rule it was recorded with, since a label's rule never changes after
+    its first recording (D202; DECISIONS D294 F2). Every label but gemini-inventory@2 reads the newer rule, which only
+    demotes more (fail-closed)."""
+    return inventory_version != interpretation.INVENTORY_VERSION_V2
+
+
+def _date_conflict(answer: _Answer, event_id: str, found: ReadFact, sessions: frozenset[str], events: frozenset[str],
+                   containing: Mapping[str, str], offered: bool) -> bool:
+    """K2's date arm: whether the act's OWN date relation and its session examination's claimed one - the examination's
+    own, else the occasion of the section its anchor lies in (``containing``) - cannot both hold. ``offered``
+    (findings for gemini-inventory@3, _stated_or_offered_dates): every session the act's session fact states or
+    offers, every examination that session's link states or offers, and every value each relation states or offers
+    (_incompatible). Otherwise (findings for gemini-inventory@2, as that label was recorded): the act's supported
+    session, that session's supported examination, and a contradicted relation stating no value (_incompatible_stated).
+    The arm fires once whatever the number of conflicts (a finding is a reason on the act's session fact)."""
+    own = answer.one(Family.EVENT, event_id, A.DATE_RELATION)
+    if own is None:
+        return False
+    named = _offered_ids if offered else _supported_ids
+    incompatible = _incompatible if offered else _incompatible_stated
+    for session in named(found):
+        if session not in sessions:
+            continue
+        for examination in named(answer.one(Family.SESSION, session, A.EXAMINATION)):
+            if examination == event_id or examination not in events:
                 continue
-            for examination in _offered_ids(answer.one(Family.SESSION, session, A.EXAMINATION)):
-                if examination == event_id or examination not in events:
-                    continue
-                theirs = answer.one(Family.EVENT, examination, A.DATE_RELATION)
-                if theirs is None and examination in containing:
-                    theirs = answer.one(Family.SECTION, containing[examination], A.OCCASION)
-                if theirs is not None and _incompatible(own, theirs):
-                    out.reason(found.keys, Reason.SESSION_CONFLICT)  # the act's own other date: its session fact only
+            theirs = answer.one(Family.EVENT, examination, A.DATE_RELATION)
+            if theirs is None and examination in containing:
+                theirs = answer.one(Family.SECTION, containing[examination], A.OCCASION)
+            if theirs is not None and incompatible(own, theirs):
+                return True
+    return False
+
+
+def _supported_ids(found: ReadFact | None) -> tuple[str, ...]:
+    """The id a SUPPORTED fact names, as a tuple of one or none (_id): gemini-inventory@2's read of K2's date arm."""
+    named = _id(found)
+    return () if named is None else (named,)
 
 
 def _named(found: ReadFact) -> tuple[str, ...]:
@@ -625,10 +671,24 @@ def _denied(found: ReadFact) -> tuple[str, ...]:
 def _incompatible(first: ReadFact, second: ReadFact) -> bool:
     """Whether two date relations cannot both hold, read on every value each states or offers [R:truth-T3]: a value one
     states or offers differs from a value the other states or offers, or is a value the other denies. Two denials never
-    conflict. (Before AMENDMENT-2 a contradicted relation stated no value, so it switched the arm off.)"""
+    conflict. (Before AMENDMENT-2 a contradicted relation stated no value, so it switched the arm off: that reading is
+    gemini-inventory@2's, _incompatible_stated.)"""
     mine, theirs = first.asserted_values, second.asserted_values
     return (any(one != other for one in mine for other in theirs)
             or bool(set(mine) & set(_denied(second))) or bool(set(theirs) & set(_denied(first))))
+
+
+def _incompatible_stated(first: ReadFact, second: ReadFact) -> bool:
+    """gemini-inventory@2's comparison in K2's date arm, as that label was recorded (DECISIONS D294 F2): whether two
+    date relations cannot both hold - both stated with different values, or one stated and the other denying that same
+    value. A contradicted relation states no value, so the arm is off for it; two denials never conflict."""
+    one, other = _fact(first), _fact(second)
+    states = {one.state, other.state}
+    if FactState.CONTRADICTED in states or one.value == '' or other.value == '':
+        return False
+    if one.state is FactState.SUPPORTED and other.state is FactState.SUPPORTED:
+        return one.value != other.value
+    return states == {FactState.SUPPORTED, FactState.NEGATED} and one.value == other.value
 
 
 # --- K3: place against session; K4: anatomy against places ------------------------------------------------------------
