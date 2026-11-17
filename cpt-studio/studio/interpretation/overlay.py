@@ -132,6 +132,7 @@ from studio.interpretation import ENGINE_VERSION_V2, ENGINE_VERSION_V3, wording
 from studio.interpretation.contract.types import Attribute, Kind, Landmark, Reason, Result, SessionKind
 from studio.interpretation.engine import assess as engine_assess
 from studio.interpretation.engine import catalogue, combination, coverage, evaluate
+from studio.interpretation.engine import classes as engine_classes
 from studio.interpretation.engine import facts as facts_
 from studio.interpretation.engine import questions as engine_questions
 from studio.interpretation.engine.types import Evaluation, FactSet, HeldFact, Id, IdFamily, ItemKind, Span
@@ -933,6 +934,15 @@ def assessed_answers(completeness: object, rows: Sequence[Stored]) -> frozenset[
                      if answer and (value == NOT_DOCUMENTED or codes.get(key) in primary_codes))
 
 
+def _addon_counted(record: Record, counted: Collection[str]) -> tuple[HeldFact, ...]:
+    """r2e (DECISIONS D303 I5; WX3-3): the ADDON row of a reinstated exclusion over the reviewer's counted set, whatever
+    its own supporting acts - a reinstatement replaces the exclusion, not the coding rule (D268, D284): the add-on is held
+    by the row's witness (coding_rule:ADDON) while none of its primaries is counted, so it is never approvable alone and
+    its reinstatement waits name the row. Nothing for a code that is no add-on, or one of whose primaries counts."""
+    found = engine_assess.addon_hold(record.code, counted, record.kept)
+    return () if found is None else (found,)
+
+
 def _addon(record: Record, evaluation: Evaluation, counted: Collection[str]) -> tuple[HeldFact, ...]:
     """engine/assess's ADDON row of ``record`` over the codes it counts (``counted``): its one witness (engine/assess
     addon_hold, the function assess's row calls) when the code is an add-on with a supporting act none of whose
@@ -1036,7 +1046,11 @@ def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: It
         own = tuple(evaluation.held_facts)
         stored_combo = tuple(before.held.get(record.key, ())) + (
             _addon(record, evaluation, engine_addon) if record.key in stored_members else ())
-        combo = tuple(after.held.get(record.key, ())) + _addon(record, evaluation, review_addon)
+        # r2e (DECISIONS D303 I5; WX3-3): an add-on counted on the reviewer's side is read over the counted set - a
+        # reinstated exclusion (no stored record: assess's excluded codes carry none) whatever its supporting acts
+        combo = tuple(after.held.get(record.key, ())) + (
+            _addon(record, evaluation, review_addon) if record.key in stored_members
+            else _addon_counted(record, review_addon))
         # the item as engine/assess words it: evaluate.item's groups AND what evaluate knows of the holds it raised
         # beside the FactSet (questions.Raised: 3.2.6 rule 2's entries, XCHG's two acts, the synthetic acts), decide
         # being pure - without them read time named another item than assess for SAME_DUCT and UNLISTED_EVIDENCE (the
@@ -1472,37 +1486,87 @@ def _live_form(live: Live, own: Sequence[Id] = (), R: Optional[FactSet] = None) 
     return item_shown(live.item, own, R)[0]
 
 
-def _supported_session(R: FactSet, subject: Id) -> Optional[Id]:
+def _established_session(R: FactSet, subject: Id) -> Optional[Id]:
+    """r2f (DECISIONS D309, RFEW-2): the session an event is ESTABLISHED in - its session fact supported, naming a session
+    the FactSet holds. A supported id the FactSet does not hold is unknown (FINAL-V2 4.11; DECISIONS D227 4d R2-2, as
+    engine/classes._unheld reads it): it establishes no session, never another one."""
     found = facts_.fact(R, subject, Attribute.SESSION)
-    return found.value if found.result is Result.SUPPORTED and isinstance(found.value, Id) else None
+    value = found.value
+    return value if found.result is Result.SUPPORTED and isinstance(value, Id) and value in R.sessions else None
 
 
 def own_session_examination(R: Optional[FactSet], item: engine_questions.Item, own: Sequence[Id]) -> Optional[bool]:
     """r2d (DECISIONS D301, RBWX-2): whether the examination ``item`` names is the examination of the session the code is
     matched to - the ONE rule the renderer (jobs._item_record) and read time read (wording.item_record's
-    ``own_session``). The code's session is the supported session of the acts it binds (``own``: its evaluation's
-    bindings and supporting acts). An item about no held object, or about an act the code binds, names the code's own
-    act; otherwise the session of the examination it names must be one of those sessions: the session its held subject
-    is (a session) or is supported in (an event), and - for DIGITAL_SCOPE, which names the held session's examination
-    when its claimed examination's session is not established - the held session engine/questions names
-    (_held_session, over the code's acts). Another session's examination (an E/M's same-day procedure's included) and
-    one whose session is not established are not. None without a FactSet (no reading: the slots alone)."""
+    ``own_session``). The code's sessions are the sessions the acts it binds are established in (``own``: its
+    evaluation's bindings and supporting acts; r2f, D309: ``_established_session``). An item about no held object, or about an act the code binds, names the code's own
+    act; otherwise the session of the examination it names: the session its held subject is (a session) or is supported
+    in (an event), and - for DIGITAL_SCOPE, which names the held session's examination when its claimed examination's
+    session is not established - the held session engine/questions names (_held_session, over the code's acts).
+    Another session's examination (an E/M's same-day procedure's included) is not. None without a FactSet (no reading:
+    the slots alone).
+
+    r2e (DECISIONS D303, I1; WX3-1): never another session's merely because the EXAMINATION's session slot is not
+    established: such an examination is the code's own session's when it may be in one of them.
+
+    r2f (DECISIONS D309, RFEW-1, RFEW-2; D301 RBWX-2): an examination is "the examination of this procedure" only when it
+    is the examination of one of the code's OWN ESTABLISHED sessions - the sessions its acts are established in
+    (``_established_session``). With none, no examination is the code's own: an unresolved, silent or unknown code
+    session never makes another session's examination its own (RFEW-1). An examination act is in one of them when its
+    session is established as that session, or - not established - when it may be (engine/classes._may_name, the
+    engine's own membership reader: its claimed value, its options, an empty slot, a denial's every other session, and a
+    session id the FactSet does not hold as possibly any session, never another one: RFEW-2); and only in a session that
+    may hold an examination (``_holds_examination``: a session holding an established E/M visit holds none). An item that
+    names a session's examination by the session itself - its held subject that session, or DIGITAL_SCOPE's held session
+    (engine/questions._held_session; an id the FactSet does not hold is unknown) - is the code's own when that session
+    is one of the code's established sessions. Otherwise the examination is named as another act, by its kind, and what
+    is asked never changes (D303 I1: wording.item_record's renamed forms)."""
     if R is None:
         return None
     subject = item.held.subject
     if subject is None or subject in tuple(own):
         return True
-    sessions = {found for found in (_supported_session(R, act) for act in own) if found is not None}
+    sessions = {found for found in (_established_session(R, act) for act in own) if found is not None}
+    if not sessions:
+        return False  # r2f (D309, RFEW-1): no established session of the code's own
     family = getattr(subject, 'family', None)
     if family is IdFamily.SESSION:
+        if subject not in R.sessions:  # r2f (D309, RFEW-2): an id the FactSet does not hold is unknown, never another
+            return any(_holds_examination(R, session) for session in sessions)
         return subject in sessions
     if family is not IdFamily.EVENT:
         return False
-    named = _supported_session(R, subject)
-    if named is None and item.message is engine_questions.MessageId.DIGITAL_SCOPE:
+    if item.message is engine_questions.MessageId.DIGITAL_SCOPE:
         rest = engine_questions._digital_rest(item.held, R)
-        named = engine_questions._held_session(R, rest, (), tuple(own)) if rest is not None else None
-    return named is not None and named in sessions
+        held = engine_questions._held_session(R, rest, (), tuple(own)) if rest is not None else None
+        if held is not None and held in R.sessions:  # the held session the item names (D280.3)
+            return held in sessions
+    named = _established_session(R, subject)
+    if named is not None:
+        return named in sessions and _holds_examination(R, named)
+    slot = facts_.fact(R, subject, Attribute.SESSION)
+    return any(engine_classes._may_name(slot, session, R) and _holds_examination(R, session) for session in sessions)
+
+
+# r2f (D309, RFEW-1): the act kinds some session family holds (FAMILY_KINDS, DECISIONS D191) - only these say anything of
+# the family of the session an act is established in
+_FAMILY_HELD_KINDS: frozenset[Kind] = frozenset(kind for family in SessionKind for kind in facts_.family_kinds(family))
+
+
+def _holds_examination(R: FactSet, session: Id) -> bool:
+    """r2f (DECISIONS D309, RFEW-1): whether an examination act may be in ``session`` - some family it may be of holds the
+    examination (facts.family_kinds). Its possible families are its kind fact's (engine/classes._open: supported, that
+    one; negated, every other; not established, its claimed value and options, every family for an empty slot or a
+    denial), narrowed to the families holding the established kind of every act established in it (FAMILY_KINDS, D191):
+    an established E/M visit fixes office_em, which holds no examination, whatever the session's kind fact says."""
+    families = engine_classes._open(facts_.fact(R, session, Attribute.KIND), SessionKind)
+    for event in R.events:
+        if _established_session(R, event) != session:
+            continue
+        kind = facts_.fact(R, event, Attribute.KIND)
+        if kind.result is Result.SUPPORTED and isinstance(kind.value, Kind) and kind.value in _FAMILY_HELD_KINDS:
+            families = frozenset(found for found in families if kind.value in facts_.family_kinds(found))
+    return any(Kind.EXAMINATION in facts_.family_kinds(found) for found in families)
 
 
 def item_shown(item: engine_questions.Item, own: Sequence[Id], R: Optional[FactSet]

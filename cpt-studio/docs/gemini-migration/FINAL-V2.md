@@ -250,10 +250,10 @@ they are status values, so one meaning has one encoding [B].
 | link | what the cited unit is |
 |---|---|
 | `statement` | the object's own statement: an event's anchor units; a session's examination anchor; a lesion's description unit |
-| `section` | the start (heading, label, signature, opening words) or the closing signature of the section that contains the object. **DECISIONS D299 (2026-11-16):** or the start of that section's procedure part - the nearest section before it whose role pass 1 states as procedure, no section between them (nor the containing section) stating or offering procedure - so an act told in a findings part may cite its part's heading ("PART 2: COLONOSCOPY" over "FINDINGS:"); another part's heading still fails; superseded wording: "the start ... or the closing signature of the section that contains the object" alone |
+| `section` | the start (heading, label, signature, opening words) or the closing signature of the section that contains the object. **DECISIONS D299 (2026-11-16):** or the start of that section's procedure part - the nearest section before it whose role pass 1 states as procedure, no section between them (nor the containing section) stating or offering procedure - so an act told in a findings part may cite its part's heading ("PART 2: COLONOSCOPY" over "FINDINGS:"); another part's heading still fails; superseded wording: "the start ... or the closing signature of the section that contains the object" alone. **DECISIONS D303 (2026-11-17, round r2e, RDRX-1):** findings made for `gemini-inventory@2` read this row as that label was recorded - the containing section's own start or closing signature, no procedure part - since the ruling above came after its first recording (D202: a label's rule never changes after it); every later label reads it as amended |
 | `frame` | a framing sentence inside the containing section ("All of the above was done by her previous surgeon.") |
 | `placing` | a sentence anywhere in the document that says when, or by whom, this act or the acts of a part were done, from after the act or from another part ("This was done at the referring facility in 2024."; "Second opinion on an upper endoscopy done elsewhere; the procedure is described below."; "No endoscopy was done today; the narratives above are from 2023."; an attestation that the findings sections occurred on the date of service) [R:CO-2] |
-| `document_frame` | a unit of the document's frame part that is a source of an encounter fact: the title, the date-of-service line, the documenting clinician's line. **DECISIONS D295 (2026-11-16):** the frame part is N0 and the leading sections before the first event is told (a header in labelled parts); superseded wording: "a unit of section N0". **DECISIONS D300 (2026-11-16):** it starts at N0's start whenever N0 passes G2, D199's empty N0 of length zero included (a note that opens with its first heading); only an N0 with a G2 reason leaves no frame part; superseded reading: none when N0 has no span (D199's last bullet) |
+| `document_frame` | a unit of the document's frame part that is a source of an encounter fact: the title, the date-of-service line, the documenting clinician's line. **DECISIONS D295 (2026-11-16):** the frame part is N0 and the leading sections before the first event is told (a header in labelled parts); superseded wording: "a unit of section N0". **DECISIONS D300 (2026-11-16):** it starts at N0's start whenever N0 passes G2, D199's empty N0 of length zero included (a note that opens with its first heading); only an N0 with a G2 reason leaves no frame part; superseded reading: none when N0 has no span (D199's last bullet). **DECISIONS D303 (2026-11-17, round r2e, RDRX-1):** findings made for `gemini-inventory@2` read this row as that label was recorded - a unit of section N0, no frame part - since the rulings above came after its first recording (D202: a label's rule never changes after it); every later label reads it as amended |
 | `antecedent` | the earlier statement an anaphoric frame refers to ("At that time" -> the outside EGD of March 2023, or this procedure's earlier sentence) |
 | `other_statement` | another statement about the same object (a later sentence, a restatement); meaning appraised |
 
@@ -467,6 +467,18 @@ anatomy, lesions, events, doubts, claims, unlisted}`. Every fact, and every inhe
   pair dropped for the bound (1.8) names no claim and is `unresolved` for `unappraised`. A row stored at the @3 pair
   without `lesion_pairs` - written before D296 - reads it as the empty list: no pair asked, so nothing set apart by one.
   The text before D300 stored the pairs with no verdict check, and refused a row without the field.
+- **DECISIONS D305 P4-ONLESION and D302 RF2C-L3 (2026-11-16, round r2e):** at the @3 pair the row also stores
+  `act_lesions` (each act-lesion claim, 4.5: the act, the statement's lesion, its claim, its control and its settled
+  result), bound to its two stored claims as `lesion_pairs` are (both about the act, naming the lesion, of one act-lesion
+  form); one dropped for the bound (1.8) names no claim and is `unresolved` for `unappraised`, and a row stored at the
+  @3 pair without `act_lesions` - written before D305 - reads it as the empty list. For every pair-type record
+  (`lesion_pairs`, `act_lesions`) the store RE-DERIVES a releasing (`supported`) outcome from every input settle reads -
+  the claim's verdict supported with no qualifier but approximate, attached yes, 3.2.5's attachment (an evidence unit
+  among the claim's cited units, which hold the units of the card it is about: a pair-type claim cites its card's own
+  run), and the control's verdict contradicted - and refuses a row whose supported result the re-derivation does not
+  give; an `unresolved` record releases nothing and is read whatever its verdicts (D300 RF-L4's boundary). The text
+  before r2e checked the verdicts of a `supported` pair without 3.2.5's attachment to the claim (any evidence unit of
+  the row passed).
 
 ### 1.8 Bounds (read, never sent; a whole answer outside them is refused, named by count, never truncated)
 
@@ -493,6 +505,11 @@ two claims each, until it is within the bound or none is left, and records each 
 `unappraised`: a dropped pair releases nothing); the document is never refused for them, and a set over the bound
 without them is not sent, as above. The bound's demand figures were re-measured with every claim class
 (contract/claims.py's CLAIM_BOUND_NOTES); the bound is unchanged. Before D300 such a set was refused whole.
+
+**DECISIONS D305 (2026-11-16, round r2e):** the act-lesion claims (4.5) are pair-type claims too - they can only
+release - so a set over its bound drops them with the lesion pair claims, by one rule: the last pair-type claim asked
+first, whichever kind it is, two claims each, until the set is within the bound or none is left, each drop recorded
+(stored unresolved for `unappraised`). CLAIM_BOUND_V3 is unchanged.
 
 An unknown unit id, words outside their units, a source over 12 units, or an id that names no object of the answer are
 ITEM-level findings: that source or fact fails its check and the fact is unresolved; the answer is not refused (3.1). JSON,
@@ -793,11 +810,11 @@ Each of the three can only demote. None can lift a fact to established by itself
 | I3 | a source's units are consecutive within one paragraph and at most 12 [R:CO-5]; the anchor's likewise; `kind_words` and `status_words` lie inside the anchor's units by I2's rule, the same rule for anchors and sources [R:CO-4] | offsets | `units_not_consecutive`, `source_too_long` (item-level), `anchor_words` | offsets |
 | I4 | every id resolves (session, section, lesion, anatomy, person, event, covers, excepts, targets, cause_event, part_of, part_of_session, through, reached_anatomy); no self reference; part_of, cause_event and part_of_session acyclic | ids | `reference_invalid` | ids |
 | B1 | revision binding: the extraction request is built from the revision text (text_sha256) and the pinned instruction, schema and segmentation; the appraisal request from the revision text, the extraction response bytes (sha256), INVENTORY_VERSION (the checks select the claims) and the pinned appraisal objects, never from a member value; `store.row` refuses unless every stored words text IS its revision slice; the row's sha256 covers the bindings, both runs and the claim list's sha256 included [R:MO-5]; `load` refuses unknown versions, shapes, closed values and hash mismatches, and reads every v2 inventory version it has shipped as stored [C][R:MO-5] | hashes, offsets | row not written; load raises | integrity |
-| G1 | **link geometry** per source: `statement` units are among the object's anchor units or their sentence closure (an event), its examination's anchor (a session) or its description unit (a lesion); `section` is the containing section's start or closing source - **DECISIONS D299 (2026-11-16):** or the start of the containing section's procedure part (the nearest section before it whose role pass 1 states as procedure, with no section between them, nor the containing section itself, whose role pass 1 states or offers as procedure; the sections are flat: a part is its procedure section and the sections that follow it up to the next one); a source in another part's heading still fails; superseded wording: "the containing section's start or closing source"; `frame` is a unit inside the containing section's span; `placing` is any unit that is not the object's own anchor, its meaning (which acts or parts it governs) appraised per act [R:CO-2]; `document_frame` is a unit of the frame part that is a source of an encounter fact (the date of service, the documenting clinician, a session kind) - **DECISIONS D295 (2026-11-16):** the frame part is N0 and each following section, contiguous from N0 and with its G2 span, that ends before the first event is told; superseded wording: "a unit of N0"; **DECISIONS D300 (2026-11-16):** whenever N0 passes G2 - D199's empty N0 of length zero included - the frame part starts at N0's start and joins the leading sections so; only an N0 with a G2 reason leaves no frame part; the first told offset counts every event pass 1 filed, denials and anchors that fail to locate included; superseded reading: no frame part when N0 has no span; `antecedent` precedes the anchor; `other_statement` units exist (their meaning is appraised) [C, J] | units, offsets, section spans | `geometry_<link>` | offsets only; it never decides what a heading means (pass 2 does) |
+| G1 | **link geometry** per source: `statement` units are among the object's anchor units or their sentence closure (an event), its examination's anchor (a session) or its description unit (a lesion); `section` is the containing section's start or closing source - **DECISIONS D299 (2026-11-16):** or the start of the containing section's procedure part (the nearest section before it whose role pass 1 states as procedure, with no section between them, nor the containing section itself, whose role pass 1 states or offers as procedure; the sections are flat: a part is its procedure section and the sections that follow it up to the next one); a source in another part's heading still fails; superseded wording: "the containing section's start or closing source"; `frame` is a unit inside the containing section's span; `placing` is any unit that is not the object's own anchor, its meaning (which acts or parts it governs) appraised per act [R:CO-2]; `document_frame` is a unit of the frame part that is a source of an encounter fact (the date of service, the documenting clinician, a session kind) - **DECISIONS D295 (2026-11-16):** the frame part is N0 and each following section, contiguous from N0 and with its G2 span, that ends before the first event is told; superseded wording: "a unit of N0"; **DECISIONS D300 (2026-11-16):** whenever N0 passes G2 - D199's empty N0 of length zero included - the frame part starts at N0's start and joins the leading sections so; only an N0 with a G2 reason leaves no frame part; the first told offset counts every event pass 1 filed, denials and anchors that fail to locate included; superseded reading: no frame part when N0 has no span; **DECISIONS D303 (2026-11-17, round r2e, RDRX-1):** findings made for `gemini-inventory@2` read `section` and `document_frame` as that label was recorded - the containing section's start or closing source, and a unit of N0 - since D299's procedure part and D295/D300's frame part came after its first recording (D202), as consistency reads its K rules and L1 for that label (D294 F2, D297 R2RX-1, D301 RBRX-1); every later label reads them as amended; `antecedent` precedes the anchor; `other_statement` units exist (their meaning is appraised) [C, J] | units, offsets, section spans | `geometry_<link>` | offsets only; it never decides what a heading means (pass 2 does) |
 | G2 | **section geometry**: starts strictly increasing by offset; each start located; N0 at the text start; a span runs from its start to the next start, or to its closing source; an overlap or an unlocated start makes that section's owner, occasion and performer unresolved [A][B] | offsets | `section_order`, `section_start_unlocated` | offsets |
 | G3 | **statement tie**: a target fact with link `statement` has its words inside the anchor units; `target.lesion`'s description unit is the anchor, a restatement or an antecedent of the event (identity rule 1, generalised; rules 2-5 retire) [C][A] | offsets | `target_detached` | offsets |
 | G4 | **inheritance edge**: an inherited fact is attached only when the act's anchor lies inside the section's span and the section's fact passed its own checks [A][J] | offsets | `inherit_unattached` | offsets |
-| G5 | **examination evidence** (D36, restated) [R:CO-6]: each of a session's reached, reached_anatomy [D292 U3], completion, stations, approach and through sources lies in its examination's anchor or one of its restatements, or in a unit that is the anchor of NO act; a source lying only in other acts' anchors, of this session or another, is inferred from where they were done (D36). There is no section test, so an examination told across several parts passes (GI Note #8 tells its insertion, its completion and the neo-terminal ileum in three sections). The pre-refutation wording, "a unit stating an act of that session", was undefined, and its natural reading admitted exactly what D36 forbids (W1S-399's reach from a biopsy sentence) [A][J] | offsets, anchors | `extent_inferred` | offsets |
+| G5 | **examination evidence** (D36, restated) [R:CO-6]: each of a session's reached, reached_anatomy [D292 U3], completion, stations, approach and through sources lies in its examination's anchor or one of its restatements, or in a unit that is the anchor of NO act; a source lying only in other acts' anchors, of this session or another, is inferred from where they were done (D36). There is no section test, so an examination told across several parts passes (GI Note #8 tells its insertion, its completion and the neo-terminal ileum in three sections). The pre-refutation wording, "a unit stating an act of that session", was undefined, and its natural reading admitted exactly what D36 forbids (W1S-399's reach from a biopsy sentence) [A][J]. **DECISIONS D303 (2026-11-17, round r2e, RDRX-1):** findings made for `gemini-inventory@2` read G5 over reached, completion, stations, approach and through - without reached_anatomy, as that label was recorded, since D292's U3 came after its first recording (D202); every later label reads reached_anatomy with them | offsets, anchors | `extent_inferred` | offsets |
 | G6 | **restatement geometry**: restatement units are not anchor units; a `title` restatement lies in N0 or in a section start | offsets | the restatement is ignored | offsets |
 | K1 | **values allowed together** [C][A]: scope only on negated or stated-doubt statements; yield only on extraction kinds; access_outcome only on cannulation; cause and cause_event only with purpose hemostasis; part_of and part_relation together; reached, stations and completion only on endoscopic sessions; visit facts only on em_visit; other_class only on kind other; performed or attempted with later_date, or planned with earlier_date, inconsistent; exceptive needs non-empty excepts, each existing, of a kind the statement covers, and asserted positive; listed_targets needs 2 or more targets; single_target a lesion or a place; segment two landmarks; the umbrella `intervention` only on statements | values | `structure_<rule>` | values |
 | K2 | **session consistency** [C][A][R:HO-7]: an event's session exists; a session's examination names it; an act's session kind admits its kind (`catalogue.family_codes_act`); an act's own claimed date relation that differs from its session examination's claimed one makes the ACT'S `session` fact unresolved. The examination's facts are never touched, and different performers in one session are legitimate: there is no performer arm (a surgeon called in to place clips does not unresolve the endoscopist's examination) | ids, values, catalogue | `session_inconsistent`, `session_conflict` | values |
@@ -969,6 +986,18 @@ the omitted place is exactly what the pair control asks. (SC-B's case: biopsies 
 rectum" filed with the transverse colon only, beside "No biopsies were taken from the rectum.". The contrast control of
 the transverse colon is not the rectum, so the pre-refutation design set the pair apart and made 45380 READY; the pair
 control "This act was done in the rectum." is supported, so the pair is UNRESOLVED and the code held.)
+
+**DECISIONS D305 P4-ONLESION (2026-11-16, round r2e; gemini-appraisal@2 only).** Where a statement whose single or
+listed target names a lesion meets an act of a compatible or sibling kind in its session whose target names NO lesion
+(pass 1 writes none, in any state, and no doubt names it) - an act of a kind with a target, with a claimable place
+compatible with one of the lesion's places - no lesion pair control can be written between them (the act has no lesion
+to be asked about, and nothing to ask the act about the statement's lesion as its own). The claim set asks instead
+"This act was not done on lesion {L}." with its contrary control "This act was done on lesion {L}." - or, where pass 1
+does not claim the lesion single, D300's membership form, "This act was not done on any of the lesions of {L}." with
+"This act was done on one of the lesions of {L}." - about the act, worded kind-neutrally from the act's anchor and the
+lesion's description runs (their sentence closures); each (act, lesion) once. The coherence table reads it as any pair:
+"not on" is established only when the claim is supported and the control rejected. Purpose stays unappraised (no
+purpose claim is built).
 
 **Same-anchor siblings** [R:CO-7]. When two events share an anchor unit, their cards quote each event's own anchor words
 (2.4). If the two cards are still identical (identical quotes) while the events' claimed values differ, the differing facts
@@ -1250,6 +1279,20 @@ Ref      = the reference rows for the date (PFS, MUE): records only (R9)
   stricture, the listed, segment and own arms, and the separate-lesion modifier review (4.7) - through one predicate
   (`engine/facts.established_distinct`). The D296 text above asked "different lesions" of a group too, read only the two
   lesions' own `same_as` lists, and left the modifier review on the written `distinct_from` alone.
+  **DECISIONS D302 (2026-11-16, round r2e):** (RF2C-L1) ONE reading of a distinctness, whoever asserted it: "different
+  lesions" - a written `distinct_from` or D296's appraised distinctness - sets two lesions apart only when BOTH are
+  established single (multiplicity supported single); for a group or a multiplicity not established single only an
+  established non-membership (RF-L3's forms) does - in every reader of `established_distinct`. The RF-L2 text above read
+  a written `distinct_from` of any multiplicity, so a written link between a group and its own member set them apart
+  while the appraised pair of the same sentence did not. (RF2C-L2) A `same_as` member, in any state, whose value is
+  empty or unreadable (S2's item-level breach, kept by 1.8) names a lesion it does not identify: it opens its holder's
+  component as an id the FactSet does not hold does - at claim time, in `possibly_one_finding`, in `engine/coverage`'s
+  join and in the finding the site rules read (`engine/facts.finding`) alike - so it may be any one lesion. The text
+  before r2e read such a member as naming nothing.
+- `established_not_on(act, L)` (**DECISIONS D305 P4-ONLESION, 2026-11-16, round r2e**): an act whose target names no
+  lesion established NOT done on the lesion L - its act-lesion claim (3.2.3) supported and its control rejected, with the
+  multiplicity its form presumes established (the single form L established single; the membership form nothing). Read
+  only by the pairing target row (4.5), to set the act apart from that lesion; never to join anything.
 - `apart_by_place(a, b)`: both place sets established and disjoint on the anatomy chain (`engine/anatomy.py`), and every
   pair control asking one object about a place of the other rejected (3.2.3) [R:SC-B]. A short list never sets anything
   apart: the omitted place is exactly what a pair control asks.
@@ -1375,6 +1418,23 @@ it was not done is open, 4.2) [R:HO-1][R:HO-3]; or whose date relation or perfor
 paired with every other event A for which `possibly(A.status, performed)` and whose kind is compatible with D's: possibly
 equal (4.2, so a statement whose kind is not established is compatible with every kind of its session's family
 [R:HO-5]), a tattoo with an injection, or an umbrella covering it. `claimed` means D's `covers` names A.
+**DECISIONS D309 (2026-11-17, round r2f; e-engine's Q4 of round r2e, the which-pairs corner of round 2's Q4 that D228
+keeps as built):** a claimed pair is read whenever D MAY be a statement: an event whose status is established and not
+negated (an act or a plan) and whose date relation or performer is not established but may be another - by `possibly`
+over what pass 1 claimed (its claimed value, a doubt's readings, a contradiction's sides, the value of a control pass 2
+did not reject, or a claim pass 1 wrote negated), never by silence - pairs with every act its `covers` names (that act
+possibly performed, the kinds compatible), as it does when that date relation or performer is established. Before this
+note such an event was a statement only by its established other date or performer, so 9.4's weakening of that one fact
+took it out of "which pairs" and released every pair it held: an established surveillance plan of an established later
+date whose `covers` names today's removal held 45385 (claimed: UNRESOLVED whatever the rows) and released it under each
+weakening of that date (P-MONO). Every 9.4 weakening of an established other date or performer keeps its claimed value,
+lists it among the sides, or leaves a denied date of service or documenting team an open denial (4.2, D294 RD-3), so no
+weakening drops a claimed pair. D's unclaimed pairs are unchanged: against an act that may support a code (its date and
+performer established today's and the team's, 4.3's support rows) an established other date, or an other performer D's
+own statement names, sets the pair apart, so no weakening of it releases there; an inherited other performer, which the
+performer row reads as naming none, is D228's DQ2 corner, kept as built (a release 9.4's P-MONO names, held to D264's
+every-row rule). `engine/pairing.possibly_statement`, `possibly_other_date`, `possibly_other_performer`; the claimed arm
+of `paired`.
 
 **The rows.** Every row is evaluated, and none decides alone [R:HO-2].
 
@@ -1397,6 +1457,108 @@ equal (4.2, so a statement whose kind is not established is compatible with ever
    snare polypectomy was performed.' refer to the polyp removed with the cold snare?").
 3. Otherwise (every row SAME): CONTRADICTION when D's negated status and A's performed status are both established; DOUBT
    otherwise (D doubted or possible, or A's status not established).
+
+**DECISIONS D305 P4-ONLESION (2026-11-16, round r2e), the target row.** A statement whose single or listed target names
+lesions, every one established is also set apart from an act whose target names NO lesion (its `target.lesion` silent)
+when `established_not_on(act, L)` holds for EVERY lesion L of the statement's target (4.2) - the established arm of
+`apart_by_lesion` for an act with no lesion of its own: the act-lesion claim's rejected control is the pair control the
+act would be asked about the statement's lesion. Over a listed target every act-lesion pair of the act is read as one
+between the two (a member 9.4's weakening deletes leaves its unestablished pair read), as the every-control scan reads
+pair controls (D220, D236); a single target reads its own pair only. An unknown act lesion alone still never proves
+independence (4.11). Motivating input: pair 4's L04 (a denial that a lifting injection was used for the resection of a
+polyp beside a tattoo placed near the site, which names no lesion and whose places overlap the polyp's; catalogue.covers
+reads a tattoo and an injection as one act): 45381 was held on `relation:contradiction`, the target row SAME by the
+overlapping places. The row's text above (INDEPENDENT by `apart_by_lesion` or `apart_by_place` only) is extended, not
+replaced.
+
+**DECISIONS D309 RFE-L1 (2026-11-17, round r2f), the listed target against an act naming no lesion.** A listed target's
+relation to an act whose target names no lesion is a function of each lesion's own established apartness from the act:
+a lesion the act was asked about (an act-lesion claim, by whichever statement) by `established_not_on` alone; any other
+lesion by its places - the lesion established single, its place list established, the act's place set established,
+the two disjoint on the anatomy chain, and the act asked about EVERY place of the lesion by a rejected place pair
+control ("This act was done in the {place}."; 3.2.3's pair controls, made from the statement's places). A group, or a
+lesion whose multiplicity is not established, is set apart only by an established not-on (D305's membership form): its
+place list may omit where one of its members lies, and nothing asks the act about such a member (D300 RF-L3's and
+D302 RF2C-L1's reading of a group). The relation reads every listed lesion AND every
+lesion the act was asked about or controlled against (one of whose places, as its place list names it in any state, a
+place pair control asks the act about), so a lesion 9.4's weakening deletes from the list is still read by the claim or
+control the act was asked about it; and every place pair control asked of the act is rejected (D220, D236's
+every-control scan). It is INDEPENDENT exactly when every lesion it reads has such an apartness - never decided by which
+listed lesions happened to be asked. A lesion no claim and no control asks the act about (the statement unplaced, or
+the lesion with no place) is set apart by nothing, as an omitted place is (4.11). The text before r2f needed
+`established_not_on` for every listed lesion: a listed lesion whose places the act's were not compatible with - never
+asked - held the full listing, and deleting it released (the refutation's RFE-L1: a denial that a lifting injection was
+used for either of two removed polyps, one in the cecum and one in the transverse colon, beside a tattoo in the
+transverse colon naming no lesion). No request changes: the claims and controls are r2e's. Named, not closed (a
+question for the ruling): a deletion that removes a requirement no claim or control could meet still releases, as a
+deleted member whose control was never generated does (refute-r2d-r2 RD1) - a listed lesion the act was neither asked
+about nor controlled against deleted from the list (as before r2f), a lesion place no control asks deleted from the
+lesion's places, or the only controlled place of a lesion read as controlled against deleted (the lesion leaves the
+read set); and a place of the act that overlapped a lesion's place without being compatible with it, deleted, makes the
+two disjoint (D245's r2d-2 Q2 shape, on a lesion, its control rejected). Closing these needs the act asked about every
+listed lesion and every lesion place, a request change (round r3's Q-ONLESION).
+**Round r2f's refutation of this reading (RF2F-L1, RF2F-L2; 2026-11-17, reproduced and repaired in round r2f).** The
+place reading reads the lesion's FINDING, as every rule that reads a lesion's places does
+(`engine/facts.finding_places`; D294 G1, D297 ENGB-1): every entry a `same_as` member in any state may join to it, an id
+the FactSet does not hold included. An entry whose places are not established, or an id the FactSet does not hold, sets
+the lesion apart by nothing; every entry is established single; the disjointness and the rejected place pair controls
+cover every place of every entry. The every-control scan reads every place pair control asked of EITHER object - the
+statement asked about the act's places as well as the act about the statement's, whichever pair made it - as
+`apart_by_controls` reads it (D220, D236): one not rejected keeps the pair together (4.11). The text above read one
+entry's own place list, so a polyp filed as two entries joined by `same_as`, one of them at the act's place, was set
+apart where the one-entry filing of the same polyp held (RF2F-L1); and it read the controls asked of the act only, so a
+statement whose control asking it about the act's place pass 2 supported, left unclear or left unanswered was released
+(RF2F-L2). No request changes.
+**DECISIONS D311 R2F2-L1 (2026-11-17, round r2f's second refutation; lane f-lesion2), the class rule for an act naming no
+lesion.** In EVERY arm that sets an act whose target names no lesion apart from a statement listing lesions - the
+listed target's place reading and its asked reading above, and D305's single target - the act is set apart only as
+3.2.3 [R:SC-B] sets two objects apart, in BOTH directions: the lesions' side as above (each place of a lesion's finding
+asked of the act by a rejected place pair control, or the lesion's established not-on), AND each place of the act - its
+place set established (every member established, one supported at least; otherwise the act may be anywhere and nothing
+sets it apart, 4.11) - asked of the statement by a rejected place pair control ("This statement is about {kind}s in the
+{place}."), unless that place is an established place of one of the statement's own lesions (its single target, or one
+of its listed targets) that the arm reads by an established not-on, which answers it. A statement whose own places hold
+an act place no such lesion holds is set apart by nothing there (the target row's SAME, places overlapping): claims.pair
+never asks an object about a place compatible with one of its own, so that control does not exist and no truthful pass
+2 could hold the pair apart. D305's "established not-on for EVERY lesion" stays necessary and is no longer sufficient.
+The rule reads what the claims asked and pass 2 established, never the statement's own place list (which 9.4 may
+shorten), so no deletion of a statement place releases. Motivating inputs (the refutation's Inputs 1-3): a denial
+placed beyond its lesions ("No injection was given at either polypectomy site or in the sigmoid colon." beside a
+sigmoid tattoo), a listed lesion filed with a short place list, and the denial placed at the tattoo's own place - each
+released before, held now - and the same shape where every listed lesion was asked, and for a single target. Kept: the
+tattoo at the place of a listed (or the single) lesion pass 2 established it was not done on (the first refutation's
+q01; pair 4's L04: the tattoo 3 cm distal to the polypectomy site, in the transverse colon where the lesion is). Read
+narrowly, both fail-closed: a lesion read by an established not-on that the statement does not list (asked for
+another statement) answers nothing for this statement, and only the lesion's OWN established places answer - never
+another entry of its finding: `same_as` is UNCONTROLLED (it only joins, so it may hold and never release), and an
+unestablished place proves nothing (P3). Named, not closed (questions for the ruling): 9.4's deletion of an act place
+no control asks either object about (a place the statement's own places hold) removes a requirement no reading could
+meet and may release, as any deleted member whose control was never generated does (refute-r2d-r2 RD1, D245); and an
+act place a not-on lesion's place answers is answered even where the statement also covers that place for itself (an
+umbrella place such as the colon, or the same place named beside the lesion), the ruled release of q01's shape. Engine
+only; no request changes.
+**DECISIONS D311 R2F2-L2 (2026-11-17), the reads' cost.** What the arm reads of an act whose target names no lesion - the
+lesions it was asked about, the lesions it was controlled against (through one index per FactSet of the place values
+the lesions' findings name), its whole place set, and each lesion's place reading against it - is a pure function of
+the FactSet and the act, computed once per FactSet (memoized as `facts.finding_places` is, DECISIONS D248 G5), never
+per (statement, act) pair and never carried from one FactSet to another. Re-reading every lesion's finding per pair
+took an assessment at 1.8's bounds (100 listed denials, 99 tattoos, 64 lesions with dense `same_as`) to 314.9 s, past
+the assess job's 120 s deadline; read once it takes 22.4 s, every outcome unchanged (21.6 s with R2F2-L1's rule; 33.3 s
+where every pair is read in full and set apart, every finding established).
+**Round r2f's refutation of lane f-lesion2 (RFL2-1, RFL2-2; 2026-11-17, reproduced and repaired in round r2f), the
+every-control scan in every arm.** The every-control scan is part of D311's class rule in EVERY arm that sets an act
+naming no lesion apart from a single or listed statement - D305's single target as the listed target: every place
+pair control asked of EITHER object (the act asked about a place of the statement, the statement about a place of the
+act, whatever place it asks about and whichever pair made it) rejected, as `apart_by_controls` reads it (D220, D236;
+4.11: a pair control not rejected never yields INDEPENDENT, in the act's direction as in the statement's), read after
+the arm's lesions' side and before each act place is answered. The text above built it in the listed arm only, so the
+single arm read the statement's controls about the act's current places alone: a single-target denial placed beyond
+its lesion ("No lifting injection was used for the resection or anywhere in the descending colon.") beside a tattoo
+filed at the lesion's place only (pass 1 omitting its descending colon) was released although pass 2 supported "This
+act was done in the descending colon." (RFL2-1), and 9.4's deletion of an act place whose statement control pass 2 left
+unrejected took that control out of the reading and released (RFL2-2, D220's class: a member 9.4 deletes leaves its
+unrejected control read). The named release stays the deletion of an act place NO control asks either object about
+(refute-r2d-r2 RD1, D245). Engine only; no request changes.
 
 **Why every row is evaluated** [R:HO-2]. Under the pre-refutation rule, "the first row that returns decides", an
 unestablished timing on D stopped the target row from ever setting apart a denial of another lesion, and every denial's
@@ -1464,7 +1626,7 @@ possibly today) also gives `statement_scope`, never `not_documented`, so a broad
 | competing (D40, D55, D74, D104, D118, D163, D167) | unchanged; a held code keeps its claims | claims over E* and over acts read by `possibly`; D118's one stricture by same lesion or places not disjoint; the D29 site fit | - |
 | same-day E/M (C-3; D81, D94, D109, D111, D130, D133, D134) | unchanged rule | procedure day: any act of a procedural family, a SAME_DAY_KIND, or other_class procedure, possibly positive (a doubted act included [R:HO-1]), with its effective date relation supported on_date_of_service. An act possibly positive whose date relation is not established, or an unlisted act, is undatable (`event_time`). The visit's own session encounter must be supported this_encounter. **The performer is not read** (legacy parity; S3 hazard 7) | facts.day_of and its frames; _stated_procedure's head words |
 | separate statement (D113) | the rule | `visit.separately_identifiable` supported = a statement; negated = a denial (quoted); otherwise none | the negator re-read |
-| modifier review (59/XS) | consideration only | `target.lesion` supported and `distinct_from` supported (**DECISIONS D300 RF-L2, 2026-11-16:** the lesions established distinct as every reader of an established distinctness reads it, 4.2's `established_distinct` - a written `distinct_from` or an established lesion pair claim alike, never while `same_as` may join them; before D300 the written `distinct_from` alone) | literal distinctness |
+| modifier review (59/XS) | consideration only | `target.lesion` supported and `distinct_from` supported (**DECISIONS D300 RF-L2, 2026-11-16:** the lesions established distinct as every reader of an established distinctness reads it, 4.2's `established_distinct` - a written `distinct_from` or an established lesion pair claim alike, never while `same_as` may join them; before D300 the written `distinct_from` alone; **DECISIONS D302 RF2C-L1, 2026-11-16:** "different lesions", written or appraised, only for two lesions established single, else an established non-membership) | literal distinctness |
 | 52/53 (D61, D71, D107, C-9) | consideration only | completion incomplete or terminated; status attempted supported; access_outcome failed | - |
 | read-under (S3 2.3) | unchanged | kind, session family, places | - |
 | ERCP D105, D107, D127 | the rules | stent components and ducts; the cannulation's access_outcome | the D127 conflict shim; _named_only_apart (its principle is the anchor rule: a title is never a statement) |
@@ -1528,17 +1690,57 @@ span selects the other act), and of two dilations under 43249, the esophageal on
 its device before the duodenal one with a balloon is explained.
 
 **Read time.** `overlay.review_view` recomputes the base and competing holds over the counted set, as v1 does, inserts them
-into `held_facts` at their rank, and presents the first live item; a released item gives way to the next [A].
+into `held_facts` at their rank, and presents the first live item; a released item gives way to the next [A]. **DECISIONS
+D303 (2026-11-17, round r2e), I5:** an add-on counted at read time - selected, reinstated or reopened - is read over the
+counted set: a reinstated add-on's ADDON row is read whatever its own supporting acts (a reinstatement replaces the
+exclusion, not the coding rule), so with no counted primary it is held by the row's witness (`coding_rule:ADDON`,
+withheld, never approvable alone) and its row asks the ADDON question (WX3-3; D268, D284); and a primary whose
+engine-read answer read time releases counts for its add-on exactly when no statement may exclude it (D294 RD-2, D304).
 
 **Service questions** (scope `service`; they hold nothing): one per (session, fact) for an in-doubt act no counted code
 reads (in_doubt_questions) and per done session with no extent that no code asks (D125). Each names its act or session,
 chosen by the binding rule. They are de-duplicated against the codes' items by (act or session, fact), and a code's item
-never displaces another code's (D89).
+never displaces another code's (D89). **DECISIONS D309 (2026-11-17, round r2f), RFEW-3:** a service fact's details row
+(one per service whichever of its codes asks it: L7-08) is one per SESSION - keyed by the session the code is matched to
+as well as its family whenever codes of two sessions of one family ask the fact - so two sessions' questions never share a
+row, an answer to one excludes that session's codes only, and one session's row keeps its id (D297 W2R-3: codes share a
+service row only when their items ask the service's one question; D303 I2).
 
 **Member answers** are unchanged: the only values are "Not documented" and "Cannot confirm"; an answer excludes the code
 whose item it answers; no answer confirms a fact or releases a hold (D7). v2 items have new fingerprints, so pre-v2 answers
 are `asked_differently`, except the key-bound facts (`base_included`, `separate_em`), which bind by key
-(`questions.bind`).
+(`questions.bind`). **DECISIONS D303 (2026-11-17, round r2e): the member surface's one
+invariant.** (I1) every item a details row binds asks exactly the question the row shows - the row's prompt, statement and
+missing and the code's qualification are derived from the item's own message and slots (the row of its form, else its
+fact key's own), and renaming an act changes its name only, never what is asked: the held session's examination is
+another session's only when it is established as one (a session slot not established names the examination the
+engine's item names: WX3-1), and an examination of another session is asked the question its own form asks with the act
+renamed - row 7's done (DONE_IN_PART) for the session's doubt and status, DIGITAL_SCOPE's and UNLISTED_SCOPE's own
+questions - never a question chosen by its fact key (WX3-1, WX3-2); (I2) items whose questions differ never share a row;
+(I3) the door records an answer only against items whose question equals the row's shown question, and read time binds
+it only to items the current reading still asks, by fingerprint; (I4) a row's passages are the passages its items'
+questions quote; (I5) above, under Read time. It is checked by code over every scene of the seam corpus and every words
+refuter's scenes, not by examples. **DECISIONS D309 (2026-11-17, round r2f):** (RFEW-1, RFEW-2; D301 RBWX-2) the held
+session's examination is "the examination of this procedure" only when it is the examination of one of the code's OWN
+ESTABLISHED sessions - the sessions its acts are established in; with none (the code's own session unresolved, silent or
+unknown) no examination is the code's own, so another session's examination is never made the code's own by the code's
+unestablished slot (this supersedes the D303 note's "a session slot not established names the examination the engine's
+item names" for the code's own side). An examination act is in one of those sessions when its session is established as
+it, or - its slot not established - when it may be (the engine's membership reader, classes._may_name: its claimed value,
+its options, an empty slot, a denial's every other session; a session id the FactSet does not hold is possibly any
+session, 4.11 - never another one), and only in a session that may hold an examination: a session's possible families are
+its kind fact's, narrowed by the established kinds of the acts established in it (facts.family_kinds: a session holding
+an established E/M visit holds none). An item naming a session's examination by the session itself (its held subject,
+or DIGITAL_SCOPE's held session) is the code's own when that session is one of the code's established sessions (a
+session the FactSet does not hold: when one of them may hold an examination - unknown, never another session). Every
+other examination is named as another act, by its kind, and asked the same question (I1). (e-words' Q1, I1 strictly)
+NOT_DOCUMENTED and UNLISTED_EVIDENCE, whose item asks performed_question(code), sit on the row that asks exactly that
+question: the SUPPORTED form's ("Is this code supported by what was done on the date of service?"). (RFEW-5) A code a
+member's answer excluded says why by that answer's state: excluded until the answer is withdrawn while it stands; once it
+is withdrawn and the update that applies the withdrawal has not run, that - never the advice to withdraw it. (RFEW-4) The
+invariant's acceptance check derives each item's question from the engine's item (its message, slots and the subject the
+FactSet establishes) and compares it with the row's rendered words and the code's qualifications, never through the
+surface's naming functions.
 
 **The five new facts** `event_entry`, `exam_stations`, `act_yield`, `act_cause` and `act_part` join `wording.NEW_FACTS` with
 their MISSING sentences ("whose entry the act is told in", "which parts of the upper tract were examined", "what the
@@ -2350,6 +2552,16 @@ rule (never a word list, EB4) and re-measured.
 | P-UNKNOWN-TARGET | for every combination of row states, an unknown, unresolved, doubted or contradicted target on either side, or a pair control not rejected, never makes the target row yield INDEPENDENT |
 | P-UNKNOWN-KIND [R:HO-5] | a statement whose kind is not established pairs with at least every act of its session's family that the same statement with an established kind would pair with |
 | P-ANY-ROW [R:HO-2] | a pair with one row proving independence is INDEPENDENT (unless `claimed`) whatever the other rows' states; a pair with none is never INDEPENDENT |
+
+**DECISIONS D309 RFE-L2 (2026-11-17, round r2f).** A weakening reaches every fact a release rests on, the facts a
+pair-type release presumes included: a lesion pair (D296, D300) and an act-lesion pair (D305) are read with the
+multiplicity their claim's form presumes established, which the engine computes when it builds the FactSet from the
+stored row, so the FactSet holds only the outcome. The property harness re-derives every pair-type outcome whenever a
+weakening changes a lesion's facts, through the engine's own readers of the stored records, in the form the claim set
+asked (the form that presumes most under which the unweakened FactSet reads the outcome as it holds it) - so a weakened
+presumed multiplicity takes the release away, as a stored row with that multiplicity would. The harness before r2f left
+the outcome as built, and the release stood under the weakening (the refutation's RFE-L2: the D305 fixture's 45381, and
+the D300 fixture's 45385 alike). The property fixtures include one listed target per D309 RFE-L1 (4.5).
 
 ### 9.5 Gate 6 and the failure classes as fixtures [B][C]
 

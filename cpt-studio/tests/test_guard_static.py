@@ -763,6 +763,13 @@ WND_PINS = {
     ('engine/facts', '_lesion_pair_presumes', "compares with 'lesion.not_member.any'"): "a stored lesion pair claim's "
         "template field against contract/claims.LESION_PAIR_FORMS' id, which the store binds every stored pair to "
         "(store._V2_LESION_PAIR_FORMS): record structure, never document text",
+    # DECISIONS D305 P4-ONLESION (round r2e): a stored act-lesion claim's form, read for the multiplicity it presumes
+    ('engine/facts', '_act_lesion_presumes', "compares with 'act.not_on_lesion'"): "a stored act-lesion claim's "
+        "template field against contract/claims.ACT_LESION_FORMS' id, which the store binds every stored pair to "
+        "(store._V2_ACT_LESION_FORMS): record structure, never document text",
+    ('engine/facts', '_act_lesion_presumes', "compares with 'act.not_on_lesion.any'"): "a stored act-lesion claim's "
+        "template field against contract/claims.ACT_LESION_FORMS' id, which the store binds every stored pair to "
+        "(store._V2_ACT_LESION_FORMS): record structure, never document text",
     ('engine/questions', '_named', 'compares with a string through UNLISTED'): "a held fact's cause against CPT Studio's "
         "own cause label ('unlisted', 3.2.6): never document text",
     ('engine/questions', 'fill', 'compares with a string through UNLISTED'): "a held fact's cause against CPT Studio's "

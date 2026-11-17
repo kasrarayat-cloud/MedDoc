@@ -47,7 +47,10 @@ Repair r3d (the integration owner's rulings on the refutation of round 2, DECISI
   narrowed by round w7r's D238 to a control never generated) and repair r2d's two (Q2, a deleted member overlapping the
   other's place without being compatible with it; Q3, a deleted member that was not established) - each checked to be
   exactly that; the which-pairs corner (round 2's Q4, kept by D228) stays out of the weakenings, named (PropertyTests,
-  ScBTests); P-UNKNOWN-TARGET names D228's arm (since D238: a control not generated, never one not rejected);
+  ScBTests) - since DECISIONS D309 (round r2f) its CLAIMED pairs stay (pairing.paired's claimed arm,
+  possibly_statement; P-MONO over the corner is tests/v2/test_r2fe_engine.py's R2FEWhichPairsMonotoneTests), its
+  unclaimed pairs as D228 keeps them; P-UNKNOWN-TARGET names D228's arm (since D238: a control not generated, never
+  one not rejected);
 - T1 (mutant X5): a place list with a member not established never sets anything apart, in the listed, the segment and
   the D228 arm, every pair control (the one about that member included) rejected; T2 (mutant X4): an exceptive statement
   that possibly excepts an act whose status is not established is UNRESOLVED on breadth and asks statement_scope, never
@@ -209,8 +212,15 @@ def session_of(kind) -> dict:
     return {A.KIND: (kind if isinstance(kind, Fact) else sup(kind),)}
 
 
-def lesion_of(distinct=(), same=()) -> dict:
-    return {A.DISTINCT_FROM: tuple(sup(other) for other in distinct), A.SAME_AS: tuple(sup(other) for other in same)}
+def lesion_of(distinct=(), same=(), single=True) -> dict:
+    """A lesion's facts: its distinct_from and same_as members, supported; filed single (``single``) - DECISIONS D302
+    RF2C-L1 (round r2e): a written distinct_from sets two lesions apart only when both are established single, so the
+    fixtures' lesions, which stand for single polyps, carry the multiplicity that says so (none was written before
+    r2e)."""
+    found = {A.DISTINCT_FROM: tuple(sup(other) for other in distinct), A.SAME_AS: tuple(sup(other) for other in same)}
+    if single:
+        found[A.MULTIPLICITY] = (sup(ct.Multiplicity.SINGLE),)
+    return found
 
 
 def build(events: dict, *, sessions=None, lesions=None, controls=None, unlisted=(), anchors=None) -> FactSet:
@@ -2787,9 +2797,16 @@ R2DB_MAY = {
     # BUILDER-CHOSEN (D301 Q2: eng-b2's other pairs, built under RB2-1's rule; and round r2d's eng-b3)
     r2db_pair(_D.ENDOSCOPE, _D.CHOLANGIOSCOPE): (f'{R2DB_BUILDER} (eng-b2 Q2)', 'a cholangioscope is a scope'),
     r2db_pair(_D.BASKET, _D.LITHOTRIPTER): (f'{R2DB_BUILDER} (eng-b2 Q2)', 'a mechanical lithotripsy basket'),
-    r2db_pair(_D.NEEDLE, _D.OTHER): (f'{R2DB_BUILDER} (r2d eng-b3)', 'a needle-type electrosurgical knife'),
-    r2db_pair(_D.INJECTION, _D.OTHER): (f'{R2DB_BUILDER} (r2d eng-b3)', 'a water-jet knife used to inject'),
-    r2db_pair(_D.CRYOTHERAPY, _D.OTHER): (f'{R2DB_BUILDER} (r2d eng-b3)', 'a cryoablation balloon'),
+    # DECISIONS D303 (round r2e; refutation RF3-1 of round r2d's eng-b3): needle/other, injection/other and
+    # cryotherapy/other left this relation - an instrument whose kind a listed member's row names is never "a device of
+    # another kind" - and are R2DB_APART's; round r2d's entries were 'a needle-type electrosurgical knife', 'a water-jet
+    # knife used to inject' and 'a cryoablation balloon'.
+    # BUILDER-CHOSEN (round r2e, refutation RF3-2 of round r2d's eng-b3: D301's condition is delivery, not naming): "a
+    # device delivered through a catheter" - the devices a single-operator cholangioscope delivers, used without current
+    r2db_pair(_D.CATHETER, _D.FORCEPS): (f'{R2DB_BUILDER} (r2e, RF3-2)', 'forceps a cholangioscope delivers'),
+    r2db_pair(_D.CATHETER, _D.COLD_FORCEPS): (f'{R2DB_BUILDER} (r2e, RF3-2)', 'cold forceps a cholangioscope delivers'),
+    r2db_pair(_D.CATHETER, _D.SNARE): (f'{R2DB_BUILDER} (r2e, RF3-2)', 'a retrieval snare a cholangioscope delivers'),
+    r2db_pair(_D.CATHETER, _D.COLD_SNARE): (f'{R2DB_BUILDER} (r2e, RF3-2)', 'a snare used cold through a cholangioscope'),
     # BUILDER-CHOSEN (D301 Q2: eng-b2's radiofrequency pairs; D222's physics - high-frequency current is radiofrequency
     # energy - read through D294 G2's classes: every member that always or may deliver current; round r2d's eng-b3)
     r2db_pair(_D.RADIOFREQUENCY, _D.ARGON_PLASMA): (f'{R2DB_BUILDER} (eng-b2 Q2)', 'an argon plasma probe'),
@@ -2821,8 +2838,15 @@ R2DB_APART = {
     r2db_pair(_D.CHOLANGIOSCOPE, _D.SPHINCTEROTOME): "claims.ANOTHER_DEVICE's contrary (D213)",
     r2db_pair(_D.ENDOSCOPE, _D.CAPSULE): "claims.ANOTHER_DEVICE's contraries (D213): a scope against a capsule",
     r2db_pair(_D.ENDOSCOPE, _D.NEEDLE): "a scope is never the device passed through its channel",
-    r2db_pair(_D.CATHETER, _D.SNARE): 'a snare is passed in its own sheath, never named a catheter',
-    r2db_pair(_D.CATHETER, _D.COLD_FORCEPS): 'forceps are passed in their own sheath, never named a catheter',
+    # DECISIONS D303 RF3-2 (round r2e): catheter/snare and catheter/cold_forceps left this table for R2DB_MAY (a snare
+    # and forceps a single-operator cholangioscope delivers); round r2d's reasons were 'a snare is passed in its own
+    # sheath, never named a catheter' and 'forceps are passed in their own sheath, never named a catheter'
+    r2db_pair(_D.CATHETER, _D.HOT_SNARE): 'a snare used with current is no device a cholangioscope delivers',
+    # DECISIONS D303 RF3-1 (round r2e): an instrument whose kind a listed member's row names is never "a device of
+    # another kind" (claims' label "a device of another kind"; pairing.ADMITS' reason for it)
+    r2db_pair(_D.NEEDLE, _D.OTHER): 'a needle-type knife is of a listed kind, a needle (RF3-1)',
+    r2db_pair(_D.INJECTION, _D.OTHER): 'a water-jet knife used to inject is of a listed kind (RF3-1)',
+    r2db_pair(_D.CRYOTHERAPY, _D.OTHER): 'a cryoablation balloon is of a listed kind, cryotherapy (RF3-1)',
     r2db_pair(_D.CATHETER, _D.BAND): "a band ligator is mounted on the scope's tip",
     r2db_pair(_D.CATHETER, _D.WIRE_BOUGIE): 'a bougie is no catheter',
     r2db_pair(_D.ARGON_PLASMA, _D.THERMAL_PROBE): 'an argon plasma probe is no heater or bipolar probe',
@@ -2924,7 +2948,7 @@ class R2DBDeviceRelationTests(SimpleTestCase):
                     self.assertEqual(P._one_device(first, second), r2db_pair(first, second) in R2DB_MAY
                                      and first is not second)
         self.assertFalse(set(R2DB_APART) & set(R2DB_MAY))
-        self.assertEqual(len(R2DB_MAY), 37)
+        self.assertEqual(len(R2DB_MAY), 38)  # 37 before round r2e: RF3-1 took 3, RF3-2 added 4 (DECISIONS D303)
 
     @staticmethod
     def technique(statement_device: Fact, act_device: Fact) -> P.RowResult:
@@ -3055,10 +3079,7 @@ class R2DBDeviceRelationTests(SimpleTestCase):
         ('EGD hemostasis', '43255', 'egd', _D.CATHETER, _D.CLIP),
         ('EGD hemostasis', '43255', 'egd', _D.OTHER, _D.CATHETER),
         ('EGD hemostasis', '43255', 'egd', _D.CATHETER, _D.OTHER),
-        ('EGD hemostasis', '43255', 'egd', _D.NEEDLE, _D.OTHER),
-        ('EGD hemostasis', '43255', 'egd', _D.OTHER, _D.NEEDLE),
-        ('EGD hemostasis', '43255', 'egd', _D.INJECTION, _D.OTHER),
-        ('EGD hemostasis', '43255', 'egd', _D.OTHER, _D.INJECTION),
+        # DECISIONS D303 RF3-1 (round r2e): needle/other and injection/other, both ways, moved to READY
         ('ERCP lithotripsy', '43265', 'litho', _D.BASKET, _D.LITHOTRIPTER),
         ('ERCP lithotripsy', '43265', 'litho', _D.LITHOTRIPTER, _D.BASKET),
         ('ERCP lithotripsy', '43265', 'litho', _D.LITHOTRIPTER, _D.CATHETER),
@@ -3069,8 +3090,11 @@ class R2DBDeviceRelationTests(SimpleTestCase):
         ('EGD ablation', '43270', 'ablation', _D.ARGON_PLASMA, _D.RADIOFREQUENCY),
         ('EGD ablation', '43270', 'ablation', _D.RADIOFREQUENCY, _D.ARGON_PLASMA),
         ('EGD ablation', '43270', 'ablation', _D.THERMAL_PROBE, _D.RADIOFREQUENCY),
-        ('EGD ablation', '43270', 'ablation', _D.CRYOTHERAPY, _D.OTHER),
+        # DECISIONS D303 RF3-1 (round r2e): cryotherapy/other moved to READY
         ('colonoscopy snare', '45385', 'snare', _D.HOT_SNARE, _D.RADIOFREQUENCY),
+        # DECISIONS D303 RF3-2 (round r2e): a cold snare beside "a catheter" (a retrieval snare a single-operator
+        # cholangioscope delivers) - moved here from READY
+        ('colonoscopy snare', '45385', 'snare', _D.COLD_SNARE, _D.CATHETER),
     )
     # the boundary: pairs read apart (R2DB_APART; D294 G2's needle, question Q1) - READY as before
     READY = (
@@ -3088,7 +3112,14 @@ class R2DBDeviceRelationTests(SimpleTestCase):
         ('colonoscopy snare', '45385', 'snare', _D.COLD_SNARE, _D.RADIOFREQUENCY),
         ('EGD hemostasis', '43255', 'egd', _D.CATHETER, _D.BAND),
         ('ERCP lithotripsy', '43265', 'litho', _D.BASKET, _D.EXTRACTION_BALLOON),
-        ('colonoscopy snare', '45385', 'snare', _D.COLD_SNARE, _D.CATHETER),
+        # DECISIONS D303 RF3-1 (round r2e): "a device of another kind" admits no instrument a listed member's row names,
+        # so these leave HOLDS - READY, the technique row INDEPENDENT; and RF3-2 moved the cold snare beside "a
+        # catheter" to HOLDS
+        ('EGD hemostasis', '43255', 'egd', _D.NEEDLE, _D.OTHER),
+        ('EGD hemostasis', '43255', 'egd', _D.OTHER, _D.NEEDLE),
+        ('EGD hemostasis', '43255', 'egd', _D.INJECTION, _D.OTHER),
+        ('EGD hemostasis', '43255', 'egd', _D.OTHER, _D.INJECTION),
+        ('EGD ablation', '43270', 'ablation', _D.CRYOTHERAPY, _D.OTHER),
     )
 
     def scene(self, which, act_device, denial_device):
@@ -3114,9 +3145,11 @@ class R2DBDeviceRelationTests(SimpleTestCase):
 
     def test_rdb_a_pair_read_apart_or_a_denial_elsewhere_stays_ready(self):
         """The boundary it must leave alone (READY on round r2b's tree and on this one): a pair the definitions read
-        apart (R2DB_APART; D294 G2's needle beside electrocautery, question Q1; a catheter beside a band, a snare beside
-        a catheter, a basket beside an extraction balloon) beside the same denial - READY, the technique row
-        INDEPENDENT; and a pair they join beside a denial of another place (the place row sets them apart) - READY."""
+        apart (R2DB_APART; D294 G2's needle beside electrocautery, question Q1; a catheter beside a band, a basket
+        beside an extraction balloon; since round r2e, DECISIONS D303 RF3-1, a needle or an injection device beside "a
+        device of another kind") beside the same denial - READY, the technique row INDEPENDENT; and a pair they join
+        beside a denial of another place (the place row sets them apart) - READY. Round r2d's wording listed "a snare
+        beside a catheter" here, which RF3-2 moved to HOLDS."""
         for name, code, which, act_device, denial_device in self.READY:
             with self.subTest(scene=name, act=act_device.value, denial=denial_device.value):
                 R = self.scene(which, act_device, denial_device)
@@ -3175,6 +3208,9 @@ def _apart_by_lesion(mode: str):
         arm = [('event', E1, A.TARGET_LESION, 0), ('lesion', L1, A.DISTINCT_FROM, 0)]
     events = {E1: statement, E2: act(lesion=sup(L2))}
     controls = controls_both_ways(E1, E2, statement_lesions=own, act_lesions=(L2,))
+    # DECISIONS D302 RF2C-L1 (round r2e): the written distinct_from sets the lesions apart only with both established
+    # single, so each lesion's multiplicity is a fact of the arm, which the property weakens too
+    arm += [('lesion', lesion, A.MULTIPLICITY, 0) for lesion in (*own, L2)]
     return events, lesions, controls, arm + [('event', E2, A.TARGET_LESION, 0)]
 
 
@@ -3197,9 +3233,32 @@ def _apart_by_place(mode: str):
     return events, {}, controls, arm + [('event', E2, A.TARGET_PLACES, 0)]
 
 
+def _apart_by_unnamed():
+    """DECISIONS D309 RFE-L1 (round r2f): a listed target set apart from an act whose target names no lesion by each
+    listed lesion's own places alone - L1 in the rectum and L3 in the cecum, each established, disjoint from the act's
+    sigmoid colon and asked of the act by a rejected place pair control, and each established single (the place reading
+    sets only a single lesion apart) - with no act-lesion claim and no place set on the statement's side, so no other
+    arm sets the two apart. DECISIONS D311 R2F2-L1 (round r2f's second refutation; restated by its owner, lane
+    f-lesion2): SC-B's second direction - the act's sigmoid colon asked of the statement by a rejected place pair
+    control - is a control of the arm too (the base without it is held: nothing establishes that the statement does
+    not cover the act's place), so the property flips and removes it like every other."""
+    single = (sup(ct.Multiplicity.SINGLE),)
+    lesions = {L1: {A.PLACES: (sup(Landmark.RECTUM),), A.MULTIPLICITY: single},
+               L3: {A.PLACES: (sup(Landmark.CECUM),), A.MULTIPLICITY: single}}
+    events = {E1: denial(breadth=sup(Breadth.LISTED_TARGETS), targets=(sup(L1), sup(L3))),
+              E2: act(lesion=SILENT, places=(sup(Landmark.SIGMOID_COLON),))}
+    controls = {(E2, A.TARGET_PLACES, Landmark.RECTUM): True, (E2, A.TARGET_PLACES, Landmark.CECUM): True,
+                (E1, A.TARGET_PLACES, Landmark.SIGMOID_COLON): True}  # DECISIONS D311 R2F2-L1
+    arm = [('event', E1, A.SCOPE_TARGETS, 0), ('event', E1, A.SCOPE_TARGETS, 1), ('lesion', L1, A.PLACES, 0),
+           ('lesion', L3, A.PLACES, 0), ('lesion', L1, A.MULTIPLICITY, 0), ('lesion', L3, A.MULTIPLICITY, 0),
+           ('event', E2, A.TARGET_PLACES, 0)]
+    return events, lesions, controls, arm
+
+
 APART = {('lesion', mode): (lambda mode=mode: _apart_by_lesion(mode)) for mode in ('single', 'listed', 'act-filed')}
 APART.update({('place', mode): (lambda mode=mode: _apart_by_place(mode)) for mode in ('single', 'segment',
                                                                                      'act-filed')})
+APART[('unnamed', 'listed')] = _apart_by_unnamed  # DECISIONS D309 RFE-L1 (round r2f)
 
 
 class PropertyTests(SimpleTestCase):
@@ -3340,7 +3399,8 @@ class PropertyTests(SimpleTestCase):
         place-deletion property's generator reaches it (test_the_place_deletion_generator_sees_sc_b). Left out, and
         named (round 2's question Q4, which DECISIONS D228 keeps as built): weakening the date relation or performer
         of an event whose status is established, which can take it out of 4.5's "which pairs" (established as
-        another) altogether."""
+        another) altogether - since DECISIONS D309 (round r2f) never out of a pair its covers names (pairing.paired's
+        claimed arm; tests/v2/test_r2fe_engine.py runs P-MONO over that corner)."""
         R = random_factset(data)
         before = held(R)
         weak, how = weaken(data, R)

@@ -120,7 +120,21 @@ contrary "... is one of ...", or "No lesion of {M} is one of the lesions of {L}.
 several (RF-L3: ``lesion_pair_form``, LESION_PAIR_FORMS); every reader of an established distinctness reads the
 appraised one as it reads a written distinct_from (RF-L2: engine/facts.established_distinct); and a set that would pass
 its bound drops the lesion pair claims - which can only release - first, never the document, each drop recorded
-(RF-L5: ``bounded``, ClaimSet.dropped_lesion_pairs).
+(RF-L5: ``bounded``, ClaimSet.dropped_lesion_pairs). DECISIONS D302 RF2C-L2 (round r2e): a same_as member whose written
+value is empty or unreadable (a supported or negated '': S2's breach, which 1.8 keeps) names a lesion it does not
+identify, so it opens its holder's component as an id the answer has no lesion of does (``same_as_components``, one
+unknown id per such member: ``unnamed``).
+
+**The act-lesion claim** (DECISIONS D305 P4-ONLESION, D296's pattern extended; FINAL-V2 4.5 as amended), under
+gemini-appraisal@2 only: where a statement whose single or listed target names a lesion meets an act its pair controls
+ask about whose target names NO lesion (none written in any state, none doubted) and whose claimable places include one
+compatible with the lesion's places, the claim set asks "This act was not done on lesion {L}." with its contrary "This
+act was done on lesion {L}." - or, where pass 1 does not claim the lesion single, D300's membership form, "This act was
+not done on any of the lesions of {L}." with "... on one of the lesions of {L}." (``act_lesion``, ACT_LESION_FORMS) -
+about the act, worded kind-neutrally, citing the act's anchor and the lesion's description runs; each (act, lesion)
+once (ClaimSet.act_lesions). Settle establishes "not on" only on a supported claim with its control rejected, and only
+engine/pairing's target row reads it, to set the act apart from that lesion. A set over its bound drops these with the
+lesion pairs, the last pair-type claim asked first (``bounded``, ClaimSet.dropped_act_lesions).
 
 **What this module never does** (5.6, 5.7 measure 4; P1): it copies no text - cards and claims carry unit ids and
 spans, and the document reaches pass 2 through the framing - reads no word of the document, compares no value with
@@ -354,6 +368,13 @@ class TemplateId(Enum):
     LESION_MEMBER = 'lesion.member'
     LESION_NONE_MEMBER = 'lesion.not_member.any'
     LESION_SOME_MEMBER = 'lesion.member.any'
+    # DECISIONS D305 P4-ONLESION (gemini-appraisal@2 only): an act whose target names no lesion asked against a
+    # statement's lesion - the lesion claimed single (ACT_NOT_ON_LESION, ACT_ON_LESION), or not, in D300's membership
+    # form (ACT_NOT_ON_ANY, ACT_ON_ONE)
+    ACT_NOT_ON_LESION = 'act.not_on_lesion'
+    ACT_ON_LESION = 'act.on_lesion'
+    ACT_NOT_ON_ANY = 'act.not_on_lesion.any'
+    ACT_ON_ONE = 'act.on_lesion.any'
     ENCOUNTER_DATE = 'encounter.date_of_service'
     STMT_BREADTH_ALL = 'statement.scope.breadth.all_of_kind'
     STMT_BREADTH_EXCEPTIVE = 'statement.scope.breadth.exceptive'
@@ -572,6 +593,13 @@ TEMPLATES_V3: Mapping[TemplateId, str] = MappingProxyType({
     T.LESION_MEMBER: 'Lesion {other} is one of the lesions of {lesion}.',
     T.LESION_NONE_MEMBER: 'No lesion of {other} is one of the lesions of {lesion}.',
     T.LESION_SOME_MEMBER: 'A lesion of {other} is one of the lesions of {lesion}.',
+    # DECISIONS D305 P4-ONLESION: an act whose target names no lesion ("This act", its card) asked against a statement's
+    # lesion ({lesion}) and its contrary - worded kind-neutrally (no kind is named), the claim citing the act's anchor
+    # and the lesion's description runs; the second pair, D300's membership form, where the lesion may be several
+    T.ACT_NOT_ON_LESION: 'This act was not done on lesion {lesion}.',
+    T.ACT_ON_LESION: 'This act was done on lesion {lesion}.',
+    T.ACT_NOT_ON_ANY: 'This act was not done on any of the lesions of {lesion}.',
+    T.ACT_ON_ONE: 'This act was done on one of the lesions of {lesion}.',
 })
 STATEMENT_TEMPLATES_V3: Mapping[TemplateId, str] = MappingProxyType({
     **STATEMENT_TEMPLATES,
@@ -1640,6 +1668,21 @@ class LesionPair:
 
 
 @dataclass(frozen=True, slots=True)
+class ActLesion:
+    """An act-lesion claim (DECISIONS D305 P4-ONLESION; FINAL-V2 4.5 as amended), built under gemini-appraisal@2 only:
+    claim, the id of "This act was not done on lesion {lesion}." about the act; control, the id of its contrary, "This
+    act was done on lesion {lesion}."; act, the act whose target names no lesion; lesion, the statement's target lesion
+    (or a listed target). Where pass 1 does not claim the lesion single the pair takes D300's membership form instead
+    (ACT_LESION_FORMS' second: "This act was not done on any of the lesions of {lesion}." / "... on one of the lesions
+    of ..."). Settle establishes "not on" only when pass 2 supports the claim and rejects the control (settle.appraise's
+    coherence table); engine/pairing's target row reads it as setting the act apart from that lesion."""
+    claim: str
+    control: str
+    act: str
+    lesion: str
+
+
+@dataclass(frozen=True, slots=True)
 class Completeness:
     """The completeness claim of an upper EUS session whose station list is empty (3.2.2 [R:SC-B]): session, its id;
     claim and control, the two claims' ids."""
@@ -1662,12 +1705,15 @@ class ClaimSet:
     each claim's sentence and the card it is about (a claim about the encounter names none: ''); appraised,
     pair_controls and completeness, which claim appraises what (settle's input); unclaimed; objects, each card's object
     (family, id); controls, the ids of the claims that serve as a control - a contrary control, a pair control, a
-    completeness control or a lesion pair's sameness control - never the id of a real claim (DECISIONS D196: a control
-    never asserts what a real claim about the same object asserts, and build() asserts it); seed, the order's seed;
+    completeness control, a lesion pair's sameness control or an act-lesion claim's contrary (DECISIONS D305) - never
+    the id of a real claim (DECISIONS D196: a control never asserts what a real claim about the same object asserts,
+    and build() asserts it); seed, the order's seed;
     lesion_pairs, the lesion pair claims (DECISIONS D296; none under gemini-appraisal@1); dropped_lesion_pairs, the
     lesion pairs - (the statement's lesion, the act's) - left out because the set would have passed the claim bound
     with them (DECISIONS D300 RF-L5: claims that can only release go first, never the document; settle records each as
-    unappraised, so a dropped pair releases nothing)."""
+    unappraised, so a dropped pair releases nothing); act_lesions, the act-lesion claims (DECISIONS D305; none under
+    gemini-appraisal@1), and dropped_act_lesions, each (the act, the statement's lesion) left out for the bound as a
+    lesion pair is (D305 with D300 RF-L5: the pair-type claims, which can only release, go first)."""
     cards: tuple[Card, ...]
     claims: tuple[Claim, ...]
     sentences: Mapping[str, str]
@@ -1681,6 +1727,8 @@ class ClaimSet:
     seed: str
     lesion_pairs: tuple[LesionPair, ...] = ()
     dropped_lesion_pairs: tuple[tuple[str, str], ...] = ()
+    act_lesions: tuple[ActLesion, ...] = ()
+    dropped_act_lesions: tuple[tuple[str, str], ...] = ()
 
     def claim(self, claim_id: str) -> Claim | None:
         """The claim of that id, None when the set has none."""
@@ -1786,6 +1834,10 @@ _PAIR_ROLE = 'pair_control'
 # control.
 _LESION_PAIR_ROLE = 'lesion_pair'
 _LESION_PAIR_CONTROL_ROLE = 'lesion_pair_control'
+# An act-lesion claim's and its control's roles (DECISIONS D305), which their content keys carry, as a lesion pair's do:
+# each is a claim of its own beside any fact's claim or control of the same sentence.
+_ACT_LESION_ROLE = 'act_lesion'
+_ACT_LESION_CONTROL_ROLE = 'act_lesion_control'
 # The place forms a place control renders (an act's, a statement's - its kind-neutral form too, D292's U1 - a
 # lesion's): the controls another place fact of the same object prefers not to repeat (_Builder.contrary).
 _PLACE_FORMS = frozenset({T.ACT_TARGET_PLACE, T.STMT_TARGET_PLACE, T.STMT_TARGET_PLACE_ANY, T.LESION_PLACES})
@@ -1830,7 +1882,9 @@ _REF_SLOT: Mapping[TemplateId, tuple[Slot, xs.Family]] = MappingProxyType({
     T.STMT_COVERS: (Slot.ACT, Family.EVENT), T.ACT_PART_OF_NEGATED: (Slot.ACT, Family.EVENT),
     T.LESION_DISTINCT: (Slot.OTHER, Family.LESION), T.LESION_SAME: (Slot.OTHER, Family.LESION),
     T.LESION_NOT_MEMBER: (Slot.OTHER, Family.LESION), T.LESION_MEMBER: (Slot.OTHER, Family.LESION),
-    T.LESION_NONE_MEMBER: (Slot.OTHER, Family.LESION), T.LESION_SOME_MEMBER: (Slot.OTHER, Family.LESION)})
+    T.LESION_NONE_MEMBER: (Slot.OTHER, Family.LESION), T.LESION_SOME_MEMBER: (Slot.OTHER, Family.LESION),
+    T.ACT_NOT_ON_LESION: (Slot.LESION, Family.LESION), T.ACT_ON_LESION: (Slot.LESION, Family.LESION),
+    T.ACT_NOT_ON_ANY: (Slot.LESION, Family.LESION), T.ACT_ON_ONE: (Slot.LESION, Family.LESION)})
 # A lesion pair's three forms (DECISIONS D296; D300 RF-L3), each (claim, control): the distinctness of two lesions pass 1
 # claims single; the membership of an act's lesion pass 1 claims single among a statement's lesions; and that no lesion
 # of an act's lesion is one of a statement's lesions. The engine reads each against the multiplicity it presumes
@@ -1838,6 +1892,21 @@ _REF_SLOT: Mapping[TemplateId, tuple[Slot, xs.Family]] = MappingProxyType({
 LESION_PAIR_FORMS: tuple[tuple[TemplateId, TemplateId], ...] = (
     (T.LESION_DISTINCT, T.LESION_SAME), (T.LESION_NOT_MEMBER, T.LESION_MEMBER),
     (T.LESION_NONE_MEMBER, T.LESION_SOME_MEMBER))
+@unique
+class PairType(Enum):
+    """The pair-type claims - claims that can only release, which a set over its bound drops first (DECISIONS D300
+    RF-L5, D305): a lesion pair claim (D296, D300) and an act-lesion claim (D305). The builder records the order they
+    were asked in by type and key (_Builder.pair_order)."""
+    LESION_PAIR = 1
+    ACT_LESION = 2
+
+
+# An act-lesion claim's two forms (DECISIONS D305 P4-ONLESION), each (claim, control): that an act whose target names
+# no lesion was not done on a statement's lesion pass 1 claims single; and, D300's membership form, on none of the
+# lesions of one it does not claim single. The engine reads each against the multiplicity it presumes (engine/facts'
+# act lesions: the first the lesion established single, the second nothing).
+ACT_LESION_FORMS: tuple[tuple[TemplateId, TemplateId], ...] = (
+    (T.ACT_NOT_ON_LESION, T.ACT_ON_LESION), (T.ACT_NOT_ON_ANY, T.ACT_ON_ONE))
 # The anatomy entries' forms that say what kind of anatomy entry it is, so its type must be claimed with them.
 _TYPED_FORMS: frozenset[TemplateId] = frozenset({T.ANATOMY_ORGAN_ABSENT, T.ANATOMY_ORGAN_NOT_ABSENT,
                                                  T.ANATOMY_SUBTYPE, T.ANATOMY_JOINS})
@@ -1895,6 +1964,14 @@ class _Builder:
         self.lesion_pairs_seen: set[frozenset[str]] = set()
         # DECISIONS D300 RF-L5: the lesion pairs left out to keep the set within its bound (bounded)
         self.dropped_pairs: list[tuple[str, str]] = []
+        # DECISIONS D305 P4-ONLESION: the act-lesion claims (claim, control, the act, the statement's lesion), each
+        # (act, lesion) once (act_lesions_seen); those left out for the bound (dropped_act_lesions); and the order
+        # every pair-type claim - a lesion pair or an act-lesion - was asked in, each (which, its key), so the bound
+        # drops the last asked first across both (bounded)
+        self.act_lesion_specs: list[tuple[_Spec, _Spec, str, str]] = []
+        self.act_lesions_seen: set[tuple[str, str]] = set()
+        self.dropped_act_lesions: list[tuple[str, str]] = []
+        self.pair_order: list[tuple[PairType, tuple[str, str]]] = []
         # DECISIONS D300 RF-L1: pass 1's same_as components, built once (same_as_components)
         self.same_as_found: tuple[dict[str, frozenset[str]], frozenset[str], bool] | None = None
         self.unclaimed: list[Unclaimed] = []
@@ -2559,12 +2636,22 @@ class _Builder:
         and its control, each a claim of its own by its role), until the set is within the bound or no pair is left,
         and each pair dropped is recorded (ClaimSet.dropped_lesion_pairs; settle stores it unappraised, so it releases
         nothing). A set still over the bound without them is refused as before (7.4 door 0): the other claims decide
-        and hold."""
+        and hold. DECISIONS D305: the act-lesion claims are pair-type claims too (they can only release: a pair not
+        established sets nothing apart), dropped by the same rule - the last asked first across both kinds
+        (pair_order), each drop recorded (ClaimSet.dropped_act_lesions)."""
         bound = claim_bound(self.version)
-        while len(built.claims) > bound and self.lesion_pair_specs:
-            keep = max(0, len(self.lesion_pair_specs) - _ceiling(len(built.claims) - bound, 2))
-            self.dropped_pairs += [(lesion, other) for _claim, _control, lesion, other in self.lesion_pair_specs[keep:]]
-            self.lesion_pair_specs = self.lesion_pair_specs[:keep]
+        while len(built.claims) > bound and self.pair_order:
+            keep = max(0, len(self.pair_order) - _ceiling(len(built.claims) - bound, 2))
+            dropped = set(self.pair_order[keep:])
+            self.dropped_pairs += [(lesion, other) for _claim, _control, lesion, other in self.lesion_pair_specs
+                                   if (PairType.LESION_PAIR, (lesion, other)) in dropped]
+            self.dropped_act_lesions += [(act, lesion) for _claim, _control, act, lesion in self.act_lesion_specs
+                                         if (PairType.ACT_LESION, (act, lesion)) in dropped]
+            self.lesion_pair_specs = [entry for entry in self.lesion_pair_specs
+                                      if (PairType.LESION_PAIR, (entry[2], entry[3])) not in dropped]
+            self.act_lesion_specs = [entry for entry in self.act_lesion_specs
+                                     if (PairType.ACT_LESION, (entry[2], entry[3])) not in dropped]
+            self.pair_order = self.pair_order[:keep]
             built = self.finish()
         return built
 
@@ -2889,6 +2976,7 @@ class _Builder:
                     continue
                 self.pair(statement, act)
                 self.lesion_pair(statement, act)  # DECISIONS D296 (gemini-appraisal@2 only)
+                self.act_lesion(statement, act)  # DECISIONS D305 P4-ONLESION (gemini-appraisal@2 only)
         for index, first in enumerate(acts):
             for second in acts[index + 1:]:
                 one = self.claimed_value(Family.EVENT, first, _A.SESSION)
@@ -2968,6 +3056,72 @@ class _Builder:
                           _LESION_PAIR_ROLE),
                     _Spec(control.template, control.subject, control.value, control.units, control.params,
                           control.slots, _LESION_PAIR_CONTROL_ROLE), mine, theirs))
+                self.pair_order.append((PairType.LESION_PAIR, (mine, theirs)))
+
+    def act_lesion(self, statement: str, act: str) -> None:
+        """DECISIONS D305 (P4-ONLESION; D296's pattern extended; FINAL-V2 4.5 as amended), under gemini-appraisal@2
+        only: a statement whose single or listed target names a lesion (its breadth claimed single_target or
+        listed_targets; lesions: its target lesion and each listed target that may be claimed) meets an act its pair
+        controls ask about (pair_controls: a compatible or sibling kind, not established in another session) whose
+        target names NO lesion - pass 1 writes no target lesion for it, in any state, and no doubt names it - and whose
+        claimable places (places: its supported target places, a segment's whole range) include one compatible
+        (engine/anatomy.compatible) with one of the statement's lesion's places (each value pass 1 gives it, of any
+        state): the claim set asks "This act was not done on lesion {lesion}." with its contrary control "This act was
+        done on lesion {lesion}." - or, where pass 1 does not claim the lesion single (a group, or a multiplicity not
+        claimed), D300's membership form, "This act was not done on any of the lesions of {lesion}." with "This act was
+        done on one of the lesions of {lesion}." (act_lesion_form) - about the act, worded kind-neutrally, citing the
+        act's anchor run and the lesion's description run in their sentence closures. Only an act whose kind has a
+        target is asked (requirements.TARGET_KINDS: the target row reads no other's). Each (act, lesion) is asked once,
+        whichever statements meet it; an act with no anchor closure or a lesion with no description closure gives no
+        claim (fail-closed: nothing then sets the act apart from the lesion by it). Settle establishes "not on" only
+        when pass 2 supports the claim and rejects the control, and engine/pairing's target row reads it as setting the
+        act apart from that lesion. Purpose stays unappraised: no purpose claim is built."""
+        if self.version != interpretation.APPRAISAL_VERSION_V3:
+            return
+        breadth = self.claimed_value(Family.EVENT, statement, _A.SCOPE_BREADTH)
+        if breadth not in (Breadth.SINGLE_TARGET.value, Breadth.LISTED_TARGETS.value):
+            return
+        if (self.kind_of(act) not in rq.TARGET_KINDS or self.slot(Family.EVENT, act, _A.TARGET_LESION)
+                or self.is_doubted(Family.EVENT, act, _A.TARGET_LESION)):
+            return
+        places = self.places(act)
+        if not places:
+            return
+        for lesion in self.lesions(statement):
+            key = (act, lesion)
+            if key in self.act_lesions_seen:
+                continue
+            lesion_places = [Landmark(value) for value in self.values_of(Family.LESION, lesion, _A.PLACES)]
+            if not any(anatomy.compatible(own, other) for own in places for other in lesion_places):
+                continue
+            self.act_lesions_seen.add(key)
+            first = self.closure(self.anchor(act))
+            second = self.closure(self.statement_run(Family.LESION, lesion))
+            if first is None or second is None:
+                continue
+            units, subject = self.ordered((*first, *second)), Ref(Family.EVENT, act)
+            claim_form, control_form = self.act_lesion_form(lesion)
+            claim = self.render(_ACT, _A.TARGET_LESION, FactState.SUPPORTED, lesion, subject, units, form=claim_form)
+            control = self.render(_ACT, _A.TARGET_LESION, FactState.SUPPORTED, lesion, subject, units,
+                                  form=control_form)
+            if isinstance(claim, Unclaimable) or isinstance(control, Unclaimable):
+                continue
+            self.act_lesion_specs.append((
+                _Spec(claim.template, claim.subject, claim.value, claim.units, claim.params, claim.slots,
+                      _ACT_LESION_ROLE),
+                _Spec(control.template, control.subject, control.value, control.units, control.params,
+                      control.slots, _ACT_LESION_CONTROL_ROLE), act, lesion))
+            self.pair_order.append((PairType.ACT_LESION, key))
+
+    def act_lesion_form(self, lesion: str) -> tuple[TemplateId, TemplateId]:
+        """DECISIONS D305: the (claim, control) forms of an act-lesion claim (ACT_LESION_FORMS) by the multiplicity pass
+        1 claims for the statement's lesion (claimed_value: one supported fact, claimable): single, "not done on lesion
+        {lesion}"; else D300's membership form, "not done on any of the lesions of {lesion}" - so a group, or a lesion
+        whose multiplicity is not claimed, is always asked in the membership form. The engine reads each against the
+        multiplicity it presumes, settled (engine/facts' act lesions: the first the lesion established single, the
+        second nothing)."""
+        single = self.claimed_value(Family.LESION, lesion, _A.MULTIPLICITY) == Multiplicity.SINGLE.value
+        return ACT_LESION_FORMS[0] if single else ACT_LESION_FORMS[1]
 
     def lesion_pair_form(self, mine: str, theirs: str) -> tuple[TemplateId, TemplateId]:
         """DECISIONS D300 RF-L3: the (claim, control) forms of the lesion pair of the statement's lesion ``mine`` and the
@@ -3010,7 +3164,15 @@ class _Builder:
         it names, 3.3 row 2) - as an undirected graph, built once: each id's component (an id no member names stands
         alone); the ids whose component is OPEN - it holds an id the answer has no lesion of (4.11: it may be any one
         lesion), or a lesion whose same_as a doubt names with no reading or malformed (it may be any lesion); and
-        whether a component holds two ids the answer has no lesion of (they may be any two)."""
+        whether a component holds two ids the answer has no lesion of (they may be any two).
+
+        DECISIONS D302 RF2C-L2: a member in any state whose written value is empty or unreadable - a supported or
+        negated member whose value is '' (S2's item-level breach, shape_inconsistent, which 1.8 keeps; a contradicted
+        member's '' is its contract shape, its sides being its values), or any written value that is not a string -
+        names a lesion it does not identify, so it opens its holder's component as an id the answer has no lesion of
+        does: it is linked to an id of its own that is no lesion of the answer (``unnamed``), one per such member, so
+        it may be any one lesion. engine/facts.possibly_one_finding and engine/coverage's join read the settled member
+        so (its value None, its state not contradicted)."""
         if self.same_as_found is None:
             lesions = set(self.ids[Family.LESION])
             graph: dict[str, list[str]] = {}
@@ -3022,11 +3184,16 @@ class _Builder:
                     graph.setdefault(value, []).append(holder)
 
             for holder in self.ids[Family.LESION]:
-                for item in self.slot(Family.LESION, holder, _A.SAME_AS):
+                for index, item in enumerate(self.slot(Family.LESION, holder, _A.SAME_AS)):
                     fact = item.fact
-                    for value in (getattr(fact, 'value', ''),
-                                  *(getattr(option, 'value', '') for option in getattr(fact, 'options', ()))):
-                        link(holder, value)
+                    written = [] if getattr(fact, 'state', None) is FactState.CONTRADICTED else [
+                        getattr(fact, 'value', '')]
+                    written += [getattr(option, 'value', '') for option in getattr(fact, 'options', ())]
+                    for value in written:
+                        if isinstance(value, str) and value:
+                            link(holder, value)
+                        else:  # D302 RF2C-L2: an empty or unreadable value - any one lesion, an unknown id of its own
+                            link(holder, unnamed(holder, index))
             for read in self.basis.answer.doubts:
                 for family, name in read.objects:
                     if family is not Family.LESION or _A.SAME_AS not in read.named(family):
@@ -3101,6 +3268,8 @@ class _Builder:
             specs += [claim, control]
         for claim, control, _lesion, _other in self.lesion_pair_specs:
             specs += [claim, control]
+        for claim, control, _act, _lesion in self.act_lesion_specs:  # DECISIONS D305
+            specs += [claim, control]
         cards, card_of = self.cards([ref for made in specs for ref in made.refs()])
 
         def shown(made: _Spec | None) -> bool:
@@ -3152,14 +3321,24 @@ class _Builder:
                 if found not in lesion_pairs:
                     lesion_pairs.append(found)
                     controls.add(found.control)
+        act_lesions: list[ActLesion] = []
+        for claim, control, act, lesion in self.act_lesion_specs:  # DECISIONS D305
+            if shown(claim) and shown(control):
+                found_act = ActLesion(claim_id[claim.content()], claim_id[control.content()], act, lesion)
+                if found_act not in act_lesions:
+                    act_lesions.append(found_act)
+                    controls.add(found_act.control)
         # DECISIONS D196: no control asserts what a real claim about the same object asserts, whatever units each
         # cites (no_control_is_a_claim leaves none); one that did would be a defect, and no claim set is built
         real = {made.assertion() for _fact, made, _control in self.appraised if shown(made)}
         real |= {claim.assertion() for claim, _control, _lesion, _other in self.lesion_pair_specs if shown(claim)}
+        real |= {claim.assertion() for claim, _control, _act, _lesion in self.act_lesion_specs if shown(claim)}
         written = [control for _fact, _made, control in self.appraised if control is not None]
         written += [made for made, *_rest in self.pairs] + [control for _session, _claim, control in self.complete]
         written += [control for _claim, control, _lesion, _other in self.lesion_pair_specs]
-        if controls & ({item.claim for item in appraised} | {pair.claim for pair in lesion_pairs}) or any(
+        written += [control for _claim, control, _act, _lesion in self.act_lesion_specs]
+        if controls & ({item.claim for item in appraised} | {pair.claim for pair in lesion_pairs}
+                       | {item.claim for item in act_lesions}) or any(
                 shown(control) and control.assertion() in real for control in written):
             raise RuntimeError('A control asserts what a real claim about the same object asserts (DECISIONS D196); '
                                'no claim set is built.')
@@ -3169,7 +3348,8 @@ class _Builder:
             completeness=tuple(complete), unclaimed=tuple(unclaimed),
             objects=MappingProxyType({card_id: object_ for object_, card_id in card_of.items()}),
             controls=frozenset(controls), seed=self.seed, lesion_pairs=tuple(lesion_pairs),
-            dropped_lesion_pairs=tuple(self.dropped_pairs))
+            dropped_lesion_pairs=tuple(self.dropped_pairs), act_lesions=tuple(act_lesions),
+            dropped_act_lesions=tuple(self.dropped_act_lesions))
 
     def cards(self, refs: list[Ref]) -> tuple[list[Card], dict[tuple[xs.Family, str], str]]:
         """One card per object named, numbered by type in document order (sections from N0, the others from 1); an
@@ -3202,6 +3382,13 @@ class _Builder:
         spans = self.basis.anchor_words.get(name, (None, None)) if family is Family.EVENT else (None, None)
         starts = [span.start for span in spans if span is not None]
         return (min(starts), max(starts)) if starts else (0, 0)
+
+
+def unnamed(holder: str, index: int) -> str:
+    """DECISIONS D302 RF2C-L2: the id a same_as member whose written value is empty or unreadable stands for at claim
+    time (_Builder.same_as_components) - one per member, never an id of pass 1 (an id is a family letter and canonical
+    digits), so it is an id the answer has no lesion of: it may be any one lesion."""
+    return f'{holder}#{index}'
 
 
 def _compatible(statement: Kind, act: Kind) -> bool:
@@ -3473,6 +3660,26 @@ def controls_document(version: str = interpretation.APPRAISAL_VERSION) -> dict[s
             'bound': ('a set that would pass the claim bound drops lesion pairs first, the last asked first, until it '
                       'is within the bound or none is left; each dropped pair is recorded, never asked'),
         }
+        # DECISIONS D305 (round r2e, P4-ONLESION): the act-lesion claim and its control, stated and pinned
+        found['act_lesions_d305'] = {
+            'asked': ("a statement whose single or listed target names a lesion, against each act its pair controls "
+                      'ask about whose target names no lesion (none written in any state, none doubted), of a kind '
+                      'with a target, with a claimable place compatible with one of the lesion\'s places: the claim '
+                      'that the act was not done on the lesion with its contrary, that it was, about the act, citing '
+                      "the act's anchor and the lesion's description runs in their closures; each (act, lesion) once; "
+                      'its content key carries its role (act_lesion, act_lesion_control)'),
+            'forms': [[claim.value, control.value] for claim, control in ACT_LESION_FORMS],
+            'form_rule': ('the lesion claimed single: not done on the lesion; else not done on any of its lesions '
+                          "(D300's membership form; a lesion claimed single: one supported multiplicity fact, "
+                          'claimable)'),
+            'bound': ('a set that would pass the claim bound drops the pair-type claims - lesion pairs and act-lesion '
+                      'claims - first, the last asked first across both, until it is within the bound or none is '
+                      'left; each dropped one is recorded, never asked'),
+        }
+        # DECISIONS D302 (round r2e, RF2C-L2): the claim-time join reads an empty or unreadable same_as value
+        found['same_as_unnamed'] = ("a same_as member whose written value is empty or unreadable (a supported or "
+                                    "negated '', a value that is not a string) is linked to an id of its own that "
+                                    'is no lesion of the answer, one per member: it may be any one lesion')
         # AMENDMENT-2 4.4 at the session's other objects (refute-f3s-r1 finding 3: the class stated and pinned)
         found['session_others'] = ("another lesion or another act of the act's session: when none exists by the "
                                    'values the slots establish, but one a card can show (none of the fact\'s own '

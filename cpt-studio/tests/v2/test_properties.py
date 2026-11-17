@@ -74,7 +74,14 @@ the ENGINE AS ASSEMBLED - engine/assess.assess_facts, every rule together - and 
   fixtures that release nothing under any weakening - an add-on whose only primary a cited denial excludes (RD-2) and an
   established denial of a kind (RD-3); D264's every-row check reads assess's ADDON row for a READY add-on
   (``addon_row_met``); and the generator keeps a negated claim negated, as settle does: a conflict doubt on a denial is
-  a contradicted denial, and a denial has no pass-1 contradiction of its value (its sides would be stated).
+  a contradicted denial, and a denial has no pass-1 contradiction of its value (its sides would be stated). DECISIONS
+  D309 RFE-L2 (round r2f): a weakening of a lesion's facts re-derives every pair-type outcome (D296/D300's lesion
+  pairs, D305's act-lesion pairs) through engine/facts' own readers (``rederived``), so a weakened multiplicity a
+  pair-type release presumes takes the release away, as a stored row with that multiplicity would; and D309 RFE-L1's
+  listed target beside an act naming no lesion is a fixture (LISTED_FIXTURE). DECISIONS D311 R2F2-L1's single target
+  beside an act naming no lesion at its lesion's place and at another, the other answered by the statement's rejected
+  place pair control, is a fixture too (SINGLE_FIXTURE; round r2f's refutation of lane f-lesion2, RFL2-2: with no
+  fixture of that release, D220's generator made no state in the single arm, whose deleted act place released).
 - P-INDEP (IndependenceTests): perturbing any fact outside requirements.dependencies(code) leaves the code's status,
   its item (the held fact it asks and its message) and its held facts unchanged - test_assess's perturbation harness
   (repair 5a's R5), over every fixture here.
@@ -599,6 +606,80 @@ def a_denial_on_a_group_beside_a_removal():
 LESION_PAIR_FIXTURE = 'a denial on a group of polyps beside a removal, set apart by a lesion pair claim (D300 RF-L7)'
 
 
+def a_denial_on_a_polyp_beside_a_tattoo_naming_none():
+    """DECISIONS D305 P4-ONLESION's P-MONO and P-INDEP fixture (round r2e, builder e-lesion; pair 4's L04 shape):
+    EF.colonoscopy's cold snare E2 of L1 (single) in the sigmoid colon, E3 a denial that a lifting injection was used
+    for L1 (its single target, placed at L1's place), and E4 a tattoo in the sigmoid colon whose target names no lesion
+    - catalogue.covers reads a tattoo and an injection as one act, and the places overlap - with the act-lesion pair
+    between E4 and L1 established: FactSet.pair_controls' (E4, distinct_from, L1) True, as engine/facts reads a settled
+    act-lesion claim pass 2 supported and whose control it rejected, L1 established single. 45381 is READY on E4 by that
+    pair alone (the release path D305 adds); 9.4's weakenings make it not established like any pair control, and a fact
+    the pair reads weakened."""
+    doc = EF.colonoscopy()
+    doc.lesions[L(1)] = {**doc.lesions[L(1)], A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}
+    doc.act(3, Kind.INJECTION, status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.SINGLE_TARGET),
+            lesion=sup(L(1)), places=[sup(Landmark.SIGMOID_COLON)], kind_words=Span(300, 330),
+            status_words=Span(330, 360))
+    doc.act(4, Kind.TATTOO, places=[sup(Landmark.SIGMOID_COLON)])
+    R = paired(doc.build())
+    return replace(R, pair_controls={**R.pair_controls, (EF.E(4), A.DISTINCT_FROM, L(1)): True})
+
+
+ACT_LESION_FIXTURE = ('a denial on a polyp beside a tattoo naming no lesion, set apart by an act-lesion claim (D305 '
+                      'P4-ONLESION)')
+
+
+def a_listed_denial_beside_a_tattoo_naming_none():
+    """DECISIONS D309 RFE-L1's P-MONO and P-INDEP fixture (round r2f, builder f-lesion; the refutation's q01 shape):
+    EF.colonoscopy's cold snare E2 of L1 (single) in the sigmoid colon, L2 a single polyp in the cecum, E3 a denial that
+    a lifting injection was used for either polyp (listed targets L1 and L2, placed at both polyps' places), and E4 a
+    tattoo in the sigmoid colon whose target names no lesion. The two listed lesions are set apart from the tattoo by
+    different readings: L1 by the act-lesion pair (E4, distinct_from, L1) established (its places compatible with the
+    tattoo's, so contract/claims asked it; L1 established single), L2 - never asked, its cecum not compatible with the
+    sigmoid colon - by its places, disjoint from the tattoo's and asked of the tattoo by a rejected place pair control
+    (claims' rule from the denial's places). 45381 is READY on E4 by the two together (the release D309's listed arm
+    adds); 9.4's weakenings make either reading not established - the pair or the control not rejected, L1's
+    multiplicity (re-derived, ``rederived``), L2's place or the tattoo's place unresolved or deleted."""
+    doc = EF.colonoscopy()
+    doc.lesions[L(1)] = {**doc.lesions[L(1)], A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}
+    doc.lesion(2, multiplicity=sup(ct.Multiplicity.SINGLE), lesion_places=[sup(Landmark.CECUM)])
+    doc.act(3, Kind.INJECTION, status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.LISTED_TARGETS),
+            targets=[sup(L(1)), sup(L(2))], places=[sup(Landmark.SIGMOID_COLON), sup(Landmark.CECUM)],
+            kind_words=Span(300, 330), status_words=Span(330, 360))
+    doc.act(4, Kind.TATTOO, places=[sup(Landmark.SIGMOID_COLON)])
+    R = paired(doc.build())
+    return replace(R, pair_controls={**R.pair_controls, (EF.E(4), A.DISTINCT_FROM, L(1)): True})
+
+
+LISTED_FIXTURE = ('a listed denial beside a tattoo naming no lesion, its polyps set apart by an act-lesion claim and by '
+                  'place (D309 RFE-L1)')
+
+
+def a_denial_on_a_polyp_beside_a_tattoo_at_two_places_naming_none():
+    """DECISIONS D311 R2F2-L1's P-MONO and P-INDEP fixture for the single arm (round r2f's refutation of lane
+    f-lesion2, RFL2-2: no fixture carried the single target's release with a second act place - the act-lesion
+    fixture's tattoo has one place - so D220's generator made no state there, and the build released one):
+    EF.colonoscopy's cold snare E2 of L1 (single) in the sigmoid colon, E3 a denial that a lifting injection was used
+    for L1 (its single target, placed at L1's place), and E4 a tattoo in the sigmoid and the descending colon whose
+    target names no lesion. The tattoo's sigmoid colon is answered by the act-lesion pair (E4, distinct_from, L1)
+    established, its descending colon by the place pair control claims makes asking the denial about it (claims' rule
+    from the full lists), rejected. 45381 is READY on E4 by the two together (pair 4's L04 release with a second
+    tattoo place); 9.4's weakenings make either not established, and D220's generator leaves that control unrejected
+    and deletes the tattoo's descending colon: the deleted member's unrejected control keeps the pair together."""
+    doc = EF.colonoscopy()
+    doc.lesions[L(1)] = {**doc.lesions[L(1)], A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}
+    doc.act(3, Kind.INJECTION, status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.SINGLE_TARGET),
+            lesion=sup(L(1)), places=[sup(Landmark.SIGMOID_COLON)], kind_words=Span(300, 330),
+            status_words=Span(330, 360))
+    doc.act(4, Kind.TATTOO, places=[sup(Landmark.SIGMOID_COLON), sup(Landmark.DESCENDING_COLON)])
+    R = paired(doc.build())
+    return replace(R, pair_controls={**R.pair_controls, (EF.E(4), A.DISTINCT_FROM, L(1)): True})
+
+
+SINGLE_FIXTURE = ('a denial on a polyp beside a tattoo at its place and at another naming no lesion, set apart by an '
+                  'act-lesion claim and a statement control (D311 R2F2-L1)')
+
+
 def fixtures():
     """(name, the settled FactSet, the proposals) the properties run over: test_assess's assess fixtures, and the SC-B
     fixtures (refutation 6a-r1 F1) - two_sessions and r2d-2's Q2 and Q3 shapes and two targeted denials, each with the
@@ -619,6 +700,16 @@ def fixtures():
     return (
         # DECISIONS D300 RF-L7 (round r2c): the release path of D296's lesion pair claim, carried by a fixture
         (LESION_PAIR_FIXTURE, TA.dated(a_denial_on_a_group_beside_a_removal()), (('45385', 2), ('45378', 1))),
+        # DECISIONS D305 (round r2e): the release path of the act-lesion claim, carried by a fixture
+        (ACT_LESION_FIXTURE, TA.dated(a_denial_on_a_polyp_beside_a_tattoo_naming_none()),
+         (('45381', 4), ('45385', 2), ('45378', 1))),
+        # DECISIONS D309 RFE-L1 (round r2f): the listed arm's release, each lesion set apart by its own reading
+        (LISTED_FIXTURE, TA.dated(a_listed_denial_beside_a_tattoo_naming_none()),
+         (('45381', 4), ('45385', 2), ('45378', 1))),
+        # DECISIONS D311 R2F2-L1 (round r2f; lane f-lesion2's repair pass, RFL2-2): the single arm's release with a
+        # second act place, carried by a fixture
+        (SINGLE_FIXTURE, TA.dated(a_denial_on_a_polyp_beside_a_tattoo_at_two_places_naming_none()),
+         (('45381', 4), ('45385', 2), ('45378', 1))),
         ('two sessions', TA.dated(TA.two_sessions().build()), TA.TWO),
         ('enriched', TA.dated(TA.enriched().build()), TA.TWO),
         ('egd dilation', TA.dated(TA.egd_dilation().build()), (('43249', 2), ('43239', 3), ('43235', 1))),
@@ -820,10 +911,62 @@ def _objects(R, name):
 
 
 def _with(R, name, subject, attributes):
-    """``R`` with ``subject``'s facts in table ``name`` replaced by ``attributes``."""
+    """``R`` with ``subject``'s facts in table ``name`` replaced by ``attributes`` - a lesion's facts with every
+    pair-type outcome re-derived from them (``rederived``, DECISIONS D309 RFE-L2)."""
     if name == 'encounter':
         return replace(R, encounter=attributes)
-    return replace(R, **{name: {**getattr(R, name), subject: attributes}})
+    changed = replace(R, **{name: {**getattr(R, name), subject: attributes}})
+    return rederived(R, changed) if name == 'lesions' else changed
+
+
+# --- the pair-type outcomes, re-derived from the weakened FactSet (DECISIONS D309 RFE-L2, round r2f) ---------------------
+#
+# A pair-type release - D296/D300's lesion pair, D305's act-lesion claim - is read with the multiplicity its claim's form
+# presumes established (engine/facts' _lesion_pairs and _act_lesions, at FactSet build, from the stored row), so the
+# FactSet holds only the outcome. 9.4's weakenings act on the FactSet: a weakened lesion multiplicity left the outcome as
+# it was, and the release it presumed stood under the weakening (the refutation's RFE-L2: the D305 fixture's 45381, and
+# D300's 45385 alike, READY with the presumed lesion no longer established single). ``_with`` re-derives every pair-type
+# outcome whenever a lesion's facts change, through engine/facts' own readers - so P-MONO, the drawn census and every
+# check of a weakened state read the presumption as a stored row would give it.
+
+# Each pair-type kind's claim forms, the first presuming most (contract/claims' tables): an act-lesion pair's subject is
+# an event, a lesion pair's a lesion
+PAIR_TYPE_FORMS = {IdFamily.EVENT: tuple(claim.value for claim, _control in CL.ACT_LESION_FORMS),
+                   IdFamily.LESION: tuple(claim.value for claim, _control in CL.LESION_PAIR_FORMS)}
+
+
+def pair_type_outcome(key, template, lesions) -> bool:
+    """engine/facts' reading of the pair-type outcome ``key`` - (an act or a lesion, distinct_from, a lesion) - as a
+    stored row gives it: one settled record of the form ``template``, its claim supported and its control rejected
+    (result supported), read by facts._act_lesions or facts._lesion_pairs against the lesion facts ``lesions``."""
+    subject, _attribute, value = key
+    context = F._Context(units={}, doubts=(), claims={'c1': {'id': 'c1', 'template': template}}, rejudge=False,
+                         service=None)
+    if subject.family is IdFamily.EVENT:
+        record = {'act': str(subject), 'lesion': str(value), 'claim': 'c1', 'result': 'supported'}
+        found = F._act_lesions({'act_lesions': [record]}, context, lesions)
+    else:
+        record = {'lesion': str(subject), 'other': str(value), 'claim': 'c1', 'result': 'supported'}
+        found = F._lesion_pairs({'lesion_pairs': [record]}, context, lesions)
+    return found[key]
+
+
+def rederived(R, changed):
+    """``changed`` - ``R`` with lesion facts changed - with each pair-type outcome ``R`` holds established (FactSet.
+    pair_controls keyed (an act or a lesion, distinct_from, a lesion), True) re-derived from ``changed``'s lesions by
+    engine/facts (``pair_type_outcome``), in its form: the form of its kind that presumes most (PAIR_TYPE_FORMS' order)
+    under which engine/facts reads it established from ``R``'s lesions - the form contract/claims asked, since a lesion
+    multiplicity settles supported single only where pass 1 claimed it so (P-DEMOTE), and claims asks the forms that
+    presume single exactly then. An outcome ``R`` holds not established stays so: no weakening establishes a
+    multiplicity."""
+    out = {}
+    for key, established in R.pair_controls.items():
+        if key[1] is not A.DISTINCT_FROM or established is not True:
+            continue
+        forms = PAIR_TYPE_FORMS[key[0].family]
+        form = next((template for template in forms if pair_type_outcome(key, template, R.lesions)), forms[-1])
+        out[key] = changed.pair_controls.get(key) is True and pair_type_outcome(key, form, changed.lesions)
+    return replace(changed, pair_controls={**changed.pair_controls, **out}) if out else changed
 
 
 def _subject(subject) -> str:

@@ -2805,7 +2805,8 @@ def explanation(message: Message, slots: Slots, text: str) -> str:
 #   the visit as CPT Studio's reading records it (VISIT_DENIED); ATTEMPTED asks whether the code describes an act begun and
 #   not completed (ATTEMPTED); the route-(d) explanations UNPROFILED, NOT_LINKED, RECOGNISED_ONLY and UNRECONCILED ask
 #   whether the code is supported by what was done (SUPPORTED) - their item's question - never whether "this procedure"
-#   was performed.
+#   was performed. r2f (DECISIONS D309, e-words' Q1): so do NOT_DOCUMENTED and UNLISTED_EVIDENCE, whose item asks the
+#   same performed_question(code) - D303's I1 read strictly: an item sits on the row that asks exactly its question.
 FORM_DIGITAL_SCOPE = 'digital_scope'
 FORM_UNLISTED_SCOPE = 'unlisted_scope'
 FORM_SESSION_DOUBT = 'session_doubt'
@@ -2828,15 +2829,28 @@ FORM_ACT_ENTRY = 'act_entry'
 FORM_ACT_TIME = 'act_time'
 FORM_ACT_PERFORMER = 'act_performer'
 FORM_ACT_STATUS = 'act_status'
+# r2e (DECISIONS D303, I1; WX3-1, WX3-2): the held session's examination when it is ANOTHER session's, named as another act
+# by its kind in the question its own form asks - row 7's done (DONE_IN_PART): the session's DOUBT and STATUS
+# (ACT_DOUBT), DIGITAL_SCOPE (ACT_DIGITAL) and UNLISTED_SCOPE (ACT_UNLISTED). Renaming the act changes its name only:
+# each one's words are its examination form's with "the examination of this procedure" replaced by the act's name
+FORM_ACT_DOUBT = 'act_doubt'
+FORM_ACT_DIGITAL = 'act_digital'
+FORM_ACT_UNLISTED = 'act_unlisted'
+# r2e (DECISIONS D303, I1): the procedure an act the code does not bind was done in, that act named by its kind - the key
+# row "In which procedure was this act done?" renamed (W2R-2's rule, read on the procedure key as on the entry, date,
+# performer and status keys): XCHG's counterpart whose session is not established
+FORM_ACT_PROCEDURE = 'act_procedure'
 FORMS: frozenset[str] = frozenset({FORM_DIGITAL_SCOPE, FORM_UNLISTED_SCOPE, FORM_SESSION_DOUBT, FORM_ADDON,
                                    FORM_DESCRIBED, FORM_ACCOUNTED, FORM_SEPARATE, FORM_ANOTHER_ENTRY, FORM_PART,
                                    FORM_SESSION_ENTRY, FORM_SESSION_TIME, FORM_SESSION_PERFORMER, FORM_SESSION_STATUS,
                                    FORM_SAME_DUCT, FORM_STRUCTURE, FORM_VISIT_DENIED, FORM_ATTEMPTED, FORM_SUPPORTED,
-                                   FORM_ACT_ENTRY, FORM_ACT_TIME, FORM_ACT_PERFORMER, FORM_ACT_STATUS})
+                                   FORM_ACT_ENTRY, FORM_ACT_TIME, FORM_ACT_PERFORMER, FORM_ACT_STATUS,
+                                   FORM_ACT_DOUBT, FORM_ACT_DIGITAL, FORM_ACT_UNLISTED, FORM_ACT_PROCEDURE})
 # r2b (D297, W2R-2): the forms whose row names an act of the item's own and shows that act's passages, whoever binds it
 ACT_FORMS: frozenset[str] = frozenset({FORM_SESSION_DOUBT, FORM_SESSION_ENTRY, FORM_SESSION_TIME, FORM_SESSION_PERFORMER,
                                        FORM_SESSION_STATUS, FORM_SAME_DUCT, FORM_ACT_ENTRY, FORM_ACT_TIME,
-                                       FORM_ACT_PERFORMER, FORM_ACT_STATUS})
+                                       FORM_ACT_PERFORMER, FORM_ACT_STATUS, FORM_ACT_DOUBT, FORM_ACT_DIGITAL,
+                                       FORM_ACT_UNLISTED, FORM_ACT_PROCEDURE})
 # What CPT Studio could not confirm, in each form's own words (true of every item of the form): the member's row
 # (studio/answers.py: its statement), the code's qualification (customer_api.FORM_WORDS) and read time's sentence for an
 # item it cannot word (overlay._fact_sentence) all read this ONE table, so they never say two things.
@@ -2864,12 +2878,18 @@ FORM_MISSING: Mapping[str, str] = MappingProxyType({
     FORM_ACT_TIME: 'whether {act} was done at this encounter',
     FORM_ACT_PERFORMER: 'who performed {act}',
     FORM_ACT_STATUS: 'that {act} was performed on the date of service',
+    # r2e (D303, I1): the examination forms' words with the act renamed (WX3-1, WX3-2)
+    FORM_ACT_DOUBT: 'that {act} was performed, in full or in part, on the date of service',
+    FORM_ACT_DIGITAL: 'the technique of an examination the document states, which may be {act}',
+    FORM_ACT_UNLISTED: 'whether a statement that names no procedure session is about {act}',
+    FORM_ACT_PROCEDURE: 'in which procedure {act} was done',
 })
 # r2b (D297, W2R-2): the slots a form's words name (``form_text``): XCHG's duct question names the act whose duct is not
 # established ({act}) and its counterpart ({whole}) by their kinds (kind_words, an act no kind names as NO_KIND_LABEL),
 # as the item names them, CPT Studio's own words - never a quote. Every other form's words are fixed.
 FORM_TEMPLATES: frozenset[str] = frozenset({FORM_SAME_DUCT, FORM_ACT_ENTRY, FORM_ACT_TIME, FORM_ACT_PERFORMER,
-                                           FORM_ACT_STATUS})
+                                           FORM_ACT_STATUS, FORM_ACT_DOUBT, FORM_ACT_DIGITAL, FORM_ACT_UNLISTED,
+                                           FORM_ACT_PROCEDURE})
 # r2b (D297): the form whose row states what CPT Studio's reading records rather than what it could not confirm - the
 # established denial a VISIT_DENIED explanation rests on (its passages show it); the qualification says the same
 FORM_RECORDED: Mapping[str, str] = MappingProxyType({
@@ -2893,32 +2913,49 @@ _MESSAGE_FORMS: Mapping[Message, str] = MappingProxyType({
     Message.SEPARATE_EM_DENIED: FORM_VISIT_DENIED, Message.ATTEMPTED: FORM_ATTEMPTED,
     Message.UNPROFILED: FORM_SUPPORTED, Message.NOT_LINKED: FORM_SUPPORTED, Message.RECOGNISED_ONLY: FORM_SUPPORTED,
     Message.UNRECONCILED: FORM_SUPPORTED,
+    # r2f (DECISIONS D309, e-words' Q1: D303 I1 strictly): NOT_DOCUMENTED and UNLISTED_EVIDENCE ask performed_question(code)
+    # too ("Confirm whether <code> is supported by what was done on the date of service"), so they sit on the row that
+    # asks exactly that question - the SUPPORTED form's - never the status row's "Was this procedure performed ...?"
+    Message.NOT_DOCUMENTED: FORM_SUPPORTED, Message.UNLISTED_EVIDENCE: FORM_SUPPORTED,
 })
 # r2b (D297, W2R-2): the forms the item's slots choose - an item about the held session's examination
 # (``session_examination``), whichever code it holds; any other slots leave the message's key row
 _SESSION_FORMS: Mapping[Message, str] = MappingProxyType({
     Message.DOUBT: FORM_SESSION_DOUBT, Message.ENTRY: FORM_SESSION_ENTRY, Message.TIME: FORM_SESSION_TIME,
     Message.PERFORMER: FORM_SESSION_PERFORMER, Message.STATUS: FORM_SESSION_STATUS,
+    # r2e (D303, I1): TIME_BESIDE_VISIT asks TIME's question (its reason adds the visit), so it takes TIME's rows
+    Message.TIME_BESIDE_VISIT: FORM_SESSION_TIME,
 })
 # r2b (D297, W2R-2): the forms the same four keys take for an act the code does not bind that its slots do not name as the
 # held session's examination (``item_record``: the item names another act) - that act by its kind
 _OTHER_ACT_FORMS: Mapping[Message, str] = MappingProxyType({
     Message.ENTRY: FORM_ACT_ENTRY, Message.TIME: FORM_ACT_TIME, Message.PERFORMER: FORM_ACT_PERFORMER,
     Message.STATUS: FORM_ACT_STATUS,
+    # r2e (DECISIONS D303, I1): every message of the four keys, by the question its own words ask - a DOUBT about an act
+    # that is not the held session's examination asks whether it was done on the date of service (STATUS's question),
+    # TIME_BESIDE_VISIT asks TIME's
+    Message.DOUBT: FORM_ACT_STATUS, Message.TIME_BESIDE_VISIT: FORM_ACT_TIME,
+    # r2e (D303, I1): and the procedure key - PROCEDURE about an act the code does not bind asks that act's procedure
+    Message.PROCEDURE: FORM_ACT_PROCEDURE,
 })
 # r2d (DECISIONS D301, RBWX-2): an item's examination is "the examination of this procedure" only when it is the
 # examination of the session the code is matched to (``item_record``'s ``own_session``). The forms whose words name it
 # so - the session's (``_SESSION_FORMS``), DIGITAL_SCOPE's and UNLISTED_SCOPE's (the held session's examination) - are
-# given to an item about the examination of any other session (an E/M's same-day procedure included), or of a session
-# that is not established, as the form naming that examination as another act, by its kind and with its own passages,
-# chosen by the item's fact key (its row's key: an entry, a date, a performer, a status); a key no such form asks (a
-# conflict's: its key row names the act by its kind) keeps its key's row
+# given to an item about the examination of another session (an E/M's same-day procedure included) as the form naming
+# that examination as another act, by its kind and with its own passages.
+# r2e (DECISIONS D303, I1; WX3-1, WX3-2): renaming the act changes its name only, never what is asked - the other
+# session's form is chosen by the item's own form, the question it asks (``_OTHER_SESSION_FORMS``), never by its fact key:
+# row 7's done stays row 7's done (the session's DOUBT and STATUS -> ACT_DOUBT), DIGITAL_SCOPE's question stays its own
+# (ACT_DIGITAL: whether the held session's examination is documented as performed, in full or in part - never a date,
+# entry, performer or status of the claimed examination), UNLISTED_SCOPE's its own (ACT_UNLISTED); the entry, date and
+# performer keep theirs. Every such form names an examination ("the examination": Kind.EXAMINATION, ``item_record``).
 EXAMINATION_FORMS: frozenset[str] = frozenset({FORM_SESSION_DOUBT, FORM_SESSION_ENTRY, FORM_SESSION_TIME,
                                                FORM_SESSION_PERFORMER, FORM_SESSION_STATUS, FORM_DIGITAL_SCOPE,
                                                FORM_UNLISTED_SCOPE})
 _OTHER_SESSION_FORMS: Mapping[str, str] = MappingProxyType({
-    'event_entry': FORM_ACT_ENTRY, 'event_time': FORM_ACT_TIME, 'event_performer': FORM_ACT_PERFORMER,
-    'performed_status': FORM_ACT_STATUS,
+    FORM_SESSION_DOUBT: FORM_ACT_DOUBT, FORM_SESSION_STATUS: FORM_ACT_DOUBT, FORM_SESSION_ENTRY: FORM_ACT_ENTRY,
+    FORM_SESSION_TIME: FORM_ACT_TIME, FORM_SESSION_PERFORMER: FORM_ACT_PERFORMER, FORM_DIGITAL_SCOPE: FORM_ACT_DIGITAL,
+    FORM_UNLISTED_SCOPE: FORM_ACT_UNLISTED,
 })
 # r2b (D297, W2R-3): each service fact's one question - the message of the item a service's row asks for every code of
 # the service (answers.SERVICE_FACTS, L7-08): engine/assess's R6 rows and the member context's rows
@@ -3019,24 +3056,28 @@ def item_record(message: object, fill: object, subject: object, own: object,
 
     r2d (DECISIONS D301, RBWX-2): ``own_session`` - whether the examination the item names is the examination of the
     session the code is matched to (the caller's established reading: overlay.own_session_examination, the ONE rule
-    the renderer and read time read) - and ``fact``, its held fact's key ('' reads its message's). The forms whose
-    words say "the examination of this procedure" (``EXAMINATION_FORMS``) are given only where it is; an item about the
-    examination of any OTHER session - an E/M's same-day procedure included - or of a session that is not established
-    is named as another act by its kind, with that act's own passages (``_OTHER_SESSION_FORMS`` by its key). None (no
-    reading given) reads the slots alone, as before."""
+    the renderer and read time read). The forms whose words say "the examination of this procedure"
+    (``EXAMINATION_FORMS``) are given only where it is; an item about the examination of ANOTHER session - an E/M's
+    same-day procedure included - is named as another act by its kind ("the examination"), with that act's own
+    passages. None (no reading given) reads the slots alone, as before.
+
+    r2e (DECISIONS D303, I1; WX3-1, WX3-2): the move to another act renames the act and never changes what is asked -
+    the other session's form is the item's own form renamed (``_OTHER_SESSION_FORMS``, keyed by the form: the question
+    the item asks), never one chosen by its fact key (``fact`` is no longer read here: a DIGITAL_SCOPE item keyed by its
+    held fact's date asks DIGITAL_SCOPE's question, never a date)."""
     act, family = getattr(fill, 'act', None), getattr(fill, 'family', None)
     found = message if isinstance(message, Message) else next(
         (member for member in Message if member.value == message), None) if isinstance(message, str) else None
     form = member_form(message, Slots(act=act, family=family))
     other = (getattr(subject, 'family', None) is IdFamily.EVENT
              and subject not in tuple(own if isinstance(own, (tuple, list, set, frozenset)) else ()))
+    named = act
     if own_session is False and form in EXAMINATION_FORMS:  # RBWX-2: another session's examination: another act
-        key = fact or (MESSAGES[found].fact if found is not None and found in MESSAGES else '')
-        form = _OTHER_SESSION_FORMS.get(key, '')
+        form, named = _OTHER_SESSION_FORMS[form], Kind.EXAMINATION  # r2e (D303 I1): renamed, the same question
     if not form and other:  # an act the code does not bind, not the session's examination: named by its kind
         form = _OTHER_ACT_FORMS.get(found, '') if found is not None else ''
     return form, act_record(form, other, getattr(fill, 'words', ()) or (), getattr(fill, 'whole_words', ()) or (),
-                            act, getattr(fill, 'whole', None))
+                            named, getattr(fill, 'whole', None))
 
 
 # --- r2d (DECISIONS D301, RBWX-1): every passage an item's question quotes, as its member row shows them ------------

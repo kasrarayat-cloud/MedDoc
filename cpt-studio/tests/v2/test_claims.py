@@ -707,8 +707,10 @@ def placeholders(sentence):
 class TemplateTests(SimpleTestCase):
     def test_every_template_is_in_one_table_and_fills_only_its_slots(self):
         # gemini-appraisal@1's tables hold every template but D292 U1's kind-neutral forms, which only @2's hold - and,
-        # since DECISIONS D300 RF-L3 (round r2c), the lesion pair's membership forms, which only @2's hold too
+        # since DECISIONS D300 RF-L3 (round r2c), the lesion pair's membership forms, which only @2's hold too - and,
+        # since DECISIONS D305 (round r2e), the act-lesion claim's forms, which only @2's hold too
         neutral = set(claims.KIND_NEUTRAL.values()) | {form for pair in claims.LESION_PAIR_FORMS[1:] for form in pair}
+        neutral |= {form for pair in claims.ACT_LESION_FORMS for form in pair}
         self.assertEqual(set(claims.TEMPLATES) | set(claims.STATEMENT_TEMPLATES), set(claims.TemplateId) - neutral)
         self.assertFalse(set(claims.TEMPLATES) & set(claims.STATEMENT_TEMPLATES))
         self.assertEqual(set(claims.TEMPLATES_V3) | set(claims.STATEMENT_TEMPLATES_V3), set(claims.TemplateId))
@@ -2675,9 +2677,13 @@ def polyp_left_answer():
               scope__breadth=[fact('single_target', src(['S7'], 'The 6 mm cecal polyp'))],
               target__lesion=[fact('L1', src(['S7'], 'The 6 mm cecal polyp'))])],
         fact('E1', src(['S4'])),
-        lesions=[lesion('L1', ['S5'], 'A 6 mm polyp', places=[fact('cecum', src(['S5'], 'cecum'))]),
+        # DECISIONS D302 RF2C-L1 (round r2e): a written distinct_from sets two lesions apart only when both are
+        # established single, so the two polyps are filed single, as the note tells them (none was written before r2e)
+        lesions=[lesion('L1', ['S5'], 'A 6 mm polyp', places=[fact('cecum', src(['S5'], 'cecum'))],
+                        multiplicity=[fact('single', src(['S5'], 'A 6 mm polyp'))]),
                  lesion('L2', ['S6'], 'A second polyp', places=[fact('sigmoid_colon', src(['S6'], 'sigmoid colon'))],
-                        distinct_from=[fact('L1', src(['S6'], 'A second polyp'))])])
+                        distinct_from=[fact('L1', src(['S6'], 'A second polyp'))],
+                        multiplicity=[fact('single', src(['S6'], 'A second polyp'))])])
 
 
 def merged(claim_set):
@@ -3466,15 +3472,21 @@ def listed_polyps_answer(fourth=False):
     """LISTED_TWO's answer (LISTED_FOURTH's with ``fourth``), as refute-r2c-r2's p01 builds it: the removal E2 of L1
     (S5) and the denial E3 of removing L2 and L3 (listed_targets), each listed polyp distinct from L1."""
     last = 'S9' if fourth else 'S8'
-    lesions = [lesion('L1', ['S5'], 'A 5 mm polyp', places=[fact('transverse_colon', src(['S5'], 'transverse colon'))]),
+    # DECISIONS D302 RF2C-L1 (round r2e): a written distinct_from sets two lesions apart only when both are established
+    # single, so each polyp is filed single, as the note tells it (no multiplicity was written before r2e)
+    lesions = [lesion('L1', ['S5'], 'A 5 mm polyp', places=[fact('transverse_colon', src(['S5'], 'transverse colon'))],
+                      multiplicity=[fact('single', src(['S5'], 'A 5 mm polyp'))]),
                lesion('L2', ['S6'], 'A different 4 mm polyp', places=[fact('cecum', src(['S6'], 'cecum'))],
-                      distinct_from=[fact('L1', src(['S6'], 'A different 4 mm polyp'))]),
+                      distinct_from=[fact('L1', src(['S6'], 'A different 4 mm polyp'))],
+                      multiplicity=[fact('single', src(['S6'], 'A different 4 mm polyp'))]),
                lesion('L3', ['S7'], 'A different 6 mm polyp',
                       places=[fact('ascending_colon', src(['S7'], 'ascending colon'))],
-                      distinct_from=[fact('L1', src(['S7'], 'A different 6 mm polyp'))])]
+                      distinct_from=[fact('L1', src(['S7'], 'A different 6 mm polyp'))],
+                      multiplicity=[fact('single', src(['S7'], 'A different 6 mm polyp'))])]
     if fourth:
         lesions.append(lesion('L4', ['S8'], 'A different 2 mm polyp', places=[fact('rectum', src(['S8'], 'rectum'))],
-                              distinct_from=[fact('L1', src(['S8'], 'A different 2 mm polyp'))]))
+                              distinct_from=[fact('L1', src(['S8'], 'A different 2 mm polyp'))],
+                              multiplicity=[fact('single', src(['S8'], 'A different 2 mm polyp'))]))
     return frame_answer('colonoscopy', [
         examination(words='colonoscope'),
         event('E2', ['S5'], 'removed with a cold snare', 'was removed', 'snare', session=[fact('X1', src(['S5']))],

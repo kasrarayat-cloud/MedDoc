@@ -223,9 +223,16 @@ def session_of(kind, **over) -> dict:
     return _facts(SESSION_ATTRIBUTES, base)
 
 
-def lesion_of(places=(), distinct=(), same=()) -> dict:
-    return {A.PLACES: tuple(sup(place) for place in places), A.DISTINCT_FROM: tuple(sup(item) for item in distinct),
-            A.SAME_AS: tuple(sup(item) for item in same)}
+def lesion_of(places=(), distinct=(), same=(), single=True) -> dict:
+    """A lesion's facts: its places, distinct_from and same_as members, supported; filed single (``single``) -
+    DECISIONS D302 RF2C-L1 (round r2e): a written distinct_from sets two lesions apart only when both are established
+    single, so the fixtures' lesions, which stand for single lesions, carry the multiplicity that says so (none was
+    written before r2e)."""
+    found = {A.PLACES: tuple(sup(place) for place in places), A.DISTINCT_FROM: tuple(sup(item) for item in distinct),
+             A.SAME_AS: tuple(sup(item) for item in same)}
+    if single:
+        found[A.MULTIPLICITY] = (sup(ct.Multiplicity.SINGLE),)
+    return found
 
 
 def build(events: dict, sessions: dict, *, lesions=None, unlisted=(), controls=None) -> FactSet:

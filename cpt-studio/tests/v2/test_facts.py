@@ -864,14 +864,18 @@ class ApartTests(SimpleTestCase):
         self.assertFalse(F.apart_by_place(F.factset(view(events)), E2, E3))
 
     def test_apart_by_lesion(self):
-        self.assertTrue(F.apart_by_lesion(self.R, E2, E3))  # L1 and L2, distinct_from established, controls rejected
-        self.assertTrue(F.apart_by_lesion(self.R, E3, E2))
-        self.assertFalse(F.apart_by_lesion(self.R, E2, E2))
-        self.assertFalse(F.apart_by_lesion(self.R, E2, E5))  # E5 names no lesion
+        # DECISIONS D302 RF2C-L1 (round r2e): a written distinct_from sets two lesions apart only when both are
+        # established single - the fixture files L1's multiplicity contradicted (single or group) and L2's none, so its
+        # written distinct_from sets nothing apart; with both filed single the pair is apart as before r2e
+        self.assertFalse(F.apart_by_lesion(self.R, E2, E3))
+        R = single(self.R, L1, L2)
+        self.assertTrue(F.apart_by_lesion(R, E2, E3))  # L1 and L2, distinct_from established, controls rejected
+        self.assertTrue(F.apart_by_lesion(R, E3, E2))
+        self.assertFalse(F.apart_by_lesion(R, E2, E2))
+        self.assertFalse(F.apart_by_lesion(R, E2, E5))  # E5 names no lesion
         events = colonoscopy()
         events['lesions'][0]['distinct_from'] = []  # no established difference between the lesions
-        self.assertFalse(F.apart_by_lesion(F.factset(view(events)), E2, E3))
-        R = self.R
+        self.assertFalse(F.apart_by_lesion(single(F.factset(view(events)), L1, L2), E2, E3))
         for missing in ((E2, A.TARGET_LESION, L2), (E3, A.TARGET_LESION, L1)):
             trimmed = FactSet(encounter=R.encounter, people=R.people, sections=R.sections, sessions=R.sessions,
                               anatomy=R.anatomy, lesions=R.lesions, events=R.events, anchors=R.anchors,
@@ -903,6 +907,17 @@ def sup(value) -> Fact:
 
 def neg(value) -> Fact:
     return plain(ct.Result.NEGATED, value, ct.FactState.NEGATED)
+
+
+# DECISIONS D302 RF2C-L1 (round r2e): a written distinct_from sets two lesions apart only when both are established
+# single, so the scenes below, whose lesions stand for single polyps, file each one single (none was filed before r2e)
+SINGLE = {A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}
+
+
+def single(R, *lesions) -> FactSet:
+    """``R`` with each of ``lesions`` filed single: its multiplicity supported single (RF2C-L1's premise)."""
+    filed = {lesion: {**R.lesions.get(lesion, {}), **SINGLE} for lesion in lesions}
+    return dataclasses.replace(R, lesions={**R.lesions, **filed})
 
 
 def unresolved(value) -> Fact:
@@ -1125,7 +1140,7 @@ class D220Tests(SimpleTestCase):
         # so the lesion pair controls between E2 (L1) and E3 (L2) are exactly (E2, L2) and (E3, L1) - their target
         # lesions name them. A lesion control asked of either about L3, a lesion only E4 names (made for another pair),
         # is not read, rejected or not: 4.2's lesion reading
-        lesions = {L1: {A.DISTINCT_FROM: (sup(L2),)}, L2: {}, L3: {}}
+        lesions = {L1: {A.DISTINCT_FROM: (sup(L2),), **SINGLE}, L2: {**SINGLE}, L3: {**SINGLE}}
         controls = {(E2, LESION, L2): True, (E3, LESION, L1): True}
         events = {E2: placed(lesion=L1), E3: placed(lesion=L2), E4: placed(lesion=L3)}
         R = scene(events, lesions=lesions, controls=controls)
@@ -1690,7 +1705,11 @@ def fixture_case(line) -> tuple:
     if attribute is LESION and fields[2] != '-':
         for entry in fields[2].split():
             named, listed = entry.split('=')
-            lesions[Id.parse(named)] = {A.DISTINCT_FROM: facts(listed, ',')}
+            lesions[Id.parse(named)] = {A.DISTINCT_FROM: facts(listed, ','), **SINGLE}
+        # RF2C-L1: every lesion a recorded scene names stands for a single polyp, filed so
+        for member in (*events[E1][attribute], *events[E2][attribute]):
+            if isinstance(member.value, Id) and member.value not in lesions:
+                lesions[member.value] = dict(SINGLE)
     controls = {}
     for token in [] if fields[-1] == '-' else fields[-1].split():
         asked, raw, rejected = token.split(':')
@@ -1727,7 +1746,7 @@ def generated(rnd) -> FactSet:
     events = {event: placed(*rnd.sample(POOL, rnd.randint(1, 3)), lesion=rnd.choice((None, L1, L2, L3)))
               for event in ids}
     lesions = {lesion: {A.DISTINCT_FROM: tuple(sup(other) for other in (L1, L2, L3)
-                                               if other != lesion and rnd.random() < 0.6)}
+                                               if other != lesion and rnd.random() < 0.6), **SINGLE}
                for lesion in (L1, L2, L3)}
     controls = {}
     for asked in ids:

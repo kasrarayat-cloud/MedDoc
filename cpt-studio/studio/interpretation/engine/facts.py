@@ -787,6 +787,55 @@ def _lesion_pairs(events: Mapping[str, object], context: _Context,
     return out
 
 
+def _act_lesion_presumes(claim: Mapping[str, object], where: str) -> bool:
+    """DECISIONS D305 P4-ONLESION: whether an act-lesion pair's stored claim form presumes its lesion single, by its
+    template (contract/claims.ACT_LESION_FORMS; the store binds the claim to one of them): True for "This act was not
+    done on lesion {lesion}.", False for D300's membership form, "This act was not done on any of the lesions of
+    {lesion}.". FactSetError for any other form."""
+    template = _string(_field(claim, 'template', where), f'{where}.template')
+    if template == 'act.not_on_lesion':
+        return True
+    if template == 'act.not_on_lesion.any':
+        return False
+    raise FactSetError(f'The stored inventory is not readable: {where} is no act-lesion claim.')
+
+
+def _act_lesions(events: Mapping[str, object], context: _Context,
+                 lesions: Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]]) -> dict[tuple[Id, Attribute, Value], bool]:
+    """DECISIONS D305 (P4-ONLESION): each settled act-lesion pair of the row (the @3 pair's ``act_lesions``; a row
+    stored before D305 has none and reads as none), keyed (the act, distinct_from, the statement's lesion) in
+    FactSet.pair_controls: True when settle established that the act was not done on the lesion (the claim supported,
+    its control rejected) with the multiplicity its claim's form presumes established too (``_act_lesion_presumes``:
+    "not done on lesion {L}" the lesion single; the membership form nothing), False otherwise. One pair asked twice is
+    established only when every asking was (fail-closed). Read by ``established_not_on`` alone - the pairing target
+    row's arm that sets an act whose target names no lesion apart from a statement's lesion - never to join anything;
+    every other reader of pair_controls ignores these keys (an event's distinct_from: no pair control asks it, and the
+    lesion pairs' keys are lesions)."""
+    out: dict[tuple[Id, Attribute, Value], bool] = {}
+    found = events.get('act_lesions')
+    if found is None:
+        return out
+    for index, item in enumerate(_sequence(found, 'act_lesions')):
+        where = f'act_lesions[{index}]'
+        record = _mapping(item, where)
+        act = _id(_field(record, 'act', where), f'{where}.act')
+        lesion = _id(_field(record, 'lesion', where), f'{where}.lesion')
+        if act.family is not _E or lesion.family is not _L:
+            raise FactSetError(f'The stored inventory is not readable: {where} is no pair of an act and a lesion.')
+        result = _enum(Result, _field(record, 'result', where), f'{where}.result')
+        claim_id = _field(record, 'claim', where)
+        established = False
+        if claim_id is not None and result is Result.SUPPORTED:
+            claim = context.claims.get(_string(claim_id, f'{where}.claim'))
+            if claim is None:
+                raise FactSetError(f'The stored inventory is not readable: {where} names a claim the row does not '
+                                   'hold.')
+            established = not _act_lesion_presumes(claim, f'{where}.claim') or _single(lesions, lesion)
+        key = (act, Attribute.DISTINCT_FROM, lesion)
+        out[key] = out.get(key, True) and established
+    return out
+
+
 def _context(events: Mapping[str, object], rejudge: bool, service: datetime.date | None) -> _Context:
     return _Context(units=_units(events), doubts=_doubts(events), claims=_claims(events), rejudge=rejudge,
                     service=service)
@@ -964,7 +1013,8 @@ def _build(inventory: object, rejudge: bool, service: datetime.date | None) -> F
     return FactSet(encounter=encounter, people=objects[_P], sections=objects[_N], sessions=objects[_X],
                    anatomy=objects[_Y], lesions=objects[_L], events=objects[_E], anchors=anchors,
                    unlisted=_unlisted(events, context),
-                   pair_controls={**_pair_controls(context), **_lesion_pairs(events, context, objects[_L])},
+                   pair_controls={**_pair_controls(context), **_lesion_pairs(events, context, objects[_L]),
+                                  **_act_lesions(events, context, objects[_L])},
                    completeness=completeness)
 
 
@@ -1308,10 +1358,38 @@ def appraised_distinct(R: FactSet, one: Id, other: Id) -> bool:
 # --- lesion identity: the same_as join (P5) and an established distinctness (DECISIONS D300 RF-L1, RF-L2) ----------
 
 
+def unnamed_member(member: Fact) -> bool:
+    """DECISIONS D302 RF2C-L2: whether a same_as member names a lesion it does not identify - pass 1 claimed it (it is
+    not silent), in ANY state but contradicted, with an empty or unreadable value (stored '', read here as None: S2's
+    item-level breach, shape_inconsistent, which 1.8 keeps; a contradicted claim's empty value is its contract shape,
+    its sides being its values). Such a member opens its holder's component as an id the FactSet does not hold does
+    (4.11: it may be any one lesion) - in ``possibly_one_finding``, in engine/coverage's join, in the finding
+    (``finding``) and at claim time (contract/claims.same_as_components) alike: a hold-only read, never an absence."""
+    return member.state is not None and member.state is not FactState.CONTRADICTED and member.value is None
+
+
+def free_lesion_number(R: FactSet) -> int:
+    """DECISIONS D302 RF2C-L2: the first lesion number no id of ``R`` uses - no lesion of the FactSet, no lesion id any
+    fact's value or option names, no id a pair control or a lesion pair names - from which each unnamed same_as member
+    (``unnamed_member``) takes an id of its own, an id the FactSet does not hold: computed from the FactSet alone, so
+    every reader numbers them alike."""
+    numbers = [lesion.number for lesion in R.lesions]
+    tables = (R.events, R.sessions, R.sections, R.lesions, R.anatomy, R.people)
+    for found in (*(member for table in tables for held in table.values() for members_ in held.values()
+                    for member in members_),
+                  *(member for members_ in R.encounter.values() for member in members_)):
+        numbers += [value.number for value in (found.value, *found.options)
+                    if isinstance(value, Id) and value.family is _L]
+    for subject, _attribute, value in R.pair_controls:
+        numbers += [item.number for item in (subject, value) if isinstance(item, Id) and item.family is _L]
+    return max(numbers, default=0) + 1
+
+
 def _possible_ids(R: FactSet, member: Fact) -> tuple[Id, ...]:
     """The lesion ids a same_as member may name, as engine/coverage's _member_ids reads it (``possibly``): supported, its
     value; an established negation ("L1 is not the same as L2"), none; not established, its claimed value and its
-    options; every lesion of the FactSet for a silent one."""
+    options; every lesion of the FactSet for a silent one. (DECISIONS D302 RF2C-L2: an unnamed member's own unknown id
+    is added by the join, ``_joins``.)"""
     if member.result is Result.NEGATED:
         return ()
     if member.result is Result.SUPPORTED:
@@ -1334,9 +1412,14 @@ class _Joins:
 
 def _joins(R: FactSet) -> _Joins:
     graph: dict[Id, list[Id]] = {}
+    fresh = free_lesion_number(R)
     for holder in R.lesions:
         for member in members(R, holder, Attribute.SAME_AS):
-            for other in _possible_ids(R, member):
+            named = list(_possible_ids(R, member))
+            if unnamed_member(member):  # DECISIONS D302 RF2C-L2: any one lesion, an id the FactSet does not hold
+                named.append(Id(_L, fresh))
+                fresh += 1
+            for other in named:
                 if other != holder:
                     graph.setdefault(holder, []).append(other)
                     graph.setdefault(other, []).append(holder)
@@ -1386,7 +1469,9 @@ def possibly_one_finding(R: FactSet, one: Id, other: Id) -> bool:
     callers (engine/pairing cannot import engine/coverage). Read so, nothing sets the two apart by lesion
     (``established_distinct``) and no lesion pair claim is asked between them (contract/claims.same_as_joins, its
     claim-time twin over pass 1's lists in any state). Every 9.4 weakening of a member widens what it may name, so a
-    weakening never turns it False: same_as stays a hold-only read (3.2.3's UNCONTROLLED)."""
+    weakening never turns it False: same_as stays a hold-only read (3.2.3's UNCONTROLLED). DECISIONS D302 RF2C-L2: a
+    member whose value is empty or unreadable (``unnamed_member``) names an id of its own the FactSet does not hold
+    (``free_lesion_number``), so it opens its holder's component as an unknown id does."""
     if one == other:
         return True
     joins = _joins_of(R)
@@ -1408,12 +1493,29 @@ def established_distinct(R: FactSet, one: Id, other: Id) -> bool:
     different ids, distinct_from supported between them in either lesion's list, or a lesion pair claim established
     (``appraised_distinct``: D296, read as a written distinct_from) - and never while same_as may join them
     (``possibly_one_finding``). Two readers read pass 1's written distinct_from as pass 1's own claim, never this:
-    engine/coverage._SameAs.denials (a contradiction is pass 1's own) and the event coding's distinct_from list."""
+    engine/coverage._SameAs.denials (a contradiction is pass 1's own) and the event coding's distinct_from list.
+
+    DECISIONS D302 RF2C-L1 (round r2e): ONE reading of a distinctness, whoever asserted it. "Different lesions" - a
+    written distinct_from, or D296's appraised distinctness - sets two lesions apart only when BOTH are established
+    single (``_single``: the multiplicity supported single); for a group or a multiplicity not established single only
+    an established non-membership does (D300 RF-L3's membership forms, which ``_lesion_pairs`` reads against the
+    multiplicity each presumes; ``appraised_distinct``). Before r2e a written distinct_from set a group and its own
+    member apart, while the appraised pair of the same sentence did not (RF2C-L1)."""
     if one == other:
         return False
     written = any(holds(member, other) for member in members(R, one, Attribute.DISTINCT_FROM)) or any(
         holds(member, one) for member in members(R, other, Attribute.DISTINCT_FROM))
+    written = written and _single(R.lesions, one) and _single(R.lesions, other)
     return (written or appraised_distinct(R, one, other)) and not possibly_one_finding(R, one, other)
+
+
+def established_not_on(R: FactSet, act: Id, lesion: Id) -> bool:
+    """DECISIONS D305 P4-ONLESION: whether pass 2 established that ``act`` - an act whose target names no lesion - was
+    NOT done on ``lesion`` (its act-lesion claim supported and its control rejected, the multiplicity the claim's form
+    presumes established: ``_act_lesions``; FactSet.pair_controls keyed (act, distinct_from, lesion), True). Read only
+    by engine/pairing's target row, which reads it as setting the act apart from that lesion (apart_by_lesion's
+    established arm); never to join anything."""
+    return R.pair_controls.get((act, Attribute.DISTINCT_FROM, lesion)) is True
 
 
 def apart_by_lesion(R: FactSet, a: Id, b: Id) -> bool:
@@ -1492,11 +1594,18 @@ def _components(R: FactSet) -> dict[Id, frozenset[Id]]:
     """Every id the same_as graph joins - each lesion linked, by each member of its same_as list, to every id that
     member names in ANY state (``any_state_ids``), an id the FactSet does not hold included, either way - mapped to its
     component; an id no member names and whose list is empty is in none (it stands alone). Built in the FactSet's
-    order."""
+    order. DECISIONS D302 RF2C-L2: a member whose value is empty or unreadable (``unnamed_member``) names an id of its
+    own the FactSet does not hold (``free_lesion_number``), so the finding holds an unknown entry and every rule reading
+    its places stays held and open, as for any id the FactSet does not hold."""
     graph: dict[Id, list[Id]] = {}
+    fresh = free_lesion_number(R)
     for holder in R.lesions:
         for member in members(R, holder, Attribute.SAME_AS):
-            for other in any_state_ids(R, member):
+            named = list(any_state_ids(R, member))
+            if unnamed_member(member):  # DECISIONS D302 RF2C-L2: any one lesion, an id the FactSet does not hold
+                named.append(Id(_L, fresh))
+                fresh += 1
+            for other in named:
                 if other != holder:
                     graph.setdefault(holder, []).append(other)
                     graph.setdefault(other, []).append(holder)

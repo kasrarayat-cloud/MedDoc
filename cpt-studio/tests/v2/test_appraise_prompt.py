@@ -91,7 +91,46 @@ FINAL_V2 = APP / 'docs' / 'gemini-migration' / 'FINAL-V2.md'
 # DECISIONS D300 (2026-11-16, round r2c): FINAL-V2 1.7, 1.8, 4.2 and 4.7's modifier review row amended with dated notes
 # (RF-L1 to RF-L6); the scanned sections 2.1-2.4 byte for byte unchanged. Was
 # 5067cf6518cc0614c34b10c26f8a7dfe1ff5e47ef0270db4a27bbcd8b78f6b92.
-FINAL_V2_SHA256 = 'c6a26382e57016fe697caa2e1ec32abd71d906bcdb7e1d254c1be3331ed06177'
+# DECISIONS D303 (2026-11-17, round r2e, RDRX-1): FINAL-V2's LINKS rows for section and document_frame and the 3.1
+# G1 and G5 rows gain dated notes (gemini-inventory@2 reads them as recorded); the scanned sections 2.1-2.4 byte for
+# byte unchanged (22,480 characters). Was c6a26382e57016fe697caa2e1ec32abd71d906bcdb7e1d254c1be3331ed06177.
+# DECISIONS D309 (2026-11-17, round r2f, lane f-engine: e-engine's Q4): FINAL-V2 4.5's which-pairs gains a dated note (a
+# claimed pair of an event that may be a statement); the scanned sections 2.1-2.4 byte for byte unchanged (22,480
+# characters). Was c6a26382e57016fe697caa2e1ec32abd71d906bcdb7e1d254c1be3331ed06177.
+# DECISIONS D302 and D305 (2026-11-16, round r2e): FINAL-V2 1.7, 1.8, 3.2.3, 4.2, 4.5 and 4.7's modifier review row
+# amended with dated notes (RF2C-L1 to RF2C-L3, P4-ONLESION); the scanned sections 2.1-2.4 byte for byte unchanged.
+# Was c6a26382e57016fe697caa2e1ec32abd71d906bcdb7e1d254c1be3331ed06177.
+# DECISIONS D309 (2026-11-17, round r2f): FINAL-V2 4.5 (RFE-L1, the listed target against an act naming no
+# lesion) and 9.4 (RFE-L2, the presumed multiplicities in the property harness) amended with dated notes; the
+# scanned sections 2.1-2.4 byte for byte unchanged.
+# Was 437f4fb31bb3b9eba3e24ef62693ae7b6637a653ded1bc3eea33c5b1e98547b4.
+# DECISIONS D309, round r2f's refutation (RF2F-L1, RF2F-L2; 2026-11-17): FINAL-V2 4.5's D309 RFE-L1 note
+# amended with a dated note (the place reading reads the lesion's finding; the every-control scan reads both
+# objects); the scanned sections 2.1-2.4 byte for byte unchanged.
+# Was 0df7d8e0399526025be0bb723437c492dff95cbd03ae49793c81f82b51ca888d.
+# DECISIONS D311, round r2f's second refutation (R2F2-L1, R2F2-L2; 2026-11-17, lane f-lesion2): FINAL-V2 4.5's
+# D309 RFE-L1 note gains two dated notes (SC-B's second direction for an act naming no lesion; the reads once per
+# FactSet); the scanned sections 2.1-2.4 byte for byte unchanged.
+# Was d4ea8928d1c7b24dddd464e6c61aa47e339ac4283aa1f7e8afcc417bd336a540.
+# DECISIONS D311, round r2f's refutation of lane f-lesion2 (RFL2-1, RFL2-2; 2026-11-17): FINAL-V2 4.5's D311
+# notes gain a dated note (the every-control scan in every arm, the single as the listed); the scanned
+# sections 2.1-2.4 byte for byte unchanged.
+# Was e8a1d189be32a9acfcb5dadc1004c811804e9f99b75ab59f2063834e1da26e3f.
+# DECISIONS D303 (2026-11-17, round r2e): FINAL-V2 4.8's Read time and Member answers paragraphs gain dated notes (the
+# member surface's invariant, I1-I5); the scanned sections 2.1-2.4 byte for byte unchanged. Was
+# c6a26382e57016fe697caa2e1ec32abd71d906bcdb7e1d254c1be3331ed06177.
+# DECISIONS D309 (2026-11-17, round r2f): FINAL-V2 4.8's Service questions and Member answers paragraphs gain dated
+# notes (RFEW-1..5, e-words' Q1, RFEW-4); the scanned sections 2.1-2.4 byte for byte unchanged. Was
+# c36721032661ad7dd918c1e7035d66c79a228c89955b2e10c4308f8d79489cf0.
+# int3 (DECISIONS D309, D311; 2026-11-17, session 738699b2): the four lanes of round r2f integrated on int2 - their
+# FINAL-V2 notes above, a UNION (f-tools: 1.3 and 3.1; f-engine: 4.5 which pairs; f-lesion2: 1.7, 1.8, 3.2.3,
+# 4.2, 4.5, 4.7 and 9.4; f-words: 4.8) with no P4-PLAN or P3-CARDS note; the scanned sections 2.1-2.4 byte for
+# byte unchanged (22,480 characters); recomputed by the same function. Was, per lane: f-tools
+# fc40be576c9a8074d824f0d2df68033e5de1145518677d1e0975d8d7e9f78438, f-engine
+# 2585b42e5bec9fe204323927912f2e1f75ec9537816b3b6542503033220191c3, f-lesion2
+# afa0291c4d3f9c6ac7fe45c6d02b83e26323a19a372a09debe6caf414c4804c0, f-words
+# 748c84802a174149dafb79cdb46ab5e5130fcedf68cfab5eb50dd874295739e9.
+FINAL_V2_SHA256 = '166473ba0e5472198db7fc917f248208df2507b7a0ad67ba3eee271bb935b08f'
 DEV_EXCLUSION = APP / 'docs' / 'gemini-migration' / 'acceptance-a1' / 'DEV-EXCLUSION.sha256'
 EVIDENCE = Path(os.environ.get('CPT_STUDIO_DESIGN_EVIDENCE', '/home/claude/cpt-studio-completion-20261106'))
 SURVEY_4 = EVIDENCE / 'gemini-migration' / 'design-v2' / 'survey' / 'failures.md'

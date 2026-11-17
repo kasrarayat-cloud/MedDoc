@@ -719,11 +719,19 @@ def _same_as_graph(R: FactSet) -> dict[Id, list[tuple[Id, _Link]]]:
     finding), as an undirected graph: each lesion of the FactSet linked, by each member of its same_as list, to every id
     that member may name (_member_ids) - an id the FactSet does not hold included. Built in the FactSet's order, so a
     walk over it is deterministic. (The removed finding E1j reads is facts.finding's: every id a member names in ANY
-    state - DECISIONS D294 G1, D297 ENGB-1.)"""
+    state - DECISIONS D294 G1, D297 ENGB-1.) DECISIONS D302 RF2C-L2: a member whose value is empty or unreadable
+    (facts.unnamed_member) names an id of its own the FactSet does not hold (facts.free_lesion_number), so it opens its
+    holder's component as an unknown id does - the join asks that member, as it asks the member naming an unknown id -
+    and facts.possibly_one_finding reads the same."""
     graph: dict[Id, list[tuple[Id, _Link]]] = {}
+    fresh = facts_.free_lesion_number(R)
     for holder in R.lesions:
         for member in facts_.members(R, holder, _A.SAME_AS):
-            for other in _member_ids(R, member):
+            named = list(_member_ids(R, member))
+            if facts_.unnamed_member(member):  # D302 RF2C-L2: any one lesion, an id the FactSet does not hold
+                named.append(Id(IdFamily.LESION, fresh))
+                fresh += 1
+            for other in named:
                 if other != holder:
                     graph.setdefault(holder, []).append((other, (holder, member)))
                     graph.setdefault(other, []).append((holder, (holder, member)))

@@ -282,10 +282,14 @@ class R2CLJoinTests(SimpleTestCase):
 
     def test_rcl_an_established_negation_leaves_the_two_apart(self):
         # the boundary: a same_as member pass 2 established negated names nothing (possibly), so a chain broken by it
-        # joins nothing and a written distinct_from with its pair controls rejected still sets the pair apart
+        # joins nothing and a written distinct_from with its pair controls rejected still sets the pair apart.
+        # DECISIONS D302 RF2C-L1 (round r2e): a written distinct_from sets two lesions apart only when both are
+        # established single, so L1 and L3 are filed single (no multiplicity was filed before r2e)
         doc = EF.colonoscopy()
+        doc.lesions[EF.L(1)] = {**doc.lesions[EF.L(1)], A.MULTIPLICITY: (EF.sup(ct.Multiplicity.SINGLE),)}
         doc.lesion(2, same_as=[EF.neg(EF.L(1))])
-        doc.lesion(3, same_as=[EF.sup(EF.L(2))], distinct_from=[EF.sup(EF.L(1))])
+        doc.lesion(3, same_as=[EF.sup(EF.L(2))], distinct_from=[EF.sup(EF.L(1))],
+                   multiplicity=EF.sup(ct.Multiplicity.SINGLE))
         doc.act(3, ct.Kind.SNARE, status=EF.neg(ct.Status.PERFORMED), breadth=EF.sup(ct.Breadth.SINGLE_TARGET),
                 lesion=EF.sup(EF.L(3)))
         doc.controls.update({(EF.E(3), A.TARGET_LESION, EF.L(1)): True, (EF.E(2), A.TARGET_LESION, EF.L(3)): True})
@@ -302,10 +306,13 @@ class R2CLJoinTests(SimpleTestCase):
         # the listed arm: "No snare polypectomy was performed on L3 or L4." against the snare E2 on L1, L3 joined to L1
         # through L2, each listed lesion written distinct from L1, every lesion pair control rejected
         def listed(chain):
+            # DECISIONS D302 RF2C-L1 (round r2e): the polyps filed single, which a written distinct_from now needs
             doc = EF.colonoscopy()
+            doc.lesions[EF.L(1)] = {**doc.lesions[EF.L(1)], A.MULTIPLICITY: (EF.sup(ct.Multiplicity.SINGLE),)}
             doc.lesion(2, same_as=[EF.unres(EF.L(1))] if chain else [])
-            doc.lesion(3, same_as=[EF.sup(EF.L(2))] if chain else [], distinct_from=[EF.sup(EF.L(1))])
-            doc.lesion(4, distinct_from=[EF.sup(EF.L(1))])
+            doc.lesion(3, same_as=[EF.sup(EF.L(2))] if chain else [], distinct_from=[EF.sup(EF.L(1))],
+                       multiplicity=EF.sup(ct.Multiplicity.SINGLE))
+            doc.lesion(4, distinct_from=[EF.sup(EF.L(1))], multiplicity=EF.sup(ct.Multiplicity.SINGLE))
             doc.act(3, ct.Kind.SNARE, status=EF.neg(ct.Status.PERFORMED), breadth=EF.sup(ct.Breadth.LISTED_TARGETS),
                     targets=[EF.sup(EF.L(3)), EF.sup(EF.L(4))], lesion=None, places=None)
             doc.controls.update({(EF.E(3), A.TARGET_LESION, EF.L(1)): True, (EF.E(2), A.TARGET_LESION, EF.L(3)): True,
@@ -514,11 +521,15 @@ class R2CLReaderTests(SimpleTestCase):
     def test_rcl_the_listed_and_own_arms_read_it(self):
         # EF: a listed statement (single listed lesion L3) and an act-filed possible statement (on L3), each beside the
         # snare E2 on L1, every lesion pair control between them rejected - the appraised pair reads as the written
+        # DECISIONS D302 RF2C-L1 (round r2e): both lesions filed single - the one multiplicity under which a written
+        # distinct_from, like D296's appraised distinctness, sets two lesions apart (none was filed before r2e)
         for arm in ('listed', 'own'):
             results = []
             for how in ('appraised', 'written'):
                 doc = EF.colonoscopy()
-                doc.lesion(3, distinct_from=[EF.sup(EF.L(1))] if how == 'written' else [])
+                doc.lesions[EF.L(1)] = {**doc.lesions[EF.L(1)], A.MULTIPLICITY: (EF.sup(ct.Multiplicity.SINGLE),)}
+                doc.lesion(3, distinct_from=[EF.sup(EF.L(1))] if how == 'written' else [],
+                           multiplicity=EF.sup(ct.Multiplicity.SINGLE))
                 if arm == 'listed':
                     doc.act(3, ct.Kind.SNARE, status=EF.neg(ct.Status.PERFORMED),
                             breadth=EF.sup(ct.Breadth.LISTED_TARGETS), targets=[EF.sup(EF.L(3))], places=None)

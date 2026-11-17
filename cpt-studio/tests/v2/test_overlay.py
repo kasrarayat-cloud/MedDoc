@@ -929,6 +929,11 @@ class ModifierReviewTests(SimpleTestCase):
         session make each a separate-lesion modifier review (combination.modifier_review)."""
         doc = TA.two_sessions()
         doc.lesions[EF.L(1)] = {**doc.lesions.get(EF.L(1), {}), ct.Attribute.DISTINCT_FROM: (EF.sup(EF.L(2)),)}
+        # DECISIONS D302 RF2C-L1 (round r2e): a written distinct_from sets two lesions apart only when both are
+        # established single, so the two lesions are filed single (no multiplicity was filed before r2e)
+        for lesion in (EF.L(1), EF.L(2)):
+            doc.lesions[lesion] = {**doc.lesions.get(lesion, {}),
+                                   ct.Attribute.MULTIPLICITY: (EF.sup(ct.Multiplicity.SINGLE),)}
         return Case(doc.build(), *TA.TWO)
 
     def test_the_review_is_the_combinations_over_the_effective_set_worded_from_values(self):

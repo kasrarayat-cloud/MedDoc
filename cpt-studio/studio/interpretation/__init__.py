@@ -149,8 +149,10 @@ INSTRUCTIONS_SHA256_V3 = '43e49a7ad6da1d8ba2300e772085783196517ae1bea64dadd09932
 # claims.TEMPLATES, whose reached_anatomy claim D292's U3 restates: step f3s (claims.templates_document under
 # gemini-appraisal@2, by step f2's appraise_prompt.pins_fable). DECISIONS D300 RF-L3 (2026-11-16, round r2c): the
 # lesion pair's membership forms added to TEMPLATES_V3 (gemini-appraisal@2 is unshipped, so its pin moves under it),
-# recomputed by the same function; was 2938e85b242524e72581cc6e509328b808958c03c2b79b6961243532e78bfc4e.
-TEMPLATES_SHA256_V3 = '59ce8ca7c093f88808c82d909f3ca09e64df488a122ae93c0a8075cdefc5143c'
+# recomputed by the same function; was 2938e85b242524e72581cc6e509328b808958c03c2b79b6961243532e78bfc4e. DECISIONS
+# D305 P4-ONLESION (2026-11-16, round r2e): the act-lesion claim's two forms added to TEMPLATES_V3, recomputed by
+# the same function; was 59ce8ca7c093f88808c82d909f3ca09e64df488a122ae93c0a8075cdefc5143c.
+TEMPLATES_SHA256_V3 = 'ac9162346b896e5bd7b79ebc71b7f59955ab0c30b1cf282dba3e23d35e9937f3'
 # claims.STATEMENT_TEMPLATES, a doubted kind's statements in kind-neutral forms (D292's U1): step f3s (by step f2's
 # appraise_prompt.pins_fable)
 STATEMENT_TEMPLATES_SHA256_V3 = '0fcd3bd3e630762ef293196298621a9565559adfd2d4af1878ac36e52e183106'
@@ -159,8 +161,11 @@ STATEMENT_TEMPLATES_SHA256_V3 = '0fcd3bd3e630762ef293196298621a9565559adfd2d4af1
 # and its control added to the document (gemini-appraisal@2 is unshipped, so its pin moves under it), recomputed by the
 # same function; was 570e24d654adee656a518ee047a16ed653494dd4c7b5d15a80bf92471982a9dc. DECISIONS D300 (2026-11-16, round
 # r2c): the lesion pair as amended (RF-L1's join, RF-L3's forms and their rule, RF-L5's drop) stated in the document,
-# recomputed by the same function; was 89d7e3fe0c0da5592860b965cf223cf69a88faca66c4d41caf7d5636ee31178e.
-CONTROLS_SHA256_V3 = '0c1cd127572a7aa1ba497cf6f570f5b0ac671e04e9091183794bb185ab7308cc'
+# recomputed by the same function; was 89d7e3fe0c0da5592860b965cf223cf69a88faca66c4d41caf7d5636ee31178e. DECISIONS
+# D305 P4-ONLESION and D302 RF2C-L2 (2026-11-16, round r2e): the act-lesion claim (asked, forms, form rule, the
+# bound across the pair-type claims) and the claim-time reading of an unnamed same_as member stated in the
+# document, recomputed by the same function; was 0c1cd127572a7aa1ba497cf6f570f5b0ac671e04e9091183794bb185ab7308cc.
+CONTROLS_SHA256_V3 = 'e7733b18ba8819c7b43c0c014fb80f3e122620635f1a34267d39b1d258a5f1b6'
 # the per-request claim bound claims.CLAIM_BOUND_V3, sized for the size bound (D278; 8.2 names 1,000 claims, whose pin
 # is 3fe08a5c8ec23575e2df78032d5b4b18dcff0927ce1c628743c47946b9415628): step f3s (claims.claim_bound_document under
 # gemini-appraisal@2, by step f2's appraise_prompt.pins_fable)

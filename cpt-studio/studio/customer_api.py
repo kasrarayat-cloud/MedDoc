@@ -22,6 +22,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import Any, Optional
 
 from django.conf import settings
 
@@ -1133,6 +1134,14 @@ def _addon_question(question: object, support: object) -> bool:
 
 STALE_WORDS = ('After the review decisions, a check that depends on the other codes could not be recomputed for this '
                'code.')
+# r2f (DECISIONS D309, RFEW-5): why a code a member's answer excluded is excluded, by the state of that answer - one that
+# stands excludes it until it is withdrawn; one withdrawn still excludes it while the update that applies the withdrawal
+# has not run (the W1 rule: an answer the assessment read stays in effect until its recompute), and the sentence says so,
+# never asking the member to withdraw what they already withdrew (the readiness blocker names the pending update)
+EXCLUDED_BY_ANSWER_WORDS = ('A detail this code needs was answered as not documented or not confirmable, so it is excluded '
+                            'until that answer is withdrawn.')
+EXCLUDED_BY_WITHDRAWN_ANSWER_WORDS = ('A detail this code needs was answered as not documented or not confirmable; that '
+                                      'answer was withdrawn, and the update that applies the withdrawal has not run yet.')
 
 
 def _reference_attention(proposal, view):
@@ -1143,11 +1152,13 @@ def _reference_attention(proposal, view):
                for check in checks)
 
 
-def _qualifications(proposal, status, view, code):
+def _qualifications(proposal, status, view, code, standing=None):
     """What qualifies the code, in fixed sentences: why it needs a detail (a conflict, each open question the overlay
     leaves it), why approve is withheld, why it is excluded, a decision the overlay no longer supports (its readiness
     blocker), a check that could not be recomputed, its modifier review and a CMS fee-schedule check that needs
-    attention."""
+    attention. r2f (DECISIONS D309, RFEW-5): a code a member's answer excluded says why by the state of that answer
+    (``_excluded_by_answer``; ``standing``: the (code, family, fact) of every standing answer of the revision, read
+    here when not given)."""
     support = proposal.support or {}
     questions = list(view.questions) if view is not None else []
     out = []
@@ -1185,8 +1196,7 @@ def _qualifications(proposal, status, view, code):
             view is not None and view.reason == review.DETAIL_UNAVAILABLE):
         out.append(_exclusion_reason(proposal))
     if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
-        out.append('A detail this code needs was answered as not documented or not confirmable, so it is excluded '
-                   'until that answer is withdrawn.')
+        out.append(_excluded_by_answer(proposal, view, standing))
     if view is not None and view.blocker:
         out.append(customer_blocker(view.blocker))
     if view is not None and view.stale:
@@ -1197,6 +1207,23 @@ def _qualifications(proposal, status, view, code):
     if _reference_attention(proposal, view):
         out.append('A CMS fee-schedule check for this code needs attention.')
     return list(dict.fromkeys(out))
+
+
+def standing_keys(revision_id: object) -> set[tuple[str, str, str]]:
+    """r2f (D309, RFEW-5): the (code, family, fact) of every standing (not withdrawn) member answer of a revision."""
+    return {(answer.code, answer.family, answer.fact) for answer in models.MemberAnswer.objects.filter(
+        revision_id=revision_id, revocation__isnull=True).only('code', 'family', 'fact')}
+
+
+def _excluded_by_answer(proposal: Any, view: Any, standing: Optional[set[tuple[str, str, str]]] = None) -> str:
+    """r2f (DECISIONS D309, RFEW-5): the sentence of a code a member's answer excluded (review.DETAIL_UNAVAILABLE), by the
+    state of the answer it rests on - its key (the code, its family, the fact the view says it answered): while one
+    stands, it is excluded until that answer is withdrawn; once none stands (withdrawn, the update that applies it not yet
+    run), it says that - never the advice to withdraw what was withdrawn."""
+    keys = standing_keys(proposal.assessment.revision_id) if standing is None else standing
+    if (proposal.code, proposal.family, view.answered) in keys:
+        return EXCLUDED_BY_ANSWER_WORDS
+    return EXCLUDED_BY_WITHDRAWN_ANSWER_WORDS
 
 
 def _status(proposal, decision, view):
@@ -1263,6 +1290,7 @@ def code_rows(assessment, current, views, membership=None, details=()):
     revision = assessment.revision
     acts = _act_index(assessment)
     proposals = list(assessment.proposals.order_by('position'))
+    standing = standing_keys(assessment.revision_id)  # r2f (D309, RFEW-5): the answers that stand, read once
     first, then, others = [], [], []
     for proposal in proposals:
         decision = current.get(proposal.pk)
@@ -1289,7 +1317,7 @@ def code_rows(assessment, current, views, membership=None, details=()):
             'status': status, 'status_label': STATUS_LABELS[status], 'sub_label': sub_label,
             'summary': code_summary(proposal, view),
             'why': {'quotes': _quotes(proposal, revision.text, revision.pages, acts, status),
-                    'qualifications': _qualifications(proposal, status, view, code)},
+                    'qualifications': _qualifications(proposal, status, view, code, standing)},
             'detail_ids': [row['id'] for row in details if code and code in row['affects']],
             'allowed_actions': (list(review.allowed_actions(proposal, assessment, membership, views))
                                 if membership is not None else []),

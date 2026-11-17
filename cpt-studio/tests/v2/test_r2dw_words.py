@@ -231,7 +231,12 @@ class R2DWAnotherSessionsExamination(R2WWorld):
     and the code's qualification - with that examination's passage; the door binds its fingerprint from that row and the
     AGAIN keeps it."""
 
-    def walk(self, build, form, statement_words):
+    TIME_PROMPT = 'Was the examination done at this encounter, on the date of service?'
+    TIME_QUALIFICATION = 'CPT Studio could not confirm from the document whether the examination was done at this encounter.'
+
+    def walk(self, build, form, statement_words, prompt=TIME_PROMPT, qualification=TIME_QUALIFICATION):
+        # r2e (DECISIONS D303, I1; WX3-2): the row asks the question its item's own form asks, the act renamed -
+        # the date for TIME, DIGITAL_SCOPE's own question for DIGITAL_SCOPE (``prompt``, ``qualification``)
         scene = self.scene(build().build(), (('99213', 1),), text=TEXT)
         stored = self.proposal(scene, '99213')
         payload = self.payload(scene)
@@ -240,11 +245,10 @@ class R2DWAnotherSessionsExamination(R2WWorld):
         for words in (row['prompt'], row['statement'], *quals):
             self.assertNotIn(EXAMINATION_WORDS, words)  # behaviour first (red on the reference)
         self.assertEqual(stored.support['item']['form'], form)
-        self.assertEqual(row['prompt'], 'Was the examination done at this encounter, on the date of service?')
+        self.assertEqual(row['prompt'], prompt)
         self.assertEqual(row['statement'], statement_words)
         self.assertEqual(row['id'], answers.detail_id('event_time', stored.family, '99213', form))
-        self.assertIn('CPT Studio could not confirm from the document whether the examination was done at this '
-                      'encounter.', quals)
+        self.assertIn(qualification, quals)
         self.assertIn(unit(2), offsets(row))  # the examination's own passage (E2)
         [answer] = self.save(scene, row, ND)
         self.assertEqual(answer.question, stored.support['question'])
@@ -252,8 +256,7 @@ class R2DWAnotherSessionsExamination(R2WWorld):
         self.assertEqual((view.status, view.answered_form), ('excluded', form))
         self.again(scene)
         [row] = self.rows_of(self.payload(scene), '99213')
-        self.assertEqual((row['prompt'], row['saved']['value']),
-                         ('Was the examination done at this encounter, on the date of service?', ND))
+        self.assertEqual((row['prompt'], row['saved']['value']), (prompt, ND))
         return scene
 
     STATEMENT = 'From the document, CPT Studio could not confirm whether the examination was done at this encounter.'
@@ -265,8 +268,12 @@ class R2DWAnotherSessionsExamination(R2WWorld):
         self.walk(sigmoidoscopy_undated, 'act_time', self.STATEMENT)
 
     def test_rdw_a_claimed_digital_examination_of_another_session(self):
-        """DIGITAL_SCOPE names the held session's examination (X2's): for the visit it is another act."""
-        scene = self.walk(claimed_dre_beside_a_visit, 'act_time', self.STATEMENT)
+        """DIGITAL_SCOPE names the held session's examination (X2's): for the visit it is another act - r2e (DECISIONS
+        D303, I1; WX3-2): asked DIGITAL_SCOPE's own question, the act renamed (ACT_DIGITAL), never its key's date."""
+        missing = 'the technique of an examination the document states, which may be the examination'
+        scene = self.walk(claimed_dre_beside_a_visit, 'act_digital', f'From the document, CPT Studio could not confirm '
+                          f'{missing}.', prompt='Is the examination documented as performed, in full or in part, on the '
+                          'date of service?', qualification=f'CPT Studio could not confirm from the document {missing}.')
         self.assertEqual(self.proposal(scene, '99213').support['item']['message'],
                          wording.Message.DIGITAL_SCOPE.value)
 
@@ -282,6 +289,14 @@ class R2DWAnotherSessionsExamination(R2WWorld):
                 self.assertEqual(row['prompt'], answers.FORM_PROMPTS[wording.FORM_SESSION_TIME])
                 self.assertIn(EXAMINATION_WORDS, row['prompt'])
                 self.assertEqual(offsets(row), [unit(2)])
+
+
+def _holds_examination(R, session):
+    """r2e (D303, WX3-1): whether a session's family holds an examination (an E/M visit's does not)."""
+    kind = F.fact(R, session, Attribute.KIND)
+    if kind.result is not Result.SUPPORTED or not isinstance(kind.value, ct.SessionKind):
+        return True
+    return ct.Kind.EXAMINATION in F.family_kinds(kind.value)
 
 
 SESSION_SCENES = (
@@ -316,7 +331,16 @@ class R2DWSessionEnumeration(SimpleTestCase):
             own = tuple(dict.fromkeys((*found.evaluation.bindings.values(), *found.evaluation.supporting)))
             sessions = {session_of(R, event) for event in own} - {None}
             subject = found.item.held.subject
-            mine = subject is None or subject in own or session_of(R, subject) in sessions
+            # r2e (DECISIONS D303, I1; WX3-1): never another session's merely because a session slot is not established -
+            # an examination whose session is not established is the code's own session's when it may be one of them
+            # (its session fact possibly one of the code's sessions whose family holds an examination), or when the
+            # code's own session is not established
+            slot = F.fact(R, subject, Attribute.SESSION) if subject is not None and subject.family is IdFamily.EVENT \
+                else None
+            may = (session_of(R, subject) is None and slot is not None
+                   and any(F.possibly(slot, session) and _holds_examination(R, session) for session in sessions))
+            mine = (subject is None or subject in own or session_of(R, subject) in sessions or may
+                    or (not sessions and found.item.message is not Q.MessageId.DIGITAL_SCOPE))
             if subject is not None and subject.family is IdFamily.EVENT and found.item.message is Q.MessageId.DIGITAL_SCOPE \
                     and session_of(R, subject) is None:
                 continue  # DIGITAL_SCOPE's held session falls back to the code's acts' (overlay: _held_session)
@@ -345,12 +369,15 @@ class R2DWSessionForms(SimpleTestCase):
 
     def test_rdw_another_sessions_examination_is_another_act(self):
         own = (Id(IdFamily.EVENT, 1),)
+        # r2e (DECISIONS D303, I1; WX3-1): renaming the act changes its name only - the session's DOUBT and STATUS keep
+        # row 7's done (ACT_DOUBT), DIGITAL_SCOPE and UNLISTED_SCOPE their own questions (ACT_DIGITAL, ACT_UNLISTED),
+        # whatever their key
         for message, fact, session_form, other_form in (
-                (Q.MessageId.DOUBT, 'performed_status', 'session_doubt', 'act_status'),
+                (Q.MessageId.DOUBT, 'performed_status', 'session_doubt', 'act_doubt'),
                 (Q.MessageId.ENTRY, 'event_entry', 'session_entry', 'act_entry'),
                 (Q.MessageId.TIME, 'event_time', 'session_time', 'act_time'),
                 (Q.MessageId.PERFORMER, 'event_performer', 'session_performer', 'act_performer'),
-                (Q.MessageId.STATUS, 'performed_status', 'session_status', 'act_status')):
+                (Q.MessageId.STATUS, 'performed_status', 'session_status', 'act_doubt')):
             with self.subTest(message=message.value):
                 found = self.item(message, fact)
                 for own_session, form in ((True, session_form), (False, other_form)):
@@ -360,10 +387,11 @@ class R2DWSessionForms(SimpleTestCase):
                     if not own_session:
                         self.assertEqual(wording.recorded_act(record), (((200, 260),), 'examination', ''))
                         self.assertNotIn(EXAMINATION_WORDS, answers.row_prompt(fact, got, 'examination'))
-        # DIGITAL_SCOPE and UNLISTED_SCOPE name the held session's examination: by their item's key
-        for message, fact, other_form in ((Q.MessageId.DIGITAL_SCOPE, 'event_time', 'act_time'),
-                                          (Q.MessageId.UNLISTED_SCOPE, 'performed_status', 'act_status'),
-                                          (Q.MessageId.DIGITAL_SCOPE, 'conflict:examination', '')):
+        # DIGITAL_SCOPE and UNLISTED_SCOPE name the held session's examination: by their item's own question (r2e,
+        # D303 I1: never by the item's key)
+        for message, fact, other_form in ((Q.MessageId.DIGITAL_SCOPE, 'event_time', 'act_digital'),
+                                          (Q.MessageId.UNLISTED_SCOPE, 'performed_status', 'act_unlisted'),
+                                          (Q.MessageId.DIGITAL_SCOPE, 'conflict:examination', 'act_digital')):
             with self.subTest(message=message.value, fact=fact):
                 found = self.item(message, fact)
                 self.assertIn(wording.item_record(wording.Message(message.value), found.fill, found.held.subject, own,

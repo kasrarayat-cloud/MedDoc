@@ -102,7 +102,9 @@ unappraised (row 6), fail-closed, though their own pair may be established (a RE
 own claim, or the store reading a shared claim per fact). A control that a claim's content also makes a pair control is
 stored in the control role. A lesion pair claim (DECISIONS D296) is stored in the claim role and its sameness control in
 the control role, and ``lesion_pairs`` records each pair's outcome: supported only when the coherence table establishes
-it. One control is read by two facts (DECISIONS D244's R-ANAT): 3.2.3 writes a reached_anatomy's
+it. An act-lesion claim (DECISIONS D305 P4-ONLESION) is stored likewise - claim and control, both about the act's
+target lesion - and ``act_lesions`` records each one's outcome by the same table. One control is read by two facts
+(DECISIONS D244's R-ANAT): 3.2.3 writes a reached_anatomy's
 control in its session's reach form (claims.CONTROLS: "In session {X} the endoscope did not reach the {point at anatomy
 Y}") - since DECISIONS D292's U3 the opposite of the reached_anatomy's own claim under gemini-appraisal@2 ("In session
 {X} the endoscope itself reached anatomy {Y}."; @1's claim, "The furthest point in session {X} was at anatomy {Y}.",
@@ -359,9 +361,9 @@ def usage_of(metadata: Mapping[str, object]) -> Usage:
 @dataclass(frozen=True)
 class Settled:
     """A settled inventory: events, the content of EventInventory.events (1.7: units, encounter, people, sections,
-    sessions, anatomy, lesions, events, doubts, claims, unlisted, and DECISIONS D296's lesion_pairs - which store.row_v2
-    keeps at the @3 pair only; contract/types records, Enum members and these records inside, which store.row_v2
-    converts), and verification, settle's report."""
+    sessions, anatomy, lesions, events, doubts, claims, unlisted, DECISIONS D296's lesion_pairs and DECISIONS D305's
+    act_lesions - which store.row_v2 keeps at the @3 pair only; contract/types records, Enum members and these records
+    inside, which store.row_v2 converts), and verification, settle's report."""
     events: Mapping[str, object]
     verification: Report
 
@@ -1110,6 +1112,11 @@ class _Settler:
             attributes.setdefault(lesion_pair.claim, A.DISTINCT_FROM)
             roles.setdefault(lesion_pair.control, ClaimRole.CONTROL)
             attributes.setdefault(lesion_pair.control, A.SAME_AS)
+        for act_lesion in self.claim_set.act_lesions:  # DECISIONS D305: a claim and its control, about the act's lesion
+            roles.setdefault(act_lesion.claim, ClaimRole.CLAIM)
+            attributes.setdefault(act_lesion.claim, A.TARGET_LESION)
+            roles.setdefault(act_lesion.control, ClaimRole.CONTROL)
+            attributes.setdefault(act_lesion.control, A.TARGET_LESION)
         out = []
         for claim in self.claim_set.claims:
             verdict = _verdict(self.verdicts, claim.id)
@@ -1146,6 +1153,30 @@ class _Settler:
                         'result': result.value, 'reasons': [reason.value for reason in reasons]})
         for lesion, other in self.claim_set.dropped_lesion_pairs:
             out.append({'lesion': lesion, 'other': other, 'claim': None, 'control': None,
+                        'result': Result.UNRESOLVED.value, 'reasons': [Reason.UNAPPRAISED.value]})
+        return out
+
+    def act_lesions(self) -> list[dict[str, object]]:
+        """DECISIONS D305 (P4-ONLESION): each act-lesion claim of the request (claims.ActLesion) with its outcome - as
+        ``lesion_pairs`` records a lesion pair's: ``supported`` only when 3.2.3's coherence table establishes the pair
+        (``appraise``: the claim supported with no lowering qualifier, attached with an attached evidence unit, and its
+        control contradicted), else ``unresolved`` with the table's reasons; never a release otherwise. Whatever the
+        form (claims.ACT_LESION_FORMS), the table reads the claim and its control alike; the engine reads each form
+        against the multiplicity it presumes. Each pair the claim set dropped for its bound
+        (ClaimSet.dropped_act_lesions; D300 RF-L5's rule) is recorded with no claim and no control, ``unresolved`` for
+        ``unappraised``."""
+        out: list[dict[str, object]] = []
+        for pair in self.claim_set.act_lesions:
+            read = self.verdicts.get(pair.claim)
+            control = _verdict(self.verdicts, pair.control)
+            outcome, reasons = appraise(_verdict(self.verdicts, pair.claim),
+                                        read is not None and read.attached_evidence, True,
+                                        None if control is None else control.verdict)
+            result = Result.SUPPORTED if outcome is PairOutcome.ESTABLISHED else Result.UNRESOLVED
+            out.append({'act': pair.act, 'lesion': pair.lesion, 'claim': pair.claim, 'control': pair.control,
+                        'result': result.value, 'reasons': [reason.value for reason in reasons]})
+        for act, lesion in self.claim_set.dropped_act_lesions:
+            out.append({'act': act, 'lesion': lesion, 'claim': None, 'control': None,
                         'result': Result.UNRESOLVED.value, 'reasons': [Reason.UNAPPRAISED.value]})
         return out
 
@@ -1243,6 +1274,7 @@ class _Settler:
         events['claims'] = self.stored_claims()
         events['unlisted'] = kept
         events['lesion_pairs'] = self.lesion_pairs()  # DECISIONS D296 (store.row_v2 keeps it at the @3 pair only)
+        events['act_lesions'] = self.act_lesions()  # DECISIONS D305 (store.row_v2 keeps it at the @3 pair only)
         return Settled(events=MappingProxyType(events), verification=self.report(health, usage, kept, dropped,
                                                                                  doubted))
 

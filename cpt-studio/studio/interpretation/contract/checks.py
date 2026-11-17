@@ -45,6 +45,17 @@ themselves (5.7 WordsNeverDecide, which binds them, is unchanged; this module is
   of an event whose anchor has a reason - its own facts, its scope members, its restatements' roles and its inherited
   keys - so claims never claims one of them. The other cross-object rules read settled results and are settle's.
 
+**The label** (DECISIONS D303, RDRX-1; D202: a label's rule never changes after its first recording): the findings are
+made for the inventory version the row they settle into is written at (``check``'s ``inventory_version``). Under
+gemini-inventory@3 - the current path, and every label but @2 - the rules above apply as amended. Findings made for
+gemini-inventory@2, first recorded before the rulings that changed G1 and G5 since, read each such check as that label
+was recorded: G1's ``document_frame`` in N0's span alone (no frame part: D295, D300), G1's ``section`` with no procedure
+part (D299), and G5 over reached, completion, stations, approach and through without reached_anatomy (D292's U3:
+RECORDED_EXTENT_ATTRIBUTES); consistency reads its K rules and L1 so (D294 F2, D297 R2RX-1, D301 RBRX-1). So a recording
+made under gemini-inventory@2 re-settles, and its pass-2 request rebuilds, as the tree that recorded it made them. No
+product path makes findings for @2 (the pipeline names jobs.V2_VERSIONS); the replay tool's Gemini path and the
+failure-class pipeline do.
+
 **The keys** are contract/extract_read.FactKey: a fact's or a member's own key; an act's inherited fact by the act's key
 of that attribute (as claims.py and settle key it); a restatement's role by (its event, restatements.role, its
 position). An answer's ids are read as written (S1 checked their shape); an id that names nothing finds nothing here.
@@ -87,6 +98,9 @@ SECTION_GEOMETRY: frozenset[Attribute] = frozenset({A.OWNER, A.OCCASION, A.PERFO
 # G3's target facts (3.1 G3): an event's five target fields.
 TARGETS: frozenset[Attribute] = frozenset({A.TARGET_LESION, A.TARGET_STRUCTURE, A.TARGET_PLACES, A.TARGET_ANATOMY,
                                            A.TARGET_DUCT})
+# DECISIONS D303 (RDRX-1): G5's attributes as gemini-inventory@2 was recorded (geometry.EXTENT_ATTRIBUTES before D292's
+# U3 added reached_anatomy) - what findings made for that label read (_Check.recorded).
+RECORDED_EXTENT_ATTRIBUTES: tuple[Attribute, ...] = (A.REACHED, A.COMPLETION, A.STATIONS, A.APPROACH, A.THROUGH)
 
 
 def family_admits(family: SessionKind, kind: Kind) -> bool:
@@ -109,7 +123,9 @@ def check(text: str, pages: Sequence[segment.Page], read: ReadAnswer, *,
     ``pages`` (the module's docstring), as one Checked record, made for ``inventory_version`` - the inventory version
     the row they settle into is written at (gemini-inventory@3, the current path's, by default; consistency.check
     applies that label's rules, every K rule and L1 reading as the label was recorded: DECISIONS D294 F2, D297 R2RX-1,
-    D301 RBRX-1). Pure: equal arguments give an equal Checked in every process.
+    D301 RBRX-1; and under gemini-inventory@2 G1's frame and procedure parts and G5's reached_anatomy read as recorded,
+    DECISIONS D303 RDRX-1 - the module docstring, The label). Pure: equal arguments give an equal Checked in every
+    process.
     ValueError when ``read`` was read against another segmentation than this text's (its unit count is not the number
     of units contract/segment.py cuts ``text`` into); TypeError and ValueError as geometry.Layout.of for a text or
     pages that are not a revision's."""
@@ -167,6 +183,12 @@ class _Check:
         self.layout = layout
         self.read = read
         self.inventory_version = inventory_version
+        # DECISIONS D303 (RDRX-1; D202): findings made for gemini-inventory@2 read every check a ruling changed after
+        # that label's first recording as it was recorded - G1's document_frame in N0 alone (before D295/D300's frame
+        # part), G1's section without a procedure part (before D299) and G5 without reached_anatomy (before D292's U3);
+        # consistency reads its K rules and L1 so through consistency._reading (D294 F2, D297 R2RX-1, D301 RBRX-1)
+        self.recorded = inventory_version == interpretation.INVENTORY_VERSION_V2
+        self.extent_attributes = RECORDED_EXTENT_ATTRIBUTES if self.recorded else geometry.EXTENT_ATTRIBUTES
         raw = read.answer
         self.raw = raw
         self.sections = geometry.Sections(layout, [
@@ -200,10 +222,13 @@ class _Check:
             if section is not None:
                 self.containing[name] = section.id
         self.frame = geometry.frame_units(self.frame_sources())
-        # DECISIONS D295: the frame part a document_frame source lies in, from the events' located anchors
-        self.part = geometry.frame_part(self.sections, geometry.first_told(self.layout, self.located.values()))
-        # DECISIONS D299: each section's procedure part head, from pass 1's section roles (computed once, as the part)
-        self.procedure = geometry.procedure_parts(self.sections, *self.procedure_roles())
+        # DECISIONS D295: the frame part a document_frame source lies in, from the events' located anchors (None under
+        # gemini-inventory@2, as recorded: link_reasons then reads N0's span alone - D303 RDRX-1)
+        self.part = None if self.recorded else geometry.frame_part(
+            self.sections, geometry.first_told(self.layout, self.located.values()))
+        # DECISIONS D299: each section's procedure part head, from pass 1's section roles (computed once, as the part;
+        # none under gemini-inventory@2, as recorded - D303 RDRX-1)
+        self.procedure = {} if self.recorded else geometry.procedure_parts(self.sections, *self.procedure_roles())
 
     # -- reading the answer --
 
@@ -371,7 +396,7 @@ class _Check:
                     and (Family.LESION, fact.value) in self.described):
                 self.add(key, geometry.lesion_reasons(self.layout, self.sections, anchor, self.restated[key.object],
                                                       self.described[(Family.LESION, fact.value)], self.anchored))
-        if key.family is Family.SESSION and key.attribute in geometry.EXTENT_ATTRIBUTES:
+        if key.family is Family.SESSION and key.attribute in self.extent_attributes:  # the label's (D303 RDRX-1)
             extent = self.extent(key.object)
             for source in sources:
                 self.add(key, geometry.extent_reasons(self.layout, source, extent))

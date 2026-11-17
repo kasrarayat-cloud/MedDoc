@@ -191,6 +191,12 @@ FORM_PROMPTS = {
     wording.FORM_ACT_TIME: 'Was {act} done at this encounter, on the date of service?',
     wording.FORM_ACT_PERFORMER: 'Who performed {act}?',
     wording.FORM_ACT_STATUS: 'Was {act} performed on the date of service, as documented?',
+    # r2e (DECISIONS D303, I1; WX3-1, WX3-2): the examination of another session in the question its own form asks -
+    # DONE_IN_PART_PROMPT with the act renamed (the session's DOUBT and STATUS, DIGITAL_SCOPE, UNLISTED_SCOPE)
+    wording.FORM_ACT_DOUBT: f'Is {{act}} {wording.DONE_IN_PART}?',
+    wording.FORM_ACT_DIGITAL: f'Is {{act}} {wording.DONE_IN_PART}?',
+    wording.FORM_ACT_UNLISTED: f'Is {{act}} {wording.DONE_IN_PART}?',
+    wording.FORM_ACT_PROCEDURE: 'In which procedure was {act} done?',  # r2e (D303, I1): the procedure row renamed
 }
 FORM_MISSING = wording.FORM_MISSING  # what CPT Studio could not confirm, per form: wording's ONE table
 # a coding statement, not a documentation one (D284): the add-on's primary codes are not counted, whatever its act
@@ -239,12 +245,16 @@ class InvalidAnswer(ValueError):
     """An answer the detail does not allow (the API answers 400 with the message, which is from the fixed table)."""
 
 
-def detail_id(fact: str, family: str, code: str, form: str = '') -> str:
+def detail_id(fact: str, family: str, code: str, form: str = '', session: str = '') -> str:
     """A detail's stable id: the same question about the same code is the same detail across re-assessments (a service
     fact's question, asked once for the service, has the code ''). r2 (D294): a row of a member form (wording.member_form)
     asks another question than its key's row, so its id names the form too - an answer the door takes for one row is
-    never taken for the other; a key's own row keeps its id."""
+    never taken for the other; a key's own row keeps its id. r2f (DECISIONS D309, RFEW-3): a service fact's row asked of
+    one SESSION of a family two of whose sessions ask it names that session too (``_row_key``); every other id is
+    unchanged."""
     parts = (fact, family, code) if not form else (fact, family, code, form)
+    if session:
+        parts = (*parts, f'session:{session}')
     return 'd' + hashlib.sha256('\x1f'.join(parts).encode()).hexdigest()[:15]
 
 
@@ -485,10 +495,13 @@ class _Row:
     # r2b (DECISIONS D297, W2R-2): the kinds a template form's words name (wording.FORM_TEMPLATES), '' otherwise
     act: str = ''
     whole: str = ''
+    # r2f (DECISIONS D309, RFEW-3): the session a service fact's row asks about, where two sessions of its family ask it
+    # ('' otherwise: one service, one row - L7-08)
+    session: str = ''
 
     @property
     def id(self):
-        return detail_id(self.fact, self.family, self.code, self.form)
+        return detail_id(self.fact, self.family, self.code, self.form, self.session)
 
     @property
     def control(self):
@@ -690,18 +703,42 @@ def _questions(encounter: Any, assessment: Any, view: Optional[Mapping[str, Any]
     return held + closed
 
 
-def _row_key(fact, family, code, form=''):
+def _row_key(fact, family, code, form='', session=''):
     """The row a question is asked in: the date of service once for the document; a service fact once for its service
     (refutation r2, L7-08), whichever of its codes asks it; any other question once for its code. r2 (DECISIONS D294):
     a question of a member form (wording.member_form) is its code's own row, keyed by its form too - items whose
-    questions differ never share a row, and its id names the form (detail_id)."""
+    questions differ never share a row, and its id names the form (detail_id). r2f (DECISIONS D309, RFEW-3): a service
+    fact's question is about one service - one SESSION: ``session`` (given by ``_rows`` only where codes of two sessions
+    of one family ask the fact) keys it too, so two sessions' questions never share a row."""
     if fact == DATE_FACT:
         return (DATE_FACT, '', '', '')
     if form:
         return (fact, family, code, form)
     if code and fact in SERVICE_FACTS:
-        return (fact, family, '', '')
+        return (fact, family, '', '', session) if session else (fact, family, '', '')
     return (fact, family, code, '')
+
+
+def _code_session(proposals: Sequence[Any]) -> str:
+    """r2f (DECISIONS D309, RFEW-3): the session a code's service questions are about - the session its stored record is
+    matched to (engine/assess's ``session``: coverage.session_of over its supporting acts, recorded for a selected and
+    an excluded code alike); '' when none is recorded."""
+    for proposal in proposals:
+        support = proposal.support if isinstance(proposal.support, dict) else {}
+        session = support.get('session')
+        if isinstance(session, str) and session:
+            return session
+    return ''
+
+
+def _service_sessions(asked: Sequence[_Asked], by_code: Mapping[str, Sequence[Any]]) -> dict[tuple[Any, Any], set[str]]:
+    """r2f (DECISIONS D309, RFEW-3): {(fact, family): the sessions its codes' questions are about} for each service fact
+    a code asks (a confirm row: never the member context's choices, one value for the encounter)."""
+    found: dict[tuple[Any, Any], set[str]] = {}
+    for _scope, fact, family, code, _position, form, _act, _quoted in asked:
+        if code and not form and fact in SERVICE_FACTS and fact not in CHOICES:
+            found.setdefault((fact, family), set()).add(_code_session(by_code.get(code, ())))
+    return found
 
 
 def _states(encounter, assessment, views=None):
@@ -780,17 +817,24 @@ def _rows(encounter, assessment, view=None, states=None):
     acts_named: dict = {}  # r2b (D297, W2R-2): {member: the act its item names}
     # r2d (D301, RBWX-1): {member: every passage its item's question quotes}
     quoted_named: dict[tuple[Any, Any, Any], tuple[tuple[int, int], ...]] = {}
-    for scope, fact, family, code, position, form, act, quoted in _questions(encounter, assessment, view, states):
+    asked = _questions(encounter, assessment, view, states)
+    by_code: dict = {}
+    for proposal in (assessment.proposals.order_by('position') if assessment is not None else ()):
+        by_code.setdefault(proposal.code, []).append(proposal)
+    # r2f (D309, RFEW-3): the service facts codes of two sessions of one family ask - each session's row is its own
+    split = {key for key, sessions in _service_sessions(asked, by_code).items() if len(sessions) > 1}
+    for scope, fact, family, code, position, form, act, quoted in asked:
         if hold and fact != DATE_FACT:
             # While a member's date conflicts with the document nothing is sent: the date is the one detail asked.
             # Every other question belongs to a reading made without a settled date, and the assessment that follows
             # the member's choice asks again what it still needs (an answer saved before stays bound to its detail).
             continue
-        key = _row_key(fact, family, code, form)
+        session = _code_session(by_code.get(code, ())) if code and not form and (fact, family) in split else ''
+        key = _row_key(fact, family, code, form, session)
         row = rows.get(key)
         if row is None:
             row = rows[key] = _Row(key[0], key[1], key[2], 'encounter' if fact == DATE_FACT else scope, position,
-                                   form=key[3])
+                                   form=key[3], session=key[4] if len(key) > 4 else '')
         elif position < row.position:
             row.position = position
         if fact == DATE_FACT:
@@ -806,9 +850,6 @@ def _rows(encounter, assessment, view=None, states=None):
             row.codes.append(code)
     values = (dict(saved) if saved is not None
               else dict((context.user_values if context is not None else encounter.user_values) or {}))
-    by_code: dict = {}
-    for proposal in (assessment.proposals.order_by('position') if assessment is not None else ()):
-        by_code.setdefault(proposal.code, []).append(proposal)
     out = []
     for row in sorted(rows.values(), key=lambda item: item.position):
         row.answers = {member: by_key.get(member) for member in row.members}

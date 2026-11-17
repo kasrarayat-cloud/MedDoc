@@ -1,0 +1,37 @@
+{
+"cases": {
+"frame: labelled header under a title": {
+"claims": 22,
+"pass2_sha256": "65fd5e0b2ea9106c0ed7dc035350290eb89d7b32202a6fdb5a94b0276ff82d72",
+"whole_sha256": "7a5178551cdd172e4103539e0609c6cb0131fb85cf7af349bd1bc376fe78c7eb"
+},
+"frame: labelled header, no title line": {
+"claims": 22,
+"pass2_sha256": "e7c9e26832bb3dad166b261f3a1536f4a62d77390ed6ad9f6317282656cd1360",
+"whole_sha256": "960d5fc170aed816be9d9c06fb24227508f7c271d0a6092feea3ea5d5aa3bcae"
+},
+"g5: reached_anatomy at the snare": {
+"claims": 107,
+"pass2_sha256": "a432d517ecb465a84be8ea46974bbe65ab932f9390ea51f70615b4957b7e730b",
+"whole_sha256": "8c7bff6d1f4bdcd39beaa610cb744c261563c21d9d387e207e62eb8b0520bade"
+},
+"g5: reached_anatomy in the examination": {
+"claims": 107,
+"pass2_sha256": "0f18328ec9f73395091a8d33ac9b1369476ec3badc45e03910dfe5c4b6dd1fe2",
+"whole_sha256": "8c7bff6d1f4bdcd39beaa610cb744c261563c21d9d387e207e62eb8b0520bade"
+},
+"parts: each act at its own section start": {
+"claims": 68,
+"pass2_sha256": "fdd65ccbe07ae487dd402903bac5062d03feb12967a263eb28ac520f9683846a",
+"whole_sha256": "8d107aa055e788d380d18b35e5e6a5f156b2492736710c347d45b7d534159534"
+},
+"parts: each act at its part heading": {
+"claims": 66,
+"pass2_sha256": "fe21f6aef71e1b4854596ea769325b98aa2972987203be1966fcc743ba308892",
+"whole_sha256": "7c5be6979582b1dad03ace6b76995f25a4cd3a24fd35bf0cecba0d0f3fbadb90"
+}
+},
+"inputs_sha256": "968e4b6cc7a54266edb88596e753f7d1611eded05c322ce40921d5c57efa5cea",
+"recorded_checks_sha256": "549d182eda8ea7b9be00ef1bbf06515973b5d5c814490a96a50d915bc12d43e2",
+"recorded_geometry_sha256": "b1262a1fbb6bfb8fff7ec2fbc995f3687526c3ec911fcbef955dfca92d4a16a0"
+}

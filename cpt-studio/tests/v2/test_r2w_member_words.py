@@ -56,7 +56,9 @@ def form_words(form):
 class R2WMemberFormTests(SimpleTestCase):
     """The forms: every message whose question its fact key's fixed row does not ask has one; every other has none."""
 
-    KEYS_OWN = (wording.Message.STATUS, wording.Message.NOT_DOCUMENTED, wording.Message.ENTRY, wording.Message.TIME,
+    # r2f (DECISIONS D309, e-words' Q1: D303 I1 strictly): NOT_DOCUMENTED asks performed_question(code), the SUPPORTED
+    # form's question, so it is no longer one of the keys whose own row asks it (named() gives it its form)
+    KEYS_OWN = (wording.Message.STATUS, wording.Message.ENTRY, wording.Message.TIME,
                 wording.Message.PERFORMER, wording.Message.PROCEDURE, wording.Message.CONFLICT, wording.Message.EXTENT,
                 wording.Message.CANNULATION, wording.Message.BASE_INCLUDED, wording.Message.SEPARATE_EM)
 
@@ -68,7 +70,10 @@ class R2WMemberFormTests(SimpleTestCase):
                 wording.Message.EXAMINATION_CLASS: wording.FORM_DESCRIBED,
                 wording.Message.ANOTHER_ENTRY: wording.FORM_ANOTHER_ENTRY, wording.Message.BUNDLED: wording.FORM_SEPARATE,
                 wording.Message.ANOTHER_TECHNIQUE: wording.FORM_ACCOUNTED,
-                wording.Message.BUNDLING_TARGET: wording.FORM_PART}
+                wording.Message.BUNDLING_TARGET: wording.FORM_PART,
+                # r2f (D309, e-words' Q1): the two messages whose item asks performed_question(code)
+                wording.Message.NOT_DOCUMENTED: wording.FORM_SUPPORTED,
+                wording.Message.UNLISTED_EVIDENCE: wording.FORM_SUPPORTED}
 
     def test_the_named_messages_have_their_form_and_the_keys_own_have_none(self):
         for message, form in self.named().items():

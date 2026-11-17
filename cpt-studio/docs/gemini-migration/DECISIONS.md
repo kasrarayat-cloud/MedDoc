@@ -16736,3 +16736,587 @@ four refutation lenses (false READY, design, reproduction, generality: 40 findin
     expectation is amended (renamed test_rbw_a_released_primary_a_statement_may_exclude_still_holds_the_addon) and
     overlay.recount's docstring and comment state the rule; no code changes. tests.v2.test_r2bw_words and test_overlay:
     119 OK. A twin where nothing may exclude the released primary (so it counts) is round r2e's (D303 I5).
+- **D305 Pair 4 fails; its two classes P4-PLAN and P4-ONLESION (session 31dfc45d, 2026-11-16).**
+  - Pair 4 (S04 C/C2CL-021, L04 231510f2fd06) on cpt-studio-test:21e79eff7b78 (int2): 4 sends, no stream breach,
+    $4.159519; the test's spend $16.021428. Scored by replay through int2 (both case-runs reproduced): S04 45380 and
+    45385 READY, correct; L04 45380, 45382, 45390 held, correct; 45381 and 45385 held where READY is expected
+    (unnecessary holds). No wrong READY, no wrong exclusion. The pair fails (D277); the sends stop.
+  - 45385 (E9, today's cold-snare removal): held relation:possible_statement by E13 - "Repeat colonoscopy for
+    surveillance in 3 years ... if pathology confirms ..." - whose claimed status (planned) and date relation
+    (later_date) settle unresolved under its conditional qualifier, so [R:HO-3] makes it a possible statement with an
+    unresolved session that pairs with every act. Ruled (P4-PLAN, engine only, no request change): an act is a possible
+    statement only when a denial is possible for it - its status's possibility reader (facts.possibly over the status
+    fact, its options and every doubt reading) admits a negated performed status; an act whose every possible status is
+    planned (supported, qualified or unestablished, with no rejection and no doubt offering performed or negated) is a
+    possible PLAN, never a possible statement: a plan neither performs nor denies an act of this encounter. A rejected
+    planned claim, or a doubt offering performed or negated, keeps the [R:HO-3] reading.
+  - 45381 (E12, the tattoo "3 cm distal to the polypectomy site"): held relation:contradiction by the established
+    denial E10, "No lifting injection was used for the resection." (single target L1, the removed polyp), because
+    catalogue.covers reads a tattoo and an injection as one act (ONE_ACT) and E12 names no lesion, so the target row
+    cannot set it apart from L1 (its places overlap L1's; its purposes - lift_for_resection, marking - are pass 1's
+    unappraised words). Ruled (P4-ONLESION, D296's pattern extended; it changes the pass-2 request of the documents it
+    reaches, named with D295/D296/D299): for a statement whose single or listed target names a lesion and an act of the
+    same session whose target names NO lesion, with places compatible with the statement's lesion, the claim set asks
+    "<the act> was not done on <the statement's lesion>" with its contrary control "<the act> was done on <the
+    statement's lesion>"; settle establishes "not on" only when the claim is supported and the control rejected; the
+    target row reads it as setting the act apart from that lesion (apart_by_lesion's established arm). A group lesion
+    reads D300's membership form. Purpose stays unappraised (no purpose row is built).
+  - Both go into round r2e with D303's words invariant and D302's engine items; P4-PLAN is re-checked free on pair 4's
+    real recording (no request change), P4-ONLESION with a faithful pass 2 and confirmed by the next pair.
+- **D306 Owner directive, 2026-11-17: Fable judges the readings; code keeps only the fixed billing rules (class a, a
+  product decision; session 31dfc45d).**
+  - The owner's words: "How can we reduce the holds by Fable agents i dont want to keep coding and run a new models i
+    want to use AI isntead of running patch and models is it possible? ... my main goal is not to using old way we have
+    ai and agents right?" Asked how far the system should rely on Fable's judgment instead of new code patches, the
+    owner chose: "Fable judges readings (Recommended)" - whenever the engine is unsure about a READING (does this
+    sentence apply to that act, which procedure part, the same polyp), Fable answers it directly with a cross-check
+    question the other way, and the code is held for the coder only if its answers disagree; code stays only for the
+    fixed billing tables (bundling, add-ons, units); no more per-pattern patches.
+  - The evidence behind it: in every unnecessary hold of pairs 1, 3 and 4, Fable's own reading held what was needed (the
+    date and author in a labelled header, the part headings, "No lifting injection was used for the resection" against
+    a tattoo 3 cm distal, a conditional surveillance plan, polyps left in place); with a faithful pass 2 the long notes
+    reach their expected outcomes. The holds came from the engine's rules not accepting that reading.
+  - Interpretation, to be designed, refuted and built as round r3 (no new per-pattern rule is written meanwhile; the
+    rules already built and refuted stay): the engine's own doubts drive the questions. A provisional assessment over
+    pass 1's reading names every hold of a proposed code whose cause is a READING uncertainty (a statement's
+    applicability to an act, an act's session or procedure part, its date relation, entry or performer, its target
+    lesion or site, a possible statement or plan) - never a billing rule (bundling, add-on, units, competing codes,
+    base_included) and never whether an act happened at all (pass 1's own facts). Each becomes a question claim in
+    pass 2 with its contrary control, worded from the note's own descriptions; an answer is established only when the
+    claim is supported and its control rejected (two judgments in opposite directions, D296's pattern); the engine
+    reads an established answer as it reads any established fact; an unanswered or incoherent question reaches the
+    coder as today. It changes the pass-2 request of most documents; the pairs that follow confirm it.
+  - The owner's addendum, the same night (verbatim): "make sure Fable has enough pwoer to handle this matter as well if
+    system miss or unsure to put a code on hold Fable has to enter and fix as much as it can find proof to release the
+    code but in safe good way". Interpretation, binding on round r3's design: (a) coverage - EVERY hold of a proposed code
+    whose cause is the system missing or being unsure about the reading (every reading-uncertainty cause the engine
+    produces, not only the classes seen so far) gets Fable's question; only fixed billing rules (bundling, add-ons,
+    units, competing codes, base_included) and a fact the document truly lacks stay with the coder; (b) proof - Fable
+    releases a code only by PROOF: its supporting answer must cite the note's own words (a quote that locates in the
+    note and lies in the passages the question concerns), and its answer to the contrary cross-check must agree; an
+    answer without locatable proof, or with the two judgments disagreeing, leaves the hold; (c) power - Fable gets what
+    it needs to judge: the whole note, the act's and the statement's own passages, and the question in plain words,
+    within the connector's existing bounds (max_tokens 128,000, adaptive reasoning as the pass already uses); (d) safety -
+    the appraisal's health thresholds (3.2.6) and the P-MONO/P-INDEP properties hold for every new answer; a wrong Fable
+    answer alone can never release a code (two judgments in opposite directions plus a located quote).
+  - The owner's second addendum (verbatim): "dont forget dont put any restriction for fable". Interpretation, binding on
+    round r3 (with the first addendum's "but in safe good way", which this does not withdraw): no limit on Fable's
+    POWER - (a) Fable always sees the whole note, every passage of the act, the statement and the question; (b) the
+    question pass runs at the connector's maximum output (max_tokens 128,000) and the highest reasoning the connector
+    supports, never a reduced setting; (c) EVERY reading-uncertainty hold of every proposed code is in scope, none
+    filtered out by kind, count or cost; (d) no question is ever dropped for a claim bound: when a document needs more
+    questions than one request carries, the bound is re-measured against the model's real capacity or the questions go
+    in a further request - never silently limited; (e) the only conditions on a release are the safety bar the owner
+    set in the first addendum - the note's own words as located proof and an agreeing cross-check, under the health
+    thresholds - and the fixed billing tables, which stay code. Nothing else restricts what Fable may judge or release.
+- **D307 Round r3's design (r3/design: CENSUS.md, DESIGN.md, PROBE.md) and the rulings on its questions (session
+  31dfc45d, 2026-11-17).**
+  - The census classifies every hold cause the engine produces: 20 READING (Fable's questions), 5 BILLING RULE (code), 4
+    ABSENT (the coder). All 21 unnecessary holds seen (pairs 1-4's 7, the development batches' 14) map to READING rows;
+    15 are visible before pass 2 (round A), 4 exist only after pass 2 (round B), 2 need A then B. The mechanism: a
+    provisional assessment inside the pass-2 request builder (settle over a faithful constructed answer; every
+    candidate code evaluated, since proposals do not exist at pass-2 time) turns each READING witness into a question
+    claim with its contrary control (families Q-REL, Q-FACT, Q-LESION, Q-ONLESION, Q-GROUP, Q-ABSORB); proof is a
+    quotes property on the verdict (LOCAL_SCHEMA_V3), located by a new contract/proof.locate inside the question's own
+    passages (1-2 quotes, at least 12 non-space characters and 2 tokens); settle establishes an answer only when the
+    claim is supported with located proof, every control is rejected and the question population is healthy; the engine
+    reads established answers through R_q everywhere EXCEPT 4.6's exclusion and RD-2's may_exclude, which read R_base -
+    so an answer can release and never exclude. The design is adopted with these rulings:
+  - D306's second addendum governs the bound: NO question is ever dropped. When a document's facts and questions would
+    pass CLAIM_BOUND_V3 or the output margin, the questions go in further pass-2 requests (question batches), each with
+    the whole note and the same proof, cross-check and health rules; W_Q is measured by the probe only to size them.
+    The design's drop priority (R9) is withdrawn; R4 (output growth) is answered by the same split.
+  - Q1: r3 moves under the unshipped gemini-appraisal@2 (D296's precedent); pairs 1-4's pass-2 recordings stop
+    replaying byte for byte and are re-checked with their recorded pass 1 and oracles (R6 accepted).
+  - Q2: round B (the witnesses only pass 2 creates) is built WITH round A after the probe confirms the question and proof
+    form, so pair 5 tests the whole mechanism (D306: every unsure hold); it can never fail the stage (R7).
+  - Q3: an umbrella act's method (snare or EMR) is a reading Fable may establish; exclusion never reads it.
+  - Q4: Q-ABSORB is built, with proof and the cross-check, unless its refutation finds a false READY those cannot guard;
+    then it stays CODER and the two C2MEM-023 holds stay held, explained.
+  - Q5 (showing the located proof to the reviewer beside a READY code) is the owner's eye (class c): not built in r3,
+    raised with the owner later.
+  - Q7: if the probe finds a correct hold that true answers would release because pass 1 never filed a billing fact (R3),
+    questions are asked only beside acts whose billing-rule facts pass 1 filed - a safety condition on pass 1's
+    omissions, not a limit on Fable's judgment.
+  - Next: the design refutation (three lenses: false READY and proof; cost, bound and output; coverage and generality)
+    and, in parallel, the probe's tools (record_v2 --pass1-from, replay_v2 --answers) and the round-A prototype in a
+    work copy; then the paid probe (about $9.5, held by the harness to $20 with --test-total-usd 36.02).
+- **D308 Round r3's design refutation (14 findings, 5 high) and DESIGN-v2; the rulings on its questions (session
+  31dfc45d, 2026-11-17).**
+  - The refutation (r3/refute-design) found five high flaws in DESIGN v1 - controls that are not the claim's exact
+    contrary (one wrong judgment establishes), health blind to a release-direction bias, true answers releasing a code a
+    pass-1 omission hides, the question pass below the highest reasoning, and question claims counted in (and failing)
+    the fact appraisal - and nine more. DESIGN-v2 (r3/design/DESIGN-v2.md, CENSUS-v2.md, PROBE-v2.md) accepts all 14.
+  - Q-A RATIFIED: the questions leave pass 2. The fact request stays int3's byte for byte (I-FACT: effort high,
+    CLAIM_BOUND_V3, engine-independent, so engine rounds stay re-checkable on recorded fact answers); a new QUESTION
+    stage plans questions on the REAL settled FactSet - every READING witness of every candidate code answers could
+    release - in rounds until no new question appears, partitioned deterministically into requests under QUESTION_BOUND
+    (measured at effort max; none ever dropped; an output overrun is halved and resent), each request at effort max and
+    max_tokens 128,000 with the whole note, failing alone; an answer is established only when its request is healthy
+    (completeness, control acceptance, no calibration breach), its claim is supported and attached with one located
+    quote inside EACH named object's own passage (no overlap), and its control - the claim's EXACT negation - is
+    rejected; calibration items whose true answer is the holding direction refuse every question of a request if one
+    is established the other way; answers release through R_q and never exclude (4.6 reads R_base; the ADDON count reads
+    R_q); question requests are pinned by QUESTION_ENGINE_SHA256_V3.
+  - Q-B RATIFIED: the silent-link rule (a pure-silent part_of or cause in the three arms without an identity rule reads
+    as a doubt; FINAL-V2 4.7 amended) - D307 Q7's safety condition in a form the engine decides; its new holds are
+    declared in advance (r3/acceptance) and released only by Fable's proven answers.
+  - Q-C: the design's exclusions are D306's own, not a limit on Fable: a fact Fable already judged (asking again would be
+    shopping for an answer), a document that states both sides (only a wrong answer could release), pass 1 and the fact
+    pass in agreement, and whether an act happened (pass 1's). Not an owner question.
+  - Q-D CONFIRMED: every release by Fable's judgment needs D306's proof - the already-built lesion-pair and P4-ONLESION
+    releases move into the question pool and release only by a proven Q-LESION / Q-ONLESION answer (their release-none
+    moves are declared in advance).
+  - Q-E: effort max for question requests is the owner's directive (D306 second addendum (b)); latency and cost per long
+    note are reported to the owner as figures, not limits.
+  - Q-F: F9 (the date of service as a reading) is built in r3, with its path into derive and member precedence unchanged.
+  - Q-G (showing the located proof beside a READY code) stays the owner's eye (class c), not built in r3.
+  - The probe tools (r3/tools: record_v2 --pass1-from, replay_v2 --answers; 35/35 mutants killed): the prototype names
+    its question records as replay_v2 expects (claim, controls); release-none's moves against int3 are expected and
+    declared (Q-D); the probe runs through a wrapper variant with read-only mounts of gemini-project/ and the prototype
+    trees (the container isolation kept); case ids use '.' (A-v3.F3all), as v2lib.safe_id requires.
+  - Next (DESIGN-v2 k.1): build the probe prototype (r3/probe), pass PROBE-v2's free gates, run the paid probe (step by
+    step, each batch read before the next; held to $20 by --test-total-usd 36.02), the lead rules on its results; then
+    the builders B0-B9 on int3.
+- **D309 Round r2e's results (wf_31f21c07-688) and their rulings; round r2f and int3 (session 31dfc45d, 2026-11-17).**
+  - Built, each green on its own int2 copy: e-lesion (P4-ONLESION, RF2C-L1..L3; tests.v2 3,229 OK; pairs 1-4: only L04's
+    request moves, one act-lesion pair, and 45381 HELD -> READY correct on the faithful re-check; rig 0 of 84 rows moved),
+    e-engine (P4-PLAN, P3-CARDS, RCG-T1..T3, RFA3-1..4, RF3-1/2), e-words (the D303 invariant I1-I5 as code: base 628/0/64/
+    0/8 violations -> 0 over 32,372 + 8,474 scenes and 10,035 items) and e-tools-records (TX3-1/2, RDRX-1/2).
+  - Refuted and reproduced: e-words RFEW-1 (medium, REGRESSION: another session's established examination named "the
+    examination of this procedure" on an E/M code's row when the code's own session is unresolved - D301 RBWX-2 rules the
+    opposite), RFEW-3 (medium, pre-existing: a service-fact row keyed by family, not session, so two sessions' different
+    questions share one row), RFEW-4 (medium: the invariant restates overlay's own rule, so it cannot judge it); lows
+    RFEW-2, RFEW-5. e-lesion RFE-L1 (low: deleting a never-asked listed lesion releases a target relation - a P-MONO
+    breach) and RFE-L2 (low: the property harness does not weaken pair presumptions). e-tools-records F1-F3 (lows).
+    e-engine RFE-1 (low) and RFE-2 (medium) are both readings of P4-PLAN / P3-CARDS.
+  - Ruled under D306 (Fable judges readings; code keeps the billing tables and correctness; no more per-pattern
+    patches): P4-PLAN and P3-CARDS are NOT integrated - they are hold-reducing readings that r3's question families
+    (Q-REL, Q-GROUP) answer with proof; RFE-1, RFE-2, RFE-3, RFE-4 and e-engine's Q1, Q3 and Q5 fall with them. Kept from
+    e-engine: RCG-T1..T3 and RFA3-1..4 (tests of int2's own code) and RF3-1/2 (device-table corrections with must-change
+    tests). e-engine's Q4 (a P-MONO breach for ESTABLISHED plans, pre-existing in int2: weakening an established other
+    date releases) is reproduced on int2 and fixed as a class rule in r2f if it is a real release, else named with its
+    reason; Q2 stays fail-closed (RD-2 reads any unestablished status as a possible denial); Q6 as built (D301 RB2-2).
+  - e-lesion's questions: Q1 (a claim-time membership ask for a written non-single distinct_from link) and Q3 (acts or
+    lesions with no place not asked) are r3's Q-LESION / Q-ONLESION witnesses, asked in the question stage with proof
+    (D306 second addendum: every reading-uncertainty hold); the fact request keeps P4-ONLESION as built (I-FACT). Q2 (the
+    store cannot re-derive a fact-path establishment, card closures not stored) goes to r3's B5: the @3 row stores card
+    units.
+  - e-words' Q1: D303's I1 applies strictly - an item's question is derived from its own message and slots in the
+    engine's item definitions, and NOT_DOCUMENTED / UNLISTED_EVIDENCE sit on whichever row asks exactly that question;
+    the move is measured and listed. No earlier reading overrides the invariant. The engine residual (where the code's
+    own session is not established, an examination named as the engine's item names it) is fixed with RFEW-1.
+  - Round r2f (repairs, no request change): W - RFEW-1..5, e-words' Q1, and an INDEPENDENT acceptance oracle for I1-I5
+    (RFEW-4: derived from the engine's items and the row's rendered words, never from overlay's naming functions); L -
+    RFE-L1 (a listed target's relation to an act naming no lesion reads every listed lesion's own established apartness,
+    so no deletion releases) and RFE-L2; E - e-engine's keepers split from its patch, and Q4; T - F1 (the place rule reads
+    the harness's own files by name, kind and content), F2, and F3 (record_pair.sh refuses a project record under its
+    writable run directory or outside the registered records). Each lane refuted; serious findings reproduced.
+  - int3 = int2 + e-lesion + e-words + e-tools-records + e-engine's keepers + r2f's four lanes, integrated and checked
+    independently (every hunk present, every pin by its owning function, FINAL-V2's notes a union without P4-PLAN or
+    P3-CARDS, the rig 0 of 84 rows moved except declared moves, pairs 1-4 re-checked, the rule mutants killed). Round r3's
+    builders (D308) start from int3.
+- **D310 The r3 probe prototype (wf_5adeeb4b-8ee): NOT READY; the rulings and the fix round before any send (session
+  31dfc45d, 2026-11-17).**
+  - Built (r3/probe): the question stage on work copies; 71/71 prototype tests; I-FACT holds (50 answered pass-1
+    case-runs, 42 equal + 8 not built alike; 23/23 rigs rebuild their recorded pass 2 byte for byte); release-none moves
+    0 of 84 rig rows; the proof check locates all 55 real round-1 items and none of 428 bad proofs; plans byte-stable;
+    planning takes 4-15 s per round. Questions per document: A-v3 2, A-note8 16, C-PAIR-4-W2 about 2, C-C2MEM-023 18,
+    each request with 4-5 calibration items. Nothing was sent.
+  - The independent checker found, and I verified first-hand: (high) the frozen acceptance/DECLARATION.json is dated
+    04:35:28Z and says it was written before any release-all run, but dev/try-F3all-release-all.json (04:14:54Z),
+    try-F3long-all.json (04:15:45Z) and fake/run1's release-all replay (04:23:48Z) came first - its F3all/F3long
+    expectations were observed, not declared. The file is kept unedited as the record; a new declaration with an
+    accurate provenance replaces it. (medium) int2's requirements table rows 44388-44408 are row for row the 45378-45398
+    rows (requirements_table.py 222-238; catalogue _COLON covers both ranges); the only stoma-route check,
+    evaluate._lower_approach, serves the EUS STOMA class (44406/44407) alone. So a colonoscopy-through-stoma code goes
+    READY on any colonoscopy whose act is established, although D225 P5 and evaluate's own docstring require an anatomy
+    entry of type stoma and the approach through_stoma. MAIN's GI engine (studio/gi/catalogue.py 91-100, profiles.py 63)
+    has the same gap: no route check separates 44388-44408 from 45378-45398 in either direction. (medium) release-all
+    moved 24 rows, not 13 (11 correct holds changed their held facts) - undeclared; COMMANDS cannot measure score (ii)'s
+    candidate-code population; calibration draws no Q-REL or Q-ABSORB item (the K3 pool omits b.9's second source),
+    though Q-REL is the largest family; 7 of 25 prototype mutants survive; record_probe.sh mounts more than it needs
+    (all of fresh/inputs with the reserved documents, devsets, all of gemini-project) and checks only the '--opt value'
+    form, so a --project-dir under the writable run directory would start a record with zero spend and lift the $20
+    ceiling to about $36.
+  - Ruled: (1) THE STOMA ROUTE IS A BILLING TABLE (D306 keeps billing tables as code; D225 P5 already rules it): a
+    colonoscopy-through-stoma code (44388-44405, 44408) is READY only when an anatomy entry of type stoma and the approach
+    through_stoma are established; a colonoscopy code (45378-45398) is never READY when the approach through_stoma is
+    established, and is held when it is possible; the route is a reading Fable may be asked (Q-FACT), the requirement
+    is the table's. Built in the probe prototype now and in round r3's build on int3 (a builder of its own). The live
+    engine's gap (main, studio/gi) is recorded here and closed by this release, which replaces that engine; it is named
+    in the release record. (2) A NEW DECLARATION (acceptance/DECLARATION-v2.json), written with an accurate written_at
+    and an explicit provenance: the oracle outcomes already observed are listed as observed, not declared; what is
+    declared in advance is the expectation for Fable's REAL answers per row, every moved row (the 13 statuses and the 11
+    held-fact moves) with its reason, frozen by sha256 before the first send. (3) Score (ii) is measured on proposed
+    codes AND on every listed candidate code a question answer releases, by a script that reads the recorded answers;
+    a candidate code READY alone on int2's own reading is reported, not a stop (Fable did not release it). (4) Calibration:
+    b.9's second source is built (pairs SAME on every row give a holding-direction Q-REL item), and every family present
+    in a request gets at least one same-family holding-direction item where a source exists; a draw that loses K3 refills.
+    (5) H4 as the prototype resolved it: a calibration breach is the false claim supported, whatever its control's
+    verdict. G1 (the session-negation question for the row-7 examination tie) is a READING row, asked with its exact
+    negation. (6) The surviving mutants (M19 heading cut, M10 C7b exclusion, quotes_bound, H1 completeness,
+    K3-without-K1) get killing tests. (7) record_probe.sh mounts only the four probe documents, the source batches
+    read-only, the prototype trees and manifests read-only and the bound test root writable; it parses every argument
+    form or refuses it; a --project-dir other than the registered record refuses. (8) Batch caps carry one more
+    worst-case send (a split); --test-total-usd stays spend + $20. (9) The connector's rate floor (B21: 110 tok/s against
+    117-131 recorded) is checked for question requests at effort max before any send, so a slow max-effort stream cannot
+    trip an installation-wide hold. (10) Recorded, built in r3 not the probe: _silent_spec's narrowing of CENSUS-v2 A3
+    (target, stations, technique, act_target, em_basis, cannulation), Q-GROUP, Q-KIND, F9, U2, and the CAUSE row's value
+    template (so F12 can release a bleeding-control code) - D306's second addendum puts every reading hold in scope.
+  - Noted for the owner's figures: the silent-link rule (D308 Q-B) moves 367 tests.v2 expectations (222 generated cases:
+    an injection, clip or ablation with a silent purpose and cause beside another act now holds until a proven answer),
+    so without the question stage the hold rate on real notes RISES; the probe measures how many of those holds Fable
+    releases with proof.
+- **D311 The takeover; round r2f's continuation adds lane f-lesion2 for R2F2-L1 and R2F2-L2 (session 738699b2,
+  2026-11-17).**
+  - Session 31dfc45d ended at 08:26Z and both its workflows died with it: wf_4a94d606-cad (r2f + int3) with f-words and
+    f-lesion done and f-engine at its setup; wf_f3dad6e7-262 (the D310 probe fix round) with its builder's work done but
+    its final whole tests.v2 run. The owner's instruction to session 738699b2: "Continue and take over too this session
+    if anything is still working". The lead completed the fix builder's last steps on the unchanged final trees (gate
+    3.7 re-run; gate 3.1's whole tests.v2: 647 failing ids, equal to the classified set; NOTES F.13) and launched the
+    independent probe checker (wf_a359d20f-59e). No send before it says READY TO SEND.
+  - R2F2-L1 (medium, a false READY, NEW in r2f): reproduced by the round's verifier and first-hand by the lead on an
+    exact copy of f-lesion/work (rf2-f-lesion/probes/q01d_short_lesion_list.py: the lesion filed at its first place only
+    releases 45381 under a FAITHFUL and under a TRUTHFUL pass 2; int2 holds all four variants as relation:contradiction).
+    f-lesion's listed arm (pairing._apart_by_lesion_places, read by _apart_from_unnamed) sets a lesion apart by SC-B's
+    one direction only. RULED - correctness, which D306 keeps in code; narrowing only; engine only; no request change:
+    an act naming no lesion is set apart from a statement listing lesions only as 3.2.3 [R:SC-B] sets two objects apart,
+    in BOTH directions - each place of a lesion's finding asked of the act by a rejected control (as built), AND each
+    place of the act outside the finding's places asked of the statement's side by a rejected control, unless that act
+    place is a place of the finding of a lesion the arm reads by an established not-on. A statement whose own places hold
+    an act place that no such lesion holds is set apart by nothing there (4.5: SAME, places overlapping). The rule reads
+    what the claims asked and pass 2 established, never the statement's deletable place list, so no 9.4 deletion of a
+    statement place releases (P-MONO). It is the CLASS rule (D276): it governs every arm that sets an act naming no
+    lesion apart from a listed statement - the listed arm, and the asked and single arms of e-lesion where the refuter's
+    q01c shows the same shape (start releases, base holds); D305's "established not-on for EVERY lesion" stays
+    necessary and is no longer sufficient there. It must keep the releases the refuter's sketch keeps (q01's, L04's
+    45381 under P4-ONLESION with its faithful pass 2) and hold Inputs 1-3, the asked-only twin and scenes K and J
+    (whose INDEPENDENT pins encode the defect and are restated by their owner). This answers f-lesion's Q-R2: a
+    statement-direction control that claims.pair never generated (contract/claims.py:2994-2995 skips a place compatible
+    with the statement's own) is never a pass.
+  - R2F2-L2 (low as filed): `_controlled_against` re-reads every lesion's finding per (statement, act) pair; at FINAL-V2
+    1.8's bounds assess_facts took 325.65 s against 38.61 s before the repair (the refuter's q04), past the assess job's
+    120 s deadline, which is a document that fails to assess. RULED: measured on the lane's start tree (1-minute load
+    under 10); if the bound input passes 60 s (half the deadline), the read is computed once per assessment (a pure
+    function of the FactSet), proven output-identical (the rig, pairs 1-4, the whole tests.v2) with the bound input's
+    time before and after; the D311 rule itself is held to the same bound.
+  - f-lesion's Q-R1 CONFIRMED as built (fail-closed): _controlled_against reads the finding, so a polyp filed twice whose
+    asked entry the one-entry filing releases is held - an unnecessary hold, never READY; whether two filings are one
+    lesion is a reading, r3's Q-LESION.
+  - Lane f-lesion2 (start f-lesion/work, i.e. int2 + f-lesion; its patch int2 -> work therefore CONTAINS f-lesion's and
+    is integrated in f-lesion's place) runs beside f-engine and f-tools, which are relaunched fresh: their builders of
+    wf_a49aa211-eeb, 3-4 minutes into setup, were stopped at 08:48Z to add the lane, and their partial directories set
+    aside as r2f/f-engine-void-20261117T0848Z and r2f/f-tools-void-20261117T0848Z. Each lane is refuted and its serious
+    findings reproduced as before; then int3 and its independent check.
+- **D312 The r3 probe is READY TO SEND (the independent checker, wf_a359d20f-59e); the dispositions of its findings and
+  of the fix round's open points (session 738699b2, 2026-11-17).**
+  - The checker re-ran every PROBE-v2 section-3 gate on its own copies and found each equal to gates/fix3 (timing fields
+    aside): the declaration order (DECLARATION-v2 mode 0444, mtime = ctime = 07:24:44Z; the fixed code did not exist
+    before it; the first fixed-tree oracle output 07:47:26Z), its own oracle comparison MATCH with a positive control
+    (three planted differences reported), tests.v2 on the final proto 647 ids equal to the classified set, int2 3,188 OK,
+    the CPU gate at load 0.60-0.94 (A-v3 0.03 s, A-note8 3.77/3.85 s, C-C2MEM-023 14.00/13.33 s), plans byte-stable,
+    the proof check, score (ii)'s two populations on fake records of the FINAL requests with constructed stops, the
+    wrapper (41/41 attempts through a copy that cannot reach docker), the cost bound by hand, and 27 READING rows read
+    against the documents. F.13's claims hold. The checker spent nothing.
+  - Its findings, all low: (1) M10b survives - C7b-denial's filed-denial and doubt arms have no killing test; (2) K3b
+    survives - the K1-companion rule of a covers K3 has no killing test; (3) route mutants S3/S5 survive with no status
+    effect; (4) NOTES F.2's fake evidence was recorded through a pre-final request - the checker re-ran it on the final
+    requests, (ii) 0 and the constructed wrong release counted; (5) an ESTABLISHED stoma entry with the transanal
+    approach only unresolved lets 45378-45398 go READY (stoma_possible reads facts.possibly, which keeps an unresolved
+    fact's claimed value) - unreachable on the four documents; (6) the declaration's provenance omits some earlier
+    fake records and logs - recorded as OBSERVED in acceptance/PROVENANCE-ADDENDUM-20261117.md, the declaration untouched;
+    (7) record_probe.sh leaves pairs/pair-01..04 (which hold reserved documents' recorded passes) inside the writable
+    test root - as D310 (7) ruled; (8) B-fb02's dilation siblings 43213/43214/43220/43233 have no right/wrong line.
+  - RULED: the probe is sent as checked, with the checked wrapper, step by step (COMMANDS 1-4, each batch read and
+    scored before the next is planned), operator figures 200 / 30 / 0 (the live site's November usage re-read
+    read-only, unchanged at about $28.91 since its last send on 2026-11-08). For the BUILD (round r3's builders, D308
+    k.1), each a requirement: killing tests for M10b, K3b, S3 and S5; finding (5) closed with F.11 (3) as one rule - a
+    colonoscopy code (45378-45398) is never READY while a stoma is possible, and a stoma is possible when an anatomy
+    entry's type is supported or possible as a stoma OR the approach's through_stoma reading is possible, read so that
+    a weakening never releases; the route's own question templates and sentences; the wrapper mounts every existing
+    pair record read-only; the question stage's own deadline and rate rows from the probe's measured latency (F.11 (5)).
+    F.11 (1) KEPT: a calibration breach is the false claim supported, whatever its proof (fail-closed). F.11 (2) KEPT for
+    the probe: the same-kind condition stands (the checker agrees: the one SAME-rows pair would breach on a right
+    answer); the build finds a sound holding-direction Q-REL source where one exists, and reports the documents where
+    none does. Finding (8): 43213/43214/43220/43233 are WRONG codes for fb02's EGD balloon dilation (43249 is its code)
+    - the S17 #11 residual (identical requirement rows), READY alone already on int2's reading in the F3all world, an
+    (ii-b) residual and never a probe document; the build's census reads them with the device and site rows.
+- **D313 The r3 probe's step 1 short (r3-probe-1, A-v3.F3all): its result, one HOLLOW PROOF from a stale question
+  sentence, and a repair round before any further send (session 738699b2, 2026-11-17).**
+  - SENT 09:39:51Z (plan first: every expected value equal - question request bba52c33..., 2 questions + 4 calibration
+    items, 12 claims, 12,311 bytes, worst case $5.226488; pass 1 and pass 2 reused at $0; test spend at start
+    $16.021428). One send, 537.98 s, finish end_turn, HTTP 200, $2.246928 (4,771 input + 55,219 output tokens; the
+    visible answer 2,123 characters, so about 54,500 tokens are max-effort thinking); test spend $18.268356. The output
+    rate 102.64 tokens a second is under the harness's 110 floor: recorded as question_rate_below_floor, a measure -
+    D310 (9)'s change did its job (without it this send would have set an installation-wide hold).
+  - Result: both questions ESTABLISHED (claim supported with located quotes, exact negation contradicted), the request
+    healthy (12 claims, 0 missing, 0 controls not rejected), all four calibration items answered in the holding
+    direction (0 breach, 0 supported), fixed point after round 1. Scored: 45386 READY (ready_recall 1/1), 45378 held,
+    unnecessary_hold_rate 0/1, verdicts correct 2; score (ii) 0, nothing unadjudicated, nothing READY without answers;
+    release-none as declared.
+  - HOLLOW PROOF (PROBE-v2 6: a located proof that does not show its claim), found by the lead reading the quoted words
+    against the note: q1.1.1 asked 'The furthest point in session X1 was at anatomy Y1.' (Y1 the ileocolonic
+    anastomosis); Fable SUPPORTED it with "The colonoscope was advanced to the ileocolonic anastomosis" and
+    CONTRADICTED its exact negation - but the note says the scope then "passed into the neo-terminal ileum", so the claim
+    as worded is false and its negation true. The fact itself (pass 1's contract: reached_anatomy names an anastomosis
+    the endoscope reached "at its furthest point or on its way beyond it") is true, so the release of 45386 is right -
+    for the question's intent, not its words. CAUSE: the prototype's QUESTION_TEMPLATES (contract/question_claims.py
+    182) carry gemini-appraisal@1's sentence, which D292 U3 had already replaced in the fact pass with 'In session {X}
+    the endoscope itself reached anatomy {Y}.' (claims.py 561). Missed by the prototype builder, the fix builder and
+    both checkers. The same class: 'fact.reached' asks 'the endoscope reached the {point}' where the fact pass says
+    'the endoscope ITSELF reached' (the contract: a point only a guidewire, catheter or capsule reached is never
+    reached) - a wording under which a wire-only reach could be supported, a false-release path for colonoscopy
+    completeness.
+  - LESSON, binding on round r3's design and build: Fable answered the claim and its exact negation by the question's
+    INTENT, consistently. The exact-negation control therefore guards against a wrong JUDGMENT but never against a
+    WRONG SENTENCE: a question's words must state its fact exactly as the contract defines it, or a release can follow
+    an answer that is right about a sentence nobody meant. Question wording is a safety surface, pinned and refuted like
+    the engine.
+  - RULED: no further probe send until a repair round (one builder, then an independent checker; no provider call):
+    (1) THE CLASS - every question sentence states its fact exactly as the contract defines it: each Q-FACT form whose
+    fact has a fact-pass claim sentence takes that sentence (claims.py's current @2 template, single source, never a
+    copy) and its exact negation; every other family (rel, onlesion, lesion.*, absorb, part_link, cause, lift,
+    hemostasis, visit.basis, G1's session negation) is checked against its CENSUS-v2 row and contract definition, and
+    any sentence that says more or less than its fact is corrected; a test pins every form to its source; every changed
+    sentence listed. (2) QUESTION_BOUND pinned from the measured t_q (55,219 / 12 = 4,601 output tokens a claim at effort
+    max, DESIGN-v2 e.2) so a request's expected output stays at or under 85% of 128,000, with the partitions, expected
+    and worst costs of steps 1 long, 2 short and 2 long and their caps (planned sends + one more worst-case send)
+    re-derived; the figures reported, not used to drop or limit any question (D306). (3) Every PROBE-v2 section-3 gate
+    re-run on the repaired trees; DECLARATION-v2 compared (a wording or partition change moves no oracle outcome - any
+    difference is a finding in a separate dated file); COMMANDS and READING updated. r3-probe-1 is NOT re-sent (it
+    passed; its record stands with the hollow proof attributed to the wording); the corrected reach sentences are
+    confirmed on A-note8's reach questions. The probe continues step by step after the checker; the ceiling stays
+    $36.02 for step 1 long, and step 2 is priced with step 1 long's measured cost before it is sent (raising the test
+    ceiling within the owner's standing permission of 2026-11-16 only if the measured cost requires it, and reported).
+  - Figures for the owner (D308 Q-E): at effort max a short note's two questions took 538 s and $2.25; the fact pass at
+    effort high on the same note took about 50 s and $0.30, and on a long note about 590 s and $3.40.
+
+## D314 (2026-11-17, session 738699b2) - the D313 repair round's result: NOT READY; calibration items must be false as worded for the object they are asked of (the class: act-form items drawn from denials); entry bound to its anchor; a by-words answer key before every send
+
+  - THE ROUND (wf_aab25c68-6a1, 10:00Z-11:36Z, one builder then one checker, no provider call). BUILDER: the sent trees
+    preserved (build-v2/a2b/r3/probe/sent-trees/r3-probe-1, code_sha256 098be706... for rig-F3all; a replay through them
+    reproduces r3-probe-1's recorded and release-none results byte for byte); 11 sentence changes (reached gains
+    'itself'; reached_anatomy takes the @2 sentence and the contract's reach negation; entry names the owner alone;
+    the universal part link enumerates the five PartRelation labels; lift.not takes the purpose label; date_relation
+    and performer render from the spec's value) with 16 more forms re-derived from the one source; pins 129/129, RED
+    on the unrepaired prototype; 65/65 mutants killed. QUESTION_BOUND = 20 claims (t_q = ceil(55,219/12) = 4,602;
+    128,000 x 85% // 4,602 = 23, rounded down to tens), so step 1 long is 3 requests (20/20/16 claims, worst
+    $16.28, cap $22, expected $10.65), step 2 short cap $16 (expected $2.55), step 2 long 3 requests (cap $22,
+    expected $11.39). Every PROBE-v2 section-3 gate passes; DECLARATION-v2 MATCH (0 of 84 rows moved under
+    release-none, exactly the 24 declared under release-all); tests.v2's 647 failing ids equal the classified set.
+  - CHECKER: NOT READY, 7 findings. Every reproduction and figure above re-run and confirmed (sent trees, gates, plans,
+    costs by hand, 13 mutants of its own all killed).
+  - VERIFIED FIRST-HAND BY THE LEAD - F1 (HIGH): step 1 long's request 2 (8ef7e922...) asks as a KNOWN-FALSE
+    calibration item K9 'This act was not done on the date of service.' of card A8, whose passage is 'no
+    esophagogastroduodenoscopy or other upper endoscopic procedure was performed on November 8, 2026' - the date of
+    service. The sentence is TRUE as worded; so is K11 'This act was not done to lesion L9.' of E28 ('No biopsy, snare
+    resection, ablation, or balloon dilation was performed on this splenic-flexure lesion'). A correct answer is an H2
+    breach that refuses the whole request. Cause, in code: engine/asking.py calibration_pool (890-935) draws K1, K2
+    and K4 from every event with no status condition, while _acts_of (357-366) already treats a negated status as no
+    act; contract/question_claims.py has no object-class reference at all, while the fact pass's FORMS table
+    (claims.py 952-) is keyed by (object class, attribute, state) and claims.object_class (2057) makes an event whose
+    claimed status is negated a STATEMENT ('This statement is about ...'). The same class reaches every act-form item
+    of an act not done (planned, attempted, a status in doubt): 'This act was not done <q>' is true of any act never
+    done. 40 of A-note8's 105 K1 items are on events whose status is not established performed. Fail-closed (no
+    wrong release), but step 1 long (about $10.65) would most likely end 0/5 for a reason that is ours, and would be
+    read as a release bias in Fable. Pre-dates the D313 repair (the D312-checked requests carried it too).
+  - THE LESSON EXTENDS D313: an exact-negation pair is exact only under its presupposition. 'This act was (not) done
+    <q>' presupposes the act was done; for an act never done both sides flip together, so the control no longer
+    controls. A sentence is a safety surface for EVERY object class and status the planner can hand it, not only for
+    the documents in front of us.
+  - RULED - a second repair round (one builder, then an independent checker; no provider call; no send until READY):
+    (1) THE CLASS: every question form and every calibration item takes its sentence from the fact pass's own form for
+    (object class, attribute, state) - claims.FORMS and claims.object_class, one source, never an attribute-only copy -
+    and each form declares the object classes and statuses for which its sentence is true EXACTLY when the engine's
+    fact holds. A calibration item (K1, K2, K4 - every act-form item) is drawn only from an event whose object class is
+    ACT and whose status is ESTABLISHED performed (the predicate shared with _acts_of, one function); K3 keeps its
+    statement form. A QUESTION form asked of a subject outside its declared classes/statuses is Unbuildable (the held
+    fact stays held with a census reason, never a wrong sentence) - except where the form's own fact is the not-done
+    reading (G1, fact.session.not: 'not done during session X' is its fact for a possible examination of any status),
+    each such exception named with the definition it follows. Pins: a test that every drawn calibration item's claim
+    is false as worded for its subject's class and status (built from the probe documents AND a constructed
+    planned/attempted/denied event of every K1/K2/K4 form); a mutant that removes the status condition must fail. Gate
+    3.8 re-derived (4 items per request, at least half negative) on the restricted pools.
+    (2) ENTRY (checker F2, MEDIUM, accepted): 'This act is told in a part of the document written by {owner}.' is
+    existential - true of an act anchored in a nursing, anesthesia or outside entry that the documenting clinician
+    merely restates, while the engine's fact is the owner of the part the act's ANCHOR is told in (evaluate._entry;
+    pass 1: a line that only refers back to an act told in another entry does not move it). The sentence is bound to
+    the act's anchor (its own told units), keeps no section start (D313's declared edit stands), and its control is the
+    exact negation; pinned, with a constructed restated-act case where the old sentence is true and the new one false.
+    (3) ABSORB (F3, LOW): NOT changed. b.7's session list is a safety rule - an act an unlisted entry re-tells must be an
+    act of its own session, or a session's missing act could be absorbed by a same-kind act of another session - and
+    the claim states exactly that fact. On C-C2MEM-023 u:0 ('All of the above was done by her previous
+    gastroenterologist', which re-tells history acts of other sessions) the by-words answer is CONTRADICTS and the hold
+    of 45385/45390 there is the engine's correct answer, not an unnecessary hold: READING's oracle for that question is
+    corrected to the by-words answer and the score reads it so.
+    (4) PART LINK (F4, LOW): kept (pass 1's PART OF is 'the document says the act was a part of another act, was done to
+    enable it, or was a step of it'); READING marks 'one part of another act' as a words-versus-intent point - a hold of
+    45381 there is read against the answer's own quoted words before any attribution.
+    (5) A BY-WORDS ANSWER KEY, before every send (no evidence before the event): READING carries, for every question
+    claim AND every calibration item of steps 1 long, 2 short and 2 long, the answer a reader of the words alone gives
+    (supports / contradicts / open) with its passage, sha256-pinned in COMMANDS; a small script compares a recorded
+    batch's answers with the key and lists every disagreement (a disagreement on a release is a hollow proof or a
+    misread, read by the lead before anything else).
+    (6) Instruments (F5-F7, LOW): COMMANDS section 1's replay and score commands name sent-trees/r3-probe-1; section 5
+    reads every calibration item's sentence as well as each question's; fx_compare_declaration.py exits non-zero on any
+    difference (positive control: exit code and verdict both).
+    (7) Every section-3 gate again (3.1-3.8, tools, wrapper) on the repaired trees; DECLARATION-v2 compared (a sentence
+    or calibration change moves no oracle outcome; any difference is a finding in its own file); plans, caps and
+    expected costs re-derived. record_probe.sh is not changed.
+  - CEILING: unchanged at $36.02 for step 1 long (its worst-case sequence reaches 34.35). Step 2 long cannot fit: it
+    needs at least $48.28 at the measured t_q. The ceiling is raised - within the owner's standing permission of
+    2026-11-16 ("just do it ... but try to handle the budget, dont run any unnecessary test") - only after step 1
+    long's measured cost, only to the measured need, by a lead edit of record_probe.sh with its tests, recorded and
+    reported to the owner.
+  - The engine round r2f-cont2 (wf_ace63a3d-70d) runs on: the f-engine and f-tools refutations found low findings;
+    f-lesion2's refutation found RFL2-1 (HIGH, the single arm of _apart_from_unnamed reads no control asked of the act)
+    and RFL2-2, both reproduced; its repair is running. Ruled when it returns.
+
+## D315 (2026-11-17, session 738699b2) - the D314 repair round's result: READY TO SEND with findings; the lead's first-hand read finds the class on the calibration item's OBJECT (a K2 session that never took place, or that may contain the act; a K4 act that is a part of another act); repaired before step 1 long is sent
+- RESULT (wf_06e8f4f3-a42, a builder then an independent checker, ended 13:33Z): the checker's verdict is READY TO SEND. It reproduced
+  the builder's figures: 143/143 prototype tests; RED, 17 tests on the D313 proto; 16 of its own 19 mutants killed;
+  tests.v2's 647 failing ids equal (0 new, 0 gone); DECLARATION-v2 MATCH; 70/70 right proofs located and 0 of 548 bad
+  ones; CPU within 30 s; plans byte-stable; costs within $0.00002. It keyed every item itself before opening the
+  builder's key: 64 of 64 agree. Findings:
+  - MEDIUM: G1 (fact.session.not, the named exception) is not exact for an ATTEMPTED act, or an act in doubt that may be
+    an attempt. The sentence is true as worded while the engine's fact is false. Unreachable on the four documents: its
+    one subject, C-C2MEM-023's E40, is planned.
+  - LOW: three surviving mutants (D, E, P) have no unit pin.
+  - LOW: fx_compare_declaration.py prints MATCH when census files are missing or a census case errored.
+  - LOW: K2 draws sessions that never took place.
+  - LOW: key_compare.py exits 0 AGREES when a keyed request was never recorded.
+  - LOW: READING's card-id note is wrong for the S26 acts.
+- VERIFIED FIRST-HAND (the lead, 13:35-13:45Z): every keyed item of step 1 long's three requests (16 questions, 12
+  calibration items) read against note8's units. The 16 questions' by-words answers agree with mine (15 supports, 1 open:
+  (E35, E31)). All 12 calibration items are false as worded. Four are K2 items whose alternative session never took
+  place:
+  - X4, "a session, told at S27": "no esophagogastroduodenoscopy or other upper endoscopic procedure was performed on
+    November 8, 2026". Asked of A18 (request 1) and of A23 (request 2).
+  - X5, "a session, told at S48": "The endoscopist did not administer or bill for a separate physician-directed moderate
+    sedation service." Asked of A2 (request 2) and of the clips A24 (request 3).
+  The last is a real risk. A reader of intent can take "the session told at S48" for today's procedure, since S48 is
+  about today's sedation, and SUPPORT "This act was done during session X5." of the clips. That breach (H2) would refuse
+  request 3, the request carrying D313's corrected reach questions, which step 1 long exists to confirm. Fable answers
+  by intent (D313).
+- THE LEAD'S SCAN (free; ids and enumeration values only) of every session and every K2/K4 item on the seven gate
+  batches:
+  - F3long: K2 names 180 alternatives. 90 of them are sessions whose kind is not established (an EGD and a sedation
+    service qualified negated_context, a non-GI geometry statement); 108 are sessions in which no act is established done.
+  - D2low: 7 of 9 alternatives are unsettled sessions (other_gi; an office visit qualified planned_only).
+  - B-fb10 (F2high-p2, F3all): the alternative of the flexible sigmoidoscopy act is the same encounter's office visit,
+    which may contain it.
+  - K4 is asked of three acts tied to another act: the lift injection beneath a lesion (A-note8 E20 -> L8 and
+    C-C2MEM-023 E20 -> L7, part_of E21, lift_for) and the perimeter coagulation done "as an adjunct to the same mucosal
+    resection" (C-C2MEM-023 E23 -> L7, adjunct_of E21). Whether "this act was done to lesion L" is true turns on the part
+    link, not on the act.
+- THE LESSON (D314's, applied to the item's OBJECT). A calibration item is known false only if it is false under every
+  reading of each object it names, not only of its subject.
+  - "This act was done during session X" is false because X is another session that took place and that excludes the
+    act's own. If X never took place, the claim is false only by its presupposition. If X may contain the act (a
+    sedation service, an office visit of the same encounter, a part of a session), the claim can be true.
+  - "This act was (not) done to lesion L" is exact for an act done to the lesion in its own right. A part of another act
+    (a lift, an adjunct, a step, an access) takes its object from the whole.
+- RULED: a third repair round (one builder, then an independent checker; no provider call; nothing sent until READY):
+  (1) K2's ALTERNATIVE is drawn only between two EXCLUSIVE sessions that TOOK PLACE. Both the act's own established
+      session and the alternative must meet all of these:
+      - their kind is SUPPORTED and is an endoscopic procedure kind (EGD, enteroscopy, colonoscopy, flexible
+        sigmoidoscopy, EUS, ERCP);
+      - at least one act established performed (performed_act) has its session established as that session;
+      - neither has a part_of_session claim.
+      This is one named predicate, read by the K2 draw only.
+      Pins:
+      - on the four probe documents and the seven gate batches, no K2 names a session outside the predicate;
+      - constructed cases give no K2: a session that never took place (its examination denied), a sedation session with
+        an established act, an office visit of the same encounter, a session that is part of another, a planned future
+        session;
+      - two procedure sessions that took place do give K2;
+      - mutants are killed: the condition removed, and each clause removed or widened.
+  (2) K4 is drawn only for an act whose part_of is SILENT (done to the lesion in its own right). Pins and a mutant,
+      likewise.
+  (3) Instruments, each with a positive control:
+      - key_compare.py lists a keyed request that was never recorded as UNRECORDED and exits 1;
+      - fx_compare_declaration.py exits 2 when a census file it needs is missing, and counts an errored census case as a
+        difference (exit 1).
+  (4) Unit pins for the checker's surviving mutants:
+      - D: event_status of an unestablished status is IN_DOUBT;
+      - E: event_class reads pass 1's filed state, not the settled result;
+      - P: an unlisted denial is described as DENIES.
+  (5) READING's card-id note is corrected. Cards are numbered by where their own words stand, so note8's E6 is card A7
+      and E7 is card A6.
+  (6) G1 (the checker's MEDIUM) is NOT changed in the probe: it is unreachable on the four documents. Its exact set,
+      excluding ATTEMPTED and IN_DOUBT, is a requirement of round r3's build, with the checker's constructed case
+      (probe-check4/scripts/ck4_g1.py) as its pin. The builder MEASURES now which G1 questions the seven gate batches
+      ask of an attempted or in-doubt act (a count, and the rows they serve), so the build's ruling has its population.
+  (7) Every gate again. Plans, caps and expected costs are re-derived. The by-words key is rewritten for every changed
+      request, with its sha256s in COMMANDS 0.7. COMMANDS sections 2-4 and READING are updated. record_probe.sh is not
+      changed. The ceiling stays $36.02 for step 1 long (D314).
+  - C-C2MEM-023's member line (S74, "All of the above was done by her previous gastroenterologist.") contests the ground
+    of three of its K1 items: the entry of E12 and E15, above the line; the session of E23, below the line, against X6,
+    told above it. They are read after step 1 long's answers, before step 2 long is planned, and are not in this round.
+- The engine round r2f-cont2 (wf_ace63a3d-70d): f-lesion2 is repaired (patch bc0763ce; RFL2-1 and RFL2-2 built, 4 mutants
+  killed) and its re-refutation found NOTHING (13:09Z). integrate:int3 was running at 13:45Z.
+- **D316 Round r2f-cont2's result: int3 READY TO COMMIT (wf_ace63a3d-70d); the carried questions ruled; QB, a false
+  READY that D311's text releases, is a BLOCKING requirement of round r3's build (session 738699b2, 2026-11-17).**
+  - Result. f-engine (Q4 built; the keepers RCG-T1..T3, RFA3-1..4, RF3-1, RF3-2), f-tools (F1-F3) and f-lesion2
+    (RFL2-1, RFL2-2 built in one repair pass; its re-refutation found NOTHING), with f-words, integrated as int3;
+    f-lesion comes in through f-lesion2's patch (D311). int3.diff sha256 2f15ef10..., 39 files, +7,378/-218;
+    int3-tools.diff bc36c1db... and int3-testinst.diff 27c99f54..., installed together (F5). Gates on int3, run by the
+    integrator and re-run by the checker:
+    - tests.v2 3,364 OK; v1 8,830 OK (7 skipped); ops 836 OK; verification 69 OK;
+    - tools 260 OK with int3's wrapper;
+    - the words checkers find 0 on 32,372 + 8,474 scenes, and s05 finds 0 on 11,598 items;
+    - mutants: f-engine 16/16, f-lesion2 17/17, f-words 10/10, f-tools 46/46;
+    - the rig moves 0 of 84 rows;
+    - pairs: pass 1 is unchanged and pass 2 moves only L04 (P4-ONLESION). On the faithful recheck L04's 45381 goes
+      HELD -> READY on E12, which is correct;
+    - P4-PLAN and P3-CARDS are absent (D309).
+    The checker: READY TO COMMIT. Its findings: I-1 (info), and three carried lows:
+    - F2: f-lesion's MF6r mutant survives, never as a false READY;
+    - F3: mypy on store.py goes from 192 to 197 errors;
+    - F5: the two tools diffs must be installed together.
+  - The lead, first-hand:
+    - int3.diff's sha256 is equal;
+    - `git apply --check` on the branch at 21e79eff7 exits 0, 39 files;
+    - QB's recorded probe (r2f/f-lesion2/out/mine/x01_questions.{base,start,work}.out), read below.
+  - RULED on the carried questions:
+    - f-engine Q1, D228's DQ2 corner: stays as built (D228 stands). Accepted states on int3: D228_DQ2 48 + D293_ERASE 36,
+      against int2's 96 + 72.
+    - f-engine Q2, a weakened date is not established (possibly today's and possibly its claimed other date): confirmed,
+      fail-closed.
+    - f-lesion2's narrow readings, each confirmed (unnecessary holds at worst, or pinned): Q-SPAN, which r3's
+      Q-ONLESION answers; Q-NG, named and pinned; QA, a reading r3's question stage asks; QC1-4, each the fail-closed
+      reading.
+    - QD, the RD1 class (a 9.4 deletion of an act place that no control asks either object about): stays the one named
+      release, D245's class. It closes only by a request change, and round r3's build decides it with QB.
+    - QB is NOT accepted. The recorded scene: a single target L1 (transverse colon, established not-on); the denial
+      placed at L1's place AND at the whole colon, an umbrella it names for itself; the tattoo in the transverse colon;
+      controls=[].
+      - The outcomes: int2 target=same (held); start (int2 + f-lesion) and work (int3) target=independent (released).
+      - Why the release is wrong: the denial's own umbrella holds the tattoo's place, and catalogue.covers reads a
+        tattoo and an injection as one act. The note therefore contradicts itself, and 45381 must be held. int3 releases
+        it.
+      - So D311's text introduces a false READY against int2. The input is constructed and reaches no recorded document
+        (the rig moves 0 of 84 rows; of the pairs, only L04 moves, correctly).
+      - Ruled: int3 is committed as round r3's base (it is not installed, and no pair is scored on it). QB is a BLOCKING
+        requirement of r3's build, closed before any pair is scored on r3's image:
+        - an act naming no lesion is NOT set apart from a statement by an established not-on of the statement's lesion
+          where the statement's own places beyond its not-on lesions' places hold the act's place. It stays SAME (held,
+          relation:contradiction), so it becomes a reading question for r3's question stage: does this statement apply
+          to this act? Asked with its exact negation (D306), and released only by an established answer;
+        - the 9.4 deletion of that statement place releases only into P4-ONLESION's ruled shape (pair 4's). That is a
+          named release beside D228_DQ2 and D293_ERASE;
+        - the must-change pin is QB's scene, held on r3; a mutant that removes the clause releases it;
+        - QD is decided in the same design.
+    - f-tools Q1 (record_v2.sh and record_fable.sh share F3's class): they get F3's refusal in r3's tools lane, or are
+      retired with that stated. RFT-1 and RFT-2 are lows that both fail safe (nothing recorded or sent) and go into the
+      same lane.
+    - Into r3's test list: f-engine's RFX-1 (a test gap, no release), f-words' RFW-1..4 (lows), and the checker's I-1, F2
+      and F3.
+  - Landing:
+    - Done now: int3.diff applied to the branch worktree; the worktree's DECISIONS copy synced (it is a byte prefix of
+      the lead's); committed with -F; trees/int3-<sha12> made from the commit; pushed after the two-view check; origin
+      confirmed by sha.
+    - Waits: int3-tools.diff and int3-testinst.diff, because the D315 probe checker is running against $G. They go in
+      together (F5) before r3's first pair. The test image for int3 is not built, since no pair is sent on int3; r3's
+      build makes its own.

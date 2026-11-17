@@ -33,6 +33,25 @@ with the session's: "No digital rectal examination was performed." beside the co
 nothing. A statement whose device only CLAIMS manual keeps pairing (option (a)): a 9.4 weakening never creates a
 supported device, so neither reading releases under a weakening.
 
+**A claimed pair of an event that MAY be a statement** (DECISIONS D309, round r2f: e-engine's Q4 of round r2e, the
+which-pairs corner of round 2's Q4 that DECISIONS D228 keeps as built, reproduced on int2 as a P-MONO release). An event
+whose status is established and not negated - an act or a plan - is a statement only by an established other date or
+performer, so 9.4's weakening of that one fact took it out of "which pairs" altogether, and with it every pair it held:
+a plan of an established later date whose scope.covers names today's removal held 45385 (a claimed pair, UNRESOLVED
+whatever the rows) and released it under each weakening of that date. The class rule, in the reader that released:
+``claimed`` is read whenever D MAY be a statement (``possibly_statement``) - D's covers naming A pairs the two when D's
+date relation or performer, not established, may be another (``possibly_other_date``, ``possibly_other_performer``:
+4.2's possibly over its claimed value, a doubt's readings, a contradiction's sides, a control pass 2 did not reject, or a
+claim pass 1 wrote negated - D294 RD-3's open denial; never a silent slot, which claims nothing) - as it does when that
+fact is established. Every 9.4 weakening of an established other date or performer keeps one of these (it keeps the
+claimed value, or lists it among the sides, or leaves a denial of today or of the team an open denial), so no weakening
+of it drops a claimed pair. A pair 4.5 claims is never INDEPENDENT (``relation``), so it holds A in every reading. D's
+unclaimed pairs are as before: against an act that may support a code (its date and performer established as today's
+and the team's: 4.3 SUP.3 and SUP.4), an established other date, or an other performer D's own statement names, sets
+the pair apart on the timing or the performer row, so its weakening releases nothing there; an inherited other
+performer, which the performer row reads as naming none (D188), is D228's DQ2 corner, kept as built and named in 9.4's
+P-MONO (tests/v2/test_properties.py's D228_DQ2, held to D264's every-row rule).
+
 **The rows** (4.5), each INDEPENDENT, UNRESOLVED or SAME, every one evaluated [R:HO-2]:
 - session (C-8): INDEPENDENT when both sessions are established (supported) and different; UNRESOLVED when either is not
   established while two or more sessions of a compatible family exist (a session whose kind is not established, or
@@ -97,7 +116,29 @@ supported device, so neither reading releases under a weakening.
   in any arm: same_as only joins (3.2.3's UNCONTROLLED), and read by possibly, weakening it never releases (P-MONO).
   DECISIONS D300: "possibly the same" reads same_as directly or through other entries (RF-L1: the P5 component,
   facts.possibly_one_finding, as engine/coverage's join reads it), and every arm reads one established distinctness -
-  a written distinct_from or an established lesion pair claim alike (RF-L2: facts.established_distinct).
+  a written distinct_from or an established lesion pair claim alike (RF-L2: facts.established_distinct); DECISIONS D302
+  RF2C-L1: "different lesions", written or appraised, only for two lesions established single, else an established
+  non-membership. DECISIONS D305 P4-ONLESION: in the single and listed arms, an act whose target names NO lesion is set
+  apart from the statement's lesions when pass 2 established that it was not done on each of them
+  (facts.established_not_on; ``_apart_from_unnamed``). DECISIONS D309 RFE-L1 (round r2f): over a LISTED target the
+  relation is a function of each lesion's own established apartness from the act - an established not-on, or its
+  FINDING's places (facts.finding_places: every entry its same_as component may join, in any state; every entry held,
+  established single and with established places) established and disjoint from the act's with the act asked about
+  each of them by a rejected place pair control - read over every listed lesion and every lesion the act was asked
+  about or controlled against, with every place pair control asked of EITHER object rejected (facts.apart_by_controls'
+  every-control scan, D220; fail-closed), so it is never decided by which lesions happened to be asked (round r2f's
+  refutation, RF2F-L1 and RF2F-L2: one entry's own place list, and the controls asked of the act alone, released a
+  finding filed as two entries and a statement pass 2 did not hold apart from the act's place). DECISIONS D311
+  R2F2-L1 (round r2f's second refutation; the class rule of every arm that sets an act naming no lesion apart from a
+  listed or single statement): SC-B in BOTH directions - also each place of the act (its place set established) asked
+  of the statement by a rejected place pair control, unless it is an established place of one of the statement's own
+  lesions the arm reads by an established not-on (``_answered_on_the_statements_side``); a statement whose own places
+  hold an act place no such lesion holds is set apart by nothing there; and in every arm - the single arm as the listed
+  arm - every place pair control asked of EITHER object rejected (facts.apart_by_controls' every-control scan, D220 and
+  D236; round r2f's refutation of lane f-lesion2, RFL2-1 and RFL2-2: the single arm read the statement's controls
+  about the act's current places alone, so an act-direction control pass 2 supported, or a deleted act place's
+  unrejected control, released it). DECISIONS D311 R2F2-L2: what the arm reads of an act is computed once per FactSet
+  and act (``_act_read``), never per (statement, act) pair.
   Otherwise SAME when the same lesion (equal ids, or same_as supported) or overlapping places
   (engine/anatomy.compatible) are established on both sides, and UNRESOLVED: an unknown target never proves
   independence (4.11).
@@ -170,7 +211,7 @@ from studio.interpretation.contract.types import (Attribute, Breadth, DateRelati
 from studio.interpretation.engine import anatomy, catalogue
 from studio.interpretation.engine import facts as facts_
 from studio.interpretation.engine import requirements as rq
-from studio.interpretation.engine.types import Fact, FactSet, Id, Span, UnlistedStatement
+from studio.interpretation.engine.types import Fact, FactSet, Id, Span, UnlistedStatement, Value
 
 _E = TypeVar('_E', bound=Enum)
 _A = Attribute
@@ -321,7 +362,7 @@ class Instrument(Enum):
     BAND_LIGATOR = 'band_ligator'  # a band ligator mounted on the endoscope's tip
     ARGON_PLASMA_PROBE = 'argon_plasma_probe'  # an argon plasma probe, passed as a catheter
     CRYOTHERAPY_CATHETER = 'cryotherapy_catheter'  # a cryotherapy spray catheter
-    CRYOABLATION_BALLOON = 'cryoablation_balloon'  # a cryoablation balloon on its catheter: a device of another kind
+    CRYOABLATION_BALLOON = 'cryoablation_balloon'  # a cryoablation balloon on its catheter (cryotherapy's: D303 RF3-1)
     HEATER_PROBE = 'heater_probe'  # passed as a catheter
     BIPOLAR_PROBE = 'bipolar_probe'  # passed as a catheter
     STENT_ON_CATHETER = 'stent_on_catheter'  # a stent on its delivery catheter
@@ -354,10 +395,17 @@ _I = Instrument
 # - "a catheter": every device delivered through a catheter or passed as one - a cholangioscope, an injection needle, a
 #   needle-knife, a dilating balloon, a clip, an argon plasma probe, a cryotherapy catheter or balloon, a heater or a
 #   bipolar probe, a stent, a basket (a mechanical lithotripsy basket among them), an electrohydraulic probe or a laser
-#   fibre, an extraction balloon, a sphincterotome, a powder applicator, a catheter used as itself; never a snare or
-#   forceps (each passed in its own sheath), a bougie, a band ligator or a scope;
-# - "a device of another kind": a device whose own kind no other member names - an electrosurgical knife (D294 G2), the
-#   needle-type and the water-jet knife, a cryoablation balloon, a powder applicator, an overtube or a suturing device;
+#   fibre, an extraction balloon, a sphincterotome, a powder applicator, a catheter used as itself; and, since round
+#   r2e (DECISIONS D303, refutation RF3-2 of round r2d's eng-b3: D301's condition is delivery, not naming, and "its own
+#   sheath" holds of the basket and the fibre too), the forceps and the retrieval snare a single-operator cholangioscope
+#   delivers through its channel, each used without current (forceps used cold, a snare used cold); never a bougie, a
+#   band ligator or a scope - superseded wording: "never a snare or forceps (each passed in its own sheath)";
+# - "a device of another kind": a device whose own kind no other member names - an electrosurgical knife (D294 G2), a
+#   powder applicator, an overtube or a suturing device; since round r2e (DECISIONS D303, refutation RF3-1: an
+#   instrument whose kind a listed member's row names is never "a device of another kind", as the clip, band, stent and
+#   needle-knife sphincterotome already were) never the needle-type knife (a needle's), the water-jet knife used to
+#   inject (an injection device's) or the cryoablation balloon (cryotherapy's) - superseded wording: "the needle-type
+#   and the water-jet knife, a cryoablation balloon" among its devices;
 # - "manual pressure or handling, without a device": no device.
 ADMITS: Mapping[Device, frozenset[Instrument]] = MappingProxyType({
     Device.ENDOSCOPE: frozenset({_I.SCOPE, _I.DIRECT_CHOLANGIOSCOPE, _I.CATHETER_CHOLANGIOSCOPE}),
@@ -388,10 +436,12 @@ ADMITS: Mapping[Device, frozenset[Instrument]] = MappingProxyType({
         _I.CATHETER_CHOLANGIOSCOPE, _I.INJECTION_NEEDLE, _I.NEEDLE_KNIFE, _I.DILATING_BALLOON, _I.CLIP_ON_CATHETER,
         _I.ARGON_PLASMA_PROBE, _I.CRYOTHERAPY_CATHETER, _I.CRYOABLATION_BALLOON, _I.HEATER_PROBE, _I.BIPOLAR_PROBE,
         _I.STENT_ON_CATHETER, _I.BASKET_CATHETER, _I.LITHOTRIPSY_BASKET, _I.LITHOTRIPSY_FIBRE, _I.EXTRACTION_BALLOON,
-        _I.SPHINCTEROTOME, _I.POWDER_APPLICATOR, _I.PLAIN_CATHETER}),
+        _I.SPHINCTEROTOME, _I.POWDER_APPLICATOR, _I.PLAIN_CATHETER,
+        _I.FORCEPS_COLD, _I.SNARE_COLD}),  # DECISIONS D303 RF3-2: delivered through a single-operator cholangioscope
     Device.MANUAL: frozenset({_I.HAND}),
-    Device.OTHER: frozenset({_I.ELECTROSURGICAL_KNIFE, _I.NEEDLE_TYPE_KNIFE, _I.WATER_JET_KNIFE,
-                             _I.CRYOABLATION_BALLOON, _I.POWDER_APPLICATOR, _I.OTHER_DEVICE}),
+    # DECISIONS D303 RF3-1: no instrument another member's row names (the needle-type knife, the water-jet knife, the
+    # cryoablation balloon were read here as well before round r2e)
+    Device.OTHER: frozenset({_I.ELECTROSURGICAL_KNIFE, _I.POWDER_APPLICATOR, _I.OTHER_DEVICE}),
 })
 # DECISIONS D294 G2 and D222: the two members whose definitions name an energy, each read through DEVICE_CURRENT - it
 # may name a device whose class is in its set: electrocautery a "may" member (its "always" members it covers:
@@ -567,12 +617,52 @@ def other_performer(R: FactSet, event: Id) -> bool:
     return values is not None and Performer.DOCUMENTING_TEAM not in values
 
 
+def _possibly_other(found: Fact, others: frozenset[_E]) -> bool:
+    """DECISIONS D309 (module docstring): a fact that is NOT established may be one of ``others`` - 4.2's possibly over
+    its claimed value, its options (a doubt's readings, a contradiction's sides, a control pass 2 did not reject) or, as
+    a claim pass 1 wrote negated or an overfilled slot's view (D294 RD-3's open denial), any value - but never by
+    silence: a silent slot claims nothing."""
+    return not facts_.silent(found) and any(facts_.possibly(found, value) for value in others)
+
+
+def possibly_other_date(R: FactSet, event: Id) -> bool:
+    """DECISIONS D309: the event's effective date relation MAY be another date - established as one (``other_date``),
+    or not established and possibly earlier_date or later_date by what it claims (``_possibly_other``). Each 9.4
+    weakening of an established other date - to unresolved, a doubt, a conflict doubt, a value-erasing contradiction or
+    an overfilled slot - keeps its claimed value or lists it among the sides, and a weakened denial of the date of
+    service is an open denial, so a weakening never turns this False."""
+    found = facts_.fact(R, event, _A.DATE_RELATION)
+    if facts_.established(found):
+        return other_date(R, event)
+    return _possibly_other(found, OTHER_DATES)
+
+
+def possibly_other_performer(R: FactSet, event: Id) -> bool:
+    """DECISIONS D309: the event's effective performer MAY be another - established as one (``other_performer``), or not
+    established and possibly other_clinician or other_facility by what it claims (``_possibly_other``; a weakened denial
+    of the documenting team is an open denial). Monotone under every 9.4 weakening, as ``possibly_other_date``."""
+    found = facts_.fact(R, event, _A.PERFORMER)
+    if facts_.established(found):
+        return other_performer(R, event)
+    return _possibly_other(found, OTHER_PERFORMERS)
+
+
 def is_statement(R: FactSet, event: Id) -> bool:
     """4.5's "which pairs", the statement side: the event's status established negated; or not established (a possible
     statement); or its effective date relation or performer established as another."""
     status = facts_.fact(R, event, _A.STATUS)
     return (status.result is Result.NEGATED or not facts_.established(status) or other_date(R, event)
             or other_performer(R, event))
+
+
+def possibly_statement(R: FactSet, event: Id) -> bool:
+    """DECISIONS D309 (module docstring): the event MAY be a statement - a statement (``is_statement``), or an event whose
+    status is established and not negated whose date relation or performer may be another though not established
+    (``possibly_other_date``, ``possibly_other_performer``). ``paired`` reads it for a claimed pair only: what makes
+    such an event a statement of another date or performer is not established, so a weakening of it never drops what
+    its covers names. Monotone: a 9.4 weakening of the status makes ``is_statement`` True, and of the date relation or
+    the performer keeps the possible other value."""
+    return is_statement(R, event) or possibly_other_date(R, event) or possibly_other_performer(R, event)
 
 
 def statements(R: FactSet) -> tuple[Id, ...]:
@@ -655,10 +745,12 @@ def shared_kinds(R: FactSet, statement: Id, act: Id) -> frozenset[Kind]:
 
 
 def paired(R: FactSet, statement: Id, act: Id) -> bool:
-    """Whether ``statement`` pairs with ``act`` (4.5): two different events, the first a statement (is_statement), the
+    """Whether ``statement`` pairs with ``act`` (4.5): two different events, the first a statement (is_statement) - or,
+    DECISIONS D309, one that MAY be a statement (possibly_statement) whose scope.covers names the act (``claimed``) - the
     second possibly performed (facts.possibly on its status: a status not established leaves every status possible),
     their kinds compatible (shared_kinds)."""
-    return (statement != act and is_statement(R, statement)
+    return (statement != act
+            and (is_statement(R, statement) or (claimed(R, statement, act) and possibly_statement(R, statement)))
             and facts_.possibly(facts_.fact(R, act, _A.STATUS), Status.PERFORMED)
             and bool(shared_kinds(R, statement, act)))
 
@@ -932,6 +1024,262 @@ def _apart_by_own_lesion(R: FactSet, p: _Context) -> bool:
     return one is not None and other is not None and not _possibly_same(R, one, other)
 
 
+def _asked_about(R: FactSet, act: Id) -> frozenset[Id]:
+    """DECISIONS D305, D309 RFE-L1: every lesion ``act`` was asked about by an act-lesion claim, whichever statement it
+    was asked for (FactSet.pair_controls keyed (the act, distinct_from, a lesion), whatever its outcome). DECISIONS
+    D311 R2F2-L2: read once per FactSet and act (``_act_read``), never once per (statement, act) pair."""
+    return _act_read(R, act).asked
+
+
+def _controlled_against(R: FactSet, act: Id) -> frozenset[Id]:
+    """DECISIONS D309 RFE-L1: every lesion ``act`` was controlled against - a lesion one of whose FINDING's places, as
+    any member of any entry's place list names it in any state (its value or an option), a place pair control asks the
+    act about (FactSet.pair_controls keyed (the act, target.places, that place), whatever its verdict). The finding is
+    facts.finding_places' (round r2f's refutation RF2F-L1; DECISIONS D294 G1, D297 ENGB-1: every lesion entry a same_as
+    member in any state may join to the lesion, P5's one finding), as ``_apart_by_lesion_places`` reads it - so an
+    entry of a listed lesion's finding is read wherever one of the finding's places was asked of the act. DECISIONS
+    D311 R2F2-L2: built once per FactSet and act (``_act_read``) from the FactSet's index of the place values its
+    lesions' findings name (``_Reads.named``, built once per FactSet) - the same set as reading every lesion's finding
+    per (statement, act) pair, which took an assessment at FINAL-V2 1.8's bounds past the assess job's deadline."""
+    return _act_read(R, act).controlled
+
+
+# --- the reads of an act whose target names no lesion, once per FactSet (DECISIONS D311 R2F2-L2) ----------------------
+
+
+class _ActRead:
+    """One act's reads (DECISIONS D311 R2F2-L2), each a pure function of the FactSet and the act: ``asked``
+    (``_asked_about``), ``controlled`` (``_controlled_against``), ``places`` (the act's whole place set as the target
+    row reads it, ``_target``'s single-target reading: None when not established) and ``apart`` (each lesion's
+    ``_apart_by_lesion_places`` over ``places``, filled as each lesion is first read)."""
+    __slots__ = ('asked', 'controlled', 'places', 'apart')
+
+    def __init__(self, asked: frozenset[Id], controlled: frozenset[Id], places: frozenset[Landmark] | None) -> None:
+        self.asked = asked
+        self.controlled = controlled
+        self.places = places
+        self.apart: dict[Id, bool] = {}
+
+
+class _Reads:
+    """One FactSet's reads of its acts (DECISIONS D311 R2F2-L2): ``named``, each place value a place member of an entry
+    of a lesion's FINDING names in any state (its value or an option; facts.finding_places), mapped to every lesion
+    whose finding names it - built once, the first time an act asked about a place is read (None until then); and
+    ``acts``, each act's ``_ActRead``, built the first time the act is read."""
+    __slots__ = ('named', 'acts')
+
+    def __init__(self) -> None:
+        self.named: dict[Value, frozenset[Id]] | None = None
+        self.acts: dict[Id, _ActRead] = {}
+
+
+# Each FactSet's reads, computed once per FactSet (DECISIONS D311 R2F2-L2; the pattern of engine/facts' _FINDINGS and
+# _JOINS, DECISIONS D248 G5): keyed by the FactSet's id, each entry holding the FactSet itself, so the id cannot name
+# another FactSet while its entry stands; the _READS_KEPT FactSets read last, the one read longest ago dropped first (a
+# dropped one is computed again). A FactSet never changes, so an entry never goes stale, and nothing is carried from one
+# FactSet to another: an assessment's FactSet, read time's FactSet over the member's answers and any other FactSet each
+# get their own. Not a word list: it holds FactSets and their reads.
+_READS: dict[int, tuple[FactSet, _Reads]] = {}
+_READS_KEPT = 8
+
+
+def _reads_of(R: FactSet) -> _Reads:
+    """``R``'s reads (``_Reads``), created once per FactSet; ``R`` becomes the FactSet read last."""
+    entry = _READS.pop(id(R), None)
+    if entry is None or entry[0] is not R:
+        entry = (R, _Reads())
+        while len(_READS) >= _READS_KEPT:
+            del _READS[next(iter(_READS))]
+    _READS[id(R)] = entry
+    return entry[1]
+
+
+def _named(R: FactSet, reads: _Reads) -> Mapping[Value, frozenset[Id]]:
+    """``_Reads.named``: every lesion of ``R`` under each place value its finding names, in any state - one pass over
+    each lesion's finding (facts.finding_places, itself memoized per FactSet)."""
+    if reads.named is None:
+        named: dict[Value, set[Id]] = {}
+        for lesion in R.lesions:
+            for member in facts_.finding_places(R, lesion).members:
+                for value in (member.value, *member.options):
+                    if value is not None:
+                        named.setdefault(value, set()).add(lesion)
+        reads.named = {value: frozenset(lesions) for value, lesions in named.items()}
+    return reads.named
+
+
+def _act_read(R: FactSet, act: Id) -> _ActRead:
+    """``act``'s reads (``_ActRead``), built once per FactSet and act: the lesions it was asked about by an act-lesion
+    claim (FactSet.pair_controls keyed (the act, distinct_from, a lesion)); the lesions whose finding names a place a
+    place pair control asks it about (keyed (the act, target.places, that place)), through ``_named``; and its whole
+    place set (``_target``'s single-target reading)."""
+    reads = _reads_of(R)
+    found = reads.acts.get(act)
+    if found is None:
+        asked = frozenset(value for subject, attribute, value in R.pair_controls
+                          if subject == act and attribute is _A.DISTINCT_FROM and isinstance(value, Id))
+        places = frozenset(value for subject, attribute, value in R.pair_controls
+                           if subject == act and attribute is _A.TARGET_PLACES)
+        named: Mapping[Value, frozenset[Id]] = _named(R, reads) if places else {}
+        controlled = frozenset(lesion for place in places for lesion in named.get(place, ()))
+        found = reads.acts[act] = _ActRead(asked, controlled, _target(R, act, _Mode.SINGLE).places)
+    return found
+
+
+def _lesion_apart(R: FactSet, act: Id, lesion: Id) -> bool:
+    """``_apart_by_lesion_places`` of ``lesion`` from ``act``'s whole place set, once per FactSet, act and lesion
+    (DECISIONS D311 R2F2-L2: a function of the FactSet and the act alone, never re-read per (statement, act) pair)."""
+    read = _act_read(R, act)
+    found = read.apart.get(lesion)
+    if found is None:
+        found = read.apart[lesion] = _apart_by_lesion_places(R, act, lesion, read.places)
+    return found
+
+
+def _apart_by_lesion_places(R: FactSet, act: Id, lesion: Id, act_places: frozenset[Landmark] | None) -> bool:
+    """DECISIONS D309 RFE-L1: a lesion set apart by its places from an act whose target names no lesion, read over the
+    lesion's FINDING (round r2f's refutation RF2F-L1; DECISIONS D294 G1 and D297 ENGB-1, P5: one id per distinct
+    finding, so a finding filed as two entries joined by same_as is one finding): facts.finding_places - every lesion
+    entry a same_as member in ANY state may join to the lesion, directly or through other entries and in either
+    direction, an id the FactSet does not hold included - the one reading every rule that reads a lesion's places
+    shares, never one entry's own list. It is apart only when
+    - every entry of the finding is held with its place list established (an entry whose places are not established,
+      or an id the FactSet does not hold - finding_places' ``unknown``, a same_as member whose value is empty or
+      unreadable among them, D302 RF2C-L2 - sets the lesion apart by nothing: a place nobody established may be
+      anywhere, 4.11; P3);
+    - every entry is established single (facts._single, the reading DECISIONS D302 RF2C-L1 gives a written
+      distinctness): a group's place list may omit a place where one of its members lies, and nothing asks the act about
+      such a member, so a finding with a group - or with an entry whose multiplicity is not established - is set apart
+      from the act only by an established not-on (D305's membership form), as D300 RF-L3 and D302 RF2C-L1 read a group
+      against a lesion;
+    - the finding's places (every place of every entry: ``_places`` over the finding's members - every member
+      established, the supported places, one at least) and the act's whole place set (``act_places``) are established
+      and disjoint on the anatomy chain (pairwise, ``_disjoint``); and
+    - the act was asked about EVERY place of every entry by a rejected place pair control ("This act was done in the
+      {place}."): pass 2 rejected that the act was done where any entry of the finding is. A place no control asks is
+      an omitted place (4.11), so a finding one of whose places no control asks is set apart by nothing here.
+    Read so, a same_as member only adds entries, and each entry adds places a control must cover or leaves the reading
+    open, so a wider finding never sets apart what a narrower one held: same_as stays a hold-only read (3.2.3's
+    UNCONTROLLED). The reading before the refutation read the entry's own place list, so a polyp filed as two entries
+    (one at the act's place, joined by same_as) was set apart where the one-entry filing of the same polyp held."""
+    found = facts_.finding_places(R, lesion)
+    if found.unknown is not None or not all(facts_._single(R.lesions, entry) for entry in found.entries):
+        return False
+    places = _places(found.members)[0]
+    return (places is not None and _disjoint(places, act_places)
+            and all(R.pair_controls.get((act, _A.TARGET_PLACES, place)) is True for place in places))
+
+
+def _apart_from_unnamed(R: FactSet, p: _Context, own: _Target, other: _Target, mode: _Mode) -> bool:
+    """DECISIONS D305 P4-ONLESION (D296's pattern extended; apart_by_lesion's established arm): a statement whose single
+    or listed target names lesions, every one established (``own.lesions``), set apart from an act whose target names
+    NO lesion (its target.lesion silent: pass 1 claimed none). A SINGLE target: when pass 2 established that the act
+    was not done on its lesion (facts.established_not_on: its act-lesion claim supported and its control rejected, the
+    multiplicity the claim's form presumes established) - the act-lesion claim's control ("This act was done on lesion
+    {L}.") rejected is the pair control the act would be asked about the statement's lesion, and the act names no
+    lesion of its own the statement could be asked about; a single target's lesion is single-valued, so only its own
+    pair is read.
+
+    DECISIONS D309 RFE-L1 (round r2f): a LISTED target's relation to such an act is a function of each lesion's own
+    established apartness from the act - a lesion the act was asked about (``_asked_about``: an act-lesion claim) by its
+    established not-on alone; any other by its FINDING's places (``_apart_by_lesion_places``: every entry of its
+    finding held, established single and with established places, the finding's places disjoint from the act's, the act
+    asked about each of them by a rejected place pair control) - and holds exactly when a lesion it reads has no such
+    apartness or a place pair control asked of either object is not rejected. It reads every listed lesion AND every
+    lesion the act was asked about or controlled against (``_controlled_against``: one of its finding's places asked of
+    the act by a place pair control), whichever statement made the claim or control, so a lesion 9.4's weakening deletes
+    from the list is still read by the claim or control the act was asked about it - never decided by which listed
+    lesions happened to be asked (r2e's arm needed an established not-on for each listed lesion, so a listed lesion
+    whose places the act's were not compatible with, never asked, held the full listing, and deleting it released: the
+    refutation's RFE-L1). And every place pair control asked of EITHER object - the statement asked about a place of the
+    act, the act about a place of the statement, whatever place it asks about and whichever pair made it - is rejected:
+    facts.apart_by_controls' every-control scan (DECISIONS D220, kept by D236) with no member it must cover, as 4.2's
+    place arm and D228's own-target arm read it (round r2f's refutation RF2F-L2: the scan read the act's controls only,
+    so a statement pass 2 did not hold apart from the act's place - its control supported, unclear or unanswered - was
+    released; 4.11: a pair control not rejected never yields INDEPENDENT). A place member 9.4's weakening deletes, from
+    either object or a lesion, leaves its unrejected control read. A lesion no claim and no control asks the act about
+    is set apart by nothing, so it holds the relation while it is listed; its deletion, like a deleted member whose
+    control was never generated (refute-r2d-r2 RD1), removes a requirement no reading could meet (this round's NOTES,
+    question Q1). Nothing else is read: an unknown act lesion never proves independence on its own (4.11), and purpose
+    stays unappraised.
+
+    DECISIONS D311 R2F2-L1 (round r2f's second refutation; the CLASS rule, in every arm that sets an act naming no
+    lesion apart from a listed or single statement - the listed arm's place reading, its asked arm and the single arm):
+    the act is set apart only as 3.2.3 [R:SC-B] sets two objects apart, in BOTH directions - the lesions' side as above
+    (each place of a lesion's finding asked of the act by a rejected control, or the lesion's established not-on), AND
+    each place of the act asked of the statement by a rejected place pair control ("This statement is about {kind}s in
+    the {place}."), unless that place is one of the statement's own lesions' established places and the arm reads that
+    lesion by an established not-on (``_answered_on_the_statements_side``). A statement whose own places hold an act
+    place no such lesion holds is set apart by nothing there (4.5's SAME, places overlapping): contract/claims.pair
+    never asks an object about a place compatible with one of its own, so that control never exists and no truthful
+    pass 2 could hold the pair apart - a denial placed beyond its lesions ("... at either polypectomy site or in the
+    sigmoid colon" beside a sigmoid tattoo), or a lesion filed with a short place list, was released before (the
+    refutation's Inputs 1-3, and its asked-only and single-target twin). It reads what the claims asked and pass 2
+    established, never the statement's place list, which 9.4 may shorten: no deletion of a statement place releases.
+
+    Round r2f's refutation of lane f-lesion2 (RFL2-1, RFL2-2; D311's class rule with D220 and D236): the every-control
+    scan belongs to that rule in EVERY arm, so it is read once, in the tail every arm shares, after the arm's lesions'
+    side - by the single arm as by the listed arm: every place pair control asked of EITHER object (the act about a
+    place of the statement, the statement about a place of the act, whatever place it asks about and whichever pair
+    made it) rejected - facts.apart_by_controls with no member it must cover (4.11: a pair control not rejected never
+    yields INDEPENDENT, in the act's direction as in the statement's). The single arm read only the statement's
+    controls about the act's current places (``_answered_on_the_statements_side``), so a single-target denial placed
+    beyond its lesion ("... or anywhere in the descending colon") beside a tattoo filed at the lesion's place alone was
+    released although pass 2 supported "This act was done in the descending colon." (RFL2-1), and 9.4's deletion of an
+    act place whose statement control pass 2 left unrejected dropped that control from the reading and released (RFL2-2,
+    D220's class). Read so, a member 9.4 deletes from either object leaves its unrejected control read in every arm;
+    the one named release stays the deletion of an act place NO control asks either object about (refute-r2d-r2 RD1,
+    D245)."""
+    if own.lesions is None or not own.lesions or not facts_.silent(facts_.fact(R, p.act, _A.TARGET_LESION)):
+        return False
+    if mode is not _Mode.LISTED:
+        lesions_apart = all(facts_.established_not_on(R, p.act, lesion) for lesion in own.lesions)
+        not_on = own.lesions
+    else:
+        asked = _asked_about(R, p.act)
+        read = own.lesions | asked | _controlled_against(R, p.act)
+        lesions_apart = all(facts_.established_not_on(R, p.act, lesion) if lesion in asked
+                            else _lesion_apart(R, p.act, lesion) for lesion in read)  # DECISIONS D311 R2F2-L2: per act
+        not_on = own.lesions & asked
+    # DECISIONS D311 R2F2-L1, every arm (round r2f's refutation of lane f-lesion2, RFL2-1 and RFL2-2): the every-control
+    # scan over both objects (D220, D236), then each act place answered on the statement's side
+    return (lesions_apart and facts_.apart_by_controls(R, p.statement, p.act, _A.TARGET_PLACES, (), ())
+            and _answered_on_the_statements_side(R, p, other.places, not_on))
+
+
+def _answered_on_the_statements_side(R: FactSet, p: _Context, act_places: frozenset[Landmark] | None,
+                                     not_on: frozenset[Id]) -> bool:
+    """DECISIONS D311 R2F2-L1: SC-B's second direction for an act naming no lesion (3.2.3 [R:SC-B]: "for each place of
+    one object outside the other's places, the pair control on the other object was REJECTED"). The act's whole place
+    set must be established (``act_places``, the target row's reading: every member established, one supported at
+    least; otherwise the act may be anywhere and nothing sets it apart, 4.11), and EACH place of it is either
+    - asked of the statement by a rejected place pair control (FactSet.pair_controls keyed (the statement,
+      target.places, that place) True: "This statement is about {kind}s in the {place}." rejected), or
+    - an established place of a lesion in ``not_on`` - the statement's OWN lesions (its single target, or its listed
+      targets) that the arm reads by an established not-on - exactly: a supported member of that lesion's own place
+      list equal to the act's place. The not-on answers that place: the statement covers it as that lesion's place,
+      and pass 2 established that the act was not done on that lesion (the ruled release of the refutation's q01 and of
+      pair 4's L04).
+    A place member of the act or of a lesion demoted, a lesion deleted from the statement's list, a statement control
+    left unrejected: each only removes an answer; and it never reads the statement's own place list (deletable), only
+    the controls claims made and pass 2's verdicts on them. It reads a statement control only for a CURRENT place of the
+    act, so on its own 9.4's deletion of an act place takes that place's requirement with it: the arm reads it after
+    facts.apart_by_controls' every-control scan over both objects, which still reads a deleted place's unrejected
+    control (round r2f's refutation of lane f-lesion2, RFL2-2; DECISIONS D220), so the arm is hold-only there but for
+    the named deletion of an act place no control asks either object about (refute-r2d-r2 RD1).
+    Two narrowings of the ruling's words, each fail-closed (the round's NOTES, questions): a lesion read by an
+    established not-on that the statement does not list (an act-lesion claim asked for another statement) answers
+    nothing for this one; and a place of ANOTHER entry of the lesion's finding (a same_as member, in any state) answers
+    nothing - same_as is UNCONTROLLED (3.2.3: it only joins, so it may hold and never release), so it never widens what
+    an established not-on answers."""
+    if act_places is None:
+        return False
+    answered = frozenset(member.value for lesion in not_on for member in facts_.members(R, lesion, _A.PLACES)
+                         if member.result is Result.SUPPORTED and isinstance(member.value, Landmark))
+    return all(place in answered or R.pair_controls.get((p.statement, _A.TARGET_PLACES, place)) is True
+               for place in act_places)
+
+
 def _mode(R: FactSet, p: _Context) -> _Mode | None:
     """How the target row reads D's target; None when D's breadth established all_of_kind or exceptive leaves the
     target out of the statement. An act-filed statement (a possible statement filed as an act, or an act established
@@ -964,9 +1312,12 @@ def _target_row(R: FactSet, p: _Context) -> RowResult:
     if mode is _Mode.OWN:
         apart = _apart_by_own_target(R, p, own, other)
     elif mode is _Mode.SINGLE:
-        apart = _apart_by_own_lesion(R, p) or facts_.apart_by_place(R, p.statement, p.act)
+        apart = (_apart_by_own_lesion(R, p) or facts_.apart_by_place(R, p.statement, p.act)
+                 or _apart_from_unnamed(R, p, own, other, mode))  # DECISIONS D305 P4-ONLESION
     else:
-        apart = mode is not _Mode.NONE and (_apart_by_lesions(R, p, own, other) or _apart_by_places(R, p, own, other))
+        apart = mode is not _Mode.NONE and (_apart_by_lesions(R, p, own, other) or _apart_by_places(R, p, own, other)
+                                            or (mode is _Mode.LISTED  # DECISIONS D305, D309 RFE-L1
+                                                and _apart_from_unnamed(R, p, own, other, mode)))
     if apart:
         return RowResult.INDEPENDENT
     lesion = next(iter(other.lesions)) if other.lesions is not None and len(other.lesions) == 1 else None

@@ -1618,8 +1618,16 @@ def _v2_build() -> None:
                 'control': _V2Nullable(_V2_CLAIM_ID),
                 'result': _V2Closed({ct.Result.SUPPORTED.value, ct.Result.UNRESOLVED.value}),
                 'reasons': _V2List(_V2Closed(reasons))}, check=_v2_lesion_pair))
-        events = _V2Obj(inventory, check=_v2_lesion_pairs_bound if lesion_pairs else None,
-                        defaults={'lesion_pairs': []} if lesion_pairs else None)
+            # DECISIONS D305 (P4-ONLESION): each act-lesion claim with its settled outcome, bound to its two claims, as
+            # a lesion pair is; a pair dropped for the bound names no claim, and a row stored before D305, which lacks
+            # the field, reads it as the empty list (no claim asked, so nothing set apart by one)
+            inventory['act_lesions'] = _V2List(_V2Obj({
+                'act': _v2_object_id('E'), 'lesion': _v2_object_id('L'), 'claim': _V2Nullable(_V2_CLAIM_ID),
+                'control': _V2Nullable(_V2_CLAIM_ID),
+                'result': _V2Closed({ct.Result.SUPPORTED.value, ct.Result.UNRESOLVED.value}),
+                'reasons': _V2List(_V2Closed(reasons))}, check=_v2_lesion_pair))
+        events = _V2Obj(inventory, check=_v2_pairs_bound if lesion_pairs else None,
+                        defaults={'lesion_pairs': [], 'act_lesions': []} if lesion_pairs else None)
         # settle's report records, field for field (contract/types' DoubtApplied, Health, Coherence and Usage; P9: no
         # free-form JSON is stored; DECISIONS D229, hand-off 1d#2)
         doubt_applied = _V2Obj({'index': _V2_INT, 'about': _V2Closed(_v2_values(ct.DoubtAbout)),
@@ -1681,8 +1689,9 @@ def _v2_lesion_pair(value, path) -> str:
     """One stored lesion pair (DECISIONS D296): two different lesions, two different claims, and an outcome its
     reasons agree with - supported with none (the coherence table established it), unresolved with one at least. A pair
     the claim set dropped to keep within its bound (DECISIONS D300 RF-L5) names neither claim and is unresolved for
-    exactly ``unappraised``: nothing was asked, so nothing is established."""
-    if value['lesion'] == value['other']:
+    exactly ``unappraised``: nothing was asked, so nothing is established. DECISIONS D305: one stored act-lesion pair
+    (an act and a lesion, never the same object) by the same rules."""
+    if value.get('other', value.get('act')) == value['lesion']:
         return f'{path} pairs a lesion with itself'
     if (value['claim'] is None) is not (value['control'] is None):
         return f'{path} names a claim without its control, or a control without its claim'
@@ -1703,6 +1712,83 @@ _V2_LESION_PAIR_FORMS = (('lesion.distinct_from', 'lesion.same_as'), ('lesion.no
                          ('lesion.not_member.any', 'lesion.member.any'))
 
 
+# An act-lesion pair's forms (contract/claims.ACT_LESION_FORMS, by template id; DECISIONS D305): the act not done on a
+# lesion, and D300's membership form, each (claim, control).
+_V2_ACT_LESION_FORMS = (('act.not_on_lesion', 'act.on_lesion'), ('act.not_on_lesion.any', 'act.on_lesion.any'))
+
+
+def _v2_pair_established(claim, control) -> bool:
+    """DECISIONS D302 RF2C-L3: whether FINAL-V2 3.2.3's coherence table establishes a pair-type claim (a lesion pair's,
+    an act-lesion's) from EVERY input settle reads for it, re-derived from what the row stores: the claim's verdict
+    supports, with no qualifier but approximate (DECISIONS D186, D224), attached yes, and 3.2.5's attachment - an
+    evidence unit among the claim's cited units or the units of the card it is about; a pair-type claim's card shows a
+    run its claim cites (a lesion pair is about the statement's lesion, whose description run it cites; an act-lesion
+    claim about the act, whose anchor run it cites), so the claim's own units hold its card's - and its control's
+    verdict contradicts. settle.appraise reads exactly these."""
+    verdict, against = claim['verdict'], control['verdict']
+    return (verdict is not None and against is not None and verdict['verdict'] == ct.VerdictValue.SUPPORTS.value
+            and all(qualifier == ct.Qualifier2.APPROXIMATE.value for qualifier in verdict['qualifiers'])
+            and verdict['attached'] == ct.Attached.YES.value
+            and any(unit in set(claim['units']) for unit in verdict['evidence'])
+            and against['verdict'] == ct.VerdictValue.CONTRADICTS.value)
+
+
+def _v2_pairs_bound(value, path) -> str:
+    """The @3 inventory's pair-type records bound to what the row holds: its lesion pairs (_v2_lesion_pairs_bound,
+    DECISIONS D296/D300) and its act-lesion pairs (_v2_act_lesions_bound, DECISIONS D305)."""
+    return _v2_lesion_pairs_bound(value, path) or _v2_act_lesions_bound(value, path)
+
+
+def _v2_act_lesions_bound(value, path) -> str:
+    """The @3 inventory's act-lesion pairs bound to what the row holds (DECISIONS D305), as lesion pairs are: each
+    pair's act an event and its lesion a lesion of the inventory, each (act, lesion) once, its claim stored in the claim
+    role and its control in the control role, of one act-lesion form together (_V2_ACT_LESION_FORMS), both about the
+    pair's act and naming its lesion - so an outcome is never read for a claim the row does not hold. And DECISIONS
+    D302 RF2C-L3: a stored supported result - the releasing one - is the one 3.2.3's coherence table gives from every
+    input settle reads (_v2_pair_established; its evidence units units of the row): a row whose stored supported result
+    the re-derivation does not give is refused."""
+    lesions = {item['id'] for item in value['lesions']}
+    acts = {item['id'] for item in value['events']}
+    claims = {item['id']: item for item in value['claims']}
+    units = {unit['id'] for unit in value['units']}
+    seen: set = set()
+    for index, item in enumerate(value['act_lesions']):
+        where = f'{path}.act_lesions[{index}]'
+        if item['act'] not in acts or item['lesion'] not in lesions:
+            return f'{where} names an act or a lesion the inventory does not hold'
+        key = (item['act'], item['lesion'])
+        if key in seen:
+            return f'{where} repeats an act-lesion pair'
+        seen.add(key)
+        if item['claim'] is None:
+            continue  # dropped to keep within the bound (DECISIONS D305 with D300 RF-L5): unresolved, unappraised
+        found, other = claims.get(item['claim']), claims.get(item['control'])
+        forms = [form for form in _V2_ACT_LESION_FORMS if found is not None and found['template'] == form[0]]
+        if (found is None or other is None or not forms or other['template'] != forms[0][1]
+                or found['role'] != ct.ClaimRole.CLAIM.value or other['role'] != ct.ClaimRole.CONTROL.value
+                or any(stored['subject'] != item['act'] or stored['value'] != item['lesion']
+                       for stored in (found, other))):
+            return f'{where} names as its claim and its control no stored pair of claims of one act-lesion form'
+        problem = _v2_pair_outcome_problem(item, found, other, units, where)
+        if problem:
+            return problem
+    return ''
+
+
+def _v2_pair_outcome_problem(item, found, other, units, where) -> str:
+    """DECISIONS D302 RF2C-L3 (with D300 RF-L4): a stored pair-type record's RELEASING result - ``supported``, the one
+    that can set two objects apart - is read only when the coherence table re-derives it from every input settle reads
+    (_v2_pair_established: 3.2.5's attachment included) and its evidence units are units of the row (3.1 I1); '' when
+    it is (or the result is unresolved, which releases nothing whatever its verdicts: D300 RF-L4's boundary), else the
+    refusal."""
+    if item['result'] != ct.Result.SUPPORTED.value:
+        return ''
+    if not _v2_pair_established(found, other) or not set(found['verdict']['evidence']) <= units:
+        return (f'{where} is supported, and the verdicts the row stores for its claim and its control do not establish '
+                'it (FINAL-V2 3.2.3, 3.2.5; DECISIONS D300 RF-L4, D302 RF2C-L3)')
+    return ''
+
+
 def _v2_lesion_pairs_bound(value, path) -> str:
     """The @3 inventory's lesion pairs bound to what the row holds (DECISIONS D296): each pair's lesions are lesions of
     the inventory, each lesion pair once, its claim stored in the claim role and its control in the control role, of one
@@ -1712,7 +1798,9 @@ def _v2_lesion_pairs_bound(value, path) -> str:
     the outcome that can release - is read only when the verdicts the row stores for its claim and control establish it
     (3.2.3's coherence table, as _v2_appraisal_establishes reads a fact's: the claim supported with no qualifier but
     approximate, attached yes, on evidence units of the row; the control contradicted): a row whose stored verdicts
-    refute its supported pair is refused."""
+    refute its supported pair is refused. DECISIONS D302 RF2C-L3: a supported result is re-derived from EVERY input
+    settle reads - 3.2.5's attachment included (an evidence unit among the claim's cited units, which hold its card's)
+    - and a row whose supported result the re-derivation does not give is refused (_v2_pair_outcome_problem)."""
     lesions = {item['id'] for item in value['lesions']}
     claims = {item['id']: item for item in value['claims']}
     units = {unit['id'] for unit in value['units']}
@@ -1734,15 +1822,11 @@ def _v2_lesion_pairs_bound(value, path) -> str:
                 or any(stored['subject'] != item['lesion'] or stored['value'] != item['other']
                        for stored in (found, other))):
             return f'{where} names as its claim and its control no stored pair of claims of one lesion pair form'
-        if item['result'] == ct.Result.SUPPORTED.value:
-            verdict, control = found['verdict'], other['verdict']
-            if (verdict is None or control is None or verdict['verdict'] != ct.VerdictValue.SUPPORTS.value
-                    or any(qualifier != ct.Qualifier2.APPROXIMATE.value for qualifier in verdict['qualifiers'])
-                    or verdict['attached'] != ct.Attached.YES.value or not verdict['evidence']
-                    or not set(verdict['evidence']) <= units
-                    or control['verdict'] != ct.VerdictValue.CONTRADICTS.value):
-                return (f'{where} is supported, and the verdicts the row stores for its claim and its control do not '
-                        'establish it (FINAL-V2 3.2.3; DECISIONS D300 RF-L4)')
+        # DECISIONS D302 RF2C-L3: a stored supported result re-derived from every input settle reads, 3.2.5's
+        # attachment included (before r2e: its verdicts checked without 3.2.5's attachment to the claim)
+        problem = _v2_pair_outcome_problem(item, found, other, units, where)
+        if problem:
+            return problem
     return ''
 
 
@@ -1843,13 +1927,15 @@ def row_v2(*, encounter_id, revision_id, provider_run_id, appraisal_run_id, revi
         raise UnknownShape('The stored interpretation is not readable: verification is not an object.')
     if not isinstance(content, dict):
         raise UnknownShape('The stored interpretation is not readable: events is not an object.')
-    if versions != READ_VERSIONS[1] and 'lesion_pairs' in content:
-        # DECISIONS D296: only the @3 pair stores lesion pair claims (claims.build asks none under gemini-appraisal@1);
-        # settle's empty list is no field of an older pair, and a non-empty one is refused, never dropped
-        if content['lesion_pairs']:
-            raise UnknownShape('The stored interpretation is not readable: lesion pairs are stored at the @3 pair '
-                               'only.')
-        content = {key: value for key, value in content.items() if key != 'lesion_pairs'}
+    for name in ('lesion_pairs', 'act_lesions'):
+        if versions != READ_VERSIONS[1] and name in content:
+            # DECISIONS D296 (and D305's act_lesions): only the @3 pair stores pair-type claims (claims.build asks none
+            # under gemini-appraisal@1); settle's empty list is no field of an older pair, and a non-empty one is
+            # refused, never dropped
+            if content[name]:
+                raise UnknownShape(f'The stored interpretation is not readable: {name.replace("_", " ")} are stored at '
+                                   'the @3 pair only.')
+            content = {key: value for key, value in content.items() if key != name}
     try:
         claims = claims_sha256_v2(content['claims'])
     except (KeyError, TypeError, ValueError):

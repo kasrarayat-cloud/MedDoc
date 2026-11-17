@@ -97,7 +97,11 @@ SHAPE_PINS = {(INTERPRETATION_PAIR, INVENTORY_VERSION_V2):
               # DECISIONS D300 (2026-11-16, round r2c): a lesion pair dropped for the bound names no claim (RF-L5) and a
               # row without lesion_pairs reads it as the empty list (RF-L6: the field's default, described); restated by
               # the same function, was 8a4213496d8533a860947b79a2623b6a461db2e50d30063db6f674d04b4ee581
-              PAIR_V3: '8aacd0456244521080c56296dda3ff85cd1b0be6c65a52470b511f55ca3fdccb'}
+              # DECISIONS D305 and D302 RF2C-L3 (2026-11-16, round r2e): the @3 pair stores the act-lesion claims
+              # (act_lesions, default the empty list) and its pair-type records are bound by one check that
+              # re-derives each outcome (_v2_pairs_bound); restated by the same function, was
+              # 8aacd0456244521080c56296dda3ff85cd1b0be6c65a52470b511f55ca3fdccb
+              PAIR_V3: '4b766536e69b60fe6f3554447bd38e780177cda5bf08cdffe6dca85a0bfed414'}
 
 
 # --- the synthetic settled inventory ----------------------------------------------------------------------------------

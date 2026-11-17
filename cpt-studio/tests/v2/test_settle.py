@@ -408,6 +408,10 @@ def roles_of(claim_set):
     for lesion_pair in claim_set.lesion_pairs:  # DECISIONS D296: a lesion pair claim is a claim, its sameness a control
         roles.setdefault(lesion_pair.claim, 'claim')
         roles.setdefault(lesion_pair.control, 'control')
+    for act_lesion in getattr(claim_set, 'act_lesions', ()):  # DECISIONS D305: an act-lesion claim is a claim, its
+        # contrary a control (a claim set built before D305 has none)
+        roles.setdefault(act_lesion.claim, 'claim')
+        roles.setdefault(act_lesion.control, 'control')
     for claim in claim_set.claims:
         roles.setdefault(claim.id, 'control')
     return roles
