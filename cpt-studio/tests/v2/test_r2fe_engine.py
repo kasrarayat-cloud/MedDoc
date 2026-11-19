@@ -405,8 +405,10 @@ def egd_bleeding(act_device, denial_device, kind=Kind.BLEEDING_CONTROL, place=La
     all-of-kind denial of its kind naming ``denial_device`` - every fact established. (the technique row, the code's
     status)."""
     doc = EF.egd()
+    # every fact established: an ablation's purpose too (restated at round r3's integration - DESIGN-v2 b.8, DECISIONS
+    # D308 Q-B: a silent purpose is possibly hemostasis, so the procedural adjunct's silent cause would be a doubt)
     extra = dict(cause=sup(ct.Cause.PRE_EXISTING_LESION), purpose=sup(ct.Purpose.HEMOSTASIS)) \
-        if kind is Kind.BLEEDING_CONTROL else {}
+        if kind is Kind.BLEEDING_CONTROL else dict(purpose=sup(ct.Purpose.TREATMENT))
     doc.act(2, kind, places=[sup(place)], device=sup(act_device), **extra)
     doc.event(3, kind=sup(kind), status=neg(PERFORMED), session=sup(X(1)), date=sup(ON),
               breadth=sup(Breadth.ALL_OF_KIND), device=sup(denial_device))

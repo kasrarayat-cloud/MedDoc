@@ -44,8 +44,10 @@ from typing import Any
 from django.test import SimpleTestCase
 
 from studio.interpretation.contract import types as ct
+from studio.interpretation.engine import anatomy as AN
 from studio.interpretation.engine import assess as AS
 from studio.interpretation.engine import catalogue as CAT
+from studio.interpretation.engine import evaluate as EV
 from studio.interpretation.engine import requirements as RQ
 from studio.interpretation.engine import requirements_table as TABLE
 from studio.interpretation.engine import types as et
@@ -86,6 +88,12 @@ def encode(value: object) -> object:
         return {'tuple': [encode(item) for item in value]}
     if isinstance(value, (dict, MappingProxyType)):
         return {'map': [[encode(key), encode(item)] for key, item in value.items()]}
+    if isinstance(value, frozenset):
+        # round r3's FactSet fields (DESIGN-v2 f.1: independent, off_lesion, controlled ...; restated at round r3's
+        # integration): a set, its members in one order of their encodings, so the frozen file is deterministic
+        return {'set': sorted((encode(item) for item in value), key=lambda item: json.dumps(item, sort_keys=True))}
+    if isinstance(value, FactSet):
+        return {'factset': encode_factset(value)}  # R_q's base, R_base (None on a FactSet with no answer folded)
     if dataclasses.is_dataclass(value) and type(value).__name__ in RECORDS:
         return {'record': type(value).__name__,
                 'fields': {field.name: encode(getattr(value, field.name)) for field in dataclasses.fields(value)}}
@@ -107,6 +115,10 @@ def decode(value: object) -> object:
     if 'map' in value:
         return {decode(key) if not isinstance(key, list) else tuple(decode(k) for k in key): decode(item)
                 for key, item in value['map']}
+    if 'set' in value:
+        return frozenset(decode(item) for item in value['set'])
+    if 'factset' in value:
+        return decode_factset(value['factset'])
     if 'record' in value:
         return RECORDS[value['record']](**{name: decode(item) for name, item in value['fields'].items()})
     raise ValueError(f'not an encoding: {value}')
@@ -133,7 +145,8 @@ def frozen_record(case_id: str, variant: str) -> dict:
     data = FC.case(case_id)
     return {'case': case_id, 'variant': variant, 'factset': encode_factset(run.R),
             'date_of_service': data['date_of_service'], 'member': data['member'], 'proposals': data['proposals'],
-            'expect': data['expect'][variant], 'known': data['known'].get(variant, {})}
+            'expect': data['expect'][variant], 'known': data['known'].get(variant, {}),
+            **({'declared': data['declared'][variant]} if variant in data.get('declared', {}) else {})}
 
 
 def write_frozen() -> None:
@@ -185,6 +198,10 @@ class FrozenTests(SimpleTestCase):
                         self.assertEqual((got['status'], got['item']),
                                          (record['known'][code]['status'], record['known'][code]['item']))
                         continue
+                    if code in record.get('declared', {}):  # round r3: a declared hold (test_failure_classes.DECLARED)
+                        self.assertEqual((got['status'], got['item']),
+                                         (record['declared'][code]['status'], record['declared'][code]['item']))
+                        continue
                     self.assertEqual(got['status'], want['status'], want['why'])
                     if want['item'] is not None:
                         self.assertEqual(got['item'], want['item'], want['why'])
@@ -213,6 +230,9 @@ TECH_OTHER = {'balloon': ct.Device.WIRE_BOUGIE, 'wire_bougie': ct.Device.BALLOON
 UMBRELLA = {kind: umbrella for umbrella, members in (
     (K.REMOVAL, (K.SNARE, K.EMR, K.HOT_BIOPSY, K.ESD)),) for kind in members}
 NO_TARGET = frozenset({K.EM_VISIT, K.EM_PROLONGED, K.MODERATE_SEDATION, K.OTHER})
+# the procedural adjunct kinds (FINAL-V2 4.7, coverage's _ADJUNCTS) but the bleeding control, which states its own purpose
+# and cause: the parts whose silent cause the silent-link rule reads as a doubt (DESIGN-v2 b.8)
+SILENT_LINK_PARTS = frozenset({K.ABLATION, K.CLIP, K.INJECTION})
 
 
 @dataclasses.dataclass
@@ -318,6 +338,14 @@ def act_fields(row: TABLE.CodeRow, kind: K) -> dict:
         out['device'] = sup(ct.Device.BALLOON)
     if kind is K.BLEEDING_CONTROL:
         out.update(purpose=sup(ct.Purpose.HEMOSTASIS), cause=sup(ct.Cause.PRE_EXISTING_LESION))
+    elif kind in SILENT_LINK_PARTS:
+        # round r3 (DESIGN-v2 b.8, DECISIONS D308 Q-B; restated at round r3's integration): a procedural adjunct's two
+        # arms read a SILENT link as a doubt - its cause wherever the part may treat bleeding (a silent purpose is
+        # possibly hemostasis; any event of the session may be its whole), its part_of beside any other act (an ERCP's
+        # cannulation) - so an act of this kind meets every requirement only with its link stated: its purpose
+        # treatment (no bleeding treated: the cause arm's premise F) and its part_of negated (done in its own right:
+        # 4.7's "negated: no")
+        out.update(purpose=sup(ct.Purpose.TREATMENT), part_of=neg(None))
     if kind is K.STONE_EXTRACTION:
         out['yield_'] = sup(ct.Material.STONES)
     if kind in (K.STENT, K.STENT_REMOVAL, K.STENT_EXCHANGE, K.SPHINCTEROTOMY, K.STONE_EXTRACTION, K.LITHOTRIPSY,
@@ -335,6 +363,12 @@ def session_fields(row: TABLE.CodeRow, doc: EF.Doc) -> dict:
     out: dict = dict(encounter=sup(THIS))
     if fam in REACH:
         out['reached'] = [sup(REACH[fam])]
+    if row.code in EV.STOMA_ROUTE_CODES:
+        # the colonoscopy route table (DECISIONS D310 (1), D225 P5; restated at round r3's integration): a colonoscopy
+        # through a stoma meets its requirements only with an anatomy entry of type stoma and the approach through_stoma
+        # established, as the stoma class's enteroscopy and EUS baselines state them
+        doc.entry(1, type=sup(ct.AnatomyType.STOMA))
+        out.update(approach=sup(ct.Approach.THROUGH_STOMA), through=sup(Y(1)))
     if fam is S.ENTEROSCOPY:
         approach, entry, reach, _ = ENT_SESSION[row.enteroscopy_class]
         out.update(approach=sup(approach), reached=[sup(reach)])
@@ -426,10 +460,60 @@ def _first(doc: EF.Doc, family: str, oid: Id, attribute: A) -> Fact:
     return getattr(doc, family)[oid][attribute][0]
 
 
+# DECISIONS D325 (2) (round r3's third repair; the int5 integrator's Q1): the EUS stoma class (44406, 44407) needs an
+# established COLONIC route too (engine/evaluate._lower_colonic) - the stoma established in the colon, or a reached
+# point at or past the cecum supported. Its baseline is the class's canonical input - a reach to the stoma, the stoma's
+# organ never established (the fact pass never claims one) - which has none, so the class's route hold (procedure, RANK
+# row 8, a question, coding_rule:lower) is held in every case whose input keeps that route: by 4.8's RANK the item is
+# the route hold unless the case's own item is of a row before it (RANK's rows 1-7, read from engine/requirements.RANK)
+# or the procedure itself; a case naming no item and no kind keeps its expectation. The expectations that move go to the
+# hold (READY, or an item of a later row: the target, the extent, base_included, competing_codes, the bundled
+# explanation); CORPUS.json records them (write_corpus).
+BEFORE_PROCEDURE = frozenset(fact.value for rank, facts in RQ.RANK.items() if rank.value < RQ.Rank.PROCEDURE.value
+                             for fact in facts)
+
+
+def keeps_the_stoma_route(built: Built) -> bool:
+    """Whether a case's input keeps the stoma class's route with no colonic route (D325 (2)): its session's approach
+    supported through_stoma, an anatomy entry supported a stoma, no entry's organ supported in the colon, and no reached
+    point supported at or past the cecum."""
+    session = built.doc.sessions.get(X(1), {})
+    entries = built.doc.anatomy.values()
+    return (session.get(A.APPROACH) == (sup(ct.Approach.THROUGH_STOMA),)
+            and any(facts.get(A.TYPE) == (sup(ct.AnatomyType.STOMA),) for facts in entries)
+            and not any(member.result is Res.SUPPORTED and AN.region(member.value) is AN.Region.COLON
+                        for facts in entries for member in facts.get(A.ORGAN, ()))
+            and not any(member.result is Res.SUPPORTED and member.value in EV.AT_OR_PAST_CECUM
+                        for member in session.get(A.REACHED, ())))
+
+
+def colonic_route_hold(code: str, found: tuple[Built, tuple] | None) -> tuple[Built, tuple] | None:
+    """``found`` (a case of ``perturb``) with D325 (2)'s route hold for the EUS stoma class (comment above)."""
+    if found is None or code_row(code).eus_class is not CAT.EusClass.STOMA or not keeps_the_stoma_route(found[0]):
+        return found
+    built, (status, item, kind, why) = found
+    if status == H_ and ((item is None and kind is None) or item == rq_procedure()
+                         or (item is not None and item.split(':')[0] in BEFORE_PROCEDURE)):
+        return found
+    return built, (H_, rq_procedure(), Q_, '4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established '
+                                           'colonic route - its input reaches no point at or past the cecum and no '
+                                           'stoma is established in the colon: the class\'s route hold (RANK 8)')
+
+
+def rq_procedure() -> str:
+    return RQ.fact_key(RQ.FactKey.PROCEDURE)
+
+
 def perturb(code: str, requirement: object, state: str) -> tuple[Built, tuple] | None:
     """The case of ``requirement`` in ``state`` (T, U, F) for ``code``: a Built and its expectation (status, item fact,
     item kind, the design's reason), or None when the design gives the state no form for this code (recorded as not
-    applicable in CORPUS.json, with its reason)."""
+    applicable in CORPUS.json, with its reason). DECISIONS D325 (2): the EUS stoma class's route hold over the case
+    (``colonic_route_hold``)."""
+    return colonic_route_hold(code, _perturb(code, requirement, state))
+
+
+def _perturb(code: str, requirement: object, state: str) -> tuple[Built, tuple] | None:
+    """``perturb``'s case and its expectation from 4.3's columns, 4.4 and 4.8."""
     built = baseline(code)
     row = code_row(code)
     doc, act = built.doc, E(built.act)
@@ -726,6 +810,23 @@ def perturb(code: str, requirement: object, state: str) -> tuple[Built, tuple] |
             return None
         built.date = None
         return built, (H_, None, None, '4.4 R7: with no date of service every code is held (service_date)')
+    if requirement is Req.ROUTE_TABLE:
+        # DECISIONS D328 (1), D330 (1) (a) (rules5's Q2): the lower-GI route table's own row, where it stands apart from
+        # the code's tags (a sigmoidoscopy's, an enteroscopy's through a stoma or a pouch). U: an ileal pouch filed beside
+        # - per anus the table's pouch arm, through a stoma or a pouch no row of the ruled harmless set (D330 (1)'s path
+        # guard) - the table's own hold, a question about the session's anatomy no answer meets (RANK row 8). F: per
+        # anus, the approach established through a stoma, the class's explanation naming it (RANK row 8); a through-stoma
+        # or pouch row has no established-otherwise form of its own (``no_form``)
+        if U:
+            doc.entry(9, type=sup(ct.AnatomyType.ILEAL_POUCH))
+            return built, (H_, 'procedure', Q_, 'D328 (1), D330 (1): an ileal pouch filed beside, the route table\'s own '
+                                                'hold (RANK 8)')
+        found = CAT.lower_route(code)
+        if found is None or found.route is not ct.Approach.TRANSANAL:
+            return None
+        _set(doc, 'sessions', X(1), A.APPROACH, sup(ct.Approach.THROUGH_STOMA))
+        return built, (H_, 'procedure', EXP_, 'D328 (1): per anus, the approach established through a stoma, the class\'s '
+                                              'explanation naming it (RANK 8)')
     return None
 
 
@@ -757,6 +858,9 @@ def no_form(code: str, requirement: object, state: str) -> str:
             return '4.3 CAUSE: a bleeding control caused by an act of this session is the procedural adjunct (CAUSE\'s F)'
         if kind not in BUNDLED_PARTS and not (kind in ERCP_BUNDLED_PARTS and row.family is S.ERCP):
             return '4.7: no bundling rule bundles an act of this kind into another act'
+    if requirement is Req.ROUTE_TABLE and state == 'F':
+        return ('D328 (1): the route table\'s through-stoma and pouch rows only hold - the enteroscopy class\'s route '
+                'explains an approach established otherwise (ENT)')
     if requirement is Req.COMBINATION and state == 'U' and rival(code) is None:
         if row.template in NO_RIVAL:
             return '4.3 ADDON: an add-on beside its primary is its T case (the step\'s NOTES, Q-ADDON); no other rival'

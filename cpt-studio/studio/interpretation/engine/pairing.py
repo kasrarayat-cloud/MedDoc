@@ -138,7 +138,27 @@ P-MONO (tests/v2/test_properties.py's D228_DQ2, held to D264's every-row rule).
   D236; round r2f's refutation of lane f-lesion2, RFL2-1 and RFL2-2: the single arm read the statement's controls
   about the act's current places alone, so an act-direction control pass 2 supported, or a deleted act place's
   unrejected control, released it). DECISIONS D311 R2F2-L2: what the arm reads of an act is computed once per FactSet
-  and act (``_act_read``), never per (statement, act) pair.
+  and act (``_act_read``), never per (statement, act) pair. DECISIONS D316 QB (round r3's build, lane engine): an act
+  place answered by an established not-on is answered only where none of the statement's own places BEYOND its not-on
+  lesions' places may hold it - a statement place (a target.places member in any state but an established negation:
+  its value and its readings, facts.possibly_written) that is not an established place of one of those lesions, or any
+  place of its scope.segment's range (a range of its own, never a lesion's place), not disjoint from the act's place
+  (engine/anatomy.disjoint: not established as another place) holds it, so a denial that
+  names an umbrella for itself beside its lesion ("... at the polypectomy site or anywhere in the colon") beside a
+  tattoo at that lesion's place stays SAME (held, relation:contradiction) - the note contradicts itself, and only an
+  established answer to the question whether the statement applies to the act releases it (``_held_beyond``). This
+  clause reads the statement's own place list, which 9.4 may shorten: deleting that statement place releases, and only
+  into P4-ONLESION's ruled shape (pair 4's) - the one named release D316 adds beside D228_DQ2 and D293_ERASE
+  (tests/v2/test_properties' D316_QB). DECISIONS D323 F1: an established Q-ONLESION answer (FactSet.off_lesion, R_q
+  only) is an established not-on read by THIS arm alone (facts.established_not_on, ``_asked_about``), under D311's class
+  rule and the QB clause - never a separate arm (the prototype's set a pair apart on the answer alone and released QB's and
+  RFL2-1's scenes on a TRUE answer); ``not_on_sets_apart`` is the arm's own what-if, the planner's test that a SAME
+  rests on the not-on lesions' places alone. DECISIONS D324 (7) (L6-4): the clause reads a statement's target.structure
+  by one typed table over EVERY Structure member (STRUCTURE_PLACEMENT): a structure with a location of its own (an
+  anastomosis, a duct, a stent, the wall, the mucosa, the lumen, a named organ, and every member not ruled lesion-like)
+  lies beyond the not-on lesions and holds every place; a lesion-like structure (a lesion, an ulcer, a mass, a varix, a
+  bleeding site) describes the statement's own target lesion and does not; a member the table does not classify counts
+  as located, and holds.
   Otherwise SAME when the same lesion (equal ids, or same_as supported) or overlapping places
   (engine/anatomy.compatible) are established on both sides, and UNRESOLVED: an unknown target never proves
   independence (4.11).
@@ -201,13 +221,15 @@ owner). ``mypy --strict`` passes over it.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum, unique
+from itertools import combinations
 from types import MappingProxyType
 from typing import TypeVar
 
 from studio.interpretation.contract.types import (Attribute, Breadth, DateRelation, Device, FactState, Kind, Landmark,
-                                                  Performer, Purpose, Result, SessionKind, Status, UnlistedWhat)
+                                                  Performer, Purpose, Result, SessionKind, Status, Structure,
+                                                  UnlistedWhat)
 from studio.interpretation.engine import anatomy, catalogue
 from studio.interpretation.engine import facts as facts_
 from studio.interpretation.engine import requirements as rq
@@ -269,6 +291,7 @@ class Pair:
     possible: bool
     kinds: frozenset[Kind]
     spans: tuple[Span, ...]
+    appraised: bool = False  # round r3 (DESIGN-v2 b.1; PROTOTYPE): INDEPENDENT by an established Q-REL answer (R_q)
 
     def result(self, row: Row) -> RowResult:
         """The result of ``row`` for this pair."""
@@ -748,7 +771,11 @@ def paired(R: FactSet, statement: Id, act: Id) -> bool:
     """Whether ``statement`` pairs with ``act`` (4.5): two different events, the first a statement (is_statement) - or,
     DECISIONS D309, one that MAY be a statement (possibly_statement) whose scope.covers names the act (``claimed``) - the
     second possibly performed (facts.possibly on its status: a status not established leaves every status possible),
-    their kinds compatible (shared_kinds)."""
+    their kinds compatible (shared_kinds). DECISIONS D330 (2): a pair whose R_base relation R_q's fold kept
+    (facts.kept_pairs) pairs, as it did on R_base."""
+    kept = facts_.kept_pairs(R)
+    if kept and (statement, act) in kept:
+        return True
     return (statement != act
             and (is_statement(R, statement) or (claimed(R, statement, act) and possibly_statement(R, statement)))
             and facts_.possibly(facts_.fact(R, act, _A.STATUS), Status.PERFORMED)
@@ -1026,8 +1053,10 @@ def _apart_by_own_lesion(R: FactSet, p: _Context) -> bool:
 
 def _asked_about(R: FactSet, act: Id) -> frozenset[Id]:
     """DECISIONS D305, D309 RFE-L1: every lesion ``act`` was asked about by an act-lesion claim, whichever statement it
-    was asked for (FactSet.pair_controls keyed (the act, distinct_from, a lesion), whatever its outcome). DECISIONS
-    D311 R2F2-L2: read once per FactSet and act (``_act_read``), never once per (statement, act) pair."""
+    was asked for (FactSet.pair_controls keyed (the act, distinct_from, a lesion), whatever its outcome) - and, DECISIONS
+    D323 F1, every lesion an established Q-ONLESION answer set it apart from (FactSet.off_lesion, R_q only), so the
+    listed arm reads that lesion by its established not-on as it reads the fact pass's. DECISIONS D311 R2F2-L2: read once
+    per FactSet and act (``_act_read``), never once per (statement, act) pair."""
     return _act_read(R, act).asked
 
 
@@ -1110,14 +1139,16 @@ def _named(R: FactSet, reads: _Reads) -> Mapping[Value, frozenset[Id]]:
 
 def _act_read(R: FactSet, act: Id) -> _ActRead:
     """``act``'s reads (``_ActRead``), built once per FactSet and act: the lesions it was asked about by an act-lesion
-    claim (FactSet.pair_controls keyed (the act, distinct_from, a lesion)); the lesions whose finding names a place a
-    place pair control asks it about (keyed (the act, target.places, that place)), through ``_named``; and its whole
-    place set (``_target``'s single-target reading)."""
+    claim (FactSet.pair_controls keyed (the act, distinct_from, a lesion)) or by an established Q-ONLESION answer
+    (FactSet.off_lesion, R_q only: DECISIONS D323 F1 - one reading of an established not-on, whichever pass made it);
+    the lesions whose finding names a place a place pair control asks it about (keyed (the act, target.places, that
+    place)), through ``_named``; and its whole place set (``_target``'s single-target reading)."""
     reads = _reads_of(R)
     found = reads.acts.get(act)
     if found is None:
         asked = frozenset(value for subject, attribute, value in R.pair_controls
-                          if subject == act and attribute is _A.DISTINCT_FROM and isinstance(value, Id))
+                          if subject == act and attribute is _A.DISTINCT_FROM and isinstance(value, Id)) | frozenset(
+            lesion for subject, lesion in R.off_lesion if subject == act)
         places = frozenset(value for subject, attribute, value in R.pair_controls
                            if subject == act and attribute is _A.TARGET_PLACES)
         named: Mapping[Value, frozenset[Id]] = _named(R, reads) if places else {}
@@ -1216,6 +1247,8 @@ def _apart_from_unnamed(R: FactSet, p: _Context, own: _Target, other: _Target, m
     sigmoid colon" beside a sigmoid tattoo), or a lesion filed with a short place list, was released before (the
     refutation's Inputs 1-3, and its asked-only and single-target twin). It reads what the claims asked and pass 2
     established, never the statement's place list, which 9.4 may shorten: no deletion of a statement place releases.
+    [Since DECISIONS D316 QB (below) the QB clause reads the statement's own places; their deletion is the named release
+    D316_QB, into P4-ONLESION's ruled shape.]
 
     Round r2f's refutation of lane f-lesion2 (RFL2-1, RFL2-2; D311's class rule with D220 and D236): the every-control
     scan belongs to that rule in EVERY arm, so it is read once, in the tail every arm shares, after the arm's lesions'
@@ -1229,7 +1262,29 @@ def _apart_from_unnamed(R: FactSet, p: _Context, own: _Target, other: _Target, m
     act place whose statement control pass 2 left unrejected dropped that control from the reading and released (RFL2-2,
     D220's class). Read so, a member 9.4 deletes from either object leaves its unrejected control read in every arm;
     the one named release stays the deletion of an act place NO control asks either object about (refute-r2d-r2 RD1,
-    D245)."""
+    D245).
+
+    DECISIONS D316 QB (round r3's build; BLOCKING, closed here): D311's text set an act apart by an established not-on
+    of the statement's lesion even where the statement's own places BEYOND its not-on lesions' places hold the act's
+    place - a single target L1 in the transverse colon, established not-on, the denial placed at L1's place AND at the
+    whole colon (an umbrella it names for itself), a tattoo in the transverse colon: the denial's own umbrella holds the
+    tattoo's place and catalogue.covers reads a tattoo and an injection as one act, so the note contradicts itself, and
+    int3 released 45381 (int2 held it). The not-on answers an act place only where no such statement place may hold it
+    (``_answered_on_the_statements_side``, ``_held_beyond``), so the pair stays SAME (held, relation:contradiction): a
+    reading question for round r3's question stage (does this statement apply to this act?), released only by an
+    established answer. The clause reads the statement's own place list, which 9.4 may shorten, so deleting that
+    statement place releases - into exactly P4-ONLESION's ruled shape (pair 4's L04: a
+    statement placed only within its not-on lesions' places): the named release D316_QB (tests/v2/test_properties),
+    beside D228_DQ2 and D293_ERASE. QD (DECISIONS D316: the RD1 class, decided with QB): it STAYS the one named release
+    of D245's class - 9.4's deletion of an ACT place no control asks either object about removes a requirement no
+    reading of the FactSet can see (claims.pair never asks an object about a place compatible with one of its own, so no
+    control, verdict or member of the deleted place is left), and it closes only by a request change, which I-FACT
+    (DESIGN-v2 a.2: the fact request is int3's byte for byte) rules out in r3; the QB clause narrows it to deletions
+    after which every remaining act place is clear of the statement's beyond places too.
+
+    DECISIONS D323 F1: an established Q-ONLESION answer (FactSet.off_lesion, R_q only) is an established not-on
+    (facts.established_not_on) and a lesion the act was asked about (``_asked_about``), read HERE under everything above
+    - never by a separate arm."""
     if own.lesions is None or not own.lesions or not facts_.silent(facts_.fact(R, p.act, _A.TARGET_LESION)):
         return False
     if mode is not _Mode.LISTED:
@@ -1262,7 +1317,8 @@ def _answered_on_the_statements_side(R: FactSet, p: _Context, act_places: frozen
       pair 4's L04).
     A place member of the act or of a lesion demoted, a lesion deleted from the statement's list, a statement control
     left unrejected: each only removes an answer; and it never reads the statement's own place list (deletable), only
-    the controls claims made and pass 2's verdicts on them. It reads a statement control only for a CURRENT place of the
+    the controls claims made and pass 2's verdicts on them [since DECISIONS D316 QB: but for the QB clause below]. It
+    reads a statement control only for a CURRENT place of the
     act, so on its own 9.4's deletion of an act place takes that place's requirement with it: the arm reads it after
     facts.apart_by_controls' every-control scan over both objects, which still reads a deleted place's unrejected
     control (round r2f's refutation of lane f-lesion2, RFL2-2; DECISIONS D220), so the arm is hold-only there but for
@@ -1271,13 +1327,128 @@ def _answered_on_the_statements_side(R: FactSet, p: _Context, act_places: frozen
     established not-on that the statement does not list (an act-lesion claim asked for another statement) answers
     nothing for this one; and a place of ANOTHER entry of the lesion's finding (a same_as member, in any state) answers
     nothing - same_as is UNCONTROLLED (3.2.3: it only joins, so it may hold and never release), so it never widens what
-    an established not-on answers."""
+    an established not-on answers.
+
+    DECISIONS D316 QB: the not-on answers an act place only where none of the statement's own places beyond its not-on
+    lesions' places may hold it (``_held_beyond``) - the statement covers the place for itself there, not as its
+    lesion's place, so the not-on answers nothing. This clause reads the statement's own place list (deletable, the named
+    release D316_QB); a rejected statement control still answers the place as before (SC-B's own second direction)."""
     if act_places is None:
         return False
     answered = frozenset(member.value for lesion in not_on for member in facts_.members(R, lesion, _A.PLACES)
                          if member.result is Result.SUPPORTED and isinstance(member.value, Landmark))
-    return all(place in answered or R.pair_controls.get((p.statement, _A.TARGET_PLACES, place)) is True
-               for place in act_places)
+    return all((place in answered and not _held_beyond(R, p.statement, place, answered))
+               or R.pair_controls.get((p.statement, _A.TARGET_PLACES, place)) is True for place in act_places)
+
+
+def _named_places(member: Fact) -> tuple[Landmark, ...] | None:
+    """The places one member of a statement's place list may name (``_held_beyond``): in any state but an established
+    negation, its value and its readings (facts.possibly_written over each value it carries: a supported member its
+    value; a member not established its claimed value and its options - a doubt's readings, a contradiction's sides; a
+    pass-1 denial that pass 2 did not establish its value too); None for a silent member, which may name any place."""
+    if facts_.silent(member):
+        return None
+    return tuple(value for value in dict.fromkeys((member.value, *member.options))
+                 if isinstance(value, Landmark) and facts_.possibly_written(member, value))
+
+
+def _named_targets(member: Fact, kind: type) -> tuple[Value, ...]:
+    """The values of type ``kind`` one member of a statement's target.anatomy or target.structure may name (the QB
+    clause, ``_held_beyond``): in any state but an established negation, its value and its readings (facts.
+    possibly_written, as ``_named_places``) - only what the member itself carries, never "any value": a pure-silent
+    slot (a target the document does not state is left empty, pass 1's TARGETS) carries none, so it names no target of
+    its own; an empty slot a DOUBT names carries that doubt's readings and names them (a doubt is never an absence,
+    4.2 - round r3's integration, the mutation proof of this clause: the first form returned () for every silent
+    member, so a doubt's reading of an anastomosis on an empty slot set the pair apart)."""
+    return tuple(value for value in dict.fromkeys((member.value, *member.options))
+                 if value is not None and isinstance(value, kind) and facts_.possibly_written(member, value))
+
+
+@unique
+class StructurePlacement(Enum):
+    """DECISIONS D324 (7) (L6-4, a regression of round r3's integration repair of R2E-QB-ANAT): where a statement's
+    target.structure lies for the QB clause (``_held_beyond``). LOCATED: a target with a location of its own that no
+    lesion's places hold - it lies beyond the statement's not-on lesions and holds every place. LESION_LIKE: a finding
+    of the kind a lesion entry describes - read in the QB clause, which reads only a statement whose target names its
+    lesions (every one established, ``_apart_from_unnamed``), as describing that target lesion, so it adds no place of
+    its own (its place is the lesion's, which the clause reads)."""
+    LESION_LIKE = 'lesion_like'
+    LOCATED = 'located'
+
+
+# DECISIONS D324 (7): the typed table over EVERY Structure member (contract/types.py; tests/v2/test_r3c_rules asserts
+# that it classifies each one). The lead's rulings: lesion-like - a lesion, an ulcer, a mass, a varix, a bleeding site;
+# located - an anastomosis, a duct, a stent, a wall, the mucosa, a lumen, a named anatomy (the gallbladder, the liver, a
+# lymph node). Every member the ruling names in neither list is LOCATED (fail-closed: a hold at worst) - a stricture, a
+# vessel, a stone, a pancreatic fluid collection, a foreign body, other (the round's NOTES, a question for the lead).
+STRUCTURE_PLACEMENT: Mapping[Structure, StructurePlacement] = MappingProxyType({
+    Structure.LESION: StructurePlacement.LESION_LIKE, Structure.STRICTURE: StructurePlacement.LOCATED,
+    Structure.ULCER: StructurePlacement.LESION_LIKE, Structure.BLEEDING_SITE: StructurePlacement.LESION_LIKE,
+    Structure.VESSEL: StructurePlacement.LOCATED, Structure.VARIX: StructurePlacement.LESION_LIKE,
+    Structure.STONE: StructurePlacement.LOCATED, Structure.STENT: StructurePlacement.LOCATED,
+    Structure.DUCT: StructurePlacement.LOCATED, Structure.PANCREATIC_FLUID_COLLECTION: StructurePlacement.LOCATED,
+    Structure.GALLBLADDER: StructurePlacement.LOCATED, Structure.LIVER: StructurePlacement.LOCATED,
+    Structure.LYMPH_NODE: StructurePlacement.LOCATED, Structure.MASS: StructurePlacement.LESION_LIKE,
+    Structure.WALL: StructurePlacement.LOCATED, Structure.LUMEN: StructurePlacement.LOCATED,
+    Structure.FOREIGN_BODY: StructurePlacement.LOCATED, Structure.MUCOSA: StructurePlacement.LOCATED,
+    Structure.ANASTOMOSIS: StructurePlacement.LOCATED, Structure.OTHER: StructurePlacement.LOCATED,
+})
+
+
+def structure_placement(structure: Structure) -> StructurePlacement:
+    """STRUCTURE_PLACEMENT's reading of ``structure``: a member the table does not classify (one contract/types.py adds
+    later) counts as LOCATED - it holds every place until it is classified (DECISIONS D324 (7))."""
+    return STRUCTURE_PLACEMENT.get(structure, StructurePlacement.LOCATED)
+
+
+def _held_beyond(R: FactSet, statement: Id, place: Landmark, answered: frozenset[Landmark]) -> bool:
+    """DECISIONS D316 QB: whether a place of ``statement``'s own places BEYOND its not-on lesions' places (``answered``:
+    their established places) may hold the act's ``place``. Its own places are:
+    - its target place list, each member read by ``_named_places`` (a silent member holds every place): a named place
+      that is one of ``answered`` is its lesion's place (pair 4's shape, the ruled release), any other is beyond;
+    - its scope.segment, which names a range of its own and never a lesion's place: each end it may name and the whole
+      range between any two ends any two of its members may name (``segment_range``: the range contract/claims.py's
+      pair controls read as the segment's places, DECISIONS D223) - every place of it is beyond, a lesion's own place
+      included;
+    - [round r3's integration, the second refutation's R2E-QB-ANAT, the class rule: EVERY target a statement names for
+      itself beyond its not-on lesions is read, not only its places and its segment] its target.anatomy - an
+      anatomy entry it may name (``_named_targets``: an anastomosis, a stoma or a pouch the statement is at, pass 1's
+      TARGETS) is a target of its own, never a lesion's place, and unplaceable as anatomy.ALTERED reads those places
+      (never disjoint from anything), so it holds every place; read so, no 9.4 weakening of the entry's own facts (its
+      organ, its joins) can set it apart - and its
+      target.structure - [DECISIONS D324 (7), L6-4: read by the typed table STRUCTURE_PLACEMENT, never "any structure
+      but a lesion"] a slot that may name a LOCATED structure (an anastomosis, a duct, a stent, the wall, the mucosa, a
+      lumen, a named organ, any member the table does not classify) names a target of its own with no place a lesion
+      holds, so it holds every place; a LESION_LIKE one (a lesion, an ulcer, a mass, a varix, a bleeding site)
+      describes the statement's own target lesion, whose places the clause reads, so it adds none (the build held an
+      antral ulcer's denial filed with the structure ulcer beside H. pylori biopsies of the antrum, which int3 and the
+      same note with the structure written lesion set apart). Every value the slot may name is read (a doubt's
+      reading of a located structure holds). Silent, either names nothing.
+    A place beyond that is not disjoint from ``place`` (engine/anatomy.disjoint: never established as another place - an
+    umbrella holding it, a place it holds, an overlapping or an unplaceable one) holds it. Read so, every 9.4 weakening
+    of a member keeps what it names (it only adds readings) and only a deletion narrows the list; an established
+    negation names nothing (the statement is not about that place)."""
+    beyond: list[Landmark] = []
+    for member in facts_.members(R, statement, _A.TARGET_PLACES):
+        found = _named_places(member)
+        if found is None:
+            return True
+        beyond.extend(value for value in found if value not in answered)
+    if _named_targets(facts_.fact(R, statement, _A.TARGET_ANATOMY), Id):
+        return True  # an anastomosis, a stoma or a pouch it names for itself: unplaceable (anatomy.ALTERED), never apart
+    if any(isinstance(value, Structure) and structure_placement(value) is StructurePlacement.LOCATED
+           for value in _named_targets(facts_.fact(R, statement, _A.TARGET_STRUCTURE), Structure)):
+        return True  # DECISIONS D324 (7): a structure with a location of its own (the typed table)
+    ends: list[tuple[Landmark, ...]] = []
+    for member in facts_.members(R, statement, _A.SCOPE_SEGMENT):
+        found = _named_places(member)
+        if found is None:
+            return True
+        ends.append(found)
+        beyond.extend(found)
+    for one, other in combinations(ends, 2):  # two ends filed (or, fail-closed, more): every range between any two
+        beyond.extend(inside for first in one for second in other for inside in segment_range(first, second))
+    return any(not anatomy.disjoint(value, place) for value in dict.fromkeys(beyond))
 
 
 def _mode(R: FactSet, p: _Context) -> _Mode | None:
@@ -1309,6 +1480,8 @@ def _target_row(R: FactSet, p: _Context) -> RowResult:
     if not has_target(R, p.act):
         return RowResult.UNRESOLVED
     own, other = _target(R, p.statement, mode), _target(R, p.act, _Mode.SINGLE)
+    # DECISIONS D323 F1: no separate arm for an established Q-ONLESION answer - it is an established not-on, read by
+    # _apart_from_unnamed below under D311's class rule and D316's QB clause, as the fact pass's act-lesion pair is
     if mode is _Mode.OWN:
         apart = _apart_by_own_target(R, p, own, other)
     elif mode is _Mode.SINGLE:
@@ -1324,6 +1497,44 @@ def _target_row(R: FactSet, p: _Context) -> RowResult:
     same = lesion is not None and any(_same_lesion(R, mine, lesion) for mine in own.known_lesions)
     overlap = any(anatomy.compatible(one, two) for one in own.known_places for two in other.known_places)
     return RowResult.SAME if same or overlap else RowResult.UNRESOLVED
+
+
+def not_on_sets_apart(R: FactSet, statement: Id, act: Id) -> bool:
+    """DECISIONS D323 F1 (with D316 QB): whether an established not-on of ``act`` from EVERY lesion ``statement``'s
+    single or listed target names would set the pair apart on the target row - the row read on ``R`` with an
+    established Q-ONLESION answer assumed for each of them (FactSet.off_lesion, read by ``_apart_from_unnamed``, the one
+    arm that reads one, under D311's class rule and the QB clause). The planner's test that the SAME a Q-ONLESION
+    question serves rests on the not-on lesions' places alone: where it is False no true answer to that question could
+    set the pair apart (a statement place beyond its lesions holding the act's place, a place pair control not
+    rejected, an act place nothing answers, an act whose places are not established), so the question could only cost.
+    False for an act whose target names a lesion or whose kind has no target, a statement naming no lesion established,
+    and any other target reading (an act-filed possible statement's own target, a segment, a breadth that leaves the
+    target out or is not established). Pure: ``R`` is never changed (the assumption is a FactSet of its own)."""
+    p = _context(R, statement, act)
+    mode = _mode(R, p)
+    if mode not in (_Mode.SINGLE, _Mode.LISTED) or not has_target(R, act):
+        return False
+    if not facts_.silent(facts_.fact(R, act, _A.TARGET_LESION)):
+        return False
+    own = _target(R, statement, mode)
+    if own.lesions is None or not own.lesions:
+        return False
+    assumed = replace(R, off_lesion=R.off_lesion | frozenset((act, lesion) for lesion in own.lesions))
+    # DECISIONS D324 (8) (round r3's integration int5, the ask lane's Q1 (a)): the assumption differs from R only in
+    # off_lesion's pairs of ``act``, which only the act's ASKED lesions read (``_act_read``); its controlled lesions,
+    # its whole place set and its per-lesion place readings (``_ActRead.apart``: finding_places, the entries'
+    # multiplicity, the place pair controls) read no off_lesion, and R's index of the places its lesions' findings name
+    # (``_named``) reads R.lesions alone - so the assumed FactSet's reads of the act are R's, with the statement's
+    # lesions asked: built once per FactSet (R's), never re-read for every assumption (each call re-read every listed
+    # lesion's finding: 107 s of FINAL-V2 1.8's bound plan).
+    base = _act_read(R, act)
+    seeded = _reads_of(assumed)
+    if seeded.named is None:
+        seeded.named = _reads_of(R).named
+    if act not in seeded.acts:
+        read = seeded.acts[act] = _ActRead(base.asked | frozenset(own.lesions), base.controlled, base.places)
+        read.apart = base.apart  # the same values on R and on the assumption: read once
+    return _target_row(assumed, _context(assumed, statement, act)) is RowResult.INDEPENDENT
 
 
 def _devices(found: Fact) -> frozenset[Device] | None:
@@ -1402,12 +1613,25 @@ def _anchor_spans(R: FactSet, event: Id) -> tuple[Span, ...]:
 
 
 def relation(R: FactSet, statement: Id, act: Id) -> Pair:
-    """The pair's relation (4.5; module docstring). ValueError unless the two pair (``paired``)."""
+    """The pair's relation (4.5; module docstring). ValueError unless the two pair (``paired``). DECISIONS D330 (2): a
+    pair whose R_base relation R_q's fold kept (facts.kept_pairs: a release a pair-family answer not AFFIRMED contests)
+    is its R_base relation (R.base's), whatever R_q's facts and answers say."""
+    kept = facts_.kept_pairs(R)
+    if kept and (statement, act) in kept and R.base is not None:
+        return relation(R.base, statement, act)
     if not paired(R, statement, act):
         raise ValueError(f'{statement} does not pair with {act} (FINAL-V2 4.5).')
     context = _context(R, statement, act)
     results = tuple((which, _ROWS[which](R, context)) for which in Row)
     named = claimed(R, statement, act)
+    if (statement, act) in R.independent:
+        # round r3 (DESIGN-v2 b.1; PROTOTYPE): an established Q-REL answer - "this statement does not concern act A",
+        # supported with located proof and its exact negation rejected - reads the pair INDEPENDENT on R_q only (a
+        # claimed pair included: its covers claim can only turn INDEPENDENT into UNRESOLVED, and the answer turns it
+        # back); R_base holds no answer, so 4.6 never reads it
+        spans = tuple(sorted(set(_anchor_spans(R, statement)) | set(_anchor_spans(R, act))))
+        return Pair(statement=statement, act=act, relation=Relation.INDEPENDENT, row=None, rows=results,
+                    claimed=named, possible=context.possible, kinds=context.kinds, spans=spans, appraised=True)
     independent = next((which for which, found in results if found is RowResult.INDEPENDENT), None)
     unresolved = next((which for which, found in results if found is RowResult.UNRESOLVED), None)
     found_row: Row | None
@@ -1449,7 +1673,21 @@ def positive(R: FactSet, act: Id) -> bool:
 def unlisted_pairs(R: FactSet, act: Id) -> tuple[UnlistedPair, ...]:
     """Every kept unlisted denial or doubt pairing with ``act`` (3.2.6 rule 4; module docstring), in FactSet.unlisted's
     order: the act possibly positive, of a kind the entry's kind covers (any kind when the entry names none), possibly
-    in the entry's session (any session when it names none)."""
+    in the entry's session (any session when it names none). DECISIONS D330 (2): an entry whose R_base pair with the
+    act R_q's fold kept (facts.kept_unlisted: a release a Q-REL answer not AFFIRMED contests) pairs as on R_base."""
+    found = _unlisted_pairs(R, act)
+    kept = facts_.kept_unlisted(R)
+    if not kept or R.base is None:
+        return found
+    indices = {index for index, other in kept if other == act} - {pair.index for pair in found}
+    if not indices:
+        return found
+    restored = tuple(pair for pair in _unlisted_pairs(R.base, act) if pair.index in indices)
+    return tuple(sorted((*found, *restored), key=lambda pair: pair.index))
+
+
+def _unlisted_pairs(R: FactSet, act: Id) -> tuple[UnlistedPair, ...]:
+    """``unlisted_pairs`` as R's own facts and answers read it."""
     if not positive(R, act):
         return ()
     kinds = act_kinds(R, act)
@@ -1457,6 +1695,8 @@ def unlisted_pairs(R: FactSet, act: Id) -> tuple[UnlistedPair, ...]:
     out: list[UnlistedPair] = []
     for index, entry in enumerate(R.unlisted):
         if entry.what is UnlistedWhat.ACT:
+            continue
+        if (index, act) in R.unlisted_independent:  # round r3 (DESIGN-v2 b.1, U1; PROTOTYPE): a Q-REL answer, R_q only
             continue
         if entry.kind is not None and not any(catalogue.covers(entry.kind, kind) for kind in kinds):
             continue

@@ -27,7 +27,10 @@ from .interpretation import holds as interpretation_holds
 Job = models.Job
 INTERPRET = jobs.INTERPRET  # the Gemini migration's interpret stage (design/FINAL.md 6.11)
 APPRAISE = jobs.APPRAISE  # design v2's pass 2 (FINAL-V2 7.4; 4.12: in interpret's step, Identifying procedures)
-READING_KINDS = (INTERPRET, APPRAISE)
+# round r3 (DECISIONS D320, D322): the question stage - the check of the reading continued - in pass 2's step, in pass
+# 2's words (its detail and its slow message), its bound its own stage deadline: no new customer text
+QUESTION = jobs.QUESTION
+READING_KINDS = (INTERPRET, APPRAISE, QUESTION)
 ACTIVE = (Job.QUEUED, Job.RUNNING)
 READING, IDENTIFYING, CHECKING, PREPARING = 'reading', 'identifying', 'checking', 'preparing'
 STEPS = ((READING, 'Reading your document'), (IDENTIFYING, 'Identifying procedures'),
@@ -46,9 +49,9 @@ CHECK_KINDS = Job.PARTICIPANT_KINDS + Job.PEER_KINDS
 APPRAISE_DETAIL = 'Checking the reading against the document'
 DETAILS = {Job.PREDICT: DOCUMENT_REVIEW, Job.REVIEW2: DOCUMENT_REVIEW, Job.ASSESS: CODING_VALIDATION,
            **{kind: INDEPENDENT_CHECKS for kind in CHECK_KINDS}, INTERPRET: 'Reading the documented procedures',
-           APPRAISE: APPRAISE_DETAIL}
+           APPRAISE: APPRAISE_DETAIL, QUESTION: APPRAISE_DETAIL}
 STEP_OF = {Job.EXTRACT: READING, Job.ANALYZE: IDENTIFYING, INTERPRET: IDENTIFYING, APPRAISE: IDENTIFYING,
-           **{kind: CHECKING for kind in SENDING_KINDS + CHECK_KINDS}}
+           QUESTION: IDENTIFYING, **{kind: CHECKING for kind in SENDING_KINDS + CHECK_KINDS}}
 JOB_STEP_STATES = {Job.SUCCEEDED: 'done', Job.FAILED: 'failed', Job.CANCELLED: 'stopped',
                    # an outcome still being confirmed did not finish; it is never called a failure of a send that may
                    # have been answered (the being_confirmed phase says what happens next)
@@ -97,6 +100,7 @@ SLOW_MESSAGES = {
     Job.ANALYZE: 'Identifying the procedures is taking longer than usual for this document.',
     INTERPRET: 'Reading the documented procedures is taking longer than usual for this document.',
     APPRAISE: 'Checking the reading against the document is taking longer than usual for this document.',
+    QUESTION: 'Checking the reading against the document is taking longer than usual for this document.',
     Job.PREDICT: ('The document review is taking longer than usual: it is still waiting for the coding service to '
                   'answer.'),
     Job.REVIEW2: ('The document review is taking longer than usual: it is still waiting for the coding service to '
@@ -653,7 +657,7 @@ def _busy_state(key, mine, current, revision, configured):
             return 'waiting'  # an assess #1: its peer reviews follow it
     if mine:
         return _jobs_outcome(mine)
-    if (active.kind in (Job.EXTRACT, INTERPRET, APPRAISE, Job.ANALYZE)
+    if (active.kind in (Job.EXTRACT, INTERPRET, APPRAISE, QUESTION, Job.ANALYZE)
             or (key == 'independent_checks' and active.kind in SENDING_KINDS)):
         return 'waiting'
     previous = jobs._newest_assessment(revision)  # 4.1: an abandoned unfinished assessment of an update left out

@@ -62,7 +62,7 @@ class R2BRJudgeAssertion7Tests(unittest.TestCase):
     own and fail or pass as they may: only assertion 7 is pinned): its verdict, problems and reported evidence, and the
     summary line D15-SUMMARY.txt prints for it."""
 
-    def judge(self, found, *, v2: bool, fable: bool) -> tuple:
+    def judge(self, found, *, v2: bool, fable: bool, question: bool = False) -> tuple:
         """(assertion 7's record, its D15-SUMMARY.txt lines: its verdict, its evidence and each problem printed) of
         Check.assess on a transcript whose switch-back counted ``found`` before it ran."""
         worker = {'running': True, 'restarts': 0, 'oom_killed': False}
@@ -77,6 +77,7 @@ class R2BRJudgeAssertion7Tests(unittest.TestCase):
                        'reading_jobs_at_start': [], 'started_at': START}}
         check.instance = SimpleNamespace(calls=[])
         check.views, check.declared, check.v2, check.fable = {}, None, v2, fable
+        check.question = question  # round r3: a candidate whose installer knows the question stage (question_candidate)
         check.candidate = {'tag': 'cpt-studio:candidate', 'revision': 'c' * 40}
         check.previous = {'tag': 'cpt-studio:previous', 'revision': 'p' * 40}
         check.args = SimpleNamespace(db='test_r2br_synthetic')
@@ -90,15 +91,16 @@ class R2BRJudgeAssertion7Tests(unittest.TestCase):
         end = next(index for index, line in enumerate(summary) if line.startswith('  8. '))
         return seventh[0], summary[at:end]
 
-    def assertSeventh(self, found, *, v2, fable, result, problems, reported):
-        seventh, lines = self.judge(found, v2=v2, fable=fable)
+    def assertSeventh(self, found, *, v2, fable, result, problems, reported, question=False):
+        seventh, lines = self.judge(found, v2=v2, fable=fable, question=question)
         self.assertEqual((seventh['result'], seventh['problems']), (result, problems))
         self.assertEqual(seventh['evidence']['reported_not_required'], reported)
         self.assertEqual((seventh['evidence']['v2_candidate'], seventh['evidence']['fable_candidate'],
-                          seventh['evidence']['scenario_v2']), (v2, fable, found))
+                          seventh['evidence']['question_candidate'], seventh['evidence']['scenario_v2']),
+                         (v2, fable, question, found))
         self.assertTrue(lines[0].startswith(f'  7. {result}  '), lines[0])
-        self.assertEqual(lines[1], f'       evidence: v2 candidate {v2}; Fable candidate {fable}; record kinds {found}; '
-                                   f'reported, never required: {reported}')
+        self.assertEqual(lines[1], f'       evidence: v2 candidate {v2}; Fable candidate {fable}; question candidate '
+                                   f'{question}; record kinds {found}; reported, never required: {reported}')
         self.assertEqual(lines[2:], [f'       - {problem}' for problem in problems])
         return seventh, lines
 
@@ -113,6 +115,18 @@ class R2BRJudgeAssertion7Tests(unittest.TestCase):
         seventh, lines = self.assertSeventh(counts(declined_hold=0, fable_inventory=0), v2=True, fable=True,
                                             result='FAIL', problems=[problem], reported={'declined_hold': 0})
         self.assertEqual(lines[2:], [f'       - {problem}'])  # each problem is printed under the evidence
+
+    def test_a_question_candidate_is_judged_on_the_question_stages_kinds(self):
+        """Round r3: a candidate with the question stage requires its records - a run without an answer-released code
+        fails assertion 7 naming it - and the same counts pass a candidate without the stage (the boundary)."""
+        found = counts(rc.SCENARIO_V2 + rc.SCENARIO_V3 + rc.SCENARIO_R3, declined_hold=0, question_released=0)
+        problem = 'question_released: the run holds no a code an established answer released'
+        self.assertSeventh(found, v2=True, fable=True, question=True, result='FAIL', problems=[problem],
+                           reported={'declined_hold': 0})
+        self.assertSeventh(found, v2=True, fable=True, question=False, result='PASS', problems=[],
+                           reported={'declined_hold': 0})
+        self.assertSeventh(counts(rc.SCENARIO_V2 + rc.SCENARIO_V3 + rc.SCENARIO_R3, declined_hold=0), v2=True,
+                           fable=True, question=True, result='PASS', problems=[], reported={'declined_hold': 0})
 
     def test_an_uncounted_declined_hold_is_reported_as_not_counted(self):
         self.assertSeventh(counts(declined_hold='RuntimeError: psql failed'), v2=True, fable=True, result='PASS',
@@ -166,7 +180,7 @@ class R2BRStopBoundFormsTests(unittest.TestCase):
     """The F4 guard reads every form it lists, in every ops text, whole when wrapped; a stale value planted in any of
     them is refused, and a statement of the bound in a form it does not list fails its completeness test."""
     INSTALL_MD, INSTALL_PY = OPS / 'INSTALL.md', OPS / 'install.py'
-    OLD = 600  # the worker's bound before AMENDMENT-2 1.12: the stale value a missed statement keeps
+    OLD = 1500  # the worker's bound before round r3 (600 before AMENDMENT-2 1.12): the stale value a missed one keeps
 
     def test_the_guard_reads_the_texts_as_they_stand(self):
         for path in F4.ops_texts():
@@ -181,15 +195,15 @@ class R2BRStopBoundFormsTests(unittest.TestCase):
         old = self.OLD
         plants = (
             # (the text, its statement as it stands, the same statement stale)
-            (self.INSTALL_MD, 'read-only root, stop timeout 1,500 s', f'read-only root, stop timeout {old} s'),
-            (self.INSTALL_PY, "D289's G2-01): 1,500 s outlasts", f"D289's G2-01): {old} s outlasts"),
-            (self.INSTALL_PY, 'may so wait up to 25 minutes', f'may so wait up to {old // 60} minutes'),
-            (self.INSTALL_MD, "The worker's stop timeout (1,500 s", f"The worker's stop timeout ({old} s"),
-            (self.INSTALL_MD, 'can take up to 25 minutes', f'can take up to {old // 60} minutes'),
-            (self.INSTALL_MD, 'about a second when idle, up to 1,500 s', f'about a second when idle, up to {old} s'),
-            (self.INSTALL_MD, 'when the 1,500 s pass', f'when the {old} s pass'),
-            (self.INSTALL_MD, '`docker\n  stop --time 1500`', f'`docker\n  stop --time {old}`'),
-            (self.INSTALL_PY, "(STOP_SECONDS['worker'], 1,500 s)", f"(STOP_SECONDS['worker'], {old} s)"),
+            (self.INSTALL_MD, 'read-only root, stop timeout 1,800 s', f'read-only root, stop timeout {old} s'),
+            (self.INSTALL_PY, 'So 1,800 s outlasts', f'So {old} s outlasts'),
+            (self.INSTALL_PY, 'may so wait up to 30 minutes', f'may so wait up to {old // 60} minutes'),
+            (self.INSTALL_MD, "The worker's stop timeout (1,800 s", f"The worker's stop timeout ({old} s"),
+            (self.INSTALL_MD, 'can take\n  up to 30 minutes', f'can take\n  up to {old // 60} minutes'),
+            (self.INSTALL_MD, 'about a second when idle, up to 1,800 s', f'about a second when idle, up to {old} s'),
+            (self.INSTALL_MD, 'when the 1,800 s pass', f'when the {old} s pass'),
+            (self.INSTALL_MD, '`docker\n  stop --time 1800`', f'`docker\n  stop --time {old}`'),
+            (self.INSTALL_PY, "(STOP_SECONDS['worker'], 1,800 s)", f"(STOP_SECONDS['worker'], {old} s)"),
         )
         for path, now, then in plants:
             with self.subTest(path=path.name, statement=then):
@@ -197,21 +211,21 @@ class R2BRStopBoundFormsTests(unittest.TestCase):
                 self.assertTrue(stale(path, planted(path, now, then)), 'the guard did not read the stale statement')
 
     def test_a_wrapped_statement_is_read_whole(self):
-        """INSTALL.md's '(up to' and '1,500 s; ...' stand on two lines: the guard reads them as one statement."""
+        """INSTALL.md's '(up to' and '1,800 s; ...' stand on two lines: the guard reads them as one statement."""
         text = self.INSTALL_MD.read_text(encoding='utf-8')
-        self.assertTrue(re.search(r'\(up to\n\s+1,500 s;', text), 'the wrapped statement this test reads moved')
-        self.assertTrue(stale(self.INSTALL_MD, re.sub(r'\(up to\n(\s+)1,500 s;', rf'(up to\n\g<1>{self.OLD} s;', text,
+        self.assertTrue(re.search(r'\(up to\n\s+1,800 s;', text), 'the wrapped statement this test reads moved')
+        self.assertTrue(stale(self.INSTALL_MD, re.sub(r'\(up to\n(\s+)1,800 s;', rf'(up to\n\g<1>{self.OLD} s;', text,
                                                       count=1)))
 
     def test_a_statement_of_the_bound_in_a_form_the_guard_does_not_list_fails_its_completeness_test(self):
-        text = planted(self.INSTALL_MD, 'stop timeout 1,500 s', 'stop timeout 1,500 s (the worker is given 1,500 '
+        text = planted(self.INSTALL_MD, 'stop timeout 1,800 s', 'stop timeout 1,800 s (the worker is given 1,800 '
                                                                 'seconds to finish its stage)')
-        self.assertEqual(unlisted(self.INSTALL_MD, text), ['1,500 seconds'])
+        self.assertEqual(unlisted(self.INSTALL_MD, text), ['1,800 seconds'])
         self.assertEqual(stale(self.INSTALL_MD, text), [])  # its value is right: only the completeness test reads it
 
     def test_the_other_bounds_are_never_read_as_a_stop_bound(self):
-        """The boundary: the drain's 'up to 600 s', the 600 s stale-stage sweep and the reading stages' 1,440 s and
-        1,380 s are no statements of a stop bound - every value a listed form reads is a role's bound (the web's 30 s
+        """The boundary: the drain's 'up to 600 s', the 600 s stale-stage sweep, the reading stages' 1,440 s, 1,560 s
+        and 1,380 s and the question stage's 1,588 s and 1,768 s are no statements of a stop bound - every value a listed form reads is a role's bound (the web's 30 s
         too, since D301 RBRX-2 listed its form)."""
         for path in (self.INSTALL_MD, self.INSTALL_PY):
             with self.subTest(path=path.name):

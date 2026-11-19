@@ -113,8 +113,11 @@ def _lock_wait_seconds() -> int:
     """How long --wait-for-lock waits for the provider lock (AMENDMENT-2 1.11 [R:cost-F-COST-8]): the interpreter's
     send deadline - the longer of its two passes', INTERPRETER_SEND_DEADLINE_SECONDS and
     APPRAISER_SEND_DEADLINE_SECONDS, read from settings at call time: a reading's send holds the lock for up to that
-    long - plus LOCK_WAIT_MARGIN_SECONDS."""
-    deadline: int = max(settings.INTERPRETER_SEND_DEADLINE_SECONDS, settings.APPRAISER_SEND_DEADLINE_SECONDS)
+    long - plus LOCK_WAIT_MARGIN_SECONDS. Round r3 (DECISIONS D322 (4)): a round of question requests holds the lock
+    for its sends, each within QUESTION_SEND_DEADLINE_SECONDS, so that deadline is read too (1,408 + 60 = 1,468 s,
+    which ops/install.py's ACCESS_CHECK_SECONDS covers)."""
+    deadline: int = max(settings.INTERPRETER_SEND_DEADLINE_SECONDS, settings.APPRAISER_SEND_DEADLINE_SECONDS,
+                        settings.QUESTION_SEND_DEADLINE_SECONDS)
     return deadline + LOCK_WAIT_MARGIN_SECONDS
 
 

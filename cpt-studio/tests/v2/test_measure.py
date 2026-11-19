@@ -280,9 +280,9 @@ class ContentTests(SimpleTestCase):
         self.assertEqual(facts[5]['inherited_from'], 'N2')
         self.assertEqual(data['guard'], {'legacy_calls': 0, 'retired_calls': 0})
         # AMENDMENT-2 8.1: the D22 labels engine/assess.versions() writes (the @3 pair, inventory and engine), and
-        # cpt-requirements@2 since DECISIONS D292
+        # cpt-requirements@2 since DECISIONS D292, @3 since D324 (11)
         self.assertEqual(data['versions'], {'interpretation': 'gemini-events@3/appraisal@2',
-                                            'inventory': 'gemini-inventory@3', 'requirements': 'cpt-requirements@2',
+                                            'inventory': 'gemini-inventory@3', 'requirements': 'cpt-requirements@3',
                                             'engine': 'cpt-studio-events@3'})
         self.assertEqual(data['relations'], [{'statement': 'E4', 'act': 'E2', 'type': 'INDEPENDENT', 'row': 'timing'}])
 

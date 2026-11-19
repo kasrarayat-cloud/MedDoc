@@ -511,6 +511,10 @@ CASES += [
          shared=note8_no_place, shared_omits=N8_TATTOO_TARGETS,
          acts={'i': {'45381': ('E18',)}}, considerations={'i': {'45381': ('59|XS',)}},
          named={'i': (N8B, ANAST)},
+         # round r3's silent-link rule (DESIGN-v2 b.8, DECISIONS D308 Q-B; declared at round r3's integration): the
+         # tattoo's part link, which the note does not state, beside the EMR is a doubt the question stage asks - the
+         # engine alone holds 45381 (act_part); the documented outcome (expect) is reached on Fable's proven answer
+         declared={'i': {'45381': (H, 'act_part', 'B8')}, 'ii': {'45381': (H, 'act_part', 'B8')}},
          note='D241: (i) files the localization tattoo faithfully (its place and its lesion, the resection-bed denial on '
               'the resected lesion) and gives the documented outcome, 45381 READY; the filing with no place and no lesion '
               'is kept only as variant (iii), a residual, never a pass. D244: the EGD denied for the date of service is '

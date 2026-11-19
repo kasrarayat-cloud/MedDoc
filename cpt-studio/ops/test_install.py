@@ -703,10 +703,10 @@ class DockerArgumentTests(unittest.TestCase):
         self.assertIn(f'type=bind,src={install.CORTI_TARGET},dst={install.CREDENTIALS_IN_CONTAINER},readonly', mounts)
         self.assertIn(f'CPT_STUDIO_CORTI_CREDENTIALS_FILE={install.CREDENTIALS_IN_CONTAINER}', self.flags(live, '-e'))
         self.assertIn('--no-healthcheck', live)
-        # above every stage's deadline (a reading stage's 1,380 s the longest; a participant phase's tool loop 540 s)
-        # and every stale-stage threshold (600 s; the reading stages' 1,440 s): test_install_harness pins them against
-        # settings.py
-        self.assertEqual(self.flags(live, '--stop-timeout'), ['1500'])  # AMENDMENT-2 1.12
+        # above every stage's deadline (the question stage's 1,588 s the longest, a reading pass's 1,380 s; a
+        # participant phase's tool loop 540 s) and every stale-stage threshold (600 s; the reading passes' 1,440 s and
+        # 1,560 s, the question stage's 1,768 s): test_install_harness pins them against settings.py
+        self.assertEqual(self.flags(live, '--stop-timeout'), ['1800'])  # round r3 (D322 (4)); 1500 by AMENDMENT-2 1.12
         self.assertEqual(self.flags(live, '-p'), [])
         disabled = install.service_args('worker', self.IMAGE, REVISION, 'disabled', '')
         self.assertNotIn('corti', ' '.join(disabled).lower())

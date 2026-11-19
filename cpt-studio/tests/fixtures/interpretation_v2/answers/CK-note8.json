@@ -23,6 +23,22 @@
   }
  },
  "date_of_service": "2026-11-08",
+ "declared": {
+  "i": {
+   "45381": {
+    "item": "act_part",
+    "rule": "B8",
+    "status": "needs_clarification"
+   }
+  },
+  "ii": {
+   "45381": {
+    "item": "act_part",
+    "rule": "B8",
+    "status": "needs_clarification"
+   }
+  }
+ },
  "document": "documents/CK-note8.txt",
  "document_sha256": "25ef61e4bf743b70a99fea032a83a429bc6e954c89564ff4b53aaddf9ef00a85",
  "expect": {

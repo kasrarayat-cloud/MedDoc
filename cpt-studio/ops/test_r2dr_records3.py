@@ -148,11 +148,11 @@ class R2DRStopBoundEveryRoleTests(unittest.TestCase):
     def test_the_workers_reading_is_left_alone(self):
         """The boundary (the r2b refutation's control): moving the worker's bound still fails the guard on the worker's
         statements, and no statement of the web's form is read as the worker's."""
-        result = guard(STATEMENT_TEST, worker=1800)
+        result = guard(STATEMENT_TEST, worker=2100)  # round r3: the bound is 1,800 s, so the move is to 2,100 s
         self.assertFalse(result.wasSuccessful())
         self.assertGreaterEqual(len(failing(result)), 12)
         self.assertNotIn(WEB_FORM, {item.get('form') for item in failing(result)})
-        with mock.patch.dict(install.STOP_SECONDS, {'worker': 1800}):
+        with mock.patch.dict(install.STOP_SECONDS, {'worker': 2100}):
             self.assertNotIn('web', {role for path in F4.ops_texts() for _, role, _ in stale(F4.prose(path))})
 
 

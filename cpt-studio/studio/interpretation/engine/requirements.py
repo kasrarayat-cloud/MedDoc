@@ -1,6 +1,8 @@
 """The requirement table of design v2 (docs/gemini-migration/FINAL-V2.md 4.3, 4.8, 4.9, 3.2.1 and Appendix A; step 1f of
 8.1; labelled REQUIREMENTS_VERSION - cpt-requirements@1, and cpt-requirements@2 once DECISIONS D292's E1j read-set
-lands, the integration's label): what each code requires, what each requirement reads and what
+lands, the integration's label; cpt-requirements@3 since DECISIONS D324 (11), round r3's rules - the colonoscopy route
+table's reads, D310 (1), and SUP.8's reads of a statement's target.anatomy and target.structure, R2E-QB-ANAT - because
+a label kept would keep old records current): what each code requires, what each requirement reads and what
 it raises, the fixed RANK of a held code's items, the CLAIMED table pass 2's claims are selected from, and each code's
 requirement closure, dependencies(code).
 
@@ -18,7 +20,13 @@ they read these tables.
   writes), B's V.this_encounter (4.3's E/M row), and 4.3's code-specific rows. requirements_of(code) lists a code's,
   in 4.3's order: SUPPORT (the examination's for BASE and EUS_EXAM, the visit's for EM), the E/M encounter, its tags,
   then route (b) or route (d), bundling, combination, R7 and R9 as its template carries them. Route (b) is never READY
-  and its one item is a ROUTE_B row's (DECISIONS D197).
+  and its one item is a ROUTE_B row's (DECISIONS D197). DECISIONS D328 (1)'s ROUTE_TABLE is the lower-GI route table's
+  row (catalogue.LOWER_ROUTES): reads_of adds its reads to every lower-GI endoscopy code's (catalogue.lower_gi), so its
+  closure (dependencies) holds them. A colonoscopy code's route row is its COLFULL row and a lower EUS code's its LOWER
+  row, as the rounds before built them; the row stands apart under this id only for a sigmoidoscopy and an enteroscopy
+  through a stoma or a pouch, and - DECISIONS D330 (1) (a), rules5's Q2 - requirements_of lists it for exactly those
+  codes (after their tags), so 9.1's trace names it and gate 6 generates its cases (tests/v2/test_gate6.py cases on
+  requirements_of).
 - **RULES** give each requirement's reads - (role, attribute, paths, kinds): the object it reads, the attribute, whether
   a READY or an exclusion path reads it or only a hold can follow from it, and the act kinds read when narrower than
   the role's - and the items it raises: ``asks`` for an unresolved requirement (U: 4.3's "unmet -> fact"), ``explains``
@@ -200,6 +208,12 @@ class Requirement(Enum):
     BUNDLING = 'bundling'  # every code (4.7): part_of, cause, lesion identity, duct; the whole read by possibly
     COMBINATION = 'combination'  # as v1 (4.7): base, base-within, competing over facts
     R7_R9 = 'R7, R9'  # every code: the date of service known; the references are records
+    # DECISIONS D328 (1): the lower-GI route table's row (catalogue.LOWER_ROUTES): every lower-GI endoscopy code's route
+    # and the anatomy it needs. A colonoscopy code's route row is its COLFULL row and a lower EUS code's its LOWER row
+    # (engine/evaluate, as the rounds before built them), so this id names the row only where it stands apart from the
+    # code's tags - a sigmoidoscopy's and an enteroscopy's through a stoma or a pouch. Its reads join the closure of every
+    # lower-GI code (reads_of); requirements_of lists it where it stands apart (DECISIONS D330 (1) (a): module docstring)
+    ROUTE_TABLE = 'route table'
 
 
 @unique
@@ -395,14 +409,18 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     # 4.3 row 8: the pairing table (4.5) over every paired statement, both sides read; 4.6 conditions 1-3 read the
     # statement; an unlisted denial or doubt pairs UNRESOLVED (3.2.6 rule 4). A CONTRADICTION asks rank 1, a DOUBT
     # rank 2, an UNRESOLVED(attribute) that attribute (session, timing, performer, technique) or statement_scope. The
-    # target row reads the act's lesion and places when its kind has a target (D195): never a visit's.
+    # target row reads the act's lesion and places when its kind has a target (D195): never a visit's. Round r3's
+    # integration (the second refutation's R2E-QB-ANAT; D316 QB's class): the target row's QB clause reads every target a
+    # statement names for itself beyond its not-on lesions - its target.anatomy and target.structure too - so they are
+    # read here (P-INDEP: a fact a code's outcome turns on lies in its closure).
     Requirement.SUP_CLEAN: Rule((
         _r(_STATEMENT, _A.KIND, _BOTH), _r(_STATEMENT, _A.STATUS, _BOTH), _r(_STATEMENT, _A.SESSION, _BOTH),
         _r(_STATEMENT, _A.DATE_RELATION, _BOTH), _r(_STATEMENT, _A.PERFORMER, _BOTH),
         _r(_STATEMENT, _A.PERFORMER_PERSON), _r(_STATEMENT, _A.SCOPE_BREADTH, _BOTH),
         _r(_STATEMENT, _A.SCOPE_EXCEPTS, _BOTH), _r(_STATEMENT, _A.SCOPE_COVERS, _HOLD),
         _r(_STATEMENT, _A.SCOPE_TARGETS), _r(_STATEMENT, _A.SCOPE_SEGMENT), _r(_STATEMENT, _A.TARGET_LESION),
-        _r(_STATEMENT, _A.TARGET_PLACES), _r(_STATEMENT, _A.TECHNIQUE_DEVICE),
+        _r(_STATEMENT, _A.TARGET_PLACES), _r(_STATEMENT, _A.TARGET_ANATOMY), _r(_STATEMENT, _A.TARGET_STRUCTURE),
+        _r(_STATEMENT, _A.TECHNIQUE_DEVICE),
         _r(_ACT, _A.KIND), _r(_ACT, _A.STATUS), _r(_ACT, _A.SESSION), _r(_ACT, _A.DATE_RELATION),
         _r(_ACT, _A.PERFORMER), _r(_ACT, _A.PERFORMER_PERSON), _r(_ACT, _A.TARGET_LESION, kinds=_TARGET_KINDS),
         _r(_ACT, _A.TARGET_PLACES, kinds=_TARGET_KINDS), _r(_ACT, _A.TECHNIQUE_DEVICE),
@@ -448,13 +466,36 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     # 4.3 R7, R9: the date of service known (document or member); the encounter-scope date question
     Requirement.R7_R9: Rule((_r(Role.ENCOUNTER, _A.DATE_OF_SERVICE), _r(Role.MEMBER, None)),
                             asks=(Item(None, FactKey.SERVICE_DATE),)),
+    # DECISIONS D328 (1): the lower-GI route table's row (engine/evaluate's route rows over catalogue.LOWER_ROUTES): the
+    # session's approach (per anus, through a stoma established is the explanation, a stoma that may exist the approach's
+    # question, a pouch the table's own hold) and the entry it passed through (an ileoscopy through a stoma needs an
+    # ileal stoma), every anatomy entry's type and organ (a stoma or a pouch that may exist, a colonic organ, the
+    # segments filed absent) - and, to hold only, every entry's subtype and joins (an anastomosis that may join the ileum
+    # below the colon: DECISIONS D327 (1) and the D328 addendum's Q3). Asked and explained at RANK row 8 (procedure), as
+    # COLFULL's route and LOWER's stoma class are. DECISIONS D330 (1): the lower-GI path guard reads the same facts (every
+    # entry's type, organ, subtype and joins against the ruled harmless set, the approach and the through of a per-anus
+    # route) and, for the ileoscopy through a stoma, the session's REACH - a reach supported at or past the cecum holds
+    # (R5R-9) - to hold only
+    Requirement.ROUTE_TABLE: Rule((_r(_SESSION, _A.APPROACH), _r(_SESSION, _A.THROUGH), _r(Role.ANATOMY, _A.TYPE),
+                                   _r(Role.ANATOMY, _A.ORGAN), _r(Role.ANATOMY, _A.SUBTYPE, _HOLD),
+                                   _r(Role.ANATOMY, _A.JOINS, _HOLD), _r(_SESSION, _A.REACHED, _HOLD)),
+                                  asks=(_PROCEDURE,), explains=(_PROCEDURE,)),
     # --- the code-specific rows (the table's tags) ---
     # ATT: attempted_not_completed accepted for the examination; F (incomplete) is the 52/53 consideration, no item
     Tag.ATT: Rule((_e(_A.STATUS),)),
     Tag.R6_EXTENT: Rule((_r(_SESSION, _A.REACHED), _r(_SESSION, _A.COMPLETION)), asks=(_EXTENT,)),
-    # COLFULL: a FULL_REACH point, or reached_anatomy with an ileocolic subtype; completion incomplete is 52/53
+    # COLFULL: a FULL_REACH point, or reached_anatomy with an ileocolic subtype; completion incomplete is 52/53.
+    # Round r3's probe prototype (DECISIONS D310 (1)): the colonoscopy route table under the same row - the session's
+    # approach and every anatomy entry's type, asked and explained at RANK row 8 (procedure), as LOWER's stoma class
+    # DECISIONS D324 (5) (round r3's integration int5, the rules lane's Q1): the route's colonic reach, the colon filed
+    # absent and the lower-tract stoma closure read every anatomy entry's ORGAN (evaluate.colonic_route,
+    # colon_absent_possible, lower_stoma_possible) - read to hold only where pass 2 never established it.
+    # DECISIONS D328 (its addendum's Q3): the colon arm reads an anastomosis's JOINS as well as its subtype (one that may
+    # join the ileum to the rectum or the anus holds: evaluate.joins_ileum_below_colon_possible) - read to hold only
     Tag.COLFULL: Rule((_r(_SESSION, _A.REACHED), _r(_SESSION, _A.REACHED_ANATOMY), _r(Role.ANATOMY, _A.SUBTYPE),
-                       _r(_SESSION, _A.COMPLETION)), asks=(_EXTENT,)),
+                       _r(_SESSION, _A.COMPLETION), _r(_SESSION, _A.APPROACH), _r(Role.ANATOMY, _A.TYPE),
+                       _r(Role.ANATOMY, _A.ORGAN), _r(Role.ANATOMY, _A.JOINS, _HOLD)),
+                      asks=(_EXTENT, _PROCEDURE), explains=(_PROCEDURE,)),
     Tag.R6_TARGET: Rule((_e(_A.TARGET_PLACES), _r(_EXAM, _A.TARGET_PLACES, kinds=_EXAMINATION)),
                         asks=(_TARGET,)),
     Tag.R6_CANNULATION: Rule((
@@ -484,8 +525,16 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     Tag.STATIONS: Rule((_r(_SESSION, _A.STATIONS), _r(_SESSION, _A.REACHED)), asks=(_STATIONS,),
                        explains=(_STATIONS,)),
     Tag.LIMITED: Rule((_r(_SESSION, _A.REACHED), _r(_SESSION, _A.STATIONS)), asks=(_STATIONS,), explains=(_STATIONS,)),
-    # LOWER asks and explains the approach at RANK row 8 beside the extent (DECISIONS D225 P5; repair r4a's R1)
-    Tag.LOWER: Rule((_r(_SESSION, _A.REACHED), _r(_SESSION, _A.APPROACH), _r(Role.ANATOMY, _A.TYPE)),
+    # LOWER asks and explains the approach at RANK row 8 beside the extent (DECISIONS D225 P5; repair r4a's R1).
+    # DECISIONS D325 (2) (round r3's third repair; the int5 integrator's Q1): the stoma class's colonic route reads every
+    # anatomy entry's ORGAN too (evaluate._lower_colonic -> colonic_route, colon_absent_possible) - read to hold only
+    # where pass 2 never established it, as COLFULL's route reads it. DECISIONS D328's addendum (rules4 Q1, Q3): the
+    # colonic route's colon arm (DECISIONS D327 (1)) reads every entry's SUBTYPE and JOINS too, and - D328 (1) - the per-
+    # anus classes' route rows read them (a colonoscopic EUS needs a colon to traverse): both to hold only (a subtype or
+    # joins that may join the ileum below the colon never releases), so P-INDEP's closure holds them
+    Tag.LOWER: Rule((_r(_SESSION, _A.REACHED), _r(_SESSION, _A.APPROACH), _r(Role.ANATOMY, _A.TYPE),
+                     _r(Role.ANATOMY, _A.ORGAN), _r(Role.ANATOMY, _A.SUBTYPE, _HOLD),
+                     _r(Role.ANATOMY, _A.JOINS, _HOLD)),
                     asks=(_EXTENT, _PROCEDURE), explains=(_EXTENT, _PROCEDURE)),
     Tag.ENT: Rule((_r(_SESSION, _A.APPROACH), _r(_SESSION, _A.THROUGH), _r(_SESSION, _A.REACHED),
                    _r(_SESSION, _A.COMPLETION), _r(Role.ANATOMY, _A.TYPE),
@@ -587,12 +636,21 @@ def spec(code: str) -> Spec:
     return Spec(code, Template.UNPROFILED, link.family, (), (), None)
 
 
-def requirements_of(code: str) -> tuple[Requirement | Tag, ...]:
-    """The requirements of ``code`` in 4.3's order: its template's head (SUPPORT, the E/M encounter), its tags, then its
-    template's tail (route (b) or route (d), bundling, combination, R7 and R9). What 9.1's trace lists and gate 6 cases
-    on."""
+def route_row_apart(code: str) -> bool:
+    """DECISIONS D330 (1) (a): whether the lower-GI route table's row of ``code`` stands apart from its tags - a lower-GI
+    endoscopy code (catalogue.lower_gi) whose route row is neither its COLFULL row (a colonoscopy code) nor its LOWER row
+    (a lower EUS code): a sigmoidoscopy, an enteroscopy through a stoma or a pouch."""
     found = spec(code)
-    return (*TEMPLATE_HEAD[found.template], *found.tags, *TEMPLATE_TAIL[found.template])
+    return catalogue.lower_gi(code) and Tag.COLFULL not in found.tags and Tag.LOWER not in found.tags
+
+
+def requirements_of(code: str) -> tuple[Requirement | Tag, ...]:
+    """The requirements of ``code`` in 4.3's order: its template's head (SUPPORT, the E/M encounter), its tags, the
+    lower-GI route table's row where it stands apart (``route_row_apart``: DECISIONS D330 (1) (a)), then its template's
+    tail (route (b) or route (d), bundling, combination, R7 and R9). What 9.1's trace lists and gate 6 cases on."""
+    found = spec(code)
+    route = (Requirement.ROUTE_TABLE,) if route_row_apart(code) else ()
+    return (*TEMPLATE_HEAD[found.template], *found.tags, *route, *TEMPLATE_TAIL[found.template])
 
 
 def candidate_kinds(groups: tuple[tuple[Kind, ...], ...]) -> frozenset[Kind]:
@@ -612,9 +670,16 @@ def statement_kinds(kinds: frozenset[Kind]) -> frozenset[Kind]:
 
 
 def reads_of(code: str) -> tuple[Read, ...]:
-    """Every read of ``code``'s requirements, in their order, each rule's arms only for the code's template (Rule)."""
+    """Every read of ``code``'s requirements, in their order, each rule's arms only for the code's template (Rule) - and,
+    DECISIONS D328 (1), for a lower-GI endoscopy code (catalogue.lower_gi) the route table's row's (ROUTE_TABLE, read
+    beside the code's family row by engine/evaluate): in requirements_of's order where the row stands apart (DECISIONS
+    D330 (1) (a)), else last."""
     template = spec(code).template
-    return tuple(read for requirement in requirements_of(code) for read in RULES[requirement].reads_for(template))
+    listed = requirements_of(code)
+    found = tuple(read for requirement in listed for read in RULES[requirement].reads_for(template))
+    if catalogue.lower_gi(code) and Requirement.ROUTE_TABLE not in listed:  # its route row is COLFULL's or LOWER's
+        found += RULES[Requirement.ROUTE_TABLE].reads_for(template)
+    return found
 
 
 @dataclass(frozen=True, slots=True)

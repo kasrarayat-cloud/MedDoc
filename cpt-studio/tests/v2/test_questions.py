@@ -929,9 +929,20 @@ class D246Items(SimpleTestCase):
 
     def test_the_part_question_names_the_part_its_whole_and_the_rule(self):
         """An injection beside the EMR, its relation to it doubted: PART (act_part) - the injection, the EMR's words, the
-        lift rule; with nothing stated of the injection, BUNDLING_TARGET (act_target) the same."""
-        for name, R, message in (('part_of doubted', injected(part_of=TE.doubted(E(2))), Q.MessageId.PART),
-                                 ('nothing stated', injected(), Q.MessageId.BUNDLING_TARGET)):
+        lift rule; with nothing stated of the injection, BUNDLING_TARGET (act_target) the same.
+
+        Restated at round r3's integration: the silent-link rule (DESIGN-v2 b.8, DECISIONS D308 Q-B) reads the
+        injection's SILENT cause as a doubt - its purpose silent, so possibly hemostasis, the procedural adjunct's cause
+        arm - and that item (CAUSE, act_cause) is asked first on both scenes; with the adjunct's cause arm closed (the
+        injection's cause stated: a lesion present before the session) each scene asks its lift item as before."""
+        for name, R in (('part_of doubted', injected(part_of=TE.doubted(E(2)))), ('nothing stated', injected())):
+            with self.subTest(name, check='the silent cause first'):
+                found, _worded = self.item('45381', R, self.bundling('45381', R))
+                self.assertEqual((found.message, found.held.fact, found.held.attribute),
+                                 (Q.MessageId.CAUSE, 'act_cause', ct.Attribute.CAUSE))
+        before = sup(ct.Cause.PRE_EXISTING_LESION)
+        for name, R, message in (('part_of doubted', injected(part_of=TE.doubted(E(2)), cause=before), Q.MessageId.PART),
+                                 ('nothing stated but its cause', injected(cause=before), Q.MessageId.BUNDLING_TARGET)):
             with self.subTest(name):
                 found, worded = self.item('45381', R, self.bundling('45381', R))
                 self.assertEqual((found.message, found.fill.act, found.fill.words, found.fill.whole_words,

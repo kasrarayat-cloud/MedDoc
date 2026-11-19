@@ -66,12 +66,18 @@ SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
 # 150 s), or one of the interpreter's two readings - one stream of up to settings.INTERPRETER_SEND_DEADLINE_SECONDS
 # (APPRAISER_SEND_DEADLINE_SECONDS for pass 2; 1,320 s each) inside its stage's JOB_DEADLINE_SECONDS (1,380 s). The
 # stage must be recorded before Docker kills the worker, or a request that reached the vendor is left 'sending' and a
-# reading's send is cut into an UNKNOWN outcome (HARNESS.md 8, 11.2; AMENDMENT-2 1.12). AMENDMENT-2 1.12 (DECISIONS
-# D289's G2-01): 1,500 s outlasts every stage's deadline (JOB_DEADLINE_SECONDS, the reading stages' 1,380 s the longest)
-# and every stale-stage threshold (STALE_RUNNING_SECONDS, 600 s, and STALE_RUNNING_SECONDS_BY_KIND, 1,440 s for the two
-# reading stages): a stage still running when the stop timeout passes is one the stale-stage sweep settles as cut short
-# anyway, so waiting longer buys nothing. A deploy may so wait up to 25 minutes for the old worker to stop.
-STOP_SECONDS = {'web': 30, 'worker': 1500}
+# reading's send is cut into an UNKNOWN outcome (HARNESS.md 8, 11.2; AMENDMENT-2 1.12). Round r3 (DECISIONS D322 (4))
+# adds the question stage: one job per round of question requests sent concurrently, each within
+# QUESTION_SEND_DEADLINE_SECONDS (1,408 s), inside its JOB_DEADLINE_SECONDS (1,588 s) and its stale-stage threshold
+# (1,768 s) - for a round of one wave, which is every round at the figures this installer writes (DECISIONS D325 (3):
+# QUESTION_FIGURES below; a round sends at most QUESTION_ROUND_CONCURRENCY requests at once, and a worker asked to stop
+# starts no further wave of it, so the stop never waits for more than the wave in flight). So 1,800 s outlasts every
+# stage's deadline (the question stage's 1,588 s the longest) and every stale-stage
+# threshold (STALE_RUNNING_SECONDS, 600 s; STALE_RUNNING_SECONDS_BY_KIND, 1,440 s and 1,560 s for the two reading
+# passes and 1,768 s for the question stage): a stage still running when the stop timeout passes is one the stale-stage
+# sweep settles as cut short anyway, so waiting longer buys nothing. A deploy may so wait up to 30 minutes for the old
+# worker to stop (AMENDMENT-2 1.12's 1,500 s before round r3).
+STOP_SECONDS = {'web': 30, 'worker': 1800}
 # The incoming web of a blue/green install, renamed to SERVICES['web'] once the old web is drained and stopped.
 INCOMING_WEB = SERVICES['web'] + '-next'
 # The old web's drain after the switch (drain_web): at least DRAIN_MIN_SECONDS, above gunicorn's 120 s request timeout
@@ -156,9 +162,13 @@ INTERPRETER_MODES = ('disabled', 'live', 'replay')  # FINAL 13: --interpreter-mo
 # participant send deadline (330 s) and the container's start, 420 s. Before it sends it takes the installation-wide
 # provider lock, which a reading's send holds for its whole stream, and the installer asks it to wait for that lock
 # (ACCESS_CHECK_WAIT_FLAG): up to the interpreter's longest send deadline plus 60 s (1,380 s, the command computes it
-# from settings), so a reading in flight never fails an install (AMENDMENT-2 1.11 [R:cost-F-COST-8]). The one-shot's
-# timeout covers that wait as well: 1,380 + 420 = 1,800 s.
-ACCESS_CHECK_SECONDS = 1800
+# from settings), so a reading in flight never fails an install (AMENDMENT-2 1.11 [R:cost-F-COST-8]). Round r3: a
+# question round holds the lock for its sends, each within QUESTION_SEND_DEADLINE_SECONDS (1,408 s), so the wait covers
+# 1,408 + 60 = 1,468 s once the command reads that row too (NOTES' question Q-LOCKWAIT), and the one-shot's timeout covers
+# that wait: 1,468 + 420 = 1,888 s, rounded up to 1,900 s. DECISIONS D325 (3): a round holds the lock for all of its
+# waves - one at the figures this installer writes (QUESTION_FIGURES); at figures allowing more, a check that meets a
+# later wave in flight fails when its wait ends, sending nothing, as for a reading in flight past the wait.
+ACCESS_CHECK_SECONDS = 1900
 ACCESS_CHECK_WAIT_FLAG = '--wait-for-lock'
 ACCESS_CHECK_OUTPUT_LIMIT = 64 * 1024
 # The CMS passage files the revision commits (HARNESS.md 5), in the repository and as the image ships them (/app is the
@@ -1993,13 +2003,66 @@ def worker_credential_mounts(participants: list[str] | tuple[str, ...], interpre
     return list(dict.fromkeys(binds))
 
 
+# DECISIONS D325 (3) (the second adversarial pass's L7P2-2; class d): the question stage's two figures are the owner's -
+# the worst case it reserves for one document over every round (QUESTION_DOCUMENT_CEILING_USD: a round that would pass
+# it is refused about itself and never sent) and the question requests in flight at once (QUESTION_ROUND_CONCURRENCY:
+# the rest of a round wait their turn in the same job) - and they are settings, never constants of this script: every
+# container this installer starts (the web, the worker and each one-shot: runtime_env) is given both, at the values the
+# revision's own cptstudio/settings.py gives them (question_figures reads its defaults - 25 US dollars a document and
+# 4 requests at once, D325's proposal - without running it), so the installed environment states them and settings.py
+# stays their one copy. At those figures a round is at most 4 requests, one wave, and the question stage keeps its rows
+# (the worker's stop timeout below outlasts them); a stopping worker starts no further wave of a round.
+QUESTION_FIGURES = ('QUESTION_DOCUMENT_CEILING_USD', 'QUESTION_ROUND_CONCURRENCY')
+SETTINGS_SOURCE = SELF.parents[1] / 'cptstudio' / 'settings.py'
+
+
+def question_figures(source: str | None = None) -> dict[str, str]:
+    """{'CPT_STUDIO_<name>': value} for each of QUESTION_FIGURES: the default the revision's cptstudio/settings.py gives
+    it (its one ``_env('<name>', '<value>')`` call, read with ast - nothing is imported or run; ``source``: that file's
+    text, read from SETTINGS_SOURCE when not given), checked as settings.py checks it when it loads - the ceiling a
+    non-negative amount of US dollars, the concurrency a whole number of requests, at least 1. InstallError when a
+    figure is missing, given more than once or malformed: no container is started without both."""
+    from decimal import Decimal, InvalidOperation
+
+    text = source if source is not None else SETTINGS_SOURCE.read_text(encoding='utf-8')
+    found: dict[str, list[str]] = {name: [] for name in QUESTION_FIGURES}
+    for node in ast.walk(ast.parse(text)):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == '_env'
+                and len(node.args) == 2 and not node.keywords):
+            continue
+        named, given = node.args
+        if (isinstance(named, ast.Constant) and isinstance(named.value, str) and named.value in found
+                and isinstance(given, ast.Constant) and isinstance(given.value, str)):
+            found[named.value].append(given.value)
+    figures: dict[str, str] = {}
+    for name, values in found.items():
+        if len(values) != 1:
+            raise InstallError(f'cptstudio/settings.py gives {name} {len(values)} defaults, not one; nothing was '
+                               'started.')
+        value = values[0]
+        if name == 'QUESTION_DOCUMENT_CEILING_USD':
+            try:
+                amount = Decimal(value)
+            except InvalidOperation:
+                amount = None
+            good = amount is not None and amount.is_finite() and amount >= 0
+        else:
+            good = value.isascii() and value.isdigit() and int(value) >= 1
+        if not good:
+            raise InstallError(f'cptstudio/settings.py gives {name} the default {value!r}, which it would refuse; '
+                               'nothing was started.')
+        figures[f'CPT_STUDIO_{name}'] = value
+    return figures
+
+
 def runtime_env(provider_mode, authorization_ref, *, credentials=False, participants=None, files=(), interpreter=None,
                 interpreter_file=False):
     """-e flags. Each harness participant is named with its mode - ``participants`` maps them; one not given is
     disabled, as in every one-shot - and a live one (or one in ``files``) with its credentials path. The interpreter is
     named with its mode (``interpreter``; disabled when not given, as in every one-shot), its credentials path when it
     is live (or ``interpreter_file``), and the replay directory when it replays (tests/fixtures/interpretation/; the
-    image ships no Fable recording, so a replayed interpreter fails every reading unsent)."""
+    image ships no Fable recording, so a replayed interpreter fails every reading unsent). Every container is given the
+    question stage's two figures (DECISIONS D325 (3): QUESTION_FIGURES, at the revision's settings values)."""
     values = {'CPT_STUDIO_DB_HOST': DB_CONTAINER, 'CPT_STUDIO_DB_PORT': '5432', 'CPT_STUDIO_DB_NAME': DB_NAME,
               'CPT_STUDIO_DB_USER': DB_USER, 'CPT_STUDIO_HTTPS': '1', 'CPT_STUDIO_TRUST_PROXY': '1',
               'CPT_STUDIO_PROVIDER_MODE': provider_mode, 'CPT_STUDIO_AUTHORIZATION_REF': authorization_ref}
@@ -2018,6 +2081,7 @@ def runtime_env(provider_mode, authorization_ref, *, credentials=False, particip
         values[INTERPRETER['file_env']] = INTERPRETER['mounted']
     if interpreting == 'replay':
         values[INTERPRETER['replay_env']] = INTERPRETER['replay_dir']
+    values.update(question_figures())  # D325 (3): the owner's two figures, as settings
     flags = []
     for name, value in values.items():
         flags += ['-e', f'{name}={value}']
@@ -2142,7 +2206,12 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 # every design v2 worker carries FINAL-V2 amendment 1's update (the amendment was adopted, D208, before any v2 build),
 # so an undo reverts a pending save's unapplied values only for a next worker that does not (UPDATE_PENDING below).
 APPRAISE_KIND = 'appraise'
-READING_STAGE_KINDS = ('interpret', APPRAISE_KIND)
+# Round r3 (DECISIONS D320, D322): the question stage (studio.jobs.QUESTION) is the third reading stage - context-free,
+# its runs appraisal runs - and no worker before round r3 runs it, so both scripts treat it exactly as interpret and
+# appraise (CLOSE_STAGES closes an open one on every undo whose next worker lacks it, its in-flight question runs settled
+# as any other; UNRUNNABLE_STAGES names it stuck to an older revision's app phase), and the undo's note counts it.
+QUESTION_KIND = 'question'
+READING_STAGE_KINDS = ('interpret', APPRAISE_KIND, QUESTION_KIND)
 # What this revision recorded that an older revision's web and worker would act on under their own rules (refutation
 # p1, migrate-0/-1), read in this revision's image as the installed revision 057a7d39 reads the rows - the oldest a
 # rollback goes back to. {encounter id: reasons}:
@@ -3535,7 +3604,9 @@ REQUEUED_KINDS = READING_STAGE_KINDS
 # studio.jobs.QUEUE_DEADLINE of this revision's image (a test pins the two equal): a queued stage waits that long for a
 # worker to claim it, then claim_next expires it before it starts (refutation w7r 6b-r1 R3). AMENDMENT-2 1.12: 60
 # minutes, since the one worker may hold a long note's two readings for about 20-27 minutes before it claims the next.
-QUEUE_DEADLINE_MINUTES = 60
+# Round r3 (DECISIONS D320): a long note's question rounds at effort max make it 25-55 minutes, so 120 minutes - a stage
+# queued behind two long notes still starts.
+QUEUE_DEADLINE_MINUTES = 120
 COALESCED_KINDS = ('extract',) + READING_STAGE_KINDS
 
 
@@ -4228,7 +4299,7 @@ def retire_parked(parked):
 #            verified, nor while a verified switch could still be undone.
 #   I-worker at most one worker runs; the old one is stopped before any new-revision web takes traffic, and the new one
 #            starts only after the old one has exited (no stale-stage sweep races a live stage).
-#   I-jobs   the old worker's current stage finishes (docker stop --time 1500, STOP_SECONDS['worker']); queued stages
+#   I-jobs   the old worker's current stage finishes (docker stop --time 1800, STOP_SECONDS['worker']); queued stages
 #            wait for the new worker.
 #   I-state  the stored list states are recomputed only once both old containers have stopped (phase_app).
 #   I-undo   every failure leaves the site served by a healthy web; today's hazard semantics are kept, and switching
@@ -4746,7 +4817,7 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
 
       S1  start the incoming web, INCOMING_WEB, on the idle port; it must answer health_ok for this revision and serve
           its own sign-in page and static files (smoke_web) - the old web still serves everything
-      S2  park the old worker (docker stop --time 1500, STOP_SECONDS['worker']: its current stage finishes; nothing
+      S2  park the old worker (docker stop --time 1800, STOP_SECONDS['worker']: its current stage finishes; nothing
           new is claimed) - the old web still serves, and what members start waits in the queue
       S3  switch the vhost's upstream to the idle port (switch_upstream: atomic replace, nginx -t, graceful reload,
           /health/ = this revision through the public path, co-tenants unchanged)
@@ -5266,7 +5337,7 @@ def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, 
     live, idle = plan['live'], plan['idle']
     worker = SERVICES['worker']
     log_tail(ctx, worker, 'worker', 'worker-failed')
-    stop_service_container(worker, 'worker')  # its current stage finishes (STOP_SECONDS['worker'], 1,500 s)
+    stop_service_container(worker, 'worker')  # its current stage finishes (STOP_SECONDS['worker'], 1,800 s)
     keep = keep_note(live, idle)
     details = {} if details is None else details
     first_at = dt.datetime.now(dt.timezone.utc)

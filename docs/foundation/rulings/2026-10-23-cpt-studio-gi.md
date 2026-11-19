@@ -3525,3 +3525,165 @@ pair, and the post-install walk is kept to the minimum that verifies the install
 (c) The pre-registered short set is restated by its own rule (DECISIONS D293). Two documents exposed during the build
 are withdrawn: B/fb01, which a build step's test run read, and B/fb09, which became that test's fixture in its place.
 Nothing else about the test protocol changes.
+
+## Owner directive, 2026-11-17 — Fable judges the readings; code keeps only the fixed billing rules
+
+Received 2026-11-17 in session 31dfc45d. Verbatim:
+
+> How can we reduce the holds by Fable agents i dont want to keep coding and run a new models i want to use AI isntead
+> of running patch and models is it possible? ... my main goal is not to using old way we have ai and agents right?
+
+The owner was asked how far the system should rely on Fable's judgment instead of new code patches, and chose "Fable
+judges readings (Recommended)". The two addenda, the same night, verbatim:
+
+> make sure Fable has enough pwoer to handle this matter as well if system miss or unsure to put a code on hold Fable
+> has to enter and fix as much as it can find proof to release the code but in safe good way
+
+> dont forget dont put any restriction for fable
+
+### Session interpretation, 2026-11-17 (31dfc45d, on receipt) — recorded, not owner-ruled (DECISIONS D306)
+
+(a) Fable answers the engine's own reading doubts. These are: does this sentence apply to that act; which procedure
+part; the same polyp; an act's session, date relation, entry, performer or target. Each becomes a question claim with
+its exact negation. An answer is established only when the claim is supported with a located quote from the note AND
+its negation is rejected.
+
+(b) Code keeps only the fixed billing tables (bundling, add-ons, units, competing codes, base-included). It also keeps
+the facts a document truly lacks, which stay with the coder. No new per-pattern rule is written.
+
+(c) No restriction on Fable's power. It sees the whole note. It answers at the connector's maximum output (128,000
+tokens) and its highest reasoning. Every reading-uncertainty hold is in scope, and no question is dropped for a claim
+bound. The only conditions on a release are the owner's safety bar: located proof and an agreeing cross-check, under
+the appraisal's health thresholds. Clause (c) was later amended for cost alone by the owner's approval of 2026-11-18:
+the per-document ceiling, below.
+
+## Owner decision, 2026-11-17 — one calibration item per question request
+
+Received 2026-11-17 in session 738699b2, after the paid probe's step 1 long. Fable answered every keyed question and
+all calibration items right, and both remaining holds came from the session's own proof check and question wording.
+The owner asked, verbatim:
+
+> why would we repari the old system even tho we know fable handle all those matter easily? i want you to reportm e what
+> are you reapring now since Fable handled everything
+
+Offered three options (one calibration item per request, none, or four), the owner chose "One per request
+(Recommended)".
+
+### Session interpretation, 2026-11-17 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D319)
+
+(a) Every question request carries exactly one calibration item: a known-false claim with its exact negation. A
+calibration claim answered "supports" refuses that request.
+
+(b) The item is a live check that Fable still answers honestly, for example after a model update, at about half the
+cost of four items.
+
+## Owner directive, 2026-11-17 — Fable passed: build round r3 and install it on the live site at effort max
+
+Received 2026-11-17 in session 738699b2. Verbatim:
+
+> We dont need to make proccess complicated so question is is fable pass the test on high accuracy as you tested i would
+> say yes so fable works perfectly rather the old system so build it and then install the whole update on live website
+> what is wrong now?
+
+After the session's report of cost and time per note at maximum effort (about $3 and 10 minutes for a short note, about
+$12 and 25-55 minutes for a long one, against under $1 today), verbatim:
+
+> Keep on the max and go live
+
+### Session interpretation, 2026-11-17 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D320)
+
+(a) The paid probe ends. Pairs 5-10 are dropped.
+
+(b) Round r3's question stage is built into the app on int3, then integrated, refuted adversarially, repaired and
+checked.
+
+(c) One confirmation pair (a short and a long note, about $15) is the only paid step left.
+
+(d) The install follows with its declaration and the owner's walk. On the live site the question stage runs at effort
+max with 128,000 output tokens.
+
+(e) The customer surface is unchanged.
+
+## Owner approval, 2026-11-17 — the install's accepted-capability loss and the cost per note at effort max
+
+Received 2026-11-17T18:27:53Z in session 738699b2. What the session put to the owner, verbatim:
+
+> Approvals made on the old engine don't carry over: an old note has to be re-checked before it can be approved or
+> exported again. Nothing already saved or downloaded is changed.
+
+> the cost per note at max effort (about $3 short, about $12 long)
+
+The owner's answer, verbatim:
+
+> i approve
+
+### Session interpretation, 2026-11-17 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D321)
+
+(a) The class-b loss is accepted. A legacy assessment's approval does not carry across engines, and a new approval or
+export of a legacy note is refused until it is checked again by its explicit act. Existing decisions and downloaded
+reports stay as records.
+
+(a') Narrowed by the build, recorded 2026-11-18 (DECISIONS D329 (3)): clause (a) was broader than the code. A legacy note
+nobody touches stays as it is today: its assessment, decisions and exports stand, and its codes can still be approved or
+exported. From its first saved change, or a Resume, every decision and export waits for the new reading. When that
+reading completes, the legacy decisions are cleared ("the interpretation changed") and kept as records. This loses less
+than the owner accepted, so no new approval was needed; the owner was told the exact behaviour.
+
+(b) The per-note cost at effort max is accepted.
+
+(c) Neither approval replaces a gate. CI, the confirmation pair, the declaration landed before the act, the D15
+runtime rollback test and the walk all stand.
+
+## Owner approval, 2026-11-18 — the live site's cost ceiling per document: $25 of question worst case, 4 requests at once
+
+Received 2026-11-18 in session 738699b2. Round r3's second adversarial pass had built a synthetic note that would have
+reserved and sent about $800 of questions in one round, with nothing to stop it. The session proposed a ceiling of $25
+per document of Fable's follow-up questions, and 4 requests at once. The owner's words, verbatim:
+
+> should we put limit for live? because i want to put somthing liek pay as you go so why should we limit into 25$?
+
+> i understand now so do you think $25 would be good?
+
+(The session answered yes.)
+
+> what if someone has a pdf which is cost more than like 25$ maybe it cost 30$
+
+(The session answered that the note is still read and decided, and only the codes whose next questions would pass the
+ceiling go to the coder.)
+
+> ok
+
+### Session interpretation, 2026-11-18 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D326)
+
+(a) QUESTION_DOCUMENT_CEILING_USD = 25 and QUESTION_ROUND_CONCURRENCY = 4 on the live site, written by the install and
+named in its declaration. The ceiling counts the reserved worst case of the question stage, not the bill and not the
+reading.
+
+(b) A round that would pass the ceiling is not sent. Its questions stay unresolved, and those codes go to the coder.
+
+(c) At most a note costs about $35: reading up to about $10, questions up to $25. A document over 20,000 characters or
+40 pages is not sent to Fable at all. Corrected 2026-11-18 (DECISIONS D329 (4)): the ceiling counts per version of a
+document, so an addendum or a new version starts a new reading with its own $25. The worst reading measured is $11.06,
+so a version costs at most about $36.
+
+(d) This amends the 2026-11-17 directive's clause (c) ("no restriction") for cost alone. A later change is a settings
+change, on the owner's figure.
+
+## Owner direction, 2026-11-18 — the API account is the owner's to manage; release first, then his walk on the live site
+
+Received 2026-11-18T21:27:35Z in session 738699b2. The session had asked him to raise or top up the Anthropic account
+before the confirmation pair, because the account's $200 figure left the pair about $33 of room against a worst case of
+about $72. His words, verbatim:
+
+> dont worry about the api budget ill take care of it by my self jsut focus to relase and i wanna walk live and try my
+> docs as soon as possible
+
+### Session interpretation, 2026-11-18 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D331)
+
+(a) The account's figure and its top-up are the owner's. The confirmation pair's cap is its full worst case, and the
+harness's provider figure is set from his direction so that the project threshold does not bind before that worst case.
+The $120 protective test ceiling stands. A provider refusal for money stops the pair as a money stop, and he is told at
+once.
+
+(b) Every safe overlap is taken on the way to the install. Commit, CI and the test image run beside the last adversarial
+pass and the final check. No gate is skipped.

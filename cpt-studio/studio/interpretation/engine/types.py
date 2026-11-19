@@ -235,6 +235,24 @@ class FactSet:
     unlisted: tuple[UnlistedStatement, ...]
     pair_controls: Mapping[tuple[Id, Attribute, Value], bool]
     completeness: Mapping[Id, Result]
+    # --- round r3 (DECISIONS D306-D308; build-v2/a2b/r3 DESIGN-v2 f.1; PROTOTYPE, PROBE-v2 section 2) --------------------
+    # The established question answers the row binds, folded in by engine/facts.py on R_q only (R_base holds none of
+    # them): independent, the (statement, act) pairs a Q-REL answer set apart (pairing.relation reads them INDEPENDENT);
+    # unlisted_independent, (the unlisted entry's index, the act) pairs a Q-REL answer about the entry set apart
+    # (pairing.unlisted_pairs drops them); off_lesion, (act, lesion) a Q-ONLESION answer set apart (an established
+    # not-on: facts.established_not_on, which pairing's one arm for an act naming no lesion reads - DECISIONS D323 F1);
+    # distinct, the (lesion, lesion) pairs a Q-LESION answer established different (facts.established_distinct
+    # reads them through pair_controls); absorbed, the indices of the unlisted entries a Q-ABSORB answer absorbed (no
+    # synthetic act any more; their rule-4 pairs stay); controlled, the (subject, attribute) facts the fact pass
+    # established with their contrary control rejected (the calibration pool's source, DESIGN-v2 b.9); base, R_base -
+    # the same row read without any answer - which 4.6's exclusion reads (an answer releases and never excludes).
+    independent: frozenset[tuple[Id, Id]] = frozenset()
+    unlisted_independent: frozenset[tuple[int, Id]] = frozenset()
+    off_lesion: frozenset[tuple[Id, Id]] = frozenset()
+    distinct: frozenset[tuple[Id, Id]] = frozenset()
+    absorbed: frozenset[int] = frozenset()
+    controlled: frozenset[tuple[Id | None, Attribute]] = frozenset()
+    base: FactSet | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, 'encounter', _frozen_facts(self.encounter))
@@ -248,6 +266,13 @@ class FactSet:
         object.__setattr__(self, 'unlisted', tuple(self.unlisted))
         object.__setattr__(self, 'pair_controls', _frozen(self.pair_controls))
         object.__setattr__(self, 'completeness', _frozen(self.completeness))
+        for name in ('independent', 'unlisted_independent', 'off_lesion', 'distinct', 'absorbed', 'controlled'):
+            object.__setattr__(self, name, frozenset(getattr(self, name)))
+
+    @property
+    def excluding(self) -> FactSet:
+        """The FactSet 4.6's exclusion reads (round r3, DESIGN-v2 f.1): R_base when this is R_q, else itself."""
+        return self.base if self.base is not None else self
 
 
 # --- what a rule decides (FINAL-V2 4.4, 4.6, 4.8) ---------------------------------------------------------------------

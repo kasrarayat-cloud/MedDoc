@@ -689,6 +689,9 @@ CASES = [
          shared=co2d_no_place, shared_omits=N8_TATTOO_TARGETS,
          acts={'i': {'45381': ('E18',)}}, considerations={'i': {'45381': ('59|XS',)}},
          named={'i': (N8B,)},
+         # round r3's silent-link rule (DESIGN-v2 b.8, DECISIONS D308 Q-B; declared at round r3's integration), as
+         # CK-note8's: the engine alone holds 45381 on the tattoo's unstated part link until Fable's proven answer
+         declared={'i': {'45381': (H, 'act_part', 'B8')}, 'ii': {'45381': (H, 'act_part', 'B8')}},
          note='D241, as CK-note8: (i) files the tattoo faithfully and gives 45381 READY; the filing with no place and no '
               'lesion is kept only as variant (iii), a residual, never a pass. The anastomosis part\'s acts are the '
               'index colonoscopy\'s, so no question on the rim biopsy stands beside the documented outcome; Q-N8b (D244, '

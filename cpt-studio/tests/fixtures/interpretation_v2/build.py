@@ -83,6 +83,7 @@ class Case:
     answers: tuple = ()
     listed: dict = field(default_factory=dict)
     known: dict = field(default_factory=dict)
+    declared: dict = field(default_factory=dict)
     header: dict = field(default_factory=dict)
     source: str = ''
     settled: dict = field(default_factory=dict)
@@ -127,6 +128,16 @@ def known_entry(pinned: tuple) -> dict:
     return entry
 
 
+def declared_entry(pinned: tuple) -> dict:
+    """A DECLARED hold's pin (round r3, DESIGN-v2 k.3 C12: a rule declared before the build that holds the code until a
+    proven question answer releases it - DECLARED in tests/v2/test_failure_classes.py): (status, item, rule) - what the
+    engine ALONE gives, while the case's ``expect`` keeps the documented outcome, which the question stage reaches on
+    Fable's established answer. Never a defect (no request to repair) and never counted a pass of the documented
+    outcome."""
+    status, item, rule = pinned
+    return {'status': STATUSES[status], 'item': item, 'rule': rule}
+
+
 def expected(case: Case) -> dict:
     out: dict = {}
     for variant, codes in case.expect.items():
@@ -156,6 +167,9 @@ def render(case: Case) -> dict:
         extra['shared_omits'] = list(case.shared_omits)
     if case.named:
         extra['named'] = named_entries(case)
+    if case.declared:
+        extra['declared'] = {variant: {code: declared_entry(pinned) for code, pinned in codes.items()}
+                             for variant, codes in case.declared.items()}
     proposals = []
     for code, words, *exact in case.codes:
         if exact and exact[0]:

@@ -37,12 +37,22 @@ A PDF original travels by reference (HARNESS.md 3). The stored request body hold
 the given bytes are re-verified against both and only then expanded into the vendor's file block. A tool loop
 (loop.py) sends every exchange through post() and re-verifies and expands the original on each exchange that carries
 its placeholder.
+
+WHY NOTHING LEFT (DECISIONS D324 (10) and its addendum, L7-A2). A 'not_sent' this SERVER caused - credentials that
+could not be used, the network (no HTTP session, a connection never established) or a deadline that passed before the
+request was written - says nothing about the request: the identical request may go once the cause is gone. post()
+returns each of these as an UnsentExchange naming its cause (Unsent), with the same fields and words as before; a
+refusal the request itself causes (it fails its own verification, its body is over the size limit or not one the
+adapter builds) carries none, and decides what it decides as before. unsent_cause() reads the cause; a caller that
+records an outcome by its fields (loop.run's final) keeps it with with_cause(). The question stage (studio/jobs.py)
+leaves a request whose not_sent names a cause owed and resumable, never decided and never retried by itself.
 """
 from __future__ import annotations
 
 import contextvars
 import copy
 import dataclasses
+import enum
 import hashlib
 import re
 import socket
@@ -50,7 +60,7 @@ import threading
 from contextlib import suppress
 from dataclasses import dataclass
 from time import monotonic
-from typing import Callable, Optional, Sequence
+from typing import Callable, Iterator, Optional, Sequence
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -346,9 +356,9 @@ def expand_original(body: dict, path: tuple, original_bytes, render: Callable[[b
     return expanded
 
 
-def _placeholders(body):
+def _placeholders(body: object) -> Iterator[tuple[tuple[object, ...], dict[str, object]]]:
     """(path, node) of every object in ``body`` that carries a placeholder key, in no particular order."""
-    pending = [((), body)]
+    pending: list[tuple[tuple[object, ...], object]] = [((), body)]
     while pending:
         path, node = pending.pop()
         if isinstance(node, dict):
@@ -371,11 +381,70 @@ def sendable(body: dict, max_bytes: int, *, with_original: bool = True) -> bytes
     return data
 
 
+def sent_length(body: object) -> Optional[int]:
+    """The bytes ``body`` (a stored request body) is sent as: its canonical encoding with every PDF original placeholder
+    expanded to the JSON string of its bare base64 (expanded_length, no file prefix) - what a worst case counts one
+    input token per byte of (DECISIONS D324 (10), L7-A1: the Fable participant's file data is bare base64). None for a
+    body that is not a JSON object or cannot be encoded."""
+    if not isinstance(body, dict):
+        return None
+    try:
+        length = len(canonical_body(body))
+    except (TypeError, ValueError, UnicodeEncodeError):
+        return None
+    for _, holder in _placeholders(body):
+        size = holder.get(ORIGINAL_BYTES)
+        if type(size) is not int or size < 0:
+            return None
+        length = expanded_length(length, holder, '')
+    return length
+
+
 # --- the exchange --------------------------------------------------------------------
+
+class Unsent(enum.Enum):
+    """Why an exchange was not sent when NOTHING about its request decided it (DECISIONS D324 (10), L7-A2): this server
+    could not send it at that moment. CREDENTIALS - the credentials could not be used when it was sent; NETWORK - no
+    HTTP session could be created, or the connection was never established (refused, a name that did not resolve, the
+    connect timeout); DEADLINE - the deadline passed before the request was written. Sent again later, the identical
+    request may go. A refusal the request itself causes carries no Unsent."""
+    CREDENTIALS = 'credentials'
+    NETWORK = 'network'
+    DEADLINE = 'deadline'
+
+
+@dataclass(frozen=True)
+class UnsentExchange(RawExchange):
+    """A 'not_sent' RawExchange that says why nothing left this server (``cause``): every RawExchange field as
+    not_sent() fills it, so a reader of the fields reads exactly what it read before."""
+    cause: Optional[Unsent] = None
+
 
 def not_sent(error: str, requested_model: str = '') -> RawExchange:
     """base.not_sent, naming the model a verified request asks for ('' until the request is verified)."""
     return dataclasses.replace(base.not_sent(error), requested_model=requested_model)
+
+
+def unsent(cause: Unsent, error: str, requested_model: str = '') -> RawExchange:
+    """not_sent(error, requested_model) naming ``cause``, this server's reason nothing left (Unsent)."""
+    return with_cause(not_sent(error, requested_model), cause)
+
+
+def with_cause(exchange: RawExchange, cause: Unsent) -> RawExchange:
+    """``exchange``, a not_sent that provably sent nothing, carrying ``cause``: each of its RawExchange fields kept."""
+    if exchange.outcome != 'not_sent' or exchange.sent or not isinstance(cause, Unsent):
+        raise ValueError('only a not_sent exchange that sent nothing carries why nothing left this server')
+    fields = {item.name: getattr(exchange, item.name) for item in dataclasses.fields(RawExchange)}
+    return UnsentExchange(**fields, cause=cause)
+
+
+def unsent_cause(exchange: object) -> Optional[Unsent]:
+    """This server's reason nothing of ``exchange`` left (Unsent), for a not_sent exchange that sent nothing and names
+    one; None for every other outcome and for a not_sent the request itself caused."""
+    if (isinstance(exchange, UnsentExchange) and exchange.outcome == 'not_sent' and not exchange.sent
+            and isinstance(exchange.cause, Unsent)):
+        return exchange.cause
+    return None
 
 
 def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: str, body: bytes, headers: dict, *,
@@ -385,11 +454,13 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
     try:
         session = session_factory()
     except Exception as exc:
-        return not_sent(f'No HTTP session could be created ({type(exc).__name__}); nothing was sent.', requested_model)
+        return unsent(Unsent.NETWORK, f'No HTTP session could be created ({type(exc).__name__}); nothing was sent.',
+                      requested_model)
     try:
         timeouts = _timeouts(deadline, connect_timeout, read_timeout)
         if timeouts is None:
-            return not_sent('The deadline passed before the request was sent; nothing was sent.', requested_model)
+            return unsent(Unsent.DEADLINE, 'The deadline passed before the request was sent; nothing was sent.',
+                          requested_model)
         started = monotonic()
         with _Watch(deadline) as watch:
             try:
@@ -397,19 +468,22 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
                                         stream=True)
             except Exception as exc:
                 if watch.disarm() and watch.unsent:
-                    return not_sent('The deadline passed before the request was sent; nothing was sent.',
-                                    requested_model)
+                    return unsent(Unsent.DEADLINE, 'The deadline passed before the request was sent; nothing was sent.',
+                                  requested_model)
                 if watch.never_connected:  # asked before the rules for a request that may have left: none was written
                     if monotonic() >= deadline:  # the clamped connect timeout: the connection took the time left
-                        return not_sent('The deadline passed before the request was sent; nothing was sent.',
-                                        requested_model)
-                    return not_sent(f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
-                                    requested_model)
+                        return unsent(Unsent.DEADLINE,
+                                      'The deadline passed before the request was sent; nothing was sent.',
+                                      requested_model)
+                    return unsent(Unsent.NETWORK,
+                                  f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
+                                  requested_model)
                 if watch.fired:
                     return _unknown(vendor, _BodyError(DEADLINE_READING), started, url, requested_model)
                 if _never_connected(exc):
-                    return not_sent(f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
-                                    requested_model)
+                    return unsent(Unsent.NETWORK,
+                                  f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
+                                  requested_model)
                 return _unknown(vendor, exc, started, url, requested_model)
             status, request_id, stop = None, '', None
             try:

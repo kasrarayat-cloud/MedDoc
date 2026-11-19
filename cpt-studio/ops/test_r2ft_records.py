@@ -32,75 +32,79 @@ OPS = Path(__file__).resolve().parent
 INSTALL_MD = OPS / 'INSTALL.md'
 MD_ANCHOR = 'then stopped (graceful, 30 s), parked as'
 # the r2e refutation's plants that its guard could not see (its probes/g1_guard_forms.py), each stating the role's
-# current bound (the worker's 1,500 s = 25 minutes, the web's 30 s): its surviving mutants, each one text
+# current bound (the worker's 1,800 s = 30 minutes since round r3 - 1,500 s = 25 minutes before it, the plants then
+# stated - the web's 30 s): its surviving mutants, each one text
 REFUTATION = {
-    'worker': ('the worker is given a stop of 25 Minutes', '| worker | 1,500 Seconds |',
-               'WORKER STOP TIMEOUT: 1500 SECONDS', 'the worker is given a 25-Minute stop',
-               'the worker stops within 1500 Sec', 'the worker service sets stop_grace_period: 25m',
-               'the worker is given a 25m stop', 'the worker unit sets TimeoutStopSec=1500',
-               'the worker is given twenty-five minutes to stop', 'the worker is given a 1,500\u2011second stop',
-               'the worker is given a 1,500\u2013second stop', 'the worker is given a 1 500 s stop',
-               'the worker is given 1500.0 s to stop'),
+    'worker': ('the worker is given a stop of 30 Minutes', '| worker | 1,800 Seconds |',
+               'WORKER STOP TIMEOUT: 1800 SECONDS', 'the worker is given a 30-Minute stop',
+               'the worker stops within 1800 Sec', 'the worker service sets stop_grace_period: 30m',
+               'the worker is given a 30m stop', 'the worker unit sets TimeoutStopSec=1800',
+               'the worker is given thirty minutes to stop', 'the worker is given a 1,800\u2011second stop',
+               'the worker is given a 1,800\u2013second stop', 'the worker is given a 1 800 s stop',
+               'the worker is given 1800.0 s to stop'),
     'web': ('the web is given a 30 Second graceful stop', 'the web is given 30 Seconds to drain',
             'the web is given half a minute to drain', 'the web is given thirty seconds to drain'),
 }
 # every form of each category the rule names, for each role's current bound
 FORMS = {
     'a grouping separator': {
-        'worker': ('a 1.500 s stop', 'a 1\u00a0500 s stop', 'a 1\u202f500 s stop', "a 1'500 s stop",
-                   'a 1\u2019500 s stop', 'a 1_500 s stop', 'a stop of 1,500,000 ms', 'a stop of 1.500.000 ms',
-                   'a stop of 15,00,000 ms', 'a stop of 1 500 000 000 \u00b5s',
-                   'a \uff11\uff15\uff10\uff10 s stop', 'a \u0661\u0665\u0660\u0660 s stop'),
+        'worker': ('a 1.800 s stop', 'a 1\u00a0800 s stop', 'a 1\u202f800 s stop', "a 1'800 s stop",
+                   'a 1\u2019800 s stop', 'a 1_800 s stop', 'a stop of 1,800,000 ms', 'a stop of 1.800.000 ms',
+                   'a stop of 18,00,000 ms', 'a stop of 1 800 000 000 \u00b5s',
+                   'a \uff11\uff18\uff10\uff10 s stop', 'a \u0661\u0668\u0660\u0660 s stop'),
         'web': ('a stop of 30,000 ms', 'a stop of 30 000 ms', 'a stop of 30.000 ms', 'a stop of 30000 msecs'),
     },
     'leading and trailing decimal zeros': {
-        'worker': ('a stop of 1500.00 s', 'a stop of 1,500.0 seconds', 'a stop of 1500,0 s', 'a stop of 01500 s',
-                   'a 25.0-minute stop'),
+        'worker': ('a stop of 1800.00 s', 'a stop of 1,800.0 seconds', 'a stop of 1800,0 s', 'a stop of 01800 s',
+                   'a 30.0-minute stop'),
         'web': ('a stop of 30.0 s', 'a stop of 30,00 seconds', 'a stop of 030 s', 'a 30.000-second stop'),
     },
     'number words': {
-        'worker': ('fifteen hundred seconds', 'one thousand five hundred seconds',
-                   'one thousand, five hundred seconds', 'a thousand and five hundred seconds',
-                   'twenty five minutes', 'twentyfive minutes', 'Twenty\u2011Five Minutes', 'TWENTY-FIVE MINUTES',
-                   'a twenty-five-minute stop', 'one million five hundred thousand milliseconds',
-                   'fifteen-hundred seconds', 'one-thousand five-hundred seconds'),
+        'worker': ('eighteen hundred seconds', 'one thousand eight hundred seconds',
+                   'one thousand, eight hundred seconds', 'a thousand and eight hundred seconds',
+                   'thirty minutes', 'Thirty Minutes', 'THIRTY MINUTES', 'a thirty-minute stop',
+                   'a thirty\u2011minute stop', 'one million eight hundred thousand milliseconds',
+                   'eighteen-hundred seconds', 'one-thousand eight-hundred seconds'),
         'web': ('Thirty Seconds', 'THIRTY SECONDS', 'a thirty-second stop', 'thirty thousand milliseconds'),
     },
     'a fraction of a larger unit': {
-        'worker': ('a 5/12 hour stop', 'a 5\u204412-hour stop', '5 / 12 h'),
+        'worker': ('a 1/2 hour stop', 'a 1\u20442-hour stop', '1 / 2 h', 'half an hour', 'a half-hour stop',
+                   '0.5 h', '\u00bd hour'),
         'web': ('half a minute', 'Half A Minute', 'half-minute', 'a half minute', 'half of a minute',
                 'a half\u2013minute', '0.5 min', '.5 minutes', '0,5 Min', '0.50 minutes', '\u00bd minute', '1/2 minute',
                 '1\u20442 minute', '1\u22152 minute',
                 'one-half minute', '\u00bd a minute'),
     },
     'a unit form in any letter case': {
-        'worker': ('1500 S', '1500 Secs', '1500 SEC', '25 MINS', '25 Min', '25 m', '25 M', '25\u2032',
-                   'a 25 MINUTE stop', '1500000 MS', '1,500,000 Milliseconds',
-                   '1500000000000 ns', '1,500,000,000,000 NSEC', '1500000000 usec', '1500000000 \u03bcs'),
+        'worker': ('1800 S', '1800 Secs', '1800 SEC', '30 MINS', '30 Min', '30 m', '30 M', '30\u2032',
+                   'a 30 MINUTE stop', '1800000 MS', '1,800,000 Milliseconds',
+                   '1800000000000 ns', '1,800,000,000,000 NSEC', '1800000000 usec', '1800000000 \u03bcs'),
         'web': ('30 S', '30 SECONDS', '30 Sec', '30\u2033', '30000 MSEC'),
     },
     'any joiner': {
-        'worker': ('1500s', '1500sec', '25min', '25minutes', 'a 1,500\u2010second stop', 'a 1,500\u2012second stop',
-                   'a 1,500\u2014second stop', 'a 1,500\u2015second stop', 'a 1,500\u2212second stop',
-                   'a 1,500\ufe63second stop', 'a 1,500\uff0dsecond stop', 'a 1,500 - second stop',
-                   'a 1,500 \u2013 second stop', 'a 25\u2011minute stop', 'a 25 - minute stop',
-                   '1500\u200bs', 'a 1,500\u2060second stop'),
+        'worker': ('1800s', '1800sec', '30min', '30minutes', 'a 1,800\u2010second stop', 'a 1,800\u2012second stop',
+                   'a 1,800\u2014second stop', 'a 1,800\u2015second stop', 'a 1,800\u2212second stop',
+                   'a 1,800\ufe63second stop', 'a 1,800\uff0dsecond stop', 'a 1,800 - second stop',
+                   'a 1,800 \u2013 second stop', 'a 30\u2011minute stop', 'a 30 - minute stop',
+                   '1800\u200bs', 'a 1,800\u2060second stop'),
         'web': ('30sec', '30seconds', 'a 30\u2010second stop', 'a 30\u2014second stop', 'a 30 \u2013 second stop',
                 'a 30\u2212second stop'),
     },
     'a sum of hours, minutes and seconds, and a key naming its unit': {
-        'worker': ('stop_grace_period: 25m0s', '0h25m0s', '0h25m', '25 minutes 0 seconds', '25 min, 0 s',
-                   '25 minutes and 0 seconds', 'TimeoutStopSec=1500', 'TimeoutStopUSec=1500000000',
-                   "STOP_SECONDS['worker'] = 1500", 'stop_timeout_minutes: 25', 'stop-timeout-ms=1500000'),
+        'worker': ('stop_grace_period: 30m0s', '0h30m0s', '0h30m', '30 minutes 0 seconds', '30 min, 0 s',
+                   '30 minutes and 0 seconds', 'TimeoutStopSec=1800', 'TimeoutStopUSec=1800000000',
+                   "STOP_SECONDS['worker'] = 1800", 'stop_timeout_minutes: 30', 'stop-timeout-ms=1800000'),
         'web': ('0m30s', '0h0m30s', 'stop_timeout_s: 30', 'seconds: 30', 'timeout_ms=30000', 'graceSeconds=30'),
     },
 }
-# the same categories stating numbers that are no role's bound: never read as one
-NOT_A_BOUND = ('a 1.5 s stop', '1,501 seconds', '1500.5 s', 'a stop of 1501.0 s', 'twenty-six minutes',
-               'twenty-five seconds', 'twenty-five hours', 'thirty-one seconds', 'thirty minutes', 'half an hour',
-               'a quarter of a minute', '\u00bc minute', '1/3 minute', '31 Seconds', '25 Hours', '300 s',
-               '15000 ms', '25m31s', '0h30m', 'TimeoutStopSec=1501', 'workers: 30', 'timeout_s=6', 'a 15-minute stop',
-               'a 1,500-page manual', 'version 1.500', 'stage 2, 30 items')
+# the same categories stating numbers that are no role's bound: never read as one - beside the bound (1,801 s, 31
+# minutes), the worker's number in another unit, and the worker's bound before round r3 (1,500 s = 25 minutes)
+NOT_A_BOUND = ('a 1.8 s stop', '1,801 seconds', '1800.5 s', 'a stop of 1801.0 s', 'thirty-one minutes',
+               'thirty hours', 'eighteen hundred minutes', 'thirty-one seconds', 'twenty-five minutes',
+               '1,500 seconds', 'a quarter of a minute', '\u00bc minute', '1/3 minute', '31 Seconds', '30 Hours',
+               '300 s', '18000 ms', '30m31s', '0h31m', 'TimeoutStopSec=1801', 'TimeoutStopSec=1500', 'workers: 30',
+               'timeout_s=6', 'a 25-minute stop', 'a quarter of an hour', 'a 1,800-page manual', 'version 1.800',
+               'stage 2, 30 items')
 
 
 def completeness(texts: dict) -> list:
@@ -129,7 +133,7 @@ class R2FTStopBoundSpellingsTests(unittest.TestCase):
     def test_the_refutations_plants_fail_the_completeness_check(self):
         """The r2e refutation's surviving mutants: each plant, at the current bound, fails the completeness check
         naming its role (each passed it before)."""
-        self.assertEqual(install.STOP_SECONDS, {'web': 30, 'worker': 1500})
+        self.assertEqual(install.STOP_SECONDS, {'web': 30, 'worker': 1800})
         for role, plants in REFUTATION.items():
             self.assertCaught(role, plants)
 
@@ -163,7 +167,8 @@ class R2FTStopBoundSpellingsTests(unittest.TestCase):
         """A decimal's digits after its point state a fraction, never a count: '0.25 min' is 15 s and '2.30 s' 2.3 s -
         the earlier set read them as the worker's 25 minutes and the web's 30 s (a failure naming no statement of a
         bound)."""
-        for plant in ('a stop of 0.25 min', 'a stop of 2.30 s', 'a stop of 0,25 min', 'a stop of 1.1500 s'):
+        for plant in ('a stop of 0.25 min', 'a stop of 0.30 min', 'a stop of 2.30 s', 'a stop of 0,30 min',
+                      'a stop of 1.1800 s'):
             with self.subTest(plant=plant):
                 self.assertEqual(completeness(in_md(plant)), [])
 
@@ -180,8 +185,8 @@ class R2FTStopBoundSpellingsTests(unittest.TestCase):
 
         without = failures({})
         self.assertEqual(without, Counter())
-        for role, plant in (('worker', 'WORKER STOP TIMEOUT: 1500 SECONDS'), ('worker', 'twenty-five minutes'),
-                            ('worker', 'a 1,500\u2013second stop'), ('worker', 'TimeoutStopSec=1500'),
+        for role, plant in (('worker', 'WORKER STOP TIMEOUT: 1800 SECONDS'), ('worker', 'thirty minutes'),
+                            ('worker', 'a 1,800\u2013second stop'), ('worker', 'TimeoutStopSec=1800'),
                             ('web', 'half a minute'), ('web', 'Thirty Seconds')):
             with self.subTest(role=role, plant=plant):
                 self.assertEqual(failures(in_md(plant)) - without, Counter({(role, 'INSTALL.md', None): 1}))

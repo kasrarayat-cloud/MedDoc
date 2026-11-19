@@ -391,11 +391,20 @@ class Fixture(SimpleTestCase):
         data = case(case_id)
         found = outcomes(run(case_id, variant).assessment)
         known = {} if design else data.get('known', {}).get(variant, {})
+        declared = data.get('declared', {}).get(variant, {})
         pinned_considerations = set()
         for code, want in data['expect'][variant].items():
             with self.subTest(case=case_id, variant=variant, code=code):
                 self.assertIn(code, found, f'{case_id} ({variant}): {code} not assessed')
                 got = found[code]
+                if code in declared:
+                    # round r3: a DECLARED hold (DECLARED below) - the engine ALONE holds the code by a rule the design
+                    # declared before the build, until Fable's proven answer releases it; 'expect' keeps the documented
+                    # outcome the question stage reaches. Held to its pin, so a change of the rule is seen
+                    self.assertEqual((got['status'], got['item']), (declared[code]['status'], declared[code]['item']),
+                                     f'{case_id} ({variant}) {code}: declared hold {declared[code]["rule"]} changed')
+                    pinned_considerations.add(code)
+                    continue
                 if code in known:
                     # the design's expectation stays in 'expect' (KnownDefectTests asserts it); this pins what the
                     # engine gives today, so a repair is seen - never counted a pass
@@ -412,6 +421,8 @@ class Fixture(SimpleTestCase):
                 if want['item_kind'] is not None:
                     self.assertEqual(got['item_kind'], want['item_kind'], f'{case_id} ({variant}) {code}')
         for code, acts in data.get('acts', {}).get(variant, {}).items():
+            if code in declared:
+                continue  # a declared hold supports nothing until its answer (the documented acts stand beside it)
             with self.subTest(case=case_id, variant=variant, code=code, check='supporting acts'):
                 self.assertEqual(found[code]['acts'], acts)
         for code, subject in data.get('subjects', {}).get(variant, {}).items():
@@ -676,6 +687,41 @@ KNOWN = {'R-N3': 'engine/combination.py base_within (4d): a part session\'s base
                    'unappraised',
          'R-K8': 'engine/assess.py (5a): a reach contradicted by its polarity pair asks extent, not conflict (RANK 1)',
          'Q-S4': 'a terminated ERCP whose completion pass 2 caught: READY with no 52/53 consideration'}
+
+
+# Round r3's DECLARED holds (DESIGN-v2 k.3 C12: "It moves int3's outcomes without any answer (more holds): those rows are
+# declared before the build"): a rule that holds a code until a proven question answer releases it, pinned on its cases
+# (build.Case.declared), each pin's item the rule's own witness. Never a defect: nothing is to be repaired.
+DECLARED = {'B8': ('DESIGN-v2 b.8, DECISIONS D308 Q-B: a silent bundling link (the tattoo\'s lift by part, the procedural '
+                   'adjunct\'s part and cause) is a doubt the question stage asks; released only by Fable\'s proven '
+                   'answer', frozenset({'act_part', 'act_cause'}))}
+
+
+def declared_holds() -> dict:
+    """Every pinned declared hold, by its rule: [(case, variant, code, pin), ...] in manifest order."""
+    found: dict = {}
+    for entry in manifest()['cases']:
+        for variant, codes in case(entry['case']).get('declared', {}).items():
+            for code, pinned in codes.items():
+                found.setdefault(pinned['rule'], []).append((entry['case'], variant, code, pinned))
+    return found
+
+
+class DeclaredHoldTests(SimpleTestCase):
+    """Round r3's declared holds (DECLARED): every pin names a declared rule, holds the code by the rule's own witness,
+    and stands beside the case's documented outcome (expect), which it never replaces; no pin is also a known defect."""
+
+    def test_every_declared_pin_is_a_declared_rule_held_by_its_witness(self):
+        found = declared_holds()
+        self.assertEqual(set(found) - set(DECLARED), set())
+        self.assertTrue(found)
+        for rule, pins in found.items():
+            for case_id, variant, code, pinned in pins:
+                with self.subTest(rule=rule, case=case_id, variant=variant, code=code):
+                    self.assertEqual(pinned['status'], 'needs_clarification')
+                    self.assertIn(pinned['item'], DECLARED[rule][1])
+                    self.assertIn(code, case(case_id)['expect'][variant])
+                    self.assertNotIn(code, case(case_id).get('known', {}).get(variant, {}))
 
 
 class KnownDefectTests(Fixture):

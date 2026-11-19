@@ -479,7 +479,106 @@ def interpretation_section_v2(assessment: Any) -> dict[str, Any]:
             'usage': usage_sums(found),
             'encounter_usage': encounter_usage(assessment.encounter_id),
             'hold': holds.as_json(hold) if hold is not None else None,
-            'holds': [holds.as_json(item) for item in holds_set]}
+            'holds': [holds.as_json(item) for item in holds_set],
+            'questions': question_section(inventory) if inventory is not None else None}
+
+
+QUESTION_UNSET = 'none'  # what an operator's line says for an absent figure
+
+
+def question_section(inventory: Any) -> Optional[dict[str, Any]]:
+    """Round r3's part of the operator report (build-v2/a2b/r3 DESIGN-v2 (i); DECISIONS D320, D322) for a design v2
+    inventory whose row records the question stage (events.questions, verification.question_runs; None for a row
+    without one, as every row written before round r3 or whose round 1 asked nothing):
+    - ``codes``: per code a question served - the witnesses the ESTABLISHED questions released, each with its question
+      (family, form, subjects, attribute, value), the witness (fact, attribute, subject, cause, reason) and its
+      located spans (the revision's offsets, and the revision's own words at them); and each unestablished question
+      with its reasons;
+    - ``requests``: each question request - its round, batch and run, its outcome, its claims, the request it halves,
+      its health (the measures and what refused it), its output rate (a measure: below
+      settings.QUESTION_RATE_FLOOR_TOKENS_PER_SECOND or not, never a hold), the worst case it was reserved at, and its
+      usage and estimated cost (run_json);
+    - ``calibration``: each calibration item with its verdicts and whether it breached;
+    - ``usage``: the question runs' sums (usage_sums).
+    Operator surface only (studio/serializers.py, the interpretation_report command): nothing here reaches a customer
+    or a reviewer. Stored rows only; nothing is re-read but the revision text the spans name."""
+    events = inventory.events if isinstance(inventory.events, dict) else {}
+    verification = inventory.verification if isinstance(inventory.verification, dict) else {}
+    records = [item for item in events.get('questions') or () if isinstance(item, dict)]
+    named = [item for item in verification.get('question_runs') or () if isinstance(item, dict)]
+    if not records and not named:
+        return None
+    text = getattr(getattr(inventory, 'revision', None), 'text', '') or ''
+    health = {(item.get('round'), item.get('batch')): item for item in verification.get('question_health') or ()
+              if isinstance(item, dict)}
+    runs = {str(run.pk): run for run in ProviderRun.objects.filter(
+        pk__in=[item.get('provider_run_id') for item in named if isinstance(item.get('provider_run_id'), str)])}
+    codes: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for record in records:
+        question = {key: record.get(key) for key in ('id', 'round', 'batch', 'family', 'form', 'subjects', 'attribute',
+                                                      'value', 'negated', 'census')}
+        established = record.get('result') == 'supported'
+        spans = [{'start': span['start'], 'end': span['end'], 'words': text[span['start']:span['end']]}
+                 for span in record.get('proof') or () if isinstance(span, dict)
+                 and type(span.get('start')) is int and type(span.get('end')) is int]
+        for witness in record.get('witnesses') or ():
+            if not isinstance(witness, dict) or not isinstance(witness.get('code'), str):
+                continue
+            entry = codes.setdefault(witness['code'], {'released': [], 'unestablished': []})
+            if established:
+                entry['released'].append({'question': question, 'witness': {key: witness.get(key) for key in (
+                    'fact', 'attribute', 'subject', 'cause', 'reason')}, 'spans': spans})
+            else:
+                entry['unestablished'].append({'question': question, 'reasons': list(record.get('reasons') or ())})
+    requests = []
+    for item in named:
+        named_run = item.get('provider_run_id')
+        run = runs.get(named_run) if isinstance(named_run, str) else None
+        scope = ((run.scope or {}).get('question') or {}) if run is not None else {}
+        measured = health.get((item.get('round'), item.get('batch')))
+        requests.append({'round': item.get('round'), 'batch': item.get('batch'), 'run': item.get('provider_run_id'),
+                         'outcome': item.get('outcome'), 'claims': item.get('claims'), 'split_of': item.get('split_of'),
+                         'request_sha256': item.get('request_sha256'), 'response_sha256': item.get('response_sha256'),
+                         'health': ({'measures': measured.get('measures'), 'refused': measured.get('refused')}
+                                    if measured is not None else None),
+                         'rate': scope.get('rate'), 'worst_case_usd': scope.get('worst_case_usd'),
+                         'detail': run_json(run) if run is not None else None})
+    calibration = [{key: item.get(key) for key in ('round', 'batch', 'kind', 'form', 'subjects', 'verdicts', 'breach')}
+                   for item in events.get('calibration') or () if isinstance(item, dict)]
+    return {'codes': dict(sorted(codes.items())), 'requests': requests, 'calibration': calibration,
+            'established': sum(1 for record in records if record.get('result') == 'supported'),
+            'asked': len(records),
+            'usage': usage_sums([request['detail'] for request in requests if request['detail'] is not None])}
+
+
+def render_questions(found: Optional[dict[str, Any]]) -> list[str]:
+    """question_section as text lines for the operator (the interpretation_report command's encounter view)."""
+    if not found:
+        return []
+    lines = [f'questions: {found["asked"]} asked, {found["established"]} established, '
+             f'{_count(len(found["requests"]), "request")}']
+    for request in found['requests']:
+        refused = (request['health'] or {}).get('refused') or []
+        rate = request['rate'] or {}
+        lines.append(f'question request round {request["round"]} batch {request["batch"]}: run {request["run"]} '
+                     f'outcome {request["outcome"]}, {request["claims"]} claims'
+                     + (f', half of {request["split_of"][:16]}' if request['split_of'] else '')
+                     + f'; refused {", ".join(refused) or QUESTION_UNSET}'
+                     + (f'; {rate.get("tokens_per_second")} tokens a second'
+                        + (' (below the floor: a measure)' if rate.get('below_floor') else '') if rate else ''))
+    for code, entry in found['codes'].items():
+        for item in entry['released']:
+            words = '; '.join(f'[{span["start"]}, {span["end"]}] "{span["words"]}"' for span in item['spans'])
+            lines.append(f'question code {code}: released {item["witness"]["fact"]} by {item["question"]["id"]} '
+                         f'({item["question"]["family"]} {item["question"]["form"]}) at {words or QUESTION_UNSET}')
+        for item in entry['unestablished']:
+            lines.append(f'question code {code}: not established {item["question"]["id"]} '
+                         f'({item["question"]["family"]} {item["question"]["form"]}): '
+                         f'{", ".join(item["reasons"]) or QUESTION_UNSET}')
+    for item in found['calibration']:
+        lines.append(f'question calibration round {item["round"]} batch {item["batch"]} {item["kind"]} '
+                     f'{item["form"]}: ' + ('BREACH' if item['breach'] else 'held'))
+    return lines
 
 
 def _inventory_json_v2(inventory: Any) -> dict[str, Any]:
@@ -1057,6 +1156,7 @@ def render_encounter(section: dict[str, Any]) -> list[str]:
             lines.append(f'encounter assessment usage: {_pairs(sums["usage"])}; estimated cost USD '
                          f'{sums["estimated_usd"]} over {_count(sums["priced_runs"], "priced run")}')
         lines += [f'encounter record problem: {problem}' for problem in found.get('problems') or ()]
+        lines += render_questions(found.get('questions'))  # round r3: the question stage, its codes and requests
     usage = section['usage']
     for purpose, sums in usage['by_purpose'].items():
         lines.append(f'encounter {purpose} runs: {sums["runs"]}; usage {_pairs(sums["usage"])}; estimated cost USD '

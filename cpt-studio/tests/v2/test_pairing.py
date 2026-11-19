@@ -2321,17 +2321,25 @@ def jm02():
 E5J_CASES = (
     ('JS06', '45388', 'needs_clarification', (('45388', 2),), js06),
     ('JS07', '43270', 'needs_clarification', (('43270', 2),), js07),
-    ('JS08', '43270', 'ready', (('43270', 2),), js08),
+    # restated at round r3's integration: the silent-link rule (DESIGN-v2 b.8, DECISIONS D308 Q-B) holds JS08's ablation
+    # (its purpose silent, so possibly hemostasis: the cause arm's silent cause) and JR06's clip (its part_of silent
+    # beside the cold snare) until Fable's proven answer - never by the technique row, which stays apart (E5J_B8)
+    ('JS08', '43270', 'needs_clarification', (('43270', 2),), js08),
     ('JS09', '43255', 'needs_clarification', (('43255', 2),), js09),
     ('JS10', '45385', 'ready', (('45385', 2),), js10),
     ('JR05', '45388', 'needs_clarification', (('45388', 2), ('45385', 3)), jr05),
     ('JR05 (the cold snare)', '45385', 'ready', (('45388', 2), ('45385', 3)), jr05),
-    ('JR06', '45382', 'ready', (('45385', 2), ('45382', 3)), jr06),
+    ('JR06', '45382', 'needs_clarification', (('45385', 2), ('45382', 3)), jr06),
     ('JR07', '45385', 'ready', (('45385', 2),), jr07),
     ('JR08', '43255', 'needs_clarification', (('43255', 3),), jr08),
     ('JM01', '43262', 'needs_clarification', (('43262', 2),), jm01),
     ('JM02', '43255', 'needs_clarification', (('43255', 2),), jm02),
 )
+
+
+# Round r3 (DESIGN-v2 b.8): the cases E5j sets apart by technique that the silent-link rule holds - by the silent link's
+# own witness alone (the procedural adjunct's cause or part arm), never by the pair's technique row
+E5J_B8 = {'JS08': ({'act_cause'}, E3, E2), 'JR06': ({'act_part'}, E4, E3)}
 
 
 class E5jTests(SimpleTestCase):
@@ -2386,7 +2394,12 @@ class E5jTests(SimpleTestCase):
         electrocautery leaves a thermal probe possible)."""
         for name, code, expected, codes, builder in E5J_CASES:
             with self.subTest(case=name):
-                self.assertEqual(_assessed(builder(), *codes)[code][0], expected)
+                status, held, _item = _assessed(builder(), *codes)[code]
+                self.assertEqual(status, expected)
+                if name in E5J_B8:  # round r3: held by the silent link alone; the technique row still apart (E5j)
+                    facts, statement, act_number = E5J_B8[name]
+                    self.assertEqual({found.fact for found in held}, facts)
+                    self.assertEqual(P.relation(builder(), statement, act_number).relation, P.Relation.INDEPENDENT)
 
     def test_the_holds_rest_on_the_technique_row(self):
         """Each E5j hold is the pair's own: the statement and the act pair, and the technique row is what is not
@@ -2533,7 +2546,8 @@ class R2BDeviceClassTests(SimpleTestCase):
         """A transverse colon angioectasia ablated with ``device`` beside "No electrocautery ablation was performed in
         the transverse colon." - every fact established."""
         doc = _colon()
-        doc.act(2, Kind.ABLATION, places=[sup(Landmark.TRANSVERSE_COLON)], device=sup(device))
+        doc.act(2, Kind.ABLATION, places=[sup(Landmark.TRANSVERSE_COLON)], device=sup(device),
+                purpose=sup(ct.Purpose.TREATMENT))  # every fact, its purpose too (round r3: DESIGN-v2 b.8)
         _denial(doc, 3, Kind.ABLATION, places=(Landmark.TRANSVERSE_COLON,), device=Device.ELECTROCAUTERY)
         return doc.build()
 
@@ -2692,7 +2706,8 @@ class R2BBGenericDeviceTests(SimpleTestCase):
         """Transverse colon angioectasias ablated with ``act_device`` beside "No ablation with <denial_device> was
         performed in the transverse colon." - every fact established."""
         doc = _colon()
-        doc.act(2, Kind.ABLATION, places=[sup(Landmark.TRANSVERSE_COLON)], device=sup(act_device))
+        doc.act(2, Kind.ABLATION, places=[sup(Landmark.TRANSVERSE_COLON)], device=sup(act_device),
+                purpose=sup(ct.Purpose.TREATMENT))  # every fact, its purpose too (round r3: DESIGN-v2 b.8)
         _denial(doc, 3, Kind.ABLATION, places=(Landmark.TRANSVERSE_COLON,), device=denial_device)
         return doc.build()
 
@@ -3056,7 +3071,8 @@ class R2DBDeviceRelationTests(SimpleTestCase):
         """Barrett mucosa of the distal esophagus ablated with ``act_device`` beside "No ablation with <denial_device>
         was performed in the distal esophagus." - every fact established."""
         doc = _egd()
-        doc.act(2, Kind.ABLATION, places=[sup(Landmark.DISTAL_ESOPHAGUS)], device=sup(act_device))
+        doc.act(2, Kind.ABLATION, places=[sup(Landmark.DISTAL_ESOPHAGUS)], device=sup(act_device),
+                purpose=sup(ct.Purpose.TREATMENT))  # every fact, its purpose too (round r3: DESIGN-v2 b.8)
         _denial(doc, 3, Kind.ABLATION, places=(Landmark.DISTAL_ESOPHAGUS,), device=denial_device)
         return doc.build()
 
@@ -4122,8 +4138,10 @@ class BoundaryTests(SimpleTestCase):
 
     def test_a_pair_holds_no_string(self):
         hints = typing.get_type_hints(P.Pair)
+        # round r3 (DESIGN-v2 b.1; restated at round r3's integration): 'appraised' - the pair INDEPENDENT by an
+        # established Q-REL answer (R_q), a bool like 'claimed' and 'possible'
         self.assertEqual(set(hints), {'statement', 'act', 'relation', 'row', 'rows', 'claimed', 'possible', 'kinds',
-                                      'spans'})
+                                      'spans', 'appraised'})
 
         def leaves(hint):
             arguments = typing.get_args(hint)

@@ -101,7 +101,17 @@ SHAPE_PINS = {(INTERPRETATION_PAIR, INVENTORY_VERSION_V2):
               # (act_lesions, default the empty list) and its pair-type records are bound by one check that
               # re-derives each outcome (_v2_pairs_bound); restated by the same function, was
               # 8aacd0456244521080c56296dda3ff85cd1b0be6c65a52470b511f55ca3fdccb
-              PAIR_V3: '4b766536e69b60fe6f3554447bd38e780177cda5bf08cdffe6dca85a0bfed414'}
+              # Round r3 (DECISIONS D306-D308, D320, D322; 2026-11-17): the @3 pair (unshipped) stores the question
+              # stage's records - events.questions and events.calibration, verification.question_runs (each naming
+              # the provider run that decided its request, provider_run_id as DESIGN-v2 e.6 spells it, its outcome a
+              # closed word) and question_health - each with the empty list as its default, and binds them to one
+              # another (_v2_questions_bound); restated by the same function, was
+              # 4b766536e69b60fe6f3554447bd38e780177cda5bf08cdffe6dca85a0bfed414 (int3; the probe prototype's shape,
+              # e61a0e097d8cc38679b234f8f9c6797677c0fad0b4dbe3164304a7381b577314, never pinned)
+              # The repair pass of round r3's pipe lane (PIPE-R1, 2026-11-17): a question run's closed outcome words
+              # lose 'hold' - an answer that set an installation-wide hold decides no request, so no row names one;
+              # restated by the same function, was 5dc37f8cf2ef16ea01f995959ac84d2c32a3573068a5ec991f96659d8e890a16
+              PAIR_V3: '2774af5d3974cb00fa08d335eb432205bc934eb45bf72de6d077c374341a3ed9'}
 
 
 # --- the synthetic settled inventory ----------------------------------------------------------------------------------

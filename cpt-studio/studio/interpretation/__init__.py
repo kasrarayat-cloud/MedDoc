@@ -63,7 +63,7 @@ APPRAISAL_VERSION = 'gemini-appraisal@1'
 INVENTORY_VERSION_V2 = 'gemini-inventory@2'  # the checks, inheritance, the settle table, the doubt mapping, the reasons
 # the requirement table, its read-sets, the CLAIMED table, RANK; @2 since DECISIONS D292 (E1j: BUNDLING's read-set
 # gains a whole's target lesion's places), @1's pins kept in tests/v2/test_requirements.REQUIREMENTS_PINS
-REQUIREMENTS_VERSION = 'cpt-requirements@2'
+REQUIREMENTS_VERSION = 'cpt-requirements@3'  # @3 since DECISIONS D324 (11): r3's rules pin (route table, QB reads)
 ENGINE_VERSION_V2 = 'cpt-studio-events@2'  # Assessment.engine_version: the engine and event_coding@2
 CONTEXT_VERSION_V2 = 'gemini-context@2'  # EncounterContext.version derived by engine/derive.py
 ROUTING_VERSION_V2 = 'gemini-routing@2'  # RoutingRun.version of engine/derive.py's stand-in

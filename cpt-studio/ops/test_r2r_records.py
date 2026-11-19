@@ -7,8 +7,8 @@ counts and reports it and never requires it; every other kind stays required. Ev
 SCENARIO_V3 is classified by how a test instance makes it (rollback_check.MADE_BY), and a kind the table does not
 classify is required (fail-closed).
 
-F4 - whenever an ops text states a container's stop bound, it states that role's STOP_SECONDS (the worker's 1,500 s
-since AMENDMENT-2 1.12, the web's 30 s), so a moved bound leaves no stale statement. The guard reads the forms
+F4 - whenever an ops text states a container's stop bound, it states that role's STOP_SECONDS (the worker's 1,800 s
+since round r3, 1,500 s from AMENDMENT-2 1.12 to it, the web's 30 s), so a moved bound leaves no stale statement. The guard reads the forms
 STOP_FORMS lists (DECISIONS D297 R2RX-4: it states the forms it reads) - ``--time N``, ``stop timeout N s``, ``N s
 outlasts``, ``up to N minutes``, the remaining stage time's ``up to N s``, ``the N s pass``, ``STOP_SECONDS['<role>'],
 N s``, the web's graceful stop ``(graceful, N s)``, and the seconds a comment beside a stop_service_container(...,
@@ -46,7 +46,7 @@ import rollback_check as rc  # noqa: E402
 import test_install_interpreter as TI  # noqa: E402  (helpers: FableRows' D15 database)
 
 OPS = Path(__file__).resolve().parent
-ALL = rc.SCENARIO_V2 + rc.SCENARIO_V3
+ALL = rc.SCENARIO_V2 + rc.SCENARIO_V3 + rc.SCENARIO_R3  # round r3: the question stage's records, required too
 
 
 def tearDownModule():
@@ -101,11 +101,15 @@ class R2RAssertion7Reported(unittest.TestCase):
         for key, title, _ in ALL:
             if key != 'declined_hold':
                 with self.subTest(key=key):
-                    self.assertEqual(rc.assertion_7(counts(**{key: 0}), True, True),
+                    self.assertEqual(rc.assertion_7(counts(**{key: 0}), True, True, True),
                                      ([f'{key}: the run holds no {title}'], {'declined_hold': 1}))
         # a v2 candidate that is not Fable's is judged on 6.4's kinds alone; a candidate before design v2 on none
         self.assertEqual(rc.assertion_7(counts(declined_hold=0), True, False), ([], {}))
         self.assertEqual(rc.assertion_7({}, False, True), ([], {}))
+        # round r3: a candidate without the question stage is never judged on its records
+        for key, _, _ in rc.SCENARIO_R3:
+            with self.subTest(key=key):
+                self.assertEqual(rc.assertion_7(counts(**{key: 0}), True, True), ([], {'declined_hold': 1}))
 
 
 class R2RAssertion7OnAReplayFilledDatabase(TI.FableRows):
@@ -630,7 +634,7 @@ class R2RStopBoundStated(unittest.TestCase):
         self.assertEqual(install.DRAIN_MAX_SECONDS, 600)
         said = ' '.join((OPS / 'INSTALL.md').read_text(encoding='utf-8').split())
         self.assertTrue('never longer than 600 s' in said, 'INSTALL.md no longer states the drain bound')
-        self.assertEqual(install.STOP_SECONDS, {'web': 30, 'worker': 1500})
+        self.assertEqual(install.STOP_SECONDS, {'web': 30, 'worker': 1800})
         for path in ops_texts():
             with self.subTest(path=path.name):
                 self.assertNotIn(600, {value for _, _, _, value in stop_statements(prose(path))})

@@ -1204,6 +1204,179 @@ coding rule, never with a word list).
 
 ---
 
+### 3.9 The question stage (round r3) [DECISIONS D306-D308, D310, D312-D323; built in round r3's build, int4, 2026-11-18]
+
+**Added 2026-11-18 (round r3's integration).** This section is new; no earlier wording is superseded by it. Round r3's
+design is `build-v2/a2b/r3/design/DESIGN-v2.md` (with CENSUS-v2 and PROBE-v2), refuted (D308) and probed with two paid
+sends (D313, D318); what follows is the design AS BUILT, with the rulings that amend DESIGN-v2.
+
+- **Why (D306, the owner's directive and its two addenda).** Fable judges the READINGS; code keeps only the fixed billing
+  tables (bundling, add-ons, units, competing codes, base_included). Every hold of a candidate code whose cause is a
+  reading uncertainty gets Fable's question; a code is released only by PROOF - a supporting answer that cites the note's
+  own words, located inside the passages the question concerns, and an agreeing answer to the exact contrary - under the
+  appraisal's health thresholds; nothing else restricts what Fable may judge (effort max, max_tokens 128,000, the whole
+  note, no question dropped for a bound).
+- **Where (D308 Q-A).** The fact request stays int3's byte for byte (I-FACT). A QUESTION stage after pass 2 plans
+  questions on the REAL settled FactSet (R_base): every READING witness of every candidate code that a true answer could
+  release, in rounds until no new question appears; an established answer is folded into R_q (`engine/facts.py`'s fold),
+  which every reader reads EXCEPT 4.6's exclusion and RD-2's may_exclude (R_base): an answer can release and never
+  exclude.
+- **Families built (D320).** Q-REL, Q-FACT (the reach, the part link, the entry, the stoma route), Q-ONLESION, Q-ABSORB,
+  G1 and the calibration item. NOT built (D310 (10), D320): Q-GROUP, Q-KIND, F9, U2, A3's narrowing and the CAUSE row's
+  wrapper - their holds stay with the coder (fail-closed). Q-LESION was never sent to Fable: no lesion-pair question is
+  asked, and DESIGN-v2 b.3 is REVERTED (D323 O1) - D296's fact-pass lesion pairs establish as on int3.
+- **Requests (D306 addendum 2, D318 (2) and its first addendum, D320).** Effort max, max_tokens 128,000, the whole note.
+  The planner partitions a round's questions deterministically into requests of at most QUESTION_BOUND = 18 claims:
+  t_q is the LARGEST measured output per claim at effort max (5,936, r3-probe-2's third request), 128,000 x 85% // 5,936
+  = 18, rounded to a PAIR (a claim and its control; DESIGN-v2 e.2's rounding to tens is superseded). Nothing is dropped:
+  more questions go in further requests, and an output overrun is halved and resent (e.4).
+- **Calibration (D319, D323 F4).** Every request carries exactly ONE calibration item - a known-false claim with its
+  exact negation - drawn from the restricted pool (D314: forms by object class and status, act-form items only from an
+  act established performed; D315 (1): K2 only between two exclusive procedure sessions that took place; D315 (2): K4
+  only for an act whose part_of is silent; D317 (1): no item whose truth turns on a member line; D317 (4): one kinds
+  table). A calibration claim answered supports refuses its request (H2). CALIBRATION_COUNT, the planner's
+  CALIBRATION_POOL_MIN and settle's CALIBRATION_FLOOR are 1. A request the planner cannot calibrate is refused at PLAN
+  time (`asking.UncalibratedRequest`, never sent); **int4 (the second refutation's ASK2-2):** the refusal is recorded per
+  question in the stage's result (`refused`, reason `question_health:uncalibrated`) and never fails the stage - the
+  document is assessed with its holds kept.
+- **Wording (D313 (1), D314 (1), D318 (3) and its second addendum).** Every question sentence states its fact exactly as
+  the contract defines it, from the fact pass's own form for (object class, attribute, state), each form declaring the
+  classes and statuses for which its sentence is exact; a form asked of a subject outside them is unbuildable (the hold
+  stays, never a wrong sentence). Q-REL asks the NARROWEST relation that settles its hold (`question_claims.
+  relation_form`): an established denial whether it denies the act (`rel.deny`), an open denial whether it denies it or
+  casts doubt on it (`rel.deny_or_doubt`), an established plan whether it plans it (`rel.plan`), any other statement
+  whether it concerns it (`rel`); no exact form, no question. G1 (`fact.session.not`) is asked only of an act
+  established performed or planned (D315 (6): `question_claims.DONE_OR_PLANNED_ACT`); **int4 (the ask lane's Q3):** that
+  declared set is the ONE source - the planner keeps no copy.
+- **Proof (D306 addendum 1 (b), D307, D318 (1)).** An answer is established only when its request is healthy, its claim
+  is supported with quotes located inside each named object's own passages (`contract/proof.locate`), and its exact
+  negation is rejected. A proof is void only when a quote lies outside the claim's own passages, overlaps another or is
+  too short - never because of further quotes inside them; every required set receives a quote; QUOTES_MAX 8.
+- **What the planner asks (int4: the engine lane's Q-R1-Q-R3 and Q1, the ask lane's Q6).** A fact is asked only when
+  `facts.answerable` holds - ONE predicate with settle's re-check and the fold: not established; not contradicted unless
+  by a cross-object conflict (C6); not judged by the fact pass (`facts.JUDGED`, C2b); located (C4); not demoted by L1's
+  date check. A Q-ONLESION question is asked only where the fact pass did not judge the act-lesion pair
+  (`facts.pair_judged`) and where the release arm's own what-if (`pairing.not_on_sets_apart`) says an established not-on
+  would set the pair apart (D323 F1). **A3 (int4, the second refutation's ASK2-1):** a silent reach list asks only the
+  code family's reachable points (`catalogue.FAMILY_REACH`) that move the witness, and of them only the outermost - an
+  EGD asks the esophagus, the stomach and the duodenum in one request, never the Extent enumeration's 51 questions in 7
+  requests; COLFULL keeps its full colonoscopy reach.
+- **The stage in the pipeline (D322, amending D320's concurrency sentence; 7.4).** ONE QUESTION job PER ROUND sends the
+  round's requests concurrently, one thread each, under the installation-wide single-flight lock held ONCE for the
+  round, after one atomic reservation of every request's worst case. Each request keeps its own deadline
+  (QUESTION_SEND_DEADLINE_SECONDS 1,408: 128,000 output tokens at 95 a second, below the 101.04 measured, plus 60 s),
+  usage, classification, stored answer, outcome and failure isolation; the next round is planned once every request of
+  the round is settled; the job deadline (1,588 s), the stale-stage threshold (1,768 s) and the worker stop timeout sit
+  above it. **int4 (the second refutation's RF2-PIPE-3):** each outcome is recorded inside its own guard, and the lock is
+  released only after every request thread of the round has ended, on every path; an outcome a thread delivers after
+  an exception has left the round's loop is recorded as it came, never as unknown. The output rate floor is a MEASURE
+  for question requests, never an installation-wide hold (D310 (9), D320).
+- **int5 and int6 (DECISIONS D324, D325; round r3's first and second adversarial passes, 2026-11-18).** The rules
+  below were ruled on the passes' reproduced findings and built in the repairs (int5: D324 (1)-(10); int6: D325 (1)-(4));
+  each is a general class rule (D276), red first on the finding's own input and pinned by a mutation proof. No customer or
+  reviewer word is new (D320 (i)); a new hold uses an existing reason.
+- **A negation answer removes only its value (D324 (1); int5).** The fold of an established answer to a negated form
+  (fact.session.not, fact.lift.not, fact.hemostasis.not, fact.cause.not) never writes an established negation with no
+  options: it rules out its value v only (`engine/facts._narrowed`, `NarrowedFact`, `facts.ruled_out`), and every other
+  reading the base fact left possible - its claimed value, its options, every value of a silent slot - stays possible for
+  every reader (`facts.possibly` and what is built on it, coverage, the pair readers); a positive answer at a ruled-out
+  value is refused. Superseded: int4's fold of a negation as an established negation, which removed the slot's other
+  readings and released (L2-1, L2-2, L6-1).
+- **Exclusivity by the truth table (D324 (2), refined by D325 (1); int5, int6).** A positive value v of a single-valued
+  slot is established only when its own claim is supported with a located proof and its control contradicted, in an
+  answered, healthy request, AND every other proposition the stage asked of that slot, in any request or round, has BOTH
+  its claim's and its control's verdicts exactly as "the slot is v" implies: another value's claim contradicted and its
+  control supported; another value's negation's claim supported and its control contradicted; v's own negation's claim
+  contradicted and its control supported. Anything else holds the slot (question_conflict): an incoherent pair, an
+  unclear, qualified or missing verdict on either member, a failed, refused, too-long, uncalibrated or unhealthy request,
+  and a plan-time refusal that names the slot (`studio/jobs._refused_questions`). A negation never establishes a value:
+  it stands only beside rivals rejected on both members. `contract/settle.exclusive` (its truth table `_implied`, the
+  verdict pair read from the stored record by `_reading`), run by the stage over every round's records; an exhaustive
+  census pins it - every slot of two and of three values, every set of asked propositions, every claim and control verdict
+  pair from supported, contradicted, unclear and missing: v is established exactly when every proposition matches v's
+  table, and no single verdict change from matching to not matching grows READY (P-MONO-Q; `tests/v2/test_r3d_claims`).
+  A rival member reads supported as settle reads a supported member (supports, attached yes, no lowering qualifier), and
+  contradicted by its verdict. Superseded: D324 (2) as int5 built it read every other proposition by its CLAIM alone
+  ("claim contradicted" for every form), so a contradicted "not w", which affirms w, counted as agreement and an
+  incoherent rival counted as rejected (D325: L2C-1, L2C-2, R3C-L1-1, L4R-1).
+- **Q-ABSORB names only performed acts (D324 (3); int5).** The absorb question's act list holds only acts for which
+  `asking.performed_act` holds (the predicate `_acts_of` applies to denials), so an entry that tells or doubts a planned,
+  attempted or in-doubt act reads as an act none of the listed acts are, and its answer cannot absorb it; where the list
+  cannot be built so, the absorb question is not asked and the entry holds.
+- **No answer lifts a fixed-table check (D324 (4); int5).** A check of pass 1's values against a fixed table - the date
+  checks, FAMILY_REACH's session_unreachable, every reason `facts.REASON_CLASSES` classes FIXED_TABLE (a new Reason
+  member is FIXED_TABLE until classified: `facts.reason_class`) - is never asked and never folded: the fold re-runs each
+  such check on the answered facts (`facts.folds`), an answered session or place re-judged for reach, and the planner
+  drops every Q-FACT question the fold would refuse (`asking._folded_mapped`; settle's re-check reads the same
+  predicate). D325 (6) Q3 confirmed the classification (FIXED_TABLE 19, CONFLICT 3, READING 36).
+- **The plan's cost is bounded (D324 (8); int5).** Every what-if the planner repeats per value or per witness reads one
+  evaluation per FactSet, and pairs are computed once per plan (`asking`'s worlds and prefetch, `whatif`'s pair reader,
+  `pairing.not_on_sets_apart` reading R's own reads, `evaluate.PairsReader`); QUESTION_CHILD_SECONDS 120 holds 1.8's
+  bound scene, the post-send child's two plans counted.
+- **Where a proof may quote (D324 (9), D325 (4); int5, int6).** No PROOF clause forbids a passage the locator requires:
+  the claim line names a frame's value passage by its field ("value at"), exempt from the heading ban, and a heading never
+  serves as the quote for an act's own passage (D324 (9)). Every Q-FACT form with no frame, reach or place rule takes the
+  asked fact's own integrity-passed sources as a REQUIRED value passage, uncut, named by the same field, where one of them
+  lies outside the subject's card; a value with no source outside the card changes nothing (D325 (4):
+  `asking.value_passage_of` gives 'own'; `question_claims._Geometry.value`; the calibration pool's session items are
+  rendered as their questions are). PROOF's session clause leaves the claim's value units out of a session's passage.
+  Each change moves the question instruction's pin by its owner (APPRAISAL_INSTRUCTIONS_Q_SHA256_V3: int5 6a798464...,
+  int6 35fb05df...), so a recorded answer to an earlier request replays as questions_changed. Superseded: DESIGN-v2 b.0's
+  empty value passage for these forms, under which a right proof quoting where pass 1 established the value was voided
+  and a hollow one quoting the act's own sentence was established (L3P-2).
+- **The pipeline's cost door and not-sent outcome (D324 (10); int5).** Every run the month's spend counts is bounded by
+  its own reservation or worst case, participant runs included, and is never None for the whole month; a cost-door
+  refusal that says nothing about a request leaves it owed (Resume). An outcome that says nothing about the request -
+  nothing left this server: the credentials, the network, a deadline before the send - decides nothing: the request
+  stays owed and the stage ends resumable, queuing nothing, as PIPE-R1 rules for holds; it never retries automatically.
+- **A per-document ceiling and bounded waves (D325 (3), D326; int6; 7.1, 7.4).** The stage reserves at most
+  QUESTION_DOCUMENT_CEILING_USD of question worst case per document (its revision) over every round
+  (`jobs._ceiling_refusal`, inside the round's one reservation transaction and before the month's threshold;
+  `jobs._document_reserved_usd` counts every question run of the revision at the worst case it was reserved at, but a run
+  whose record proves it cost nothing): a round that would pass it is refused about itself and never sent, its runs
+  recorded not sent (scope refused 'ceiling', the existing "Nothing was sent."), its questions unresolved
+  (question_request_failed:refused) and the codes held. At most QUESTION_ROUND_CONCURRENCY requests are in flight at once
+  (`jobs._question_waves`): the rest of the round waits in the same job, under the same lock and the same reservation,
+  each wave recorded before the next, and before each later wave every send door that can change is asked again (a
+  member's Stop, the worker's stop, a newer save, an unknown outcome, an installation-wide hold, the lock); a crash
+  mid-wave repeats no send. The owner's figures (D326): 25 US dollars and 4 at once on the live site, written by the
+  install into every container (`ops/install.question_figures`, read from the revision's settings); at these a round is
+  at most 4 requests, ONE wave, so the deadline and the stale threshold stay 1,588 s and 1,768 s. D326 amends D306's
+  second addendum (c) for cost alone; D306 (d) stands (no question dropped for a claim bound). Superseded in part: "the
+  round's requests concurrently, one thread each" above - at most the concurrency at once.
+- **A known limit, recorded (D325 (5)).** The trap's polarity: D319's one item is drawn negative in form whenever one can
+  be, so a model that affirms every positive sentence and rejects every negative one passes both the item and the exact
+  negation, and with hollow quotes it would release a positive claim (R3C-L1-2). Fable showed no such bias (every keyed
+  answer and all 16 trap items right). The owner's release guards stand - the exact negation and a located proof
+  (stronger with D325 (4)); not built in r3.
+- **int7 (DECISIONS D327-D330; round r3's third and fourth adversarial passes and the repairs that followed, 2026-11-18).**
+  The rules below were ruled on the passes' reproduced findings and built in round r3's later repairs (rules4: D327 (1);
+  rules5 and pairs: D328; rules6 and pairs2: D330), integrated as int7; each is a general class rule (D276), red first on
+  the finding's own input and pinned by a mutation proof. No customer or reviewer word is new (D320 (i)); a new hold uses
+  an existing reason.
+- **A statement-act pair's relation is ONE proposition (D328 (2), D330 (2); pairs, pairs2).** A release of a pair
+  through one family stands only when every question asked of the SAME pair - Q-REL, Q-ONLESION (and Q-LESION, if ever
+  built), in any request or round - read AFFIRMED: the release direction on both claim and control, in an answered,
+  healthy request. Anything else holds the pair (question_conflict): `contract/settle.exclusive` keeps an established
+  pair-family record only when every other record and plan-time refusal about one of its pairs reads AFFIRMED, or is the
+  same proposition established too (`settle._pair_held`), its pairs read by `settle.pair_scopes` without a FactSet - a
+  Q-REL its two subjects, a Q-ONLESION every event statement of its act, a Q-LESION every pair: the fail-closed scope
+  (D330 (3): exclusivity's FactSet scope, the pairs lane's Q1, is not adopted). D330 (2) extends the proposition to
+  every answer that can set a pair apart, Q-FACT included: where the fold would release a pair held on R_base - set it
+  apart through a row of 4.5 (session, timing, performer, breadth, target, technique), drop it out of the pairs, or drop
+  a kept unlisted entry's pair - while a pair-family record about the same pair does not read AFFIRMED, the pair keeps
+  its R_base relation (`engine/facts._kept`, `facts.AnsweredFactSet`; 4.5); every answer is still folded for every other
+  reader. ONE reader reads a stored record's verdict pair for exclusivity and for the fold (`facts.answer_reading`;
+  `settle._reading` returns it). The planner asks a pair through another family only when no earlier answer about the
+  pair holds it (`asking._Context.unheld`, `settle.PairAnswers`). Recorded as cost, not built (D330 (3)): a question a
+  rare shape asks after an earlier answer held the pair is paid and can only hold (RP-3; the pairs2 lane's Q1).
+- **A rival's contradicted verdict (D327 (2)).** A rival member's "contradicted" reads the verdict contradicts with any
+  qualifier, as settle reads the value's own control.
+- **The ceiling per revision (D329 (4); 7.1).** The per-document ceiling counts per REVISION
+  (`jobs._document_reserved_usd(revision)`): an addendum or a new version starts a new reading with its own 25 US
+  dollars, so a note costs at most about $36 (its worst reading $11.06, D278), not $35.
+- **Unchanged (D320 (i)).** The customer surface.
+
 ## 4. The decision engine (`studio/interpretation/engine/`, `cpt-studio-events@2`)
 
 The coding rules of S3 stay. Their inputs move to settled facts, and every [W] input of S3 is replaced by the attribute
@@ -1358,6 +1531,93 @@ encounter this document records (unmet: `event_time`) [B's V.this_encounter, J].
 | bundling | every code (4.7) | part_of and part_relation, cause and cause_event, lesion identity, duct; the whole's status and timing read by `possibly` | `act_part`, or `act_target` (bundling identity) | bundled: held (explanation naming the whole) |
 | combination | as v1 (4.7) | base, base-within, competing over facts | `base_included`, `competing_codes` | - |
 | R7, R9 | every code | the date of service known (document or member); the references are records | encounter-scope date question | - |
+
+**DECISIONS D310 (1) and D312 (5) (2026-11-17; built in round r3's build, int4 2026-11-18), the colonoscopy route
+table.** A billing table (D306 keeps billing tables as code; D225 P5), read on the supporting act under the code's
+COLFULL tag: a colonoscopy-through-stoma code (44388-44405, 44408; `evaluate.STOMA_ROUTE_CODES`) is READY only when the
+session's approach is established through_stoma AND an anatomy entry's type is established stoma; another approach
+established, or through_stoma denied, explains it away (coding_rule:stoma_route). A colonoscopy code (45378-45398;
+`evaluate.ANUS_ROUTE_CODES`) is never READY when the approach is established through_stoma, and is held (the approach
+question) while a stoma route is possible (`evaluate.stoma_possible`: unless the approach is ESTABLISHED as another
+route, an anatomy entry possibly a stoma OR the approach's own through_stoma reading possible - read so that no 9.4
+weakening releases). The route is a reading Fable may be asked (Q-FACT); the requirement is the table's. Superseded
+reading: the COLFULL row alone, under which int2's requirement rows of the two ranges were row for row the same and a
+through-stoma code went READY on any colonoscopy whose act was established (D310's finding; MAIN's studio/gi too).
+
+**DECISIONS D324 (5) and D325 (2) (2026-11-18; built in round r3's repairs, int5 and int6), a colonoscopy code needs a
+colon to traverse.** The through-stoma codes 44388-44408 - 44406 and 44407, LOWER's EUS stoma class, included
+(`evaluate._lower_colonic`, D325 (2)) - are READY only when the route is COLONIC as well (`evaluate.colonic_route`): no
+anatomy entry may file the colon as a whole surgically absent (`colon_absent_possible`, read fail-closed), and the
+stoma's organ is established in the colon or a reached point at or past the cecum is supported
+(`evaluate.AT_OR_PAST_CECUM`: the colon's points less the ileocecal valve). The valve counts only from a stoma established
+in the colon: from an ileal stoma, or one of an organ not established, it is reached before any colon, so a scope through
+an ileal stoma to the valve or into the ileum holds the code for the coder (an ileoscopy through a stoma, 44380-44384),
+and an open point that may only be the valve is never asked as the reach. The stoma-possible closure opens only for a
+stoma of the lower tract or of an organ not established (`evaluate.lower_stoma_possible`; D324 (5)): a gastrostomy beside
+a colonoscopy holds no 45378-45398 code. The anus-route codes 45378-45398 hold with the route table's own hold where a
+colon may not remain (`evaluate.no_colon_possible`, D325 (2)): an anatomy entry may file the whole colon surgically
+absent, an entry may be an ileal pouch, or the approach is established or possible through a pouch - a small-bowel reach
+completes a colonoscopy only when a colon remains. Each hold is an existing reason (coding_rule:stoma_route; LOWER's
+coding_rule:lower). The requirement rows read the anatomy entry's organ (COLFULL and LOWER declare it: P-INDEP).
+Superseded: the through-stoma reach as any point of the colon region, the valve included, and the anus route read on the
+stoma alone (D325's L6B-1 and L6B-2; D324's L6-2 before them).
+
+**DECISIONS D327 (1) and D328's addendum (2026-11-18; built in round r3's later repairs, rules4 and rules5, integrated in
+int7), a colon that may not remain.** The anatomy may leave no colon otherwise than by an entry filing the colon as a
+whole surgically absent (`evaluate.whole_colon_absent_possible`, read wherever D324 (5) read that case alone: the colonic
+route, its witness, LOWER's `_lower_colonic` and the anus route's colon to traverse): the entries that may be surgically
+absent may together cover every segment of the colon, a side counting as its segments and both sides covering the colon
+(`segments_absent_possible`; the addendum's rules4 Q2); or an entry's subtype may join the ileum below the colon -
+ileorectal or ileoanal (`ileum_below_colon_possible`) - or its joins may join the small bowel to the rectum or the anus
+(`joins_ileum_below_colon_possible`; the addendum's rules4 Q3). A joins list of ONE member holds only where that member
+may lie below the colon - the rectum, the anal canal, or a landmark naming no placeable organ (D330 (1) (c)) - and a
+member naming no placeable organ is read as one of its filed subtype's own ends (`evaluate.SUBTYPE_ENDS`; R5R-6, by its
+class rule's principle). A colon that may remain - a right hemicolectomy with an ileocolic anastomosis, a sigmoid or
+Hartmann resection, a segmental colectomy - meets none of them, and the code is read as before. Each holds 45378-45398 and
+44388-44408 with the route table's own hold (coding_rule:stoma_route; LOWER's coding_rule:lower); the requirement rows
+read the subtype and the joins to hold only.
+
+**DECISIONS D328 (1) (2026-11-18; built in round r3's fourth repair, rules5, integrated in int7), the lower-GI route
+table by principle.** Every lower-GI endoscopy code in the catalogue declares in ONE typed table its route - per anus,
+through a stoma or through a pouch - and the anatomy it needs: a colon to traverse, a rectum and sigmoid, a colonic
+stoma, an ileal stoma, a pouch (`catalogue.LOWER_ROUTES`, `catalogue.RouteAnatomy`, `catalogue.lower_route`). The
+families: colonoscopy 45378-45398 with its EUS 45391 and 45392; sigmoidoscopy 45330-45350 with its EUS 45341 and 45342;
+proctosigmoidoscopy 45300-45327; through a stoma 44380-44408; through a pouch 44385-44386. A code is READY only when the
+record establishes its route and nothing filed contradicts the anatomy it needs, read fail-closed. Per anus
+(`evaluate._anus_route`, read by the route rows and by LOWER's per-anus EUS classes): an approach established through a
+stoma gives the class's explanation (procedure, RANK row 8); an entry that may be an ileal pouch, or an approach
+established or possible through one, gives the table's own hold (`pouch_possible`), and for the colonoscopy family so
+does a colon that may not remain (`no_colon_possible`); a stoma that may exist gives the approach question. There is no
+rectum-absent arm. An ileoscopy through a stoma (44380-44384) needs its stoma ileal and no colon traversed
+(`evaluate.ileal_stoma_contradicted`, D330 (1)'s R5R-9: a stoma passed that may be colonic or is filed outside the ileum,
+or a supported reach through it at or past the cecum, holds it). A lower-GI code with no row holds at run time, and a
+completeness test asserts every one has a row. Superseded: the route rules added family by family (the colonoscopy
+through a stoma, then per anus).
+
+**DECISIONS D330 (1) (2026-11-18; built in round r3's fifth repair, int7), the lower-GI path guard.** Four rounds each
+found the next post-surgical lower-GI shape a listed arm missed, so the default is inverted: an unknown shape costs a
+hold, never a false READY. After every arm, each code with a row in the route table is held with the table's own hold
+(procedure, RANK row 8, coding_rule:stoma_route: an existing reason) unless EVERY anatomy entry of the document is, for
+that code's route, (i) the entry the route itself uses - the stoma or the ileal pouch the session established it
+entered through (`evaluate.route_entries`) - or (ii) a match for a row of the RULED HARMLESS SET for its route family
+(`catalogue.HARMLESS`: one finite typed table, one row per route family and entry shape; `evaluate.harmless`,
+`harmless_row`). An entry matches a row only when every possible value of every field it files - type, subtype, every
+joins member, organ - lies within the row, read by `_may_be`, silent and unreadable fields included. The set is the
+release set: an omission costs a hold. It keeps an entry wholly outside the lower GI tract, a surgically absent
+appendix, a segmental colectomy's or an anterior resection's absent parts and anastomosis, and the common inputs as int6
+decided them; it does not hold harmless, for example, the colon gone as a whole beside a colonoscopy, a rectum and
+sigmoid or a colonic stoma, an ileorectal or ileoanal join beside every family but the pouch's, the anal canal absent
+per anus, an ileal pouch but as the pouch route's own entry, or an anastomosis whose subtype and joins are both silent.
+A per-anus code's own route is the guard's too (`evaluate._anus_route_contradicted`): an approach filed or supported as
+anything but per anus (R5R-7), or a through that may name an entry that may be a stoma or a pouch (R5R-8), holds it; a
+silent approach reads per anus only when no entry may be a stoma or a pouch, as before. The guard only holds: it runs
+where the arms left the route met (`evaluate.path_guard`, `_guarded`, LOWER's row), never releases what an arm held, and
+reads no askable fact, so no answer lifts it (D324 (4)). A census pins it (9.4), and the route table joins
+`requirements_of`, so gate 6 generates its cases (9.5). Recorded limits, fail-safe and not built: a stoma's organ is
+never claimed or askable, so a lower-GI code on a note that names any stoma, with the approach silent, holds for the
+coder (D330 (1) (d), R5R-5: the remedy after go-live is a pass-2 claim on the stoma's organ or an approach question
+template, never pass 1's unverified organ read to release); a Kock pouch entered through its continent stoma holds 44386
+for the coder (R5R-3).
 
 A code's REQUIRED facts are exactly these, over its E* acts, their session, the statements paired with its candidates
 (4.5), the doubts that name their facts, the unlisted statements that touch them (3.2.6) and the encounter's date. Nothing
@@ -1560,6 +1820,36 @@ unrejected took that control out of the reading and released (RFL2-2, D220's cla
 unrejected control read). The named release stays the deletion of an act place NO control asks either object about
 (refute-r2d-r2 RD1, D245). Engine only; no request changes.
 
+**DECISIONS D316 QB (2026-11-17; built in round r3's build, int4 2026-11-18), the statement's places beyond its not-on
+lesions.** An act place is answered by an established not-on only where no place of the statement's OWN places beyond
+its not-on lesions' places may hold it (`pairing._held_beyond`, read by `_answered_on_the_statements_side`): its
+target.places members in any state but an established negation (a member equal to an ESTABLISHED place of a not-on lesion
+is that lesion's place, pair 4's shape; any other is beyond) and every end and range of its scope.segment. A beyond place
+holds the act's place unless established as another place (`anatomy.disjoint`). So a denial placed at its lesion AND at
+an umbrella it names for itself (QB's scene: the whole colon) stays SAME beside a tattoo in that umbrella - held,
+relation:contradiction - a reading question for the question stage (Q-REL), released only by an established answer.
+Superseded in part: D311's "The rule reads what the claims asked and pass 2 established, never the statement's deletable
+place list" - the statement's own places beyond its not-on lesions are now read, so the 9.4 deletion of such a place
+releases only into P4-ONLESION's ruled shape: the named release `D316_QB` (9.4), beside D228_DQ2 and D293_ERASE. QD
+(D316) is decided with it: the deletion of an act place NO control asks either object about stays the one named release
+of D245's class; it closes only by a request change, which I-FACT rules out in r3.
+**Round r3's second refutation (R2E-QB-ANAT, HIGH; reproduced and repaired in int4, 2026-11-18), the statement's own
+targets beyond its places.** The clause above read target.places and scope.segment only, so a denial whose target names
+an anatomy entry for itself (an anastomosis) beside a tattoo naming no lesion was set apart and released 45381. The class
+rule: every target the statement names for itself, in any state but an established negation (its value and readings,
+`facts.possibly_written`; a pure-silent slot names none, an empty slot a doubt names names its readings), is beyond its
+not-on lesions - a target.anatomy entry (an
+anastomosis, a stoma or a pouch: unplaceable, never apart) and a target.structure other than a lesion (an anastomosis, a
+stent, a wall) - so the pair stays SAME. Engine only; no request changes (requirements' SUP_CLEAN reads the statement's
+target.anatomy and target.structure, P-INDEP).
+
+**Round r3's first adversarial pass (L6-4; DECISIONS D324 (7), repaired in int5 2026-11-18), a lesion-like structure.**
+A target.structure lies beyond the statement's not-on lesions only when it has a location of its own - an anastomosis, a
+duct, a stent, a wall, the mucosa, a lumen, a named anatomy (`pairing.STRUCTURE_PLACEMENT` LOCATED); a lesion-like
+structure (an ulcer, a mass, a varix, a bleeding site, a lesion) that describes the statement's own target lesion does
+not. The typed table splits the Structure enumeration completely; a new member counts as located, and so holds, until
+classified. R2E-QB-ANAT's scene stays held.
+
 **Why every row is evaluated** [R:HO-2]. Under the pre-refutation rule, "the first row that returns decides", an
 unestablished timing on D stopped the target row from ever setting apart a denial of another lesion, and every denial's
 timing was claimed with an act's sentence ("This act was done on a date before the date of service."), which a faithful
@@ -1585,6 +1875,14 @@ established negated status made a statement, so the caught misfiling dropped out
   attribute (h1). An unlisted denial or doubt pairs UNRESOLVED(statement_scope) (3.2.6 rule 4).
 - Nothing dismisses a contradiction: no literal row, no name comparison, no place adjacency (C-11's dismissals and
   D58/D77 retire).
+
+**DECISIONS D328 (2) and D330 (2) (2026-11-18; built in round r3's later repairs, pairs and pairs2, integrated in int7), a
+pair's relation is one proposition (3.9).** A pair the fold would release on R_q - set apart through a row of this
+table, dropped out of the pairs, or a kept unlisted entry's pair dropped - keeps its R_base relation while a pair-family
+question asked of the same pair, in any request or round, did not read AFFIRMED: `pairing.relation(R_q, S, A)` is then
+`pairing.relation(R_base, S, A)` (the same Pair: relation, row, rows, kinds, spans), `pairing.paired` is True, and a kept
+entry's R_base unlisted pair stays in `pairing.unlisted_pairs` (they read `facts.AnsweredFactSet`'s kept pairs). Every
+answered fact stands for every other reader, and a kept pair's hold is its R_base relation's own (an existing reason).
 
 ### 4.6 Exclusion: the only path to EXCLUDED besides R1 and member answers [C][A][B]
 
@@ -1613,6 +1911,12 @@ claimed in the statement form, 3.2.2 [R:HO-2]) that the code does not cite gives
 (C-7). A negated statement of the code's kinds whose session or date relation is not established (possibly this session,
 possibly today) also gives `statement_scope`, never `not_documented`, so a broad denial is never dropped.
 
+**DECISIONS D324 (6) (2026-11-18; built in round r3's repair, int5), an exclusion reads the base's own decision.** 4.6
+runs for a group only when R_base's own 4.4 decision reaches it - no supporting act, no pending candidate, and no found
+or pending XCHG pair, filed or synthetic - computed by the code path the decision itself uses (`evaluate._read_group`),
+never by a partial re-check; otherwise the group holds as not documented. So an answer never excludes:
+EXCLUDED(R, A) == EXCLUDED(R, no answers) for every set of answers A.
+
 ### 4.7 The coding relations that stay, forked and rewired [A][B][C]
 
 | rule | stays as | v2 inputs | gone |
@@ -1635,6 +1939,19 @@ possibly today) also gives `statement_scope`, never `not_documented`, so a broad
 | reconcile, completeness, event_coding, service questions (S3 6.3) | unchanged shapes, `cpt-studio-events@2` | results; `unlisted` makes completeness incomplete | - |
 | R7, R9 | unchanged | date of service; PFS and MUE rows | - |
 | the routing stand-in, the derived context (`facts.derive`) | `engine/derive.py` [J] | the date of service, member values, date relations | day_of |
+
+**DECISIONS D308 Q-B (2026-11-17; DESIGN-v2 b.8; built in round r3's build, int4 2026-11-18), the silent-link rule.** In
+the three bundling arms that have no identity arm to fall back on, a pure-silent link (an empty slot no doubt names)
+reads as a DOUBT (U, asked as that link), never as no bundle: the procedural adjunct's part arm reads a silent part_of so
+beside any act that may be its whole; its cause arm reads a silent cause so only where the part treats bleeding (its kind
+bleeding_control, or its purpose possibly hemostasis - the arm's own premise); the tattoo's lift-by-part arm (a part
+that is no injection, whose purpose arm is F by kind) reads a silent part_of so. A negated link stays no; every other
+reader keeps the silent exit. Why: a part whose link pass 1 never filed is explained by nothing, so a true answer to an
+unrelated doubt could otherwise release a code the bundle table explains away (D307 Q7's safety condition in a form the
+engine decides). Its new holds were declared in advance (r3/acceptance) and are released only by Fable's proven answers
+(Q-FACT's part-link and cause questions); D310 noted that it moves 367 tests.v2 expectations (an injection, clip or
+ablation with a silent purpose and cause beside another act now holds). Superseded reading: the bundling row's "the whole
+read by `possibly`" took a pure-silent link as no bundle in every arm.
 
 ### 4.8 The one-question policy [A][B][C]
 
@@ -2094,6 +2411,16 @@ exercised, which the matrix's reinstated-code world does.
 As 1.1. A changed pass-1 byte needs `gemini-events@3`; a changed pass-2 byte, `gemini-appraisal@2`; a changed check or
 settle rule, `gemini-inventory@3` (re-settled from the stored bytes, no send); an engine change, a recompute.
 
+**DECISIONS D324 (11) (2026-11-18), the requirements label.** REQUIREMENTS_VERSION is `cpt-requirements@3` since round
+r3's rules pin moved (the route table, QB's reads); a label kept would keep old records current. Its rules pin is
+restated within the unreleased round (int5, int6: the organ reads of D324 (5) and D325 (2)); no record exists under @3
+outside test databases.
+
+**DECISIONS D327 (3) (2026-11-18), the label kept.** REQUIREMENTS_VERSION stays `cpt-requirements@3`: nothing has
+shipped, so no record exists under @3 outside test databases. Its rules pin is restated within the round by its owner
+(`sha256_of(requirements.rules_canonical())`): rules5 for the route table's reads and the subtype and joins reads
+(`d48cf1f6...`), rules6 for the route table's reach read (`e5c9398d...`).
+
 ### 6.2 Existing records [C][B][A; revised R:MO-1, MO-4, MO-5]
 
 - **Live (c2e53f8e).** Every legacy assessment, decision, approval and export stays as it is, read by LegacyReader; reload
@@ -2132,6 +2459,16 @@ settle rule, `gemini-inventory@3` (re-settled from the stored bytes, no send); a
   in 7.6 [R:MO-5].
 - **Re-assessment** of a legacy or v1 revision is always an explicit act that creates new rows; the install re-assesses
   nothing (D16).
+- **DECISIONS D321 (2026-11-17T18:27:53Z), the owner's approval (class b).** The accepted-capability loss this section
+  and 6.5 state - a legacy (c2e53f8e7d33) assessment's approval does not carry across engines; a new approval or export
+  of a legacy assessment is refused until the encounter is checked again by its explicit act; existing decisions and
+  downloaded reports stay as records - is ACCEPTED by the owner. No wording above changes, and no gate is replaced.
+- **DECISIONS D329 (3) (2026-11-18), what the build does with a legacy encounter.** The build is narrower than D321's
+  ruled clause (a): an untouched legacy (c2e53f8e7d33) encounter stays as it is today - its assessment, decisions and
+  exports stand, and its codes can still be approved or exported. From the first saved change, or a Resume, every
+  decision and export is refused until the new reading completes; then the legacy decisions are cleared ("the
+  interpretation changed") and kept as records (`tests/v2/test_update_review.py` BindingTests). This narrows the loss
+  the owner accepted, so no new approval is needed.
 
 ### 6.3 Migration 0015 (additive; no backfill, no RunPython) [C, corrected by J]
 
@@ -2214,6 +2551,25 @@ About 1.85x v1 at the median (the pre-refutation figure was 1.8x). Prices double
 walk will likely fall after that date. The per-document production cost is reported to the owner before the install
 (standing authority class d); the recording budget against the cap is 7.6.
 
+**DECISIONS D319, D320, D321 (2026-11-17), the question stage's cost at effort max (3.9).** About $3 for a short note
+and about $12 for a long one at four calibration items a request (r3-probe-1: one request, $2.246928; r3-probe-2: three
+requests, $11.250816); D319's one item a request brings a long note to about 3 requests and $8.50. The owner accepted the
+per-document cost (D321, class d). The table above is the two passes' cost and is unchanged.
+
+**DECISIONS D325 (3) and D326 (2026-11-18), the question stage's ceiling per document (3.9).** The stage reserves at most
+25 US dollars of question worst case per document (QUESTION_DOCUMENT_CEILING_USD), 4 requests at once
+(QUESTION_ROUND_CONCURRENCY); a round that would pass the ceiling is not sent and its codes go to the coder. It counts
+the reserved worst case of the follow-up questions, not the bill and not the reading: at most a note costs about $35 - its
+reading up to about $10, its questions up to $25 (D326). The recorded long note (r3-probe-2) reserved $16.280776 in one
+round of 3 requests, within it. The owner's figure is a setting; a later change is a settings change on the owner's
+figure (D326).
+
+**DECISIONS D327 (5) and D329 (4) (2026-11-18), the ceiling per revision.** The ceiling counts per REVISION
+(`jobs._document_reserved_usd(revision)`): an addendum or a new version starts a new reading with its own 25 US dollars,
+and the worst reading is $11.06 (D278), so a note costs at most about $36, not $35 (D329 (4); the words put to the owner
+in D326 stay as they were said). A later figure is a one-line settings default and an install of that revision (D327
+(5)).
+
 ### 7.2 Latency (two passes in series; FRESH-2's median generation rate, 100.8 tokens per second)
 
 | | F1 0.85 | F1 1.0 | F1 1.2 | v1 (measured) |
@@ -2226,6 +2582,11 @@ Pass 2's largest modelled output is about 12,900 tokens at the mean thinking, ab
 tokens), and about 29,400 at its largest (16,776 tokens, measured on an 848-character document: thinking does not follow
 size). At the slowest measured rate, 82.4 tokens per second, the last takes about 356 s, past the pre-refutation 300-second
 read; pass 2 therefore takes pass 1's deadlines (7.4) [R:MO-3].
+
+**DECISIONS D320 and D322 (2026-11-17), the question stage's latency (3.9).** A round's requests run concurrently, so a
+long note waits for its slowest request (r3-probe-2's slowest: 1,049 s) rather than their sum: about 10 minutes for a
+short note and 25-55 minutes for a long one, at the measured 101-104 output tokens a second at effort max. The table above
+is the two passes' and is unchanged.
 
 ### 7.3 The size bound, and why pass 1 must stay lean [C][J]
 
@@ -2252,6 +2613,22 @@ in the long documents). The rule:
 extract -> interpret (pass 1) -> appraise (pass 2) -> analyze (engine/derive) -> predict (Corti) -> astra -> fable
         -> assess #1 -> astra_peer -> fable_peer -> assess #2                      [review2 -> assess] member-asked only
 ```
+
+**DECISIONS D308 Q-A and D322 (2026-11-17; built in round r3's build, int4 2026-11-18).** The QUESTION stage (3.9) runs
+between appraise and analyze: `appraise (pass 2) -> question (one job per round, its requests concurrent) -> analyze`. Its
+key is `question:<pass-2 run>:<round>:<tail>` (`jobs._question_key`), each wave of a round a job of its own; the ONE row
+is written at the fixed point, which queues the analyze. Superseded: the diagram above has no question stage.
+
+**DECISIONS D325 (3) (2026-11-18; built in round r3's repair, int6), the round's waves.** The one QUESTION job of a round
+still takes the lock once and reserves every request's worst case in one transaction, the per-document ceiling checked
+first (7.1); it then sends the round in waves of at most QUESTION_ROUND_CONCURRENCY requests, each wave recorded before
+the next starts, the later ones waiting RESERVED in the same job (3.9). The stage's deadline and stale threshold are
+derived from the waves a round can take (`cptstudio/settings`: one wave at the installed figures, 1,588 s and 1,768 s); a
+pair of figures whose stage would outlast the queue window refuses to load. Superseded in part: "its requests
+concurrent" - at most the concurrency at once.
+
+**DECISIONS D327 (6) (2026-11-18), a figure of several waves.** At 25 and 4 a round is one wave. A figure that needs
+several waves first builds the pipe lane's exact changes (the access check's lock wait, QUEUE_DEADLINE).
 
 **Keys.** `interpret:<revision>:gemini-events@2`; `appraise:<revision>:<extraction run>:<the first 16 hex of the appraisal
 request's sha256>` (99 characters; with `:after-reconcile:<run>` and `:resume:<uuid>`, 196 of `Job.idempotency_key`'s 200).
@@ -2324,6 +2701,13 @@ model substitution.
 | settle findings (an unlocated unit, a failed geometry or consistency check, a qualifier, a disagreement) | - | the facts unresolved | the one item on that fact |
 | a legacy or retired call on the new path | the sentinel gate refuses the write (`sentinel.tripped`); the install self-test fails | the same | - |
 
+**DECISIONS D324 (10) and D325 (3) (2026-11-18; round r3's repairs, int5 and int6), the question stage's outcomes.** A
+question request that never left this server (the credentials, the network, a deadline before the send) decides nothing:
+it stays owed and the stage ends resumable, queuing nothing, its Resume sending it once; a month's cost-door refusal
+that says nothing about a request leaves it owed. A round the per-document ceiling refuses (3.9, 7.1) is refused about
+itself: never sent, its questions unresolved (question_request_failed:refused), its codes held for the coder, no Resume
+sending it. The table above is pass 1's and pass 2's and is unchanged.
+
 ### 7.6 The recording budget (fresh calls, bounded; the testing authority of 2026-11-11, cap about $300) [C][B][A; revised R:MO-6]
 
 Every batch runs with concurrency one under its own cost cap enforced by the harness; every request's usage is recorded;
@@ -2353,6 +2737,10 @@ about $350, more than the shared monthly cap of about $300 (2026-11-11). Therefo
    installation-wide hold that pauses every new upload until the reset (D39, 7.4). A separate test key or project, or a
    sub-cap, is an owner decision (class d: keys and money), asked before any post-switch batch; until it is made,
    post-switch batches run only inside the reserve rule of item 2.
+
+**DECISIONS D327 (4) (2026-11-18), the record harness mirrors the product.** The harness's question rounds are sent in
+the product's waves (at most QUESTION_ROUND_CONCURRENCY at once) under the product's per-document ceiling
+(int6-tools.diff), so a round the product would refuse is never sent by the harness.
 
 ---
 
@@ -2495,6 +2883,11 @@ regression (held to READY on the exact input) counts as a wrong READY whatever c
 | G-NOISE | D3 (development documents with FRESH expected outcomes, outside the acceptance hash list) | unnecessary holds at most 12%, and READY recall at least 75%, before the acceptance run is spent; reported by cause (`words_not_in_units`, `anchor_words`, `source_too_long`, `extent_inferred`, `cards_indistinct`, `unlisted`, `doubt_*`, `relation:possible_statement`, `appraisal:*`) | the dominant `cause` is repaired (prompt, templates, geometry, a coding rule), never settle weakened, never a word list |
 | G-GUARD | every measured assessment | `legacy_calls = retired_calls = 0` | a defect; the sentinel refuses the write |
 
+**Round r3 (DECISIONS D312, D317, D319, D320; 2026-11-17/18).** The question stage's own gates, before any send: the
+by-words answer key (D314 (5)) and key_compare; gate 3.8 is ONE calibration item per request, a known-false claim (D319);
+the I-FACT equality of the fact request (D308 Q-A); release-none moving nothing but declared rows (D310 (2)); score (ii)
+over every candidate code a question answer releases (D310 (3)). The acceptance and release gates above are unchanged.
+
 **The release gate** (before the PR leaves draft): the acceptance gate and every design gate pass; every wrong READY or
 wrong exclusion found anywhere is investigated and repaired in the prompt, the schema, the claim templates or a coding
 rule (never a word list, EB4) and re-measured.
@@ -2563,6 +2956,32 @@ presumed multiplicity takes the release away, as a stored row with that multipli
 the outcome as built, and the release stood under the weakening (the refutation's RFE-L2: the D305 fixture's 45381, and
 the D300 fixture's 45385 alike). The property fixtures include one listed target per D309 RFE-L1 (4.5).
 
+**Round r3's build (DECISIONS D316, D323 F4; int4, 2026-11-18).** P-MONO's named releases are D228_DQ2, D293_ERASE and
+`D316_QB` (4.5: the deletion of a statement place beyond its not-on lesions releases only into P4-ONLESION's ruled
+shape); RFX-1 (D316's carried item) narrows D228_DQ2's predicate to the UNCLAIMED corner - a claimed pair's release is
+named by no ruling. P-CONTROLLED: the QB clause (R2E-QB-ANAT) reads a STATEMENT's target.anatomy on a READY path only to
+HOLD (a target it names for itself keeps the pair together, never sets it apart), so a yes-bias there can only hold; it is
+recorded as such in the tests, and the fact pass's UNCONTROLLED list (CONTROLS_SHA256_V3) does not move. P-MONO-Q and
+P-INDEP-Q (DESIGN-v2 f) read an established answer through the fold: removing or demoting an answer never grows READY or
+EXCLUDED, and EXCLUDED(R_q) == EXCLUDED(R_base).
+
+**Round r3's repairs (DECISIONS D324 (1), D324 (2), D325 (1); int5 and int6, 2026-11-18).** The fold's property: for
+every negated form, every witness whose value is not v reads the same on R_q as on R_base (`tests/v2/test_r3c_fold`).
+The exclusivity census (3.9): every slot of two and of three values, every set of asked propositions and every claim and
+control verdict pair from supported, contradicted, unclear and missing; a value is established exactly when every
+proposition matches its truth table, and no single verdict change from matching to not matching grows the established
+set or READY (P-MONO-Q; `tests/v2/test_r3d_claims`).
+
+**Round r3's later repairs (DECISIONS D328 (2), D330 (1), D330 (2); int7, 2026-11-18).** The pair census (3.9, 4.5): a
+pair's records over every pair-family verdict state - and, D330 (2), the rows a Q-FACT answer releases through x the
+pair's Q-REL in 23 states, three pair-family records together, and the fold's rule over every row of 4.5 and every drop
+- released and READY exactly when every pair-family record asked of the pair is absent or reads AFFIRMED, and no single
+verdict or health change from the release grows READY (P-MONO-Q; `tests/v2/test_r3f_pairs`, `tests/v2/test_r3g_pairs`).
+The guard census (4.3): every entry shape over the contract's finite vocabularies - type x subtype x joins of up to two
+members x organ, silent included - x every route family x the approach and through states: a shape outside the harmless
+set holds, every harmless row keeps the common controls as int6 decided them, and the guard reads every row of the route
+table (`tests/v2/test_r3g_rules`); no 9.4 weakening of a scene the guard holds releases it (P-MONO).
+
 ### 9.5 Gate 6 and the failure classes as fixtures [B][C]
 
 **Gate 6** (engine only, offline, unit speed): a corpus of hand-built settled FactSets. Being facts, they carry no words:
@@ -2599,6 +3018,26 @@ twins-015, W1S-222 and C2MEM-031 (CO-1, CO-2). Every engine case among them is a
 
 These are engine and settle tests. They prove what the engine does given a filing, and nothing about Gemini's reading;
 they are never acceptance evidence.
+
+**Round r3's build (int4, 2026-11-18): declared holds.** A failure-class or checklist expectation that the silent-link
+rule (4.7, D308 Q-B) moves is recorded on its case as DECLARED - the held code, its fact key and the rule (b.8) - never
+rewritten as the case's expected outcome, so the fixture keeps the outcome a coder would want and names the rule that
+holds it (`cases_*.py` `declared`, read by `test_failure_classes`: S4's C1, C2 and BF4 (ii) on 43255, the checklist's
+CK-note8 and the refutation's RF-CO2d on 45381, each `act_part` under b.8). RESIDUALS.json (variant (iii)): BF4, C1 and
+C2's 43255 move from wrong_ready to held (act_part), so wrong_ready 30 -> 27 and held 35 -> 38.
+
+**Round r3's third repair (DECISIONS D325 (2); int6, 2026-11-18): gate 6's EUS stoma class.** 44406 and 44407's 40
+generated expectations move to the class's route hold (procedure, RANK row 8, a question, coding_rule:lower) through the
+generator's own rule (`test_gate6.colonic_route_hold`; CORPUS.json written by `write_corpus`): the class's canonical
+baseline - a reach to the stoma, the stoma's organ never established - has no colonic route (4.3). The READY side of the
+class is pinned in `tests/v2/test_r3d_rules`.
+
+**Round r3's fifth repair (DECISIONS D330 (1) (a); int7, 2026-11-18): gate 6's route table.** ROUTE_TABLE joins
+`requirements.requirements_of` after the tags for the 19 codes whose route row stands apart (the sigmoidoscopy and
+enteroscopy route codes, `requirements.route_row_apart`), so gate 6 generates its T, U and F cases - U an ileal pouch
+filed beside (the table's hold), F per anus the approach supported through a stoma (the class's explanation); a
+through-stoma or pouch row has no F form - and CORPUS.json is written by `write_corpus` (6,192 -> 6,249 cases: the 57
+added are exactly the 19 codes x T, U and F).
 
 ### 9.6 Recordings, labels, and development kept apart from acceptance [C][B][A]
 

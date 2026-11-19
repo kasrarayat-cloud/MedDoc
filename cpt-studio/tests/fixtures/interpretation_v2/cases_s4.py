@@ -1131,14 +1131,19 @@ CASES += [
          expect={'i': {'43239': (R, None, None, 'SUPPORT met'),
                        '43255': (H, 'performed_status', EXP, BUNDLED)},
                  'ii': {'43239': (R, None, None, 'unchanged'),
-                        '43255': (H, 'act_cause', Q, '4.3 CAUSE unresolved: act_cause (RANK 17)')}}),
+                        # restated at round r3's integration: the silent-link rule (DESIGN-v2 b.8, DECISIONS D308 Q-B)
+                        # reads the clip's silent part_of beside the biopsy as a doubt, asked first (act_part, RANK 17)
+                        '43255': (H, 'act_part', Q, '4.3 CAUSE unresolved: act_cause (RANK 17); since round r3 the '
+                                                    'silent part_of is a doubt too, asked first: act_part (RANK 17)')}}),
     Case('C2', 'class', ('C2',), 'A control naming the polypectomy site at a conflicting place', C2_TEXT, c2,
          codes=(('43251', 'hot snare'), ('43255', 'hemoclips')), caught=('cause@E3/0',),
          expect={'i': {'43251': (R, None, None, 'SUPPORT met'),
                        '43255': (H, 'performed_status', EXP, BUNDLED + '; a place conflict sets nothing apart (4.7, '
                                                                      '4.13: D77 dropped)')},
                  'ii': {'43251': (R, None, None, 'unchanged'),
-                        '43255': (H, 'act_cause', Q, '4.3 CAUSE unresolved (RANK 17)')}}),
+                        # restated at round r3's integration (DESIGN-v2 b.8, DECISIONS D308 Q-B), as C1's
+                        '43255': (H, 'act_part', Q, '4.3 CAUSE unresolved (RANK 17); since round r3 the silent part_of '
+                                                    'is a doubt too, asked first: act_part (RANK 17)')}}),
     Case('C3', 'class', ('C3', 'BF14'), 'Cautery to an angioectasia read as a bleeding control', C3_TEXT, c3,
          codes=(('45382', 'Cautery was applied'), ('45388', 'Cautery was applied')),
          caught=('kind@E2/0', 'purpose@E2/0'),
@@ -1419,7 +1424,9 @@ CASES += [
                                                 'date'),
                        '43255': (H, 'performed_status', EXP, BUNDLED)},
                  'ii': {'43249': (R, None, None, 'unchanged'),
-                        '43255': (H, 'act_cause', Q, '4.3 CAUSE unresolved (RANK 17)')}}),
+                        # restated at round r3's integration (DESIGN-v2 b.8, DECISIONS D308 Q-B), as C1's
+                        '43255': (H, 'act_part', Q, '4.3 CAUSE unresolved (RANK 17); since round r3 the silent part_of '
+                                                    'is a doubt too, asked first: act_part (RANK 17)')}}),
     Case('BF6', 'borderline', ('BF6', 'S1', 'SC-B'), 'The EUS station line cited only as the examination', BF6_TEXT, bf6,
          codes=(('43259', 'linear echoendoscope'),), caught=('completeness@X1',),
          expect={'i': {'43259': (R, None, None, '4.3 STATIONS: the three upper stations supported examined')},

@@ -33,10 +33,10 @@
     "why": "unchanged"
    },
    "43255": {
-    "item": "act_cause",
+    "item": "act_part",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.3 CAUSE unresolved (RANK 17)"
+    "why": "4.3 CAUSE unresolved (RANK 17); since round r3 the silent part_of is a doubt too, asked first: act_part (RANK 17)"
    }
   }
  },

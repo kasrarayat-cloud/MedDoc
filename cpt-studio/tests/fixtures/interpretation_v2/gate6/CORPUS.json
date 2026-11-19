@@ -31100,6 +31100,35 @@
     "status": "ready",
     "why": "4.3: every requirement met"
    },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "44380",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "44380",
+   "expect": null,
+   "requirement": "route table",
+   "state": "F",
+   "why": "D328 (1): the route table's through-stoma and pouch rows only hold - the enteroscopy class's route explains an approach established otherwise (ENT)"
+  },
+  {
+   "code": "44380",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
    "requirement": "bundling",
    "state": "T"
   },
@@ -31550,6 +31579,35 @@
     "status": "ready",
     "why": "4.3: every requirement met"
    },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "44381",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "44381",
+   "expect": null,
+   "requirement": "route table",
+   "state": "F",
+   "why": "D328 (1): the route table's through-stoma and pouch rows only hold - the enteroscopy class's route explains an approach established otherwise (ENT)"
+  },
+  {
+   "code": "44381",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
    "requirement": "bundling",
    "state": "T"
   },
@@ -31950,6 +32008,35 @@
    },
    "requirement": "ENT",
    "state": "F"
+  },
+  {
+   "code": "44382",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "44382",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "44382",
+   "expect": null,
+   "requirement": "route table",
+   "state": "F",
+   "why": "D328 (1): the route table's through-stoma and pouch rows only hold - the enteroscopy class's route explains an approach established otherwise (ENT)"
   },
   {
    "code": "44382",
@@ -32371,6 +32458,35 @@
    },
    "requirement": "ENT",
    "state": "F"
+  },
+  {
+   "code": "44384",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "44384",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "44384",
+   "expect": null,
+   "requirement": "route table",
+   "state": "F",
+   "why": "D328 (1): the route table's through-stoma and pouch rows only hold - the enteroscopy class's route explains an approach established otherwise (ENT)"
   },
   {
    "code": "44384",
@@ -32814,6 +32930,35 @@
     "status": "ready",
     "why": "4.3: every requirement met"
    },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "44385",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "44385",
+   "expect": null,
+   "requirement": "route table",
+   "state": "F",
+   "why": "D328 (1): the route table's through-stoma and pouch rows only hold - the enteroscopy class's route explains an approach established otherwise (ENT)"
+  },
+  {
+   "code": "44385",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
    "requirement": "bundling",
    "state": "T"
   },
@@ -33222,6 +33367,35 @@
    },
    "requirement": "ENT",
    "state": "F"
+  },
+  {
+   "code": "44386",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "44386",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "44386",
+   "expect": null,
+   "requirement": "route table",
+   "state": "F",
+   "why": "D328 (1): the route table's through-stoma and pouch rows only hold - the enteroscopy class's route explains an approach established otherwise (ENT)"
   },
   {
    "code": "44386",
@@ -37628,10 +37802,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.1",
    "state": "T"
@@ -37661,10 +37835,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.2",
    "state": "T"
@@ -37683,10 +37857,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3 ATT: attempted accepted for a base or exam-only code (52/53)"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.2",
    "state": "F"
@@ -37694,10 +37868,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.3",
    "state": "T"
@@ -37727,10 +37901,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.4",
    "state": "T"
@@ -37760,10 +37934,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.5",
    "state": "T"
@@ -37793,10 +37967,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.6",
    "state": "T"
@@ -37826,10 +38000,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.7",
    "state": "T"
@@ -37851,10 +38025,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.8",
    "state": "T"
@@ -37884,10 +38058,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "ATT",
    "state": "T"
@@ -37902,10 +38076,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3 ATT: attempted accepted, the 52/53 consideration"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "ATT",
    "state": "F"
@@ -37913,10 +38087,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "R6:target",
    "state": "T"
@@ -37924,10 +38098,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": "target",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.3 R6:target unmet (RANK 12)"
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "R6:target",
    "state": "U"
@@ -37942,10 +38116,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "TRACT",
    "state": "T"
@@ -37975,10 +38149,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "LOWER",
    "state": "T"
@@ -37986,10 +38160,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": "extent",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.3: the reach unresolved (RANK 14)"
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "LOWER",
    "state": "U"
@@ -38008,10 +38182,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "bundling",
    "state": "T"
@@ -38033,10 +38207,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "combination",
    "state": "T"
@@ -38044,10 +38218,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": "base_included",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.7 base_included (a): another counted code of the family beside it, with no act documented: a question (RANK 21)"
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "combination",
    "state": "U"
@@ -38055,10 +38229,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": "base_included",
-    "item_kind": "explanation",
+    "item": "procedure",
+    "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.7 base_included (b): a reportable act of the session (RANK 21)"
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "combination",
    "state": "F"
@@ -38066,10 +38240,10 @@
   {
    "code": "44406",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "R7, R9",
    "state": "T"
@@ -38095,10 +38269,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.1",
    "state": "T"
@@ -38128,10 +38302,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.2",
    "state": "T"
@@ -38161,10 +38335,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.3",
    "state": "T"
@@ -38194,10 +38368,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.4",
    "state": "T"
@@ -38227,10 +38401,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.5",
    "state": "T"
@@ -38260,10 +38434,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.6",
    "state": "T"
@@ -38293,10 +38467,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.7",
    "state": "T"
@@ -38326,10 +38500,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "SUP.8",
    "state": "T"
@@ -38359,10 +38533,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "R6:target",
    "state": "T"
@@ -38370,10 +38544,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": "target",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.3 R6:target unmet (RANK 12)"
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "R6:target",
    "state": "U"
@@ -38388,10 +38562,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "DEF",
    "state": "T"
@@ -38421,10 +38595,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "TRACT",
    "state": "T"
@@ -38454,10 +38628,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "LOWER",
    "state": "T"
@@ -38465,10 +38639,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": "extent",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.3: the reach unresolved (RANK 14)"
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "LOWER",
    "state": "U"
@@ -38487,10 +38661,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "bundling",
    "state": "T"
@@ -38509,10 +38683,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": "explanation",
+    "item": "procedure",
+    "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.7: part of another act, bundled (an explanation naming the whole, RANK 18)"
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "bundling",
    "state": "F"
@@ -38520,10 +38694,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "combination",
    "state": "T"
@@ -38531,10 +38705,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": "competing_codes",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.7 competition (P-ADMIT2, D40): another counted code claims the same documented act: one competing_codes question (RANK 22)"
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "combination",
    "state": "U"
@@ -38549,10 +38723,10 @@
   {
    "code": "44407",
    "expect": {
-    "item": null,
-    "item_kind": null,
-    "status": "ready",
-    "why": "4.3: every requirement met"
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.3 LOWER, DECISIONS D325 (2): the stoma class needs an established colonic route - its input reaches no point at or past the cecum and no stoma is established in the colon: the class's route hold (RANK 8)"
    },
    "requirement": "R7, R9",
    "state": "T"
@@ -39281,6 +39455,39 @@
     "status": "ready",
     "why": "4.3: every requirement met"
    },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45330",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45330",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "F"
+  },
+  {
+   "code": "45330",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
    "requirement": "bundling",
    "state": "T"
   },
@@ -39655,6 +39862,39 @@
     "why": "4.3: completion incomplete beside a supported reach: met, the 52/53 consideration (established otherwise)"
    },
    "requirement": "R6:extent",
+   "state": "F"
+  },
+  {
+   "code": "45331",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45331",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45331",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
    "state": "F"
   },
   {
@@ -40049,6 +40289,39 @@
     "status": "ready",
     "why": "4.3: every requirement met"
    },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45332",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45332",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "F"
+  },
+  {
+   "code": "45332",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
    "requirement": "bundling",
    "state": "T"
   },
@@ -40415,6 +40688,39 @@
     "why": "4.3: completion incomplete beside a supported reach: met, the 52/53 consideration (established otherwise)"
    },
    "requirement": "R6:extent",
+   "state": "F"
+  },
+  {
+   "code": "45333",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45333",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45333",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
    "state": "F"
   },
   {
@@ -40842,6 +41148,39 @@
     "status": "ready",
     "why": "4.3: every requirement met"
    },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45334",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45334",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "F"
+  },
+  {
+   "code": "45334",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
    "requirement": "bundling",
    "state": "T"
   },
@@ -41208,6 +41547,39 @@
     "why": "4.3: completion incomplete beside a supported reach: met, the 52/53 consideration (established otherwise)"
    },
    "requirement": "R6:extent",
+   "state": "F"
+  },
+  {
+   "code": "45335",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45335",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45335",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
    "state": "F"
   },
   {
@@ -41602,6 +41974,39 @@
     "status": "ready",
     "why": "4.3: every requirement met"
    },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45337",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45337",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "F"
+  },
+  {
+   "code": "45337",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
    "requirement": "bundling",
    "state": "T"
   },
@@ -41968,6 +42373,39 @@
     "why": "4.3: completion incomplete beside a supported reach: met, the 52/53 consideration (established otherwise)"
    },
    "requirement": "R6:extent",
+   "state": "F"
+  },
+  {
+   "code": "45338",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45338",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45338",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
    "state": "F"
   },
   {
@@ -42385,6 +42823,39 @@
     "why": "4.3 TECH: another class, an explanation"
    },
    "requirement": "TECH",
+   "state": "F"
+  },
+  {
+   "code": "45340",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45340",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45340",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
    "state": "F"
   },
   {
@@ -43721,6 +44192,39 @@
     "status": "ready",
     "why": "4.3: every requirement met"
    },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45346",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45346",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "F"
+  },
+  {
+   "code": "45346",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
    "requirement": "bundling",
    "state": "T"
   },
@@ -44105,6 +44609,39 @@
     "status": "ready",
     "why": "4.3: every requirement met"
    },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45347",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45347",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "F"
+  },
+  {
+   "code": "45347",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
    "requirement": "bundling",
    "state": "T"
   },
@@ -44471,6 +45008,39 @@
     "why": "4.3: completion incomplete beside a supported reach: met, the 52/53 consideration (established otherwise)"
    },
    "requirement": "R6:extent",
+   "state": "F"
+  },
+  {
+   "code": "45349",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45349",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45349",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
    "state": "F"
   },
   {
@@ -44847,6 +45417,39 @@
     "why": "4.3: completion incomplete beside a supported reach: met, the 52/53 consideration (established otherwise)"
    },
    "requirement": "R6:extent",
+   "state": "F"
+  },
+  {
+   "code": "45350",
+   "expect": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.3: every requirement met"
+   },
+   "requirement": "route table",
+   "state": "T"
+  },
+  {
+   "code": "45350",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "D328 (1), D330 (1): an ileal pouch filed beside, the route table's own hold (RANK 8)"
+   },
+   "requirement": "route table",
+   "state": "U"
+  },
+  {
+   "code": "45350",
+   "expect": {
+    "item": "procedure",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "D328 (1): per anus, the approach established through a stoma, the class's explanation naming it (RANK 8)"
+   },
+   "requirement": "route table",
    "state": "F"
   },
   {

@@ -130,7 +130,7 @@ class InterpreterSpecTests(unittest.TestCase):
         adapter = (APP_ROOT / 'studio' / 'interpretation' / 'fable_adapter.py').read_text(encoding='utf-8')
         for read in ('mode = settings.GEMINI_MODE if mode is None else mode',
                      'return FableInterpreter(settings.ANTHROPIC_CREDENTIALS_FILE,',
-                     'return ReplayInterpreterF(settings.GEMINI_REPLAY_DIR, **limits)'):
+                     'replay = ReplayInterpreterF(settings.GEMINI_REPLAY_DIR, **limits)'):
             self.assertIn(read, adapter)
 
     def test_the_loader_check_calls_the_loader_the_adapter_reads_the_key_with(self):
@@ -1362,6 +1362,12 @@ class InterpretationOnTheDatabaseTests(DatabaseTest):
 
 # --- AMENDMENT-2 8.5: the rows the Fable candidate writes, on a real database -----------------------------------------
 
+# round r3 (DECISIONS D322 (5)): the D15 inventory's question record - an established (supported) answer whose witness
+# names the approved ready code 45378, the code an established answer released. Synthetic.
+D15_QUESTION_EVENTS = {'questions': [
+    {'id': 'q1.1.1', 'result': 'supported', 'witnesses': [{'code': '45378', 'fact': 'event_session'}]}]}
+
+
 class FableRows(V2Rows):
     """Rows the Fable candidate writes (AMENDMENT-2 8.1, 8.5), each label read from the interpretation package: its runs
     (provider PROVIDER_V3, adapter ADAPTER_VERSION_V3, model MODEL_V3), an inventory of INTERPRETATION_PAIR_V3 and
@@ -1380,7 +1386,7 @@ class FableRows(V2Rows):
             requested_model=interpretation.MODEL_V3, returned_model=interpretation.MODEL_V3 if sent else '',
             started_at=timezone.now())
 
-    def fable_inventory(self, encounter):
+    def fable_inventory(self, encounter, events=None):
         from studio import interpretation, models
         first = self.fable_run(encounter, interpretation.PURPOSE, request='a')
         second = self.fable_run(encounter, interpretation.APPRAISAL_PURPOSE, request='b')
@@ -1388,15 +1394,15 @@ class FableRows(V2Rows):
             encounter=encounter, revision=encounter.current_revision, provider_run=first, appraisal_run=second,
             interpretation_version=interpretation.INTERPRETATION_PAIR_V3,
             inventory_version=interpretation.INVENTORY_VERSION_V3, text_sha256='a' * 64, request_sha256='e' * 64,
-            response_sha256='b' * 64, state='read', events={}, encounter_facts={}, open_questions=[],
+            response_sha256='b' * 64, state='read', events=events or {}, encounter_facts={}, open_questions=[],
             verification={}, sha256='c' * 64)
 
-    def fable(self, tag):
+    def fable(self, tag, events=None):
         """An interpreted and appraised upload of the Fable candidate, its @3 assessment current: (encounter,
-        assessment)."""
+        assessment); its inventory's events ``events`` (none when not given)."""
         from studio import interpretation
         encounter = self.extracted(self.encounter(tag))
-        made = self.fable_inventory(encounter)
+        made = self.fable_inventory(encounter, events)
         context = self.context(encounter, version=interpretation.CONTEXT_VERSION_V2, inventory=made)
         assessment = self.assessment(encounter, context, engine_version=interpretation.ENGINE_VERSION_V3,
                                      provider_run=self.made_run(encounter), inventory=made)
@@ -1407,9 +1413,12 @@ class FableRows(V2Rows):
         rows - each on @3 rows and anthropic runs only, none of FINAL-V2's @2 or Gemini's: an interpreted and appraised
         upload; a held, an excluded and a reinstated code; an approved code with a modifier and its export; a member
         answer; a second review; an interpreter hold (a decline's); a queued interpret and a queued appraise job; a
-        pass-2 refusal and an unhealthy appraisal; a held code whose item is a new fact. Returns the encounter."""
+        pass-2 refusal and an unhealthy appraisal; a held code whose item is a new fact; and round r3's question
+        stage records (a queued question job, a question run, a code an established answer released). Returns the
+        encounter."""
         from studio import interpretation, models
-        encounter, assessment = self.fable('d15')
+        # round r3: the inventory records an established answer naming the approved ready code 45378 (below)
+        encounter, assessment = self.fable('d15', D15_QUESTION_EVENTS)
         revision, user = encounter.current_revision, encounter.created_by
 
         def proposal(code, position, **fields):
@@ -1447,6 +1456,11 @@ class FableRows(V2Rows):
         models.Clarification.objects.create(encounter=encounter, assessment=assessment, scope='service',
                                             family='gi.colonoscopy', fact='event_entry', question='Synthetic?',
                                             reason='Synthetic.')
+        # round r3 (DECISIONS D322 (5)): the question stage's records - a queued question job, a question run, and the
+        # approved ready code 45378 released by an established answer the inventory records (D15_QUESTION_EVENTS)
+        self.job(queued, 'question', models.Job.QUEUED)
+        self.fable_run(encounter, interpretation.APPRAISAL_PURPOSE, request='q',
+                       scope={'question': {'round': 1, 'batch': 1}})
         return encounter
 
 
@@ -1549,9 +1563,9 @@ class AccessCheckWaitTests(DatabaseTest):
             with self.command._single_flight(wait=True):
                 ran.append(True)
         self.assertEqual(ran, [])
-        self.assertEqual(sum(polls), 1320 + 60)  # INTERPRETER_SEND_DEADLINE_SECONDS (1,320, AMENDMENT-2 1.12) + 60
+        self.assertEqual(sum(polls), 1408 + 60)  # QUESTION_SEND_DEADLINE_SECONDS (1,408, round r3), the longest, + 60
         self.assertEqual(str(caught.exception), 'Another provider request is in flight; nothing was sent. Try again '
-                                                'once it has finished. CPT Studio waited 1380 s for it to finish.')
+                                                'once it has finished. CPT Studio waited 1468 s for it to finish.')
         self.assertFalse(self.held_here())
 
     def test_without_the_flag_it_refuses_at_once_as_it_always_did(self):
@@ -1566,9 +1580,13 @@ class AccessCheckWaitTests(DatabaseTest):
 
     def test_the_wait_is_the_interpreters_longest_send_deadline_plus_60_s_read_at_call_time(self):
         from django.test import override_settings
-        self.assertEqual(self.command._lock_wait_seconds(), 1380)
-        with override_settings(INTERPRETER_SEND_DEADLINE_SECONDS=100, APPRAISER_SEND_DEADLINE_SECONDS=700):
+        self.assertEqual(self.command._lock_wait_seconds(), 1468)  # round r3: the question requests' 1,408 s
+        with override_settings(INTERPRETER_SEND_DEADLINE_SECONDS=100, APPRAISER_SEND_DEADLINE_SECONDS=700,
+                               QUESTION_SEND_DEADLINE_SECONDS=300):
             self.assertEqual(self.command._lock_wait_seconds(), 760)  # pass 2's, the longer one
+        with override_settings(INTERPRETER_SEND_DEADLINE_SECONDS=100, APPRAISER_SEND_DEADLINE_SECONDS=700,
+                               QUESTION_SEND_DEADLINE_SECONDS=900):
+            self.assertEqual(self.command._lock_wait_seconds(), 960)  # a question request's, the longest
         self.assertEqual(self.command.LOCK_WAIT_MARGIN_SECONDS, 60)
 
     def test_the_installer_asks_for_the_wait_and_the_command_takes_it_through_to_the_lock(self):
@@ -1602,9 +1620,13 @@ class AccessCheckTimeoutTests(unittest.TestCase):
         wait = max(settings_value('INTERPRETER_SEND_DEADLINE_SECONDS'),
                    settings_value('APPRAISER_SEND_DEADLINE_SECONDS')) + 60
         self.assertEqual(wait, 1380)
-        self.assertGreaterEqual(install.ACCESS_CHECK_SECONDS, wait + settings_value('PARTICIPANT_SEND_DEADLINE_SECONDS')
-                                + 90)
-        self.assertEqual(install.ACCESS_CHECK_SECONDS, 1800)
+        # round r3 (D322 (4)): a question round holds the lock for its sends, each within its own deadline, so the wait
+        # the timeout covers is that deadline's plus 60 s once the command reads it (NOTES' question Q-LOCKWAIT)
+        question = max(wait, settings_value('QUESTION_SEND_DEADLINE_SECONDS') + 60)
+        self.assertEqual(question, 1468)
+        self.assertGreaterEqual(install.ACCESS_CHECK_SECONDS,
+                                question + settings_value('PARTICIPANT_SEND_DEADLINE_SECONDS') + 90)
+        self.assertEqual(install.ACCESS_CHECK_SECONDS, 1900)
         self.assertEqual(module_literal('studio/management/commands/participant_access_check.py',
                                         'LOCK_WAIT_MARGIN_SECONDS'), 60)
         # the flag the installer passes is the command's own option

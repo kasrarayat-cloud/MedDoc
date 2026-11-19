@@ -14,12 +14,17 @@ THE REQUEST (1.2). ADAPTER_VERSION_V3 (anthropic-messages@cptstudio-interp-1) ha
 ProviderRun.purpose its run records: EXTRACTION, pass 1 - the body contract/extract_prompt.request_parts_fable builds
 from the framed revision (the user turn is the framed document alone, D1), with its one system block cached (7.2) -
 and APPRAISAL, pass 2 - the body contract/appraise_prompt.request_parts_fable builds from 2.4's user turn, with
-output_config.format a json_schema over appraise_schema.LOCAL_SCHEMA. Both bodies have exactly BODY_KEYS: model
-claude-fable-5-2, max_tokens MAX_TOKENS, stream true, output_config.effort high, system and messages. Never sent:
+output_config.format a json_schema over appraise_schema.LOCAL_SCHEMA. Round r3 (DECISIONS D306, D320, D322) adds a
+third, QUESTION - contract/question_claims.request_parts_q's body, effort max (QUESTION_EFFORT), LOCAL_SCHEMA_Q - whose
+run is an appraisal run (its purpose APPRAISAL, its scope naming the question round): request_kind names it, body_kind
+answers its purpose, and only its send deadline (QUESTION_SEND_DEADLINE_SECONDS, derived from the whole output at 95
+tokens a second: D322 (4)), its read timeout and its reader (read_question) are its own. Every body has exactly
+BODY_KEYS: model claude-fable-5-2, max_tokens MAX_TOKENS, stream true, output_config.effort high (max for a question
+request), system and messages. Never sent:
 thinking (always on for this model; omitting it is adaptive), temperature, top_p, top_k, an assistant prefill, tools,
 tool_choice, stop_sequences, metadata, fallbacks and any anthropic-beta header (D275: no fallback model), a member
 value, a filename, a participant's output (D1) or the PDF original (D12). A body is sent only when it is exactly one
-of the two kinds as the builders write it (body_kind), so nothing rides along. The headers are set at send time and
+of the kinds as the builders write it (body_kind, request_kind), so nothing rides along. The headers are set at send time and
 never stored: x-api-key (the existing Anthropic credential, read at send time by participants.credentials, never
 printed), anthropic-version API_VERSION (part of what ADAPTER_VERSION_V3 names, 8.4 [R:replay-R8]),
 content-type application/json, and anthropic-workspace-id when the credential file names one.
@@ -32,7 +37,10 @@ an error event - a body read whole without its end event, or a read that stopped
 chunk, the deadline, the byte cap) before it - is recorded 'unknown' with the bytes read so far and no usage - never
 read, never priced as a whole answer [R:connector-CONN-6][R:connector-CONN-2][R:connector-CONN-3]; bytes kept from a
 read that stopped early but already end with the end event are the whole stream they are (DECISIONS D294,
-CONN-RF-3).
+CONN-RF-3). A not_sent this SERVER caused names its cause (participants.http.Unsent, DECISIONS D324 (10), L7-A2): the
+credentials read at send time (CREDENTIALS, here), the network or the deadline before the send (http.post); the loop
+rebuilds its final from the exchange's fields, so send_loop keeps the cause on it (_with_unsent_cause). A refusal the
+request itself causes names none.
 
 THE STREAM (1.4). ``assemble`` reads the raw SSE bytes into one answer, purely: strict UTF-8 lines, events separated by
 one empty line, comments skipped, one optional event: line and exactly one data: line per event (strict JSON, its type
@@ -63,6 +71,7 @@ whether it is request-bound [R:connector-CONN-1].
 """
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -93,11 +102,34 @@ ENDPOINT = 'https://api.anthropic.com/v1/messages'
 # interpretation.API_VERSION_V3, never to the Fable participant's, so a changed anthropic-version is a new adapter version.
 API_VERSION = '2026-10-21'
 EFFORT = 'high'  # D275
+QUESTION_EFFORT = 'max'  # round r3 (DESIGN-v2 e.1; PROTOTYPE): a question request's effort, the highest the model accepts
 MAX_TOKENS = 128000  # both passes (section 3; D278: sized for INTERPRET_MAX_CHARS' 20,000 characters)
 BODY_KEYS = frozenset({'model', 'max_tokens', 'stream', 'output_config', 'system', 'messages'})
 EXTRACTION = interpretation.PURPOSE  # 'interpretation': pass 1, its run's ProviderRun.purpose
 APPRAISAL = interpretation.APPRAISAL_PURPOSE  # 'appraisal': pass 2
 PURPOSES = (EXTRACTION, APPRAISAL)
+# Round r3 (DECISIONS D306, D320, D322; DESIGN-v2 e.1): the THIRD request kind, a question request - Fable judging the
+# engine's reading doubts at effort max (QUESTION_EFFORT) with max_tokens MAX_TOKENS, its body exactly what
+# contract/question_claims.request_parts_q writes. It is a KIND, never a purpose: its run is an appraisal run
+# (ProviderRun.purpose APPRAISAL, the purpose interpretation.holds classifies; its scope names the question round), so
+# body_kind answers APPRAISAL for it as for pass 2, and request_kind tells the two apart for what differs - the send
+# deadline and the read timeout. KINDS_OF_REQUEST lists the three kinds.
+QUESTION = 'question'
+KINDS_OF_REQUEST = (EXTRACTION, APPRAISAL, QUESTION)
+# D322 (4): a question request's deadline is DERIVED from the whole output - MAX_TOKENS (128,000 tokens, thinking
+# included) at QUESTION_DEADLINE_RATE (95) tokens per second, a margin below the slowest max-effort rate measured
+# (101.04, r3-probe-2's first request; D318: 101-104) - plus QUESTION_DEADLINE_TAIL_SECONDS (60) for the connection,
+# the prefill and the stream's tail: ceil(128,000 / 95) + 60 = 1,408 s (question_deadline_derivation, pinned). The
+# configured interpreters read settings.QUESTION_SEND_DEADLINE_SECONDS and QUESTION_READ_TIMEOUT_SECONDS, equal to it
+# (a test pins the three equal); the read timeout never cuts before the deadline.
+QUESTION_DEADLINE_RATE = 95
+QUESTION_DEADLINE_TAIL_SECONDS = 60
+QUESTION_SEND_DEADLINE_SECONDS = -(-MAX_TOKENS // QUESTION_DEADLINE_RATE) + QUESTION_DEADLINE_TAIL_SECONDS  # 1,408
+QUESTION_READ_TIMEOUT_SECONDS = QUESTION_SEND_DEADLINE_SECONDS
+# The worst case a send is reserved at (DESIGN-v2 e.8; D322 (1)): every byte of the canonical body as one input token,
+# plus this allowance for the turn's framing, and the body's max_tokens as output - so the bound is at or above what the
+# vendor's token count can be (tools/v2 record_v2's worst_usage, the reservation the probe was sent under).
+PROMPT_MARGIN_TOKENS = 1000
 KEY_HEADER, VERSION_HEADER, WORKSPACE_HEADER = 'x-api-key', 'anthropic-version', 'anthropic-workspace-id'
 CONNECT_TIMEOUT_SECONDS = 10
 # 1.12: 128,000 output tokens at 100 tokens per second plus 40 s; the read timeout bounds each wait for a byte and never
@@ -616,7 +648,19 @@ def body_kind(body: Any) -> tuple[str, str]:
     2.4's form (the framed document - checked by extract_prompt._is_framed, so no Gemini pin is read - then the cards,
     then the claims, each one line as claims.py writes it: adapter._card_ids and adapter._claim_lines). So the
     instruction, the schema, the effort, the output maximum and the cache marker are this version's byte for byte, and
-    nothing rides along. Otherwise ('', why not): UNPINNED_V3 when a pin does not match, else NOT_BUILT."""
+    nothing rides along. Otherwise ('', why not): UNPINNED_V3 when a pin does not match, else NOT_BUILT. Round r3: a
+    question request's body is APPRAISAL here - its run's purpose (request_kind tells it apart)."""
+    kind, problem = request_kind(body)
+    return (APPRAISAL if kind == QUESTION else kind), problem
+
+
+def request_kind(body: Any) -> tuple[str, str]:
+    """(EXTRACTION, APPRAISAL or QUESTION, '') - which of the three request kinds ``body`` is exactly (KINDS_OF_REQUEST;
+    body_kind's checks, and for the third the question body's own) - or ('', why not), as body_kind answers it. Round
+    r3 (DECISIONS D306-D308, D320; DESIGN-v2 e.1, h): a QUESTION request is exactly what
+    contract/question_claims.request_parts_q writes (effort max, max_tokens MAX_TOKENS, LOCAL_SCHEMA_Q, the question
+    instruction, its claim lines each marked proof), read first so it never reaches the fact builders' pins; its run is
+    an appraisal run, so only the deadline and the read timeout read this kind (InterpreterF)."""
     try:
         http.check_shape(body, MODEL, BODY_KEYS)
         turn = body['messages'][0]['content'][0]['text']
@@ -624,6 +668,13 @@ def body_kind(body: Any) -> tuple[str, str]:
         return '', NOT_BUILT
     if not isinstance(turn, str):
         return '', NOT_BUILT
+    from studio.interpretation.contract import question_claims
+
+    try:
+        if question_claims.question_body(body):
+            return QUESTION, ''
+    except RuntimeError:  # a pin of the question side: no request of it can be checked
+        return '', UNPINNED_V3
     try:
         if extract_prompt._is_framed(turn):
             return (EXTRACTION, '') if body == extract_prompt.request_parts_fable(turn) else ('', NOT_BUILT)
@@ -634,6 +685,82 @@ def body_kind(body: Any) -> tuple[str, str]:
     except (TypeError, ValueError):
         return '', NOT_BUILT
     return '', NOT_BUILT
+
+
+def question_deadline_derivation() -> dict[str, int]:
+    """D322 (4)'s derivation of a question request's send deadline, in exact integer arithmetic: the whole output
+    (MAX_TOKENS, thinking included) at QUESTION_DEADLINE_RATE tokens per second, rounded up, plus the tail - 1,408 s."""
+    stream = -(-MAX_TOKENS // QUESTION_DEADLINE_RATE)
+    return {'max_tokens': MAX_TOKENS, 'rate': QUESTION_DEADLINE_RATE, 'stream_seconds': stream,
+            'tail_seconds': QUESTION_DEADLINE_TAIL_SECONDS, 'deadline': stream + QUESTION_DEADLINE_TAIL_SECONDS}
+
+
+def _cached_prefix(body: Any) -> tuple[int, str]:
+    """(the bytes of the system blocks up to the last cache marker, its time-to-live) - (0, '') when no block is marked -
+    or ValueError for a body whose prefix this reading cannot bound (tools/v2 record_v2.prefix_of's rule: a marker this
+    connector never writes, a marker inside a message, a block that is not text)."""
+    if not isinstance(body, dict):
+        raise ValueError('the request body is not a JSON object')
+    for message in body.get('messages') or []:
+        content = message.get('content') if isinstance(message, dict) else None
+        if isinstance(content, list) and any(isinstance(part, dict) and 'cache_control' in part for part in content):
+            raise ValueError('a cache marker inside a message is a prefix this reading does not bound')
+    system = body.get('system')
+    if system is None:
+        return 0, ''
+    if not isinstance(system, list):
+        raise ValueError('the system field is not a list of blocks')
+    marked, ttl = -1, ''
+    for index, block in enumerate(system):
+        if not isinstance(block, dict) or block.get('type') != 'text' or not isinstance(block.get('text'), str):
+            raise ValueError('a system block is not a text block')
+        control = block.get('cache_control')
+        if control is None:
+            continue
+        given = control.get('ttl', '5m') if isinstance(control, dict) else None
+        if not isinstance(control, dict) or control.get('type') != 'ephemeral' or given not in ('5m', '1h'):
+            raise ValueError('a cache marker this reading does not know')
+        marked, ttl = index, given
+    if marked < 0:
+        return 0, ''
+    return sum(len(block['text'].encode('utf-8')) for block in system[:marked + 1]), ttl
+
+
+def worst_usage(request: Any) -> Optional[dict[str, Any]]:
+    """The usage of the most expensive answer ``request`` can draw (DESIGN-v2 e.8: the reservation at the worst case,
+    input + 128,000 output tokens): the cached prefix as a 5-minute cache write, every other byte of the canonical body
+    plus PROMPT_MARGIN_TOKENS as input (one token per byte, so the bound is at or above the vendor's count), and the
+    body's max_tokens as output - in Anthropic's usage fields, as participants.pricing prices them. None for a body this
+    reading cannot bound (no positive max_tokens, a cache marker it does not know or a 1-hour one)."""
+    body = getattr(request, 'body', None)
+    if not isinstance(body, dict):
+        return None
+    out = body.get('max_tokens')
+    if type(out) is not int or out <= 0:
+        return None
+    try:
+        prefix, ttl = _cached_prefix(body)
+        whole = len(canonical_body(body))
+    except (ValueError, TypeError, UnicodeEncodeError):
+        return None
+    if ttl not in ('', '5m'):
+        return None  # a 1-hour write has no rate in the table: never a guessed one
+    return {'input_tokens': max(whole - prefix, 0) + PROMPT_MARGIN_TOKENS, 'cache_creation_input_tokens': prefix,
+            'cache_read_input_tokens': 0, 'output_tokens': out,
+            'cache_creation': {'ephemeral_5m_input_tokens': prefix, 'ephemeral_1h_input_tokens': 0}}
+
+
+def worst_case_usd(request: Any) -> Optional[str]:
+    """The most one send of ``request`` can cost (worst_usage, priced by participants.pricing at claude-fable-5-2's
+    rates), as the estimate's decimal text ('5.428696'); None when it cannot be bounded or priced - never a guess."""
+    usage = worst_usage(request)
+    if usage is None:
+        return None
+    from studio.participants import pricing
+
+    found = pricing.estimate(MODEL, usage)
+    value = found.get('estimated_usd') if isinstance(found, dict) else None
+    return value if isinstance(value, str) and value else None
 
 
 def _appraisal_document(turn: str) -> Optional[str]:
@@ -805,6 +932,46 @@ def read_appraisal(appraisal: AppraisalRequest, request: ProviderRequest,
     # integration)
     return appraise_read.read(answer, appraisal.built.claim_set, appraisal.unit_count,
                               version=interpretation.APPRAISAL_VERSION_V3)
+
+
+OTHER_QUESTION = 'the stored answer answers another question request than the one rebuilt from the stored passes'
+NOT_A_QUESTION = 'the stored request is not a question request of this version'
+
+
+def read_question(question: Any, request: ProviderRequest, response_bytes: object, text: str,
+                  unit_count: int) -> tuple[Union[Any, extract_read.Refusal], dict[str, Any]]:
+    """A question request's stored answer, read against the request it answered (round r3; DESIGN-v2 c.2-c.3): the
+    run's ``request`` must be a question request of READ_VERSIONS (request_kind) and ``question.request`` - the
+    contract/question_claims.QuestionRequest rebuilt purely from the stored passes - byte for byte, so a verdict is never
+    read against claims it did not answer; then the envelope (answer_text, as pass 2's: structured outputs constrain
+    it); then contract/appraise_read.read_questions over the request's claim ids, each with its cited units; then every
+    question's and calibration item's claim proof located inside its own passages (contract/proof.locate over the
+    revision ``text``: the one text reader, run where the text is allowed). (the ReadQuestions, {claim id:
+    ProofLocation}) - or (the Refusal of the whole answer, {}). Pure: a stored answer is read again with no request."""
+    if getattr(request, 'provider', None) != NAME or getattr(request, 'adapter_version', None) not in READ_VERSIONS:
+        return extract_read.refuse('envelope', STORED_VERSION), {}
+    if request_kind(getattr(request, 'body', None))[0] != QUESTION:
+        return extract_read.refuse('envelope', NOT_A_QUESTION), {}
+    if not adapter._same_request(request, question.request):
+        return extract_read.refuse('envelope', OTHER_QUESTION), {}
+    answer = answer_text(request, response_bytes, APPRAISAL)
+    if isinstance(answer, extract_read.Refusal):
+        return answer, {}
+    from studio.interpretation.contract import proof
+
+    cited: dict[str, Any] = {}
+    for item in question.items:
+        cited[item.claim] = item.cited
+        cited[item.control] = item.cited
+    read = appraise_read.read_questions(answer, question.claim_ids, cited, unit_count)
+    if not hasattr(read, 'verdicts'):
+        return read, {}
+    locations: dict[str, Any] = {}
+    for item in question.items:
+        verdict = read.verdicts.get(item.claim)
+        quotes = verdict.quotes if verdict is not None else ()
+        locations[item.claim] = proof.locate(text, item.required, item.optional, quotes, item.alternatives)
+    return read, locations
 
 
 # --- classification (1.5) ---------------------------------------------------------------------------------------------
@@ -982,14 +1149,19 @@ class InterpreterF:
     def __init__(self, *, send_deadline: float = SEND_DEADLINE_SECONDS,
                  appraisal_send_deadline: float = APPRAISAL_SEND_DEADLINE_SECONDS,
                  max_request_bytes: int = DEFAULT_MAX_REQUEST_BYTES,
-                 max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES) -> None:
-        for label, seconds in (('send_deadline', send_deadline), ('appraisal_send_deadline', appraisal_send_deadline)):
+                 max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
+                 question_send_deadline: float = QUESTION_SEND_DEADLINE_SECONDS) -> None:
+        for label, seconds in (('send_deadline', send_deadline), ('appraisal_send_deadline', appraisal_send_deadline),
+                               ('question_send_deadline', question_send_deadline)):
             if not valid_deadline(seconds):
                 raise ValueError(f'{label} must be a positive number of seconds.')
         for label, limit in (('max_request_bytes', max_request_bytes), ('max_response_bytes', max_response_bytes)):
             if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
                 raise ValueError(f'{label} must be a positive integer.')
         self.send_deadlines: dict[str, float] = {EXTRACTION: send_deadline, APPRAISAL: appraisal_send_deadline}
+        # round r3: a question request's own send deadline (D322 (4)), read for its kind (request_kind) where pass 2's
+        # would be - its run's purpose is pass 2's
+        self.question_send_deadline: float = question_send_deadline
         self.max_request_bytes = max_request_bytes
         self.max_response_bytes = max_response_bytes
 
@@ -1024,7 +1196,7 @@ class InterpreterF:
         problem, purpose = self._problem(request)
         if problem:
             return http.not_sent(problem)
-        deadline = monotonic() + min(deadline_s, self.send_deadlines[purpose])
+        deadline = monotonic() + min(deadline_s, self.longest_s(request.body, purpose))
         return self._exchange(request.body, deadline, purpose)
 
     def send_loop(self, request: ProviderRequest, *, deadline_s: float, client_request_id: str = '',
@@ -1051,14 +1223,26 @@ class InterpreterF:
             if halt:
                 return loop.LoopOutcome(final=http.not_sent(halt, MODEL), exchanges=(), stopped=True)
 
+        seen: list[RawExchange] = []
+
         def post(turn: int, body: dict[str, Any], deadline: float) -> RawExchange:
             kind, problem = body_kind(body)
-            return http.not_sent(problem, MODEL) if problem else self._exchange(body, deadline, kind)
+            exchange = http.not_sent(problem, MODEL) if problem else self._exchange(body, deadline, kind)
+            seen.append(exchange)
+            return exchange
 
-        return loop.run(self, request, post=post, parse_turn=adapter._no_tool_calls, follow_up=adapter._no_follow_up,
-                        execute_tool=adapter._no_tools, deadline_s=deadline_s, longest_s=self.send_deadlines[purpose],
-                        max_exchanges=1, max_tool_result_bytes=1, max_request_bytes=self.max_request_bytes,
-                        body_keys=BODY_KEYS)
+        outcome = loop.run(self, request, post=post, parse_turn=adapter._no_tool_calls,
+                           follow_up=adapter._no_follow_up, execute_tool=adapter._no_tools, deadline_s=deadline_s,
+                           longest_s=self.longest_s(request.body, purpose), max_exchanges=1, max_tool_result_bytes=1,
+                           max_request_bytes=self.max_request_bytes, body_keys=BODY_KEYS)
+        return _with_unsent_cause(outcome, seen)
+
+    def longest_s(self, body: Any, purpose: str) -> float:
+        """The longest send of ``body`` (of ``purpose``): a question request's own deadline (question_send_deadline;
+        round r3, D322 (4)), else its purpose's (send_deadlines)."""
+        if purpose == APPRAISAL and request_kind(body)[0] == QUESTION:
+            return self.question_send_deadline
+        return self.send_deadlines[purpose]
 
     def _problem(self, request: ProviderRequest) -> tuple[str, str]:
         """(why ``request`` is not sent, '') - another provider's or adapter version's, altered since it was hashed,
@@ -1074,6 +1258,21 @@ class InterpreterF:
         raise NotImplementedError
 
 
+def _with_unsent_cause(outcome: loop.LoopOutcome, seen: Sequence[RawExchange]) -> loop.LoopOutcome:
+    """DECISIONS D324 (10), L7-A2: ``outcome`` with the cause its one exchange's not_sent named
+    (participants.http.Unsent) kept on its final. participants.loop rebuilds the final from that exchange's fields,
+    which hold no cause, so the caller - the question stage, which leaves a request owed when nothing left this server
+    for its credentials, the network or the deadline - could not tell it from a refusal of the request itself. Only a
+    loop whose ONE exchange (``seen``, the exchanges post() returned) was that not_sent, its final not_sent with the
+    same words; any other outcome is returned as it is."""
+    final = outcome.final
+    if (len(seen) != 1 or len(outcome.exchanges) != 1 or final.outcome != 'not_sent' or final.sent
+            or final.error != seen[0].error):
+        return outcome
+    cause = http.unsent_cause(seen[0])
+    return outcome if cause is None else dataclasses.replace(outcome, final=http.with_cause(final, cause))
+
+
 class FableInterpreter(InterpreterF):
     """The live interpreter: one POST to ENDPOINT, the key read at send time (1.11: CPT Studio's existing Anthropic
     credential, settings.ANTHROPIC_CREDENTIALS_FILE), each purpose's own read timeout (``read_timeouts``)."""
@@ -1087,16 +1286,21 @@ class FableInterpreter(InterpreterF):
                  appraisal_send_deadline: float = APPRAISAL_SEND_DEADLINE_SECONDS,
                  max_request_bytes: int = DEFAULT_MAX_REQUEST_BYTES,
                  max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
-                 session_factory: Optional[Callable[[], requests.Session]] = None) -> None:
+                 session_factory: Optional[Callable[[], requests.Session]] = None,
+                 question_send_deadline: float = QUESTION_SEND_DEADLINE_SECONDS,
+                 question_read_timeout: float = QUESTION_READ_TIMEOUT_SECONDS) -> None:
         super().__init__(send_deadline=send_deadline, appraisal_send_deadline=appraisal_send_deadline,
-                         max_request_bytes=max_request_bytes, max_response_bytes=max_response_bytes)
+                         max_request_bytes=max_request_bytes, max_response_bytes=max_response_bytes,
+                         question_send_deadline=question_send_deadline)
         for label, seconds in (('connect_timeout', connect_timeout), ('read_timeout', read_timeout),
-                               ('appraisal_read_timeout', appraisal_read_timeout)):
+                               ('appraisal_read_timeout', appraisal_read_timeout),
+                               ('question_read_timeout', question_read_timeout)):
             if not valid_deadline(seconds):
                 raise ValueError(f'{label} must be a positive number of seconds.')
         self.credentials_path = credentials_path
         self.connect_timeout = connect_timeout
         self.read_timeouts: dict[str, float] = {EXTRACTION: read_timeout, APPRAISAL: appraisal_read_timeout}
+        self.question_read_timeout: float = question_read_timeout  # round r3: a question request's (D322 (4))
         self.session_factory: Callable[[], requests.Session] = session_factory or http.default_session
 
     def _exchange(self, body: dict[str, Any], deadline: float, purpose: str) -> RawExchange:
@@ -1111,13 +1315,14 @@ class FableInterpreter(InterpreterF):
             return http.not_sent(str(exc), MODEL)
         try:
             credentials = load_anthropic_credentials(self.credentials_path)
-        except CredentialsError as exc:
-            return http.not_sent(f'{exc} No request was sent.', MODEL)
+        except CredentialsError as exc:  # this server's credentials, not the request (D324 (10), L7-A2)
+            return http.unsent(http.Unsent.CREDENTIALS, f'{exc} No request was sent.', MODEL)
         headers = {KEY_HEADER: credentials.api_key, VERSION_HEADER: API_VERSION, 'content-type': 'application/json'}
         if credentials.workspace_id is not None:
             headers[WORKSPACE_HEADER] = credentials.workspace_id
+        read_timeout = self.question_read_timeout if request_kind(body)[0] == QUESTION else self.read_timeouts[purpose]
         return http.post(VENDOR, self.session_factory, ENDPOINT, data, headers, deadline=deadline,
-                         connect_timeout=self.connect_timeout, read_timeout=self.read_timeouts[purpose],
+                         connect_timeout=self.connect_timeout, read_timeout=read_timeout,
                          max_response_bytes=self.max_response_bytes, requested_model=MODEL)
 
 
@@ -1137,17 +1342,26 @@ def get_interpreter_v2(mode: Optional[str] = None) -> Optional[InterpreterF]:
     limits: dict[str, Any] = {'send_deadline': settings.INTERPRETER_SEND_DEADLINE_SECONDS,
                               'appraisal_send_deadline': settings.APPRAISER_SEND_DEADLINE_SECONDS,
                               'max_response_bytes': settings.INTERPRETER_MAX_RESPONSE_BYTES}
+    # round r3 (D322 (4)): a question request's own deadline, QUESTION_SEND_DEADLINE_SECONDS (and, live, its read
+    # timeout) - set on either interpreter, the replay one (studio/interpretation/replay.py) taking it as InterpreterF's
+    question = settings.QUESTION_SEND_DEADLINE_SECONDS
     if mode == 'live':
         if not settings.ANTHROPIC_CREDENTIALS_FILE:
             raise ProviderUnavailable('Live interpretation needs CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE.')
         return FableInterpreter(settings.ANTHROPIC_CREDENTIALS_FILE,
                                 connect_timeout=settings.PARTICIPANT_CONNECT_TIMEOUT_SECONDS,
                                 read_timeout=settings.INTERPRETER_READ_TIMEOUT_SECONDS,
-                                appraisal_read_timeout=settings.APPRAISER_READ_TIMEOUT_SECONDS, **limits)
+                                appraisal_read_timeout=settings.APPRAISER_READ_TIMEOUT_SECONDS,
+                                question_send_deadline=question,
+                                question_read_timeout=settings.QUESTION_READ_TIMEOUT_SECONDS, **limits)
     if mode == 'replay':
         if not settings.GEMINI_REPLAY_DIR:
             raise ProviderUnavailable('Replay interpretation needs CPT_STUDIO_GEMINI_REPLAY_DIR.')
         from studio.interpretation.replay import ReplayInterpreterF
 
-        return ReplayInterpreterF(settings.GEMINI_REPLAY_DIR, **limits)
+        replay = ReplayInterpreterF(settings.GEMINI_REPLAY_DIR, **limits)
+        if not valid_deadline(question):
+            raise ValueError('question_send_deadline must be a positive number of seconds.')
+        replay.question_send_deadline = question
+        return replay
     raise ValueError(f'No interpreter exists for mode {mode!r}; expected disabled, live or replay.')

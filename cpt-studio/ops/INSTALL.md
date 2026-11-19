@@ -15,7 +15,7 @@ run the next. Nothing here was executed by the session that wrote it.
 | image | `cpt-studio:<sha12>`, built from `git archive <revision> cpt-studio/`, label `org.opencontainers.image.revision=<revision>` |
 | database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg` |
 | web | container `cpt-studio-web`, gunicorn, read-only root, uid 10150, `127.0.0.1:9150` or `127.0.0.1:9151` → 8000: a fresh host starts on 9150, and each install after it starts the incoming web `cpt-studio-web-next` on the other port and switches to it (blue/green, **app**), so the port alternates |
-| worker | container `cpt-studio-worker`, read-only root, stop timeout 1,500 s (AMENDMENT-2 1.12: above every stage's deadline - a reading stage's 1,380 s, its 1,320 s send included, the longest - and every stale-stage threshold, 600 s and the reading stages' 1,440 s; a deploy may wait up to 25 minutes for it), the only holder of the Corti credentials (live mode only), of each harness participant's (that participant live only) and of the interpreter's, which is the Fable participant's file, bound once when either is live |
+| worker | container `cpt-studio-worker`, read-only root, stop timeout 1,800 s (round r3, DECISIONS D322 (4): above every stage's deadline - the question stage's 1,588 s, a round of question requests sent concurrently within their 1,408 s deadline - one wave of at most `QUESTION_ROUND_CONCURRENCY` requests at the installed figures, DECISIONS D325 (3) - the longest; the reading passes' 1,380 s - and every stale-stage threshold, 600 s, the reading passes' 1,440 s and 1,560 s and the question stage's 1,768 s; a deploy may wait up to 30 minutes for it; AMENDMENT-2 1.12's 1,500 s before round r3), the only holder of the Corti credentials (live mode only), of each harness participant's (that participant live only) and of the interpreter's, which is the Fable participant's file, bound once when either is live |
 | network | `cpt-studio-net` (bridge). Web and worker reach the database as `cpt-studio-db:5432` |
 | files | volume `cpt-studio-files` at `/var/lib/cpt-studio` (originals, reference copies) |
 | secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `corti-credentials.env` (10150:10150 0400), `initial-credentials.json` (root 0600), `operator-credentials.json` (root 0600, the human platform operator's login, **operators**) |
@@ -285,7 +285,7 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   synthetic-only, database ok, release <revision>}` there and serve its own
   sign-in page and every static file that page names (read-only GETs) - the
   old web still serves everything; **S2** the old worker is parked (`docker
-  stop --time 1500`: its current stage finishes, nothing new is claimed) - the
+  stop --time 1800`: its current stage finishes, nothing new is claimed) - the
   old web still serves, and what members start waits in the queue; **S3** the
   vhost's upstream is switched to the idle port: the live file must be this
   revision's HTTPS stage for the old port, and is replaced atomically by the
@@ -352,12 +352,15 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   one-shot with the worker's mount and network for that participant: its
   credentials file read-only at the worker's path, `cpt-studio-net`, that
   participant live under the same `--authorization-ref`, every other one
-  disabled, bounded at 1,800 s. The command takes the installation-wide
+  disabled, bounded at 1,900 s. The command takes the installation-wide
   provider lock and sends nothing while another request holds it: the installer
   runs it with `--wait-for-lock` (AMENDMENT-2 1.11), so it waits out a reading
-  in flight - up to the interpreter's send deadline plus 60 s, 1,380 s - and
-  fails the check only after that; the bound is that wait, the participant send
-  deadline (330 s) and the container's start. It writes nothing to the
+  in flight - up to the interpreter's send deadline plus 60 s, 1,380 s; a round
+  of question requests holds the lock for up to their own deadline, 1,408 s,
+  a wave (one wave at the installed figures: DECISIONS D325 (3)), which the
+  wait covers (1,468 s) once the command reads that row too (round r3)
+  - and fails the check only after that; the bound is that wait, the
+  participant send deadline (330 s) and the container's start. It writes nothing to the
   database. What the container wrote is recorded - its JSON receipt in this
   phase's receipt (`access_checks`), its stdout and the last 8 KiB of its
   stderr in a log - only once a root helper has found no value from that
@@ -504,8 +507,15 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   starts only once it has exited (S4): no worker of the old code claims a stage
   the new web queued, and the two workers never run together. What members
   start between S2 and S4 waits in the queue (the old worker's remaining stage
-  time, about a second when idle, up to 1,500 s), inside the 60 minutes a
-  queued stage waits. A predict the previous pair queued
+  time, about a second when idle, up to 1,800 s), inside the 120 minutes a
+  queued stage waits. Round r3's question stage is a reading stage like
+  interpret and appraise: a question round the previous pair queued is
+  finished by the new pair, which recomputes it from the stored question runs
+  (a request whose identical request this document has a deciding outcome for
+  is never sent again); a round whose requests were in flight when the old worker
+  stopped is the old worker's to finish (its stop timeout outlasts the round);
+  one cut short is recorded unknown, request by request, and waits for its
+  reconciliation. A predict the previous pair queued
   (for an upload, a date change, a Resume or a reconciliation) sends its one
   request, for the context remade under the new rules, unless a recorded
   answer is reused, an unknown outcome waits for its reconciliation, or that
@@ -908,7 +918,12 @@ whose item is a new fact) - counting the assessments of both engine versions
 and the appraisal runs of every interpreter provider (AMENDMENT-2 8.5), and, of
 a Fable candidate, its new versions' rows too (an inventory of
 `gemini-events@3/appraisal@2`, a `cpt-studio-events@3` assessment, a run of
-its adapter, an interpreter hold with reason `declined`) - and fails its
+its adapter, an interpreter hold with reason `declined`), and, of a candidate
+whose installer knows round r3's question stage, its records (a queued or
+running question job, a question run, a code an established answer released;
+the test instance makes them by replaying frozen Fable streams, D322 (6)) - and
+assertion 6 reads the question stages as it reads the interpret and appraise
+ones - and fails its
 assertion 7 on any missing that a test instance makes through the product's
 own flows (replay, a free live outcome such as a refused key, or the
 scenario's own steps); a kind only a paid or nondeterministic provider outcome
@@ -1294,18 +1309,103 @@ verified inside the image under that setting.
   values under 8 characters (they would match by chance), nor a value
   transformed (encoded, or partly printed). It reads only the checked
   participant's file.
-- The worker's stop timeout (1,500 s, AMENDMENT-2 1.12) covers every stage's
-  deadline - a participant phase's whole tool loop (540 s: at most four
-  exchanges; one send's deadline is 330 s) and a reading stage's 1,380 s, its
-  1,320 s send included - and is above every stale-stage threshold
-  (`STALE_RUNNING_SECONDS`, 600 s; the reading stages' 1,440 s): a stage still
-  running when the 1,500 s pass is killed with the worker and settled as any
-  stage cut short (the stale-stage sweep, or an undo's close). Parking or
-  removing a worker that is inside a stage waits up to that long, so a stop in
-  `app` or `rollback-app` can take up to 25 minutes: let the queue drain (or
-  Stop the encounters) first to avoid the wait. In blue/green the site stays
+- The worker's stop timeout (1,800 s; round r3, DECISIONS D322 (4)) covers
+  every stage's deadline - a participant phase's whole tool loop (540 s: at
+  most four exchanges; one send's deadline is 330 s), a reading pass's 1,380
+  s, its 1,320 s send included, and the question stage's 1,588 s, a round of
+  question requests sent concurrently, each within 1,408 s (128,000 output
+  tokens at 95 tokens a second, below the slowest measured max-effort rate of
+  101 tokens a second, plus 60 s), one wave of them at the installed figures
+  (DECISIONS D325 (3); a worker asked to stop starts no further wave of a
+  round) - and is above every stale-stage threshold
+  (`STALE_RUNNING_SECONDS`, 600 s; the reading passes' 1,440 s and 1,560 s; the
+  question stage's 1,768 s): a stage still running when the 1,800 s pass is
+  killed with the worker and settled as any stage cut short (the stale-stage
+  sweep, or an undo's close). Parking or removing a worker that is inside a
+  stage waits up to that long, so a stop in `app` or `rollback-app` can take
+  up to 30 minutes: let the queue drain (or Stop the encounters) first to
+  avoid the wait. In blue/green the site stays
   served meanwhile, and that wait is the processing pause: what members start
   is accepted and shown as queued.
+- The question stage (round r3; DECISIONS D320, D322). After the reading's two
+  passes, Fable is asked the engine's reading doubts at effort max, one job per
+  round: the round's requests are sent CONCURRENTLY, one thread each and at
+  most `QUESTION_ROUND_CONCURRENCY` at once (limit 6), under the
+  installation-wide provider lock held once for the round, so the stage takes
+  as long as its slowest request (r3-probe-2's three requests: 1,049 s, 921 s
+  and 691 s), never their sum; the one worker still runs one job at a time.
+  What it costs and how long it takes: about $3 and 10 minutes for a short note,
+  about $12 and 25-55 minutes for a long one (D320's figures; the owner
+  approved the cost per document at effort max: D321). Its limits:
+  1. A document queued behind a long note waits for it: a job that cannot start
+     within the queue window (`jobs.QUEUE_DEADLINE`, 120 minutes: a job queued
+     behind two long notes still starts) expires and its document reads
+     stopped, with Resume - nothing is lost and nothing is charged. Several
+     long notes uploaded together will meet it.
+  2. Each question request fails alone: a refused, failed, cut-off, declined
+     or unreadable request leaves its questions unresolved and their holds stay
+     with the coder; nothing is sent again for it (no automatic retry).
+     Anthropic's per-minute limits apply to the round's concurrent streams (at
+     most `QUESTION_ROUND_CONCURRENCY` at once: limit 6): a
+     429 that names `rate_limit_error` fails that request alone; any other 429,
+     like a 402, a 401 or a 403, sets the installation-wide hold (D39), and the
+     whole site's reading pauses until an operator releases it. Such a hold
+     decides no question request (the repair pass of round r3's pipe lane,
+     PIPE-R1): the document's question stage pauses (the paused phase, with
+     Resume), the round's other answers are kept, and after the release a
+     member's Resume sends each request still owed once - as `interpreter_hold
+     --release` says of every hold that is not request-bound. A request that
+     never left this server - its credentials could not be read, the network
+     failed, or its deadline passed before the send - decides nothing either
+     (DECISIONS D324 (10)): the document's question stage stops with Resume,
+     nothing is queued, and a member's Resume sends each such request once more.
+  3. A worker that dies mid-round leaves each request in flight an unknown
+     outcome (one reconciliation each); a Resume never sends a request whose
+     identical request has a deciding outcome, and a reconciliation releases
+     one new attempt of that one request - on the revision that request was
+     made for while it is the current one, else the current revision's reading
+     from its first stage (PIPE-R2: an addendum made meanwhile is read).
+  4. A question request's output rate below 110 tokens a second is recorded on
+     its run and in the operator report as a measure, never a hold (D310 (9):
+     effort max measured 101-104).
+  5. A spending threshold for the question requests can be configured
+     (`CPT_STUDIO_QUESTION_PROVIDER_CAP_USD` with the site reserve and the
+     account's other spend): a round whose worst cases together pass it by
+     themselves sends nothing, its questions unresolved; a round this month's
+     spend or the other spend pushes over it sends nothing and stays owed - the
+     document stops with Resume, and a member's Resume sends it once the month
+     allows it (DECISIONS D324 (10)). Every run of the month counts at its
+     estimate or its own worst case, a Fable participant run with an unknown
+     outcome included. None is configured by this installer (the account's own
+     limit is the only bound, as before round r3); setting one is the owner's
+     figure (class d). The per-document ceiling (limit 6) is checked first, and
+     is always configured.
+  6. Two figures bound the question stage, and this installer sets both in
+     every container it starts (DECISIONS D325 (3); class d, the owner's
+     figures - settings, never constants of the code).
+     `CPT_STUDIO_QUESTION_DOCUMENT_CEILING_USD` (25 US dollars, about twice the
+     accepted long note) bounds the worst case the stage reserves for one
+     document over every round - each request counted at its worst case, its
+     whole 128,000 output tokens and its input, at least $5.128 - so a
+     document's questions can never cost more. A round that would pass it,
+     with what the document already holds reserved, is refused about itself
+     and never sent: its questions stay unresolved, their codes are held for
+     the coder, and no Resume sends it later. A reservation stops counting
+     only when its request provably cost nothing (nothing was sent, a reuse,
+     or an error answer with no usage), so a request sent again after an
+     outcome that decided nothing counts once.
+     `CPT_STUDIO_QUESTION_ROUND_CONCURRENCY` (4) bounds the question requests
+     in flight at once: the rest of a round wait their turn in the same job,
+     under the same lock and the same reservation. The installer writes the
+     values the revision's `cptstudio/settings.py` gives them, so a figure
+     moves by a change of that file in a release. At these figures a round
+     holds at most 4 requests, one wave, so the stage's 1,588 s deadline and
+     1,768 s stale-stage threshold stand. Figures that allow more waves add 1,483 s to each per wave
+     (`QUESTION_ROUND_WAVES`), and figures whose stage would outlast the
+     120-minute queue window refuse to load. A worker asked to stop starts no
+     further wave of a round (the later requests stay owed, for the next
+     worker), and a participant check (`--access-check`) that meets a later
+     wave in flight fails when its wait for the lock ends, sending nothing.
 - Blue/green residuals (the declaration states them):
   1. A request an old nginx worker accepted before the reload but proxies only
      after the drain has ended - in practice a large upload it is still
@@ -1322,7 +1422,7 @@ verified inside the image under that setting.
      new API until it is reloaded; the new API's response shapes must stay
      tolerant of it for one release.
   4. Processing pauses for the old worker's remaining stage time (up to
-     1,500 s; about a second when idle) plus the switch; uploads are accepted and
+     1,800 s; about a second when idle) plus the switch; uploads are accepted and
      shown as queued.
   5. `systemctl reload nginx` is host-global. It is graceful, and the switch's
      verification requires co-tenant routing and app.quillmd.com unchanged

@@ -1437,6 +1437,45 @@ class _V2Units(_V2Spec):
         return ['units', self.shape.describe()]
 
 
+# --- round r3: the question stage's stored records (DESIGN-v2 h; PROTOTYPE) ----------------------------------------------
+_V2_SPAN = _V2Obj({'start': _V2_INT, 'end': _V2_INT})
+_V2_VERDICT_PAIR = _V2Obj({'claim': _V2Nullable(_V2_STR), 'control': _V2Nullable(_V2_STR)})
+_V2_QUESTION = _V2Obj({
+    'id': _V2_STR, 'round': _V2_INT, 'batch': _V2_INT,
+    'family': _V2Closed({'Q-REL', 'Q-FACT', 'Q-LESION', 'Q-ONLESION', 'Q-ABSORB', 'Q-GROUP', 'Q-KIND'}),
+    'form': _V2_STR, 'subjects': _V2List(_V2_STR), 'unlisted': _V2Nullable(_V2_INT),
+    'attribute': _V2Nullable(_V2_STR), 'value': _V2_STR,
+    'negated': _V2_BOOL, 'census': _V2_STR, 'claim': _V2_CLAIM_ID, 'control': _V2_CLAIM_ID,
+    'controls': _V2List(_V2_CLAIM_ID),
+    'witnesses': _V2List(_V2Obj({'code': _V2_STR, 'fact': _V2_STR, 'attribute': _V2Nullable(_V2_STR),
+                                 'subject': _V2Nullable(_V2_STR), 'cause': _V2_STR, 'reason': _V2Nullable(_V2_STR)})),
+    'verdicts': _V2_VERDICT_PAIR, 'result': _V2Closed({'supported', 'unresolved'}), 'reasons': _V2List(_V2_STR),
+    'proof': _V2List(_V2_SPAN), 'held_by_answer': _V2_BOOL})
+_V2_CALIBRATION = _V2Obj({
+    'round': _V2_INT, 'batch': _V2_INT, 'kind': _V2Closed({'K1', 'K2', 'K3', 'K4'}), 'form': _V2_STR,
+    'subjects': _V2List(_V2_STR), 'attribute': _V2Nullable(_V2_STR), 'value': _V2_STR, 'negated': _V2_BOOL,
+    'claim': _V2_CLAIM_ID, 'control': _V2_CLAIM_ID, 'verdicts': _V2_VERDICT_PAIR, 'breach': _V2_BOOL})
+# Round r3's build (DESIGN-v2 e.6; DECISIONS D322 (2)): ONE row binds every question run - each stored with the
+# ProviderRun that decided its request (the run sent, reused, or kept unsent by a door: never none), the request and
+# response it carries, and its outcome, one of QUESTION_RUN_OUTCOMES: 'answered' (read and settled), 'too_long' (its
+# answer cut at its output limit: split in halves, or a request of one question left unresolved), or why nothing usable
+# came back - 'failed', 'declined' (a request-bound hold: the model declined, or an error event after message_start),
+# 'unreadable', 'not_sent', 'refused' (the round's reservation refused by the budget check) or 'failed_before' (the
+# identical request failed or was cut off before and is never sent again). Never 'hold' (the repair pass's PIPE-R1): an
+# answer that set an installation-wide hold decides no request (studio/jobs.py _question_outcome), so a row that names
+# a request decided by one is refused here, whoever wrote it.
+QUESTION_RUN_OUTCOMES = ('answered', 'too_long', 'failed', 'declined', 'unreadable', 'not_sent', 'refused',
+                         'failed_before')
+_V2_RUN_ID = _V2Test(lambda value: isinstance(value, str) and _v2_is_uuid(value), 'a run id')
+_V2_QUESTION_RUN = _V2Obj({
+    'round': _V2_INT, 'batch': _V2_INT, 'provider_run_id': _V2_RUN_ID, 'request_sha256': _V2_SHA,
+    'response_sha256': _V2Nullable(_V2_SHA), 'outcome': _V2Closed(set(QUESTION_RUN_OUTCOMES)),
+    'split_of': _V2Nullable(_V2_SHA), 'claims': _V2_INT,
+    'usage': _V2Map(_V2Test(lambda value: type(value) is int and value >= 0, 'a count'))})
+_V2_QUESTION_HEALTH = _V2Obj({'round': _V2_INT, 'batch': _V2_INT, 'measures': _V2Map(_V2_INT),
+                              'refused': _V2List(_V2_STR)})
+
+
 def _v2_build() -> None:
     """Import contract/ and build every shape that reads its enumerations (called once, by _v2). The shapes are the
     comment at the head of design v2, field for field: the parts every pair shares once, then each pair's own
@@ -1492,7 +1531,7 @@ def _v2_build() -> None:
                         'units': _V2_UNITS, 'content': _V2_SHA, 'verdict': _V2Nullable(_V2_VERDICT)},
                        _v2_claim_check)
 
-    def pair(reasons: frozenset, overfull: Optional[str], lesion_pairs: bool = False) -> dict:
+    def pair(reasons: frozenset, overfull: Optional[str], lesion_pairs: bool = False, questions: bool = False) -> dict:
         """One version pair's shapes: its settled-fact shape (its closed reason list ``reasons``), the inventory and
         both reports; ``overfull`` the reason an overfilled slot's written facts carry (slot_overfull), or None where
         a slot holds one fact; ``lesion_pairs``, whether its inventory stores the settled lesion pair claims (DECISIONS
@@ -1626,8 +1665,13 @@ def _v2_build() -> None:
                 'control': _V2Nullable(_V2_CLAIM_ID),
                 'result': _V2Closed({ct.Result.SUPPORTED.value, ct.Result.UNRESOLVED.value}),
                 'reasons': _V2List(_V2Closed(reasons))}, check=_v2_lesion_pair))
+        defaults = {'lesion_pairs': [], 'act_lesions': []} if lesion_pairs else {}
+        if questions:  # round r3 (DESIGN-v2 h; PROTOTYPE): the question stage's outcomes, at the @3 pair only
+            inventory['questions'] = _V2List(_V2_QUESTION)
+            inventory['calibration'] = _V2List(_V2_CALIBRATION)
+            defaults.update({'questions': [], 'calibration': []})
         events = _V2Obj(inventory, check=_v2_pairs_bound if lesion_pairs else None,
-                        defaults={'lesion_pairs': [], 'act_lesions': []} if lesion_pairs else None)
+                        defaults=defaults or None)
         # settle's report records, field for field (contract/types' DoubtApplied, Health, Coherence and Usage; P9: no
         # free-form JSON is stored; DECISIONS D229, hand-off 1d#2)
         doubt_applied = _V2Obj({'index': _V2_INT, 'about': _V2Closed(_v2_values(ct.DoubtAbout)),
@@ -1653,7 +1697,9 @@ def _v2_build() -> None:
                                                            'session': _V2Nullable(_v2_object_id('X')),
                                                            'event': _v2_object_id('E')}))}),
             'usage': _V2Obj({'interpretation': usage, 'appraisal': usage}),
-        })
+            **({'question_runs': _V2List(_V2_QUESTION_RUN), 'question_health': _V2List(_V2_QUESTION_HEALTH)}
+               if questions else {}),
+        }, defaults={'question_runs': [], 'question_health': []} if questions else None)
         report_refused = _V2Obj({'label': _V2_STR, 'request_sha256': _V2_SHA, 'response_sha256': _V2_SHA,
                                      'refused': _V2Const(True), 'stage': _V2Closed(xr.STAGES),
                                      'problems': _V2List(_V2_STR)})
@@ -1664,7 +1710,7 @@ def _v2_build() -> None:
 
     reasons_2 = _v2_values(ct.Reason) - {ct.Reason.SLOT_OVERFULL.value}  # the @2 pair's list as shipped (R8)
     two = pair(reasons_2, None)
-    three = pair(_v2_values(ct.Reason), ct.Reason.SLOT_OVERFULL.value, lesion_pairs=True)
+    three = pair(_v2_values(ct.Reason), ct.Reason.SLOT_OVERFULL.value, lesion_pairs=True, questions=True)
     # the @2 pair's shapes keep their module names (the facts readers and tests reach)
     _V2_FACT_SHAPE, _V2_ENCOUNTER = two['fact'], two['encounter']
     _V2_PERSON, _V2_SECTION = two['person'], two['section']
@@ -2220,6 +2266,88 @@ def _v2_consistent(fields: Mapping, versions: tuple, state: str) -> None:
     if report['unlisted']['kept'] != len(events['unlisted']):
         raise Mismatch('The stored verification report counts other unlisted statements than its row keeps.')
     _v2_verdicts_bound(events, shape)
+    if versions == READ_VERSIONS[1]:
+        _v2_questions_bound(events, report)
+
+
+QUESTION_FAILED_PREFIX = 'question_request_failed:'  # settle's H0 reason: d.1, a request that did not answer
+QUESTION_BREACH = 'question_health:calibration'  # settle's H2 reason: a calibration item's false claim supported
+
+
+def _v2_questions_bound(events: Mapping[str, Any], report: Mapping[str, Any]) -> None:
+    """Round r3 (DESIGN-v2 d.1, d.2, e.6; DECISIONS D322 (2)): the question stage's records bound to the runs and the
+    health the row stores, so no stored record releases what its own inputs do not give (the RF-L4 / RF2C-L3 pattern):
+    - each question run is stored once - its (round, batch) and its request once - and a half of a split names as its
+      parent a request of the row whose answer was cut at its output limit;
+    - each health record names a run of the row, once, and every run has one but a request split in halves (its halves
+      are settled instead); a run that did not answer is refused by its own outcome (question_request_failed:<outcome>);
+    - each question and each calibration record names a run and a health record of the row, and question ids are
+      unique;
+    - a SUPPORTED question - the one an answer releases by - rests on an answered and healthy request: its run's outcome
+      'answered', its request's health refusing nothing, its claim answered supports and its control contradicts, a
+      located proof and no reason; an unresolved one names its reason;
+    - a calibration breach is refused by its request's health (question_health:calibration).
+    UnknownShape for a row that breaks any of them; a problem names the place, never a stored value."""
+    unreadable = 'The stored interpretation is not readable: '
+    runs = list(report.get('question_runs') or [])
+    health = list(report.get('question_health') or [])
+    questions = list(events.get('questions') or [])
+    calibration = list(events.get('calibration') or [])
+    by_place: dict[tuple[Any, Any], Any] = {}
+    by_request: dict[Any, Any] = {}
+    for index, run in enumerate(runs):
+        place = (run['round'], run['batch'])
+        if place in by_place or run['request_sha256'] in by_request:
+            raise UnknownShape(f'{unreadable}verification.question_runs[{index}] repeats a question request.')
+        by_place[place], by_request[run['request_sha256']] = run, run
+    parents = set()
+    for index, run in enumerate(runs):
+        parent = run['split_of']
+        if parent is None:
+            continue
+        found = by_request.get(parent)
+        if found is None or found['outcome'] != 'too_long' or found['round'] != run['round']:
+            raise UnknownShape(f'{unreadable}verification.question_runs[{index}] is a half of no request of its round '
+                               'the row records as cut at its output limit.')
+        parents.add(parent)
+    refused_by: dict[Any, Any] = {}
+    for index, record in enumerate(health):
+        place = (record['round'], record['batch'])
+        run = by_place.get(place)
+        if run is None or place in refused_by:
+            raise UnknownShape(f'{unreadable}verification.question_health[{index}] names no question run of the row, '
+                               'or one already measured.')
+        if run['outcome'] != 'answered' and QUESTION_FAILED_PREFIX + run['outcome'] not in record['refused']:
+            raise UnknownShape(f'{unreadable}verification.question_health[{index}] does not refuse a request that did '
+                               'not answer.')
+        refused_by[place] = list(record['refused'])
+    for place, run in by_place.items():
+        if place not in refused_by and run['request_sha256'] not in parents:
+            raise UnknownShape(f'{unreadable}question round {place[0]} request {place[1]} has no health record.')
+    seen = set()
+    for index, record in enumerate(questions):
+        where = f'events.questions[{index}]'
+        place = (record['round'], record['batch'])
+        if place not in refused_by or record['id'] in seen:
+            raise UnknownShape(f'{unreadable}{where} names no measured question request of the row, or repeats an id.')
+        seen.add(record['id'])
+        if record['result'] != 'supported':
+            if not record['reasons']:
+                raise UnknownShape(f'{unreadable}{where} is unresolved and names no reason.')
+            continue
+        verdicts = record['verdicts']
+        if (refused_by[place] or by_place[place]['outcome'] != 'answered' or record['reasons'] or not record['proof']
+                or verdicts['claim'] != ct.VerdictValue.SUPPORTS.value
+                or verdicts['control'] != ct.VerdictValue.CONTRADICTS.value):
+            raise UnknownShape(f'{unreadable}{where} is supported, and the request, the verdicts and the proof the row '
+                               'stores for it do not establish it (DESIGN-v2 d.1, d.2).')
+    for index, record in enumerate(calibration):
+        place = (record['round'], record['batch'])
+        if place not in refused_by:
+            raise UnknownShape(f'{unreadable}events.calibration[{index}] names no measured question request of the row.')
+        if record['breach'] and QUESTION_BREACH not in refused_by[place]:
+            raise UnknownShape(f'{unreadable}events.calibration[{index}] is a breach its request\'s health does not '
+                               'refuse (DESIGN-v2 d.1 H2).')
 
 
 def _v2_established_bound(events: Mapping, shape: Optional[_V2Spec] = None) -> None:
@@ -2300,6 +2428,14 @@ def _v2_verdicts_bound(events: Mapping, shape: Optional[_V2Spec] = None) -> None
             raise UnknownShape(f'The stored interpretation is not readable: the control at {path}.appraisal.control '
                                'is about another attribute than its fact (FINAL-V2 3.2.3; CONTROL_ATTRIBUTES).')
         read.add(control['claim'])
+
+
+def _v2_is_uuid(value: str) -> bool:
+    """Whether ``value`` is a UUID in its canonical text form (as str(uuid.UUID) writes it)."""
+    try:
+        return str(uuid.UUID(value)) == value
+    except ValueError:
+        return False
 
 
 def _v2_uuid(value: object, name: str, nullable: bool = False) -> Optional[str]:

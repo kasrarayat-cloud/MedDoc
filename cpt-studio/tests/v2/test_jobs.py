@@ -651,8 +651,9 @@ class FailureTests(PipelineCase):
             job = jobs.claim_next()
             with self.assertRaises(KeyboardInterrupt), jobs._stage_scope(job):
                 jobs.STAGES[jobs.APPRAISE](job)  # as the worker runs it, until it dies (the job stays running)
-        # older than a reading stage's stale threshold (AMENDMENT-2 1.12: 1,440 s; settings.STALE_RUNNING_SECONDS_BY_KIND)
-        Job.objects.filter(pk=appraise.pk).update(started_at=timezone.now() - timedelta(seconds=1500))
+        # older than the appraise stage's stale threshold (settings.STALE_RUNNING_SECONDS_BY_KIND: AMENDMENT-2 1.12's
+        # 1,440 s, 1,560 s since round r3, where the stage also plans the first question round in a bounded child)
+        Job.objects.filter(pk=appraise.pk).update(started_at=timezone.now() - timedelta(seconds=1620))
         jobs.mark_stale()
         appraise.refresh_from_db()
         self.assertEqual((appraise.state, appraise.result.get('settled')), (Job.SUCCEEDED, jobs.STALE_INTERPRETATION))
@@ -2058,7 +2059,9 @@ class StaleThresholdTests(FableCase):
     def test_the_thresholds_are_settings_per_kind(self):
         from django.conf import settings
 
-        self.assertEqual((jobs.stale_threshold(jobs.INTERPRET), jobs.stale_threshold(jobs.APPRAISE)), (1440, 1440))
+        # round r3 (D322 (4)): appraise 1,440 -> 1,560 s (it plans the first question round), the question stage 1,768 s
+        self.assertEqual((jobs.stale_threshold(jobs.INTERPRET), jobs.stale_threshold(jobs.APPRAISE),
+                          jobs.stale_threshold(jobs.QUESTION)), (1440, 1560, 1768))
         self.assertEqual(jobs.stale_threshold(Job.PREDICT), settings.STALE_RUNNING_SECONDS)
         with override_settings(STALE_RUNNING_SECONDS_BY_KIND={'interpret': 2000}):
             self.assertEqual((jobs.stale_threshold(jobs.INTERPRET), jobs.stale_threshold(jobs.APPRAISE)),
@@ -2124,17 +2127,19 @@ INTERPRETATION_PURPOSE = interpretation.PURPOSE
 
 
 class QueueDeadlineTests(FableCase):
-    """A2 1.12: QUEUE_DEADLINE is 60 minutes - a job queued behind two long readings still starts."""
+    """A2 1.12: QUEUE_DEADLINE was 60 minutes - a job queued behind two long readings still starts. Round r3 (D320,
+    D322): a long note's questions at effort max make it 25-55 minutes, so the window is 120 minutes - a job queued
+    behind two long notes still starts."""
 
-    def test_sixty_minutes(self):
-        self.assertEqual(jobs.QUEUE_DEADLINE, timedelta(minutes=60))
+    def test_one_hundred_and_twenty_minutes(self):
+        self.assertEqual(jobs.QUEUE_DEADLINE, timedelta(minutes=120))
         encounter, revision = self.fresh_encounter()
         [queued] = Job.objects.filter(encounter=encounter, state=Job.QUEUED)
-        self.assertAlmostEqual((queued.deadline_at - queued.created_at).total_seconds(), 3600, delta=5)
-        with mock.patch.object(timezone, 'now', return_value=queued.created_at + timedelta(minutes=59)):
+        self.assertAlmostEqual((queued.deadline_at - queued.created_at).total_seconds(), 7200, delta=5)
+        with mock.patch.object(timezone, 'now', return_value=queued.created_at + timedelta(minutes=119)):
             self.assertEqual(jobs.claim_next().state, Job.RUNNING)
         Job.objects.filter(pk=queued.pk).update(state=Job.QUEUED, started_at=None)
-        with mock.patch.object(timezone, 'now', return_value=queued.created_at + timedelta(minutes=61)):
+        with mock.patch.object(timezone, 'now', return_value=queued.created_at + timedelta(minutes=121)):
             expired = jobs.claim_next()
         self.assertEqual((expired.state, expired.error), (Job.CANCELLED, 'The stage expired before it could start; '
                                                                          'resume to run it.'))

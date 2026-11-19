@@ -792,7 +792,9 @@ def synthetic(R: FactSet) -> tuple[int, ...]:
     """The indices in FactSet.unlisted of the kept entries read as 3.2.6 rule 3's synthetic act (DECISIONS D216, D231),
     in stored order: an unlisted ACT, or an unlisted DOUBT - a doubt about whether an act was done leaves it possibly
     performed (4.2 [R:HO-1]; refute-r4a-r1 F1). A DENIAL is no act: 3.2.6 rule 4 pairs it."""
-    return tuple(index for index, entry in enumerate(R.unlisted) if entry.what in SYNTHETIC_WHAT)
+    # round r3 (DESIGN-v2 b.7; PROTOTYPE): an entry a Q-ABSORB answer absorbed re-tells a described act - no synthetic act
+    return tuple(index for index, entry in enumerate(R.unlisted) if entry.what in SYNTHETIC_WHAT
+                 and index not in R.absorbed)
 
 
 def synthetic_sessions(R: FactSet, entry: UnlistedStatement) -> tuple[Id, ...]:

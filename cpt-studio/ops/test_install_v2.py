@@ -59,8 +59,11 @@ class StageKindTests(unittest.TestCase):
     def test_appraise_is_a_reading_kind_no_older_worker_runs(self):
         # FINAL-V2 6.4: the old worker would die on STAGES['appraise'], so it is never among the kinds every worker runs
         self.assertEqual(install.APPRAISE_KIND, 'appraise')
-        self.assertEqual(install.READING_STAGE_KINDS, ('interpret', 'appraise'))
+        # round r3 (D322 (5)): the question stage is a reading stage too, which no older worker runs either
+        self.assertEqual(install.QUESTION_KIND, 'question')
+        self.assertEqual(install.READING_STAGE_KINDS, ('interpret', 'appraise', 'question'))
         self.assertNotIn('appraise', install.COMMON_STAGE_KINDS)
+        self.assertNotIn('question', install.COMMON_STAGE_KINDS)
         # both scripts read the kinds from a worker's own jobs.STAGES, never from a list naming them
         self.assertIn('Job.objects.exclude(kind__in=kept)', install.CLOSE_STAGES)
         self.assertIn('Job.objects.exclude(kind__in=known)', install.UNRUNNABLE_STAGES)
@@ -75,13 +78,14 @@ class StageKindTests(unittest.TestCase):
         since = dt.datetime(2026, 11, 13, 10, 0, tzinfo=dt.timezone.utc)
         with mock.patch.object(install, 'app_script', app_script):
             for kinds, revert in ((list(install.COMMON_STAGE_KINDS), True), (KINDS_OLD, True),
-                                  (KINDS_OLD + ['interpret'], True), (KINDS_OLD + ['interpret', 'appraise'], False)):
+                                  (KINDS_OLD + ['interpret'], True), (KINDS_OLD + ['interpret', 'appraise'], False),
+                                  (KINDS_OLD + ['interpret', 'appraise', 'question'], False)):
                 with self.subTest(kinds=kinds):
                     install.close_undone_stages(IMAGE, b'', since, REVISION, 'undone', kinds)
                     body, params = seen[-1]
                     self.assertIs(body, install.CLOSE_STAGES)
                     self.assertIs(params['revert'], revert)
-                    self.assertEqual(params['reading_kinds'], ['interpret', 'appraise'])
+                    self.assertEqual(params['reading_kinds'], ['interpret', 'appraise', 'question'])
                     self.assertEqual(params['kinds'], sorted(kinds))
 
 
@@ -1784,7 +1788,7 @@ class PutBackOnTheDatabaseTests(V2Rows):
         self.assertGreater(models.Job.objects.get(pk=waiting.pk).deadline_at, due)  # its deadline renewed (2.3)
         # refutation w7r 6b-r1 R3: it waits for a worker only until that deadline, and the sentence says so
         self.assertIn('1 of them had a reading stage still queued (interpret 1), its deadline renewed: claimed by a '
-                      'worker of this revision within 60 minutes of the put-back, it reads the details put back; claimed '
+                      'worker of this revision within 120 minutes of the put-back, it reads the details put back; claimed '
                       'after that, it expires without starting, and the update then reads stopped, with Resume',
                       done['sentence'])
 
@@ -1981,7 +1985,7 @@ class RequeueDeadlineOnTheDatabaseTests(V2Rows):
         with mock.patch.object(install, 'app_script', in_this_image):
             done = install.reapply_reverted(IMAGE, b'', [closed])
         self.assertIn('while it waits for a worker of this revision the update reads updating; claimed within the '
-                      'queue deadline (60 minutes from the put-back), it runs, its doors sending the save\'s request at '
+                      'queue deadline (120 minutes from the put-back), it runs, its doors sending the save\'s request at '
                       'most once; claimed after it, it expires without starting, and the update then reads stopped, with '
                       'Resume', done['sentence'])
         shown = progress.encounter_progress(models.Encounter.objects.get(pk=encounter.pk))

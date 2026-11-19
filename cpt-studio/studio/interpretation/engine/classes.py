@@ -665,7 +665,9 @@ def synthetic_possible(R: FactSet) -> tuple[UnlistedStatement, ...]:
     """The kept unlisted entries every absence condition here reads as possibly performed acts (D216, D231; module
     docstring, the absence conditions), in the stored order: the ACTS and the DOUBTS (POSSIBLY_PERFORMED) - the set
     evaluate.synthetic_possible reads (O17); never a DENIAL."""
-    return tuple(entry for entry in R.unlisted if entry.what in POSSIBLY_PERFORMED)
+    # round r3 (DESIGN-v2 b.7; PROTOTYPE): an absorbed entry is no possibly performed act (its rule-4 pairs stay)
+    return tuple(entry for index, entry in enumerate(R.unlisted) if entry.what in POSSIBLY_PERFORMED
+                 and index not in R.absorbed)
 
 
 def _card_may_name(entry: UnlistedStatement, session: Id, R: FactSet) -> bool:

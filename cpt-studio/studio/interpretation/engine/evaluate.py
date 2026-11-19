@@ -32,7 +32,9 @@ read results, ids and integer spans only, through engine/facts.py's predicates a
   group's item is 4.6's own (the item the document gets without them; never an exclusion: ``_unbound_item``). With no
   positive candidate,
   the exclusion (4.6) decides: EXCLUDED (reinstatable), or a statement_scope question, or not documented (7.6:
-  performed_status, rank 4).
+  performed_status, rank 4). Round r3 (DESIGN-v2 f.1, f.2(3)): 4.6 reads R_base, and - DECISIONS D324 (6) - it runs for
+  a group only when R_base's own 4.4 decision of the group reaches it, read by the same code path (``_read_group``: no
+  supporting act, no pending candidate, no found or pending XCHG pair); otherwise the group is held, not documented.
 - Then the code-specific rows (4.4's ``code_requirements``) over EVERY supporting act, each non-T row's witnesses added
   to ``held_facts``: there is no early return before them (Q2), and an act that fails one stays in E* while it holds the
   code (the design's literal outcome function; v1's R4 filtered such an act out of E* instead - recorded as a
@@ -111,10 +113,13 @@ empty list with the completeness claim supported and that reach [R:SC-B]; a stat
 only the members that may name an upper station are read: refute-4a-r2 P4); LIMITED (43231, 43232: reached short of the
 duodenum; 43237, 43238 - the codes whose profile includes the EGD, step 1f's hand-off #7 - a station negated or
 reached short; all three examined is the class explanation; the upper stations only, as STATIONS); LOWER (D43: the
-class reach, the stoma codes also an anatomy entry of type stoma supported and the approach through_stoma; the stoma
+class reach, the stoma codes also an anatomy entry of type stoma supported and the approach through_stoma, and -
+DECISIONS D325 (2) - a colonic route, ``_lower_colonic`` (DECISIONS D327 (1): never where the anatomy may leave the
+colon gone, ``whole_colon_absent_possible``), else the class's route hold; the stoma
 class's approach is asked at RANK row 8, procedure - another approach supported its explanation naming it, an approach
 or a stoma entry not established its question - and through_stoma denied the class explanation: D225, P5; the reach
-and the approach each recorded when not T: refute-r4a-r1 F7); YIELD
+and the approach each recorded when not T: refute-r4a-r1 F7; DECISIONS D328 (1): the class's route is the lower-GI
+route table's, per anus for the sigmoidoscopic and colonoscopic classes, ``_anus_route``); YIELD
 (43264: yield supported stones, stone fragments, sludge or debris; negated is "documented as retrieving nothing";
 contradicted conflict:stone_extraction; a filter of SUPPORT, 4.3's "no support from that act");
 CAUSE (purpose supported hemostasis and cause supported pre_existing_lesion, spontaneous or earlier_procedure; cause
@@ -126,7 +131,15 @@ supporting, or a stent removal and a stent placement each supporting in one duct
 positive filed part beside a kept unlisted other part is a pair candidate too (D216)). Every witness rests on the fact
 that is not T under that fact's own attribute (a contradicted purpose, reach or target lesion is never witnessed as
 the cause, the stations or the act's places: D225 P7, refute-r4a-r1 F4). R6 and COLFULL, ENT, C3+SEP, ADDON, bundling,
-combination, R7 and R9 are the steps 4b, 4c, 4d and 5a rows that assess appends (4.4).
+combination, R7 and R9 are the steps 4b, 4c, 4d and 5a rows that assess appends (4.4). THE LOWER-GI ROUTE TABLE
+(DECISIONS D328 (1); catalogue.LOWER_ROUTES): every lower-GI endoscopy code's route row - a code is READY only when the
+record establishes its route and nothing filed contradicts the anatomy it needs, read fail-closed (``_row_lower_route``,
+under a colonoscopy code's COLFULL row, a sigmoidoscopy's and an enteroscopy's under Requirement.ROUTE_TABLE; a lower
+EUS code's in its LOWER row; the section comment at the table). THE LOWER-GI PATH GUARD (DECISIONS D330 (1); catalogue.
+HARMLESS): after every arm of those rows, a lower-GI code is held with the table's own hold unless every anatomy entry
+of the document is the entry its route itself uses or a match for a row of the ruled harmless set for its route
+family, and a per-anus code's own approach and through do not contradict the route - fail-closed by construction: a
+shape the set omits holds (``path_guard``, ``_guarded``; the section comment before ``_row_lower_route``).
 
 **Exclusion** (4.6): with no supporting act and no positive candidate, a statement D excludes the code only when (1) D's
 kind is supported and covers the group, its session supported of the code's family (route (b): its places in the code's
@@ -188,18 +201,19 @@ only - no retired v1 module (5.0), none of contract's text modules, not wording 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum, unique
 from types import MappingProxyType
+from typing import Protocol
 
-from studio.interpretation.contract.types import (AnatomyType, Approach, Attribute, Breadth, Cause, DateRelation,
-                                                  Device, EncounterRelation, Extent, Kind, Landmark, Link, Material,
-                                                  Owner, Performer, Purpose, Reason, Result, Route, SessionKind, Status,
-                                                  Structure, Tract, UnlistedWhat)
+from studio.interpretation.contract.types import (AnastomosisSubtype, AnatomyType, Approach, Attribute, Breadth, Cause,
+                                                  DateRelation, Device, EncounterRelation, Extent, Kind, Landmark, Link,
+                                                  Material, Owner, Performer, Purpose, Reason, Result, Route,
+                                                  SessionKind, Status, Structure, Tract, UnlistedWhat)
 from studio.interpretation.engine import anatomy, catalogue, pairing, questions
 from studio.interpretation.engine import facts as facts_
 from studio.interpretation.engine import requirements as rq
-from studio.interpretation.engine.requirements_table import Tag, Template
+from studio.interpretation.engine.requirements_table import CODES, Tag, Template
 from studio.interpretation.engine.types import (Cover, Evaluation, Exclusion, Fact, FactSet, HeldFact, Id, IdFamily,
                                                 ItemKind, Span, UnlistedStatement)
 
@@ -301,12 +315,26 @@ class Support:
         return sum(1 for row in self.rows if row.truth is not Truth.T)
 
 
+class PairsReader(Protocol):
+    """What row 8 reads through a caller's per-FactSet reader (engine/coverage.Reader: its pairs and unlisted pairs,
+    each computed once per Reader): the FactSet it reads, and an act's pairs."""
+    R: FactSet
+
+    def pairs(self, event: Id) -> tuple[pairing.Pair, ...]: ...
+
+    def unlisted_pairs(self, event: Id) -> tuple[pairing.UnlistedPair, ...]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class _Code:
-    """The proposal's code with its link and its requirement spec (engine/requirements.spec)."""
+    """The proposal's code with its link and its requirement spec (engine/requirements.spec). ``reader``: DECISIONS D324
+    (8) (round r3's integration int5, the ask lane's Q1 (b)) - the caller's reader of the FactSet ``support`` reads, when
+    it passed one (the planner's what-if worlds and its FactSet: one coverage.Reader each), through which row 8 reads an
+    act's pairs once per Reader instead of once per code."""
     code: str
     link: catalogue.CodeLink
     spec: rq.Spec
+    reader: PairsReader | None = None
 
     @property
     def template(self) -> Template:
@@ -388,9 +416,11 @@ def _bleeding_group(group: Sequence[Kind]) -> bool:
 
 def _claims_hemostasis(purpose: Fact) -> bool:
     """A purpose fact that claims hemostasis without establishing it: not established, hemostasis its claimed value or
-    one of its options (a doubt's reading, a contradicted side, an unrejected control)."""
-    return not facts_.established(purpose) and (purpose.value is Purpose.HEMOSTASIS
-                                               or Purpose.HEMOSTASIS in purpose.options)
+    one of its options (a doubt's reading, a contradicted side, an unrejected control). DECISIONS D324 (1) (round r3's
+    integration int5, the fold lane's Q-F3): never a purpose an established answer ruled hemostasis out of
+    (facts.ruled_out: "This act was not done for hemostasis.") - the answer removes that value, and only it."""
+    return (not facts_.established(purpose) and Purpose.HEMOSTASIS not in facts_.ruled_out(purpose)
+            and (purpose.value is Purpose.HEMOSTASIS or Purpose.HEMOSTASIS in purpose.options))
 
 
 def candidate_kinds(R: FactSet, group: Sequence[Kind], event: Id) -> frozenset[Kind]:
@@ -432,7 +462,9 @@ def synthetic_acts(R: FactSet) -> tuple[UnlistedStatement, ...]:
     possibly performed act of its kind in its session for every rule whose condition is the absence of one (it never
     supports, excludes or releases anything: 3.2.6). An unlisted denial or doubt is no act (condition 5 and rule 4 read
     those); the absence conditions read the synthetic acts and the unlisted doubts alike (``synthetic_possible``)."""
-    return tuple(entry for entry in R.unlisted if entry.what is UnlistedWhat.ACT)
+    # round r3 (DESIGN-v2 b.7; PROTOTYPE): an entry a Q-ABSORB answer absorbed re-tells a described act - no synthetic act
+    return tuple(entry for index, entry in enumerate(R.unlisted) if entry.what is UnlistedWhat.ACT
+                 and index not in R.absorbed)
 
 
 def synthetic_possible(R: FactSet) -> tuple[UnlistedStatement, ...]:
@@ -443,7 +475,9 @@ def synthetic_possible(R: FactSet) -> tuple[UnlistedStatement, ...]:
     filed placement holds 43274, as "The existing biliary stent was removed." does). A DENIAL is a statement that the
     act was not done: 3.2.6 rule 4 pairs it, and condition 5 reads it; no absence condition reads it as an act (the
     step's NOTES, question Q1)."""
-    return tuple(entry for entry in R.unlisted if entry.what in _POSSIBLY_PERFORMED)
+    # round r3 (DESIGN-v2 b.7; PROTOTYPE): an absorbed entry is no possibly performed act (its rule-4 pairs stay)
+    return tuple(entry for index, entry in enumerate(R.unlisted) if entry.what in _POSSIBLY_PERFORMED
+                 and index not in R.absorbed)
 
 
 def synthetic_kinds(entry: UnlistedStatement) -> frozenset[Kind]:
@@ -865,7 +899,9 @@ def _row_clean(c: _Code, group: Sequence[Kind], R: FactSet, event: Id) -> Row:
     concerns it - and every unlisted denial or doubt pairing with the act (statement_scope, cause unlisted)."""
     witnesses: list[HeldFact] = []
     own = _conflict_kind(R, event, group)
-    for pair in pairing.pairs_of(R, event):
+    # DECISIONS D324 (8) (int5): the caller's reader of R, when it passed one - the same pairs, read once per Reader
+    reader = c.reader if c.reader is not None and c.reader.R is R else None
+    for pair in (reader.pairs(event) if reader is not None else pairing.pairs_of(R, event)):
         found = pairing.item(pair)
         cause = pairing.cause(pair)
         if found is None or cause is None:
@@ -878,7 +914,8 @@ def _row_clean(c: _Code, group: Sequence[Kind], R: FactSet, event: Id) -> Row:
             key = rq.fact_key(found.fact)
         attribute = _ROW_ATTRIBUTE[pair.row] if pair.relation is pairing.Relation.UNRESOLVED and pair.row else _A.STATUS
         witnesses.append(_held(key, found.rank, _Q, attribute, event, None, cause, pair.spans))
-    for unlisted in pairing.unlisted_pairs(R, event):  # what it asks is the pairing table's (pairing.item; D228 DQ3)
+    for unlisted in (reader.unlisted_pairs(event) if reader is not None  # what it asks is the pairing table's
+                     else pairing.unlisted_pairs(R, event)):  # (pairing.item; D228 DQ3)
         asked = pairing.item(unlisted) or _SCOPE
         witnesses.append(_held(rq.fact_key(asked.fact), asked.rank, _Q, None, event, None, questions.UNLISTED,
                                unlisted.spans))
@@ -1185,17 +1222,40 @@ def _row_lower(c: _Code, group: Sequence[Kind], R: FactSet, event: Id) -> Row:
     approach supported - no approach to name - stays the examination-class explanation (extent; the step's NOTES,
     question Q6). The reach and the approach are each recorded whenever they are not T (HO-8: every unresolved fact is
     held; refute-r4a-r1 F7: an unestablished reach no longer hides the approach), so RANK asks the approach (row 8)
-    before the extent (row 14) when both are unknown, and the row is F when either fails on an established fact."""
+    before the extent (row 14) when both are unknown, and the row is F when either fails on an established fact.
+
+    DECISIONS D328 (1) (L6C-1): the class's route is the lower-GI route table's (catalogue.LOWER_ROUTES), read here for
+    the lower EUS codes - per anus for the sigmoidoscopic and colonoscopic classes (45341, 45342, 45391, 45392:
+    ``_anus_route``, with LOWER's own explanation: an approach established through a stoma, a pouch or - the colonoscopic
+    class, a colon to traverse - a colon gone, a stoma that may exist), through a stoma for the stoma class (44406,
+    44407: ``_lower_approach``, as above). A session not established is asked as before, beside the table's own hold
+    about the act where the anatomy alone contradicts a per-anus row; a lower EUS code the table declares no row for
+    holds with the table's own hold."""
     exam_class = c.spec.row.eus_class if c.spec.row is not None else None
     session = _session(R, event)
+    found = catalogue.lower_route(c.code)
     if session is None or exam_class is None:
-        return _no_session(Tag.LOWER, R, event, group)
+        row = _no_session(Tag.LOWER, R, event, group)
+        held: list[HeldFact] = []
+        if found is None:
+            held = [_table_hold(R, event, event)]
+        elif found.route is Approach.TRANSANAL:
+            held, _ = _anus_route(found.needs, _Rule.LOWER, group, R, None, event)
+        if found is not None and not held and path_guard(found, R, None):  # DECISIONS D330 (1): the path guard
+            held = [_table_hold(R, event, event)]
+        return _row(Tag.LOWER, [*row.witnesses, *held]) if held else row
     witnesses, failed = _lower_reach(exam_class, group, R, session, event)
-    if exam_class is catalogue.EusClass.STOMA:
-        held, approach_failed = _lower_approach(group, R, session, event)
-        witnesses += held
-        failed = failed or approach_failed
-    return _row(Tag.LOWER, witnesses, failed)
+    route: list[HeldFact] = []
+    route_failed = False
+    if found is None:
+        route = [_table_hold(R, session, event)]
+    elif found.route is Approach.TRANSANAL:
+        route, route_failed = _anus_route(found.needs, _Rule.LOWER, group, R, session, event)
+    elif found.route is Approach.THROUGH_STOMA:
+        route, route_failed = _lower_approach(group, R, session, event)
+    if found is not None and not route and path_guard(found, R, session):  # DECISIONS D330 (1): the path guard
+        route = [_table_hold(R, session, event)]
+    return _row(Tag.LOWER, [*witnesses, *route], failed or route_failed)
 
 
 def _lower_reach(exam_class: catalogue.EusClass, group: Sequence[Kind], R: FactSet, session: Id,
@@ -1218,15 +1278,43 @@ def _lower_reach(exam_class: catalogue.EusClass, group: Sequence[Kind], R: FactS
     return [], False
 
 
+def _lower_colonic(R: FactSet, session: Id, event: Id) -> list[HeldFact]:
+    """DECISIONS D325 (2) (round r3's third repair; the int5 integrator's Q1, D324 (5)'s range): LOWER's stoma class -
+    44406 and 44407, the EUS colonoscopy codes through a stoma, inside 44388-44408 - needs an established COLONIC route
+    too (``colonic_route``: the anatomy may not leave the colon gone - DECISIONS D327 (1),
+    ``whole_colon_absent_possible`` -, and the stoma established in the colon or a reached point at or past the cecum
+    supported), beside the approach established through_stoma and a stoma entry established. Met: nothing. Not met
+    while the reach is open and may lie at or past the cecum (a reached point not established that may be one of
+    AT_OR_PAST_CECUM, or no reach filed) and the anatomy may not leave the colon gone: nothing here - LOWER's own reach
+    question (``_lower_reach``) already holds the row, and a true answer that the scope reached the cecum releases it,
+    never one that it reached the ileum, the valve or the stoma. Otherwise the class's own hold for its route
+    (procedure, RANK row 8, coding_rule:lower, about the session's anatomy: the hold the class gives a stoma route with
+    no stoma entry, so its words are the class's, D320 (i)): a reach to the stoma, the small bowel or the ileocecal
+    valve alone never completes a through-stoma colonoscopy, nor does any reach where no colon may remain. Every 9.4
+    weakening only keeps it held (the route reads supported facts, the absent readings only widen, an open reach is
+    LOWER's question)."""
+    if colonic_route(R, session):
+        return []
+    if not whole_colon_absent_possible(R):
+        reached = facts_.members(R, session, _A.REACHED)
+        if not reached or any(not facts_.established(member)
+                              and any(facts_.possibly(member, point) for point in AT_OR_PAST_CECUM)
+                              for member in reached):
+            return []
+    return [_held(rq.fact_key(_PROCEDURE.fact), _PROCEDURE.rank, _Q, _A.TYPE, session, None,
+                  questions.coding_rule(_Rule.LOWER), _anchor(R, event))]
+
+
 def _lower_approach(group: Sequence[Kind], R: FactSet, session: Id, event: Id) -> tuple[list[HeldFact], bool]:
     """The stoma class's approach (D225 P5; module docstring): supported through_stoma beside a supported anatomy entry
-    of type stoma is T; another approach supported is the class explanation naming it (F, RANK row 8); through_stoma
-    denied with no approach supported the examination-class explanation (F, extent: question Q6); through_stoma
-    supported with no stoma entry, or an approach not established, the approach question (U, RANK row 8)."""
+    of type stoma is T - DECISIONS D325 (2): once the route is colonic (``_lower_colonic``, else the class's route
+    hold); another approach supported is the class explanation naming it (F, RANK row 8); through_stoma denied with no
+    approach supported the examination-class explanation (F, extent: question Q6); through_stoma supported with no stoma
+    entry, or an approach not established, the approach question (U, RANK row 8)."""
     approach = _fact(R, session, _A.APPROACH)
     if facts_.holds(approach, Approach.THROUGH_STOMA):
         if any(facts_.holds(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) for entry in R.anatomy):
-            return [], False
+            return _lower_colonic(R, session, event), False
         return [_held(rq.fact_key(_PROCEDURE.fact), _PROCEDURE.rank, _Q, _A.TYPE, session, None,
                       questions.coding_rule(_Rule.LOWER), _anchor(R, event))], False
     if approach.result is Result.SUPPORTED and isinstance(approach.value, Approach):  # misfit: named (P5)
@@ -1235,6 +1323,844 @@ def _lower_approach(group: Sequence[Kind], R: FactSet, session: Id, event: Id) -
         return [_fails(_EXTENT, True, _A.APPROACH, session, approach, _Rule.LOWER, R, event)], True
     return [_open(approach, _PROCEDURE, _A.APPROACH, session, event, group, R,
                   questions.coding_rule(_Rule.LOWER))], False
+
+
+# --- the lower-GI route table (DECISIONS D328 (1); D310 (1), D225 P5, D312 (5), D324 (5), D325 (2), D327 (1)) ----------
+# A billing table (D306 keeps billing tables as code): catalogue.LOWER_ROUTES declares, for EVERY lower-GI endoscopy
+# code of the catalogue (catalogue.lower_gi), its route - per anus, through a stoma, through a pouch - and the anatomy
+# it needs - a colon to traverse, a rectum and sigmoid, a colonic stoma, an ileal stoma, a pouch -, and a code is READY
+# only when the record establishes its route and nothing filed contradicts the anatomy it needs, read fail-closed. The
+# rounds before added the route rules family by family (the colonoscopy through a stoma, D310 (1); through the anus,
+# D325 (2); each found by another refutation), so D328 (1) rules one table and one reading of it, dispatched on the
+# code's row (``_row_lower_route``; the lower EUS codes' own row, ``_row_lower``):
+# - per anus (``_anus_route``, every per-anus family alike: the colonoscopy, its EUS codes 45391 and 45392, the
+#   sigmoidoscopy and its EUS codes 45341 and 45342): an approach established through a stoma is the class's
+#   explanation; an entry that may be an ileal pouch, or an approach established or possible through a pouch, is the
+#   table's own hold (``pouch_possible``); for the colonoscopy family an anatomy that may leave no colon is the table's
+#   own hold too (``no_colon_possible``: D325 (2), D327 (1) - a small-bowel reach completes a colonoscopy only when a
+#   colon remains); a stoma that may exist asks the approach (``stoma_possible``, D312 (5)). There is no rectum-absent
+#   arm: a sigmoidoscopy after a low anterior resection stays as int6 decides it.
+# - through a stoma: the colonoscopy family needs a colonic stoma - the approach supported through_stoma, a stoma entry
+#   established and a colonic route (``colonic_route``: D324 (5), D325 (2), D327 (1); LOWER's stoma class, 44406 and
+#   44407, reads the same need through ``_lower_approach`` and ``_lower_colonic``); the ileoscopy through a stoma
+#   (44380-44384) needs an ileal stoma, its route the enteroscopy class's own (engine/classes: the approach and the
+#   entry passed through), and nothing filed may make that stoma colonic (``colonic_stoma_possible``).
+# - through a pouch (44385, 44386): a pouch, which the enteroscopy class's route establishes (the entry passed through
+#   established an ileal pouch: engine/classes) - nothing more here.
+# A lower-GI code the table declares no row for holds with the table's own hold. Before the table (int2) the two
+# colonoscopy ranges' requirement rows were row for row the same, so a through-stoma code went READY on any colonoscopy
+# whose act was established (D310: the gap is MAIN's studio/gi too). The colonoscopy family's codes of each route:
+
+
+def _route_of(code: int) -> Approach | None:
+    found = catalogue.LOWER_ROUTES.get(code)
+    return found.route if found is not None else None
+
+
+STOMA_ROUTE_CODES: frozenset[int] = frozenset(
+    code for code, row in CODES.items()
+    if row.family is SessionKind.COLONOSCOPY and _route_of(code) is Approach.THROUGH_STOMA)
+ANUS_ROUTE_CODES: frozenset[int] = frozenset(
+    code for code, row in CODES.items()
+    if row.family is SessionKind.COLONOSCOPY and _route_of(code) is Approach.TRANSANAL)
+# DECISIONS D324 (5) (round r3's repair: L6-2, R2E-STOMA-ORGAN), two more columns of the same billing table, each an
+# enumeration of engine/anatomy's own regions and containment (never a list of words):
+# - the COLONIC REACH: the reached points of the colon (anatomy.Region.COLON: the colon, its sides and segments, the
+#   cecum, the appendiceal orifice and the ileocecal valve, to the rectosigmoid) - never the ileum or the small bowel
+#   (an ileal or small-bowel reach alone never completes a through-stoma colonoscopy: through an ileostomy it may never
+#   have entered a colon), nor the rectum or the anal canal;
+# - the organs of a LOWER-TRACT stoma: every landmark that is, holds or lies within the colon or the ileum
+#   (anatomy.compatible: the colon and its segments, the ileum and its terminal parts, the small bowel that holds the
+#   ileum) - a colostomy or an ileostomy, the only stomas a colonoscope passes; a stoma of any other placed organ (a
+#   gastrostomy, an esophagostomy, a duodenostomy, a jejunostomy) opens no colonoscopy route.
+COLONIC_REACH: frozenset[Extent] = frozenset(
+    extent for extent in Extent if anatomy.region(extent) is anatomy.Region.COLON)
+# DECISIONS D325 (2) (L6B-1, high: a scope through a loop ileostomy's efferent limb to the valve gave 44389 READY): the
+# colonic reach THROUGH A STOMA is a point at or past the cecum - every point of the colon but the ileocecal valve. The
+# valve is the ileum's own opening into the colon: from an ileal stoma, or one of an organ not established, it is
+# reached before any colon, so it never counts alone; it counts only from a stoma established in the colon, where the
+# organ arm of ``colonic_route`` already makes the route colonic whatever the reach (``_colonic_organ``).
+AT_OR_PAST_CECUM: frozenset[Extent] = frozenset(
+    extent for extent in COLONIC_REACH if extent is not Extent.ILEOCECAL_VALVE)
+LOWER_STOMA_ORGANS: frozenset[Landmark] = frozenset(
+    landmark for landmark in Landmark
+    if anatomy.compatible(landmark, Landmark.COLON) or anatomy.compatible(landmark, Landmark.ILEUM))
+# The landmarks that name no placeable organ (anatomy.UNPLACED, anatomy.ALTERED: other, an anastomosis, a stoma, a
+# pouch): an organ filed so leaves every organ open.
+_NO_ORGAN: frozenset[Landmark] = anatomy.UNPLACED | anatomy.ALTERED
+
+
+def _may_be(found: Fact, value: AnatomyType | Landmark | AnastomosisSubtype | Approach | Id) -> bool:
+    """Whether an anatomy entry's ``found`` may hold ``value``, read fail-closed for a closure that only HOLDS (D324
+    (5)): facts.possibly (supported at it; not established, its claimed value, a reading, a side, an unrejected
+    control's value, an open denial; a silent slot), or any established negation - an established negation never
+    rules a value out here: it names no value of its own, and the fact pass has no negated form for an entry's type
+    and no control for its negated organ (contract/claims.py), so a negation is read to hold only, never to release.
+    Only a fact SUPPORTED at another value rules ``value`` out; every 9.4 weakening only widens it. DECISIONS D327 (1)
+    reads an entry's subtype so too (``ileum_below_colon_possible``)."""
+    return facts_.possibly(found, value) or found.result is Result.NEGATED
+
+
+def colon_absent_possible(R: FactSet, entry: Id) -> bool:
+    """DECISIONS D324 (5): whether anatomy entry ``entry`` may file the colon AS A WHOLE surgically absent - its type
+    may be surgically_absent and its organ may be the colon itself (``_may_be``: a type or organ pass 2 never
+    established, as a surgically absent organ no reached point names is never claimed, reads its claimed value). A
+    segment filed absent (a sigmoid colectomy, a right hemicolectomy: organ supported at the segment, or claimed so) is
+    no absent colon, and a type or organ SUPPORTED otherwise rules the entry out; an established negation never does
+    (``_may_be``: read to hold only)."""
+    return (_may_be(_fact(R, entry, _A.TYPE), AnatomyType.SURGICALLY_ABSENT)
+            and _may_be(_fact(R, entry, _A.ORGAN), Landmark.COLON))
+
+
+# DECISIONS D327 (1) (round r3's repair of int6's residual: the rules lane's Q1, v8, v9 and v10), two more columns of
+# the same billing table, each an enumeration of members (never a list of words), read beside D324 (5)'s colon filed
+# absent as a whole:
+# - the colon's SEGMENTS, the anatomy table's (engine/anatomy's Region.COLON): the cecum and the ascending, transverse,
+#   descending and sigmoid colon. The table's other colon landmarks are the colon itself, its four sides (the right,
+#   left, proximal and distal colon) and the points within or between segments - the appendiceal orifice and the
+#   ileocecal valve in the cecum; the hepatic and splenic flexures and the rectosigmoid, where two segments meet. A side
+#   counts as the segments it holds (anatomy.contains: the right colon the cecum and the ascending colon, the left colon
+#   the descending and the sigmoid colon, the proximal colon the right colon's and the transverse colon, the distal
+#   colon the left colon's), the colon as all five, a point as none. The four kinds split Region.COLON completely (the
+#   tests pin it); a colon landmark the table gains is no segment here until it is classified, so it is never needed
+#   for the segments to cover the colon - it can only ever add a hold.
+# - the ANASTOMOSIS SUBTYPES that join the ileum BELOW the colon: an ileorectal anastomosis (after a total abdominal
+#   colectomy) and an ileoanal one (after a proctocolectomy) - beside either no colon remains. The subtypes that leave
+#   the colon as before are the ones listed, and ILEUM_BELOW_COLON is the rest, so a subtype the enumeration gains holds
+#   until it is classified: those joining a colon that remains (ileocolic, a right hemicolectomy; colocolic, a
+#   segmental colectomy; colorectal and coloanal, a sigmoid, Hartmann or anterior resection) and those of the upper
+#   tract, the bile duct and the pancreas, with other, which say nothing of the colon.
+COLON_SEGMENTS: frozenset[Landmark] = frozenset({
+    Landmark.CECUM, Landmark.ASCENDING_COLON, Landmark.TRANSVERSE_COLON, Landmark.DESCENDING_COLON,
+    Landmark.SIGMOID_COLON})
+# Each place whose absence files a segment absent -> the segments it is or holds (a segment itself; a side, its
+# segments; the colon, all five). A place in no such row (a point, an organ outside the colon) files none.
+_SEGMENTS_OF: Mapping[Landmark, frozenset[Landmark]] = MappingProxyType({
+    place: frozenset(segment for segment in COLON_SEGMENTS if place is segment or anatomy.contains(place, segment))
+    for place in Landmark
+    if any(place is segment or anatomy.contains(place, segment) for segment in COLON_SEGMENTS)})
+_COLON_REMAINS: frozenset[AnastomosisSubtype] = frozenset({
+    AnastomosisSubtype.ILEOCOLIC, AnastomosisSubtype.COLOCOLIC, AnastomosisSubtype.COLORECTAL,
+    AnastomosisSubtype.COLOANAL})
+_NOT_OF_THE_COLON: frozenset[AnastomosisSubtype] = frozenset({
+    AnastomosisSubtype.GASTROJEJUNAL, AnastomosisSubtype.GASTRODUODENAL, AnastomosisSubtype.ESOPHAGOJEJUNAL,
+    AnastomosisSubtype.ESOPHAGOGASTRIC, AnastomosisSubtype.HEPATICOJEJUNAL, AnastomosisSubtype.CHOLEDOCHODUODENAL,
+    AnastomosisSubtype.PANCREATICOJEJUNAL, AnastomosisSubtype.OTHER})
+ILEUM_BELOW_COLON: frozenset[AnastomosisSubtype] = frozenset(
+    subtype for subtype in AnastomosisSubtype if subtype not in _COLON_REMAINS | _NOT_OF_THE_COLON)
+# DECISIONS D328's addendum (rules4 Q2), fail-closed: when both sides of the colon may be absent, the transverse colon may
+# be absent too, so the sides cover the colon - the right colon's segments and the left colon's (anatomy.contains: the
+# cecum and the ascending colon; the descending and the sigmoid colon), each side filed as the side or as its segments
+# (a side counts as its segments: D327 (1)). Every cover of the five segments covers both sides.
+_BOTH_SIDES: frozenset[Landmark] = _SEGMENTS_OF[Landmark.RIGHT_COLON] | _SEGMENTS_OF[Landmark.LEFT_COLON]
+# DECISIONS D328's addendum (rules4 Q3): an anastomosis's JOINS are read as well as its subtype. The places of the small
+# bowel (anatomy.Region.SMALL_BOWEL: the jejunum, the ileum and its terminal parts, the small bowel) and the places below
+# the colon (Region.RECTUM and Region.ANUS: the rectum, the anal canal), each with the landmarks that name no placeable
+# organ (_NO_ORGAN: other, an anastomosis, a stoma, a pouch - an ileal pouch's own landmark), which may be either: an
+# anastomosis joining one to the other leaves no colon between them. Computed from engine/anatomy's regions.
+_SMALL_BOWEL_PLACES: frozenset[Landmark] = frozenset(
+    landmark for landmark in Landmark if anatomy.region(landmark) is anatomy.Region.SMALL_BOWEL) | _NO_ORGAN
+_BELOW_COLON_PLACES: frozenset[Landmark] = frozenset(
+    landmark for landmark in Landmark
+    if anatomy.region(landmark) in (anatomy.Region.RECTUM, anatomy.Region.ANUS)) | _NO_ORGAN
+
+
+# DECISIONS D330 (1) (R5R-6, closed with the guard, by its principle): the two ends each anastomosis subtype names (every
+# subtype but OTHER, which names another pair) - the places of the regions its name joins (engine/anatomy's regions;
+# the ileum with the landmarks compatible with it, the jejunum alone of the small bowel): a joins member naming no
+# placeable organ is read as one of its subtype's own ends.
+def _region_places(*regions: anatomy.Region) -> frozenset[Landmark]:
+    return frozenset(landmark for landmark in Landmark if anatomy.region(landmark) in regions)
+
+
+_ILEAL_ENDS: frozenset[Landmark] = frozenset(
+    landmark for landmark in Landmark if anatomy.compatible(landmark, Landmark.ILEUM))
+_COLON_ENDS: frozenset[Landmark] = _region_places(anatomy.Region.COLON)
+_JEJUNUM: frozenset[Landmark] = frozenset({Landmark.JEJUNUM})
+SUBTYPE_ENDS: Mapping[AnastomosisSubtype, frozenset[Landmark]] = MappingProxyType({
+    AnastomosisSubtype.ILEOCOLIC: _ILEAL_ENDS | _COLON_ENDS,
+    AnastomosisSubtype.COLOCOLIC: _COLON_ENDS,
+    AnastomosisSubtype.COLORECTAL: _COLON_ENDS | _region_places(anatomy.Region.RECTUM),
+    AnastomosisSubtype.COLOANAL: _COLON_ENDS | _region_places(anatomy.Region.ANUS),
+    AnastomosisSubtype.ILEORECTAL: _ILEAL_ENDS | _region_places(anatomy.Region.RECTUM),
+    AnastomosisSubtype.ILEOANAL: _ILEAL_ENDS | _region_places(anatomy.Region.ANUS),
+    AnastomosisSubtype.GASTROJEJUNAL: _region_places(anatomy.Region.STOMACH) | _JEJUNUM,
+    AnastomosisSubtype.GASTRODUODENAL: _region_places(anatomy.Region.STOMACH, anatomy.Region.DUODENUM),
+    AnastomosisSubtype.ESOPHAGOJEJUNAL: _region_places(anatomy.Region.ESOPHAGUS) | _JEJUNUM,
+    AnastomosisSubtype.ESOPHAGOGASTRIC: _region_places(anatomy.Region.ESOPHAGUS, anatomy.Region.STOMACH),
+    AnastomosisSubtype.HEPATICOJEJUNAL: _region_places(anatomy.Region.BILIARY, anatomy.Region.LIVER) | _JEJUNUM,
+    AnastomosisSubtype.CHOLEDOCHODUODENAL: _region_places(anatomy.Region.BILIARY, anatomy.Region.DUODENUM),
+    AnastomosisSubtype.PANCREATICOJEJUNAL: _region_places(anatomy.Region.PANCREAS) | _JEJUNUM,
+})
+
+
+def _absent_readings(R: FactSet, entry: Id) -> frozenset[frozenset[Landmark]]:
+    """DECISIONS D327 (1): each set of colon segments one reading of anatomy entry ``entry`` may file surgically absent
+    - only the empty set unless its type may be surgically_absent; else, for every place its organ may be (``_may_be``:
+    its supported value; not established, its claimed value, a reading, a side or an unrejected control's value; every
+    place for a silent organ, an open denial or an established negation), the segments that place is or holds
+    (``_SEGMENTS_OF``), and the empty set when no such place is possible. Read fail-closed as ``colon_absent_possible``
+    reads its entry: only a fact SUPPORTED at another value rules a reading out. Every 9.4 weakening only adds
+    readings."""
+    if not _may_be(_fact(R, entry, _A.TYPE), AnatomyType.SURGICALLY_ABSENT):
+        return frozenset({frozenset()})
+    organ = _fact(R, entry, _A.ORGAN)
+    readings = frozenset(segments for place, segments in _SEGMENTS_OF.items() if _may_be(organ, place))
+    return readings or frozenset({frozenset()})
+
+
+def segments_absent_possible(R: FactSet) -> bool:
+    """DECISIONS D327 (1) (v10): whether the anatomy entries that may be surgically absent may together cover every
+    segment of the colon - the colon filed absent segment by segment, or side by side: whether ONE reading of all the
+    entries together (each entry one of its readings, ``_absent_readings``) files every segment of COLON_SEGMENTS
+    absent - or, DECISIONS D328's addendum (rules4 Q2, fail-closed), both sides of the colon (``_BOTH_SIDES``: the right
+    colon's segments and the left colon's), beside which the transverse colon may be absent too. Computed over the
+    segment sets the entries can reach so far (at most 2 ** 5 of them). So an entry that may be either of two sides
+    counts as the one that completes the cover, but never as both at once: beside the transverse colon, an entry
+    contradicted between the right and the left colon leaves a colon in every reading, and the code is read as before.
+    Four segments of five that keep a segment of a side, a side alone, or a side beside the other side's one segment (the
+    right colon and the sigmoid) leave a colon that may remain: False. Every 9.4 weakening only adds readings, so none
+    turns it False."""
+    reached: frozenset[frozenset[Landmark]] = frozenset({frozenset()})
+    for entry in R.anatomy:
+        reached = frozenset(so_far | segments for so_far in reached for segments in _absent_readings(R, entry))
+    return any(so_far >= _BOTH_SIDES for so_far in reached)
+
+
+def ileum_below_colon_possible(R: FactSet, entry: Id) -> bool:
+    """DECISIONS D327 (1) (v8, v9): whether anatomy entry ``entry``'s subtype may be one that joins the ileum below the
+    colon (ILEUM_BELOW_COLON: ileorectal, ileoanal) - ``_may_be`` over a subtype pass 1 claimed: supported at it, its
+    claimed value, a reading, a side, an unrejected control's value (the subtype's control names its sibling, and
+    ileorectal and ileoanal are each other's), an open denial, or any established negation. Never a SILENT subtype: it
+    names no anastomosis. DECISIONS D328's addendum (rules4 Q3): OR its joins may join the ileum to the rectum or the
+    anus (``joins_ileum_below_colon_possible``) - so only an anastomosis whose subtype AND joins pass 1 both left silent
+    stays as int6 decides it (the addendum's recorded residual; the common right-hemicolectomy filing names an ileocolic
+    subtype and joins the ileum to the colon). The entry's type is not read: a subtype or a joins list names an
+    anastomosis whatever type was filed. Every 9.4 weakening keeps a claimed subtype claimed (none makes it silent) and
+    only widens what it and each member of the joins may be."""
+    subtype = _fact(R, entry, _A.SUBTYPE)
+    return ((not facts_.silent(subtype) and any(_may_be(subtype, value) for value in ILEUM_BELOW_COLON))
+            or joins_ileum_below_colon_possible(R, entry))
+
+
+def joins_ileum_below_colon_possible(R: FactSet, entry: Id) -> bool:
+    """DECISIONS D328's addendum (rules4 Q3): whether anatomy entry ``entry``'s JOINS may join the small bowel - the
+    ileum - to the rectum or the anus, read fail-closed over the members pass 1 filed (``_may_be`` over each: its
+    supported place; not established, its claimed value, a reading, a side, an unrejected control's value, an open
+    denial; any established negation; a landmark naming no placeable organ may be either end): one member that may lie
+    in the small bowel (_SMALL_BOWEL_PLACES) beside ANOTHER that may lie below the colon (_BELOW_COLON_PLACES). An empty
+    list (silent) joins nothing here. Two members that are each the colon's or the upper tract's (an ileocolic
+    anastomosis joins the ileum to the colon; a colorectal one the colon to the rectum) never hold. Every 9.4 weakening of
+    a member only widens what it may be, and 9.4 deletes no member of this list (test_properties.LISTS), so none turns
+    it False.
+
+    DECISIONS D330 (1) (c) (R5R-4, rules5's own regression): a list of ONE member names one organ, the anastomosis of
+    that organ to itself (an ileo-ileal or jejuno-jejunal join filed once), so it holds only where that member may lie
+    below the colon - the rectum, the anal canal, or a landmark naming no placeable organ, which may be either end. A
+    small-bowel member alone is no ileum joined below the colon; the path guard's harmless set decides such an entry
+    (engine/catalogue.HARMLESS). An IRA or an IPAA is still held by its subtype or by a list of two members.
+
+    DECISIONS D330 (1) (R5R-6, closed with the guard; its class rule by principle): where the entry's subtype is filed
+    and every subtype it may be names its two ends (SUBTYPE_ENDS: every subtype but OTHER), a member naming no placeable
+    organ (a colonic J-pouch's pouch, a gastric bypass's pouch) is read as one of those ends - never as the small bowel
+    or below the colon unless an end is: a coloanal anastomosis joining the pouch and the anal canal, or a gastrojejunal
+    one joining the pouch and the jejunum, joins no ileum below the colon. A silent subtype, or one that may be OTHER,
+    reads such a member as before (either end). Every 9.4 weakening of the subtype keeps it filed and only widens what
+    it may be, so it only widens the ends a member may be, or turns the reading off."""
+    joins = facts_.members(R, entry, _A.JOINS)
+    subtype = _fact(R, entry, _A.SUBTYPE)
+    named = [value for value in AnastomosisSubtype if _may_be(subtype, value)]
+    ends = (frozenset().union(*(SUBTYPE_ENDS[value] for value in named))
+            if not facts_.silent(subtype) and named and all(value in SUBTYPE_ENDS for value in named) else None)
+    places = []
+    for member in joins:
+        found = frozenset(place for place in Landmark if _may_be(member, place))
+        places.append((found - _NO_ORGAN) | ends if ends is not None and found & _NO_ORGAN else found)
+    small = [bool(found & _SMALL_BOWEL_PLACES) for found in places]
+    below = [bool(found & _BELOW_COLON_PLACES) for found in places]
+    if len(joins) == 1:
+        return below[0]
+    return any(small[one] and below[other] for one in range(len(joins)) for other in range(len(joins)) if one != other)
+
+
+def whole_colon_absent_possible(R: FactSet) -> bool:
+    """D324 (5) and DECISIONS D327 (1): whether the record's anatomy may leave no colon at all - an entry may file the
+    colon as a whole surgically absent (``colon_absent_possible``), the entries that may be surgically absent may cover
+    every segment of the colon (``segments_absent_possible``), or an entry's subtype may join the ileum below the colon
+    (``ileum_below_colon_possible``). The route table reads it wherever D324 (5) read the first case alone - the
+    through-stoma codes' colonic route (``colonic_route``, its witness, LOWER's ``_lower_colonic``) and the anus route's
+    colon to traverse (``no_colon_possible``) - so each case holds 44388-44408 and 45378-45398 with the table's own
+    hold. A colon that may remain - a right hemicolectomy with an ileocolic anastomosis, a sigmoid or Hartmann
+    resection, a segmental colectomy - meets none of them, and the code is read exactly as before. Every 9.4 weakening
+    only widens each case, so none turns it False."""
+    return (any(colon_absent_possible(R, entry) or ileum_below_colon_possible(R, entry) for entry in R.anatomy)
+            or segments_absent_possible(R))
+
+
+def _colonic_organ(R: FactSet, entry: Id) -> bool:
+    """D324 (5)'s first arm for one entry: its type supported stoma and its organ SUPPORTED at a colon place
+    (anatomy.Region.COLON) - a colostomy the record establishes. The fact pass never claims a stoma's organ
+    (contract/claims.py has only the surgically-absent forms for an organ), so on a fact pass alone this arm reads an
+    established organ only where an answer or a later request supplies one; an organ not established never meets it."""
+    organ = _fact(R, entry, _A.ORGAN)
+    return (facts_.holds(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) and organ.result is Result.SUPPORTED
+            and isinstance(organ.value, Landmark) and anatomy.region(organ.value) is anatomy.Region.COLON)
+
+
+def colonic_route(R: FactSet, session: Id) -> bool:
+    """DECISIONS D324 (5) (L6-2, high; also on int3): whether a colonoscopy through a stoma in ``session`` - its
+    approach supported through_stoma - has a COLONIC route, which a through-stoma code (44388-44408: DECISIONS D325
+    (2), 44406 and 44407 included, ``_lower_colonic``) needs besides the approach and a stoma entry established. Both
+    hold:
+    - the colon as a whole is not filed surgically absent: no anatomy entry may be a surgically absent colon
+      (``colon_absent_possible``, read fail-closed: an entry pass 1 filed so holds whatever pass 2 left open) - and,
+      DECISIONS D327 (1), the anatomy may not leave the colon gone otherwise: by its segments or sides, or beside an
+      anastomosis joining the ileum below the colon (``whole_colon_absent_possible``);
+    - the stoma's organ is a colon segment (every entry that may be a stoma - facts.possibly over its type - a stoma
+      established at a colon place: ``_colonic_organ``), or the record establishes a colonic reach through the stoma
+      (a reached point of the session SUPPORTED at or past the cecum, AT_OR_PAST_CECUM; the session's approach is
+      through the stoma, so its reach is). DECISIONS D325 (2) (L6B-1): the ileocecal valve counts only from a stoma
+      established in the colon (the first arm, whatever the reach); from an ileal stoma or one of an organ not
+      established only a point at or past the cecum counts - the valve is reached there before any colon.
+    An ileal or small-bowel reach alone, or the valve alone, meets neither arm (the class rule: a small-bowel reach
+    completes a colonoscopy only when a colon remains and was traversed), so a scope passed through an end ileostomy
+    after a proctocolectomy into the ileum, or through a loop ileostomy's efferent limb to the valve, holds the
+    through-stoma codes - an ileoscopy through a stoma (44380-44384) - for the coder. Read so, every 9.4 weakening only
+    turns it False: the arms read supported facts only, and the absent readings only widen."""
+    if whole_colon_absent_possible(R):
+        return False
+    if any(member.result is Result.SUPPORTED and member.value in AT_OR_PAST_CECUM
+           for member in facts_.members(R, session, _A.REACHED)):
+        return True
+    stomas = [entry for entry in R.anatomy if facts_.possibly(_fact(R, entry, _A.TYPE), AnatomyType.STOMA)]
+    return bool(stomas) and all(_colonic_organ(R, entry) for entry in stomas)
+
+
+def _colonic_route_witness(R: FactSet, session: Id, event: Id, group: Sequence[Kind]) -> HeldFact | None:
+    """D324 (5): the route row's witness when ``colonic_route`` is not met (None when it is), as HO-8 holds every fact
+    the row rests on and the planner reads each: the route table's own hold (``_route_hold``, the coder's) when an
+    entry may file the colon surgically absent - or, DECISIONS D327 (1), the anatomy may leave the colon gone otherwise
+    (``whole_colon_absent_possible``): no answer establishes an anatomy entry's type, organ or subtype (the route's
+    facts have no question template) - or when the reach is established and holds no colonic point (an ileal or
+    small-bowel reach alone, or - DECISIONS D325 (2) - the ileocecal valve alone: no reading of it is colonic through
+    the stoma); otherwise the reach the route rests on, asked as COLFULL's extent row asks it (RANK row 14, its reading's
+    cause; a contradicted one at RANK 1): a reached point not established that may lie at or past the cecum
+    (AT_OR_PAST_CECUM), or an empty reach list - a true answer that the scope reached the cecum through the stoma makes
+    the route colonic, so the question it serves can release the code, and a false one never does; an open point that
+    may only be the valve is never asked (its true answer would not make the route colonic: L6B-1's question path)."""
+    if colonic_route(R, session):
+        return None
+    if not whole_colon_absent_possible(R):
+        reached = facts_.members(R, session, _A.REACHED)
+        open_ = next((member for member in reached if not facts_.established(member)
+                      and any(facts_.possibly(member, point) for point in AT_OR_PAST_CECUM)), None)
+        if open_ is not None or not reached:
+            return _open(open_ if open_ is not None else facts_.SILENT, _EXTENT, _A.REACHED, session, event, group, R)
+    return _route_hold(R, session, event)
+
+
+def lower_stoma_possible(R: FactSet, entry: Id) -> bool:
+    """DECISIONS D324 (5) (R2E-STOMA-ORGAN): whether anatomy entry ``entry``'s organ leaves it possibly a stoma of the
+    lower tract - a colon or an ileum stoma, the only kind a colonoscope may pass. Only an organ SUPPORTED at a placed
+    landmark outside LOWER_STOMA_ORGANS rules that out (a gastrostomy's stomach). An organ not established (unresolved -
+    the fact pass never claims a stoma's organ -, contradicted, unknown, silent) leaves it open, as does an established
+    negation (it names no organ, so the others stay possible) and an organ filed as no placeable landmark (_NO_ORGAN).
+    Every 9.4 weakening only opens it."""
+    organ = _fact(R, entry, _A.ORGAN)
+    if organ.result is not Result.SUPPORTED or not isinstance(organ.value, Landmark) or organ.value in _NO_ORGAN:
+        return True
+    return organ.value in LOWER_STOMA_ORGANS
+
+
+def stoma_possible(R: FactSet, session: Id) -> bool:
+    """D310 (1)'s "possible" for a colonoscopy through the anus, closed by DECISIONS D312 (5) with F.11 (3) as one rule
+    (round r3's build): a stoma route is possible unless the session's approach is ESTABLISHED as another route
+    (``_route_closed``: supported at another approach, or through_stoma itself denied), and then exactly when a stoma
+    is possible - an anatomy entry's type supported or possible as a stoma (facts.possibly: supported, its claimed
+    value or a reading of it, unresolved, contradicted with it a side, an open denial, silent), OR the approach's own
+    through_stoma reading possible (``_stoma_reading``: pass 1's claim, a doubt's reading, a contradiction's side or an
+    unrejected control's value names it, an open denial leaves every route open, or an established denial of another
+    route leaves it among the others). A stoma route needs a stoma or a reading of one, so a silent approach on a
+    document whose anatomy names no entry that may be a stoma leaves 45378-45398 as int2 read them (D114).
+
+    The checker's finding (5) (D312): an established stoma entry beside an approach only unresolved as transanal let
+    45378-45398 go READY - the reading before read the approach by facts.possibly, which keeps an unresolved fact's
+    claimed value and so ruled the stoma route out on a fact pass 2 never established. Read so, every 9.4 weakening
+    only opens a closed route (an established approach made unresolved, a doubt added) or keeps what a member names, so
+    no weakening turns it False (P-MONO); only an established approach closes it.
+
+    DECISIONS D324 (5) (R2E-STOMA-ORGAN): the entry clause opens a route only for an entry that may be a stoma of the
+    lower tract (``lower_stoma_possible``: a colon or ileum stoma, or one whose organ is not established) - a gastrostomy
+    established at the stomach beside a colonoscopy no longer holds 45378-45398. Its organ weakened opens it again."""
+    approach = _fact(R, session, _A.APPROACH)
+    if _route_closed(approach):
+        return False
+    if _stoma_reading(approach):
+        return True
+    return any(facts_.possibly(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) and lower_stoma_possible(R, entry)
+               for entry in R.anatomy)
+
+
+def _route_closed(approach: Fact) -> bool:
+    """DECISIONS D312 (5): the approach ESTABLISHED as a route that is not through a stoma - supported at another
+    approach, or through_stoma denied. Anything not established (unresolved, contradicted, unknown, an open denial,
+    silent) leaves the route open, and an established denial of another approach (the scope did not enter through the
+    anus) names no route at all, so it leaves it open too."""
+    if approach.result is Result.SUPPORTED:
+        return approach.value is not Approach.THROUGH_STOMA
+    return approach.result is Result.NEGATED and approach.value is Approach.THROUGH_STOMA
+
+
+def _stoma_reading(approach: Fact) -> bool:
+    """DECISIONS D312 (5): the approach's own through_stoma reading is possible - facts.possibly over the approach (its
+    supported value; not established, its claimed value, a reading, a side, an unrejected control's value, or an open
+    denial, which leaves every value open) for any approach pass 1 claimed (never a silent slot: it names no route, and
+    a stoma route needs a stoma), or an established denial of another approach, which leaves through_stoma among the
+    other approaches (an established negation reads as every other value of its enumeration)."""
+    if approach.result is Result.NEGATED:
+        return approach.value is not Approach.THROUGH_STOMA
+    return not facts_.silent(approach) and facts_.possibly(approach, Approach.THROUGH_STOMA)
+
+
+def ileal_pouch_possible(R: FactSet, entry: Id) -> bool:
+    """DECISIONS D325 (2) (L6B-2, high): whether anatomy entry ``entry`` may be an ileal pouch (``_may_be`` over its
+    type: supported, claimed, a reading, a side, an unrejected control's value, an open denial, silent, or any
+    established negation - read to hold only). An ileal pouch is the ileum made into a reservoir once the colon is
+    gone, so beside one no colon may remain for a scope through the anus to traverse (a pouch endoscopy is 44385/44386).
+    A gastric pouch or a Roux limb is another type (AnatomyType: catalogue.ENTEROSCOPY_CLASS_ANATOMY's distinction,
+    D141), so it is never read here."""
+    return _may_be(_fact(R, entry, _A.TYPE), AnatomyType.ILEAL_POUCH)
+
+
+def pouch_route_possible(R: FactSet, session: Id) -> bool:
+    """DECISIONS D325 (2): whether the approach of ``session`` is established, or possible, through a pouch - the
+    record names the pouch route: facts.possibly over the approach (supported through_pouch; not established, pass 1's
+    claim, a doubt's reading, a contradiction's side or an unrejected control's value names it, or an open denial,
+    which leaves every route open) for any approach pass 1 claimed. Never a silent approach (it names no route, and
+    every colonoscopy's approach may be silent), and never an ESTABLISHED negation: one of through_pouch rules the
+    route out, and one of another approach (through the stoma, per anus) names no pouch - the stoma route's reading of
+    it (``_stoma_reading``) is not this route's, as a pouch route needs a pouch named. Every 9.4 weakening keeps the
+    value it reads (as claimed, or among the options) and turns an established negation into an open denial, so none
+    turns it False."""
+    approach = _fact(R, session, _A.APPROACH)
+    return not facts_.silent(approach) and facts_.possibly(approach, Approach.THROUGH_POUCH)
+
+
+def no_colon_possible(R: FactSet, session: Id | None) -> bool:
+    """DECISIONS D325 (2) (L6B-2, high: an ileal pouch after a proctocolectomy reached per anus into the ileum gave 45380
+    READY): whether a colon may NOT remain for a colonoscopy through the anus in ``session`` - a colonoscopy code needs a
+    colon to traverse, and a small-bowel reach completes a colonoscopy only when a colon remains. True in the ruling's
+    three cases, each read fail-closed: an anatomy entry may file the whole colon surgically absent
+    (``colon_absent_possible``) - and, DECISIONS D327 (1), the anatomy may leave the colon gone otherwise: the entries
+    that may be surgically absent may cover every segment, or an entry's subtype may be ileorectal or ileoanal
+    (``whole_colon_absent_possible``, v8, v9 and v10); an entry may be an ileal pouch (``ileal_pouch_possible``); the
+    session's approach is established or possible through a pouch (``pouch_route_possible``). With ``session`` None (the
+    act's session not established) only the anatomy cases are read: they hold whatever the session, so no answer about
+    it can release the code (D312 checker S3's principle); the approach is read once the session is known. Every 9.4
+    weakening only widens each case (they read possibilities, never a value's absence), so none turns it False.
+    DECISIONS D328 (1): the table's colon arm of the colonoscopy family (``_anatomy_contradicts``) - the anatomy cases
+    beside its pouch arm, ``pouch_possible``, which every per-anus code reads."""
+    return whole_colon_absent_possible(R) or pouch_possible(R, session)
+
+
+def pouch_possible(R: FactSet, session: Id | None) -> bool:
+    """DECISIONS D328 (1) (D325 (2)'s two pouch cases, read for every per-anus code of the route table): whether an
+    anatomy entry may be an ileal pouch (``ileal_pouch_possible``) or - ``session`` known - the session's approach is
+    established or possible through a pouch (``pouch_route_possible``). An ileal pouch is the ileum made into a reservoir
+    once the colon and the rectum are gone, so beside one no colon, rectum or sigmoid may remain for a scope through the
+    anus (a pouch endoscopy is 44385/44386). With ``session`` None only the anatomy is read: it holds whatever the
+    session, so no answer about the session can release it. Every 9.4 weakening only widens each case."""
+    if any(ileal_pouch_possible(R, entry) for entry in R.anatomy):
+        return True
+    return session is not None and pouch_route_possible(R, session)
+
+
+# The landmarks of the colon (anatomy.Region.COLON): a stoma whose organ may be one of them may be a colostomy, which an
+# ileoscopy through a stoma does not pass (DECISIONS D328 (1): it needs an ileal stoma).
+_COLON_PLACES: frozenset[Landmark] = frozenset(
+    landmark for landmark in Landmark if anatomy.region(landmark) is anatomy.Region.COLON)
+
+
+def _stomas_passed(R: FactSet, session: Id | None) -> tuple[Id, ...]:
+    """The stomas ``session``'s endoscope may have entered the bowel through: every anatomy entry whose type may be a
+    stoma (facts.possibly) - only the one the session's through names when that is SUPPORTED naming an anatomy entry
+    (none when that entry cannot be a stoma: the enteroscopy class's route part then holds the code itself)."""
+    stomas = tuple(entry for entry in R.anatomy if facts_.possibly(_fact(R, entry, _A.TYPE), AnatomyType.STOMA))
+    if session is not None:
+        through = _fact(R, session, _A.THROUGH)
+        if (through.result is Result.SUPPORTED and isinstance(through.value, Id)
+                and through.value.family is IdFamily.ANATOMY):
+            return tuple(entry for entry in stomas if entry == through.value)
+    return stomas
+
+
+def colonic_stoma_possible(R: FactSet, session: Id | None) -> bool:
+    """DECISIONS D328 (1): whether a stoma ``session``'s endoscope may have passed through (``_stomas_passed``) may be a
+    COLONIC stoma by what pass 1 filed - the route table's ileoscopy through a stoma (44380-44384) needs an ileal stoma.
+    True when such an entry's organ is filed (not silent) and may be a colon place or a landmark naming no placeable
+    organ (``_may_be`` over _COLON_PLACES and _NO_ORGAN: its supported place; not established, its claimed value, a
+    reading, a side, an unrejected control's value, an open denial; any established negation). A silent organ files
+    nothing against an ileal stoma - the fact pass never claims a stoma's organ, and an ileostomy whose organ pass 1 left
+    empty stays as the enteroscopy class decides it. Every 9.4 weakening of an organ or of the through only widens it
+    (an established through weakened reads every entry that may be a stoma)."""
+    for entry in _stomas_passed(R, session):
+        organ = _fact(R, entry, _A.ORGAN)
+        if not facts_.silent(organ) and any(_may_be(organ, place) for place in _COLON_PLACES | _NO_ORGAN):
+            return True
+    return False
+
+
+# DECISIONS D330 (1) (R5R-9): the landmarks an ileal stoma's organ may be - the ileum, its parts, and the small bowel
+# that holds it (anatomy.compatible with the ileum).
+ILEAL_PLACES: frozenset[Landmark] = frozenset(
+    landmark for landmark in Landmark if anatomy.compatible(landmark, Landmark.ILEUM))
+
+
+def ileal_stoma_contradicted(R: FactSet, session: Id | None) -> bool:
+    """DECISIONS D328 (1) and D330 (1) (R5R-9): whether what is filed contradicts the ileal stoma an ileoscopy through a
+    stoma (44380-44384) needs, read fail-closed - its route's own entry, which the path guard leaves to this rule:
+    - a stoma the endoscope may have passed through may be colonic by what pass 1 filed (``colonic_stoma_possible``);
+    - such a stoma's organ is FILED (not silent) and may lie nowhere in the ileum (ILEAL_PLACES: a jejunostomy's, a
+      gastrostomy's organ) - read in the hold direction only, as pass 1 filed it; a silent organ files nothing (Q6);
+    - the session's reach is SUPPORTED at a colon point at or past the cecum (AT_OR_PAST_CECUM): the colon was traversed
+      through the stoma, so the examination is a colonoscopy through a stoma (44388/44389) - the mirror of D325 (2), held
+      whatever the organ (with ``session`` None the reach is read once the session is known).
+    Every 9.4 weakening only widens an organ or the stomas passed (never makes an organ silent), and the reach clause
+    reads supported points only, which no answer removes, so none turns it False."""
+    if colonic_stoma_possible(R, session):
+        return True
+    for entry in _stomas_passed(R, session):
+        organ = _fact(R, entry, _A.ORGAN)
+        if not facts_.silent(organ) and not any(_may_be(organ, place) for place in ILEAL_PLACES):
+            return True
+    return session is not None and any(member.result is Result.SUPPORTED and member.value in AT_OR_PAST_CECUM
+                                       for member in facts_.members(R, session, _A.REACHED))
+
+
+def _stoma_entry(R: FactSet, session: Id, event: Id, group: Sequence[Kind]) -> HeldFact:
+    """The through-stoma codes' anatomy requirement not met (no entry's type established stoma): the question on the
+    first entry whose type leaves stoma possible (its reading's cause: a reading Fable may be asked - no question
+    template in the probe, so the planner blocks it); with none, the table's own hold - no anatomy entry may be a stoma
+    (a question about the session's anatomy, coding_rule:stoma_route, as LOWER's stoma class holds a missing entry): the
+    document names no stoma, which no answer can supply (the coder's)."""
+    for entry in R.anatomy:
+        found = _fact(R, entry, _A.TYPE)
+        if facts_.possibly(found, AnatomyType.STOMA):
+            return _open(found, _PROCEDURE, _A.TYPE, entry, event, group, R, questions.coding_rule(_Rule.STOMA_ROUTE))
+    return _route_hold(R, session, event)
+
+
+def _table_hold(R: FactSet, subject: Id, event: Id) -> HeldFact:
+    """The route table's own hold (``_route_hold``) about ``subject``: the session, or the act itself where its session
+    is not established - the anatomy holds the code whatever the session, so no answer about the session can release it
+    (D312 checker S3's principle)."""
+    return _held(rq.fact_key(_PROCEDURE.fact), _PROCEDURE.rank, _Q, _A.TYPE, subject, None,
+                 questions.coding_rule(_Rule.STOMA_ROUTE), _anchor(R, event))
+
+
+def _route_hold(R: FactSet, session: Id, event: Id) -> HeldFact:
+    """The route table's own hold: a question about the session's anatomy (procedure at RANK row 8, about no fact,
+    coding_rule:stoma_route) that no answer can meet - the planner reads it ABSENT (asking's census: the route table's
+    anatomy hold with no fact), so it reaches the coder. It holds a through-stoma code when the document names no entry
+    that may be a stoma (``_stoma_entry``), and where DECISIONS D324 (5)'s colonic route is not met on facts no answer
+    can change (``_colonic_route_witness``); and - DECISIONS D325 (2) - a colonoscopy code through the anus where a colon
+    may not remain (``no_colon_possible``): the same hold and so the same words, as D320 (i) keeps the customer surface
+    unchanged. DECISIONS D327 (1)'s cases (``whole_colon_absent_possible``) hold both ranges with it too, and DECISIONS
+    D328 (1) every lower-GI code whose row the record contradicts (``_anus_route``, ``colonic_stoma_possible``) or that
+    has no row."""
+    return _table_hold(R, session, event)
+
+
+def _anatomy_contradicts(needs: catalogue.RouteAnatomy, R: FactSet, session: Id | None) -> bool:
+    """DECISIONS D328 (1): whether what the record files may contradict the anatomy a per-anus code needs, read
+    fail-closed - for every per-anus code a pouch (``pouch_possible``: an entry that may be an ileal pouch, or an
+    approach established or possible through one); for the colonoscopy family (a colon to traverse) an anatomy that may
+    leave no colon too (``no_colon_possible``: D325 (2), D327 (1)). A rectum and sigmoid has no rectum-absent arm and no
+    colon arm (D328 (1)): a sigmoidoscopy after a low anterior resection, or of the rectum an ileorectal anastomosis
+    leaves, stays as before."""
+    if needs is catalogue.RouteAnatomy.COLON:
+        return no_colon_possible(R, session)
+    return pouch_possible(R, session)
+
+
+def _anus_route(needs: catalogue.RouteAnatomy, rule: questions.Rule, group: Sequence[Kind], R: FactSet,
+                session: Id | None, event: Id) -> tuple[list[HeldFact], bool]:
+    """DECISIONS D328 (1): a per-anus code's route (the route table's Approach.TRANSANAL rows) - its witnesses, and
+    whether an established fact fails it. The record establishes the route through the anus unless the record may
+    contradict it, read fail-closed in the ruling's order:
+    - the session's approach established (supported) through a stoma: the class's explanation naming it (procedure,
+      RANK row 8, ``rule``: coding_rule:stoma_route for the colonoscopy and sigmoidoscopy families, LOWER's own for its
+      sigmoidoscopic and colonoscopic EUS classes) - F;
+    - what is filed may contradict the anatomy the code needs (``_anatomy_contradicts``: a pouch for every per-anus
+      code, a colon gone for the colonoscopy family): the table's own hold (``_route_hold``, the coder's);
+    - a stoma that may exist (``stoma_possible``, D312 (5)): the approach's question (its reading's cause; ``rule``'s
+      for an approach established otherwise, an established denial);
+    otherwise nothing (the route holds). With ``session`` None (the act's session not established: SUPPORT row 6 asks
+    it) only the anatomy is read, and it holds the code whatever the session (the table's hold about the act). Every 9.4
+    weakening only keeps it held: each case reads possibilities, never a value's absence."""
+    if session is None:
+        return ([_table_hold(R, event, event)] if _anatomy_contradicts(needs, R, None) else []), False
+    approach = _fact(R, session, _A.APPROACH)
+    if facts_.holds(approach, Approach.THROUGH_STOMA):
+        return [_fails(_PROCEDURE, True, _A.APPROACH, session, approach, rule, R, event)], True
+    if _anatomy_contradicts(needs, R, session):
+        return [_route_hold(R, session, event)], False
+    if stoma_possible(R, session):
+        return [_open(approach, _PROCEDURE, _A.APPROACH, session, event, group, R, questions.coding_rule(rule))], False
+    return [], False
+
+
+def _through_stoma_route(label: rq.Requirement | Tag, group: Sequence[Kind], R: FactSet, session: Id | None,
+                         event: Id) -> Row:
+    """The colonoscopy through a stoma (the route table's colonic-stoma rows of the colonoscopy family: DECISIONS D310
+    (1), D324 (5), D325 (2), D327 (1)). T only when the session's approach is supported through_stoma, an anatomy
+    entry's type is supported stoma and the route is colonic (``colonic_route``: no entry may file the colon surgically
+    absent, nor may the anatomy leave it gone otherwise, and the stoma's organ is a colon segment or a colonic reach
+    through it is established; else its witness, ``_colonic_route_witness``: the table's own hold, the coder's, or the
+    open reach it rests on); another approach established, or through_stoma denied, is the explanation naming the
+    approach (procedure, RANK row 8, coding_rule:stoma_route); an approach not established is the approach question (its
+    reading's cause), beside the anatomy requirement when no entry is a stoma (``_stoma_entry``). A session not
+    established is SUPPORT row 6's question (T here) - except on a document whose anatomy names no entry that may be a
+    stoma, or may leave the colon gone (``whole_colon_absent_possible``): there no session the act may be in gives a
+    colonic route, so the table's own hold about the act holds it whatever the session (the planner reads it ABSENT)."""
+    if session is None:
+        if (not any(facts_.possibly(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) for entry in R.anatomy)
+                or whole_colon_absent_possible(R)):
+            return _row(label, [_table_hold(R, event, event)])
+        return _row(label, [])
+    approach = _fact(R, session, _A.APPROACH)
+    stoma = any(facts_.holds(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) for entry in R.anatomy)
+    if facts_.holds(approach, Approach.THROUGH_STOMA):
+        if not stoma:
+            return _row(label, [_stoma_entry(R, session, event, group)])
+        witness = _colonic_route_witness(R, session, event, group)
+        return _row(label, [] if witness is None else [witness])
+    if (approach.result is Result.SUPPORTED and isinstance(approach.value, Approach)) or facts_.denied(
+            approach, Approach.THROUGH_STOMA):
+        return _row(label, [_fails(_PROCEDURE, True, _A.APPROACH, session, approach, _Rule.STOMA_ROUTE, R, event)],
+                    failed=True)
+    witnesses = [_open(approach, _PROCEDURE, _A.APPROACH, session, event, group, R,
+                       questions.coding_rule(_Rule.STOMA_ROUTE))]
+    if not stoma:
+        witnesses.append(_stoma_entry(R, session, event, group))
+    return _row(label, witnesses)
+
+
+# --- the lower-GI path guard (DECISIONS D330 (1)): fail-closed by construction ---------------------------------------
+# Four rounds each found the next post-surgical lower-GI shape a listed arm missed, so D330 (1) inverts the default: an
+# unknown shape costs a hold, never a false READY. After every arm of a route row (``_row_lower_route``, ``_row_lower``),
+# a lower-GI code - every row of catalogue.LOWER_ROUTES - is held with the table's own hold (``_table_hold``, an
+# existing reason: D320 (i)) unless EVERY anatomy entry of the document is, for that code's route, (i) the entry the
+# route itself uses (``route_entries``) or (ii) a match for a row of the ONE finite typed RULED HARMLESS SET for its
+# route family (catalogue.HARMLESS: ``harmless``); and a per-anus code's own route is the guard's too (R5R-7, R5R-8:
+# ``_anus_route_contradicted``). It only holds: it runs where the arms left the route met (or only the open reach the
+# colonic route rests on), never releases what an arm held, and reads only pass 1's anatomy entries, the session's
+# approach and through and the colon's cover - none of them askable (asking.FACT_ATTRIBUTES), so no answer lifts it
+# (D324 (4)).
+
+
+@dataclass(frozen=True, slots=True)
+class EntryValues:
+    """What an anatomy entry's fields may possibly be (``entry_values``; DECISIONS D330 (1)): the values of its type,
+    subtype and organ, and of each member of its joins list, each ``_may_be`` - its supported value; not established,
+    its claimed value, a reading, a side, an unrejected control's value; every value of its enumeration when silent, an
+    open denial or any established negation."""
+    types: frozenset[AnatomyType]
+    subtypes: frozenset[AnastomosisSubtype]
+    organs: frozenset[Landmark]
+    joins: tuple[frozenset[Landmark], ...]
+
+
+def entry_values(R: FactSet, entry: Id) -> EntryValues:
+    """``EntryValues`` of anatomy entry ``entry``: each field's possible values (``_may_be``), so a silent or unreadable
+    field may be every member of its enumeration - it matches only a row holding them all; an empty joins list has no
+    member."""
+    return EntryValues(
+        types=frozenset(value for value in AnatomyType if _may_be(_fact(R, entry, _A.TYPE), value)),
+        subtypes=frozenset(value for value in AnastomosisSubtype if _may_be(_fact(R, entry, _A.SUBTYPE), value)),
+        organs=frozenset(value for value in Landmark if _may_be(_fact(R, entry, _A.ORGAN), value)),
+        joins=tuple(frozenset(value for value in Landmark if _may_be(member, value))
+                    for member in facts_.members(R, entry, _A.JOINS)))
+
+
+def harmless_row(values: EntryValues, row: catalogue.Harmless) -> bool:
+    """DECISIONS D330 (1): whether an anatomy entry whose fields may be ``values`` matches ``row`` of the ruled harmless
+    set - every possible value of its type, subtype and organ, and of every member of its joins list, lies within the
+    row; a row with ``joins_filed`` needs a list of at least one member. Every 9.4 weakening only widens what a field may
+    be (none makes a filed field silent or deletes a joins member), so none turns a mismatch into a match."""
+    if not (values.types <= row.types and values.subtypes <= row.subtypes and values.organs <= row.organs):
+        return False
+    if row.joins_filed and not values.joins:
+        return False
+    return all(member <= row.joins for member in values.joins)
+
+
+def harmless(R: FactSet, entry: Id, needs: catalogue.RouteAnatomy) -> bool:
+    """DECISIONS D330 (1): whether anatomy entry ``entry`` is harmless for the route family ``needs`` - it matches a row
+    of catalogue.HARMLESS[needs] (``harmless_row`` over ``entry_values``), and, for every family but those of
+    catalogue.HARMLESS_ILEUM_BELOW (the pouch's), it may not join the ileum below the colon
+    (``ileum_below_colon_possible``: its subtype or its joins)."""
+    if needs not in catalogue.HARMLESS_ILEUM_BELOW and ileum_below_colon_possible(R, entry):
+        return False
+    types = frozenset(value for value in AnatomyType if _may_be(_fact(R, entry, _A.TYPE), value))
+    if not any(types <= row.types for row in catalogue.HARMLESS[needs]):  # no row holds its type: no other field read
+        return False
+    values = entry_values(R, entry)
+    return any(harmless_row(values, row) for row in catalogue.HARMLESS[needs])
+
+
+# The anatomy type of the entry each route itself passes (D330 (1) (i)): a stoma, an ileal pouch. A per-anus route
+# passes none.
+_ROUTE_ENTRY_TYPE: Mapping[Approach, AnatomyType] = MappingProxyType({
+    Approach.THROUGH_STOMA: AnatomyType.STOMA, Approach.THROUGH_POUCH: AnatomyType.ILEAL_POUCH})
+
+
+def route_entries(found: catalogue.LowerRoute, R: FactSet, session: Id | None) -> frozenset[Id]:
+    """DECISIONS D330 (1) (i): the anatomy entry the route of ``found`` itself uses - for a through-stoma or a pouch row,
+    the stoma or the pouch the session ESTABLISHED it entered through: the entry the session's through names when it is
+    SUPPORTED, else the one entry that may be of the route's type (``_may_be``) and that the through may name (a silent
+    through may name any) - each only when its type is SUPPORTED the route's type; none when that is not one entry (two
+    stomas and a through not established: neither is exempt). With ``session`` None (the act's session not established)
+    every entry that may be of the route's type, since any of them may be the route's own once the session is known (the
+    guard then holds only what holds whatever the session). A per-anus route uses none. Every 9.4 weakening of the
+    through or of a type only widens what may be named, so an entry exempt on the weakened FactSet was exempt before or
+    the set is no longer one entry."""
+    wanted = _ROUTE_ENTRY_TYPE.get(found.route)
+    if wanted is None:
+        return frozenset()
+    possible = [entry for entry in R.anatomy if _may_be(_fact(R, entry, _A.TYPE), wanted)]
+    if session is None:
+        return frozenset(possible)
+    through = _fact(R, session, _A.THROUGH)
+    if (through.result is Result.SUPPORTED and isinstance(through.value, Id)
+            and through.value.family is IdFamily.ANATOMY):
+        named = [through.value]
+    else:
+        named = [entry for entry in possible if facts_.possibly(through, entry)]
+    if len(named) == 1 and facts_.holds(_fact(R, named[0], _A.TYPE), wanted):
+        return frozenset(named)
+    return frozenset()
+
+
+def _named_by(R: FactSet, through: Fact) -> tuple[Id, ...]:
+    """The anatomy entries a session's ``through`` may name (``_may_be``: its supported entry; not established, its
+    claimed entry, a reading, a side; every entry for an open denial or an established negation), an entry the FactSet
+    does not hold among them (its type reads as silent: it may be anything). A silent through names none."""
+    if facts_.silent(through):
+        return ()
+    ids = [*R.anatomy, *(value for value in (through.value, *through.options)
+                         if isinstance(value, Id) and value.family is IdFamily.ANATOMY and value not in R.anatomy)]
+    return tuple(entry for entry in ids if _may_be(through, entry))
+
+
+def _stoma_or_pouch_possible(R: FactSet, entry: Id) -> bool:
+    """Whether anatomy entry ``entry`` may be a stoma or a pouch (D330 (1), R5R-8): its type may be a stoma, an ileal
+    pouch or a gastric pouch (``_may_be``: a silent type may be anything), or its organ is filed at a landmark naming a
+    stoma or a pouch (an S-pouch filed as another alteration)."""
+    found = _fact(R, entry, _A.TYPE)
+    organ = _fact(R, entry, _A.ORGAN)
+    return (any(_may_be(found, value) for value in (AnatomyType.STOMA, AnatomyType.ILEAL_POUCH,
+                                                    AnatomyType.GASTRIC_POUCH))
+            or (not facts_.silent(organ) and any(_may_be(organ, value) for value in (Landmark.STOMA, Landmark.POUCH))))
+
+
+def _anus_route_contradicted(R: FactSet, session: Id) -> bool:
+    """DECISIONS D330 (1): the route's own entry belongs to the guard too - whether the record contradicts a per-anus
+    route in ``session``: its approach is filed or supported as anything but per anus (R5R-7: ``_may_be`` over every
+    other approach - supported, claimed, a reading, a side, an open denial or an established negation names one); a
+    silent approach reads per anus only when no entry may be a stoma or a pouch, as int6 reads it (``stoma_possible``,
+    ``pouch_possible``); or its through may name an entry that may be a stoma or a pouch (R5R-8:
+    ``_stoma_or_pouch_possible``). Every 9.4 weakening only widens what the approach and the through may be."""
+    approach = _fact(R, session, _A.APPROACH)
+    if facts_.silent(approach):
+        if stoma_possible(R, session) or pouch_possible(R, session):
+            return True
+    elif any(_may_be(approach, value) for value in Approach if value is not Approach.TRANSANAL):
+        return True
+    return any(_stoma_or_pouch_possible(R, entry) for entry in _named_by(R, _fact(R, session, _A.THROUGH)))
+
+
+def path_guard(found: catalogue.LowerRoute, R: FactSet, session: Id | None) -> bool:
+    """DECISIONS D330 (1), THE LOWER-GI PATH GUARD: whether the route row of a lower-GI code whose route table row is
+    ``found`` holds with the table's own hold - unless EVERY anatomy entry of the document is, for the row's route,
+    (i) the entry the route itself uses (``route_entries``) or (ii) harmless for its route family (``harmless``: a match
+    for a row of catalogue.HARMLESS[found.needs]); for a family beside which the colon may not be gone as a whole (not in
+    catalogue.HARMLESS_WHOLE_COLON), the entries that may be surgically absent may not cover the colon either
+    (``segments_absent_possible``: D327 (1), a side counts as its segments); and a per-anus route may not be contradicted
+    by its own approach or through (``_anus_route_contradicted``, ``session`` known). Fail-closed by construction: a
+    shape the harmless set omits holds. A through-stoma or pouch row whose session's approach is ESTABLISHED as
+    another route adds nothing: the code is held by that route's explanation (the enteroscopy class's, the colonoscopy
+    through a stoma's own row, LOWER's stoma class's), an established failure, so its item stays that explanation.
+    Every 9.4 weakening only widens what each field may be (a weakened approach no longer establishes another route),
+    so none turns it False."""
+    if found.route is not Approach.TRANSANAL and session is not None:
+        approach = _fact(R, session, _A.APPROACH)
+        if approach.result is Result.SUPPORTED and approach.value is not found.route:
+            return False  # another route established: the code's class explains it (an established failure), held
+    own = route_entries(found, R, session)
+    if any(entry not in own and not harmless(R, entry, found.needs) for entry in R.anatomy):
+        return True
+    if found.needs not in catalogue.HARMLESS_WHOLE_COLON and segments_absent_possible(R):
+        return True
+    return found.route is Approach.TRANSANAL and session is not None and _anus_route_contradicted(R, session)
+
+
+def _guarded(row: Row, found: catalogue.LowerRoute, R: FactSet, session: Id | None, event: Id) -> Row:
+    """``row`` (a route row its arms decided) with the path guard (``path_guard``) after every arm: where the arms left
+    the route met - no witness, or only the open reach the colonic route rests on (a question whose true answer an
+    unknown shape could still hold: the guard's hold beside it blocks the candidate, asking.plan's releasable filter) -
+    the table's own hold about the session (about the act while its session is not established) is added when the guard
+    holds. A row an arm held otherwise (an established failure, a hold, another question) is returned as it was: the
+    guard never releases and never re-words an arm's hold."""
+    if row.truth is Truth.F or any(held.attribute is not _A.REACHED for held in row.witnesses):
+        return row
+    if not path_guard(found, R, session):
+        return row
+    hold = _table_hold(R, session if session is not None else event, event)
+    return _row(row.requirement, [*row.witnesses, hold]) if hold not in row.witnesses else row
+
+
+def _row_lower_route(c: _Code, group: Sequence[Kind], R: FactSet, event: Id) -> Row:
+    """DECISIONS D328 (1): the lower-GI route table's row (catalogue.LOWER_ROUTES) over one supporting act of a lower-GI
+    endoscopy code (catalogue.lower_gi) other than the lower EUS codes (LOWER's own row reads theirs, ``_row_lower``): a
+    colonoscopy code's under its COLFULL row (the colonoscopy route table of D310 (1), whose rows these are), a
+    sigmoidoscopy's and an enteroscopy's (through a stoma or a pouch) under the table's own id (Requirement.ROUTE_TABLE).
+    Dispatched on the code's row:
+    - per anus: ``_anus_route`` (the colonoscopy family a colon to traverse, the sigmoidoscopy family a rectum and
+      sigmoid);
+    - through a stoma, a colonic stoma: ``_through_stoma_route`` (the colonoscopy family);
+    - through a stoma, an ileal stoma (the ileoscopy, whose route the enteroscopy class establishes: engine/classes): the
+      table's own hold when a stoma the endoscope may have passed through may be colonic by what is filed
+      (``colonic_stoma_possible``), whatever the session;
+    - through a pouch: nothing (the enteroscopy class's route establishes the pouch).
+    A lower-GI code the table declares no row for holds with the table's own hold (the completeness test fails first).
+
+    DECISIONS D330 (1): the ileoscopy's ileal stoma reads its own stoma's filed organ and the reach through it too
+    (``ileal_stoma_contradicted``, R5R-9), and after every arm the lower-GI path guard (``_guarded``, ``path_guard``)
+    holds the row with the table's own hold unless every anatomy entry is the route's own or harmless for its family."""
+    label: rq.Requirement | Tag = Tag.COLFULL if c.has(Tag.COLFULL) else rq.Requirement.ROUTE_TABLE
+    found = catalogue.lower_route(c.code)
+    session = _session(R, event)
+    if found is None:
+        return _row(label, [_table_hold(R, session if session is not None else event, event)])
+    return _guarded(_route_arms(label, found, group, R, session, event), found, R, session, event)
+
+
+def _route_arms(label: rq.Requirement | Tag, found: catalogue.LowerRoute, group: Sequence[Kind], R: FactSet,
+                session: Id | None, event: Id) -> Row:
+    """``_row_lower_route``'s arms, dispatched on the code's row ``found`` (its docstring), before the path guard."""
+    if found.route is Approach.TRANSANAL:
+        witnesses, failed = _anus_route(found.needs, _Rule.STOMA_ROUTE, group, R, session, event)
+        return _row(label, witnesses, failed)
+    if found.needs is catalogue.RouteAnatomy.COLONIC_STOMA:
+        return _through_stoma_route(label, group, R, session, event)
+    if found.needs is catalogue.RouteAnatomy.ILEAL_STOMA and ileal_stoma_contradicted(R, session):
+        return _row(label, [_table_hold(R, session if session is not None else event, event)])
+    return _row(label, [])
+
+
+# The route row's name the earlier rounds' tests read (D310 (1)'s colonoscopy route table: its rows are the table's now).
+_row_colon_route = _row_lower_route
 
 
 def _row_yield(c: _Code, group: Sequence[Kind], R: FactSet, event: Id) -> Row:
@@ -1424,10 +2350,12 @@ _FILTER_ROWS: Mapping[Tag, Callable[[_Code, Sequence[Kind], FactSet, Id], Row]] 
 EVALUATED_TAGS: frozenset[Tag] = frozenset(_TAG_ROWS) | frozenset(_FILTER_ROWS)
 
 
-def support(code: str, group: Sequence[Kind], R: FactSet, event: Id) -> Support:
+def support(code: str, group: Sequence[Kind], R: FactSet, event: Id, reader: PairsReader | None = None) -> Support:
     """SUPPORT(E, C, g) (module docstring): every row's truth and witnesses, in 4.3's order - rows 1-8, the E/M encounter
-    for an E/M code, and 43264's YIELD."""
-    return _support(_code(code), tuple(group), R, event)
+    for an E/M code, and 43264's YIELD. ``reader``: the caller's per-FactSet reader of ``R`` (engine/coverage.Reader),
+    read by row 8 only when it is ``R``'s own (DECISIONS D324 (8), int5): the outcome is the same with or without it."""
+    c = _code(code)
+    return _support(replace(c, reader=reader) if reader is not None and reader.R is R else c, tuple(group), R, event)
 
 
 def _support(c: _Code, group: tuple[Kind, ...], R: FactSet, event: Id) -> Support:
@@ -1445,7 +2373,12 @@ def code_rows(code: str, group: Sequence[Kind], R: FactSet, event: Id) -> tuple[
 
 
 def _code_rows(c: _Code, group: tuple[Kind, ...], R: FactSet, event: Id) -> tuple[Row, ...]:
-    return tuple(_TAG_ROWS[tag](c, group, R, event) for tag in c.spec.tags if tag in _TAG_ROWS)
+    rows = tuple(_TAG_ROWS[tag](c, group, R, event) for tag in c.spec.tags if tag in _TAG_ROWS)
+    # DECISIONS D328 (1): every lower-GI endoscopy code's route row (round r3's probe prototype built the colonoscopy's,
+    # D310 (1)); the lower EUS codes' is LOWER's own row (``_row_lower``)
+    if catalogue.lower_gi(c.code) and not c.has(Tag.LOWER):
+        rows += (_row_lower_route(c, group, R, event),)
+    return rows
 
 
 # --- 43276's pairs (XCHG) -----------------------------------------------------------------------------------------------
@@ -2047,10 +2980,43 @@ def _unbound_item(c: _Code, group: Sequence[Kind], kept: Sequence[Span], R: Fact
     digital examination holds the code (repair r4a-2's DV1, P-MONO), so a statement 4.6 would exclude by is asked its
     scope instead - the citation beside a doubt (the step's NOTES, question Q-R4A-EXCL). A digital examination statement
     concerns no group (``_concerns``), as without its line."""
-    excluded = _exclusion(c, group, kept, R, kept_words, evidence_doubted)
+    base = R.excluding  # round r3 (DESIGN-v2 f.1; PROTOTYPE): 4.6 reads R_base, never an answer
+    excluded = _exclusion(c, group, kept, base, kept_words, evidence_doubted)
     if excluded.exclusion is not None:
-        return _scope(R, excluded.exclusion.event, kept)
+        return _scope(base, excluded.exclusion.event, kept)
     return excluded.item if excluded.item is not None else _code_level(_Rule.NOT_DOCUMENTED, _Q, kept)
+
+
+@dataclass(frozen=True, slots=True)
+class _Read:
+    """4.4's reading of one requirement group on one FactSet (``_read_group``): every candidate's SUPPORT, the
+    supporting acts (``found``), the positive candidates that support nothing (``pending``) and, for 43276's
+    stent_exchange group with no supporting act, its pairs (``paired``: XCHG's other way of being supported, filed or
+    D216 synthetic - each found pair's two acts joined to ``found``, each pending pair to ``pending``)."""
+    supports: tuple[Support, ...]
+    found: tuple[Id, ...]
+    pending: tuple[Support, ...]
+    paired: _Paired | None
+
+    @property
+    def reaches_exclusion(self) -> bool:
+        """4.4's decision reaches 4.6 for the group: no supporting act and no pending candidate - a found or pending
+        XCHG pair, filed or synthetic, among them (DECISIONS D324 (6))."""
+        return not self.found and not self.pending
+
+
+def _read_group(c: _Code, group: tuple[Kind, ...], R: FactSet) -> _Read:
+    """4.4 over one requirement group on ``R`` (module docstring): the ONE code path ``_decide`` reads a group by - on
+    R_q for its outcome, and on R_base for the premise of 4.6 (DECISIONS D324 (6), the rule below in ``_decide``)."""
+    supports = tuple(_support(c, group, R, event) for event in candidates(R, group))
+    found = [entry.event for entry in supports if entry.met]
+    pending = [entry for entry in supports if not entry.met and positive(R, entry.event)]
+    paired: _Paired | None = None
+    if Kind.STENT_EXCHANGE in group and c.has(Tag.XCHG) and not found:
+        paired = _pairs(c, R)
+        found += [event for pair in paired.found for event in pair]
+        pending += paired.pending
+    return _Read(supports, tuple(found), tuple(pending), paired)
 
 
 def _decide(code: str, kept: Sequence[Span], R: FactSet, kept_words: Sequence[Span] | None) -> _Decided:
@@ -2071,16 +3037,12 @@ def _decide(code: str, kept: Sequence[Span], R: FactSet, kept_words: Sequence[Sp
     paired_synthetic: list[tuple[HeldFact, UnlistedStatement]] = []
     evidence = on_evidence(kept, R)  # 3.2.6 rule 2: an unlisted unit on the kept evidence holds the code
     for group in groups_:
-        supports = tuple(_support(c, group, R, event) for event in candidates(R, group))
-        found = [entry.event for entry in supports if entry.met]
-        pending = [entry for entry in supports if not entry.met and positive(R, entry.event)]
-        if Kind.STENT_EXCHANGE in group and c.has(Tag.XCHG) and not found:
-            paired = _pairs(c, R)
-            found += [event for pair in paired.found for event in pair]
-            pending += paired.pending
-            for witness, exchange in paired.exchanges:
+        read = _read_group(c, group, R)
+        supports, found, pending = read.supports, list(read.found), list(read.pending)
+        if read.paired is not None:
+            for witness, exchange in read.paired.exchanges:
                 exchanges.setdefault(witness, exchange)
-            paired_synthetic += paired.synthetic
+            paired_synthetic += read.paired.synthetic
         if found:
             found = _site_fit(c, group, R, found)  # D240: an act established outside the site class does not support
             supporting += [event for event in found if event not in supporting]
@@ -2099,7 +3061,19 @@ def _decide(code: str, kept: Sequence[Span], R: FactSet, kept_words: Sequence[Sp
                 held.append(_unbound_item(c, group, kept, R, kept_words, bool(evidence)))
             decided.append(_Group(group, supports, (), ranked))
             continue
-        excluded = _exclusion(c, group, kept, R, kept_words, bool(evidence))
+        # round r3 (DESIGN-v2 f.1, f.2(3); PROTOTYPE): 4.6's exclusion reads R_base, the row without any answer - an
+        # answer releases and never excludes. DECISIONS D324 (6) (L2-3): 4.6 runs for the group only when R_base's OWN
+        # 4.4 decision reaches it, read by the one code path this function reads the group by (``_read_group``: no
+        # supporting act, no pending candidate, and no found or pending XCHG pair, filed or synthetic) - never a partial
+        # re-check (the build re-checked candidate positivity alone, so an answer that set 43276's pair apart on R_q,
+        # asked for another code, sent it to 4.6 on R_base, where a cited denial excluded it). Otherwise the group is
+        # held, not documented, never excluded
+        base = R.excluding
+        if base is not R and not _read_group(c, group, base).reaches_exclusion:
+            held.append(_code_level(_Rule.NOT_DOCUMENTED, _Q, kept))
+            decided.append(_Group(group, supports, (), ()))
+            continue
+        excluded = _exclusion(c, group, kept, base, kept_words, bool(on_evidence(kept, base)))
         if excluded.exclusion is not None:
             return _Decided(Evaluation((), (), {}, exclusion=excluded.exclusion), ())
         held.append(excluded.item if excluded.item is not None else _code_level(_Rule.NOT_DOCUMENTED, _Q, kept))

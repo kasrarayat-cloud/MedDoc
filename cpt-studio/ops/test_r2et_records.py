@@ -34,18 +34,18 @@ PY_ANCHOR = 'anyway, so waiting longer buys nothing.'
 # every syntax a statement of each role's current bound may take that D301's spelling set did not read (the r2d
 # refutation's plants first): the setter's and stopper's flags and their docker spellings, and the unit forms
 PLANTS = {
-    'worker': ('the worker container is created with docker run --stop-timeout 1500',
-               'docker run --stop-timeout=1500', 'the worker is stopped with docker stop -t 1500', 'docker stop -t1500',
-               'docker stop --time=1500', 'docker compose stop --timeout 1500', 'the worker is given a 25-minute stop',
-               'a stop of 25 min', 'a stop of 25 mins', 'a 1,500-second stop', 'a stop of 1500 secs',
-               'a stop of 1500 sec', 'a stop of 1,500,000 ms', 'a 1500-seconds stop'),
+    'worker': ('the worker container is created with docker run --stop-timeout 1800',
+               'docker run --stop-timeout=1800', 'the worker is stopped with docker stop -t 1800', 'docker stop -t1800',
+               'docker stop --time=1800', 'docker compose stop --timeout 1800', 'the worker is given a 30-minute stop',
+               'a stop of 30 min', 'a stop of 30 mins', 'a 1,800-second stop', 'a stop of 1800 secs',
+               'a stop of 1800 sec', 'a stop of 1,800,000 ms', 'a 1800-seconds stop'),
     'web': ('the web container is created with docker run --stop-timeout 30', 'the web is stopped with docker stop -t 30',
             'the web is stopped with docker stop --time=30', 'the web is given a 30-second graceful stop',
             'a stop of 30 secs', 'a stop of 30 sec', 'a stop of 30,000 ms', 'docker compose stop --timeout=30'),
 }
 # the same syntaxes stating numbers that are no role's bound (another container's 60 s stop among them): never read
-NOT_A_BOUND = ('docker run --stop-timeout 60', 'docker stop -t 45', 'a 45-second stop', 'a stop of 26 min',
-               'a stop of 1501 secs', 'docker stop --time=301')
+NOT_A_BOUND = ('docker run --stop-timeout 60', 'docker stop -t 45', 'a 45-second stop', 'a stop of 31 min',
+               'a stop of 1801 secs', 'docker stop --time=301', 'a stop of 25 min', 'a stop of 1500 secs')
 
 
 def completeness(texts: dict) -> list:
@@ -75,7 +75,7 @@ class R2ETStopBoundSpellingsTests(unittest.TestCase):
     def test_a_statement_in_the_installers_prose_fails_it_too(self):
         """install.py's comments are read as INSTALL.md's prose is: the setter's own flag in a comment beside the
         bound's definition fails the completeness check on install.py."""
-        for role, plant in (('worker', 'docker run --stop-timeout 1500 sets it.'), ('web', 'the web stops in 30 secs.')):
+        for role, plant in (('worker', 'docker run --stop-timeout 1800 sets it.'), ('web', 'the web stops in 30 secs.')):
             text = H.planted(INSTALL_PY, PY_ANCHOR, f'{PY_ANCHOR} {plant}')
             with self.subTest(role=role, plant=plant):
                 self.assertEqual(completeness({INSTALL_PY: text}), [(role, 'install.py')])
@@ -83,7 +83,8 @@ class R2ETStopBoundSpellingsTests(unittest.TestCase):
     def test_the_texts_as_they_stand_and_numbers_that_are_no_bound_pass(self):
         """The boundaries: the ops texts as they stand pass every completeness test (each statement of a bound lies in a
         listed form or states another bound OTHER_BOUNDS lists), and the widened syntaxes stating a number that is no
-        role's bound - another container's 60 s stop, 45 s, 26 minutes, 1,501 s, 301 s - are not read as a bound."""
+        role's bound - another container's 60 s stop, 45 s, 31 minutes, 1,801 s, 301 s, the worker's bound before round
+        r3 (25 minutes, 1,500 s) - are not read as a bound."""
         self.assertEqual(completeness({}), [])
         for plant in NOT_A_BOUND:
             with self.subTest(plant=plant):
@@ -102,9 +103,9 @@ class R2ETStopBoundSpellingsTests(unittest.TestCase):
         self.assertEqual(F4.setter_flags(source), ('--grace-period',))
         self.assertEqual(F4.setter_flags("docker('stop', '--time', '30', name)\n"), ())  # no STOP_SECONDS: not its flag
         with mock.patch.object(F4, 'setter_flags', lambda source=None: ('--grace-period',)):
-            self.assertTrue(F4.spellings(1500).search('docker stop --grace-period 1500'))
-            self.assertTrue(F4.spellings(1500).search('docker stop --grace-period=1500'))
-            self.assertIsNone(F4.spellings(1500).search('docker stop --time 1500'))  # the flags read, not a list
+            self.assertTrue(F4.spellings(1800).search('docker stop --grace-period 1800'))
+            self.assertTrue(F4.spellings(1800).search('docker stop --grace-period=1800'))
+            self.assertIsNone(F4.spellings(1800).search('docker stop --time 1800'))  # the flags read, not a list
         for flag in ('--stop-timeout', '--time', '-t', '--timeout'):
             with self.subTest(flag=flag):
                 self.assertTrue(F4.spellings(30).search(f'{flag} 30'))
@@ -127,8 +128,8 @@ class R2ETStopBoundSpellingsTests(unittest.TestCase):
 
         without = failures({})
         self.assertEqual(without, Counter())
-        for role, plant in (('worker', 'the worker is stopped with docker stop -t 1500'),
-                            ('worker', 'the worker is given a 25-minute stop'),
+        for role, plant in (('worker', 'the worker is stopped with docker stop -t 1800'),
+                            ('worker', 'the worker is given a 30-minute stop'),
                             ('web', 'the web is given a 30-second graceful stop')):
             with self.subTest(role=role, plant=plant):
                 self.assertEqual(failures(in_md(plant)) - without, Counter({(role, 'INSTALL.md', None): 1}))

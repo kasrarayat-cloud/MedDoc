@@ -45,7 +45,7 @@ label is refused before a byte of the answer is read: no answer is read under a 
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, cast
@@ -231,3 +231,86 @@ def attached_evidence(claim_set: claims.ClaimSet, claim_id: str, evidence: tuple
     if card is not None:
         allowed |= set(card.units)
     return any(unit in allowed for unit in evidence)
+
+
+# --- round r3: a question request's answer (DECISIONS D306-D308, D318 (1); build-v2/a2b/r3 DESIGN-v2 c.2) ------------
+
+# appraise_schema.QUOTES_MAX - ONE constant, read here and by contract/proof (DECISIONS D318 (1): the flood cap, 8 quotes,
+# why beside it): more than it voids that verdict's proof (quotes_bound); never a second copy
+QUOTE_MAX_CHARS = 300  # c.2: a quote over 300 characters voids that verdict's proof (quotes_bound)
+
+
+@dataclass(frozen=True, slots=True)
+class QuestionVerdict:
+    """One verdict of a question request's answer: the read verdict (contract/types.Verdict), its quotes as written,
+    and ``quotes_bound`` - more than appraise_schema.QUOTES_MAX quotes (the flood cap, the one constant) or one over
+    QUOTE_MAX_CHARS characters, which voids the proof only (c.2); ``attached``, whether an evidence unit lies in the
+    claim's cited units or its card's (3.2.5)."""
+    claim: str
+    verdict: Verdict
+    quotes: tuple[str, ...]
+    quotes_bound: bool
+    attached: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ReadQuestions:
+    """A question request's answer, read: each claim id's verdict (None when missing or repeated), the claim ids
+    answered more than once, those not answered, and the ids the answer names that the request does not ask."""
+    verdicts: Mapping[str, QuestionVerdict | None]
+    repeated: tuple[str, ...]
+    missing: tuple[str, ...]
+    unknown: tuple[str, ...]
+
+
+def read_questions(answer: object, claim_ids: Sequence[str], cited: Mapping[str, Sequence[str]],
+                   unit_count: int) -> Refusal | ReadQuestions:
+    """A question request's answer (DESIGN-v2 c.2): strict JSON, valid against appraise_schema.LOCAL_SCHEMA_Q, at most
+    one verdict per claim (bound_error's rule over the request's claim count), then item by item - each verdict of a
+    claim the request asks, its evidence units the revision's, its quotes read as written with c.2's item-level bounds.
+    ``cited``: each claim id's cited units and its card's (3.2.5's attachment). The Refusal of the whole answer
+    otherwise; nothing is repaired."""
+    if type(unit_count) is not int or unit_count < 0:
+        raise ValueError('The unit count is a whole number of at least 0.')
+    if not isinstance(answer, str):
+        return refuse('json', 'there is no appraisal text')
+    try:
+        parsed = reading.strict_json_text(answer)
+    except reading.JSONRefused as exc:
+        return refuse('json', f'the appraisal {exc}')
+    error = reading.schema_error(parsed, appraise_schema.LOCAL_SCHEMA_Q, 'the appraisal')
+    if error:
+        return refuse('schema', f'the appraisal breaks its schema: {error}')
+    parsed = cast(dict[str, Any], parsed)
+    error = bound_error(parsed, len(claim_ids))
+    if error:
+        return refuse('bounds', error)
+    known = set(claim_ids)
+    seen: dict[str, list[dict[str, Any]]] = {}
+    unknown: list[str] = []
+    for node in parsed['verdicts']:
+        if node['claim'] in known:
+            seen.setdefault(node['claim'], []).append(node)
+        else:
+            unknown.append(node['claim'])
+    verdicts: dict[str, QuestionVerdict | None] = {}
+    repeated: list[str] = []
+    missing: list[str] = []
+    for claim_id in claim_ids:
+        nodes = seen.get(claim_id, [])
+        if len(nodes) != 1:
+            (repeated if nodes else missing).append(claim_id)
+            verdicts[claim_id] = None
+            continue
+        node = nodes[0]
+        evidence = tuple(node['evidence'])
+        if any(not unit_known(unit, unit_count) for unit in evidence):
+            evidence = ()
+        verdict = Verdict(claim=claim_id, verdict=VerdictValue(node['verdict']), attached=Attached(node['attached']),
+                          qualifiers=tuple(Qualifier2(value) for value in node['qualifiers']), evidence=evidence)
+        quotes = tuple(node['quotes'])
+        bound = len(quotes) > appraise_schema.QUOTES_MAX or any(len(quote) > QUOTE_MAX_CHARS for quote in quotes)
+        allowed = set(cited.get(claim_id, ()))
+        verdicts[claim_id] = QuestionVerdict(claim=claim_id, verdict=verdict, quotes=quotes, quotes_bound=bound,
+                                             attached=any(unit in allowed for unit in evidence))
+    return ReadQuestions(verdicts=verdicts, repeated=tuple(repeated), missing=tuple(missing), unknown=tuple(unknown))

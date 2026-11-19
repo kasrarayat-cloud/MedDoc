@@ -1670,7 +1670,10 @@ UPDATE_DECISION_CHECK = ('These codes are from before this update and cannot be 
                          'they are updated.')
 UPDATE_BLOCKER = 'The codes are from before the latest change; the update has not finished'
 CONTEXT_FACT_NAMES = ('service_date', 'setting', 'billing_context', 'patient_status')  # studio.types.CONTEXT_FACTS
-READING_KINDS = (Job.EXTRACT, interpretation_labels.JOB_KIND, interpretation_labels.APPRAISE_JOB_KIND, Job.ANALYZE)
+# round r3 (DECISIONS D322): the question stage ('question', jobs.QUESTION: jobs imports this module) is a context-free
+# reading stage too, so it serves the saved state while a reading is owed
+READING_KINDS = (Job.EXTRACT, interpretation_labels.JOB_KIND, interpretation_labels.APPRAISE_JOB_KIND, 'question',
+                 Job.ANALYZE)
 UPDATE_DETAILS, UPDATE_DOCUMENTATION, UPDATE_CHECK = 'details', 'documentation', 'check'  # update.kind (5.1)
 
 

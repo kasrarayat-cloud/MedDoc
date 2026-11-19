@@ -72,6 +72,13 @@ outcome is (a non-200 is failed, auth, permission, quota or refused, never decli
 The literals are the server's (studio/interpretation/__init__.py), held to it by ops/test_rollback_check.py, since
 this runner imports no module of the application.
 
+Round r3 (DECISIONS D320, D322 (5)). A candidate whose installer knows the question stage (question_candidate: its
+READING_STAGE_KINDS names 'question') is judged on that stage's records too (SCENARIO_R3, each required: a queued or
+running question job, a question run - an appraisal run whose scope names its question round - and a code an
+established answer released), which the D15 test instance makes by replaying frozen Fable streams with nothing sent
+(D322 (6)); and assertion 6 reads the question stages as the interpret and appraise ones: none open when the previous
+worker starts.
+
     python3 -B cpt-studio/ops/rollback_check.py counts --db cptg_<dump> --candidate cpt-studio-test:<sha12> \\
         --out <new directory> --db-env-file <0600 env file>
 
@@ -443,6 +450,27 @@ SCENARIO_V3 = (
     ('declined_hold', f'an interpreter hold with reason {DECLINED}',
      f"select count(*) from studio_interpreterhold where reason in {sql_strings((DECLINED,))}"),
 )
+# Round r3 (DECISIONS D320, D322 (5)): a candidate whose installer knows the question stage (question_candidate: its
+# READING_STAGE_KINDS names 'question') is judged on the question stage's records too - a queued or running question
+# job, a question run (an appraisal run whose scope names its question round) and a code an established answer
+# released (a ready code of a v2 assessment whose inventory holds a supported question naming that code among its
+# witnesses) - each required: the D15 runtime test makes them through the product's own flows, the question stage
+# replaying frozen Fable streams (D322 (6): the tools lane's replay stack variant), with nothing sent. Literals, as above.
+QUESTION_KIND = 'question'
+SCENARIO_R3 = (
+    ('queued_question', 'a queued or running question job',
+     f"select count(*) from studio_job where kind in {sql_strings((QUESTION_KIND,))} "
+     "and state in ('queued', 'running')"),
+    ('question_run', 'a question run (an appraisal run of a question round)',
+     f"select count(*) from studio_providerrun where provider in {sql_strings(READ_PROVIDERS)} "
+     "and purpose = 'appraisal' and scope->'question' is not null"),
+    ('question_released', 'a code an established answer released',
+     "select count(*) from studio_proposal p join studio_assessment a on a.id = p.assessment_id "
+     "join studio_eventinventory i on i.id = a.event_inventory_id "
+     f"where p.status = 'ready' and a.engine_version in {sql_strings(V2_ENGINES)} and jsonb_path_exists(i.events, "
+     "'$.questions[*] ? (@.result == \"supported\").witnesses[*] ? (@.code == $code)', "
+     "jsonb_build_object('code', p.code))"),
+)
 # DECISIONS D294 F1: how a test instance makes each record kind, which decides what assertion 7 does with it.
 # MADE_ON_TEST: the product's own flows make it on a test instance with no paid or nondeterministic provider outcome -
 # replay, a free live outcome (a refused key's HTTP 401 sets an 'auth' interpreter hold) or the D15 scenario's own steps
@@ -461,6 +489,7 @@ MADE_BY = {
     'unhealthy_appraisal': MADE_ON_TEST, 'held_new_fact': MADE_ON_TEST,
     'fable_inventory': MADE_ON_TEST, 'fable_assessment': MADE_ON_TEST, 'fable_run': MADE_ON_TEST,
     'declined_hold': MADE_BY_PROVIDER_OUTCOME,
+    'queued_question': MADE_ON_TEST, 'question_run': MADE_ON_TEST, 'question_released': MADE_ON_TEST,
 }
 UPDATE_SETS = ('pending_before_analyze', 'pending_after_analyze', 'completed', 'a21')
 UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')  # an id put into SQL is one
@@ -475,6 +504,13 @@ def fable_candidate(installer: object) -> bool:
     hold each a test instance makes, and the rest are reported (MADE_BY)."""
     spec = getattr(installer, 'INTERPRETER', None)
     return isinstance(spec, dict) and bool(spec.get('name') == 'anthropic')
+
+
+def question_candidate(installer: object) -> bool:
+    """Whether the candidate's installer knows round r3's question stage (its READING_STAGE_KINDS names
+    QUESTION_KIND), so that assertion 7 counts the question stage's records (SCENARIO_R3) too."""
+    kinds = getattr(installer, 'READING_STAGE_KINDS', None)
+    return isinstance(kinds, tuple) and QUESTION_KIND in kinds
 
 
 def required(key: str) -> bool:
@@ -513,13 +549,14 @@ def scenario_reported(found: dict, kinds: tuple[tuple[str, str, str], ...] = SCE
     return reported
 
 
-def assertion_7(found: dict, v2: bool, fable: bool) -> tuple[list, dict]:
-    """Assertion 7 of a candidate (FINAL-V2 6.4; AMENDMENT-2 8.5 for a Fable candidate; DECISIONS D294 F1): (its
-    problems - each record kind it requires that the run did not hold - and the kinds it counts and reports, never
-    requires) over ``found``, the counts before the switch-back; nothing of either for a candidate that is not v2."""
+def assertion_7(found: dict, v2: bool, fable: bool, question: bool = False) -> tuple[list, dict]:
+    """Assertion 7 of a candidate (FINAL-V2 6.4; AMENDMENT-2 8.5 for a Fable candidate; round r3's SCENARIO_R3 for a
+    candidate with the question stage; DECISIONS D294 F1): (its problems - each record kind it requires that the run did
+    not hold - and the kinds it counts and reports, never requires) over ``found``, the counts before the switch-back;
+    nothing of either for a candidate that is not v2."""
     if not v2:
         return [], {}
-    kinds = SCENARIO_V2 + (SCENARIO_V3 if fable else ())
+    kinds = SCENARIO_V2 + (SCENARIO_V3 if fable else ()) + (SCENARIO_R3 if question else ())
     return scenario_problems(found, kinds), scenario_reported(found, kinds)
 
 
@@ -962,13 +999,14 @@ def open_stages(instance, kinds) -> dict:
     known = ','.join(f"'{kind}'" for kind in sorted(kinds))
     interpret = instance.sql("select id, state from studio_job where kind = 'interpret' and state in ('queued', 'running')")
     appraise = instance.sql("select id, state from studio_job where kind = 'appraise' and state in ('queued', 'running')")
+    question = instance.sql("select id, state from studio_job where kind = 'question' and state in ('queued', 'running')")
     unknown = instance.sql(
         f"select j.id, j.kind, j.state from studio_job j join studio_encounter e on e.id = j.encounter_id "
         f"where j.kind not in ({known}) and (j.state in ('queued', 'running') or (j.state = 'cancelled' "
         f"and e.current_revision_id = j.revision_id and j.id = (select k.id from studio_job k where "
         f"k.revision_id = j.revision_id order by k.created_at desc, k.id desc limit 1)))")
     return {'interpret_open': [row[0] for row in interpret], 'appraise_open': [row[0] for row in appraise],
-            'unrunnable_open': [row[:3] for row in unknown]}
+            'question_open': [row[0] for row in question], 'unrunnable_open': [row[:3] for row in unknown]}
 
 
 def load_views(directory: Path) -> tuple:
@@ -1039,6 +1077,8 @@ class Check:
         self.v2 = isinstance(getattr(self.installer, 'APPRAISE_KIND', None), str)
         # AMENDMENT-2 8.5: a candidate that installs the Fable interpreter is judged on its new versions' rows too
         self.fable = fable_candidate(self.installer)
+        # round r3: and one whose installer knows the question stage on the question stage's records
+        self.question = question_candidate(self.installer)
         self.recompute_previous = literal(self.previous['revision'], INSTALLER_PATH, 'RECOMPUTE_STATES')
         self.recompute_candidate = literal(self.candidate['revision'], INSTALLER_PATH, 'RECOMPUTE_STATES')
         self.client = (literal(self.previous['revision'], CLIENT_CONTRACT_PATH, 'HEADER'),
@@ -1071,7 +1111,7 @@ class Check:
         """FINAL-V2 6.4: {key: count} of each record kind SCENARIO_V2 names - and AMENDMENT-2 8.5's, SCENARIO_V3 - by
         SQL (an error text where one failed)."""
         found = {}
-        for key, _, statement in SCENARIO_V2 + SCENARIO_V3:
+        for key, _, statement in SCENARIO_V2 + SCENARIO_V3 + SCENARIO_R3:
             try:
                 found[key] = int(self.instance.sql(statement)[0][0])
             except (RuntimeError, IndexError, ValueError) as error:
@@ -1380,9 +1420,9 @@ class Check:
         worker['interpret_jobs_at_start'] = inst.sql(
             "select id, state, finished_at, left(error, 80) from studio_job where kind = 'interpret' "
             "and state <> 'succeeded' order by created_at")
-        worker['reading_jobs_at_start'] = inst.sql(  # design v2: pass 2's stages beside pass 1's
-            "select id, kind, state, finished_at, left(error, 80) from studio_job where kind in ('interpret', 'appraise') "
-            "and state <> 'succeeded' order by created_at")
+        worker['reading_jobs_at_start'] = inst.sql(  # design v2: pass 2's stages beside pass 1's; round r3's question
+            "select id, kind, state, finished_at, left(error, 80) from studio_job where kind in ('interpret', 'appraise', "
+            "'question') and state <> 'succeeded' order by created_at")
         worker['started_at'] = utc_now()
         inst.start('worker', self.previous['id'], args.port)
         time.sleep(20)
@@ -1505,11 +1545,13 @@ class Check:
         # design v2 (FINAL-V2 6.4): the appraise stages too - none open at the start, each settled by the close
         if start.get('appraise_open'):
             a6.append(f'appraise stages open when the previous worker started: {start.get("appraise_open")}')
+        if start.get('question_open'):  # round r3: the question stages too
+            a6.append(f'question stages open when the previous worker started: {start.get("question_open")}')
         reading = worker.get('reading_jobs_at_start') or []
         if self.v2 and not reading_settled_before(reading, worker.get('started_at')):
             a6.append('the interpret and appraise stages were not each settled by CLOSE_STAGES before the previous '
                       'worker started')
-        a7, reported7 = assertion_7(sb.get('scenario_v2'), self.v2, self.fable)
+        a7, reported7 = assertion_7(sb.get('scenario_v2'), self.v2, self.fable, self.question)
         update = (self.declared or {}).get('update') if isinstance(self.declared, dict) else None
         upd = sb.get('update') or {}
         a8 = (update_problems(update, {'update_pending': upd.get('update_pending'), 'reverted': upd.get('reverted')},
@@ -1545,10 +1587,11 @@ class Check:
                            'interpret_jobs_at_start': worker.get('interpret_jobs_at_start'),
                            'reading_jobs_at_start': worker.get('reading_jobs_at_start'),
                            'worker_started_at': worker.get('started_at'), 'worker': worker.get('at_end')}),
-            assertion(7, 'FINAL-V2 6.4 (and AMENDMENT-2 8.5 for a Fable candidate): the run holds each v2 record kind '
-                         'a test instance makes; a kind only a paid or nondeterministic provider outcome makes is '
-                         'reported', a7,
-                      {'v2_candidate': self.v2, 'fable_candidate': self.fable, 'scenario_v2': sb.get('scenario_v2'),
+            assertion(7, 'FINAL-V2 6.4 (and AMENDMENT-2 8.5 for a Fable candidate, round r3 for one with the question '
+                         'stage): the run holds each v2 record kind a test instance makes; a kind only a paid or '
+                         'nondeterministic provider outcome makes is reported', a7,
+                      {'v2_candidate': self.v2, 'fable_candidate': self.fable, 'question_candidate': self.question,
+                       'scenario_v2': sb.get('scenario_v2'),
                        'reported_not_required': reported7, 'install_reads': sb.get('install_reads')}),
             assertion(8, 'AMENDMENT-1 U17: the pending updates named, the unapplied saves reverted and listed, the value '
                          'saved again taking effect on the previous web', a8,
@@ -1574,8 +1617,8 @@ class Check:
                    f'{(sb.get("note") or {}).get("context_only")}; exact: {not note_issues}; refusing reasons {reasons}',
                 6: f'closed {[row[1] for row in sb.get("closed_stages") or ()]}; open at the worker start '
                    f'{worker.get("open_at_start")}',
-                7: f'v2 candidate {self.v2}; Fable candidate {self.fable}; record kinds {sb.get("scenario_v2")}; '
-                   f'reported, never required: {reported7}',
+                7: f'v2 candidate {self.v2}; Fable candidate {self.fable}; question candidate {self.question}; '
+                   f'record kinds {sb.get("scenario_v2")}; reported, never required: {reported7}',
                 8: f'named {sorted(((sb.get("update") or {}).get("update_pending") or {}))}, reverted '
                    f'{sorted(((sb.get("update") or {}).get("reverted") or {}))}, resave {http_rec.get("resave")}'}
         for item in rec['assertions']:

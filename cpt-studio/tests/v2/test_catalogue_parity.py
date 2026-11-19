@@ -708,9 +708,11 @@ class BoundaryTests(SimpleTestCase):
     def test_the_new_enums_are_plain_unique_and_closed(self):
         defined = [value for module in (anatomy, catalogue) for value in vars(module).values()
                    if isinstance(value, type) and issubclass(value, enum.Enum) and value.__module__ == module.__name__]
+        # (round r3's fourth repair, DECISIONS D328 (1): RouteAnatomy, the lower-GI route table's needs, joins them;
+        # round r3's round 5, lane rules6, DECISIONS D330 (1): EntryShape, the ruled harmless set's entry shapes)
         self.assertEqual({cls.__name__ for cls in defined},
                          {'Region', 'LinkRoute', 'NoRouteReason', 'SupportLevel', 'TechniqueClass', 'SiteClass',
-                          'EusClass', 'EnteroscopyClass'})
+                          'EusClass', 'EnteroscopyClass', 'RouteAnatomy', 'EntryShape'})
         for cls in defined:
             with self.subTest(enum=cls.__name__):
                 self.assertFalse(issubclass(cls, str))  # never a StrEnum: a member never equals a raw string

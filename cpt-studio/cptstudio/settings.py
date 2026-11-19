@@ -6,6 +6,7 @@ file: the deployment passes this service its own variables, and provider
 credentials live in a separate protected file named by
 ``CPT_STUDIO_CORTI_CREDENTIALS_FILE``.
 """
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import os
 
@@ -220,6 +221,81 @@ INTERPRETER_SEND_DEADLINE_SECONDS = 1320  # AMENDMENT-2 1.12
 INTERPRETER_READ_TIMEOUT_SECONDS = 1320
 APPRAISER_SEND_DEADLINE_SECONDS = 1320  # AMENDMENT-2 1.12, as pass 1's
 APPRAISER_READ_TIMEOUT_SECONDS = 1320
+# Round r3's question requests (DECISIONS D306, D320, D322; DESIGN-v2 e.1, e.7, e.8): Fable judges the engine's reading
+# doubts at effort max, one stream per request of up to fable_adapter.MAX_TOKENS (128,000) output tokens. D322 (4): the
+# send deadline is DERIVED from that whole output at 95 tokens per second - a margin below the slowest max-effort rate
+# measured, 101.04 (r3-probe-2's first request; D318: 101-104) - plus 60 s for the connection, the prefill and the
+# stream's tail: ceil(128,000 / 95) + 60 = 1,408 s (fable_adapter.question_deadline_derivation; a test pins the three
+# equal). The read timeout never cuts before it. AMENDMENT-2 1.12's 110 tokens-a-second floor is a MEASURE for a
+# question request (D310 (9), D320: max effort ran at 101-104 there), recorded on its run and in the operator report,
+# never a hold.
+QUESTION_SEND_DEADLINE_SECONDS = 1408
+QUESTION_READ_TIMEOUT_SECONDS = 1408
+QUESTION_RATE_FLOOR_TOKENS_PER_SECOND = 110
+# Each of the question stage's two forked computations (D322 (3); jobs._question_state_child): before a round's sends,
+# the round rebuilt purely from the stored passes and the stored answers; after them, the answers settled and the next
+# round planned. The probe measured a round's plan at 0.03-15 s (C-C2MEM-023, the slowest development note, 13-15 s at
+# a 1-minute load under 10; PROBE-v2 3.7's limit 30 s), so a computation that replays up to three rounds fits.
+QUESTION_CHILD_SECONDS = 120
+# The round's ONE reservation (D322 (1); DESIGN-v2 e.8). Before a round's question requests are sent - concurrently,
+# under the installation-wide provider lock held once - every request's worst case (its input bound plus 128,000
+# output tokens: fable_adapter.worst_case_usd) is reserved, all of them in one transaction; with a threshold
+# configured, the budget check is inside that same transaction, so the requests can never pass it together. The check:
+# this month's recorded spend of the Anthropic account (jobs.account_month_spend: the interpreter's and the Fable
+# participant's runs, each at its estimate, an unsettled or unpriced one at its own reservation or worst case - the
+# participant's tool loop bounded from its own record, so one such run never leaves the whole month unbounded: DECISIONS
+# D324 (10), L7-A1), plus QUESTION_OTHER_SPEND_USD (the account's spend outside this installation, an operator figure),
+# plus the round's worst cases, stays within QUESTION_PROVIDER_CAP_USD (the account's configured monthly limit as the
+# owner states it) less QUESTION_SITE_RESERVE_USD (kept for this site's other sends). A refused reservation sends
+# nothing. A refusal about the round itself - a request whose worst case cannot be bounded, or worst cases that pass the
+# threshold by themselves - leaves its requests' questions unresolved (question_request_failed:refused) and their holds
+# with the coder (e.5); one the month's state causes (its recorded spend, the other spend, a month that cannot be
+# bounded) says nothing about the requests: they stay owed and the stage ends resumable, for a member's Resume once the
+# month allows it (D324 (10); jobs._refused_for_itself). No threshold by default (QUESTION_PROVIDER_CAP_USD empty): the
+# account's own limit is the only bound, as before round r3 - a figure only the owner sets (class d). The per-document
+# ceiling below is checked first, in the same transaction: a round over it is refused about itself whatever the month.
+QUESTION_PROVIDER_CAP_USD = _env('QUESTION_PROVIDER_CAP_USD', '')
+QUESTION_SITE_RESERVE_USD = _env('QUESTION_SITE_RESERVE_USD', '40')
+QUESTION_OTHER_SPEND_USD = _env('QUESTION_OTHER_SPEND_USD', '0')
+for _name, _amount in (('QUESTION_PROVIDER_CAP_USD', QUESTION_PROVIDER_CAP_USD),
+                       ('QUESTION_SITE_RESERVE_USD', QUESTION_SITE_RESERVE_USD),
+                       ('QUESTION_OTHER_SPEND_USD', QUESTION_OTHER_SPEND_USD)):
+    if _amount == '' and _name == 'QUESTION_PROVIDER_CAP_USD':
+        continue
+    try:
+        _value = Decimal(_amount)
+    except InvalidOperation:
+        _value = None
+    if _value is None or not _value.is_finite() or _value < 0:
+        raise RuntimeError(f'CPT_STUDIO_{_name} must be a non-negative amount of US dollars.')
+# The question stage's two figures (DECISIONS D325 (3), the second adversarial pass's L7P2-2; class d: the figures are
+# the owner's - settings, which the installer writes into every container it starts, never constants of the code).
+# QUESTION_DOCUMENT_CEILING_USD bounds the worst case the stage reserves for one document - its revision - over every
+# round: a round whose requests' worst cases, with every reservation the document already holds, would pass it is
+# refused ABOUT ITSELF and never sent, its questions unresolved (question_request_failed:refused) and their codes held
+# for the coder (jobs._ceiling_refusal); exactly at the ceiling is within it. A reservation is held at the worst case it
+# was reserved at until its run's own record proves it cost nothing (nothing sent, a reuse, an error body with no usage:
+# jobs._run_cost's rule), so a request sent again after an outcome that decided nothing is counted once.
+# QUESTION_ROUND_CONCURRENCY bounds the question requests in flight at once: a round's further requests wait their turn
+# in the same job, under the same provider lock and the same one reservation, in waves of at most that many
+# (jobs._send_question_round). The proposed figures (D325 (3)): 25 US dollars a document, about twice D321's accepted
+# long note, and 4 requests at once. An empty or malformed figure refuses to load: the stage always has both.
+QUESTION_DOCUMENT_CEILING_USD = _env('QUESTION_DOCUMENT_CEILING_USD', '25')
+_concurrency = _env('QUESTION_ROUND_CONCURRENCY', '4')
+# The least worst case one question request is reserved at (fable_adapter.worst_usage priced at claude-fable-5-2's
+# rates, participants.pricing): its whole output, 128,000 tokens at $40.00 a million, and the prompt margin, 1,000 input
+# tokens at $8.00 a million; every byte of its body adds more. So no round reserves more than the ceiling's whole
+# multiples of it (a test pins it to the adapter's and the price table's own figures).
+QUESTION_REQUEST_FLOOR_USD = '5.128'
+try:
+    _ceiling: Decimal | None = Decimal(QUESTION_DOCUMENT_CEILING_USD)
+except InvalidOperation:
+    _ceiling = None
+if _ceiling is None or not _ceiling.is_finite() or _ceiling < 0:
+    raise RuntimeError('CPT_STUDIO_QUESTION_DOCUMENT_CEILING_USD must be a non-negative amount of US dollars.')
+if not (_concurrency.isascii() and _concurrency.isdigit()) or int(_concurrency) < 1:
+    raise RuntimeError('CPT_STUDIO_QUESTION_ROUND_CONCURRENCY must be a whole number of requests, at least 1.')
+QUESTION_ROUND_CONCURRENCY = int(_concurrency)
 # The most bytes one interpreter response may carry (AMENDMENT-2 1.12): the raw stream holds one JSON event per delta,
 # so it is larger than its answer, and its bytes per output token are unmeasured; a 128,000-token stream above this at
 # the measured rate raises the cap before the next send.
@@ -245,10 +321,16 @@ INTERPRET_MAX_PAGES = 40
 # (ops/install.py, 600 s) outlasts it. The interpret and appraise stages (the interpreter's two passes, AMENDMENT-2
 # 1.12) have 1,380 s each: the 1,320 s send, the 15 s recording and 45 s of the stage's own work. They end 60 s before
 # their own stale threshold (STALE_RUNNING_SECONDS_BY_KIND below), and the worker's stop timeout (ops/install.py
-# STOP_SECONDS['worker'], 1,500 s by 1.12) outlasts them, so a deploy lets a reading finish.
+# STOP_SECONDS['worker']) outlasts them, so a deploy lets a reading finish. Round r3's question stage (one job per round
+# of question requests, sent concurrently: D322 (1)-(4); in waves of at most QUESTION_ROUND_CONCURRENCY: D325 (3)) has
+# 1,588 s for a round of one wave: the question request's 1,408 s send (QUESTION_SEND_DEADLINE_SECONDS), the 15 s
+# recording, its forked computation before the sends (QUESTION_CHILD_SECONDS, 120 s) and 45 s of the stage's own work -
+# so jobs._check_loop_time lets the round's sends start only while all of them fit; its stale threshold lies above it by
+# the computation after the sends and 60 s, 1,768 s, and the worker's stop timeout (1,800 s) outlasts that. Both are the
+# figures' own (QUESTION_ROUND_WAVES below re-derives them for more waves; at the proposed figures, one wave).
 JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180,
                         'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580, 'interpret': 1380,
-                        'appraise': 1380}
+                        'appraise': 1380, 'question': 1588}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.
@@ -260,8 +342,53 @@ STALE_RUNNING_SECONDS = 600
 # 1,380 s stage deadline; every other kind keeps STALE_RUNNING_SECONDS. Read per kind by jobs.mark_stale's periodic
 # sweep and by jobs._check_loop_time, whose budget would otherwise stop at 600 s and queue every reading stage again
 # before its 1,320 s send; the worker's first sweep at its start settles every running stage whatever its age, since at
-# most one worker runs.
-STALE_RUNNING_SECONDS_BY_KIND = {'interpret': 1440, 'appraise': 1440}
+# most one worker runs. Round r3's question stage: 1,768 s, above its 1,588 s stage deadline by the computation after
+# its sends (QUESTION_CHILD_SECONDS) and 60 s, so a live round of 1,408 s sends is never swept (without its row the
+# 600 s default would sweep it, and _check_loop_time would queue it again before every send). The appraise stage now
+# plans round 1 of the questions after its settle (DESIGN-v2 e.7; QUESTION_CHILD_SECONDS), so its threshold lies that
+# much higher: 1,380 + 120 + 60 = 1,560 s (AMENDMENT-2 1.12's 1,440 s before round r3).
+STALE_RUNNING_SECONDS_BY_KIND = {'interpret': 1440, 'appraise': 1560, 'question': 1768}
+# The question stage's rows re-derived for its waves (DECISIONS D325 (3)). The most requests one round can reserve
+# within the ceiling - its whole multiples of QUESTION_REQUEST_FLOOR_USD - sent at most QUESTION_ROUND_CONCURRENCY at
+# once, are QUESTION_ROUND_WAVES waves (at least one); a round of more is refused about itself (jobs._ceiling_refusal),
+# so the stage never sends more. Each wave but the last is held to its whole bound - its 1,408 s send, its 15 s
+# recording (jobs.LOOP_RECORDING_SECONDS) and the 60 s the round waits for the wave's threads
+# (jobs.QUESTION_WAVE_WAIT_SECONDS) - and the last to its send and recording, as a round of one wave always was: the
+# stage's deadline is the computation before the sends, the waves, and 45 s of the stage's own work; its stale threshold
+# that, the computation after the sends and 60 s. At the proposed figures a round reserves at most 4 requests
+# (25 // 5.128), one wave of 4: the rows stay 1,588 s and 1,768 s, the literals above, and the worker's stop timeout
+# outlasts them as before. Every further wave adds 1,483 s to each. A pair of figures whose stage would outlast the
+# queue window (_queue_window_seconds, jobs.QUEUE_DEADLINE: a document queued behind one such stage would expire before
+# it starts) refuses to load. A worker asked to stop starts no further wave (jobs._send_question_round), so its stop
+# timeout need outlast only the wave it is in.
+_queue_window_seconds = 7200  # jobs.QUEUE_DEADLINE (a test pins the two equal)
+_wave_recording_seconds, _wave_wait_seconds, _stage_work_seconds = 15, 60, 45  # jobs' (a test pins them equal)
+
+
+def _question_stage_rows(ceiling: Decimal, concurrency: int) -> tuple[int, int, int]:
+    """(waves, the question stage's deadline, its stale threshold) under a per-document ceiling and a concurrency
+    (D325 (3), the comment above); RuntimeError for a pair whose stage would outlast the queue window."""
+    refusal = ('CPT_STUDIO_QUESTION_DOCUMENT_CEILING_USD and CPT_STUDIO_QUESTION_ROUND_CONCURRENCY together let one '
+               'round reserve more waves of requests than the question stage can send within the queue window: lower '
+               'the ceiling or raise the concurrency.')
+    try:
+        requests = int(Decimal(ceiling) // Decimal(QUESTION_REQUEST_FLOOR_USD))
+    except (InvalidOperation, ValueError, OverflowError):
+        raise RuntimeError(refusal) from None
+    waves = max(1, -(-requests // concurrency))
+    whole = QUESTION_SEND_DEADLINE_SECONDS + _wave_recording_seconds + _wave_wait_seconds  # a wave but the last
+    deadline = (QUESTION_CHILD_SECONDS + (waves - 1) * whole + QUESTION_SEND_DEADLINE_SECONDS + _wave_recording_seconds
+                + _stage_work_seconds)
+    stale = deadline + QUESTION_CHILD_SECONDS + _wave_wait_seconds
+    if stale > _queue_window_seconds:
+        raise RuntimeError(refusal)
+    return waves, deadline, stale
+
+
+_rows = _question_stage_rows(_ceiling, QUESTION_ROUND_CONCURRENCY)
+QUESTION_ROUND_WAVES = _rows[0]
+JOB_DEADLINE_SECONDS['question'] = _rows[1]
+STALE_RUNNING_SECONDS_BY_KIND['question'] = _rows[2]
 
 LOGGING = {
     'version': 1,

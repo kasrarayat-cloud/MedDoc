@@ -108,7 +108,7 @@ V1_VALUES = {
 # FINAL-V2 1.1, and 8.1 step 0b's names for them
 V2_VALUES = {
     'INTERPRETATION_VERSION_V2': 'gemini-events@2', 'APPRAISAL_VERSION': 'gemini-appraisal@1',
-    'INVENTORY_VERSION_V2': 'gemini-inventory@2', 'REQUIREMENTS_VERSION': 'cpt-requirements@2',  # DECISIONS D292
+    'INVENTORY_VERSION_V2': 'gemini-inventory@2', 'REQUIREMENTS_VERSION': 'cpt-requirements@3',  # D292; D324 (11)
     'ENGINE_VERSION_V2': 'cpt-studio-events@2', 'CONTEXT_VERSION_V2': 'gemini-context@2',
     'ROUTING_VERSION_V2': 'gemini-routing@2', 'ADAPTER_VERSION_V2': 'gemini-generate@cptstudio-2',
     'INTERPRETATION_PAIR': 'gemini-events@2/appraisal@1', 'APPRAISAL_PURPOSE': 'appraisal',
@@ -367,6 +367,9 @@ def _settings_assigned() -> set:
 PASSES_1_12 = {'interpretation': ('INTERPRETER_SEND_DEADLINE_SECONDS', 'INTERPRETER_READ_TIMEOUT_SECONDS', 'interpret'),
                'appraisal': ('APPRAISER_SEND_DEADLINE_SECONDS', 'APPRAISER_READ_TIMEOUT_SECONDS', 'appraise')}
 SEND_1_12, READ_1_12, STAGE_1_12, STALE_1_12 = 1320, 1320, 1380, 1440
+# round r3 (DESIGN-v2 e.7, DECISIONS D322): the appraise stage plans round 1 of the questions after its settle, in a
+# child of settings.QUESTION_CHILD_SECONDS (120 s), so its stale threshold moved by that: 1,440 -> 1,560 s
+STALE_R3 = {'appraise': 1560}
 OTHER_STAGES = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180, 'astra': 580,
                 'fable': 580, 'astra_peer': 580, 'fable_peer': 580}
 # 1.12's derivation: a send at the output maximum at 100 tokens per second (13.5% below the slowest measured rate),
@@ -399,13 +402,16 @@ class SettingsTests(SimpleTestCase):
             with self.subTest(purpose=purpose):
                 self.assertEqual((literals[send], literals[read], literals['JOB_DEADLINE_SECONDS'][kind],
                                   literals['STALE_RUNNING_SECONDS_BY_KIND'][kind]),
-                                 (SEND_1_12, READ_1_12, STAGE_1_12, STALE_1_12))
+                                 (SEND_1_12, READ_1_12, STAGE_1_12, STALE_R3.get(kind, STALE_1_12)))
                 self.assertEqual((getattr(settings, send), getattr(settings, read)), (SEND_1_12, READ_1_12))
-        # the per-kind threshold names the two reading stages only; every other stage keeps its deadline and the
+        # the per-kind threshold names the reading stages only - the two passes and, since round r3, the question stage
+        # (D322 (4): its own rows, tests/v2/test_question_stage.py) - every other stage keeps its deadline and the
         # stale-stage sweep's 600 s
-        self.assertEqual(set(literals['STALE_RUNNING_SECONDS_BY_KIND']), {'interpret', 'appraise'})
+        self.assertEqual(set(literals['STALE_RUNNING_SECONDS_BY_KIND']), {'interpret', 'appraise', 'question'})
         self.assertEqual({kind: seconds for kind, seconds in literals['JOB_DEADLINE_SECONDS'].items()
-                          if kind not in ('interpret', 'appraise')}, OTHER_STAGES)
+                          if kind not in ('interpret', 'appraise', 'question')}, OTHER_STAGES)
+        self.assertEqual((literals['JOB_DEADLINE_SECONDS']['question'],
+                          literals['STALE_RUNNING_SECONDS_BY_KIND']['question']), (1588, 1768))
         self.assertEqual(literals['STALE_RUNNING_SECONDS'], 600)
         # the interpreter's response cap (1.12's last row)
         self.assertEqual(settings.INTERPRETER_MAX_RESPONSE_BYTES, 16 * 1024 * 1024)
@@ -687,8 +693,11 @@ FIELDS = {
               'negated_values'),
     et.Anchor: ('units', 'kind_words', 'status_words'),
     et.UnlistedStatement: ('units', 'what', 'kind', 'session'),
+    # FINAL-V2 4.1 R's eleven, then round r3's (DESIGN-v2 f.1, DECISIONS D306-D308; restated at round r3's integration):
+    # the established question answers folded in on R_q, the fact pass's controlled facts and R_q's base, R_base
     et.FactSet: ('encounter', 'people', 'sections', 'sessions', 'anatomy', 'lesions', 'events', 'anchors', 'unlisted',
-                 'pair_controls', 'completeness'),
+                 'pair_controls', 'completeness', 'independent', 'unlisted_independent', 'off_lesion', 'distinct',
+                 'absorbed', 'controlled', 'base'),
     et.HeldFact: ('fact', 'attribute', 'subject', 'result', 'kind', 'cause', 'reason', 'spans', 'rank'),  # D189
     et.Exclusion: ('event', 'fact', 'cover', 'anchor'),
     et.Evaluation: ('supporting', 'held_facts', 'bindings', 'exclusion'),
@@ -781,7 +790,14 @@ TYPES = {
                  'anatomy': _OBJECTS, 'lesions': _OBJECTS, 'events': _OBJECTS, 'anchors': Mapping[et.Id, et.Anchor],
                  'unlisted': tuple[et.UnlistedStatement, ...],
                  'pair_controls': Mapping[tuple[et.Id, ct.Attribute, _VALUE], bool],
-                 'completeness': Mapping[et.Id, ct.Result]},
+                 'completeness': Mapping[et.Id, ct.Result],
+                 # round r3 (DESIGN-v2 f.1): Q-REL's pairs set apart, its unlisted ones by entry index, Q-ONLESION's (act,
+                 # lesion), Q-LESION's lesion pairs, Q-ABSORB's entry indices, the controlled (subject, attribute) facts
+                 # the calibration pool reads (DESIGN-v2 b.9), and R_base
+                 'independent': frozenset[tuple[et.Id, et.Id]], 'unlisted_independent': frozenset[tuple[int, et.Id]],
+                 'off_lesion': frozenset[tuple[et.Id, et.Id]], 'distinct': frozenset[tuple[et.Id, et.Id]],
+                 'absorbed': frozenset[int], 'controlled': frozenset[tuple[et.Id | None, ct.Attribute]],
+                 'base': et.FactSet | None},
     et.HeldFact: {'fact': str, 'attribute': ct.Attribute | None, 'subject': et.Id | None, 'result': ct.Result | None,
                   'kind': et.ItemKind, 'cause': str, 'reason': ct.Reason | None, 'spans': tuple[ct.Span, ...],
                   'rank': int | None},

@@ -220,7 +220,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum, unique
 from types import MappingProxyType
 from typing import TypeVar
@@ -430,9 +430,13 @@ def _either(*judged: Judged) -> Judged:
 
 
 def _pure_silent(found: Fact) -> bool:
-    """An empty slot no doubt names (3.3 row 3): pass 1 stated nothing and nothing doubts it."""
+    """An empty slot no doubt names (3.3 row 3): pass 1 stated nothing and nothing doubts it. DECISIONS D324 (1) (round
+    r3's integration int5, the fold lane's Q-F1): a slot an established negation answer narrowed (facts.ruled_out: "the
+    bleeding this act treated was not caused by another act of this procedure") is no longer empty - an answer rules
+    its value out - so it is read through facts.possibly like any slot not established (every other value exactly as
+    the base left it, the ruled-out one impossible), never as the silence it was."""
     return (found.state is None and not found.options and found.result is Result.UNKNOWN
-            and all(reason is Reason.SILENT for reason in found.reasons))
+            and all(reason is Reason.SILENT for reason in found.reasons) and not facts_.ruled_out(found))
 
 
 def _doubted(found: Fact) -> bool:
@@ -653,24 +657,37 @@ def _unchallenged(ask: _Asker, whole: Id) -> Judged:
     return Judged(Truth.U, (), None, found) if found else _TRUE
 
 
-def _part_of(ask: _Asker, part: Id, whole: Id) -> Judged:
+def _part_of(ask: _Asker, part: Id, whole: Id, open_silent: bool = False) -> Judged:
     """The part's part_of names the whole (any part_relation): supported, its value; negated or an empty slot no doubt
-    names, no (module docstring); otherwise, facts.possibly's."""
+    names, no (module docstring); otherwise, facts.possibly's.
+
+    Round r3's silent-link rule (DESIGN-v2 b.8, DECISIONS D308 Q-B; FINAL-V2 4.7 amended; PROTOTYPE): ``open_silent``,
+    passed only by the arms that have no identity arm to fall back on (the tattoo's lift by part, the procedural
+    adjunct's part arm), reads an empty slot no doubt names as a DOUBT (U, asked as its part_of), never as no bundle:
+    a part whose link pass 1 never filed is explained by nothing, so a true answer to an unrelated doubt could
+    otherwise release a code the bundle table explains away. A negated slot stays no; every other caller keeps the
+    silent exit."""
     found = facts_.fact(ask.R, part, _A.PART_OF)
     if found.result is Result.SUPPORTED:
         return _decided(_A.PART_OF) if found.value == whole else _FALSE
-    if found.result is Result.NEGATED or _pure_silent(found):
+    if found.result is Result.NEGATED:
         return _FALSE
+    if _pure_silent(found):
+        return ask.doubt(part, _A.PART_OF, found, rq.FactKey.ACT_PART) if open_silent else _FALSE
     return ask.doubt(part, _A.PART_OF, found, rq.FactKey.ACT_PART) if facts_.possibly(found, whole) else _FALSE
 
 
-def _caused_by(ask: _Asker, part: Id, whole: Id) -> Judged:
+def _caused_by(ask: _Asker, part: Id, whole: Id, open_silent: bool = False) -> Judged:
     """The part treats bleeding the whole caused (D30, D79: cause act_of_this_session with cause_event): the cause,
     unless an empty slot no doubt names; and the cause_event naming the whole - supported, its value; negated, not that
-    act; an empty slot, any act of the session; otherwise facts.possibly's."""
+    act; an empty slot, any act of the session; otherwise facts.possibly's.
+
+    Round r3's silent-link rule (DESIGN-v2 b.8; PROTOTYPE): ``open_silent``, passed only by the procedural adjunct's
+    cause arm and only when the part treats bleeding (its kind bleeding_control, or its purpose possibly hemostasis:
+    the arm's own premise), reads an empty cause slot no doubt names as a DOUBT (U, asked as its cause)."""
     cause = facts_.fact(ask.R, part, _A.CAUSE)
     if _pure_silent(cause):
-        return _FALSE
+        return ask.doubt(part, _A.CAUSE, cause, rq.FactKey.ACT_CAUSE) if open_silent else _FALSE
     by_act = _enum_in(ask, part, _A.CAUSE, frozenset({Cause.ACT_OF_THIS_SESSION}), Cause, rq.FactKey.ACT_CAUSE)
     if by_act.truth is Truth.F:
         return _FALSE
@@ -1108,10 +1125,12 @@ def _lift(ask: _Asker, whole: Id) -> Judged:
     whole_ = _whole(ask, ask.part, whole, _RESECTIONS, _PERFORMED)
     if whole_.truth is Truth.F:
         return _FALSE
-    by_part = _both(_part_of(ask, ask.part, whole),
+    kind = _kind_in(ask, ask.part, _LIFTS, rq.FactKey.ACT_PART)
+    # round r3's silent-link rule (DESIGN-v2 b.8; PROTOTYPE): a part that is no injection (a tattoo: _LIFTS_BY_PART less
+    # _LIFTS), whose purpose arm is F by kind, reads its silent part_of as a doubt
+    by_part = _both(_part_of(ask, ask.part, whole, open_silent=kind.truth is Truth.F),
                     _enum_in(ask, ask.part, _A.PART_RELATION, _LIFT_RELATIONS, PartRelation, rq.FactKey.ACT_PART),
                     _kind_in(ask, ask.part, _LIFTS_BY_PART, rq.FactKey.ACT_PART), _not_hemostatic(ask.R, ask.part))
-    kind = _kind_in(ask, ask.part, _LIFTS, rq.FactKey.ACT_PART)
     purpose = _enum_in(ask, ask.part, _A.PURPOSE, frozenset({Purpose.LIFT_FOR_RESECTION}), Purpose,
                        rq.FactKey.ACT_PART)
     by_purpose = _FALSE if Truth.F in (kind.truth, purpose.truth) else _both(_same_lesion(ask, ask.part, whole), kind,
@@ -1166,14 +1185,23 @@ def _adjunct(ask: _Asker, whole: Id) -> Judged:
     kind = _kind_in(ask, ask.part, _ADJUNCTS, rq.FactKey.ACT_PART)
     if kind.truth is Truth.F:
         return _FALSE
-    part_of = _part_of(ask, ask.part, whole)
+    # round r3's silent-link rule (DESIGN-v2 b.8; PROTOTYPE): the adjunct's part arm reads a silent part_of as a doubt,
+    # and its cause arm a silent cause, only where the part treats bleeding (the arm's own premise)
+    part_of = _part_of(ask, ask.part, whole, open_silent=True)
     by_part = _FALSE if part_of.truth is Truth.F else _both(part_of,
                                                              _whole(ask, ask.part, whole, _ACT_WHOLES, _POSITIVE))
-    caused = _caused_by(ask, ask.part, whole)
+    caused = _caused_by(ask, ask.part, whole, open_silent=_treats_bleeding(ask.R, ask.part))
     by_cause = _FALSE if caused.truth is Truth.F else _both(caused, _whole(ask, ask.part, whole, None, _POSITIVE))
     found = _either(by_part, by_cause) if Truth.T in (by_part.truth, by_cause.truth) else _either(
         by_part, by_cause, _lesion_adjunct(ask, whole))
     return _both(found, kind)
+
+
+def _treats_bleeding(R: FactSet, part: Id) -> bool:
+    """Round r3 (DESIGN-v2 b.8): the procedural adjunct's cause arm's premise - the part's kind is bleeding_control (by
+    facts.possibly on its kind) or its purpose is possibly hemostasis."""
+    return (facts_.possibly(facts_.fact(R, part, _A.KIND), Kind.BLEEDING_CONTROL)
+            or facts_.possibly(facts_.fact(R, part, _A.PURPOSE), Purpose.HEMOSTASIS))
 
 
 def _lesion_adjunct(ask: _Asker, whole: Id) -> Judged:
@@ -1293,6 +1321,8 @@ def _not_adjunct(R: FactSet, part: Id, whole: Id) -> bool:
     part_of, cause = facts_.fact(R, part, _A.PART_OF), facts_.fact(R, part, _A.CAUSE)
     if part_of.result is Result.NEGATED and part_of.value == whole:
         return True
+    if Cause.ACT_OF_THIS_SESSION in facts_.ruled_out(cause):  # D324 (1), int5 (the fold lane's Q-F2): an answer ruled
+        return True                                           # act_of_this_session out - the negation it establishes
     if cause.result is Result.NEGATED:
         return cause.value is Cause.ACT_OF_THIS_SESSION
     if cause.result is not Result.SUPPORTED:
@@ -1616,8 +1646,8 @@ class Reader:
                     entry = R.unlisted[index]
                     events[whole] = _filed_doubted_form(R, entry)
                     anchors[whole] = Anchor(units=tuple(entry.units), kind_words=None, status_words=None)
-                self._synthetic = (FactSet(R.encounter, R.people, R.sections, R.sessions, R.anatomy, R.lesions, events,
-                                           anchors, R.unlisted, R.pair_controls, R.completeness), virtual)
+                # round r3: replace() keeps the FactSet's answers and its R_base (DESIGN-v2 f.1; PROTOTYPE)
+                self._synthetic = (replace(R, events=events, anchors=anchors), virtual)
         return self._synthetic
 
     def pairs(self, event: Id) -> tuple[pairing.Pair, ...]:
@@ -2241,7 +2271,7 @@ def unlisted_acts(R: FactSet, session: Id | None = None) -> tuple[tuple[int, Unl
     """3.2.6 rule 3: (index, entry) of each kept unlisted ACT that names a session - of ``session`` when given - each a
     synthetic doubted act of that session."""
     return tuple((index, entry) for index, entry in enumerate(R.unlisted)
-                 if entry.what is UnlistedWhat.ACT and entry.session is not None
+                 if entry.what is UnlistedWhat.ACT and entry.session is not None and index not in R.absorbed
                  and (session is None or entry.session == session))
 
 

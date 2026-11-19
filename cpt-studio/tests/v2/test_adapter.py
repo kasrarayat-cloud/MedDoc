@@ -1135,8 +1135,10 @@ class TimeoutTests(SimpleTestCase):
         stale = settings.STALE_RUNNING_SECONDS_BY_KIND
         self.assertEqual((settings.INTERPRETER_SEND_DEADLINE_SECONDS, settings.INTERPRETER_READ_TIMEOUT_SECONDS,
                           settings.JOB_DEADLINE_SECONDS['interpret'], stale['interpret']), (1320, 1320, 1380, 1440))
+        # round r3 (DESIGN-v2 e.7): the appraise stage plans round 1 of the questions after its settle, in a child of
+        # settings.QUESTION_CHILD_SECONDS, so its stale threshold moved by that, 1,440 -> 1,560 s (the settings row's)
         self.assertEqual((settings.APPRAISER_SEND_DEADLINE_SECONDS, settings.APPRAISER_READ_TIMEOUT_SECONDS,
-                          settings.JOB_DEADLINE_SECONDS['appraise'], stale['appraise']), (1320, 1320, 1380, 1440))
+                          settings.JOB_DEADLINE_SECONDS['appraise'], stale['appraise']), (1320, 1320, 1380, 1560))
 
     def test_each_pass_fits_the_bounds_the_senders_output_maximum_sets(self):
         from studio import jobs

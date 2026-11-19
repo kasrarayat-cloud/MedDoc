@@ -82,6 +82,11 @@ the ENGINE AS ASSEMBLED - engine/assess.assess_facts, every rule together - and 
   beside an act naming no lesion at its lesion's place and at another, the other answered by the statement's rejected
   place pair control, is a fixture too (SINGLE_FIXTURE; round r2f's refutation of lane f-lesion2, RFL2-2: with no
   fixture of that release, D220's generator made no state in the single arm, whose deleted act place released).
+  DECISIONS D316 QB (round r3's build, lane engine): a single target placed at its lesion's place AND at an umbrella
+  holding the act's place, beside an act naming no lesion that the act-lesion pair sets apart from the lesion, is held
+  (the note contradicts itself: QB_FIXTURE); 9.4's deletion of that umbrella releases, into exactly P4-ONLESION's
+  ruled shape - the named release D316_QB, beside D228_DQ2 and D293_ERASE, held to D264's every-row rule like every
+  named release.
 - P-INDEP (IndependenceTests): perturbing any fact outside requirements.dependencies(code) leaves the code's status,
   its item (the held fact it asks and its message) and its held facts unchanged - test_assess's perturbation harness
   (repair 5a's R5), over every fixture here.
@@ -680,6 +685,54 @@ SINGLE_FIXTURE = ('a denial on a polyp beside a tattoo at its place and at anoth
                   'act-lesion claim and a statement control (D311 R2F2-L1)')
 
 
+def a_denial_on_a_polyp_and_the_colon_beside_a_tattoo_naming_none():
+    """DECISIONS D316 QB's P-MONO and P-INDEP fixture (round r3's build, lane engine; QB's recorded scene in
+    ACT_LESION_FIXTURE's frame): EF.colonoscopy's cold snare E2 of L1 (single) in the sigmoid colon, E3 a denial that a
+    lifting injection was used for L1 (its single target), placed at L1's place AND at the whole colon - an umbrella it
+    names for itself, holding the sigmoid colon - and E4 a tattoo in the sigmoid colon whose target names no lesion,
+    with the act-lesion pair (E4, distinct_from, L1) established (no place pair control: every place is compatible with
+    one of the other object's own). The denial's own umbrella holds the tattoo's place and catalogue.covers reads a tattoo and
+    an injection as one act, so the note contradicts itself: 45381 is HELD on E4 (int3 released it). 9.4's deletion of
+    the umbrella leaves ACT_LESION_FIXTURE's shape (pair 4's), the one release D316 names (D316_QB)."""
+    doc = EF.colonoscopy()
+    doc.lesions[L(1)] = {**doc.lesions[L(1)], A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}
+    doc.act(3, Kind.INJECTION, status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.SINGLE_TARGET),
+            lesion=sup(L(1)), places=[sup(Landmark.SIGMOID_COLON), sup(Landmark.COLON)], kind_words=Span(300, 330),
+            status_words=Span(330, 360))
+    doc.act(4, Kind.TATTOO, places=[sup(Landmark.SIGMOID_COLON)])
+    R = paired(doc.build())
+    return replace(R, pair_controls={**R.pair_controls, (EF.E(4), A.DISTINCT_FROM, L(1)): True})
+
+
+QB_FIXTURE = ('a denial on a polyp and on the colon beside a tattoo naming no lesion, the act-lesion pair established '
+              '(D316 QB)')
+
+
+def a_denial_on_a_polyp_and_an_anastomosis_beside_a_tattoo_naming_none():
+    """Round r3's integration (the second refutation's R2E-QB-ANAT, HIGH; D316 QB's class): ACT_LESION_FIXTURE's frame
+    (pair 4's shape: the denial E3 of a lifting injection for L1, single, placed at L1's place only, the tattoo E4 in the
+    sigmoid colon naming no lesion, the act-lesion pair (E4, distinct_from, L1) established) with the denial ALSO at the
+    anastomosis Y1 (its target.anatomy, supported - "or at the anastomosis"), an entry of type anastomosis whose organ
+    the note does not state. The anastomosis is a target the denial names for itself beyond its not-on lesion, and an
+    unplaceable one (anatomy.ALTERED), so it holds the tattoo's place: catalogue.covers reads a tattoo and an injection as
+    one act and the note contradicts itself - 45381 HELD (the build released it). target.anatomy is single-valued, so
+    9.4 deletes no member of it, and every weakening of it keeps the entry it names: no single weakening releases."""
+    doc = EF.colonoscopy()
+    doc.lesions[L(1)] = {**doc.lesions[L(1)], A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}
+    doc.entry(1, type=sup(ct.AnatomyType.ANASTOMOSIS))
+    doc.act(3, Kind.INJECTION, status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.SINGLE_TARGET),
+            lesion=sup(L(1)), places=[sup(Landmark.SIGMOID_COLON)], kind_words=Span(300, 330),
+            status_words=Span(330, 360))
+    doc.events[EF.E(3)] = {**doc.events[EF.E(3)], A.TARGET_ANATOMY: (sup(EF.Y(1)),)}
+    doc.act(4, Kind.TATTOO, places=[sup(Landmark.SIGMOID_COLON)])
+    R = paired(doc.build())
+    return replace(R, pair_controls={**R.pair_controls, (EF.E(4), A.DISTINCT_FROM, L(1)): True})
+
+
+QB_ANAT_FIXTURE = ('a denial on a polyp and at an anastomosis beside a tattoo naming no lesion, the act-lesion pair '
+                   'established (R2E-QB-ANAT)')
+
+
 def fixtures():
     """(name, the settled FactSet, the proposals) the properties run over: test_assess's assess fixtures, and the SC-B
     fixtures (refutation 6a-r1 F1) - two_sessions and r2d-2's Q2 and Q3 shapes and two targeted denials, each with the
@@ -709,6 +762,13 @@ def fixtures():
         # DECISIONS D311 R2F2-L1 (round r2f; lane f-lesion2's repair pass, RFL2-2): the single arm's release with a
         # second act place, carried by a fixture
         (SINGLE_FIXTURE, TA.dated(a_denial_on_a_polyp_beside_a_tattoo_at_two_places_naming_none()),
+         (('45381', 4), ('45385', 2), ('45378', 1))),
+        # DECISIONS D316 QB (round r3's build): the single arm beside a statement placed beyond its not-on lesion, held,
+        # and its one named release (D316_QB), carried by a fixture
+        (QB_FIXTURE, TA.dated(a_denial_on_a_polyp_and_the_colon_beside_a_tattoo_naming_none()),
+         (('45381', 4), ('45385', 2), ('45378', 1))),
+        # round r3's integration (R2E-QB-ANAT): QB's class through the denial's own target.anatomy, held, no release
+        (QB_ANAT_FIXTURE, TA.dated(a_denial_on_a_polyp_and_an_anastomosis_beside_a_tattoo_naming_none()),
          (('45381', 4), ('45385', 2), ('45378', 1))),
         ('two sessions', TA.dated(TA.two_sessions().build()), TA.TWO),
         ('enriched', TA.dated(TA.enriched().build()), TA.TWO),
@@ -1130,6 +1190,49 @@ def _d228_compatible_deletion(label, what, code, R, transition=None) -> bool:
                and every_place_control_rejected(R, subject, other) for other in R.events)
 
 
+def _qb_statement_place_deletion(label, what, code, R, transition=None) -> bool:
+    """DECISIONS D316 QB (round r3's build, lane engine; the named release beside D228_DQ2 and D293_ERASE): 9.4's
+    deletion of an ESTABLISHED member of a statement's own target.places that lay BEYOND its not-on lesions' places -
+    no established place of a lesion pairing's one arm for an act naming no lesion reads by an established not-on - and
+    held a place of such an act (not disjoint from it) releases the act into exactly P4-ONLESION's ruled shape (pair 4's
+    L04): after the deletion that arm sets the pair apart (pairing._apart_from_unnamed: every lesion apart, the
+    every-control scan, each act place answered), the pair was not apart before, and no place of the statement left
+    beyond its not-on lesions' places holds an act place (pairing._held_beyond). Nothing else: a deletion of an act's or
+    a lesion's place (refute-r2d-r2 RD1 / D245's class is the act's), a member within its lesions' places or one that
+    held no act place, a pair another arm sets apart, a statement read in another arm."""
+    deleted = _deleted_place(label, what)
+    if deleted is None:
+        return False
+    statement, member = deleted
+    if member.result not in ESTABLISHED or not isinstance(member.value, Landmark):
+        return False
+    after = weakened_state(label, what, R)
+    if after is None:
+        return False
+    for act in R.events:
+        if act == statement or not P.paired(R, statement, act) or not F.silent(F.fact(R, act, A.TARGET_LESION)):
+            continue
+        mode = P._mode(after, P._context(after, statement, act))
+        if mode not in (P._Mode.SINGLE, P._Mode.LISTED) or P._mode(R, P._context(R, statement, act)) is not mode:
+            continue
+        if (P.row(R, P.Row.TARGET, statement, act) is P.RowResult.INDEPENDENT
+                or P.row(after, P.Row.TARGET, statement, act) is not P.RowResult.INDEPENDENT):
+            continue
+        own, other = P._target(after, statement, mode), P._target(after, act, P._Mode.SINGLE)
+        if not P._apart_from_unnamed(after, P._context(after, statement, act), own, other, mode):
+            continue
+        not_on = own.lesions if mode is P._Mode.SINGLE else own.lesions & P._asked_about(after, act)
+        answered = frozenset(place.value for lesion in not_on for place in F.members(after, lesion, A.PLACES)
+                             if place.result is Res.SUPPORTED and isinstance(place.value, Landmark))
+        act_places = other.places or frozenset()
+        if member.value in answered or all(anatomy.disjoint(member.value, place) for place in act_places):
+            continue
+        if any(P._held_beyond(after, statement, place, answered) for place in act_places):
+            continue
+        return True
+    return False
+
+
 def _how(label) -> str | None:
     """The 9.4 weakening the label's last segment names: one of HOWS, or 'deleted'; None for a pair control made not
     rejected or a completeness claim made unresolved (their ``what`` is a key or a session, not a fact)."""
@@ -1244,7 +1347,13 @@ def _which_pairs_corner(label, what, code, R, transition=None) -> bool:
     if attribute not in made_by or F.fact(R, subject, attribute).inherited_from is None:
         return False
     weak = reweakened(label, what, R)
-    return not P.is_statement(weak, subject) and bool(_held_pairs(R, subject))
+    held = _held_pairs(R, subject)
+    # D316's carried RFX-1 (round r3's integration; f-engine's refutation): the corner is D228's UNCLAIMED one - a pair
+    # the statement's scope.covers names is never dropped by a weakening (D309's class rule: "no weakening drops a
+    # claimed pair"), so a release of a code a CLAIMED pair held is a P-MONO breach, never this ruling's
+    lost = [act_ for act_ in held if not P.paired(weak, subject, act_)]
+    return (not P.is_statement(weak, subject) and bool(held)
+            and not any(P.relation(R, subject, act_).claimed for act_ in lost))
 
 
 def left_by_support(code, R, act_) -> bool:
@@ -1579,6 +1688,8 @@ D264_CLEAN = "DECISIONS D264: D264_CLEAN (6a's Q4; refute-6a-r2 F2's states, the
 D264_SITE = "DECISIONS D264: D264_SITE with D240 (6a's Q6; D29's site fit read from a deleted place member; w7r's O13)"
 D293_ERASE = ("DECISIONS D293: Q-ERASE option (a) - a value-erasing contradiction of a fact whose classic weakening a "
               "named release takes, accepted under that class and held to D264's every-row rule")
+D316_QB = ("DECISIONS D316: QB - a deleted statement place beyond its not-on lesions' places, released only into "
+           "P4-ONLESION's ruled shape (pair 4's)")
 ACCEPTED_RELEASES = (
     ('the deleted beyond point of a jejunal enteroscopy', D218, _jejunal_beyond_deletion),
     ('a deleted place member that overlapped the other object\'s place, every control between them rejected', D245_Q2,
@@ -1599,6 +1710,8 @@ ACCEPTED_RELEASES = (
      _clean_row_release),
     ("a deleted member of an act's target.places or of its target lesion's places setting the act outside a code's SITE "
      'class: the act leaves by its SITE row, or a claim and so a competition', D264_SITE, _site_class_release),
+    ("a deleted statement place beyond its not-on lesions' places that held the place of an act naming no lesion, the "
+     "pair left in P4-ONLESION's ruled shape (pair 4's)", D316_QB, _qb_statement_place_deletion),
 )
 # DECISIONS D264: every named release is accepted only when every act still supporting the released code meets every row
 # of evaluate's reading after the weakening (``every_row_met``) - D264 names D262_STATUS, D262_QM, D262_NC, D228_DQ2,
@@ -1936,8 +2049,11 @@ class PMonoTests(SimpleTestCase):
         # control rejected - D245's own reasoning), so deleting its stomach releases nothing; D245's ruling and its
         # predicate stay, met directly by test_the_rulings_accept_their_shapes_alone
         # DECISIONS D293: D293_ERASE's sixteen (ERASING_ACCEPTED), each held to D264's rule by the check
+        # DECISIONS D316 QB (round r3's build): QB_FIXTURE's one - 45381 released when the denial's umbrella (the colon)
+        # is deleted, into pair 4's shape
         self.assertEqual(collections.Counter(named), {D218: 1, D245_B: 1, D262_NC: 2, D262_STATUS: 4,
-                                                      D228_DQ2: 4, D262_QM: 24, D264_SITE: 4, D293_ERASE: 16})
+                                                      D228_DQ2: 4, D262_QM: 24, D264_SITE: 4, D293_ERASE: 16,
+                                                      D316_QB: 1})
         self.assertEqual(set(named) | {D264_CLEAN, D245_Q2},
                          {ruling for _description, ruling, _predicate in ACCEPTED_RELEASES})
         # the shrunk claims a ruling accepts, pinned: D264_SITE's - 43249's claim drops the dilation when its distal
@@ -2642,6 +2758,8 @@ DRAWN_RELEASES = {
     # snare, every place control rejected), and with any control left unrejected the biopsy is held as before
     'a snare beside a biopsy of two places (EGD)': {},
     'a possible statement beside a biopsy and a snare, its controls rejected (D245)': {D245_B: 1},  # likewise
+    # DECISIONS D316 QB: its act-lesion pair as filed (the umbrella's deletion, D316_QB); not rejected, nothing
+    QB_FIXTURE: {D316_QB: 1},
 }
 DRAWN_SHRINKS = {F3_FIXTURE: {D264_SITE: DRAWN_SITE_SHRINKS}}
 
@@ -3106,6 +3224,17 @@ def controlled() -> set:
     out = {(_CLASS_FAMILY[rule.object_class.value], rule.attribute) for rule in CL.CONTROLS}
     out |= {(_CLASS_FAMILY[item.object_class.value], item.attribute) for item in CL.UNCONTROLLED}
     out |= {(IdFamily.EVENT, A.TARGET_PLACES), (IdFamily.EVENT, A.TARGET_LESION), (IdFamily.SESSION, A.STATIONS)}
+    # round r3's integration (the second refutation's R2E-QB-ANAT): the target row's QB clause reads a STATEMENT's
+    # target.anatomy on a READY path only to HOLD - an anatomy target it names for itself keeps the pair together, never
+    # sets it apart (3.2.3's ONLY_HOLDS reasoning; tests/v2/test_requirements.READ_UNCONTROLLED records it) - so a
+    # yes-bias there can only hold; the contract's UNCONTROLLED is not moved (it is the fact pass's, CONTROLS_SHA256_V3)
+    out |= {(IdFamily.EVENT, A.TARGET_ANATOMY)}
+    # round r3's fourth repair (DECISIONS D328's addendum Q3, lane rules5): the colon arm reads an anastomosis entry's
+    # JOINS on a READY path only to HOLD - joins that may join the ileum to the rectum or the anus hold the colonoscopy
+    # codes (evaluate.joins_ileum_below_colon_possible), and no verdict on a member releases one (a member contradicted
+    # or unresolved keeps every value it may be) - so a yes-bias there can only hold; the contract's UNCONTROLLED is not
+    # moved (it is the fact pass's, CONTROLS_SHA256_V3: a question for the integrator, NOTES)
+    out |= {(IdFamily.ANATOMY, A.JOINS)}
     return out
 
 

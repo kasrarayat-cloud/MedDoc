@@ -497,6 +497,58 @@ class ScenarioOnAFableFilledDatabase(FableRows):
         self.assertEqual(len(rc.scenario_problems(found)), 10)
 
 
+class ScenarioRoundR3(FableRows):
+    """Round r3 (DECISIONS D320, D322 (5)): a candidate whose installer knows the question stage is judged on its
+    records - a queued or running question job, a question run, a code an established answer released - each SQL
+    counting on a database that holds them, and none of them judged for a candidate without the stage."""
+
+    def counts(self, kinds):
+        from django.db import connection
+        found = {}
+        with connection.cursor() as cursor:
+            for key, _, statement in kinds:
+                cursor.execute(statement)
+                found[key] = cursor.fetchone()[0]
+        return found
+
+    def test_this_revisions_installer_is_a_question_candidate_and_an_earlier_one_is_not(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import install
+        self.assertTrue(rc.question_candidate(install))
+        self.assertFalse(rc.question_candidate(SimpleNamespace(READING_STAGE_KINDS=('interpret', 'appraise'))))
+        self.assertFalse(rc.question_candidate(SimpleNamespace()))
+        self.assertEqual(rc.QUESTION_KIND, install.QUESTION_KIND)
+        self.assertEqual([key for key, _, _ in rc.SCENARIO_R3], ['queued_question', 'question_run', 'question_released'])
+        for statement in (sql for _, _, sql in rc.SCENARIO_R3):
+            self.assertTrue(statement.startswith('select count(*) from studio_'), statement)
+
+    def test_each_question_record_kind_counts_on_a_database_that_holds_it(self):
+        self.fill_d15()
+        found = self.counts(rc.SCENARIO_R3)
+        self.assertEqual(found, {'queued_question': 1, 'question_run': 1, 'question_released': 1})
+        self.assertEqual(rc.assertion_7({**self.counts(rc.SCENARIO_V2 + rc.SCENARIO_V3), **found}, True, True, True),
+                         ([], {'declined_hold': 1}))
+
+    def test_a_released_code_needs_a_supported_question_naming_it(self):
+        """The boundary: the same rows with the question unresolved, or naming another code, count no released code
+        (the inventory's events rewritten in SQL: the model refuses an update of its immutable rows)."""
+        from django.db import connection
+        from studio import models
+        self.fill_d15()
+        inventory = models.EventInventory.objects.exclude(events={}).get()
+        for events in ({'questions': [{'result': 'unresolved', 'witnesses': [{'code': '45378'}]}]},
+                       {'questions': [{'result': 'supported', 'witnesses': [{'code': '45385'}]}]}):
+            with self.subTest(events=events):
+                with connection.cursor() as cursor:
+                    cursor.execute('update studio_eventinventory set events = %s::jsonb where id = %s',
+                                   [json.dumps(events), inventory.pk])
+                self.assertEqual(self.counts(rc.SCENARIO_R3[2:])['question_released'], 0)
+                problems, _ = rc.assertion_7({key: 1 for key, _, _ in rc.SCENARIO_V2 + rc.SCENARIO_V3}
+                                             | self.counts(rc.SCENARIO_R3), True, True, True)
+                self.assertEqual(problems, ['question_released: the run holds no a code an established answer '
+                                            'released'])
+
+
 class UpdateRows(unittest.TestCase):
     DECLARED = {'pending_before_analyze': ['e1'], 'pending_after_analyze': ['e2'], 'completed': ['e3'], 'a21': ['e4']}
     CLOSE = {'update_pending': {'e1': ['values_saved'], 'e2': ['assessment_off_context'], 'e4': ['reconciled_unknown']},

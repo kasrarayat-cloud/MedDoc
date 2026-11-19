@@ -895,7 +895,10 @@ class UpdateFailureTests(UpdateCase):
         panel = progress.encounter_progress(row)
         self.assertEqual(panel['error'], {'text': customer_api.update_text('review_not_sent', review.UPDATE_DETAILS,
                                                                            True), 'action': 'retry_update'})
-        [unsent] = Run.objects.filter(encounter=encounter, state=Run.NOT_SENT).exclude(request_sha256='')
+        # round r3: the scene's reading leaves a doubt the question stage asks, and this module's scripted connector
+        # prepares no question request - its question run is recorded not sent too; the run meant is the review's
+        [unsent] = (Run.objects.filter(encounter=encounter, state=Run.NOT_SENT).exclude(request_sha256='')
+                    .exclude(scope__has_key='question'))
         job = jobs.retry_update(encounter, self.user)
         self.assertEqual(job.idempotency_key, f'predict:{row.current_context_id}:retry:{unsent.pk}')
         self.drain()

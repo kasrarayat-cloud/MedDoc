@@ -702,8 +702,13 @@ class R6Tests(SimpleTestCase):
             with self.subTest(fixture=name):
                 found = by_code(run(doc.build(), ('45385', 2)))['45385']
                 self.assertEqual((found.status, found.considerations), (status, considered))
-                colfull = [row for row in found.trace if row.requirement == 'COLFULL']
+                # restated at round r3's integration: the colonoscopy route table (DECISIONS D310 (1)) is a second
+                # COLFULL-tagged row, read on the supporting act - T here (no stoma route possible) - beside the extent
+                # row, read on the session
+                colfull = [row for row in found.trace if row.requirement == 'COLFULL' and on_session(row)]
                 self.assertEqual(len(colfull), 1)
+                self.assertEqual([row.truth.value for row in found.trace if row.requirement == 'COLFULL'
+                                  and not on_session(row)], ['T'])
                 if status is Outcome.NEEDS_CLARIFICATION:
                     self.assertEqual(found.item.held.fact, 'extent')
                     self.assertEqual(colfull[0].truth.value, 'U')
@@ -862,7 +867,8 @@ class D244Tests(SimpleTestCase):
         self.assertEqual((found.item.message, found.item.fill.attribute, found.item.fill.act, found.item.fill.family),
                          (Q.MessageId.CONFLICT_ATTRIBUTE, attribute, Kind.EXAMINATION, found.family))
         self.assertNotIn('extent', [fact for fact, _ in facts_of(found)])  # rank 14 never stands in for it
-        rows = [row for row in found.trace if row.requirement == requirement]
+        # the extent row, on the session (round r3's route row, on the act, is beside it: on_session)
+        rows = [row for row in found.trace if row.requirement == requirement and on_session(row)]
         self.assertEqual([(row.truth.value, row.subject, row.witness) for row in rows], [('U', X(1), held)])
 
     def test_r_k8_rf_ho9_i_a_reach_given_both_polarities_holds_45378_at_rank_1(self):
@@ -1051,9 +1057,15 @@ class D244Tests(SimpleTestCase):
                 found = by_code(run(doc.build(), (code, 2 if code == '43239' else 1)))[code]
                 self.assertEqual((found.status, found.item.held.fact, found.item.held.rank, found.item.held.attribute),
                                  (Outcome.NEEDS_CLARIFICATION, 'extent', 14, attribute))
-                self.assertEqual([row.truth.value for row in found.trace if row.requirement in ('R6:extent', 'COLFULL')],
-                                 ['U'])
+                self.assertEqual([row.truth.value for row in found.trace
+                                  if row.requirement in ('R6:extent', 'COLFULL') and on_session(row)], ['U'])
                 self.assertEqual(found.considerations, INCOMPLETE)
+
+
+def on_session(row) -> bool:
+    """A trace row read on a session (the extent rows: R6:extent, COLFULL's reach) - never round r3's colonoscopy route
+    table (DECISIONS D310 (1)), COLFULL-tagged and read on the supporting act."""
+    return row.subject is not None and row.subject.family is IdFamily.SESSION
 
 
 def _office() -> EF.Doc:

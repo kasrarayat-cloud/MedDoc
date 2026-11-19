@@ -130,7 +130,26 @@ FINAL_V2 = APP / 'docs' / 'gemini-migration' / 'FINAL-V2.md'
 # 2585b42e5bec9fe204323927912f2e1f75ec9537816b3b6542503033220191c3, f-lesion2
 # afa0291c4d3f9c6ac7fe45c6d02b83e26323a19a372a09debe6caf414c4804c0, f-words
 # 748c84802a174149dafb79cdb46ab5e5130fcedf68cfab5eb50dd874295739e9.
-FINAL_V2_SHA256 = '166473ba0e5472198db7fc917f248208df2507b7a0ad67ba3eee271bb935b08f'
+# int4 (round r3's integration, DECISIONS D306-D323; 2026-11-18, session 738699b2): the round's records (B9) - FINAL-V2
+# gains eleven dated notes, insertions only (3.9 the question stage, new; 4.3 the colonoscopy route table; 4.5 D316 QB
+# and R2E-QB-ANAT; 4.7 the silent-link rule; 6.2 D321; 7.1, 7.2 and 7.4 the stage's cost, latency and place; 9.2, 9.4 and
+# 9.5), every earlier line kept; the scanned sections 2.1-2.4 byte for byte unchanged (22,480 characters); recomputed by
+# the same function. Was 166473ba0e5472198db7fc917f248208df2507b7a0ad67ba3eee271bb935b08f.
+# int6 (round r3's third repair, DECISIONS D325 (6) Q8; 2026-11-18, session 738699b2): D324's and D325's records -
+# FINAL-V2 gains ten dated notes, insertions only (3.9 the first and second adversarial passes' rules; 4.3 the colon to
+# traverse, D324 (5) and D325 (2); 4.5 D324 (7)'s lesion-like structure; 4.6 D324 (6); 6.1 D324 (11)'s label; 7.1
+# D325 (3) and D326's ceiling; 7.4 the round's waves; 7.5 the question stage's outcomes; 9.4 the fold's property and
+# the exclusivity census; 9.5 gate 6's EUS stoma class), every earlier line kept; the scanned sections 2.1-2.4 byte
+# for byte unchanged (22,480 characters); recomputed by the same function. Was
+# 95cc73e21bf36c9cd4a09812c5a98605c3f565b5d3713fc84a832aa846503c52.
+# int7 (round r3's fifth repair's integration; the task's D326 to D330 records; 2026-11-19, session 738699b2):
+# FINAL-V2 gains ten dated notes, insertions only (3.9 the pair's one proposition D328 (2)/D330 (2), D327 (2) and
+# D329 (4); 4.3 D327 (1) with D328's addendum, D328 (1)'s route table and D330 (1)'s path guard; 4.5 the kept pairs;
+# 6.1 D327 (3)'s label; 6.2 D329 (3); 7.1 D327 (5) and D329 (4); 7.4 D327 (6); 7.6 D327 (4); 9.4 the pair and guard
+# censuses; 9.5 gate 6's route table), every earlier line kept; the scanned sections 2.1-2.4 byte for byte unchanged
+# (22,480 characters); recomputed by the same function. Was
+# 3d650284a79bed7b120248c28aa71989ca06d5c1e320d399e980726495a101d9.
+FINAL_V2_SHA256 = '248d1af97a3bd59b32f346f0ee91dd299b1e91faa0b32b5c76abab0afa7c4834'
 DEV_EXCLUSION = APP / 'docs' / 'gemini-migration' / 'acceptance-a1' / 'DEV-EXCLUSION.sha256'
 EVIDENCE = Path(os.environ.get('CPT_STUDIO_DESIGN_EVIDENCE', '/home/claude/cpt-studio-completion-20261106'))
 SURVEY_4 = EVIDENCE / 'gemini-migration' / 'design-v2' / 'survey' / 'failures.md'

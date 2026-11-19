@@ -570,7 +570,7 @@ class SuccessPathTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(*ACTS), [
             ('recorder', 'start'),
             ('run', 'web', NEXT, 9151, IMAGE), ('wait', 'web', NEXT, 9151), ('smoke', 9151),          # S1
-            ('stop', WORKER, '1500'), ('rename', WORKER, WORKER + '-previous'),                           # S2
+            ('stop', WORKER, '1800'), ('rename', WORKER, WORKER + '-previous'),                           # S2
             ('vhost', 'replace', 9151), ('reload', 9151), ('https', 9151, REVISION),                     # S3
             ('run', 'worker', WORKER, None, IMAGE), ('wait', 'worker', WORKER, None),                    # S4
             ('drain', 9150), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # S5
@@ -702,7 +702,7 @@ class FailureArmTests(TemporaryDirectoryTest):
         message, details = self.failed(world)
         self.assert_old_pair_serves(world)
         self.assertIn('/login/ answered 500', message)
-        self.assertNotIn(('stop', WORKER, '1500'), world.events)
+        self.assertNotIn(('stop', WORKER, '1800'), world.events)
 
     def test_s2_a_worker_rename_that_fails_restarts_the_old_worker(self):
         world = BlueGreenWorld(self.tmp)
@@ -785,7 +785,7 @@ class FailureArmTests(TemporaryDirectoryTest):
         self.assert_old_pair_serves(world)
         self.assertEqual(world.acts('reload'), [('reload', 9151), ('reload', 9150)])
         order = [world.events.index(event) for event in (
-            ('stop', WORKER, '1500'), ('close', IMAGE, tuple(KINDS_OLD)), ('put_back', OLD_IMAGE), ('reload', 9150),
+            ('stop', WORKER, '1800'), ('close', IMAGE, tuple(KINDS_OLD)), ('put_back', OLD_IMAGE), ('reload', 9150),
             ('https', 9150, OLD), ('drain', 9151), ('stop', NEXT, '30'), ('rename', WORKER + '-previous', WORKER),
             ('start', WORKER))]
         self.assertEqual(order, sorted(order))
@@ -937,7 +937,7 @@ class StopTimeoutBlueGreenTests(TemporaryDirectoryTest):
             for event in world.acts('stop'):
                 name, seconds = event[1], event[2]
                 if name.startswith(WORKER):
-                    self.assertEqual(seconds, '1500', event)  # AMENDMENT-2 1.12
+                    self.assertEqual(seconds, '1800', event)  # round r3 (D322 (4)); 1500 by AMENDMENT-2 1.12
                 else:
                     self.assertEqual(seconds, '30', event)
 
@@ -1387,7 +1387,7 @@ class SwitchBackTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(*ACTS), [
             ('recorder', 'start'),
             ('run', 'web', NEXT, 9150, OLD_IMAGE), ('wait', 'web', NEXT, 9150), ('smoke', 9150),        # B2
-            ('stop', WORKER, '1500'), ('rename', WORKER, WORKER + '-previous'),                            # B3
+            ('stop', WORKER, '1800'), ('rename', WORKER, WORKER + '-previous'),                            # B3
             ('close', IMAGE, tuple(KINDS_OLD)), ('put_back', OLD_IMAGE),                                  # B4
             ('vhost', 'replace', 9150), ('reload', 9150), ('https', 9150, OLD),                           # B5
             ('drain', 9151), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # B6
@@ -1405,7 +1405,7 @@ class SwitchBackTests(TemporaryDirectoryTest):
         self.assertIn('switched back to bbbbbbbbbbbb', details['summary'])
         # rollback-app's check, first, and again right before B4's close (refute-r2 L6-4)
         self.assertEqual(world.acts('hazards'), [('hazards', IMAGE), ('hazards', IMAGE)])
-        self.assertLess(world.events.index(('hazards', IMAGE), world.events.index(('stop', WORKER, '1500'))),
+        self.assertLess(world.events.index(('hazards', IMAGE), world.events.index(('stop', WORKER, '1800'))),
                         world.events.index(('close', IMAGE, tuple(KINDS_OLD))))
 
     def test_it_refuses_before_starting_anything(self):
@@ -1974,12 +1974,12 @@ class InstallDocTests(unittest.TestCase):
         for phrase in ('`cpt-studio-web-next` starts on the idle port', "**S3** the vhost's upstream is switched",
                        '**S5** the old web is drained', 'at least 130 s', '10 consecutive one-second samples',
                        'never longer than 600 s', 'every 0.5 s', '`availability`', 'never stops the serving web',
-                       '`docker stop --time 1500`', 'graceful, 30 s', 'the two differ in their `proxy_pass` line alone'):
+                       '`docker stop --time 1800`', 'graceful, 30 s', 'the two differ in their `proxy_pass` line alone'):
             self.says(phrase, app)
         self.assertEqual((install.DRAIN_MIN_SECONDS, install.DRAIN_QUIET_SECONDS, install.DRAIN_MAX_SECONDS),
                          (130, 10, 600))
         self.assertEqual((install.AVAILABILITY_INTERVAL_SECONDS, install.STOP_SECONDS),
-                         (0.5, {'web': 30, 'worker': 1500}))  # AMENDMENT-2 1.12: the worker's outlasts a reading
+                         (0.5, {'web': 30, 'worker': 1800}))  # round r3: the worker's outlasts a question round
         for step in ('S1', 'S2', 'S3', 'S4', 'S5'):
             self.says(f'- {step} (', app)  # one row of the failure matrix each
 
@@ -2080,7 +2080,7 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(*ACTS), [  # the switch is exactly the one without the interpreter
             ('recorder', 'start'),
             ('run', 'web', NEXT, 9151, IMAGE), ('wait', 'web', NEXT, 9151), ('smoke', 9151),          # S1
-            ('stop', WORKER, '1500'), ('rename', WORKER, WORKER + '-previous'),                           # S2
+            ('stop', WORKER, '1800'), ('rename', WORKER, WORKER + '-previous'),                           # S2
             ('vhost', 'replace', 9151), ('reload', 9151), ('https', 9151, REVISION),                     # S3
             ('run', 'worker', WORKER, None, IMAGE), ('wait', 'worker', WORKER, None),                    # S4
             ('drain', 9150), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # S5

@@ -634,8 +634,10 @@ class CodeRows(SimpleTestCase):
         self.assertEqual(keys(decide('45341', lower(sup(Extent.CECUM)))),
                          [('extent', 14, EXPLANATION, rule(Q.Rule.LOWER))])
         self.assertEqual([entry[:3] for entry in keys(decide('45341', lower()))], [('extent', 14, QUESTION)])
-        self.assertTrue(ready(decide('44406', lower(sup(Extent.STOMA), approach=sup(ct.Approach.THROUGH_STOMA),
-                                                    stoma=True))))
+        # DECISIONS D325 (2) (round r3's third repair; was READY): the stoma class needs an established colonic route
+        # too - a reach to the stoma alone, the stoma's organ never established, is held by the class's own route hold
+        self.assertEqual(keys(decide('44406', lower(sup(Extent.STOMA), approach=sup(ct.Approach.THROUGH_STOMA),
+                                                    stoma=True))), [('procedure', 8, QUESTION, rule(Q.Rule.LOWER))])
         # D225 (refute-4a-r2 P5): with the reach met, the stoma class's approach is asked as the approach - RANK row 8,
         # procedure ("approach for a class") - never as R6's extent question
         for name, R in {'no stoma entry': lower(sup(Extent.STOMA), approach=sup(ct.Approach.THROUGH_STOMA)),
@@ -655,11 +657,14 @@ class CodeRows(SimpleTestCase):
         self.assertEqual(item('44406', R).message, Q.MessageId.EXAMINATION_CLASS)
         # the reach not established is still R6's extent question (the reach IS what is unknown), recorded beside the
         # approach's when that is unknown too (refute-r4a-r1 F7: HO-8, every unresolved fact held; RANK then asks the
-        # approach, row 8) - and alone once the approach is established through the documented stoma
+        # approach, row 8) - and, once the approach is established through the documented stoma, beside the class's
+        # route hold (DECISIONS D325 (2); was the extent question alone): a reach that can only be the stoma never makes
+        # the route colonic
         self.assertEqual([entry[:3] for entry in keys(decide('44406', lower(unres(Extent.STOMA), stoma=True)))],
                          [('extent', 14, QUESTION), ('procedure', 8, QUESTION)])
         R = lower(unres(Extent.STOMA), stoma=True, approach=sup(ct.Approach.THROUGH_STOMA))
-        self.assertEqual([entry[:3] for entry in keys(decide('44406', R))], [('extent', 14, QUESTION)])
+        self.assertEqual([entry[:3] for entry in keys(decide('44406', R))],
+                         [('extent', 14, QUESTION), ('procedure', 8, QUESTION)])
 
     def ercp(self, *acts):
         return ercp_doc(*acts)
@@ -2004,7 +2009,8 @@ class LowerApproach(SimpleTestCase):
         """The reach's witness and the approach's are each recorded when not T; the row is F when either rests on an
         established failure. A reach outside the class beside an approach established oral: two explanations, the
         approach's asked first (row 8); no reach stated beside through_stoma with no stoma entry: two questions; the
-        reach met beside through_stoma and a stoma entry: READY."""
+        reach met beside through_stoma and a stoma entry: READY - DECISIONS D325 (2): once the route is colonic, so a
+        reach to the stoma alone is held by the class's route hold."""
         R = lower_eus(sup(Extent.DUODENUM), approach=sup(ct.Approach.ORAL))
         self.assertEqual(keys(decide('44406', R)), [('extent', 14, EXPLANATION, rule(Q.Rule.LOWER)),
                                                     ('procedure', 8, EXPLANATION, rule(Q.Rule.LOWER))])
@@ -2016,13 +2022,19 @@ class LowerApproach(SimpleTestCase):
                          [('extent', 14, QUESTION), ('procedure', 8, QUESTION)])
         self.assertEqual([row.truth for row in EV.code_rows('44406', (Kind.EXAMINATION,), R, E(1))
                           if row.requirement is Tag.LOWER], [U])
-        self.assertTrue(ready(decide('44406', lower_eus(sup(Extent.STOMA), approach=sup(ct.Approach.THROUGH_STOMA)))))
-        # a non-stoma class reads no approach (45341: the sigmoidoscopic class)
+        # DECISIONS D325 (2) (round r3's third repair; was READY): no colonic route (the stoma's organ never
+        # established, no point at or past the cecum reached) - the class's own route hold
+        self.assertEqual(keys(decide('44406', lower_eus(sup(Extent.STOMA), approach=sup(ct.Approach.THROUGH_STOMA)))),
+                         [('procedure', 8, QUESTION, rule(Q.Rule.LOWER))])
+        # a non-stoma class reads no approach (45341: the sigmoidoscopic class) - but DECISIONS D330 (1) (lane rules6,
+        # R5R-7): a per-anus code of the lower-GI route table whose approach is supported as another route is held by the
+        # path guard with the table's own hold (procedure, RANK row 8), beside the reach's question
         doc = Doc()
         doc.session(1, SessionKind.EUS, tract=sup(ct.Tract.LOWER), reached=[unres(Extent.SIGMOID_COLON)],
                     approach=sup(ct.Approach.ORAL))
         doc.exam(1)
-        self.assertEqual([entry[:3] for entry in keys(decide('45341', doc.build()))], [('extent', 14, QUESTION)])
+        self.assertEqual([entry[:3] for entry in keys(decide('45341', doc.build()))],
+                         [('extent', 14, QUESTION), ('procedure', 8, QUESTION)])
 
 
 class SameDuctCounterpart(SimpleTestCase):

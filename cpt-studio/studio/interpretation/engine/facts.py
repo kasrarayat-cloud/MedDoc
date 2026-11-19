@@ -119,22 +119,56 @@ D193). Nothing is lifted, and every other fact is read as stored. The claim-time
 a second implementation, because engine/ cannot import date_literals; tests/v2/test_facts.py pins the two equal over
 the grid relation x precision x literal x service date (D193).
 
+**The established question answers** (round r3, DESIGN-v2 b, d.2 row 1, f.1; ``_answered``) fold into R_q only where
+the stored row still asks for them, re-checked against the row itself at the FactSet's own effective date (the repair
+pass of round r3's engine lane: R3BE-RF1, R3BE-RF2). A fact answer applies only over a fact the question stage may ask
+(``answerable``): not established, not contradicted by pass 1 unless by a cross-object conflict (C6), and no reason of
+a class it refuses - the typed table over every Reason member (``REASON_CLASSES``, DECISIONS D324 (4); a member it does
+not name reads as a fixed-table check): never one the fact pass JUDGED (C2b: its claim contradicted, unclear or
+qualified, or its control incoherent - ``JUDGED``), its object located (C4), and never one a FIXED-TABLE check demoted
+(``FIXED_TABLE``: a check of pass 1's values against a fixed table - L1's literal_mismatch and literal_unchecked, the
+act's own date words against the effective date; K3's session_unreachable, FAMILY_REACH; K2's session_inconsistent,
+FAMILY_KINDS; K1's structure rules; K4's anatomy_conflict - is never a reading, so no answer lifts it: R3BE-RF1, L1-02).
+Each answered fact is re-judged by every fixed-table check that reads it, on the objects as folded so far with the
+answer in them (``_RECHECKS``): an answered session or place by K3's reach (and an answered session by K2's arms, an
+answered place, reach or station by K4's absent organs, a fact K1 allows only together with another by that rule), as
+the timing fact an answer establishes is re-judged by L1 as every established timing fact is - its stored literals
+against this FactSet's effective date - so an answer given while the date of service was unknown, or another, never
+establishes a date relation its own date words fail at the assessment's date; and a fact whose check cannot be re-run
+here whole (a date's own words, a statement's doubt of basis, the yield table) is never answered. An answer to a
+NEGATED form at a value (fact.session.not, fact.lift.not, fact.hemostasis.not, fact.cause.not: DECISIONS D324 (1))
+rules out exactly that value and nothing else: it never writes an established negation, but R_base's fact itself with
+the value ruled out (``NarrowedFact``) - not established, every field kept but the options, which lose the value - so
+``possibly`` and every reader built on it read the value as impossible and every other reading R_base's fact left
+possible (its claimed value, its options, every value of a silent slot, an open denial's every value) exactly as on
+R_base; a reader of the fields reads R_base's fact (fail-closed: a ruled-out value it still names stays possible there).
+The part link's universal negation ("not done as part of another act") rules out every whole, and is that negation. A
+pair answer (Q-ONLESION, Q-LESION) applies only to a
+pair the fact pass did not judge (``pair_judged``: every stored record of the pair carries no reason but
+``PAIR_ASKABLE``'s - no usable verdict, or never asked - and a pair control held unestablished with no stored record to
+say why is judged, fail-closed); a Q-REL answer never sets apart a pair whose covers claim the fact pass established.
+A refused answer leaves R_q exactly as R_base there: it never removes or weakens a fact, so it only holds.
+
 **The text-free boundary** (P1, 5.7 measures 4 and 5): this module imports the standard library, contract/types.py and
 engine's types, anatomy, catalogue (FAMILY_REACH, which requirements_table already imports) and requirements_table only
-(no retired v1 module, none of contract's text modules, not store.py: its caller hands it store.textfree_v2's view), and
+- and, inside the fold's DECISIONS D330 (2) rule (``_kept``), engine/pairing, read when the rule runs and never at
+import, since pairing reads this module - (no retired v1 module, none of contract's text modules, not store.py: its
+caller hands it store.textfree_v2's view), and
 holds no word list (every module-level collection holds enumeration members - but ``_FINDINGS``, the findings memo of a
-few FactSets, DECISIONS D297 ENGB-1). No public function here returns a string
+few FactSets, DECISIONS D297 ENGB-1, and ``_RECHECKS``, the fixed-table checks over enumeration members the fold re-runs,
+DECISIONS D324 (4)). No public function here returns a string
 (the private readers of the stored JSON do), and ``mypy --strict`` passes over it. A row this builder cannot read whole
 raises FactSetError (a ValueError); nothing is ever read as an empty inventory.
 """
 from __future__ import annotations
 
 import datetime
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from enum import Enum
+from dataclasses import fields as dataclass_fields
+from enum import Enum, unique
 from types import MappingProxyType
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from studio.interpretation.contract.types import (AccessOutcome, AnastomosisSubtype, AnatomyType, Approach, Attribute,
                                                   Breadth, Cause, CheckStatus, Completion, DateRelation, DateRole,
@@ -240,6 +274,120 @@ REQUIRED_FACTS: frozenset[tuple[IdFamily | None, Attribute]] = frozenset({
 # fact at one key, each carrying slot_overfull - is read, as one merged view (module docstring).
 SLOTS: frozenset[tuple[IdFamily | None, Attribute]] = frozenset(
     key for key, domain in DOMAINS.items() if not domain.many and key not in REQUIRED_FACTS)
+# Round r3 (module docstring, the established question answers): what an established answer may do with a fact a
+# settle reason demoted - THE typed table over every Reason member (DECISIONS D324 (4)). contract/types.py's Reason is
+# no lane's to edit, so the table lives here: REASON_CLASSES names every member's class, and ``reason_class`` reads a
+# member the table does not name as a fixed-table check (fail-closed until it is classified; tests/v2/test_r3c_fold
+# fails first when a member is added).
+
+
+@unique
+class ReasonClass(Enum):
+    """The class of a settle reason as the fold and the planner read it (DECISIONS D324 (4)): a READING an answer may
+    settle (the document's own statement of the value is uncertain, unlocated, overfilled or never usably judged:
+    asked, and folded when established) or a FIXED_TABLE check (pass 1's values judged against a fixed table: never
+    asked, never folded, and re-run on every answered fact it reads, ``_RECHECKS``), with the four classes int4's
+    fold already refused or answered by their own rule: JUDGED (the fact pass judged it, C2b: never re-asked),
+    UNLOCATED (the object itself does not locate, C4), CONTRADICTION (pass 1 states both sides, C1: a contradicted fact
+    is refused unless a cross-object CONFLICT is among its reasons) and CONFLICT (C6: a cross-object conflict between
+    two of pass 1's readings, which an answer chooses between - DECISIONS D308's R3D-12)."""
+    READING = 'reading'
+    FIXED_TABLE = 'fixed_table'
+    JUDGED = 'judged'
+    UNLOCATED = 'unlocated'
+    CONTRADICTION = 'contradiction'
+    CONFLICT = 'conflict'
+
+
+_RC = ReasonClass
+# Every Reason member's class (DECISIONS D324 (4)), by the check of FINAL-V2 3.1 or the 3.3 row that gives it:
+# - FIXED_TABLE: the checks of pass 1's values against a fixed table, whose verdict on a combination of values no answer
+#   about one of them settles (L1-02's class: "the answer settles which session the act belongs to, not the reach"):
+#   L1's two date checks (the act's own date words against the effective date of service - R3BE-RF1); K3's
+#   session_unreachable (engine/catalogue.FAMILY_REACH, DECISIONS D192); K2's session_inconsistent (its kind arm reads
+#   engine/requirements_table.FAMILY_KINDS, D191, and its existence and link arms give the same reason, so the reason
+#   cannot tell them apart: fail-closed); K1's fourteen structure_<rule> reasons (3.1 K1's table of values allowed
+#   together: engine/catalogue's ENDOSCOPIC_FAMILIES and covers, engine/requirements' EXTRACTION_KINDS and the
+#   contract's own rules); and K4's anatomy_conflict (an act place, reach or station at or inside an organ an anatomy
+#   entry files surgically absent, under engine/anatomy's containment: a true answer about the place leaves the absent
+#   organ filed, and no engine rule reads it - L6-2's "read nowhere" - so it is L1-02's shape, not R3D-12's).
+# - CONFLICT: the cross-object conflicts D308 (R3D-12) made readings and this ruling leaves so - K2's date arm
+#   (session_conflict: the code still reads the act's own date relation, which holds it), K5's person_conflict ("which
+#   person" is the reading the code reads) and K6's instrument_conflict (the reach question asks "the endoscope
+#   itself", which is what K6 doubts).
+# - READING: a doubt (F3), silence (F2/A3), an integrity, slot or geometry failure (F1: where pass 1's words lie, which
+#   a located proof re-judges), K7's frame_role (the value was read from a frame its section's role is not governed by:
+#   a source check a proof from the act's own passage settles), a qualifier (F5), never appraised (F4), indistinct
+#   cards (F6) and no usable verdict (C2a).
+_CLASSED: tuple[tuple[ReasonClass, tuple[Reason, ...]], ...] = (
+    (_RC.READING, (
+        Reason.DOUBT_STATED, Reason.DOUBT_UNCLEAR, Reason.SILENT, Reason.SHAPE_INCONSISTENT, Reason.UNIT_UNKNOWN,
+        Reason.WORDS_NOT_IN_UNITS, Reason.WORDS_NOT_BOUNDED, Reason.UNITS_NOT_CONSECUTIVE, Reason.SOURCE_TOO_LONG,
+        Reason.ANCHOR_WORDS, Reason.REFERENCE_INVALID, Reason.SLOT_OVERFULL, Reason.GEOMETRY_STATEMENT,
+        Reason.GEOMETRY_SECTION, Reason.GEOMETRY_FRAME, Reason.GEOMETRY_PLACING, Reason.GEOMETRY_DOCUMENT_FRAME,
+        Reason.GEOMETRY_ANTECEDENT, Reason.GEOMETRY_OTHER_STATEMENT, Reason.SECTION_ORDER,
+        Reason.SECTION_START_UNLOCATED, Reason.TARGET_DETACHED, Reason.INHERIT_UNATTACHED, Reason.EXTENT_INFERRED,
+        Reason.FRAME_ROLE, Reason.QUALIFIED_HEDGED, Reason.QUALIFIED_CONDITIONAL, Reason.QUALIFIED_REPORTED,
+        Reason.QUALIFIED_PARTIAL, Reason.QUALIFIED_NAMED_ONLY, Reason.QUALIFIED_RESTATEMENT_ONLY,
+        Reason.QUALIFIED_REFERENCE_ONLY, Reason.UNAPPRAISED, Reason.CARDS_INDISTINCT, Reason.APPRAISAL_DETACHED,
+        Reason.APPRAISAL_MISSING)),
+    (_RC.FIXED_TABLE, (
+        Reason.LITERAL_MISMATCH, Reason.LITERAL_UNCHECKED, Reason.SESSION_UNREACHABLE, Reason.SESSION_INCONSISTENT,
+        Reason.STRUCTURE_SCOPE, Reason.STRUCTURE_YIELD, Reason.STRUCTURE_ACCESS_OUTCOME, Reason.STRUCTURE_CAUSE,
+        Reason.STRUCTURE_PART_OF, Reason.STRUCTURE_ENDOSCOPIC, Reason.STRUCTURE_VISIT, Reason.STRUCTURE_OTHER_CLASS,
+        Reason.STRUCTURE_STATUS_TIME, Reason.STRUCTURE_EXCEPTIVE, Reason.STRUCTURE_LISTED_TARGETS,
+        Reason.STRUCTURE_SINGLE_TARGET, Reason.STRUCTURE_SEGMENT, Reason.STRUCTURE_UMBRELLA, Reason.ANATOMY_CONFLICT)),
+    # JUDGED - a fact the fact pass judged and did not establish (3.3 row 9, 3.2.3's coherence table: its claim
+    # contradicted, unclear or qualified, every appraisal_qualified:<q> included, or its control incoherent): DESIGN-v2
+    # b's C2b, never re-asked. Exactly engine/questions.APPRAISAL_CAUSES' reasons but C2a's two (missing, detached: no
+    # usable verdict), pinned by tests/v2/test_r3b_engine with every reason contract/settle.appraise gives.
+    (_RC.JUDGED, (
+        Reason.APPRAISAL_CONTRADICTS, Reason.APPRAISAL_UNCLEAR, Reason.CONTROL_INCOHERENT, Reason.APPRAISAL_QUALIFIED,
+        Reason.APPRAISAL_QUALIFIED_HEDGED, Reason.APPRAISAL_QUALIFIED_CONDITIONAL, Reason.APPRAISAL_QUALIFIED_REPORTED,
+        Reason.APPRAISAL_QUALIFIED_PARTIAL, Reason.APPRAISAL_QUALIFIED_NAMED_ONLY,
+        Reason.APPRAISAL_QUALIFIED_RESTATEMENT_ONLY, Reason.APPRAISAL_QUALIFIED_REFERENCE_ONLY,
+        Reason.APPRAISAL_QUALIFIED_APPROXIMATE, Reason.APPRAISAL_QUALIFIED_NEGATED_CONTEXT,
+        Reason.APPRAISAL_QUALIFIED_OTHER_OCCASION, Reason.APPRAISAL_QUALIFIED_OTHER_PERFORMER,
+        Reason.APPRAISAL_QUALIFIED_OTHER_ENTRY, Reason.APPRAISAL_QUALIFIED_OTHER_TARGET,
+        Reason.APPRAISAL_QUALIFIED_OTHER_ACT, Reason.APPRAISAL_QUALIFIED_SCOPE_LIMITED,
+        Reason.APPRAISAL_QUALIFIED_PLANNED_ONLY, Reason.APPRAISAL_QUALIFIED_HISTORY_ONLY)),
+    (_RC.UNLOCATED, (Reason.ANCHOR_INVALID,)),
+    (_RC.CONTRADICTION, (Reason.CONTRADICTED_BY_PASS1,)),
+    (_RC.CONFLICT, (Reason.SESSION_CONFLICT, Reason.PERSON_CONFLICT, Reason.INSTRUMENT_CONFLICT)),
+)
+REASON_CLASSES: Mapping[Reason, ReasonClass] = MappingProxyType({
+    reason: kind for kind, reasons in _CLASSED for reason in reasons})
+
+
+def reason_class(reason: Reason) -> ReasonClass:
+    """``reason``'s class (REASON_CLASSES); a member the table does not name is a FIXED_TABLE check (DECISIONS D324
+    (4): a new member is a fixed-table check until it is classified - never asked, never folded)."""
+    return REASON_CLASSES.get(reason, ReasonClass.FIXED_TABLE)
+
+
+def _classed(kind: ReasonClass) -> frozenset[Reason]:
+    return frozenset(reason for reason in Reason if reason_class(reason) is kind)
+
+
+# JUDGED - the table's C2b class (above), one source with asking's _C2B.
+JUDGED: frozenset[Reason] = _classed(ReasonClass.JUDGED)
+# FIXED_TABLE - the table's fixed-table checks (DECISIONS D324 (4)): a fact one of them demoted is never asked and
+# never folded, and every answered fact is re-judged by the ones that read it (``_RECHECKS``).
+FIXED_TABLE: frozenset[Reason] = _classed(ReasonClass.FIXED_TABLE)
+# DATE_CHECKS - L1's demotions (3.1 L1; contract/settle.LITERAL_REASONS): a timing fact's own date words against the
+# effective date, a check and never a reading, so never asked and never lifted by an answer (R3BE-RF1). Two of the
+# fixed-table checks; an answered timing fact is re-judged by them through ``_Context.judge``.
+DATE_CHECKS: frozenset[Reason] = frozenset({Reason.LITERAL_MISMATCH, Reason.LITERAL_UNCHECKED})
+# CONFLICTS - the cross-object conflicts the table reads as readings (C6; contract/consistency): a fact pass 1
+# contradicted through one is still a reading the question stage asks. K4's anatomy_conflict is a fixed-table check
+# (DECISIONS D324 (4)): never answered.
+CONFLICTS: frozenset[Reason] = _classed(ReasonClass.CONFLICT)
+# What ``answerable`` refuses by its reasons' class alone.
+_REFUSED: frozenset[ReasonClass] = frozenset({ReasonClass.FIXED_TABLE, ReasonClass.JUDGED, ReasonClass.UNLOCATED})
+# PAIR_ASKABLE - the only reasons a stored pair record (D296's lesion_pairs, D305's act_lesions) may carry and its pair
+# still be answered: no usable verdict (C2a: missing, detached) or never asked (unappraised: dropped for the claim bound,
+# D300 RF-L5). Any other reason is the fact pass's own judgment of the pair (R3BE-RF2), refused fail-closed.
+PAIR_ASKABLE: frozenset[Reason] = frozenset({Reason.APPRAISAL_MISSING, Reason.APPRAISAL_DETACHED, Reason.UNAPPRAISED})
 
 # A slot with nothing in it, and what an object or attribute the FactSet does not hold reads as (fail-closed: unknown,
 # never established, every value possible).
@@ -384,6 +532,19 @@ class _Context:
     # the events whose overfilled session slot holds a written fact K3 demoted (session_unreachable): the merged view
     # is widened as that fact alone would be (module docstring, an overfilled slot)
     unreachable: set[Id] = field(default_factory=set)
+    # round r3 (R3BE-RF1): the literals L1 reads for each timing fact, by (its subject's stored id, its attribute) - the
+    # very ones ``_fact`` judged it on (its own, or its section's occasion literals for an inherited date relation that
+    # stores none; every written fact's of an overfilled slot) - so the fold re-judges an answered timing fact on them
+    literals: dict[tuple[str, Attribute], list[IsoDate | None]] = field(default_factory=dict)
+
+    def judge(self, subject: Id, attribute: Attribute, value: Value | None) -> Reason | None:
+        """L1 re-judged (``rejudged``) on the timing fact an established answer would set to ``value`` (module
+        docstring, the established question answers): its stored literals against this row's effective date, exactly
+        as an established timing fact of that value is judged - the reason it fails, or None when it passes, when
+        ``attribute`` is no timing fact of ``subject``'s family, or when L1 is not re-judged (``factset``)."""
+        if not self.rejudge or (subject.family, attribute) not in TIMING:
+            return None
+        return rejudged(value, tuple(self.literals.get((str(subject), attribute), ())), self.service)
 
     def span(self, units: Sequence[object], where: str) -> Span | None:
         """The span from the first cited unit's start to the last one's end; None when a unit is unknown (an item-level
@@ -533,6 +694,7 @@ def _fact(record: object, domain: Domain, subject: str, attribute: Attribute, fa
             # 3a stores an inherited date relation's literals with the per-act fact (DECISIONS D193); one stored with
             # none of its own is re-judged on its section's occasion literals, a defence D193 keeps
             literals = context.occasions.get(inherited, ())
+        context.literals.setdefault((subject, attribute), []).extend(literals)  # round r3: the fold's L1 (R3BE-RF1)
         if context.rejudge and result in ESTABLISHED:
             failed = rejudged(value, literals, context.service)
             if failed is not None:
@@ -783,6 +945,8 @@ def _lesion_pairs(events: Mapping[str, object], context: _Context,
             presumed = (lesion, other)[2 - _lesion_pair_presumes(claim, f'{where}.claim'):]
             established = all(_single(lesions, entry) for entry in presumed)
         key = (lesion, Attribute.DISTINCT_FROM, other)
+        # DECISIONS D323 O1: the prototype's b.3 (a fact-pass lesion pair no longer establishing by itself, re-asked as
+        # Q-LESION) is REVERTED - Q-LESION is not shipped (D320), so D296's pairs establish as on int3
         out[key] = out.get(key, True) and established
     return out
 
@@ -979,9 +1143,21 @@ def _k3_widened(sessions: Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]], hel
     return {**held, Attribute.SESSION: (replace(session, options=session.options + tuple(added)),)}
 
 
-def _build(inventory: object, rejudge: bool, service: datetime.date | None) -> FactSet:
+def _build(inventory: object, rejudge: bool, service: datetime.date | None, answers: bool = True) -> FactSet:
+    """The FactSet of a stored row (module docstring). Round r3 (DESIGN-v2 f.1; PROTOTYPE): ``answers`` folds the row's
+    ESTABLISHED question answers (events.questions, ``_answered``) into R_q, whose ``base`` is R_base - the same row
+    read without any of them, which 4.6's exclusion reads; without answers (or with none established) the FactSet is
+    R_base itself. The fold re-judges every answered timing fact by L1 on the literals this row's own read of it
+    recorded, at this FactSet's effective date (``_Context.judge``; R3BE-RF1)."""
     events = _events_of(inventory)
     context = _context(events, rejudge, service)
+    base = _build_base(events, context)
+    if not answers:
+        return base
+    return _answered(base, events, context.judge)
+
+
+def _build_base(events: Mapping[str, object], context: _Context) -> FactSet:
     encounter = _object_facts(_mapping(_field(events, 'encounter', 'the inventory'), 'encounter'), None, '', context,
                               'encounter')
     objects: dict[IdFamily, dict[Id, Mapping[Attribute, tuple[Fact, ...]]]] = {}
@@ -1015,7 +1191,982 @@ def _build(inventory: object, rejudge: bool, service: datetime.date | None) -> F
                    unlisted=_unlisted(events, context),
                    pair_controls={**_pair_controls(context), **_lesion_pairs(events, context, objects[_L]),
                                   **_act_lesions(events, context, objects[_L])},
-                   completeness=completeness)
+                   completeness=completeness, controlled=_controlled(events))
+
+
+# --- round r3: the controlled facts and the established answers (DESIGN-v2 b.9, f.1; PROTOTYPE) ------------------------
+
+
+def _stored_list(value: object) -> Sequence[object]:
+    """A stored list, or () for anything else."""
+    return value if isinstance(value, Sequence) and not isinstance(value, str) else ()
+
+
+def _controlled(events: Mapping[str, object]) -> frozenset[tuple[Id | None, Attribute]]:
+    """The (subject, attribute) of every single-valued fact the fact pass established WITH its contrary control rejected
+    (the stored appraisal's control verdict contradicts): two fact-pass judgments - the calibration pool's source
+    (DESIGN-v2 b.9: only controlled facts feed K1, K2 and K4)."""
+    out: set[tuple[Id | None, Attribute]] = set()
+
+    def walk(record: Mapping[str, object], subject: Id | None) -> None:
+        for attribute, value, listed, _path in _paths(record, '', False):
+            if listed or not isinstance(value, Mapping) or not _is_fact(value):
+                continue
+            appraisal = value.get('appraisal')
+            control = appraisal.get('control') if isinstance(appraisal, Mapping) else None
+            if (isinstance(control, Mapping) and control.get('verdict') == VerdictValue.CONTRADICTS.value
+                    and value.get('result') in (Result.SUPPORTED.value, Result.NEGATED.value)):
+                out.add((subject, attribute))
+
+    encounter = events.get('encounter')
+    if isinstance(encounter, Mapping):
+        walk(encounter, None)
+    for _family, name in ((_P, 'people'), (_N, 'sections'), (_X, 'sessions'), (_Y, 'anatomy'), (_L, 'lesions'),
+                          (_E, 'events')):
+        for item in _stored_list(events.get(name)):
+            raw = item.get('id') if isinstance(item, Mapping) else None
+            if isinstance(item, Mapping) and isinstance(raw, str):
+                try:
+                    walk(item, Id.parse(raw))
+                except ValueError:
+                    continue
+    return frozenset(out)
+
+
+@unique
+class QuestionFamily(Enum):
+    """A stored question's family as the fold reads it (contract/settle writes engine/asking.Family's value; DESIGN-v2
+    b): the stored field is read AS a member of this enumeration (``_member``) and compared by identity, never as a
+    string (FINAL-V2 5.7 measure 4; DECISIONS D323 F3: the prototype's fold compared stored strings with string
+    constants). Its values are engine/asking.Family's for the families the fold reads (tests/v2/test_r3b_engine pins
+    the two equal); a family it does not name folds nothing."""
+    Q_REL = 'Q-REL'
+    Q_FACT = 'Q-FACT'
+    Q_LESION = 'Q-LESION'
+    Q_ONLESION = 'Q-ONLESION'
+    Q_ABSORB = 'Q-ABSORB'
+
+
+@unique
+class QuestionSubject(Enum):
+    """A stored question subject that names no object (engine/asking writes it for an encounter fact): read as a member
+    of this enumeration, never compared as a string (DECISIONS D323 F3)."""
+    DOCUMENT = 'document'
+
+
+def _member(enumeration: type[_T], raw: object) -> _T | None:
+    """``raw`` read as the member of ``enumeration`` whose value it is; None for anything else (another value, a value
+    of another type, an unhashable one)."""
+    try:
+        return enumeration(raw)
+    except (ValueError, TypeError):
+        return None
+
+
+def _subject_of(raw: object) -> Id | None:
+    """A stored question subject that names an object ('E3'); None for anything else (the document, a kept unlisted
+    entry - which a record names by its typed ``unlisted`` index instead)."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        return Id.parse(raw)
+    except ValueError:
+        return None
+
+
+def _unlisted_of(record: Mapping[str, object], base: FactSet) -> int | None:
+    """The kept unlisted entry a stored question names (its ``unlisted`` index), when it is one of the base's."""
+    index = record.get('unlisted')
+    return index if type(index) is int and 0 <= index < len(base.unlisted) else None
+
+
+def established_answers(events: Mapping[str, object]) -> tuple[Mapping[str, object], ...]:
+    """The row's established question answers (events.questions with result supported), in stored order."""
+    return tuple(item for item in _stored_list(events.get('questions'))
+                 if isinstance(item, Mapping) and item.get('result') == Result.SUPPORTED.value)
+
+
+# --- a stored question record's verdict pair, as the truth tables read it (DECISIONS D325 (1), D328 (2), D330 (2)) -------
+
+
+@unique
+class StoredReason(Enum):
+    """The reasons a stored question record carries that its READING reads (``answer_reading``): contract/settle's own
+    (QUESTION_CONFLICT - exclusivity's hold over an established record -, QUESTION_CONTRADICTS, QUESTION_NOT_ELIGIBLE)
+    and contract/proof.ProofReason's values (a proof that did not locate). A stored reason is read AS a member of this
+    enumeration (``_member``), never compared as a string (FINAL-V2 5.7 measure 4); a reason it does not name reads as
+    none of them (fail-closed: such a record is never AFFIRMED or REJECTED). Its values are theirs
+    (tests/v2/test_r3g_pairs pins them equal)."""
+    CONFLICT = 'question_conflict'
+    CONTRADICTS = 'question_contradicts'
+    NOT_ELIGIBLE = 'question_not_eligible'
+    PROOF_MISSING = 'proof_missing'
+    PROOF_SHORT = 'proof_short'
+    PROOF_UNLOCATED = 'proof_unlocated'
+    QUOTES_BOUND = 'quotes_bound'
+
+
+# the reasons settle writes only AFTER it read a supports claim as supported (attached yes, no lowering qualifier): none
+# (established), a proof that did not locate, or exclusivity's own hold
+_CLAIM_READ = frozenset({StoredReason.CONFLICT, StoredReason.PROOF_MISSING, StoredReason.PROOF_SHORT,
+                         StoredReason.PROOF_UNLOCATED, StoredReason.QUOTES_BOUND})
+# the reasons a contradicts claim carries in an answered, healthy request (the slot's base fact still askable, or not)
+_CLAIM_REJECTED = frozenset({StoredReason.CONTRADICTS, StoredReason.NOT_ELIGIBLE})
+
+
+@unique
+class AnswerReading(Enum):
+    """One stored question record's verdict pair as the truth tables read it (DECISIONS D325 (1); contract/settle's
+    ``Reading`` is this enumeration): AFFIRMED - its claim supported and its control contradicted; REJECTED - its claim
+    contradicted and its control supported; OTHER - anything else (an incoherent pair, an unclear, qualified or missing
+    verdict, or verdicts that do not count: a failed, refused, too-long, uncalibrated or unhealthy request, a question
+    no longer eligible)."""
+    AFFIRMED = 'affirmed'
+    REJECTED = 'rejected'
+    OTHER = 'other'
+
+
+def _stored_reasons(raw: object) -> tuple[StoredReason | None, ...] | None:
+    """A stored record's reasons, each read as a StoredReason (None for one it does not name); () for none; None for a
+    value that is no list (fail-closed: read as no reading)."""
+    if not raw:
+        return ()
+    if not isinstance(raw, (list, tuple)):
+        return None
+    return tuple(_member(StoredReason, reason) for reason in raw)
+
+
+def answer_reading(record: Mapping[str, object]) -> AnswerReading:
+    """A stored question record's verdict pair as the truth tables read it, from the record alone - settle_questions'
+    own reasons (DECISIONS D325 (1); contract/settle's module comment, "How a record's verdict pair is READ"; the one
+    reader: contract/settle._reading is this function, and the fold reads it for DECISIONS D330 (2)): REJECTED - the
+    claim contradicted (QUESTION_CONTRADICTS or QUESTION_NOT_ELIGIBLE beside it: an answered, healthy request) and the
+    control supported as settle reads a supported member (held_by_answer); AFFIRMED - the claim supported as settle
+    reads a claim (no reason, a proof that did not locate, or exclusivity's question_conflict: reasons settle writes only
+    after that reading passed) and the control contradicted; OTHER - anything else."""
+    verdicts = record.get('verdicts')
+    if not isinstance(verdicts, Mapping):
+        return AnswerReading.OTHER
+    claim, control = verdicts.get('claim'), verdicts.get('control')
+    reasons = _stored_reasons(record.get('reasons'))
+    if reasons is None:
+        return AnswerReading.OTHER
+    if (claim == VerdictValue.CONTRADICTS.value and control == VerdictValue.SUPPORTS.value
+            and record.get('held_by_answer') is True and len(reasons) == 1 and reasons[0] in _CLAIM_REJECTED):
+        return AnswerReading.REJECTED
+    if (claim == VerdictValue.SUPPORTS.value and control == VerdictValue.CONTRADICTS.value
+            and (not reasons or (len(reasons) == 1 and reasons[0] in _CLAIM_READ))):
+        return AnswerReading.AFFIRMED
+    return AnswerReading.OTHER
+
+
+def _answered_fact(base: Fact, value: Value | None, negated: bool, spans: tuple[Span, ...]) -> Fact:
+    """The fact an established Q-FACT answer ESTABLISHES (DESIGN-v2 b.2 Engine): supported at its value; for a negation
+    answer, negated at it - a list member's own negation (that member alone; every other member and value is read as
+    before), or the part link's universal negation ("not done as part of another act of this procedure": no value,
+    every whole ruled out); no options, no reasons, its proof spans (the base fact's when none), the base fact's sources
+    and section kept. A negation answer AT A VALUE of a single-valued slot never comes here: it rules that value out
+    and nothing else (``_narrowed``, DECISIONS D324 (1))."""
+    result = Result.NEGATED if negated else Result.SUPPORTED
+    state = FactState.NEGATED if negated else FactState.SUPPORTED
+    return Fact(result=result, value=value, state=state, options=(), reasons=(), spans=spans or base.spans,
+                cited=base.cited, inherited_from=base.inherited_from, counter=())
+
+
+@dataclass(frozen=True, slots=True)
+class NarrowedFact(Fact):
+    """A single-valued fact one or more established answers to a negated form narrowed (DECISIONS D324 (1); module
+    docstring, the established question answers): R_base's fact with each value an answer ruled out (``ruled_out``, in
+    answer order) - every field of the base fact kept as it was (result, value, state, reasons, spans, sources, section,
+    counter, negated_values) but its options, which lose the ruled-out values. Never established: every reader that
+    reads the fields reads it as R_base's fact (a ruled-out value it still names is read as possible there, fail-closed),
+    and every possibility reader of this module (``possibly``, ``possibly_written``, and so every reader built on them)
+    reads each ruled-out value as impossible and every other value exactly as on R_base - a negation answer removes
+    only its value."""
+    ruled_out: tuple[Value, ...] = ()
+
+
+def ruled_out(found: Fact) -> tuple[Value, ...]:
+    """The values established negation answers ruled out of ``found`` (a NarrowedFact's ``ruled_out``); () for every
+    other fact. Read by the possibility readers here, and by any reader that must never ask or count a ruled-out value."""
+    return found.ruled_out if isinstance(found, NarrowedFact) else ()
+
+
+def _narrowed(base: Fact, value: Value) -> NarrowedFact:
+    """``base`` with ``value`` ruled out and nothing else (DECISIONS D324 (1): the fold of an established answer to a
+    negated form - fact.session.not, fact.lift.not, fact.hemostasis.not, fact.cause.not, and any later one at a value -
+    never writes an established negation with no options): every field of ``base`` kept, ``value`` taken out of its
+    options and added to what it rules out (a NarrowedFact composes: a second negation narrows it further). Its claimed
+    value, its other options, a silent slot's every other value and an open denial's every value stay possible."""
+    gone = ruled_out(base) + ((value,) if value not in ruled_out(base) else ())
+    return NarrowedFact(result=base.result, value=base.value, state=base.state,
+                        options=tuple(option for option in base.options if option not in gone), reasons=base.reasons,
+                        spans=base.spans, cited=base.cited, inherited_from=base.inherited_from, counter=base.counter,
+                        negated_values=base.negated_values, ruled_out=gone)
+
+
+def _objects_of(R: FactSet, family: IdFamily) -> Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]] | None:
+    return {_P: R.people, _N: R.sections, _X: R.sessions, _Y: R.anatomy, _L: R.lesions, _E: R.events}.get(family)
+
+
+def _proof_spans(record: Mapping[str, object]) -> tuple[Span, ...]:
+    out: list[Span] = []
+    for item in _stored_list(record.get('proof')):
+        start = item.get('start') if isinstance(item, Mapping) else None
+        end = item.get('end') if isinstance(item, Mapping) else None
+        if type(start) is int and type(end) is int:
+            try:
+                out.append(Span(start, end))
+            except ValueError:
+                continue
+    return tuple(out)
+
+
+def _presumed(form: object, lesion: Id, other: Id) -> tuple[Id, ...] | None:
+    """The lesions whose single multiplicity a Q-LESION form presumes established (None: not a lesion form) - read by
+    ``_lesion_pair_presumes``, the one reading of a lesion pair form (contract/claims.LESION_PAIR_FORMS' ids, which a
+    Q-LESION question's form takes: DECISIONS D300 RF-L3), the fact pass's pairs and an answer alike (DECISIONS D323
+    F3: the prototype kept a second copy of the three forms as string constants)."""
+    try:
+        count = _lesion_pair_presumes({'template': form}, 'the question')
+    except FactSetError:
+        return None
+    return (lesion, other)[2 - count:]
+
+
+def answerable(found: Fact) -> bool:
+    """Whether an established Q-FACT answer may be folded over the stored fact ``found`` (a single slot, or the list
+    member at the asked value) - exactly the facts the question stage may ask (DESIGN-v2 b.2's value rule and d.2 row 1,
+    asking's census; module docstring, the established question answers): not established (an established fact is
+    never re-answered); not contradicted by pass 1 unless by a cross-object conflict (C1; C6 is asked); and no reason
+    of a class the fold refuses (``reason_class``): not judged by the fact pass (C2b, ``JUDGED``: re-asking until
+    another answer comes is no second judgment - R3BE-RF2's class), its object located (C4, anchor_invalid), and not
+    demoted by a fixed-table check (``FIXED_TABLE``, DECISIONS D324 (4): L1's date checks - R3BE-RF1 - K3's reach, K2's
+    session consistency, K1's structure and K4's absent organ; a check of pass 1's values against a fixed table is
+    never a reading, so no answer lifts it - L1-02). A reason no table row names reads as a fixed-table check. Pure;
+    reads the fact alone. A fact an established negation answer narrowed (``NarrowedFact``) is not established, so a
+    further answer about the same slot may still apply over it."""
+    if found.result in ESTABLISHED:
+        return False
+    classes = {reason_class(reason) for reason in found.reasons}
+    if found.result is Result.CONTRADICTED and ReasonClass.CONFLICT not in classes:
+        return False
+    return not classes & _REFUSED
+
+
+def _pair_reasons(events: Mapping[str, object], name: str, first: str, second: str
+                  ) -> dict[tuple[Id, Id], frozenset[Reason]]:
+    """Every stored pair record of ``events[name]`` - DECISIONS D296's lesion_pairs ('lesion', 'other') or D305's
+    act_lesions ('act', 'lesion'), the fields ``first`` and ``second`` - by its two ids: the reasons its records carry,
+    every asking's (one pair asked twice carries both askings' reasons: fail-closed, as ``_lesion_pairs`` and
+    ``_act_lesions`` establish a pair only when every asking did). A row without the list has none; a record this
+    reader cannot read whole raises FactSetError, as the builder's own reader of the list does."""
+    out: dict[tuple[Id, Id], frozenset[Reason]] = {}
+    stored = events.get(name)
+    if stored is None:
+        return out
+    for index, item in enumerate(_sequence(stored, name)):
+        where = f'{name}[{index}]'
+        record = _mapping(item, where)
+        key = (_id(_field(record, first, where), f'{where}.{first}'),
+               _id(_field(record, second, where), f'{where}.{second}'))
+        reasons = frozenset(_enum(Reason, reason, f'{where}.reasons')
+                            for reason in _sequence(_field(record, 'reasons', where), f'{where}.reasons'))
+        out[key] = out.get(key, frozenset()) | reasons
+    return out
+
+
+def act_lesion_reasons(events: Mapping[str, object]) -> dict[tuple[Id, Id], frozenset[Reason]]:
+    """The row's D305 act-lesion records (events.act_lesions) by (act, lesion): every asking's reasons
+    (``_pair_reasons``) - what ``pair_judged`` reads for a Q-ONLESION answer, and the planner may read for its question."""
+    return _pair_reasons(events, 'act_lesions', 'act', 'lesion')
+
+
+def lesion_pair_reasons(events: Mapping[str, object]) -> dict[tuple[Id, Id], frozenset[Reason]]:
+    """The row's D296 lesion pair records (events.lesion_pairs) by (lesion, other): every asking's reasons
+    (``_pair_reasons``) - what ``pair_judged`` reads for a Q-LESION answer."""
+    return _pair_reasons(events, 'lesion_pairs', 'lesion', 'other')
+
+
+def pair_judged(R: FactSet, judged: Mapping[tuple[Id, Id], frozenset[Reason]], one: Id, other: Id) -> bool:
+    """Whether the fact pass JUDGED the pair of ``one`` and ``other`` (an act and a lesion, or two lesions), in either
+    order, so that no Q-ONLESION or Q-LESION answer is folded over it (R3BE-RF2; module docstring, the established
+    question answers): a stored record of the pair (``judged``: the row's pair records as ``act_lesion_reasons`` or
+    ``lesion_pair_reasons`` read them) carries a reason outside ``PAIR_ASKABLE`` - the claim contradicted, unclear or qualified, or its control incoherent
+    (C2b: Fable's own judgment, never re-asked) - or ``R`` holds the pair's control (FactSet.pair_controls, (one,
+    distinct_from, other)) unestablished with no stored record to say why (fail-closed: a pair asked and not
+    established is judged unless its record shows it had no usable verdict or was never asked)."""
+    for key in ((one, other), (other, one)):
+        reasons = judged.get(key)
+        if reasons is not None:
+            if reasons - PAIR_ASKABLE:
+                return True
+        elif R.pair_controls.get((key[0], Attribute.DISTINCT_FROM, key[1])) is False:
+            return True
+    return False
+
+
+def _covers_established(R: FactSet, statement: Id, act: Id) -> bool:
+    """The fact pass established that ``statement`` covers ``act`` (a scope.covers member supported at it): a Q-REL
+    answer "this statement does not concern act A" is never folded over that judgment (asking's C7a; R3BE-RF2's class
+    for Q-REL)."""
+    return any(holds(member, act) for member in members(R, statement, Attribute.SCOPE_COVERS))
+
+
+Judge = Callable[[Id, Attribute, Value | None], Reason | None]
+
+
+# --- round r3: the fixed-table checks the fold re-runs on an answered fact (DECISIONS D324 (4)) --------------------------
+
+
+class _Folded:
+    """The facts as the fold has folded them so far (DECISIONS D324 (4)): R_base's, an object an earlier answer
+    changed read with its folded facts, and - for ``at`` - one object read with the facts an answer would leave it."""
+
+    __slots__ = ('base', 'changed', 'subject', 'held')
+
+    def __init__(self, base: FactSet, changed: Mapping[IdFamily, Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]]],
+                 subject: Id | None = None, held: Mapping[Attribute, tuple[Fact, ...]] | None = None) -> None:
+        self.base = base
+        self.changed = changed
+        self.subject = subject
+        self.held = held
+
+    def facts(self, subject: Id) -> Mapping[Attribute, tuple[Fact, ...]]:
+        if self.held is not None and subject == self.subject:
+            return self.held
+        edits = self.changed.get(subject.family)
+        if edits is not None and subject in edits:
+            return edits[subject]
+        return _facts_of(self.base, subject)
+
+    def fact(self, subject: Id, attribute: Attribute) -> Fact:
+        found = self.facts(subject).get(attribute, ())
+        return found[0] if found else SILENT
+
+    def members(self, subject: Id, attribute: Attribute) -> tuple[Fact, ...]:
+        return self.facts(subject).get(attribute, ())
+
+    def at(self, subject: Id, held: Mapping[Attribute, tuple[Fact, ...]]) -> _Folded:
+        return _Folded(self.base, self.changed, subject, held)
+
+
+def _stated(found: Fact, enumeration: type[_T]) -> tuple[_T, ...]:
+    """The members of ``enumeration`` a fact states or offers, as 3.1's checks read a slot under gemini-inventory@3
+    (contract/consistency._offered: a supported claim's value, a contradiction's sides, an overfilled view's values
+    no written fact only denies; never a negated claim's): ``claimed_values``."""
+    return tuple(value for value in claimed_values(found) if isinstance(value, enumeration))
+
+
+def _stated_sessions(view: _Folded, found: Fact) -> tuple[Id, ...]:
+    """The sessions of the row a session fact states or offers (K2's and K3's ``reading.ids``)."""
+    return tuple(value for value in claimed_values(found) if isinstance(value, Id) and value in view.base.sessions)
+
+
+def _supported_value(found: Fact, enumeration: type[_T]) -> _T | None:
+    """The member a claim pass 1 stated SUPPORTED holds, whatever its result - None for a silent slot or any other state
+    (contract/consistency._value: K1's reading, the one that fires most)."""
+    value = found.value
+    return value if found.state is FactState.SUPPORTED and isinstance(value, enumeration) else None
+
+
+def _filed(found: Fact) -> bool:
+    """A single-valued fact pass 1 (or an established answer) wrote, in any state: not an empty slot."""
+    return found.state is not None
+
+
+def _act(view: _Folded, event: Id) -> bool:
+    """3.1's act (contract/consistency._act): an event whose status claim is not negated and whose kind is not stated
+    the examination (ADJUDICATION C-1: the examination is the session)."""
+    return (view.fact(event, Attribute.STATUS).state is not FactState.NEGATED
+            and _supported_value(view.fact(event, Attribute.KIND), Kind) is not Kind.EXAMINATION)
+
+
+def _events_in(view: _Folded, subject: Id) -> tuple[Id, ...]:
+    """The events an answered session's checks judge: ``subject`` itself for an event, every event whose session fact
+    states or offers it for a session."""
+    if subject.family is _E:
+        return (subject,)
+    return tuple(event for event in view.base.events if subject in _stated_sessions(view, view.fact(event,
+                                                                                                Attribute.SESSION)))
+
+
+# A fixed-table check's failures on the folded facts: one tuple per failing combination of values (the objects and the
+# values the rule judges together), so that an answer is refused whenever it ADDS a failing combination - one that
+# includes the answered value - even beside a combination that already fails without it (``_refused_by_rechecks``).
+_Failures = frozenset[tuple[object, ...]]
+_NONE: _Failures = frozenset()
+
+
+def _k3_failures(view: _Folded, subject: Id) -> _Failures:
+    """K3 (3.1; contract/consistency._k3) on the folded facts: each (act, session, family, place) where an act's
+    SUPPORTED place lies in a region that a family of a session its session fact states or offers cannot reach
+    (catalogue.FAMILY_REACH, ``_reach_holds``: a family the table does not list, and a place in no region, are judged by
+    no reach). Re-run on every answered session or place (DECISIONS D324 (4), L1-02)."""
+    out: set[tuple[object, ...]] = set()
+    for event in _events_in(view, subject):
+        if not _act(view, event):
+            continue
+        places = [member.value for member in view.members(event, Attribute.TARGET_PLACES)
+                  if member.state is FactState.SUPPORTED and isinstance(member.value, Landmark)]
+        for session in _stated_sessions(view, view.fact(event, Attribute.SESSION)) if places else ():
+            out.update((event, session, family, place)
+                       for family in _stated(view.fact(session, Attribute.KIND), SessionKind) for place in places
+                       if not _reach_holds(family, place))
+    return frozenset(out)
+
+
+def _k2_failures(view: _Folded, subject: Id) -> _Failures:
+    """K2's existence and kind arms (3.1; contract/consistency._k2) on the folded facts: each (event, id) where an
+    event's session fact names an id that is no session of the row; each (act, session, family, kind) where a family
+    of the act's session (each that session's kind states or offers) does not admit a kind the act states
+    (requirements_table.FAMILY_KINDS, DECISIONS D191 - a family the table does not list admits no kind, as
+    contract/checks.family_admits reads it)."""
+    out: set[tuple[object, ...]] = set()
+    for event in _events_in(view, subject):
+        found = view.fact(event, Attribute.SESSION)
+        out.update((event, value) for value in claimed_values(found)
+                   if isinstance(value, Id) and value not in view.base.sessions)
+        if not _act(view, event):
+            continue
+        kinds = _stated(view.fact(event, Attribute.KIND), Kind)
+        for session in _stated_sessions(view, found):
+            out.update((event, session, family, kind)
+                       for family in _stated(view.fact(session, Attribute.KIND), SessionKind) for kind in kinds
+                       if kind not in family_kinds(family))
+    return frozenset(out)
+
+
+_PLACES_OF: Mapping[IdFamily, tuple[Attribute, ...]] = MappingProxyType({
+    _E: (Attribute.TARGET_PLACES,), _X: (Attribute.REACHED, Attribute.STATIONS)})
+
+
+def _k4_places(view: _Folded, holder: Id) -> list[Landmark | Extent | Station]:
+    """What K4 reads of an object: an act's SUPPORTED places, a session's SUPPORTED reached points and stations."""
+    if holder.family is _E and not _act(view, holder):
+        return []
+    return [member.value for attribute in _PLACES_OF.get(holder.family, ()) for member in view.members(holder, attribute)
+            if member.state is FactState.SUPPORTED and isinstance(member.value, Landmark | Extent | Station)]
+
+
+def _k4_failures(view: _Folded, subject: Id) -> _Failures:
+    """K4 (3.1; contract/consistency._k4) on the folded facts: each (object, place, entry, organ) where a place, reach
+    or station lies at or inside an organ an anatomy entry states or offers surgically absent (engine/anatomy's
+    containment) - for an answered act place, reach or station against every entry, and for an answered entry's type
+    or organ against every act and session."""
+    entries = (subject,) if subject.family is _Y else tuple(view.base.anatomy)
+    holders = (*view.base.events, *view.base.sessions) if subject.family is _Y else (subject,)
+    out: set[tuple[object, ...]] = set()
+    for entry in entries:
+        if AnatomyType.SURGICALLY_ABSENT not in _stated(view.fact(entry, Attribute.TYPE), AnatomyType):
+            continue
+        organs = _stated(view.fact(entry, Attribute.ORGAN), Landmark)
+        out.update((holder, place, entry, organ) for holder in holders for place in _k4_places(view, holder)
+                   for organ in organs if anatomy.landmark_of(place) is organ or anatomy.contains(organ, place))
+    return frozenset(out)
+
+
+def _kind_requires(attributes: tuple[Attribute, ...], kind: Kind) -> Callable[[_Folded, Id], _Failures]:
+    """A K1 rule of one event kind (3.1 K1, "values allowed together"): ``attributes`` written only on an event whose
+    kind is stated ``kind`` (visit facts on em_visit, other_class on other, access_outcome on cannulation) - each
+    (event, attribute) written on an event of another kind."""
+    def failures(view: _Folded, subject: Id) -> _Failures:
+        if subject.family is not _E or _supported_value(view.fact(subject, Attribute.KIND), Kind) is kind:
+            return _NONE
+        return frozenset((subject, attribute) for attribute in attributes if _filed(view.fact(subject, attribute)))
+    return failures
+
+
+def _k1_endoscopic_failures(view: _Folded, subject: Id) -> _Failures:
+    """K1's endoscopic rule: a session's reached points, stations or completion only when its kind is stated an
+    endoscopic family (catalogue.ENDOSCOPIC_FAMILIES) - each (session, attribute, value) written on another session."""
+    if subject.family is not _X or _supported_value(view.fact(subject, Attribute.KIND),
+                                                    SessionKind) in catalogue.ENDOSCOPIC_FAMILIES:
+        return _NONE
+    out: set[tuple[object, ...]] = {(subject, attribute, member.value) for attribute in (Attribute.REACHED,
+                                                                                         Attribute.STATIONS)
+                                    for member in view.members(subject, attribute)}
+    if _filed(view.fact(subject, Attribute.COMPLETION)):
+        out.add((subject, Attribute.COMPLETION))
+    return frozenset(out)
+
+
+def _k1_cause_failures(view: _Folded, subject: Id) -> _Failures:
+    """K1's cause rule: a cause or cause_event written only on an act whose purpose is stated hemostasis - each (act,
+    attribute) written beside another purpose, whichever. An answer to the cause's negated form writes no cause
+    (``_narrowed`` keeps the slot as pass 1 wrote it)."""
+    if subject.family is not _E or _supported_value(view.fact(subject, Attribute.PURPOSE), Purpose) is Purpose.HEMOSTASIS:
+        return _NONE
+    return frozenset((subject, attribute) for attribute in (Attribute.CAUSE, Attribute.CAUSE_EVENT)
+                     if _filed(view.fact(subject, attribute)))
+
+
+def _k1_part_failures(view: _Folded, subject: Id) -> _Failures:
+    """K1's part rule: a part_of not negated needs its part_relation, and a part_relation its part_of (a negated
+    part_of - a separate act, 1.6 - needs none)."""
+    if subject.family is not _E:
+        return _NONE
+    part_of, relation = view.fact(subject, Attribute.PART_OF), _filed(view.fact(subject, Attribute.PART_RELATION))
+    out: set[tuple[object, ...]] = set()
+    if _filed(part_of) and part_of.state is not FactState.NEGATED and not relation:
+        out.add((subject, Attribute.PART_OF))
+    if relation and not _filed(part_of):
+        out.add((subject, Attribute.PART_RELATION))
+    return frozenset(out)
+
+
+_POSITIVE_STATUS: frozenset[Status] = frozenset({Status.PERFORMED, Status.ATTEMPTED_NOT_COMPLETED})
+
+
+def _k1_status_time_failures(view: _Folded, subject: Id) -> _Failures:
+    """K1's status-against-timing rule: each (act, status, relation) of a status done or begun with a later date, or
+    planned with an earlier one, over every status and date relation the facts state or offer."""
+    if subject.family is not _E:
+        return _NONE
+    relations = _stated(view.fact(subject, Attribute.DATE_RELATION), DateRelation)
+    return frozenset((subject, status, relation) for status in _stated(view.fact(subject, Attribute.STATUS), Status)
+                     for relation in relations
+                     if (status in _POSITIVE_STATUS and relation is DateRelation.LATER_DATE)
+                     or (status is Status.PLANNED and relation is DateRelation.EARLIER_DATE))
+
+
+@dataclass(frozen=True, slots=True)
+class _Recheck:
+    """One fixed-table check of FINAL-V2 3.1 as the fold re-runs it on an answered fact (DECISIONS D324 (4)): ``reads``,
+    the facts whose answered value could make it fail; ``failures``, its failing combinations for the answered object
+    on the folded facts - None where it cannot be re-run whole here (the check reads what this module never sees: a
+    doubt's basis, engine/requirements' EXTRACTION_KINDS, a date's own words), so an answer to a fact it reads is never
+    folded."""
+    reads: frozenset[tuple[IdFamily | None, Attribute]]
+    failures: Callable[[_Folded, Id], _Failures] | None
+
+
+_SCOPE_FACTS = (Attribute.SCOPE_BREADTH, Attribute.SCOPE_TARGETS, Attribute.SCOPE_SEGMENT, Attribute.SCOPE_COVERS,
+                Attribute.SCOPE_EXCEPTS)
+
+
+def _reads(*keys: tuple[IdFamily | None, Attribute]) -> frozenset[tuple[IdFamily | None, Attribute]]:
+    return frozenset(keys)
+
+
+_L1_DATES = _Recheck(_reads((_E, Attribute.DATE), (None, Attribute.DATE_OF_SERVICE)), None)
+_K2 = _Recheck(_reads((_E, Attribute.SESSION), (_E, Attribute.KIND), (_E, Attribute.STATUS), (_X, Attribute.KIND)),
+               _k2_failures)
+_K2_LINK = _Recheck(_reads((_X, Attribute.EXAMINATION)), None)
+# Every fixed-table reason's check, as the fold re-runs it (DECISIONS D324 (4): "The fold re-runs each such check on the
+# answered facts"). L1 on a timing fact (an act's date relation, a section's occasion) is ``_Context.judge``'s, on the
+# literals the row's own read recorded (R3BE-RF1); L1 on a date's own words (an act's date, the date of service) cannot
+# be re-run here, so no answer establishes a date. The checks K1 reads a statement for (scope, exceptive, umbrella) read
+# a doubt of basis stated, which the FactSet keeps only as its effect; the yield rule reads EXTRACTION_KINDS, which this
+# module does not import (its text-free boundary) - none re-run, so no answer is folded on the facts they read. A list
+# rule a target only satisfies (listed_targets, single_target) reads the breadth alone: an answered lesion, place or
+# target can only add one.
+_RECHECKS: Mapping[Reason, tuple[_Recheck, ...]] = MappingProxyType({
+    Reason.LITERAL_MISMATCH: (_L1_DATES,),
+    Reason.LITERAL_UNCHECKED: (_L1_DATES,),
+    Reason.SESSION_UNREACHABLE: (_Recheck(_reads((_E, Attribute.SESSION), (_E, Attribute.TARGET_PLACES),
+                                                  (_E, Attribute.KIND), (_E, Attribute.STATUS), (_X, Attribute.KIND)),
+                                           _k3_failures),),
+    Reason.SESSION_INCONSISTENT: (_K2, _K2_LINK),
+    Reason.ANATOMY_CONFLICT: (_Recheck(_reads((_E, Attribute.TARGET_PLACES), (_X, Attribute.REACHED),
+                                               (_X, Attribute.STATIONS), (_Y, Attribute.TYPE), (_Y, Attribute.ORGAN),
+                                               (_E, Attribute.KIND), (_E, Attribute.STATUS)), _k4_failures),),
+    Reason.STRUCTURE_SCOPE: (_Recheck(_reads(*((_E, attribute) for attribute in _SCOPE_FACTS),
+                                              (_E, Attribute.STATUS)), None),),
+    Reason.STRUCTURE_YIELD: (_Recheck(_reads((_E, Attribute.YIELD), (_E, Attribute.KIND)), None),),
+    Reason.STRUCTURE_ACCESS_OUTCOME: (_Recheck(_reads((_E, Attribute.ACCESS_OUTCOME), (_E, Attribute.KIND)),
+                                               _kind_requires((Attribute.ACCESS_OUTCOME,), Kind.CANNULATION)),),
+    Reason.STRUCTURE_CAUSE: (_Recheck(_reads((_E, Attribute.CAUSE), (_E, Attribute.CAUSE_EVENT), (_E, Attribute.PURPOSE)),
+                                      _k1_cause_failures),),
+    Reason.STRUCTURE_PART_OF: (_Recheck(_reads((_E, Attribute.PART_OF), (_E, Attribute.PART_RELATION)),
+                                        _k1_part_failures),),
+    Reason.STRUCTURE_ENDOSCOPIC: (_Recheck(_reads((_X, Attribute.REACHED), (_X, Attribute.STATIONS),
+                                                   (_X, Attribute.COMPLETION), (_X, Attribute.KIND)),
+                                           _k1_endoscopic_failures),),
+    Reason.STRUCTURE_VISIT: (_Recheck(_reads((_E, Attribute.VISIT_BASIS), (_E, Attribute.VISIT_SEPARATELY_IDENTIFIABLE),
+                                             (_E, Attribute.KIND)),
+                                      _kind_requires((Attribute.VISIT_BASIS, Attribute.VISIT_SEPARATELY_IDENTIFIABLE),
+                                                     Kind.EM_VISIT)),),
+    Reason.STRUCTURE_OTHER_CLASS: (_Recheck(_reads((_E, Attribute.OTHER_CLASS), (_E, Attribute.KIND)),
+                                            _kind_requires((Attribute.OTHER_CLASS,), Kind.OTHER)),),
+    Reason.STRUCTURE_STATUS_TIME: (_Recheck(_reads((_E, Attribute.STATUS), (_E, Attribute.DATE_RELATION)),
+                                            _k1_status_time_failures),),
+    Reason.STRUCTURE_EXCEPTIVE: (_Recheck(_reads((_E, Attribute.SCOPE_BREADTH), (_E, Attribute.SCOPE_EXCEPTS),
+                                                 (_E, Attribute.KIND), (_E, Attribute.STATUS)), None),),
+    Reason.STRUCTURE_LISTED_TARGETS: (_Recheck(_reads((_E, Attribute.SCOPE_BREADTH)), None),),
+    Reason.STRUCTURE_SINGLE_TARGET: (_Recheck(_reads((_E, Attribute.SCOPE_BREADTH)), None),),
+    Reason.STRUCTURE_SEGMENT: (_Recheck(_reads((_E, Attribute.SCOPE_BREADTH), (_E, Attribute.SCOPE_SEGMENT)), None),),
+    Reason.STRUCTURE_UMBRELLA: (_Recheck(_reads((_E, Attribute.KIND), (_E, Attribute.STATUS)), None),),
+})
+
+
+def _rechecked_by() -> dict[tuple[IdFamily | None, Attribute], tuple[_Recheck, ...]]:
+    out: dict[tuple[IdFamily | None, Attribute], list[_Recheck]] = {}
+    for checks in _RECHECKS.values():
+        for check in checks:
+            for key in check.reads:
+                found = out.setdefault(key, [])
+                if check not in found:
+                    found.append(check)
+    return {key: tuple(checks) for key, checks in out.items()}
+
+
+# The fixed-table checks each answered (object family, attribute) is re-judged by (DECISIONS D324 (4)).
+_RECHECKED_BY: Mapping[tuple[IdFamily | None, Attribute], tuple[_Recheck, ...]] = MappingProxyType(_rechecked_by())
+
+
+def _refused_by_rechecks(view: _Folded, subject: Id | None, attribute: Attribute,
+                         held: Mapping[Attribute, tuple[Fact, ...]]) -> bool:
+    """Whether a fixed-table check refuses the answer that would leave ``subject`` with the facts ``held``: a check
+    that reads the answered fact and cannot be re-run whole here, or one with a failing combination on the objects as
+    folded so far with the answer in them that it does not have without it - the answer would establish a combination
+    the fixed table rules out (DECISIONS D324 (4): an answered session or place re-judged for reach, as L1 re-judges an
+    answered timing fact). A combination that already fails without the answer is other facts' - which that check
+    demoted, so no answer is folded over them and they hold every code that reads them - and the answer leaves it as
+    it was; any combination it adds refuses it, beside one or not."""
+    checks = _RECHECKED_BY.get((subject.family if subject is not None else None, attribute), ())
+    if not checks:
+        return False
+    if subject is None or any(check.failures is None for check in checks):
+        return True
+    after = view.at(subject, held)
+    return any(check.failures is not None and check.failures(after, subject) - check.failures(view, subject)
+               for check in checks)
+
+
+def _answer_facts(current: tuple[Fact, ...], domain: Domain, value: Value | None, negated: bool,
+                  spans: tuple[Span, ...]) -> tuple[Fact, ...] | None:
+    """The facts at the answered attribute once one established answer applies (``_fact_answer``), or None when it
+    does not: a list member at the value answered when it may be (``answerable``) or appended when none names it; a
+    single slot answered only when it may be - narrowed by a negation at a value (``_narrowed``: DECISIONS D324 (1)),
+    and never established at a value an earlier negation answer ruled out (the two answers contradict each other)."""
+    if domain.many:
+        members_ = list(current)
+        at = next((index for index, member in enumerate(members_) if member.value == value), None)
+        if at is None:
+            members_.append(_answered_fact(SILENT, value, negated, spans))
+        elif answerable(members_[at]):
+            members_[at] = _answered_fact(members_[at], value, negated, spans)
+        else:
+            return None
+        return tuple(members_)
+    one = current[0] if current else SILENT
+    if not answerable(one):
+        return None
+    if negated and value is not None:
+        return (_narrowed(one, value),)
+    if value is not None and value in ruled_out(one):
+        return None
+    return (_answered_fact(one, value, negated, spans),)
+
+
+def _fact_answer(base: FactSet, record: Mapping[str, object], subject: Id | None,
+                 held: Mapping[Attribute, tuple[Fact, ...]], judge: Judge | None = None,
+                 view: _Folded | None = None) -> tuple[Attribute, tuple[Fact, ...]] | None:
+    """One established Q-FACT answer applied to ``held`` (the subject's facts as folded so far; ``view``, every object
+    as folded so far - R_base's when not given): the attribute and its new facts, or None where it does not apply - an
+    unknown attribute or value; a fact the question stage could not ask (``answerable``: established, contradicted by
+    pass 1, judged by the fact pass, unlocated, or demoted by a fixed-table check); a value an earlier negation answer
+    ruled out; a fixed-table check that refuses it (``_refused_by_rechecks``, DECISIONS D324 (4): re-run on the folded
+    facts, the answer in them); or, by ``judge`` (``_Context.judge``), a timing fact L1 fails at the value the answer
+    would establish on its stored literals at this FactSet's effective date (R3BE-RF1: an answer never establishes a
+    date relation the act's own date words fail; a negation answer establishes no value, so there is none to judge).
+    A negation answer at a value of a single-valued slot rules that value out and nothing else (``_narrowed``,
+    DECISIONS D324 (1))."""
+    try:
+        attribute = Attribute(record.get('attribute'))
+    except ValueError:
+        return None
+    domain = DOMAINS.get((subject.family if subject is not None else None, attribute))
+    raw = record.get('value')
+    negated = record.get('negated') is True
+    if domain is None or not isinstance(raw, str):
+        return None
+    value = _maybe(raw, domain) if raw != '' else None
+    # the one answer with no value: "This act was not done as part of another act of this procedure." - the part_of
+    # slot negated for every whole (coverage._part_of reads a negated part_of as no bundle): its claim rules out every
+    # value, so it is the established negation it says
+    if value is None and not (negated and attribute is Attribute.PART_OF and raw == ''):
+        return None
+    if not negated and judge is not None and subject is not None and judge(subject, attribute, value) is not None:
+        return None
+    new = _answer_facts(held.get(attribute, ()), domain, value, negated, _proof_spans(record))
+    if new is None:
+        return None
+    if _refused_by_rechecks(view if view is not None else _Folded(base, {}), subject, attribute,
+                            {**held, attribute: new}):
+        return None
+    return attribute, new
+
+
+def folds(R: FactSet, subject: Id | None, attribute: Attribute, value: str, negated: bool = False) -> bool:
+    """Whether an established Q-FACT answer about ``subject``'s ``attribute`` at the stored ``value`` (its negation when
+    ``negated``) would be folded over ``R`` alone: the fold's own rule (``_fact_answer``) - the fact answerable, the
+    value not ruled out, every fixed-table check that reads the fact re-run with the answer in it - without L1 on a
+    timing fact, which needs the row's literals (the fold's ``judge``). One predicate the planner and settle's re-check
+    can read, so that what the fold never folds is never asked (DECISIONS D324 (4))."""
+    if subject is None:
+        held: Mapping[Attribute, tuple[Fact, ...]] = R.encounter
+    else:
+        objects = _objects_of(R, subject.family)
+        if objects is None or subject not in objects:
+            return False
+        held = objects[subject]
+    record = {'attribute': attribute.value, 'value': value, 'negated': negated}
+    return _fact_answer(R, record, subject, held) is not None
+
+
+# --- DECISIONS D330 (2) (finding RP-1): a pair's relation is ONE proposition across EVERY answer that can set it apart,
+# Q-FACT included ----------------------------------------------------------------------------------------------------------
+#
+# D328 (2) (contract/settle.exclusive) holds a pair-family RECORD whose release another record about its pair does not
+# agree with. An answer of another family can set a pair apart too, and nothing of it is a pair's: an established Q-FACT
+# answer (a session, a date relation, a performer, a target, a device; a kind or a status, never asked today) changes
+# the facts a row of 4.5 reads, so the fold may set a pair held on R_base apart through a ROW (session, timing,
+# performer, breadth, target, technique) - or drop it from "which pairs" (engine/pairing.paired) - or drop a kept
+# unlisted entry's pair from pairing.unlisted_pairs (its session, its kind, its status), while the SAME pair's Q-REL, in
+# the same round or another, said the statement denies the act (RP-1: 45380 READY on a biopsy Fable said the EGD's
+# denial denies, because Fable also put the biopsy in the colonoscopy; int6 the same). THE RULE (D330 (2)): every such
+# release - whatever answer made it, a pair family's own included - stands only when every pair-family question asked
+# of the same pair, in any request or round, read AFFIRMED in an answered, healthy request (D328 (2)'s condition:
+# ``answer_reading``); otherwise the pair KEEPS ITS R_base RELATION. Built pair by pair (``_kept``): every answer is folded
+# exactly as before - the answered facts stand for every other reader - and only the pair's relation is R_base's
+# (AnsweredFactSet.kept_pairs and kept_unlisted, which engine/pairing's paired, relation and unlisted_pairs read): never
+# the refuter's coarse MRP1b, which held an event's answered facts whenever a pair-family record naming it disagreed.
+# A pair no pair-family question was asked of is contested by nothing, so its release stands as on int6.
+#
+# Which pairs a record is asked of (``_contest_of``): as contract/settle.pair_scopes reads a stored record WITHOUT a
+# FactSet - the fail-closed scope production's exclusivity reads (DECISIONS D330 (3)): a Q-REL its two subjects exactly
+# (a kept unlisted entry by its typed index), a Q-ONLESION every event statement of its act, a Q-LESION every event
+# pair; a kept unlisted entry is the statement of its own Q-REL only (no Q-ONLESION or Q-LESION is asked of it). A record
+# whose subjects are not two stored names is about every pair, a kept entry's included (fail-closed: settle_questions
+# never writes one). tests/v2/test_r3g_pairs pins the reading equal to settle's on every record settle writes.
+#
+# The stored records are the fold's whole input. A question refused at PLAN time (studio/jobs._refused_questions) leaves
+# no record, and none stands beside an answer: the stage draws its calibration pool once, and no question's key is ever
+# a calibration item's (engine/asking.draw), so every request of a stage gets its item or none does
+# (tests/v2/test_r3g_pairs.PlanTimeRefusalTests).
+#
+# P-MONO-Q: one verdict changed from a pattern that reads AFFIRMED to one that does not can only contest more pairs, and a
+# contested pair can only keep a relation that holds (R_base's, never INDEPENDENT); with no pair-family record asked,
+# nothing changes. The census over rows x pair-family verdict states: tests/v2/test_r3g_pairs.RowCensusTests.
+
+
+@dataclass(frozen=True, slots=True)
+class AnsweredFactSet(FactSet):
+    """R_q whose fold KEPT some pairs' R_base relation (DECISIONS D330 (2); the comment above): ``kept_pairs`` the
+    (statement, act) pairs and ``kept_unlisted`` the (kept unlisted entry's index, act) pairs a release of which the
+    stored records contest - engine/pairing reads each at R_base's relation (``paired``, ``relation``,
+    ``unlisted_pairs``). Every other field is R_q's; dataclasses.replace keeps both sets, so a FactSet derived from R_q
+    (a what-if, a synthetic act) keeps them too. The fold builds one only when it keeps a pair."""
+    kept_pairs: frozenset[tuple[Id, Id]] = frozenset()
+    kept_unlisted: frozenset[tuple[int, Id]] = frozenset()
+
+
+def kept_pairs(R: FactSet) -> frozenset[tuple[Id, Id]]:
+    """The (statement, act) pairs whose R_base relation R_q's fold kept (DECISIONS D330 (2)); frozenset() for any other
+    FactSet."""
+    return R.kept_pairs if isinstance(R, AnsweredFactSet) else frozenset()
+
+
+def kept_unlisted(R: FactSet) -> frozenset[tuple[int, Id]]:
+    """The (kept unlisted entry's index, act) pairs whose R_base pairing R_q's fold kept (DECISIONS D330 (2));
+    frozenset() for any other FactSet."""
+    return R.kept_unlisted if isinstance(R, AnsweredFactSet) else frozenset()
+
+
+_PAIR_FAMILIES: frozenset[QuestionFamily] = frozenset({QuestionFamily.Q_REL, QuestionFamily.Q_ONLESION,
+                                                       QuestionFamily.Q_LESION})
+
+
+@dataclass(frozen=True, slots=True)
+class _Contest:
+    """The pairs one stored pair-family record is asked of (the comment above): ``statement`` an event, a kept unlisted
+    entry's index, or None - every EVENT statement (``every`` too: every kept entry as well); ``act`` an event, or None -
+    every act."""
+    statement: Id | int | None
+    act: Id | None
+    every: bool = False
+
+
+def _contest_of(record: Mapping[str, object], family: QuestionFamily, base: FactSet) -> _Contest | None:
+    """The pairs a stored pair-family record is asked of, read WITHOUT a FactSet (contract/settle.pair_scopes'
+    fail-closed scope; the comment above): None when it names no pair the row holds (a subject that names no object)."""
+    raw = record.get('subjects')
+    if not isinstance(raw, (list, tuple)) or len(raw) != 2 or not all(isinstance(item, str) for item in raw):
+        return _Contest(None, None, every=True)
+    first, second = _subject_of(raw[0]), _subject_of(raw[1])
+    if family is QuestionFamily.Q_REL:
+        index = _unlisted_of(record, base)
+        statement: Id | int | None = index if index is not None else first
+        return _Contest(statement, second) if statement is not None and second is not None else None
+    if family is QuestionFamily.Q_ONLESION:
+        return _Contest(None, first) if first is not None else None
+    return _Contest(None, None)
+
+
+def _contests(records: Sequence[object], base: FactSet) -> tuple[_Contest, ...]:
+    """Every pair-family record of the row whose reading is not AFFIRMED (``answer_reading``), read for its pairs. An
+    ESTABLISHED record (result supported) is a release the fold folds, never a contest: settle establishes a record only
+    when its claim was supported and its control contradicted in an answered, healthy request (d.2), which is AFFIRMED
+    whatever else the stored record carries."""
+    out: list[_Contest] = []
+    for record in records:
+        if not isinstance(record, Mapping) or record.get('result') == Result.SUPPORTED.value:
+            continue
+        family = _member(QuestionFamily, record.get('family'))
+        if family is None or family not in _PAIR_FAMILIES or answer_reading(record) is AnswerReading.AFFIRMED:
+            continue
+        found = _contest_of(record, family, base)
+        if found is not None:
+            out.append(found)
+    return tuple(out)
+
+
+def _contested(contests: Sequence[_Contest], statement: Id | int, act: Id) -> bool:
+    """Whether a contest is about the pair of ``statement`` (an event, or a kept unlisted entry's index) and ``act``: the
+    same act (or every act) and the same statement - a wildcard meeting every event statement, and every kept entry too
+    for a record read as about every pair (``_Contest.every``)."""
+    for contest in contests:
+        if contest.act is not None and contest.act != act:
+            continue
+        if contest.statement is None:
+            if contest.every or not isinstance(statement, int):
+                return True
+        elif contest.statement == statement:
+            return True
+    return False
+
+
+def _kept(base: FactSet, R: FactSet, events: Mapping[str, object]) -> FactSet:
+    """R_q (``R``, every answer folded) with DECISIONS D330 (2) applied (the comment above): each pair held on ``base``
+    that R releases - not paired on R, or INDEPENDENT there; for a kept unlisted entry, no longer in unlisted_pairs - and
+    that a pair-family record not AFFIRMED is asked of keeps its R_base relation (AnsweredFactSet); ``R`` itself when no
+    pair is kept."""
+    contests = _contests(_stored_list(events.get('questions')), base)
+    if not contests:
+        return R
+    from studio.interpretation.engine import pairing  # pairing reads this module: read here, never at import
+
+    named = {contest.act for contest in contests}
+    acts = base.events if None in named else tuple(act for act in base.events if act in named)
+    held: set[tuple[Id, Id]] = set()
+    held_unlisted: set[tuple[int, Id]] = set()
+    for act in acts:
+        for statement in base.events:
+            if statement == act or not _contested(contests, statement, act):
+                continue
+            if (not pairing.paired(base, statement, act)
+                    or pairing.relation(base, statement, act).relation is pairing.Relation.INDEPENDENT):
+                continue  # not held on R_base: nothing for the fold to release
+            if (pairing.paired(R, statement, act)
+                    and pairing.relation(R, statement, act).relation is not pairing.Relation.INDEPENDENT):
+                continue  # still held on R_q (its relation as the answers leave it)
+            held.add((statement, act))
+        entries = [index for index in range(len(base.unlisted)) if _contested(contests, index, act)]
+        if entries:
+            before = {pair.index for pair in pairing.unlisted_pairs(base, act)}
+            after = {pair.index for pair in pairing.unlisted_pairs(R, act)}
+            held_unlisted.update((index, act) for index in entries if index in before and index not in after)
+    if not held and not held_unlisted:
+        return R
+    kept: dict[str, Any] = {item.name: getattr(R, item.name) for item in dataclass_fields(FactSet)}
+    return AnsweredFactSet(**kept, kept_pairs=frozenset(held), kept_unlisted=frozenset(held_unlisted))
+
+
+def _answered(base: FactSet, events: Mapping[str, object], judge: Judge | None = None) -> FactSet:
+    """R_q (DESIGN-v2 f.1; PROTOTYPE): ``base`` with every established answer of the row folded in, each only where it
+    still applies to the base (``asking.eligible``'s rule, re-checked here: a fact answer only over a fact the question
+    stage may ask - ``answerable`` - and, for a timing fact, only at a value L1 passes on its stored literals at this
+    FactSet's effective date (``judge``, ``_Context.judge``; None: no L1, as ``factset`` reads the row); a Q-ONLESION or
+    Q-LESION answer only for a pair the fact pass did not judge (``pair_judged`` over the row's stored pair records),
+    a lesion pair only with the multiplicity its form presumes established; a Q-REL answer never for a pair whose
+    covers claim the fact pass established; an absorption only for an entry the base keeps), and ``base`` itself as
+    R_base. Read only by release paths: a fact answer establishes the value the row needs, a Q-REL answer sets a pair
+    apart, a Q-LESION answer a distinctness, a Q-ONLESION answer an act apart from a lesion, a Q-ABSORB answer removes a
+    synthetic act (no fact-pass judgment of an absorption exists to re-check). A refused answer leaves R_q as R_base
+    there (R3BE-RF1, R3BE-RF2). With no established answer, ``base``. DECISIONS D324: a negation answer at a value
+    rules out that value only (``_narrowed``, (1)); no answer is folded over a fact a fixed-table check demoted, and
+    each answered fact is re-judged by every fixed-table check that reads it, over the objects as folded so far
+    (``_refused_by_rechecks``, (4)). DECISIONS D330 (2): a pair held on R_base that the folded answers release - set
+    apart through a row, out of "which pairs", or a kept unlisted entry's pair out of unlisted_pairs - while a
+    pair-family question asked of it reads other than AFFIRMED keeps its R_base relation (``_kept``)."""
+    found = established_answers(events)
+    if not found:
+        return base
+    act_lesions, lesion_pairs = act_lesion_reasons(events), lesion_pair_reasons(events)
+    changed: dict[IdFamily, dict[Id, dict[Attribute, tuple[Fact, ...]]]] = {}
+    encounter: dict[Attribute, tuple[Fact, ...]] | None = None
+    independent: set[tuple[Id, Id]] = set()
+    unlisted_independent: set[tuple[int, Id]] = set()
+    off_lesion: set[tuple[Id, Id]] = set()
+    distinct: set[tuple[Id, Id]] = set()
+    absorbed: set[int] = set()
+    pair_controls = dict(base.pair_controls)
+    for record in found:
+        family = _member(QuestionFamily, record.get('family'))
+        subjects = [_subject_of(item) for item in _stored_list(record.get('subjects'))]
+        unlisted = _unlisted_of(record, base)
+        if family is QuestionFamily.Q_REL and subjects and subjects[-1] is not None and subjects[-1] in base.events:
+            act = subjects[-1]
+            if unlisted is not None:
+                unlisted_independent.add((unlisted, act))
+            elif (len(subjects) == 2 and subjects[0] is not None and subjects[0] in base.events
+                  and not _covers_established(base, subjects[0], act)):
+                independent.add((subjects[0], act))
+        elif family is QuestionFamily.Q_ONLESION and len(subjects) == 2:
+            act_, lesion_ = subjects
+            if (act_ is not None and lesion_ is not None and act_ in base.events and lesion_ in base.lesions
+                    and fact(base, act_, Attribute.TARGET_LESION).result is not Result.SUPPORTED
+                    and not pair_judged(base, act_lesions, act_, lesion_)):
+                off_lesion.add((act_, lesion_))
+        elif family is QuestionFamily.Q_LESION and len(subjects) == 2:
+            lesion, other = subjects
+            if lesion is None or other is None or lesion == other or lesion not in base.lesions \
+                    or other not in base.lesions or pair_judged(base, lesion_pairs, lesion, other):
+                continue
+            presumed = _presumed(record.get('form'), lesion, other)
+            if presumed is not None and all(_single(base.lesions, entry) for entry in presumed):
+                distinct.add((lesion, other))
+                pair_controls[(lesion, Attribute.DISTINCT_FROM, other)] = True
+        elif family is QuestionFamily.Q_ABSORB and unlisted is not None:
+            absorbed.add(unlisted)
+        elif family is QuestionFamily.Q_FACT and len(subjects) == 1:
+            subject = subjects[0]
+            if subject is None and _member(QuestionSubject, _stored_list(record.get('subjects'))[0]) is not \
+                    QuestionSubject.DOCUMENT:
+                continue
+            if subject is None:
+                held = encounter if encounter is not None else dict(base.encounter)
+                applied = _fact_answer(base, record, None, held)
+                if applied is not None:
+                    encounter = {**held, applied[0]: applied[1]}
+                continue
+            objects = _objects_of(base, subject.family)
+            if objects is None or subject not in objects:
+                continue
+            edits = changed.setdefault(subject.family, {})
+            held = edits.get(subject) or dict(objects[subject])
+            # every fixed-table check that reads the answered fact re-runs over the objects as folded so far, this
+            # answer in them (DECISIONS D324 (4))
+            applied = _fact_answer(base, record, subject, held, judge, _Folded(base, changed))
+            if applied is not None:
+                edits[subject] = {**held, applied[0]: applied[1]}
+
+    def merged(family: IdFamily, objects: Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]]
+               ) -> Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]]:
+        edits = changed.get(family)
+        return {subject: edits.get(subject, facts_of) for subject, facts_of in objects.items()} if edits else objects
+
+    answered = replace(base, people=merged(_P, base.people), sections=merged(_N, base.sections),
+                       sessions=merged(_X, base.sessions), anatomy=merged(_Y, base.anatomy),
+                       lesions=merged(_L, base.lesions), events=merged(_E, base.events),
+                       encounter=encounter if encounter is not None else base.encounter, pair_controls=pair_controls,
+                       independent=frozenset(independent), unlisted_independent=frozenset(unlisted_independent),
+                       off_lesion=frozenset(off_lesion), distinct=frozenset(distinct), absorbed=frozenset(absorbed),
+                       base=base)
+    # DECISIONS D330 (2): a release the stored records contest keeps the pair's R_base relation
+    return _kept(base, answered, events)
 
 
 def factset(inventory: object) -> FactSet:
@@ -1175,7 +2326,13 @@ def possibly(f: Fact, v: Value) -> bool:
     merged view reads so too, as a written denial read alone now would (AMENDMENT-2 4.4; every view, the fail-closed
     reading of ``open_denial``). The claimed-value readers (AMENDMENT-2 4.3.3 c: the digital examination's device) and
     the readers of a multi-valued list's members, which RD-3 (a single-valued claim) does not reach, read
-    ``possibly_written``."""
+    ``possibly_written``.
+
+    DECISIONS D324 (1): a value an established negation answer ruled out (``ruled_out``: a NarrowedFact R_q holds) is
+    not possible; every other value reads exactly as on R_base's fact - the answer removes only its value, for this
+    predicate and every reader built on it."""
+    if v in ruled_out(f):
+        return False
     if holds(f, v):
         return True
     if f.result not in OPEN:
@@ -1191,7 +2348,10 @@ def possibly_written(f: Fact, v: Value) -> bool:
     denial: read by the claimed-value readers (AMENDMENT-2 4.3.3 c: pairing.digital_examination and combination._digital
     read a device that CLAIMS manual, DECISIONS D253's claimed-manual reading) and by the readers of a multi-valued
     list's members (a statement's excepts, a lesion's same_as, an other date's role), which RD-3 does not reach - so
-    each keeps the reading it was built and ruled with."""
+    each keeps the reading it was built and ruled with. A value an established negation answer ruled out is not
+    possible here either (DECISIONS D324 (1), as ``possibly``)."""
+    if v in ruled_out(f):
+        return False
     if holds(f, v):
         return True
     if f.result not in OPEN:
@@ -1514,8 +2674,19 @@ def established_not_on(R: FactSet, act: Id, lesion: Id) -> bool:
     NOT done on ``lesion`` (its act-lesion claim supported and its control rejected, the multiplicity the claim's form
     presumes established: ``_act_lesions``; FactSet.pair_controls keyed (act, distinct_from, lesion), True). Read only
     by engine/pairing's target row, which reads it as setting the act apart from that lesion (apart_by_lesion's
-    established arm); never to join anything."""
-    return R.pair_controls.get((act, Attribute.DISTINCT_FROM, lesion)) is True
+    established arm); never to join anything.
+
+    DECISIONS D323 F1 (round r3's build): or an established Q-ONLESION answer said so ("This act was not done to lesion
+    {L}." supported with its located proof, its exact negation rejected: FactSet.off_lesion, folded by ``_answered`` on
+    R_q only, never on R_base) - ONE reading of an established not-on, whichever pass established it, so pairing's one
+    arm reads both under the same class rule (D311) and QB clause (D316).
+
+    Round r3's engine repair pass (R3BE-RF2): FactSet.off_lesion holds only answers the fold accepted, and the fold
+    never accepts one for a pair the fact pass JUDGED (``pair_judged``: its stored act-lesion record carrying a reason
+    but no usable verdict or never asked - "This act was not done on lesion {L}." contradicted, unclear or qualified,
+    or its control incoherent - or the pair held unestablished with no record to say why), so the OR never sets apart
+    an act the fact pass itself judged done on the lesion."""
+    return R.pair_controls.get((act, Attribute.DISTINCT_FROM, lesion)) is True or (act, lesion) in R.off_lesion
 
 
 def apart_by_lesion(R: FactSet, a: Id, b: Id) -> bool:

@@ -674,7 +674,7 @@
    ]
   },
   {
-   "answers_sha256": "eb55050defb263f691bdfc816279cf9d7ceb611c4c213a524d79dc5d39d89284",
+   "answers_sha256": "e079bfac3ff515c90b24f7d3176e51a50f3779f77978fbb780fe5b035f057d1e",
    "case": "C1",
    "document_sha256": "000423f57495d4b5e7b665b600f26de2548e44fbaff3c4af533b62b4707b2380",
    "kind": "class",
@@ -696,7 +696,7 @@
    ]
   },
   {
-   "answers_sha256": "4bcafe75fc4718dbca7fe269e7ef787f059824a37e1366943ddc1c50983c61e4",
+   "answers_sha256": "3e49341d0cb4ffa97ae06551cc38807438f5a78bb116749e11c56a0ba3b24689",
    "case": "C2",
    "document_sha256": "5d07847105526850b1197c18603e503ec57be9a11e117ab393b0fefa748ee80c",
    "kind": "class",
@@ -1191,7 +1191,7 @@
    ]
   },
   {
-   "answers_sha256": "f56b96f6468a09d0120b0d0ec2fd5bd77fa96f16e78004dc62a2efdd314e6503",
+   "answers_sha256": "1cb2aa031194bdd64aefdda8d5e7a0908c76c429cb04baee9034d0ad56fc2561",
    "case": "BF4",
    "document_sha256": "666745fd1ae5d1ce82ba35e9ab6c7b0113b05b948e0badc85c95f9833ef1cae6",
    "kind": "borderline",
@@ -1503,7 +1503,7 @@
    ]
   },
   {
-   "answers_sha256": "87ba6c778df3e7bf0582f53f78e2af606e3f80b82366258f444211caa71cdca6",
+   "answers_sha256": "2356578cd81e92e7bb374e1e74d64dc182d20ddcf6902ffbb4577250aceb002d",
    "case": "CK-note8",
    "document_sha256": "25ef61e4bf743b70a99fea032a83a429bc6e954c89564ff4b53aaddf9ef00a85",
    "kind": "checklist",
@@ -2014,7 +2014,7 @@
    ]
   },
   {
-   "answers_sha256": "ab066e535ef69945af589ea4a94229dea7d9e4442d9a8e7564ba8d895aed2228",
+   "answers_sha256": "f2b8889e8232ffc6025f306221edf071ac54d58449f08d2df315f8d43d0bb671",
    "case": "RF-CO2d",
    "document_sha256": "91ae6c0a21bc1d1595ec922c03880a73634a5818391d2f58557261393d730085",
    "kind": "refutation",

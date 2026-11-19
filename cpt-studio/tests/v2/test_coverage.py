@@ -291,6 +291,32 @@ def first(items):
 CECAL = {L1: lesion(ct.Multiplicity.SINGLE, places=(Landmark.CECUM,))}
 
 
+# Round r3's silent-link rule (DESIGN-v2 b.8, DECISIONS D308 Q-B; restated at round r3's integration): a procedural
+# adjunct whose part_of is silent beside any other act, or whose cause is silent where it may treat bleeding (a silent
+# purpose is possibly hemostasis), is a DOUBT - held until Fable's proven answer. A test of another rule (D221's lesion
+# arm, the lift's identity, a place, a same_as ...) states that link of its part, so it reads the rule it tests and
+# nothing else: its part_of negated (done in its own right - it names no whole, so D221's own exception, _not_adjunct,
+# which needs a negation NAMING the whole, is untouched) and its purpose treatment (no bleeding treated: the cause arm's
+# premise F). The silent link itself is pinned by tests/v2/test_r3_probe (SilentLinkTests) and test_r3b_int4.
+STATED_LINK = {"part_of": neg(None), "purpose": sup(Purpose.TREATMENT)}
+# the same link stated where the test reads the part's PURPOSE (an injection's lift): its part_of negated and its cause a
+# lesion present before the session (the cause arm F by its cause), its purpose left as the test gives it
+LINK_KEEPING_PURPOSE = {"part_of": neg(None), "cause": sup(Cause.PRE_EXISTING_LESION)}
+
+
+def doubted_links(R, part) -> list:
+    """(rule, whole, truth, the attributes its doubts name) of every bundle of ``part``: what the silent-link rule's
+    bundles are pinned by (round r3, DESIGN-v2 b.8)."""
+    return [(bundle.rule, bundle.whole, bundle.truth, {doubt.attribute for doubt in bundle.doubts})
+            for bundle in C.bundles(R, part)]
+
+
+# Round r3's silent-link bundles of a part beside the examination E1 and an act E2, its cause and its part_of silent: the
+# cause arm over every event of the session (any event may have caused the bleeding it may treat), the part arm over the
+# act (DESIGN-v2 b.8, DECISIONS D308 Q-B)
+SILENT_LINKS = [(C.Rule.PROCEDURAL_ADJUNCT, E1, U, {A.CAUSE}), (C.Rule.PROCEDURAL_ADJUNCT, E2, U, {A.CAUSE, A.PART_OF})]
+
+
 def emr(**over) -> dict:
     """v1's emr(): "... the 20 mm flat polyp was resected by EMR en bloc." - an EMR of L1 in the cecum."""
     base = dict(lesion=sup(L1), places=(sup(Landmark.CECUM),))
@@ -328,8 +354,16 @@ class Bundling(SimpleTestCase):
 
     def test_c5_an_injection_with_no_place_joins_the_bundling_identity(self):
         """v1: an injection naming no place and no lesion beside the EMR asks its identity (act_target), never READY.
-        v2: its purpose and lesion unstated leave the lift possible (U): asked, never its own act."""
+        v2: its purpose and lesion unstated leave the lift possible (U): asked, never its own act. (Restated at round
+        r3's integration: beside the lift, the silent-link rule asks its unstated part_of and cause too - DESIGN-v2 b.8;
+        with that link stated the lift's own questions are the only ones, as before.)"""
         R = self.lifted()
+        self.assertIsNone(C.bundled(R, E3))
+        self.assertEqual(rules(R, E3), [(C.Rule.LIFT_INJECTION, E2, U), *[row[:3] for row in SILENT_LINKS]])
+        held = C.bundling('45381', (E3,), R)
+        self.assertEqual({item.fact for item in held}, {'act_part', 'act_target', 'act_cause'})
+        self.assertTrue(all(item.rank == 17 and item.kind is ItemKind.QUESTION for item in held))
+        R = self.lifted(**LINK_KEEPING_PURPOSE)
         self.assertIsNone(C.bundled(R, E3))
         self.assertEqual(rules(R, E3), [(C.Rule.LIFT_INJECTION, E2, U)])
         held = C.bundling('45381', (E3,), R)
@@ -339,8 +373,13 @@ class Bundling(SimpleTestCase):
 
     def test_an_injection_at_a_disjoint_place_is_its_own_act(self):
         """v1: an injection in the rectum beside the cecal EMR is its own act (45381 READY). v2: by its established
-        place, disjoint from the EMR's, with the pair controls rejected (4.2 [R:SC-B])."""
+        place, disjoint from the EMR's, with the pair controls rejected (4.2 [R:SC-B]). (Restated at round r3's
+        integration: the place sets the LIFT apart, as before; its part_of and cause unstated, the silent-link rule asks
+        them - DESIGN-v2 b.8, a doubt no place decides; that link stated, its own act by its place, as before.)"""
         events = {E1: exam(), E2: emr(), E3: act(Kind.INJECTION, places=(sup(Landmark.RECTUM),))}
+        R = build(events, lesions=CECAL, controls=controls(E3, (Landmark.RECTUM,), E2, (Landmark.CECUM,)))
+        self.assertEqual(doubted_links(R, E3), SILENT_LINKS)  # no LIFT bundle: the place
+        events = {E1: exam(), E2: emr(), E3: act(Kind.INJECTION, places=(sup(Landmark.RECTUM),), **LINK_KEEPING_PURPOSE)}
         R = build(events, lesions=CECAL, controls=controls(E3, (Landmark.RECTUM,), E2, (Landmark.CECUM,)))
         self.assertEqual((rules(R, E3), C.verdict(R, E3).truth, C.bundling('45381', (E3,), R)), ([], T, ()))
         # SC-B: a place difference counts only with its pair controls rejected - without them it is asked
@@ -350,8 +389,13 @@ class Bundling(SimpleTestCase):
     def test_a_tattoo_is_never_a_lift_by_place_alone(self):
         """v1: a tattoo in the cecum is never a lift by place alone. v2: the purpose arm is the injection's (a tattoo's
         purpose is no lift), so a marking tattoo is its own act; its part_of naming the EMR still bundles it (v1's
-        ONE_ACT arm)."""
+        ONE_ACT arm). (Restated at round r3's integration: never by place alone, as before - but its part_of unstated,
+        the silent-link rule asks it, the tattoo's lift by part being its only arm - DESIGN-v2 b.8; stated not a part,
+        its own act.)"""
         R = build({E1: exam(), E2: emr(), E3: act(Kind.TATTOO, purpose=sup(Purpose.MARKING),
+                                                 places=(sup(Landmark.CECUM),))}, lesions=CECAL)
+        self.assertEqual(doubted_links(R, E3), [(C.Rule.LIFT_INJECTION, E2, U, {A.PART_OF, A.PART_RELATION})])
+        R = build({E1: exam(), E2: emr(), E3: act(Kind.TATTOO, purpose=sup(Purpose.MARKING), part_of=neg(None),
                                                  places=(sup(Landmark.CECUM),))}, lesions=CECAL)
         self.assertEqual((rules(R, E3), C.verdict(R, E3).truth), ([], T))
         R = build({E1: exam(), E2: emr(), E3: act(Kind.TATTOO, part_of=sup(E2), relation=sup(ct.PartRelation.STEP_OF))},
@@ -415,14 +459,20 @@ class Bundling(SimpleTestCase):
         self.assertEqual(C.bundled(R, E3).rule, C.Rule.CLIP)
         cov = C.reconcile(R, [C.Counted('sel:0', '45385', SessionKind.COLONOSCOPY, (E2,))], procedure_day=True)
         self.assertEqual(([act.event for act in cov.bundled], cov.unresolved), ([E3], []))
+        # (restated at round r3's integration: its part_of unstated beside the snare, the silent-link rule asks it -
+        # DESIGN-v2 b.8 - and stated not a part, no adjunct, reportable, as before)
         R = build({E1: exam(), E2: snare, E3: act(Kind.CLIP, purpose=sup(Purpose.HEMOSTASIS),
                                                   cause=sup(Cause.PRE_EXISTING_LESION))})
+        self.assertEqual(doubted_links(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E2, U, {A.PART_OF})])
+        R = build({E1: exam(), E2: snare, E3: act(Kind.CLIP, purpose=sup(Purpose.HEMOSTASIS),
+                                                  cause=sup(Cause.PRE_EXISTING_LESION), part_of=neg(None))})
         self.assertEqual((C.bundles(R, E3), C.reportable(R, E3)), ((), True))
         cov = C.reconcile(R, [C.Counted('sel:0', '45385', SessionKind.COLONOSCOPY, (E2,))], procedure_day=True)
         self.assertEqual([(item.act, item.reason) for item in cov.unresolved],
                          [(Kind.BLEEDING_CONTROL, C.ItemReason.NOT_COVERED)])
         R = build({E1: exam(), E2: snare, E3: act(Kind.CLIP)})
-        self.assertEqual(rules(R, E3), [(C.Rule.CLIP, None, U)])
+        # beside D157's doubt, round r3's silent links (DESIGN-v2 b.8): its cause and its part_of unstated
+        self.assertEqual(rules(R, E3), [(C.Rule.CLIP, None, U), *[row[:3] for row in SILENT_LINKS]])
         self.assertTrue(C.doubted(R, E3))
         cov = C.reconcile(R, [C.Counted('sel:0', '45385', SessionKind.COLONOSCOPY, (E2,))], procedure_day=True)
         self.assertEqual([(item.act, item.reason) for item in cov.unresolved], [(Kind.CLIP, C.ItemReason.IN_DOUBT)])
@@ -448,9 +498,11 @@ class Bundling(SimpleTestCase):
         self.assertEqual(C.bundles(R, E2), ())
         self.assertEqual(C.FAMILY_OWN_BUNDLED[SessionKind.EUS], frozenset())
         self.assertEqual(C.FAMILY_OWN_BUNDLED[SessionKind.ERCP], frozenset({Kind.INJECTION}))
-        # an ERCP injection whose purpose may be hemostasis may be a bleeding control: asked, never bundled silently
+        # an ERCP injection whose purpose may be hemostasis may be a bleeding control: asked, never bundled silently -
+        # and (round r3's silent-link rule, DESIGN-v2 b.8) its unstated cause asked beside it, the examination its whole
         R = build({E1: exam(), E2: act(Kind.INJECTION)}, sessions={X1: session(SessionKind.ERCP)})
-        self.assertEqual(rules(R, E2), [(C.Rule.FAMILY_BUNDLED, None, U)])
+        self.assertEqual(doubted_links(R, E2), [(C.Rule.FAMILY_BUNDLED, None, U, {A.PURPOSE}),
+                                                (C.Rule.PROCEDURAL_ADJUNCT, E1, U, {A.CAUSE})])
 
 
 # --- the procedural adjuncts: v1's ProceduralAdjuncts and AdjunctBesideARemoval, re-expressed -------------------------
@@ -492,17 +544,30 @@ class ProceduralAdjuncts(SimpleTestCase):
     def test_a_standalone_ablation_stays_its_codes(self):
         """v1's D30 control (transverse colon) READY; and v1's D58 cost (the ascending colon, one step from the
         resection, asked) and D41's no-part_of ablation (asked) are gone in v2: with no part_of and no cause, nothing
-        relates the ablation to the resection, whatever its place - its own act."""
+        relates the ablation to the resection, whatever its place - its own act. (Restated at round r3's integration:
+        with its part_of, its cause and its purpose UNSTATED, the silent-link rule asks them whatever its place -
+        DESIGN-v2 b.8, DECISIONS D308 Q-B - and Fable's proven part-link answer releases it; with them stated, its own
+        act whatever its place, as before.)"""
         for place in (Landmark.TRANSVERSE_COLON, Landmark.ASCENDING_COLON, Landmark.CECUM):
             with self.subTest(place=place):
                 R = self.adjunct(places=(sup(place),))
+                self.assertEqual(doubted_links(R, E3), SILENT_LINKS)
+                self.assertEqual({(item.fact, item.rank) for item in C.bundling('45388', (E3,), R)},
+                                 {('act_cause', 17), ('act_part', 17)})
+                R = self.adjunct(places=(sup(place),), **STATED_LINK)
                 self.assertEqual((rules(R, E3), C.bundling('45388', (E3,), R)), ([], ()))
 
     def test_an_adjunct_of_a_removal_of_another_encounter_is_its_own_act(self):
         """v1: "... removed with a cold snare in 2024." / "The scar was treated with argon plasma coagulation." part_of
-        E2: READY. v2: the whole's date relation established as another date - no whole."""
+        E2: READY. v2: the whole's date relation established as another date - no whole. (Restated at round r3's
+        integration: no whole by its part_of, as before; its purpose and cause unstated, the silent-link rule asks
+        the cause over today's events - the examination - DESIGN-v2 b.8; its purpose stated, its own act.)"""
         R = build({E1: exam(), E2: act(Kind.SNARE, date=sup(EARLIER)),
                    E3: act(Kind.ABLATION, part_of=sup(E2), relation=sup(ct.PartRelation.ADJUNCT_OF))})
+        self.assertEqual(doubted_links(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E1, U, {A.CAUSE})])
+        R = build({E1: exam(), E2: act(Kind.SNARE, date=sup(EARLIER)),
+                   E3: act(Kind.ABLATION, part_of=sup(E2), relation=sup(ct.PartRelation.ADJUNCT_OF),
+                           purpose=STATED_LINK['purpose'])})
         self.assertEqual((rules(R, E3), C.verdict(R, E3).truth), ([], T))
 
     def test_a_biopsy_part_of_nothing_is_unaffected(self):
@@ -518,21 +583,36 @@ class ProceduralAdjuncts(SimpleTestCase):
         R = build({E1: exam(), E2: act(Kind.SNARE), E3: act(Kind.BLEEDING_CONTROL, purpose=sup(Purpose.HEMOSTASIS),
                                                             cause=sup(Cause.ACT_OF_THIS_SESSION))})
         self.assertEqual(rules(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E1, U), (C.Rule.PROCEDURAL_ADJUNCT, E2, U)])
+        # restated at round r3's integration: its part_of unstated beside the snare, the silent-link rule asks it too
+        # (DESIGN-v2 b.8); stated not a part, the cause question alone, as before
+        self.assertEqual({(item.fact, item.rank) for item in C.bundling('45382', (E3,), R)},
+                         {('act_cause', 17), ('act_part', 17)})
+        R = build({E1: exam(), E2: act(Kind.SNARE), E3: act(Kind.BLEEDING_CONTROL, purpose=sup(Purpose.HEMOSTASIS),
+                                                            cause=sup(Cause.ACT_OF_THIS_SESSION), part_of=neg(None))})
+        self.assertEqual(rules(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E1, U), (C.Rule.PROCEDURAL_ADJUNCT, E2, U)])
         self.assertEqual({(item.fact, item.rank) for item in C.bundling('45382', (E3,), R)}, {('act_cause', 17)})
 
     def test_d58_a_part_of_naming_the_examination_sets_nothing_apart(self):
         """v1 D58 variant 3: a part_of naming the examination (the session, C-1). v2: it relates the clip to no act -
-        no bundle by it; the clip's own cause decides (here none stated: its own act)."""
+        no bundle by it; the clip's own cause decides (here none stated: its own act). (Restated at round r3's
+        integration: no bundle by the part_of, as before; the cause unstated, the silent-link rule asks it over every
+        event - DESIGN-v2 b.8; stated a lesion present before, its own act.)"""
         R = build({E1: exam(), E2: act(Kind.SNARE),
                    E3: act(Kind.BLEEDING_CONTROL, purpose=sup(Purpose.HEMOSTASIS), part_of=sup(E1),
                            relation=sup(ct.PartRelation.ADJUNCT_OF))})
+        self.assertEqual(doubted_links(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E1, U, {A.CAUSE}),
+                                                (C.Rule.PROCEDURAL_ADJUNCT, E2, U, {A.CAUSE})])
+        R = build({E1: exam(), E2: act(Kind.SNARE),
+                   E3: act(Kind.BLEEDING_CONTROL, purpose=sup(Purpose.HEMOSTASIS), part_of=sup(E1),
+                           relation=sup(ct.PartRelation.ADJUNCT_OF), cause=sup(Cause.PRE_EXISTING_LESION))})
         self.assertEqual(C.bundles(R, E3), ())
 
     def test_a_part_of_in_doubt_asks_the_part(self):
         """A part_of claimed but not established (pass 2 unclear), or an empty slot a doubt names: asked, act_part."""
         for part in (unres(E2), doubted_empty(E2)):
             with self.subTest(part=part.result):
-                R = self.adjunct(part_of=part)
+                # its purpose stated (round r3's integration: a silent one opens the silent-link rule's cause arm, b.8)
+                R = self.adjunct(part_of=part, purpose=STATED_LINK['purpose'])
                 self.assertEqual(rules(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E2, U)])
                 self.assertEqual({item.fact for item in C.verdict(R, E3).held}, {'act_part'})
 
@@ -1883,18 +1963,36 @@ class AdjunctBesideARemoval(SimpleTestCase):
     def test_a_bleeding_control_naming_nothing_beside_a_polypectomy(self):
         """v1: "Immediate oozing from the polypectomy site was controlled with two hemoclips for hemostasis." asked
         (D41). v2: its cause unstated - no bundling (the CAUSE row asks act_cause); its cause in doubt - asked here
-        (act_cause); stated as this session's act with the snare as cause_event - bundled."""
-        self.assertEqual(C.bundles(polypectomy(hemoclips()), E3), ())
+        (act_cause); stated as this session's act with the snare as cause_event - bundled.
+
+        Restated at round r3's integration: its cause and its part_of unstated - ASKED here, by the silent-link rule
+        (DESIGN-v2 b.8, DECISIONS D308 Q-B: the procedure-caused bleeding control), U, never explained; both stated -
+        its link to nothing - its own act, as before."""
+        R = polypectomy(hemoclips())
+        self.assertEqual(doubted_links(R, E3), SILENT_LINKS)
+        self.assertEqual({(item.fact, item.attribute) for item in C.verdict(R, E3).held},
+                         {('act_cause', A.CAUSE), ('act_part', A.PART_OF)})
+        self.assertEqual(C.bundles(polypectomy(hemoclips(part_of=neg(None), cause=sup(Cause.PRE_EXISTING_LESION))), E3),
+                         ())
         R = polypectomy(hemoclips(cause=unres(Cause.ACT_OF_THIS_SESSION), cause_event=sup(E2)))
         self.assertEqual(rules(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E2, U)])
-        self.assertEqual({(item.fact, item.attribute) for item in C.verdict(R, E3).held}, {('act_cause', A.CAUSE)})
+        # its part_of unstated beside the snare: the silent-link rule asks it too (round r3, DESIGN-v2 b.8)
+        self.assertEqual({(item.fact, item.attribute) for item in C.verdict(R, E3).held},
+                         {('act_cause', A.CAUSE), ('act_part', A.PART_OF)})
         R = polypectomy(hemoclips(cause=sup(Cause.ACT_OF_THIS_SESSION), cause_event=sup(E2)))
         self.assertEqual(C.bundled(R, E3).whole, E2)
 
     def test_an_ablation_of_the_resection_margins_with_no_part_of(self):
-        """v1 (D41) asked it. v2: nothing relates it to the EMR - no part_of, no cause - so it is its own act."""
+        """v1 (D41) asked it. v2: nothing relates it to the EMR - no part_of, no cause - so it is its own act.
+
+        Restated at round r3's integration: nothing STATES its relation to the EMR - its part_of and its cause silent,
+        its purpose silent (so possibly hemostasis) - so the silent-link rule asks them (DESIGN-v2 b.8, DECISIONS D308
+        Q-B), U; Fable's proven part-link answer releases it. Its link stated (done in its own right, a treatment): its
+        own act, as v2 had it."""
         R = build({E1: exam(), E2: emr(), E3: act(Kind.ABLATION)}, lesions=CECAL)
-        self.assertEqual(C.bundles(R, E3), ())
+        self.assertEqual(doubted_links(R, E3), SILENT_LINKS)
+        self.assertEqual(C.bundles(build({E1: exam(), E2: emr(), E3: act(Kind.ABLATION, **STATED_LINK)},
+                                         lesions=CECAL), E3), ())
 
     def test_a_verified_part_of_another_act(self):
         """v1: "The biopsy site oozing was controlled with two hemoclips for hemostasis." part_of the biopsy: set apart
@@ -1906,17 +2004,25 @@ class AdjunctBesideARemoval(SimpleTestCase):
                    E3: hemoclips(part_of=sup(E4), relation=sup(ct.PartRelation.ADJUNCT_OF)), E4: act(Kind.BIOPSY)})
         found = C.bundled(R, E3)
         self.assertEqual((found.rule, found.whole), (C.Rule.PROCEDURAL_ADJUNCT, E4))
-        self.assertNotIn(E2, [bundle.whole for bundle in C.bundles(R, E3)])
+        # restated at round r3's integration: never bundled INTO the removal - the removal (and the examination) appear
+        # only as the silent-link rule's U by the control's unstated cause (DESIGN-v2 b.8), never T; the one T is E4
+        self.assertEqual([(bundle.whole, bundle.truth, {doubt.attribute for doubt in bundle.doubts})
+                          for bundle in C.bundles(R, E3) if bundle.whole != E4], [(E1, U, {A.CAUSE}), (E2, U, {A.CAUSE})])
 
     def test_d58_places_never_decide(self):
         """v1's D58 variants (the distal sigmoid beside the rectosigmoid, the proximal transverse beside the hepatic
         flexure: adjacent, asked) and its controls (the descending colon, two steps away: READY): in v2 the clip's
         place decides nothing - with its cause unstated it is its own act everywhere; caused by the snare, bundled
-        everywhere."""
+        everywhere. (Restated at round r3's integration: with its cause and part_of unstated it is ASKED everywhere by
+        the silent-link rule, DESIGN-v2 b.8 - the same bundles at every place; with them stated, its own act
+        everywhere.)"""
         for place in (Landmark.SIGMOID_COLON, Landmark.TRANSVERSE_COLON, Landmark.DESCENDING_COLON,
                       Landmark.ASCENDING_COLON, Landmark.ANASTOMOSIS):
             with self.subTest(place=place):
                 R = polypectomy(hemoclips(places=(sup(place),)))
+                self.assertEqual(doubted_links(R, E3), SILENT_LINKS)
+                R = polypectomy(hemoclips(places=(sup(place),), part_of=neg(None),
+                                          cause=sup(Cause.PRE_EXISTING_LESION)))
                 self.assertEqual(C.bundles(R, E3), ())
                 R = polypectomy(hemoclips(places=(sup(place),), cause=sup(Cause.ACT_OF_THIS_SESSION),
                                           cause_event=sup(E2)))
@@ -2119,8 +2225,13 @@ class EusActsByCatalogueKind(SimpleTestCase):
     def test_c2_controls(self):
         R = self.eus(act(Kind.CLIP, purpose=sup(Purpose.PROPHYLAXIS)))  # never reported: bundled (CLIP)
         self.assertEqual((C.eus_unlisted(R, E3), entries(R)), ((False, False), {'X1': set()}))
-        R = self.eus(act(Kind.INJECTION))  # the EUS lists the injection: its own act, reportable as one
-        self.assertEqual((C.eus_unlisted(R, E3), C.reportable(R, E3)), ((False, False), True))
+        R = self.eus(act(Kind.INJECTION, purpose=STATED_LINK['purpose']))  # the EUS lists the injection: its own act,
+        self.assertEqual((C.eus_unlisted(R, E3), C.reportable(R, E3)), ((False, False), True))  # reportable as one
+        # restated at round r3's integration: its purpose UNSTATED, it may treat bleeding the EUS caused - the
+        # silent-link rule's doubt (DESIGN-v2 b.8): listed, in doubt, never bundled silently
+        R = self.eus(act(Kind.INJECTION))
+        self.assertEqual((C.eus_unlisted(R, E3), doubted_links(R, E3)),
+                         ((False, True), [(C.Rule.PROCEDURAL_ADJUNCT, E1, U, {A.CAUSE})]))
         R = self.eus(act(Kind.OTHER))  # no catalogue kind (v1's ''): D137's class, as before
         self.assertEqual(C.eus_unlisted(R, E3), (True, False))
         R = self.eus(act(Kind.CLIP, purpose=sup(Purpose.HEMOSTASIS), cause=sup(Cause.ACT_OF_THIS_SESSION),
@@ -2322,13 +2433,20 @@ class LesionAdjunct(SimpleTestCase):
     rest)."""
 
     def test_dq1_an_adjunct_of_the_removed_lesion_is_asked_never_explained(self):
-        for name, part, whole in (
-                ('ablation beside the EMR', act(Kind.ABLATION, lesion=sup(L1)), emr()),
-                ('hemostatic clip beside the snare', hemoclips(lesion=sup(L1)), act(Kind.SNARE, lesion=sup(L1))),
-                ('a lesion only possibly the same', act(Kind.ABLATION, lesion=unres(L1)), emr())):
+        # restated at round r3's integration: the ablations state their link (STATED_LINK), so D221's lesion arm is what
+        # they read; the hemostatic clip treats bleeding, so its UNSTATED cause - which D221's own exception reads, and so
+        # stays unstated here - is the silent-link rule's doubt over every event too (DESIGN-v2 b.8): the examination's
+        # bundle beside the snare's
+        adjunct, examination = (C.Rule.PROCEDURAL_ADJUNCT, E2, U), (C.Rule.PROCEDURAL_ADJUNCT, E1, U)
+        for name, part, whole, expected in (
+                ('ablation beside the EMR', act(Kind.ABLATION, **STATED_LINK, lesion=sup(L1)), emr(), [adjunct]),
+                ('hemostatic clip beside the snare', hemoclips(lesion=sup(L1), part_of=neg(None)),
+                 act(Kind.SNARE, lesion=sup(L1)), [examination, adjunct]),
+                ('a lesion only possibly the same', act(Kind.ABLATION, **STATED_LINK, lesion=unres(L1)), emr(),
+                 [adjunct])):
             with self.subTest(name):
                 R = build({E1: exam(), E2: whole, E3: part}, lesions=CECAL)
-                self.assertEqual(rules(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E2, U)])
+                self.assertEqual(rules(R, E3), expected)
                 found = C.verdict(R, E3)
                 self.assertEqual(found.truth, U)
                 self.assertIn(('act_part', 17, E3, A.PART_OF), {(item.fact, item.rank, item.subject, item.attribute)
@@ -2340,14 +2458,18 @@ class LesionAdjunct(SimpleTestCase):
     def test_dq1_controls(self):
         lesions = {**CECAL, L2: lesion(ct.Multiplicity.SINGLE, distinct=(L1,))}
         for name, part, ctl in (
-                ('no lesion stated (round 1 reading kept)', act(Kind.ABLATION), {}),
-                ('another lesion, established apart', act(Kind.ABLATION, lesion=sup(L2)),
+                ('no lesion stated (round 1 reading kept)', act(Kind.ABLATION, **STATED_LINK), {}),
+                ('another lesion, established apart', act(Kind.ABLATION, **STATED_LINK, lesion=sup(L2)),
                  lesion_controls(E3, L2, E2, L1)),
+                # (restated at round r3's integration: each control states the rest of its link - DESIGN-v2 b.8 reads an
+                # unstated part_of, or an unstated cause where the part may treat bleeding, as a doubt)
                 ('bleeding the lesion had before (cause pre-existing: 4.3 CAUSE decides)',
-                 hemoclips(lesion=sup(L1), cause=sup(Cause.PRE_EXISTING_LESION)), {}),
-                ('stated not part of the EMR', act(Kind.ABLATION, lesion=sup(L1), part_of=neg(E2)), {}),
+                 hemoclips(lesion=sup(L1), cause=sup(Cause.PRE_EXISTING_LESION), part_of=neg(None)), {}),
+                ('stated not part of the EMR', act(Kind.ABLATION, lesion=sup(L1), part_of=neg(E2),
+                                                   purpose=STATED_LINK['purpose']), {}),
                 ('a marking injection (no adjunct kind of v1)', act(Kind.INJECTION, lesion=sup(L1),
-                                                                    purpose=sup(Purpose.MARKING)), {})):
+                                                                    purpose=sup(Purpose.MARKING), part_of=neg(None)),
+                 {})):
             with self.subTest(name):
                 R = build({E1: exam(), E2: emr(), E3: part}, lesions=lesions, controls=ctl)
                 self.assertNotIn(C.Rule.PROCEDURAL_ADJUNCT, [bundle.rule for bundle in C.bundles(R, E3)])
@@ -2419,7 +2541,7 @@ def strong_weaken(R: FactSet, change) -> FactSet:
 RECORD_SCENES = {
     'egd_and_colonoscopy': (lambda: build(
         {E1: exam(session=sup(X1)), E2: exam(session=sup(X2)), E3: act(Kind.BIOPSY, session=sup(X2), lesion=sup(L1)),
-         E4: act(Kind.SNARE, session=sup(X2), lesion=sup(L1)), E5: act(Kind.ABLATION, session=sup(X2), lesion=sup(L1)),
+         E4: act(Kind.SNARE, session=sup(X2), lesion=sup(L1)), E5: act(Kind.ABLATION, **STATED_LINK, session=sup(X2), lesion=sup(L1)),
          E6: act(Kind.PEG, session=sup(X1))},
         sessions={X1: session(SessionKind.EGD), X2: session(SessionKind.COLONOSCOPY)},
         lesions={L1: lesion(ct.Multiplicity.SINGLE)}), [C.Counted('sel:0', '45378', SessionKind.COLONOSCOPY, (E2,))]),
@@ -2901,7 +3023,8 @@ class AdjunctAsksOnlyForTheSameLesion(SimpleTestCase):
         if same is not None:
             lesions[L2] = {**lesions[L2], A.SAME_AS: (same,)}
         return build({E1: exam(), E2: act(whole, lesion=sup(L1), places=(sup(Landmark.SIGMOID_COLON),)),
-                      E3: act(Kind.ABLATION, lesion=part_lesion, places=(sup(Landmark.CECUM),))}, lesions=lesions)
+                      E3: act(Kind.ABLATION, lesion=part_lesion, places=(sup(Landmark.CECUM),), **STATED_LINK)},
+                     lesions=lesions)
 
     def test_d221_another_lesion_is_not_held_by_the_bundling_row(self):
         """q1: a cold snare of polyp L1 (sigmoid) and an APC of angioectasia L2 (cecum), distinct_from stated or not;
@@ -2912,17 +3035,28 @@ class AdjunctAsksOnlyForTheSameLesion(SimpleTestCase):
         for name, R, code in (
                 ('another lesion', self.scene(sup(L2)), '45388'),
                 ('distinct_from stated', build({E1: exam(), E2: act(Kind.SNARE, lesion=sup(L1)),
-                                                E3: act(Kind.ABLATION, lesion=sup(L2))}, lesions=distinct), '45388'),
+                                                E3: act(Kind.ABLATION, lesion=sup(L2), **STATED_LINK)},
+                                               lesions=distinct), '45388'),
                 ('the EGD shape', build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L1)),
-                                         E3: act(Kind.ABLATION, lesion=sup(L2))}, sessions={X1: session(
+                                         E3: act(Kind.ABLATION, lesion=sup(L2), **STATED_LINK)}, sessions={X1: session(
                                              SessionKind.EGD)}, lesions={L1: lesion(ct.Multiplicity.SINGLE),
-                                                                         L2: lesion()}), '43270'),
-                ('a bleeding control of another lesion', build({E1: exam(), E2: act(Kind.SNARE, lesion=sup(L1)),
-                                                                E3: hemoclips(lesion=sup(L2))},
-                                                               lesions={L1: lesion(), L2: lesion()}), '45382')):
+                                                                         L2: lesion()}), '43270')):
             with self.subTest(name):
                 self.assertEqual((C.bundles(R, E3), C.verdict(R, E3).truth, C.bundling(code, (E3,), R)), ((), T, ()))
                 self.assertFalse(C.doubted(R, E3))
+        # a bleeding control of another lesion (restated at round r3's integration): it treats bleeding, so the silent-
+        # link rule reads its SILENT cause as a doubt (DESIGN-v2 b.8: the procedure-caused bleeding control), its part_of
+        # stated - held by the cause arm alone, over every event of the session; D221's lesion arm adds nothing (no
+        # bundle of it rests on a lesion or a part_of)
+        R = build({E1: exam(), E2: act(Kind.SNARE, lesion=sup(L1)), E3: hemoclips(lesion=sup(L2), part_of=neg(None))},
+                  lesions={L1: lesion(), L2: lesion()})
+        with self.subTest('a bleeding control of another lesion'):
+            found = C.bundles(R, E3)
+            self.assertEqual([(bundle.rule, bundle.whole, bundle.truth) for bundle in found],
+                             [(C.Rule.PROCEDURAL_ADJUNCT, E1, U), (C.Rule.PROCEDURAL_ADJUNCT, E2, U)])
+            self.assertEqual({doubt.attribute for bundle in found for doubt in bundle.doubts}, {A.CAUSE})
+            self.assertEqual({(item.fact, item.attribute) for item in C.bundling('45382', (E3,), R)},
+                             {('act_cause', A.CAUSE)})
 
     def test_d221_one_lesion_or_a_same_as_that_may_join_them_asks(self):
         """DECISIONS D248 G2 (option (b)) changed the last four rows: a lesion fact that is not supported is an unknown
@@ -3199,7 +3333,7 @@ class SameAsIsAnEquivalence(SimpleTestCase):
             lesions[L3] = {**lesions[L3], A.DISTINCT_FROM: (sup(L2),)}
         here = (sup(Landmark.ASCENDING_COLON),)
         return build({E1: exam(), E2: act(whole, lesion=sup(L3), places=here),
-                      E3: part if part is not None else act(Kind.ABLATION, lesion=sup(L2), places=here)},
+                      E3: part if part is not None else act(Kind.ABLATION, **STATED_LINK, lesion=sup(L2), places=here)},
                      lesions=lesions, controls=controls_)
 
     def test_r1_a_chain_through_a_third_entry_holds_the_ablation(self):
@@ -3238,8 +3372,9 @@ class SameAsIsAnEquivalence(SimpleTestCase):
         biopsy of L2 beside the snare of L3, distinct_from stated both ways and the lesion pair controls rejected, is
         apart (its own act) - but never while a chain through L1 may join them (round 1 read direct links only and set
         it apart: its code released)."""
+        # the injection's part_of stated (round r3's integration: the lift's identity read, never the silent link)
         lift = act(Kind.INJECTION, lesion=sup(L2), purpose=sup(Purpose.LIFT_FOR_RESECTION),
-                   places=(sup(Landmark.ASCENDING_COLON),))
+                   places=(sup(Landmark.ASCENDING_COLON),), part_of=STATED_LINK['part_of'])
         R = self.scene(self.LINKS['a star: L2 and L3 each the same as L1'], part=lift)
         self.assertEqual((rules(R, E3), C.verdict(R, E3).truth), ([(C.Rule.LIFT_INJECTION, E2, T)], FF))
         R = self.scene(self.LINKS['a chain, its second link unresolved'], part=lift)
@@ -3284,7 +3419,7 @@ class MissingLesionIdentifiers(SimpleTestCase):
                                                                    reasons=INVALID)),
                              ('supported', sup(L9))):
             with self.subTest(name):
-                R = build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L1)), E3: act(Kind.ABLATION, lesion=sup(L2))},
+                R = build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L1)), E3: act(Kind.ABLATION, **STATED_LINK, lesion=sup(L2))},
                           lesions={L1: lesion_entry(), L2: lesion_entry(member)})
                 self.assertEqual(rules(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E2, U)])
                 held = C.bundling('45388', (E3,), R)
@@ -3298,7 +3433,7 @@ class MissingLesionIdentifiers(SimpleTestCase):
                                    fact(Res.UNRESOLVED, L1, State.SUPPORTED, reasons=INVALID)),
                                   ('supported', sup(L2), sup(L1))):
             with self.subTest(name):
-                R = build({E1: exam(), E2: act(Kind.EMR, lesion=whole), E3: act(Kind.ABLATION, lesion=part)})
+                R = build({E1: exam(), E2: act(Kind.EMR, lesion=whole), E3: act(Kind.ABLATION, **STATED_LINK, lesion=part)})
                 self.assertEqual(rules(R, E3), [(C.Rule.PROCEDURAL_ADJUNCT, E2, U)])
                 held = {(item.fact, item.subject, item.attribute) for item in C.bundling('45388', (E3,), R)}
                 self.assertLessEqual({('act_part', E3, A.PART_OF), ('act_target', E3, A.TARGET_LESION)}, held)
@@ -3310,7 +3445,7 @@ class MissingLesionIdentifiers(SimpleTestCase):
         for name, members, found in (('one missing id', (sup(L9),), []),
                                      ('two missing ids', (sup(L9), unres(L8)), [(C.Rule.PROCEDURAL_ADJUNCT, E2, U)])):
             with self.subTest(name):
-                R = build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L1)), E3: act(Kind.ABLATION, lesion=sup(L2))},
+                R = build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L1)), E3: act(Kind.ABLATION, **STATED_LINK, lesion=sup(L2))},
                           lesions={L1: lesion_entry(), L2: lesion_entry(), L3: lesion_entry(*members)})
                 self.assertEqual(rules(R, E3), found)
                 if found:
@@ -3560,8 +3695,9 @@ class SyntheticActIsAPossibleWhole(SimpleTestCase):
         step (an FNA beside a drainage): the whole told in each form - the same truth for the unlisted act, the unlisted
         doubt and the filed doubted form, U each time."""
         cases = (
-            ('lift', act(Kind.INJECTION, lesion=sup(L1), purpose=sup(Purpose.LIFT_FOR_RESECTION)), Kind.EMR,
-             SessionKind.COLONOSCOPY, C.Rule.LIFT_INJECTION),
+            # the injection's part_of stated (round r3's integration: the lift read, never the silent link, b.8)
+            ('lift', act(Kind.INJECTION, lesion=sup(L1), purpose=sup(Purpose.LIFT_FOR_RESECTION),
+                         part_of=STATED_LINK['part_of']), Kind.EMR, SessionKind.COLONOSCOPY, C.Rule.LIFT_INJECTION),
             ('technique', act(Kind.SNARE, lesion=sup(L1)), Kind.EMR, SessionKind.COLONOSCOPY,
              C.Rule.RESECTION_TECHNIQUE),
             ('adjunct', act(Kind.BLEEDING_CONTROL, cause=sup(Cause.ACT_OF_THIS_SESSION)), Kind.SNARE,
@@ -3894,7 +4030,7 @@ class UnknownIdentityAsksItsLesion(SimpleTestCase):
     def apc_beside_emr(self, apc_lesion, emr_lesion=None):
         lesions = {lesion_id: lesion_entry() for lesion_id in (L1, L2, L3)}
         return build({E1: exam(), E2: act(Kind.EMR, lesion=emr_lesion or sup(L1)),
-                      E3: act(Kind.ABLATION, lesion=apc_lesion)}, lesions=lesions)
+                      E3: act(Kind.ABLATION, **STATED_LINK, lesion=apc_lesion)}, lesions=lesions)
 
     def test_g2_n2(self):
         """n2: the APC E3 beside the EMR E2 of L1 (supported), entries L1-L3, no same_as, part_of or cause: (a) its
@@ -3992,7 +4128,7 @@ class ContradictedIdentityIsAsked(SimpleTestCase):
         lesions = {lesion_id: lesion_entry() for lesion_id in (L1, L2, L3)}
         lesions[L1] = {**lesions[L1], A.SAME_AS: (sup(L3),)}
         lesions[L2] = {**lesions[L2], A.SAME_AS: (sup(L1), neg(L3))}
-        R = build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L3)), E3: act(Kind.ABLATION, lesion=sup(L2))},
+        R = build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L3)), E3: act(Kind.ABLATION, **STATED_LINK, lesion=sup(L2))},
                   lesions=lesions)
         held = C.bundling('45388', (E3,), R)
         self.assertEqual([(item.fact, item.subject, item.attribute) for item in held[:2]],
@@ -4089,7 +4225,7 @@ class ZeroOneWalk(SimpleTestCase):
         lesions[L4] = {**lesions[L4], A.SAME_AS: (unres(L3),)}
         lesions[L5] = {**lesions[L5], A.SAME_AS: (sup(L6),)}
         lesions[L6] = {**lesions[L6], A.SAME_AS: (unres(L3),)}
-        return build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L3)), E3: act(Kind.ABLATION, lesion=sup(L2))},
+        return build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L3)), E3: act(Kind.ABLATION, **STATED_LINK, lesion=sup(L2))},
                      lesions=lesions)
 
     def test_g7_the_walk_counts_open_members(self):
@@ -4116,7 +4252,7 @@ class ZeroOneWalk(SimpleTestCase):
                    E4: act(Kind.BIOPSY, lesion=sup(L2), places=here)}, lesions=lesions)
         self.assertEqual((rules(R, E4), C.verdict(R, E4).truth), ([(C.Rule.BIOPSY_OF_REMOVED_LESION, E2, T)], FF))
         R = build({E1: exam(), E2: act(Kind.EMR, lesion=sup(L3), places=here),
-                   E3: act(Kind.ABLATION, lesion=sup(L2), places=here)}, lesions=lesions)
+                   E3: act(Kind.ABLATION, **STATED_LINK, lesion=sup(L2), places=here)}, lesions=lesions)
         held = C.bundling('45388', (E3,), R)
         self.assertEqual((held[0].fact, held[0].subject, held[0].attribute), ('act_part', E3, A.PART_OF))
 
@@ -4131,7 +4267,9 @@ SAME_LESION_PAIRS = {
     'biopsy beside a snare': (Kind.BIOPSY, Kind.SNARE, {}, SessionKind.COLONOSCOPY, C.Rule.BIOPSY_OF_REMOVED_LESION,
                               '45380'),
     'snare beside an EMR': (Kind.SNARE, Kind.EMR, {}, SessionKind.COLONOSCOPY, C.Rule.RESECTION_TECHNIQUE, '45385'),
-    'lift injection beside an EMR': (Kind.INJECTION, Kind.EMR, {'purpose': sup(Purpose.LIFT_FOR_RESECTION)},
+    # its part_of stated (round r3's integration: STATED_LINK's - the lift's identity read, never the silent link)
+    'lift injection beside an EMR': (Kind.INJECTION, Kind.EMR, {'purpose': sup(Purpose.LIFT_FOR_RESECTION),
+                                                                'part_of': STATED_LINK['part_of']},
                                      SessionKind.COLONOSCOPY, C.Rule.LIFT_INJECTION, '45381'),
     'FNA beside a drainage': (Kind.FNA, Kind.DRAINAGE, {}, SessionKind.EUS, C.Rule.DRAINAGE_STEP, '43242'),
 }
@@ -4244,8 +4382,11 @@ class OneFindingNeverApartByPlace(SimpleTestCase):
 
         def scene(l2_links, whole=Kind.SNARE, part=Kind.BIOPSY):
             entries = {**lesions, L1: lesion_entry(sup(L3)), L2: lesion_entry(*l2_links)}
+            # the ablation's link stated (round r3's integration: STATED_LINK - a silent part_of or cause is the
+            # silent-link rule's doubt, DESIGN-v2 b.8, asked before D221's identity)
+            link = STATED_LINK if part is Kind.ABLATION else {}
             return build({E1: exam(), E2: act(whole, lesion=sup(L3), places=here),
-                          E4: act(part, lesion=sup(L2), places=here)}, lesions=entries)
+                          E4: act(part, lesion=sup(L2), places=here, **link)}, lesions=entries)
 
         for sides in ((L3, L1), (L3, L4)):
             with self.subTest(sides=sides):

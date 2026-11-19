@@ -234,13 +234,15 @@ class StopTimeoutTests(unittest.TestCase):
                 self.assertGreater(install.STOP_SECONDS['worker'], deadlines[kind])
 
     def test_the_worker_outlasts_every_stage_deadline(self):
-        # W9R-BUILD-LIST B21 (G2-01 (i), F8's half; DECISIONS D289): with STOP_SECONDS['worker'] 1,500 (AMENDMENT-2
-        # 1.12), the stop outlasts every stage kind's JOB_DEADLINE_SECONDS, so a deploy's docker stop lets the stage the
-        # worker is in finish - a reading's send included - instead of cutting it into an unknown outcome
-        self.assertEqual(install.STOP_SECONDS['worker'], 1500)
+        # W9R-BUILD-LIST B21 (G2-01 (i), F8's half; DECISIONS D289): with STOP_SECONDS['worker'] 1,800 (round r3, D322
+        # (4); 1,500 by AMENDMENT-2 1.12), the stop outlasts every stage kind's JOB_DEADLINE_SECONDS, so a deploy's
+        # docker stop lets the stage the worker is in finish - a reading's or a question round's sends included -
+        # instead of cutting it into an unknown outcome
+        self.assertEqual(install.STOP_SECONDS['worker'], 1800)
         deadlines = settings_value('JOB_DEADLINE_SECONDS')
-        self.assertGreaterEqual(len(deadlines), 11)  # positive control: the whole table was read
-        self.assertEqual(max(deadlines.values()), 1380)  # the reading stages', the longest
+        self.assertGreaterEqual(len(deadlines), 12)  # positive control: the whole table was read
+        self.assertEqual(max(deadlines.values()), 1588)  # the question stage's, the longest
+        self.assertEqual(max(value for kind, value in deadlines.items() if kind != 'question'), 1380)  # the readings'
         for kind, deadline in deadlines.items():
             with self.subTest(kind=kind):
                 self.assertGreater(install.STOP_SECONDS['worker'], deadline)
@@ -249,10 +251,11 @@ class StopTimeoutTests(unittest.TestCase):
         # harness@2 (HARNESS.md 11.2): one participant phase is a loop of at most PARTICIPANT_MAX_EXCHANGES exchanges
         # within PARTICIPANT_LOOP_DEADLINE_SECONDS; a stop must let it record its outcome, and a stage the stop
         # outlasts is one the stale-stage sweep settles as cut short anyway. AMENDMENT-2 1.12: the reading stages
-        # have a stale threshold of their own (1,440 s), and the stop (1,500 s) is above every threshold.
+        # have a stale threshold of their own (1,440 s; round r3: 1,560 s for appraise, which plans the first question
+        # round, and 1,768 s for the question stage), and the stop (1,800 s) is above every threshold.
         loop, stale = settings_value('PARTICIPANT_LOOP_DEADLINE_SECONDS'), settings_value('STALE_RUNNING_SECONDS')
         by_kind = settings_value('STALE_RUNNING_SECONDS_BY_KIND')
-        self.assertEqual((loop, stale, by_kind), (540, 600, {'interpret': 1440, 'appraise': 1440}))
+        self.assertEqual((loop, stale, by_kind), (540, 600, {'interpret': 1440, 'appraise': 1560, 'question': 1768}))
         self.assertGreater(install.STOP_SECONDS['worker'], loop)
         self.assertGreater(install.STOP_SECONDS['worker'], max([stale, *by_kind.values()]))
         self.assertEqual(install.STOP_SECONDS['web'], 30)  # the web sends nothing: unchanged
@@ -282,8 +285,8 @@ class StopTimeoutTests(unittest.TestCase):
             install.remove_service_container(install.SERVICES['worker'], 'worker')
             install.stop_service_container(install.SERVICES['worker'], 'worker')
         stops = [(args, kwargs) for args, kwargs in calls if args[0] == 'stop']
-        self.assertEqual([args[:3] for args, _ in stops], [('stop', '--time', '1500')] * 3)  # AMENDMENT-2 1.12
-        self.assertTrue(all(kwargs['timeout'] > 1500 for _, kwargs in stops))
+        self.assertEqual([args[:3] for args, _ in stops], [('stop', '--time', '1800')] * 3)  # round r3 (D322 (4))
+        self.assertTrue(all(kwargs['timeout'] > 1800 for _, kwargs in stops))
 
 
 class ServiceMountTests(unittest.TestCase):

@@ -872,11 +872,24 @@ VALUES_DECIDING_NOTHING = {
     (OC.STATEMENT, A.SCOPE_SEGMENT): (anatomy.ALTERED | anatomy.UNPLACED,
                                       'engine/anatomy: never disjoint, in no region'),
     (OC.LESION, A.PLACES): (anatomy.ALTERED | anatomy.UNPLACED, 'engine/anatomy: never disjoint, in no region (D212)'),
+    # round r3's integration (the second refutation's R2E-QB-ANAT; FINAL-V2 4.5): the target row's QB clause reads a
+    # statement's target.anatomy beside an established not-on only to HOLD - an anatomy target the statement names for
+    # itself lies beyond its not-on lesions, so the pair is never set apart by it - so no READY or exclusion path turns
+    # on its supported value (a wrong support can only hold); the fact pass's controls (claims.UNCONTROLLED,
+    # CONTROLS_SHA256_V3: I-FACT) do not move
+    (OC.STATEMENT, A.TARGET_ANATOMY): (frozenset({None}), "R2E-QB-ANAT (4.5): the QB clause's anatomy target only holds"),
 }
 # The negated forms 3.2.3's rows leave without a control: they control an act's performer, places and technique-class
 # device in the supported state only, as every rule reads the supported value (4.3 rows 4 and 6, SITE, TECH; 4.5's rows
 # set a pair apart on supported values), so the denial "this act was not done by / in / with ..." can only hold.
-NEGATED_FORMS_DECIDING_NOTHING = {(OC.ACT, A.PERFORMER), (OC.ACT, A.TARGET_PLACES), (OC.ACT, A.TECHNIQUE_DEVICE)}
+# Round r3's integration int5 (DECISIONS D324 (5), the rules lane's Q1): COLFULL reads an anatomy entry's organ, and an
+# established NEGATED organ only holds there - evaluate._may_be reads any established negation as leaving every organ
+# possible (the colon filed absent), lower_stoma_possible keeps the route open for an organ not SUPPORTED, and the
+# colonic organ arm reads a SUPPORTED organ only - so no READY or exclusion path turns on a negated organ's value (a hold-
+# only allowance of D324 (11)'s kind; the fact pass's controls, claims.UNCONTROLLED and CONTROLS_SHA256_V3, do not move:
+# I-FACT)
+NEGATED_FORMS_DECIDING_NOTHING = {(OC.ACT, A.PERFORMER), (OC.ACT, A.TARGET_PLACES), (OC.ACT, A.TECHNIQUE_DEVICE),
+                                  (OC.ANATOMY, A.ORGAN)}
 
 
 def deciding_reads():

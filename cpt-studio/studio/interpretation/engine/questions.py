@@ -224,6 +224,7 @@ class Rule(Enum):
     CAUSE = 'cause'  # CAUSE (every code covering bleeding_control)
     ENTEROSCOPY_CLASS = 'enteroscopy_class'  # ENT (step 4c's engine/classes.py: its class explanations)
     ACT_ELSEWHERE = 'act_elsewhere'  # ENT (step 4c's: an act held by another family's session)
+    STOMA_ROUTE = 'stoma_route'  # round r3's probe prototype, DECISIONS D310 (1): the colonoscopy route table
 
 
 def coding_rule(rule: Rule | Tag) -> str:

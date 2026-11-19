@@ -166,8 +166,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, unique
+from functools import lru_cache
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from studio import interpretation
 from studio.interpretation.contract import claims, jsonschema
@@ -176,6 +177,7 @@ from studio.interpretation.contract.appraise_read import ReadAppraisal, ReadUnli
 from studio.interpretation.contract.extract_read import (OBJECT_LETTERS, Cited, DateOfService, FactKey, ReadAnswer,
                                                          ReadCitation, ReadFact, ReadMember, is_id, iso_date, merged,
                                                          partial_date)
+from studio.interpretation.contract.proof import ProofReason
 from studio.interpretation.contract.types import (Appraisal, Attached, Attribute, Checked, Checks, CheckStatus,
                                                   ControlVerdict, DateState, Doubt, DoubtAbout, DoubtBasis, Fact,
                                                   FactState, Kind, Link, Owner, Qualifier, Qualifier2, Reason,
@@ -183,6 +185,7 @@ from studio.interpretation.contract.types import (Appraisal, Attached, Attribute
                                                   SettledSource, Source, Status, StoredLiteral, Unlisted, UnlistedWhat,
                                                   Verdict, VerdictValue)
 from studio.interpretation.engine import catalogue
+from studio.interpretation.engine import facts as engine_facts
 # settle's stored records and the closed lists inside them live in contract/types (DECISIONS D229: w34 O4 and
 # O5, hand-offs 1d#2 and 1d#6), where the store reads them; each is named here as well, so settle.<name> is
 # the very same object it was
@@ -200,6 +203,10 @@ from studio.interpretation.contract.types import StoredVerdict as StoredVerdict
 from studio.interpretation.contract.types import UnlistedReport as UnlistedReport
 from studio.interpretation.contract.types import Usage as Usage
 from studio.interpretation.contract.types import Usages as Usages
+
+if TYPE_CHECKING:  # the engine's types, for annotations only (settle reads the engine lazily, as _single_valued does)
+    from studio.interpretation.engine.asking import Family as QuestionFamily
+    from studio.interpretation.engine.types import FactSet, Id
 
 Family = xs.Family
 A = Attribute
@@ -1308,3 +1315,607 @@ class _Settler:
                       reasons=MappingProxyType({reason: reasons[reason] for reason in Reason if reason in reasons}),
                       doubts=doubts, health=health, coherence=coherence,
                       unlisted=UnlistedReport(kept=len(kept), dropped=tuple(dropped)), usage=usage)
+
+
+# --- round r3: a question request settled (DECISIONS D306-D308, D319; build-v2/a2b/r3 DESIGN-v2 d) -------------------
+
+QUESTION_MISSING_SHARE = (1, 10)  # d.1 H1: missing or repeated verdicts above 1/10 of the claims, with >= 10 claims
+QUESTION_MISSING_MIN = 10
+CALIBRATION_LEAN_SHARE = (1, 4)  # d.1 H3: calibration claims answered supports above 1/4 of the items, with >= 4 items
+CALIBRATION_LEAN_MIN = 4
+CONTROL_SHARE = (1, 2)  # d.1 H4: pairs whose control was not rejected above 1/2, with >= 4 pairs
+CONTROL_MIN = 4
+# d.1 H5 (DECISIONS D319, the owner's: ONE calibration item per question request - a known-false claim with its exact
+# negation, a live check that Fable still answers honestly): a request with no calibration item is uncalibrated, so
+# every question of it is refused. At D310's floor of 2 every one-item request would be refused as uncalibrated. H2 is
+# unchanged (the item's claim supported refuses the request); H3 (lean) needs CALIBRATION_LEAN_MIN items, so it reads
+# only a request planned under the probe's four-item draw (r3-probe-1, r3-probe-2), never a one-item request.
+CALIBRATION_FLOOR = 1
+# d.2's per-question reasons that exclusivity reads (DECISIONS D324 (2): ``exclusive``), one constant each, the very
+# strings settle_questions and _claim_reading give - so the reader and the writer of a reason cannot drift apart
+QUESTION_CONFLICT = 'question_conflict'
+QUESTION_CONTRADICTS = 'question_contradicts'
+QUESTION_NOT_ELIGIBLE = 'question_not_eligible'
+
+
+@dataclass(frozen=True)
+class QuestionSettlement:
+    """One question request settled (d): its question records (events.questions), its calibration records
+    (events.calibration) and its health record (verification.question_health)."""
+    questions: tuple[dict[str, Any], ...]
+    calibration: tuple[dict[str, Any], ...]
+    health: dict[str, Any]
+
+
+def _above(count: int, total: int, share: tuple[int, int]) -> bool:
+    return count * share[1] > total * share[0]
+
+
+def _claim_reading(found: Any) -> str:
+    """The claim verdict's reason when it is not 'supports, attached yes, no lowering qualifier' ('' when it is):
+    question_missing, question_unclear, question_contradicts, question_qualified:<q>, question_detached."""
+    if found is None:
+        return 'question_missing'
+    verdict = found.verdict
+    if verdict.verdict is VerdictValue.UNCLEAR:
+        return 'question_unclear'
+    if verdict.verdict is VerdictValue.CONTRADICTS:
+        return QUESTION_CONTRADICTS
+    lowering = [item for item in verdict.qualifiers if item is not Qualifier2.APPROXIMATE]  # D186/D224
+    if verdict.verdict is VerdictValue.QUALIFIED or lowering:
+        return f'question_qualified:{(lowering[0].value if lowering else "other")}'
+    if verdict.attached is not Attached.YES:
+        return 'question_detached'
+    return ''
+
+
+def settle_questions(question_request: Any, read: Any, locations: Mapping[str, Any], R_base: Any,
+                     outcome: str = 'answered') -> QuestionSettlement:
+    """One question request (DESIGN-v2 d): the request's health (d.1: H0 answered, H1 completeness, H2 calibration
+    breach - the false calibration claim supported, whatever its control's verdict: D310 (5) -, H3 calibration lean, H4
+    control acceptance - a question's control or a calibration item's CLAIM not rejected: D310 (5), as built -, H5 the
+    calibration item: none drawn, uncalibrated - CALIBRATION_FLOOR 1, DECISIONS D319) and each question by d.2's rule, in
+    order - still eligible against the settled facts (engine/asking.eligible over R_base), the claim supported, attached,
+    with no lowering qualifier, its proof located (``locations``: contract/proof.locate's ProofLocation per claim id,
+    computed where the text is allowed), its control - the claim's exact negation - contradicted. All hold: 'supported'
+    (established, the release direction); otherwise 'unresolved' with the first failing reason. A holding-direction
+    pattern (claim contradicted, control supported - supports, attached yes, no lowering qualifier) is recorded as
+    held_by_answer, which exclusivity alone reads (a rival's rejection: DECISIONS D325 (1)). ``read`` is
+    appraise_read.read_questions' result (a Refusal, or None for a request that was not answered: ``outcome`` names
+    why). Exclusivity (d.2 row 5) is the stage's: ``exclusive``."""
+    from studio.interpretation.engine import asking
+
+    items = question_request.items
+    calibration = [item for item in items if item.role == 'calibration']
+    questions = [item for item in items if item.role == 'question']
+    refused: list[str] = []
+    answered = outcome == 'answered' and read is not None and hasattr(read, 'verdicts')
+    if not answered:
+        refused.append(f'question_request_failed:{outcome if outcome != "answered" else "unreadable"}')
+    measures: dict[str, int] = {'claims': 2 * len(items), 'missing': 0, 'calibration': len(calibration),
+                                'calibration_breach': 0, 'calibration_supported': 0, 'pairs': len(items),
+                                'controls_not_rejected': 0}
+    verdicts = read.verdicts if answered else {}
+
+    def breach(item: Any) -> bool:
+        """H2 as DECISIONS D310 (5) rules it: a calibration item's CLAIM - known false - SUPPORTED (d.2 row 2: supports,
+        attached, no lowering qualifier), whatever its proof and its control's verdict. (DESIGN-v2 d.1 counted only a
+        claim established in the release direction - proof located AND control contradicted - so a model supporting
+        both members of a known-false pair breached nothing.)"""
+        claim = verdicts.get(item.claim)
+        return claim is not None and not _claim_reading(claim)
+
+    if answered:
+        measures['missing'] = len(read.missing) + len(read.repeated)
+        for item in items:
+            # H4 counts, in each pair, the member a release-biased model would wrongly accept: a question's control
+            # (the claim's exact negation) not rejected; a calibration item's CLAIM (known false) not rejected. A
+            # calibration item's control is known TRUE (b.9): counting it as "not rejected" would refuse every request
+            # whose calibration items are half its pairs or more (q <= 4) - the prototype's reading, flagged in NOTES
+            member = verdicts.get(item.claim if item.role == 'calibration' else item.control)
+            if member is None or member.verdict.verdict is not VerdictValue.CONTRADICTS:
+                measures['controls_not_rejected'] += 1
+        for item in calibration:
+            claim = verdicts.get(item.claim)
+            if claim is not None and claim.verdict.verdict is VerdictValue.SUPPORTS:
+                measures['calibration_supported'] += 1
+            if breach(item):
+                measures['calibration_breach'] += 1
+        if measures['claims'] >= QUESTION_MISSING_MIN and _above(measures['missing'], measures['claims'],
+                                                                  QUESTION_MISSING_SHARE):
+            refused.append('question_health:missing')
+        if measures['calibration_breach']:
+            refused.append('question_health:calibration')
+        if len(calibration) >= CALIBRATION_LEAN_MIN and _above(measures['calibration_supported'], len(calibration),
+                                                               CALIBRATION_LEAN_SHARE):
+            refused.append('question_health:calibration_lean')
+        if len(items) >= CONTROL_MIN and _above(measures['controls_not_rejected'], len(items), CONTROL_SHARE):
+            refused.append('question_health:controls')
+    if len(calibration) < CALIBRATION_FLOOR:
+        refused.append('question_health:uncalibrated')
+    health = {'round': question_request.round, 'batch': question_request.batch, 'measures': measures,
+              'refused': refused}
+    records: list[dict[str, Any]] = []
+    for number, item in enumerate(questions):
+        spec = item.spec
+        claim = verdicts.get(item.claim)
+        control = verdicts.get(item.control)
+        located = locations.get(item.claim)
+        reason = ''
+        if refused:
+            reason = refused[0]
+        elif not asking.eligible(spec, R_base):
+            reason = QUESTION_NOT_ELIGIBLE
+        else:
+            reason = _claim_reading(claim)
+            if not reason and claim is not None:
+                if claim.quotes_bound:
+                    reason = ProofReason.BOUND.value
+                elif located is None or not located.located:
+                    reason = located.reason if located is not None else ProofReason.MISSING.value
+                elif control is None:
+                    reason = 'question_control_missing'
+                elif control.verdict.verdict is not VerdictValue.CONTRADICTS:
+                    reason = 'question_incoherent'
+        # the holding direction (claim contradicted, control SUPPORTED - read as settle reads a supported member: supports,
+        # attached yes, no lowering qualifier, DECISIONS D325 (1)); exclusivity reads it as a rival's rejection
+        held = (claim is not None and control is not None and claim.verdict.verdict is VerdictValue.CONTRADICTS
+                and control.verdict.verdict is VerdictValue.SUPPORTS and not _claim_reading(control))
+        records.append({
+            'id': f'q{question_request.round}.{question_request.batch}.{number + 1}',
+            'round': question_request.round, 'batch': question_request.batch, 'family': spec.family.value,
+            'form': spec.form, 'subjects': list(spec.subjects), 'unlisted': asking.unlisted_index(spec.subjects),
+            'attribute': spec.attribute.value if spec.attribute is not None else None, 'value': spec.value,
+            'negated': spec.negated, 'census': spec.census, 'claim': item.claim, 'control': item.control,
+            'controls': list(item.controls),
+            'witnesses': [{'code': w.code, 'fact': w.fact, 'attribute': w.attribute, 'subject': w.subject,
+                           'cause': w.cause, 'reason': w.reason} for w in spec.witnesses],
+            'verdicts': {'claim': claim.verdict.verdict.value if claim is not None else None,
+                         'control': control.verdict.verdict.value if control is not None else None},
+            'result': 'unresolved' if reason else 'supported', 'reasons': [reason] if reason else [],
+            'proof': [{'start': start, 'end': end} for start, end in (located.spans if located is not None
+                                                                      and located.located else ())],
+            'held_by_answer': held})
+    calibration_records: list[dict[str, Any]] = []
+    for item in calibration:
+        spec = item.spec
+        claim = verdicts.get(item.claim)
+        control = verdicts.get(item.control)
+        calibration_records.append({
+            'round': question_request.round, 'batch': question_request.batch, 'kind': spec.kind, 'form': spec.form,
+            'subjects': list(spec.subjects), 'attribute': spec.attribute.value if spec.attribute is not None else None,
+            'value': spec.value, 'negated': spec.negated, 'claim': item.claim, 'control': item.control,
+            'verdicts': {'claim': claim.verdict.verdict.value if claim is not None else None,
+                         'control': control.verdict.verdict.value if control is not None else None},
+            'breach': bool(answered and breach(item))})
+    return QuestionSettlement(questions=tuple(records), calibration=tuple(calibration_records), health=health)
+
+
+# --- d.2 row 5: exclusivity by the truth table (DECISIONS D325 (1), refining D324 (2); findings L2C-1, L2C-2, R3C-L1-1,
+# L4R-1, and L4-1 and ASK2-3 before them) -------------------------------------------------------------------------------
+#
+# THE CLASS RULE (D325 (1)). A positive value v of a single-valued slot stays established only when BOTH hold:
+# - its own record is established: settle_questions' d.2 rule - the claim supported (supports, attached yes, no lowering
+#   qualifier) with a located proof, and its control contradicted, in an answered, healthy request (result 'supported');
+# - every OTHER proposition the stage asked of that slot, in any request or any round, has BOTH its claim's and its
+#   control's verdicts exactly as "the slot is v" implies (``_implied``), in an answered, healthy request (``_reading``):
+#     another value's claim "w"        - the claim contradicted and the control supported (REJECTED: w is false);
+#     another value's negation "not w" - the claim supported and the control contradicted (AFFIRMED: "not w" is true);
+#     v's own negation "not v"         - the claim contradicted and the control supported (REJECTED: "not v" is false);
+#   and the same proposition asked again is itself established (fail-closed: one proposition answered two ways holds).
+# Anything else holds the slot (question_conflict): an incoherent pair (both members contradicted, or both supported), an
+# unclear, qualified or missing verdict on either member, a failed, refused, too-long, uncalibrated or unhealthy request
+# (its records carry that request-level reason, under which no verdict counts), a question the stage no longer asks.
+#
+# A NEGATION NEVER ESTABLISHES A VALUE: an established "not v" removes its own value v and nothing else (the fold,
+# engine/facts._narrowed: DECISIONS D324 (1)). Exclusivity keeps "not v" only when every other proposition of its slot is
+# REJECTED on both members - its own value v as the table says ("not v" makes v false), and every other value and
+# negation by D324 (2)'s hold side as built (two coherent propositions of one slot hold each other: ASK2-3's two
+# negations; "not during X1" beside "during X2" - where the value is then established by the table and the fold rules
+# X1 out with it) - each now read on BOTH members, so a rival answered incoherently is never read as rejected, beside a
+# negation as beside a value (D325 (1)'s class: D324 (2) read a rival by its claim alone).
+#
+# THE UNIVERSAL NEGATION (fact.part_link.any, its stored value '' - "This act was not done as part of another act of this
+# procedure.") says the slot holds NO value, and the fold establishes it as the negation it says (engine/facts.
+# _fact_answer); the table reads it as a value of its own: beside it another value's claim is REJECTED and another value's
+# negation AFFIRMED. (The planner asks no named part link today, so its slot has one proposition; this keeps the table
+# exact if one is ever asked.)
+#
+# Why both members (D325 (1)'s findings). D324 (2) as built read every other proposition by its CLAIM alone - "claim
+# contradicted" for every form - so a contradicted "not w", which AFFIRMS w, counted as agreeing with v (L2C-1, R3C-L1-1,
+# L4R-1: 45382 READY on an injection Fable said was a lift; 45385 READY beside an examination Fable placed in the
+# colonoscopy), and a rival whose claim and exact negation were BOTH contradicted counted as rejected (L2C-2: 45380 READY
+# on a biopsy Fable also put in the EGD). Under the table the answers that release are exactly those consistent with v;
+# and no single verdict change from matching to not matching releases anything (P-MONO-Q, f.2): every pattern the table
+# accepts is AFFIRMED or REJECTED, and one changed verdict of either reads OTHER, which matches no table.
+#
+# How a record's verdict pair is READ (``_reading``) from the stored record alone - settle_questions' own reasons, one
+# constant each, so the writer and the reader of a reason cannot drift apart:
+# - a CLAIM is supported when its verdict supports and settle's claim reading passed (attached yes, no lowering
+#   qualifier: _claim_reading gave ''), which the record shows by a reason settle writes only after that reading: none
+#   (established), a proof that did not locate (contract/proof.ProofReason) or question_conflict (exclusivity's own,
+#   written over an established record); a supports claim held as qualified or detached, or a question no longer
+#   eligible (its claim never read), is not read supported;
+# - a CLAIM is contradicted when its verdict contradicts beside the reason such a question of an answered, healthy
+#   request carries (QUESTION_CONTRADICTS, or QUESTION_NOT_ELIGIBLE: the slot's base fact no longer askable);
+# - a CONTROL is contradicted when its verdict contradicts (settle's d.2 row 4, the fact pass's appraise: ``control is
+#   VerdictValue.CONTRADICTS``), and supported only as settle reads a supported member - supports, attached yes, no
+#   lowering qualifier (D186/D224; a hedged or detached supports is a qualified verdict, which holds): the record keeps
+#   no control qualifier, so settle_questions writes that reading into held_by_answer (the claim contradicted and the
+#   control supported so), which a REJECTED reading requires.
+#
+# What is a slot (``_slot_of``): the (subjects, attribute) of a Q-FACT record whose attribute is single-valued for its
+# subject's family (engine/facts.DOMAINS) - the facts an established answer is folded into (facts._fact_answer: the
+# value, or its negation). A list attribute (places, reached points, stations) takes each established member: no slot.
+# The other families fold into RELATIONS, sets of pairs (Q-REL's independent pairs, Q-ONLESION's off-lesion pairs,
+# Q-LESION's distinct pairs, Q-ABSORB's absorbed entries) - an act may be apart from several lesions - so they are no
+# slot's propositions; and the planner never asks a Q-FACT target lesion and a Q-ONLESION of one act (a Q-ONLESION only
+# where the act's target lesion is silent, engine/asking._onlesion_spec; a silent target lesion is never a Q-FACT,
+# asking._silent_spec). ``refused``: the stage's questions refused at PLAN time (engine/asking.UncalibratedRequest, never
+# sent, so no record: studio/jobs._refused_questions' entries), each a blocker of its slot - of every single-valued slot
+# of its subjects when the entry names no attribute (fail-closed).
+_SUPPORTED = 'supported'
+_UNRESOLVED = 'unresolved'
+_Q_FACT = 'Q-FACT'
+_DOCUMENT = 'document'
+_NO_VALUE = ''  # the universal negation's stored value (fact.part_link.any: the slot holds no value)
+
+
+# One stored question record's verdict pair as exclusivity reads it (DECISIONS D325 (1); the module comment above):
+# AFFIRMED - its claim supported and its control contradicted; REJECTED - its claim contradicted and its control
+# supported; OTHER - anything else (an incoherent pair, an unclear, qualified or missing verdict, or verdicts that do not
+# count). The truth table asks AFFIRMED or REJECTED of every other proposition of a slot, never OTHER. ONE enumeration
+# and ONE reader (``_reading``) with the engine's fold, which reads the same records for DECISIONS D330 (2)
+# (engine/facts.AnswerReading, engine/facts.answer_reading): the engine cannot import this module, so they live there.
+Reading = engine_facts.AnswerReading
+
+
+@lru_cache(maxsize=4096)
+def _single_valued(subject: str, attribute_value: str) -> bool:
+    """Whether ``attribute_value`` names a single-valued attribute of ``subject``'s family (engine/facts.DOMAINS) - a
+    pure function of its two strings, so it is read once per pair (exclusivity reads every record of every round)."""
+    from studio.interpretation.engine import facts as engine_facts
+    from studio.interpretation.engine.types import Id
+
+    try:
+        family = Id.parse(subject).family if subject != _DOCUMENT else None
+        attribute = Attribute(attribute_value)
+    except ValueError:
+        return False
+    domain = engine_facts.DOMAINS.get((family, attribute))
+    return domain is not None and not domain.many
+
+
+def _slot_of(record: Mapping[str, Any]) -> tuple[tuple[str, ...], str] | None:
+    """The single-valued slot a stored question asks - (its subjects, its attribute) - or None (module comment above)."""
+    if record.get('family') != _Q_FACT:
+        return None
+    subjects = record.get('subjects')
+    attribute_value = record.get('attribute')
+    if not isinstance(subjects, (list, tuple)) or len(subjects) != 1 or not isinstance(subjects[0], str):
+        return None
+    if not isinstance(attribute_value, str):
+        return None
+    subject = subjects[0]
+    return ((subject,), attribute_value) if _single_valued(subject, attribute_value) else None
+
+
+def _proposition(record: Mapping[str, Any]) -> tuple[object, bool]:
+    """A record's proposition within its slot: its value and whether it is that value's negation."""
+    return record.get('value'), record.get('negated') is True
+
+
+def _reading(record: Mapping[str, Any]) -> Reading:
+    """A stored record's verdict pair as the truth table reads it (module comment above): REJECTED - the claim
+    contradicted (QUESTION_CONTRADICTS or QUESTION_NOT_ELIGIBLE beside it: an answered, healthy request) and the control
+    supported as settle reads a supported member (held_by_answer); AFFIRMED - the claim supported as settle reads a
+    claim (no reason, a proof that did not locate - ProofReason - or question_conflict: reasons settle writes only after
+    that reading passed) and the control contradicted; OTHER - anything else. The one reader, the fold's too
+    (engine/facts.answer_reading; its StoredReason enumeration's values are QUESTION_CONFLICT, QUESTION_CONTRADICTS,
+    QUESTION_NOT_ELIGIBLE and ProofReason's, pinned equal by tests/v2/test_r3g_pairs)."""
+    return engine_facts.answer_reading(record)
+
+
+def _affirms(proposition: tuple[object, bool]) -> bool:
+    """Whether a proposition says what its slot holds - a value, or (the universal negation) no value - rather than a
+    value it does not hold (a value's negation)."""
+    value, negated = proposition
+    return not negated or value == _NO_VALUE
+
+
+def _implied(own: tuple[object, bool], other: tuple[object, bool]) -> Reading:
+    """The reading "the slot is ``own``" implies of ``other``, another proposition of its slot (D325 (1)'s table): beside
+    a value, another value's negation AFFIRMED; every other pair REJECTED - another value, the value's own negation, and,
+    beside a negation, every other proposition (its own value by the table, the rest by D324 (2)'s hold side)."""
+    if _affirms(own) and not _affirms(other) and other[0] != own[0]:
+        return Reading.AFFIRMED
+    return Reading.REJECTED
+
+
+def _agrees(other: Mapping[str, Any], own: tuple[object, bool]) -> bool:
+    """Whether another record of the slot gave both verdicts ``own`` implies there (``_implied``, read by ``_reading``);
+    the same proposition asked again established too (fail-closed: one proposition answered two ways holds)."""
+    proposition = _proposition(other)
+    if proposition == own:
+        return other.get('result') == _SUPPORTED
+    return _reading(other) is _implied(own, proposition)
+
+
+def _refused_slots(refused: Sequence[Mapping[str, Any]]) -> tuple[set[tuple[tuple[str, ...], str]], set[str]]:
+    """The slots the plan-time refusals block: (the slots named, the subjects whose every slot is blocked because the
+    entry names no attribute)."""
+    slots: set[tuple[tuple[str, ...], str]] = set()
+    whole: set[str] = set()
+    for entry in refused:
+        if entry.get('family') != _Q_FACT:
+            continue
+        slot = _slot_of(entry)
+        if slot is not None:
+            slots.add(slot)
+            continue
+        subjects = entry.get('subjects')
+        if entry.get('attribute') is None and isinstance(subjects, (list, tuple)):
+            whole |= {subject for subject in subjects if isinstance(subject, str)}
+    return slots, whole
+
+
+# --- d.2 row 5 over the PAIR families: a statement-act pair's relation is ONE proposition (DECISIONS D328 (2), finding
+# R3D-L1-1: D325 (1)'s truth table extended over the families) -----------------------------------------------------------
+#
+# THE CLASS RULE (D328 (2)). A pair family's established answer RELEASES statement-act pairs (engine/facts._answered):
+# a Q-REL answer the one pair it names (R_q.independent, or R_q.unlisted_independent for a kept unlisted entry's), a
+# Q-ONLESION answer "act A was not done to lesion L" every pair (S, A) whose statement names L (R_q.off_lesion, which
+# pairing._apart_from_unnamed reads for each such statement), a Q-LESION answer (never planned: DECISIONS D320, D323 O1)
+# every pair whose two sides name its two lesions (R_q.distinct). A release of a pair through one family stands only
+# when EVERY question asked of the SAME pair - in any family (Q-REL, Q-ONLESION, Q-LESION), request or round - got the
+# release direction on BOTH its claim and its control in an answered, healthy request: ``_reading`` AFFIRMED, since
+# every pair family's claim is its release direction ("This statement does not deny act A.", "This act was not done to
+# lesion L."); and the same proposition asked again was established too. Anything else holds the pair
+# (question_conflict): a holding pattern (REJECTED: "the statement denies the act", "the act was done to the lesion"),
+# an incoherent pair, an unclear, qualified or missing verdict, a failed, refused, too-long, uncalibrated or unhealthy
+# request (its records carry that request-level reason, under which no verdict counts: OTHER), a question no longer
+# eligible, a question refused at PLAN time (``refused``: never sent, so no record). The fold reads one answer for every
+# pair it releases at once, so the hold is written on the ANSWER (unresolved, question_conflict, its proof dropped): an
+# established record of a pair family stays established only when every other record and plan-time refusal about one
+# of its pairs passes the rule (``_pair_held``).
+#
+# The finding (R3D-L1-1, the third adversarial pass over int6): E3 an established denial that an injection was given for
+# L1, E4 a tattoo of L1's place naming no lesion. Round 1 asked the pair's Q-REL ("This statement does not deny act E4.":
+# the pair UNRESOLVED on E4's doubted performer) and Fable answered it in the HOLDING direction - the denial denies the
+# tattoo; round 2, the performer established and the pair a CONTRADICTION, asked the SAME pair through Q-ONLESION ("This
+# act was not done to lesion L1.") and its release direction was established. Under the planner's own premise for that
+# question (DECISIONS D323 F1: the SAME rests on the denial's lesion's places alone) the two answers cannot both hold;
+# D325 (1)'s table read Q-FACT slots only, so the Q-REL answer was read by nothing and 45381 went READY on Fable's own
+# statement that the denial denies the tattoo. The planner's half (engine/asking.plan, ``pair_held``) no longer asks a
+# pair through another family once an earlier answer about it holds it; this half holds whatever records still disagree
+# (one round's requests, a later replay, a request split in halves).
+#
+# WHICH PAIRS a record is asked of (``pair_scopes``), each (statement, act) as stored. A Q-REL record: its two subjects,
+# exactly - so two Q-REL answers about two pairs never hold each other (each releases its own pair, as before). Read on a
+# FactSet ``R`` when one is given: a Q-ONLESION (A, L) is about every pair (S, A) of an event S of R, not A, whose target
+# lesion or a listed target MAY be L (``_naming``: not silent, and engine/facts.possibly - an answer establishes only a
+# value pass 1 claimed or a doubt's reading, so every statement whose own lesions R_q's arm reads naming L is among
+# them; a silent target names nothing that arm reads, and the planner never asks one); a Q-LESION (L1, L2) about every
+# pair of events naming L1 and L2 so, either way round. With NO FactSet - the stage's call, studio/jobs.py
+# ``exclusive(records, refused)`` - fail-closed: a Q-ONLESION about every EVENT statement of its act (PairScope's None
+# statement), a Q-LESION about every pair, and a record whose subjects are not two stored names about every pair. A kept
+# unlisted entry ('u:<index>') is the statement of its own Q-REL only: R_q's unlisted pairs are released by Q-REL answers
+# alone (pairing.unlisted_pairs), never by a not-on or a distinctness, so no wildcard reaches it.
+#
+# P-MONO-Q holds as for the slots: every other record must read AFFIRMED, so one verdict changed from a pattern some
+# table accepts (AFFIRMED or REJECTED) to one none accepts can only add a blocker; idempotent, since a record this rule
+# holds keeps its AFFIRMED reading (question_conflict is a reason settle writes after the claim reading passed,
+# ``_reading``) and so blocks nothing it did not block before.
+#
+# DECISIONS D330 (2) (finding RP-1) extends the proposition beyond the pair families' records: a release of the pair by
+# ANY answer the fold reads - a Q-FACT answer setting it apart through a row, dropping it from "which pairs", or dropping
+# a kept unlisted entry's pair - stands only when every pair-family question asked of the pair read AFFIRMED (this
+# condition); otherwise the pair keeps its R_base relation. No record of those answers is a pair's, so it is the fold's
+# rule (engine/facts._kept), reading the same records with the same reader (``_reading``) and, without a FactSet, the
+# same scopes as ``pair_scopes`` (pinned equal by tests/v2/test_r3g_pairs).
+
+
+@dataclass(frozen=True, slots=True)
+class PairScope:
+    """One statement-act pair a pair-family question is asked of, as stored ('E3' and 'E4'; a kept unlisted entry 'u:0'
+    as a statement): ``statement`` None is every EVENT statement of the act, ``act`` None every act (the fail-closed
+    scope of a question whose pairs are not read on a FactSet: the module comment above)."""
+    statement: str | None
+    act: str | None
+
+
+_EVERY_PAIR = PairScope(None, None)
+_NO_PAIRS: frozenset[PairScope] = frozenset()  # the scope of a record of no pair family
+
+
+def _question_family(record: Mapping[str, Any]) -> QuestionFamily | None:
+    """A stored question's family read AS engine/asking.Family (the enumeration settle_questions writes the value of),
+    None for anything else."""
+    from studio.interpretation.engine import asking
+
+    try:
+        return asking.Family(record.get('family'))
+    except (ValueError, TypeError):
+        return None
+
+
+def _entry_name(stored: str | None) -> bool:
+    """Whether a stored statement names a kept unlisted entry ('u:<index>': engine/asking.unlisted_index, typed)."""
+    from studio.interpretation.engine import asking
+
+    return stored is not None and asking.unlisted_index((stored,)) is not None
+
+
+# each lesion's naming events (``_naming``) read once per FactSet and stored lesion name, by the reader that holds it
+_Naming = dict[str, 'tuple[Id, ...] | None']
+
+
+def _naming(R: FactSet, stored: str, cache: _Naming) -> tuple[Id, ...] | None:
+    """Every event of ``R`` whose target lesion, or a member of whose listed targets, MAY be the lesion ``stored``
+    names (not silent, and engine/facts.possibly) - None when ``stored`` names no lesion ``R`` holds (fail-closed: the
+    caller reads the record as about every pair of its act). Read once per ``cache`` (one FactSet's)."""
+    if stored in cache:
+        return cache[stored]
+    from studio.interpretation.engine import facts as engine_facts
+    from studio.interpretation.engine.types import Id, IdFamily
+
+    found: tuple[Id, ...] | None = None
+    try:
+        lesion = Id.parse(stored)
+    except ValueError:
+        lesion = None
+    if lesion is not None and lesion.family is IdFamily.LESION and lesion in R.lesions:
+        def may_be(fact_: Any) -> bool:
+            return not engine_facts.silent(fact_) and engine_facts.possibly(fact_, lesion)
+
+        found = tuple(event for event in R.events
+                      if may_be(engine_facts.fact(R, event, A.TARGET_LESION))
+                      or any(may_be(member) for member in engine_facts.members(R, event, A.SCOPE_TARGETS)))
+    cache[stored] = found
+    return found
+
+
+def pair_scopes(record: Mapping[str, Any], R: FactSet | None = None,
+                cache: _Naming | None = None) -> frozenset[PairScope]:
+    """DECISIONS D328 (2): the statement-act pairs a stored pair-family question - or a plan-time refusal of one, or a
+    planned question in its record's fields - is asked of (the module comment above): read on ``R`` when given, else
+    fail-closed; frozenset() for a record of no pair family (Q-FACT, Q-ABSORB). ``cache``: the caller's ``_naming``
+    reads of ``R`` (a fresh one when None)."""
+    if record.get('family') == _Q_FACT:  # the slots' family (exclusivity's every call): no pair family, read first
+        return _NO_PAIRS
+    from studio.interpretation.engine import asking
+
+    family = _question_family(record)
+    if family is not asking.Family.Q_REL and family is not asking.Family.Q_ONLESION \
+            and family is not asking.Family.Q_LESION:
+        return _NO_PAIRS
+    subjects = record.get('subjects')
+    if (not isinstance(subjects, (list, tuple)) or len(subjects) != 2
+            or not all(isinstance(subject, str) for subject in subjects)):
+        return frozenset({_EVERY_PAIR})
+    first, second = str(subjects[0]), str(subjects[1])
+    if family is asking.Family.Q_REL:
+        return frozenset({PairScope(first, second)})
+    reads: _Naming = cache if cache is not None else {}
+    if family is asking.Family.Q_ONLESION:
+        statements = _naming(R, second, reads) if R is not None else None
+        if statements is None:
+            return frozenset({PairScope(None, first)})
+        return frozenset(PairScope(str(event), first) for event in statements if str(event) != first)
+    one = _naming(R, first, reads) if R is not None else None
+    other = _naming(R, second, reads) if R is not None else None
+    if one is None or other is None:
+        return frozenset({_EVERY_PAIR})
+    return frozenset(PairScope(str(statement), str(act)) for side, rest in ((one, other), (other, one))
+                     for statement in side for act in rest if statement != act)
+
+
+def _meets(one: PairScope, other: PairScope) -> bool:
+    """Whether two scopes name one pair: the same act (None, every act) and the same statement - None meeting every
+    EVENT statement, never a kept unlisted entry (the module comment above)."""
+    if one.act is not None and other.act is not None and one.act != other.act:
+        return False
+    if one.statement is not None and other.statement is not None:
+        return one.statement == other.statement
+    return not _entry_name(one.statement) and not _entry_name(other.statement)
+
+
+def _about_one_pair(ones: frozenset[PairScope], others: frozenset[PairScope]) -> bool:
+    return any(_meets(one, other) for one in ones for other in others)
+
+
+def _pair_key(record: Mapping[str, Any]) -> tuple[object, ...]:
+    """A pair-family record's proposition: its content key's fields (engine/asking.QuestionSpec.key)."""
+    subjects = record.get('subjects')
+    return (record.get('family'), record.get('form'),
+            tuple(subjects) if isinstance(subjects, (list, tuple)) else subjects, record.get('attribute'),
+            record.get('value'), record.get('negated') is True)
+
+
+def _pair_held(index: int, records: Sequence[Mapping[str, Any]], scopes: Sequence[frozenset[PairScope]],
+               refused: Sequence[frozenset[PairScope]]) -> bool:
+    """D328 (2) for the established pair-family record ``records[index]``: held when any other record about one of its
+    pairs (``scopes``) reads other than AFFIRMED - or, for the same proposition, is not established - or a plan-time
+    refusal (``refused``, their scopes) is about one of them."""
+    own, mine = scopes[index], _pair_key(records[index])
+    for other, theirs in enumerate(scopes):
+        if other == index or not theirs or not _about_one_pair(own, theirs):
+            continue
+        record = records[other]
+        if _pair_key(record) == mine:
+            if record.get('result') != _SUPPORTED:
+                return True
+        elif _reading(record) is not Reading.AFFIRMED:
+            return True
+    return any(_about_one_pair(own, theirs) for theirs in refused)
+
+
+class PairAnswers:
+    """DECISIONS D328 (2), the planner's half (engine/asking.plan): a stage's question records so far, each pair-family
+    record read ONCE - its pairs (``pair_scopes`` over ``R``), its proposition and its reading - and ``holds``."""
+
+    def __init__(self, records: Sequence[Mapping[str, Any]], R: FactSet | None = None) -> None:
+        self.R = R
+        self._naming: _Naming = {}
+        self._read: list[tuple[frozenset[PairScope], tuple[object, ...], Reading]] = []
+        for record in records:
+            if not isinstance(record, Mapping):
+                continue
+            scopes = pair_scopes(record, R, self._naming)
+            if scopes:
+                self._read.append((scopes, _pair_key(record), _reading(record)))
+
+    def holds(self, question: Mapping[str, Any]) -> bool:
+        """Whether an earlier answer about one of the pairs a planned question (its record's fields: family, form,
+        subjects, attribute, value, negated) is asked of HOLDS it - a record of another proposition about one of its
+        pairs that reads other than AFFIRMED, so that no established answer to the question could release that pair
+        (``exclusive`` would hold it). The question itself is never asked twice (the planner's ``asked_before``), so
+        its own records are not read."""
+        own = pair_scopes(question, self.R, self._naming)
+        if not own:
+            return False
+        mine = _pair_key(question)
+        return any(key != mine and reading is not Reading.AFFIRMED and _about_one_pair(own, scopes)
+                   for scopes, key, reading in self._read)
+
+
+def pair_held(question: Mapping[str, Any], records: Sequence[Mapping[str, Any]], R: FactSet | None = None) -> bool:
+    """``PairAnswers(records, R).holds(question)`` (DECISIONS D328 (2), the planner's half)."""
+    return PairAnswers(records, R).holds(question)
+
+
+def exclusive(records: Sequence[dict[str, Any]],
+              refused: Sequence[Mapping[str, Any]] = (), R: FactSet | None = None) -> list[dict[str, Any]]:
+    """d.2 row 5 over a stage's question records, every request and every round (DECISIONS D325 (1), refining D324 (2):
+    the module comment above): an established record of a single-valued slot stays established only when every other
+    record of its slot gave BOTH verdicts its proposition implies there (the truth table, ``_implied``, read by
+    ``_reading``) - or is the same proposition established too - and no plan-time refusal (``refused``) names the slot;
+    and (DECISIONS D328 (2)) an established record of a PAIR family (Q-REL, Q-ONLESION, Q-LESION) stays established only
+    when every other record and plan-time refusal about one of its pairs - ``pair_scopes``, read on ``R`` when given,
+    else fail-closed - reads AFFIRMED, or is the same proposition established too (``_pair_held``); otherwise it is
+    unresolved, question_conflict, its proof dropped. Every other record - a list attribute's member, a Q-ABSORB
+    answer, an unresolved record - is returned as it is, in order. Idempotent, and monotone: a single verdict change from
+    matching to not matching only adds a blocker."""
+    keyed = [_slot_of(record) for record in records]
+    slots: dict[tuple[tuple[str, ...], str], list[int]] = {}
+    for index, slot in enumerate(keyed):
+        if slot is not None:
+            slots.setdefault(slot, []).append(index)
+    blocked, whole = _refused_slots(refused)
+    naming: _Naming = {}
+    scopes = [pair_scopes(record, R, naming) for record in records]
+    refused_scopes = [found for found in (pair_scopes(entry, R, naming) for entry in refused) if found]
+    out = []
+    for index, record in enumerate(records):
+        slot = keyed[index]
+        if slot is not None and record.get('result') == _SUPPORTED:
+            own = _proposition(record)
+            held = slot in blocked or slot[0][0] in whole or any(
+                not _agrees(records[other], own) for other in slots[slot] if other != index)
+            if held:
+                record = {**record, 'result': _UNRESOLVED, 'reasons': [QUESTION_CONFLICT], 'proof': []}
+        elif scopes[index] and record.get('result') == _SUPPORTED and _pair_held(index, records, scopes,
+                                                                                 refused_scopes):
+            record = {**record, 'result': _UNRESOLVED, 'reasons': [QUESTION_CONFLICT], 'proof': []}
+        out.append(record)
+    return out

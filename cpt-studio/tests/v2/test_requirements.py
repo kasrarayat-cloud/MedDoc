@@ -70,7 +70,33 @@ REQUIREMENTS_PINS = {
     'cpt-requirements@2': {
         'table': '1b0f0d18e5d3328d923f43bd033b75559e439c849dafae259ddd6e64b89820e5',
         'rank': '4c0c972d7c8f05b48bc4cebfaa1628c8e7d772ebb3dbcd4146a0eb80da3c26c1',
+        # the label's own record (int3's, which the probe's and the pairs' records were made under); DECISIONS D324 (11)
+        # moved the label, so round r3's rules are @3's below (round r3's integration had restated this row to them,
+        # 68cccaf0..., with the label kept)
         'rules': '1677db1b003841c3cd76b35bd6702dbda6dbb5d0273be43d83cc713699c91bf7',
+        'claimed': '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81',
+    },
+    # DECISIONS D324 (11): REQUIREMENTS_VERSION moves to @3 because its rules pin moved - a label kept would keep old
+    # records current. Round r3 (DECISIONS D310 (1), the colonoscopy route table under COLFULL: it reads the session's
+    # approach and the anatomy entry's type, asks and explains the procedure at RANK row 8; and round r3's integration,
+    # the second refutation's R2E-QB-ANAT: SUP.8 reads a statement's target.anatomy and target.structure), as its owning
+    # function requirements.rules_canonical gives it; the table, RANK and CLAIMED are unchanged. Round r3's integration
+    # int5 (DECISIONS D324 (5), the rules lane's Q1): COLFULL reads every anatomy entry's organ (the colonic route, the
+    # colon filed absent, the lower-tract stoma closure) - 68cccaf0e284f036eba6456d6d3503314d27eed67cfe9de604f315b4b179b9e0
+    # (int4's and the lanes' @3) superseded. Round r3's third repair (DECISIONS D325 (2), the rules lane: the int5
+    # integrator's Q1): LOWER reads every anatomy entry's organ too (the stoma class's colonic route) -
+    # fba7ca41cf4d05f117759142deaf9299d06df4f380a85be1536093d108434efd (int5's @3) superseded, as its owning function
+    # requirements.rules_canonical gives it. Round r3's fourth repair (DECISIONS D328 (1) and its addendum, lane rules5):
+    # the lower-GI route table's own row (Requirement.ROUTE_TABLE: its reads join every lower-GI code's closure) and
+    # LOWER's subtype and joins, COLFULL's joins, each to hold only - d2f1e7a2077f3c46260922515a779489ed8d0eee8464addf16fc
+    # 26686159cea2 (int6's @3) superseded, the label kept (DECISIONS D327 (3): nothing has shipped under @3). Round r3's
+    # round 5 (DECISIONS D330 (1), lane rules6): the route table's row reads the session's reach to hold only (the
+    # ileoscopy's colonic reach, R5R-9) - d48cf1f6d27652da43eb68c5f536acb904e1e52e5b7e1b7f912d0c2009932769 (rules5's)
+    # superseded, as its owning function requirements.rules_canonical gives it, the label kept (nothing has shipped)
+    'cpt-requirements@3': {
+        'table': '1b0f0d18e5d3328d923f43bd033b75559e439c849dafae259ddd6e64b89820e5',
+        'rank': '4c0c972d7c8f05b48bc4cebfaa1628c8e7d772ebb3dbcd4146a0eb80da3c26c1',
+        'rules': 'e5c9398d3aa5aff90c20b48de1903144c0abc53ed2c46d7703bc285248d6d228',
         'claimed': '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81',
     },
 }
@@ -140,11 +166,25 @@ DESIGN_CLAIMED = {
 # statement's own person (4.5's target and performer rows) are claimed. A code-specific row reads the code's supporting
 # act, never an umbrella (4.3 row 1), and 4.5's target row the lesion and places of an act whose kind has a target
 # (D195's TARGET_KINDS), so no read is left unclaimed and no claim beyond D195's list is needed.
-KNOWN_GAPS: dict = {}
+# Round r3's integration (the second refutation's R2E-QB-ANAT, HIGH - a false READY; D316 QB's class): the target row's QB
+# clause reads a statement's target.structure, which no claim appraises for a statement, ONLY TO HOLD - a structure the
+# statement names for itself beyond its not-on lesions keeps the pair together, never sets it apart - so the unappraised
+# read can never release; claiming it would change the fact request, which round r3 keeps int3's byte for byte (I-FACT).
+# Every statement kind, as SUP.8 pairs every one.
+KNOWN_GAPS: dict = {('SUP.8', 'statement', 'target.structure'): {
+    'ablation', 'band_ligation', 'biopsy', 'bleeding_control', 'capsule_study', 'cholangioscopy', 'clip', 'decompression',
+    'dilation', 'drainage', 'em_prolonged', 'em_visit', 'emr', 'examination', 'fna', 'foreign_body', 'fundoplication',
+    'hot_biopsy', 'injection', 'intervention', 'lithotripsy', 'manometry', 'myotomy', 'peg', 'ph_monitoring',
+    'pressure_measurement', 'rectal_sensation', 'removal', 'snare', 'sphincterotomy', 'stent', 'stent_exchange',
+    'stent_removal', 'stone_extraction', 'tattoo', 'tube_placement', 'tube_replacement'}}
 # CLAIMED attributes that no requirement reads for any kind (P2: "a claim no rule needs"), kept as 3.2.1 lists them
 # (DECISIONS D195: they release nothing; trimming them is a cost question for D3).
-CLAIMED_UNREAD = {('statement', 'target.anatomy'), ('statement', 'target.duct'), ('anatomy', 'organ'),
-                  ('anatomy', 'joins')}
+# (round r3's integration: a statement's target.anatomy is read now - SUP.8's QB clause, R2E-QB-ANAT)
+# (round r3's integration int5, DECISIONS D324 (5): an anatomy entry's organ is read now - COLFULL's colonic route, the
+# colon filed absent and the lower-tract stoma closure; it was ('anatomy', 'organ') here)
+# (DECISIONS D328's addendum, rules4 Q3: an anastomosis's joins are read now - COLFULL's and LOWER's colon arm, the
+# route table's row - so ('anatomy', 'joins') left this set)
+CLAIMED_UNREAD = {('statement', 'target.duct')}
 # The same per listed kind (P2 at the level 3.2.1 writes its kind lists): for each CLAIMED entry whose kinds are listed,
 # the codable kinds of its list that no requirement of any code reads. Each is kept by a ruling; any other is a claim
 # no rule needs (the ERCP examination's, intervention's, sedation's and other's duct, before this repair):
@@ -191,11 +231,16 @@ READ_UNCONTROLLED = {
     # SITE's lesion arm reads it (READY, D195 claims it); 3.2.2 gives it no template, and neither 3.2.3 nor D196 a
     # control or an UNCONTROLLED entry: open for the integration owner, pinned so that deciding it moves this row
     ('lesion', 'places'): 'claimed by D195 for SITE; no control decided',
+    # round r3's integration (R2E-QB-ANAT): SUP.8's QB clause reads them only to HOLD - a target the statement names for
+    # itself beyond its not-on lesions keeps the pair together, never sets it apart - so no control is needed for them
+    ('statement', 'target.anatomy'): 'read by SUP.8 to hold only (QB): claimed, never controlled; never a release',
+    ('statement', 'target.structure'): 'read by SUP.8 to hold only (QB): unclaimed (KNOWN_GAPS); never a release',
 }
 # Controlled by 3.2.3 and read on no READY or exclusion path, each with its reason.
-CONTROLLED_UNREAD = {
-    ('anatomy', 'organ'): 'no rule reads it; CLAIMED keeps it as 3.2.1 lists it (D195)',
-}
+# (round r3's integration int5, DECISIONS D324 (5): ('anatomy', 'organ') is read on COLFULL's READY path now - the
+# colonic route reads a SUPPORTED colonic organ - so it left this table: 'no rule reads it; CLAIMED keeps it as 3.2.1
+# lists it (D195)')
+CONTROLLED_UNREAD: dict = {}
 
 
 def ready_reads() -> set:
@@ -417,7 +462,11 @@ class RequirementTests(SimpleTestCase):
         for code, row in CODES.items():
             with self.subTest(code=code):
                 found = R.requirements_of(str(code))
-                self.assertEqual(found, (*R.TEMPLATE_HEAD[row.template], *row.tags, *R.TEMPLATE_TAIL[row.template]))
+                # DECISIONS D330 (1) (a) (lane rules6): the lower-GI route table's row after the tags where it stands apart
+                # from them (R.route_row_apart: a sigmoidoscopy, an enteroscopy through a stoma or a pouch)
+                route = (Requirement.ROUTE_TABLE,) if R.route_row_apart(str(code)) else ()
+                self.assertEqual(found, (*R.TEMPLATE_HEAD[row.template], *row.tags, *route,
+                                         *R.TEMPLATE_TAIL[row.template]))
                 if row.template is Template.RECOGNISED:
                     self.assertEqual(found, (*row.tags, Requirement.R7_R9))
                 else:
@@ -477,7 +526,9 @@ class RequirementTests(SimpleTestCase):
 
         unmet = {  # 4.3's "unmet -> fact"
             Tag.ATT: set(), Tag.DEF: set(), Tag.ADDON: set(), Tag.D80: set(),
-            Tag.R6_EXTENT: {(Rank.EXTENT, FactKey.EXTENT)}, Tag.COLFULL: {(Rank.EXTENT, FactKey.EXTENT)},
+            # COLFULL: the reach, and since round r3 the route table's approach at RANK row 8 (DECISIONS D310 (1))
+            Tag.R6_EXTENT: {(Rank.EXTENT, FactKey.EXTENT)}, Tag.COLFULL: {(Rank.EXTENT, FactKey.EXTENT),
+                                                                          (Rank.PROCEDURE, FactKey.PROCEDURE)},
             Tag.R6_TARGET: {(Rank.TARGET, FactKey.TARGET)},
             Tag.R6_CANNULATION: {(Rank.CANNULATION, FactKey.CANNULATION)},
             Tag.R6_EM_BASIS: {(Rank.EM_BASIS, FactKey.EM_BASIS)},
@@ -504,7 +555,10 @@ class RequirementTests(SimpleTestCase):
         self.assertEqual(items(RULES[Tag.CAUSE].explains), {(Rank.BUNDLED, FactKey.PERFORMED_STATUS)})
         self.assertEqual(items(RULES[Tag.C3_SEP].explains), {(Rank.SEPARATE_EM, FactKey.SEPARATE_EM)})
         self.assertEqual(items(RULES[Tag.D80].explains), {(Rank.STATUS, FactKey.PERFORMED_STATUS)})
-        for tag in (Tag.ATT, Tag.R6_EXTENT, Tag.COLFULL, Tag.R6_CANNULATION, Tag.XCHG):
+        # round r3 (DECISIONS D310 (1)): COLFULL's route table explains a colonoscopy code through the anus beside an
+        # established stoma route (and a through-stoma one beside another), naming the approach at RANK row 8
+        self.assertEqual(items(RULES[Tag.COLFULL].explains), {(Rank.PROCEDURE, FactKey.PROCEDURE)})
+        for tag in (Tag.ATT, Tag.R6_EXTENT, Tag.R6_CANNULATION, Tag.XCHG):
             self.assertEqual(RULES[tag].explains, ())  # a consideration, or "not supported", is no held item
 
     def test_supports_items_are_4_8s_rows(self):
@@ -661,8 +715,17 @@ class DependencyTests(SimpleTestCase):
         self.assertTrue(em.member and base.member)  # R6:context, and the member date of R7
         self.assertNotIn(Attribute.PERFORMER, em.reads[Role.SAME_DAY_ACT])  # C-3 reads no performer
         self.assertTrue({Attribute.REACHED, Attribute.COMPLETION, Attribute.REACHED_ANATOMY} <= act.reads[Role.SESSION])
-        self.assertEqual(R.dependencies('45341').reads[Role.ANATOMY], {Attribute.TYPE})  # LOWER's stoma
-        self.assertEqual(R.dependencies('45385').reads[Role.ANATOMY], {Attribute.SUBTYPE})  # COLFULL's anastomosis
+        # LOWER's stoma class, and since round r3's third repair every entry's organ (DECISIONS D325 (2): the stoma
+        # class's colonic route; LOWER is one row for its classes, so 45341 reads it too - was {TYPE}); since round r3's
+        # fourth repair (DECISIONS D328 (1) and its addendum's Q1, Q3) every entry's subtype and joins too, to hold only
+        # (the colon arm; the lower-GI route table's row) - was {ORGAN, TYPE}
+        self.assertEqual(R.dependencies('45341').reads[Role.ANATOMY],
+                         {Attribute.ORGAN, Attribute.SUBTYPE, Attribute.TYPE, Attribute.JOINS})
+        # COLFULL's anastomosis, and since round r3 the route table's stoma entry (DECISIONS D310 (1)) and, since round
+        # r3's integration int5, every entry's organ (DECISIONS D324 (5): was {SUBTYPE, TYPE}); since round r3's fourth
+        # repair every entry's joins, to hold only (DECISIONS D328's addendum, Q3) - was {ORGAN, SUBTYPE, TYPE}
+        self.assertEqual(R.dependencies('45385').reads[Role.ANATOMY],
+                         {Attribute.ORGAN, Attribute.SUBTYPE, Attribute.TYPE, Attribute.JOINS})
         for held in ('99152', '99153', '12345'):
             found = R.dependencies(held)
             self.assertEqual(set(found.reads), {Role.ENCOUNTER, Role.MEMBER} | ({Role.COUNTED} if held == '99153'

@@ -21,6 +21,22 @@
   }
  },
  "date_of_service": "2026-11-08",
+ "declared": {
+  "i": {
+   "45381": {
+    "item": "act_part",
+    "rule": "B8",
+    "status": "needs_clarification"
+   }
+  },
+  "ii": {
+   "45381": {
+    "item": "act_part",
+    "rule": "B8",
+    "status": "needs_clarification"
+   }
+  }
+ },
  "document": "documents/RF-CO2d.txt",
  "document_sha256": "91ae6c0a21bc1d1595ec922c03880a73634a5818391d2f58557261393d730085",
  "expect": {

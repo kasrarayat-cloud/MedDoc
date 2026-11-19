@@ -78,5 +78,30 @@ def _local_schema() -> dict[str, Any]:
 
 LOCAL_SCHEMA: dict[str, Any] = _local_schema()
 
+
+def _local_schema_q() -> dict[str, Any]:
+    """Round r3's LOCAL_SCHEMA_Q (DECISIONS D306-D308; build-v2/a2b/r3 DESIGN-v2 c.2): a question request's
+    structured-output schema - LOCAL_SCHEMA with each verdict carrying ``quotes`` (the proof: passages of the document's
+    own words), required like every field. LOCAL_SCHEMA itself is untouched (I-FACT). How many quotes count, and how
+    long each may be, is the reader's item-level bound (appraise_read: QUOTE_MAX_CHARS, and contract/proof's QUOTES_MAX
+    - DECISIONS D318 (1)), never a schema keyword: the schema stays the one the probe sent."""
+    schema = _local_schema()
+    verdict = schema['properties']['verdicts']['items']
+    verdict['properties']['quotes'] = {'type': 'array', 'items': {'type': 'string'}}
+    verdict['required'].append('quotes')
+    return schema
+
+
+LOCAL_SCHEMA_Q: dict[str, Any] = _local_schema_q()
+# DECISIONS D318 (1): QUOTES_MAX, THE flood cap of a question verdict's quotes - ONE constant, held here beside the schema
+# whose ``quotes`` it bounds, read by contract/appraise_read (quotes_bound) and contract/proof (locate), and rendered into
+# the question instruction (contract/question_claims.PROOF); never a schema keyword (the schema stays the one the probe
+# sent). Every quote must already lie inside the claim's own passages, so a flood of the document's other words voids a
+# proof whatever its size; the cap only bounds a degenerate answer and the locator's search. 8 = twice the most quotes
+# Fable gave one verdict at effort max in step 1 long (r3-probe-2: 4), and room for every passage a form may draw on -
+# its two required objects plus a frame value passage or a section head, or a reach's two alternatives: at most 4 - to be
+# quoted per unit across a sentence a line break splits in two (4 x 2).
+QUOTES_MAX = 8
+
 # What generationConfig.responseSchema carries: derived, never written by hand.
 RESPONSE_SCHEMA: dict[str, Any] = jsonschema.gemini_schema(LOCAL_SCHEMA)
