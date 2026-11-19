@@ -726,7 +726,9 @@ LOWER_STOMA = G.COLON_ALL | G.lm('ileum', 'terminal_ileum', 'neo_terminal_ileum'
 
 
 def declared_entry(facts):
-    """The declared reading of one census entry: (type values, organ fact or None, the oracle's arguments)."""
+    """The declared reading of one census entry: (type values, organ fact or None, the oracle's arguments, the shapes it
+    may be). Round r3's round 7 fixes (DECISIONS D345 (1), 2026-11-19): the shapes are its type values and every shape a
+    filed field names (G.oracle_made_shapes); the type values alone decide the exemption (route_entries reads the type)."""
     type_ = facts.get(A.TYPE, (None,))[0]
     organ = facts.get(A.ORGAN, (None,))[0]
     subtype = facts.get(A.SUBTYPE, (None,))[0]
@@ -734,11 +736,38 @@ def declared_entry(facts):
     args = (types, frozenset({subtype.value}) if subtype is not None else G.ALL_SUBTYPES, subtype is None,
             frozenset({organ.value}) if organ is not None else G.ALL_PLACES, organ is None,
             tuple(frozenset({member.value}) for member in facts.get(A.JOINS, ())))
-    return types, organ, args
+    return types, organ, args, types | G.oracle_made_shapes(*args[1:])
+
+
+# Round r3's round 7 fixes (DECISIONS D345 (2), 2026-11-19), DECLARED: the ids each through state may name - a silent
+# through names none; a supported or claimed one its id; one at its widest (a contradiction's sides, a denial, a claim pass
+# 2 rejected) every entry and its own ids
+def declared_names(t_name, anatomy) -> set:
+    return {'silent': set(), 'Y1 supported': {Y1}, 'Y7 supported': {Y7}, 'Y9 supported (no such entry)': {Y9},
+            'Y1 claimed': {Y1}, 'Y1 or Y7': set(anatomy) | {Y1, Y7}}.get(t_name, set(anatomy) | {Y1})
+
+
+def declared_candidates(family, through, t_name, anatomy, read):
+    """D342 (1) (c) and D345 (2), DECLARED: (whether the route is not certain, the entries that may be the route's own).
+    The route is not certain when the through may name an entry that cannot be of the route's type, or an id with no
+    entry; then every entry that may be of the type is a candidate. Otherwise a supported through's entry, or every entry
+    the through may name (a silent through any)."""
+    wanted = OWN_DECLARED[family][0]
+    of_type = {entry for entry in anatomy if wanted in read[entry][3]}
+    names = declared_names(t_name, anatomy)
+    uncertain = any(name not in read or wanted not in read[name][3] for name in names)
+    if uncertain:
+        return True, of_type
+    if through is None:
+        return False, of_type
+    return False, of_type & names
 
 
 def declared_guard(family, approach, a_values, controlled, through, t_name, anatomy) -> bool:
-    """D330 (1) and D336 (1), DECLARED for one route state: whether the guard holds."""
+    """D330 (1) and D336 (1), DECLARED for one route state: whether the guard holds. Round r3's round 7 fixes (DECISIONS
+    D345): every entry's shapes include those its filed fields name (1); the route's own entry is the entry the through
+    names, and a through that may name an entry that cannot be of the route's type, or no entry, reads the route at its
+    widest (2: ``declared_candidates``)."""
     route = G.ROUTE_OF[family]
     if route is not AP.TRANSANAL and approach is not None and approach.result is ct.Result.SUPPORTED and \
             approach.value not in ACCEPTED[route]:
@@ -758,10 +787,11 @@ def declared_guard(family, approach, a_values, controlled, through, t_name, anat
     if any(entry not in own and not G.oracle_harmless(family, *read[entry][2]) for entry in anatomy):
         return True
     if route is not AP.TRANSANAL and own_entry_outside_declared(family, through, t_name, anatomy):
-        return True  # round r3's round 7 (DECISIONS D342 (1) (c)): the route's own entry within its type's anatomy
+        return True  # round r3's round 7 (DECISIONS D342 (1) (c), D345 (2)): the route's own entry
     if family == 'COLONIC_STOMA':  # (e): a stoma passed through whose filed organ may lie outside the lower tract
-        stomas = [entry for entry in anatomy if AT.STOMA in read[entry][0]]
-        if through is not None and through.result is ct.Result.SUPPORTED:
+        stomas = [entry for entry in anatomy if AT.STOMA in read[entry][3]]
+        uncertain, _candidates = declared_candidates(family, through, t_name, anatomy, read)
+        if through is not None and through.result is ct.Result.SUPPORTED and not uncertain:
             stomas = [entry for entry in stomas if entry == through.value]
         if any(read[entry][1] is not None and read[entry][1].value not in LOWER_STOMA for entry in stomas):
             return True
@@ -770,10 +800,11 @@ def declared_guard(family, approach, a_values, controlled, through, t_name, anat
     if approach is not None and not a_values <= {AP.TRANSANAL}:
         return True  # R5R-7
     if not controlled:  # (b): per anus has no control - read as int6 reads a silent approach
-        for entry, (types, organ, _args) in read.items():
+        for entry, (_types, organ, args, shapes) in read.items():
+            made = G.oracle_made_shapes(*args[1:])
             outside = organ is not None and organ.result is ct.Result.SUPPORTED and organ.value not in LOWER_STOMA \
-                and organ.value not in G.NO_ORGAN
-            if (AT.STOMA in types and not outside) or AT.ILEAL_POUCH in types:
+                and organ.value not in G.NO_ORGAN and AT.STOMA not in made
+            if (AT.STOMA in shapes and not outside) or AT.ILEAL_POUCH in shapes:
                 return True
     if through is None:
         return False
@@ -782,9 +813,9 @@ def declared_guard(family, approach, a_values, controlled, through, t_name, anat
     for name in names:   # R5R-8: the through may name an entry that may be a stoma or a pouch
         if name not in read:
             return True  # an entry the FactSet does not hold: its type may be anything
-        types, organ, _args = read[name]
-        if types & {AT.STOMA, AT.ILEAL_POUCH, AT.GASTRIC_POUCH} or (organ is not None and organ.value in
-                                                                     (LM.STOMA, LM.POUCH)):
+        _types, organ, _args, shapes = read[name]
+        if shapes & {AT.STOMA, AT.ILEAL_POUCH, AT.GASTRIC_POUCH} or (organ is not None and organ.value in
+                                                                      (LM.STOMA, LM.POUCH)):
             return True
     return False
 
@@ -804,17 +835,18 @@ def own_entry_outside_declared(family, through, t_name, anatomy) -> bool:
     """D342 (1) (c), DECLARED: every entry that may be the route's own - its type may be the route's type, the session's
     through may name it (a supported through names only its entry; a through not established, every entry it may be:
     a claimed one its value, a contradiction's sides, a silent, denied or rejected one every entry) - files an organ, a
-    subtype or a joins member outside its type's own anatomy."""
+    subtype or a joins member outside its type's own anatomy. Round r3's round 7 fixes (DECISIONS D345 (2)): when the
+    through may name an entry that cannot be of the route's type, or no entry, every entry that may be of the type is a
+    candidate (``declared_candidates``), and with no candidate whose type is established the route's the route holds."""
     wanted, organs, subtypes, joins = OWN_DECLARED[family]
-    if through is not None and through.result is ct.Result.SUPPORTED:
-        names = {through.value}
-    else:
-        names = {'Y1 claimed': {Y1}, 'Y1 or Y7': {Y1, Y7}}.get(t_name, set(anatomy))
-    for entry in names & set(anatomy):
+    read = {entry: declared_entry(facts) for entry, facts in anatomy.items()}
+    uncertain, candidates = declared_candidates(family, through, t_name, anatomy, read)
+    if uncertain and not any(anatomy[entry].get(A.TYPE, (None,))[0] is not None
+                             and anatomy[entry][A.TYPE][0].result is ct.Result.SUPPORTED
+                             and anatomy[entry][A.TYPE][0].value is wanted for entry in candidates):
+        return True
+    for entry in candidates:
         facts = anatomy[entry]
-        type_ = facts.get(A.TYPE, (None,))[0]
-        if type_ is not None and type_.value is not wanted and type_.result is not ct.Result.NEGATED:
-            continue  # an entry whose type is established or claimed otherwise is never the route's own
         organ = facts.get(A.ORGAN, (None,))[0]
         subtype = facts.get(A.SUBTYPE, (None,))[0]
         if organ is not None and organ.value not in organs or subtype is not None and subtype.value not in subtypes:
@@ -822,8 +854,6 @@ def own_entry_outside_declared(family, through, t_name, anatomy) -> bool:
         if any(member.value not in joins for member in facts.get(A.JOINS, ())):
             return True
     return False
-
-
 class RouteStateCensusTests(SimpleTestCase):
     """D336 (1) (f): every route family x every approach and through state x the census's entries - the guard equals the
     declared reading: (a) only an established failure exempts; (b) per anus has no control; (e) a colonoscopy through a

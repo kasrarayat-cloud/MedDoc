@@ -489,11 +489,17 @@ class StomaOrganTests(SimpleTestCase):
             "a contradiction's side": contra(LM.STOMACH, LM.TRANSVERSE_COLON), 'the stomach denied': neg(LM.STOMACH),
             'other': sup(LM.OTHER), 'a stoma': sup(LM.STOMA),
         }
+        # round r3's round 7 fixes (DECISIONS D345 (1), 2026-11-19): an organ read at its widest (a doubt's reading, a
+        # contradiction's side, an established negation) may be the pouch, so the stoma may be an ileal pouch too - the
+        # table's own hold answers before the approach's question (held as before; an answer about the approach could
+        # never release it: per anus is never established)
+        widest = ("a doubt's reading", "a contradiction's side", 'the stomach denied')
         for name, organ in organs.items():
             with self.subTest(organ=name):
                 R = peg_note(organ)
                 self.assertTrue(evaluate.stoma_possible(R, X1))
-                self.assertEqual(held_of(R, '45385'), [('procedure', 'reading_unknown', A.APPROACH, 'X1', 'question')])
+                self.assertEqual(held_of(R, '45385'), [('procedure', ROUTE, A.TYPE, 'X1', 'question')] if name in widest
+                                 else [('procedure', 'reading_unknown', A.APPROACH, 'X1', 'question')])
 
     def test_the_pipelines_gastrostomy_keeps_its_hold_its_organ_is_never_established(self):
         # the ruled boundary on today's fact pass (the attacker's case c, end to end): pass 1 files the gastrostomy's

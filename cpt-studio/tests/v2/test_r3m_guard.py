@@ -182,16 +182,65 @@ def controlled_claims():
                lambda f, typ=typ: entry_of(type=f, organ=sup(LM.STOMACH) if typ is AT.GASTRIC_POUCH else None), typ)
 
 
-# Claims a harmless row reads beside a controlled one (read only to hold): a gastric pouch's organ, an anastomosis's type
-# beside its controlled subtype, a joins member beside an ileocolic subtype
+# Claims a harmless row reads beside a controlled one (read only to hold). Round r3's round 7 fixes (DECISIONS D345 (3),
+# 2026-11-19; the final check's finding 4: int9 listed three by hand - a gastric pouch's organ, an anastomosis's type,
+# an ileocolic anastomosis's joins member): EVERY claim a harmless row reads, DERIVED from catalogue.HARMLESS - for
+# every family's every row, its controlled claim at each value it releases on, its filed organ at each place it admits
+# (the absence row's organ is its claim), a joins member at each place it admits, and the type it is filed with - each
+# beside the row's own entry at its first value (one claim per distinct shape, field and value).
+def _row_entry(row, value):
+    if row.decided_by is A.TYPE:
+        return {A.TYPE: (sup(value),)}
+    if row.decided_by is A.ORGAN:
+        return {A.TYPE: (sup(catalogue.ABSENCE_TYPE),), A.ORGAN: (sup(value),)}
+    return {A.TYPE: (sup(catalogue.SUBTYPE_TYPE),), A.SUBTYPE: (sup(value),)}
+
+
+def _claim_entry(base, field, found):
+    out = dict(base)
+    if field is A.JOINS:
+        out.pop(A.JOINS, None)
+        if found is not None:
+            out[A.JOINS] = (found,)
+    elif found is None:
+        out.pop(field, None)
+    else:
+        out[field] = (found,)
+    return out
+
+
 def read_claims():
-    yield ('a gastric pouch\'s organ stomach', None, LM.COLON,
-           lambda f: entry_of(type=sup(AT.GASTRIC_POUCH), organ=f), LM.STOMACH)
-    yield ('an ileocolic anastomosis\'s type', AT.STOMA, AT.SURGICALLY_ABSENT,
-           lambda f: entry_of(type=f, subtype=sup(SUB.ILEOCOLIC)), AT.ANASTOMOSIS)
-    yield ('an ileocolic anastomosis\'s joins member colon', None, LM.RECTUM,
-           lambda f: entry_of(type=sup(AT.ANASTOMOSIS), subtype=sup(SUB.ILEOCOLIC),
-                              joins=(sup(LM.ILEUM),) + ((f,) if f is not None else ())), LM.COLON)
+    seen = {}
+    for _needs, rows in catalogue.HARMLESS.items():
+        for row in rows:
+            first = sorted(row.values, key=lambda v: v.value)[0]
+            claims = [(row.decided_by, value) for value in row.values]
+            if row.decided_by is not A.ORGAN:
+                claims += [(A.ORGAN, place) for place in row.organs]
+            claims += [(A.JOINS, place) for place in row.joins]
+            claims += [(A.TYPE, row_type) for row_type in ((catalogue.ABSENCE_TYPE,) if row.decided_by is A.ORGAN
+                                                         else (catalogue.SUBTYPE_TYPE,) if row.decided_by is A.SUBTYPE
+                                                         else ())]
+            for field, value in claims:
+                base_value = value if field is row.decided_by else first
+                key = (row.shape, field, value, base_value)
+                if key in seen:
+                    continue
+                base = _row_entry(row, base_value)
+                if field is A.TYPE:
+                    control, other = CL.TYPE_SIBLINGS.get(value), (AT.STOMA if value is not AT.STOMA
+                                                                    else AT.SURGICALLY_ABSENT)
+                elif field is A.SUBTYPE:
+                    control, other = CL.SUBTYPE_SIBLINGS.get(value), (SUB.ILEORECTAL if value is not SUB.ILEORECTAL
+                                                                      else SUB.OTHER)
+                elif field is A.ORGAN and row.decided_by is A.ORGAN:
+                    control, other = value, (LM.COLON if value is not LM.COLON else LM.RECTUM)
+                else:
+                    control, other = None, (LM.COLON if value is not LM.COLON else LM.RECTUM)
+                name = 'joins member' if field is A.JOINS else field.value
+                seen[key] = (f'{row.shape.value}: {name} {value.value}', control, other,
+                             lambda f, base=base, field=field: _claim_entry(base, field, f), value)
+    yield from seen.values()
 
 
 class SettledStateCensusTests(SimpleTestCase):
@@ -201,10 +250,13 @@ class SettledStateCensusTests(SimpleTestCase):
 
     def test_every_controlled_claim_every_settled_state_every_family(self):
         # a silent slot (row 3) reads as the field not filed - for a field read only to hold (a gastric pouch's organ)
-        # that files nothing; a joins member is never silent (an empty list has no member)
+        # that files nothing; a joins member is never silent (an empty list has no member). Round r3's round 7 fixes
+        # (DECISIONS D345 (3), 2026-11-19): every claim a harmless row reads, derived (read_claims); the states one
+        # engine Fact per distinct outcome of settle's table for each claim (equal Facts read alike)
         R0 = G.bare()
         wrong, checked, released, widened = [], 0, 0, 0
         for label, control, other, make, value in (*controlled_claims(), *read_claims()):
+            seen_facts = set()
             established = G.with_entry(R0, make(sup(value)))
             baseline = {family: evaluate.harmless(established, Y1, G.needs(family)) for family in FAMILIES}
             unfiled = G.with_entry(R0, make(None))
@@ -212,6 +264,9 @@ class SettledStateCensusTests(SimpleTestCase):
             for state, row, found, decides in settled_states(value, control, other):
                 if row == 3 and 'joins member' in label:
                     continue
+                if found in seen_facts:
+                    continue
+                seen_facts.add(found)
                 R = G.with_entry(R0, make(found))
                 for family in FAMILIES:
                     expected = silent[family] if row == 3 else decides and baseline[family]
@@ -224,6 +279,7 @@ class SettledStateCensusTests(SimpleTestCase):
         self.assertGreater(checked, 35000)
         self.assertTrue(0 < released < checked)
         self.assertGreater(widened, 10000)   # int8: most of these were harmless (L4P8-1: 336 subtype x outcome x family)
+        self.assertGreater(len(list(read_claims())), 300)   # int9: 3 claims listed by hand (D345 (3))
 
     def test_the_predicate_is_rows_6_and_8_of_settles_table(self):
         # one predicate over the settled result: it narrows exactly on settle's rows 6 (unappraised) and 8 (established),
@@ -809,8 +865,9 @@ def own_variants():
             yield f'subtype {subtype.value} {name}', {'subtype': found}, (('subtype', values),)
     for place in LM:
         yield f'joins [{place.value}]', {'joins': (sup(place),)}, (('joins', (frozenset({place}),)),)
-    for one, other in itertools.combinations((LM.ILEUM, LM.POUCH, LM.ANAL_CANAL, LM.RECTUM, LM.COLON, LM.STOMACH,
-                                              LM.JEJUNUM, LM.TERMINAL_ILEUM, LM.SIGMOID_COLON), 2):
+    # round r3's round 7 fixes (DECISIONS D345 (3), 2026-11-19): EVERY landmark pair (was: 36 pairs over 9 chosen
+    # landmarks)
+    for one, other in itertools.combinations(sorted(LM, key=lambda p: p.value), 2):
         yield (f'joins [{one.value}, {other.value}]', {'joins': (sup(one), sup(other))},
                (('joins', (frozenset({one}), frozenset({other}))),))
     yield 'a joins member pass 2 rejected', {'joins': (T.rejected(LM.ILEUM),)}, (('joins', (G.ALL_PLACES,)),)
@@ -956,3 +1013,27 @@ class ControlTests(SimpleTestCase):
         T.DevelopmentFilingTests('test_the_development_sets_own_filings').test_the_development_sets_own_filings()
         T.DevelopmentFilingTests('test_the_oracle_lenss_controls_stay_ready_or_held_as_on_int7'
                                  ).test_the_oracle_lenss_controls_stay_ready_or_held_as_on_int7()
+
+
+# === round r3's round 7 fixes (DECISIONS D345 (3), 2026-11-19): the census lists are derived =========================
+
+class ReadClaimsDerivedTests(SimpleTestCase):
+    """The final check's finding 4: read_claims and the route census's two-member joins were listed by hand. Each is
+    derived now, and its completeness is pinned here from the catalogue and the landmark enumeration themselves."""
+
+    def test_every_claim_every_harmless_row_reads_is_a_census_claim(self):
+        found = {label for label, _control, _other, _make, _value in read_claims()}
+        names = {A.TYPE: 'type', A.ORGAN: 'organ', A.SUBTYPE: 'subtype', A.JOINS: 'joins member'}
+        expected = set()
+        for rows in catalogue.HARMLESS.values():
+            for row in rows:
+                expected |= {f'{row.shape.value}: {names[row.decided_by]} {value.value}' for value in row.values}
+                if row.decided_by is not A.ORGAN:
+                    expected |= {f'{row.shape.value}: organ {place.value}' for place in row.organs}
+                expected |= {f'{row.shape.value}: joins member {place.value}' for place in row.joins}
+        self.assertEqual(sorted(expected - found)[:10], [])
+
+    def test_the_route_census_two_member_joins_are_every_landmark_pair(self):
+        pairs = [label for label, _over, fields in own_variants()
+                 if fields and fields[0][0] == 'joins' and len(fields[0][1]) == 2]
+        self.assertEqual(len(pairs), len(LM) * (len(LM) - 1) // 2)

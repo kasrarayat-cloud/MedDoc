@@ -855,6 +855,13 @@ CONTROLLED_SUBTYPES: frozenset[AnastomosisSubtype] = frozenset({
 CONTROLLED_APPROACHES: frozenset[Approach] = frozenset({Approach.ORAL, Approach.THROUGH_STOMA, Approach.THROUGH_POUCH})
 ABSENCE_TYPE: AnatomyType = AnatomyType.SURGICALLY_ABSENT
 SUBTYPE_TYPE: AnatomyType = AnatomyType.ANASTOMOSIS
+# DECISIONS D345 (1) (L6M-1): A FILED FIELD NAMES ITS SHAPE IN EVERY FIELD AND EVERY READER - the MADE places (the
+# surgically made landmarks that are a shape of their own; anatomy.ALTERED less the anastomosis, which a subtype names)
+# and the shape each names: an entry whose organ or a joins member may be the stoma may be a stoma, one that may be the
+# pouch may be an ileal pouch (the lower tract's pouch). The one exception - a subtype established that itself defines
+# the place - is engine/evaluate's (``SUBTYPE_MADE_PLACES``, read from each subtype's own ends).
+MADE_PLACE_SHAPES: Mapping[Landmark, AnatomyType] = MappingProxyType({
+    Landmark.STOMA: AnatomyType.STOMA, Landmark.POUCH: AnatomyType.ILEAL_POUCH})
 
 
 # The places, from engine/anatomy's regions and containment:

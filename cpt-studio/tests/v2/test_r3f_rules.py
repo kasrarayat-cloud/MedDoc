@@ -687,12 +687,15 @@ class IlealStomaTests(SimpleTestCase):
                 self.assertEqual(witnesses(route_row(R, 44382)), [(ROUTE, A.TYPE, X1, None)])
         # an entry that cannot be a stoma is never read (a surgically absent colon beside an ileostomy: an end
         # ileostomy after a proctocolectomy) - nor is one the through names (the enteroscopy class's route part holds
-        # a code whose through names no stoma: engine/classes)
+        # a code whose through names no stoma: engine/classes). Round r3's round 7 fixes (DECISIONS D345 (2),
+        # 2026-11-19): a through naming an entry that cannot be a stoma leaves the route not certain, so every entry
+        # that may be a stoma is read as one the scope may have passed - here the ileostomy Y1, within the ileum (the
+        # route row as before; was: none read)
         R = ileoscopy(None, through=None, entries={Y2: ABSENT_COLON})
         self.assertEqual(witnesses(route_row(R, 44382)), [])
         R = ileoscopy(sup(LM.ILEUM), through=sup(Y2), entries={Y2: ABSENT_COLON})
         self.assertEqual(witnesses(route_row(R, 44382)), [])
-        self.assertEqual(evaluate._stomas_passed(R, X1), ())
+        self.assertEqual(evaluate._stomas_passed(R, X1), (Y1,))
 
     def test_the_acts_open_session_reads_every_stoma(self):
         R = ileoscopy(sup(LM.ILEUM), entries={Y2: COLOSTOMY}, act_session=unres(X1, ct.Reason.GEOMETRY_SECTION))

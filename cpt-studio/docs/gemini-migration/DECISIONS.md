@@ -18700,3 +18700,104 @@ four refutation lenses (false READY, design, reproduction, generality: 40 findin
       Later lanes run Python with -B and -I.
   - Next (D342 (4)). int9 is committed on top of 57b48228; CI, the C1 image, C2 and D15 on int9's image run beside the
     sixth pass (attack6: four lenses) and check:final7, which started at 13:09Z.
+- **D344 OWNER DIRECTIVE (session 738699b2, received 2026-11-19T15:09:47Z), verbatim: "round 7 would be last round tho then acter the
+  fixes run the laid test and give me the results then live walk".** Read as: round 7 is the last adversarial round;
+  its findings are fixed; then the paid confirmation pair ("laid test" = the paid test) runs on the fixed build; its
+  results go to the owner; then the install and his live walk.
+  - What it changes. No round 8 of broad adversarial lenses. The fix of round 7's findings (int10) is built by
+    principle with its own censuses, as every round's repair was.
+  - What it does not change. AGENTS.md's refutation pass over the FINISHED diff stays mandatory on the code path that
+    decides codes. It runs as a focused check of int10's repair diff, plus the independent final check, BESIDE the
+    paid pair, so it adds no wall-clock time. A defect it finds in the fix is part of "the fixes": repaired, and the
+    pair's recorded answers replayed offline through the final tree with its request bytes compared.
+  - Sequence. Round 7's last verification and its rulings (the next entry), then int10. Then int10 is committed, CI
+    runs, and C1, C2, D1-D4 and D15 run on int10's image. The pair runs on int10 beside int10's CI and the focused
+    check. The owner gets the results, the hold costs and the quiet-window request in one message, then the merge, the
+    declaration and the act, then the walk.
+- **D345 Round 7's sixth adversarial pass over int9 and its final check (wf_eb1ccb6b-85e; 4 lenses, 2 verified, the
+  final check READY TO COMMIT). The findings whole: r3m/findings7.json (d5381caf44410259...). Under D344 these are
+  the last round's fixes: int10. The lead's rulings (session 738699b2, 2026-11-19T15:12:04Z).**
+  - FIXED in int10 (both release-direction classes, pre-existing, int8 and 57b48228 identical, 0 development rows):
+    - (1) L6M-1 (verified MEDIUM: false READY). D342 (1) (b) is applied to joins, not to the organ. Pass 1 files a
+      stoma or pouch in an anastomosis's ORGAN field ("LAR with a colorectal anastomosis and a diverting loop stoma"
+      as one entry, organ stoma). Every per-anus code is READY beside it (2,726 rows per per-anus family), and a
+      pouch-named organ releases beside 44388-44408 and 44380-44384 (1,884 rows).
+      - THE RULE: A FILED FIELD NAMES ITS SHAPE IN EVERY FIELD AND EVERY READER. An entry whose organ or joins member
+        may be Landmark.STOMA may be a stoma; at Landmark.POUCH it may be an ileal pouch.
+      - Every reader reads it so: the per-anus stoma and pouch arms (_anus_route_contradicted, ileal_pouch_possible
+        and pouch_possible), the harmless rows (no _NO_ORGAN exemption for a made place in subtype_ends_contradicted),
+        and every other reader of an entry's possible shape. R5R-8's _stoma_or_pouch_possible already reads the
+        through's entry this way.
+      - The one exception is a subtype ESTABLISHED by the D342 (1) (a) predicate that itself defines that place: a
+        coloanal or colorectal colonic J-pouch's pouch, or an upper join's own gastric pouch or anastomotic stoma.
+    - (2) L9R-1 = L4P9-1 = the final check's finding 1 (verified LOW, found three times independently: false READY).
+      D342 (1) (c)'s "its established type gives the route" is unbuilt for a through that names an entry of another
+      type, or no entry. _route_may_use and _stomas_passed return nothing and the arms accept ANY established stoma,
+      so a gastrostomy releases 44388-44408 and EUS 44406/44407.
+      - THE RULE, D342 (1) (c) by principle: the route's own entry is the entry the session's through names, and its
+        established type gives the route.
+      - When the through may name an entry that cannot be of the route's type, or no entry, the route is not certain
+        and reads at its widest:
+        - every entry that may be of the route's type is a candidate own entry, both for own_entry_outside and for
+          colonic_route_stoma_contradicted (_stomas_passed);
+        - with no candidate established as the route's type, the route holds;
+        - the arms (_through_stoma_route, _lower_approach) never take another stoma as the route's own.
+      - D343 Q2 (the session not established) stands.
+    - (3) The final check's finding 4: the censuses are derived, never hand-listed.
+      - read_claims becomes every claim a harmless row reads, from the catalogue.
+      - The route census's two-member joins cover every landmark pair.
+      - The route census varies the through over every entry type, every settled state and none; and the own
+        entry's organ, subtype and joins over settle's whole outcome table.
+      - FINAL-V2 9.4's note states exactly what the census covers.
+  - RECORDED, not built. Each is fail-safe: the existing reason, 0 questions, 0 development rows. These are D342 (2)
+    hold costs, the owner is told them in plain words, and the remedy is D336 (2)'s post-go-live exact-negation
+    question claims; the pair measures their live reach.
+    - L8R7-1. An absence whose organ the note's own reach or station names (pass 1's anatomy_conflict) holds. Three
+      cases: a right hemicolectomy whose note reaches the cecum (D343 Q5); a low anterior resection with retroflexion
+      in the rectum; an appendectomy filed at the appendiceal orifice with the orifice identified.
+    - L8R7-2. An anatomy fact pass 1 qualifies (reported, hedged) settles in row 5 and holds the lower-GI codes, e.g.
+      "per the patient, cholecystectomy". 0 of 26 development anatomy facts carry a qualifier. Not widened: a
+      release-direction change is not made in the last round.
+    - L8R7-3. D342 (1) (a)'s intended effect, re-measured: an honest "unclear" on a named anastomosis's subtype, or
+      on a stoma or pouch type, holds.
+    - L8R7-4. The recorded classes, re-measured, int9 == int8.
+    - The final check's finding 2. A transanal approach claim pass 2 leaves unclear, hedged or without a verdict holds
+      the per-anus codes even with no anatomy entry; silence stays READY (D340 Q2). Dev exposure 0. Not widened, for
+      the same reason as L8R7-2.
+  - RECORDED as notes.
+    - L8R7-5. An absence's organ claim is never made end to end, so every absence-based READY rests on D340 Q1's
+      carve-out.
+    - The final check's finding 3. The remaining facts.possibly readers are hold-or-question choices or exemptions;
+      no release in 48,000 sampled statuses.
+    - Finding 5. v1's CoverageCostTests misses its wall-clock bound at load 16-30 on int8 and int9 alike.
+    - Finding 6, a disclosure accepted. Stray empty run directories under r3i were removed by rmdir; the scratchpad
+      path lists were removed.
+  - Next (D344): int10 is built by principle on the committed head 8adce6fb (trees/int9-8adce6fb4dc1), with its own
+    censuses, RED on int9 and GREEN on int10. Then a focused refutation of int10's repair diff and the independent final
+    check, run beside the paid pair.
+- **D346 int10 built (wf_2bbc4c01-546, repair:int10 returned 18:45:17Z): r3n/int10.diff 576b10b0cd2a1dda...,
+  r3n/int10-repair.diff 5f3d4154d02901af... (11 files on top of 8adce6fb), NOTES r3n/int10/NOTES.md. The lead's rulings
+  on its questions and findings (session 738699b2, 2026-11-19T18:47Z).**
+  - D345 (1)-(3) are built by principle. tests.v2 4,275 OK; v1 8,830 OK; ops 878; ops/verification 69; tools 411;
+    v2dbtests 4; D15 tooling 9 + 7; mypy --strict as int9. The D345 mutants: 37, 36 killed, 1 equivalent (D10.r2). The
+    new module test_r3n_guard is RED on int9 and GREEN on int10. The seven batches move 0 of 84 rows; pairs 1-4 and both
+    probes replay byte-identical; request bytes 1,350 runs, 0 differ. The L8 hold matrices: 0 moved, 0 READY appearing.
+    The differential census (164,528 cases): 0 READY appearing; 1,502 READY -> held, each a made place or a through
+    naming no own entry (D345's intended effect). The harness is unchanged (int10/tools == int9/tools,
+    int10/testinst == int9/testinst), so the E harness installed at 15:15:32Z stands.
+  - Q1 RULED: as built. A surgically absent entry whose organ is the stoma or the pouch (a reversed stoma, an excised
+    pouch) is read as that shape and holds, as on int9. An absence exception would release, and no release-direction
+    change is made in the last round (D344, D345). Recorded beside D342 (2)'s costs. For the four reversed-stoma rows in
+    the L6 lane, the first reason moved from coding_rule:stoma_route to reading_unknown. That is an existing reason, and
+    the status is unchanged.
+  - Q2 ACCEPTED as practice. A census for a reader that combines fields or states varies them together, up front.
+    The one-field censuses missed 11 D10 survivors and int9's r5.M13b; CombinationCensusTests closed them.
+  - Findings ACCEPTED.
+    - 44407 holds with coding_rule:lower where the lenses expected coding_rule:stoma_route: held, existing reason.
+    - D10.r2 is equivalent, with proof and a census of 0 differences.
+    - FINAL-V2 9.4's dated note predates CombinationCensusTests; NOTES and the module docstring record the wider census.
+    - RESIDUALS case A1 (an IPAA filed as an anastomosis), 44386: the item kind moves from explanation to question
+      (FINAL-V2 4.8: an unresolved requirement is a question). Status, item and class are unchanged: held. Live, only
+      the question stage's established path could answer it.
+  - Next (D344): commit int10 on 8adce6fb and push; CI; C1, C2, D1-D4 and D15 on int10's image; the paid pair (E) on
+    int10. The focused refutation (refute7: L10-release, L10-regress) and check:final8 run beside it.

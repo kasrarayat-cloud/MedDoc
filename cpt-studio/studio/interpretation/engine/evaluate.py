@@ -1307,13 +1307,15 @@ def _lower_colonic(R: FactSet, session: Id, event: Id) -> list[HeldFact]:
 
 def _lower_approach(group: Sequence[Kind], R: FactSet, session: Id, event: Id) -> tuple[list[HeldFact], bool]:
     """The stoma class's approach (D225 P5; module docstring): supported through_stoma beside a supported anatomy entry
-    of type stoma is T - DECISIONS D325 (2): once the route is colonic (``_lower_colonic``, else the class's route
+    of type stoma is T (DECISIONS D345 (2): the route's own entry, ``_route_own_established`` - the entry the SUPPORTED
+    through names, never another stoma; else a candidate) - DECISIONS D325 (2): once the route is colonic
+    (``_lower_colonic``, else the class's route
     hold); another approach supported is the class explanation naming it (F, RANK row 8); through_stoma denied with no
     approach supported the examination-class explanation (F, extent: question Q6); through_stoma supported with no stoma
     entry, or an approach not established, the approach question (U, RANK row 8)."""
     approach = _fact(R, session, _A.APPROACH)
     if facts_.holds(approach, Approach.THROUGH_STOMA):
-        if any(facts_.holds(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) for entry in R.anatomy):
+        if _route_own_established(R, session, AnatomyType.STOMA):  # DECISIONS D345 (2): the route's own entry
             return _lower_colonic(R, session, event), False
         return [_held(rq.fact_key(_PROCEDURE.fact), _PROCEDURE.rank, _Q, _A.TYPE, session, None,
                       questions.coding_rule(_Rule.LOWER), _anchor(R, event))], False
@@ -1388,6 +1390,9 @@ LOWER_STOMA_ORGANS: frozenset[Landmark] = frozenset(
 # The landmarks that name no placeable organ (anatomy.UNPLACED, anatomy.ALTERED: other, an anastomosis, a stoma, a
 # pouch): an organ filed so leaves every organ open.
 _NO_ORGAN: frozenset[Landmark] = anatomy.UNPLACED | anatomy.ALTERED
+# DECISIONS D345 (1): of those, the landmarks that name no shape of their own either - other and an anastomosis (a
+# subtype names an anastomosis); the made places (catalogue.MADE_PLACE_SHAPES: the stoma, the pouch) name a shape.
+_PLACELESS: frozenset[Landmark] = _NO_ORGAN - frozenset(catalogue.MADE_PLACE_SHAPES)
 
 
 def settled_narrows(found: Fact) -> bool:
@@ -1541,6 +1546,79 @@ SUBTYPE_ENDS: Mapping[AnastomosisSubtype, frozenset[Landmark]] = MappingProxyTyp
     AnastomosisSubtype.CHOLEDOCHODUODENAL: _region_places(anatomy.Region.BILIARY, anatomy.Region.DUODENUM),
     AnastomosisSubtype.PANCREATICOJEJUNAL: _region_places(anatomy.Region.PANCREAS) | _JEJUNUM,
 })
+# DECISIONS D345 (1) (L6M-1), its one exception by principle: a subtype's OWN construction defines a made place
+# (catalogue.MADE_PLACE_SHAPES), so a filed field naming that place beside it names no other shape - a pouch is the
+# bowel made into a reservoir and joined below the colon, so every subtype with an end at the rectum or the anus
+# (SUBTYPE_ENDS: a colonic J-pouch's colorectal or coloanal join, an ileal pouch's own ileorectal or ileoanal join)
+# defines its pouch; an upper join's made places lie in the upper tract (catalogue.UPPER_SUBTYPES: its own gastric
+# pouch, its own anastomotic stoma). A join that keeps the colon above the rectum (ileocolic, colocolic) and OTHER,
+# which names another pair, define none: beside them a stoma or a pouch a field names is a shape of its own.
+_BELOW_THE_COLON_ENDS: frozenset[Landmark] = _region_places(anatomy.Region.RECTUM, anatomy.Region.ANUS)
+SUBTYPE_MADE_PLACES: Mapping[AnastomosisSubtype, frozenset[Landmark]] = MappingProxyType({
+    subtype: (frozenset(catalogue.MADE_PLACE_SHAPES) if subtype in catalogue.UPPER_SUBTYPES
+              else frozenset({Landmark.POUCH}) if SUBTYPE_ENDS.get(subtype, frozenset()) & _BELOW_THE_COLON_ENDS
+              else frozenset())
+    for subtype in AnastomosisSubtype})
+_FieldReading = Callable[[Fact, Landmark], bool]
+
+
+def _filed_fields(R: FactSet, entry: Id) -> tuple[Fact, ...]:
+    """The fields of anatomy entry ``entry`` that name a place: its organ when filed (a silent organ files nothing)
+    and every member of its joins list (a member is never silent)."""
+    organ = _fact(R, entry, _A.ORGAN)
+    return (*(() if facts_.silent(organ) else (organ,)), *facts_.members(R, entry, _A.JOINS))
+
+
+def named_made_places(R: FactSet, entry: Id, may: _FieldReading | None = None) -> frozenset[Landmark]:
+    """DECISIONS D345 (1): every made place (catalogue.MADE_PLACE_SHAPES: the stoma, the pouch) a FILED field of
+    anatomy entry ``entry`` - its organ, or a joins member - may name, each field read by ``may``: ``_may_be``, the one
+    predicate (D342 (1) (a)), unless the reader reads the entry's type otherwise (facts.possibly, for the
+    hold-or-question choices: ``possibly_shape``)."""
+    reads: _FieldReading = _may_be if may is None else may
+    fields = _filed_fields(R, entry)
+    return frozenset(place for place in catalogue.MADE_PLACE_SHAPES if any(reads(found, place) for found in fields))
+
+
+def defined_made_places(R: FactSet, entry: Id) -> frozenset[Landmark]:
+    """DECISIONS D345 (1)'s ONE exception: the made places anatomy entry ``entry``'s subtype itself defines - only a
+    subtype ESTABLISHED by the D342 (1) (a) predicate (``settled_narrows``: established through its control, or
+    unappraised), and only a place EVERY value it may be defines (SUBTYPE_MADE_PLACES). A silent subtype, or one in
+    any widened state, defines none: an unestablished subtype never exempts."""
+    subtype = _fact(R, entry, _A.SUBTYPE)
+    if facts_.silent(subtype) or not settled_narrows(subtype):
+        return frozenset()
+    values = [value for value in AnastomosisSubtype if _may_be(subtype, value)]
+    return frozenset(place for place in catalogue.MADE_PLACE_SHAPES
+                     if values and all(place in SUBTYPE_MADE_PLACES[value] for value in values))
+
+
+def made_shapes(R: FactSet, entry: Id, may: _FieldReading | None = None) -> frozenset[AnatomyType]:
+    """DECISIONS D345 (1), A FILED FIELD NAMES ITS SHAPE IN EVERY FIELD AND EVERY READER (L6M-1) - the ONE rule over
+    an anatomy entry's fields, which every reader of its possible shape reads: the shapes its FILED organ or joins
+    members may name (``named_made_places``, each field by ``may``) - a stoma where one may be Landmark.STOMA, an
+    ileal pouch where one may be Landmark.POUCH (catalogue.MADE_PLACE_SHAPES) - but a place its established subtype
+    itself defines (``defined_made_places``: a coloanal or colorectal colonic J-pouch's pouch, an ileal pouch's own
+    join's pouch, an upper join's own gastric pouch or anastomotic stoma). int9 applied D342 (1) (b) to joins only:
+    an anastomosis filed with its stoma or pouch in its ORGAN field ("a colorectal anastomosis and a diverting loop
+    stoma" as one entry) released every per-anus code beside it, and a pouch-named organ the through-stoma codes.
+    Every 9.4 weakening of a field only widens what it may name, and of the subtype only removes the exception (a
+    subtype not established defines nothing), so none removes a shape."""
+    return frozenset(catalogue.MADE_PLACE_SHAPES[place]
+                     for place in named_made_places(R, entry, may) - defined_made_places(R, entry))
+
+
+def may_be_shape(R: FactSet, entry: Id, shape: AnatomyType) -> bool:
+    """DECISIONS D345 (1): whether anatomy entry ``entry`` may be of ``shape`` by the one predicate - its type may be
+    it (``_may_be``), or a filed field names it (``made_shapes``)."""
+    return _may_be(_fact(R, entry, _A.TYPE), shape) or shape in made_shapes(R, entry)
+
+
+def possibly_shape(R: FactSet, entry: Id, shape: AnatomyType) -> bool:
+    """DECISIONS D345 (1), for the readers that read an entry's type by facts.possibly (a hold-or-question choice: the
+    approach's question beside a stoma that may exist, the colonic route's organ arm): its type possibly ``shape``, or
+    a filed field possibly naming it (``made_shapes`` by facts.possibly) - so a stoma or a pouch filed in an organ or a
+    joins member is read exactly as one filed as the entry's type."""
+    return facts_.possibly(_fact(R, entry, _A.TYPE), shape) or shape in made_shapes(R, entry, facts_.possibly)
 
 
 def _absent_readings(R: FactSet, entry: Id) -> frozenset[frozenset[Landmark]]:
@@ -1711,7 +1789,7 @@ def colonic_route(R: FactSet, session: Id) -> bool:
     if any(member.result is Result.SUPPORTED and member.value in AT_OR_PAST_CECUM
            for member in facts_.members(R, session, _A.REACHED)):
         return True
-    stomas = [entry for entry in R.anatomy if facts_.possibly(_fact(R, entry, _A.TYPE), AnatomyType.STOMA)]
+    stomas = [entry for entry in R.anatomy if possibly_shape(R, entry, AnatomyType.STOMA)]  # D345 (1)
     return bool(stomas) and all(_colonic_organ(R, entry) for entry in stomas)
 
 
@@ -1744,7 +1822,10 @@ def lower_stoma_possible(R: FactSet, entry: Id) -> bool:
     landmark outside LOWER_STOMA_ORGANS rules that out (a gastrostomy's stomach). An organ not established (unresolved -
     the fact pass never claims a stoma's organ -, contradicted, unknown, silent) leaves it open, as does an established
     negation (it names no organ, so the others stay possible) and an organ filed as no placeable landmark (_NO_ORGAN).
-    Every 9.4 weakening only opens it."""
+    Every 9.4 weakening only opens it. DECISIONS D345 (1): a stoma a filed field names (``made_shapes``: the organ at
+    the stoma, or a joins member) is one whose own organ the entry never files, so it may be of the lower tract."""
+    if AnatomyType.STOMA in made_shapes(R, entry):
+        return True
     organ = _fact(R, entry, _A.ORGAN)
     if organ.result is not Result.SUPPORTED or not isinstance(organ.value, Landmark) or organ.value in _NO_ORGAN:
         return True
@@ -1770,14 +1851,15 @@ def stoma_possible(R: FactSet, session: Id) -> bool:
 
     DECISIONS D324 (5) (R2E-STOMA-ORGAN): the entry clause opens a route only for an entry that may be a stoma of the
     lower tract (``lower_stoma_possible``: a colon or ileum stoma, or one whose organ is not established) - a gastrostomy
-    established at the stomach beside a colonoscopy no longer holds 45378-45398. Its organ weakened opens it again."""
+    established at the stomach beside a colonoscopy no longer holds 45378-45398. Its organ weakened opens it again.
+    DECISIONS D345 (1): an entry a filed field names a stoma (``possibly_shape``: its organ or a joins member at the
+    stoma) may be a stoma, exactly as one whose type is."""
     approach = _fact(R, session, _A.APPROACH)
     if _route_closed(approach):
         return False
     if _stoma_reading(approach):
         return True
-    return any(facts_.possibly(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) and lower_stoma_possible(R, entry)
-               for entry in R.anatomy)
+    return any(possibly_shape(R, entry, AnatomyType.STOMA) and lower_stoma_possible(R, entry) for entry in R.anatomy)
 
 
 def _route_closed(approach: Fact) -> bool:
@@ -1807,8 +1889,9 @@ def ileal_pouch_possible(R: FactSet, entry: Id) -> bool:
     established negation - read to hold only). An ileal pouch is the ileum made into a reservoir once the colon is
     gone, so beside one no colon may remain for a scope through the anus to traverse (a pouch endoscopy is 44385/44386).
     A gastric pouch or a Roux limb is another type (AnatomyType: catalogue.ENTEROSCOPY_CLASS_ANATOMY's distinction,
-    D141), so it is never read here."""
-    return _may_be(_fact(R, entry, _A.TYPE), AnatomyType.ILEAL_POUCH)
+    D141), so it is never read here. DECISIONS D345 (1) (L6M-1): or a filed field names the pouch (``may_be_shape``: its
+    organ or a joins member may be Landmark.POUCH), but a pouch its established subtype itself defines."""
+    return may_be_shape(R, entry, AnatomyType.ILEAL_POUCH)
 
 
 def pouch_route_possible(R: FactSet, session: Id) -> bool:
@@ -1862,14 +1945,22 @@ _COLON_PLACES: frozenset[Landmark] = frozenset(
 
 def _stomas_passed(R: FactSet, session: Id | None) -> tuple[Id, ...]:
     """The stomas ``session``'s endoscope may have entered the bowel through: every anatomy entry whose type may be a
-    stoma (facts.possibly) - only the one the session's through names when that is SUPPORTED naming an anatomy entry
-    (none when that entry cannot be a stoma: the enteroscopy class's route part then holds the code itself)."""
-    stomas = tuple(entry for entry in R.anatomy if facts_.possibly(_fact(R, entry, _A.TYPE), AnatomyType.STOMA))
-    if session is not None:
-        through = _fact(R, session, _A.THROUGH)
-        if (through.result is Result.SUPPORTED and isinstance(through.value, Id)
-                and through.value.family is IdFamily.ANATOMY):
-            return tuple(entry for entry in stomas if entry == through.value)
+    stoma (facts.possibly, as before) or - DECISIONS D345 (1) - a filed field of which names the stoma (``made_shapes``,
+    by the one predicate) - only the one the session's through names when that is SUPPORTED naming an entry that may be
+    a stoma. DECISIONS D345 (2) (L9R-1, L4P9-1, the final check's finding 1): when the through may name an entry that
+    cannot be a stoma, or an id with no entry (``_route_uncertain``), the route is not certain and every entry that may
+    be a stoma is read. int9 returned none there, saying the enteroscopy class's route part then holds the code itself -
+    true only of the ileoscopy through a stoma and the pouch (44380-44386: that class reads the through's entry), never
+    of the colonoscopy through a stoma (44388-44408), which a gastrostomy beside an anastomosis the through named
+    released."""
+    stomas = tuple(entry for entry in R.anatomy if facts_.possibly(_fact(R, entry, _A.TYPE), AnatomyType.STOMA)
+                   or AnatomyType.STOMA in made_shapes(R, entry))
+    if session is None or _route_uncertain(R, session, AnatomyType.STOMA):
+        return stomas
+    through = _fact(R, session, _A.THROUGH)
+    if (through.result is Result.SUPPORTED and isinstance(through.value, Id)
+            and through.value.family is IdFamily.ANATOMY):
+        return tuple(entry for entry in stomas if entry == through.value)
     return stomas
 
 
@@ -1929,10 +2020,12 @@ def _stoma_entry(R: FactSet, session: Id, event: Id, group: Sequence[Kind]) -> H
     first entry whose type leaves stoma possible (its reading's cause: a reading Fable may be asked - no question
     template in the probe, so the planner blocks it); with none, the table's own hold - no anatomy entry may be a stoma
     (a question about the session's anatomy, coding_rule:stoma_route, as LOWER's stoma class holds a missing entry): the
-    document names no stoma, which no answer can supply (the coder's)."""
-    for entry in R.anatomy:
+    document names no stoma, which no answer can supply (the coder's). DECISIONS D345 (2): only the route's own entry
+    is asked (``_route_own``: the entry the SUPPORTED through names, never another; else every candidate) - an entry
+    the FactSet holds; with none whose type may be a stoma, the table's own hold."""
+    for entry in _route_own(R, session, AnatomyType.STOMA):
         found = _fact(R, entry, _A.TYPE)
-        if facts_.possibly(found, AnatomyType.STOMA):
+        if entry in R.anatomy and facts_.possibly(found, AnatomyType.STOMA):
             return _open(found, _PROCEDURE, _A.TYPE, entry, event, group, R, questions.coding_rule(_Rule.STOMA_ROUTE))
     return _route_hold(R, session, event)
 
@@ -2000,23 +2093,25 @@ def _anus_route(needs: catalogue.RouteAnatomy, rule: questions.Rule, group: Sequ
 def _through_stoma_route(label: rq.Requirement | Tag, group: Sequence[Kind], R: FactSet, session: Id | None,
                          event: Id) -> Row:
     """The colonoscopy through a stoma (the route table's colonic-stoma rows of the colonoscopy family: DECISIONS D310
-    (1), D324 (5), D325 (2), D327 (1)). T only when the session's approach is supported through_stoma, an anatomy
-    entry's type is supported stoma and the route is colonic (``colonic_route``: no entry may file the colon surgically
-    absent, nor may the anatomy leave it gone otherwise, and the stoma's organ is a colon segment or a colonic reach
-    through it is established; else its witness, ``_colonic_route_witness``: the table's own hold, the coder's, or the
-    open reach it rests on); another approach established, or through_stoma denied, is the explanation naming the
-    approach (procedure, RANK row 8, coding_rule:stoma_route); an approach not established is the approach question (its
-    reading's cause), beside the anatomy requirement when no entry is a stoma (``_stoma_entry``). A session not
-    established is SUPPORT row 6's question (T here) - except on a document whose anatomy names no entry that may be a
-    stoma, or may leave the colon gone (``whole_colon_absent_possible``): there no session the act may be in gives a
-    colonic route, so the table's own hold about the act holds it whatever the session (the planner reads it ABSENT)."""
+    (1), D324 (5), D325 (2), D327 (1)). T only when the session's approach is supported through_stoma, the route's own
+    entry's type is supported stoma (DECISIONS D345 (2), ``_route_own_established``: the entry the SUPPORTED through
+    names, never another stoma; else a candidate) and the route is colonic (``colonic_route``: no entry may file the
+    colon surgically absent, nor may the anatomy leave it gone otherwise, and the stoma's organ is a colon segment or a
+    colonic reach through it is established; else its witness, ``_colonic_route_witness``: the table's own hold, the
+    coder's, or the open reach it rests on); another approach established, or through_stoma denied, is the explanation
+    naming the approach (procedure, RANK row 8, coding_rule:stoma_route); an approach not established is the approach
+    question (its reading's cause), beside the anatomy requirement when no entry is a stoma (``_stoma_entry``). A
+    session not established is SUPPORT row 6's question (T here) - except on a document whose anatomy names no entry
+    that may be a stoma, or may leave the colon gone (``whole_colon_absent_possible``): there no session the act may be
+    in gives a colonic route, so the table's own hold about the act holds it whatever the session (the planner reads it
+    ABSENT)."""
     if session is None:
         if (not any(facts_.possibly(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) for entry in R.anatomy)
                 or whole_colon_absent_possible(R)):
             return _row(label, [_table_hold(R, event, event)])
         return _row(label, [])
     approach = _fact(R, session, _A.APPROACH)
-    stoma = any(facts_.holds(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) for entry in R.anatomy)
+    stoma = _route_own_established(R, session, AnatomyType.STOMA)  # DECISIONS D345 (2): the route's own entry
     if facts_.holds(approach, Approach.THROUGH_STOMA):
         if not stoma:
             return _row(label, [_stoma_entry(R, session, event, group)])
@@ -2081,9 +2176,11 @@ def release_reading(R: FactSet, entry: Id) -> ReleaseReading | None:
     A type with no control of its own (an anastomosis without a controlled subtype; a Roux limb, a bypass, another
     alteration), a joins list (no control: read only to hold) and a silent field never decide a release. Every 9.4
     weakening only widens what a field may be, so it turns a decided reading into a wider one or into None, never the
-    reverse."""
+    reverse. DECISIONS D345 (1): the types an entry may be include every shape a filed field names (``made_shapes``:
+    an organ or a joins member at the stoma or the pouch), so such an entry is decided by no single claim and holds
+    - but beside an established subtype that itself defines the place."""
     type_, subtype, organ = (_fact(R, entry, attribute) for attribute in (_A.TYPE, _A.SUBTYPE, _A.ORGAN))
-    types = frozenset(value for value in AnatomyType if _may_be(type_, value))
+    types = frozenset(value for value in AnatomyType if _may_be(type_, value)) | made_shapes(R, entry)  # D345 (1)
     subtypes = (frozenset() if facts_.silent(subtype)
                 else frozenset(value for value in AnastomosisSubtype if _may_be(subtype, value)))
     organs = None if facts_.silent(organ) else frozenset(value for value in Landmark if _may_be(organ, value))
@@ -2106,7 +2203,9 @@ def subtype_ends_contradicted(reading: ReleaseReading) -> bool:
     """DECISIONS D336 (1) (e) (an impossible join; L6O-3, final check 5): whether an entry decided by its subtype files an
     organ or a joins member the subtype cannot join - for EVERY subtype it may be (a reading of each must hold), some
     possible place of its filed organ or of a joins member that names a placeable organ lies outside that subtype's own
-    ends (SUBTYPE_ENDS; a landmark naming no placeable organ - a colonic J-pouch's pouch - names one of its ends). An
+    ends (SUBTYPE_ENDS; a landmark naming no placeable organ and no shape - other, an anastomosis - names one of its
+    ends; DECISIONS D345 (1): a made place - the stoma, the pouch - only where the subtype itself defines it,
+    SUBTYPE_MADE_PLACES: a colonic J-pouch's pouch, an upper join's gastric pouch or anastomotic stoma). An
     upper subtype at the rectum, or a duodenum joined to the rectum under any subtype, contradicts it; an ileocolic
     anastomosis joining the ileum and the colon does not. Read only to HOLD; every 9.4 weakening widens a place or the
     subtypes read, so none turns it False."""
@@ -2114,8 +2213,11 @@ def subtype_ends_contradicted(reading: ReleaseReading) -> bool:
         return False
     fields = [*reading.joins, *([reading.organs] if reading.organs is not None else [])]
     for subtype in reading.values:
-        ends = SUBTYPE_ENDS.get(subtype) if isinstance(subtype, AnastomosisSubtype) else None
-        if ends is None or any(place not in ends and place not in _NO_ORGAN for found in fields for place in found):
+        if not isinstance(subtype, AnastomosisSubtype) or subtype not in SUBTYPE_ENDS:
+            return True
+        ends, made = SUBTYPE_ENDS[subtype], SUBTYPE_MADE_PLACES[subtype]
+        if any(place not in ends and place not in _PLACELESS and place not in made
+               for found in fields for place in found):
             return True
     return False
 
@@ -2197,12 +2299,14 @@ def _named_by(R: FactSet, through: Fact) -> tuple[Id, ...]:
 def _stoma_or_pouch_possible(R: FactSet, entry: Id) -> bool:
     """Whether anatomy entry ``entry`` may be a stoma or a pouch (D330 (1), R5R-8): its type may be a stoma, an ileal
     pouch or a gastric pouch (``_may_be``: a silent type may be anything), or its organ is filed at a landmark naming a
-    stoma or a pouch (an S-pouch filed as another alteration)."""
+    stoma or a pouch (an S-pouch filed as another alteration); DECISIONS D345 (1): or any filed field names one
+    (``made_shapes``: a joins member too)."""
     found = _fact(R, entry, _A.TYPE)
     organ = _fact(R, entry, _A.ORGAN)
     return (any(_may_be(found, value) for value in (AnatomyType.STOMA, AnatomyType.ILEAL_POUCH,
                                                     AnatomyType.GASTRIC_POUCH))
-            or (not facts_.silent(organ) and any(_may_be(organ, value) for value in (Landmark.STOMA, Landmark.POUCH))))
+            or (not facts_.silent(organ) and any(_may_be(organ, value) for value in (Landmark.STOMA, Landmark.POUCH)))
+            or bool(made_shapes(R, entry)))
 
 
 def _anus_route_contradicted(R: FactSet, session: Id) -> bool:
@@ -2218,13 +2322,15 @@ def _anus_route_contradicted(R: FactSet, session: Id) -> bool:
     no entry may be a stoma of the lower tract or an ileal pouch, and the approach may not be through a pouch (int6's
     reading of a silent approach: ``lower_stoma_possible`` over every entry whose type may be a stoma, ``pouch_possible``).
     So beside a stoma, its organ never established (D330 (d)), no per-anus code is released on the approach alone. Every
-    9.4 weakening only widens what the approach, a type or the through may be, so none turns it False."""
+    9.4 weakening only widens what the approach, a type or the through may be, so none turns it False. DECISIONS
+    D345 (1) (L6M-1): an entry may be a stoma or an ileal pouch by a filed field too (``may_be_shape``,
+    ``ileal_pouch_possible``: its organ or a joins member at the stoma or the pouch)."""
     approach = _fact(R, session, _A.APPROACH)
     if not facts_.silent(approach) and any(_may_be(approach, value) for value in Approach
                                            if value is not Approach.TRANSANAL):
         return True
     if not (approach.result is Result.SUPPORTED and approach.value in catalogue.CONTROLLED_APPROACHES):
-        if (any(_may_be(_fact(R, entry, _A.TYPE), AnatomyType.STOMA) and lower_stoma_possible(R, entry)
+        if (any(may_be_shape(R, entry, AnatomyType.STOMA) and lower_stoma_possible(R, entry)
                 for entry in R.anatomy) or pouch_possible(R, session)):
             return True
     return any(_stoma_or_pouch_possible(R, entry) for entry in _named_by(R, _fact(R, session, _A.THROUGH)))
@@ -2253,23 +2359,64 @@ def colonic_route_stoma_contradicted(R: FactSet, session: Id | None) -> bool:
     return any(outside(entry) for entry in stomas)
 
 
-def _route_may_use(found: catalogue.LowerRoute, R: FactSet, session: Id | None) -> tuple[Id, ...]:
-    """DECISIONS D342 (1) (c): the anatomy entries that may be the route's OWN entry - for a through-stoma or a pouch row
-    (catalogue.ROUTE_OWN), every entry whose type may be the route's type (``_may_be``: the one predicate) and that the
-    session's through may name (``_may_be``; a silent through may name any) - only the entry the through names when it is
-    SUPPORTED naming an anatomy entry. With ``session`` None every entry whose type may be the route's type. A per-anus
-    route uses none."""
-    own = catalogue.ROUTE_OWN.get(found.needs)
-    if found.route is Approach.TRANSANAL or own is None:
-        return ()
-    entries = tuple(entry for entry in R.anatomy if _may_be(_fact(R, entry, _A.TYPE), own.type))
-    if session is None:
+def _route_uncertain(R: FactSet, session: Id, wanted: AnatomyType) -> bool:
+    """DECISIONS D345 (2) (L9R-1 = L4P9-1 = the final check's finding 1; D342 (1) (c) by principle: the route's own
+    entry is the entry the session's through names, and its established type gives the route): whether the route is
+    NOT CERTAIN - the session's filed through may name (``_named_by``: its supported entry; not established, every
+    entry it may name) an entry that cannot be of the route's type ``wanted`` (``may_be_shape`` false) or an id with no
+    entry. A silent through names none: every entry that may be of the type is read as before."""
+    return any(entry not in R.anatomy or not may_be_shape(R, entry, wanted)
+               for entry in _named_by(R, _fact(R, session, _A.THROUGH)))
+
+
+def _own_candidates(R: FactSet, session: Id | None, wanted: AnatomyType) -> tuple[Id, ...]:
+    """DECISIONS D342 (1) (c) and D345 (2): the entries that may be the route's OWN entry, read in the hold direction -
+    every entry that may be of the route's type ``wanted`` (``may_be_shape``: the one predicate, a filed field's shape
+    included) and that the session's through may name (``_may_be``; a silent through may name any) - only the entry
+    the through names when it is SUPPORTED. With ``session`` None (D343 Q2), or the route not certain
+    (``_route_uncertain``: the through may name an entry that cannot be of the type, or no entry), EVERY entry that
+    may be of the type: the route reads at its widest."""
+    entries = tuple(entry for entry in R.anatomy if may_be_shape(R, entry, wanted))
+    if session is None or _route_uncertain(R, session, wanted):
         return entries
     through = _fact(R, session, _A.THROUGH)
     if (through.result is Result.SUPPORTED and isinstance(through.value, Id)
             and through.value.family is IdFamily.ANATOMY):
         return tuple(entry for entry in entries if entry == through.value)
     return tuple(entry for entry in entries if _may_be(through, entry))
+
+
+def _route_own(R: FactSet, session: Id, wanted: AnatomyType) -> tuple[Id, ...]:
+    """DECISIONS D345 (2), THE ARMS' ROUTE-OWN ENTRY (``_through_stoma_route``, ``_lower_approach``, ``_stoma_entry``:
+    every reader that takes an established entry of the route's type as the route's): the entry the session's through
+    names when it is SUPPORTED - never another entry, even one established of the type (int9 took ANY established
+    stoma, so a gastrostomy gave the route beside an anastomosis the through named) -, else the candidates
+    (``_own_candidates``: those the through may name, or every entry that may be of the type when the route is not
+    certain)."""
+    through = _fact(R, session, _A.THROUGH)
+    if (through.result is Result.SUPPORTED and isinstance(through.value, Id)
+            and through.value.family is IdFamily.ANATOMY):
+        return (through.value,)
+    return _own_candidates(R, session, wanted)
+
+
+def _route_own_established(R: FactSet, session: Id, wanted: AnatomyType) -> bool:
+    """DECISIONS D345 (2): whether the route's own entry (``_route_own``) is ESTABLISHED of the route's type - its type
+    supported ``wanted`` (an id with no entry is silent)."""
+    return any(facts_.holds(_fact(R, entry, _A.TYPE), wanted) for entry in _route_own(R, session, wanted))
+
+
+def _route_may_use(found: catalogue.LowerRoute, R: FactSet, session: Id | None) -> tuple[Id, ...]:
+    """DECISIONS D342 (1) (c): the anatomy entries that may be the route's OWN entry - for a through-stoma or a pouch row
+    (catalogue.ROUTE_OWN), every entry whose type may be the route's type (``_may_be``: the one predicate) and that the
+    session's through may name (``_may_be``; a silent through may name any) - only the entry the through names when it is
+    SUPPORTED naming an anatomy entry. With ``session`` None every entry whose type may be the route's type. A per-anus
+    route uses none. DECISIONS D345: ``_own_candidates`` - a filed field's shape counts (1), and when the route is not
+    certain every entry that may be of the route's type is a candidate (2)."""
+    own = catalogue.ROUTE_OWN.get(found.needs)
+    if found.route is Approach.TRANSANAL or own is None:
+        return ()
+    return _own_candidates(R, session, own.type)
 
 
 def own_entry_outside(R: FactSet, entry: Id, own: catalogue.OwnAnatomy) -> bool:
@@ -2299,13 +2446,18 @@ def route_own_entry_contradicted(found: catalogue.LowerRoute, R: FactSet, sessio
     (``_route_may_use``) is read so, and one that files a field outside its type's anatomy holds. With ``session`` None
     (the act's session not established) it holds only what holds whatever the session (D312 checker S3's principle, as
     ``colonic_route_stoma_contradicted`` reads its stomas): every such entry files one. A per-anus route has no own
-    entry."""
+    entry. DECISIONS D345 (2): with the session known and the route not certain (``_route_uncertain``: the through may
+    name an entry that cannot be of the route's type, or no entry), every entry that may be of the type is a candidate,
+    and with NO candidate established as the route's type the route holds."""
     own = catalogue.ROUTE_OWN.get(found.needs)
     if found.route is Approach.TRANSANAL or own is None:
         return False
     entries = _route_may_use(found, R, session)
     if session is None:
         return bool(entries) and all(own_entry_outside(R, entry, own) for entry in entries)
+    if _route_uncertain(R, session, own.type) and not any(facts_.holds(_fact(R, entry, _A.TYPE), own.type)
+                                                          for entry in entries):
+        return True  # DECISIONS D345 (2): the route not certain, and no candidate established of the route's type
     return any(own_entry_outside(R, entry, own) for entry in entries)
 
 
@@ -2342,7 +2494,14 @@ def path_guard(found: catalogue.LowerRoute, R: FactSet, session: Id | None) -> b
     DECISIONS D342 (1): every field it reads is read by the one predicate (``settled_narrows``, through ``_may_be``); a
     filed joins list names an anastomosis whatever the entry's uncontrolled type (``joins_ileum_below_colon_possible``);
     and the route's own entry - exempt from the harmless set (``route_entries``) - is read in the hold direction too: its
-    organ, subtype and joins within its type's own anatomy (``route_own_entry_contradicted``)."""
+    organ, subtype and joins within its type's own anatomy (``route_own_entry_contradicted``).
+
+    DECISIONS D345: a filed field names its shape in every field and every reader (``made_shapes``: an organ or a
+    joins member at the stoma or the pouch makes the entry a possible stoma or ileal pouch for every reader - the
+    harmless rows, the per-anus clause, the stomas passed - but beside an established subtype that itself defines the
+    place); and the route's own entry is the entry the through names, its established type giving the route - a
+    through that may name an entry that cannot be of the route's type, or no entry, reads the route at its widest
+    (``_route_uncertain``, ``_own_candidates``, ``_stomas_passed``; ``_route_own`` for the arms)."""
     if found.route is not Approach.TRANSANAL and session is not None:
         approach = _fact(R, session, _A.APPROACH)
         if approach.result is Result.SUPPORTED and approach.value not in _accepted_approaches(found):

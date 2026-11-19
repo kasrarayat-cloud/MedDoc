@@ -133,6 +133,26 @@ def declared_rows(family: str) -> list:
 
 WHOLE_COLON_HARMLESS = {'ILEAL_STOMA', 'POUCH'}
 ILEUM_BELOW_HARMLESS = {'POUCH'}
+# Round r3's round 7 fixes (DECISIONS D345 (1), 2026-11-19), DECLARED from the ruling: A FILED FIELD NAMES ITS SHAPE IN
+# EVERY FIELD - an organ or a joins member that may be the stoma makes the entry a possible stoma, one that may be the
+# pouch a possible ileal pouch - but beside a subtype established that itself defines the place: a pouch for every
+# subtype joining a bowel end below the colon (colorectal, coloanal: a colonic J-pouch; ileorectal, ileoanal: the
+# ileal pouch's own join), a pouch and an anastomotic stoma for an upper join; ileocolic, colocolic and other define
+# none. Other and an anastomosis name no shape (PLACELESS: they keep what D342 ruled)
+MADE_SHAPES = {LM.STOMA: AT.STOMA, LM.POUCH: AT.ILEAL_POUCH}
+DEFINED_PLACES = {**{subtype: lm('pouch', 'stoma') for subtype in UPPER_SUBTYPES},
+                  **{subtype: lm('pouch') for subtype in (SUB.COLORECTAL, SUB.COLOANAL, SUB.ILEORECTAL, SUB.ILEOANAL)}}
+PLACELESS = lm('other', 'anastomosis')
+
+
+def oracle_made_shapes(subtypes, subtype_silent: bool, organs, organ_silent: bool, joins) -> frozenset:
+    """D345 (1), DECLARED: the shapes the entry's filed organ (unless silent) or joins members may name, but a place
+    EVERY subtype the entry may be defines (a subtype at its widest may be one that defines nothing)."""
+    fields = list(joins) + ([] if organ_silent else [organs])
+    named = {place for place in MADE_SHAPES for found in fields if place in found}
+    defined = (frozenset.intersection(*(DEFINED_PLACES.get(subtype, frozenset()) for subtype in subtypes))
+               if not subtype_silent and subtypes else frozenset())
+    return frozenset(MADE_SHAPES[place] for place in named - defined)
 
 
 # The two ends each subtype names (every subtype but OTHER), DECLARED by its name over the anatomy table's regions: a
@@ -204,17 +224,22 @@ def oracle_ends_contradicted(subtypes, organs, organ_silent: bool, joins) -> boo
     """D336 (1) (e), DECLARED: for some subtype the entry may be, a filed organ or a joins member that may name a placed
     organ outside that subtype's own ends (a landmark naming no placed organ names an end)."""
     fields = list(joins) + ([] if organ_silent else [organs])
-    return any(place not in SUBTYPE_ENDS[subtype] and place not in NO_ORGAN
+    # round r3's round 7 fixes (DECISIONS D345 (1)): a made place - the stoma, the pouch - is one of the subtype's ends
+    # only where the subtype itself defines it (was: every landmark naming no placed organ)
+    return any(place not in SUBTYPE_ENDS[subtype] and place not in PLACELESS
+               and place not in DEFINED_PLACES.get(subtype, frozenset())
                for subtype in subtypes for found in fields for place in found)
 
 
 def oracle_harmless(family: str, types, subtypes, subtype_silent: bool, organs, organ_silent: bool, joins) -> bool:
     """The declared release set's verdict (D330 (1), D336 (1)) on one entry whose fields may be these values - the
     caller's widest reading of each: a silent field, an open denial, an established negation or a claim pass 2 rejected
-    with no control left, every value."""
+    with no control left, every value. Round r3's round 7 fixes (DECISIONS D345 (1)): the types the entry may be
+    include every shape a filed field names (``oracle_made_shapes``)."""
+    own_shape = bool(types) and types <= CONTROLLED_TYPES
+    types = types | oracle_made_shapes(subtypes, subtype_silent, organs, organ_silent, joins)
     if family not in ILEUM_BELOW_HARMLESS and oracle_ileum_below(subtypes, subtype_silent, joins,
-                                                                AT.ANASTOMOSIS in types,
-                                                                bool(types) and types <= CONTROLLED_TYPES):
+                                                                AT.ANASTOMOSIS in types, own_shape):
         return False
     decided = oracle_decided(types, subtypes, subtype_silent, organs, organ_silent)
     if decided is None:
@@ -795,7 +820,14 @@ class CensusTests(SimpleTestCase):
             outside = (organ is not None and organ[0].result is ct.Result.SUPPORTED and organ[0].value not in NO_ORGAN
                        and organ[0].value not in COLON_ALL | lm('ileum', 'terminal_ileum', 'neo_terminal_ileum',
                                                                 'small_bowel'))
-            return (value is AT.STOMA and not outside) or value is AT.ILEAL_POUCH
+            # round r3's round 7 fixes (DECISIONS D345 (1)): or a filed field names the stoma or the pouch (a stoma
+            # a field names files no organ of its own, so it may be of the lower tract)
+            subtype = facts.get(A.SUBTYPE)
+            made = oracle_made_shapes(frozenset({subtype[0].value}) if subtype else ALL_SUBTYPES, not subtype,
+                                      frozenset({organ[0].value}) if organ else ALL_PLACES, organ is None,
+                                      tuple(frozenset({member.value}) for member in facts.get(A.JOINS, ())))
+            return (((value is AT.STOMA or AT.STOMA in made) and (not outside or AT.STOMA in made))
+                    or value is AT.ILEAL_POUCH or AT.ILEAL_POUCH in made)
 
         def may_be_stoma_or_pouch(facts) -> bool:
             if facts is None:  # no such entry: a silent type may be anything

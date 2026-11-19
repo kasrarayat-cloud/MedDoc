@@ -1663,6 +1663,23 @@ or the route is not certain. The development filings stay as int8 decided them. 
 claim beside a lower-GI code; an absence that files a join) are recorded costs (D342 (2), D336 (2)): fail-safe, an
 existing reason, no question.
 
+**DECISIONS D345 (2026-11-19; built in round r3's round 7 fixes, int10), a filed field names its shape in every field and
+every reader; the route's own entry is the entry the through names.** (1) An anatomy entry whose organ or a joins member
+may be the stoma (by the one predicate above) may be a stoma, and one that may be the pouch an ileal pouch - for every
+reader of an entry's possible shape (`evaluate.made_shapes`, one rule over the entry's fields): the per-anus stoma and
+pouch arms, `lower_stoma_possible`, the colonic and ileal stoma readers, the harmless rows (an organ or a joins member at
+a made place is none of a subtype's ends) and R5R-8; int9 applied the D342 (1) (b) rule to joins only, so an anastomosis
+filed with its stoma or pouch in its organ field released every per-anus code beside it. The one exception is a subtype
+established that itself defines the place (`evaluate.SUBTYPE_MADE_PLACES`, read from each subtype's own ends): a colonic
+J-pouch's or an ileal pouch's own join's pouch, an upper join's gastric pouch or anastomotic stoma. (2) When the session's
+through may name an entry that cannot be of the route's type, or an id with no entry, the route is not certain and reads
+at its widest: every entry that may be of the route's type is a candidate own entry (its fields within its type's
+anatomy; the colonic stoma's organ clause), with none established as the route's type the route holds, and the arms never
+take another entry than the supported through's as the route's own (`evaluate._route_uncertain`, `_own_candidates`,
+`_route_own`); int9 read no own entry there, so a gastrostomy beside an anastomosis the through named released the
+colonoscopy through a stoma. The development filings stay as int9 decided them; the holds this adds are on these two
+classes' shapes: fail-safe, an existing reason, no question.
+
 A code's REQUIRED facts are exactly these, over its E* acts, their session, the statements paired with its candidates
 (4.5), the doubts that name their facts, the unlisted statements that touch them (3.2.6) and the encounter's date. Nothing
 else can hold it (4.9).
@@ -3042,6 +3059,23 @@ claims a harmless row reads beside them x every route family, its completeness d
 `settle.decide` themselves; the predicate is exactly rows 6 and 8; the joins census over every type state x a list of 0, 1
 and 2 members over every landmark; the route census over every through family's own entry x its organ, subtype and joins
 in every state x the through's states.
+
+**Round r3's round 7 fixes (DECISIONS D345 (3); int10, 2026-11-19), a correction of the note above.** It overstated two
+censuses. As int9 built them, the claims a harmless row reads were three listed by hand (a gastric pouch's organ, an
+anastomosis's type, an ileocolic anastomosis's joins member), and the route census varied the own entry's organ
+supported, claimed and unclear, its subtype supported, claimed and a pass-1 doubt, and its joins one member supported at
+every landmark, 36 pairs over nine chosen landmarks and one rejected member - not every state - and never the entry the
+through names. The censuses now derive every list: `tests/v2/test_r3m_guard`'s claims are every claim a harmless row
+reads, derived from `catalogue.HARMLESS` (each row's controlled claim at every value it releases on, its organ at every
+place it admits, a joins member at every place it admits, the type it is filed with), against settle's whole outcome table
+x every route family, and its two-member joins are every landmark pair. `tests/v2/test_r3n_guard` adds, each with its
+expected values declared from the rulings: the same claims against the declared release set; the session's through
+naming an entry of every type or an id with no entry, in every settled state and silent, beside the family's own entry and
+an entry of the route's type outside its anatomy, for every through family (the readers of D345 (2), and end to end); each
+through family's own entry's organ, subtype and joins at every value in every settled state, and its two-member joins over
+every landmark pair; and every field (organ, each joins member, subtype) x every landmark, the stoma and the pouch
+included, x every settled state, with every reader over every field x every landmark x a narrowing and a widening state
+x every route family's codes, the EUS codes included; each with a completeness test.
 
 ### 9.5 Gate 6 and the failure classes as fixtures [B][C]
 
