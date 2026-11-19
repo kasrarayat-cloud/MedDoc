@@ -18540,3 +18540,40 @@ four refutation lenses (false READY, design, reproduction, generality: 40 findin
   - Next. Commit int8 on top of int7 (the repair diff, DECISIONS.md synced), push after the two-view check, then CI on
     the new head, the test image and its C2 precheck, and D1-D4 on int8's image. D339's runner fix is committed on top
     when its round completes, and D15 re-runs on int8's image.
+
+- **D341 The D15 runner fix of D339 (wf_651dfe16-5e5): built, refuted, its one serious finding verified LOW. ACCEPTED.
+  It is committed on top of int8 (f94b1d13). The lead's rulings (session 738699b2, 2026-11-19T08:31:32Z). Notes: r3l/NOTES.md
+  (430a0458...).**
+  - The build. ops-d15fix2.diff (int7 to r3l, 2 files, +2260 -7) sha256 2d9a83ad48aca0d3...: rollback_check.py
+    647fd4a0..., test_rollback_check.py ea4f0f22.... int8 touches neither file, so the diff applies to int8 as is. Check.
+    legacy_rows reads the stored legacy state by 7 read-only statements after the close. Every ported function cites
+    its c2e53f8e line, with a branch table of 57 rows. A Django parity test covers every function where the candidate's
+    legacy path is identical to c2e53f8e's. Tests: 95 (int7's 57 unchanged); RED on the D338 runner (24 not OK), GREEN.
+    Mutants 10 of 10 killed, and round 1's ML1 and ML2 are killed. ops 878 OK; ops/verification 69 OK.
+  - Offline. The int7 run's 22 findings re-judge to 22 recorded, and only assertion 2 moves (FAIL to PASS). The 84
+    legacy encounters: 84 recorded, 0 failing.
+  - d15tool-u2 (33fb6f7a...): pending_after_analyze prefers the oldest candidate with a current legacy approve.
+  - The refutation (a differential harness on c2e53f8e's own code; decisions of every kind, revoke chains, answers of
+    every kind) found no release: every mismatch between the port and c2e53f8e fails closed.
+    - R3L-1 (filed medium; verified LOW, reproduced). A counted code's base_included or competing_codes answer that
+      c2e53f8e applies at read time is read as 'unread' by the port, so the encounter fails assertion 2. It only ever
+      fails wrongly, never records wrongly, and names its cause. 0 of 84 legacy encounters have the shape; the D15
+      tooling cannot make it. Recorded, not built.
+    - R3L-2 (low). With one decided candidate that has a context row (f5c72233), the approve preference gives it to
+      pending_after_analyze, so the int8 run's completed set clears no legacy decision (int7's run cleared 1). Accepted
+      as a coverage trade. D339 asked for the decided pending encounter. Completed's clearing was exercised on int7's
+      run, where assertion 8 PASSED, and neither int8 nor this diff touches the close, the update flows,
+      update_problems or with_update_note (the diff removes 7 lines, all in assertion 2's report). The int8 run's notes
+      record the trade.
+    - R3L-3 (low). Instance.sql splits psql text with str.splitlines, so U+0085, U+2028 or U+2029 in a to_json column
+      aborts the run (fail-closed). The lead's census of the nine tables legacy_rows reads, on cptg_r3i7 (live at
+      02:40Z) and cptg_d15r3c: 0 rows carry any of the three. A positive control detects a planted U+2028 and a planted
+      U+0085 inside jsonb. Recorded, not built; a crash of the run is a stop, never a pass.
+  - The builder's questions. Q1 (a fingerprinted answer reads 'unread', so a FAIL): accepted, fail-closed, 0 on the
+    run's data. Q2 (plan.sql previews the old pick): accepted; the declared JSON comes from scenario.json, and the
+    run reads the real pick there. Q3 (the approve preference in the opt-in context fallback): confirmed. Q4
+    (unreadable gates are allowed and never required; the reinstatement check's stored half is enforced): confirmed,
+    D339's rule. Q5 (the customer page numbers exactly code_rows' set): confirmed, c2e53f8e's own behaviour.
+  - Next. Commit on top of int8. Push, superseding f94b1d13's in-flight CI by declaration (the runs are the lead's
+    own; the descendant's citation covers int8). Build the final head's test image, run C2, D1-D4, and D15 on a FRESH
+    database with d15tool-u2, which must PASS 8 of 8.

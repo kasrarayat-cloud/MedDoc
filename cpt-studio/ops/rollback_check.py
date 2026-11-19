@@ -39,7 +39,12 @@ cookie or token is printed or written: the credentials files are read when signi
 to Docker on stdin.
 
 The comparison is pure and unit-tested (ops/test_rollback_check.py, no Docker and no database): held_move, compare_rows,
-compare_encounter, note_problems, marker_problems, recompute_problems, declared_changes and target_problems.
+compare_encounter, note_problems, marker_problems, recompute_problems, declared_changes and target_problems; and, for
+DECISIONS D338 and D339 (below), assertion_2, pending_sets, u17_not_recorded, legacy_shown_problems, u17_difference,
+u17_summary, legacy_exercised and the port of the installed release's legacy path they judge by - legacy_current_decisions,
+legacy_current_decision, legacy_decision_root, legacy_final, legacy_counted, legacy_unavailable, legacy_view_status,
+legacy_status, legacy_numbered, legacy_actions, legacy_allowed and legacy_expected. Check.legacy_rows' SQL runs on real
+rows of the ops suite's test database (no Docker).
 
 Design v2 (docs/gemini-migration/FINAL-V2.md 6.4; AMENDMENT-1.md 9.4, 9.5 and U17; step 6b; schema @2). The run is made
 on v2 records: before the switch-back the test database is counted for each of 6.4's thirteen record kinds (SCENARIO_V2:
@@ -78,6 +83,26 @@ running question job, a question run - an appraisal run whose scope names its qu
 established answer released), which the D15 test instance makes by replaying frozen Fable streams with nothing sent
 (D322 (6)); and assertion 6 reads the question stages as the interpret and appraise ones: none open when the previous
 worker starts.
+
+DECISIONS D338 (AMENDMENT-1 9.4 and U17). A legacy encounter pending after analyze, and A21's (a reconciled unknown
+document review with a reading owed), read on the previous image as their legacy codes, as stored, with the legacy
+release's own actions and offers, where the candidate shows them as the earlier codes while a reading is owed: 9.4
+states both as a rollback limit, the close names them update_pending and the note lists them. On an encounter the close
+named update_pending for one of those two (RECORDED_REASONS) AND the note lists, assertion 2 RECORDS a difference, never
+fails it, exactly when the previous image shows that encounter's legacy assessment as stored (legacy_shown_problems) and
+the difference is the legacy release's own (u17_difference: its draft offer, or a row of that assessment). The record is
+U17's measurement: assertion 2's evidence 'u17_measurement' and a summary line, never its problems. Anything else on such
+an encounter still fails, every other encounter keeps "never less held", and an encounter named for values_saved alone
+(pending before analyze: its save reverted, so both images read it with no update) stays as assertion 8 judges it.
+
+DECISIONS D339 clarifies "as stored": what the installed release c2e53f8e computes from the stored legacy state, read by
+the runner's own SQL after the close and before the renders (legacy_rows: each proposal's bucket, status, reinstatable
+flag and checks; its current legacy decision as c2e53f8e defines current - revoke chains, the assessment the decision
+was recorded on, carries; the member answers c2e53f8e's review overlay reads). The expected status is c2e53f8e's
+customer_api._status over that state (on a member's or the operator's detail, its overlay's status), the stored one where
+the overlay could re-read a hold the stored state does not settle; the allowed actions are exactly those c2e53f8e's
+review._actions, behind review._allowed's gates, can produce on it - an action whose gate the SQL cannot read is allowed
+but never required; no union over decision states. Each branch is ported as a pure function citing its c2e53f8e line.
 
     python3 -B cpt-studio/ops/rollback_check.py counts --db cptg_<dump> --candidate cpt-studio-test:<sha12> \\
         --out <new directory> --db-env-file <0600 env file>
@@ -654,6 +679,630 @@ def update_problems(declared, close, note, after, audits, resave=None) -> list:
     return problems
 
 
+# --- DECISIONS D338 and D339 (AMENDMENT-1 9.4, U17): what assertion 2 records, never fails ----------------------------
+# 9.4 states two of its states as a rollback limit, "as D59's reinstatable limit is": a legacy encounter pending after
+# analyze (a gemini context current, the legacy assessment on the earlier context) and A21's (its own unknown document
+# review reconciled while a reading is owed, no save). The previous image shows the legacy codes there as stored, with
+# its own actions and offers (the draft export; confirm and reinstate on an excluded code; per-code approval), where the
+# candidate shows them as the earlier codes, deciding nothing, while the reading is owed. FINAL-V2 6.4's "never less held"
+# governs v2 assessments; on these encounters assertion 2 records such a difference as U17's measurement. An encounter the
+# close named for values_saved alone (pending before analyze) is not one of them: the close reverted its unapplied save,
+# so both images read it as a legacy encounter with no update, and it stays as assertion 8 judges it (D338).
+#
+# DECISIONS D339: "as stored" is what the legacy release c2e53f8e computes from the stored legacy state, read by the
+# runner's own SQL after the close and before the renders (Check.legacy_rows): each proposal's bucket, status,
+# reinstatable flag and checks; its CURRENT legacy decision, exactly as c2e53f8e defines current; and the member answers
+# c2e53f8e's review overlay reads for it. The expected status is c2e53f8e's customer_api._status over that state - on a
+# member's or the operator's detail the overlay's own status, which serializers._proposal_json prints - and where the
+# overlay could re-read a hold the stored state does not settle, the stored status is expected, so a mismatch fails. The
+# allowed actions are exactly those c2e53f8e's review._actions, behind review._allowed's gates, can produce on that state:
+# an action whose gate the SQL cannot read (exact evidence over the revision text, the overlay's half of the
+# reinstatement gate, the same-day hold, a viewer it cannot name, a finality that turns on the participants configured
+# now) is allowed but never required, and there is no union over decision states. Every branch is ported below from
+# c2e53f8e7d33 as a pure function citing its c2e53f8e FILE:LINE (paths under cpt-studio/studio/). The literals are
+# c2e53f8e's; ops/test_rollback_check.py holds them to this tree's own files, since this runner imports no application
+# module.
+RECORDED_REASONS = (UPDATE_REASON_OF['pending_after_analyze'], UPDATE_REASON_OF['a21'])
+V2_ENGINE_PREFIX = 'cpt-studio-events@'  # a v2 assessment's engine, or one with an event inventory (independent_new_path)
+APPROVE, REJECT, REINSTATE, REVOKE, CONFIRM = 'approve', 'reject', 'reinstate', 'revoke', 'confirm'  # models.py:395
+SELECTED, EXCLUDED = 'selected', 'excluded'  # models.py:318 (Proposal)
+READY, NEEDS_CLARIFICATION, STATUS_EXCLUDED = 'ready', 'needs_clarification', 'excluded'  # models.py:319
+UNAVAILABLE_ANSWERS = ('not_documented', 'cannot_confirm')  # validation/questions.py:38-39, review_view.py:66
+KEY_BOUND_FACTS = ('base_included', 'separate_em')  # validation/questions.py:268
+BASE_FACT, SEPARATE_EM_FACT = 'base_included', 'separate_em'  # validation/review_view.py:54, :61
+COMPETING_FACT = 'competing_codes'  # validation/engine.py:3139 (review_view.COMPETING_FACT)
+REINSTATEMENT_CHECK = 'review.reinstatement'  # review.py:590, validation/review_view.py:56
+LEGACY_PARTICIPANTS = ('astra', 'fable')  # participants/__init__.py:39 (PARTICIPANTS)
+REVIEWER_ROLES = ('owner', 'reviewer')  # models.py:89, :100-102 (Membership.can_review: active, an owner or a reviewer)
+# A difference a row of the legacy assessment makes: listed by the previous image alone, an action the candidate did not
+# allow, a status the candidate did not show - each row read as c2e53f8e shows it first. not_listed_after is none of them.
+ROW_DIFFERENCES = ('listed_only_after', 'action_not_allowed_before', 'toward_release', 'lateral', 'unknown')
+
+
+def _detail_view(name) -> bool:
+    """Whether ``name`` is a view that lists proposal rows: a customer's, a member's or the operator's detail."""
+    return isinstance(name, str) and (name.startswith(('customer.detail[', 'member.detail[')) or name == 'operator.detail')
+
+
+def finding_text(finding) -> str:
+    """One comparison finding as assertion 2 words a problem."""
+    extra = finding.get('actions') or finding.get('offer')
+    return (f'{finding.get("encounter")} {finding.get("where")}: {finding.get("finding")} ({finding.get("before")} -> '
+            f'{finding.get("after")}{", " + str(extra) if extra else ""})')
+
+
+def pending_sets(named, note) -> tuple:
+    """(the close's update_pending as {encounter: [reasons]}, the encounters the switch-back's note lists update_pending,
+    sorted), each empty where it was not read."""
+    named = named if isinstance(named, dict) else {}
+    listed = note.get('update_pending') if isinstance(note, dict) else None
+    return ({str(pk): [str(reason) for reason in reasons] if isinstance(reasons, (list, tuple)) else []
+             for pk, reasons in named.items()},
+            sorted({str(pk) for pk in listed}) if isinstance(listed, list) else [])
+
+
+# --- c2e53f8e's legacy path, ported (DECISIONS D339): pure, over Check.legacy_rows' entry -----------------------------
+
+def legacy_current_decisions(decisions, assessment) -> dict:
+    """c2e53f8e review.py:219-227 (current_decisions): {proposal id: its current decision on ``assessment``} - the
+    decisions recorded on the assessment, in sequence order, the latest per proposal (:222-223), none where that latest is
+    a revoke or invalidated (:224-227). A carried decision is current on the assessment it was carried onto (its own
+    row's 'assessment'), never on its root's (decision_root). The status, the overlay's counted set and the customer
+    page's numbering read these. ``decisions``: Check.legacy_rows' rows {'id', 'proposal', 'assessment', 'action',
+    'sequence', 'carried_from', 'invalidated'}."""
+    latest = {}
+    for decision in sorted((d for d in decisions if d['assessment'] == assessment), key=lambda d: d['sequence']):
+        latest[decision['proposal']] = decision
+    return {proposal: decision for proposal, decision in latest.items()
+            if decision['action'] != REVOKE and not decision['invalidated']}
+
+
+def legacy_current_decision(decisions, proposal):
+    """c2e53f8e review.py:230-234 (_current_decision): the proposal's latest decision by sequence, whichever assessment it
+    was recorded on (:231, proposal.decisions), None when there is none or it is a revoke or invalidated (:232-233).
+    review._allowed reads THIS one for the actions (:653); the status reads current_decisions."""
+    mine = [decision for decision in decisions if decision['proposal'] == proposal]
+    if not mine:
+        return None
+    latest = max(mine, key=lambda d: d['sequence'])
+    return None if latest['action'] == REVOKE or latest['invalidated'] else latest
+
+
+def legacy_decision_root(decisions, decision):
+    """c2e53f8e review.py:1529-1534 (decision_root): the decision a carried decision was copied from, followed back to the
+    reviewer's own act (:1532-1533, carried_from) - who decided and when, never what is current. Followed within
+    ``decisions`` (an encounter's: a carry never leaves its encounter); a link out of them, or back to a decision already
+    passed, ends the walk."""
+    by_id = {item['id']: item for item in decisions}
+    root, seen = decision, set()
+    while root.get('carried_from') in by_id and root['id'] not in seen:
+        seen.add(root['id'])
+        root = by_id[root['carried_from']]
+    return root
+
+
+def legacy_final(records):
+    """c2e53f8e review.py:2077-2084 (is_final): its chain's final assessment - phase 2 (jobs.py:417-427: an entry of a
+    participant, participants/__init__.py:39, whose state is not 'not_configured', and one carrying a peer state) or one
+    that owes no peer stage (jobs.py:341-346 and :322-328: a peer stage is owed for each participant whose first reading
+    the assessment read, if it is configured now and no member date conflict holds the assessment). True where the stored
+    entries settle it (phase 2, or no participant's reading read: nothing can be owed, whatever is configured); None where
+    it turns on the participants configured now or a member date conflict (participants.configured,
+    jobs.peer_review_held), which the SQL does not read. ``records``: [(name, state, has a peer state)] of
+    Assessment.participants in stored order; by name the last entry wins (jobs.py:298-301, _records)."""
+    latest = {}
+    for name, state, peer in records:
+        latest[name] = (state, peer)
+    entries = [value for name, value in latest.items() if name in LEGACY_PARTICIPANTS]
+    if any(state != 'not_configured' for state, _ in entries) and any(peer for _, peer in entries):
+        return True  # jobs.py:425-427: phase 2
+    if not any(state == 'read' for state, _ in entries):
+        return True  # jobs.py:328: no peer stage can be owed
+    return None
+
+
+def legacy_counted(row, action) -> bool:
+    """c2e53f8e validation/review_view.py:212-222 (counts): the proposal is decided like a code that is billed - one the
+    engine excluded by a member's answer (:218-219), a selected code not rejected (:220-221), or an excluded,
+    reinstatable code with a current reinstatement or the approval resting on one (:222). ``action``: its current
+    decision's (current_decisions: the overlay's ``decided``, review.py:270-272), or None."""
+    # validation/review_view.py:218-219
+    if row['answered_away']:
+        return True
+    # validation/review_view.py:220-221
+    if row['bucket'] == SELECTED:
+        return action != REJECT
+    # validation/review_view.py:222
+    return row['bucket'] == EXCLUDED and row['reinstatable'] and action in (REINSTATE, APPROVE)
+
+
+def legacy_unavailable(row, answers, counted) -> tuple:
+    """c2e53f8e's DETAIL_UNAVAILABLE derivation for one proposal: (state, fact, value), state 'unavailable', 'available'
+    or 'unread'.
+    - validation/review_view.py:541-544: the engine excluded the code by a member's answer (questions.py:94-103,
+      answered_away: its support's 'answered' marker) - 'unavailable', the marker's fact and value;
+    - validation/review_view.py:545-551 (_unavailable_by :321-328 over _open_facts :306-318): one of the code's open
+      proposal-scoped questions a member answered as unavailable, with an answer the overlay applies. review.py:398-408
+      (_member_answers) gives the overlay answer_states' ``bound`` (review.py:310-350): a standing answer of the
+      revision (review.py:247-251: no revocation) the assessment did not read itself (:330-333) that binds to a question
+      the assessment asks (validation/questions.py:271-294: an answer value a question takes, :282-283; by its (code,
+      family, fact) when it carries no fingerprint or answers a KEY_BOUND_FACTS question, :286-291; else by a fingerprint
+      equal to the asked one), keyed to the code by its own code, family and fact (review_view.py:185-193, :325).
+      'unavailable' where such an answer certainly binds to a stored open question the code itself asks;
+    - 'unread' where an answer could apply but whether it does turns on what the SQL does not read: the fingerprint of
+      the question as asked (it hashes the passages of the revision text, questions.py:236-247), the questions the
+      overlay re-reads over the counted set (a counted code's base_included, review_view.py:312-313, and competing hold,
+      :633-660), or those it adds to a counted code (a reinstatement's waits, :314-315; a same-day visit, :316-317). The
+      stored reading is expected there (D339): a code the overlay excludes by such an answer fails;
+    - else 'available'.
+    ``row``: the proposal (Check.legacy_rows); ``answers``: its revision's member answers in answered order ({'id',
+    'code', 'family', 'fact', 'value', 'fingerprinted', 'read', 'revoked'}); ``counted``: legacy_counted."""
+    # validation/review_view.py:541-544
+    if row['answered_away']:
+        return 'unavailable', row['answered_fact'], row['answered_value']
+    # validation/review_view.py:545-551 over review.py:310-350's bound answers (questions.py:271-294)
+    asked: dict = {}  # a stored open proposal-scoped question's fact -> whether the code asks it by its own family
+    for fact, family in row['open_facts']:
+        asked[fact] = asked.get(fact, False) or family in ('', row['family'])
+    unread = None
+    for answer in answers:
+        if answer['revoked'] or answer['read'] or answer['value'] not in UNAVAILABLE_ANSWERS:
+            continue
+        if not answer['code'] or answer['code'] != row['code'] or answer['family'] != row['family']:
+            continue
+        fact = answer['fact']
+        if fact in asked:
+            if counted and fact in (BASE_FACT, COMPETING_FACT):
+                unread = unread or answer
+            elif asked[fact] and (not answer['fingerprinted'] or fact in KEY_BOUND_FACTS):
+                return 'unavailable', fact, answer['value']
+            else:
+                unread = unread or answer
+        elif counted and (fact in (BASE_FACT, SEPARATE_EM_FACT)
+                          or (row['bucket'] == EXCLUDED and not row['reinstatement_clear'])):
+            unread = unread or answer
+    if unread is not None:
+        return 'unread', unread['fact'], unread['value']
+    return 'available', '', ''
+
+
+def legacy_view_status(row, action, unavailable) -> str:
+    """The status c2e53f8e's review overlay gives the proposal (validation/review_view.py:505-717), which a member's and
+    the operator's detail print (serializers.py:334-336): excluded for a code a member's answer leaves detail_unavailable
+    (:579-584); needs_clarification for a counted, reinstated exclusion still in review whose stored reinstatement check
+    does not pass (:680-683; its approval waits on what that check names, :662-665); else its stored status (:684-685).
+    Where the overlay re-reads a hold over the counted set - the base rule (:600-630), a competing hold (:633-660), a
+    same-day visit (:703-710), a selected code's status recomputed from them (:678-679) - the stored status is expected
+    (D339): a mismatch fails. ``unavailable``: legacy_unavailable's state ('unread' reads as stored)."""
+    # validation/review_view.py:579-584
+    if unavailable == 'unavailable':
+        return STATUS_EXCLUDED
+    # validation/review_view.py:680-683 (active: counted and not detail_unavailable, :554-555, :597)
+    if row['bucket'] == EXCLUDED and legacy_counted(row, action) and not row['reinstatement_clear']:
+        return NEEDS_CLARIFICATION
+    # validation/review_view.py:684-685
+    return row['status']
+
+
+def legacy_status(row, action, unavailable) -> str:
+    """c2e53f8e customer_api.py:543-562 (_status): the customer page's status of a numbered proposal - approved for an
+    approval (:549-550); excluded for a rejection (:551-552), a confirmed exclusion (:553-554), a code a member's answer
+    leaves detail_unavailable (:555-556) and an exclusion no reinstatement lifted (:557-558); needs_detail where the
+    overlay's status needs clarification (:559-561, legacy_view_status); else ready (:562). ``action``: the current
+    decision's (current_decisions, :548), or None."""
+    # customer_api.py:549-550
+    if action == APPROVE:
+        return 'approved'
+    # customer_api.py:551-552
+    if action == REJECT:
+        return 'excluded'
+    # customer_api.py:553-554
+    if action == CONFIRM:
+        return 'excluded'
+    # customer_api.py:555-556 (legacy_unavailable)
+    if unavailable == 'unavailable':
+        return 'excluded'
+    # customer_api.py:557-558
+    if row['bucket'] == EXCLUDED and action != REINSTATE:
+        return 'excluded'
+    # customer_api.py:559-561 (the overlay's status: legacy_view_status)
+    if legacy_view_status(row, action, unavailable) == NEEDS_CLARIFICATION:
+        return 'needs_detail'
+    # customer_api.py:562
+    return 'ready'
+
+
+def legacy_numbered(row, action) -> bool:
+    """c2e53f8e customer_api.py:605-617 (code_rows): whether the customer page numbers the proposal - a selected code, one
+    the engine excluded by a member's answer, or an excluded code with a current decision other than a confirmation
+    (:610-613); then an excluded code a reviewer can decide or has decided (:614-615); every other proposal is an
+    other code (:616-617). Only the current assessment of the current revision is numbered at all (:996, :1001-1002;
+    review.py:169-174, live_assessment). ``action``: the current decision's (current_decisions, :607), or None."""
+    # customer_api.py:610-613 (first)
+    if (row['bucket'] == SELECTED or row['answered_away']
+            or (row['bucket'] == EXCLUDED and action is not None and action != CONFIRM)):
+        return True
+    # customer_api.py:614-615 (then); else :616-617 (other_codes)
+    return row['bucket'] == EXCLUDED and (row['reinstatable'] or action is not None)
+
+
+def legacy_actions(row, current, unavailable, view_status) -> tuple:
+    """c2e53f8e review.py:562-584 (_actions) as (required, optional) sets of actions: a decided approval, rejection or
+    confirmation is revoked only (:566-567); a code a member's answer leaves detail_unavailable has nothing to decide but
+    the revoke of a decision taken (:568-569); a selected code that is ready or needs clarification in the overlay
+    (:570) is rejected, approved when ready (:572-573) and revoked when decided (:574); an excluded code (:575) undecided
+    is nothing when not reinstatable (:576-580), else confirmed or reinstated (:581); reinstated, it is rejected, revoked
+    and approved (:582-583); any other code is the revoke of a decision taken (:584). Exact evidence (:571) is read over
+    the revision text, which the runner never reads, and the same-day hold and the overlay's half of the reinstatement
+    gate (review_view.py:714) over the counted set: the actions they gate - approve, reinstate - are optional, never
+    required; the gate's stored half, the review.reinstatement check (review.py:582, :587-590), is read, and a reinstated
+    code whose check does not pass is never approvable. ``current``: _current_decision's action, or None."""
+    # review.py:566-567
+    if current in (APPROVE, REJECT, CONFIRM):
+        return {REVOKE}, set()
+    # review.py:568-569
+    if unavailable == 'unavailable':
+        return ({REVOKE} if current is not None else set()), set()
+    # review.py:570 (the overlay's status), :572-574; :571 and :573's exact evidence and same-day hold not read
+    if row['bucket'] == SELECTED and view_status in (READY, NEEDS_CLARIFICATION):
+        return ({REJECT} | ({REVOKE} if current is not None else set()),
+                {APPROVE} if view_status == READY else set())
+    # review.py:575
+    if row['bucket'] == EXCLUDED and row['status'] == STATUS_EXCLUDED:
+        # review.py:576
+        if current is None:
+            # review.py:579-580
+            if not row['reinstatable']:
+                return set(), set()
+            # review.py:581: reinstate gated by exact evidence
+            return {CONFIRM}, {REINSTATE}
+        # review.py:582-583: approve gated by exact evidence, the reinstatement gate and the same-day hold
+        return {REJECT, REVOKE}, ({APPROVE} if row['reinstatement_clear'] else set())
+    # review.py:584
+    return ({REVOKE} if current is not None else set()), set()
+
+
+def legacy_allowed(reviewer, entry, row, current, unavailable, view_status) -> tuple:
+    """c2e53f8e review.py:646-654 (_allowed) as (required, optional): nothing for a viewer who may not review the
+    encounter's workspace (:647; _is_reviewer :212-214), nothing on an assessment that is not its encounter's current one
+    on the current revision or not its chain's final one (:649-651); else _actions (:652-654) over the proposal's
+    _current_decision. A gate the SQL cannot read - a viewer it cannot name (``reviewer`` None), a finality that turns on
+    the participants configured now (``entry['final']`` None) - allows every action _actions produces and requires none.
+    ``reviewer``: True, False or None; ``current``: _current_decision's action, or None."""
+    # review.py:647-648 (the reviewer gate) and :649-651 (the current assessment of the current revision)
+    if reviewer is False or not entry['revision_current']:
+        return set(), set()
+    # review.py:652-654
+    required, optional = legacy_actions(row, current, unavailable, view_status)
+    # review.py:647 and :650 (is_final) where the SQL cannot read them
+    if reviewer is None or entry['final'] is not True:
+        return set(), required | optional
+    return required, optional
+
+
+def legacy_expected(entry) -> dict:
+    """{proposal id: what c2e53f8e shows for it} over ``entry`` (Check.legacy_rows; _entry_problems clean): 'decision',
+    its current decision's action (legacy_current_decisions: the status, the counted set and the numbering read it);
+    'acting', _current_decision's (legacy_current_decision: the actions read it); 'counted'; 'unavailable'
+    (legacy_unavailable); 'view_status' (a member's and the operator's detail); 'status' (the customer page);
+    'numbered' (the customer page lists it)."""
+    current = legacy_current_decisions(entry['decisions'], entry['assessment'])
+    out: dict = {}
+    for pk, row in entry['proposals'].items():
+        decided = current.get(pk)
+        action = decided['action'] if decided is not None else None
+        acting = legacy_current_decision(entry['decisions'], pk)
+        counted = legacy_counted(row, action)
+        unavailable = legacy_unavailable(row, entry['answers'], counted)
+        out[pk] = {'decision': action, 'acting': acting['action'] if acting is not None else None, 'counted': counted,
+                   'unavailable': unavailable, 'view_status': legacy_view_status(row, action, unavailable[0]),
+                   'status': legacy_status(row, action, unavailable[0]),
+                   'numbered': bool(entry['revision_current']) and legacy_numbered(row, action)}
+    return out
+
+
+def legacy_exercised(entry) -> dict:
+    """What of D339's rule ``entry``'s stored state exercises (evidence, never a verdict): {action: n} of its current
+    decisions, and how many proposals a member's answer leaves unavailable ('answer_unavailable') or could ('answer_unread')."""
+    if _entry_problems(entry):
+        return {}
+    out: dict = {}
+    for want in legacy_expected(entry).values():
+        if want['decision']:
+            out[want['decision']] = out.get(want['decision'], 0) + 1
+        if want['unavailable'][0] != 'available':
+            key = f'answer_{want["unavailable"][0]}'
+            out[key] = out.get(key, 0) + 1
+    return dict(sorted(out.items()))
+
+
+# The shape Check.legacy_rows gives each part of an entry; a part of another shape is not read (never as stored vacuously).
+_PROPOSAL_FIELDS = {'status': str, 'bucket': str, 'reinstatable': bool, 'code': str, 'family': str, 'key': str,
+                    'reinstatement_clear': bool, 'answered_away': bool, 'answered_fact': str, 'answered_value': str}
+_DECISION_FIELDS = {'id': str, 'proposal': str, 'assessment': str, 'action': str, 'sequence': int, 'invalidated': bool}
+_ANSWER_FIELDS = {'id': str, 'code': str, 'family': str, 'fact': str, 'value': str, 'fingerprinted': bool, 'read': bool,
+                  'revoked': bool}
+
+
+def _shaped(item, fields) -> bool:
+    return isinstance(item, dict) and all(type(item.get(name)) is kind for name, kind in fields.items())
+
+
+def _entry_problems(stored) -> list:
+    """Why ``stored`` (Check.legacy_rows' entry) is not a readable legacy state ([] when it is): not read, no current
+    assessment, a current assessment that is not legacy (an event inventory or a cpt-studio-events@ engine), or any part
+    of it not read whole - each proposal with its fields and open questions, the decisions (with their sequence and
+    invalidation), the member answers, the workspace's memberships, whether its assessment is on the current revision and
+    whether it is final (True, or None where that turns on what the SQL does not read)."""
+    if not isinstance(stored, dict):
+        return ['its current assessment was not read']
+    if not stored.get('assessment'):
+        return ['it has no current assessment']
+    engine = stored.get('engine_version')
+    if stored.get('event_inventory') is not False or not isinstance(engine, str) or engine.startswith(V2_ENGINE_PREFIX):
+        return [f'its current assessment {stored["assessment"]} ({engine}) is not a legacy assessment']
+    proposals = stored.get('proposals')
+    if not isinstance(proposals, dict):
+        return ['its legacy assessment\'s proposals were not read']
+    for pk, row in sorted(proposals.items()):
+        facts = row.get('open_facts') if isinstance(row, dict) else None
+        if not _shaped(row, _PROPOSAL_FIELDS) or not isinstance(facts, list) or not all(
+                isinstance(item, (list, tuple)) and len(item) == 2 and all(type(part) is str for part in item)
+                for item in facts):
+            return [f'its proposal {pk} was not read whole']
+    decisions = stored.get('decisions')
+    if not isinstance(decisions, list) or not all(
+            _shaped(item, _DECISION_FIELDS) and (item.get('carried_from') is None or type(item['carried_from']) is str)
+            for item in decisions) or len({item['sequence'] for item in decisions}) != len(decisions):
+        return ['its decisions were not read']
+    answers = stored.get('answers')
+    if not isinstance(answers, list) or not all(_shaped(item, _ANSWER_FIELDS) for item in answers):
+        return ['its member answers were not read']
+    memberships = stored.get('memberships')
+    if not isinstance(memberships, dict) or not all(type(key) is str and type(value) is bool
+                                                    for key, value in memberships.items()):
+        return ['its workspace\'s memberships were not read']
+    if type(stored.get('revision_current')) is not bool or 'final' not in stored or not (stored['final'] is True
+                                                                                       or stored['final'] is None):
+        return ['whether its assessment can be decided on was not read']
+    if stored.get('unread'):
+        return [f'its stored state was not read whole: {stored["unread"]}']
+    return []
+
+
+def _viewer(name, stored) -> tuple:
+    """(whether the viewer of the detail view ``name`` may review its encounter's workspace: True, False, or None where
+    the SQL cannot name the viewer; why the view cannot be judged, or ''). A customer's or a member's detail names its
+    membership (parity_render.py renders one of each per membership of the encounter's workspace), read by SQL as
+    c2e53f8e's Membership.can_review (models.py:100-102) - the reviewer gate of review._allowed (review.py:212-214, :647).
+    The operator's detail is the operator's own membership of the workspace or read-only access (operator.py:109-114),
+    and the SQL does not read which user the renderer signed in as the operator."""
+    if name == 'operator.detail':
+        return None, ''
+    membership = name[name.index('[') + 1:-1] if name.endswith(']') and '[' in name else ''
+    if membership not in stored['memberships']:
+        return None, f'its viewer {membership!r} is not a membership of its workspace'
+    return stored['memberships'][membership], ''
+
+
+def _derivation(row, want) -> str:
+    """The stored state a row's expected status and actions were computed from, as a problem names it."""
+    answered = want['unavailable']
+    said = {'unavailable': f'; a member\'s answer leaves {answered[1]} unavailable ({answered[2]})',
+            'unread': f'; a member\'s answer to {answered[1]} ({answered[2]}) the overlay may apply - its binding is not '
+                      'read, so the stored reading is expected (DECISIONS D339)', 'available': ''}[answered[0]]
+    acting = ('' if want['acting'] == want['decision']
+              else f' (its latest decision, which the actions read: {want["acting"] or "none"})')
+    return (f'stored {row["status"]} {row["bucket"]}{", reinstatable" if row["reinstatable"] else ""}, current decision '
+            f'{want["decision"] or "none"}{acting}{said}')
+
+
+def _row_problems(name, row, stored, expected, reviewer, complete=True) -> list:
+    """Why a row the previous image shows on ``name`` (its 'id', 'status' and 'allowed_actions') is not what c2e53f8e
+    shows for the legacy assessment's stored state ([] when it is): a v2 proposal, a proposal not of that assessment, a
+    customer row the legacy release does not number (legacy_numbered), another status than its own (legacy_status on a
+    customer detail, legacy_view_status on a member's or the operator's), another bucket, an action it does not produce
+    there, or - for a whole row (``complete``; a finding names only some of a row's actions) - one it produces that
+    the viewer would be required to see (legacy_allowed). ``expected``: legacy_expected(stored); ``reviewer``:
+    _viewer's."""
+    pk = str(row.get('id')) if isinstance(row, dict) else None
+    if pk in {str(item) for item in stored.get('v2_proposals') or ()}:
+        return [f'{name}: shows {pk}, a v2 proposal']
+    if pk not in stored['proposals']:
+        return [f'{name}: shows {pk}, not a proposal of its legacy assessment']
+    have, want = stored['proposals'][pk], expected[pk]
+    customer = name.startswith('customer.detail[')
+    problems = []
+    if customer and not want['numbered']:
+        problems.append(f'{name}: numbers {pk}, which the legacy release does not number there '
+                        f'({_derivation(have, want)}{"" if stored["revision_current"] else "; not on the current revision"})')
+    status = want['status'] if customer else want['view_status']
+    if row.get('status') != status:
+        problems.append(f'{name}: {pk} shows status {row.get("status")!r}, stored {have["status"]!r} ({have["bucket"]}): '
+                        f'the legacy release shows {status!r} for its stored state ({_derivation(have, want)})')
+    if 'bucket' in row and row.get('bucket') != have['bucket']:  # a member's or the operator's row prints its bucket
+        problems.append(f'{name}: {pk} shows bucket {row.get("bucket")!r}, stored {have["bucket"]!r}')
+    actions = row.get('allowed_actions')
+    if not isinstance(actions, (list, tuple)):
+        problems.append(f'{name}: {pk} lists no allowed actions ({actions!r})')
+        return problems
+    required, optional = legacy_allowed(reviewer, stored, have, want['acting'], want['unavailable'][0],
+                                        want['view_status'])
+    shown = {str(action) for action in actions}
+    extra = sorted(shown - required - optional)
+    if extra:
+        problems.append(f'{name}: {pk} allows {extra}, which the legacy release does not offer on a stored '
+                        f'{have["status"]} {have["bucket"]} row ({_derivation(have, want)})')
+    missing = sorted(required - shown) if complete else []
+    if missing:
+        problems.append(f'{name}: {pk} does not allow {missing}, which the legacy release offers on that stored state '
+                        f'({_derivation(have, want)})')
+    return problems
+
+
+def legacy_shown_problems(views, stored) -> list:
+    """DECISIONS D338 and D339: why the previous image does NOT show an encounter's legacy assessment as c2e53f8e shows
+    its stored state ([] when it does), over its views of the encounter (``views``: parity_render.py's, by name) and the
+    stored state the runner read by SQL after the close (``stored``: Check.legacy_rows' entry, _entry_problems clean).
+    As stored: each member's and the operator's detail shows that assessment with every one of its proposals by id and no
+    other row; each customer detail numbers exactly the proposals the legacy release numbers (legacy_numbered); and every
+    row has the status and only the actions c2e53f8e computes for it over that state, with each action it would offer
+    that viewer (_row_problems). A detail view that raised, cannot be read or names a viewer outside the workspace is not
+    as stored, and at least one member's or the operator's detail must be read: never as stored vacuously."""
+    problems = _entry_problems(stored)
+    if problems:
+        return problems
+    expected = legacy_expected(stored)
+    numbered = sorted(pk for pk, want in expected.items() if want['numbered'])
+    details = 0
+    for name in sorted(views) if isinstance(views, dict) else ():
+        if not _detail_view(name):
+            continue
+        view = views[name]
+        if is_error(view) or not isinstance(view, dict):
+            problems.append(f'{name}: the previous image\'s view could not be read')
+            continue
+        reviewer, why = _viewer(name, stored)
+        if why:
+            problems.append(f'{name}: {why}')
+            continue
+        if name.startswith('customer.detail['):
+            rows = view.get('codes') if view.get('codes') is not None else []
+            if isinstance(rows, list):
+                shown = {str(row.get('id')) for row in rows if isinstance(row, dict)}
+                missing = sorted(set(numbered) - shown)
+                if missing:
+                    problems.append(f'{name}: does not number {missing}, which the legacy release numbers')
+        else:
+            details += 1
+            assessment = view.get('assessment')
+            if not isinstance(assessment, dict):
+                problems.append(f'{name}: shows no assessment')
+                continue
+            if str(assessment.get('id')) != str(stored['assessment']):
+                problems.append(f'{name}: shows assessment {assessment.get("id")}, not its legacy assessment '
+                                f'{stored["assessment"]}')
+            rows = assessment.get('proposals')
+            shown = {str(row.get('id')) for row in rows if isinstance(row, dict)} if isinstance(rows, list) else set()
+            missing = sorted(set(stored['proposals']) - shown)
+            if missing:
+                problems.append(f'{name}: does not show {missing} of its legacy assessment')
+        if not isinstance(rows, list):
+            problems.append(f'{name}: lists no rows ({type(rows).__name__})')
+            continue
+        for row in rows:
+            problems += _row_problems(name, row, stored, expected, reviewer)
+    if not details:
+        problems.append('the previous image rendered no member or operator detail of it')
+    return problems
+
+
+def u17_not_recorded(pk, named, listed, legacy, views) -> list:
+    """DECISIONS D338: why assertion 2 records no difference on the encounter ``pk`` ([] when it records them): the close
+    did not name it update_pending (``named``: pending_sets' first), the switch-back's note does not list it (``listed``),
+    the close named it for values_saved alone (pending before analyze: assertion 8's), or the previous image does not show
+    its legacy assessment as c2e53f8e shows its stored state (legacy_shown_problems over ``views[pk]`` and ``legacy[pk]``)."""
+    if pk not in named:
+        return ['the close did not name it update_pending']
+    if pk not in listed:
+        return ['the switch-back note does not list it']
+    if not set(named[pk]) & set(RECORDED_REASONS):
+        return [f'the close named it update_pending {named[pk]}, neither of {list(RECORDED_REASONS)}: pending before '
+                'analyze (its save reverted) stays as assertion 8 judges it, and never less held here']
+    return legacy_shown_problems((views or {}).get(pk) if isinstance(views, dict) else None,
+                                 (legacy or {}).get(pk) if isinstance(legacy, dict) else None)
+
+
+def u17_difference(finding, stored) -> list:
+    """DECISIONS D338: why ``finding``, on an encounter whose previous image shows its legacy assessment as stored, is not
+    a difference U17 records ([] when it is): the legacy release's own offer there - the draft export ('readiness.draft'
+    on a detail view, 'draft' on readiness.customer: 9.4, "per-code approval and the draft export do not check the
+    context"; the approved export is blocked, and A21's run reads as an outcome still being confirmed) - or a row
+    difference (ROW_DIFFERENCES) on a detail view whose row reads as c2e53f8e shows it for the stored state (D339:
+    _row_problems over the finding's own row - its status after and the actions it names, which may be only some of the
+    row's). Any other offer, a state, a list row or a row the previous image does not list is not."""
+    where, kind = finding.get('where'), finding.get('finding')
+    if kind == 'offer_not_made_before':
+        offer = finding.get('offer')
+        if (_detail_view(where) and offer == 'readiness.draft') or (where == 'readiness.customer' and offer == 'draft'):
+            return []
+        return [f'{offer} on {where} is not the legacy release\'s draft offer']
+    if kind in ROW_DIFFERENCES and _detail_view(where) and finding.get('proposal'):
+        problems = _entry_problems(stored)
+        if problems:
+            return problems
+        reviewer, why = _viewer(where, stored)
+        if why:
+            return [f'{where}: {why}']
+        row = {'id': finding.get('proposal'), 'status': finding.get('after'),
+               'allowed_actions': list(finding.get('actions') or ())}
+        return _row_problems(where, row, stored, legacy_expected(stored), reviewer, complete=False)
+    return [f'{kind} on {where} is not a difference U17 records']
+
+
+def assertion_2(comparison, named, note, legacy, views) -> tuple:
+    """Assertion 2 (FINAL-V2 6.4: per proposal the previous image is equal or strictly more held, allowing no action the
+    candidate did not; DECISIONS D338 and D339 for AMENDMENT-1 9.4's update-pending rows): (its problems, U17's
+    measurement), over the comparison (``comparison``: Check.compare's record), the close's update_pending (``named``),
+    the switch-back's note (``note``), the update-pending encounters' stored legacy state (``legacy``: Check.legacy_rows)
+    and the previous image's views by encounter (``views``).
+
+    A finding is RECORDED - into the measurement, never a problem - only on an encounter u17_not_recorded clears, and only
+    when u17_difference admits it. Every other finding is a problem, worded as before (finding_text); on an
+    update-pending encounter (named or listed) it says why it was not recorded. The measurement: 'recorded', the recorded
+    findings as the comparison found them; 'encounters', for each update-pending encounter its reasons, whether the note
+    lists it, its current assessment, why nothing is recorded there ('not_recorded', [] when recorded), what of D339's
+    rule its stored state exercises ('exercised': legacy_exercised) and its recorded and failing counts."""
+    comp = comparison if isinstance(comparison, dict) else {}
+    named_map, listed = pending_sets(named, note)
+    legacy = legacy if isinstance(legacy, dict) else {}
+    encounters = {}
+    for pk in sorted(set(named_map) | set(listed)):
+        stored = legacy.get(pk) if isinstance(legacy.get(pk), dict) else {}
+        encounters[pk] = {'reasons': named_map.get(pk), 'listed': pk in listed, 'assessment': stored.get('assessment'),
+                          'engine_version': stored.get('engine_version'),
+                          'not_recorded': u17_not_recorded(pk, named_map, listed, legacy, views),
+                          'exercised': legacy_exercised(stored), 'recorded': 0, 'failing': 0}
+    problems, recorded = [], []
+    for finding in comp.get('findings') or ():
+        if not isinstance(finding, dict):
+            problems.append(f'an unreadable finding: {finding!r}'[:300])
+            continue
+        entry = encounters.get(str(finding.get('encounter')))
+        why = None
+        if entry is not None:
+            why = entry['not_recorded'] or u17_difference(finding, legacy.get(str(finding.get('encounter'))))
+            if not why:
+                recorded.append(finding)
+                entry['recorded'] += 1
+                continue
+            entry['failing'] += 1
+        problems.append(finding_text(finding) + (f' - update_pending, not recorded as U17: {"; ".join(why[:3])}'
+                                                 if why else ''))
+    if not comp.get('encounters'):
+        problems.append('no encounter was compared')
+    return problems, {'recorded': recorded, 'encounters': encounters}
+
+
+def u17_summary(measurement) -> str:
+    """The summary's line for U17's measurement (assertion 2's evidence 'u17_measurement'): each encounter's recorded
+    count, with what of D339's rule its stored state exercised ('exercised') where it exercised any."""
+    measurement = measurement if isinstance(measurement, dict) else {}
+    encounters = measurement.get('encounters') if isinstance(measurement.get('encounters'), dict) else {}
+
+    def exercised(entry):
+        items = entry.get('exercised') if isinstance(entry.get('exercised'), dict) else {}
+        return f' [{", ".join(f"{name} {count}" for name, count in items.items())}]' if items else ''
+    on = [f'{pk} ({", ".join(entry.get("reasons") or ())}) {entry.get("recorded")}{exercised(entry)}'
+          for pk, entry in sorted(encounters.items()) if entry.get('recorded')]
+    why = {pk: str((entry.get('not_recorded') or [''])[0]) for pk, entry in encounters.items()}
+    off = [f'{pk} ({why[pk][:90] + ("..." if len(why[pk]) > 90 else "")})'
+           for pk, entry in sorted(encounters.items()) if entry.get('not_recorded')]
+    return (f'U17 measurement (DECISIONS D338, D339; recorded, never a problem): '
+            f'{len(measurement.get("recorded") or ())} difference(s){" on " + "; ".join(on) if on else ""}'
+            f'{"; nothing recorded on " + "; ".join(off) if off else ""}')
+
+
 def assertion(number, title, problems, evidence) -> dict:
     return {'assertion': number, 'title': title, 'result': 'PASS' if not problems else 'FAIL',
             'problems': problems, 'evidence': evidence}
@@ -1143,6 +1792,134 @@ class Check:
                                  'where e.id in (' + ','.join(f"'{pk}'" for pk in encounters) + ')')
         return {row[0]: {'user_values': row[1], 'context': row[2], 'context_values': row[3]} for row in rows}
 
+    def legacy_rows(self, encounters) -> dict:
+        """DECISIONS D338 and D339 (AMENDMENT-1 9.4, U17): {encounter: its stored legacy state} by the runner's own SQL,
+        read after the close and before the renders (switch_back). Each encounter's current assessment
+        (Encounter.current_assessment, the one the previous image reads): its engine, whether an event inventory made it,
+        whether it is on the current revision ('revision_current': c2e53f8e review.py:169-174, live_assessment, and
+        :650) and whether it is its chain's final one ('final': legacy_final over its participants' stored entries); every
+        proposal of it ('proposals': {id: status, bucket, reinstatable, code, family, key, whether its review.reinstatement
+        check passes, the engine's 'answered' marker and its fact and value, its open proposal-scoped questions
+        'open_facts' [fact, family]}); every proposal of a v2 assessment of the encounter ('v2_proposals':
+        independent_new_path's rule); every decision of the encounter, of its current assessment or of a proposal of it
+        ('decisions': id, proposal, assessment, action, sequence, carried_from, invalidated); every member answer of the
+        assessment's revision ('answers': code, family, fact, value, whether it carries a fingerprint, whether the
+        assessment read it, whether it was revoked); and the memberships of the encounter's workspace ('memberships':
+        {id: whether it may review}). assertion_2 judges by it, through the ported functions, whether the previous image
+        shows an update-pending encounter's legacy assessment as c2e53f8e shows that state. Only UUIDs reach SQL; free
+        text is read as JSON (to_json), so no tab or line break in it splits a row. An encounter with no current
+        assessment reads 'assessment' None; one whose rows cannot be read as one current assessment, or whose fields do
+        not parse, reads 'unread' (never as stored)."""
+        encounters = sorted({pk for pk in encounters if isinstance(pk, str) and UUID.fullmatch(pk)})
+        if not encounters:
+            return {}
+        within = ','.join(f"'{pk}'" for pk in encounters)
+        out: dict = {}
+        records: dict = {}
+
+        def entry(pk):
+            return out.setdefault(pk, {'assessment': None, 'engine_version': None, 'event_inventory': False,
+                                       'revision_current': False, 'final': True, 'proposals': {}, 'v2_proposals': [],
+                                       'decisions': [], 'answers': [], 'memberships': {}})
+
+        def unread(pk, why):
+            entry(pk).setdefault('unread', why)
+
+        def text(value):
+            return json.loads(value)
+        for pk, assessment, engine, inventory, current_revision in self.instance.sql(
+                'select e.id, a.id, a.engine_version, (a.event_inventory_id is not null)::int, '
+                'coalesce(a.revision_id = e.current_revision_id, false)::int from studio_encounter e '
+                f'left join studio_assessment a on a.id = e.current_assessment_id where e.id in ({within})'):
+            if pk in out:
+                unread(pk, 'its current assessment was read more than once')
+                continue
+            entry(pk).update({'assessment': assessment or None, 'engine_version': engine or None,
+                              'event_inventory': inventory == '1', 'revision_current': current_revision == '1'})
+        for pk, _, name, state, peer in self.instance.sql(
+                "select e.id, r.ord, to_json(r.value->>'name')::text, coalesce(to_json(r.value->>'state')::text, 'null'), "
+                "((r.value->'peer_state') is not null)::int from studio_encounter e join studio_assessment a on "
+                "a.id = e.current_assessment_id cross join lateral jsonb_array_elements(case when "
+                "jsonb_typeof(a.participants) = 'array' then a.participants else '[]'::jsonb end) with ordinality as "
+                "r(value, ord) where jsonb_typeof(r.value) = 'object' and jsonb_typeof(r.value->'name') = 'string' and "
+                f'e.id in ({within}) order by e.id, r.ord'):
+            try:
+                records.setdefault(pk, []).append((text(name), text(state), peer == '1'))
+            except ValueError:
+                unread(pk, 'its assessment\'s participants could not be parsed')
+        for (pk, proposal, status, bucket, current, v2, reinstatable, code, family, key, clear, answered, fact,
+             value) in self.instance.sql(
+                'select a.encounter_id, p.id, p.status, p.bucket, (a.id = e.current_assessment_id)::int, '
+                "(a.event_inventory_id is not null or a.engine_version like 'cpt-studio-events@%')::int, "
+                'p.reinstatable::int, to_json(p.code)::text, to_json(p.family)::text, to_json(p.key)::text, '
+                "(exists (select 1 from jsonb_array_elements(case when jsonb_typeof(p.checks) = 'array' then p.checks "
+                "else '[]'::jsonb end) c where c->'id' = '\"review.reinstatement\"'::jsonb and c->'status' = "
+                "'\"pass\"'::jsonb))::int, coalesce(jsonb_typeof(p.support->'answered') = 'object' and "
+                "(p.support->'answered'->'value') in ('\"not_documented\"'::jsonb, '\"cannot_confirm\"'::jsonb) and "
+                "jsonb_typeof(p.support->'answered'->'fact') = 'string' and p.support->'answered'->>'fact' <> '', false)::int, "
+                "coalesce(to_json(p.support->'answered'->>'fact')::text, 'null'), "
+                "coalesce(to_json(p.support->'answered'->>'value')::text, 'null') "
+                'from studio_proposal p join studio_assessment a on a.id = p.assessment_id join studio_encounter e on '
+                f'e.id = a.encounter_id where a.encounter_id in ({within}) order by a.encounter_id, p.id'):
+            if current == '1':
+                try:
+                    marker = answered == '1'
+                    entry(pk)['proposals'][proposal] = {
+                        'status': status, 'bucket': bucket, 'reinstatable': reinstatable == '1', 'code': text(code),
+                        'family': text(family), 'key': text(key), 'reinstatement_clear': clear == '1',
+                        'answered_away': marker, 'answered_fact': text(fact) if marker else '',
+                        'answered_value': text(value) if marker else '', 'open_facts': []}
+                except ValueError:
+                    unread(pk, f'its proposal {proposal} could not be parsed')
+            if v2 == '1':
+                entry(pk)['v2_proposals'].append(proposal)
+        for pk, proposal, fact, family in self.instance.sql(
+                'select e.id, c.proposal_id, to_json(c.fact)::text, to_json(c.family)::text from studio_clarification c '
+                "join studio_encounter e on e.current_assessment_id = c.assessment_id where c.state = 'open' and "
+                f"c.scope = 'proposal' and c.proposal_id is not null and e.id in ({within}) "
+                'order by e.id, c.created_at, c.id'):
+            row = entry(pk)['proposals'].get(proposal)
+            if row is None:  # a question naming another assessment's proposal: c2e53f8e never reads it (review.py:266-268)
+                continue
+            try:
+                row['open_facts'].append([text(fact), text(family)])
+            except ValueError:
+                unread(pk, f'an open question of its proposal {proposal} could not be parsed')
+        for pk, decision, proposal, assessment, action, sequence, carried, invalidated in self.instance.sql(
+                'select e.id, d.id, d.proposal_id, d.assessment_id, to_json(d.action)::text, d.sequence, '
+                'd.carried_from_id, (exists (select 1 from studio_decisioninvalidation i where i.decision_id = d.id))::int '
+                'from studio_encounter e join studio_decision d on (d.encounter_id = e.id or d.assessment_id = '
+                'e.current_assessment_id or d.proposal_id in (select p.id from studio_proposal p where p.assessment_id = '
+                f'e.current_assessment_id)) where e.id in ({within}) order by e.id, d.sequence'):
+            try:
+                entry(pk)['decisions'].append({'id': decision, 'proposal': proposal, 'assessment': assessment,
+                                               'action': text(action), 'sequence': int(sequence),
+                                               'carried_from': carried or None, 'invalidated': invalidated == '1'})
+            except ValueError:
+                unread(pk, f'its decision {decision} could not be parsed')
+        for pk, answer, code, family, fact, value, fingerprinted, read, revoked in self.instance.sql(
+                'select e.id, m.id, to_json(m.code)::text, to_json(m.family)::text, to_json(m.fact)::text, '
+                "to_json(m.value)::text, coalesce(m.question <> '', false)::int, (exists (select 1 from "
+                "studio_clarification c where c.assessment_id = e.current_assessment_id and c.state = 'answered' and "
+                'c.answer_id = m.id))::int, (exists (select 1 from studio_memberanswerrevocation r where '
+                'r.answer_id = m.id))::int from studio_encounter e join studio_assessment a on '
+                'a.id = e.current_assessment_id join studio_memberanswer m on m.revision_id = a.revision_id '
+                f'where e.id in ({within}) order by e.id, m.answered_at, m.id'):
+            try:
+                entry(pk)['answers'].append({'id': answer, 'code': text(code), 'family': text(family),
+                                             'fact': text(fact), 'value': text(value),
+                                             'fingerprinted': fingerprinted == '1', 'read': read == '1',
+                                             'revoked': revoked == '1'})
+            except ValueError:
+                unread(pk, f'its member answer {answer} could not be parsed')
+        for pk, membership, reviews in self.instance.sql(
+                "select e.id, m.id, (m.active and m.role in ('owner', 'reviewer'))::int from studio_encounter e "
+                f'join studio_membership m on m.workspace_id = e.workspace_id where e.id in ({within}) order by e.id, m.id'):
+            entry(pk)['memberships'][str(membership)] = reviews == '1'
+        for pk, item in out.items():
+            item['final'] = legacy_final(records.get(pk, ())) if item['assessment'] else None
+        return out
+
     # 1. the switch-back, as the candidate's installer runs it (P-1)
     def switch_back(self):
         inst, installer = self.instance, self.installer
@@ -1194,6 +1971,10 @@ class Check:
                             'reading_closed': (close or {}).get('reading_closed'), 'after': self.update_rows(watched),
                             'audits': inst.sql("select encounter_id, data from studio_auditevent where event = "
                                                "'context.rollback_reverted' order by created_at, id")}
+        # DECISIONS D338 and D339: every encounter the close named update_pending or the note lists, its stored legacy
+        # state - read after the close, on the rows both images then render (assertion_2 judges by it)
+        named, listed = pending_sets((close or {}).get('update_pending'), record['note'])
+        record['update']['legacy'] = self.legacy_rows(sorted(set(named) | set(listed)))
         stuck = inst.app_script(installer, prev['id'], installer.UNRUNNABLE_STAGES, {}, read_only=True,
                                 what='UNRUNNABLE_STAGES after the close (previous image)')
         record['unrunnable_after_close'] = stuck
@@ -1499,11 +2280,11 @@ class Check:
                 a1.append(f'the previous worker was not running cleanly ({side}: {state})')
         if http_rec.get('health') != 200:
             a1.append(f'the previous web did not answer /health/ with 200 ({http_rec.get("health")})')
-        a2 = [f'{f["encounter"]} {f["where"]}: {f["finding"]} ({f.get("before")} -> {f.get("after")}'
-              f'{", " + str(f.get("actions") or f.get("offer")) if f.get("actions") or f.get("offer") else ""})'
-              for f in comp.get('findings') or ()]
-        if not comp.get('encounters'):
-            a2.append('no encounter was compared')
+        # DECISIONS D338 and D339: a difference on an update-pending legacy encounter whose previous image shows its legacy
+        # assessment as c2e53f8e shows its stored state is U17's measurement, recorded and never a problem; every other
+        # finding fails as before
+        a2, u17 = assertion_2(comp, (sb.get('update') or {}).get('update_pending'), sb.get('note'),
+                              (sb.get('update') or {}).get('legacy'), self.views.get('after') or {})
         items = []
         stored_views = {side: {pk: (views.get('reports.stored') or {}) for pk, views in (self.views.get(side) or {}).items()}
                         for side in ('before', 'after')}
@@ -1565,7 +2346,7 @@ class Check:
                 'health': http_rec.get('health')}),
             assertion(2, 'per proposal the previous image is equal or strictly more held; no new action', a2, {
                 'encounters_compared': comp.get('encounters'), 'new_path_compared': comp.get('new_path'),
-                'findings': len(comp.get('findings') or ())}),
+                'findings': len(comp.get('findings') or ()), 'u17_measurement': u17}),
             assertion(3, 'RECOMPUTE_STATES moves new-path encounters only toward held; changed set as declared',
                       rc_problems, {'declared': rc.get('declared'), 'declared_at': rc.get('declared_at'),
                                     'read_only': rc.get('read_only'), 'applied': rc.get('applied'),
@@ -1621,9 +2402,12 @@ class Check:
                    f'record kinds {sb.get("scenario_v2")}; reported, never required: {reported7}',
                 8: f'named {sorted(((sb.get("update") or {}).get("update_pending") or {}))}, reverted '
                    f'{sorted(((sb.get("update") or {}).get("reverted") or {}))}, resave {http_rec.get("resave")}'}
+        measured = {2: u17_summary(u17)}  # DECISIONS D338: U17's measurement, beside assertion 2's evidence
         for item in rec['assertions']:
             summary.append(f'  {item["assertion"]}. {item["result"]}  {item["title"]}')
             summary.append(f'       evidence: {said[item["assertion"]]}')
+            if item['assertion'] in measured:
+                summary.append(f'       {measured[item["assertion"]]}')
             for problem in item['problems'][:12]:
                 summary.append(f'       - {problem}')
             if len(item['problems']) > 12:
