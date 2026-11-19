@@ -58,9 +58,13 @@ EVIDENCE_NAME = 'scan-evidence.json'
 DENYLIST = json.loads((HERE / 'verification' / 'customer-denylist.json').read_text(encoding='utf-8'))
 CONTRACT = json.loads((HERE / 'verification' / 'customer-contract.json').read_text(encoding='utf-8'))
 # ASCII-only and case-insensitive, as the walk's JavaScript reads the same patterns ('gi' without 'u'): Python's re.I
-# alone would fold the long s and the Kelvin sign onto ASCII letters, which JavaScript does not.
+# alone would fold the long s and the Kelvin sign onto ASCII letters, which JavaScript does not. A pattern marked
+# "case_sensitive": true (design v2, FINAL-V2 4.12 [R:MO-2]: a provider name joined to a word by its case alone) is
+# matched with its case as written, ASCII-only, as the walk reads it ('g').
 FLAGS = re.ASCII | re.IGNORECASE
-PATTERNS = [(p['id'], p['severity'], frozenset(p['surfaces']), re.compile(p['source'], FLAGS)) for p in DENYLIST['patterns']]
+PATTERNS = [(p['id'], p['severity'], frozenset(p['surfaces']),
+             re.compile(p['source'], re.ASCII if p.get('case_sensitive') is True else FLAGS))
+            for p in DENYLIST['patterns']]
 FORBIDDEN_KEYS = frozenset(DENYLIST['forbidden_keys'])
 DENY_SHAPE = re.compile(DENYLIST['deny_value_shape'])
 ISO_TIMESTAMP = re.compile(CONTRACT['iso_pattern'])

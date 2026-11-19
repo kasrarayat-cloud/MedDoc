@@ -679,7 +679,8 @@ predict -> astra -> fable -> assess #1 -> astra_peer -> fable_peer -> assess #2
   when that run answers the request, the context is current and nothing else blocks a send - and an attempt recorded
   not sent, phase 1 or peer review, is never retried behind a reconcile or a context change.
 - **Worker deadlines:** a phase-1 or peer job's deadline covers `PARTICIPANT_LOOP_DEADLINE_SECONDS` (540 s) plus its
-  own bookkeeping, below `STALE_RUNNING_SECONDS` (600 s); the installer's stop timeout (600 s) is above both.
+  own bookkeeping, below `STALE_RUNNING_SECONDS` (600 s); the installer's stop timeout (1,500 s since AMENDMENT-2 1.12)
+  is above both.
 
 ### 12.2 The CMS tool executor (`studio/reference/tools.py`)
 
@@ -986,8 +987,8 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
 - **12.1, the upgrade mark.** A chain started by the upgrade's predict marks its peer stages `:after-upgrade`; they stop
   where they would send until a member's Resume, as its phase-1 stages do.
 - **12.1, deadlines.** A phase-1 or peer job's deadline is 580 s: the 540 s loop, 15 s to record its outcome and 25 s of
-  the stage's own work before the loop. It ends 20 s before `STALE_RUNNING_SECONDS` (600 s); the installer's 600 s stop
-  timeout outlasts it. A stage left with less than a whole loop's time is queued again, having reserved and sent nothing.
+  the stage's own work before the loop. It ends 20 s before `STALE_RUNNING_SECONDS` (600 s); the installer's 1,500 s
+  stop timeout (AMENDMENT-2 1.12) outlasts it. A stage left with less than a whole loop's time is queued again, having reserved and sent nothing.
 - **12.3 and 12.4, the frozen list and what a peer sees of Corti.** `frozen` lists `corti` when its run has response
   bytes, and a model participant whenever a reading was produced. Corti is shown to a peer only from a read, unrefused
   answer, with `modifiers: []`, `units` as the number of its entries, and `evidence` only as exact passages of the
@@ -4510,8 +4511,17 @@ owner:** session 30a58364. Every agent works under it; no other actor installs.
 
 ### The migration checklist (the owner's, verbatim; an item is ticked only when its stated outcome is verified, with the evidence linked)
 
-- [ ] Record the installed baseline, rollback image, active work and all locations where semantic interpretation influences routing,
+- [x] Record the installed baseline, rollback image, active work and all locations where semantic interpretation influences routing,
   matching, contradictions, completeness, clarification, review, saving and export.
+  **Evidence:** `cpt-studio/GEMINI-MIGRATION-MAP.md` (2026-11-09), recording:
+  - the baseline: release c2e53f8e, image `sha256:02a99d53026f`, rollback images c2e53f8e7d33 and aeae34bebbe5 present, schema
+    leaf 0013, read-only live counts at 08:20:55Z (86 encounters, 180 assessments, 2,477 proposals, 62 decisions);
+  - the active work: the U32 c4 workflow stopped and preserved; the keyword-era branches parked; g1 sealed;
+  - 97 influence sites by concern and the ordered legacy calls on 9 execution paths, from 8 readers plus a re-reading
+    synthesis, 11 high-impact sites re-verified against the code by the integration owner;
+  - the keep/replace/utility split and 33 hazards.
+  It is a STATIC map: for the new path, the runtime call guard of item 4 is the backstop against any site static reading
+  missed (function-local imports, module names in strings).
 - [ ] Implement the production Gemini adapter using the existing protected credential. Include finite deadlines, Stop/resume,
   duplicate prevention, usage recording and reconciliation of unknown outcomes. Authentication/quota failures must stop requests. No
   silent model substitution or fallback to the old reader.
@@ -4541,3 +4551,207 @@ owner:** session 30a58364. Every agent works under it; no other actor installs.
 
 **Completion** means the INSTALLED application actually uses the replacement successfully. A working adapter or a passed seven-case
 trial is not completion. Clinical-accuracy claims stay separate from functional completion.
+
+### Owner directive, 2026-11-12: Gemini owns the open-ended clinical interpretation; the phrase-by-phrase repair campaign is stopped
+
+Verbatim, with the session's interpretation (a)-(j), in `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` ("Owner directive,
+2026-11-12"); row in `docs/foundation/RULINGS.md`. It confirms the 2026-11-09 directive and changes the MEANS. The narrowing-only
+repair rounds were adding a deterministic word reader for each counterexample, and they were not converging: since round 5f, 14
+builders produced 7 integrable repairs, and every review found new critical paraphrases. That campaign stops here.
+
+**Preserved work and evidence (nothing deleted).**
+- The branch `feat/cpt-studio-gemini-interpreter-20261109` at 4726a8ce6261bfb874246d8fa3e6f6ceb99cd875, pushed and confirmed on
+  origin. It is the baseline the new design starts from.
+- DECISIONS D1-D177 (`cpt-studio/docs/gemini-migration/DECISIONS.md`), with every round's integration entry, record of repairs not
+  integrated, recorded residuals and accepted costs.
+- The session directory `gemini-migration/` holds:
+  - the rounds' patches, reviews and probes;
+  - refutation rounds 5-6, with their confirmed findings and case files;
+  - the audited differential gate `gate5/` and its run on 05a881a75 (3,165 cases);
+  - the FRESH recordings (fresh-frozen, fresh2-frozen) and scores;
+  - the head-to-head.
+- The U32 c4 four-result registry (1,374 entries), which is a regression corpus.
+
+**The required implementation (the owner's, verbatim; ticked only with linked evidence).**
+
+- [ ] Move judgments about timing, causality, entry ownership, targets, techniques, examined stations and extent into Gemini’s
+  structured, source-linked event inventory. Represent supported facts, explicit negatives, contradictions and unknowns distinctly.
+- [ ] Remove remaining keyword-based reinterpretations and semantic vetoes from the new path. Do not reproduce the old reader under a
+  new “verification” name. Keep deterministic schema, source-integrity, revision-binding and applicable coding-rule checks.
+- [ ] Define verification honestly. A quote existing in the document does not prove that it supports the claimed meaning. Check
+  attachment to the correct event and surrounding qualifications. Gemini must not certify its own answer simply by setting
+  “verified=true”.
+- [ ] Hold only decisions dependent on unresolved required facts. Give one focused explanation or question. Let unrelated supported
+  codes proceed. Preserve broad denials and genuine contradictions; never treat an unknown target as proof that statements cannot
+  conflict.
+- [ ] Keep Corti, Astra and Fable as coding participants. Model agreement alone must not approve a code. Preserve reviewer approval
+  and customer-facing provider confidentiality.
+
+**Acceptance, frozen BEFORE the prompt changes.**
+- Committed by hash, cases and expected outcomes together.
+- Composition:
+  - independent documents (g1, sealed; c6 and c7 stay sealed for the post-install walk);
+  - previous failures (the registry, the refutation rounds' confirmed findings, FRESH's recorded failures);
+  - equivalent paraphrases of each failure;
+  - meaning-changing variants;
+  - repeated runs.
+- Measured, per code: wrong READY (wrong code, wrong act or wrong facts), wrong exclusions and dropped genuine questions, AND
+  unnecessary holds.
+- The pass thresholds are written down before measuring. An all-held result cannot pass.
+
+**Recordings.**
+- Fresh Gemini calls run under the existing testing authority (the cap of about $300, 2026-11-11), in small, bounded batches with
+  concurrency one, each with its own cost cap; every request's usage is recorded.
+- Fresh calls are labelled apart from replays and text-only runs.
+- Prior recordings are kept unchanged.
+- On 2026-11-12 the owner's funding authority (below; D183) superseded the ~$300 cap as a ceiling. The batches, their
+  per-batch guards and the recording of every request's usage stay.
+
+**Installation and completion.**
+- Install only after the new path passes the frozen checks, through the established path: PR, CI, `scripts/merge-pr.sh`, a
+  declaration committed in `docs/foundation/mutations/`, and `scripts/run-ruled-mutation.sh`.
+- Then run the actual website workflow on the installed site: upload, processing, review, save, reload and downloaded reports.
+- Then verify that the deployed runtime uses Gemini and invokes none of the retired semantic vetoes (operator-side evidence).
+- The current site (c2e53f8e) stays available until the switch; existing records and the rollback image are kept.
+- The report states: the installed revision, the remaining defects, the incorrect approvals, the unnecessary holds, the usage and
+  the actual download results.
+- The migration is NOT complete at the design, recording or offline-test stage.
+
+**Status, 2026-11-12.** Recorded. Next, in order:
+1. Freeze the acceptance cases and expected outcomes. No prompt change happens before this.
+2. Design (the inventory's attributes and states, the attachment and qualification checks, the fail-closed hold policy, the
+   retirement list).
+3. Implement.
+4. Fresh recordings and measurement.
+5. Refutation.
+6. PR, CI and merge.
+7. Install.
+8. The website walk.
+9. The report.
+
+**Status, 2026-11-12, after step 1's first pass.**
+- **Acceptance set a1 v1 is sealed and recorded by hash** in `docs/gemini-migration/acceptance-a1/` (THRESHOLDS.md, SHA256SUMS-v1,
+  README.md).
+  - It has 216 synthetic reports and 550 code rows.
+  - It was authored, independently checked and adjudicated per family.
+  - Its structural checks found 0 violations.
+  - The builder has read no case.
+- **Before the set is used**, THRESHOLDS.md amendment 1 applies:
+  - every label is re-derived blind, and each disagreement is adjudicated without saying which answer is the label;
+  - v2's hashes are committed before any prompt change.
+
+  The amendment also names the one unclassified cell (expected EXCLUDED, actual HELD = SAFE MISMATCH, reported) and fixes, before
+  any measurement, how a disputed label is decided while the builder stays blind.
+- **Step 2 (design v2)** is running, blind to the set.
+
+**Status, 2026-11-12, step 1 done: acceptance set a1 v2 is sealed and committed by hash, before any prompt change.**
+- **Labels re-derived blind** (amendment 1).
+  - Outcome agreement with v1 was 533 of 550 rows. No blind coder gave READY where v1 did not.
+  - 28 rows were adjudicated A/B and 21 labels changed, mostly on the HELD/EXCLUDED boundary.
+  - The adjudicators applied the product's established policy, stated from the code: an act at another encounter is EXCLUDED;
+    base codes, components, competing codes, limited-versus-full and session-caused bleeding are held for the reviewer.
+  - A base-code scan found no READY base code left beside a counted intervention.
+  - One variant was dropped by a pair adjudicator because its edit changes no outcome.
+- **The v2 set:** 215 cases, 546 code rows. It was sealed at 04:39:52Z with all its evidence; see `SHA256SUMS-v2` and
+  README.md. v2 is the set measured.
+- **`DEV-EXCLUSION.sha256`** lists the hashes of every a1 document text, for the builders and a fixture guard.
+- **Baseline harness** (session tools):
+  - c2e53f8e runs on the set in 8 seconds;
+  - the scorer implements THRESHOLDS' classes, with independent evaluators for the act and topic checks.
+
+**Status, 2026-11-12, step 2 done: design v2 is adopted (DECISIONS D178-D182).**
+- **The design** is `docs/gemini-migration/FINAL-V2.md`. Four refutation lenses attacked it and it was revised; each decision is in
+  `REFUTATIONS-V2.md`. It was written blind to a1 and to every sealed set.
+- **Its shape:**
+  - Two Gemini calls per document. The first builds the source-linked inventory: facts with states, sources and Gemini's doubts.
+  - The second judges CPT Studio's fixed sentences about those facts against the document. For each fact that decides a code, it
+    must also reject a contrary sentence planted beside it.
+  - A deterministic settle step computes each fact's result: supported, negated, contradicted, unknown or unresolved.
+  - A text-free engine applies the coding rules to the results.
+  - 145 v1 reader functions, in 17 modules, are denied on the new path.
+- **Cost and time, modelled before any send:**
+  - about $0.083 per document (median) now, and $0.166 from 2026-12-01: about 1.85 times the single-call v1;
+  - a median of about 53 s, against 28 s.
+- **Owner items, and the step each gates** (D178):
+  - the second call's cost: class d, before the install;
+  - the recording budget against the cap: class d, before the acceptance run;
+  - the legacy context-save loss: class b, before the install;
+  - a separate test key after the switch: class d, before any batch after the switch.
+- **Next:** step 0b, then build wave 1 (six builders).
+  - Each builder works in its own tree, and each file has one owner.
+  - The integration owner applies the patches. The full suite runs after every wave.
+
+**Owner authority, 2026-11-12: the second Gemini call approved, and the migration funded.** The authority is verbatim in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` ("Owner directive, 2026-11-12 — funding authority for the migration;
+the second Gemini call approved"), and in RULINGS.md; DECISIONS D183 applies it.
+- **Approved:** design v2's second call per report. Both passes stand.
+- **Funded:** the Gemini, Corti, Astra, Fable and development-agent usage needed to complete the migration.
+  - For authorized synthetic development, testing and verification, this supersedes the owner-imposed monetary ceilings,
+    including the testing authority of 2026-11-11 (about $300).
+  - No new ceiling is invented, and price or testing-budget approvals are no longer asked.
+- **Batches stay purposeful.** Each has a cost guard of about twice its modelled cost: the guard stops a runaway loop and
+  is not a ceiling on the work. Actual usage and cost are recorded per request and per batch.
+- **Unchanged:**
+  - The Google project's own spending cap is the owner's setting; the session does not change it or work around it.
+  - Authentication, quota and payment failures are holds, diagnosed and reported to the owner, never retried in a loop.
+  - No subscription, top-up, vendor agreement or key is created.
+  - Synthetic data only; no real patient's document is processed.
+- **The server execution control** is the authorization reference every provider run records
+  (`CPT_STUDIO_AUTHORIZATION_REF`). It is the rulings file, which now holds this authority. The live gate still refuses a
+  send without it.
+- **Accounting is preserved, not reset:** the cap stop of 2026-11-10 at about $26 (estimated), the 23 sends refused after
+  it, the void g1 runs 2 and 3, and every estimate marked as one. The usage ledger is the session's
+  `gemini-migration/USAGE-LEDGER.md`, and this file gives its totals at each milestone.
+- **Still open:** the class-b legacy context-save loss (FINAL-V2 6.2). It is asked again before the install. (Closed
+  the same day by the owner's amendment below: automatic recheck, D184.)
+- **Scope, through to completion:**
+  - the implementation;
+  - independent testing of wrong READYs and unnecessary holds;
+  - the critical and materially incomplete findings;
+  - the pypdf security update and its checks; DONE 2026-11-14: PR #1494 merged into main as 56b70eb5 (pypdf 6.21.4
+    under a fail-closed 6.21.2 compatibility layer; round 9: 2,611 of 2,705 unique PDFs read identically to the
+    installed release, 90 S-limit constructions, 1 P-cost, 3 memory boundary, 0 unexplained; the identity lens's
+    444,140 runs found nothing; CI on 0ec8a9e8a green with pip_audit "No known vulnerabilities found"), merged into
+    the migration branch 2026-11-15;
+  - the installation, with the current site kept available;
+  - the actual website walk: upload, review, save, reload and downloads.
+
+**Owner amendment, 2026-11-12: automatic recheck after a save** (verbatim in the rulings file, "Owner amendment,
+2026-11-12 — automatic recheck after a save"; RULINGS.md; DECISIONS D184). It supersedes FINAL-V2 6.2's mandatory "Check
+again" on legacy encounters and closes the class-b item.
+- **The rule:** a successful save that changes clinical content or coding context queues the recheck in the background.
+  - Only the stages whose inputs changed run, and results are reused only when inputs and versions match.
+  - Each result is bound to the exact saved revision and context, and an older result never overwrites newer work.
+  - Duplicate submissions are prevented.
+- **While pending:**
+  - the screen shows "Changes saved—updating codes", with truthful progress;
+  - stale codes cannot be approved or exported as current;
+  - earlier approvals and reports stay as records.
+- **When done:** the screen shows the updated codes and what changed, and approval stays explicit.
+- **Failures** offer Retry with a clear explanation. Quota, authentication and payment failures hold without repeated
+  requests.
+- **Scope:** legacy and new encounters.
+- **Verified by tests and the installed walk:** rapid successive edits, failures, reload persistence and actual exports.
+- **Next:** the behaviour is designed and refuted as FINAL-V2 amendment 1 before it is built (steps 5b and a new UI step).
+
+**Owner directive, 2026-11-13: the interpreter's model becomes `gemini-4-carbon`, at its maximum reasoning** (verbatim in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`; RULINGS.md; DECISIONS D230, built by round w9r's step cb, D272).
+- **The model.** The interpreter's model, D13's code constant (`studio/interpretation/__init__.py` MODEL, named by the
+  request's URL), is `gemini-4-carbon`: every request built names it, and an answer naming any other model sets the
+  model hold (P-5). The trial above and the FRESH recordings were answered by `gemini-4-argon`, and the twelve
+  SYNTHETIC-SLIP answers under `tests/fixtures/interpretation/synthetic/`, hand-written and answered by no model, are
+  labelled `gemini-4-argon` (DECISIONS D274); all stay labelled so and are replayed as Argon's: the adapter reads a v1
+  answer against the models v1's requests have named (`gemini-4-argon`, which every v1 request of record named, or
+  MODEL, which a v1 request built since D230 names) and a design v2 answer against MODEL alone; the classifier holds any
+  answer that does not name MODEL.
+- **The request.** Both passes ask for thinking level high, the model's documented maximum, and 65,536 output tokens,
+  its synchronous limit, which thinking tokens count toward; temperature stays in the body (the model ignores it and does
+  not reject it). The bytes change before the first recording, so no version moves (D202). The HTTP timeouts stay until
+  D1 measures the latency at high reasoning.
+- **Cost.** `gemini-4-carbon` at `gemini-4-argon`'s rates, the same through 2026-11-30 and from 2026-12-01 (Google's
+  pricing page, read 2026-11-13); a run whose request named Argon keeps Argon's rates.
+- **Customer surfaces.** The customer denylist names both full IDs, never the bare word "carbon": a carbon-particle tattoo
+  is clinical wording, as argon plasma coagulation is.
+- **No separate qualification.** D1-D3, the frozen acceptance and the installed walk measure Carbon. Watched at D1: the
+  latency against the 480, 510 and 560 s timeouts, MAX_TOKENS finishes, modelVersion exactly `gemini-4-carbon`, and the
+  cost.

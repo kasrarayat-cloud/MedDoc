@@ -18,6 +18,7 @@ from studio import jobs, models
 from studio.gi import context
 from studio.gi.context import MISSING_NOTES
 from studio.types import CONTEXT_FACTS, Fact, Span, to_jsonable
+from tests.legacy_chain import applied
 from tests.support import pipeline_factories as pf
 from tests.test_pipeline_api import OFFICE_NOTE, drain
 from tests.test_repairs_pipeline import LIVE, NO_DATE_NOTE, ApiHarness
@@ -170,6 +171,7 @@ class ContextCostIsBoundedTests(SimpleTestCase):
         self.assertEqual((facts['billing_context'].origin, len(facts['billing_context'].evidence)), ('conflict', 72000))
 
 
+@applied
 @override_settings(**LIVE)
 class ContextCostThroughTheServiceTests(ApiHarness, TestCase):
     """The finding's own routes: the analyze stage in the worker, and POST /context in a cold web process."""

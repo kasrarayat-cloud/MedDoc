@@ -1,0 +1,16 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Facility: Thornfield Outpatient Endoscopy (fictional)
+Patient: Esther Kalinowski (fictional)
+Date of service: November 9, 2026
+Endoscopist: Marcus Delacroix-Ye, MD (fictional)
+Indication: Change in bowel habit and iron deficiency.
+Anesthesia: Monitored anesthesia care (MAC) by the anesthesia service.
+Procedure: I advanced the colonoscope to the cecum and identified the appendiceal orifice.
+Findings:
+- Ascending colon: a 7 mm sessile polyp.
+- Under MAC by Dr. Yusuf Brightwater (fictional), a cold snare polypectomy was performed.
+- The polyp was retrieved for histology. There was no bleeding.
+- The remainder of the colon was normal.
+Impression: 7 mm ascending colon polyp, removed by cold snare.
+Plan: Await pathology.

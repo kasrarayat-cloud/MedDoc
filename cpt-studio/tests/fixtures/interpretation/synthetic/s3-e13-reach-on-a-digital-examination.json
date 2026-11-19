@@ -1,0 +1,32 @@
+{
+  "label": "SYNTHETIC-SLIP",
+  "slip": "S3",
+  "role": "slip",
+  "name": "s3-e13-reach-on-a-digital-examination",
+  "about": "An extent invented for the digital rectal examination (\"distal rectum\", in no passage): discarded, never attached or stored.",
+  "kind": "txt",
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nCOLONOSCOPY REPORT\nDate of service: November 9, 2026\nEndoscopist: Ines Valdero, MD (fictional)\nProcedure: A digital rectal examination was performed and was normal.\nThe colonoscope was then advanced to the cecum.\nFindings: The colon was normal.\n",
+  "response": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": "{\"passages\": [{\"id\": \"P1\", \"text\": \"Date of service: November 9, 2026\"}, {\"id\": \"P2\", \"text\": \"Endoscopist: Ines Valdero, MD (fictional)\"}, {\"id\": \"P3\", \"text\": \"Procedure: A digital rectal examination was performed and was normal.\"}, {\"id\": \"P4\", \"text\": \"The colonoscope was then advanced to the cecum.\"}], \"encounter\": {\"date_of_service\": {\"value\": \"2026-11-09\", \"state\": \"stated\", \"words\": \"November 9, 2026\", \"passages\": [\"P1\"], \"other_dates\": []}, \"documenting_endoscopist\": {\"words\": \"Ines Valdero, MD (fictional)\", \"passages\": [\"P2\"]}, \"team\": [], \"anatomy\": [], \"reach\": [{\"event\": \"E1\", \"landmark\": \"rectum\", \"words\": \"distal rectum\", \"passages\": [\"P3\"], \"completion\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}}, {\"event\": \"E2\", \"landmark\": \"cecum\", \"words\": \"advanced to the cecum\", \"passages\": [\"P4\"], \"completion\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}}], \"visit_facts\": []}, \"lesions\": [], \"events\": [{\"id\": \"E1\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"examination\", \"words\": \"digital rectal examination\", \"passages\": [\"P3\"]}, \"technique\": {\"value\": \"manual\", \"words\": \"digital\", \"passages\": [\"P3\"]}, \"target\": {\"lesion\": \"\", \"landmark\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"time\": {\"value\": \"current_encounter\", \"words\": \"\", \"passages\": []}, \"performer\": {\"value\": \"documenting_team\", \"words\": \"\", \"passages\": []}, \"status\": {\"value\": \"performed\", \"words\": \"was performed\", \"passages\": [\"P3\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}, {\"id\": \"E2\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"examination\", \"words\": \"colonoscope\", \"passages\": [\"P4\"]}, \"technique\": {\"value\": \"endoscope\", \"words\": \"colonoscope\", \"passages\": [\"P4\"]}, \"target\": {\"lesion\": \"\", \"landmark\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"time\": {\"value\": \"current_encounter\", \"words\": \"\", \"passages\": []}, \"performer\": {\"value\": \"documenting_team\", \"words\": \"\", \"passages\": []}, \"status\": {\"value\": \"performed\", \"words\": \"was then advanced to the cecum\", \"passages\": [\"P4\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}], \"open_questions\": []}"
+            }
+          ],
+          "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-4-argon",
+    "responseId": "synthetic-s3-e13-reach-on-a-digital-examination",
+    "usageMetadata": {
+      "promptTokenCount": 0,
+      "candidatesTokenCount": 0,
+      "totalTokenCount": 0
+    }
+  }
+}

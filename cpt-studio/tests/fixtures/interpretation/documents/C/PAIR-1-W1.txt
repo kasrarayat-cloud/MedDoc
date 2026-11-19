@@ -1,0 +1,18 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+COLONOSCOPY REPORT
+Patient: Synthetic Patient (fictional), 58-year-old man
+Date of service: November 9, 2026
+Endoscopist: A. Current, MD (fictional)
+Sedation: Monitored anesthesia care by the anesthesia team
+
+Indication: Colorectal anastomotic stricture after a sigmoid colectomy in 2023; straining and narrow stools.
+
+HISTORY
+A colonoscopy in March 2024 found the anastomosis narrowed but passable. No dilation was carried out in 2024.
+
+PROCEDURE
+The colonoscope was advanced to the colorectal anastomosis at 20 cm, where a short benign-appearing stricture admitted the scope only with resistance. A through-the-scope balloon was passed across the stricture and inflated to 15 mm for 60 seconds. The colonoscope then passed easily and was advanced to the cecum; the appendiceal orifice and ileocecal valve were identified.
+
+IMPRESSION
+Colorectal anastomotic stricture dilated with a through-the-scope balloon to 15 mm.

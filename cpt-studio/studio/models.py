@@ -212,6 +212,22 @@ class EncounterContext(ImmutableModel):
     # P5 FLOW), recorded when the context is made, so a screen can show the document's date beside the one a member
     # entered without reading the note's prose. Outside ``sha256``. Null for contexts made before it existed.
     document_date = models.JSONField(null=True, blank=True)
+    # Gemini migration (FINAL 4.2, D6): the EventInventory a 'gemini-context@1' context was derived from, so which
+    # inventory a stage reads is a stored fact of the context it carries (Job.context), never a lookup of the newest
+    # inventory. Null on every legacy context. Nullable with no database default (migration 0014), so a context an older
+    # release inserts leaves it NULL (ops/install.py migration_verdict: "nullable").
+    event_inventory = models.ForeignKey('EventInventory', null=True, blank=True, on_delete=models.PROTECT,
+                                        related_name='+')
+    # FINAL-V2 amendment 1 (docs/gemini-migration/AMENDMENT-1.md 4.5, A5; adopted as DECISIONS D208): the earlier codes,
+    # the Assessment the member was shown before the save or addendum this context was made for. It names them while
+    # the update runs and is the base of "what changed" afterwards. Set at insert (jobs.record_derived_context's
+    # ``earlier``, from analyze and from a context save), never after (the row is immutable), and outside ``sha256``.
+    # NULL for an upload, for a first processing with nothing shown yet, for every context made before it existed, and
+    # for any context an older release writes after a switch-back (it knows no such column). Nullable with no default of
+    # any kind (migration 0015), so a context an older release inserts leaves it NULL (ops/install.py
+    # migration_verdict: "nullable"). No reverse accessor ('+'): Assessment gains no attribute for it.
+    earlier_assessment = models.ForeignKey('Assessment', null=True, blank=True, on_delete=models.PROTECT,
+                                           related_name='+')
 
 
 class RoutingRun(ImmutableModel):
@@ -283,6 +299,48 @@ class ProviderRun(models.Model):
         indexes = [models.Index(fields=['provider', 'adapter_version', 'request_sha256'])]
 
 
+class EventInventory(ImmutableModel):
+    """Gemini migration (FINAL 4.1, D6): the one persisted reading of a revision's documented clinical events - Gemini's
+    stored answer, read under ``interpretation_version`` and normalized and verified under ``inventory_version`` - that
+    every new-path consumer reads (P6). Bound to its revision and to the Gemini ProviderRun whose stored bytes were
+    read. A stored answer the reader refused keeps a row in state ``refused``, with empty events and the reason in
+    ``verification`` (contract 4.5). A new ``inventory_version`` re-reads the same stored bytes into a new row beside
+    the first, with no new request, which is why both versions and the run are in the unique key. Append-only."""
+    READ, REFUSED = 'read', 'refused'
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # tenancy: scoped by encounter__workspace, as every reuse lookup is
+    encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='event_inventories')
+    revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='event_inventories')
+    provider_run = models.ForeignKey(ProviderRun, on_delete=models.PROTECT, related_name='event_inventories')
+    # Design v2 (docs/gemini-migration/FINAL-V2.md 6.3, migration 0015): the appraisal ProviderRun (pass 2, purpose
+    # 'appraisal') whose verdicts a gemini-events@2 inventory settled; provider_run stays pass 1's. NULL on every v1 row
+    # and on a v2 row that records a refused pass-1 answer (no pass 2 ran); a refused or unhealthy pass-2 answer is
+    # recorded on its ProviderRun and the stage, never as a row, so the unique key below is unchanged. Nullable with no
+    # default of any kind, so a row an older release inserts leaves it NULL (ops/install.py migration_verdict:
+    # "nullable"). interpretation.store.BINDINGS_V2 names it, so a v2 row's sha256 binds both runs.
+    appraisal_run = models.ForeignKey(ProviderRun, on_delete=models.PROTECT, null=True, related_name='+')
+    interpretation_version = models.CharField(max_length=40)  # gemini-events@1: the prompt, schema and read rules
+    inventory_version = models.CharField(max_length=40)  # gemini-inventory@1: normalization, verification, lexicons
+    text_sha256 = models.CharField(max_length=64)  # the revision text the request was built from (checked on read)
+    request_sha256 = models.CharField(max_length=64)  # copied from the run
+    response_sha256 = models.CharField(max_length=64)  # copied from the run; re-checked against its stored bytes
+    state = models.CharField(max_length=12)  # read | refused
+    events = models.JSONField()  # {passages, lesions, events, relations} (contract 4.3, as FINAL 5 corrects it)
+    encounter_facts = models.JSONField()
+    open_questions = models.JSONField()
+    verification = models.JSONField()  # the D22 evidence of this reading: counts, reasons, discarded items, problems
+    sha256 = models.CharField(max_length=64)  # types.sha256_json over everything above but id and created_at
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        constraints = [models.UniqueConstraint(
+            fields=['revision', 'interpretation_version', 'inventory_version', 'provider_run'],
+            name='one_inventory_per_revision_versions_run')]
+        indexes = [models.Index(fields=['revision', 'interpretation_version', 'inventory_version'],
+                                name='studio_inventory_versions')]
+
+
 class Assessment(ImmutableModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='assessments')
@@ -309,6 +367,15 @@ class Assessment(ImmutableModel):
     retrieval = models.JSONField(default=list)
     sha256 = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Gemini migration (FINAL 4.2, D6, D22): the EventInventory a new-path assessment was made from, set at insert; and
+    # ``interpretation``, the operator record of how it was made (the engine and both interpretation versions, the
+    # inventory id and sha256, the Gemini run, the context, member_date_state, the sentinel's count), which is outside
+    # ``sha256`` like ``participants`` and ``retrieval``. Both are null on every legacy assessment. Nullable with no
+    # database default (migration 0014), so a row an older release inserts leaves them NULL (ops/install.py
+    # migration_verdict: "nullable").
+    event_inventory = models.ForeignKey(EventInventory, null=True, blank=True, on_delete=models.PROTECT,
+                                        related_name='+')
+    interpretation = models.JSONField(null=True, blank=True)
 
     class Meta:
         ordering = ['created_at']
@@ -553,6 +620,75 @@ class OperatorRevocation(ImmutableModel):
     grant = models.OneToOneField(OperatorGrant, on_delete=models.PROTECT, related_name='revocation')
     reason = models.TextField()
     revoked_by = models.CharField(max_length=120)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class InterpreterHold(ImmutableModel):
+    """Gemini migration (FINAL 4.1 and 11, D11): the installation-wide interpreter hold, set when a Gemini answer means
+    further requests would be refused or misread until an operator acts - an authentication or permission refusal, an
+    exhausted daily or billing quota, a substituted model (FINAL 11.1; ADJUDICATION P-3 to P-5). While a hold stands no
+    Gemini request is sent. Installation-wide, so it names no workspace. Shaped like OperatorGrant: append-only, and
+    active until an InterpreterHoldRelease names it. ``reason`` is a plain column with no choices: the classification
+    (interpretation.holds) owns its values, so a new one needs no migration (the installer's gate refuses
+    AlterField)."""
+    AUTH, PERMISSION, QUOTA, MODEL = 'auth', 'permission', 'quota', 'model'
+    # AMENDMENT-2 1.5: a request of the version refused as invalid; the model declined to answer (request-bound)
+    REFUSED, DECLINED = 'refused', 'declined'
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reason = models.CharField(max_length=20)
+    http_status = models.PositiveIntegerField(null=True, blank=True)
+    vendor_status = models.CharField(max_length=40, blank=True)  # the error body's error.status, as received
+    violations = models.JSONField(default=list, blank=True)  # the google.rpc.QuotaFailure violations, as recorded
+    # the Gemini run whose answer set the hold
+    run = models.ForeignKey(ProviderRun, on_delete=models.PROTECT, related_name='interpreter_holds')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class InterpreterHoldRelease(ImmutableModel):
+    """The end of one InterpreterHold, recorded by the ``interpreter_hold --release`` management command (FINAL 11.2);
+    the hold row stays. Members then Resume."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    hold = models.OneToOneField(InterpreterHold, on_delete=models.PROTECT, related_name='release')
+    released_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    note = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ProviderHold(ImmutableModel):
+    """FINAL-V2 amendment 1 (docs/gemini-migration/AMENDMENT-1.md 7.3, A16 and A20; adopted as DECISIONS D208): the
+    installation-wide hold of one provider - Corti, Astra or Fable - set when a refusal of that provider means further
+    requests would be refused until an operator acts: an authentication, permission, payment or quota refusal, by A20's
+    one classification (studio.provider_holds reads the run's recorded HTTP status and ``sent``, never its error text).
+    While a hold of a provider stands no request of that provider is sent by any encounter; a stored answer is still
+    reused. Installation-wide, so it names no workspace and no encounter. Shaped like InterpreterHold: append-only, and
+    standing until a ProviderHoldRelease names it. ``provider`` and ``reason`` are plain columns with no choices: the
+    classification owns their values, so a new one needs no migration (the installer's gate refuses AlterField). One run
+    sets at most one hold and a reuse of a run sets none; the classification's ``record`` keeps both, as
+    interpretation.holds.record does for InterpreterHold."""
+    AUTH, PERMISSION, QUOTA, REFUSED = 'auth', 'permission', 'quota', 'refused'  # REFUSED: a participant's other 4xx
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.CharField(max_length=20)  # the ProviderRun.provider of the run that set it
+    reason = models.CharField(max_length=20)
+    http_status = models.PositiveIntegerField(null=True, blank=True)  # the refusal's status, as the run recorded it
+    # the run whose recorded refusal set the hold (for Corti's token endpoint, the run recorded not sent)
+    run = models.ForeignKey(ProviderRun, on_delete=models.PROTECT, related_name='provider_holds')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class ProviderHoldRelease(ImmutableModel):
+    """The end of one ProviderHold, recorded by the ``provider_hold --release <provider>`` management command
+    (AMENDMENT-1.md 7.3: an operator, holding an operator grant, as for ``interpreter_hold``); the hold row stays.
+    Shaped like InterpreterHoldRelease. After it the next member act sends the held request once."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    hold = models.OneToOneField(ProviderHold, on_delete=models.PROTECT, related_name='release')
+    released_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    note = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
 

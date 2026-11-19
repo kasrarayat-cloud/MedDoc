@@ -1,0 +1,12 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Flexible Sigmoidoscopy - urgent
+Date of service: 2026-10-14
+Endoscopist: Jane Synthetic, MD (fictional)
+Sedation: monitored anesthesia care
+
+Indication: Rectal bleeding.
+
+Procedure: The adult colonoscope was advanced to 40 cm in the sigmoid colon. Cold forceps biopsies were obtained from the rectum.
+Flexible sigmoidoscopy was completed to 40 cm without complication.
+
+Plan: Colonoscopy in 6 weeks.

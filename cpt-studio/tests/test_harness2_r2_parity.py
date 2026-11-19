@@ -38,10 +38,12 @@ from django.utils import timezone
 from studio import jobs, models, participants, review
 from studio.reference import importers, passages
 from studio.types import RawExchange
+from tests import v2_documents, v2_replay
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_harness_pipeline import BOTH, HarnessCase, installed_reader_labels, served_reader_labels
-from tests.test_pipeline_api import FakeProvider, drain
+from tests.test_pipeline_api import FakeProvider, RecordedInterpretation, drain
 from tests.test_reference import ArchiveMixin
 from tests.test_repairs_pipeline import LIVE
 
@@ -184,6 +186,7 @@ class CortiOnlyCase(OperatorReads, AssessedTwiceMixin, ArchiveMixin, TestCase):
         self.assertEqual(self.holdings(encounter_id), before)
 
 
+@applied
 class CortiOnlyRepersistTests(CortiOnlyCase):
     """A reviewer decides 45378; then the passages are imported; then an assess reads exactly the first assessment's
     inputs again: the round-4 head's answer, one assessment with everything where it was."""
@@ -205,10 +208,13 @@ class CortiOnlyRepersistTests(CortiOnlyCase):
         self.kill_after_persisting(encounter_id)
         self.assertGreater(import_passages(), 0)
         recorded = Persisted(self)
+        # FINAL-V2 amendment 1, 4.3 and 3.6: the swept stage made the current codes, which are fresh - it serves
+        # nothing and nothing is left to resume; the recorded assessment stands as it was
         response = self.post(f'/api/encounters/{encounter_id}/resume', {})
-        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.status_code, 409, response.content)
         drain()
-        self.assert_the_same_inputs_kept_the_assessment(recorded, before, encounter_id)
+        self.assertEqual(recorded.calls, [])
+        self.assertEqual(self.holdings(encounter_id), before)
 
     def test_a_round_4_row_is_the_same_assessment_as_its_identical_reassessment(self):
         """An assessment as migration 0007 leaves one the round-4 release recorded (participants and retrieval both
@@ -258,6 +264,7 @@ class SameAssessmentMixin:
         self.assertFalse(review._same_assessment(None, *common[1:], record, []))
 
 
+@applied
 @override_settings(**LIVE)
 class CortiOnlySameAssessmentTests(SameAssessmentMixin, CortiOnlyCase):
     """review._same_assessment with no model participant configured: exactly the round-4 head's comparison (I1)."""
@@ -301,7 +308,7 @@ def jobs_records():
 # --- parity-r2-2 with participants configured (HARNESS.md 12.3) -------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
-class ConfiguredRepersistTests(OperatorReads, AssessedTwiceMixin, ArchiveMixin, HarnessCase):
+class ConfiguredRepersistTests(RecordedInterpretation, OperatorReads, AssessedTwiceMixin, ArchiveMixin, HarnessCase):
     """Astra and Fable configured (the pipeline tests' fakes) and both of their first requests failed, so assess #1 owes
     no peer stage and is the final assessment (I10). The same assess, resumed after the stale sweep with the passages
     imported in between, reads the same participant runs: it is the same assessment."""
@@ -313,8 +320,12 @@ class ConfiguredRepersistTests(OperatorReads, AssessedTwiceMixin, ArchiveMixin, 
         self.load_pfs()
         self.load_mue()
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_resume_after_the_stale_sweep_keeps_the_recorded_final_assessment(self):
-        encounter_id = self.create()
+        # DECISIONS D243: the test rejects through the product, which reads event_coding@2 only (FINAL-V2 6.5): its rows
+        # are design v2's, in replay (tests/v2_replay.py), from the office note with its clinician named
+        # (tests/v2_documents.OFFICE_NOTE, RecordedInterpretation.v2_interpretations' default) - never the v1 chain's
+        encounter_id = self.create(v2_documents.OFFICE_NOTE)
         drain()
         self.assertEqual([(r['name'], r['state']) for r in self.records(encounter_id).values()],
                          [('astra', 'failed'), ('fable', 'failed')])
@@ -329,19 +340,17 @@ class ConfiguredRepersistTests(OperatorReads, AssessedTwiceMixin, ArchiveMixin, 
         self.assertGreater(import_passages(), 0)
         recorded, sent = Persisted(self), (len(self.adapters['astra'].sent), len(self.adapters['fable'].sent))
         self.assertEqual(sent, (1, 1))
+        # FINAL-V2 amendment 1, 4.3 and 3.6: the swept stage made the current codes, which are fresh - it serves
+        # nothing and nothing is left to resume; the recorded assessment stands as it was
         response = self.post(f'/api/encounters/{encounter_id}/resume', {})
-        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.status_code, 409, response.content)
         drain()
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), sent)
-        self.assertEqual(len(recorded.calls), 1)
-        call = recorded.calls[0]
-        self.assertEqual([(entry['name'], entry['state'], entry['run']) for entry in call['participants']],
-                         [(entry['name'], entry['state'], entry['run']) for entry in assessment.participants])
-        self.assertGreater(passage_count(call['retrieval']), passage_count(assessment.retrieval))
-        self.assertEqual(call['returned'], before['current'])
+        self.assertEqual(recorded.calls, [])
         self.assertEqual(self.holdings(encounter_id), before)
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class ConfiguredSameAssessmentTests(OperatorReads, SameAssessmentMixin, HarnessCase):
     """review._same_assessment while a model participant is configured, on a final assess #2 (both participants read,
@@ -448,6 +457,7 @@ ASSESSMENT_FIELDS = ('profiles_version', 'engine_version', 'encounter_checks', '
                      'completeness', 'participants')
 
 
+@applied
 @override_settings(**LIVE)
 class ImportedReferenceParityTests(OperatorReads, ArchiveMixin, TestCase):
     """I1's one declared exception, pinned through the importers: Corti alone on COLON, the CMS PFS and practitioner

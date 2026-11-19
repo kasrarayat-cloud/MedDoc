@@ -3,7 +3,8 @@ Synthetic data only; the provider is an in-process fake."""
 from django.test import TestCase, override_settings
 
 from studio import models
-from tests.test_pipeline_api import FakeProvider, drain
+from tests.legacy_chain import applied
+from tests.test_pipeline_api import OFFICE_NOTE_STATE, FakeProvider, RecordedInterpretation, drain
 from tests.support.operator import OperatorReads
 from tests.test_repairs_ec5_reportfacts import browser
 from tests.test_repairs_gi2_present import LETTER, NO_PLACE, UNDATED, VISIT_TIME
@@ -12,9 +13,11 @@ from tests.test_repairs_pipeline import LIVE, ApiHarness
 
 
 @override_settings(**LIVE)
-class RepeatedResumeTests(OperatorReads, ApiHarness, TestCase):
+class RepeatedResumeTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """sends known limit 'third Resume': every Resume appended 44 characters to the previous key, so the third or fourth
     Stop/Resume in a row overflowed Job.idempotency_key (200 characters) with an HTTP 500 and nothing recorded."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
+    # interpretation.
 
     def test_six_stop_resume_rounds_each_resume_and_the_document_finishes(self):
         encounter_id = self.create()
@@ -25,7 +28,7 @@ class RepeatedResumeTests(OperatorReads, ApiHarness, TestCase):
             resume = self.client.post(f'/api/encounters/{encounter_id}/resume')
             self.assertEqual(resume.status_code, 201, (round_number, resume.content))
         drain()
-        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, OFFICE_NOTE_STATE)
         keys = list(models.Job.objects.filter(encounter_id=encounter_id).values_list('idempotency_key', flat=True))
         resumed = [key for key in keys if ':resume:' in key]
         self.assertGreaterEqual(len(resumed), 6)
@@ -61,6 +64,7 @@ class OneSubActReadPerSentenceTests(OperatorReads, TestCase):
         self.assertEqual(routed, detect.route(text, date(2026, 10, 19)))
 
 
+@applied
 @override_settings(**LIVE)
 class ListedDateQuotesTheKeptEvidenceTests(PresentHarness):
     """gi2 integration (present's open must-fix concern, occurrence RC5): the documents/queue list's SERVICE DATE cell

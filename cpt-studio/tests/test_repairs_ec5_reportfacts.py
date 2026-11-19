@@ -12,6 +12,7 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings
 
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import OFFICE_NOTE
 from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import LIVE
@@ -210,6 +211,7 @@ COLONOSCOPY = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\nProce
 POLYP = 'A 7 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
 
 
+@applied
 @override_settings(**LIVE)
 class RejectedCodeAccountsForNothingTests(OperatorReads, ApiCase, TestCase):
     """report-6: a colonoscopy with a cold-snare polypectomy, 45385 selected and rejected by the reviewer. The reviewed
@@ -255,6 +257,7 @@ SCREEN = ('[app.factValue(data.facts.service_date, null, true), app.metaFact(dat
           'app.inviteMarkup([data.row])]')
 
 
+@applied
 @override_settings(**LIVE)
 class MemberConflictIsNeverConflictingDocumentationTests(OperatorReads, ApiCase, TestCase):
     """context-5: a member's service date (or setting) unlike the document's single value is stored as a member
@@ -331,6 +334,7 @@ READ_IN_PART = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\nProc
 UNRESOLVED_TITLE = 'UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL'
 
 
+@applied
 @override_settings(**LIVE)
 class ReadInPartSpeaksForWhatWasReadTests(OperatorReads, ApiCase, TestCase):
     """report-8: a findings sentence over the 1,200-character act-reading bound, whose unread tail documents a cold-forceps
@@ -376,6 +380,7 @@ EUS_BESIDE_COLONOSCOPY = (SYNTHETIC + 'Date of service: 2026-10-14\nEUS: Normal 
                           'Colonoscopy: The colonoscope was advanced to the cecum. ' + POLYP + '\n')
 
 
+@applied
 @override_settings(**LIVE)
 class UnestablishedServiceKeepsCodingIncompleteTests(OperatorReads, ApiCase, TestCase):
     """report-1 (repaired by WIP 8p, 9086a4271; re-checked here): a findings-only EUS (or ERCP) section beside a coded
@@ -493,6 +498,7 @@ NOT_UPPER = ('the document does not place it at an upper GI site of an upper GI 
              'this encounter reads it, and no code profile of this service accounts for it')
 
 
+@applied
 @override_settings(**LIVE)
 class LowerEusBiopsyIsNeverReadUnderTheUpperFamilyTests(OperatorReads, ApiCase, TestCase):
     """skeptic of the report-0 repair (9d9fb8e17): an upper endoscopy report (antral forceps biopsy, 43239 selected) beside
@@ -610,6 +616,7 @@ NOT_READ = ('The documented-service reading reported a problem (see services.inv
             'not read is not covered by this check.')
 
 
+@applied
 @override_settings(**LIVE)
 class ConflictsCheckSpeaksForWhatWasReadTests(OperatorReads, ApiCase, TestCase):
     """skeptic of the report-8 repair (e6601b1cf): a colonoscopy whose findings sentence (over 1,200 characters) is read

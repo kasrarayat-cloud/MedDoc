@@ -206,8 +206,8 @@ Adopt R4 section 6 (`R4-api-leak-surface.md`), with these fixed choices:
 ```jsonc
 {
   "id": "uuid", "title": "str", "created_at": "iso", "updated_at": "iso",
-  "state": "processing|action_needed|awaiting_detail|ready|reviewed|no_codes|stopped|failed|being_confirmed",
-  "state_label": "Processing|Action needed|A few details needed|Ready for review|Reviewed|No codes suggested|Stopped|Could not finish|Being confirmed",
+  "state": "processing|action_needed|awaiting_detail|ready|reviewed|no_codes|stopped|failed|being_confirmed|updating",
+  "state_label": "Processing|Action needed|A few details needed|Ready for review|Reviewed|No codes suggested|Stopped|Could not finish|Being confirmed|Updating codes",
   "permissions": {"can_review": true},
   "document": {"kind": "upload|paste|addendum", "name": "str", "media_type": "str", "size": 123, "page_count": 3, "revision": 1,
                "text": "canonical text", "pages": [/* page spans as today's revision.pages */],
@@ -219,7 +219,7 @@ Adopt R4 section 6 (`R4-api-leak-surface.md`), with these fixed choices:
   "progress": {"phase": "...", "busy": false, "steps": [{"key": "reading", "label": "Reading your document", "state": "done",
                "started_at": "iso", "finished_at": "iso"}], "active_detail": "", "started_at": "iso", "finished_at": "iso",
                "server_time": "iso", "slow": false, "message": "plain", "can_stop": false, "can_resume": false, "can_leave": true,
-               "error": {"text": "plain", "action": "resume|new_document|none"}|null},
+               "error": {"text": "plain", "action": "resume|new_document|retry_reading|retry_update|none"}|null},
   "checks": [{"key": "document_review", "label": "Document review", "state": "done|running|waiting|unavailable|not_run"},
              {"key": "independent_checks", "label": "Independent checks", "state": "..."},
              {"key": "coding_validation", "label": "Coding validation", "state": "..."}],
@@ -241,8 +241,20 @@ Adopt R4 section 6 (`R4-api-leak-surface.md`), with these fixed choices:
   "unresolved": ["plain"], "limitations": ["plain"],
   "readiness": {"draft": true, "approved": false, "blockers": ["plain"]},
   "reports": [{"id": "", "kind": "draft|approved", "fmt": "txt|csv", "filename": "", "generated_at": "iso", "generated_by": "label",
-               "download_url": "/api/reports/<id>/download", "current": true}],
-  "activity": [{"event": "allowlisted key", "summary": "plain", "actor": "label", "actor_kind": "human|agent", "at": "iso"}]
+               "download_url": "/api/reports/<id>/download", "current": true, "revision": 1}],
+  "activity": [{"event": "allowlisted key", "summary": "plain", "actor": "label", "actor_kind": "human|agent", "at": "iso"}],
+  "update": {"pending": true, "state": "updating|failed|stopped|paused|being_confirmed", "kind": "details|documentation|check",
+             "restorable": true, "changes": ["plain"], "saved_by": "label"|null, "saved_at": "iso"|null, "started_at": "iso"|null,
+             "earlier": {"made_at": "iso", "revision": 1, "service_date": "plain", "details": ["plain"]}}|null,
+  "earlier_codes": [/* rows of "codes", each with "allowed_actions": [] */],
+  "what_changed": {"compared_with": {"made_at": "iso", "revision": 1}, "details": ["plain"],
+                   "codes": [{"code": "45385", "change": "added|removed|status|units|detail", "text": "plain"}],
+                   "unchanged": 0,
+                   "decisions": [{"code": "45385", "action": "Approval|Rejection|Reinstatement|Confirmed exclusion",
+                                  "outcome": "kept|kept_then_cleared|kept_then_changed|cleared", "text": "plain"}],
+                   "answers": "plain"|null}|null,
+  "decision_history": [{"code": "45385", "action": "Approval|Rejection|Reinstatement|Confirmed exclusion", "by": "label",
+                        "by_kind": "human|agent", "at": "iso", "revision": 1, "why": "plain"}]
 }
 ```
 
@@ -274,6 +286,78 @@ unless the support reading records the act as shown ('pass' or 'warn').
 maps to needs_detail, with the separate_em row that asks it; never ready beside no approve. Section 9: P8's tools judge
 the customer page's statuses, actions and progress steps against the operator view's statement of them (each proposal's
 `customer`, each stage's `step_outcome`), never a re-derivation, and cannot verify without it.
+
+**Amended 2026-11-13 (FINAL-V2 amendment 1, `docs/gemini-migration/AMENDMENT-1.md`, DECISIONS D208; step 5d UPDATE-UX).**
+The codes are updated automatically after a save. The contract gains four top-level keys, after `activity`, and nothing
+else is removed; every value is derived from rows on each GET (amendment 5.5) and every string is CPT Studio's fixed
+wording (`studio/customer_api.py`, step 3c's constants), with no stored free text.
+- `state` and `state_label` take `updating` / "Updating codes": an update is pending and a stage that serves it is queued
+  or running. An update nothing serves reads its own state (`stopped`, `failed`, `being_confirmed`); the member date
+  conflict's `action_needed` holds only while the saved values are the current context's.
+- `progress.phase` takes `updating` (busy, an update pending); `progress.error.action` takes `retry_update` ("Try
+  updating again", POST `/api/encounters/<id>/retry-update`) besides `retry_reading`. While an update is pending the
+  panel's message and error are amendment 7.1's texts by the update's kind and whether a restore applies, and
+  `progress.started_at` is when the update began (its first save).
+- `update` (null unless an update is pending): `state` (`updating` while it runs, else what stops it); `kind`
+  (`documentation` when the earlier codes are of another revision - an addendum; `check` for an update no save started -
+  an operator's reconciliation of the earlier codes' own unknown document review while a reading is owed, A21;
+  `details` otherwise); `restorable` (a save of the earlier codes' own values would make them current again, A19);
+  `changes` (the saved values that differ from the earlier codes' own, in the member's words - "Date of service: 10
+  November 2026", "Date of service removed", "Place of service: Office" (a choice whose entered value the save removed
+  reads "Place of service: entered value removed", never "not documented"), "Patient: New patient", "Claim: Facility
+  claim" - plus "Documentation added (revision n)" when the revision differs;
+  when none differs, the one fixed line that says why the codes are updated, in the form of the update's state); who
+  saved last and when (`saved_by`, `saved_at`; null for kind `check`); `started_at` (the oldest save since the later of
+  the earlier codes' creation and the newest restore, or the reconciliation for kind `check`); and `earlier`: when the
+  earlier codes were made, their revision, their date of service and their details, each in the member's words
+  ("10 November 2026", "not documented", "two dates to choose from"; a choice the document and the member disagree on
+  reads "two values to choose from").
+- `earlier_codes`: while an update is pending, the earlier codes (`review.earlier`: under A17 the current assessment
+  itself) as rows of `codes`, each with `allowed_actions: []`, read under their own sentinel label (A14); `codes` is
+  then `[]`, and `other_codes`, `not_separately_coded`, `unresolved`, `limitations`, `details_needed` and
+  `earlier_answers` are read from the earlier codes, never from an assessment of the update that is not final. `[]`
+  unless an update is pending.
+- `what_changed` (null unless the codes are fresh and the current context records an earlier assessment): from stored
+  rows only (amendment 6.2) - `compared_with` (the earlier codes' time and revision, drawn as "Compared with the codes as
+  suggested on <time>, before any answer or decision"); `details` (each coding-context fact whose value differs, "Label:
+  before → after", then "Documentation added (revision n)" and "The document was read again with the current reading."
+  where they apply); `codes` (the listed rows paired by code and stored position: added, removed - with the other-codes
+  list's reason when the current codes hold an unlisted proposal of it - status, units, detail), sorted by code;
+  `unchanged` (the paired rows with no change); `decisions` (the decisions the update acted on: kept, kept then cleared
+  by a final made with the same details, kept then changed by a reviewer, or cleared, with its sentence), sorted by
+  code; `answers` (the one line when an answer given before the change is not applied to the updated codes, else null).
+- `decision_history`: every decision of the encounter that no longer applies (it has an invalidation), newest first,
+  at most 200, each with its code, its action noun, who, when (the reviewer's own act), the revision it was made on and
+  why, in 5.4's fixed words (cleared by an addendum; made on the earlier reading; cleared by a final with the same
+  details; cleared when the document was read again with the same details; cleared when the details changed) - never
+  the stored reason.
+- `reports[]` gains `revision` (the revision its codes were made on); `current` is true only while its marker matches
+  AND no update is pending. An export that is not current is listed "Earlier — made on revision n; it may not show the
+  current codes" and downloads with its EARLIER banner (section 5 below: no 409).
+- `readiness` while an update is pending: `draft: false, approved: false`, and the one blocker by the update's state and
+  kind ("The codes are being updated after your change." while it runs; "The codes have not been updated after your
+  change yet." otherwise; their check forms for kind `check`).
+
+Section 5's customer report is `cpt-studio-customer-report@2`: the TXT states, after "Encounter:", "Document: revision
+n", "Details used: date of service ...; place of service ...; patient ...; claim ..." and "Codes made: <time>", and its
+"Date of service" - all read from the ASSESSMENT's own revision and context, never the encounter's current one; the CSV
+appends `revision_number`, `details_used` and `codes_made_at` after `review_label`, on every row (the banner rows too). A
+customer download of an export that is not current is served as an EARLIER export: the TXT with two banner lines ("EARLIER
+EXPORT — MAY NOT SHOW THE CURRENT CODES"; "Made <time> on revision n. This document has changed since (its details, its
+documentation, its codes or its decisions); create a new export for the current codes.") and a blank line before the
+stored bytes; the CSV with one row after its header whose `report_format` cell holds the two sentences (one per line) and
+whose other cells are empty; the stored name with `-earlier` before its extension. The stored artifact never changes.
+While an update is pending no customer export is made (409 UPDATE_EXPORT). Section 8's page: the update's panel, the
+earlier codes' section (greyed, no decision button, their other sections inside it) under hooks of its own -
+`section.earlier-codes > ol.earlier-list > li.earlier-row[data-code][data-status]`, never section 8's
+`ol.result-list > li.result-row[data-proposal]`, which stays the codes the API serves (none while an update is
+pending) - "What changed" above the codes, "Earlier decisions" beside the history, earlier downloads linked, the context
+rows of "A few details needed" editable while processing runs or an update is pending and the answer rows not ("You can
+answer this once the codes are updated."; no "Change this answer" or "Withdraw this answer"; while an update is
+pending a choice row saved "Not documented" still takes one of its values, a context save that replaces the answer),
+and typing that sends nothing
+until Save. `details_needed[].allow` keeps listing a row's answers; while an update is pending the server refuses them
+and the page offers none. API.md, "Automatic update after a save", is the full statement.
 
 ## 8. P6 UI: DOM contract (P8's walk tool depends on these exact hooks)
 

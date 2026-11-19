@@ -1,0 +1,10 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy report (fictional)
+Date of service: 2026-10-14
+Procedure: Colonoscopy
+Findings: The colonoscope was advanced to the cecum and the examination was completed. The ascending colon scar was clean.
+Impression: Clean scar; no recurrence.
+
+Outside colonoscopy report
+Findings:
+A 22 mm polyp in the ascending colon was removed piecemeal with a cold snare in four pieces, without submucosal injection.

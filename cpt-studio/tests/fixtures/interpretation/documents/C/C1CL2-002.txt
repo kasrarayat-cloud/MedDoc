@@ -1,0 +1,10 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Date of service: November 8, 2026
+Endoscopist: A. Synthetic, MD (fictional)
+Indication: Surveillance.
+FINDINGS:
+The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was removed with a cold snare. Biopsies were taken from the rectum.
+No polypectomy was performed on the polyp noted previously.
+IMPRESSION:
+Polyp removed with cold snare; rectal biopsies taken.

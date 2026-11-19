@@ -19,6 +19,7 @@ from django.test import TestCase, override_settings
 
 from studio import jobs, models
 from studio.types import Fact, from_jsonable
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import FakeProvider
@@ -44,6 +45,7 @@ class DateLines(FakeProvider):
         return super().send(request, deadline_s=deadline_s)
 
 
+@applied
 @override_settings(**LIVE_SETTINGS)
 class RecordedBeforeTheInstallTests(OperatorReads, TestCase):
     def setUp(self):

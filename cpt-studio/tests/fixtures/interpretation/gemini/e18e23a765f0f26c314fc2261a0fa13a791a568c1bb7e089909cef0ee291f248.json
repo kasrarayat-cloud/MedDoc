@@ -1,0 +1,36 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\n  \"passages\": [\n    {\n      \"id\": \"P1\",\n      \"text\": \"COLONOSCOPY REPORT\"\n    },\n    {\n      \"id\": \"P2\",\n      \"text\": \"Date of service: November 9, 2026\"\n    },\n    {\n      \"id\": \"P3\",\n      \"text\": \"Endoscopist: Marcus Delacroix-Ye, MD (fictional)\"\n    },\n    {\n      \"id\": \"P4\",\n      \"text\": \"Procedure: I advanced the colonoscope to the cecum and identified the appendiceal orifice.\"\n    },\n    {\n      \"id\": \"P5\",\n      \"text\": \"- Ascending colon: a 7 mm sessile polyp.\"\n    },\n    {\n      \"id\": \"P6\",\n      \"text\": \"- Under MAC by Dr. Yusuf Brightwater (fictional), a cold snare polypectomy was performed.\"\n    },\n    {\n      \"id\": \"P7\",\n      \"text\": \"- The polyp was retrieved for histology. There was no bleeding.\"\n    },\n    {\n      \"id\": \"P8\",\n      \"text\": \"Impression: 7 mm ascending colon polyp, removed by cold snare.\"\n    }\n  ],\n  \"encounter\": {\n    \"date_of_service\": {\n      \"value\": \"2026-11-09\",\n      \"state\": \"stated\",\n      \"words\": \"November 9, 2026\",\n      \"passages\": [\n        \"P2\"\n      ],\n      \"other_dates\": []\n    },\n    \"documenting_endoscopist\": {\n      \"words\": \"Marcus Delacroix-Ye, MD (fictional)\",\n      \"passages\": [\n        \"P3\"\n      ]\n    },\n    \"team\": [],\n    \"anatomy\": [],\n    \"reach\": [\n      {\n        \"event\": \"E1\",\n        \"landmark\": \"cecum\",\n        \"words\": \"to the cecum and identified the appendiceal orifice\",\n        \"passages\": [\n          \"P4\"\n        ],\n        \"completion\": {\n          \"value\": \"not_stated\",\n          \"words\": \"\",\n          \"passages\": []\n        }\n      }\n    ],\n    \"visit_facts\": []\n  },\n  \"lesions\": [\n    {\n      \"id\": \"L1\",\n      \"words\": \"a 7 mm sessile polyp\",\n      \"landmark\": \"ascending_colon\",\n      \"site_words\": \"Ascending colon\",\n      \"size_words\": \"7 mm\",\n      \"multiplicity\": \"single\",\n      \"passages\": [\n        \"P5\",\n        \"P7\",\n        \"P8\"\n      ]\n    }\n  ],\n  \"events\": [\n    {\n      \"id\": \"E1\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"COLONOSCOPY\",\n        \"passages\": [\n          \"P1\"\n        ]\n      },\n      \"kind\": {\n        \"value\": \"examination\",\n        \"words\": \"I advanced the colonoscope to the cecum and identified the appendiceal orifice\",\n        \"passages\": [\n          \"P4\"\n        ]\n      },\n      \"technique\": {\n        \"value\": \"endoscope\",\n        \"words\": \"colonoscope\",\n        \"passages\": [\n          \"P4\"\n        ]\n      },\n      \"target\": {\n        \"lesion\": \"\",\n        \"landmark\": \"colon\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"I\",\n        \"passages\": [\n          \"P4\"\n        ]\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"I advanced the colonoscope to the cecum and identified the appendiceal orifice\",\n        \"passages\": [\n          \"P4\"\n        ]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    },\n    {\n      \"id\": \"E2\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"COLONOSCOPY\",\n        \"passages\": [\n          \"P1\"\n        ]\n      },\n      \"kind\": {\n        \"value\": \"snare\",\n        \"words\": \"cold snare polypectomy\",\n        \"passages\": [\n          \"P6\",\n          \"P8\"\n        ]\n      },\n      \"technique\": {\n        \"value\": \"cold_snare\",\n        \"words\": \"cold snare\",\n        \"passages\": [\n          \"P6\",\n          \"P8\"\n        ]\n      },\n      \"target\": {\n        \"lesion\": \"L1\",\n        \"landmark\": \"ascending_colon\",\n        \"words\": \"7 mm ascending colon polyp\",\n        \"passages\": [\n          \"P7\",\n          \"P8\"\n        ]\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"was performed\",\n        \"passages\": [\n          \"P6\",\n          \"P8\"\n        ]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"removal\",\n        \"words\": \"polypectomy\",\n        \"passages\": [\n          \"P6\",\n          \"P8\"\n        ]\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    }\n  ],\n  \"open_questions\": []\n}",
+            "thoughtSignature": "EmMKYQFpFH0Tf6vUHuhUwV9dX1wMGofQ/fTmdSrCDp3IUEwmYmDridvtraQKz4ML3nrowfSokprCTzyn51yjsDHTfQY8Ko/pEON0oxdz2ZsvV3LJr20mCUncPYu7bPz67g2lC5o="
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 7879,
+    "candidatesTokenCount": 1554,
+    "totalTokenCount": 9433,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7879
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1554
+      }
+    ]
+  },
+  "modelVersion": "gemini-4-argon",
+  "responseId": "j__yatrcK5LUz7IP1LqOwQU"
+}

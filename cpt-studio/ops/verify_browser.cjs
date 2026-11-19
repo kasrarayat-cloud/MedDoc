@@ -82,6 +82,22 @@
  * leave note), the operator state, no code, no provider request, the original still served, both viewports, the scans and
  * the direct-URL probes. Such a document has no review_plan: there is nothing to decide.
  *
+ * The Gemini migration's new path (cpt-studio/design: FINAL.md 4.3, 8.3, 11; DECISIONS D3, D22), told apart by the
+ * operator view - the assessment's engine label, its interpretation section, a routing stand-in labelled derived
+ * (newPath). There the routing is a stand-in derived from the event inventory: its families and statuses are judged as a
+ * reading's, a fact the manifest names is read from the usable (verified, not open) attributes of that family's current
+ * events in the inventory the stand-in names and stated in the routing reading's own words (standInValues: a landmark,
+ * or the site of the lesion an act is verified to be done on; time or mdm; successful or failed), so the documents'
+ * expectations read the same on both paths, and a reading's missing lists and mentions - which a stand-in never
+ * carries - are recorded as not judged. Setting, billing context and patient status come only from a member's values
+ * (D3), so a document origin there fails, the document part of an expectation is recorded as not judged, and the rest
+ * of it (a member's value, missing) is judged as on a reading. The provenance adds the interpretation's
+ * (checkInterpretation): an inventory that was read, the interpreter's run asking for and answered by its one model with
+ * its hashes and usage, a record with no problem and no legacy execution counted, and the trace carrying the same
+ * section. A failed reading's notice offers its recorded retry ("Try reading again", ERROR_ACTION_BUTTONS), and a refused
+ * reading the recorded retry released is sent again once without counting as a duplicate paid request
+ * (releasedForRetry); the /ops/ probes cover the retry and the interpreter hold's URLs.
+ *
  * --acceptance-reviewer (CPT Studio GI interpretation 63) is kept as before: a human reviewer account, approvals only,
  * each recorded as that reviewer's. It records HUMAN approvals: the 2026-11-03 directive labels every test approval an
  * agent-executed synthetic review, so its walks use agent mode.
@@ -108,7 +124,7 @@ const VIEWPORTS = { desktop: { width: 1440, height: 1000 }, mobile: { width: 390
 const UI_TIMEOUT_MS = 30000;
 // Decision (l) (2026-11-03; studio/client_contract.py): a direct customer API call names the current page build, as
 // the page itself does (static/studio/app.js api()); a call without it is answered 409 client_outdated.
-const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-03' };
+const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-13' };
 const POLL_MS = 2000;
 // How long addAddendum waits for a withdrawn answer to read unsaved (the walk round's c1c race).
 const WITHDRAWAL_WAIT_MS = 60000;
@@ -168,6 +184,37 @@ const FULL_DATE = new RegExp('(?<![\\w/-])(?:(\\d{4})-(\\d{2})-(\\d{2})|(\\d{1,2
   + `|(${MONTH_NAME})\\.?[ \\t]+(\\d{1,2})(?:st|nd|rd|th)?,?[ \\t]+(\\d{4})`
   + `|(\\d{1,2})(?:st|nd|rd|th)?(?:[ \\t]+|-)(${MONTH_NAME})\\.?(?:,?[ \\t]+|-)(\\d{4}))(?![\\w/-])`, 'gi');
 const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+// The Gemini migration's new path (studio/interpretation/__init__.py: ENGINE_VERSION, ROUTING_VERSION, PURPOSE; the unit
+// tests hold these to the source): the events engine's label family, the routing stand-in's version and the reading
+// run's purpose.
+const EVENTS_ENGINE_PREFIX = 'cpt-studio-events@';
+const ROUTING_STAND_IN = 'gemini-routing@1';
+// AMENDMENT-2 (docs/gemini-migration/AMENDMENT-2.md 8.1 and section 9 [R:replay-R2]; the interpreter is Claude Fable 5.2,
+// DECISIONS D275): the current path's interpreter - interpretation.PROVIDER_V3 and MODEL_V3, for both passes - whose
+// assessments carry ENGINE_VERSION_V3. A row of an earlier label is read as stored: the design v1 cpt-studio-events@1
+// and FINAL-V2's cpt-studio-events@2 were made by the Gemini interpreter (interpretation.PROVIDER and MODEL, which keep
+// Gemini's values: STORED_INTERPRETER), so their runs are held to it, never to Fable; an assessment of an engine label
+// the walk does not know fails, never read as one it knows (an @3 assessment read as "not v2" was R2's defect).
+const INTERPRETER = Object.freeze({ provider: 'anthropic', model: 'claude-fable-5-2', purpose: 'interpretation' });
+const STORED_INTERPRETER = Object.freeze({ provider: 'gemini', model: 'gemini-4-carbon' });
+// every interpreter provider an installation may hold runs of (interpretation.READ_PROVIDERS: Fable's, and Gemini's
+// stored ones): the recorded retry releases a reading run of any of them (releasedForRetry)
+const READ_PROVIDERS = Object.freeze(['anthropic', 'gemini']);
+const EVENTS_ENGINE_V1 = 'cpt-studio-events@1';
+// Design v2 (docs/gemini-migration/FINAL-V2.md 1.1, 5.7 measure 9; step 6b; interpretation/__init__.py ENGINE_VERSION_V2,
+// ROUTING_VERSION_V2, APPRAISAL_PURPOSE): a v2 assessment - FINAL-V2's @2 or AMENDMENT-2's @3 - is made from an inventory
+// settled from TWO runs of one interpreter - pass 1 (purpose interpretation) and the appraisal (pass 2, purpose
+// appraisal), the same provider and model - so its D22 record and its interpretation section name both, and its sentinel
+// record counts the retired executions too (0); its routing stand-in carries the v2 label (ROUTING_VERSION_V2, which
+// AMENDMENT-2 leaves unchanged). Each is told apart by its own label, read from the source by the unit tests.
+const EVENTS_ENGINE_V2 = 'cpt-studio-events@2';
+const EVENTS_ENGINE_V3 = 'cpt-studio-events@3';
+const ROUTING_STAND_IN_V2 = 'gemini-routing@2';
+const STAND_IN_VERSIONS = new Set([ROUTING_STAND_IN, ROUTING_STAND_IN_V2]);
+const APPRAISER = Object.freeze({ provider: INTERPRETER.provider, model: INTERPRETER.model, purpose: 'appraisal' });
+// D3 (FINAL 4.3; interpretation.facts.MEMBER_FACTS): on the new path these come only from a member's values, never from
+// the document, so the context states each as the member's or as missing.
+const MEMBER_ONLY_FACTS = new Set(['setting', 'billing_context', 'patient_status']);
 
 // --- the customer surface (cpt-studio/CORE-UX-DESIGN.md sections 5-8) ------------------------------------------------
 //
@@ -192,7 +239,9 @@ const SETTLED_PHASES = new Set(['failed', 'stopped']);
 // expectation, never read from the page: the page draws every other phase - results ready, a detail asked, a limitation
 // - as one compact line with its title and the time it took (app.js PANEL_PHASES), and a page that folded one of these
 // phases into that line fails. The 2026-11-05 acceptance walk held the compact line to the whole panel's contract.
-const PANEL_PHASES = new Set(['queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed', 'paused']);
+// FINAL-V2 amendment 1, 5.1 (step 5d's request): an update of the codes after a save draws the whole panel while it runs
+// ('updating', app.js PANEL_PHASES); in every other update state the panel is the state's own (failed, stopped, ...).
+const PANEL_PHASES = new Set(['queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed', 'paused', 'updating']);
 // The compact line says the server's message only where it adds to the title: a detail asked, a limitation.
 const COMPACT_MESSAGE_PHASES = new Set(['awaiting_detail', 'partial']);
 // The compact line's title for each phase that draws it (app.js PHASE_TITLES): a finished document read under another
@@ -201,20 +250,28 @@ const COMPACT_TITLES = { completed: 'Results ready', awaiting_detail: 'Results r
 // The busy phases whose panel shows the time elapsed (app.js progressTime: an animated phase while busy). A paused
 // document's worker is silent (decision (j): never drawn as working) and a date hold being re-checked waits on the
 // member, so neither shows a running time (refutation, 2026-11-05: the walk once demanded one of every busy panel).
-const ELAPSED_PHASES = new Set(['queued', 'processing']);
+// FINAL-V2 amendment 1, 5.1 (step 5d's request): a running update shows the time since it began (app.js ANIMATED_PHASES).
+const ELAPSED_PHASES = new Set(['queued', 'processing', 'updating']);
+// FINAL-V2 amendment 1, 1.4 and 5.1(3) (step 5d's request): while an update of the codes is pending an answer ("Not
+// documented", "Cannot confirm") is neither recorded nor withdrawn - a row that takes only an answer says so, with no
+// control - and the context rows (the date, a choice) keep their controls: a rapid successive edit is a context save.
+const ANSWER_AFTER_UPDATE = VOCAB.answer_after_update;
 // The operator states a document fails in (progress.FAILED_STATES), each read by the customer as failed; the button the
-// failed notice offers for each served error action (app.js ERROR_ACTIONS: "Upload a new document", "Resume processing").
+// failed notice offers for each served error action (app.js ERROR_ACTIONS: "Upload a new document", "Resume processing",
+// and the Gemini migration's "Try reading again": the recorded retry of a failed reading, design/FINAL.md 11.3).
 const FAILED_STATES = new Set(['extraction_failed', 'processing_failed', 'provider_failed', 'provider_not_run']);
-const ERROR_ACTION_BUTTONS = { new_document: 'upload', resume: 'resume' };
+// FINAL-V2 amendment 1, 7.2: a failed update's notice offers its recorded retry ("Try updating again")
+const ERROR_ACTION_BUTTONS = { new_document: 'upload', resume: 'resume', retry_reading: 'retry-reading', retry_update: 'retry-update' };
 // The operator state each customer state is read from (CORE-UX-DESIGN 7; the hold of a member date conflict is the
 // customer's action_needed, whatever operator state it records).
 const CUSTOMER_STATE_OF = { ready_for_review: 'ready', needs_clarification: 'awaiting_detail', reviewed: 'reviewed',
   no_codes: 'no_codes', stopped: 'stopped', provider_unknown: 'being_confirmed', processing: 'processing',
   provider_failed: 'failed', extraction_failed: 'failed', processing_failed: 'failed', provider_not_run: 'failed' };
 // P5's fold of the current revision's jobs into the four customer steps; an assess job is the "checking" step while a
-// peer review follows it, the "preparing" step otherwise (the final assessment).
-const STEP_OF_KIND = { extract: 'reading', analyze: 'identifying', predict: 'checking', astra: 'checking', fable: 'checking',
-  astra_peer: 'checking', fable_peer: 'checking', review2: 'checking' };
+// peer review follows it, the "preparing" step otherwise (the final assessment). The Gemini migration's interpret stage
+// is "Identifying procedures", as analyze is (progress.STEP_OF; design/FINAL.md 6.11).
+const STEP_OF_KIND = { extract: 'reading', interpret: 'identifying', analyze: 'identifying', predict: 'checking', astra: 'checking',
+  fable: 'checking', astra_peer: 'checking', fable_peer: 'checking', review2: 'checking' };
 const PEER_KINDS = new Set(['astra_peer', 'fable_peer']);
 // The customer step states a job state may be drawn as (queued may read as the active step or a waiting one).
 // An outcome left unknown is being confirmed (CORE-UX-DESIGN 6): its step may read failed, waiting or active, never done.
@@ -232,12 +289,15 @@ const PLAN_KEYS = new Set(['reject', 'approve_codes', 'context_edit', 'second_re
 // A modifier-shaped token a row might show although none is assigned.
 const MODIFIER_TOKEN = /\b(?:59|X[ESPU]|25|33|PT|5[23]|7[6-9])\b/;
 // The /ops/ surface (CORE-UX-DESIGN 5): every URL answers 404 to anyone who is not a platform operator.
+// The Gemini migration adds the interpreter hold's state and release (/ops/api/interpreter) and the operator's retry of a
+// failed reading (FINAL 11.2-11.3): an operator's too.
 const OPS_GET_PATHS = id => ['/ops/', '/ops/assets/ops.js', '/ops/api/encounters', `/ops/api/encounters/${id}`,
-  `/ops/api/encounters/${id}/trace`, `/ops/api/encounters/${id}/reports`];
-const OPS_POST_PATHS = id => [`/ops/api/encounters/${id}/reports`, `/ops/api/encounters/${id}/reconcile`];
-// A body the operator views refuse (an unknown report kind, a run that is no run): a gate that answered anything but
-// 404 to a customer would still create nothing.
-const OPS_POST_BODY = { kind: '__verify_unknown_kind__', fmt: '__none__', run: '__not_a_run__' };
+  `/ops/api/encounters/${id}/trace`, `/ops/api/encounters/${id}/reports`, '/ops/api/interpreter'];
+const OPS_POST_PATHS = id => [`/ops/api/encounters/${id}/reports`, `/ops/api/encounters/${id}/reconcile`,
+  `/ops/api/encounters/${id}/retry-reading`, '/ops/api/interpreter'];
+// A body the operator views refuse (an unknown report kind, a run that is no run, an override that is not true or false,
+// and no release note): a gate that answered anything but 404 to a customer would still create nothing.
+const OPS_POST_BODY = { kind: '__verify_unknown_kind__', fmt: '__none__', run: '__not_a_run__', override: '__not_a_flag__' };
 const REMOVED_PATHS = id => [`/api/encounters/${id}/trace`];
 // Response headers that carry no customer-facing wording (security policy, cookies, caching, dates).
 const UNSCANNED_HEADERS = new Set(['set-cookie', 'date', 'etag', 'last-modified', 'content-length', 'content-security-policy',
@@ -464,10 +524,38 @@ function checkExtraction(expected, enc, delivery, sourceText) {
   return out;
 }
 
+// Whether the operator view is a new-path encounter's (the Gemini migration): its assessment the events engine's, its
+// interpretation section the events', or its routing the stand-in derived from an event inventory.
+function newPath(enc) {
+  return String(enc?.assessment?.engine_version || '').startsWith(EVENTS_ENGINE_PREFIX)
+    || enc?.assessment?.interpretation?.engine === 'events' || enc?.routing?.derived === true
+    || STAND_IN_VERSIONS.has(enc?.routing?.version);
+}
+
 function checkContext(expected, enc) {
   const facts = enc.context?.facts || {};
+  const derived = newPath(enc);
   return Object.entries(expected || {}).flatMap(([name, want]) => {
     const fact = facts[name];
+    if (derived && MEMBER_ONLY_FACTS.has(name)) {
+      // D3: never read from the document on the new path - a context that states one from it read it anyway. What the
+      // author expected the document to state is not what this context can say: an expectation's document part (its
+      // origin_in names the document, and the context's origin is none of the others it names) is recorded as not
+      // judged; anything else it names - a member's value, missing, a value - is judged as on a reading
+      const origin = fact?.origin;
+      const member = Boolean(fact) && ['user', 'missing'].includes(origin);
+      const named = Array.isArray(want.origin_in) ? want.origin_in : null;
+      const others = named ? named.filter(item => item !== 'document') : null;
+      const documentPart = Boolean(named) && named.includes('document') && !others.includes(origin);
+      const expected = !documentPart && (!others || others.includes(origin))
+        && (!want.value_in || want.value_in.map(v => v.toLowerCase()).includes(String(fact?.value ?? '').toLowerCase()));
+      const asked = documentPart ? '' : `; expected origin ${others ? others.join('|') : 'any'}${want.value_in ? `, value ${want.value_in.join('|')}` : ''}`;
+      const judged = check(`context.${name}`, 'hard', member && (documentPart || expected), fact
+        ? `origin ${origin}, value ${JSON.stringify(fact.value)} (on the new path only a member's value or missing: D3${asked})` : 'fact not reported');
+      return documentPart
+        ? [judged, skip(`context.${name}.document`, `not judged on the new path: ${name} comes only from a member's values (D3), never from the document`)]
+        : [judged];
+    }
     if (!fact) return [check(`context.${name}`, 'hard', false, 'fact not reported')];
     const origin = !want.origin_in || want.origin_in.includes(fact.origin);
     const value = !want.value_in || want.value_in.map(v => v.toLowerCase()).includes(String(fact.value ?? '').toLowerCase());
@@ -485,11 +573,119 @@ function containsAny(value, needles) {
   return needles.some(n => text.includes(n.toLowerCase()));
 }
 
+// The routing stand-in of the new path (design/FINAL.md 4.3): a version, one finding per family the event inventory's
+// events name with a status derived from their VERIFIED attributes, no mention, fact or missing list, and the inventory
+// it was derived from - which must be the one the assessment was made from (its interpretation section), or the stand-in
+// says nothing about this assessment.
+function checkStandIn(enc) {
+  const routing = enc.routing || {};
+  const section = isObject(enc.assessment?.interpretation) ? enc.assessment.interpretation : null;
+  const made = section?.inventory?.id ?? section?.record?.inventory?.id ?? null;
+  const problems = [];
+  if (routing.derived !== true) problems.push('it is not labelled derived');
+  if (!STAND_IN_VERSIONS.has(routing.version)) problems.push(`its version is ${JSON.stringify(routing.version)}`);
+  if (typeof routing.inventory !== 'string' || !routing.inventory) problems.push('it names no event inventory');
+  else if (made && routing.inventory !== made) problems.push(`it names the inventory ${routing.inventory}; the assessment was made from ${made}`);
+  const read = (routing.families || []).filter(family => (family.mentions || []).length || (family.facts || []).length || (family.missing || []).length);
+  if (read.length) problems.push(`it carries a reading's mentions, facts or missing lists for ${read.map(family => family.family).join(', ')}`);
+  return check('routing.stand_in', 'hard', problems.length === 0, problems.length ? `the routing stand-in: ${problems.join('; ')}`
+    : `a stand-in derived from the event inventory ${routing.inventory}${made ? ', the one the assessment was made from' : ''}`);
+}
+
+// What a stand-in's family states of a fact the manifest names, read from the event inventory the assessment was made
+// from (its interpretation section): only the USABLE attributes of that family's current events that state the fact -
+// verified, and named by no open question (interpretation.verify.usable: an open attribute is an unverified one) - never
+// a passage's words; and stated in the routing reading's own words (API.md: a landmark's label, time or mdm, successful
+// or failed), the vocabulary the manifest's expectations are written in (its expectation_corrections: gi-10's
+// cannulation is "successful", which the inventory's "performed" never contains). null for a fact no attribute states.
+const STAND_IN_FACTS = {
+  extent: 'landmark the examination reached',
+  target: 'landmark or lesion site the act was done on',
+  em_basis: 'basis of the visit',
+  cannulation: 'cannulation outcome',
+};
+// The routing reading's words for the inventory's values (studio/gi/detect.py _em_facts and _cannulation; API.md): a
+// visit's basis is time or mdm; a cannulation's outcome successful, or failed for one begun and not completed. A
+// cannulation not performed states no outcome ("the pancreatic duct was not cannulated" is no failed cannulation).
+const STAND_IN_WORDS = {
+  em_basis: { total_time: 'time', medical_decision_making: 'mdm' },
+  cannulation: { performed: 'successful', attempted_not_completed: 'failed' },
+};
+// The landmarks CPT Studio names no place by (interpretation.lexicon.UNPLACED_LANDMARKS; wording.landmark_label).
+const UNPLACED_LANDMARKS = new Set(['not_stated', 'other']);
+
+function standInValues(enc, family, name) {
+  if (!Object.hasOwn(STAND_IN_FACTS, name)) return null;
+  if (enc?.routing?.version === ROUTING_STAND_IN_V2) return null;  // a v2 inventory has no such attribute (V2_STAND_IN_UNJUDGED)
+  const inventory = enc?.assessment?.interpretation?.inventory;
+  const parts = isObject(inventory?.events) ? inventory.events : {};
+  const events = (Array.isArray(parts.events) ? parts.events : []).filter(isObject);
+  const lesions = new Map((Array.isArray(parts.lesions) ? parts.lesions : []).filter(isObject).map(lesion => [lesion.id, lesion]));
+  const facts = isObject(inventory?.encounter_facts) ? inventory.encounter_facts : {};
+  const current = events.filter(event => event.family === family && event.current === 'yes');
+  const byId = new Map(current.map(event => [event.id, event]));
+  const usable = attribute => isObject(attribute) && attribute.state === 'verified' && attribute.open !== true;
+  const stated = value => typeof value === 'string' && value !== '' && value !== 'not_stated';
+  const placed = value => stated(value) && !UNPLACED_LANDMARKS.has(value);
+  const words = value => String(value).replace(/_/g, ' ');
+  if (name === 'extent') {
+    // a reach entry IS its examination's extent (normalize attaches it), so one whose extent an open question names is not
+    const reach = (Array.isArray(facts.reach) ? facts.reach : []).filter(item => isObject(item) && item.family === family
+      && byId.has(item.event) && item.state === 'verified' && placed(item.landmark) && byId.get(item.event).extent?.open !== true)
+      .map(item => item.landmark);
+    return [...reach, ...current.filter(event => usable(event.extent) && placed(event.extent.value)).map(event => event.extent.value)].map(words);
+  }
+  if (name === 'target') {
+    // the act's own landmark (mapping.target_landmark), and the usable site of the lesion it is verified to have been done
+    // on (identity.verified_lesion; events.lesion_words reads that site): an act on "the pancreatic head mass" may name
+    // the mass and leave the landmark to the lesion, whatever the target's own words
+    return current.flatMap(event => {
+      const target = isObject(event.target) ? event.target : {};
+      const own = usable(target) && placed(target.value) ? [target.value] : [];
+      const lesion = target.identity === 'verified' && typeof target.lesion === 'string' && target.lesion ? lesions.get(target.lesion) : undefined;
+      const site = lesion && usable(lesion.site) && placed(lesion.site.value) ? [lesion.site.value] : [];
+      return [...own, ...site].map(words);
+    });
+  }
+  const said = (table, value) => (Object.hasOwn(table, value) ? table[value] : words(value));
+  if (name === 'em_basis') {
+    const visits = (Array.isArray(facts.visits) ? facts.visits : []).filter(item => isObject(item) && byId.has(item.event)
+      && item.basis_state === 'verified' && stated(item.basis) && byId.get(item.event).visit?.basis?.open !== true).map(item => item.basis);
+    return [...visits, ...current.filter(event => usable(event.visit?.basis) && stated(event.visit.basis.value)).map(event => event.visit.basis.value)]
+      .map(value => said(STAND_IN_WORDS.em_basis, value));
+  }
+  return current.filter(event => usable(event.kind) && event.kind.value === 'cannulation' && usable(event.status)
+    && Object.hasOwn(STAND_IN_WORDS.cannulation, event.status.value)).map(event => STAND_IN_WORDS.cannulation[event.status.value]);
+}
+
+// Design v2 (step 6b; refutation 6b-r1 P1): a v2 stand-in (gemini-routing@2, engine/derive.routing_stand_in) is derived
+// from a v2 inventory, whose events state settled FACTS - each attribute a claim with its sources, checks, appraisal and
+// result (store's v2 event shape: id, anchor, kind, status, session, target.places, ...; a session's reached; no family,
+// no current flag, no 'verified' state, and no encounter_facts) - so none of v1's verified attributes standInValues reads
+// is there, and no design entry maps a v2 fact to the routing reading's words a manifest expectation is written in (6b's
+// question Q8). Each per-fact routing expectation on a v2 stand-in is therefore recorded as NOT JUDGED - never failed,
+// never passed - while the stand-in itself (labelled derived, naming the inventory the assessment was made from) and each
+// family's status are judged as on v1.
+const V2_STAND_IN_UNJUDGED = `not judged on a design v2 stand-in (${ROUTING_STAND_IN_V2}): its event inventory states settled facts, `
+  + 'not the verified attributes this check reads, and no design entry maps a v2 fact to the routing reading\'s words (6b Q8)';
+
+function standInFact(enc, family, name, rule, id, severity) {
+  if (enc?.routing?.version === ROUTING_STAND_IN_V2) return skip(id, `${V2_STAND_IN_UNJUDGED}: ${name}`);
+  const values = standInValues(enc, family, name);
+  if (values === null) return skip(id, `not judged on the routing stand-in: it states no ${name}, and no attribute of the event inventory states it`);
+  const wanted = rule.value_contains_any || (severity === 'soft' ? [''] : null);
+  const ok = values.length > 0 && (!wanted || values.some(value => containsAny(value, wanted)));
+  return check(id, severity, ok, values.length
+    ? `the event inventory's verified ${STAND_IN_FACTS[name]}: ${JSON.stringify(values)}${rule.value_contains_any ? ` (expected one of ${rule.value_contains_any.join('|')})` : ''}`
+    : `no verified ${STAND_IN_FACTS[name]} of ${family} in the event inventory`);
+}
+
 function checkRouting(expected, enc) {
   const routing = enc.routing;
   if (!routing) return [check('routing.present', 'hard', false, 'no routing in the encounter JSON')];
   const families = routing.families || [];
-  const out = [];
+  const derived = routing.derived === true || STAND_IN_VERSIONS.has(routing.version);
+  const out = derived ? [checkStandIn(enc)] : [];
   for (const [slug, want] of Object.entries(expected.families || {})) {
     const family = families.find(f => f.family === slug);
     const id = `routing.${slug}`;
@@ -498,6 +694,17 @@ function checkRouting(expected, enc) {
       continue;
     }
     out.push(check(`${id}.status`, 'hard', (want.status_in || []).includes(family.status), `${family.status} (expected ${(want.status_in || []).join('|')})`));
+    if (derived) {
+      // a reading's missing lists and mentions: the stand-in carries neither (FINAL 4.3), so they are not judged here
+      for (const [name, rule] of Object.entries(want.facts || {})) out.push(standInFact(enc, slug, name, rule, `${id}.fact.${name}`, 'hard'));
+      const unjudged = 'not judged on the routing stand-in: it carries no missing list (FINAL 4.3)';
+      for (const name of want.missing_includes || []) out.push(skip(`${id}.missing.${name}`, unjudged));
+      for (const name of want.missing_excludes || []) out.push(skip(`${id}.not_missing.${name}`, unjudged));
+      const info = want.informational || {};
+      for (const [name, rule] of Object.entries(info.facts || {})) out.push(standInFact(enc, slug, name, rule, `${id}.info.fact.${name}`, 'soft'));
+      if (info.mention_statuses_include) out.push(skip(`${id}.info.mentions`, 'not judged on the routing stand-in: it carries no mention (FINAL 4.3)'));
+      continue;
+    }
     for (const [name, rule] of Object.entries(want.facts || {})) {
       const fact = familyFact(family, name);
       const ok = Boolean(fact) && (!rule.value_contains_any || containsAny(fact.value, rule.value_contains_any));
@@ -1537,7 +1744,10 @@ function checkCustomerVocabulary(enc) {
 
 // --- the denylist (ops/verification/customer-denylist.json) -------------------------------------------------------------
 
-const PATTERNS = DENYLIST.patterns.map(p => ({ id: p.id, severity: p.severity, surfaces: new Set(p.surfaces), regex: new RegExp(p.source, 'gi') }));
+// A pattern marked "case_sensitive": true is matched with its case as written ('g'; design v2, FINAL-V2 4.12 [R:MO-2]: a
+// provider name joined to a word by its case alone); every other one case-insensitively ('gi'), ASCII-only either way.
+const PATTERNS = DENYLIST.patterns.map(p => ({ id: p.id, severity: p.severity, surfaces: new Set(p.surfaces),
+  regex: new RegExp(p.source, p.case_sensitive === true ? 'g' : 'gi') }));
 const FORBIDDEN_KEYS = new Set(DENYLIST.forbidden_keys);
 const DENY_SHAPE = new RegExp(DENYLIST.deny_value_shape);
 
@@ -1733,6 +1943,8 @@ function sameList(a, b) {
 }
 
 // CPT Studio's located acts by id, from the operator view's recorded reading (assessment.services).
+// Read whatever the engine, as review.act_index is (customer_api._act_index): a new-path assessment's services record is
+// the stub (design/FINAL.md 4.3, 8.3), which carries no act, so its anchors are its support.source alone.
 function actIndex(op) {
   const out = new Map();
   const services = op?.assessment?.services?.services;
@@ -2088,6 +2300,8 @@ function checkChecksPanel(cust, dom) {
 function checkDetailsPanel(cust, dom) {
   const details = Array.isArray(cust?.details_needed) ? cust.details_needed : [];
   const panel = dom?.details || null;
+  // an update of the codes pending (FINAL-V2 amendment 1, 5.1): the answers wait, whatever allow lists (1.4)
+  const updating = isObject(cust?.update) && cust.update.pending === true;
   if (!details.length) return [check('dom.details_panel', 'hard', !panel || !panel.rows.length, panel ? `the page shows ${panel.rows.length} detail row(s); the API asks none` : 'no details asked, no panel')];
   if (!panel) return [check('dom.details_panel', 'hard', false, `the API asks ${details.length} detail(s); the page shows no section.details-panel`)];
   const problems = [];
@@ -2102,10 +2316,12 @@ function checkDetailsPanel(cust, dom) {
       // a saved row shows its answer, and a way to change it (app.js savedAnswer: "Saved: ..." and "Change this answer"
       // where the API names the answer; a date entered at upload keeps its date field), never the open row's offers:
       // walk 2 (2026-11-05) held a saved row to an open row's answer buttons, and a correct page failed
-      const editable = cust?.permissions?.can_review === true && cust?.progress?.busy !== true;
+      const editable = cust?.permissions?.can_review === true && cust?.progress?.busy !== true && !updating;
       if (row.saved === null) problems.push(`${where} does not show its saved answer`);
       const named = typeof detail.saved.answer_id === 'string' && Boolean(detail.saved.answer_id);
       if (editable && named && !row.revoke) problems.push(`${where} offers no way to change its saved answer`);
+      // the server refuses a withdrawal while an update of the codes is pending (FINAL-V2 amendment 1, 1.4 [R:truth-T12])
+      if (updating && row.revoke) problems.push(`${where} offers to withdraw its answer while an update of the codes is pending`);
       if (editable && !named && detail.control === 'date' && !row.date_input) problems.push(`${where} offers no date field to change the entered date`);
       return;
     }
@@ -2123,10 +2339,18 @@ function checkDetailsPanel(cust, dom) {
       if (missing.length) problems.push(`${where} lacks the choice(s) ${missing.join(', ')}`);
     }
     if (detail.control === 'confirm' && row.radios.length) problems.push(`${where} offers a clinical fact to choose: a member never supplies one`);
-    for (const allowed of detail.allow || []) {
-      if (!row.choices.includes(allowed) && !row.radios.some(radio => radio.value === allowed)) problems.push(`${where} does not offer ${allowed}`);
+    if (updating) {
+      // no answer is offered while the update is pending; a row that takes only an answer says it waits for the update
+      if (row.choices.length) problems.push(`${where} offers ${row.choices.join(', ')} while an update of the codes is pending`);
+      if (detail.control === 'confirm' && cust?.permissions?.can_review === true && !collapse(row.text).includes(ANSWER_AFTER_UPDATE)) {
+        problems.push(`${where} does not say that it can be answered once the codes are updated`);
+      }
+    } else {
+      for (const allowed of detail.allow || []) {
+        if (!row.choices.includes(allowed) && !row.radios.some(radio => radio.value === allowed)) problems.push(`${where} does not offer ${allowed}`);
+      }
+      for (const offered of row.choices) if (!(detail.allow || []).includes(offered)) problems.push(`${where} offers ${offered}, which the API does not allow`);
     }
-    for (const offered of row.choices) if (!(detail.allow || []).includes(offered)) problems.push(`${where} offers ${offered}, which the API does not allow`);
     if (row.saved !== null) problems.push(`${where} shows a saved answer the API does not hold`);
   });
   if (details.some(detail => !detail.saved) && !panel.save) problems.push('no Save (button[data-action="save-details"])');
@@ -2174,7 +2398,15 @@ function checkProgressDom(cust, dom, animating = []) {
   if (progress.can_stop) out.push(check('progress.dom.stop', 'hard', panel.stop, `Stop ${panel.stop ? 'offered' : 'not offered'} while the API allows it`));
   if (progress.can_resume) out.push(check('progress.dom.resume', 'hard', panel.resume, `Resume ${panel.resume ? 'offered' : 'not offered'} while the API allows it`));
   if (progress.can_leave) out.push(check('progress.dom.leave_note', 'hard', Boolean(panel.leave), `leave note ${panel.leave ? JSON.stringify(panel.leave) : 'not shown'}`));
-  if (SETTLED_PHASES.has(progress.phase)) {
+  // the notice offers the error's own action where the page offers it there (app.js progressError: Resume may be the
+  // panel's own button instead) - the recorded retry of a failed reading included (FINAL 11.3)
+  const offered = isObject(progress.error) ? ERROR_ACTION_BUTTONS[progress.error.action] || null : null;
+  if (offered && offered !== 'resume') {
+    out.push(check('progress.dom.error_action', 'hard', panel.notice_action === offered, `the notice offers ${panel.notice_action ? `"${panel.notice_action}"` : 'no action'}; the error's action ${progress.error.action} offers "${offered}"`));
+  }
+  // a reading paused on the installation (FINAL 11.2: the stopped state with the paused phase, nothing running) is as
+  // settled as a stop; a paused worker that is still busy is not
+  if (SETTLED_PHASES.has(progress.phase) || (progress.phase === 'paused' && !progress.busy)) {
     out.push(check('progress.dom.settled_still', 'hard', animating.length === 0 && !panel.steps.some(step => step.state === 'active'),
       animating.length ? `${progress.phase}, and still animating: ${animating.slice(0, 5).join(', ')}` : panel.steps.some(step => step.state === 'active')
         ? `${progress.phase}, and a step still reads active` : `${progress.phase}: no step active, nothing animating`));
@@ -2270,16 +2502,44 @@ function byCreated(a, b) {
   return String(a.created_at || '').localeCompare(String(b.created_at || ''));
 }
 
+// The recorded retry of a failed reading (FINAL 11.3; ADJUDICATION P-2; studio/jobs.py retry_reading): the newest
+// interpretation attempt that was sent and did not succeed - a failure, or an answer whose reading was refused or cut off,
+// which is a SUCCEEDED run - is released for ONE more attempt, written on its reconciled_at (the operator view serves
+// reconciled: true) and audited RETRY_EVENT, and the stage it queues sends the identical request. A reconciled answer
+// alone is no release: an unknown outcome a member reconciled, which the stage then settled SUCCEEDED from its recorded
+// exchange (P-6), is reconciled too, and it holds its answer.
+const RETRY_EVENT = 'interpretation.retry';
+
+// Whether the recorded retry released ``run`` (a SUCCEEDED run) for ``next``, the next send of its request: an
+// interpretation run that is reconciled, with a retry recorded in the activity after it was made and no later than that
+// send. So one retry releases the one attempt after it, and an answer that was read is never sent again.
+function releasedForRetry(run, next, retries) {
+  // design v2 (FINAL-V2 7.5; amendment 1, 7.2; step 6b): the recorded retry releases pass 2's attempt too (jobs.retry_reading:
+  // "pass 2 alone when its attempt is the appraisal"), audited the same way, so an appraisal run is read as pass 1's is.
+  // AMENDMENT-2 section 9 [R:replay-R2]: a reading run of any interpreter provider (READ_PROVIDERS), Fable's above all -
+  // jobs.retry_target releases the reading path's own runs - so a released retry of an anthropic run is no duplicate
+  if (!READ_PROVIDERS.includes(run.provider) || ![INTERPRETER.purpose, APPRAISER.purpose].includes(run.purpose)
+      || run.reconciled !== true) return false;
+  const made = Date.parse(run.created_at);
+  const resent = Date.parse(next?.created_at);
+  return Number.isFinite(made) && Number.isFinite(resent) && retries.some(at => at > made && at <= resent);
+}
+
 // Each sent run whose request (provider, purpose, request hash) was already answered (succeeded) or left unknown and not
-// reconciled by an earlier sent run: a duplicate paid request. A request sent again after a definite failure is a retry.
-function duplicateSends(runs) {
+// reconciled by an earlier sent run: a duplicate paid request. A request sent again after a definite failure is a retry,
+// and so is one sent again after an answer the recorded retry released (releasedForRetry, read from ``activity``, the
+// operator view's).
+function duplicateSends(runs, activity = []) {
+  const retries = (Array.isArray(activity) ? activity : []).filter(item => isObject(item) && item.event === RETRY_EVENT)
+    .map(item => Date.parse(item.created_at)).filter(Number.isFinite);
   const groups = new Map();
   const duplicates = [];
   for (const run of [...(runs || [])].sort(byCreated)) {
     if (!sentRun(run) || !run.request_sha256) continue;
     const key = `${run.provider}|${run.purpose}|${run.request_sha256}`;
     const earlier = groups.get(key) || [];
-    const blocking = earlier.filter(item => item.state === 'succeeded' || (item.state === 'unknown' && !item.reconciled));
+    const blocking = earlier.filter((item, index) => (item.state === 'succeeded' && !releasedForRetry(item, earlier[index + 1] || run, retries))
+      || (item.state === 'unknown' && !item.reconciled));
     if (blocking.length) duplicates.push({ run, earlier: blocking });
     groups.set(key, [...earlier, run]);
   }
@@ -2288,7 +2548,7 @@ function duplicateSends(runs) {
 
 function checkNoDuplicateSends(op, id = 'pipeline.no_duplicate_send') {
   const runs = op?.provider_runs || [];
-  const dupes = duplicateSends(runs);
+  const dupes = duplicateSends(runs, op?.activity);
   const sent = runs.filter(sentRun).length;
   return [check(id, 'hard', dupes.length === 0, dupes.length
     ? `sent again after an answer or an unreconciled unknown outcome: ${dupes.map(({ run, earlier }) => `${run.id} (${describeRun(run)}) after ${earlier.map(e => `${e.id} ${e.state}`).join(', ')}`).join('; ')}`
@@ -2399,6 +2659,7 @@ function checkProvenance(op, trace, { expectHarness = false } = {}) {
       out.push(check('provenance.peer_reviews', 'hard', peers.length === 0, peers.length ? `no peer review state for ${peers.map(row => row.name).join(', ')}` : 'Astra and Fable each with a peer review state'));
     }
   }
+  if (newPath(op)) out.push(...checkInterpretation(op, trace));
   const runs = Array.isArray(op?.provider_runs) ? op.provider_runs : [];
   const unhashed = runs.filter(run => sentRun(run) && (!SHA256.test(String(run.request_sha256 || '')) || (run.state === 'succeeded' && !SHA256.test(String(run.response_sha256 || '')))));
   out.push(check('provenance.request_hashes', 'hard', unhashed.length === 0, unhashed.length ? `sent run(s) without their request/response sha256: ${unhashed.map(describeRun).join(', ')}`
@@ -2418,6 +2679,89 @@ function checkProvenance(op, trace, { expectHarness = false } = {}) {
   out.push(check('provenance.trace', 'hard', Boolean(trace) && bare.length === 0, !trace ? 'the operator trace was not served'
     : bare.length ? `traced runs without endpoint, model (or, where the API names none, adapter version) or identity: ${bare.map(r => `${r.participant} ${r.id}`).join(', ')}`
       : `${traced.length} traced run(s), each with its endpoint, model or adapter version, and identity`));
+  return out;
+}
+
+// The interpretation's provenance on a new-path encounter (design/FINAL.md 3.1, 8.3; D22), from the operator view's
+// interpretation section: the assessment was made from an event inventory that was READ, through the interpreter's run
+// - its provider and purpose, the one model asked for, and that model answering (a substituted model is refused and never
+// read, ADJUDICATION P-5) - whose request and response hashes it keeps, and whose usage it records where it sent; the D22
+// record has no problem and counts no execution of the legacy reader (P1); and the trace, where it was read, carries the
+// same section (``trace`` undefined: not read).
+function checkInterpretation(op, trace) {
+  const section = isObject(op?.assessment?.interpretation) ? op.assessment.interpretation : null;
+  if (!section || section.engine !== 'events') {
+    return [check('provenance.interpretation', 'hard', false, section ? `the assessment's interpretation section names the engine ${JSON.stringify(section.engine)}`
+      : 'the operator view serves no interpretation section for a new-path assessment')];
+  }
+  const inventory = isObject(section.inventory) ? section.inventory : null;
+  const run = isObject(section.run) ? section.run : null;
+  const record = isObject(section.record) ? section.record : null;
+  const problems = [];
+  // AMENDMENT-2 (8.1, 9 [R:replay-R2]): the engine label says which interpreter made the assessment - @3 the current
+  // path's (INTERPRETER, Fable), @1 and @2 the Gemini interpreter's, read as stored (STORED_INTERPRETER) - and an @2 or
+  // @3 assessment was settled from two runs; an engine label the walk does not know is judged by none of them
+  const engine = section.engine_version;
+  const known = [EVENTS_ENGINE_V1, EVENTS_ENGINE_V2, EVENTS_ENGINE_V3].includes(engine);
+  const made = engine === EVENTS_ENGINE_V3 ? INTERPRETER : STORED_INTERPRETER;
+  if (!known) problems.push(`its engine label ${JSON.stringify(engine)} is none the walk knows (${[EVENTS_ENGINE_V1, EVENTS_ENGINE_V2, EVENTS_ENGINE_V3].join(', ')})`);
+  if (!inventory) problems.push('no event inventory');
+  else if (inventory.state !== 'read') problems.push(`its event inventory was ${inventory.state}`);
+  if (!run) problems.push('no interpreter run');
+  else {
+    if (run.provider !== made.provider || run.purpose !== INTERPRETER.purpose) problems.push(`its run is ${run.provider}/${run.purpose}`);
+    if (run.requested_model !== made.model) problems.push(`its run asked for ${JSON.stringify(run.requested_model)}`);
+    if ((run.sent || run.returned_model) && run.returned_model !== made.model) problems.push(`its run was answered by ${JSON.stringify(run.returned_model)}`);
+    if (!SHA256.test(String(run.request_sha256 || '')) || (run.state === 'succeeded' && !SHA256.test(String(run.response_sha256 || '')))) problems.push('its run lacks its request or response sha256');
+  }
+  if (!record) problems.push('no D22 record');
+  else {
+    if (record.sentinel?.legacy_calls !== 0) problems.push(`the record counts ${JSON.stringify(record.sentinel?.legacy_calls)} execution(s) of the legacy reader`);
+    if (inventory && record.inventory?.id !== inventory.id) problems.push('the record names another inventory');
+    if (run && record.gemini_run !== run.id) problems.push('the record names another run');
+  }
+  // design v2 (FINAL-V2 5.7 measure 9; step 6b): a v2 assessment's inventory was settled from both runs - the appraisal
+  // (pass 2) is held to the same provider and model, its hashes and its usage, and the record names it and counts no
+  // retired execution. A v1 assessment's section has no appraisal run, and none is asked of it. AMENDMENT-2: an @3
+  // assessment is a v2 one too (R2: read as not v2, its appraisal run went unchecked), its two runs Fable's.
+  const v2 = engine === EVENTS_ENGINE_V2 || engine === EVENTS_ENGINE_V3;
+  const appraisal = isObject(section.appraisal_run) ? section.appraisal_run : null;
+  if (v2) {
+    if (!appraisal) problems.push('no appraisal run (pass 2)');
+    else {
+      if (appraisal.provider !== made.provider || appraisal.purpose !== APPRAISER.purpose) problems.push(`its appraisal run is ${appraisal.provider}/${appraisal.purpose}`);
+      if (appraisal.requested_model !== made.model) problems.push(`its appraisal run asked for ${JSON.stringify(appraisal.requested_model)}`);
+      if ((appraisal.sent || appraisal.returned_model) && appraisal.returned_model !== made.model) problems.push(`its appraisal run was answered by ${JSON.stringify(appraisal.returned_model)}`);
+      if (!SHA256.test(String(appraisal.request_sha256 || '')) || (appraisal.state === 'succeeded' && !SHA256.test(String(appraisal.response_sha256 || '')))) problems.push('its appraisal run lacks its request or response sha256');
+      if (run && appraisal.id === run.id) problems.push('its appraisal run is its pass-1 run');
+    }
+    if (record) {
+      if (appraisal && record.appraisal_run !== appraisal.id) problems.push('the record names another appraisal run');
+      if (record.sentinel?.retired_calls !== 0) problems.push(`the record counts ${JSON.stringify(record.sentinel?.retired_calls)} retired execution(s)`);
+    }
+  } else if (appraisal) {
+    problems.push(`an assessment of ${JSON.stringify(section.engine_version)} names an appraisal run`);
+  }
+  const recorded = Array.isArray(section.problems) ? section.problems : ['problems not served'];
+  if (recorded.length) problems.push(`the record's problems: ${recorded.join(' ')}`);
+  const out = [check('provenance.interpretation', 'hard', problems.length === 0, problems.length ? problems.join('; ')
+    : `made from the event inventory ${inventory.id} (read), through the ${run.provider} run ${run.id} asking for ${run.requested_model}${run.returned_model ? `, answered by ${run.returned_model}` : ''}${v2 ? ` and its appraisal run ${appraisal.id}` : ''}; no legacy${v2 ? ' or retired' : ''} execution counted`)];
+  for (const [what, item, id] of [['interpreter', run, 'provenance.interpretation.usage'], ...(v2 ? [['appraisal', appraisal, 'provenance.interpretation.appraisal_usage']] : [])]) {
+    if (item && item.sent && item.state === 'succeeded') {
+      out.push(check(id, 'soft', isObject(item.usage) && Object.keys(item.usage).length > 0,
+        isObject(item.usage) && Object.keys(item.usage).length ? `usage ${JSON.stringify(item.usage)}${item.estimated_cost ? `, estimated USD ${item.estimated_cost}` : ''}` : `the ${what} run that sent records no usage`));
+    }
+  }
+  if (trace !== undefined) {
+    const traced = isObject(trace?.interpretation) ? trace.interpretation : null;
+    const same = Boolean(traced) && traced.engine === 'events' && traced.run?.id === run?.id
+      && (!v2 || traced.appraisal_run?.id === appraisal?.id);
+    out.push(check('provenance.interpretation.trace', 'hard', same,
+      !trace ? 'the operator trace was not served' : !traced ? 'the trace carries no interpretation section'
+        : same ? 'the trace carries the same interpretation section'
+          : traced.run?.id !== run?.id ? `the trace names the run ${traced.run?.id}, the detail ${run?.id}`
+            : `the trace names the appraisal run ${traced.appraisal_run?.id}, the detail ${appraisal?.id}`));
+  }
   return out;
 }
 
@@ -4269,7 +4613,10 @@ async function verifyDocument(page, opts, manifest, item, sink, sessions = {}) {
   // the negative scans, once the operator view (and so every identifier it holds) is known
   try {
     await readPage(page, ctx).catch(() => null);
-    const sc = scanContext({ documentText: opView?.revision?.text || '', denyValues: opView ? denyValuesFrom(opView, trace) : [], allowed: [new URL(opts.baseUrl).host] });
+    // the member's own uploaded file name, which the page, the document's name and the original's download header
+    // echo back, is the member's input and not the site's machinery: it is removed before scanning, like the host
+    // (gi-10-ercp-sphincterotomy-stone-extraction.txt: "extraction.txt" reads as a rule id; Gemini walk 2026-11-10)
+    const sc = scanContext({ documentText: opView?.revision?.text || '', denyValues: opView ? denyValuesFrom(opView, trace) : [], allowed: [new URL(opts.baseUrl).host, item.delivery.file] });
     add(scanDocument(ctx, sc, record, opts.out));
   } catch (error) {
     add([check('scan.json', 'hard', false, `the scans could not run: ${String(error && error.message || error)}`)]);
@@ -4455,8 +4802,16 @@ module.exports = {
   mergeSamples, sampleProgress, scanDocument, checkBundle, customerSummary, isBusy, saved, OPS_GET_PATHS, OPS_POST_PATHS, REMOVED_PATHS,
   // the 2026-11-05 acceptance walk's corrections: the compact line, a model-less participant, the upload key, a failed document
   checkCompactProgress, PANEL_PHASES, MODELLESS_PARTICIPANTS, uploadCarriedClientKey, checkFailure, FAILED_STATES, FAILURE_WALKED,
+  // FINAL-V2 amendment 1 (step 5d's request): the page while an update of the codes is pending
+  ELAPSED_PHASES, ANSWER_AFTER_UPDATE,
   // the completion repair's physician addendum step (review_plan.addendum)
   checkAddendum, withdrawalTookEffect,
+  // the Gemini migration's new path: the routing stand-in, D3, the interpretation's provenance, the retry action
+  newPath, checkStandIn, standInValues, checkInterpretation, ERROR_ACTION_BUTTONS, STEP_OF_KIND, INTERPRETER, EVENTS_ENGINE_PREFIX,
+  // design v2 (step 6b): the appraisal run and the v2 labels; a v2 stand-in's facts are not judged (refutation 6b-r1 P1)
+  APPRAISER, EVENTS_ENGINE_V2, ROUTING_STAND_IN_V2, STAND_IN_VERSIONS, V2_STAND_IN_UNJUDGED, standInFact,
+  STORED_INTERPRETER, READ_PROVIDERS, EVENTS_ENGINE_V1, EVENTS_ENGINE_V3,
+  ROUTING_STAND_IN, MEMBER_ONLY_FACTS, OPS_POST_BODY, STAND_IN_WORDS, RETRY_EVENT, releasedForRetry,
 };
 
 if (require.main === module) {

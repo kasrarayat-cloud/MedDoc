@@ -26,7 +26,7 @@ from tests.support import factories as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC, _audit
 from tests.test_harness_pipeline import BOTH, HarnessCase
-from tests.test_pipeline_api import OFFICE_NOTE, drain
+from tests.test_pipeline_api import OFFICE_NOTE, RecordedInterpretation, drain
 from tests.test_repairs_pipeline import LIVE
 
 ROOT = Path(settings.BASE_DIR)
@@ -37,7 +37,7 @@ OPS_CSS_SHA256 = 'c3bfa4ede6d0fe061df336f19b6daa2d36cf145e95678b0e75eb43556f167e
 
 
 @override_settings(**LIVE, **BOTH, STORAGES=PLAIN_STATIC)
-class MatrixTests(HarnessCase):
+class MatrixTests(RecordedInterpretation, HarnessCase):
     def setUp(self):
         super().setUp()
         self.owner = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)

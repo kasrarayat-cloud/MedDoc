@@ -39,6 +39,7 @@ from django.test import SimpleTestCase
 from studio import bounded, jobs
 from studio.gi import context
 from studio.types import Span
+from tests.legacy_chain import applied
 from tests.test_repairs_7c8_context import DateAssertions
 from tests.test_repairs_7c8_context3 import (COLO_BODY, COLO_PLAIN, EGD_BODY, ELENA_DATE, HEAD, OFFICE_BODY, VISIT_BODY,
                                              EndToEnd, date_fact, evidence_text)
@@ -105,6 +106,7 @@ class EvidenceSourcesAreNeverSentTests(DateAssertions, SimpleTestCase):
                              '2026-10-09', '2026-10-14')
 
 
+@applied
 class EvidenceSourcesAreNeverSentRequestTests(EndToEnd):
     """dates:1, dates:3 and dates:5 end to end: each request is dateless and the snare polypectomy done on 10/14 is
     never excluded against the fax's, the letter's or the other discipline's date."""
@@ -280,6 +282,7 @@ class EmptyDateFieldIsKeptTests(DateAssertions, SimpleTestCase):
         self.assert_member_conflict(text, '2026-10-20')
 
 
+@applied
 class BirthDateRequestTests(EndToEnd):
     """dates:0, dates:2, interplay:0, sk:3 and sk:4 end to end: nothing is sent for the member's 1998-01-01 (a held
     member conflict), and no act is excluded against it; the member's correct date is taken and sent."""
@@ -375,6 +378,7 @@ class OnlyALabelReadAsTheNoteSOwnTests(DateAssertions, SimpleTestCase):
                 self.assert_document(HEAD + 'Patient: Synthetic, Alex    ' + line + '\n\n' + COLO_BODY, value)
 
 
+@applied
 class OnlyALabelReadAsTheNoteSOwnRequestTests(EndToEnd):
     def test_sk1_inputs_send_no_date(self):
         for text in UNPLACED_LABELS[:4]:
@@ -462,6 +466,7 @@ class LabelSOwnFieldTests(DateAssertions, SimpleTestCase):
                              '2026-10-14')
 
 
+@applied
 class LabelSOwnFieldRequestTests(EndToEnd):
     def test_b3_and_v1_send_no_date(self):
         b3 = self.finished(NOT_ALONE[0][0])

@@ -32,6 +32,7 @@ from studio.gi import context as gi_context
 from studio.gi.context import is_member_conflict
 from studio.providers.corti import ADAPTER_VERSION, build_coding_request
 from studio.types import Fact, RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_gi4_state import DOCS, LIVE, RetainedProvider, seed_reference
@@ -50,6 +51,7 @@ def request_sha(text, day):
                                 10 ** 7).canonical_sha256
 
 
+@applied
 @override_settings(**LIVE)
 class WideDateStateTests(OperatorReads, TestCase):
     def setUp(self):
@@ -73,11 +75,13 @@ class WideDateStateTests(OperatorReads, TestCase):
         while (job := jobs.claim_next()) is not None:
             jobs.run_job(job)
 
-    def answer(self, encounter_id, value):
+    def answer(self, encounter_id, value, status=201):
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(f'/api/encounters/{encounter_id}/context',
                                         data=json.dumps({'service_date': value}), content_type='application/json')
-        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.status_code, status, response.content)
+        if status == 200:  # FINAL-V2 amendment 1, 1.3: a save of the saved values writes nothing and answers 200
+            self.assertTrue(response.json()['unchanged'])
         self.drain()
 
     def service_date(self, encounter_id):
@@ -94,7 +98,7 @@ class WideDateStateTests(OperatorReads, TestCase):
         self.assertTrue(is_member_conflict(self.service_date(encounter_id)))
         self.answer(encounter_id, '2026-10-26')
         self.assertEqual(self.provider.sent, [STORED[None], STORED['2026-10-26']])
-        self.answer(encounter_id, '2026-10-26')  # an identical re-save
+        self.answer(encounter_id, '2026-10-26', status=200)  # an identical re-save
         self.assertEqual(len(self.provider.sent), 2)
         self.assertEqual(self.service_date(encounter_id)['origin'], 'user')
 
@@ -110,7 +114,7 @@ class WideDateStateTests(OperatorReads, TestCase):
         self.assertTrue(is_member_conflict(self.service_date(encounter_id)))
         self.answer(encounter_id, '2026-10-18')  # installed's own date: one dated request, as installed sent it
         self.assertEqual(self.provider.sent, [request_sha(X_Y, None), request_sha(X_Y, '2026-10-18')])
-        self.answer(encounter_id, '2026-10-18')
+        self.answer(encounter_id, '2026-10-18', status=200)  # an identical re-save
         self.assertEqual(len(self.provider.sent), 2)
         self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.REVIEW2).exists())
 
@@ -164,6 +168,7 @@ def installed_reading(text, service_date):
     return facts
 
 
+@applied
 @override_settings(**LIVE)
 class RecordedInstallConsequenceTests(OperatorReads, TestCase):
     """CTS-6: what an encounter recorded before the install meets at its first context save after it (recorded for the

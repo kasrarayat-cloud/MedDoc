@@ -21,6 +21,7 @@ from django.utils import timezone
 
 from studio import customer_api, jobs, models, reports, review, serializers
 from studio.validation import engine, questions
+from tests.legacy_chain import applied
 from tests.test_cux_r2_details import PipelineCase
 from tests.test_cux_r2_overlay import ApiCase, persist_input
 from tests.test_cux_review import decide
@@ -148,6 +149,17 @@ class EarlierFormKeyBindingTests(SimpleTestCase):
 
 # --- W1, W6 and their controls: the withdrawal window reads the stored assessment everywhere ------------------------
 
+def withdrawn_reading(codes):
+    """r2f (DECISIONS D309, RFEW-5): the codes as read before a withdrawal, as they read once the answer is withdrawn and
+    its recompute has not run - the same status, sub label and actions, the excluded-by-an-answer sentence in its
+    withdrawn form (customer_api: never "until that answer is withdrawn" once it was)."""
+    return {code: (status, sub_label, allowed,
+                   [customer_api.EXCLUDED_BY_WITHDRAWN_ANSWER_WORDS if item == customer_api.EXCLUDED_BY_ANSWER_WORDS
+                    else item for item in qualifications])
+            for code, (status, sub_label, allowed, qualifications) in codes.items()}
+
+
+@applied
 class WithdrawalWindowTests(ArchiveMixin, PipelineCase):
     def setUp(self):
         super().setUp()
@@ -207,8 +219,10 @@ class WithdrawalWindowTests(ArchiveMixin, PipelineCase):
         self.assertEqual(self.encounter(encounter_id).current_assessment_id, marker.pk)  # the recompute has not run
         for label, now in (('queued', queued), ('stopped', held)):
             with self.subTest(label):
-                # one source of truth: every reader as it read the stored assessment before the withdrawal
-                for name in ('codes', 'draft', 'coding', 'customer_draft', 'views'):
+                # one source of truth: every reader as it read the stored assessment before the withdrawal - r2f
+                # (DECISIONS D309, RFEW-5): but for the code's sentence, which says the answer was withdrawn
+                self.assertEqual(now['codes'], withdrawn_reading(answered['codes']), 'codes')
+                for name in ('draft', 'coding', 'customer_draft', 'views'):
                     self.assertEqual(now[name], answered[name], name)
                 # and readiness holds while the stored assessment reads an answer that no longer stands (integration of
                 # cycle 2): an approval meanwhile could export without 45385 on the strength of the withdrawn answer
@@ -246,7 +260,8 @@ class WithdrawalWindowTests(ArchiveMixin, PipelineCase):
         self.client.post(f'/api/encounters/{encounter_id}/details/{answer.pk}/revoke')
         self.client.post(f'/api/encounters/{encounter_id}/stop')
         held = self.readers(encounter_id)
-        for name in ('codes', 'draft', 'coding', 'customer_draft', 'views'):
+        self.assertEqual(held['codes'], withdrawn_reading(answered['codes']), 'codes')  # r2f (D309, RFEW-5)
+        for name in ('draft', 'coding', 'customer_draft', 'views'):
             self.assertEqual(held[name], answered[name], name)
         self.assertEqual(held['blockers'][0], STALE_WORDS)  # readiness holds while the withdrawn answer is read
         self.assertLessEqual(set(held['blockers'][1:]), set(answered['blockers']))
@@ -332,6 +347,7 @@ class WithdrawalWindowTests(ArchiveMixin, PipelineCase):
 
 # --- W5: a documented service's engine-applied answer, withdrawn: the same window, read alike --------------------------
 
+@applied
 class ServiceAnswerWindowTests(ArchiveMixin, PipelineCase):
     def setUp(self):
         super().setUp()
@@ -373,6 +389,7 @@ class ServiceAnswerWindowTests(ArchiveMixin, PipelineCase):
 
 # --- W2: an earlier-form answer through a re-assessment by this release ----------------------------------------------
 
+@applied
 class EarlierFormThroughReassessmentTests(ArchiveMixin, PipelineCase):
     def setUp(self):
         super().setUp()
@@ -521,6 +538,7 @@ def undo_reading(since):
     return answer['hazards'], answer['written'], install.web_written_by_time(closed), hold, notes
 
 
+@applied
 class MarkerHazardTimingTests(ArchiveMixin, PipelineCase):
     def setUp(self):
         super().setUp()

@@ -22,6 +22,7 @@ from django.test import SimpleTestCase
 
 from studio.gi.profiles import PROFILES
 from studio.validation import checks
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import FakeProvider, drain
 from tests.test_repairs_7c8_p1reports import Harness, section
 from tests.test_repairs_7c8_p2reports import EGD_LABEL, EVERY_DETECTED, screen, unproposed
@@ -110,6 +111,7 @@ class AnEnteroscopyRoutingReadsAsPerformedIsNamedTests(SimpleTestCase):
         self.assertEqual((unproposed(result).status, unproposed(result).detail), ('pass', checks.UNPROPOSED_PASS))
 
 
+@applied
 class TheReportsNameTheEnteroscopyRoutingReadsTests(Harness):
     """EUS-SECOND 0 through the API, on the verifier's smallest input: the stored check, the draft TXT, the Checks tab
     and - once the reviewer approves 43242 - the reviewed TXT name the enteroscopy; none says that every performed
@@ -177,6 +179,7 @@ class ReviewHarness(Harness):
         self.assertIn(('review.reinstatement', 'pass'), [(c['id'], c['status']) for c in proposal['checks']])
 
 
+@applied
 class AReinstatedCodeCountsAsASelectedOneTests(ReviewHarness):
     """EUS-SECOND 1 and 2 (verified must-fix, class 3): a documentation check excludes the EUS's code - 43242, which
     includes the EGD read as the EUS's endoscopic portion - on another act's cancel or defer word (a misreading
@@ -262,6 +265,7 @@ EGD_AND_EUS_PAIR = (SYNTHETIC + 'Date of service: 2026-10-14\n' + EGD_LINE + '\n
                     'EUS: A pancreatic mass ' + SAMPLED_FNA + '.\n')  # the verifier's smallest input (EUS-SECOND 3)
 
 
+@applied
 class ARejectedCodeIncludesNothingTests(ReviewHarness):
     """EUS-SECOND 3 (verified must-fix, class 3): an esophagoscopy EUS code (43232), which includes no upper endoscopy,
     and an EGD-with-EUS code (43242) - from the primary answer, or added by the second review for the listed EGD; the
@@ -349,6 +353,7 @@ class SecondReviewRollbackBase(P2Base):
             encounter_id=encounter_id, purpose=models.ProviderRun.SECOND_REVIEW).order_by('created_at')]
 
 
+@applied
 class AnOlderUnreadSecondReviewIsNamedBehindARetryTests(SecondReviewRollbackBase):
     """ROLLBACK 0 (verified must-fix, class 3 reached through a class 5 path; pre-existing at a62a18c85, not at
     057a7d398, which cannot write a second review): a second review sent with an unknown outcome is reconciled, which
@@ -399,6 +404,7 @@ class AnOlderUnreadSecondReviewIsNamedBehindARetryTests(SecondReviewRollbackBase
         self.assertEqual(self.encounter(failed).state, 'no_codes')
 
 
+@applied
 class AStoppedSecondReviewIsNeverAFailedRequestTests(SecondReviewRollbackBase):
     """ROLLBACK 1 (verified must-fix, class 3 and class 5; pre-existing at a62a18c85, not at 057a7d398): a member
     stops the second review while its stage runs, before anything is sent - its run is cancelled ("Stopped before

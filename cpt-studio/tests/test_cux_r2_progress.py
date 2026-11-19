@@ -31,14 +31,15 @@ from django.utils import timezone
 
 from studio import jobs, models, progress, review
 from studio.types import ExtractionResult, RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.support.operator import OperatorReads
 from tests.test_cux_flow import ProgressCase, run_stages
 from tests.test_harness_pipeline import BOTH, HarnessCase
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
+from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
 from tests.test_repairs_gi2_present import BIOPSY, SNARE, Harness
-from tests.test_repairs_pipeline import NO_DATE_NOTE
+from tests.test_repairs_pipeline import INTERPRETATIONS, NO_DATE_NOTE
 from tests.test_services_second_review import TwoPassProvider
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
@@ -97,12 +98,16 @@ class StatePrecedenceTests(TestCase):
 
     def test_a_failed_stage_after_an_unknown_outcome_waits_on_its_reconciliation(self):
         pf.assess(self.enc, pf.result())
-        for kind, failed in (('analyze', 'processing_failed'), ('assess', 'processing_failed'),
+        # FINAL-V2 amendment 1, 4.3 and 5.2: the target jobs decide the derived state - a stage of the current context
+        # created after the codes; a context-free stage (analyze) after fresh codes serves nothing, so their state stands
+        current = models.Encounter.objects.get(pk=self.enc.pk).current_context
+        for kind, failed in (('analyze', 'no_codes'), ('assess', 'processing_failed'),
                              ('astra', 'processing_failed'), ('astra_peer', 'processing_failed'),
                              ('predict', 'provider_failed')):
             with self.subTest(kind):
                 models.Job.objects.filter(encounter=self.enc).delete()
-                job = pf.job(self.enc, self.s.revision, kind, 'failed')
+                job = pf.job(self.enc, self.s.revision, kind, 'failed',
+                             **({} if kind == 'analyze' else {'context': current}))
                 if kind == 'predict':  # its own request, sent and failed
                     pf.provider_run(self.enc, self.s.revision, state=models.ProviderRun.FAILED)
                 self.assertEqual(self.state(), failed)  # the control: no unknown outcome
@@ -121,7 +126,9 @@ class StatePrecedenceTests(TestCase):
 
     def test_a_run_left_sending_by_a_failed_stage_is_the_same_unknown_outcome(self):
         pf.assess(self.enc, pf.result())
-        pf.job(self.enc, self.s.revision, 'assess', 'failed')
+        # a stage of the current context (FINAL-V2 amendment 1, 4.3: a target job)
+        pf.job(self.enc, self.s.revision, 'assess', 'failed',
+               context=models.Encounter.objects.get(pk=self.enc.pk).current_context)
         orphan = pf.provider_run(self.enc, self.s.revision, state=models.ProviderRun.SENDING)
         self.assertTrue(review._orphaned_sending(self.enc))
         self.assertEqual(self.state(), 'provider_unknown')
@@ -156,11 +163,14 @@ class StatePrecedenceTests(TestCase):
     def test_control_the_member_s_own_stop_still_reads_stopped_and_resumable(self):
         pf.assess(self.enc, pf.result())
         self.unknown()
-        pf.job(self.enc, self.s.revision, 'assess', 'cancelled')
+        # a stage of the current context, queued after the codes (FINAL-V2 amendment 1, 4.3: a target job)
+        pf.job(self.enc, self.s.revision, 'assess', 'cancelled',
+               context=models.Encounter.objects.get(pk=self.enc.pk).current_context)
         self.assertEqual(self.state(), 'stopped')
         self.assertTrue(review.can_resume(models.Encounter.objects.get(pk=self.enc.pk)))
 
 
+@applied
 @override_settings(**BOTH)
 class ParticipantUnknownTests(CustomerReads, OperatorReads, HarnessCase):
     """L5-1's inputs (a) and (b), through the real pipeline: a participant left 'sending' after both its outcome writes
@@ -222,6 +232,7 @@ class ParticipantUnknownTests(CustomerReads, OperatorReads, HarnessCase):
         self.assertEqual(error, {'text': progress.ERRORS['processing_failed'][0], 'action': 'new_document'})
 
 
+@applied
 @override_settings(**LIVE)
 class CortiUnknownTests(CustomerReads, OperatorReads, TestCase):
     """L5-1's input (c): Corti's read times out after sending, then the assess overruns its bound."""
@@ -331,6 +342,7 @@ class HeartbeatLifetimeTests(TransactionTestCase):
 
 # --- L5-3: a reservation its stage left behind is never being confirmed -----------------------------------------------
 
+@applied
 @override_settings(**LIVE)
 class ReservationTests(CustomerReads, OperatorReads, TestCase):
     def setUp(self):
@@ -413,7 +425,10 @@ class ReservationTests(CustomerReads, OperatorReads, TestCase):
         drain()
         encounter = models.Encounter.objects.get(pk=encounter_id)
         job = models.Job.objects.filter(encounter=encounter).order_by('-created_at').first()
-        models.Job.objects.filter(pk=job.pk).update(state=models.Job.RUNNING, started_at=timezone.now())
+        # running now, so queued after the codes it serves (FINAL-V2 amendment 1, 4.3: a target job is created after the
+        # current assessment of a fresh encounter)
+        models.Job.objects.filter(pk=job.pk).update(state=models.Job.RUNNING, started_at=timezone.now(),
+                                                    created_at=timezone.now())
         mine = models.ProviderRun.objects.create(
             encounter=encounter, revision=encounter.current_revision, provider='corti', adapter_version='test',
             request_sha256='f' * 64, request_body={}, contexts=[], state=models.ProviderRun.RESERVED,
@@ -447,9 +462,12 @@ class StaleReservationTests(TestCase):
 # --- L5-4: a blocked or skipped stage is never done -------------------------------------------------------------------
 
 @override_settings(**LIVE)
-class BlockedStageTests(CustomerReads, TestCase):
+class BlockedStageTests(RecordedInterpretation, CustomerReads, TestCase):
     """L5-4's input: a document whose first request's outcome is unknown, then a member's date - a new request, which
     the unknown outcome blocks (nothing is sent, nothing assessed)."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE or NO_DATE_NOTE from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
 
     def test_a_document_review_an_unknown_outcome_blocked_is_never_done(self):
         ws = f.workspace()
@@ -532,14 +550,16 @@ class StageRecordTests(ProgressCase):
 
     def test_a_re_check_s_own_outcome_is_read(self):
         self.chain('extract', 'analyze', 'predict', 'assess')
-        self.final()
+        final = self.final()
+        # the re-check is asked on the final, so its stages are queued after it (FINAL-V2 amendment 1, 4.3: target jobs)
+        later = (final.created_at - self.t0).total_seconds()
         for outcome, expected in (('failed', 'unavailable'), ('unknown', 'unavailable'), ('not_sent', 'unavailable'),
                                   ('succeeded', 'done'), ('reused', 'done')):
             with self.subTest(outcome):
                 models.Job.objects.filter(kind__in=('review2', 'assess'), created_at__gt=self.t0 + timedelta(
                     seconds=100)).delete()
-                self.job('review2', 'succeeded', 600, result={'second_review': outcome, 'run': None})
-                self.job('assess', 'queued', 602)
+                self.job('review2', 'succeeded', later + 1, result={'second_review': outcome, 'run': None})
+                self.job('assess', 'queued', later + 3)
                 self.assertEqual(self.checks()['document_review'], expected)
         # the stale sweep records a re-check it settles under 'provider'
         swept = self.job('review2', 'succeeded', 700, result={'provider': 'failed', 'run': None, 'settled': 'x'})
@@ -562,6 +582,7 @@ class FailingRecheck(TwoPassProvider):
         return super().send(request, deadline_s=deadline_s)
 
 
+@applied
 class RecheckOutcomeTests(CustomerReads, Harness):
     def ask(self, provider):
         self.use(provider)

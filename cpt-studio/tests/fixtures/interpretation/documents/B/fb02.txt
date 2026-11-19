@@ -1,0 +1,20 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+UPPER ENDOSCOPY (EGD) REPORT
+Facility: Cedar Hollow Digestive Health (fictional)
+Patient: Walter Brenning (fictional)
+Date of service: November 4, 2026
+Endoscopist: Priya Ostrander, MD (fictional)
+Indication: Recurrent solid-food dysphagia; known peptic stricture of the distal esophagus.
+History: On June 4, 2026 the stricture was dilated over a guidewire with bougies to 15 mm.
+Swallowing improved for about four months; the dysphagia has now returned.
+Procedure: The gastroscope was advanced to the second portion of the duodenum.
+Findings:
+- Distal esophagus: a smooth, benign-appearing stricture at 37 cm, about 12 mm in diameter.
+- The stricture was traversed by the gastroscope with mild resistance.
+- Today the stricture was dilated with a through-the-scope balloon to 16.5 mm and then 18 mm.
+- After dilation there was a superficial mucosal tear without significant bleeding.
+- Stomach and duodenum: normal.
+Impression:
+1. Recurrent peptic stricture of the distal esophagus, dilated today with a balloon to 18 mm.
+2. Normal stomach and duodenum.
+Plan: Continue the proton pump inhibitor twice daily. Clinic follow-up in 8 weeks.

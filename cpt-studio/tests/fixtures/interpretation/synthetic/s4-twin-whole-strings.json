@@ -1,0 +1,32 @@
+{
+  "label": "SYNTHETIC-SLIP",
+  "slip": "S4",
+  "role": "twin",
+  "name": "s4-twin-whole-strings",
+  "about": "The same answer with every string whole.",
+  "kind": "txt",
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nCOLONOSCOPY REPORT\nDate of service: November 9, 2026\nEndoscopist: Marta Lindqvist, MD (fictional)\nHistory: In 2023 Dr. Tomas Brandt (fictional) removed a 10 mm polyp from the transverse colon with a hot snare at an outside hospital.\nProcedure: The colonoscope was advanced to the cecum (appendiceal orifice seen).\nCold forceps biopsies were taken from the transverse colon polypectomy scar (flat and pale).\nNo polyp was removed today.\n",
+  "response": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": "{\"passages\": [{\"id\": \"P1\", \"text\": \"Date of service: November 9, 2026\"}, {\"id\": \"P2\", \"text\": \"Endoscopist: Marta Lindqvist, MD (fictional)\"}, {\"id\": \"P3\", \"text\": \"History: In 2023 Dr. Tomas Brandt (fictional) removed a 10 mm polyp from the transverse colon with a hot snare at an outside hospital.\"}, {\"id\": \"P4\", \"text\": \"Procedure: The colonoscope was advanced to the cecum (appendiceal orifice seen)\"}, {\"id\": \"P5\", \"text\": \"Cold forceps biopsies were taken from the transverse colon polypectomy scar (flat and pale)\"}, {\"id\": \"P6\", \"text\": \"No polyp was removed today.\"}], \"encounter\": {\"date_of_service\": {\"value\": \"2026-11-09\", \"state\": \"stated\", \"words\": \"November 9, 2026\", \"passages\": [\"P1\"], \"other_dates\": []}, \"documenting_endoscopist\": {\"words\": \"Marta Lindqvist, MD (fictional)\", \"passages\": [\"P2\"]}, \"team\": [], \"anatomy\": [], \"reach\": [{\"event\": \"E2\", \"landmark\": \"cecum\", \"words\": \"advanced to the cecum (appendiceal orifice seen)\", \"passages\": [\"P4\"], \"completion\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}}], \"visit_facts\": []}, \"lesions\": [{\"id\": \"L1\", \"words\": \"polypectomy scar (flat and pale)\", \"landmark\": \"transverse_colon\", \"site_words\": \"transverse colon\", \"size_words\": \"\", \"multiplicity\": \"single\", \"passages\": [\"P5\"]}], \"events\": [{\"id\": \"E1\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"snare\", \"words\": \"removed\", \"passages\": [\"P3\"]}, \"technique\": {\"value\": \"hot_snare\", \"words\": \"hot snare\", \"passages\": [\"P3\"]}, \"target\": {\"lesion\": \"\", \"landmark\": \"transverse_colon\", \"words\": \"transverse colon\", \"passages\": [\"P3\"]}, \"time\": {\"value\": \"earlier_encounter\", \"words\": \"In 2023\", \"passages\": [\"P3\"]}, \"performer\": {\"value\": \"other_clinician\", \"words\": \"Dr. Tomas Brandt (fictional)\", \"passages\": [\"P3\"]}, \"status\": {\"value\": \"performed\", \"words\": \"removed a 10 mm polyp\", \"passages\": [\"P3\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}, {\"id\": \"E2\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"examination\", \"words\": \"colonoscope\", \"passages\": [\"P4\"]}, \"technique\": {\"value\": \"endoscope\", \"words\": \"colonoscope\", \"passages\": [\"P4\"]}, \"target\": {\"lesion\": \"\", \"landmark\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"time\": {\"value\": \"current_encounter\", \"words\": \"\", \"passages\": []}, \"performer\": {\"value\": \"documenting_team\", \"words\": \"\", \"passages\": []}, \"status\": {\"value\": \"performed\", \"words\": \"was advanced to the cecum\", \"passages\": [\"P4\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}, {\"id\": \"E3\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"biopsy\", \"words\": \"biopsies\", \"passages\": [\"P5\"]}, \"technique\": {\"value\": \"cold_forceps\", \"words\": \"Cold forceps\", \"passages\": [\"P5\"]}, \"target\": {\"lesion\": \"L1\", \"landmark\": \"transverse_colon\", \"words\": \"transverse colon polypectomy scar (flat and pale)\", \"passages\": [\"P5\"]}, \"time\": {\"value\": \"current_encounter\", \"words\": \"\", \"passages\": []}, \"performer\": {\"value\": \"documenting_team\", \"words\": \"Marta Lindqvist, MD (fictional)\", \"passages\": [\"P2\", \"P5\"]}, \"status\": {\"value\": \"performed\", \"words\": \"were taken\", \"passages\": [\"P5\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}, {\"id\": \"E4\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"removal\", \"words\": \"removed\", \"passages\": [\"P6\"]}, \"technique\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"target\": {\"lesion\": \"\", \"landmark\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"time\": {\"value\": \"current_encounter\", \"words\": \"today\", \"passages\": [\"P6\"]}, \"performer\": {\"value\": \"documenting_team\", \"words\": \"\", \"passages\": []}, \"status\": {\"value\": \"not_performed\", \"words\": \"No polyp was removed\", \"passages\": [\"P6\"]}, \"scope\": {\"value\": \"all_of_kind\", \"targets\": [], \"words\": \"No\", \"passages\": [\"P6\"]}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}], \"open_questions\": []}"
+            }
+          ],
+          "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-4-argon",
+    "responseId": "synthetic-s4-twin-whole-strings",
+    "usageMetadata": {
+      "promptTokenCount": 0,
+      "candidatesTokenCount": 0,
+      "totalTokenCount": 0
+    }
+  }
+}

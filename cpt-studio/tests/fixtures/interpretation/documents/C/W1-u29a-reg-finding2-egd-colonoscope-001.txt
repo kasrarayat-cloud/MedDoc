@@ -1,0 +1,11 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+EGD - stat
+Date of service: 2026-11-05
+Endoscopist: Jane Synthetic, MD (fictional)
+Sedation: monitored anesthesia care
+
+Indication: Dysphagia.
+History: Colonoscopy in 2021 was normal.
+
+Procedure: The pediatric colonoscope was advanced through the esophageal stricture into the stomach and the second part of the duodenum. Cold forceps biopsies were obtained from the gastric antrum.
+The EGD was completed without complication.

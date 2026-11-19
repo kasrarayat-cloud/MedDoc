@@ -1,0 +1,2042 @@
+{
+ "cases": [
+  {
+   "answers_sha256": "c20d0fdff2143d67212f8a9fbd8b881645ef4a9c2bf639817c3a34952eebd2e2",
+   "case": "T1",
+   "document_sha256": "c42094df2a809590dc36df06965eb1c660ffbeb459260248eb8566a6b9f5d20b",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "T1",
+    "BF1"
+   ],
+   "title": "A same-day act read as another date",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "4dc846a96d6323490a31fdfa097beea76bd9c9791d07c8011cd20b95d0c7dd31",
+   "case": "T2",
+   "document_sha256": "a36809355a3686f28b9ab605ec910beee629ff8ed803de480664aa0f8ffde2c9",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "T2",
+    "BF1"
+   ],
+   "title": "A same-day act's own code read as at an earlier encounter",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "d20abf4ca89e4b7bbceb38d1d596580985d9a0f79d127f19eae31833510e6904",
+   "case": "T3",
+   "document_sha256": "668cd53520dfe5de54589dc231be7491a051cb76a062548a1e0c14805a0d8e80",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "T3",
+    "BF1"
+   ],
+   "title": "Another day's act read on the date of service by a same-day frame",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "bacedc6013e43632b863386b3c2490bc0b40a7bde98267aa319e03de8c5eab84",
+   "case": "T4",
+   "document_sha256": "cfee53965f4192e8c2d0fba7cfb4c595089591b9613d88f2f753ce90fd9d2e6b",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "T4",
+    "BF2"
+   ],
+   "title": "An act of unknown class beside the visit",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "9cffd65461411c02dc996cefff2478d0a6d58d4a27ffaa2eeb9f9b8011108fdc",
+   "case": "T6",
+   "document_sha256": "f02f580a765193522173c47f64ea76378012215730730d15b7cb8e9d9ea34625",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "T6",
+    "BF2"
+   ],
+   "title": "A whole placed at another encounter absorbs today's act",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "d662a050b64eb26857ac293a6f6e1f0d5361728e1c5f5f52d47b21e13fa11fc5",
+   "case": "T7",
+   "document_sha256": "fdc271ba2b269cc1b316439f97db45f26b9a94f1de8558a880e34f93d0468201",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "T7",
+    "BF11",
+    "BF21"
+   ],
+   "title": "Another time's yield counted as this sweep's",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "7844cf561102c42ec6e6dccae8d6eec7a443b110030cbb3a0db009699319d219",
+   "case": "T8",
+   "document_sha256": "474f59736a623929e855c2fd8eb7e9f893a59d3446f3f64f1f48eb849850e627",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "T8",
+    "BF3"
+   ],
+   "title": "An anaphoric \"At that time\" filed as an earlier encounter",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "cd2982017159b4c73128bb37654833eaa820dc48a9a7a9f7793bb66e75e272af",
+   "case": "T9",
+   "document_sha256": "728f79243d28c65eea586c73642f2341593d486804fccddae627679a69d3a2ca",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "T9",
+    "BF18"
+   ],
+   "title": "A discourse back-reference sets a denial apart",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "341f8073c23fe0bf79d437751e4734fe72e41ed64788368f278e92216bc211e8",
+   "case": "E1",
+   "document_sha256": "99eb1623f2c4fb7641aba90781336c1fd227cc3ed03d7ec065eabf4cbabf6fca",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "E1",
+    "BF13"
+   ],
+   "title": "An act told only in an anesthesia entry",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "6b724a95d10b88bd274507c1047fc59c079da204c7c1ab13c37b7241467c6c71",
+   "case": "E2",
+   "document_sha256": "0a0b63b3f12706450e9a2f9ce34164daee1a671c6aa73eece2007e8600059ec9",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "E2",
+    "BF12"
+   ],
+   "title": "A hard-wrapped act after a nursing signature",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "7868bf6d5ff3ab9d7dc0a2845ead30fca075451b7e116bf33befbedd9cdc1397",
+   "case": "E3",
+   "document_sha256": "220638949cc461f83e957eb7cec9097108a74eff3bd0d12335d2a7114e0ef57b",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "E3",
+    "BF11"
+   ],
+   "title": "An \"as above\" line read as the physician's statement",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "7a199dd9a5258e20088e6557847db0ac6327964233474a1461daa8749c260c3f",
+   "case": "E4",
+   "document_sha256": "67cb4822085aa580f9c70cc8863411c516bfb9c05f53a6d6f37e010e7271f77c",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "E4",
+    "BF12"
+   ],
+   "title": "A role label opening a later sentence of a physician line",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "9633a6303fc1952e1dcf6f9df65d7a9d7e7eb0e5b1f989a9ad7be28b99490e82",
+   "case": "E5",
+   "document_sha256": "eaa83b2c0948857c3a1714039a6d746ff9b889b3de46fa8ad5c14a79fe733a7f",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "E5"
+   ],
+   "title": "A pathology sub-heading ends the pathology entry",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "2dac5ed8af2bac26e470e31341ea8fc33e75a67b9db1ee35c9fc5e4d6969b79b",
+   "case": "T5",
+   "document_sha256": "e5bc5d2e64e8c8eef08d76680877d96edfd2c2c417aa544665aafecdb0d1ad09",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "T5",
+    "BF2",
+    "D3",
+    "CO-1"
+   ],
+   "title": "An unanchored earlier time on a removal releases its biopsy",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "aef641b9eeb5b9472575158c6353adf0d2bd468985a05985d52f4cd983f5beba",
+   "case": "G1",
+   "document_sha256": "aed2c5927f96c9df2bd72d5342e52ff0504241cfed0614367106b975004485e9",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "G1",
+    "BF8"
+   ],
+   "title": "43253 on a submucosal tattoo",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "6e60394bc1fc49a78a712209dafc550227ddd91d9a9ce322a1a1fa87cce28828",
+   "case": "G2",
+   "document_sha256": "cf53f56ef6601a70d9abb7d6e5a6cc9e2129020bb1298d15201acc1e5c13cca1",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "G2",
+    "BF6"
+   ],
+   "title": "An upper EUS code on a lower EUS",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "648e79fd0fae2a2a10da87d0160fd391530e3e6597da0799deb19cb0647d62f4",
+   "case": "G3",
+   "document_sha256": "df8ec60a0b2a8bc728f227986b9ff470c4804c3cba72fcb0bf108fdcb00a494b",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "G3",
+    "BF9",
+    "BF15"
+   ],
+   "title": "An FNA that is the access step of a drainage",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "de114c283f421f11978ea779844e2badda50d5b81ab7c4186adee928d1510589",
+   "case": "G4",
+   "document_sha256": "bd56c4b4979333fa8e8f05bb2e915e69e6ceffb9ce972fbd3d1f8b8585fd3974",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "G4",
+    "O1"
+   ],
+   "title": "An unlisted EUS-guided act beside the EUS examination",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "afcdbe20deaa18883b61ed035b9e11232944702529e3097c636091b12a51b9cf",
+   "case": "G5",
+   "document_sha256": "48802b61409066a6078effae3b72bda7406c7aceb5dc866f17abb99967911fe7",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "G5"
+   ],
+   "title": "A lab draw counted as a possible same-day procedure",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "7c1db382dd00389fa49585309579cae90cf6e0c1613760c45b9ad4618d1de50d",
+   "case": "S1",
+   "document_sha256": "18b2086d5aef8060116e3df644f8f89f58e0e0afade842e966e85980c9f0c6bc",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "S1",
+    "BF6"
+   ],
+   "title": "A full-class EUS code beside stations that exclude the upper tract",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "6e6e502cc6106d28d258e17455cb55b660e33d6c12ae45b034b6226673f4a854",
+   "case": "S2",
+   "document_sha256": "6b625d78dce9ced4b7218231a1bbab480055bf11424dca4b63631f7d5d33b1fc",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "S2",
+    "BF7"
+   ],
+   "title": "Stations stated as not examined",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "4f11ebf260f2f1c8fc534585bd53b799f2ba2b4547dbc932812a198013eb1ba6",
+   "case": "S3",
+   "document_sha256": "186b1d498a78951f47fdb472b9f697173e956b604f1f0c06650d6efaf9509464",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "S3",
+    "BF20"
+   ],
+   "title": "A session told only by its acts keeps its extent question",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "9836a2c20c96942df9ff6caf6d3fbb2f070cb6d3fc880be89b7cd548cbbc5053",
+   "case": "S4",
+   "document_sha256": "3f75a6f2b97cedadb8ae973622122f62dc6a83c9c5d5f7ec2286bcd19acc107f",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "S4",
+    "BF7"
+   ],
+   "title": "A terminated examination keeps its 52/53 consideration",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "b9972db84e32f7c55eef5dd25cc10e434fb5a2560a758dcf4f8a1abb31fa9b29",
+   "case": "N1",
+   "document_sha256": "1ed4dccd7096c0bb93b05ab88ac1ef0caf97111953173f03e926a7323f55f795",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "N1",
+    "BF16",
+    "BF20"
+   ],
+   "title": "An act assigned to the wrong coding session",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "d78fbc717b4195b0e918075fbe3333e658de11d5a8dcaf9b3e68a289c13290d0",
+   "case": "N2",
+   "document_sha256": "f44ff292e6b1016913d20bac35da308b1629b3299be3a1a5f6f90a0a619bc765",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "N2"
+   ],
+   "title": "An act of unverified place is never moved into the EGD",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "fca73ef57e01c6b3a04349560048c13a367c5d26eb8480f36e7eb5dd21496edb",
+   "case": "N3",
+   "document_sha256": "9afddbfe7f3e8d9033a0883d0994f7a22b145ea5808bc1c323c295fdcc68b306",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "N3",
+    "BF15"
+   ],
+   "title": "A part session's base code beside its whole",
+   "variants": [
+    "i",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "0fe400bd87dc12d520c7f5ac408af3e4f413af966399b275b0f697e6154a6ea1",
+   "case": "A1",
+   "document_sha256": "2e0a9aed7f9f3cf47c1bbef13a1f08be213f687d7124084bd3bf0cb7b3430116",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "A1",
+    "BF5"
+   ],
+   "title": "An ileal pouch-anal anastomosis filed as an anastomosis",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "9ad0d3e3f0e0a0c5802e42a1b119a8c0a93c1452a0b17fc3be40f1e2810a4bda",
+   "case": "A1b",
+   "document_sha256": "2e0a9aed7f9f3cf47c1bbef13a1f08be213f687d7124084bd3bf0cb7b3430116",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "A1",
+    "BF5"
+   ],
+   "title": "The ileal class on a pouchoscopy",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "5190b5aa698a37c4791c160c6a5befc9090891e7a257689deab08bff53c2500e",
+   "case": "A2",
+   "document_sha256": "41848d84de2d93841dfe69604534fd4399a35e6a10e8b4893461fedf703204ad",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "A2",
+    "BF5"
+   ],
+   "title": "An ileal J-pouch beside a gastric pouch and a Roux limb",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "acc4bd031b3fb9b2c0e332c1762d3c7d67fbc319258ce1b96e715cd69704869e",
+   "case": "A2b",
+   "document_sha256": "41848d84de2d93841dfe69604534fd4399a35e6a10e8b4893461fedf703204ad",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "A2",
+    "BF5"
+   ],
+   "title": "The ileal class through a gastric pouch and a Roux limb",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "0844e51628582cfe91fce150d88ec51d4ac3d5649da966a1954b636c88484375",
+   "case": "A3",
+   "document_sha256": "debd54e01d65ff3824178da9e8e721ec17ed5165c81e3de6f6e2cf43cb40c5a3",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "A3",
+    "BF19"
+   ],
+   "title": "An anatomy history clause read as the scope's route",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "1094b0cda13e4fa87b1bd2fadf98db0674b5b909f42dd2f6ecd996bfb480bf45",
+   "case": "A3b",
+   "document_sha256": "debd54e01d65ff3824178da9e8e721ec17ed5165c81e3de6f6e2cf43cb40c5a3",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "A3",
+    "BF19"
+   ],
+   "title": "The jejunal class beside a stoma history",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "e079bfac3ff515c90b24f7d3176e51a50f3779f77978fbb780fe5b035f057d1e",
+   "case": "C1",
+   "document_sha256": "000423f57495d4b5e7b665b600f26de2548e44fbaff3c4af533b62b4707b2380",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "C1",
+    "BF4",
+    "BF14"
+   ],
+   "title": "A bleeding control for bleeding this session's biopsy caused",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "3e49341d0cb4ffa97ae06551cc38807438f5a78bb116749e11c56a0ba3b24689",
+   "case": "C2",
+   "document_sha256": "5d07847105526850b1197c18603e503ec57be9a11e117ab393b0fefa748ee80c",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "C2"
+   ],
+   "title": "A control naming the polypectomy site at a conflicting place",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "c837f6054dc868a570734e1a2555bf3d849de889c88513a386f1db9430652324",
+   "case": "C3",
+   "document_sha256": "a655d1874bc3b193df3e7482774ab5fc6c679a86693705dc3928d9ce4df467f7",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "C3",
+    "BF14"
+   ],
+   "title": "Cautery to an angioectasia read as a bleeding control",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "03a36920b59c66b779e30c8f84daa75894bf2a69503db9944dcf4613efdac606",
+   "case": "C4",
+   "document_sha256": "7b8f4cb169c19299ceee89f2c8ba1884870f1c7d7ee3f5ad408d6360d53b8ccc",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "C4",
+    "BF15"
+   ],
+   "title": "A device-named procedural adjunct keeps its record",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "ca8a4f8fa8a31ec22624d5b73d6e3815b7deaa0ba5a40cfa281066a5717a9af1",
+   "case": "Y1",
+   "document_sha256": "bb5c507be402da381073bf30da182af73c299d82dbd3c8108097001eb4b5bacd",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Y1"
+   ],
+   "title": "Another extraction's denial clause read as this sweep's",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "02fda841917f6ceb1187064dac6512508db201a1b14f399ec529a2e8e9c896c9",
+   "case": "Y2",
+   "document_sha256": "8e02dc4afd1244d381437d2764a73e5b71a767041413e301483c4c01a35086c8",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Y2",
+    "BF11",
+    "BF21"
+   ],
+   "title": "A sweep that states nothing carries 43264",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "c65788bc1e4ae80b32cefbe3991d4c2d2c8cec673de011b47812658707c59c90",
+   "case": "Y3",
+   "document_sha256": "24e9b0eed8b51ac46d2709b86ff3ac00543be48c5f9f9f0aebdc4f2f114bd1d4",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Y3"
+   ],
+   "title": "A sweep that states no yield after a clean cholangiogram",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "2fd67cc108984f56521ef4b66530bc3c07c3eab5cbaf458cf150723a719ef845",
+   "case": "Y4",
+   "document_sha256": "751c2d40a8306444f6ca6b846c016eb05793ac7584c6741305fd3c63e52c7a24",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Y4"
+   ],
+   "title": "A purpose clause and an end state read as a yield",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "b3dbb6d58795857b426ac291cdf93a80aa27ee22f97dcf4fbe59e8648c6aed3d",
+   "case": "Y5",
+   "document_sha256": "0ffb0232cfd8f66fa393e0489a3cba18862a58ec3c4f26ff37ee145c516fd5f9",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Y5"
+   ],
+   "title": "A retrieval denial right after an own yield",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "61c64d68651062a405fab36e61bf182eb509c4c1bcc9d94ad1411158282f1bd9",
+   "case": "Y6",
+   "document_sha256": "9e8792af0d2b54e5ec7934eed07c80261227f78613da3bf597f86887ead3add1",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Y6"
+   ],
+   "title": "A denial clause holding another event's words",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "0a175e7b825327df3518f550faabb6dad42b605bb27834384ecb923ac888afa6",
+   "case": "Y7",
+   "document_sha256": "e3ea59e5e8d5ffc64083b3623ce19da377b7526d34661c749cae22544f29df79",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Y7",
+    "O1"
+   ],
+   "title": "A denial pass 1 does not report",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "91a8caaf7f5fd71f2c110b4660b66e69dd931af67db2689c22806139cba61f8b",
+   "case": "X1",
+   "document_sha256": "2ebd27985c5aa3cb2281b4a0a74765e220ddc6b63d59d5e602cf52b9af1cb22e",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "X1",
+    "BF10",
+    "BF11"
+   ],
+   "title": "A stent exchange named in the title",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "1e2abf04bb6cd4d6969063dbe2a482ea99fb27fa6110e2510a2f9ac2cc7b33e9",
+   "case": "D1",
+   "document_sha256": "b75a72352051c8cdb6bd01d5fa25737b36a79245adcd98ef062c592f550d007a",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "D1",
+    "BF17",
+    "HO-2"
+   ],
+   "title": "An exceptive denial cited alone",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "5c9501e970ac281420643a1c8f640e21f6df73119ecf8fa55a70b588870b13a5",
+   "case": "D2",
+   "document_sha256": "452c8d8f5f03dd233e49db3a21b365b3e34098ca8ec06ad77623098504f39ef3",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "D2"
+   ],
+   "title": "A partial-scope denial keeps the conflict question",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "b686dfc8fdb5447e708736e82fbfb25044f7e27d968a72b2bb8847e2d9160c28",
+   "case": "D3",
+   "document_sha256": "7d122ec899466be4c1cc25c83c5536853e6d2c194f8cb90389880d04d6ecaeb2",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "D3",
+    "BF2"
+   ],
+   "title": "A contradicted act is never bundled out of its question",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "399a45aa49c5c65a6b7b0bbfe291010f8f1eb90c6b838d2cfdf1f999400e0291",
+   "case": "Q1",
+   "document_sha256": "e0888f7f6cfe3bfaca1147753d85c1d31125ec372c857d162d6cd0a4fdf1fcbe",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Q1",
+    "BF3"
+   ],
+   "title": "Each held code names the act its decision depends on",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "10bf203cd3d390dae08d225b54d72538efbdc442551aef37c46c6d41cab6ad15",
+   "case": "Q2",
+   "document_sha256": "7a91fe04bd77622a0505653701a2da6d12a6cfa3751431110b84cd936f9e5665",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Q2",
+    "BF12"
+   ],
+   "title": "A first hold never pre-empts the code's other facts",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "c757e2da19bc865234eb924c02264ef670d99e7169c50141202975d951e35b83",
+   "case": "Q3",
+   "document_sha256": "854d13010f5969ca86c0168cb1d3d6617430ebcdf64929f02b25cbef247062e2",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Q3"
+   ],
+   "title": "A held code keeps its claims and its rival held",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "48579b0158fa4d6fa5c695a6235c6122b175f5776ddffb2c63a5e966dbb5093d",
+   "case": "Q4",
+   "document_sha256": "61fedd603f86a8d179168f4a93cb4c0bf3f4bafe13da5640e7dd21f6413db3e4",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Q4"
+   ],
+   "title": "One item keyed to the fact it resolves",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "2d034da432d5d47cecca1fea8b32da4cc73f17a97c4aaf61d51e95034c4c7206",
+   "case": "Q5",
+   "document_sha256": "480997241508904018a364caffd3d3bacff5ab542b103f66c9a97d8611dca87c",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Q5"
+   ],
+   "title": "A standing pre-v2 answer is asked differently, never applied",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "f11112151011383e7c9a2ec33a90583a50c86c7bb120e581387262a2dea07554",
+   "case": "Q6",
+   "document_sha256": "f07c749491c5acb1477ee48ef1754537d4dacc34f387cbe34f0de1474423c0a3",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Q6"
+   ],
+   "title": "An act no code is proposed for stays listed",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "e0f1cdb7e8708f67b1481d8943f4492a910d68a9f3d07ff21fcee54a945930e4",
+   "case": "Q7",
+   "document_sha256": "382e8645278bda2735ce684bf7c009656767baa33359e2da16a6d6e8776119c3",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "Q7"
+   ],
+   "title": "Every statement a hold reads stays a held fact",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "000f8556e19eb106c5ac41a4d4d82f30ccfbca2c1d454ffad42b0605bfa47d95",
+   "case": "O1",
+   "document_sha256": "75f35644e78bfd20827781737a00d3b7c6ed4997cb975a4368475be0eab9670a",
+   "kind": "class",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "O1"
+   ],
+   "title": "An act pass 1 omits beside an office visit",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "0f83d48dbbe87ea6a35bad0faa7591e81727de9b2a93bbff5ff25653456de308",
+   "case": "BF1",
+   "document_sha256": "a99815e1c4f29285b9e45f3a8ce5942d7f522f06b37319f2744e5f0e6da64c8e",
+   "kind": "borderline",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "BF1",
+    "T1",
+    "T2"
+   ],
+   "title": "\"Immediately prior to this visit\"",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "006538835010fed546689307fc8eeae6481ef9ecfe6ab6be2df5b78f41f27a9f",
+   "case": "BF2",
+   "document_sha256": "9a045bda8cdbae8bec669aabf2c90ebb6ca93d604a010459536f606f12497721",
+   "kind": "borderline",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "BF2",
+    "T4"
+   ],
+   "title": "An undated finding beside a visit",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "1cb2aa031194bdd64aefdda8d5e7a0908c76c429cb04baee9034d0ad56fc2561",
+   "case": "BF4",
+   "document_sha256": "666745fd1ae5d1ce82ba35e9ab6c7b0113b05b948e0badc85c95f9833ef1cae6",
+   "kind": "borderline",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "BF4",
+    "C1"
+   ],
+   "title": "A history act at the site of today's bleeding control",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "5c8efa2c1810f70cfb589a98259f80e73707d0c05edc3ab04ab859620e4b1aef",
+   "case": "BF6",
+   "document_sha256": "666e701253fb2b01ec6038d2bb74f0e0cf8ec9c9fc1ab2068c8f63c7326d8df5",
+   "kind": "borderline",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "BF6",
+    "S1",
+    "SC-B"
+   ],
+   "title": "The EUS station line cited only as the examination",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "714eb50fbc6fe365409f152f328d7a3110b5b7b6d104ea55057aadc91c8f61dd",
+   "case": "BF8",
+   "document_sha256": "f564ac840e65f9b02925c98c88d603e44913d9e7e92c5187809b104cc0d8667d",
+   "kind": "borderline",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "BF8",
+    "G1"
+   ],
+   "title": "A tattoo's place taken from its reference point",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "77d4fbeb747ca37ba661c052eadbf368d2a75d981c82003085c5389160cc1771",
+   "case": "BF11",
+   "document_sha256": "173686256e76651e6087a53a8624249ae9ec051dd51f93624a5293c875f48e97",
+   "kind": "borderline",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "BF11",
+    "X1",
+    "Y2"
+   ],
+   "title": "An impression restatement cited as the act's statement",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "af547a5711bd216f465d5b3cf5c3a052fec5fee8690c94ce9da13d691532afa1",
+   "case": "BF16",
+   "document_sha256": "e6adb887d456150b013aa7017d08bbdfad49956fc47cae6c1ec68a68bd1fa143",
+   "kind": "borderline",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "BF16",
+    "N1"
+   ],
+   "title": "A polypectomy whose technique is not stated",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "3d16465b018bb5425a5e1d0307eb3ccdfaaf7ad683b6fb147bba0c1887dcc75c",
+   "case": "BF21",
+   "document_sha256": "ec010d7d2aab80499c3753b1f166546776a76e8d02aeab2100cf27628ca0ee4e",
+   "kind": "borderline",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "BF21",
+    "Y2",
+    "T7"
+   ],
+   "title": "A yield stated as the act's attribute",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "6a233c869bf91e41a193950277e0ab5c3ac3bad1813fb0da43924a1ec04410fd",
+   "case": "CK-v1",
+   "document_sha256": "c157397abc5a8bc5a4cc7d0649e80fa4863837639433efcb94e1f19d6f96cedf",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/A/v1_two_lesions_one_site.txt (sha256 c157397abc5a8bc5a4cc7d0649e80fa4863837639433efcb94e1f19d6f96cedf), verbatim",
+   "refs": [
+    "original v1",
+    "different lesions at one site",
+    "biopsy-site conflation"
+   ],
+   "title": "Two lesions at one site; the biopsy-site conflation slip",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "296ad2c5435db0d167e2f0ed22ce822426dc345853e4bc21bc84c0c17614a375",
+   "case": "CK-v2",
+   "document_sha256": "15dd4b608c626429eecc1404494f4dffef2bdce6d8a3fe32c89b41cc62cb19d2",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/A/v2_two_techniques_one_lesion.txt (sha256 15dd4b608c626429eecc1404494f4dffef2bdce6d8a3fe32c89b41cc62cb19d2), verbatim",
+   "refs": [
+    "original v2",
+    "technique-specific denials"
+   ],
+   "title": "Technique-specific denials beside a cold snare",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "d84d5f56ffcadbe601ce016024c5b1392862e1d59c93980f042259bf1f17c1bb",
+   "case": "CK-v3",
+   "document_sha256": "50010191b6e052e1cbb13f3f00906687c97fc3fa5f252883be437e432510876a",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/A/v3_historical_denial_current_act.txt (sha256 50010191b6e052e1cbb13f3f00906687c97fc3fa5f252883be437e432510876a), verbatim",
+   "refs": [
+    "original v3",
+    "historical and current acts",
+    "HO-2"
+   ],
+   "title": "A historical denial beside a current act",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "636938d7c08df412e0c44febf892a74ad1e576318464647816775c56447bbe96",
+   "case": "CK-v4",
+   "document_sha256": "b52f087e9808f440a2749af5193258a53fd991d96011b8e84614fd3c0a65f2d1",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/A/v4_this_time_as_well.txt (sha256 b52f087e9808f440a2749af5193258a53fd991d96011b8e84614fd3c0a65f2d1), verbatim",
+   "refs": [
+    "original v4",
+    "genuine contradictions"
+   ],
+   "title": "\"This time as well\" beside today's snare",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "ae2d57800e601089401322c8ccd1cdc32bb6e394572e1c546573f833092913c9",
+   "case": "CK-v5",
+   "document_sha256": "f2350dd285240e2ef9dee3bd37c745f9c0124405941ea96e021a7476ce83c96a",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/A/v5_two_performers.txt (sha256 f2350dd285240e2ef9dee3bd37c745f9c0124405941ea96e021a7476ce83c96a), verbatim",
+   "refs": [
+    "original v5",
+    "the scar",
+    "different performers",
+    "\"No polyp was removed today.\""
+   ],
+   "title": "The scar, a previous surgeon, and \"No polyp was removed today.\"",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "6b366d6ba5513d3abf3687c78524fd924b342e8cc15d1004ccefbf1ec5fa823a",
+   "case": "CK-v6",
+   "document_sha256": "37baad6c6b64844a8ad9a40041c4a407bc96ee5425ca3e19280b6ef87b8401c8",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/A/v6_altered_anatomy_guidewire.txt (sha256 37baad6c6b64844a8ad9a40041c4a407bc96ee5425ca3e19280b6ef87b8401c8), verbatim",
+   "refs": [
+    "original v6",
+    "guidewire-versus-scope extent",
+    "CO-8"
+   ],
+   "title": "A guidewire's reach is not the scope's",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "4b684032869881676fcf1f30755aaa6acab30675fb50a536781396c15d2b8cc3",
+   "case": "CK-hist",
+   "document_sha256": "4db1ecee6ef7a146c3925546edf1067a4916eeae9ac3873e71dcd386533f38e0",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "unsupported historical extent"
+   ],
+   "title": "A historical reach is not today's extent",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "1c497c2358a57c0131c8a3571c81798b62d7cae068443296c2c4b6bbbd9134cf",
+   "case": "CK-future",
+   "document_sha256": "92b97501e6f03bffcbdc39ca72bdede7f569b1b1bcc39790ff5783626c60658e",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "future purpose (C-13)"
+   ],
+   "title": "A planned dilation never supports, and a cited plan excludes",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "6466322695be947efa43bd0f7b45cf78e9682b8ba79473939f88cf041ebff5dc",
+   "case": "CK-broad",
+   "document_sha256": "49139b674ac0a6653d871b478cf9e28bc69a41a79f0d91b0b2d71f6a2d4ff7ae",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "\"No polyp was removed today.\"",
+    "genuine contradictions"
+   ],
+   "title": "A broad denial beside a snare",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "2356578cd81e92e7bb374e1e74d64dc182d20ddcf6902ffbb4577250aceb002d",
+   "case": "CK-note8",
+   "document_sha256": "25ef61e4bf743b70a99fea032a83a429bc6e954c89564ff4b53aaddf9ef00a85",
+   "kind": "checklist",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/A/note8.txt (sha256 25ef61e4bf743b70a99fea032a83a429bc6e954c89564ff4b53aaddf9ef00a85), verbatim",
+   "refs": [
+    "original note8",
+    "CO-3",
+    "CO-6",
+    "D241"
+   ],
+   "title": "GI Note #8, the original seventh case",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "090450b2f6135412a61c989f22be50f662f8bfec1104f83c1948f9feadbc258e",
+   "case": "RF-HO3",
+   "document_sha256": "0d65698d3a10c9cc10bd5a2ddadb5b657163d23fb2ff86ac64e39fc08402d8e1",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-3"
+   ],
+   "title": "Probe (a) beside a genuine snare",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "60780fb15ce1aa529b270bd148cfd62aa9b051ebd9adfc56ae69d6e2153d80c4",
+   "case": "RF-HO1a",
+   "document_sha256": "54d0e256f31b563680cfba287fcaa21411ffa7b31084a4268183c5dd8d083dd2",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-1"
+   ],
+   "title": "A stated doubt beside a base code",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "d83bce1d42c4e442a0eabd4cba4ae67add1e90ae7b621a329702a1556284a0a7",
+   "case": "RF-HO1b",
+   "document_sha256": "a99a26c5abae82412dab56f662edf31bf32dd4fa566d18ca13d4a49176795b18",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-1"
+   ],
+   "title": "A doubted same-day sigmoidoscopy beside an office visit",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "487e07eadc47a5eeed45122b0a2099f778cae5a9790445d490e3d1cdba385789",
+   "case": "RF-HO1c",
+   "document_sha256": "8edeb851885d113f2d2a1ba2260c3703f7690755808aaa989814b5f3726e7bb6",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-1"
+   ],
+   "title": "A cited rectal denial beside a doubted sigmoid biopsy",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "b9ab73193f7c556788aadb2366415bd03db81d738f4589c467fb91e4be154a9e",
+   "case": "RF-HO2",
+   "document_sha256": "6f808b44dcd0140f4478f4dd67189016b3bcef43e18de9234c47562a2bbfe036",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-2"
+   ],
+   "title": "\"No prior colonoscopy.\" beside today's colonoscopy",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "1abf10c3c5ee337ce66f1c6bff01f58821da011d0bd28ea758cf2376940bd7cc",
+   "case": "RF-HO5",
+   "document_sha256": "bc0a324134a55820bf754ef03f82162af5c15493771f7cc5bff62b876c3bc760",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-5"
+   ],
+   "title": "A sibling-misfiled denial",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "54bb5f9b84839f7ae9961e653ab5af772685bcc4cf34bb099b07386bf9dbde44",
+   "case": "RF-SCA1",
+   "document_sha256": "ad6636d6c9c7a684be4a2ecabfe5f655a4ccf6a282c5f7d0d314d850210148ea",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "SC-A",
+    "HO-6"
+   ],
+   "title": "A stent exchange whose removal only pass 2 reports",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "c487df00f59edb66dea4a676891cb79d832d424e020fa243f8a94850ea845990",
+   "case": "RF-SCA1b",
+   "document_sha256": "84c4dea95763e220e0a6ffca3f8f546775e16065b77e70bd2fdc952ca05cd328",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "SC-A",
+    "D216"
+   ],
+   "title": "D216: an unlisted removal in its own sentence beside a placement",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "ff063e95b9bb6c4e3007edb781f014f6eaedd0b6a3196ed4dc1fa2a78a52568a",
+   "case": "RF-SCA2",
+   "document_sha256": "18e6f576b462c5fc75937497e264b263ef66d26bb56c6abf8f57a33f2292d0cd",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "SC-A",
+    "HO-6"
+   ],
+   "title": "The biopsy-then-snare sentence",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "b2fee980148c9be6176690beb84ba1a05568b3b2abb673b2322f26ead3bcd0c8",
+   "case": "RF-SCA3",
+   "document_sha256": "9603598893ad576a3b171de0521d9310afcd0d8a285cdaa9cbe6df8c16bbdd43",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "SC-A",
+    "HO-6"
+   ],
+   "title": "A shared denial anchor",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "7f2dde1cb4b5467963acb5b7afaf069faa02963f06a7d4027c6ac15e77a396a1",
+   "case": "RF-SCB",
+   "document_sha256": "b9323d64df01b2d71b6d48cf7640927c1e5d646ba43f62a02f9d93a371af76ba",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "SC-B"
+   ],
+   "title": "A short place list beside a rectal denial",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "930b28594144a40d94ab89a5131830e8bd133d301bfd7f656142f39ec5a90a6d",
+   "case": "RF-SCC",
+   "document_sha256": "f1fd49b80fc64db4e206ab85faee6fbd16507a0dc3b4ebcfdc6ace3138dca34f",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "SC-C"
+   ],
+   "title": "A balloon sphincteroplasty filed as a sphincterotomy",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "9ec5ea752ddbe3ae3385dca3c131f5376687f6c2b1c32544484a351c89c0f6ab",
+   "case": "RF-SCD",
+   "document_sha256": "665577da8f65ccf6e9c931cef6934b1cc1b594d7d8724ea07cc4baa5034fb944",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "SC-D"
+   ],
+   "title": "A nursing note with a summarizing impression",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "7d2017efcbf16f5143c77f30acd78abb207a70a593c989d0f1e9fa9febcf45b7",
+   "case": "RF-HO7",
+   "document_sha256": "89c6274c4f5ea2f4f6816ada62b22a18194f10b281a1c32468d9361e28657bc2",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-7"
+   ],
+   "title": "Two performers in one session",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "1aa95eb39928599f74a706016695fb27e2c48ddc7bd31c41de14f02d6ec5cff7",
+   "case": "RF-HO8a",
+   "document_sha256": "042d65927818cfb4bb2c0d107f935ce5d5b3beb432095ac51f82457b63d00d82",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-8"
+   ],
+   "title": "A contradicted date on the act the item does not name",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "ed45aa52f17157679e05033c63aa8da5525dad58f0b45fd2bce7fed587ce4f9e",
+   "case": "RF-HO8b",
+   "document_sha256": "efeedbcdb1864cf4890e68bbc6171d0f650d5811a4e7f73d9ab661ddacba78af",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-8"
+   ],
+   "title": "Two dilations at two sites: the esophageal one's device asked",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "dfe8f6e5b0be180a286db0458ab860e375a95e587563f44ed1a17604d1df674e",
+   "case": "RF-HO9",
+   "document_sha256": "fa3f0d1b75d2fa502a08bf6e8dabac152b3cd28f2e9c80a8c9d2b93936e212bb",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "HO-9"
+   ],
+   "title": "A reach given both polarities",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "0e4be9251247362fcec3e469230c11de0c354986210a0a76c1f369ddb4c54132",
+   "case": "RF-CO3",
+   "document_sha256": "8038e75f363042fb472851064df55199f70e149be62ee18746ab793b8e21f581",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture in the shape of development document fresh/inputs/A/note8.txt (read for its shape only)",
+   "refs": [
+    "CO-3"
+   ],
+   "title": "A hard-wrapped denial (GI Note #8's shape)",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "634f7acc9bb2f148b7ce7cac1bb02204a1b9875c5be4abcdc5afa26671a8bf4f",
+   "case": "RF-CO6",
+   "document_sha256": "861ef1e243c0d3a1f3a9703edf1a386575fa1b3d267aa762689bec1d40a4b287",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "synthetic: written for this fixture",
+   "refs": [
+    "CO-6",
+    "D36"
+   ],
+   "title": "An examination told across three parts",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "885defb28a58af1425b617a1c041d62de495dd1709ea0d8494f5c06937cfc618",
+   "case": "RF-CO4",
+   "document_sha256": "c319dd358c93fef4c34802071282fa8f4c85149bc074b21e309de8c8b8a954d1",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/C/PAIR-4-W2.txt (sha256 c319dd358c93fef4c34802071282fa8f4c85149bc074b21e309de8c8b8a954d1), verbatim",
+   "refs": [
+    "CO-4",
+    "CO-5"
+   ],
+   "title": "PAIR-4-W2: the wrapped \"At / this examination\"",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "a1f2f9abb060ea8e074915882a04595794937293bd65ffafdf812e6085f7d895",
+   "case": "RF-CO7",
+   "document_sha256": "2a74acaa304e9744b2d16dbc9de9e7b61a10a67cdd9fc8aa67d616d514cb990e",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/B/fb08.txt (sha256 2a74acaa304e9744b2d16dbc9de9e7b61a10a67cdd9fc8aa67d616d514cb990e), verbatim",
+   "refs": [
+    "CO-7"
+   ],
+   "title": "fb08: two denials, distinct cards",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  },
+  {
+   "answers_sha256": "3d8b8912612849bde10702c58f5dd72917aa0e2dde1315b0bbdbc0e27e934219",
+   "case": "RF-CO1",
+   "document_sha256": "8cb731a0cc7c06cce6634e27d04934a8e7842116c56d0890cf80eedcbced10e6",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/C/W1S-499.txt (sha256 8cb731a0cc7c06cce6634e27d04934a8e7842116c56d0890cf80eedcbced10e6), verbatim",
+   "refs": [
+    "CO-1",
+    "W1S-499"
+   ],
+   "title": "W1S-499: a finding against an act, a conflict doubt",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "38597c7d25e42b3cc1a65ece1bccfbdf2b852e38274d17c10f8adc54299d2b79",
+   "case": "RF-CO2a",
+   "document_sha256": "f876aed8c7677279ee373ab46cd9e3058c8c5dc358d232accdf922db5f894b36",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/C/W1-u30a-rel-f2-after-002.txt (sha256 f876aed8c7677279ee373ab46cd9e3058c8c5dc358d232accdf922db5f894b36), verbatim",
+   "refs": [
+    "CO-2",
+    "f2-after-002"
+   ],
+   "title": "f2-after-002: a placing sentence after the act",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "5814b2a4ab4cd7b75ac51e7b149a23b8455d839d6cfb5d1ff679d3b1465b6bee",
+   "case": "RF-CO2b",
+   "document_sha256": "bc2d12df38d0871c3fb976e6c7f450702c31165a9e8d607dae3d9fb4aba9f552",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/C/W1-u29b-rel-p3-aside-of-twins-015.txt (sha256 bc2d12df38d0871c3fb976e6c7f450702c31165a9e8d607dae3d9fb4aba9f552), verbatim",
+   "refs": [
+    "CO-2",
+    "twins-015"
+   ],
+   "title": "twins-015: an indication that places the procedure elsewhere",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "69ad74fd522ebe084d97f59de1bc2dab7c5ba04f57ebb4c1f1c1aef22ff1bb07",
+   "case": "RF-CO2c",
+   "document_sha256": "4082677a571c84de780d079b9dc7768216f1cdef790220fe557db681e3f677f9",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/C/W1S-222.txt (sha256 4082677a571c84de780d079b9dc7768216f1cdef790220fe557db681e3f677f9), verbatim",
+   "refs": [
+    "CO-2",
+    "W1S-222"
+   ],
+   "title": "W1S-222: a plan sentence that places the narratives above",
+   "variants": [
+    "i",
+    "ii"
+   ]
+  },
+  {
+   "answers_sha256": "f2b8889e8232ffc6025f306221edf071ac54d58449f08d2df315f8d43d0bb671",
+   "case": "RF-CO2d",
+   "document_sha256": "91ae6c0a21bc1d1595ec922c03880a73634a5818391d2f58557261393d730085",
+   "kind": "refutation",
+   "not_on_exclusion_list": {
+    "as_written": true,
+    "whitespace_stripped": true
+   },
+   "provenance": "development: fresh/inputs/C/C2MEM-031.txt (sha256 91ae6c0a21bc1d1595ec922c03880a73634a5818391d2f58557261393d730085), verbatim",
+   "refs": [
+    "CO-2",
+    "C2MEM-031",
+    "D241"
+   ],
+   "title": "C2MEM-031: a sentence that places the part above it",
+   "variants": [
+    "i",
+    "ii",
+    "iii"
+   ]
+  }
+ ],
+ "design": "FINAL-V2 9.5",
+ "exclusion_list_entries": 288,
+ "fixtures": "interpretation_v2"
+}

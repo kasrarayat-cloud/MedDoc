@@ -1,0 +1,32 @@
+{
+  "label": "SYNTHETIC-SLIP",
+  "slip": "S2",
+  "role": "slip",
+  "name": "s2a-merged-target-words",
+  "about": "The biopsy target words merged from two places: they locate nowhere (words_unlocated); no lesion is linked and the site, the anastomosis, is kept.",
+  "kind": "txt",
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nCOLONOSCOPY REPORT\nDate of service: November 9, 2026\nEndoscopist: Ines Valdero, MD (fictional)\nProcedure: The colonoscope was advanced through the ileocolic anastomosis into the neo-terminal ileum.\nFindings: At the ileocolic anastomosis there were two superficial erosions.\nCold forceps biopsies were taken from an inflamed portion of the anastomotic rim.\nA 5 mm sessile polyp in the sigmoid colon was removed with a cold snare.\nImpression: Anastomotic erosions; rim biopsied; sigmoid polyp removed.\n",
+  "response": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": "{\"passages\": [{\"id\": \"P1\", \"text\": \"Date of service: November 9, 2026\"}, {\"id\": \"P2\", \"text\": \"Endoscopist: Ines Valdero, MD (fictional)\"}, {\"id\": \"P3\", \"text\": \"Procedure: The colonoscope was advanced through the ileocolic anastomosis into the neo-terminal ileum.\"}, {\"id\": \"P4\", \"text\": \"Findings: At the ileocolic anastomosis there were two superficial erosions.\"}, {\"id\": \"P5\", \"text\": \"Cold forceps biopsies were taken from an inflamed portion of the anastomotic rim.\"}, {\"id\": \"P6\", \"text\": \"A 5 mm sessile polyp in the sigmoid colon was removed with a cold snare.\"}], \"encounter\": {\"date_of_service\": {\"value\": \"2026-11-09\", \"state\": \"stated\", \"words\": \"November 9, 2026\", \"passages\": [\"P1\"], \"other_dates\": []}, \"documenting_endoscopist\": {\"words\": \"Ines Valdero, MD (fictional)\", \"passages\": [\"P2\"]}, \"team\": [], \"anatomy\": [{\"state\": \"altered\", \"landmark\": \"anastomosis\", \"words\": \"ileocolic anastomosis\", \"passages\": [\"P3\"]}], \"reach\": [{\"event\": \"E1\", \"landmark\": \"neo_terminal_ileum\", \"words\": \"into the neo-terminal ileum\", \"passages\": [\"P3\"], \"completion\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}}], \"visit_facts\": []}, \"lesions\": [{\"id\": \"L1\", \"words\": \"two superficial erosions\", \"landmark\": \"anastomosis\", \"site_words\": \"ileocolic anastomosis\", \"size_words\": \"\", \"multiplicity\": \"group\", \"passages\": [\"P4\"]}, {\"id\": \"L2\", \"words\": \"5 mm sessile polyp\", \"landmark\": \"sigmoid_colon\", \"site_words\": \"sigmoid colon\", \"size_words\": \"5 mm\", \"multiplicity\": \"single\", \"passages\": [\"P6\"]}], \"events\": [{\"id\": \"E1\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"examination\", \"words\": \"colonoscope\", \"passages\": [\"P3\"]}, \"technique\": {\"value\": \"endoscope\", \"words\": \"colonoscope\", \"passages\": [\"P3\"]}, \"target\": {\"lesion\": \"\", \"landmark\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"time\": {\"value\": \"current_encounter\", \"words\": \"\", \"passages\": []}, \"performer\": {\"value\": \"documenting_team\", \"words\": \"\", \"passages\": []}, \"status\": {\"value\": \"performed\", \"words\": \"was advanced\", \"passages\": [\"P3\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}, {\"id\": \"E2\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"biopsy\", \"words\": \"biopsies\", \"passages\": [\"P5\"]}, \"technique\": {\"value\": \"cold_forceps\", \"words\": \"Cold forceps\", \"passages\": [\"P5\"]}, \"target\": {\"lesion\": \"\", \"landmark\": \"anastomosis\", \"words\": \"inflamed portion of the anastomotic rim and two superficial erosions\", \"passages\": [\"P5\"]}, \"time\": {\"value\": \"current_encounter\", \"words\": \"\", \"passages\": []}, \"performer\": {\"value\": \"documenting_team\", \"words\": \"\", \"passages\": []}, \"status\": {\"value\": \"performed\", \"words\": \"were taken\", \"passages\": [\"P5\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}, {\"id\": \"E3\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"snare\", \"words\": \"removed\", \"passages\": [\"P6\"]}, \"technique\": {\"value\": \"cold_snare\", \"words\": \"cold snare\", \"passages\": [\"P6\"]}, \"target\": {\"lesion\": \"L2\", \"landmark\": \"sigmoid_colon\", \"words\": \"A 5 mm sessile polyp in the sigmoid colon\", \"passages\": [\"P6\"]}, \"time\": {\"value\": \"current_encounter\", \"words\": \"\", \"passages\": []}, \"performer\": {\"value\": \"documenting_team\", \"words\": \"\", \"passages\": []}, \"status\": {\"value\": \"performed\", \"words\": \"was removed with a cold snare\", \"passages\": [\"P6\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}], \"open_questions\": []}"
+            }
+          ],
+          "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-4-argon",
+    "responseId": "synthetic-s2a-merged-target-words",
+    "usageMetadata": {
+      "promptTokenCount": 0,
+      "candidatesTokenCount": 0,
+      "totalTokenCount": 0
+    }
+  }
+}

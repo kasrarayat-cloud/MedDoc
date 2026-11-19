@@ -1,0 +1,7 @@
+SYNTHETIC EUS REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+Findings: A radial echoendoscope was advanced through the rectum to the sigmoid colon.
+A 3 cm mass was seen in the rectum.
+Three gold fiducial markers were then placed into the rectal mass under EUS guidance for radiation planning.

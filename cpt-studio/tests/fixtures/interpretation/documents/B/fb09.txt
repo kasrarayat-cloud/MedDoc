@@ -1,0 +1,18 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Facility: Ashford Valley Endoscopy (fictional)
+Patient: Lorraine Petrakis (fictional)
+Date of service: November 5, 2026
+Endoscopist: Desmond Achebe-Rowe, MD (fictional)
+Indication: Abdominal pain and change in bowel habit.
+Procedure: The colonoscope was advanced to the cecum, confirmed by the appendiceal orifice.
+Findings:
+- Descending colon: a 6 mm sessile polyp, removed completely with a cold snare and retrieved.
+- Hepatic flexure: a 10 mm sessile polyp on the proximal side of a thick fold.
+- Snare removal of this polyp was attempted, but the snare could not be positioned around it.
+- The hepatic flexure polyp was not removed, and no tissue was taken from it.
+- The remainder of the colon was normal.
+Impression:
+1. 6 mm descending colon polyp, removed by cold snare.
+2. 10 mm hepatic flexure polyp, not removed after a failed snare attempt.
+Plan: Repeat colonoscopy with a distal cap in 4 to 6 weeks to remove the hepatic flexure polyp.

@@ -30,18 +30,24 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from studio import jobs, models, progress
 from studio.gi.context import _USER_CONFLICT_PREFIX
 from studio.providers.base import ProviderUnavailable
+from tests import v2_documents, v2_replay
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.support.operator import OperatorReads
 from tests.test_cux_flow import ProgressCase, run_stages
 from tests.test_cux_r2_progress import LIVE, NOTE, TIME_QUOTE, CustomerReads
 from tests.test_harness_pipeline import BOTH, FakeParticipant, HarnessCase, ScriptedCorti
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
+from tests.test_pipeline_api import OFFICE_INTERPRETATION, OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
+from tests.test_repairs_7c8_p1reports import COLONOSCOPY_INTERPRETATIONS
 from tests.test_repairs_gi2_present import BIOPSY, SNARE, Harness
 from tests.test_services_second_review import TwoPassProvider
 
 APP = Path(__file__).resolve().parents[1] / 'studio' / 'static' / 'studio' / 'app.js'
 NO_PATIENT_STATUS = OFFICE_NOTE.replace('Patient status: Established patient, last seen 2026-03-02.\n', '')
+# Gemini's synthetic answer to NO_PATIENT_STATUS (design/FINAL.md 14.6): OFFICE_NOTE's, which cites no patient-status
+# line (a member value on the production chain, DECISIONS D3), so it is this note's own.
+NO_PATIENT_STATUS_INTERPRETATIONS = ((OFFICE_NOTE, OFFICE_INTERPRETATION), (NO_PATIENT_STATUS, OFFICE_INTERPRETATION))
 TO_START, NEXT_STEP = 'Waiting to start', 'Waiting for the next step'
 STEP_TEXT = {'done': 'Done', 'active': 'In progress', 'waiting': 'Waiting to start', 'not_started': 'Not started',
              'failed': 'Did not finish', 'stopped': 'Stopped', 'skipped': 'Not needed'}
@@ -102,6 +108,7 @@ class DrawnSteps:
 
 # --- C-R3-5: a document review that did not give an answer never reads its step done ----------------------------------
 
+@applied
 @override_settings(**LIVE)
 class DocumentReviewStepTests(DrawnSteps, CustomerReads, TestCase):
     """The lens's input and its siblings, through the real pipeline and the shipped page: Corti answers HTTP 503 after
@@ -164,6 +171,7 @@ class DocumentReviewStepTests(DrawnSteps, CustomerReads, TestCase):
         self.assertEqual(doc['checks'][0]['state'], 'done')
 
 
+@applied
 @override_settings(**BOTH)
 class CheckedStepTests(DrawnSteps, CustomerReads, OperatorReads, HarnessCase):
     """With both checks configured (the committed failed fixture's shape): the checks that run after a document review
@@ -344,11 +352,23 @@ class QueuedReading:
         self.assertEqual(page['message'], block['message'])  # the page draws the server's message as served
         return page
 
+    def assertUpdating(self, doc):
+        """FINAL-V2 amendment 1, 5.2 (U16): a member's re-run after a finished run is an update - 'updating' while its
+        first stage waits, the steps before the run's first read skipped ("Not needed") and none done, so the server
+        says the stage waits to start (the page's 'updating' title is step 5d's)."""
+        block = doc['progress']
+        self.assertEqual((block['phase'], block['busy'], block['slow']), ('updating', True, False))
+        self.assertEqual(states(doc)[:3], ['skipped', 'skipped', 'skipped'])
+        self.assertEqual(block['message'], progress.MESSAGES['queued'])
+
 
 @override_settings(**LIVE)
-class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase):
+class QueuedTitleFlowTests(RecordedInterpretation, QueuedReading, CustomerReads, OperatorReads, TestCase):
     """The lens's inputs and the member's other re-runs of a revision, through the real endpoints: the first step each
     queues, drawn by the shipped page before the worker runs it."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes from their recorded synthetic
+    # interpretations; the run reconciled is Corti's, beside the interpretation's own.
+    interpretations = NO_PATIENT_STATUS_INTERPRETATIONS
 
     def setUp(self):
         self.ws = f.workspace()
@@ -384,8 +404,8 @@ class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase
         drain()
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'}).status_code, 201)
         doc = self.customer(encounter_id)
-        self.assertEqual(states(doc), ['done', 'done', 'done', 'waiting'])
-        self.assertQueued(doc, after_done=True)
+        self.assertEqual(states(doc), ['skipped', 'skipped', 'skipped', 'waiting'])
+        self.assertUpdating(doc)
 
     def test_stop_then_resume_waits_for_the_next_step(self):
         encounter_id = self.upload()
@@ -394,8 +414,8 @@ class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop', {}).status_code, 200)
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume', {}).status_code, 201)
         doc = self.customer(encounter_id)
-        self.assertEqual(states(doc), ['done', 'done', 'done', 'waiting'])
-        self.assertQueued(doc, after_done=True)
+        self.assertEqual(states(doc), ['skipped', 'skipped', 'skipped', 'waiting'])
+        self.assertUpdating(doc)
 
     def test_a_saved_detail_waits_for_the_next_step(self):
         encounter_id = self.upload(NO_PATIENT_STATUS)
@@ -406,14 +426,13 @@ class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase
         self.assertEqual(saved.status_code, 201, saved.content)
         self.assertTrue(saved.json()['reassessing'])
         doc = self.customer(encounter_id)
-        self.assertEqual(states(doc)[:3], ['done', 'done', 'done'])
-        self.assertQueued(doc, after_done=True)
+        self.assertUpdating(doc)
 
     def test_a_reconciliation_waits_for_the_next_step(self):
         self.provider.outcome = 'unknown'
         encounter_id = self.upload()
         drain()
-        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id, purpose=models.ProviderRun.PRIMARY)
         self.provider.outcome = 'succeeded'
         reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile', {'provider_run_id': str(run.pk),
                                                                            'note': NOTE})
@@ -425,10 +444,19 @@ class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase
         self.assertEqual(len(self.provider.sent), 2)  # the one attempt it released, sent once
 
 
-class QueuedRecheckTests(QueuedReading, CustomerReads, Harness):
+class QueuedRecheckTests(RecordedInterpretation, QueuedReading, CustomerReads, Harness):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    # DECISIONS D243 class C: the test approves and asks the re-check through the product, which reads event_coding@2 only
+    # (FINAL-V2 6.5): its rows are design v2's, in replay (tests/v2_replay.py), from the colonoscopy report with its
+    # endoscopist named (tests/v2_documents.COLONOSCOPY) - never the v1 chain's.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.COLONOSCOPY, v2_documents.colonoscopy_answer),)
+
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_re_check_of_what_is_still_open_waits_for_the_next_step(self):
         self.use(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
-        encounter_id = self.create()
+        encounter_id = self.create(v2_documents.COLONOSCOPY)
         drain()
         self.approve(encounter_id, '45385')
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)

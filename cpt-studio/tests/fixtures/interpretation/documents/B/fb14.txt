@@ -1,0 +1,14 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+UPPER ENDOSCOPIC ULTRASOUND (EUS) REPORT
+Facility: Fairhaven Digestive Institute (fictional)
+Patient: Ingrid Solberg-Marsh (fictional)
+Date of service: November 6, 2026
+Endoscopist: Thaddeus Ng, MD (fictional)
+Indication: Dilated common bile duct on abdominal ultrasound; evaluate for choledocholithiasis.
+Procedure: The linear echoendoscope was advanced to the second portion of the duodenum.
+EUS imaging was performed from the esophagus, stomach and duodenum.
+Findings: common bile duct 7 mm without stones or sludge; the ampulla was normal.
+Pancreas: normal echotexture with no mass or cyst. No lymphadenopathy.
+Fine-needle aspiration was not performed because no target lesion was found.
+Impression: Mildly dilated common bile duct without choledocholithiasis on EUS.
+Plan: Clinic follow-up with repeat liver tests.

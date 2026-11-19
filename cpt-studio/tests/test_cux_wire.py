@@ -22,6 +22,7 @@ from django.conf import settings
 from django.test import Client, SimpleTestCase, TestCase
 
 from studio import answers, customer_api, jobs, models, progress, reports, review
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import operator as ops
 from tests.support import pipeline_factories as pf
@@ -86,7 +87,7 @@ class MemberAnswerEffectTests(WireCase):
                          ('45378', COLON, 'base_included', 'not_documented'))
         # bound to the overlay's own question as it is asked (completion repair 2026-11-06, U11): the overlay reads it
         self.assertEqual(review._member_answers(assessment),
-                         [{key: item[key] for key in ('code', 'family', 'fact', 'value', 'answer_id')}
+                         [{key: item[key] for key in ('code', 'family', 'fact', 'value', 'answer_id', 'question')}
                           for item in answers.saved_answers(assessment)])
         self.assertEqual(answer.question, review.asked_fingerprints(assessment)[('45378', COLON, 'base_included')])
 
@@ -128,7 +129,9 @@ class MemberAnswerEffectTests(WireCase):
         doc = self.payload(s)
         self.assertEqual(self.codes(doc)['45378']['status'], 'needs_detail')
         self.assertEqual((doc['readiness']['approved'], doc['readiness']['blockers']), (False, ['45378 needs a detail.']))
-        self.assertEqual(self.download(s, approved).status_code, 409)
+        stale = self.download(s, approved)  # FINAL-V2 amendment 1, 8.3 (A9): served with the EARLIER banner
+        self.assertEqual(stale.status_code, 200)
+        self.assertTrue(stale.content.decode('utf-8').startswith(reports.EARLIER_BANNER + '\n'))
 
     def test_a_rejected_code_s_stored_question_asks_nothing_until_the_rejection_is_revoked(self):
         s = persist('selected')
@@ -170,7 +173,8 @@ class DateHoldRowsTests(DetailsCase):
         extent = {'id': answers.detail_id('extent', COLON, '45385'), 'fact': 'extent', 'value': 'not_documented'}
         with self.assertRaisesMessage(jobs.Refused, answers.STALE):
             answers.save_details(encounter, self.s.reviewer, [extent])
-        pf.context(encounter, encounter.current_revision, fact_values=pf.facts())  # the document's own date in force
+        # the document's own date in force: the member's date cleared ("Use document date"), as the save stores it
+        pf.context(encounter, encounter.current_revision, fact_values=pf.facts(), user_values={})
         settled = pf.assess(encounter, pf.result(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent')))
         encounter.refresh_from_db()
         self.assertFalse(progress.date_held(encounter))
@@ -178,8 +182,10 @@ class DateHoldRowsTests(DetailsCase):
         self.assertEqual([(row['fact'], row['affects']) for row in rows], [('extent', ['45385'])])
 
 
+@applied
 class ApprovedExportMarkerTests(WireCase):
-    """An approved export answers 409 exactly when the decisions it was made from changed (critic C8)."""
+    """An approved export is served as an earlier export (FINAL-V2 amendment 1, 8.3: A9) exactly when the decisions it
+    was made from changed (critic C8)."""
 
     def setUp(self):
         self.s = persist('pair')  # 45380 and 45385 on separate lesions, each with the separate-lesion modifier review
@@ -200,8 +206,9 @@ class ApprovedExportMarkerTests(WireCase):
 
     def assertStale(self):
         stale = self.download(self.s, self.report)
-        self.assertEqual(stale.status_code, 409)
-        self.assertEqual(stale.json()['error'], customer_api.STALE_EXPORT)
+        self.assertEqual(stale.status_code, 200)
+        self.assertTrue(stale.content.decode('utf-8').startswith(reports.EARLIER_BANNER + '\n'))
+        self.assertIn('-earlier.txt', stale['Content-Disposition'])
         self.assertFalse(self.listed(self.s, self.report))
 
     def test_nothing_that_is_not_a_decision_makes_it_stale(self):

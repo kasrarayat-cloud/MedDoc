@@ -1,0 +1,36 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\n  \"passages\": [\n    {\n      \"id\": \"P1\",\n      \"text\": \"Colonoscopy report (fictional)\"\n    },\n    {\n      \"id\": \"P2\",\n      \"text\": \"Date of service: 2026-10-14\"\n    },\n    {\n      \"id\": \"P3\",\n      \"text\": \"Endoscopist: Synthetic Endoscopist, MD (fictional)\"\n    },\n    {\n      \"id\": \"P4\",\n      \"text\": \"Procedure: Colonoscopy\"\n    },\n    {\n      \"id\": \"P5\",\n      \"text\": \"Findings: The colonoscope was advanced to the terminal ileum.\"\n    },\n    {\n      \"id\": \"P6\",\n      \"text\": \"A 7 mm sessile polyp was found in the transverse colon.\"\n    },\n    {\n      \"id\": \"P7\",\n      \"text\": \"The 7 mm polyp was removed with a cold snare and was not bleeding afterwards.\"\n    },\n    {\n      \"id\": \"P8\",\n      \"text\": \"Impression: Transverse colon polyp, removed.\"\n    }\n  ],\n  \"encounter\": {\n    \"date_of_service\": {\n      \"value\": \"2026-10-14\",\n      \"state\": \"stated\",\n      \"words\": \"2026-10-14\",\n      \"passages\": [\"P2\"],\n      \"other_dates\": []\n    },\n    \"documenting_endoscopist\": {\n      \"words\": \"Synthetic Endoscopist, MD\",\n      \"passages\": [\"P3\"]\n    },\n    \"team\": [],\n    \"anatomy\": [],\n    \"reach\": [\n      {\n        \"event\": \"E1\",\n        \"landmark\": \"terminal_ileum\",\n        \"words\": \"terminal ileum\",\n        \"passages\": [\"P5\"],\n        \"completion\": {\n          \"value\": \"not_stated\",\n          \"words\": \"\",\n          \"passages\": []\n        }\n      }\n    ],\n    \"visit_facts\": []\n  },\n  \"lesions\": [\n    {\n      \"id\": \"L1\",\n      \"words\": \"A 7 mm sessile polyp\",\n      \"landmark\": \"transverse_colon\",\n      \"site_words\": \"transverse colon\",\n      \"size_words\": \"7 mm\",\n      \"multiplicity\": \"single\",\n      \"passages\": [\"P6\", \"P7\", \"P8\"]\n    }\n  ],\n  \"events\": [\n    {\n      \"id\": \"E1\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\"P1\", \"P4\"]\n      },\n      \"kind\": {\n        \"value\": \"examination\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\"P1\", \"P4\", \"P5\"]\n      },\n      \"technique\": {\n        \"value\": \"endoscope\",\n        \"words\": \"colonoscope\",\n        \"passages\": [\"P5\"]\n      },\n      \"target\": {\n        \"lesion\": \"\",\n        \"landmark\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"was advanced\",\n        \"passages\": [\"P5\"]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    },\n    {\n      \"id\": \"E2\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\"P1\", \"P4\"]\n      },\n      \"kind\": {\n        \"value\": \"snare\",\n        \"words\": \"removed with a cold snare\",\n        \"passages\": [\"P7\", \"P8\"]\n      },\n      \"technique\": {\n        \"value\": \"cold_snare\",\n        \"words\": \"cold snare\",\n        \"passages\": [\"P7\"]\n      },\n      \"target\": {\n        \"lesion\": \"L1\",\n        \"landmark\": \"transverse_colon\",\n        \"words\": \"The 7 mm polyp\",\n        \"passages\": [\"P7\", \"P8\"]\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"was removed\",\n        \"passages\": [\"P7\", \"P8\"]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"removal\",\n        \"words\": \"removed\",\n        \"passages\": [\"P7\", \"P8\"]\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    }\n  ],\n  \"open_questions\": []\n}",
+            "thoughtSignature": "EmMKYQFpFH0TR45eNgC50Z//Uxo0FRrWx1RJjlBkkEVf40901LJWoJeVu64SEKySa18wMRV3naAsPXFjrhBwlWQcGgJih6CyEHBU5b0CKV+oENWtpuPZnO5xHLT4e/ymp7vjfss="
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 7795,
+    "candidatesTokenCount": 1407,
+    "totalTokenCount": 9202,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7795
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1407
+      }
+    ]
+  },
+  "modelVersion": "gemini-4-argon",
+  "responseId": "1QPzaqK_PMOcz7IPyfOviAk"
+}

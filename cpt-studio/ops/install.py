@@ -39,6 +39,7 @@ import threading
 import time
 import traceback
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = 'cpt-studio'
@@ -60,12 +61,23 @@ DB_VOLUME = 'cpt-studio-pg'
 FILES_VOLUME = 'cpt-studio-files'
 DB_CONTAINER = 'cpt-studio-db'
 SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
-# A stopped worker finishes the stage it is in (run_worker), which may be inside a harness participant phase's tool
-# loop: that ends by settings.PARTICIPANT_LOOP_DEADLINE_SECONDS (540 s for at most 4 exchanges; one send by 330 s,
-# Corti's by 150 s) and must be recorded before Docker kills the worker, or a request that reached the vendor is left
-# 'sending' (HARNESS.md 8, 11.2). 600 s is settings.STALE_RUNNING_SECONDS, the stale-stage sweep's bound: a stage still
-# running when the stop timeout passes is one that sweep settles as cut short anyway, so waiting longer buys nothing.
-STOP_SECONDS = {'web': 30, 'worker': 600}
+# A stopped worker finishes the stage it is in (run_worker), which may be inside a send: a harness participant phase's
+# tool loop (settings.PARTICIPANT_LOOP_DEADLINE_SECONDS, 540 s for at most 4 exchanges; one send by 330 s, Corti's by
+# 150 s), or one of the interpreter's two readings - one stream of up to settings.INTERPRETER_SEND_DEADLINE_SECONDS
+# (APPRAISER_SEND_DEADLINE_SECONDS for pass 2; 1,320 s each) inside its stage's JOB_DEADLINE_SECONDS (1,380 s). The
+# stage must be recorded before Docker kills the worker, or a request that reached the vendor is left 'sending' and a
+# reading's send is cut into an UNKNOWN outcome (HARNESS.md 8, 11.2; AMENDMENT-2 1.12). Round r3 (DECISIONS D322 (4))
+# adds the question stage: one job per round of question requests sent concurrently, each within
+# QUESTION_SEND_DEADLINE_SECONDS (1,408 s), inside its JOB_DEADLINE_SECONDS (1,588 s) and its stale-stage threshold
+# (1,768 s) - for a round of one wave, which is every round at the figures this installer writes (DECISIONS D325 (3):
+# QUESTION_FIGURES below; a round sends at most QUESTION_ROUND_CONCURRENCY requests at once, and a worker asked to stop
+# starts no further wave of it, so the stop never waits for more than the wave in flight). So 1,800 s outlasts every
+# stage's deadline (the question stage's 1,588 s the longest) and every stale-stage
+# threshold (STALE_RUNNING_SECONDS, 600 s; STALE_RUNNING_SECONDS_BY_KIND, 1,440 s and 1,560 s for the two reading
+# passes and 1,768 s for the question stage): a stage still running when the stop timeout passes is one the stale-stage
+# sweep settles as cut short anyway, so waiting longer buys nothing. A deploy may so wait up to 30 minutes for the old
+# worker to stop (AMENDMENT-2 1.12's 1,500 s before round r3).
+STOP_SECONDS = {'web': 30, 'worker': 1800}
 # The incoming web of a blue/green install, renamed to SERVICES['web'] once the old web is drained and stopped.
 INCOMING_WEB = SERVICES['web'] + '-next'
 # The old web's drain after the switch (drain_web): at least DRAIN_MIN_SECONDS, above gunicorn's 120 s request timeout
@@ -117,10 +129,47 @@ PARTICIPANTS = {
               'required': ('ANTHROPIC_API_KEY',), 'optional': ('ANTHROPIC_WORKSPACE_ID',)},
 }
 PARTICIPANT_FILE_LIMIT = 32_000  # the size the application's loaders accept (HARNESS.md 8)
+# The interpreter's credential (AMENDMENT-2 1.11; DECISIONS D275: the interpreter is Claude Fable 5.2 and reads CPT
+# Studio's existing Anthropic credential; D14's rule, the key in the worker only, is unchanged): the Fable participant's
+# file - the same source, target and mount as PARTICIPANTS[INTERPRETER_SHARES] - so the participants' run of the secrets
+# phase copies it, once (unread, by key NAME only: H_PARTICIPANT_SECRETS), and the WORKER alone binds it read-only,
+# once, whenever the Fable participant or the interpreter is live (one bind target: worker_credential_mounts). The
+# interpreter keeps its own mode (--interpreter-mode, CPT_STUDIO_GEMINI_MODE: the historical name, which sets the
+# interpreter whatever its provider) and has no access check of its own. The web is given the mode and the path and no
+# file, as for Corti and the participants (a web that builds what the worker would send needs the worker's
+# configuration, and only the worker sends; service_problems refuses any bind in a web). A missing source leaves the
+# interpreter installable only disabled or replayed. Replay sends nothing and answers a reading only from a recording
+# in the replay directory the image ships (tests/fixtures/interpretation/, kept in the image by deploy/.dockerignore),
+# and the image ships no Fable recording: the Fable replay folder (anthropic/, its .sse streams) is not in the tree
+# (AMENDMENT-2 8.3: the connector's replay fixtures were to be made from D2/D3's frozen streams, which D277 does not
+# run), and the directory's gemini/ holds the v1 FRESH recordings (D274), which the Fable interpreter never reads - so
+# an interpreter installed replayed fails every reading unsent ("The replay directory is not available."). The model
+# and the endpoint are the adapter's constants (studio/interpretation/fable_adapter.py), never the installer's. The
+# installer no longer copies or mounts the earlier interpreter's key copy, LEGACY_INTERPRETER_COPY: one left on a host
+# stays untouched and is reported (preflight, secrets), because deleting a key copy is the owner's decision (class d).
+INTERPRETER = {'name': 'anthropic', 'source': f'{PROVIDER_SOURCES}/anthropic.env',
+               'target': f'{ETC_DIR}/anthropic-credentials.env', 'mounted': '/run/cpt-studio/anthropic-credentials.env',
+               'file_env': 'CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE', 'mode_env': 'CPT_STUDIO_GEMINI_MODE',
+               'replay_env': 'CPT_STUDIO_GEMINI_REPLAY_DIR', 'replay_dir': '/app/tests/fixtures/interpretation',
+               'module': 'studio.interpretation.fable_adapter', 'loader': 'load_anthropic_credentials',
+               'setting': 'ANTHROPIC_CREDENTIALS_FILE', 'required': ('ANTHROPIC_API_KEY',),
+               'optional': ('ANTHROPIC_WORKSPACE_ID',)}
+INTERPRETER_SHARES = 'fable'  # the participant whose credentials file the interpreter reads (AMENDMENT-2 1.11)
+LEGACY_INTERPRETER_COPY = f'{ETC_DIR}/gemini.env'  # the Gemini interpreter's own key copy, never written or read now
+INTERPRETER_MODES = ('disabled', 'live', 'replay')  # FINAL 13: --interpreter-mode live|replay|disabled
 # An access check sends one coding request (Corti, after the OAuth token request its adapter sends first) or one run of
-# the pipeline's tool loop, one request per exchange and at most PARTICIPANT_MAX_EXCHANGES (Astra, Fable): its deadline is the participant send deadline (330 s), plus the container's
-# start.
-ACCESS_CHECK_SECONDS = 420
+# the pipeline's tool loop, one request per exchange and at most PARTICIPANT_MAX_EXCHANGES (Astra, Fable): the
+# participant send deadline (330 s) and the container's start, 420 s. Before it sends it takes the installation-wide
+# provider lock, which a reading's send holds for its whole stream, and the installer asks it to wait for that lock
+# (ACCESS_CHECK_WAIT_FLAG): up to the interpreter's longest send deadline plus 60 s (1,380 s, the command computes it
+# from settings), so a reading in flight never fails an install (AMENDMENT-2 1.11 [R:cost-F-COST-8]). Round r3: a
+# question round holds the lock for its sends, each within QUESTION_SEND_DEADLINE_SECONDS (1,408 s), so the wait covers
+# 1,408 + 60 = 1,468 s once the command reads that row too (NOTES' question Q-LOCKWAIT), and the one-shot's timeout covers
+# that wait: 1,468 + 420 = 1,888 s, rounded up to 1,900 s. DECISIONS D325 (3): a round holds the lock for all of its
+# waves - one at the figures this installer writes (QUESTION_FIGURES); at figures allowing more, a check that meets a
+# later wave in flight fails when its wait ends, sending nothing, as for a reading in flight past the wait.
+ACCESS_CHECK_SECONDS = 1900
+ACCESS_CHECK_WAIT_FLAG = '--wait-for-lock'
 ACCESS_CHECK_OUTPUT_LIMIT = 64 * 1024
 # The CMS passage files the revision commits (HARNESS.md 5), in the repository and as the image ships them (/app is the
 # image's copy of cpt-studio/, built from git archive of the revision).
@@ -352,6 +401,7 @@ PHASE_ARGUMENTS = {
     'pfs_retrieved_at': {'reference'}, 'mue_retrieved_at': {'reference'},
     'provider_mode': {'app', 'switch-back'}, 'authorization_ref': {'app', 'switch-back'},
     'astra_mode': {'app', 'switch-back'}, 'fable_mode': {'app', 'switch-back'}, 'access_check': {'app'},
+    'interpreter_mode': {'app', 'switch-back'},
     'owner_username': {'provision'}, 'owner_display_name': {'provision'}, 'agent_username': {'provision'},
     'agent_display_name': {'provision'}, 'workspace_name': {'provision'},
     'reset_passwords': {'provision', 'operators'},
@@ -372,6 +422,12 @@ def parse_args(argv=None):
     parser.add_argument('--authorization-ref')
     parser.add_argument('--astra-mode', choices=('disabled', 'live'), help='Astra (OpenAI); disabled when not given')
     parser.add_argument('--fable-mode', choices=('disabled', 'live'), help='Fable (Anthropic); disabled when not given')
+    parser.add_argument('--interpreter-mode', choices=INTERPRETER_MODES,
+                        help='the interpreter (Claude Fable 5.2, AMENDMENT-2: the Fable participant\'s Anthropic key; '
+                             'design/FINAL.md 13): disabled when not given, which pauses '
+                             "every upload's reading (verify reports an app phase that did not give it); live sends "
+                             'under --authorization-ref; replay sends nothing and answers only from a recording in '
+                             'the image, which ships no Fable recording, so every reading fails unsent')
     parser.add_argument('--access-check', action='store_true', default=None,
                         help='after the app phase, check each live participant with real requests: one coding '
                              'request for Corti, and for Astra and for Fable one run of the tool loop, one request '
@@ -392,6 +448,9 @@ def parse_args(argv=None):
         parser.error(problem)
     args.astra_mode = args.astra_mode or 'disabled'
     args.fable_mode = args.fable_mode or 'disabled'
+    # --interpreter-mode stays None when it is not given (interpreter_mode reads that as disabled), so the app receipt
+    # can say whether it was given: verify does not call an interpreter left disabled by default verified (the review of
+    # S14, finding 2; design/FINAL.md 13: the install uses live)
     args.agent_username = args.agent_username or 'review-agent'
     args.agent_display_name = args.agent_display_name or 'CPT Studio review agent'
     args.owner_display_name = args.owner_display_name or ''
@@ -433,8 +492,13 @@ def argument_problem(args) -> str:
         for name in participants:
             if not args.authorization_ref:
                 return f'--{name}-mode live needs --authorization-ref (a ruling file tracked at the revision).'
-        if args.authorization_ref and args.provider_mode == 'disabled' and not participants:
-            return '--authorization-ref only applies to --provider-mode live, --astra-mode live or --fable-mode live.'
+        # The interpreter sends under the same recorded authority (jobs._live_gate; design/FINAL.md 6.3).
+        interpreting = getattr(args, 'interpreter_mode', None) == 'live'
+        if interpreting and not args.authorization_ref:
+            return '--interpreter-mode live needs --authorization-ref (a ruling file tracked at the revision).'
+        if args.authorization_ref and args.provider_mode == 'disabled' and not participants and not interpreting:
+            return ('--authorization-ref only applies to --provider-mode live, --astra-mode live, --fable-mode live or '
+                    '--interpreter-mode live.')
         if args.access_check and args.provider_mode != 'live' and not participants:
             return ('--access-check checks each live participant: give --provider-mode live, --astra-mode live or '
                     '--fable-mode live.')
@@ -491,20 +555,106 @@ def write_receipt(directory: Path, phase: str, record: dict) -> Path:
     return write_private(directory, f'{phase}-{stamp()}.json', data)
 
 
-def latest_receipt(directory: Path, phase: str, revision: str):
-    """The newest successful receipt of ``phase`` for ``revision``, or None."""
+def latest_receipt_entry(directory: Path, phase: str, revision: str):
+    """(path, record) of the newest successful receipt of ``phase`` for ``revision``, or None."""
     for path in sorted(directory.glob(f'{phase}-*.json'), reverse=True):
         record = json.loads(path.read_text(encoding='utf-8'))
         if record.get('phase') == phase and record.get('ok') and record.get('revision') == revision:
-            return record
+            return path, record
     return None
 
 
-def require_receipt(ctx, phase):
-    record = latest_receipt(ctx.receipts, phase, ctx.revision)
-    if record is None:
+def latest_receipt(directory: Path, phase: str, revision: str):
+    """The newest successful receipt of ``phase`` for ``revision``, or None."""
+    entry = latest_receipt_entry(directory, phase, revision)
+    return None if entry is None else entry[1]
+
+
+def require_receipt_entry(ctx, phase):
+    """(path, record) of require_receipt's receipt: the one latest_receipt gives, else refused."""
+    entry = latest_receipt_entry(ctx.receipts, phase, ctx.revision)
+    if entry is None:
         raise InstallError(f'No successful --phase {phase} receipt for this revision in {ctx.receipts}.')
-    return record
+    return entry
+
+
+def require_receipt(ctx, phase):
+    return require_receipt_entry(ctx, phase)[1]
+
+
+def receipt_moments(record) -> list:
+    """DECISIONS D59: the times ``record`` (a receipt main wrote) records for its phase, as aware datetimes - main's
+    'started_at', taken before anything of the phase ran, and each step its swap stamped ('details' 'steps': S1-S6 of a
+    blue/green app). A value that is not such a time is left out."""
+    if not isinstance(record, dict):
+        return []
+    details = record.get('details')
+    steps = details.get('steps') if isinstance(details, dict) else None
+    values = [record.get('started_at')] + (list(steps.values()) if isinstance(steps, dict) else [])
+    return [moment for moment in (utc_moment(value) for value in values if isinstance(value, str))
+            if moment is not None]
+
+
+def written_moment(path: Path):
+    """When write_receipt wrote the receipt at ``path``: the stamp() its name carries, as an aware datetime, or None."""
+    text = receipt_stamp(path)
+    if text is None:
+        return None
+    return dt.datetime.strptime(text, '%Y%m%dT%H%M%S%fZ').replace(tzinfo=dt.timezone.utc)
+
+
+def receipt_stamp(path: Path):
+    """The stamp() write_receipt put in the name of the receipt at ``path`` ('<phase>-<stamp>.json'), or None. Phases
+    run one at a time on one receipts directory (main's lock), so it orders receipts of different phases."""
+    match = re.fullmatch(r'.+-(\d{8}T\d{12}Z)\.json', path.name)
+    return None if match is None else match[1]
+
+
+def written_after(path: Path, bound):
+    """DECISIONS D82, D83: whether the receipt at ``path`` was written after the receipt ``bound`` ((path, record); None:
+    after nothing), by the stamps their names carry - None when either carries none, so the order cannot be told."""
+    if bound is None:
+        return True
+    mine, theirs = receipt_stamp(path), receipt_stamp(bound[0])
+    if mine is None or theirs is None:
+        return None
+    return mine > theirs
+
+
+def replaced_web_entry(record) -> dict:
+    """What an app receipt records of the web its phase replaced ('details' 'replaced' 'web'), or {}."""
+    details = record.get('details') if isinstance(record, dict) else None
+    replaced = details.get('replaced') if isinstance(details, dict) else None
+    web = replaced.get('web') if isinstance(replaced, dict) else None
+    return web if isinstance(web, dict) else {}
+
+
+def replaced_web(record) -> tuple:
+    """(image, revision) of the web an app receipt says its phase replaced (the pair a switch-back returns to), when it
+    names both well formed; else (None, None). A receipt that failed records one only once its switch had finished -
+    the old web parked and this revision's pair serving (S5, or a swap's park; then the recompute, the removal of the
+    parked pair or an access check failed) - never after an undo."""
+    web = replaced_web_entry(record)
+    image, revision = web.get('image'), web.get('revision')
+    if (isinstance(image, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', image) and isinstance(revision, str)
+            and SHA_RE.fullmatch(revision)):
+        return image, revision
+    return None, None
+
+
+def last_switch_back(ctx, target=None):
+    """DECISIONS D82, D83: (path, record) of the newest successful switch-back receipt of this revision - one that
+    returned to ``target`` (a revision) when it is given ('details' 'previous') - or None."""
+    for path in sorted(ctx.receipts.glob('switch-back-*.json'), reverse=True):
+        record = json.loads(path.read_text(encoding='utf-8'))
+        if not (isinstance(record, dict) and record.get('phase') == 'switch-back' and record.get('ok')
+                and record.get('revision') == ctx.revision):
+            continue
+        details = record.get('details')
+        previous = details.get('previous') if isinstance(details, dict) else None
+        if target is None or (isinstance(previous, dict) and previous.get('revision') == target):
+            return path, record
+    return None
 
 
 class Context:
@@ -1128,10 +1278,47 @@ def participant_secrets() -> dict:
     /etc/cpt-studio (10150:10150 0400), checked by key name only; a missing source leaves its participant 'not
     provided'. The sources directory is mounted only once it is seen to be a root-owned 0700 directory (and the helper
     looks again); anything else refuses with nothing written. {participant: {state, source, key_names}}."""
+    return copied_credentials(PARTICIPANTS, 'participant')
+
+
+def interpreter_secrets(participants: object) -> dict[Any, Any]:
+    """The interpreter's credential (AMENDMENT-2 1.11): the file of the participant INTERPRETER_SHARES names, so the
+    participants' run of the secrets phase copied it - unread, checked by key name only, 10150:10150 0400 - and nothing
+    is copied again for the interpreter: its entry is that participant's, read from ``participants``
+    (participant_secrets' answer) and named the interpreter's. An answer that does not say what was done with that
+    file refuses (DECISIONS D66: never read as "none"). {INTERPRETER['name']: {state, source, key_names,
+    shared_with}}."""
+    entry = participants.get(INTERPRETER_SHARES) if isinstance(participants, dict) else None
+    if not (isinstance(entry, dict) and isinstance(entry.get('state'), str)):
+        raise InstallError(f"The copy of the participants' credentials did not say what it did with the "
+                           f"{INTERPRETER_SHARES} participant's file, which the interpreter reads (AMENDMENT-2 1.11).",
+                           details={'participant_credentials': participants})
+    return {INTERPRETER['name']: {**entry, 'shared_with': INTERPRETER_SHARES}}
+
+
+LEGACY_COPY_NOTE = (f"{LEGACY_INTERPRETER_COPY}, the earlier Gemini interpreter's key copy, is left untouched: "
+                    "nothing copies, mounts or reads it now, and deleting it is the owner's decision (class d)")
+
+
+def legacy_copy_state(paths: object) -> Any:
+    """What ``paths`` (helper_stat's answer) says of LEGACY_INTERPRETER_COPY (AMENDMENT-2 1.11): {'path', 'state':
+    'present' | 'absent' | 'not read', and LEGACY_COPY_NOTE's 'note' when it is present}. Reported, never a problem:
+    the installer neither writes nor removes it."""
+    found = paths.get(LEGACY_INTERPRETER_COPY) if isinstance(paths, dict) else None
+    if not isinstance(found, dict):
+        return {'path': LEGACY_INTERPRETER_COPY, 'state': 'not read'}
+    if not found.get('exists'):
+        return {'path': LEGACY_INTERPRETER_COPY, 'state': 'absent'}
+    return {'path': LEGACY_INTERPRETER_COPY, 'state': 'present', 'note': LEGACY_COPY_NOTE}
+
+
+def copied_credentials(specs, what) -> dict:
+    """H_PARTICIPANT_SECRETS over ``specs`` ({name: spec with source, target, required and optional}); ``what`` names
+    them in a refusal. {name: {state, source, key_names}}."""
     folder = helper_stat([PROVIDER_SOURCES])[PROVIDER_SOURCES]
     mounted = bool(folder.get('exists'))
     if mounted and folder != {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}:
-        raise InstallError(f'{PROVIDER_SOURCES} is not a root-owned 0700 directory; no participant credentials file '
+        raise InstallError(f'{PROVIDER_SOURCES} is not a root-owned 0700 directory; no {what} credentials file '
                            'was copied.', details={'sources': folder})
     mounts = [f'type=bind,src={ETC_DIR},dst=/target']
     if mounted:
@@ -1140,13 +1327,16 @@ def participant_secrets() -> dict:
               'participants': [{'name': name, 'source': PurePosixPath(spec['source']).name,
                                 'source_path': spec['source'], 'target': PurePosixPath(spec['target']).name,
                                 'target_path': spec['target'], 'required': list(spec['required']),
-                                'optional': list(spec['optional'])} for name, spec in PARTICIPANTS.items()]}
+                                'optional': list(spec['optional'])} for name, spec in specs.items()]}
     return run_helper(H_PARTICIPANT_SECRETS, params, mounts=mounts, sensitive=True)['participants']
 
 
 def credentials_target(name) -> str:
-    """The installed credentials file of 'corti' or of a harness participant."""
-    return CORTI_TARGET if name == 'corti' else PARTICIPANTS[name]['target']
+    """The installed credentials file of 'corti', of a harness participant, or of the interpreter (INTERPRETER['name'],
+    'anthropic': the Fable participant's file, AMENDMENT-2 1.11)."""
+    if name == 'corti':
+        return CORTI_TARGET
+    return INTERPRETER['target'] if name == INTERPRETER['name'] else PARTICIPANTS[name]['target']
 
 
 def credential_free(outputs, participants) -> bool:
@@ -1782,15 +1972,97 @@ def participant_modes(args) -> dict:
     return {name: getattr(args, f'{name}_mode', None) or 'disabled' for name in PARTICIPANTS}
 
 
+def interpreter_mode(args) -> str:
+    """The interpreter's mode from --interpreter-mode; 'disabled' when not given (or for an args object that does not
+    name it), as every one-shot runs it (design/FINAL.md 13)."""
+    mode = getattr(args, 'interpreter_mode', None) or 'disabled'
+    if mode not in INTERPRETER_MODES:
+        raise InstallError(f'The interpreter mode must be one of {", ".join(INTERPRETER_MODES)}, not {mode!r}.')
+    return mode
+
+
 def participant_mount(name) -> str:
     """A participant's credentials file, read-only at the worker's path (HARNESS.md 8)."""
     spec = PARTICIPANTS[name]
     return f'type=bind,src={spec["target"]},dst={spec["mounted"]},readonly'
 
 
-def runtime_env(provider_mode, authorization_ref, *, credentials=False, participants=None, files=()):
+def interpreter_mount() -> str:
+    """The interpreter's credentials file, read-only at the worker's path (D14; AMENDMENT-2 1.11: the Fable
+    participant's file, so this is participant_mount(INTERPRETER_SHARES) to the byte)."""
+    return f'type=bind,src={INTERPRETER["target"]},dst={INTERPRETER["mounted"]},readonly'
+
+
+def worker_credential_mounts(participants: list[str] | tuple[str, ...], interpreter: bool) -> list[str]:
+    """The credentials binds of a worker - or of a one-shot in its layout - that holds the files of ``participants``
+    (participant names) and, when ``interpreter`` is true, the interpreter's: each file bound ONCE (AMENDMENT-2 1.11:
+    the interpreter's file is the Fable participant's, so a worker with both live binds it one time; Docker refuses a
+    container that names one destination twice). The participants' come first, in their order, then the interpreter's
+    when it is a file of its own."""
+    binds = [participant_mount(name) for name in participants] + ([interpreter_mount()] if interpreter else [])
+    return list(dict.fromkeys(binds))
+
+
+# DECISIONS D325 (3) (the second adversarial pass's L7P2-2; class d): the question stage's two figures are the owner's -
+# the worst case it reserves for one document over every round (QUESTION_DOCUMENT_CEILING_USD: a round that would pass
+# it is refused about itself and never sent) and the question requests in flight at once (QUESTION_ROUND_CONCURRENCY:
+# the rest of a round wait their turn in the same job) - and they are settings, never constants of this script: every
+# container this installer starts (the web, the worker and each one-shot: runtime_env) is given both, at the values the
+# revision's own cptstudio/settings.py gives them (question_figures reads its defaults - 25 US dollars a document and
+# 4 requests at once, D325's proposal - without running it), so the installed environment states them and settings.py
+# stays their one copy. At those figures a round is at most 4 requests, one wave, and the question stage keeps its rows
+# (the worker's stop timeout below outlasts them); a stopping worker starts no further wave of a round.
+QUESTION_FIGURES = ('QUESTION_DOCUMENT_CEILING_USD', 'QUESTION_ROUND_CONCURRENCY')
+SETTINGS_SOURCE = SELF.parents[1] / 'cptstudio' / 'settings.py'
+
+
+def question_figures(source: str | None = None) -> dict[str, str]:
+    """{'CPT_STUDIO_<name>': value} for each of QUESTION_FIGURES: the default the revision's cptstudio/settings.py gives
+    it (its one ``_env('<name>', '<value>')`` call, read with ast - nothing is imported or run; ``source``: that file's
+    text, read from SETTINGS_SOURCE when not given), checked as settings.py checks it when it loads - the ceiling a
+    non-negative amount of US dollars, the concurrency a whole number of requests, at least 1. InstallError when a
+    figure is missing, given more than once or malformed: no container is started without both."""
+    from decimal import Decimal, InvalidOperation
+
+    text = source if source is not None else SETTINGS_SOURCE.read_text(encoding='utf-8')
+    found: dict[str, list[str]] = {name: [] for name in QUESTION_FIGURES}
+    for node in ast.walk(ast.parse(text)):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == '_env'
+                and len(node.args) == 2 and not node.keywords):
+            continue
+        named, given = node.args
+        if (isinstance(named, ast.Constant) and isinstance(named.value, str) and named.value in found
+                and isinstance(given, ast.Constant) and isinstance(given.value, str)):
+            found[named.value].append(given.value)
+    figures: dict[str, str] = {}
+    for name, values in found.items():
+        if len(values) != 1:
+            raise InstallError(f'cptstudio/settings.py gives {name} {len(values)} defaults, not one; nothing was '
+                               'started.')
+        value = values[0]
+        if name == 'QUESTION_DOCUMENT_CEILING_USD':
+            try:
+                amount = Decimal(value)
+            except InvalidOperation:
+                amount = None
+            good = amount is not None and amount.is_finite() and amount >= 0
+        else:
+            good = value.isascii() and value.isdigit() and int(value) >= 1
+        if not good:
+            raise InstallError(f'cptstudio/settings.py gives {name} the default {value!r}, which it would refuse; '
+                               'nothing was started.')
+        figures[f'CPT_STUDIO_{name}'] = value
+    return figures
+
+
+def runtime_env(provider_mode, authorization_ref, *, credentials=False, participants=None, files=(), interpreter=None,
+                interpreter_file=False):
     """-e flags. Each harness participant is named with its mode - ``participants`` maps them; one not given is
-    disabled, as in every one-shot - and a live one (or one in ``files``) with its credentials path."""
+    disabled, as in every one-shot - and a live one (or one in ``files``) with its credentials path. The interpreter is
+    named with its mode (``interpreter``; disabled when not given, as in every one-shot), its credentials path when it
+    is live (or ``interpreter_file``), and the replay directory when it replays (tests/fixtures/interpretation/; the
+    image ships no Fable recording, so a replayed interpreter fails every reading unsent). Every container is given the
+    question stage's two figures (DECISIONS D325 (3): QUESTION_FIGURES, at the revision's settings values)."""
     values = {'CPT_STUDIO_DB_HOST': DB_CONTAINER, 'CPT_STUDIO_DB_PORT': '5432', 'CPT_STUDIO_DB_NAME': DB_NAME,
               'CPT_STUDIO_DB_USER': DB_USER, 'CPT_STUDIO_HTTPS': '1', 'CPT_STUDIO_TRUST_PROXY': '1',
               'CPT_STUDIO_PROVIDER_MODE': provider_mode, 'CPT_STUDIO_AUTHORIZATION_REF': authorization_ref}
@@ -1801,6 +2073,15 @@ def runtime_env(provider_mode, authorization_ref, *, credentials=False, particip
         values[spec['mode_env']] = mode
         if mode == 'live' or name in files:
             values[spec['file_env']] = spec['mounted']
+    interpreting = interpreter or 'disabled'
+    if interpreting not in INTERPRETER_MODES:
+        raise InstallError(f'The interpreter mode must be one of {", ".join(INTERPRETER_MODES)}, not {interpreting!r}.')
+    values[INTERPRETER['mode_env']] = interpreting
+    if interpreting == 'live' or interpreter_file:
+        values[INTERPRETER['file_env']] = INTERPRETER['mounted']
+    if interpreting == 'replay':
+        values[INTERPRETER['replay_env']] = INTERPRETER['replay_dir']
+    values.update(question_figures())  # D325 (3): the owner's two figures, as settings
     flags = []
     for name, value in values.items():
         flags += ['-e', f'{name}={value}']
@@ -1808,12 +2089,14 @@ def runtime_env(provider_mode, authorization_ref, *, credentials=False, particip
 
 
 def service_args(role, image_id, revision, provider_mode, authorization_ref, participants=None, *, name=None,
-                 port=WEB_PORT):
+                 port=WEB_PORT, interpreter=None):
     """docker run arguments for a long-running role; secrets arrive on stdin as an env-file. ``participants`` maps each
-    harness participant to its mode (disabled when not given). A web is named ``name`` (the incoming web of a
-    blue/green install: INCOMING_WEB) and publishes 127.0.0.1:``port``; every other argument is the same."""
+    harness participant to its mode (disabled when not given), and ``interpreter`` is the interpreter's (disabled when
+    not given). A web is named ``name`` (the incoming web of a blue/green install: INCOMING_WEB) and publishes
+    127.0.0.1:``port``; every other argument is the same."""
     live = provider_mode == 'live'
     modes = {name: (participants or {}).get(name) or 'disabled' for name in PARTICIPANTS}
+    interpreting = interpreter or 'disabled'
     container = name or SERVICES[role]
     if container not in ((SERVICES['web'], INCOMING_WEB) if role == 'web' else (SERVICES['worker'],)):
         raise InstallError(f'{container} is not a name a CPT Studio {role} is started under.')
@@ -1822,19 +2105,23 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref, par
               '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}={role}', '--label', f'{REVISION_LABEL}={revision}',
               '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--stop-timeout', str(STOP_SECONDS[role]),
               '--mount', f'type=volume,src={FILES_VOLUME},dst={STATE_DIR}', '--env-file', '/dev/stdin']
-    environment = runtime_env(provider_mode, authorization_ref, credentials=live, participants=modes)
+    environment = runtime_env(provider_mode, authorization_ref, credentials=live, participants=modes,
+                              interpreter=interpreting)
     if role == 'web':
         # The path, never the file. A context change in the web builds the request it would send to tell a
         # re-check from a re-send (jobs._run_answers); building a request opens nothing, and only the worker
         # sends. Without the path, live mode had no provider in the web, so every setting or billing save
         # re-predicted and the worker re-sent a failed or not-sent request (pre-install review, 2026-10-26).
-        # A live harness participant alike: its adapter builds requests without credentials (HARNESS.md 8).
+        # A live harness participant alike: its adapter builds requests without credentials (HARNESS.md 8). And the
+        # interpreter alike (design/FINAL.md 13; its adapter reads the key only to send, interpretation.fable_adapter).
         return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{port}:8000', *environment,
                 image_id, 'web']
     extra = ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
-    for name, mode in modes.items():
-        if mode == 'live':
-            extra += ['--mount', participant_mount(name)]
+    # the worker alone holds a live participant's key and the live interpreter's (D14), each file once: the
+    # interpreter's is the Fable participant's (AMENDMENT-2 1.11), one bind target whichever of them is live
+    for bind in worker_credential_mounts([name for name, mode in modes.items() if mode == 'live'],
+                                         interpreting == 'live'):
+        extra += ['--mount', bind]
     return [*common, *hardening('1536m', 256, '1g'), '--no-healthcheck', *extra, *environment, image_id, 'worker']
 
 
@@ -1850,16 +2137,18 @@ def db_args() -> list:
 
 
 def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UID}', timeout=600,
-            network=None, credentials=False, participant_files=(), environment=None):
-    """A --rm container of the app image with provider calls disabled - Corti's and every participant's - unless
-    ``environment`` gives its -e flags; returns the completed process. ``credentials`` and ``participant_files``
-    (participant names) mount those credentials files read-only at the worker's paths."""
+            network=None, credentials=False, participant_files=(), environment=None, interpreter_file=False):
+    """A --rm container of the app image with provider calls disabled - Corti's, every participant's and the
+    interpreter's (design/FINAL.md 13) - unless ``environment`` gives its -e flags; returns the completed process.
+    ``credentials``, ``participant_files`` (participant names) and ``interpreter_file`` mount those credentials files
+    read-only at the worker's paths, each file once (worker_credential_mounts)."""
     name = f'cpt-studio-oneshot-{secrets.token_hex(8)}'
     if credentials:
         mounts = [*mounts, f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly']
-    mounts = [*mounts, *(participant_mount(participant) for participant in participant_files)]
+    mounts = [*mounts, *worker_credential_mounts(participant_files, interpreter_file)]
     if environment is None:
-        environment = runtime_env('disabled', '', credentials=credentials, files=participant_files)
+        environment = runtime_env('disabled', '', credentials=credentials, files=participant_files,
+                                  interpreter_file=interpreter_file)
     argv = [DOCKER, 'run', '--rm', '--name', name, '--pull=never', '--network', network or NETWORK,
             '--no-healthcheck', '--log-driver=none', '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=oneshot',
             *hardening('768m', 128, '256m', user=user), '--env-file', '/dev/stdin', *environment,
@@ -1884,6 +2173,16 @@ PARTICIPANT_CREDENTIALS_CHECKS = {
            f'{spec["loader"]}(settings.{spec["setting"]})\n'
            f"print('{name}-credentials-parse-ok')\n")
     for name, spec in PARTICIPANTS.items()}
+# The interpreter's, likewise (design/FINAL.md 13: "the offline loader check follows the existing pattern"): the loader
+# its adapter reads the key with (AMENDMENT-2 1.11: interpretation.fable_adapter.load_anthropic_credentials, the
+# participants' own loader of the shared Fable file, ANTHROPIC_API_KEY required and ANTHROPIC_WORKSPACE_ID optional), in
+# the worker's mount layout, offline, with the interpreter itself disabled. It proves, too, that this revision's image
+# imports the adapter the interpreter sends through; an earlier image that has none fails it, so a switch-back to a
+# revision before AMENDMENT-2 runs its interpreter disabled or replayed only.
+INTERPRETER_CREDENTIALS_CHECK = ('from django.conf import settings\n'
+                                 f'from {INTERPRETER["module"]} import {INTERPRETER["loader"]}\n'
+                                 f'{INTERPRETER["loader"]}(settings.{INTERPRETER["setting"]})\n'
+                                 f"print('{INTERPRETER['name']}-credentials-parse-ok')\n")
 
 # Run by `manage shell -c` in an image of the app (APP_SCRIPT_PRELUDE gives it P, the parameters, and ANSWER); each
 # prints one ANSWER line. UNRUNNABLE_STAGES uses only what every revision's models have (057a7d39's included): it is
@@ -1894,6 +2193,25 @@ APP_SCRIPT_PRELUDE = 'import base64, json\nP = json.loads(base64.b64decode({payl
 # the kinds the next worker runs - read from that worker's own image (stage_kinds_of) - and only these when it has no
 # image to ask (refutation p1, security-0).
 COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
+# The Gemini migration's stage kind 'interpret' (interpretation.JOB_KIND) is not among them (design/FINAL.md 12.1,
+# 13): no worker before it runs one, so CLOSE_STAGES closes an open interpret stage on every undo whose next worker
+# lacks it, settling the interpreter's run it had in flight as any other (sending: unknown, reserved: not sent), and
+# an older revision's app phase refuses while one is open (UNRUNNABLE_STAGES), as for the participants' stages.
+# Design v2 (docs/gemini-migration/FINAL-V2.md 6.4, step 6b): pass 2's stage kind 'appraise'
+# (interpretation.APPRAISE_JOB_KIND) is not among them either - the old worker would die on STAGES['appraise'] - so both
+# scripts treat it exactly as interpret: CLOSE_STAGES closes it on every undo whose next worker lacks it (the appraisal
+# run it had in flight settled as any other), and UNRUNNABLE_STAGES names it stuck to an older revision's app phase. Both
+# read the kinds from a worker's own jobs.STAGES, so neither names a kind; READING_STAGE_KINDS is what the undo's note
+# counts (interpretation_note) and what the tests pin. A next worker that runs 'appraise' is a design v2 worker, and
+# every design v2 worker carries FINAL-V2 amendment 1's update (the amendment was adopted, D208, before any v2 build),
+# so an undo reverts a pending save's unapplied values only for a next worker that does not (UPDATE_PENDING below).
+APPRAISE_KIND = 'appraise'
+# Round r3 (DECISIONS D320, D322): the question stage (studio.jobs.QUESTION) is the third reading stage - context-free,
+# its runs appraisal runs - and no worker before round r3 runs it, so both scripts treat it exactly as interpret and
+# appraise (CLOSE_STAGES closes an open one on every undo whose next worker lacks it, its in-flight question runs settled
+# as any other; UNRUNNABLE_STAGES names it stuck to an older revision's app phase), and the undo's note counts it.
+QUESTION_KIND = 'question'
+READING_STAGE_KINDS = ('interpret', APPRAISE_KIND, QUESTION_KIND)
 # What this revision recorded that an older revision's web and worker would act on under their own rules (refutation
 # p1, migrate-0/-1), read in this revision's image as the installed revision 057a7d39 reads the rows - the oldest a
 # rollback goes back to. {encounter id: reasons}:
@@ -2090,7 +2408,62 @@ def undo_hazards():
         if assessment is not None and any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()) and any(
                 decision.modifiers for decision in review.current_decisions(assessment).values()):
             found.setdefault(str(encounter.pk), set()).add('modifier')
+        # DECISIONS D51 (the S17 refutation, finding 13): a reviewer's reinstatement on a new-path assessment. The new
+        # path's review overlay adds, at read time, the base rule a reinstated therapeutic code brings back ("45378 was
+        # approved, but 45386 was reinstated ..."); no older revision reads a new-path assessment's event coding, so its
+        # overlay adds no such hold - its readiness reads both approvals as reviewed and its export bills both. D59 (the
+        # S17 refutation round 2, finding 11): named while any code stands reinstated as the overlay counts one - the
+        # reinstatement, or the approval that rests on it (reinstated_codes) - so approving the reinstated code, the
+        # normal end of a reinstatement, never clears it; only a revoke (or a reject) of that code does
+        if assessment is not None and is_new_assessment(assessment) and reinstated_codes(assessment):
+            found.setdefault(str(encounter.pk), set()).add('reinstatement')
     return {pk: sorted(reasons) for pk, reasons in sorted(found.items())}
+
+
+def reinstated_codes(assessment):
+    """DECISIONS D59: the excluded codes of ``assessment`` a reviewer reinstated and has not rejected or revoked - their
+    current decision is the reinstatement, or an approval that rests on it - as the review overlay counts them
+    (review.reinstated_codes, read where the image has it; otherwise the same rule over its current decisions)."""
+    from studio import models, review
+    current = review.current_decisions(assessment)
+    if hasattr(review, 'reinstated_codes'):
+        return list(review.reinstated_codes(assessment, current))
+    counted = (models.Decision.REINSTATE, models.Decision.APPROVE)
+    return [proposal.code for proposal in assessment.proposals.filter(bucket=models.Proposal.EXCLUDED)
+            if current.get(proposal.pk) is not None and current[proposal.pk].action in counted]
+
+
+def is_new_assessment(assessment):  # a new-path assessment (DECISIONS D51); an older image has no new path
+    try:
+        from studio import interpretation
+    except ImportError:
+        return False
+    check = getattr(interpretation, 'is_new_assessment', None)
+    return bool(check(assessment)) if check is not None else False
+
+
+def touched_since(since):
+    """DECISIONS D51: the encounters (ids, as strings) with a record CREATED at or after ``since`` - an encounter, a
+    revision, a context, a provider run (or its reconciliation), an event inventory, an assessment, a clarification, a
+    finding confirmation, a decision or its invalidation, a member's answer or its revocation, a stage, a report. Only
+    creations and members' and operators' acts count: an installer's own close and put-back write finish times and list
+    states, never these. An encounter with none holds only what the pair before this one left there."""
+    from studio import models
+    out = set()
+    rows = [(models.Encounter, 'created_at', 'pk'), (models.ProviderRun, 'created_at', 'encounter_id'),
+            (models.ProviderRun, 'reconciled_at', 'encounter_id'), (models.Assessment, 'created_at', 'encounter_id'),
+            (models.Clarification, 'created_at', 'encounter_id'), (models.Decision, 'created_at', 'encounter_id'),
+            (models.Job, 'created_at', 'encounter_id')]
+    optional = [('SourceRevision', 'created_at', 'encounter_id'), ('EncounterContext', 'created_at', 'encounter_id'),
+                ('EventInventory', 'created_at', 'encounter_id'), ('FindingConfirmation', 'created_at', 'encounter_id'),
+                ('MemberAnswer', 'answered_at', 'encounter_id'), ('ReportArtifact', 'generated_at', 'encounter_id'),
+                ('MemberAnswerRevocation', 'revoked_at', 'answer__encounter_id'),
+                ('DecisionInvalidation', 'created_at', 'decision__encounter_id')]
+    rows += [(getattr(models, name), field, key) for name, field, key in optional if hasattr(models, name)]
+    for model, field, key in rows:
+        out.update(str(pk) for pk in model.objects.filter(**{f'{field}__gte': since}).values_list(key, flat=True)
+                   if pk is not None)
+    return out
 
 
 def written_since(since, pks):
@@ -2122,6 +2495,23 @@ def written_since(since, pks):
     return found
 '''
 UNDO_HAZARDS_READ = UNDO_HAZARDS + "print(ANSWER + json.dumps({'hazards': undo_hazards()}))\n"
+# DECISIONS D51: the encounters with a record created since this revision's pair (P['since']), in this revision's image.
+TOUCHED_SINCE_READ = (UNDO_HAZARDS + "import datetime as _dt\n"
+                      "print(ANSWER + json.dumps({'touched': sorted(touched_since(_dt.datetime.fromisoformat("
+                      "P['since'])))}))\n")
+# DECISIONS D51: what the PREVIOUS revision reads of the records the hazard reasons name - run in the previous image. A
+# member's answer as the completion repair reads it (its re-made assessment, support 'answered'; jobs.recompute_after_
+# answers), and a chosen modifier (Decision.modifiers). Its participants and second reviews are read from the stage
+# kinds its worker runs (stage_kinds_of: astra and fable, review2).
+TARGET_MODEL_READS = '''
+from studio import jobs, models
+reads = []
+if hasattr(models, 'MemberAnswer') and hasattr(jobs, 'recompute_after_answers'):
+    reads.append('member_answer')
+if any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()):
+    reads.append('modifier')
+print(ANSWER + json.dumps({'reads': reads}))
+'''
 # Close what a pair being undone left open since it started (refutation r1, migrate-3/-4): every stage it queued, ran
 # or left resumable (cancelled) becomes FAILED with P['note'] - failed, not cancelled, so no revision's web offers a
 # Resume for it - and every provider run it left unsettled is settled as the stale-stage sweep settles one (sending:
@@ -2133,7 +2523,102 @@ UNDO_HAZARDS_READ = UNDO_HAZARDS + "print(ANSWER + json.dumps({'hazards': undo_h
 # its encounter's latest stage (what a Resume runs again): that worker ends on it (refutation p1, security-0: a second
 # review stopped under an earlier pair of a revision that runs it outlived the window). Nothing finished is touched and
 # no row is removed. The answer names, after the close, what the next pair would still act on wrongly (UNDO_HAZARDS).
-CLOSE_STAGES = UNDO_HAZARDS + f'COMMON_STAGE_KINDS = {list(COMMON_STAGE_KINDS)!r}\n' + '''
+# Design v2 (FINAL-V2 6.4 and amendment 1, 9.4; step 6b), in the same transaction, after the stages are closed and
+# under each encounter's row lock (UPDATE_PENDING): every encounter that reads an update of its codes pending is named
+# ('update_pending', with its reasons: never a hazard, so never a refusal - a rollback is the incident path), and, when
+# P['revert'] (close_undone_stages: the next worker runs no 'appraise', so it has no update), every such encounter whose
+# saved values are not its current context's (an update pending before its analyze) has Encounter.user_values set back
+# to that context's member values, one 'context.rollback_reverted' audit row each naming the fields, and the answer
+# names each field's saved and restored values ('reverted'); 'reading_closed' counts the reading stages (interpret,
+# appraise: P['reading_kinds']) it closed. Each key is given only when there is one, so the answer is as it was
+# otherwise. The old image's details panel shows the context's values while its own save compares a save with
+# Encounter.user_values, so without the revert a pending value entered again there was "unchanged" and silently not
+# saved, and a save of another field applied the hidden value unannounced (amendment 1, 9.4 [R:legacy-L7]).
+# Refutation w7r 6b-r1 R2 (DECISIONS D247 F2: every sentence says what is so): when the next worker runs 'appraise' (an
+# earlier design v2 revision, which reads an update itself; no revert), the answer also says what each pending update
+# reads once the close has run, as this image's page reads it ('update_reads': {encounter: {'phase', 'action'}} from
+# progress.encounter_progress - the phase and the one action it offers; None for one that could not be read), so the
+# note words each update by what it reads (a closed reading or document review reads paused, a closed analysis or
+# assessment reads failed with "Try updating again", ...) - never one reading for all.
+UPDATE_PENDING = '''
+CONTEXT_FIELDS = ('service_date', 'setting', 'billing_context', 'patient_status')  # studio.types.CONTEXT_FACTS
+PENDING_REASONS = ('values_saved', 'assessment_off_context', 'reconciled_unknown')
+
+
+def update_pending_reasons(encounter):
+    """FINAL-V2 amendment 1, 9.4: why ``encounter`` reads an update of its codes pending, [] when it does not -
+    'values_saved' (values(encounter) differs from values(current context)), 'assessment_off_context' (its current
+    assessment is not on its current context) and 'reconciled_unknown' (its current assessment's own document review
+    is an UNKNOWN run an operator's reconciliation released while a reading is owed: A21's update, which no save
+    started). An image with no update (no review.values) names none."""
+    from studio import review
+    if not all(hasattr(review, name) for name in ('values', 'reconciled_unknown', 'reading_owed')):
+        return []
+    context = encounter.current_context if encounter.current_context_id else None
+    assessment = encounter.current_assessment if encounter.current_assessment_id else None
+    reasons = []
+    if context is not None and review.values(encounter) != review.values(context):
+        reasons.append('values_saved')
+    if assessment is not None and context is not None and assessment.context_id != context.pk:
+        reasons.append('assessment_off_context')
+    if (assessment is not None and assessment.provider_run_id is not None
+            and review.reconciled_unknown(assessment.provider_run) and review.reading_owed(encounter)):
+        reasons.append('reconciled_unknown')
+    return reasons
+
+
+def revert_unapplied(encounter):
+    """Encounter.user_values set back to its current context's member values for each coding-context field whose value
+    differs (values(), the vocabulary's normalization), every other key kept, and one 'context.rollback_reverted' audit
+    row naming the fields; {field: {'saved', 'restored'}} ({} when no field differs)."""
+    from studio import models, review
+    context = encounter.current_context
+    saved, restored = review.values(encounter), review.values(context)
+    fields = [name for name in CONTEXT_FIELDS if saved.get(name) != restored.get(name)]
+    if not fields:
+        return {}
+    stored = dict(encounter.user_values) if isinstance(encounter.user_values, dict) else {}
+    member = context.user_values if isinstance(context.user_values, dict) else {}
+    for name in fields:
+        if name in member:
+            stored[name] = member[name]
+        else:
+            stored.pop(name, None)
+    encounter.user_values = stored
+    encounter.save(update_fields=['user_values', 'updated_at'])
+    models.AuditEvent.objects.create(workspace_id=encounter.workspace_id, encounter=encounter, actor=None,
+                                     actor_kind='system', event='context.rollback_reverted',
+                                     data={'fields': fields, 'context': str(context.pk)})
+    return {name: {'saved': saved.get(name), 'restored': restored.get(name)} for name in fields}
+
+
+def pending_updates(revert):
+    """({encounter id: reasons}, {encounter id: reverted fields}): every encounter that reads an update pending; with
+    ``revert``, an encounter named 'values_saved' whose current context is of its current revision has its unapplied
+    values reverted (revert_unapplied), read again under its own row lock first (only those are locked: the web may
+    still serve while the close runs). Called inside the close's transaction."""
+    from studio import models
+    pending, reverted = {}, {}
+    for encounter in list(models.Encounter.objects.filter(current_revision__isnull=False).order_by('created_at', 'pk')):
+        reasons = update_pending_reasons(encounter)
+        if not reasons:
+            continue
+        pending[str(encounter.pk)] = reasons
+        if not (revert and 'values_saved' in reasons):
+            continue
+        locked = models.Encounter.objects.select_for_update().get(pk=encounter.pk)
+        again = update_pending_reasons(locked)  # what the encounter reads under its lock is what is named
+        if not again:
+            pending.pop(str(encounter.pk))
+            continue
+        pending[str(encounter.pk)] = again
+        if 'values_saved' in again and locked.current_context.revision_id == locked.current_revision_id:
+            fields = revert_unapplied(locked)
+            if fields:
+                reverted[str(encounter.pk)] = fields
+    return pending, reverted
+'''
+CLOSE_STAGES = UNDO_HAZARDS + UPDATE_PENDING + f'COMMON_STAGE_KINDS = {list(COMMON_STAGE_KINDS)!r}\n' + '''
 import datetime
 from django.db import transaction
 from django.db.models import Q
@@ -2158,6 +2643,10 @@ with transaction.atomic():
                                 | Q(started_at__gte=since, state=Job.RUNNING) | Q(pk__in=unrunnable))
     encounters = sorted({str(pk) for pk in stages.values_list('encounter_id', flat=True)})
     kinds = sorted(set(stages.values_list('kind', flat=True)))
+    reading = {}  # design v2: the reading stages (interpret, appraise) this close fails, by kind
+    for kind in stages.values_list('kind', flat=True):
+        if kind in (P.get('reading_kinds') or ()):
+            reading[kind] = reading.get(kind, 0) + 1
     runs = Run.objects.filter(in_flight)
     reached = getattr(jobs, 'may_have_reached_vendor', None)  # the stale sweep's rule for sent (sends-3)
     if reached is not None:
@@ -2167,8 +2656,23 @@ with transaction.atomic():
     not_sent = runs.filter(state=Run.RESERVED).update(
         state=Run.NOT_SENT, finished_at=now, error='The worker stopped before sending.')
     closed = stages.update(state=Job.FAILED, error=P['note'], finished_at=now)
-for pk in encounters:
+    # design v2 (amendment 1, 9.4): the pending updates named, and the unapplied saves reverted when P['revert'], in the
+    # step that closes the stages (UPDATE_PENDING)
+    pending, reverted = pending_updates(bool(P.get('revert')))
+for pk in sorted(set(encounters) | set(reverted)):
     review.refresh_state(models.Encounter.objects.get(pk=pk))
+# Refutation w7r 6b-r1 R2: for a next worker that runs appraise (no revert), what each pending update reads now, as this
+# image's page reads it (its phase and the one action it offers), so the note words each by it; None: not read
+update_reads = {}
+if pending and not P.get('revert'):
+    for pk in sorted(pending):
+        try:
+            from studio import progress
+            shown = progress.encounter_progress(models.Encounter.objects.get(pk=pk))
+            offered = shown.get('error') if isinstance(shown.get('error'), dict) else {}
+            update_reads[pk] = {'phase': str(shown.get('phase') or ''), 'action': str(offered.get('action') or 'none')}
+        except Exception:  # noqa: BLE001 - said in the note as not read, never read as any state
+            update_reads[pk] = None
 # Refutation p2, install2:1: the encounters whose stored state this revision labels from more than the state (worded from
 # the run it reads: a response refused whole is provider_failed, 'Provider response not used'). An older revision labels
 # a state by its name alone ('Provider request failed', for a request that succeeded): put_back_states gives each the
@@ -2191,7 +2695,135 @@ answer = {'closed': closed, 'kinds': kinds, 'encounters': len(encounters), 'runs
 written = [pk for pk, reasons in hazards.items() if 'member_answer' in reasons or 'modifier' in reasons]
 if written:
     answer['written_since'] = written_since(since, written)
+if reading:
+    answer['reading_closed'] = dict(sorted(reading.items()))
+if pending:
+    answer['update_pending'] = pending
+if update_reads:
+    answer['update_reads'] = update_reads
+if reading or pending:
+    answer['update_revert'] = bool(P.get('revert'))  # whether the next worker runs no appraise (has no update)
+if reverted:
+    answer['reverted'] = reverted
 print(ANSWER + json.dumps(answer))
+'''
+# Design v2 (amendment 1, 9.4; step 6b, refutation 6b-r1 P2): the unapplied saves a close reverted for an earlier image
+# (CLOSE_STAGES' 'reverted', given as P['reverted']: {encounter: {field: {'saved', 'restored'}}}) put back when the
+# undo that closed them leaves this revision's pair to serve again after all - a switch-back undone before its switch,
+# an S4 undo or a rollback-app that keeps this revision's web serving, a swap that leaves neither pair running, a
+# rollback-app stopped after its close with this pair to be started again (refutation 6b-r2 F1, DECISIONS D247) - so the
+# revision that serves, whose own worker reads the update, shows the member's saved change as an update pending, as
+# before the close, never the earlier codes as current with the change silently gone. Under each encounter's row lock,
+# and only where nothing changed since the revert: its newest 'context.rollback_reverted' audit row names its current
+# context and exactly those fields, its values are that context's, and each field holds the value the revert restored;
+# otherwise it is left as it stands and named in 'not_reapplied' with why ('gone', 'fields', 'context_changed',
+# 'values_changed'). Each put back writes one 'context.rollback_reapplied' audit row naming the fields and the context.
+# D247 DQ1 (option (a)): in the same transaction the put-back queues again the first reading stage the update owes, by
+# the save's own rule (AMENDMENT-1 2.3, jobs._save_awaiting_reading): a reading stage of the revision still QUEUED is
+# coalesced with (its deadline renewed, nothing more queued: 'coalesced'); a reading that failed before is left to show
+# that failure (nothing queued, as a save queues nothing then); otherwise the owed stage (jobs._owed_reading,
+# jobs._owed_key: interpret, or the appraise stage of the read extraction) is queued for the member whose save it was
+# (the newest 'context.changed' row before the revert: its actor, else the requester of the stage it names) under the
+# save's own key shape, its base key plus ':after-save:' and the revert's audit row - so one revert's put-back queues it
+# at most once ('requeued'), and the stage's own doors send the save's request at most once - when the serving worker
+# runs that stage (its kind is in this image's jobs.STAGES; the put-back runs in the image of the revision that serves).
+# A stage so queued, or coalesced with, waits jobs.QUEUE_DEADLINE for a worker to claim it and then expires before it
+# starts, as any queued stage does (refutation w7r 6b-r1 R3: reapply_reverted's sentence says so, never that it runs).
+# Otherwise nothing is queued and why is named ('not_requeued': 'reading_failed', 'no_stage', 'no_save',
+# 'queued_before', 'not_readable'), and such an update reads paused, with nothing to resume. Nothing is sent here.
+REAPPLY_REVERTED = '''
+from django.db import transaction
+from studio import jobs, models, review
+CONTEXT_FIELDS = ('service_date', 'setting', 'billing_context', 'patient_status')  # studio.types.CONTEXT_FACTS
+SAVE_RULE = ('enqueue', 'STAGES', 'INTERPRET', 'APPRAISE', 'AFTER_SAVE', 'READABLE', '_coalesce', '_owed_reading',
+             '_read_extraction', '_owed_key', '_interpret_key', '_reading_failed')  # jobs._save_awaiting_reading's own
+
+
+def saved_by(encounter, marker):
+    """The member whose save the revert set back: the newest 'context.changed' row of the encounter recorded before the
+    revert's row ``marker`` (a restore aside) - its actor, else the requester of the stage it names; None for none."""
+    row = (models.AuditEvent.objects.filter(encounter_id=encounter.pk, event='context.changed',
+                                            created_at__lte=marker.created_at)
+           .exclude(data__has_key='restored').order_by('-created_at', '-pk').first())
+    if row is None:
+        return None
+    if row.actor_id is not None:
+        return row.actor
+    reading = row.data.get('reading') if isinstance(row.data, dict) else None
+    job = models.Job.objects.filter(pk=reading, encounter_id=encounter.pk).first() if reading else None
+    return job.requested_by if job is not None else None
+
+
+def requeue(encounter, marker):
+    """The first reading stage the update of ``encounter`` owes, queued again as its save queued it (2.3), once for the
+    revert ``marker``: ('requeued' or 'coalesced', kind, job id), or ('not_requeued', why, None)."""
+    if not all(hasattr(jobs, name) for name in SAVE_RULE):
+        return 'not_requeued', 'no_stage', None
+    revision = encounter.current_revision
+    if revision is None or revision.extraction_status not in jobs.READABLE:
+        return 'not_requeued', 'not_readable', None
+    found = jobs._coalesce(encounter, revision)
+    if found is not None:
+        return 'coalesced', found.kind, str(found.pk)
+    kind = jobs._owed_reading(revision)
+    extraction = jobs._read_extraction(revision) if kind == jobs.APPRAISE else None
+    base = jobs._owed_key(revision, kind, extraction)
+    if base is None:  # no appraise stage of the read extraction is known: interpret's door queues it (2.3)
+        kind, base = jobs.INTERPRET, jobs._interpret_key(revision)
+    if kind not in jobs.STAGES:
+        return 'not_requeued', 'no_stage', None
+    if jobs._reading_failed(revision, kind):
+        return 'not_requeued', 'reading_failed', None
+    member = saved_by(encounter, marker)
+    if member is None:
+        return 'not_requeued', 'no_save', None
+    key = f'{base}:{jobs.AFTER_SAVE}:{marker.pk}'
+    if models.Job.objects.filter(idempotency_key=key).exists():
+        return 'not_requeued', 'queued_before', None
+    job = jobs.enqueue(kind, encounter=encounter, revision=revision, key=key, requested_by=member)
+    return 'requeued', kind, str(job.pk)
+
+
+reapplied, kept, queued = {}, {}, {'requeued': {}, 'coalesced': {}, 'not_requeued': {}}
+for pk, fields in sorted(P['reverted'].items()):
+    if not (isinstance(fields, dict) and fields and all(name in CONTEXT_FIELDS and isinstance(pair, dict)
+                                                        and set(pair) == {'saved', 'restored'}
+                                                        for name, pair in fields.items())):
+        kept[pk] = 'fields'
+        continue
+    with transaction.atomic():
+        encounter = models.Encounter.objects.select_for_update().filter(pk=pk).first()
+        if encounter is None:
+            kept[pk] = 'gone'
+            continue
+        context = encounter.current_context if encounter.current_context_id else None
+        marker = (models.AuditEvent.objects.filter(encounter_id=encounter.pk, event='context.rollback_reverted')
+                  .order_by('-created_at', '-pk').first())
+        if (context is None or marker is None or not isinstance(marker.data, dict)
+                or marker.data.get('context') != str(context.pk)
+                or sorted(marker.data.get('fields') or ()) != sorted(fields)):
+            kept[pk] = 'context_changed'
+            continue
+        now = review.values(encounter)
+        if now != review.values(context) or any(now.get(name) != pair['restored'] for name, pair in fields.items()):
+            kept[pk] = 'values_changed'
+            continue
+        stored = dict(encounter.user_values) if isinstance(encounter.user_values, dict) else {}
+        for name, pair in fields.items():
+            if pair['saved'] is None:
+                stored.pop(name, None)
+            else:
+                stored[name] = pair['saved']
+        encounter.user_values = stored
+        encounter.save(update_fields=['user_values', 'updated_at'])
+        models.AuditEvent.objects.create(workspace_id=encounter.workspace_id, encounter=encounter, actor=None,
+                                         actor_kind='system', event='context.rollback_reapplied',
+                                         data={'fields': sorted(fields), 'context': str(context.pk)})
+        reapplied[pk] = sorted(fields)
+        outcome, what, job = requeue(encounter, marker)  # D247 DQ1: under the same row lock, as the save queued it
+        queued[outcome][pk] = what if outcome == 'not_requeued' else {'kind': what, 'job': job}
+    review.refresh_state(models.Encounter.objects.get(pk=pk))
+print(ANSWER + json.dumps({'reapplied': reapplied, 'not_reapplied': kept, **queued}))
 '''
 # The stages this image's worker cannot run (a kind its STAGES does not know) that are queued, running, or cancelled
 # as their encounter's latest stage (what a Resume runs again): a worker meeting one ends on a KeyError (migrate-3).
@@ -2227,6 +2859,183 @@ for encounter in rows:
         changed[str(encounter.pk)] = [read, derived]
 print(ANSWER + json.dumps({'encounters': rows.count(), 'changed': changed}))
 '''
+# ADJUDICATION P-1 (design/FINAL.md 12.3 as amended): the new-path encounters an earlier image is handed - the
+# assessments made from event inventories (every one the events engine made, an engine_version of the
+# cpt-studio-events@ family, interpretation.is_new_assessment's rule, or that names an inventory) and their encounters;
+# and the encounters that hold a context derived from an inventory (a version of the gemini-context@ family,
+# interpretation.is_new_context's rule, or one that names an inventory) and no such assessment, 'context_only' - one
+# stopped between analyze and assess, whose gemini context is current (the review of S14, finding 1: FINAL 12.1's row
+# "declared by the hazard", which this note replaced). An earlier image reads the assessments fail-closed: its overlay
+# cannot read their records, so it keeps every stored hold and releases none (FINAL 12.1-12.2). It reads such a context
+# as current and keeps its holds (its held rows carry the legacy notes, FINAL 4.3), and an explicit act reads the
+# document again with its own reader (12.1). An inventory alone is not named: no earlier image reads one (12.1), nor a
+# routing stand-in (its operator console only shows it). None of it is EVER a refusing reason (not an UNDO_HAZARDS or
+# SHOWN_HAZARDS one): switch-back and rollback-app write it as a declared note in their receipts and go on. Read in
+# this revision's own image; an image with no event inventories answers None. Nothing is written or sent.
+# DECISIONS D59 (the S17 refutation round 2, finding 13): it also names, as 'reinstatable', the new-path encounters
+# whose current assessment - the one an earlier web shows and takes decisions on - is a new-path one holding an
+# excluded code a reviewer can reinstate. An earlier image reads that assessment through its stub record, so its
+# overlay adds no base hold for a reinstatement made THERE, and the diagnostic base code beside the reinstated
+# therapeutic code stays approvable (45378 beside 45385, which this revision holds): those encounters are exposed. The
+# key is given only when there is one, so the answer is as it was otherwise; still never a refusing reason.
+INTERPRETATION_MADE = '''
+from django.db.models import Q
+from studio import models
+try:
+    from studio import interpretation
+except ImportError:
+    interpretation = None
+made = None
+if interpretation is not None and all(any(f.name == 'event_inventory' for f in model._meta.get_fields())
+                                      for model in (models.Assessment, models.EncounterContext)):
+    family = interpretation.ENGINE_VERSION.partition('@')[0] + '@'
+    new_path = models.Assessment.objects.filter(Q(event_inventory__isnull=False) | Q(engine_version__startswith=family))
+    encounters = list(new_path.values_list('encounter_id', flat=True))
+    derived = interpretation.CONTEXT_VERSION.partition('@')[0] + '@'
+    holding = (models.EncounterContext.objects.filter(Q(event_inventory__isnull=False)
+                                                      | Q(version__startswith=derived))
+               .order_by().values_list('encounter_id', flat=True).distinct())
+    assessed = {str(pk) for pk in encounters}
+    context_only = {str(pk) for pk in holding} - assessed
+    made = {'assessments': len(encounters), 'encounters': sorted(assessed | context_only),
+            'context_only': sorted(context_only)}
+    exposed = {str(pk) for pk in models.Encounter.objects.filter(
+        current_assessment__in=new_path, current_assessment__proposals__bucket=models.Proposal.EXCLUDED,
+        current_assessment__proposals__reinstatable=True).order_by().values_list('pk', flat=True)}
+    if exposed:
+        made['reinstatable'] = sorted(exposed)
+print(ANSWER + json.dumps({'interpretation': made}))
+'''
+# Design v2 (FINAL-V2 6.2 [R:MO-1]; step 6b): the app phase asserts on the target, before the switch, that NO DESIGN V1
+# ROW exists - no Assessment whose engine_version is V1_ENGINE_VERSION and no EventInventory row whose
+# interpretation_version is V1_INTERPRETATION_VERSION - and refuses otherwise. v1 rows only, by exact version: v2's own
+# rows (cpt-studio-events@2, gemini-events@2/appraisal@1, read as stored), AMENDMENT-2's that the Fable interpreter
+# writes (8.5: cpt-studio-events@3, gemini-events@3/appraisal@2 with gemini-inventory@3) and every legacy row never trip
+# it, so a fix release after the walk, the re-install after a switch-back and a same-revision app re-run (a
+# provider-mode switch, the access check run again, the recovery of a failed app: D83) all pass. (The pre-refutation
+# predicate, the family cpt-studio-events@% and
+# any EventInventory row, refused every install after v2's first row, on append-only tables only a deletion could
+# clear.) The branch was never installed, so live holds no v1 row; a test instance's v1 rows are read as stored by
+# EventReader's V1 branch and are never deleted here. The versions are the design's literals, given as P (the script
+# reads no label of the image's). Read in this revision's image, after migrate (0014 makes EventInventory); nothing is
+# written or sent.
+V1_ENGINE_VERSION = 'cpt-studio-events@1'
+V1_INTERPRETATION_VERSION = 'gemini-events@1'
+NAMED_LIMIT = 200  # encounter ids an in-image count names (its count is complete)
+V1_ROWS = '''
+from studio import models
+assessments = models.Assessment.objects.filter(engine_version=P['engine_version'])
+inventories = models.EventInventory.objects.filter(interpretation_version=P['interpretation_version'])
+named = sorted({str(pk) for pk in (*assessments.values_list('encounter_id', flat=True),
+                                   *inventories.values_list('encounter_id', flat=True))})
+print(ANSWER + json.dumps({'engine_version': P['engine_version'], 'interpretation_version': P['interpretation_version'],
+                           'assessments': assessments.count(), 'inventories': inventories.count(),
+                           'encounter_count': len(named), 'encounters': named[:P['limit']]}))
+'''
+# Amendment 1, 9.5 (step 6b): the install counts, read-only, on the target, before the switch (the app phase, after
+# migrate), printed into the install transcript and NEVER a refusal (9.5: a refusal on them would refuse a fix release,
+# the re-install after a switch-back and a same-revision app, MO-1's defect). In this revision's image, by its own rules:
+#   size        the live encounters whose current revision has no inventory read at the current versions
+#               (jobs.current_versions) and is over INTERPRET_MAX_CHARS or INTERPRET_MAX_PAGES (jobs._size_bound;
+#               expected 0 for characters, D25), and those whose text fails the pure framing check (FINAL-V2 1.2 rule
+#               8's [S<n>] label refusal: contract/extract_prompt.unframed over jobs._participant_pages, as A12's
+#               SAVE_UNPREPARED reads it, whatever the size), with the live maximum length (19,398 at D25) beside the
+#               bound - their details could not be changed after the install (A12, class b);
+#   values      the encounters with a current context of their current revision whose values(encounter) differ from
+#               values(current context) (review.values): printed on every install; on the first install over the
+#               installed release (no gemini context, no EventInventory row of a v2 version) expected 0, and a non-zero
+#               count names its encounters for the owner (they would read an update no save queued);
+#   refused     the provider refusals recorded before the install that no ProviderHold row names: Corti runs FAILED
+#               and sent with 401, 402, 403 or 429; participant runs FAILED and sent with an exchange A20 holds
+#               (provider_holds.classify_run); Corti runs recorded not sent with the installed adapter's token-refusal
+#               sentence (P['token_sentence']) - each with its newest date (7.3's stated limit, class b);
+#   a21         the encounters whose current assessment's own document review is an UNKNOWN run already reconciled while
+#               a reading is owed (review.reconciled_unknown, review.reading_owed): expected 0, named when not;
+#   holds       every standing provider hold (provider_holds.state) and the interpreter hold (holds.state): the
+#               provider holds in the install transcript.
+# Nothing is written or sent.
+INSTALL_COUNTS = '''
+from django.conf import settings
+from studio import interpretation, jobs, models, provider_holds, review
+from studio.interpretation import holds as interpreter_holds
+from studio.interpretation.contract import extract_prompt
+Run, Inventory, limit = models.ProviderRun, models.EventInventory, P['limit']
+versions = jobs.current_versions()
+read_now = set(Inventory.objects.filter(state=Inventory.READ, interpretation_version=versions[0],
+                                        inventory_version=versions[1]).values_list('revision_id', flat=True))
+rows = list(models.Encounter.objects.filter(current_revision__isnull=False)
+            .select_related('current_revision', 'current_context').order_by('created_at', 'pk'))
+over_chars, over_pages, unframed, longest, unread, empty, unextracted = [], [], [], 0, 0, 0, 0
+extracted = (models.SourceRevision.OK, models.SourceRevision.PARTIAL)  # the installed release saves a context on these only
+for encounter in rows:
+    revision = encounter.current_revision
+    longest = max(longest, len(revision.text or ''))
+    if revision.pk in read_now:
+        continue
+    unread += 1
+    bound = jobs._size_bound(revision)
+    if bound == 'chars':
+        over_chars.append(str(encounter.pk))
+    elif bound == 'pages':
+        over_pages.append(str(encounter.pk))
+    try:
+        reason = extract_prompt.unframed(revision.text or '', jobs._participant_pages(revision))
+    except (TypeError, ValueError):
+        reason = True
+    if reason is not None:
+        unframed.append(str(encounter.pk))
+        if getattr(reason, 'value', None) == 'empty':  # no text
+            empty += 1
+            unextracted += revision.extraction_status not in extracted  # an extraction that failed or has not run
+differ = [str(encounter.pk) for encounter in rows
+          if encounter.current_context_id is not None
+          and encounter.current_context.revision_id == encounter.current_revision_id
+          and review.values(encounter) != review.values(encounter.current_context)]
+gemini_context = interpretation.CONTEXT_VERSION.partition('@')[0] + '@'  # every gemini-context@ version
+first = (not models.EncounterContext.objects.filter(version__startswith=gemini_context).exists()
+         and not Inventory.objects.exclude(interpretation_version=interpretation.INTERPRETATION_VERSION).exists())
+named = set(models.ProviderHold.objects.values_list('run_id', flat=True))
+corti = sorted(name for name, provider in provider_holds.COVERS.items() if provider == provider_holds.CORTI)
+participants = sorted(name for name, provider in provider_holds.COVERS.items() if provider != provider_holds.CORTI)
+
+
+def newest(found):
+    times = [run.created_at for run in found]
+    return {'count': len(found), 'newest': max(times).isoformat() if times else None}
+
+
+refused = {
+    'corti_sent': newest([run for run in Run.objects.filter(
+        provider__in=corti, state=Run.FAILED, sent=True,
+        http_status__in=sorted(provider_holds.REFUSED_BEFORE_STATUSES)).order_by('created_at') if run.pk not in named]),
+    'participant_sent': newest([run for run in Run.objects.filter(
+        provider__in=participants, state=Run.FAILED, sent=True).order_by('created_at')
+        if run.pk not in named and provider_holds.classify_run(run) is not None]),
+    'corti_token': newest([run for run in Run.objects.filter(
+        provider__in=corti, state=Run.NOT_SENT, error__startswith=P['token_sentence']).order_by('created_at')
+        if run.pk not in named])}
+a21 = []
+for encounter in rows:
+    assessment = encounter.current_assessment if encounter.current_assessment_id is not None else None
+    if (assessment is not None and assessment.provider_run_id is not None
+            and review.reconciled_unknown(assessment.provider_run) and review.reading_owed(encounter)):
+        a21.append(str(encounter.pk))
+print(ANSWER + json.dumps({
+    'size': {'bound_chars': settings.INTERPRET_MAX_CHARS, 'bound_pages': settings.INTERPRET_MAX_PAGES,
+             'longest_chars': longest, 'without_inventory': unread, 'over_chars': len(over_chars),
+             'over_pages': len(over_pages), 'unframed': len(unframed), 'unframed_empty': empty,
+             'unframed_unextracted': unextracted,
+             'encounters': {'over_chars': over_chars[:limit], 'over_pages': over_pages[:limit],
+                            'unframed': unframed[:limit]}},
+    'values': {'count': len(differ), 'first_install': first, 'encounters': differ[:limit] if first else []},
+    'refused': refused,
+    'a21': {'count': len(a21), 'encounters': a21[:limit]},
+    'holds': {'provider': provider_holds.state(), 'interpreter': interpreter_holds.state()['standing']}}))
+'''
+# The installed release's token-refusal sentence (studio/providers/corti.py at c2e53f8e7d33: "Corti authentication was
+# refused (HTTP {status}); no coding request was sent."), the one field that carries such a refusal it recorded (amendment
+# 1, 7.3: recorded not sent with no status).
+CORTI_TOKEN_REFUSAL = 'Corti authentication was refused (HTTP '
 # The list state the installed revision 057a7d39 derives for each encounter of P['encounters'], written where it differs
 # (refutation p2, install2:1), for an undo with no older image to ask: rollback-app with no pair parked, after which the
 # older revision is installed by its own installer - 057a7d39's never recomputes a stored state, so it shows what it is
@@ -2432,11 +3241,12 @@ def service_problems(container, role, image_id, port=None) -> list:
                 else [{}])
     if bindings not in expected:
         problems.append('unexpected published ports')
-    # Only the worker holds a credentials file, read-only (HARNESS.md 8): Corti's and a live participant's.
+    # Only the worker holds a credentials file, read-only (HARNESS.md 8): Corti's, a live participant's and the live
+    # interpreter's (design/FINAL.md 13, D14). A web holds none, whatever it is configured for.
     binds = [(mount.get('Source'), mount.get('Destination'), mount.get('RW'))
              for mount in container.get('Mounts') or [] if mount.get('Type') == 'bind']
-    allowed = {(CORTI_TARGET, CREDENTIALS_IN_CONTAINER)} | {(spec['target'], spec['mounted'])
-                                                          for spec in PARTICIPANTS.values()}
+    allowed = ({(CORTI_TARGET, CREDENTIALS_IN_CONTAINER), (INTERPRETER['target'], INTERPRETER['mounted'])}
+               | {(spec['target'], spec['mounted']) for spec in PARTICIPANTS.values()})
     if role == 'web' and binds:
         problems.append('the web holds a bind-mounted file (only the worker holds credentials)')
     if role == 'worker' and any((source, destination) not in allowed or writable is not False
@@ -2532,11 +3342,20 @@ def close_undone_stages(image_id, env_bytes, since, revision, reason, kinds) -> 
     unsettled are settled (CLOSE_STAGES). A pair restored or reinstalled afterwards would read that work under its own
     rules: the installed revision's worker ends on a second review it has no stage for, and reads a member date conflict
     as no date at all (refutation r1, migrate-3 and migrate-4; p1, security-0). Run with the undone revision's own
-    image. The answer's 'hazards' name what the next pair would still act on wrongly (UNDO_HAZARDS)."""
+    image. The answer's 'hazards' name what the next pair would still act on wrongly (UNDO_HAZARDS).
+
+    Design v2 (FINAL-V2 6.4; amendment 1, 9.4; step 6b): the same step names every encounter that reads an update of its
+    codes pending ('update_pending', never a refusing reason) and counts the reading stages it closed ('reading_closed');
+    and when the next worker runs no APPRAISE_KIND - it has no update, as the installed c2e53f8e has none, and so is
+    every worker of an image an undo cannot ask (COMMON_STAGE_KINDS) - it reverts each pending save's unapplied values
+    to the current context's ('reverted', with a 'context.rollback_reverted' audit row each). A next worker that runs
+    'appraise' is a design v2 worker, which reads the pending update itself, so nothing is reverted for it."""
     note = (f'Closed by the installer: {reason} (revision {revision[:12]}), so this stage will not run. Change the '
             'context, add an addendum or upload the document again to process it.')
     return app_script(image_id, env_bytes, CLOSE_STAGES, {'since': since.isoformat(), 'note': note,
-                                                          'kinds': sorted(kinds)},
+                                                          'kinds': sorted(kinds),
+                                                          'revert': APPRAISE_KIND not in set(kinds),
+                                                          'reading_kinds': list(READING_STAGE_KINDS)},
                       what=f'Closing the stages revision {revision[:12]} left open')
 
 
@@ -2559,6 +3378,695 @@ def undo_hazards(image_id, env_bytes, revision) -> dict:
                       what=f'Reading what an older revision would act on wrongly (revision {revision[:12]})')['hazards']
 
 
+def interpretation_note(image_id, env_bytes, revision) -> dict:
+    """ADJUDICATION P-1: the declared, NON-REFUSING note a switch-back or rollback-app receipt carries - the assessments
+    ``revision`` made from event inventories, and the new-path encounters (INTERPRETATION_MADE, read with ``image_id``,
+    this revision's own image): those with such an assessment, which the earlier image reads fail-closed, and those that
+    hold only a context derived from an inventory ('context_only'; the review of S14, finding 1), which it reads as
+    current, keeping its holds. {'assessments', 'encounters', 'context_only', 'note'}, and 'reinstatable' when the
+    answer names it (DECISIONS D59, the S17 refutation round 2, finding 13): the encounters among them whose current
+    new-path assessment holds an excluded code a reviewer can reinstate - exposed, since the earlier image adds no base
+    hold for a reinstatement made there; the note then says how many, and what to do first. It never stops an undo: a
+    read that fails, or an answer that says nothing it read, is recorded as not counted (an interrupt is never
+    swallowed)."""
+    def uncounted(why):
+        return {'assessments': None, 'encounters': None, 'context_only': None,
+                'note': f'the assessments made from event inventories and the contexts derived from them were not '
+                        f'counted ({why}); the earlier image reads any such assessment fail-closed and any such '
+                        'context as current, keeping its holds'}
+    try:
+        answer = app_script(image_id, env_bytes, INTERPRETATION_MADE, {},
+                            what=f'Counting the assessments and contexts revision {revision[:12]} made from event '
+                                 'inventories')
+    except Exception as error:  # noqa: BLE001 — a declared note never stops an undo; it says it was not read
+        return uncounted(str(error) or type(error).__name__)
+    made = answer.get('interpretation', _UNREAD) if isinstance(answer, dict) else _UNREAD
+    if made is None:
+        return {'assessments': 0, 'encounters': [], 'context_only': [],
+                'note': 'this image keeps no event inventory, so no assessment or context was made from one'}
+    named = made.get('encounters') if isinstance(made, dict) else None
+    context_only = made.get('context_only') if isinstance(made, dict) else None
+    exposed = made.get('reinstatable', []) if isinstance(made, dict) else None
+    # what it read, said consistently: every id once, the context-only encounters among those named, and an assessment
+    # for each other named encounter - at least one, and no more encounters than assessments; D59: the exposed
+    # encounters, when named, once each and among those with an assessment
+    if not (isinstance(made, dict) and type(made.get('assessments')) is int and made['assessments'] >= 0
+            and isinstance(named, list) and all(isinstance(pk, str) for pk in named) and len(set(named)) == len(named)
+            and isinstance(context_only, list) and all(isinstance(pk, str) for pk in context_only)
+            and len(set(context_only)) == len(context_only) and set(context_only) <= set(named)
+            and (len(named) - len(context_only) == 0) == (made['assessments'] == 0)
+            and len(named) - len(context_only) <= made['assessments']
+            and isinstance(exposed, list) and all(isinstance(pk, str) for pk in exposed)
+            and len(set(exposed)) == len(exposed) and set(exposed) <= set(named) - set(context_only)):
+        return uncounted('the count did not say what it read')
+    count, held = made['assessments'], len(context_only)
+    note = (f'{count} {"assessment was" if count == 1 else "assessments were"} made from event inventories; the '
+            'earlier image reads them fail-closed')
+    if held:
+        note += (f'; {held} {"encounter holds" if held == 1 else "encounters hold"} a context derived from an event '
+                 'inventory and no assessment made from one: the earlier image reads that context as current, keeping '
+                 'its holds, and an explicit act reads the document again with the earlier reader')
+    if exposed:  # D59 (finding 13): the rollback limit, with how many encounters it reaches
+        note += (f'; {len(exposed)} {"encounter holds" if len(exposed) == 1 else "encounters hold"} an excluded code a '
+                 'reviewer can reinstate: the earlier image reads a new-path assessment through a stub that adds no '
+                 'base hold, so a reinstatement made there can leave the diagnostic base code approvable beside the '
+                 'therapeutic code - re-check each new-path encounter on the earlier web (a context save reads it '
+                 'again with the earlier reader) before reviewing it there')
+    found = {'assessments': count, 'encounters': list(named), 'context_only': list(context_only), 'note': note}
+    if 'reinstatable' in made:
+        found['reinstatable'] = list(exposed)
+    return found
+
+
+def _is_ids(value) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) and item for item in value) \
+        and len(set(value)) == len(value)
+
+
+def _undo_parts(closes) -> tuple:
+    """(update_pending, reverted, reading_closed, without_update) merged over the close answers ``closes``
+    (CLOSE_STAGES'; without_update: no close said the next worker has the update), or None when
+    an answer that names any of them does not say what it read. A close that names none of them (an image with no
+    update, or nothing pending) adds nothing; a None or a missing close is skipped (its own receipt says why)."""
+    pending, reverted, reading, reverts = {}, {}, {}, set()
+    for close in closes or ():
+        if not isinstance(close, dict):
+            continue
+        if close.get('update_pending') or close.get('reading_closed'):
+            reverts.add(close.get('update_revert') is not False)  # unsaid: the earlier image is read as having no update
+        named, values, counted = close.get('update_pending', {}), close.get('reverted', {}), close.get('reading_closed', {})
+        if not (isinstance(named, dict) and all(isinstance(pk, str) and isinstance(reasons, list) and reasons
+                                                and all(reason in UNDO_PENDING_REASONS for reason in reasons)
+                                                for pk, reasons in named.items())):
+            return None
+        if not (isinstance(values, dict) and all(
+                isinstance(pk, str) and pk in named and 'values_saved' in named[pk] and isinstance(fields, dict)
+                and fields and all(isinstance(name, str) and isinstance(pair, dict) and set(pair) == {'saved', 'restored'}
+                                   for name, pair in fields.items())
+                for pk, fields in values.items())):
+            return None
+        if not (isinstance(counted, dict) and all(kind in READING_STAGE_KINDS and type(count) is int and count > 0
+                                                  for kind, count in counted.items())):
+            return None
+        for pk, reasons in named.items():
+            pending[pk] = sorted(set(pending.get(pk, [])) | set(reasons))
+        for pk, fields in values.items():
+            reverted.setdefault(pk, {}).update(fields)
+        for kind, count in counted.items():
+            reading[kind] = reading.get(kind, 0) + count
+    return (dict(sorted(pending.items())), dict(sorted(reverted.items())), dict(sorted(reading.items())),
+            all(reverts) if reverts else True)
+
+
+# CLOSE_STAGES' update_pending reasons (UPDATE_PENDING's PENDING_REASONS), read back by the note
+UNDO_PENDING_REASONS = ('values_saved', 'assessment_off_context', 'reconciled_unknown')
+
+
+def _update_reads(closes, pending):
+    """Refutation w7r 6b-r1 R2: what each pending update of ``pending`` reads after the closes ``closes``, as the image
+    of the close read its page (CLOSE_STAGES' 'update_reads', given for a next worker that runs appraise): {encounter:
+    {'phase', 'action'} or None (not read)}, a later close's reading over an earlier one's; an encounter no close read
+    is None. None when an answer that gives it does not say what it read (never read as any state)."""
+    reads = {}
+    for close in closes or ():
+        if not isinstance(close, dict) or 'update_reads' not in close:
+            continue
+        given = close['update_reads']
+        if not (isinstance(given, dict) and all(
+                isinstance(pk, str) and pk in pending and (shown is None or (
+                    isinstance(shown, dict) and set(shown) == {'phase', 'action'}
+                    and all(isinstance(value, str) and value for value in shown.values())))
+                for pk, shown in given.items())):
+            return None
+        reads.update(given)
+    return {pk: reads.get(pk) for pk in sorted(pending)}
+
+
+def _reads_said(reads) -> str:
+    """The note's clauses for what each pending update reads (_update_reads), grouped by the action its page offers:
+    each says what a member can do there, and none promises an action the page does not offer (D247 F2)."""
+    groups = {}
+    for pk, shown in reads.items():
+        key = ('unread', '') if shown is None else (shown['action'], shown['phase'].replace('_', ' '))
+        groups.setdefault(key, []).append(pk)
+    clauses = []
+    for (action, phase), ids in sorted(groups.items()):
+        count = f'{len(ids)} {"reads" if len(ids) == 1 else "read"}'
+        if action == 'retry_update':
+            clauses.append(f'{count} {phase}, and its member\'s "Try updating again" queues the failed stage again')
+        elif action == 'retry_reading':
+            clauses.append(f'{count} {phase}, and its member\'s "Try reading again" queues its reading again')
+        elif action == 'resume':
+            clauses.append(f'{count} {phase}, and its member\'s "Resume processing" runs it again')
+        elif action == 'none' and phase == 'paused':
+            clauses.append(f'{count} paused, with nothing to resume or retry, until its member saves a change of a '
+                           'detail, which queues the update again')
+        elif action == 'none':
+            clauses.append(f'{count} {phase}, with nothing offered on its page')
+        elif action == 'unread':
+            clauses.append(f'{len(ids)} could not be read after the close')
+        else:
+            clauses.append(f'{count} {phase}, offering {action}')
+    return '; '.join(clauses)
+
+
+def with_update_note(note, closes) -> dict:
+    """Design v2 (FINAL-V2 6.4; amendment 1, 9.4; step 6b): the undo's declared note (interpretation_note's ``note``)
+    with what the closes ``closes`` did for the amendment's update: 'reading_closed' (the interpret and appraise stages
+    failed with the installer's note, which no earlier worker runs), 'update_pending' (the encounters that read an update
+    of their codes pending - a stated rollback limit like D59's 'reinstatable', never a refusal) and 'reverted' (the
+    unapplied values each such save had, set back to the current context's, with the saved and restored values), each
+    key given only when there is one, and each said in the note's sentence with what the operator does. D59's
+    reinstatable clause stays as interpretation_note wrote it. An answer that does not say what it read is said so,
+    never read as none. Refutation 6b-r2 F2 (DECISIONS D247): every sentence says what is so - an earlier revision that
+    runs both reading stages offers no retry and no resume of a reading stage the installer closed, and nothing is
+    queued for an update there (D247 DQ1's 'otherwise'). Refutation w7r 6b-r1 R2: what such an update then reads depends
+    on the stage the close left (a closed reading or document review reads paused, with nothing to resume, until its
+    member saves a change of a detail; a closed analysis or assessment reads failed, and "Try updating again" queues it
+    again), so the note words each pending update by what it reads after the close, as the close's image read its page
+    ('update_reads', grouped by the action offered) - never one reading for all, and no retry promised where none is
+    offered; one the close did not read is said so."""
+    out = dict(note) if isinstance(note, dict) else {'note': ''}
+    sentence = out.get('note') if isinstance(out.get('note'), str) else ''
+    parts = _undo_parts(closes)
+    reads = _update_reads(closes, parts[0]) if parts is not None else None
+    if parts is None or (reads is None and not parts[3]):
+        out['update_pending'] = None
+        out['note'] = (sentence + '; ' if sentence else '') + (
+            'the encounters with an update of their codes pending were not read (a close did not say what it read): '
+            'read each close in this receipt before anyone reviews on the earlier web')
+        return out
+    pending, reverted, reading, without_update = parts
+    clauses = []
+    if reading:
+        total = sum(reading.values())
+        said = (': the earlier image runs neither interpret nor appraise, and a context save there reads the document '
+                'with its own reader' if without_update else
+                ': each was failed with the installer\'s note, and nothing queues it again - the earlier revision runs '
+                'both, but offers no retry and no resume of a stage the installer closed')
+        clauses.append(f'{total} reading stage{"s were" if total != 1 else " was"} closed '
+                       f'({", ".join(f"{kind} {count}" for kind, count in reading.items())}){said}')
+        out['reading_closed'] = reading
+    if pending:
+        out['update_pending'] = sorted(pending)
+        if without_update:
+            said = (': the earlier image has no update and shows the codes from before the change, so tell those '
+                    'encounters\' members that the codes shown predate their change')
+        else:
+            # refutation w7r 6b-r1 R2: each update worded by what it reads after the close, never one reading for all
+            out['update_reads'] = reads
+            said = (': the earlier revision reads an update itself (its worker runs appraise), but each stage of it '
+                    'this revision\'s pair left open was closed with the others (failed, with the installer\'s '
+                    'note) and nothing queues it again; as this revision\'s page reads each after the close '
+                    '(update_reads; an earlier design v2 revision reads an update by the same amendment, 7.1 and '
+                    '7.2): ' + _reads_said(reads) + ' - tell those encounters\' members so')
+        clauses.append(f'{len(pending)} {"encounter reads" if len(pending) == 1 else "encounters read"} an update of '
+                       f'their codes pending (update_pending){said}')
+        checked = [pk for pk, reasons in pending.items() if 'reconciled_unknown' in reasons]
+        if checked:
+            clauses.append(f'{len(checked)} of them read an update no save started (a reconciled document review, '
+                           'A21)' + (': the earlier image reads that reconciled run as an outcome still being '
+                                     'confirmed, with nothing pending' if without_update else ''))
+    if reverted:
+        out['reverted'] = reverted
+        clauses.append(f'the unapplied details of {len(reverted)} {"encounter were" if len(reverted) == 1 else "encounters were"} '
+                       'set back to their current context\'s values (context.rollback_reverted; each field\'s saved '
+                       'and restored value is in reverted): ask each member to save the change again on the earlier web')
+    if clauses:
+        out['note'] = '; '.join(([sentence] if sentence else []) + clauses)
+    return out
+
+
+# REAPPLY_REVERTED's answer for the stage it queues again (D247 DQ1): the reasons it names in 'not_requeued', and the
+# kinds 'requeued' (jobs._owed_reading's) and 'coalesced' (jobs._coalesce's) may name
+REQUEUE_REASONS = ('reading_failed', 'no_stage', 'no_save', 'queued_before', 'not_readable')
+REQUEUED_KINDS = READING_STAGE_KINDS
+# studio.jobs.QUEUE_DEADLINE of this revision's image (a test pins the two equal): a queued stage waits that long for a
+# worker to claim it, then claim_next expires it before it starts (refutation w7r 6b-r1 R3). AMENDMENT-2 1.12: 60
+# minutes, since the one worker may hold a long note's two readings for about 20-27 minutes before it claims the next.
+# Round r3 (DECISIONS D320): a long note's question rounds at effort max make it 25-55 minutes, so 120 minutes - a stage
+# queued behind two long notes still starts.
+QUEUE_DEADLINE_MINUTES = 120
+COALESCED_KINDS = ('extract',) + READING_STAGE_KINDS
+
+
+def named_ids(ids) -> str:
+    """Encounter ids for a message (refutation 6b-r2 F1: the message names them): sorted, NAMED_LIMIT at most, then
+    how many more - every one is in the receipt."""
+    ordered = sorted(ids)
+    shown = ', '.join(ordered[:NAMED_LIMIT])
+    return shown + (f' and {len(ordered) - NAMED_LIMIT} more' if len(ordered) > NAMED_LIMIT else '')
+
+
+def _queued_said(put, requeued, coalesced, unqueued) -> bool:
+    """Whether REAPPLY_REVERTED's answer says, for each encounter it put back and for no other, what it queued again
+    (D247 DQ1): one of 'requeued' and 'coalesced' ({'kind', 'job'}) or 'not_requeued' (a reason it names)."""
+    if not all(isinstance(found, dict) for found in (requeued, coalesced, unqueued)):
+        return False
+    sets = (set(requeued), set(coalesced), set(unqueued))
+    if sets[0] & sets[1] or sets[0] & sets[2] or sets[1] & sets[2] or sets[0] | sets[1] | sets[2] != set(put):
+        return False
+    return (all(isinstance(item, dict) and item.get('kind') in REQUEUED_KINDS and isinstance(item.get('job'), str)
+                and item['job'] for item in requeued.values())
+            and all(isinstance(item, dict) and item.get('kind') in COALESCED_KINDS and isinstance(item.get('job'), str)
+                    and item['job'] for item in coalesced.values())
+            and all(why in REQUEUE_REASONS for why in unqueued.values()))
+
+
+def _kinds_said(found) -> str:
+    counted = {}
+    for item in found.values():
+        counted[item['kind']] = counted.get(item['kind'], 0) + 1
+    return ', '.join(f'{kind} {count}' for kind, count in sorted(counted.items()))
+
+
+def reapply_reverted(image_id, env_bytes, closes) -> dict:
+    """Design v2 (amendment 1, 9.4; refutation 6b-r1 P2): the unapplied saves the closes ``closes`` reverted for an
+    earlier image (CLOSE_STAGES' 'reverted'), put back by REAPPLY_REVERTED in ``image_id`` (this revision's image) - for
+    an undo that, after its close, leaves this revision's pair to serve again: its web serves on, or neither pair runs
+    and the next phase is the operator's, or rollback-app stopped with this pair to be started again (refutation 6b-r2
+    F1, DECISIONS D247); its worker reads the update itself. D247 DQ1: the put-back also queues again, once, the first
+    reading stage each update owes, as its save queued it (REAPPLY_REVERTED). {'asked': {encounter: [fields]},
+    'reapplied', 'not_reapplied', 'requeued', 'coalesced', 'not_requeued', 'problem', 'sentence'}: nothing runs and the
+    sentence is '' when no close reverted anything; a close that does not say what it reverted, or a put-back that fails
+    or does not say what it did, is the 'problem', said in the sentence with the encounters named and what the operator
+    does - never read as nothing to put back, nor as put back (an interrupt is never swallowed)."""
+    out = {'asked': {}, 'reapplied': {}, 'not_reapplied': {}, 'requeued': {}, 'coalesced': {}, 'not_requeued': {},
+           'problem': '', 'sentence': ''}
+    parts = _undo_parts(closes)
+    if parts is None:
+        out['problem'] = 'a close did not say what it set back'
+        out['sentence'] = ('the unapplied details a close may have set back to their context\'s values were not put '
+                           'back (a close did not say what it set back): read each close in this receipt, and ask '
+                           'the members of the encounters it names to check their details')
+        return out
+    reverted = parts[1]
+    if not reverted:
+        return out
+    out['asked'] = {pk: sorted(fields) for pk, fields in reverted.items()}
+    try:
+        answer = app_script(image_id, env_bytes, REAPPLY_REVERTED, {'reverted': reverted},
+                            what='Putting back the unapplied details the close set back')
+    except Exception as error:  # noqa: BLE001 — said, with what the operator does; an interrupt still stops the undo
+        answer, out['problem'] = None, str(error) or type(error).__name__
+    said = {name: answer.get(name) if isinstance(answer, dict) else None
+            for name in ('reapplied', 'not_reapplied', 'requeued', 'coalesced', 'not_requeued')}
+    put, kept = said['reapplied'], said['not_reapplied']
+    if not out['problem'] and not (
+            isinstance(put, dict) and isinstance(kept, dict) and not set(put) & set(kept)
+            and set(put) | set(kept) == set(reverted)
+            and all(isinstance(fields, list) and sorted(fields) == sorted(reverted[pk]) for pk, fields in put.items())
+            and all(isinstance(why, str) and why for why in kept.values())
+            and _queued_said(put, said['requeued'], said['coalesced'], said['not_requeued'])):
+        out['problem'] = 'the put-back did not say what it did'
+    if out['problem']:
+        # refutation 6b-r2 F1/F2: the encounters named; a put-back that failed or did not say what it did may have put
+        # some of them back (each encounter is its own transaction), so neither "put back" nor "not put back" is said
+        out['sentence'] = may_not_have_been_put_back(reverted, out['problem'], 'this revision\'s web')
+        return out
+    out.update(reapplied=dict(sorted(put.items())), not_reapplied=dict(sorted(kept.items())),
+               requeued=dict(sorted(said['requeued'].items())), coalesced=dict(sorted(said['coalesced'].items())),
+               not_requeued=dict(sorted(said['not_requeued'].items())))
+    clauses = []
+    if put:
+        clauses.append(f'the unapplied details the close had set back on {len(put)} '
+                       f'{"encounter were" if len(put) == 1 else "encounters were"} put back '
+                       '(context.rollback_reapplied): each reads its update pending again, as before the close')
+    requeued, coalesced, unqueued = out['requeued'], out['coalesced'], out['not_requeued']
+    # refutation w7r 6b-r1 R3 (D247 F2): a queued stage runs only if a worker claims it before its queue deadline -
+    # claim_next expires one claimed after it, without starting it (wherever no worker of this revision runs at the
+    # put-back: the stopped layouts) - so the sentence says what it reads while it waits, how long it may wait and what
+    # the update reads after, never that it simply runs
+    if requeued:
+        clauses.append(f'the first reading stage the update of {len(requeued)} of them owes was queued again, once '
+                       f'each ({_kinds_said(requeued)}; reapplied.requeued names each, under its save\'s key with the '
+                       'revert\'s audit row): while it waits for a worker of this revision the update reads '
+                       f'updating; claimed within the queue deadline ({QUEUE_DEADLINE_MINUTES} minutes from the '
+                       'put-back), it runs, its doors sending the save\'s request at most once; claimed after it, it '
+                       'expires without starting, and the update then reads stopped, with Resume')
+    if coalesced:
+        clauses.append(f'{len(coalesced)} of them had a reading stage still queued ({_kinds_said(coalesced)}), its '
+                       f'deadline renewed: claimed by a worker of this revision within {QUEUE_DEADLINE_MINUTES} '
+                       'minutes of the put-back, it reads the details put back; claimed after that, it expires without '
+                       'starting, and the update then reads stopped, with Resume')
+    failed = sorted(pk for pk, why in unqueued.items() if why == 'reading_failed')
+    if failed:
+        clauses.append(f'{len(failed)} of them had a reading that failed before the close, so nothing was queued for '
+                       'it, as a save queues nothing then: each shows that failure as it did before the close')
+    again = sorted(pk for pk, why in unqueued.items() if why == 'queued_before')
+    if again:
+        clauses.append(f'for {len(again)} of them a stage had been queued again for this revert before, so nothing '
+                       'more was queued')
+    unsaved = sorted(pk for pk, why in unqueued.items() if why == 'no_save')
+    if unsaved:
+        clauses.append(f'for {len(unsaved)} of them no member\'s save was found to queue a stage for, so nothing was '
+                       'queued: such an update reads paused, with nothing to resume, until its member changes a detail '
+                       'again, which queues its reading')
+    other = {pk: why for pk, why in unqueued.items() if why in ('no_stage', 'not_readable')}
+    if other:
+        clauses.append(f'for {len(other)} of them nothing was queued '
+                       f'({", ".join(f"{why} {list(other.values()).count(why)}" for why in sorted(set(other.values())))}'
+                       ': this revision\'s worker runs no such stage, or the revision\'s text was not read): such an '
+                       'update reads paused, with nothing to resume')
+    if kept:
+        clauses.append(f'{len(kept)} {"encounter was" if len(kept) == 1 else "encounters were"} left as the close set '
+                       f'{"it" if len(kept) == 1 else "them"}, having changed since (reapplied.not_reapplied names '
+                       'each): ask those members to check their details')
+    out['sentence'] = '; '.join(clauses)
+    return out
+
+
+def may_not_have_been_put_back(reverted, problem, where) -> str:
+    """The sentence for saves a put-back may or may not have put back - it failed, did not say what it did, or was
+    interrupted: REAPPLY_REVERTED puts each encounter back in its own transaction - naming the encounters
+    (``reverted``: CLOSE_STAGES' set-back fields by encounter) and saying neither "put back" nor "not put back"
+    (refutation 6b-r2 F1/F2); ``where`` is the web the members check their details on."""
+    return (f'the unapplied details the close set back on {len(reverted)} '
+            f'{"encounter" if len(reverted) == 1 else "encounters"} ({named_ids(reverted)}; context.rollback_reverted) '
+            f'may not have been put back ({problem}): context.rollback_reapplied names each one that was, so ask each '
+            f'of those members to check their details on {where}')
+
+
+def interrupted_put_back(closes, error) -> dict:
+    """reapply_reverted's answer for a put-back that raised before it answered - an interrupt (a Ctrl-C), or any error
+    reapply_reverted does not answer itself (refutation w7r 6b-r1 R1): any encounter asked may or may not have been put
+    back (each in its own transaction) - the 'problem', with 'interrupted' True, and the sentence naming them; what each
+    field was saved and restored as stays in the close's own record."""
+    parts = _undo_parts(closes)
+    reverted = parts[1] if parts is not None else {}
+    problem = (f'the put-back {"stopped on an error" if isinstance(error, Exception) else "was interrupted"} '
+               f'({str(error) or type(error).__name__})')
+    return {'asked': {pk: sorted(fields) for pk, fields in reverted.items()}, 'reapplied': {}, 'not_reapplied': {},
+            'requeued': {}, 'coalesced': {}, 'not_requeued': {}, 'problem': problem, 'interrupted': True,
+            'sentence': may_not_have_been_put_back(reverted, problem, 'whichever web serves next') if reverted else ''}
+
+
+def kept_serving(image_id, env_bytes, closes, details) -> str:
+    """reapply_reverted for an undo whose close set pending saves back and that then leaves this revision's pair to
+    serve again - its web keeps serving, neither pair runs for the operator to choose, or rollback-app stopped with this
+    pair to be started again (refutation 6b-r1 P2; refutation 6b-r2 F1, DECISIONS D247: before the message that says
+    so): recorded in ``details`` as 'reapplied' when anything was asked or went wrong; the sentence for the undo's
+    message (' ...' or '').
+
+    Refutation w7r 6b-r1 R1: an interrupt while the put-back runs is recorded here (interrupted_put_back: 'reapplied'
+    says so, and the sentence names the encounters the close set back as possibly not put back), never lost with the
+    message that was being built - the close's record of what each member saved is in ``details`` or the caller's
+    receipt. The phase still stops on it: every caller raises its message right after (rollback-app and the swap), or
+    returns it to an undo that raises it (the S4 undo, return_to_old_web, rollback-app in the keep layout)."""
+    try:
+        done = reapply_reverted(image_id, env_bytes, closes)
+    except BaseException as error:  # noqa: BLE001 — recorded and said; the caller's InstallError stops the phase
+        done = interrupted_put_back(closes, error)
+    if done['asked'] or done['problem']:
+        details['reapplied'] = done
+    return f' {done["sentence"][:1].upper()}{done["sentence"][1:]}.' if done['sentence'] else ''
+
+
+def not_put_back(closes, why, where='stages_closed.reverted') -> str:
+    """The sentence for an undo's message that may leave this revision's pair to serve again when the put-back could
+    not run (refutation 6b-r2 F1, DECISIONS D247) - an interrupt, or an undo left half way, which puts nothing back while
+    the earlier web may serve (F3): it names the encounters whose saves the close set back (context.rollback_reverted;
+    ``where`` names the receipt's field) and says they were not put back ' ...', or '' when nothing was set back."""
+    parts = _undo_parts(closes)
+    if parts is None:
+        return (' A close did not say which unapplied details it set back to their context\'s values, and nothing was '
+                f'put back ({why}): read each close in this receipt, and ask the members of the encounters it names to '
+                'check their details.')
+    reverted = parts[1]
+    if not reverted:
+        return ''
+    return (f' The unapplied details the close set back on {len(reverted)} '
+            f'{"encounter" if len(reverted) == 1 else "encounters"} ({named_ids(reverted)}; context.rollback_reverted, '
+            f'each field\'s saved and restored value in {where}) were not put back '
+            f'({why}): whichever web serves next, ask each of those members to save the change again there.')
+
+
+def possibly_set_back(started_at) -> str:
+    """The switch-back's clause (refutation r3, D-5), its subject the close, for a close that was started and gave no
+    answer - CLOSE_STAGES commits its revert, then reads every encounter, so it may have set pending saves back with
+    nothing said - carried by every undo whose close may have raised after its commit (refutation 6b-r2 F4, DECISIONS
+    D247): 'may have set back ... (context.rollback_reverted rows since ``started_at``) ...'."""
+    return ('may have set back the unapplied details of encounters with an update of their codes pending '
+            f'(context.rollback_reverted rows since {started_at}), which were not put back: ask those members to check '
+            'their details')
+
+
+def set_back_clause(closes) -> str:
+    """The sentence for an undo's message whose closes set pending saves back and that hands the rows to the earlier
+    pair (refutation 6b-r1 P2: a message that omitted the revert): ' ...' or '' when nothing was set back."""
+    parts = _undo_parts(closes)
+    if parts is None:
+        return (' A close did not say which unapplied details it set back to their context\'s values: read each close '
+                'in this receipt before anyone reviews on the earlier web.')
+    reverted = parts[1]
+    if not reverted:
+        return ''
+    return (f' The close set the unapplied details of {len(reverted)} '
+            f'{"encounter" if len(reverted) == 1 else "encounters"} back to their context\'s values for the earlier pair '
+            '(stages_closed.reverted names each field\'s saved and restored value): once it serves, ask each of those '
+            'members to save the change again there.')
+
+
+def undone_note(note, served=None, kept=None) -> dict:
+    """The declared note of an undo that handed the site to NO earlier pair after its close (refutation 6b-r1 P2): a
+    switch-back undone before its switch, or a way back that kept this revision's web serving. interpretation_note's
+    ``note`` as it was counted (D59's 'reinstatable' clause kept), with 'handed': False and a first clause saying no
+    earlier web read the rows - never with_update_note's instructions for an earlier web's members, which no earlier web
+    served (what the close set back, and what was put back, is in the receipt's close and 'reapplied').
+
+    Refutation 6b-r2 F5 (DECISIONS D247): ``served`` - {'from', 'until', 'update_pending'} - when nginx may have routed to
+    the earlier web before the undo settled the vhost back (a B5 undo whose nginx_may_have_read was true): the note then
+    says that earlier web may have served from the switch until the settle, what members who used it saw there, and
+    names the encounters with an update pending ('update_pending'; 'served' records the window). ``kept`` says why no
+    earlier web read the rows when it is not that the undo kept this revision's web serving (rollback-app whose removal
+    stopped after a put-back, refutation 6b-r2 F1).
+
+    Refutation w7r 6b-r1 R5: ``served['reconciled_unknown']`` names the encounters among them whose only reason is A21's
+    (an update no save started): no change of their members was pending, so they are worded apart, as with_update_note
+    words them - never said to have seen "the codes from before their change"."""
+    out = dict(note) if isinstance(note, dict) else {'note': ''}
+    sentence = out.get('note') if isinstance(out.get('note'), str) else ''
+    out['handed'] = False
+    if served:
+        unread = served.get('update_pending') is None  # the close did not say what it read: never read as none
+        pending = [] if unread else sorted(served['update_pending'])
+        unstarted = sorted(set(served.get('reconciled_unknown') or ()) & set(pending))
+        changed = [pk for pk in pending if pk not in unstarted]
+        out['served'] = {'from': served.get('from'), 'until': served.get('until')}
+        out['update_pending'] = None if unread else pending
+        saw = []
+        if changed:
+            saw.append(f'the members of the {len(changed)} {"encounter" if len(changed) == 1 else "encounters"} with '
+                       'an update of their codes pending (update_pending) who used it in that window saw the codes '
+                       'from before their change there (AMENDMENT-1 9.4 says what the earlier web shows for each)')
+        if unstarted:
+            saw.append(f'{len(unstarted)} {"encounter" if len(unstarted) == 1 else "encounters"} with an update '
+                       'pending read an update no save started (a reconciled document review, A21), so no change of '
+                       'their members was pending: an earlier image with no update reads that reconciled run as an '
+                       'outcome still being confirmed, with nothing pending (AMENDMENT-1 9.4)')
+        first = (f'the earlier web may have served from the switch ({served.get("from")}) until the settle '
+                 f'({served.get("until")}): nginx was asked to reload with the vhost naming it and was proven to route to '
+                 'this revision\'s web again only at the settle, the requests it had taken by then finishing during its '
+                 'drain, and the undo then kept this revision\'s web serving'
+                 + ('; the encounters with an update of their codes pending were not read (the close did not say what '
+                    'it read): read it in this receipt, tell the members of those it names that they may have seen the '
+                    'codes from before their change there, and check any decision or export made there in that window'
+                    if unread else
+                    '; ' + '; '.join(saw) + ': tell those members, and check any decision or export made there in that '
+                    'window' if saw else '')
+                 + '; what follows is what that web read')
+    else:
+        why = kept or 'the undo kept this revision\'s web serving'
+        first = f'handed to no earlier web: {why}, so what follows is what an earlier web would have read'
+    out['note'] = '; '.join([first] + ([sentence] if sentence else []))
+    return out
+
+
+def v1_rows(image_id, env_bytes) -> dict:
+    """FINAL-V2 6.2 [R:MO-1]: the design v1 rows on the target (V1_ROWS, in this revision's image)."""
+    return app_script(image_id, env_bytes, V1_ROWS, {'engine_version': V1_ENGINE_VERSION,
+                                                     'interpretation_version': V1_INTERPRETATION_VERSION,
+                                                     'limit': NAMED_LIMIT},
+                      what='Reading the target for design v1 rows')
+
+
+def v1_rows_refusal(answer):
+    """None when ``answer`` (V1_ROWS') says no design v1 row exists; otherwise the refusal's message. An answer that
+    does not say what it read, or counted other versions, refuses (D66: never read as "none")."""
+    if not (isinstance(answer, dict) and answer.get('engine_version') == V1_ENGINE_VERSION
+            and answer.get('interpretation_version') == V1_INTERPRETATION_VERSION
+            and all(type(answer.get(key)) is int and answer[key] >= 0
+                    for key in ('assessments', 'inventories', 'encounter_count'))
+            and _is_ids(answer.get('encounters')) and len(answer['encounters']) <= answer['encounter_count']
+            and (answer['encounter_count'] == 0) == (answer['assessments'] == answer['inventories'] == 0)):
+        return ('the read of the target for design v1 rows gave no answer it could be judged by; nothing was replaced '
+                '(FINAL-V2 6.2: the install refuses unless it is shown that no v1 row exists)')
+    if answer['encounter_count'] == 0:
+        return None
+    shown = ', '.join(answer['encounters'])
+    more = answer['encounter_count'] - len(answer['encounters'])
+    return (f'the target holds design v1 rows - {answer["assessments"]} assessment(s) of engine {V1_ENGINE_VERSION} and '
+            f'{answer["inventories"]} event inventor{"y" if answer["inventories"] == 1 else "ies"} of '
+            f'{V1_INTERPRETATION_VERSION}, on {answer["encounter_count"]} encounter(s): {shown}'
+            + (f' and {more} more' if more > 0 else '') + '; nothing was replaced (FINAL-V2 6.2 [R:MO-1]: this '
+            'release is installed only where no v1 row exists - live never held one; a test instance\'s are read as '
+            'stored and retired with that instance, never deleted by the installer)')
+
+
+def install_counts(image_id, env_bytes) -> dict:
+    """Amendment 1, 9.5: the install counts (INSTALL_COUNTS, in this revision's image), with 'report' - the sentences the
+    owner is told before the switch (class b; a non-zero A21 count, which is reported, not asked). NEVER a refusal: a
+    read that fails, or an answer that does not say what it read, is recorded as not counted (an interrupt is never
+    swallowed), and the install goes on."""
+    try:
+        answer = app_script(image_id, env_bytes, INSTALL_COUNTS, {'limit': NAMED_LIMIT,
+                                                                  'token_sentence': CORTI_TOKEN_REFUSAL},
+                            what='Counting what the owner is told before the switch (amendment 1, 9.5)')
+    except Exception as error:  # noqa: BLE001 — printed, never a refusal (9.5)
+        return {'counted': False, 'why': str(error) or type(error).__name__,
+                'report': ['the install counts of amendment 1, 9.5 were not read: read them on the test instance\'s '
+                           'restored dump before reporting to the owner']}
+    problem = counts_problem(answer)
+    if problem:
+        return {'counted': False, 'why': problem, 'answer': answer,
+                'report': ['the install counts of amendment 1, 9.5 did not say what they read: read them on the test '
+                           'instance\'s restored dump before reporting to the owner']}
+    return {'counted': True, **answer, 'report': counts_report(answer)}
+
+
+def counts_problem(answer) -> str:
+    """'' when ``answer`` is INSTALL_COUNTS' answer in its shape; otherwise what is wrong with it."""
+    def count(value):
+        return type(value) is int and value >= 0
+    if not isinstance(answer, dict):
+        return 'no answer'
+    size, values, refused, a21, holds = (answer.get(key) for key in ('size', 'values', 'refused', 'a21', 'holds'))
+    if not (isinstance(size, dict) and all(count(size.get(key)) for key in (
+            'bound_chars', 'bound_pages', 'longest_chars', 'without_inventory', 'over_chars', 'over_pages', 'unframed',
+            'unframed_empty', 'unframed_unextracted'))
+            and isinstance(size.get('encounters'), dict)
+            and all(_is_ids(size['encounters'].get(key)) and len(size['encounters'][key]) <= size[key]
+                    for key in ('over_chars', 'over_pages', 'unframed'))
+            and size['over_chars'] + size['over_pages'] <= size['without_inventory']
+            and size['unframed_unextracted'] <= size['unframed_empty'] <= size['unframed'] <= size['without_inventory']):
+        return 'the size count is not in its shape'
+    if not (isinstance(values, dict) and count(values.get('count')) and type(values.get('first_install')) is bool
+            and _is_ids(values.get('encounters')) and len(values['encounters']) <= values['count']
+            and (values['first_install'] or not values['encounters'])):
+        return 'the saved-values count is not in its shape'
+    if not (isinstance(refused, dict) and set(refused) == {'corti_sent', 'participant_sent', 'corti_token'}
+            and all(isinstance(item, dict) and count(item.get('count'))
+                    and (item.get('newest') is None) == (item['count'] == 0)
+                    and (item.get('newest') is None or isinstance(item['newest'], str))
+                    for item in refused.values())):
+        return 'the refusal count is not in its shape'
+    if not (isinstance(a21, dict) and count(a21.get('count')) and _is_ids(a21.get('encounters'))
+            and len(a21['encounters']) <= a21['count']):
+        return 'the A21 count is not in its shape'
+    if not (isinstance(holds, dict) and isinstance(holds.get('provider'), dict)
+            and all(isinstance(items, list) for items in holds['provider'].values())
+            and isinstance(holds.get('interpreter'), list)):
+        return 'the holds are not in their shape'
+    return ''
+
+
+def counts_report(answer) -> list:
+    """The sentences the owner is told before the switch (amendment 1, 9.5), from INSTALL_COUNTS' ``answer``: each
+    non-zero class-b count, and a non-zero A21 count; [] when there is nothing to report."""
+    size, values, refused, a21 = answer['size'], answer['values'], answer['refused'], answer['a21']
+    report = []
+    if size['over_chars'] or size['over_pages']:
+        report.append(f'{size["over_chars"]} encounter(s) over {size["bound_chars"]} characters and '
+                      f'{size["over_pages"]} over {size["bound_pages"]} pages have no inventory at the current '
+                      'versions: their details cannot be changed after the install (A12, class b)')
+    # refutation 6b-r1 P8: a revision whose extraction failed or has not run has no text, and the installed release
+    # refuses a context save on it too ("once the document text has been extracted"): no capability is lost there
+    lost = size['unframed'] - size['unframed_unextracted']
+    if lost:
+        empty = size['unframed_empty'] - size['unframed_unextracted']
+        report.append(f'{lost} encounter(s) with no inventory at the current versions have a text that cannot be framed'
+                      + (f' ({empty} of them an extracted text that is empty)' if empty else '')
+                      + ': their details cannot be changed after the install (A12, class b)')
+    if size['unframed_unextracted']:
+        report.append(f'{size["unframed_unextracted"]} encounter(s) have no text because their extraction failed or has '
+                      'not run: the installed release refuses a change of their details too, so nothing is lost there '
+                      '(not class b)')
+    report.append(f'an addendum that would take a document over {size["bound_chars"]} characters, or whose text cannot be '
+                  f'framed, is refused before it is recorded (A12); the longest current document is '
+                  f'{size["longest_chars"]} characters')
+    if values['first_install'] and values['count']:
+        report.append(f'{values["count"]} encounter(s) hold saved details their current context does not (first install, '
+                      f'expected 0): they would read an update no save queued - {", ".join(values["encounters"])}')
+    sent, participant, token = refused['corti_sent'], refused['participant_sent'], refused['corti_token']
+    if sent['count'] or participant['count'] or token['count']:
+        report.append(f'refusals recorded before the install that no hold names: Corti {sent["count"]} (newest '
+                      f'{sent["newest"]}) - each stays held against its identical request, and an update meeting one '
+                      f'ends failed and cannot finish for those details on that encounter (7.1\'s refused-before row); '
+                      f'participants {participant["count"]} (newest {participant["newest"]}) - each stays held against '
+                      'its identical request, and an update meeting one goes on without that participant\'s check (it '
+                      f'completes partial, 7.1); Corti token refusals {token["count"]} (newest {token["newest"]}) - each '
+                      'sent once after the install, a refusal again setting the hold (amendment 1, 7.3, class b)')
+    if a21['count']:
+        report.append(f'{a21["count"]} encounter(s) hold a reconciled unknown document review while a reading is owed '
+                      f'(A21, expected 0): from the install on they read an update no save started - '
+                      f'{", ".join(a21["encounters"])}')
+    return report
+
+
+def counts_summary(counts) -> str:
+    """One clause of the app receipt's summary for the install counts (amendment 1, 9.5)."""
+    if not isinstance(counts, dict) or counts.get('counted') is not True:
+        return '; install counts NOT read (9.5): see the receipt'
+    size, values, refused, a21 = counts['size'], counts['values'], counts['refused'], counts['a21']
+    standing = sum(len(items) for items in counts['holds']['provider'].values())
+    return (f'; install counts: {size["over_chars"]} over the character bound, {size["over_pages"]} over the page '
+            f'bound, {size["unframed"]} unframed, longest {size["longest_chars"]} characters; {values["count"]} with '
+            f'saved details not yet read; {sum(item["count"] for item in refused.values())} refusal(s) recorded before '
+            f'the install; {a21["count"]} A21; {standing} provider hold(s) and {len(counts["holds"]["interpreter"])} '
+            'interpreter hold(s) standing' + (f'; {len(counts["report"])} item(s) for the owner' if counts['report'] else ''))
+
+
+def target_reads(prev_image, env_bytes, kinds) -> frozenset:
+    """DECISIONS D51: the hazard reasons the revision a switch-back returns to reads as this revision wrote them, so
+    they are no hazard to it: 'participant' when its worker runs a participant stage (astra or fable), the three second
+    review reasons when it runs review2 (``kinds``: stage_kinds_of its image), and 'member_answer' and 'modifier' as its
+    own models say (TARGET_MODEL_READS, in its image). Never 'unknown', 'outcome', 'conflict' or 'reinstatement'."""
+    reads = set()
+    if {'astra', 'fable'} & set(kinds):
+        reads.add('participant')
+    if 'review2' in kinds:
+        reads.update(('second_review', 'second_review_refused', 'second_review_unread'))
+    answer = app_script(prev_image, env_bytes, TARGET_MODEL_READS, {},
+                        what='Reading which review records the previous revision reads')
+    reads.update(reason for reason in answer.get('reads') or () if reason in ('member_answer', 'modifier'))
+    return frozenset(reads)
+
+
+def touched_encounters(image_id, env_bytes, since) -> set:
+    """DECISIONS D51: the encounters with a record created since ``since`` (TOUCHED_SINCE_READ, in this image)."""
+    answer = app_script(image_id, env_bytes, TOUCHED_SINCE_READ, {'since': since.isoformat()},
+                        what='Reading what this revision wrote since its pair was created')
+    return set(answer['touched'])
+
+
+def switch_back_hazards(hazards, reads, touched) -> dict:
+    """DECISIONS D51 (the S17 rollback test, D15 assertion 5): of ``hazards`` (undo_hazards' {encounter id: reasons},
+    read as the oldest revision reads the rows), those a switch-back must refuse on. A switch-back returns to the pair
+    this revision replaced: a reason that revision reads (``reads``: target_reads) is no hazard to it, and an encounter
+    with no record created since this revision's pair (``touched``) holds only what that pair itself left there - its
+    status quo before the switch, as it served it. On live data the unfiltered read named 23 such legacy encounters
+    (participant, member_answer, modifier), so the switch-back refused whatever this revision had done. A hazards value
+    that is not a dict is returned as it is (the caller refuses on it)."""
+    if not isinstance(hazards, dict):
+        return hazards
+    out = {}
+    for pk, reasons in hazards.items():
+        left = [reason for reason in (reasons or ()) if reason not in reads]
+        if left and pk in touched:
+            out[pk] = left
+    return out
+
+
 def hazard_summary(hazards) -> str:
     counts = {}
     for reasons in hazards.values():
@@ -2574,7 +4082,12 @@ def hazard_summary(hazards) -> str:
 # The harness: a code only a participant proposed is one too (the older web shows it as the provider's proposal).
 # The core repair (2026-11-03): a member's answer that stands, and a chosen modifier, are two more (the older web reads
 # neither: it asks the answered question again, and shows the approval without its modifier).
-SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant', 'member_answer', 'modifier')
+SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant', 'member_answer', 'modifier',
+                 'reinstatement')  # D51: an older overlay adds no hold for a new-path reinstatement
+# The Gemini migration (ADJUDICATION P-1, which governs design/FINAL.md 13): an assessment made from an event inventory
+# is NOT a hazard of either kind - not here and not in UNDO_HAZARDS. An earlier image reads it fail-closed (it keeps
+# every stored hold and releases none), so naming it would only make switch-back and rollback-app refuse. They write it
+# as a declared note in their receipts instead (INTERPRETATION_MADE, interpretation_note) and go on.
 
 
 def hazards_by_kind(hazards):
@@ -2627,8 +4140,10 @@ def put_back_states(closed, older_image, image_id, env_bytes) -> dict:
                       what='Putting back the list states the installed revision 057a7d39 derives')
 
 
-def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None) -> dict:
-    """Replace the web and worker (``participants``: each harness participant's mode, disabled when not given) the way
+def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *,
+                     interpreter=None) -> dict:
+    """Replace the web and worker (``participants``: each harness participant's mode, disabled when not given;
+    ``interpreter``: the interpreter's, disabled when not given) the way
     replacement_plan reads the host - after migrate, as before, and right before anything is started or stopped (a
     refusal starts and stops nothing; preflight has refused the same states before the install began): a served site
     is switched blue/green (switch_services, which never stops its web; it needs this install's preflight receipt, the
@@ -2636,18 +4151,20 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref,
     was (swap_services). The receipt's 'replacement' says which, and why."""
     plan = replacement_plan(ctx)
     summary = {key: plan[key] for key in ('mode', 'why', 'vhost', 'vhost_sha256', 'live', 'idle', 'port') if key in plan}
+    # named only when it is not the default, so a stand-in of either keeps the arguments it always had
+    interpreting = {'interpreter': interpreter} if (interpreter or 'disabled') != 'disabled' else {}
     if plan['mode'] == 'blue-green':
         preflight = require_receipt(ctx, 'preflight')
         services = switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants,
-                                   preflight=preflight, plan=plan)
+                                   preflight=preflight, plan=plan, **interpreting)
     else:
         services = swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants,
-                                 port=plan['port'])
+                                 port=plan['port'], **interpreting)
     return {**services, 'replacement': summary}
 
 
 def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *,
-                  port=WEB_PORT) -> dict:
+                  port=WEB_PORT, interpreter=None) -> dict:
     """The swap of a host where nothing is served through the vhost (replacement_plan's 'fresh'). Park
     the old pair, start the new pair, its web on 127.0.0.1:``port`` (``participants``: each harness participant's
     mode, disabled when not given); on any failure stop what was started, close every stage it left open
@@ -2657,17 +4174,20 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
     closed, whose states cannot be put back, or whose web would show a state wrongly whatever it is handed (the close
     names it for a SHOWN_HAZARDS reason, and the old pair is not this same revision) is never restored over them: the
     new pair is left stopped and the old one parked, for rollback-app. On success the old pair is left parked: phase_app
-    removes it (retire_parked) once the stored list states are recomputed."""
+    removes it (retire_parked) once the stored list states are recomputed. 'worker_started_at' is when the new worker
+    was started (ADJUDICATION P-7: the verify one-shot's window begins there, as blue/green's begins at S4)."""
     parked, launched, started = {}, [], {}
-    swapped_at = None
+    swapped_at = worker_started_at = None
     try:
         for role in ('worker', 'web'):  # the worker first, so no stage runs across the switch
             parked[role] = park(role)
         swapped_at = dt.datetime.now(dt.timezone.utc)  # every stage created from here on is the new pair's
         for role in ('web', 'worker'):
             launched.append(role)
+            if role == 'worker':
+                worker_started_at = utc_now_ms()
             docker('run', '-d', *service_args(role, image_id, ctx.revision, provider_mode, authorization_ref,
-                                              participants, port=port),
+                                              participants, port=port, interpreter=interpreter),
                    input=env_bytes, quiet=True)
             # WEB_PORT is wait_service's own default, and is left to it (callers' stand-ins keep its three arguments)
             started[role] = wait_service(role, ctx.revision, image_id, **({'port': port} if port != WEB_PORT else {}))
@@ -2683,13 +4203,16 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
         if launched and any(parked.values()):
             previous = parked.get('worker') or parked.get('web')
             kinds = stage_kinds_of(previous['image'], env_bytes)  # what the restored worker runs (p1, security-0)
+            close_started = utc_now_ms()  # refutation 6b-r2 F4's class: a close that raises may have committed first
             try:
                 closed = close_undone_stages(image_id, env_bytes, swapped_at, ctx.revision,
                                              'its installation failed and the previous revision was restored', kinds)
             except BaseException as error:
                 raise InstallError(f'{failure}; the stages the new pair left open could not then be closed ({error}), '
                                    'so the new pair was left stopped and the previous pair parked (*-previous): run '
-                                   '--phase rollback-app, then rename the parked pair back.') from error
+                                   '--phase rollback-app, then rename the parked pair back. The close was started and '
+                                   f'gave no answer: it {possibly_set_back(close_started)}.',
+                                   details={'close_started_at': close_started}) from error
             hazards = closed.get('hazards')
             shown, acting = hazards_by_kind(hazards)
             # Refutation p2, the skeptic of the install2:1 repair: a state the restored web would show wrongly whatever
@@ -2700,6 +4223,10 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
             # does, and is restored as usual.
             if (shown is None or shown) and not same_revision(previous, ctx.revision):
                 named = hazard_summary(shown) if shown is not None else 'the close did not say which encounters'
+                # refutation 6b-r1 P2: neither pair runs and the operator chooses - keeping this revision reads the
+                # saves the close set back as its own update, going back sets them back again (rollback-app's close)
+                left = {'hazards': hazards, 'stages_closed': closed}
+                said = kept_serving(image_id, env_bytes, [closed], left)
                 raise InstallError(
                     f'{failure}; {named} hold states the previous revision would show wrongly whatever it is handed '
                     '(a bounded second review whose response was refused whole, or whose outcome is unknown or not '
@@ -2709,16 +4236,18 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                     '(*-previous). To keep this revision, remove the parked pair by hand and run --phase app again '
                     'once its failure is fixed; to go back, start this pair again, clear them on its web '
                     '(ops/INSTALL.md, Reinstalling an older revision), run --phase rollback-app, then rename the '
-                    'parked pair back.', details={'hazards': hazards, 'stages_closed': closed}) from failure
+                    'parked pair back.' + said, details=left) from failure
             # Refutation p2, install2:1: the restored pair shows a stored state by its own labels - a response this
             # revision refused whole would read 'Provider request failed' - so it is handed its own derivation of those.
             try:
                 put_back = put_back_states(closed, previous['image'], image_id, env_bytes)
             except BaseException as error:
+                # refutation 6b-r1 P2: the only way on is back to the previous pair, which reads the saves the close
+                # set back as set back - so they stay so, and the message and the receipt say it
                 raise InstallError(f'{failure}; the list states the previous revision labels otherwise could not then '
                                    f'be put back ({error}), so the new pair was left stopped and the previous pair '
                                    'parked (*-previous): run --phase rollback-app, then rename the parked pair '
-                                   'back.') from error
+                                   'back.' + set_back_clause([closed]), details={'stages_closed': closed}) from error
             ctx.log('undo', json.dumps({**closed, 'states_put_back': put_back}).encode())
             # Refutation p1, migrate-0/-1: this path cannot refuse, so while the close names records the restored
             # revision would act on under its own rules (a send without a date, an identical re-send of a request that
@@ -2733,6 +4262,9 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 docker('rename', SERVICES[role] + '-previous', SERVICES[role])
                 if role != 'worker' or not hold_worker:
                     docker('start', SERVICES[role])
+        # refutation w7r 6b-r1 (its observation, 6b-r1 P2's class): the previous pair was handed the rows, so a close
+        # that set pending saves back is said in the message - and recorded in the receipt, not only in the undo log
+        set_back = set_back_clause([closed]) if closed is not None else ''
         if hold_worker:
             hazards = closed.get('hazards')
             named = hazard_summary(acting) if acting is not None else 'the close did not say which'
@@ -2740,10 +4272,15 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 f'{failure}; the previous web was restored and its worker ({SERVICES["worker"]}) left stopped, so '
                 f'nothing can be sent: {named} hold records it would act on under its own rules (ops/INSTALL.md, '
                 'Reinstalling an older revision). Install this revision again once its failure is fixed: its worker '
-                'reads them under its own rules.', details={'hazards': hazards, 'stages_closed': closed,
-                                                            'states_put_back': put_back}) from failure
+                'reads them under its own rules.' + set_back, details={'hazards': hazards, 'stages_closed': closed,
+                                                                       'states_put_back': put_back}) from failure
+        if set_back:
+            raise InstallError(f'{str(failure) or type(failure).__name__}; the previous pair was restored.' + set_back,
+                               details={**(failure.details if isinstance(getattr(failure, 'details', None), dict)
+                                           else {}),
+                                        'stages_closed': closed, 'states_put_back': put_back}) from failure
         raise
-    return {'started': started, 'replaced': parked}
+    return {'started': started, 'replaced': parked, 'worker_started_at': worker_started_at}
 
 
 def retire_parked(parked):
@@ -2762,7 +4299,8 @@ def retire_parked(parked):
 #            verified, nor while a verified switch could still be undone.
 #   I-worker at most one worker runs; the old one is stopped before any new-revision web takes traffic, and the new one
 #            starts only after the old one has exited (no stale-stage sweep races a live stage).
-#   I-jobs   the old worker's current stage finishes (docker stop --time 600); queued stages wait for the new worker.
+#   I-jobs   the old worker's current stage finishes (docker stop --time 1800, STOP_SECONDS['worker']); queued stages
+#            wait for the new worker.
 #   I-state  the stored list states are recomputed only once both old containers have stopped (phase_app).
 #   I-undo   every failure leaves the site served by a healthy web; today's hazard semantics are kept, and switching
 #            back replaces restarting a stopped web.
@@ -3273,14 +4811,14 @@ def stop_incoming_web() -> str:
 
 
 def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *, preflight,
-                    plan) -> dict:
+                    plan, interpreter=None) -> dict:
     """The blue/green replacement (replacement_plan's 'blue-green'): the serving web is never stopped before the switch
     is verified and drained.
 
       S1  start the incoming web, INCOMING_WEB, on the idle port; it must answer health_ok for this revision and serve
           its own sign-in page and static files (smoke_web) - the old web still serves everything
-      S2  park the old worker (docker stop --time 600: its current stage finishes; nothing new is claimed) - the old web
-          still serves, and what members start waits in the queue
+      S2  park the old worker (docker stop --time 1800, STOP_SECONDS['worker']: its current stage finishes; nothing
+          new is claimed) - the old web still serves, and what members start waits in the queue
       S3  switch the vhost's upstream to the idle port (switch_upstream: atomic replace, nginx -t, graceful reload,
           /health/ = this revision through the public path, co-tenants unchanged)
       S4  start the new worker - processing resumes under the new rules
@@ -3309,7 +4847,8 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
     try:
         step('S1')
         docker('run', '-d', *service_args('web', image_id, ctx.revision, provider_mode, authorization_ref, participants,
-                                          name=INCOMING_WEB, port=idle), input=env_bytes, quiet=True)
+                                          name=INCOMING_WEB, port=idle, interpreter=interpreter),
+               input=env_bytes, quiet=True)
         started['web'] = wait_service('web', ctx.revision, image_id, name=INCOMING_WEB, port=idle)
         record['smoke'] = smoke_web(idle)
         step('S2')
@@ -3319,7 +4858,7 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
                                            from_revision=plan['web']['revision'])
         step('S4')
         docker('run', '-d', *service_args('worker', image_id, ctx.revision, provider_mode, authorization_ref,
-                                          participants), input=env_bytes, quiet=True)
+                                          participants, interpreter=interpreter), input=env_bytes, quiet=True)
         started['worker'] = wait_service('worker', ctx.revision, image_id)
         step('S5')
         record['drain'] = drain_web(live)
@@ -3747,8 +5286,9 @@ def return_to_old_web(ctx, cause, *, image_id, env_bytes, preflight, live, idle,
     try:
         details['states_put_back'] = put_back_states(first, previous.get('image'), image_id, env_bytes)
     except BaseException as error:  # noqa: BLE001
+        # refutation 6b-r1 P2: the new web keeps serving, so the saves the first close set back are put back
         return (f'{cause}; the list states the old revision labels otherwise could not be put back ({error}), so '
-                f'{keep}.', details, 'kept')
+                f'{keep}.' + kept_serving(image_id, env_bytes, [first], details), details, 'kept')
     back = {}
     try:
         details['switch_back'] = switch_upstream(ctx, preflight, idle, live, revision=old_revision, progress=back,
@@ -3765,23 +5305,31 @@ def return_to_old_web(ctx, cause, *, image_id, env_bytes, preflight, live, idle,
                         f'the old worker parked ({worker}-previous). Remove neither before reading which one nginx '
                         'serves: read "left" in this receipt, then ops/INSTALL.md, Recovery notes (a switch that '
                         'stopped half way). The list states were put back to the old revision\'s: rerun --phase app, '
-                        'which recomputes them.', details, 'halfway')
+                        'which recomputes them.'
+                        # refutation 6b-r2 F3: nothing is put back half way; F1: the saves set back are named
+                        + not_put_back([first], 'an undo left half way puts nothing back while the earlier web may '
+                                                'serve'), details, 'halfway')
+        # refutation 6b-r1 P2: nginx never read the switched vhost, so the old web served nothing and the new web
+        # keeps serving: the saves the first close set back are put back
         return (f'{cause}; the switch back to the old web failed ({error}) and the vhost was left on the new one, so '
                 f'{keep}. The list states were put back to the old revision\'s: rerun --phase app, which recomputes '
-                'them.', details, 'kept')
+                'them.' + kept_serving(image_id, env_bytes, [first], details), details, 'kept')
     done = finish_back(ctx, image_id=image_id, env_bytes=env_bytes, idle=idle, previous=previous,
                        parked_worker=parked_worker, kinds=kinds, reason=reason, since=first_at, closes=[],
                        details=details, worker=True,
                        hold=lambda every: return_hold(first, every[-1], same=same, first_at=first_at))
     switched = f'{cause}; the vhost was switched back, so {web} (revision {old_revision[:12]}) serves on {live} again'
+    # the old web is handed the rows, so what the closes set back for it is said in the message (refutation w7r 6b-r1's
+    # observation, 6b-r1 P2's class: a message that omitted the revert)
+    set_back = set_back_clause([first, details.get('stages_closed_after_drain')])
     if done['outcome'] == 'back':
         return (f'{switched}; {done["problem"]}. {left_for_rollback_app()} Migrations already applied are not '
-                'reversed.', details, 'back')
+                'reversed.' + set_back, details, 'back')
     held = (f' It is held - nothing can be sent - because {"; ".join(done["notes"])} (ops/INSTALL.md, Reinstalling an '
             'older revision).') if done['hold'] else ((' ' + '; '.join(done['notes']) + '.') if done['notes'] else '')
     removed = 'the new worker was removed' if done['worker_removed'] else 'there was no new worker to remove'
     return (f'{switched}; {removed} and the incoming web {done["removed"]}; the old worker was {done["worker_note"]}.'
-            f'{held} Migrations already applied are not reversed.', details, done['outcome'])
+            f'{held} Migrations already applied are not reversed.' + set_back, details, done['outcome'])
 
 
 def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, progress, previous, kinds,
@@ -3789,14 +5337,18 @@ def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, 
     live, idle = plan['live'], plan['idle']
     worker = SERVICES['worker']
     log_tail(ctx, worker, 'worker', 'worker-failed')
-    stop_service_container(worker, 'worker')  # its current stage finishes (600 s)
+    stop_service_container(worker, 'worker')  # its current stage finishes (STOP_SECONDS['worker'], 1,800 s)
     keep = keep_note(live, idle)
     details = {} if details is None else details
     first_at = dt.datetime.now(dt.timezone.utc)
     try:
         closed = close_undone_stages(image_id, env_bytes, progress['applied_at'], ctx.revision, reason, kinds)
     except BaseException as error:  # noqa: BLE001
-        return (f'{cause}; {close_did_not_finish("the stages the new pair left open", error)}, so {keep}.', details)
+        # refutation 6b-r2 F4 (DECISIONS D247): the close may have committed its revert before it raised, and the new
+        # web keeps serving: the switch-back's clause names the context.rollback_reverted rows since it started
+        details['close_started_at'] = first_at.isoformat()
+        return (f'{cause}; {close_did_not_finish("the stages the new pair left open", error)}, so {keep}. The close '
+                f'{possibly_set_back(first_at.isoformat())}.', details)
     details['stages_closed'] = closed
     shown, acting = hazards_by_kind(closed.get('hazards'))
     if shown is not None and not same_revision(previous, ctx.revision):
@@ -3809,7 +5361,7 @@ def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, 
         return (f'{cause}; {named} hold states the old revision would show wrongly whatever it is handed (a bounded '
                 'second review refused whole or not read, a code only a harness participant proposed, a member\'s '
                 'answer or a chosen modifier written since this switch began), and this revision shows them as they '
-                f'are: {keep}.', details)
+                f'are: {keep}.' + kept_serving(image_id, env_bytes, [closed], details), details)  # 6b-r1 P2
     message, _, _ = return_to_old_web(ctx, cause, image_id=image_id, env_bytes=env_bytes, preflight=preflight,
                                       live=live, idle=idle, old_revision=plan['web']['revision'],
                                       previous=previous, parked_worker=parked.get('worker'), kinds=kinds,
@@ -3832,6 +5384,20 @@ def participant_source_problems(paths) -> list:
         if found.get('exists') and found != {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o600'}:
             problems.append(f'{spec["source"]} is not a root-owned 0600 regular file')
     return problems
+
+
+def interpreter_source_problems(paths) -> list:
+    """The interpreter's source (design/FINAL.md 13), read as a participant's: optional here - preflight does not know
+    the mode the app phase will be given, and the app phase refuses --interpreter-mode live without its copy - but one
+    that is there must be a root-owned 0600 regular file, or the secrets phase refuses it. ``paths``: helper_stat's
+    answer, the source included (its directory is participant_source_problems'). AMENDMENT-2 1.11: the source is a
+    participant's (INTERPRETER_SHARES), judged once, by participant_source_problems, so nothing is said of it twice."""
+    if INTERPRETER['source'] in {spec['source'] for spec in PARTICIPANTS.values()}:
+        return []
+    found = paths[INTERPRETER['source']]
+    if found.get('exists') and found != {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o600'}:
+        return [f'{INTERPRETER["source"]} is not a root-owned 0600 regular file']
+    return []
 
 
 def phase_preflight(ctx) -> dict:
@@ -3878,13 +5444,19 @@ def phase_preflight(ctx) -> dict:
     if not all(details['images'].values()):
         problems.append('a pinned image (helper or postgres) is not present locally')
     participant_paths = [path for spec in PARTICIPANTS.values() for path in (spec['source'], spec['target'])]
-    details['paths'] = helper_stat([CORTI_SOURCE, ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR, PROVIDER_SOURCES,
-                                    *participant_paths])
+    # each path once: the interpreter's source and copy are the Fable participant's (AMENDMENT-2 1.11), and the earlier
+    # interpreter's own key copy is stat'd only to be reported (LEGACY_INTERPRETER_COPY; never a problem)
+    details['paths'] = helper_stat(list(dict.fromkeys([
+        CORTI_SOURCE, ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR, PROVIDER_SOURCES, *participant_paths,
+        INTERPRETER['source'], INTERPRETER['target'], LEGACY_INTERPRETER_COPY])))
     if not details['paths'][CORTI_SOURCE].get('exists'):
         problems.append(f'{CORTI_SOURCE} is missing')
     problems += participant_source_problems(details['paths'])
+    problems += interpreter_source_problems(details['paths'])
     details['participant_sources'] = {name: 'present' if details['paths'][spec['source']].get('exists') else 'absent'
                                       for name, spec in PARTICIPANTS.items()}
+    details['interpreter_source'] = 'present' if details['paths'][INTERPRETER['source']].get('exists') else 'absent'
+    details['legacy_interpreter_copy'] = legacy_copy_state(details['paths'])
     details['letsencrypt'] = le_state()
     if not all(details['letsencrypt']['dirs'].values()):
         problems.append('a Let\'s Encrypt or webroot directory is missing')
@@ -3922,8 +5494,17 @@ def phase_secrets(ctx) -> dict:
     # The harness participants' credentials, after the set above and never part of it (HARNESS.md 8).
     participants = participant_secrets()
     states = ', '.join(f'{name} {entry["state"]}' for name, entry in participants.items())
+    # Then the interpreter's (AMENDMENT-2 1.11, D14): the Fable participant's file, which the run above copied - unread,
+    # by key name only - and nothing is copied again; the earlier interpreter's own key copy is only reported.
+    interpreter = interpreter_secrets(participants)
+    copied = ', '.join(f'{name} {entry["state"]} (the {entry["shared_with"]} participant\'s file)'
+                       for name, entry in interpreter.items())
+    legacy = legacy_copy_state(helper_stat([LEGACY_INTERPRETER_COPY]))
     return {'etc_dir': etc['etc_dir'], **result, 'participant_credentials': participants,
-            'summary': f'secrets {result["state"]}; participant credentials: {states}; values never left the helper'}
+            'interpreter_credentials': interpreter, 'legacy_interpreter_copy': legacy,
+            'summary': f'secrets {result["state"]}; participant credentials: {states}; interpreter credentials: '
+                       f'{copied}; values never left the helper'
+                       + (f'; {legacy["note"]}' if legacy['state'] == 'present' else '')}
 
 
 # --- migrations ----------------------------------------------------------------------
@@ -4310,17 +5891,19 @@ def phase_db(ctx) -> dict:
     return details
 
 
-def pair_modes(mode, participants=None) -> str:
-    """'provider live, astra disabled, fable live': how the pair was started."""
+def pair_modes(mode, participants=None, interpreter=None) -> str:
+    """'provider live, astra disabled, fable live': how the pair was started; ', interpreter live' follows when the
+    caller names the interpreter's mode (``interpreter``)."""
     return ', '.join([f'provider {mode}'] + [f'{name} {(participants or {}).get(name) or "disabled"}'
-                                             for name in PARTICIPANTS])
+                                             for name in PARTICIPANTS]
+                     + ([f'interpreter {interpreter}'] if interpreter is not None else []))
 
 
-def after_swap_failure(image_id, mode, states, error, parked, participants=None) -> str:
+def after_swap_failure(image_id, mode, states, error, parked, participants=None, interpreter=None) -> str:
     """The receipt of an app phase stopped once its new pair runs (refutation p2, install2:2): whether the stored list
     states were recomputed (``states``, RECOMPUTE_STATES' answer, or None), what stopped it, and what is left to do."""
     cause = str(error) or type(error).__name__
-    running = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants)}), but '
+    running = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants, interpreter)}), but '
     back = 'or, to go back, run --phase rollback-app, then rename the parked pair back.'
     if states is None:
         if any((parked or {}).values()):
@@ -4358,7 +5941,12 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
     status alone and never with a cause the installer does not know: its receipt's error, else the last non-empty line
     of its stderr, each scanned with the rest and repeated only whole and only up to 300 characters (otherwise named,
     never cut). Only the end of stderr is kept and scanned, so a line that began before it is never taken for a whole
-    one."""
+    one.
+
+    It is asked to wait for the installation-wide provider lock (ACCESS_CHECK_WAIT_FLAG; AMENDMENT-2 1.11
+    [R:cost-F-COST-8]): the new worker may be in a reading's send, which holds that lock for up to the interpreter's
+    send deadline, and the check waits that out (the deadline plus 60 s) before it would refuse, inside
+    ACCESS_CHECK_SECONDS."""
     if name == 'corti':
         environment = runtime_env('live', authorization_ref, credentials=True)
         files = {'credentials': True}
@@ -4366,8 +5954,9 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
         environment = runtime_env('disabled', authorization_ref, participants={name: 'live'})
         files = {'participant_files': (name,)}
     try:
-        result = oneshot(image_id, ['manage', 'participant_access_check', '--participant', name], env_bytes,
-                         network=NETWORK, environment=environment, timeout=ACCESS_CHECK_SECONDS, **files)
+        command = ['manage', 'participant_access_check', ACCESS_CHECK_WAIT_FLAG, '--participant', name]
+        result = oneshot(image_id, command, env_bytes, network=NETWORK, environment=environment,
+                         timeout=ACCESS_CHECK_SECONDS, **files)
     except InstallError as error:  # it did not finish: whether its request reached the vendor is not known
         return {'ok': False, 'recorded': False, 'problem': f'{error} Whether its request reached the vendor is not '
                                                            'known; nothing it wrote was recorded.'}
@@ -4431,10 +6020,12 @@ def access_check_failure(image_id, mode, participants, states, checks, error=Non
               'that participant disabled.')
 
 
-def check_credential_files(mode, live):
-    """Every credentials file a live provider or participant needs, before anything changes: a missing participant
-    source leaves no file, and that participant is installed disabled or not at all (HARNESS.md 8)."""
-    wanted = ([CORTI_TARGET] if mode == 'live' else []) + [PARTICIPANTS[name]['target'] for name in live]
+def check_credential_files(mode, live, interpreter='disabled'):
+    """Every credentials file a live provider, participant or interpreter needs, before anything changes: a missing
+    participant source leaves no file, and that participant is installed disabled or not at all (HARNESS.md 8); a live
+    interpreter needs the file the secrets phase copied (design/FINAL.md 13)."""
+    wanted = (([CORTI_TARGET] if mode == 'live' else []) + [PARTICIPANTS[name]['target'] for name in live]
+              + ([INTERPRETER['target']] if interpreter == 'live' else []))
     found = helper_stat(wanted) if wanted else {}
     if mode == 'live':
         target = found[CORTI_TARGET]
@@ -4446,9 +6037,14 @@ def check_credential_files(mode, live):
             raise InstallError(f'--{name}-mode live: {spec["target"]} is not the {APP_UID}:{APP_UID} 0400 file the '
                                f'secrets phase copies from {spec["source"]}; nothing was changed. Place the source and '
                                f'run --phase secrets, or install with --{name}-mode disabled.')
+    if interpreter == 'live' and found[INTERPRETER['target']] != {'exists': True, 'kind': 'file', 'uid': APP_UID,
+                                                                  'gid': APP_UID, 'mode': '0o400'}:
+        raise InstallError(f'--interpreter-mode live: {INTERPRETER["target"]} is not the {APP_UID}:{APP_UID} 0400 file '
+                           f'the secrets phase copies from {INTERPRETER["source"]}; nothing was changed. Place the '
+                           'source and run --phase secrets first.')
 
 
-def check_credential_parsing(image_id, env, mode, live):
+def check_credential_parsing(image_id, env, mode, live, interpreter='disabled'):
     """The application's own loaders read each live credentials file in ``image_id``, in the worker's mount layout,
     with no network: format and permissions only, before anything changes."""
     if mode == 'live':
@@ -4468,21 +6064,32 @@ def check_credential_parsing(image_id, env, mode, live):
             raise InstallError(f'The application cannot load {PARTICIPANTS[name]["target"]} as mounted for the worker '
                                f'(--{name}-mode live; format and permissions only; nothing was sent or changed).',
                                output=output if credential_free([output], [name]) else b'')
+    if interpreter == 'live':
+        # And the live interpreter's (design/FINAL.md 13): its own loader, the interpreter itself disabled; its error is
+        # kept only once a root helper found no value from the file in it.
+        parsed = oneshot(image_id, ['manage', 'shell', '-c', INTERPRETER_CREDENTIALS_CHECK], env, network='none',
+                         interpreter_file=True, timeout=120)
+        if parsed.returncode or f'{INTERPRETER["name"]}-credentials-parse-ok'.encode() not in parsed.stdout:
+            output = parsed.stderr[-2048:]
+            raise InstallError(f'The application cannot load {INTERPRETER["target"]} as mounted for the worker '
+                               '(--interpreter-mode live; format and permissions only; nothing was sent or changed).',
+                               output=output if credential_free([output], [INTERPRETER['name']]) else b'')
 
 
 def phase_app(ctx) -> dict:
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
     modes = participant_modes(ctx.args)
     live = [name for name in PARTICIPANTS if modes[name] == 'live']
+    interpreter = interpreter_mode(ctx.args)  # design/FINAL.md 13: --interpreter-mode; disabled when not given
     access = bool(getattr(ctx.args, 'access_check', None))
     if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{ctx.revision}:{reference}'],
                          check=False).returncode:
         raise InstallError('--authorization-ref is not a file tracked at the revision.')
     image_id = installed_image(ctx)
     require_db()
-    check_credential_files(mode, live)
+    check_credential_files(mode, live, interpreter)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
-    check_credential_parsing(image_id, env, mode, live)
+    check_credential_parsing(image_id, env, mode, live, interpreter)
     migrate = oneshot(image_id, ['migrate'], env)
     migrate_log = ctx.log('migrate', migrate.stdout + migrate.stderr)
     if migrate.returncode:
@@ -4497,7 +6104,41 @@ def phase_app(ctx) -> dict:
                            f'({", ".join(unrunnable["kinds"])}) are queued, running or resumable; nothing was '
                            'replaced. Close them with the newer revision\'s --phase rollback-app first.',
                            details=unrunnable)
-    services = replace_services(ctx, image_id, env, mode, reference, modes)
+    # Design v2 (FINAL-V2 6.2 [R:MO-1]): on the target, before the switch, no design v1 row - v1 rows only, so v2's own
+    # rows never trip it: a fix release, the re-install after a switch-back and a same-revision re-run all pass.
+    v1 = v1_rows(image_id, env)
+    refusal = v1_rows_refusal(v1)
+    if refusal:
+        raise InstallError(refusal[:1].upper() + refusal[1:] + '.', details={'v1_rows': v1,
+                                                                            'unrunnable_stages': unrunnable})
+    # Amendment 1, 9.5: the install counts, read-only, before the switch, printed into this receipt - never a refusal.
+    counts = install_counts(image_id, env)
+    try:
+        return _app_after_counts(ctx, image_id, env, mode, reference, modes, interpreter, access, live, migrate_log,
+                                 unrunnable, v1, counts)
+    except InstallError as error:  # the receipt of a failure after the read carries the counts too
+        if error.details is None or isinstance(error.details, dict):
+            error.details = {**(error.details or {}), 'install_counts': counts}
+        raise
+
+
+def _app_after_counts(ctx, image_id, env, mode, reference, modes, interpreter, access, live, migrate_log, unrunnable,
+                      v1, counts) -> dict:
+    """phase_app once the target is known to hold no design v1 row and the install counts are read: the replacement,
+    the recompute of the stored list states and the opt-in access checks, as they always were."""
+    # The interpreter's mode is named only when it is not the default, as swap_services leaves WEB_PORT to
+    # wait_service: a stand-in of replace_services keeps the six arguments it always had.
+    services = replace_services(ctx, image_id, env, mode, reference, modes,
+                                **({'interpreter': interpreter} if interpreter != 'disabled' else {}))
+    # ADJUDICATION P-7: the verify one-shot counts legacy-engine assessments made since the NEW WORKER started - S4 of a
+    # blue/green switch, the worker's start of a swap - never since the install began (until S2 the old worker runs).
+    # 'given': whether --interpreter-mode was given at all - verify reports an interpreter left disabled only because it
+    # was not (the review of S14, finding 2: FINAL 13's install is live, and a disabled mode pauses every upload's
+    # reading, 11.2).
+    steps = services.get('steps') if isinstance(services.get('steps'), dict) else {}
+    interpreting = {'mode': interpreter, 'given': getattr(ctx.args, 'interpreter_mode', None) is not None,
+                    'credentials_loaded': interpreter == 'live',
+                    'worker_started_at': steps.get('S4') or services.get('worker_started_at')}
     # Refutation p1, migrate-2: the stored list states are recomputed with this revision's derivation (RECOMPUTE_STATES)
     # - once this pair has replaced the old one, never before, so a failure path restores the old pair over the states
     # it derived. Blue/green (I-state): only once the drained old web has stopped too (switch_services' S5). Nothing is refused for it (round-7c8 skeptic, sk:2: refusing while an outcome was unknown also refused
@@ -4515,8 +6156,8 @@ def phase_app(ctx) -> dict:
         states = app_script(image_id, env, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
         retire_parked(parked)
     except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
-        raise InstallError(after_swap_failure(image_id, mode, states, error, parked, modes),
-                           details={**services, 'states_recomputed': states}) from error
+        raise InstallError(after_swap_failure(image_id, mode, states, error, parked, modes, interpreter),
+                           details={**services, 'states_recomputed': states, 'interpreter': interpreting}) from error
     # Opt-in, last: each live participant - Corti too, when the provider is live (checklist 1.3: all three) - is
     # checked once with real requests (participant_access_check), never without the flag.
     checks, checked = None, (['corti'] if mode == 'live' else []) + live
@@ -4534,9 +6175,9 @@ def phase_app(ctx) -> dict:
     return {'image_id': image_id, 'provider_mode': mode, 'authorization_ref': reference, 'participants': modes,
             'participant_credentials_loaded': live, 'migrate_log': migrate_log, 'unrunnable_stages': unrunnable,
             'states_recomputed': states, 'access_checks': checks if access else 'not run (no --access-check)',
-            **services,
-            'summary': f'web and worker running {image_id[:19]} ({pair_modes(mode, modes)})'
-                       + switched_summary(services)
+            **services, 'interpreter': interpreting, 'v1_rows': v1, 'install_counts': counts,
+            'summary': f'web and worker running {image_id[:19]} ({pair_modes(mode, modes, interpreter)})'
+                       + switched_summary(services) + '; no design v1 row' + counts_summary(counts)
                        + (f'; access checked: {", ".join(checked)}' if access else '')}
 
 
@@ -4552,21 +6193,26 @@ def switched_summary(services) -> str:
 def phase_switch_back(ctx) -> dict:
     """Post-success rollback without interruption (ops/INSTALL.md, switch-back): back to the pair this revision's last
     successful app phase replaced (its receipt's 'replaced': the previous web's image and revision - images are never
-    removed), by the blue/green switch in reverse. rollback-app's checks run first and refuse, stopping nothing, while
-    this revision recorded what an older revision would act on, or show, wrongly (undo_hazards). ``--provider-mode``
-    and the participant modes are the previous pair's, as its own app phase was given them."""
+    removed; after a same-revision re-run, the pair switch_back_target reads, DECISIONS D83), by the blue/green switch
+    in reverse. rollback-app's checks run first and refuse, stopping nothing, while
+    this revision recorded what an older revision would act on, or show, wrongly (undo_hazards). ``--provider-mode``,
+    the participant modes and ``--interpreter-mode`` are the previous pair's, as its own app phase was given them (a
+    revision before the Gemini migration has no interpreter: leave it disabled; one before AMENDMENT-2 has no Fable
+    adapter, so its interpreter's loader check fails live: give it disabled or replay). What this revision made from
+    event
+    inventories is never a refusing reason: the receipt declares it in a note and the switch goes on (ADJUDICATION
+    P-1). DECISIONS D59, D65, D82, D95 and D110: it refuses only on encounters with a record created since
+    replaced_since's time - the earliest time recorded by the app receipt the pair is read from and by every app
+    receipt of this revision written after its last successful switch-back to that pair, whatever each replaced and
+    however it ended (that switch-back's own start when the receipt the pair is read from is older than it) - never
+    across that switch-back and never the current containers' creation."""
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
     modes = participant_modes(ctx.args)
     live = [name for name in PARTICIPANTS if modes[name] == 'live']
-    app = require_receipt(ctx, 'app')
-    previous = ((app.get('details') or {}).get('replaced') or {}).get('web') or {}
-    prev_image, prev_revision = previous.get('image'), previous.get('revision')
-    if not (isinstance(prev_image, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', prev_image)
-            and isinstance(prev_revision, str) and SHA_RE.fullmatch(prev_revision)):
-        raise InstallError("This revision's app receipt names no previous web (image and revision) to switch back to; "
-                           'nothing was changed.')
-    if prev_revision == ctx.revision:
-        raise InstallError('The pair the app phase replaced is this same revision: there is nothing to switch back to.')
+    interpreter = interpreter_mode(ctx.args)
+    # D83: the receipt the target is read from - the newest successful app receipt, or after a same-revision re-run the
+    # newest since the last switch-back naming another revision whose image is present - and the since is read from it
+    entry, prev_image, prev_revision = switch_back_target(ctx, require_receipt_entry(ctx, 'app'))
     if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{prev_revision}:{reference}'],
                          check=False).returncode:
         raise InstallError('--authorization-ref is not a file tracked at the previous revision.')
@@ -4581,27 +6227,144 @@ def phase_switch_back(ctx) -> dict:
         raise InstallError(f'The site is not served by this revision\'s web through its HTTPS stage, so there is '
                            'nothing to switch back from; nothing was changed.', details={'plan': plan})
     preflight = require_receipt(ctx, 'preflight')
-    check_credential_files(mode, live)
+    check_credential_files(mode, live, interpreter)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
-    check_credential_parsing(prev_image, env, mode, live)
-    hazards = undo_hazards(image_id, env, ctx.revision)
+    check_credential_parsing(prev_image, env, mode, live, interpreter)
+    since = replaced_since(ctx, entry)  # D59, D82: the touched filter's since, read once for every check of this phase
+    reads = target_reads(prev_image, env, stage_kinds_of(prev_image, env))
+    hazards = switch_back_hazards(undo_hazards(image_id, env, ctx.revision), reads,
+                                  touched_encounters(image_id, env, since))  # D51
+    if not isinstance(hazards, dict):  # D66: an answer that does not say what it read is never read as "none"
+        raise InstallError('The read of what an older revision would act on wrongly gave no answer it could be judged by; '
+                           'nothing was started or stopped.', details={'hazards': hazards})
     if hazards:
         raise InstallError(f'{hazard_summary(hazards)} hold records an older revision would act on, or show, wrongly '
                            'under its own rules; nothing was started or stopped. Clear them on this revision\'s web '
                            '(ops/INSTALL.md, Reinstalling an older revision), then rerun --phase switch-back.',
-                           details={'hazards': hazards})
+                           details={'hazards': hazards, 'touched_since': since.isoformat()})
     services = switch_back_services(ctx, image_id, env, prev_image, prev_revision, mode, reference, modes,
-                                    preflight=preflight, plan=plan)
+                                    preflight=preflight, plan=plan, interpreter=interpreter, reads=reads,
+                                    touched_since=since)
     availability = services.get('availability') or {}
+    note = (services.get('interpretation') or {}).get('note')
     return {'image_id': image_id, 'previous': {'image': prev_image, 'revision': prev_revision},
-            'provider_mode': mode, 'authorization_ref': reference, 'participants': modes, **services,
-            'summary': f'switched back to {prev_revision[:12]} ({pair_modes(mode, modes)}) on {plan["idle"]}: '
-                       f'{availability.get("samples", 0)} availability samples, '
-                       f'{availability.get("non_200_count", 0)} not 200'}
+            'provider_mode': mode, 'authorization_ref': reference, 'participants': modes,
+            'interpreter_mode': interpreter, **services,
+            'summary': f'switched back to {prev_revision[:12]} ({pair_modes(mode, modes, interpreter)}) on '
+                       f'{plan["idle"]}: {availability.get("samples", 0)} availability samples, '
+                       f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')}
+
+
+def switch_back_target(ctx, entry) -> tuple:
+    """DECISIONS D83 (refutation round 3, finding 14): (the app receipt the switch-back reads its target from, as (path,
+    record); the target web's image; its revision). ``entry`` is the newest successful app receipt of this revision
+    (require_receipt_entry), and the target is the web it replaced. When that web is this same revision - a
+    same-revision re-run: a provider-mode switch, an access check run again, the re-run a failed app's receipt asks for
+    once its parked pair is removed - the target is read instead from the newest app receipt of this revision written
+    since its last successful switch-back that names ANOTHER revision whose image is still present (newest first; a
+    receipt whose image is gone is passed over). That receipt is a successful one, or one that failed once its switch
+    had finished: it records the web it replaced (replaced_web) only when the old web was parked and this revision's
+    pair served - its recompute, the removal of the parked pair or an access check failed after it (finding 14 (b):
+    the first app over the target, failed so, then recovered and run again). With none, there is nothing to switch back
+    to: an app whose receipt records no replaced web (the S4 keep layout, an S5 failure, an undo) leaves none. The
+    receipt returned is the one replaced_since reads the since from."""
+    image, revision = replaced_web(entry[1])
+    if image is None:
+        raise InstallError("This revision's app receipt names no previous web (image and revision) to switch back to; "
+                           'nothing was changed.')
+    if revision != ctx.revision:
+        return entry, image, revision
+    bound = last_switch_back(ctx)
+    for path in sorted(ctx.receipts.glob('app-*.json'), reverse=True):
+        if written_after(path, bound) is not True:  # before that switch-back, or the order cannot be told
+            continue
+        record = json.loads(path.read_text(encoding='utf-8'))
+        if not (isinstance(record, dict) and record.get('phase') == 'app' and record.get('revision') == ctx.revision):
+            continue
+        image, revision = replaced_web(record)
+        if image is None or revision == ctx.revision:
+            continue
+        found = inspect('image', image)
+        if found is not None and labels_of(found).get(REVISION_LABEL) == revision and owned(found, 'app-image'):
+            return (path, record), image, revision
+    raise InstallError('The pair the app phase replaced is this same revision, and no app receipt of this revision '
+                       'since its last switch-back names another revision whose image is present: there is nothing to '
+                       'switch back to.')
+
+
+def pair_created_at():
+    """When this revision's pair was created: the earliest creation time of its web and worker containers (the 'since'
+    every close of an undo reads)."""
+    current = [inspect('container', SERVICES[role]) for role in SERVICES]
+    return min(created_at(container) for container in current if container is not None)
+
+
+def replaced_since(ctx, entry) -> dt.datetime:
+    """DECISIONS D59 (the S17 refutation round 2, finding 12), D65, D82, D95 and D110: the 'since' of a switch-back's
+    touched filter (touched_encounters; D51) - when this revision's first app phase began since it last returned to the
+    pair the switch-back returns to, whatever that app replaced and however it ended. ``entry`` is the app receipt the
+    switch-back reads that pair from (switch_back_target, D83: the newest successful one, or after a same-revision
+    re-run the one it reads instead). The bound is this revision's newest successful switch-back to that target
+    (last_switch_back; D82, refutation round 3, finding 13): that switch-back completed, so what the target wrote while
+    it served again, until this revision's next app began, is its own status quo, and the since never reaches across it.
+    A switch-back that did not complete (refused at B7: D65's recovery), one to another target and another revision's
+    set no bound; nor is there one when ``entry`` names no target revision. Counted: ``entry`` and every app receipt of
+    this revision written after the bound, whatever it replaced and however it ended (D95, the round-3 review of
+    D82/D83; D110, refutation round 4, finding 21) - a successful one, over the target or another revision (D65: the app
+    run again after a switch-back refused at B7 names the same target, and what this revision wrote under its earlier
+    pair is no more the target's than before); one that failed once its switch had finished (D83 may read it as the
+    target); one undone after it parked a role (replaced={'worker'}); a swap undone after its web had served, whose
+    receipt records no 'replaced' (finding 21: hazards, stages_closed and states_put_back); one interrupted, or refused
+    before anything changed. Most of them may have put this revision's pair in front of traffic without the receipt
+    saying so (one refused before anything changed did not, and says so); the rule reads no receipt's account of that,
+    so none is asked whether it served: an earlier since names more encounters, which only refuses more
+    (fail-closed). Receipts are ordered by the stamps their names carry (written_after); one whose order cannot be told
+    is counted (fail-closed). The since is the earliest time those receipts record for their phases (receipt_moments:
+    main's started_at, taken before anything of that phase ran, and the steps a blue/green switch stamped); a counted
+    receipt that records none counts from when it was written (written_moment). When ``entry`` itself is older than the
+    bound (no successful app has replaced the target since: a later app failed, or replaced another revision), the since
+    is the earliest of that switch-back's own start and the receipts counted after it - never across it, and fail-closed
+    after it. Never the current containers' creation: a later app phase of this same revision that installed a pair and
+    then failed (its receipt not ok - a recompute that failed, or an access check: the pair stays installed) created
+    them, and what this revision wrote under its earlier pair is not the target's status quo. When ``entry`` records no
+    time (and is not older than the bound), the since is the earliest creation time of this revision's containers
+    (pair_created_at), of the receipts counted, and of every app receipt of this revision written after ``entry`` (the
+    earliest time each records, else when it was written). The closes of B4 and B7 keep their own since (they close this
+    pair's stages)."""
+    path, record = entry
+    target = replaced_web_entry(record).get('revision')
+    bound = last_switch_back(ctx, target) if target else None  # D82
+    earlier = []
+    for other_path in sorted(ctx.receipts.glob('app-*.json')):
+        if other_path.name == path.name or written_after(other_path, bound) is False:
+            continue  # D82: a receipt written before the switch-back that last returned to this target is never read
+        other = json.loads(other_path.read_text(encoding='utf-8'))
+        # D95, D110 (refutation round 4, finding 21): every app receipt of this revision written after that bound
+        # counts, whatever it replaced and however it ended. D95 counted a successful one, or one that parked a role
+        # ('replaced' non-empty); a swap undone after its web had served records no 'replaced', so its window was
+        # dropped and a record written in it was handed to the target. A receipt cannot always say whether its phase
+        # put this revision's pair in front of traffic, so none is asked: an earlier since names more encounters
+        # (fail-closed)
+        if isinstance(other, dict) and other.get('phase') == 'app' and other.get('revision') == ctx.revision:
+            earlier += receipt_moments(other) or [moment for moment in (written_moment(other_path),) if moment]
+    if written_after(path, bound) is False:  # D82: ``entry`` is older than the switch-back that returned to its target
+        # (that receipt's stamp is told, so written_moment gives a time when it records none)
+        return min(earlier + (receipt_moments(bound[1]) or [written_moment(bound[0])]))
+    own = receipt_moments(record)
+    if own:
+        return min(own + earlier)
+    moments = [pair_created_at()] + earlier
+    for later in sorted(ctx.receipts.glob('app-*.json')):
+        if later.name <= path.name:
+            continue
+        other = json.loads(later.read_text(encoding='utf-8'))
+        if isinstance(other, dict) and other.get('phase') == 'app' and other.get('revision') == ctx.revision:
+            moments += receipt_moments(other) or [moment for moment in (written_moment(later),) if moment is not None]
+    return min(moments)
 
 
 def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, provider_mode, authorization_ref,
-                         participants, *, preflight, plan) -> dict:
+                         participants, *, preflight, plan, interpreter=None, reads=None, touched_since=None) -> dict:
     """The switch in reverse, never stopping the serving web first:
 
       B2  start the previous revision's web, INCOMING_WEB, on the idle port; health_ok for ITS revision; smoke_web
@@ -4611,27 +6374,39 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
           nothing is closed for a switch that cannot pass (refutation r2, L6-4) - then close every stage this
           revision's pair queued, ran or left resumable since it was created, and every open stage of a kind the
           previous worker does not run (close_undone_stages, rollback-app's rule); refuse to go on while the close
-          names a record; put back the list states the previous revision labels otherwise
+          names a record; put back the list states the previous revision labels otherwise; count what this revision
+          made from event inventories, the receipt's declared note, which never refuses (ADJUDICATION P-1)
       B5  switch the vhost's upstream to the idle port (/health/ = the previous revision through the public path)
       B6  drain this revision's web, stop it and park it; the previous web takes the canonical name
       B7  close again what this revision's web started between B4 and the end of its drain (requests it accepted
           before the switch); this also closes what a member started on the previous web during that window
-          (ops/INSTALL.md, Known limits); put back again; hold the previous worker while the close names a record
+          (ops/INSTALL.md, Known limits); count again what this revision made from event inventories - before any
+          refusal, so a receipt that stops here carries it too (D59); put back again; hold the previous worker while
+          the close names a record
       B8  start the previous worker
       B9  remove this revision's parked pair (its image is kept)
     The baseline is read before anything starts too. Before B5 every failure resumes this revision's pair; from B5 on
-    the previous web serves and the receipt says what is left."""
+    the previous web serves and the receipt says what is left. ``touched_since``: the since of every touched filter
+    (replaced_since, D59 and D82; read from the app receipt switch_back_target gives, D83, when not given) - the closes
+    keep their own, this pair's creation and B4's close."""
     live, idle = plan['live'], plan['idle']
     current = {role: inspect('container', SERVICES[role]) for role in SERVICES}
     since = min(created_at(container) for container in current.values() if container is not None)
+    if touched_since is None:
+        touched_since = replaced_since(ctx, switch_back_target(ctx, require_receipt_entry(ctx, 'app'))[0])
     kinds = stage_kinds_of(prev_image, env_bytes)
+    reads = target_reads(prev_image, env_bytes, kinds) if reads is None else reads  # D51
+
+    def hazards_now(hazards):  # D51: what this switch-back refuses on, read again whenever hazards are read
+        return switch_back_hazards(hazards, reads, touched_encounters(image_id, env_bytes, touched_since))  # D59
     reason = f'revision {ctx.revision[:12]} was switched back to {prev_revision[:12]} (switch-back)'
     drifted = ingress_checks(ctx, preflight)
     if drifted:
         raise InstallError(baseline_problem(drifted, 'nothing was started or stopped'), details={'baseline': drifted})
     steps, parked, started, progress, closes, put_back = {}, {}, {}, {}, {}, []
+    counted = {}  # design v2 (refutation 6b-r1 P2): B4's note as counted, before the update's clauses were added
     record = {'mode': 'switch-back', 'ports': {'from': live, 'to': idle}, 'steps': steps, 'closes': closes,
-              'states_put_back': put_back, 'since': since.isoformat()}
+              'states_put_back': put_back, 'since': since.isoformat(), 'touched_since': touched_since.isoformat()}
     reached = [None]
 
     def step(name):
@@ -4640,6 +6415,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
 
     def refuse_on_hazards(closed, when, checked):
         hazards = closed.get('hazards') if isinstance(closed, dict) else None
+        if isinstance(hazards, dict):
+            hazards = hazards_now(hazards)  # D51
         if not isinstance(hazards, dict) or hazards:
             named = hazard_summary(hazards) if isinstance(hazards, dict) else 'the close did not say which encounters'
             written = ({pk: [r for r in reasons if r in WEB_WRITTEN_HAZARDS] for pk, reasons in hazards.items()}
@@ -4657,7 +6434,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
     try:
         step('B2')
         docker('run', '-d', *service_args('web', prev_image, prev_revision, provider_mode, authorization_ref,
-                                          participants, name=INCOMING_WEB, port=idle), input=env_bytes, quiet=True)
+                                          participants, name=INCOMING_WEB, port=idle, interpreter=interpreter),
+               input=env_bytes, quiet=True)
         started['web'] = wait_service('web', prev_revision, prev_image, name=INCOMING_WEB, port=idle)
         record['smoke'] = smoke_web(idle)
         step('B3')
@@ -4668,7 +6446,10 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
             raise InstallError(baseline_problem(drifted, 'nothing was closed or switched'),
                                details={'baseline': drifted})
         checked = dt.datetime.now(dt.timezone.utc)
-        hazards = undo_hazards(image_id, env_bytes, ctx.revision)
+        hazards = hazards_now(undo_hazards(image_id, env_bytes, ctx.revision))  # D51
+        if not isinstance(hazards, dict):  # D66: never read as "none"
+            raise InstallError('before anything was closed, the read of what an older revision would act on wrongly gave '
+                               'no answer it could be judged by', details={'hazards': hazards})
         if hazards:
             raise InstallError(f'before anything was closed, {hazard_summary(hazards)} hold records an older revision '
                                'would act on, or show, wrongly under its own rules', details={'hazards': hazards})
@@ -4679,6 +6460,10 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         closes['first'] = close_undone_stages(image_id, env_bytes, since, ctx.revision, reason, kinds)
         refuse_on_hazards(closes['first'], 'after this revision\'s worker stopped and its stages were closed', checked)
         put_back.append(put_back_states(closes['first'], prev_image, image_id, env_bytes))
+        # ADJUDICATION P-1: no worker of this revision runs from B3 on, so this is what the previous image is handed;
+        # design v2 (amendment 1, 9.4): with what the close did for the update - the note lists the pending updates
+        counted['b4'] = interpretation_note(image_id, env_bytes, ctx.revision)
+        record['interpretation'] = with_update_note(counted['b4'], [closes['first']])
         step('B5')
         record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=prev_revision, progress=progress,
                                            from_revision=ctx.revision)
@@ -4687,11 +6472,19 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         parked['web'] = retire_live_web(plan['web']['id'])
         step('B7')
         closes['second'] = close_undone_stages(image_id, env_bytes, first, ctx.revision, reason, kinds)
+        # D51 (the S17 refutation, finding 14): this revision's web served until B6's drain, so a context save there
+        # could make a new-path context after B4's count; the note is read again once that web is stopped - the final
+        # count of what the previous image is handed (B4's stays in the record). D59 (round 2, finding 14): read
+        # before the close's refusal, which leaves the previous web serving these rows with its worker held, so the
+        # receipt that stops here carries B7's count too
+        record['interpretation_at_b4'] = record.get('interpretation')
+        record['interpretation'] = with_update_note(interpretation_note(image_id, env_bytes, ctx.revision),
+                                                    [closes['first'], closes['second']])
         refuse_on_hazards(closes['second'], 'after the switch', checked)
         put_back.append(put_back_states(closes['second'], prev_image, image_id, env_bytes))
         step('B8')
         docker('run', '-d', *service_args('worker', prev_image, prev_revision, provider_mode, authorization_ref,
-                                          participants), input=env_bytes, quiet=True)
+                                          participants, interpreter=interpreter), input=env_bytes, quiet=True)
         started['worker'] = wait_service('worker', prev_revision, prev_image)
         step('B9')
         retire_parked(parked)
@@ -4703,9 +6496,18 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
                                        parked=parked, progress=progress, put_back=put_back, closes=closes,
                                        prev_revision=prev_revision)
         except BaseException as second:  # noqa: BLE001 — the undo itself stopped: say so, with what is there now
+            interrupted = closes.get('reapplied') if isinstance(closes.get('reapplied'), dict) else {}
             message = (f'{str(failure) or type(failure).__name__}; the undo at {reached[0]} stopped too '
                        f'({str(second) or type(second).__name__}): read "left" in this receipt, then ops/INSTALL.md, '
-                       'Recovery notes')
+                       'Recovery notes'
+                       # refutation w7r 6b-r1 R1: a put-back that the stop interrupted names the saves it may have left
+                       + (f'. {interrupted["sentence"][:1].upper()}{interrupted["sentence"][1:]}'
+                          if interrupted.get('interrupted') and interrupted.get('sentence') else ''))
+        if closes.get('undone_before_switch') and 'b4' in counted:
+            # refutation 6b-r1 P2: no previous web was handed the site, so B4's note was handed to none - its
+            # instructions for the previous web's members are not left standing in the receipt; refutation 6b-r2 F5: one
+            # that nginx may have routed to until the settle is said to have served in that window
+            record['interpretation'] = undone_note(counted['b4'], served=closes.get('served'))
         raise InstallError(message, details={**record, 'failed_at': reached[0], 'started': started, 'replaced': parked,
                                              'availability': stop_recorder(recorder),
                                              'left': left_summary()}) from failure
@@ -4735,21 +6537,51 @@ def undo_switch_back(ctx, failure, reached, *, image_id, env_bytes, plan, parked
                 f'{remove_incoming_web()}; {web} kept serving on {live}.')
     if reached in ('B4', 'B5'):
         switched_file = reached == 'B5' and progress.get('applied_at') is not None
+        # refutation 6b-r2 F3: left half way, the previous web may serve, so nothing is put back; F1: the message names
+        # the encounters whose saves B4's close set back, as not put back (the recovery may keep this revision)
+        first_close = [closes.get('first')] if isinstance(closes, dict) else []
+        kept_back = not_put_back(first_close, 'an undo left half way puts nothing back while the earlier web may serve',
+                                 where='closes.first.reverted')
         if switched_file and vhost_state()['file_sha256'] == sha256(rendered_vhosts(ctx.revision, idle)['https']
                                                                      .encode()):
             return (f'{cause}; quillmd-cpt still names the previous revision\'s web ({INCOMING_WEB}, port {idle}), '
-                    + halfway)
+                    + halfway + kept_back)
         touched = reached == 'B5' and nginx_may_have_read(progress)
         notes = []
+        closed = closes if isinstance(closes, dict) else {}
         if touched:
             settled = settle_vhost(ctx, port=live, revision=ctx.revision, other_revision=prev_revision or '')
             if not settled['proven']:
                 return (f'{cause}; the vhost was put back, but nginx may still route to the previous revision\'s web '
                         f'({INCOMING_WEB}, port {idle}): a reload of the switched vhost was asked for, or nginx loaded '
                         f'one since it was written, and nginx was not proven to run this revision\'s again '
-                        f'({settled.get("problem")}), ' + halfway)
+                        f'({settled.get("problem")}), ' + halfway + kept_back)
+            # refutation 6b-r2 F5 (DECISIONS D247): nginx may have routed to the previous web from the switch until
+            # this settle, so the receipt's note says that web may have served in that window (undone_note's served)
+            parts = _undo_parts([closed.get('first')]) if closed.get('first') is not None else None
+            closed['served'] = {'from': progress['applied_at'].isoformat(),
+                                'until': dt.datetime.now(dt.timezone.utc).isoformat(),
+                                'update_pending': sorted(parts[0]) if parts is not None else None,
+                                # refutation w7r 6b-r1 R5: A21's own (an update no save started), worded apart
+                                'reconciled_unknown': sorted(pk for pk, reasons in parts[0].items()
+                                                             if reasons == ['reconciled_unknown'])
+                                if parts is not None else None}
             drain_web(idle)
         removed = remove_incoming_web()
+        # design v2 (amendment 1, 9.4; refutation 6b-r1 P2): B4's close set the pending saves back for the previous
+        # image, which now never serves - this revision's web serves on and its worker reads the update - so they are put
+        # back, once the previous web is gone and before this revision's worker resumes (closes is the receipt's)
+        closed['undone_before_switch'] = True
+        if closed.get('first') is not None:
+            try:
+                closed['reapplied'] = reapplied = reapply_reverted(image_id, env_bytes, [closed['first']])
+            except BaseException as error:  # noqa: BLE001 — recorded, then raised again: the undo stops
+                # refutation w7r 6b-r1 R1: recorded in the receipt's closes before the interrupt stops the undo (this
+                # worker is not resumed after a Ctrl-C), so the undo's message names those encounters
+                closed['reapplied'] = interrupted_put_back([closed['first']], error)
+                raise
+            if reapplied['sentence']:
+                notes.append(reapplied['sentence'])
         if put_back:  # once no previous-revision container runs (I-state), before this revision's worker resumes
             try:
                 app_script(image_id, env_bytes, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
@@ -4758,13 +6590,12 @@ def undo_switch_back(ctx, failure, reached, *, image_id, env_bytes, plan, parked
                 notes.append(f'the list states put back to the previous revision\'s could not be recomputed ({error}): '
                              'rerun --phase app, which recomputes them')
         worker_note = restore_parked_worker(parked.get('worker'))
-        closed = closes or {}
         if closed.get('first') is not None:
             closing = '. A stage the close already closed stays closed (failed, with the installer\'s note).'
         elif closed.get('first_started_at'):  # refutation r3, D-5: it was started, and may have committed
             closing = ('. The close was started and gave no answer, so it may have closed some or all of this '
                        'revision\'s open stages before it stopped: a stage it closed stays closed (failed, with the '
-                       'installer\'s note).')
+                       f'installer\'s note); and it {possibly_set_back(closed["first_started_at"])}.')
         else:
             closing = '. Nothing was closed.'
         return (f'{cause}; nothing was switched: {web} kept serving on {live}, this revision\'s worker was '
@@ -5479,6 +7310,182 @@ def other_lineages(le: dict) -> tuple:
             set(le['live']) - {DOMAIN})
 
 
+# Verify's one-shot of the D22 report (design/FINAL.md 13; DECISIONS D22; ADJUDICATION P-7): `manage
+# interpretation_report --since <the new worker's start> --self-test --json` in this revision's image, the interpreter
+# disabled as in every one-shot (a one-shot's mode is its own, so the worker's is read from the worker's configuration).
+# Nothing is written or sent. Every check of its self-test named here must have run and passed - one that ran fewer
+# checks proves less than it says - and the hold state is reported beside it, never judged here (a standing hold is the
+# operator's to release, with `manage interpreter_hold --release`). AMENDMENT-2 8.5 and section 9: 'model constant'
+# is the report's comparison of interpretation.MODEL_V3, fable_adapter.MODEL and fable_adapter.ENDPOINT with the
+# written-out report.D275_MODEL and report.D275_ENDPOINT (and the dormant Gemini adapter's with D13_MODEL and
+# FINAL_ENDPOINT), each with its literal, never with each other; the installer requires it run and passed, by name.
+INTERPRETATION_SELF_TEST = ('sentinel installed', 'deny set as pinned', 'positive control', 'positive control trips',
+                            'model constant', 'no new-path legacy execution recorded',
+                            'every new-path assessment carries its record', 'no sentinel trip',
+                            'no legacy-engine assessment')
+INTERPRETATION_REPORT_SECONDS = 180
+INTERPRETATION_REPORT_LIMIT = 1024 * 1024  # bytes of the report's JSON that are read; more is refused, never cut
+
+
+def worker_mode_of(container: Any, variable: Any) -> str | None:
+    """The mode ``container`` was started with in ``variable`` (a mode variable: CPT_STUDIO_GEMINI_MODE, or a
+    participant's CPT_STUDIO_<NAME>_MODE), read from Docker's record of its environment, and nothing else of that record
+    is read out (the env-file's values are there too). None when it names none, or more than one."""
+    env = ((container or {}).get('Config') or {}).get('Env') or []
+    found = [entry.split('=', 1)[1] for entry in env if isinstance(entry, str) and entry.startswith(variable + '=')]
+    return found[0] if len(found) == 1 else None
+
+
+def worker_interpreter_mode(container: Any) -> str | None:
+    """The interpreter mode ``container`` was started with: its one CPT_STUDIO_GEMINI_MODE (worker_mode_of)."""
+    return worker_mode_of(container, INTERPRETER['mode_env'])
+
+
+def holds_interpreter_key(container) -> bool:
+    """Whether ``container`` holds the interpreter's credentials file, read-only, at the worker's path."""
+    return any(mount.get('Type') == 'bind'
+               and (mount.get('Source'), mount.get('Destination'), mount.get('RW'))
+               == (INTERPRETER['target'], INTERPRETER['mounted'], False)
+               for mount in (container or {}).get('Mounts') or [])
+
+
+def utc_moment(value):
+    """An ISO 8601 date and time with its offset ('Z' or '+00:00') as an aware datetime; None otherwise."""
+    try:
+        moment = dt.datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is not None and moment.utcoffset() is not None else None
+
+
+def interpretation_evidence(ctx, image_id, worker) -> tuple:
+    """(evidence, problems) of verify's D22 one-shot. Its window starts at the newest successful app receipt's
+    new-worker start (ADJUDICATION P-7: S4 of a blue/green switch, the worker's start of a swap - never the install's
+    start: the old worker runs until S2, and its legacy assessments are not this revision's). The worker's interpreter
+    mode must be the one that receipt installed, which is disabled only where --interpreter-mode said so (FINAL 13: the
+    install uses live). The interpreter's key is the Fable participant's file (AMENDMENT-2 1.11), so the worker must
+    hold it whenever its interpreter or that participant is live, and a bind is reported only when neither is
+    [R:replay-R3]: a worker with the participant live and the interpreter disabled or replayed holds it rightly, and
+    verifies clean (D14's rule, the key in the worker only, is unchanged). A worker that names no interpreter mode and
+    holds no key but the live participant's, with no app receipt of this revision beside it, is no pair this installer
+    started (every pair it starts names one): there is nothing of the interpreter to read, and the evidence says so.
+    With an app receipt, or a worker that names a mode or holds the key for no live holder, every missing piece is a
+    problem."""
+    app = latest_receipt(ctx.receipts, 'app', ctx.revision)
+    mode = worker_interpreter_mode(worker)
+    sharing = worker_mode_of(worker, PARTICIPANTS[INTERPRETER_SHARES]['mode_env'])
+    evidence = {'worker_mode': mode, 'worker_holds_key': holds_interpreter_key(worker),
+                'key_shared_with': {INTERPRETER_SHARES: sharing}}
+    if app is None:
+        if mode is None and (not evidence['worker_holds_key'] or sharing == 'live'):
+            return ({**evidence, 'self_test': 'not run',
+                     'summary': 'interpretation self-test not run: the worker names no interpreter mode and no app '
+                                'receipt of this revision names its new worker'}, [])
+        return ({**evidence, 'self_test': 'not run', 'summary': 'interpretation self-test not run'},
+                ["no successful app receipt of this revision names its new worker's start, so the interpretation "
+                 'self-test was not read (ADJUDICATION P-7)'])
+    installed = (app.get('details') or {}).get('interpreter') or {}
+    since = installed.get('worker_started_at')
+    evidence.update(app_mode=installed.get('mode'), app_mode_given=installed.get('given'), since=since)
+    problems = []
+    if mode != installed.get('mode'):
+        problems.append(f"the worker's interpreter mode is {mode or 'not named'}, but the app phase installed "
+                        f"{installed.get('mode') or 'none'}")
+    # The review of S14, finding 2: FINAL 13's install is live, and its D22 evidence shows "mode live". Disabled is the
+    # default when --interpreter-mode is not given - as in the app command ops/INSTALL.md documents - and it pauses
+    # every upload's reading (FINAL 11.2), so an installation left so by default is not verified; one given disabled
+    # is the operator's choice. A receipt that does not say whether it was given is read as not given.
+    if installed.get('mode') == 'disabled' and installed.get('given') is not True:
+        problems.append('the app phase installed the interpreter disabled only because --interpreter-mode was not '
+                        "given, so every upload's reading is paused (design/FINAL.md 11.2; the install uses live, "
+                        'FINAL 13): rerun --phase app with --interpreter-mode live, or with --interpreter-mode '
+                        'disabled to keep it paused')
+    # AMENDMENT-2 1.11 [R:replay-R3]: the shared file is expected whenever the interpreter or the participant whose file
+    # it is is live, and a bind is reported only when neither is
+    if mode == 'live' and not evidence['worker_holds_key']:
+        problems.append(f"the live interpreter's worker does not hold {INTERPRETER['target']} read-only")
+    elif sharing == 'live' and not evidence['worker_holds_key']:
+        problems.append(f"the worker of the live {INTERPRETER_SHARES} participant does not hold "
+                        f"{INTERPRETER['target']} read-only")
+    if mode != 'live' and sharing != 'live' and evidence['worker_holds_key']:
+        problems.append(f'the worker holds {INTERPRETER["target"]}, but neither its interpreter nor the '
+                        f'{INTERPRETER_SHARES} participant is live')
+    asked = utc_moment(since) if isinstance(since, str) else None
+    if asked is None:
+        problems.append("the app receipt names no new worker's start, so the interpretation self-test was not read "
+                        '(ADJUDICATION P-7)')
+        return {**evidence, 'self_test': 'not run', 'summary': f'interpreter {mode}: self-test not run'}, problems
+    result = oneshot(image_id, ['manage', 'interpretation_report', '--since', since, '--self-test', '--json'],
+                     read_protected_env(APP_ENV, APP_ENV_KEYS), timeout=INTERPRETATION_REPORT_SECONDS)
+    evidence.update(exit=result.returncode, log=ctx.log('interpretation-report', result.stdout + result.stderr[-8192:]))
+    parsed = None
+    if len(result.stdout) <= INTERPRETATION_REPORT_LIMIT:
+        try:
+            parsed = json.loads(result.stdout.decode('utf-8'))
+        except (UnicodeDecodeError, ValueError):
+            parsed = None
+    report = parsed.get('report') if isinstance(parsed, dict) else None
+    test = parsed.get('self_test') if isinstance(parsed, dict) else None
+    checks = test.get('checks') if isinstance(test, dict) else None
+    if not (isinstance(report, dict) and isinstance(checks, list)
+            and all(isinstance(check, dict) and isinstance(check.get('name'), str) for check in checks)):
+        problems.append(f'the interpretation report did not answer its JSON report and self-test (exit '
+                        f'{result.returncode}); see {evidence["log"]}')
+        return {**evidence, 'self_test': 'unread', 'summary': f'interpreter {mode}: self-test unread'}, problems
+    evidence.update(self_test=test, report=report)
+    named = {check['name']: check for check in checks}
+    missing = [name for name in INTERPRETATION_SELF_TEST if name not in named]
+    failed = [check for check in checks if check.get('ok') is not True]
+    if missing:
+        problems.append('the interpretation self-test did not run: ' + ', '.join(missing))
+    if failed:
+        problems.append('the interpretation self-test failed: ' + '; '.join(
+            f'{check["name"]} ({check.get("detail")})' for check in failed))
+    if test.get('passed') is not True and not failed:
+        problems.append('the interpretation self-test did not say it passed')
+    if result.returncode and not failed:
+        problems.append(f'the interpretation report exited {result.returncode}; see {evidence["log"]}')
+    # design v2 (FINAL-V2 5.7 measures 1-3; step 6a's request R6): the RETIRED kind is read too - armed, its size its
+    # pin, its positive control ok - from the report's own sentinel record (this one-shot's sentinel.status()); its
+    # probe trips through 'positive control trips', whose ok needs sentinel.trip_test's retired_tripped since step 6a
+    retired = retired_problems(report.get('sentinel'))
+    problems += retired
+    evidence['retired'] = {key: (report.get('sentinel') or {}).get(key) if isinstance(report.get('sentinel'), dict)
+                           else None for key in ('retired_size', 'pinned_retired_size', 'retired_control',
+                                                 'retired_armed', 'retired_modules')}
+    window = utc_moment((report.get('window') or {}).get('since'))
+    if window != asked:
+        problems.append(f'the interpretation report read from {window.isoformat() if window else "an unnamed time"}, '
+                        f'not from the new worker\'s start ({since})')
+    hold = report.get('hold') if isinstance(report.get('hold'), dict) else {}
+    standing = [item.get('reason') for item in hold.get('standing') or [] if isinstance(item, dict)]
+    held = (f'standing ({", ".join(sorted(set(map(str, standing))))})' if hold.get('held') else
+            'none standing' if hold.get('held') is False else 'not read')
+    passed = not (missing or failed or result.returncode or retired) and test.get('passed') is True
+    evidence['summary'] = (f'interpreter {mode}: self-test {"passed" if passed else "FAILED"} '
+                           f'({len(INTERPRETATION_SELF_TEST) - len(missing)} of {len(INTERPRETATION_SELF_TEST)} checks '
+                           f'run; the retired kind {"as pinned" if not retired else "NOT as pinned"}) since the new '
+                           f'worker started ({since}); interpreter hold {held}')
+    return evidence, problems
+
+
+def retired_problems(found) -> list:
+    """Design v2 (FINAL-V2 5.7 measures 1-3; step 6a's request R6): what is wrong with the RETIRED kind in the D22
+    report's sentinel record ``found`` (sentinel.status() of the report's process): [] when it is armed, its size equals
+    its pin (RETIRED_SIZE) and its positive control passed. A record that does not say is wrong, never read as fine."""
+    if not isinstance(found, dict):
+        return ['the interpretation report carries no sentinel record, so the retired kind was not read']
+    problems = []
+    size, pinned = found.get('retired_size'), found.get('pinned_retired_size')
+    if not (type(size) is int and type(pinned) is int and pinned > 0 and size == pinned):
+        problems.append(f'the retired kind holds {size!r} code objects, pinned {pinned!r} (FINAL-V2 5.7 measure 1)')
+    if found.get('retired_control') != 'ok':
+        problems.append(f'the retired kind\'s positive control is {found.get("retired_control")!r}, not ok (5.7 measure 3)')
+    if found.get('retired_armed') is not True:
+        problems.append('the retired kind is not armed in the report\'s process (5.7 measure 2)')
+    return problems
+
+
 def phase_verify(ctx) -> dict:
     preflight = require_receipt(ctx, 'preflight')['details']
     image_id = installed_image(ctx)
@@ -5520,8 +7527,9 @@ def phase_verify(ctx) -> dict:
     db = inspect('container', DB_CONTAINER)
     if db is None or db_container_problems(db, postgres.get('Id')) or not db['State'].get('Running'):
         problems.append(f'{DB_CONTAINER} is not the running, labelled, loopback-only database')
+    pair = {}
     for role, name in SERVICES.items():
-        container = inspect('container', name)
+        container = pair[role] = inspect('container', name)
         if container is None or not container['State'].get('Running'):
             problems.append(f'{name} is not running')
         else:
@@ -5537,12 +7545,17 @@ def phase_verify(ctx) -> dict:
     if foreign:
         problems.append(f'uid {APP_UID} now runs {foreign} task(s) outside CPT Studio')
     appeared = sorted(set(now) - set(preflight['containers']) - {DB_CONTAINER, *SERVICES.values()})
+    # The D22 evidence (design/FINAL.md 13; ADJUDICATION P-7): the interpreter's mode as the worker was started with it,
+    # and the interpretation report's self-test since the new worker started.
+    interpreting, interpretation_problems = interpretation_evidence(ctx, image_id, pair.get('worker'))
+    problems += interpretation_problems
     details = {'evidence': evidence, 'containers_appeared_elsewhere': appeared, 'image_id': image_id,
-               'web_port': port}
+               'web_port': port, 'interpretation': interpreting}
     if problems:
         raise InstallError(f'verify found {len(problems)} difference(s): ' + '; '.join(problems) + '.',
                            details={**details, 'problems': problems})
-    return {**details, 'summary': f'installed {ctx.revision[:12]} verified; co-tenants and app.quillmd.com unchanged'}
+    return {**details, 'summary': f'installed {ctx.revision[:12]} verified; co-tenants and app.quillmd.com unchanged; '
+                                  + interpreting['summary']}
 
 
 def keep_layout(ctx):
@@ -5677,33 +7690,50 @@ def rollback_from_keep(ctx, keep) -> dict:
         if keep['worker'] is not None:
             stop_service_container(SERVICES['worker'], 'worker')
         first_at = dt.datetime.now(dt.timezone.utc)
+        record['close_started_at'] = first_at.isoformat()  # refutation 6b-r2 F4: a close that raises may have committed
         record['stages_closed'] = first = close_undone_stages(image_id, env, since, ctx.revision, reason, kinds)
         shown, acting = hazards_by_kind(first.get('hazards'))
         if shown is None or shown or acting:
             named = (hazard_summary(merge_hazards(shown, acting)) if shown is not None
                      else 'the close did not say which encounters')
+            # refutation 6b-r1 P2: this revision's web keeps serving, so the saves the close set back are put back
             message, outcome = (f'{cause}: after the close, {named} hold records an older revision would act on, or '
                                 f'show, wrongly under its own rules, so nothing more was done: {keep_note(live, idle)}. '
-                                'Clear them on this revision\'s web, then rerun --phase rollback-app.'), 'kept'
+                                'Clear them on this revision\'s web, then rerun --phase rollback-app.'
+                                + kept_serving(image_id, env, [first], record)), 'kept'
         else:
+            # ADJUDICATION P-1: this revision's worker is stopped, so this is what the old pair is handed (design v2:
+            # with the close's pending updates; the close after the drain adds its own below)
+            base = interpretation_note(image_id, env, ctx.revision)
+            record['interpretation'] = with_update_note(base, [first])
             message, _, outcome = return_to_old_web(
                 ctx, cause, image_id=image_id, env_bytes=env, preflight=baseline, live=live, idle=idle,
                 old_revision=old_revision, previous=previous, parked_worker=parked, kinds=kinds, reason=reason,
                 first=first, first_at=first_at, details=record)
+            if record.get('stages_closed_after_drain') is not None:
+                record['interpretation'] = with_update_note(base, [first, record['stages_closed_after_drain']])
+            if outcome == 'kept':  # refutation 6b-r1 P2: the old web served nothing, so the note was handed to none
+                record['interpretation'] = undone_note(base)
         record['availability'] = recorder.stop()  # inside: a Ctrl-C here fails the phase too (D-4)
     except BaseException as failure:
+        # refutation 6b-r2 F4 (DECISIONS D247): a close that raised may have committed its revert first, and this
+        # layout keeps this revision's web serving: the switch-back's clause names the rows since it started
+        unanswered = record.get('close_started_at') and 'stages_closed' not in record
         raise InstallError(f'{cause}: {str(failure) or type(failure).__name__}; read "left" in this receipt, then '
-                           'ops/INSTALL.md, Recovery notes.',
+                           'ops/INSTALL.md, Recovery notes.'
+                           + (f' The close was started and gave no answer: it '
+                              f'{possibly_set_back(record["close_started_at"])}.' if unanswered else ''),
                            details={**record, 'availability': stop_recorder(recorder),
                                     'left': left_summary()}) from failure
     if outcome != 'switched' or record.get('incoming_left'):
         raise InstallError(message, details={**record, 'outcome': outcome, 'left': left_summary()})
     availability = record['availability']
+    note = (record.get('interpretation') or {}).get('note')
     return {**record, 'outcome': outcome, 'message': message,
             'summary': f'switched back to {old_revision[:12]} on {live} (the S4 keep layout): '
                        f'{availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200; {removal_summary(record, keep)}; database, '
-                       'volumes, images and secrets kept'}
+                       'volumes, images and secrets kept' + (f'; {note}' if note else '')}
 
 
 def rollback_back(ctx, keep) -> dict:
@@ -5739,11 +7769,16 @@ def rollback_back(ctx, keep) -> dict:
                                 'Rerun --phase rollback-app once nginx answers (ops/INSTALL.md, Recovery notes); never '
                                 'start the old worker by hand.'), 'halfway'
         else:
+            # ADJUDICATION P-1: no worker of this revision runs in this layout, so this is what the old pair is handed
+            base = record['interpretation'] = interpretation_note(image_id, env, ctx.revision)
             done = finish_back(ctx, image_id=image_id, env_bytes=env, idle=idle, previous=previous,
                                parked_worker=parked_of(parked_worker), kinds=kinds, reason=reason, since=since,
                                closes=[], details=record, worker=True,
                                hold=lambda every: undo_hold(every, same=False, strict=True,
                                                             window='the incoming web was created'))
+            # design v2 (amendment 1, 9.4): the note with what the close after the drain did for the update
+            if record.get('stages_closed_after_drain') is not None:
+                record['interpretation'] = with_update_note(base, [record['stages_closed_after_drain']])
             outcome = done['outcome']
             if outcome == 'back':
                 message = f'{cause}: {done["problem"]}. {left_for_rollback_app()}'
@@ -5762,11 +7797,12 @@ def rollback_back(ctx, keep) -> dict:
     if outcome != 'switched' or record.get('incoming_left'):
         raise InstallError(message, details={**record, 'outcome': outcome, 'left': left_summary()})
     availability = record['availability']
+    note = (record.get('interpretation') or {}).get('note')
     return {**record, 'outcome': outcome, 'message': message,
             'summary': f'went back to {old_revision[:12]} on {live} (the back layout): '
                        f'{availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200; {removal_summary(record, keep)}; database, '
-                       'volumes, images and secrets kept'}
+                       'volumes, images and secrets kept' + (f'; {note}' if note else '')}
 
 
 def phase_rollback_app(ctx) -> dict:
@@ -5780,13 +7816,20 @@ def phase_rollback_app(ctx) -> dict:
     so a parked pair renamed back or an older revision installed afterwards never runs that work under its own rules,
     nor shows a state it would misread. When the stages cannot be closed, the states cannot be put back, or the second
     read names a record (a send in flight when the worker stopped is an unknown outcome), the pair is left stopped, not
-    removed. Refutation r2, L6-5: in the S4 'keep' layout (keep_layout) it acts on this revision's web and worker, with
+    removed. Refutation 6b-r2 F1 (DECISIONS D247): when that message has this pair started again (a record named after
+    the close) or offers to keep this revision (a removal that failed), the saves the close set back are put back first
+    (kept_serving), or, when that cannot run (an interrupt), named as not put back; a Ctrl-C while the put-back runs is
+    recorded and said by kept_serving, so the receipt keeps the close's record of what each member saved (refutation
+    w7r 6b-r1 R1), as it does for a close that raised or was interrupted. Refutation r2, L6-5: in the S4 'keep'
+    layout (keep_layout) it acts on this revision's web and worker, with
     this revision's image, and switches back to the old web without interrupting the site (rollback_from_keep), and in
     the 'back' layout it finishes the way back (rollback_back; refutation r3, D-3); with a cpt-studio-web-next in any
     other layout, or a web and a worker of different images, it refuses, stopping nothing: which web serves, and whose
     records to read, cannot be told from the names. Refutation r3 (the recovery notes send undos here): it removes only
     this revision's own pair - a web or worker under the canonical names that carries another revision is refused,
-    stopping nothing (it would stop the old web an undo had just put back in service)."""
+    stopping nothing (it would stop the old web an undo had just put back in service). ADJUDICATION P-1: what this
+    revision made from event inventories is never a reason to refuse; every arm that hands the rows to an older pair
+    declares it in its receipt ('interpretation': interpretation_note) and goes on."""
     keep = keep_layout(ctx)
     if keep is not None:
         return rollback_from_keep(ctx, keep)
@@ -5838,33 +7881,62 @@ def phase_rollback_app(ctx) -> dict:
                 next_image = previous['Image']
                 break
         kinds = stage_kinds_of(next_image, env) if next_image else list(COMMON_STAGE_KINDS)
-        try:
+        try:  # refutation w7r 6b-r1 R4: a database that refuses here means the close never started - said so
             require_db()
+        except InstallError as error:
+            raise InstallError(f'Web and worker stopped, not removed: the stages they left open could not be closed '
+                               f'({error}): the close was not started, so nothing was closed or set back. Rerun '
+                               '--phase rollback-app once that is resolved.') from error
+        started = utc_now_ms()  # refutation 6b-r2 F4: a close that raises may have committed its revert first
+        try:
             closed = close_undone_stages(first['Image'], env,
                                          min(created_at(container) for container in pair.values()), revision,
                                          'its web and worker were removed (rollback-app)', kinds)
-        except InstallError as error:
-            raise InstallError(f'Web and worker stopped, not removed: the stages they left open could not be closed '
-                               f'({error}). Rerun --phase rollback-app once that is resolved.') from error
+        except BaseException as error:  # noqa: BLE001 — refutation w7r 6b-r1 R1: a Ctrl-C there is said too
+            raise InstallError(f'Web and worker stopped, not removed: '
+                               f'{close_did_not_finish("the stages they left open", error)}; and it '
+                               f'{possibly_set_back(started)}. Rerun --phase rollback-app once that is resolved.',
+                               details={'close_started_at': started}) from error
         hazards = closed.get('hazards')
         if not isinstance(hazards, dict) or hazards:
             named = hazard_summary(hazards) if isinstance(hazards, dict) else 'the close did not say which encounters'
+            left = {'hazards': hazards, 'stages_closed': closed}
+            # refutation 6b-r2 F1 (DECISIONS D247): this message leaves this revision's pair to serve again (started
+            # again to clear the records), so the saves the close set back are put back first, as kept_serving does
+            # on every way that keeps this revision's web serving - or, when that cannot run, it names them
             raise InstallError(f'Web and worker stopped, not removed: after the close, {named} hold records an older '
                                'revision would act on, or show, wrongly under its own rules. Start them again '
                                f'(docker start {SERVICES["worker"]} {SERVICES["web"]}), clear them on this '
                                'revision\'s web (ops/INSTALL.md, Reinstalling an older revision), then rerun --phase '
-                               'rollback-app.',
-                               details={'hazards': hazards, 'stages_closed': closed})
+                               'rollback-app.' + kept_serving(first['Image'], env, [closed], left), details=left)
         # Refutation p2, install2:1: the next pair - the parked one renamed back, or an older revision installed by its
         # own installer, which never recomputes a stored state - shows each state by its own labels, so a response
         # refused whole would read 'Provider request failed'. Each state this revision labels otherwise is given the
         # state that pair derives (the parked image's own derivation, else 057a7d39's), while this pair is stopped.
         try:
             put_back = put_back_states(closed, next_image, first['Image'], env)
-        except InstallError as error:
+        except BaseException as error:  # noqa: BLE001 — refutation w7r 6b-r1 R1's class: a Ctrl-C keeps the record too
+            # the only way on is back to the older pair, which reads the saves the close set back as set back: they
+            # stay so, and the message says it (refutation 6b-r2 F2: what is so)
             raise InstallError(f'Web and worker stopped, not removed: the list states an older revision labels '
-                               f'otherwise could not be put back ({error}). Rerun --phase rollback-app once that is '
-                               'resolved.', details={'stages_closed': closed}) from error
+                               f'otherwise could not be put back ({str(error) or type(error).__name__}). Rerun --phase '
+                               'rollback-app once that is resolved.' + set_back_clause([closed]),
+                               details={'stages_closed': closed}) from error
+        # ADJUDICATION P-1: the pair is stopped, so this is what the next pair is handed - a declared note, never a
+        # refusal; design v2 (amendment 1, 9.4): with the close's pending updates and reverted saves
+        try:
+            base = interpretation_note(first['Image'], env, revision)
+        except BaseException as error:  # noqa: BLE001 — it answers every failure itself; an interrupt keeps the record
+            changed = (put_back or {}).get('changed') or {}
+            raise InstallError(f'Web and worker stopped, not removed: the count of what this revision made from event '
+                               f'inventories was interrupted ({str(error) or type(error).__name__})'
+                               + (f', after the list states of {len(changed)} encounter(s) were put back to what the '
+                                  'older revision derives' if changed else '')
+                               + '. Rerun --phase rollback-app.' + set_back_clause([closed]),
+                               details={'stages_closed': closed, 'states_put_back': put_back}) from error
+        made = with_update_note(base, [closed])
+    else:
+        made = None
     removed = {}
     try:
         for role in ('worker', 'web'):
@@ -5872,17 +7944,32 @@ def phase_rollback_app(ctx) -> dict:
             removed[name] = role in pair
             remove_service_container(name, role)
     except BaseException as error:  # noqa: BLE001 — states were put back for the older revision: the receipt says so
-        if not (put_back or {}).get('changed'):
+        changed = (put_back or {}).get('changed')
+        parts = _undo_parts([closed]) if closed is not None else None
+        if not changed and not (closed is not None and (parts is None or parts[1])):
             raise
-        raise InstallError(f'{str(error) or type(error).__name__}; before it, the list states of '
-                           f'{len(put_back["changed"])} encounter(s) were put back to what the older revision derives, '
-                           'which this revision labels otherwise: rerun --phase rollback-app; or, to keep this '
-                           'revision, rerun --phase app, which recomputes them.',
-                           details={'stages_closed': closed, 'states_put_back': put_back}) from error
+        details = {'stages_closed': closed, 'states_put_back': put_back, 'interpretation': made}
+        states = (f'; before it, the list states of {len(changed)} encounter(s) were put back to what the older '
+                  'revision derives, which this revision labels otherwise' if changed else '')
+        # refutation 6b-r2 F1 (DECISIONS D247): the message offers to keep this revision, so the saves the close set
+        # back are put back first; an interrupt runs nothing more, and the message names them as not put back. Once
+        # any is put back, no earlier pair was handed them, so the note carries none of its members' instructions
+        if isinstance(error, Exception):
+            said = kept_serving(first['Image'], env, [closed], details)
+        else:
+            said = not_put_back([closed], 'the phase was interrupted before they could be')
+        if (details.get('reapplied') or {}).get('reapplied'):
+            details['interpretation'] = undone_note(base, kept='the removal of this revision\'s pair stopped before '
+                                                               'any earlier pair was started, and the saves the close '
+                                                               'set back were put back (reapplied)')
+        raise InstallError(f'{str(error) or type(error).__name__}{states}: rerun --phase rollback-app; or, to keep '
+                           'this revision, rerun --phase app' + (', which recomputes them' if changed else '') + '.'
+                           + said, details=details) from error
     parked = [name + '-previous' for name in SERVICES.values() if inspect('container', name + '-previous')]
     return {'removed': removed, 'stages_closed': closed, 'states_put_back': put_back, 'parked_left_in_place': parked,
+            'interpretation': made,
             'summary': 'web and worker removed after closing their open stages; database, volumes, images and '
-                       'secrets kept'}
+                       'secrets kept' + (f'; {made["note"]}' if made else '')}
 
 
 def recorded_vhosts(ctx) -> dict:

@@ -1,0 +1,7 @@
+SYNTHETIC ERCP REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+Findings: The duodenoscope was advanced to the major papilla.
+Deep biliary cannulation was achieved with a sphincterotome.
+The existing biliary stent was removed and replaced with a new plastic stent.

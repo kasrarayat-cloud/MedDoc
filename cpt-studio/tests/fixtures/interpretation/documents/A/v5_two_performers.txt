@@ -1,0 +1,8 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Date of service: November 9, 2026
+Endoscopist: Grace Okafor, MD (fictional)
+History: In 2024 Dr. Lucas Alvarez (fictional) removed a 12 mm polyp from the ascending colon with a hot snare at another hospital.
+Procedure: I advanced the colonoscope to the cecum. I examined the ascending colon polypectomy scar, which was flat and pale, and took cold
+forceps biopsies from it. No polyp was removed today.
+Impression: Healed ascending colon polypectomy scar, biopsied.

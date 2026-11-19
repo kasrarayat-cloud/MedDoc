@@ -1,0 +1,17 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Facility: Harborview Endoscopy Center (fictional)
+Patient: Teodor Lindqvist (fictional)
+Date of service: November 9, 2026
+Endoscopist: Naomi Carrow, MD (fictional)
+Indication: Hematochezia.
+Procedure: The colonoscope was advanced to the cecum; the appendiceal orifice was identified.
+Findings:
+- Mid transverse colon: a 30 mm flat, granular laterally spreading lesion.
+- The lesion was not removed today because clopidogrel had not been held.
+- Today a submucosal tattoo was placed 3 cm distal to the lesion for future localization.
+- The tattoo used sterile carbon particle suspension injected in three quadrants.
+- Remainder of the colon: normal.
+Impression:
+1. 30 mm laterally spreading lesion of the transverse colon, tattooed today; not resected.
+Plan: Endoscopic mucosal resection at a separate session after clopidogrel is held.

@@ -21,6 +21,7 @@ from django.test import Client, TestCase, override_settings
 
 from studio import models, serializers
 from studio.providers.base import ProviderUnavailable
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import FakeProvider, drain
@@ -131,6 +132,7 @@ class Harness(OperatorReads, TestCase):
 
 # --- 1. the review queue lists what waits on a member (demo RC6, PR5; R9 and R10) ---------------------------------------
 
+@applied
 class QueueListsWhatWaitsOnAMemberTests(Harness):
     def test_a_reviewed_encounter_whose_coding_is_incomplete_is_queued_and_says_so(self):
         # ho-09's shape: the one selected code approved (state reviewed), a documented act left without a supported
@@ -288,6 +290,7 @@ class QueueListsWhatWaitsOnAMemberTests(Harness):
 
 # --- 3. the date chip quotes the date the reader kept as evidence (occurrence RC5, R4 (i)) -------------------------------
 
+@applied
 class DateChipQuotesTheKeptEvidenceTests(Harness):
     def chips(self, detail):
         codes = page(detail)['codes']
@@ -331,6 +334,7 @@ class DateChipQuotesTheKeptEvidenceTests(Harness):
 
 # --- 4. a clarification card leads with its question; the technical reason is behind "Details" (demo RC8, PR7) ---------
 
+@applied
 class ClarificationCardsLeadWithTheQuestionTests(Harness):
     def test_the_encounter_question_card_leads_with_the_question(self):
         self.use(FakeProvider(selections=[('99213', VISIT_TIME)]))
@@ -368,6 +372,7 @@ QUOTE_SNARE = 'was removed with a cold snare'
 QUOTE_BIOPSY = 'was sampled with cold biopsy forceps'
 
 
+@applied
 class CandidatesAreGroupedTests(Harness):
     def test_candidates_of_a_documented_service_family_lead_and_the_rest_are_collapsed_with_their_count(self):
         self.use(Scripted(codes=[('cpt', '45385', QUOTE_SNARE)],

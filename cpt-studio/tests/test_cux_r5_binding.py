@@ -48,6 +48,7 @@ from studio.types import NormalizedResponse, PageSpan
 from tests import test_customer_surface as tcs
 from tests import test_repairs_gi2_present as gi2
 from tests import test_services_reconcile as rec
+from tests.legacy_chain import applied
 from tests.test_customer_fixtures import CitingCorti
 from tests.test_cux_bind import MARA, acts, bundled, conflicts, inventory, outcomes, run, service
 from tests.test_cux_hold import state
@@ -640,6 +641,7 @@ class HeldCodeCarriesItsActsTests(SimpleTestCase):
         self.assertEqual(reviews['43239'], {})
 
 
+@applied
 @override_settings(**gi2.LIVE)
 class SecondReviewApprovedExportTests(gi2.Harness):
     """Fix (a), X-R5B-1 through the customer API: after the bounded second review the snare code is a code that needs a
@@ -686,6 +688,7 @@ class SecondReviewApprovedExportTests(gi2.Harness):
         self.walk(H1146)
 
 
+@applied
 class AddendumLiftsTheHoldTests(tcs.SurfaceCase):
     """Fix (b), Y-F2 through the customer API: the physician's addendum, posted from the held code's detail row and
     naming the act's site and service, is assessed as revision 2 and lifts the hold; the code can then be approved.
@@ -754,6 +757,7 @@ class AddendumLiftsTheHoldTests(tcs.SurfaceCase):
         self.assertEqual(reply.status_code, 409, reply.content)
 
 
+@applied
 @override_settings(**gi2.LIVE)
 class ModifierReviewTests(gi2.Harness):
     """Fix (c), X-R5B-2 through the customer API: beside the held label-only snare (45385), the ready forceps removal

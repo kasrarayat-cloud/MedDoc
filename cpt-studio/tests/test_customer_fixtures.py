@@ -27,6 +27,7 @@ from django.test import override_settings
 from studio import jobs, models, review
 from studio.providers.corti import ADAPTER_VERSION, build_coding_request
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import operator as ops
 from tests.test_customer_surface import GI_TWO_LESIONS, LESION_A, SurfaceCase, assert_contract, assert_rows, assert_session
@@ -120,6 +121,7 @@ class RetainedCorti:
                            usage_basis='retained_fixture_replayed_in_process')
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class CustomerFixtureTests(SurfaceCase):
     maxDiff = None

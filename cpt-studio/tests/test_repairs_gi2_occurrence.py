@@ -26,6 +26,7 @@ from django.test import SimpleTestCase
 
 from studio import bounded, jobs
 from studio.gi import context
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import OFFICE_NOTE
 from tests.test_repairs_7c8_context import DateAssertions
 from tests.test_repairs_7c8_context3 import (COLO_BODY, COLO_PLAIN, EGD_BODY, ELENA_DATE, HEAD, EndToEnd, date_fact,
@@ -250,6 +251,7 @@ class NarrowRuleCostTests(SimpleTestCase):
                 self.assertEqual((out[0]['service_date'].origin, out[0]['service_date'].value), expected)
 
 
+@applied
 class NarrowRuleRequestTests(EndToEnd):
     """End to end: the outside block's date never reaches a request, and the act done today is not excluded against
     it; a member's answer with that date is held (nothing sent), as a member's date the document never states is."""

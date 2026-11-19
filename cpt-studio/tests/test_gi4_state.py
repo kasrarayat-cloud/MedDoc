@@ -36,6 +36,7 @@ from studio.gi import services as gi_services
 from studio.providers.corti import ADAPTER_VERSION, build_coding_request
 from studio.types import Fact, RawExchange, Span
 from studio.validation import engine, reconcile
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 
@@ -153,6 +154,7 @@ def seed_reference(codes):
                 replay.PFS_ROW if source['kind'] == 'cms-pfs' else replay.MUE_ROW))
 
 
+@applied
 @override_settings(**LIVE)
 class StateBatteryTests(OperatorReads, TestCase):
     def setUp(self):
@@ -189,9 +191,11 @@ class StateBatteryTests(OperatorReads, TestCase):
     def detail(self, encounter_id):
         return self.client.get(f'/ops/api/encounters/{encounter_id}').json()
 
-    def answer(self, encounter_id, value):
+    def answer(self, encounter_id, value, status=201):
         response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': value})
-        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.status_code, status, response.content)
+        if status == 200:  # FINAL-V2 amendment 1, 1.3: a save of the saved values writes nothing and answers 200
+            self.assertTrue(response.json()['unchanged'])
         self.drain()
 
     def no_review2(self, encounter_id):
@@ -209,7 +213,7 @@ class StateBatteryTests(OperatorReads, TestCase):
         self.assertEqual(self.provider.sent, [STORED[None]])  # the dateless primary, byte-identical to the live one
         self.answer(encounter_id, '2026-10-19')
         self.assertEqual(self.provider.sent, [STORED[None], STORED['2026-10-19']])
-        self.answer(encounter_id, '2026-10-19')  # an identical re-save
+        self.answer(encounter_id, '2026-10-19', status=200)  # an identical re-save
         self.assertEqual(len(self.provider.sent), 2)
         self.assertEqual(self.proposal(encounter_id, '43251')['status'], 'ready')
         self.no_review2(encounter_id)
@@ -235,10 +239,8 @@ class StateBatteryTests(OperatorReads, TestCase):
                               'acknowledgement': review.ACKNOWLEDGEMENTS['human']})
         self.assertEqual(response.status_code, 201, response.content)
         approved = models.Decision.objects.get(encounter_id=encounter_id)
-        self.answer(encounter_id, '2026-10-19')  # identical re-save: same fingerprint, the decision carries
-        carried = models.Decision.objects.get(carried_from=approved)
-        self.assertEqual(carried.proposal_fingerprint, approved.proposal_fingerprint)
-        self.assertFalse(models.DecisionInvalidation.objects.filter(decision=approved).exists())
+        # FINAL-V2 amendment 1, 1.2: an identical re-save changes nothing and makes nothing; the approval stands
+        carried = approved
         sends = len(self.provider.sent)
         response = self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'hospital_outpatient'})
         self.assertEqual(response.status_code, 201, response.content)  # a context change 43251 does not depend on
@@ -247,7 +249,11 @@ class StateBatteryTests(OperatorReads, TestCase):
         self.assertEqual(again.proposal_fingerprint, carried.proposal_fingerprint)
         removed, _ = models.ReferenceCodeFact.objects.filter(code='43251', source__kind='cms-pfs').delete()
         self.assertEqual(removed, 1)  # the fee-schedule row 43251's checks read is gone: a check changes
-        self.answer(encounter_id, '2026-10-19')  # the same date again: a re-assessment, nothing to send
+        # another change 43251 does not depend on (an identical re-save makes nothing: amendment 1, 1.2): a
+        # re-assessment, nothing to send
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.drain()
         self.assertEqual(len(self.provider.sent), sends)
         self.assertFalse(models.Decision.objects.filter(carried_from=again).exists())
         invalidation = models.DecisionInvalidation.objects.get(decision=again)
@@ -357,7 +363,8 @@ class StateBatteryTests(OperatorReads, TestCase):
         self.drain()
         self.no_review2(encounter_id)
         self.assertEqual(len(self.provider.sent), sends)
-        response = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': ''})  # an unchanged value
+        # a value that changes (FINAL-V2 amendment 1, 1.2: a save that changes nothing makes nothing)
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': 'professional'})
         self.assertEqual(response.status_code, 201, response.content)
         self.drain()
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).current_context.version, jobs.CONTEXT_VERSION)

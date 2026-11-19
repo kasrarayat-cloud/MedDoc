@@ -20,17 +20,39 @@ blocked on it returns at once, and the outcome is 'unknown' (sent) - never a par
 Every exchange records what was called and what answered (HARNESS.md 6): the endpoint only when the request may have
 reached it, the model the verified request names, and the model, id and usage the response body states, as stated.
 
+A STREAM WITH AN END EVENT (docs/gemini-migration/AMENDMENT-2.md 1.3; the interpreter's connector, studio/
+interpretation/fable_adapter.py). A vendor may name a ``complete`` test: whether a 200's bytes reached the stream's end.
+When it does, the test decides from the bytes kept: a 200 whose kept bytes do not reach the end - its body read whole
+without its end event, or a read that stopped early for a connection reset or a broken chunk, the deadline or the byte
+cap before the end event came - is 'unknown' (sent, HTTP 200) with the bytes read before the stop kept and their
+sha256, and no usage: the operator's evidence for the reconcile, never an answer and never priced as one
+[R:connector-CONN-6][R:connector-CONN-2][R:connector-CONN-3]. Whenever the bytes kept from a read that stopped early
+already end with the stream's end event, they are the whole stream they are (DECISIONS D294, CONN-RF-3): 'succeeded',
+read, described and priced as a whole answer - so its outcome is never left for a reconcile to pay for again. A vendor
+that names none (Corti's discipline, Astra, Fable 5.1, the dormant Gemini adapter) keeps every path exactly as
+before.
+
 A PDF original travels by reference (HARNESS.md 3). The stored request body holds {"$original_sha256": hex,
 "$original_bytes": n} where the vendor's file data goes, and the request's sha256 is of that stored form. At send time
 the given bytes are re-verified against both and only then expanded into the vendor's file block. A tool loop
 (loop.py) sends every exchange through post() and re-verifies and expands the original on each exchange that carries
 its placeholder.
+
+WHY NOTHING LEFT (DECISIONS D324 (10) and its addendum, L7-A2). A 'not_sent' this SERVER caused - credentials that
+could not be used, the network (no HTTP session, a connection never established) or a deadline that passed before the
+request was written - says nothing about the request: the identical request may go once the cause is gone. post()
+returns each of these as an UnsentExchange naming its cause (Unsent), with the same fields and words as before; a
+refusal the request itself causes (it fails its own verification, its body is over the size limit or not one the
+adapter builds) carries none, and decides what it decides as before. unsent_cause() reads the cause; a caller that
+records an outcome by its fields (loop.run's final) keeps it with with_cause(). The question stage (studio/jobs.py)
+leaves a request whose not_sent names a cause owed and resumable, never decided and never retried by itself.
 """
 from __future__ import annotations
 
 import contextvars
 import copy
 import dataclasses
+import enum
 import hashlib
 import re
 import socket
@@ -38,7 +60,7 @@ import threading
 from contextlib import suppress
 from dataclasses import dataclass
 from time import monotonic
-from typing import Callable, Optional, Sequence
+from typing import Callable, Iterator, Optional, Sequence
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -63,7 +85,17 @@ _RESPONSE_ID = re.compile(r'[\x21-\x7e]{1,140}')  # fits ProviderRun.response_id
 @dataclass(frozen=True)
 class Vendor:
     label: str  # how errors name the vendor
-    request_id_header: str  # the response header carrying the vendor's own request id
+    request_id_header: str  # the response header carrying the vendor's own request id ('' when it sends none)
+    # The vendor's describe hook (Gemini migration, FINAL 3.2): how a response body states its usage, model and id,
+    # ``describe(raw) -> (usage, model, id)``. None is this module's describe, which reads all three at the top level as
+    # OpenAI and Anthropic state them; Gemini states them as usageMetadata, modelVersion and responseId
+    # (studio/interpretation/adapter.py). What a hook returns is kept only where it fits the record (described).
+    describe: Optional[Callable[[bytes], tuple]] = None
+    # AMENDMENT-2 1.3: the vendor's end test, ``complete(raw) -> bool``, for a response that is a stream with an
+    # end event (the interpreter's Fable connector). Set, a 200 whose kept bytes do not reach the end - read whole, or a
+    # read that stopped early - is 'unknown' with the bytes read so far kept (_cut), and kept bytes that reach it are
+    # the whole stream (D294, CONN-RF-3); None (every participant) keeps every path as it was.
+    complete: Optional[Callable[[bytes], bool]] = None
 
 
 def default_session() -> requests.Session:
@@ -276,8 +308,11 @@ def expanded_length(stored_length: int, holder: dict, file_prefix: str) -> int:
 
 def check_shape(body, model: str, keys: frozenset) -> None:
     """A verified body is still one this adapter builds: exactly its fields, naming its model (HARNESS.md 8: the model
-    is a code constant, and nothing else - no sampling, thinking or fallback field - can ride along)."""
-    if not isinstance(body, dict) or set(body) != keys or body.get('model') != model:
+    is a code constant, and nothing else - no sampling, thinking or fallback field - can ride along). A vendor whose URL
+    names the model (Gemini's generateContent, studio/interpretation/adapter.py) builds a body with no model field: its
+    fields hold none, so a model field is refused as any other extra field is, and that adapter checks the rest of its
+    body itself. Every body whose fields include ``model`` must name ``model``, exactly as before."""
+    if not isinstance(body, dict) or set(body) != keys or ('model' in keys and body.get('model') != model):
         raise ProviderUnavailable('The request body is not one this adapter builds (its fields or its model differ); '
                                   'nothing was sent.')
 
@@ -321,9 +356,9 @@ def expand_original(body: dict, path: tuple, original_bytes, render: Callable[[b
     return expanded
 
 
-def _placeholders(body):
+def _placeholders(body: object) -> Iterator[tuple[tuple[object, ...], dict[str, object]]]:
     """(path, node) of every object in ``body`` that carries a placeholder key, in no particular order."""
-    pending = [((), body)]
+    pending: list[tuple[tuple[object, ...], object]] = [((), body)]
     while pending:
         path, node = pending.pop()
         if isinstance(node, dict):
@@ -346,11 +381,70 @@ def sendable(body: dict, max_bytes: int, *, with_original: bool = True) -> bytes
     return data
 
 
+def sent_length(body: object) -> Optional[int]:
+    """The bytes ``body`` (a stored request body) is sent as: its canonical encoding with every PDF original placeholder
+    expanded to the JSON string of its bare base64 (expanded_length, no file prefix) - what a worst case counts one
+    input token per byte of (DECISIONS D324 (10), L7-A1: the Fable participant's file data is bare base64). None for a
+    body that is not a JSON object or cannot be encoded."""
+    if not isinstance(body, dict):
+        return None
+    try:
+        length = len(canonical_body(body))
+    except (TypeError, ValueError, UnicodeEncodeError):
+        return None
+    for _, holder in _placeholders(body):
+        size = holder.get(ORIGINAL_BYTES)
+        if type(size) is not int or size < 0:
+            return None
+        length = expanded_length(length, holder, '')
+    return length
+
+
 # --- the exchange --------------------------------------------------------------------
+
+class Unsent(enum.Enum):
+    """Why an exchange was not sent when NOTHING about its request decided it (DECISIONS D324 (10), L7-A2): this server
+    could not send it at that moment. CREDENTIALS - the credentials could not be used when it was sent; NETWORK - no
+    HTTP session could be created, or the connection was never established (refused, a name that did not resolve, the
+    connect timeout); DEADLINE - the deadline passed before the request was written. Sent again later, the identical
+    request may go. A refusal the request itself causes carries no Unsent."""
+    CREDENTIALS = 'credentials'
+    NETWORK = 'network'
+    DEADLINE = 'deadline'
+
+
+@dataclass(frozen=True)
+class UnsentExchange(RawExchange):
+    """A 'not_sent' RawExchange that says why nothing left this server (``cause``): every RawExchange field as
+    not_sent() fills it, so a reader of the fields reads exactly what it read before."""
+    cause: Optional[Unsent] = None
+
 
 def not_sent(error: str, requested_model: str = '') -> RawExchange:
     """base.not_sent, naming the model a verified request asks for ('' until the request is verified)."""
     return dataclasses.replace(base.not_sent(error), requested_model=requested_model)
+
+
+def unsent(cause: Unsent, error: str, requested_model: str = '') -> RawExchange:
+    """not_sent(error, requested_model) naming ``cause``, this server's reason nothing left (Unsent)."""
+    return with_cause(not_sent(error, requested_model), cause)
+
+
+def with_cause(exchange: RawExchange, cause: Unsent) -> RawExchange:
+    """``exchange``, a not_sent that provably sent nothing, carrying ``cause``: each of its RawExchange fields kept."""
+    if exchange.outcome != 'not_sent' or exchange.sent or not isinstance(cause, Unsent):
+        raise ValueError('only a not_sent exchange that sent nothing carries why nothing left this server')
+    fields = {item.name: getattr(exchange, item.name) for item in dataclasses.fields(RawExchange)}
+    return UnsentExchange(**fields, cause=cause)
+
+
+def unsent_cause(exchange: object) -> Optional[Unsent]:
+    """This server's reason nothing of ``exchange`` left (Unsent), for a not_sent exchange that sent nothing and names
+    one; None for every other outcome and for a not_sent the request itself caused."""
+    if (isinstance(exchange, UnsentExchange) and exchange.outcome == 'not_sent' and not exchange.sent
+            and isinstance(exchange.cause, Unsent)):
+        return exchange.cause
+    return None
 
 
 def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: str, body: bytes, headers: dict, *,
@@ -360,11 +454,13 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
     try:
         session = session_factory()
     except Exception as exc:
-        return not_sent(f'No HTTP session could be created ({type(exc).__name__}); nothing was sent.', requested_model)
+        return unsent(Unsent.NETWORK, f'No HTTP session could be created ({type(exc).__name__}); nothing was sent.',
+                      requested_model)
     try:
         timeouts = _timeouts(deadline, connect_timeout, read_timeout)
         if timeouts is None:
-            return not_sent('The deadline passed before the request was sent; nothing was sent.', requested_model)
+            return unsent(Unsent.DEADLINE, 'The deadline passed before the request was sent; nothing was sent.',
+                          requested_model)
         started = monotonic()
         with _Watch(deadline) as watch:
             try:
@@ -372,27 +468,35 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
                                         stream=True)
             except Exception as exc:
                 if watch.disarm() and watch.unsent:
-                    return not_sent('The deadline passed before the request was sent; nothing was sent.',
-                                    requested_model)
+                    return unsent(Unsent.DEADLINE, 'The deadline passed before the request was sent; nothing was sent.',
+                                  requested_model)
                 if watch.never_connected:  # asked before the rules for a request that may have left: none was written
                     if monotonic() >= deadline:  # the clamped connect timeout: the connection took the time left
-                        return not_sent('The deadline passed before the request was sent; nothing was sent.',
-                                        requested_model)
-                    return not_sent(f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
-                                    requested_model)
+                        return unsent(Unsent.DEADLINE,
+                                      'The deadline passed before the request was sent; nothing was sent.',
+                                      requested_model)
+                    return unsent(Unsent.NETWORK,
+                                  f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
+                                  requested_model)
                 if watch.fired:
                     return _unknown(vendor, _BodyError(DEADLINE_READING), started, url, requested_model)
                 if _never_connected(exc):
-                    return not_sent(f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
-                                    requested_model)
+                    return unsent(Unsent.NETWORK,
+                                  f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
+                                  requested_model)
                 return _unknown(vendor, exc, started, url, requested_model)
-            status, request_id = None, ''
+            status, request_id, stop = None, '', None
             try:
                 status = response.status_code
                 request_id = _request_id(response.headers, vendor.request_id_header)
-                raw = _read_capped(response, max_response_bytes, deadline)
-                if watch.disarm():  # the deadline cut the read: what was read is not the whole answer
-                    raise _BodyError(DEADLINE_READING)
+                if vendor.complete is not None and status == 200:  # AMENDMENT-2 1.3: every early stop keeps its bytes
+                    raw, stop = _read_kept(response, max_response_bytes, deadline)
+                    if watch.disarm():  # the deadline cut the read: the bytes before the cut are kept (the end test
+                        stop = _BodyError(DEADLINE_READING)  # below decides whether they are the whole stream)
+                else:
+                    raw = _read_capped(response, max_response_bytes, deadline)
+                    if watch.disarm():  # the deadline cut the read: what was read is not the whole answer
+                        raise _BodyError(DEADLINE_READING)
             except Exception as exc:
                 if watch.disarm():
                     exc = _BodyError(DEADLINE_READING)
@@ -401,7 +505,11 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
                 with suppress(Exception):
                     response.close()
         latency = _elapsed_ms(started)
-        usage, returned_model, response_id = describe(raw)
+        # D294 (CONN-RF-3): the kept bytes decide, whatever stopped the read - bytes that already end with the stream's
+        # end event are the whole stream they are; only bytes short of it are unknown
+        if vendor.complete is not None and status == 200 and not _ended(vendor, raw):
+            return _cut(vendor, raw, stop, latency, url, requested_model, request_id)
+        usage, returned_model, response_id = described(vendor, raw)
         error = ''
         if status != 200:
             redirect = ' (a redirect; it was not followed)' if isinstance(status, int) and 300 <= status < 400 else ''
@@ -426,6 +534,21 @@ def describe(raw: bytes) -> tuple[dict, str, str]:
     if not isinstance(parsed, dict):
         return {}, '', ''
     usage, model, response_id = parsed.get('usage'), parsed.get('model'), parsed.get('id')
+    return (usage if isinstance(usage, dict) else {}, recorded_model(model),
+            response_id if isinstance(response_id, str) and _RESPONSE_ID.fullmatch(response_id) else '')
+
+
+def described(vendor: Vendor, raw: bytes) -> tuple[dict, str, str]:
+    """(usage, model, id) as ``vendor``'s describe hook reads ``raw``: describe's reading exactly, for a vendor with no
+    hook (OpenAI, Anthropic); a hook's reading kept only where it fits the record - the usage a JSON object, the model
+    as recorded_model keeps one, the id visible ASCII of at most 140 characters - and nothing at all ({}, '', '') when
+    the hook raises or answers in another shape. It never raises: what a response says never changes its outcome."""
+    if vendor.describe is None:
+        return describe(raw)
+    try:
+        usage, model, response_id = vendor.describe(raw)
+    except Exception:  # noqa: BLE001 - the hook reads vendor bytes; a hook that cannot describe them records nothing
+        return {}, '', ''
     return (usage if isinstance(usage, dict) else {}, recorded_model(model),
             response_id if isinstance(response_id, str) and _RESPONSE_ID.fullmatch(response_id) else '')
 
@@ -476,6 +599,59 @@ def _read_capped(response, cap: int, deadline: float) -> bytes:
             raise _BodyError(DEADLINE_READING)
         chunks.append(chunk)
     return b''.join(chunks)
+
+
+def _read_kept(response, cap: int, deadline: float) -> tuple:
+    """(the bytes read, why the read stopped early or None): _read_capped's reading under the same cap and deadline, for
+    a vendor whose stream has an end event (Vendor.complete) and a 200 only, except that an early stop - a connection
+    reset or a broken chunk raised inside iter_content (requests' ChunkedEncodingError or ConnectionError: a chunked
+    body cut without its terminating chunk raises before an end is seen), the deadline or the cap - hands back the
+    chunks read whole before it instead of dropping them (AMENDMENT-2 1.3 [R:connector-CONN-6]). A chunk that would
+    pass the cap is not kept, so the bytes kept never pass it. The vendor's end test then reads the bytes kept: bytes
+    that already end with the end event are the whole stream, whatever stopped the read (D294, CONN-RF-3)."""
+    chunks, size = [], 0
+    try:
+        for chunk in response.iter_content(CHUNK_BYTES):
+            if size + len(chunk) > cap:
+                return b''.join(chunks), _BodyError(f'the response exceeded {cap:,} bytes')
+            chunks.append(chunk)
+            size += len(chunk)
+            if monotonic() > deadline:
+                return b''.join(chunks), _BodyError(DEADLINE_READING)
+    except Exception as exc:  # the read stopped early: what was read so far is the evidence, kept
+        return b''.join(chunks), exc
+    return b''.join(chunks), None
+
+
+def _ended(vendor: Vendor, raw: bytes) -> bool:
+    """Whether ``vendor``'s end test says ``raw`` reached its stream's end; a test that raises says it did not."""
+    try:
+        return vendor.complete(raw) is True
+    except Exception:  # noqa: BLE001 - what a response says never raises out of the send discipline
+        return False
+
+
+INCOMPLETE_STREAM = ('The request reached {label}, but its answer stream ended before its end event. The outcome is '
+                     'unknown; reconcile it before any new attempt.')
+CUT_STREAM = ('The request reached {label}, but its answer stream was cut before its end event ({why}); the bytes read '
+              'before the cut are kept. The outcome is unknown; reconcile it before any new attempt.')
+
+
+def _cut(vendor: Vendor, raw: bytes, stop, latency: float, url: str, requested_model: str,
+         request_id: str) -> RawExchange:
+    """The unknown exchange of a 200 whose kept bytes do not reach the stream's end (AMENDMENT-2 1.3; D294, CONN-RF-3:
+    only such bytes are unknown): ``stop`` None for a body read whole without its end event (INCOMPLETE_STREAM), else
+    why the read stopped early, before the end event (CUT_STREAM). Sent, HTTP 200, the bytes read so far kept with their
+    sha256 - P-6 never reads an unknown exchange - and no usage: a cut stream is never priced as a whole answer
+    [R:connector-CONN-3]. The model and id its bytes state are kept for the operator."""
+    data = bytes(raw)
+    _, returned_model, response_id = described(vendor, data)
+    why = (INCOMPLETE_STREAM.format(label=vendor.label) if stop is None
+           else CUT_STREAM.format(label=vendor.label, why=_describe(stop)))
+    return RawExchange(outcome='unknown', sent=True, http_status=200, response_bytes=data,
+                       response_sha256=hashlib.sha256(data).hexdigest(), latency_ms=latency, usage={}, usage_basis='',
+                       provider_request_id=request_id, error=why, endpoint=url, requested_model=requested_model,
+                       returned_model=returned_model, response_id=response_id)
 
 
 def _elapsed_ms(started: float) -> float:

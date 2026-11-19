@@ -41,6 +41,7 @@ from tests import test_harness2_r6_meaning as r6m
 from tests import test_harness2_r7 as r7
 from tests import test_harness_engine as he
 from tests import test_pipeline_api
+from tests.legacy_chain import applied
 from tests.test_harness2_r2_wording import browser
 from tests.test_pipeline_api import drain
 
@@ -70,6 +71,7 @@ def traced(encounter_id):
     return [entry.get('code') for entry in models.Encounter.objects.get(pk=encounter_id).current_assessment.retrieval]
 
 
+@applied
 class SecondReviewRetrievalTests(r6m.MeaningCase):
     assert_no_family_rule = r7.RetrievalTests.assert_no_family_rule
 
@@ -349,6 +351,7 @@ class MissingServiceReadingTests(SimpleTestCase):
                     self.assertIn(status, gi_services.SERVICE_STATUSES)
 
 
+@applied
 class MissingServiceReadingPipelineTests(r6m.MeaningCase):
     missing = r7.MissingServiceReadingPipelineTests.missing
 
@@ -398,6 +401,7 @@ def refused_whole():
 PANEL = 'Each code listed below was given by Astra or Fable and is offered only as an alternative.'
 
 
+@applied
 class ParticipantsOnlyWordingTests(r6m.MeaningCase):
     assert_blocker = r6m.D14BlockerTests.assert_blocker
 
@@ -459,6 +463,7 @@ class ParticipantsOnlyWordingTests(r6m.MeaningCase):
 
 # --- wording-4: participants.summary's closing sentence ------------------------------------------------------------
 
+@applied
 class SummarySentenceTests(r6m.MeaningCase):
     def ask_second(self, encounter_id, later):
         self.corti.selections = list(later)
@@ -526,6 +531,7 @@ def titles_of(detail, value):
                   if any(key.startswith(f'{item["id"]}:') for key in keys)}
 
 
+@applied
 class OverlappingPassageTitleTests(r6m.MeaningCase):
     def both(self, text, corti):
         return [self.corti_alone(text, corti), self.detail(self.scenario(text, corti))]

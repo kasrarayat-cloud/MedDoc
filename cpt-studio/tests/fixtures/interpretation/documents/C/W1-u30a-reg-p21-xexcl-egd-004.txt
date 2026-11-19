@@ -1,0 +1,9 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Upper Endoscopy Report
+Date of Service: 11/04/2026
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Indication: Anemia.
+Description of procedure: The gastroscope was passed through the mouth and advanced to the second portion of the duodenum. The patient tolerated the procedure well.
+Findings:
+1. Gastric body: 10 mm sessile polyp. It was removed with a hot snare, without tattooing.
+Impression: Gastric body polyp, removed with hot snare.

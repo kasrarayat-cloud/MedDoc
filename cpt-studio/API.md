@@ -659,13 +659,18 @@ revision's number on this document. The walk round (2026-11-07) replaced the ear
 customer surface carries no internal identifier, and no page read it.
 Creates a new revision (original text + labelled addendum), invalidates current
 decisions, runs the pipeline. 400 when the document plus the addendum would
-exceed the length limit (nothing is created); 409 while a stage is queued or
-running. The addendum revision carries the original's extraction limitations.
+exceed the length limit (nothing is created). The addendum revision carries the original's extraction limitations.
+**Amended 2026-11-13 (FINAL-V2 amendment 1, step 5d):** no longer refused while a stage is queued or running (A1); refused
+409, under the row lock and before anything is written, as a duplicate of the current revision's own addendum (A13) and
+when its update could never finish (A12) - see "Automatic update after a save" below.
 
 ## POST /api/encounters/{id}/context
 
 `{"service_date": "YYYY-MM-DD|''", "setting": "office|hospital_outpatient|asc|inpatient|emergency|telehealth|''",
-"billing_context": "professional|facility|''"}` → `201 {"context_id": "uuid"}`. Each value is a JSON
+"billing_context": "professional|facility|''"}` → `201 {"context_id": "uuid"}` (**amended 2026-11-13, FINAL-V2 amendment 1:
+`200 {"context_id", "unchanged": true, "updating"}` for a save that changes nothing, `201 {"context_id", "updating"}` for a
+change, `201 {"context_id", "updating": false, "restored": true}` for a restore; no 409 while a stage runs - see
+"Automatic update after a save" below; the re-check described here is the legacy chain's**). Each value is a JSON
 string: a listed choice, or null or `''` to clear the user value; any other type (a number, a
 boolean, a list, an object) answers 400. A service date is a string in `YYYY-MM-DD` form only
 (also on upload). Re-assesses with the provider run in use only when that run answers
@@ -899,9 +904,9 @@ usage, credit, request id, run id, hash, rule id, source key, trace link or engi
   modifiers}}`.
 - `POST /api/encounters/{id}/resume` → `201 {"resumed": true}` (never the stage's kind).
 - `POST /api/encounters/{id}/reports` `{"kind": "draft"|"approved", "fmt": "txt"|"csv"}` ("reviewed" is read as
-  "approved") → `201 {id, kind, fmt, filename, generated_at, generated_by, download_url, current}`; the approved
+  "approved") → `201 {id, kind, fmt, filename, generated_at, generated_by, download_url, current, revision}`; the approved
   export answers 409 with `details.blockers` (customer wording) until `readiness.approved`. Format
-  `cpt-studio-customer-report@1`: the draft lists the numbered suggested codes ("Suggested codes — not approved") with
+  `cpt-studio-customer-report@1` (**`@2` since 2026-11-13, FINAL-V2 amendment 1: see "Automatic update after a save"**): the draft lists the numbered suggested codes ("Suggested codes — not approved") with
   status, units, decided modifiers, one sentence of CPT Studio's own reading and the exact quotations with their page;
   the approved export lists the approved items only, each with units, modifiers, approver, "Agent-executed synthetic
   review — not clinical approval" for an agent's approval, the decision time and its quotations with page and character
@@ -912,7 +917,9 @@ usage, credit, request id, run id, hash, rule id, source key, trace link or engi
 - `GET /api/reports/{id}/download` → a customer artifact of the caller's workspace as stored, **without**
   `X-Content-SHA256`. Any other artifact (an operator report, or one recorded before the `audience` column existed:
   they name the review participants) answers 404; an approved export whose snapshot no longer matches the persisted
-  decisions answers `409 {"error": "This export no longer matches the saved decisions; create a new one."}`. Stored
+  decisions answers `409 {"error": "This export no longer matches the saved decisions; create a new one."}`
+  (**superseded 2026-11-13, FINAL-V2 amendment 1, A9: an export that is not current, of either kind, is served as an
+  EARLIER export with its banner, never refused - see "Automatic update after a save"**). Stored
   artifacts are never modified.
 - `GET /api/encounters/{id}/original` → the original as stored, without `X-Content-SHA256`.
 - **Removed:** `GET /api/encounters/{id}/trace` and `POST /api/encounters/{id}/reconcile` answer 404 for everyone.
@@ -964,24 +971,33 @@ one save for every row of "A few details needed" (owner or reviewer; 403 otherwi
 - context values go through ONE context change and its re-assessment (as `POST .../context` makes it); the other two
   values are stored as the member's answers (append-only, attributed, audited `detail.answered`), read by the review
   overlay with no re-assessment and nothing sent;
-- 201 `{"saved": n, "unchanged": m, "answer_ids": [...], "reassessing": bool}` when something was saved; 200 with
-  `saved` 0 when the save changed nothing (a repeated identical save makes nothing); 400 `{"error"}` for an answer the
-  row does not allow ("Only "Not documented" or "Cannot confirm" can be recorded for this detail. A clinical detail is
-  added to the documentation by the physician.", "Choose one of the answers offered for this detail.", ...); 409 while
-  processing runs or for a detail no longer asked.
+- 201 `{"saved": n, "unchanged": m, "answer_ids": [...], "reassessing": bool, "restored": bool}` when something was
+  saved; 200 with `saved` 0 when the save changed nothing (a repeated identical save makes nothing); 400 `{"error"}` for
+  an answer the row does not allow ("Only "Not documented" or "Cannot confirm" can be recorded for this detail. A
+  clinical detail is added to the documentation by the physician.", "Choose one of the answers offered for this
+  detail.", ...); 409 for a detail no longer asked. **Amended 2026-11-13 (FINAL-V2 amendment 1, 1.3 and 1.4; step
+  5d):** `reassessing` is true when an update of the codes is pending after the save or the save queued an answer's
+  recompute, and `restored` when the save made the earlier codes current again; only a save that records an answer is
+  refused 409 while processing runs ("Wait for processing to finish (or stop it) before saving details.") or while an
+  update is pending ("You can answer this once the codes are updated."), and a save of context values alone is
+  accepted then (subject to `POST .../context`'s own refusals) - a value given in a row saved "Not documented" replaces
+  that answer and records none. See "Automatic update after a save" below.
 
 **`POST /api/encounters/{id}/details/{answer id}/revoke`** - withdraws one saved answer: the detail is asked again, at
 once for an answer only the review overlay applied, and once the recompute the withdrawal queues has run for one the
 assessment itself read (until then every surface reads that assessment, the answer still in effect: the recorded
 limitation under "Completion repair (2026-11-06)"); 201 `{"revoked": "<answer id>"}`; 404 for another document's answer;
-409 while processing runs or when already withdrawn. A later answer to the same detail withdraws the earlier one itself.
+409 while processing runs or when already withdrawn, and (**amended 2026-11-13, FINAL-V2 amendment 1, 1.4**) while an
+update of the codes is pending ("You can change your answers once the codes are updated."). A later answer to the same
+detail withdraws the earlier one itself.
 
 **Blocks** (built by `answers.details_needed(encounter, assessment, view)`, `answers.service_date_block(encounter)`,
 `progress.encounter_progress(encounter, now)` and `progress.checks_summary(encounter)` with DESIGN section 7's keys):
 `details_needed` rows are one per open question, de-duplicated by (fact, family, code), with a stable `id` across
 re-assessments; `service_date` shows the document's own date and quote only where the document gives one date of its
 own, beside the member's entered date; `progress` folds the jobs into four plain steps and one phase (`queued`,
-`processing`, `action_needed`, `awaiting_detail`, `completed`, `partial`, `failed`, `stopped`, `being_confirmed`), never
+`processing`, `action_needed`, `awaiting_detail`, `completed`, `partial`, `failed`, `stopped`, `being_confirmed`,
+`paused`, and - **amended 2026-11-13, FINAL-V2 amendment 1** - `updating` while an update of the codes runs), never
 a percentage or an estimate, "taking longer than usual" only from the stage's own deadline; `checks` states Document
 review, Independent checks and Coding validation. None of them writes anything.
 
@@ -996,7 +1012,8 @@ What the customer page (`studio/static/studio/app.js`) sends and relies on. It r
 contract (build design section 7) and the customer session and list; it reads no other endpoint and has no
 diagnostics route. Fixtures: `tests/fixtures/customer/`.
 
-**Every request** carries `X-CPT-Studio-Client: customer-2026-11-03`. A server that no longer serves this build of the
+**Every request** carries `X-CPT-Studio-Client: customer-2026-11-03` (**`customer-2026-11-13` since FINAL-V2 amendment
+1: the payload gained the update keys**). A server that no longer serves this build of the
 page answers HTTP 409 with `{"error": "<sentence>", "error_code": "client_outdated"}`; the page shows "CPT Studio was
 updated — reload the page to continue." with a Reload button and stops polling. This is a client contract; the server
 side belongs to the integration. A page loaded before this release sends no header and does not know `error_code`; it
@@ -1022,7 +1039,10 @@ with a `modifier_review` whose `options` offer it (one at most, never prefilled;
 **`POST /api/encounters/{id}/reports`**: `{"kind": "draft" | "approved", "fmt": "txt" | "csv"}`; the page downloads the
 answer's `download_url`, which must match `/api/reports/<uuid>/download`. The approved options are disabled, with
 `readiness.blockers` listed, while `readiness.approved` is not `true`. A `reports[]` entry whose `current` is not `true`
-is listed without a link ("No longer matches the saved decisions").
+is listed without a link ("No longer matches the saved decisions"). **Amended 2026-11-13 (FINAL-V2 amendment 1, 5.4 and
+8.3):** an entry that names its `revision` is listed and linked as an earlier download ("Earlier — made on revision
+{n}; it may not show the current codes"), and it downloads with its EARLIER banner; only an entry with no `revision`
+(an older server) keeps the unlinked line.
 
 **`POST /api/encounters/{id}/addenda`**: `{"text", "clarification_id": "<details_needed[].id>", "synthetic_attestation":
 "yes"}`, offered only on a row with `addendum_allowed: true` ("Add to the documentation (physician)"); the server
@@ -1031,11 +1051,13 @@ stored clarification that row shows (none for a question only the review overlay
 "That detail is not open on this document." A clarification's own id is read as before. **`/stop`** and **`/resume`**: `{}`, offered when `progress.can_stop` (while busy) or
 `progress.can_resume`, and `permissions.can_review`.
 
-**Polling.** `GET /api/encounters/{id}` while `progress.busy` is true or `progress.phase` is `queued`, `processing` or
-`being_confirmed`: 2.5 s backing off to 15 s, and to 30 s after failed reads. A failed read shows "Reconnecting…";
-coming back to the tab or back online reads at once. Elapsed time is `server_time` − `started_at`, advanced by the
-browser's clock between reads; no percentage or forecast is shown. No step is animated unless the phase is `queued` or
-`processing` and `busy` is true.
+**Polling.** `GET /api/encounters/{id}` while `progress.busy` is true or `progress.phase` is `queued`, `processing`,
+`being_confirmed` or (**amended 2026-11-13, FINAL-V2 amendment 1**) `updating`: 2.5 s backing off to 15 s, and to 30 s
+after failed reads. A failed read shows "Reconnecting…"; coming back to the tab or back online reads at once. Elapsed
+time is `server_time` − `started_at`, advanced by the browser's clock between reads; no percentage or forecast is shown.
+No step is animated unless the phase is `queued`, `processing` or `updating` and `busy` is true. A read whose only
+difference from the page drawn is `progress.server_time` redraws nothing (the clock moves the elapsed time alone), so a
+poll never empties a date the member is typing in the details panel unless something it draws changed.
 
 **Labels the page fixes itself** (a served label is used only for a value it does not know): the code statuses (Ready
 for review, Needs a detail, Approved, Excluded), the states, the four stages and the three checks. An approved code whose
@@ -1050,7 +1072,15 @@ typographic quotes and "page N" are drawn by CSS from `data-page`), and a quote 
 `#updateNotice`, `#uploadStatus`; `section.progress-panel.progress-done[data-phase]` for `completed`, `partial` and
 `awaiting_detail`; `[data-elapsed][data-since]` ticks while busy and carries `data-until` once finished. The edit-context
 dialog is gone (`#contextDialog`, `#contextServiceDate`, `#contextSetting`, `#contextBilling`, `#saveContext`,
-`button[data-action="edit-context"]`): context answers go through the details panel.
+`button[data-action="edit-context"]`): context answers go through the details panel. **Amended 2026-11-13 (FINAL-V2
+amendment 1; step 5d):** while an update of the codes is pending, the earlier codes are
+`section.earlier-codes > ol.earlier-list > li.earlier-row[data-code][data-status]` (`#earlierTitle`, `.earlier-made`),
+never `ol.result-list > li.result-row[data-proposal]`, which stays the codes the API serves (none then), so the walk never
+reads the earlier codes as current; their rows keep the inner classes of a result row (`.result-number`, `.result-code`,
+`.status[data-status]`, ...) and carry no `data-proposal`, no decision button and no passage button. What was saved is
+`.update-saved` (`.update-changes > li`, `.update-saved-by`) under the panel's title; a row that takes only an answer
+shows `p.detail-wait` "You can answer this once the codes are updated." and no control; "What changed" is
+`section.what-changed`, "Earlier decisions" `details.earlier-decisions`, an earlier download `li.report-item.earlier`.
 
 ## Core repair and customer interface (2026-11-03): integration wiring
 
@@ -1072,7 +1102,9 @@ corrected here where this changes them):
 - **`readiness.approved`** is `review.readiness` over the overlay (every suggested code approved, rejected, its exclusion
   confirmed, or its detail answered as unavailable; nothing processing; a settled result) with an approved code to list
   (session decision (f) of 2026-11-03: no partial approved export).
-- **An approved export is stale (download 409; `reports[].current` false) exactly when its decision marker moves**:
+- **An approved export is stale (download 409; `reports[].current` false) exactly when its decision marker moves**
+  (**amended 2026-11-13, FINAL-V2 amendment 1: or while an update of the codes is pending; the download is then the
+  EARLIER export, never a 409**):
   the live assessment, the current context, the current decisions (ids and sequence) and the standing member answers
   (ids). A customer artifact's `snapshot_sha256` holds that marker's digest (`reports.customer_marker`), not a digest of
   the report's content: a queued stage, a later run, an operator report or new wording never makes one stale. This
@@ -1293,3 +1325,112 @@ tests are `tests/test_completion_answers.py` unless named.
   previous release inserts stays valid. A rollback past this release leaves assessments whose answered codes carry
   `support.answered`, which the previous release reads as an ordinary exclusion that holds nothing: re-assess such an
   encounter after a rollback (recorded for the installer's undo hazards).
+
+## Automatic update after a save (FINAL-V2 amendment 1, 2026-11-13; step 5d UPDATE-UX)
+
+The codes are updated automatically after a save (`docs/gemini-migration/AMENDMENT-1.md`, DECISIONS D184 and D208). What the
+customer API does, what the page sends and draws, and what an export states. Every customer sentence named here is CPT
+Studio's fixed wording, held in `studio/customer_api.py` (step 3c's constants) and never re-worded; none names a provider
+or a model. The page names its build `customer-2026-11-13`.
+
+**Saves.**
+- `POST /api/encounters/{id}/context` compares the submitted values with the SAVED values under the encounter's row lock
+  (never with the page): a save that changes nothing writes nothing - no context, job, provider run or audit row - and
+  answers `200 {"context_id": "<current context>"|null, "unchanged": true, "updating": <an update is pending>}`; a change
+  answers `201 {"context_id": "<current context after it>", "updating": <an update of codes the member was shown is pending
+  after it>}`; a save of the earlier codes' own values that makes them current again (a restore, amendment 2.5) answers
+  `201 {"context_id": "<their context>", "updating": false, "restored": true}`. There is no busy refusal; a save is
+  refused 409 (nothing written) while a member's own act on the current codes is queued or running (an answer's
+  recompute, the bounded second review: "Wait for processing to finish (or stop it) before changing context."), for a
+  restore that cannot stand as the codes were ("The codes from before your change cannot be used again as they were, so
+  their details cannot be restored until the update has finished."), and, on a revision with no reading at the current
+  versions, for a document over the size bound or that cannot be prepared for reading ("This document is too long to be
+  read in one piece, so its details cannot be changed here. The codes shown stay as they are." / "This document could
+  not be prepared for reading, so its details cannot be changed here. The codes shown stay as they are. Upload it again
+  to change them.").
+- `POST /api/encounters/{id}/details` saves context values through the same comparison and is accepted while processing
+  runs or an update is pending; a save that records an answer ("Not documented", "Cannot confirm") is refused 409 while a
+  stage runs ("Wait for processing to finish (or stop it) before saving details.") or while an update is pending ("You
+  can answer this once the codes are updated."), nothing written. Its answer: `{"saved", "unchanged", "answer_ids",
+  "reassessing", "restored"}` - `reassessing` when an update is pending after the save or it queued an answer's
+  recompute, `restored` when it made the earlier codes current again; 201 when something was saved, 200 otherwise.
+  While a case-B update is pending (the saved values are not the current context's: a legacy revision, or one whose
+  reading is of an older version, until the update's analyze), the date block and the rows show the saved values,
+  assert no member date conflict, and keep the document's own date and quote.
+- `POST /api/encounters/{id}/details/{answer_id}/revoke` is refused 409 while an update is pending ("You can change your
+  answers once the codes are updated."), nothing written; the page hides Withdraw then.
+- `POST /api/encounters/{id}/addenda` is accepted while processing runs (no busy refusal). Refused 409 under the row lock,
+  before the revision is recorded or any decision invalidated: the same text as the current revision's own addendum
+  ("This documentation was already added as revision {n}."); the document's own text over the character bound, its
+  pages over the page bound, or a text that cannot be framed ("This document is too long to be read in one piece, so
+  documentation cannot be added to it here. Upload it again, shorter or split, with the documentation included." / "This
+  document cannot be prepared for reading as it stands, so documentation cannot be added to it here. Upload it again with
+  the documentation included, without bracketed markers such as [S2]."); the document with the addendum over the
+  character bound, or a combined text that cannot be framed ("With this documentation the document would be too long to
+  be read in one piece, so it was not added." / "This documentation could not be prepared for reading, so it was not
+  added."). No addendum refusal says the codes shown stay.
+
+**While an update is pending.**
+- `POST /api/encounters/{id}/decisions` answers 409 for every action ("These codes are from before your latest change and
+  cannot be decided on. Decide on the codes once they are updated."; "... from before this update ..." for an update no
+  save started), writing no decision; the earlier codes' `allowed_actions` are `[]`.
+- `POST /api/encounters/{id}/reports` answers 409 for both kinds before anything is generated, and again under the
+  encounter's lock ("These codes are from before your latest change and cannot be exported as current. Exports are
+  available again once the codes are updated; earlier downloads stay available, marked as earlier."; its check form),
+  with `details.blockers` the update's blocker; nothing is written.
+- `POST /api/encounters/{id}/second-review` answers 409 with the decision sentence; `recheck.available` is false.
+- `GET /api/encounters/{id}` serves `update`, `earlier_codes`, `what_changed` and `decision_history` (CORE-UX-DESIGN.md
+  section 7, amended 2026-11-13, lists every key and value): `codes: []`, the earlier codes read-only, every other
+  assessment-derived key read from the earlier codes, `state` `updating` while a stage that serves the update runs, the
+  progress panel's phase `updating` and its texts by the update's state and kind, `readiness` `{draft: false, approved:
+  false}` with one blocker by the update's state, and every export made before the update listed `current: false`.
+  `update.changes` names each saved value that differs from the earlier codes' own, in the member's words: "Date of
+  service: 10 November 2026" or "Date of service removed"; "Place of service: Office", "Patient: New patient", "Claim:
+  Facility claim", or, for a choice whose entered value the save removed ("Use what the document states", or an empty
+  value), "Place of service: entered value removed" (likewise "Patient: ..." and "Claim: ..."), never "not documented";
+  "Documentation added (revision {n})". The details rows' `allow` still lists the answers a row takes; while an update
+  is pending the server refuses them (above) and the page offers none.
+
+**Retry.** `POST /api/encounters/{id}/retry-update` (owners and reviewers; 403 otherwise) → `201 {"retrying": true}`:
+one recorded attempt at a failed update - its document review's failed request released once (a 5xx, another 4xx, a
+transport failure), a request never sent for a local reason sent, or a failed stage that sends nothing run again -
+audited `update.retry`. Refused 409 in the member's words: "Wait for processing to finish (or stop it) before asking for
+the document to be read again." (busy, or asked again for the same attempt), "There is no failed update to try again.",
+"An earlier request has an unknown outcome; it is reconciled before anything is tried again.", "Updating the codes is
+paused on this installation; resume once the coding service is available again.", "This update failed while reading the
+document; use Try reading again.", "The coding service refused this same request before, so it is not sent again."
+The page offers it as "Try updating again" where the panel's error action is `retry_update`, and on 201 says "Asked.
+Updating the codes is tried once more." (`customer_api.RETRY_UPDATE_ASKED`).
+
+**Exports.** A new customer export is `cpt-studio-customer-report@2`: the TXT adds, after "Encounter:", `Document: revision
+{n}`, `Details used: date of service {date|not documented|not established}; place of service {..}; patient {..}; claim {..}`
+(choices in the member's words) and `Codes made: {time}`, and its `Date of service:` line - each read from the export's
+assessment's own revision and context; the CSV appends `revision_number`, `details_used` and `codes_made_at` after
+`review_label`, on every row, the banner rows included. An export is current only while its marker matches AND no update
+is pending. `GET /api/reports/{id}/download` serves a current customer artifact exactly as stored; any other - either kind,
+either format, `@1` included - as an EARLIER export: the TXT is the two lines `EARLIER EXPORT — MAY NOT SHOW THE CURRENT
+CODES` and `Made {generated_at} on revision {n}. This document has changed since (its details, its documentation, its codes
+or its decisions); create a new export for the current codes.`, a blank line, then the stored bytes; the CSV is the stored
+header row, one row whose `report_format` cell holds the same two lines and whose other cells are empty, then the stored
+rows; the file name is the stored one with `-earlier` before its extension; `{n}` is the artifact's assessment's
+revision. The stored artifact (content, sha256) never changes; an operator's `/ops/` download serves its bytes exactly.
+`reports[]` items gain `revision`; a non-current one is listed "Earlier — made on revision {n}; it may not show the
+current codes" and stays linked.
+
+**The page.** While an update is pending: the panel titled "Changes saved—updating codes" ("Updating codes" for an update
+no save started) while it runs - in every other state the state's own title - with what was saved under it (`changes`,
+and "Saved by {member}, {time}") and the elapsed time since the update began; the results section's sentence and the
+review bar's tally by the update's state ("Before your change: ...", never "No codes yet" while earlier codes exist,
+"Before your change: no code suggested" when they listed none); the earlier codes' own section ("Codes from before your
+change", "Made {time}, with date of service {date}. They cannot be approved or exported: they are from before your latest
+change."), greyed, under hooks of its own (`ol.earlier-list > li.earlier-row`, never the current codes'
+`ol.result-list > li.result-row`), with no decision button and with their other codes, not separately coded, still open
+and limitations inside it; both export kinds disabled with the update's export note by state; earlier downloads linked;
+the context rows of "A few details needed" editable and the answer rows replaced by "You can answer this once the codes
+are updated."; Withdraw hidden ("Change this answer" and "Withdraw this answer"), while a choice row saved "Not
+documented" keeps its saved line and takes one of its values (a context save, which replaces that answer; outside an
+update, while processing runs, that row shows its saved line only). Typing a date or choosing a value sends nothing;
+the one request is the Save button's POST `/details`, and a poll that brings only the server's clock redraws nothing
+under the member's typing.
+A save that restored the earlier codes toasts "Saved. The codes from before your change are current again." Once the
+codes are fresh: "What changed" above them and "Earlier decisions" beside the history.

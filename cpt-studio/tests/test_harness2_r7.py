@@ -46,10 +46,12 @@ from tests import test_harness2_pipeline as hp
 from tests import test_harness2_r6_meaning as r6m
 from tests import test_harness2_r6_row as r6row
 from tests import test_pipeline_api
+from tests.legacy_chain import applied
+from tests.test_harness2_pipeline import TWO_EXTENTS_INTERPRETATIONS
 from tests.test_harness2_r2_evidence import page
 from tests.test_harness2_r2_wording import browser
 from tests.test_harness_engine import code, corti, read, run, service, span
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 ACK = review.ACKNOWLEDGEMENTS['human']
 
@@ -83,6 +85,7 @@ FAMILY_LOOKUP = 'is the endoscopic base of 45385'
 FAMILY_PAIR = '45378, 45385 are one endoscopic family'
 
 
+@applied
 class RetrievalTests(r6m.MeaningCase):
     def assert_as_alone(self, text, corti=(), **participants):
         """The input through the pipeline with Astra and Fable configured: each of Corti's proposals has the retrieval
@@ -214,6 +217,7 @@ def inexact(index, value):
     return mock.patch('tests.test_pipeline_api.corti_like_response', answer)
 
 
+@applied
 class SummarySentenceTests(r6m.MeaningCase):
     def assert_closing(self, detail):
         self.assertTrue(self.summary(detail).endswith(f' {r6m.NEVER_DECIDE}'), self.summary(detail))
@@ -334,6 +338,7 @@ class MissingServiceReadingTests(SimpleTestCase):
                                                'coding completeness is incomplete.')
 
 
+@applied
 class MissingServiceReadingPipelineTests(r6m.MeaningCase):
     def missing(self, text, quote, family='egd'):
         services = [r6m.colon_service(r6m.CECUM), ('u1', family, 'performed', quote)]
@@ -375,6 +380,7 @@ class MissingServiceReadingPipelineTests(r6m.MeaningCase):
 
 # --- display-2: whose the listed codes are, never "independent" -----------------------------------------------------
 
+@applied
 class PeerOnlyBlockerTests(r6m.MeaningCase):
     assert_blocker = r6m.D14BlockerTests.assert_blocker
 
@@ -397,6 +403,7 @@ class PeerOnlyBlockerTests(r6m.MeaningCase):
 
 # --- display-5: a participant's verbatim quote is never called an evidence passage ----------------------------------
 
+@applied
 class AlternativeRationaleTests(r6m.MeaningCase):
     def test_n1_the_failed_act_s_sentence(self):
         """display-5: an alternative's rationale never calls a participant's verbatim quote an evidence passage. Moved
@@ -438,6 +445,7 @@ class AlternativeRationaleTests(r6m.MeaningCase):
 SNARED = 'The polyp was removed with a hot snare.'
 
 
+@applied
 class ProviderPassageTitleTests(r6m.MeaningCase):
     def assert_titled(self, detail):
         (item,) = [p for p in r6m.proposals(detail) if p['code'] == '45385']
@@ -473,8 +481,11 @@ NONE_MADE = ['No assessment of this revision was made.']
 COMING = ['The peer reviews and the second assessment follow the first assessment.']
 
 
-class FinalRowTests(r6row.StaleMixin, r6m.MeaningCase):
+class FinalRowTests(RecordedInterpretation, r6row.StaleMixin, r6m.MeaningCase):
     """R6-ROW's input (TWO_EXTENTS, ColonCase's participants), without ColonCase's own tests."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     corti_codes = (('45385', hp.SNARE), ('45380', hp.BIOPSY))
 
     def setUp(self):

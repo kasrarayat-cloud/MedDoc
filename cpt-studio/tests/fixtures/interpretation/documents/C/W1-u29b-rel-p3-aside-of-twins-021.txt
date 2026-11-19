@@ -1,0 +1,15 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+UPPER ENDOSCOPY (EGD) - URGENT ADD-ON
+Patient: Synthetic Patient (fictional), 50-year-old woman
+Date of service: 2026-10-14
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Anesthesia: Monitored anesthesia care by the anesthesia team
+
+Indication: Food impaction since dinner last night. In 2023 she had a dilation during an upper endoscopy at an outside hospital.
+
+Procedure: At the original procedure, the adult gastroscope was passed into the esophagus under direct vision. The scope was advanced through the stomach and the pylorus into the second part of the duodenum. On withdrawal, cold forceps biopsies were taken from the proximal and distal esophagus.
+
+Findings: Rings and furrows in the esophagus. Normal stomach and duodenum.
+Impression: Rings and furrows; biopsied.
+Plan: Repeat EGD in 8 weeks.

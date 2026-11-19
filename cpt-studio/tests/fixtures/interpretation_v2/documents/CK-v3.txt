@@ -1,0 +1,8 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Date of service: November 9, 2026
+Endoscopist: Helena Varga, MD (fictional)
+History: Crohn disease with an ileocolonic anastomosis. At the 2024 colonoscopy the anastomosis was narrowed, but no dilation was performed.
+Procedure: The colonoscope was advanced to the ileocolonic anastomosis, which was narrowed to 9 mm. The anastomotic stricture was dilated
+today with a 15 mm through-the-scope balloon, after which the colonoscope passed into the neo-terminal ileum, which was examined for 10 cm.
+Impression: Anastomotic stricture dilated to 15 mm today.

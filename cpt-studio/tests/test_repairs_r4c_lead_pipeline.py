@@ -25,6 +25,7 @@ from studio.gi import detect, sections
 from studio.reference.store import DbReferenceLookup, prefetched_lookup, selected_codes
 from studio.types import NormalizedResponse, ProviderCode, to_jsonable
 from studio.validation import checks
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 from tests.test_reference import ArchiveMixin
@@ -72,6 +73,7 @@ class Probe:
                 mock.patch.object(detect, 'status_for_span', self.wrap('span', _SPAN)))
 
 
+@applied
 @override_settings(**LIVE)
 class OneChildPerStageTests(TestCase):
     def setUp(self):

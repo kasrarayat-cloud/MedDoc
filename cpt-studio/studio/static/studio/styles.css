@@ -271,3 +271,38 @@
 .earlier-answers ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .earlier-answer{display:grid;gap:2px;font-size:12px;overflow-wrap:anywhere}
 .earlier-why{color:var(--muted);font-size:11px}
+/* FINAL-V2 amendment 1 (step 5d): the codes are updated after a save - what was saved, the earlier codes (read-only,
+   greyed), what changed, earlier decisions and earlier downloads */
+.update-saved{margin:10px 0 0;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--soft);font-size:12px;line-height:1.6}
+.update-changes{list-style:none;margin:0;padding:0;display:grid;gap:2px;overflow-wrap:anywhere}
+.update-saved-by{margin:4px 0 0;color:var(--muted);font-size:11px}
+.earlier-codes{background:#fbfbf7;border:1px dashed var(--line);border-radius:12px;padding:14px 18px;display:grid;gap:12px}
+.earlier-head h2{font-size:14px;font-weight:600;margin:0}
+.earlier-made{margin:4px 0 0;font-size:12px;color:var(--muted);line-height:1.6}
+/* the earlier codes' own list and rows (never .result-list/.result-row: the walk reads those as the current codes) */
+.earlier-list{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.earlier-row{background:#f6f6f1;border:1px solid var(--line);border-radius:12px;padding:16px 18px;min-width:0;opacity:.72}
+.earlier-row .result-code{color:#5f6f55}
+.earlier-row[data-status="excluded"] .result-sub{color:var(--muted)}
+.earlier-codes .result-notes,.earlier-codes .other-codes{background:transparent}
+.detail-saved-value{margin:6px 0 0;font-size:12px;color:#3d4a36}
+.what-changed{background:#fff;border:1px solid var(--line);border-left:3px solid var(--teal);border-radius:12px;padding:14px 18px}
+.what-changed h2{font-size:14px;font-weight:600;margin:0}
+.what-changed-compared{margin:4px 0 8px;font-size:11px;color:var(--muted)}
+.what-changed-list,.what-changed-decisions{margin:0;padding-left:18px;font-size:12px;line-height:1.65;color:#3d4a36}
+.what-changed-list li,.what-changed-decisions li{overflow-wrap:anywhere}
+.what-changed-decisions{margin-top:8px}
+.what-changed-answers{margin:8px 0 0;font-size:12px;color:var(--amber);background:var(--amber-bg);border-radius:8px;padding:8px 10px}
+.earlier-decisions{background:#fff;border:1px solid var(--line);border-radius:12px;padding:0 18px}
+.earlier-decisions>summary{cursor:pointer;min-height:48px;display:flex;align-items:center;font-size:12px;font-weight:500;color:var(--ink)}
+.earlier-decisions>summary:focus-visible{outline:3px solid #83b6a3;outline-offset:2px}
+.earlier-decisions ol{margin:0 0 14px;padding:0;list-style:none;display:grid;gap:10px;font-size:12px;line-height:1.6;color:#5f6f55}
+.earlier-decisions li strong{display:block;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
+.earlier-decisions li small{display:block;font-size:11px;color:var(--muted)}
+.earlier-decisions li p{margin:2px 0 0}
+.report-item.earlier small{color:var(--amber)}
+.update-export-note p{font-weight:400}
+@media(max-width:760px){.earlier-codes,.what-changed{padding:14px}
+.earlier-row{padding:14px}
+.earlier-decisions>summary{min-height:44px}
+}

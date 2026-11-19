@@ -1,0 +1,36 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\n  \"passages\": [\n    {\n      \"id\": \"P1\",\n      \"text\": \"COLONOSCOPY REPORT\"\n    },\n    {\n      \"id\": \"P2\",\n      \"text\": \"Date of service: November 9, 2026\"\n    },\n    {\n      \"id\": \"P3\",\n      \"text\": \"Endoscopist: A. Current, MD (fictional)\"\n    },\n    {\n      \"id\": \"P4\",\n      \"text\": \"Indication: Surveillance colonoscopy.\"\n    },\n    {\n      \"id\": \"P5\",\n      \"text\": \"The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were identified.\"\n    },\n    {\n      \"id\": \"P6\",\n      \"text\": \"A 12 mm sessile polyp in the transverse colon could not be captured with a cold snare on the first attempt; after repositioning, it was captured and removed en bloc with the cold snare and retrieved.\"\n    },\n    {\n      \"id\": \"P7\",\n      \"text\": \"12 mm transverse colon polyp removed with a cold snare.\"\n    }\n  ],\n  \"encounter\": {\n    \"date_of_service\": {\n      \"value\": \"2026-11-09\",\n      \"state\": \"stated\",\n      \"words\": \"November 9, 2026\",\n      \"passages\": [\"P2\"],\n      \"other_dates\": []\n    },\n    \"documenting_endoscopist\": {\n      \"words\": \"A. Current, MD\",\n      \"passages\": [\"P3\"]\n    },\n    \"team\": [],\n    \"anatomy\": [],\n    \"reach\": [\n      {\n        \"event\": \"E1\",\n        \"landmark\": \"cecum\",\n        \"words\": \"cecum\",\n        \"passages\": [\"P5\"],\n        \"completion\": {\n          \"value\": \"not_stated\",\n          \"words\": \"\",\n          \"passages\": []\n        }\n      }\n    ],\n    \"visit_facts\": []\n  },\n  \"lesions\": [\n    {\n      \"id\": \"L1\",\n      \"words\": \"A 12 mm sessile polyp in the transverse colon\",\n      \"landmark\": \"transverse_colon\",\n      \"site_words\": \"in the transverse colon\",\n      \"size_words\": \"12 mm\",\n      \"multiplicity\": \"single\",\n      \"passages\": [\"P6\", \"P7\"]\n    }\n  ],\n  \"events\": [\n    {\n      \"id\": \"E1\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"COLONOSCOPY\",\n        \"passages\": [\"P1\", \"P4\"]\n      },\n      \"kind\": {\n        \"value\": \"examination\",\n        \"words\": \"COLONOSCOPY\",\n        \"passages\": [\"P1\", \"P4\", \"P5\"]\n      },\n      \"technique\": {\n        \"value\": \"endoscope\",\n        \"words\": \"colonoscope\",\n        \"passages\": [\"P5\"]\n      },\n      \"target\": {\n        \"lesion\": \"\",\n        \"landmark\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"The colonoscope was advanced to the cecum\",\n        \"passages\": [\"P5\"]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"diagnostic\",\n        \"words\": \"Surveillance\",\n        \"passages\": [\"P4\"]\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    },\n    {\n      \"id\": \"E2\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"COLONOSCOPY\",\n        \"passages\": [\"P1\"]\n      },\n      \"kind\": {\n        \"value\": \"snare\",\n        \"words\": \"captured and removed en bloc with the cold snare\",\n        \"passages\": [\"P6\", \"P7\"]\n      },\n      \"technique\": {\n        \"value\": \"cold_snare\",\n        \"words\": \"cold snare\",\n        \"passages\": [\"P6\", \"P7\"]\n      },\n      \"target\": {\n        \"lesion\": \"L1\",\n        \"landmark\": \"transverse_colon\",\n        \"words\": \"A 12 mm sessile polyp in the transverse colon\",\n        \"passages\": [\"P6\", \"P7\"]\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"captured and removed en bloc with the cold snare\",\n        \"passages\": [\"P6\", \"P7\"]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"removal\",\n        \"words\": \"removed\",\n        \"passages\": [\"P6\", \"P7\"]\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    }\n  ],\n  \"open_questions\": []\n}",
+            "thoughtSignature": "EmMKYQFpFH0T9ZNlUBrEfAbu6KLTQDgsE7weedkE0Vrl/JTxomjIqZYgElHKcRKTtzXNsqDA0THiLV1hou7Em6tWv4tufCiGuY50b3tJA4w7nKAdA3vA2T//dGxIWVAdbtvryws="
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 7838,
+    "candidatesTokenCount": 1433,
+    "totalTokenCount": 9271,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7838
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1433
+      }
+    ]
+  },
+  "modelVersion": "gemini-4-argon",
+  "responseId": "wgbzauDLNuGiqtsPp8ffsAY"
+}

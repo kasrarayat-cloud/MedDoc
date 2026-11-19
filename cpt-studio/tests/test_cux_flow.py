@@ -24,6 +24,7 @@ from django.utils import timezone
 from studio import answers, intake, jobs, models, progress, review
 from studio.gi import context as gi_context
 from studio.types import ExtractionResult, PageSpan, sha256_json
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase
@@ -55,6 +56,7 @@ def pasted(text, *, service_date='', title='Synthetic note'):
     return intake.create_encounter(membership=membership, user=user, title=title, service_date=service_date, text=text)
 
 
+@applied
 class DocumentDateTests(TestCase):
     """EncounterContext.document_date: the document's own service date fact before a member's value is merged (R2 4.4,
     Q-6), from the facts the bounded child returned; never a date the document does not state as its own."""
@@ -99,7 +101,7 @@ class DocumentDateTests(TestCase):
         encounter.refresh_from_db()
         self.assertEqual(encounter.current_context.document_date['value'], '2026-10-21')
         reviewer = encounter.created_by
-        saved = jobs.change_context(encounter, reviewer, {'service_date': '1998-01-01'})
+        saved = jobs.change_context(encounter, reviewer, {'service_date': '1998-01-01'}).context  # a ContextSave (2.7)
         self.assertEqual(saved.document_date['value'], '2026-10-21')  # the document's own, not the member's
         self.assertTrue(gi_context.is_member_conflict(saved.facts['service_date']))
 
@@ -302,6 +304,7 @@ class DetailRowsTests(DetailsCase):
                          (None, False, '1998-01-01'))  # never read back from the note's prose
 
 
+@applied
 class DetailSaveTests(DetailsCase):
     def setUp(self):
         super().setUp()
@@ -328,7 +331,9 @@ class DetailSaveTests(DetailsCase):
                              {'contexts': 1, 'jobs': 1, 'assessments': 0, 'answers': 1, 'revocations': 0, 'audit': 3})
             drain()
             assessed = self.counts()
-            self.assertEqual(assessed['assessments'] - after['assessments'], 1)  # the one re-assessment the save made
+            # FINAL-V2 amendment 1, 7.2: the coding service is not configured here, so the update's document review
+            # pauses (a request the run in use does not answer) and no assessment replaces the earlier codes
+            self.assertEqual(assessed['assessments'] - after['assessments'], 0)
             again = self.post(items)
             self.assertEqual(again.status_code, 200, again.content)
             self.assertEqual((again.json()['saved'], again.json()['unchanged']), (0, 3))
@@ -440,6 +445,7 @@ class DetailSaveTests(DetailsCase):
         self.assertEqual(self.counts(), before)
 
 
+@applied
 @override_settings(**LIVE)
 class DateHoldDetailTests(TestCase):
     """The member date hold (Mara's first run): the date row is there at once, and "Use document date" is the existing
@@ -466,7 +472,9 @@ class DateHoldDetailTests(TestCase):
         url = f'/api/encounters/{encounter.pk}/details'
         body = json.dumps({'answers': [{'id': row['id'], 'fact': 'service_date', 'value': 'use_document'}]})
         busy = client.post(url, data=body, content_type='application/json')
-        self.assertEqual((busy.status_code, busy.json()['error']), (409, answers.BUSY))  # the hold's assess first
+        # the hold's assess first: a save carrying only a context value is no longer refused with answers.BUSY
+        # (FINAL-V2 amendment 1, 1.4); the test-only legacy chain keeps change_context's own busy refusal
+        self.assertEqual((busy.status_code, busy.json()['error']), (409, jobs.CONTEXT_BUSY_MESSAGE))
         drain()
         self.assertEqual(self.provider.sent, [])  # nothing was sent while the hold stood
         with mock.patch.object(jobs, 'change_context', wraps=jobs.change_context) as change:
@@ -616,8 +624,10 @@ class ProgressFoldTests(ProgressCase):
 
     def test_a_re_assessment_run_keeps_what_was_read_and_checked_before(self):
         self.chain(*CHAIN, 'assess')
-        self.final()
-        again = self.job('assess', 'queued', 600)  # a member's save, long after: a run of its own
+        final = self.final()
+        # a member's save, long after: a run of its own - queued after the final was made (FINAL-V2 amendment 1: a
+        # target job of a fresh encounter is one created after its current assessment, review.target_jobs)
+        again = self.job('assess', 'queued', (final.created_at - self.t0).total_seconds() + 1)
         out = self.progress()
         self.assertEqual((out['phase'], self.states(out)), ('queued', ['done', 'done', 'done', 'waiting']))
         self.assertEqual(out['started_at'], again.created_at.isoformat())
@@ -743,6 +753,7 @@ class ProgressFoldTests(ProgressCase):
         self.assertEqual((out['slow'], out['message']), (False, progress.TAKING_TURN))
 
 
+@applied
 @override_settings(**LIVE)
 class DateHoldProgressTests(TestCase):
     def setUp(self):
@@ -772,7 +783,8 @@ class DateHoldProgressTests(TestCase):
         answers.save_details(encounter, encounter.created_by, [{'id': row['id'], 'fact': 'service_date',
                                                                 'value': 'use_document'}])
         encounter.refresh_from_db()
-        self.assertEqual(progress.encounter_progress(encounter)['phase'], 'queued')  # the request is made now
+        # the request is made now, as an update of the held codes (FINAL-V2 amendment 1, 5.2 and U19: never action_needed)
+        self.assertEqual(progress.encounter_progress(encounter)['phase'], 'updating')
         drain()
         encounter.refresh_from_db()
         self.assertIn(progress.encounter_progress(encounter)['phase'], ('awaiting_detail', 'completed', 'partial'))
@@ -876,6 +888,7 @@ class UploadKeyTests(TestCase):
 
 # --- the re-assessment from retained answers (manage.py reassess_retained; jobs.reassess_retained) ---------------------
 
+@applied
 class ReassessRetainedTests(ColonCase):
     """R6 6.4: ONE assess in the re-assessment mode, which re-reads the final assessment's retained answers by id - the
     Corti run, every phase-1 run and peer run its entries name - creates no ProviderRun and sends nothing. Corti is the

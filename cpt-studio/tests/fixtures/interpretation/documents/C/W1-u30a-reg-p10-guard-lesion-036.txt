@@ -1,0 +1,8 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+ENDOSCOPY REPORT
+Date of service: November 3, 2026
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Indications: Surveillance after an ascending colon EMR at an outside hospital in 2025.
+COLONOSCOPY: The adult colonoscope was advanced to the cecum. The preparation was good. The ascending colon scar was inspected and it was not biopsied. In the descending colon at 55 cm, a 15 mm sessile polyp was removed en bloc with a hot snare, not with forceps. Withdrawal time: 14 min.
+IMPRESSION:
+1. 15 mm descending colon polyp, removed with hot snare.

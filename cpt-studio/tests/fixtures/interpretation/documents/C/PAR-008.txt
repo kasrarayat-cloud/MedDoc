@@ -1,0 +1,52 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+ENDOSCOPY NOTE - EGD AND COLONOSCOPY, SAME SESSION
+Patient: Beatrix Cavendale (fictional)    Age: 67    Sex: F
+Service date: Nov 6, 2026
+Endoscopist: Anselm Wrenfield, MD (fictional)
+Sedation: Propofol, administered by anesthesia (CRNA)
+Instruments: Gastroscope; adult colonoscope
+
+INDICATION
+Iron deficiency anemia found on routine labs (hemoglobin 9.6 g/dL, ferritin
+5 ng/mL). No melena and no visible blood. Takes aspirin 81 mg daily. Past history: ERCP with biliary sphincterotomy and stone extraction at another
+hospital in 2023, followed by laparoscopic cholecystectomy.
+
+PROCEDURE: EGD
+Consent confirmed and time-out done. Left lateral position, bite block
+placed. Gastroscope passed under direct vision through the esophagus and
+stomach to the second part of the duodenum.
+Esophagus normal; Z-line at 38 cm. 2 cm sliding hiatal hernia without
+Cameron lesions. Patchy erythema in the antrum, no erosions or ulcers.
+Body and fundus normal, including on retroflexion.
+Duodenal bulb and second portion normal. The major papilla shows a healed
+sphincterotomy.
+Biopsies, cold forceps: antrum and body for H. pylori (jar 1); duodenal
+bulb and second portion for celiac disease (jar 2).
+Both done by Dr. Hale.
+
+PROCEDURE: COLONOSCOPY
+Bite block removed; she remained in the left lateral position. Rectal exam
+normal. The colonoscope was inserted and advanced under direct vision. Prep
+fair; brown liquid stool was washed and suctioned.
+Sigmoid colon, 30 cm: 10 mm sessile polyp, removed en bloc with a cold
+snare and retrieved (jar 3). Because she takes aspirin, one clip was
+placed to close the defect; no bleeding was seen before or after.
+Moderate diverticulosis in the sigmoid and descending colon.
+Retroflexion in the rectum: small internal hemorrhoids.
+Complications: none.
+
+IMPRESSION
+1. 2 cm hiatal hernia; mild antral erythema, biopsied.
+2. Normal-appearing duodenum, biopsied for celiac disease.
+3. Healed sphincterotomy at the papilla from the 2023 ERCP.
+4. 10 mm sigmoid polyp removed with cold snare; prophylactic clip placed.
+5. Diverticulosis of the sigmoid and descending colon.
+6. Small internal hemorrhoids.
+
+PLAN
+- Ferrous sulfate 325 mg every other day; repeat CBC and ferritin in
+  3 months.
+- Continue aspirin.
+- Pathology from jars 1-3 will be sent to her and to her primary care
+  physician, with a surveillance interval once results are back.

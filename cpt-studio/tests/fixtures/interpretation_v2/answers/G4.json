@@ -1,0 +1,1125 @@
+{
+ "acts": {},
+ "answers": [],
+ "case": "G4",
+ "caught": [],
+ "checked": [],
+ "considerations": {},
+ "date_of_service": "2031-03-14",
+ "document": "documents/G4.txt",
+ "document_sha256": "bd56c4b4979333fa8e8f05bb2e915e69e6ceffb9ce972fbd3d1f8b8585fd3974",
+ "expect": {
+  "i": {
+   "43259": {
+    "item": "base_included",
+    "item_kind": null,
+    "status": "needs_clarification",
+    "why": "Appendix C G4: base_included on the session's other act (its kind the EUS entry does not list, D137)"
+   }
+  },
+  "ii": {
+   "43259": {
+    "item": "base_included",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "3.2.6 rule 3: the unlisted act is a synthetic doubted act of the session: base_included, a question"
+   }
+  }
+ },
+ "held": {},
+ "kind": "class",
+ "known": {},
+ "listed": {},
+ "member": [
+  "office",
+  "established"
+ ],
+ "note": "",
+ "pass1": {
+  "correct": {
+   "anatomy": [],
+   "doubts": [],
+   "encounter": {
+    "date_of_service": {
+     "options": [],
+     "sources": [
+      {
+       "link": "document_frame",
+       "units": [
+        "S2"
+       ],
+       "words": "03/14/2031"
+      }
+     ],
+     "state": "stated",
+     "value": "2031-03-14"
+    },
+    "documenting_clinician": [
+     {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": "Corvin Ashdale"
+       }
+      ],
+      "state": "supported",
+      "value": "P1"
+     }
+    ],
+    "other_dates": []
+   },
+   "events": [
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "linear echoendoscope",
+      "status_words": "was advanced",
+      "units": [
+       "S4"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "linear echoendoscope"
+       }
+      ],
+      "state": "supported",
+      "value": "examination"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "was advanced"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "other_statement",
+          "units": [
+           "S6"
+          ],
+          "words": "pancreatic head"
+         }
+        ],
+        "state": "supported",
+        "value": "pancreas"
+       }
+      ],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    },
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "lumen-apposing metal stent",
+      "status_words": "was deployed",
+      "units": [
+       "S7"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S7"
+         ],
+         "words": "Later"
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "id": "E2",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S7"
+        ],
+        "words": "lumen-apposing metal stent"
+       }
+      ],
+      "state": "supported",
+      "value": "stent"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S7"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S7"
+        ],
+        "words": "was deployed"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S7"
+          ],
+          "words": "from the gastric body"
+         }
+        ],
+        "state": "supported",
+        "value": "gastric_body"
+       }
+      ],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    }
+   ],
+   "lesions": [],
+   "people": [
+    {
+     "id": "P1",
+     "name": {
+      "link": "statement",
+      "units": [
+       "S3"
+      ],
+      "words": "Corvin Ashdale"
+     },
+     "role": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S3"
+        ],
+        "words": "Endoscopist"
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     }
+    }
+   ],
+   "sections": [
+    {
+     "end": [],
+     "id": "N0",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S1"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "header"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [],
+      "words": ""
+     }
+    },
+    {
+     "end": [],
+     "id": "N1",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S4"
+         ],
+         "words": "Findings:"
+        }
+       ],
+       "state": "supported",
+       "value": "findings"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [
+       "S4"
+      ],
+      "words": "Findings:"
+     }
+    }
+   ],
+   "sessions": [
+    {
+     "approach": [],
+     "completion": [],
+     "device_reached": [],
+     "encounter": [],
+     "examination": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "E1"
+      }
+     ],
+     "id": "X1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "linear echoendoscope"
+       }
+      ],
+      "state": "supported",
+      "value": "eus"
+     },
+     "part_of_session": [],
+     "reached": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": "second portion of the duodenum"
+        }
+       ],
+       "state": "supported",
+       "value": "second_portion_duodenum"
+      }
+     ],
+     "reached_anatomy": [],
+     "stations": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "other_statement",
+         "units": [
+          "S5"
+         ],
+         "words": "from the esophagus"
+        }
+       ],
+       "state": "supported",
+       "value": "esophagus"
+      },
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "other_statement",
+         "units": [
+          "S5"
+         ],
+         "words": "stomach and duodenum"
+        }
+       ],
+       "state": "supported",
+       "value": "stomach"
+      },
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "other_statement",
+         "units": [
+          "S5"
+         ],
+         "words": "stomach and duodenum"
+        }
+       ],
+       "state": "supported",
+       "value": "duodenum"
+      }
+     ],
+     "through": [],
+     "tract": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": "linear echoendoscope"
+        }
+       ],
+       "state": "supported",
+       "value": "upper"
+      }
+     ]
+    }
+   ]
+  },
+  "misfiled": {
+   "anatomy": [],
+   "doubts": [],
+   "encounter": {
+    "date_of_service": {
+     "options": [],
+     "sources": [
+      {
+       "link": "document_frame",
+       "units": [
+        "S2"
+       ],
+       "words": "03/14/2031"
+      }
+     ],
+     "state": "stated",
+     "value": "2031-03-14"
+    },
+    "documenting_clinician": [
+     {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": "Corvin Ashdale"
+       }
+      ],
+      "state": "supported",
+      "value": "P1"
+     }
+    ],
+    "other_dates": []
+   },
+   "events": [
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "linear echoendoscope",
+      "status_words": "was advanced",
+      "units": [
+       "S4"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "linear echoendoscope"
+       }
+      ],
+      "state": "supported",
+      "value": "examination"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "was advanced"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "other_statement",
+          "units": [
+           "S6"
+          ],
+          "words": "pancreatic head"
+         }
+        ],
+        "state": "supported",
+        "value": "pancreas"
+       }
+      ],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    }
+   ],
+   "lesions": [],
+   "people": [
+    {
+     "id": "P1",
+     "name": {
+      "link": "statement",
+      "units": [
+       "S3"
+      ],
+      "words": "Corvin Ashdale"
+     },
+     "role": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S3"
+        ],
+        "words": "Endoscopist"
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     }
+    }
+   ],
+   "sections": [
+    {
+     "end": [],
+     "id": "N0",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S1"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "header"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [],
+      "words": ""
+     }
+    },
+    {
+     "end": [],
+     "id": "N1",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S4"
+         ],
+         "words": "Findings:"
+        }
+       ],
+       "state": "supported",
+       "value": "findings"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [
+       "S4"
+      ],
+      "words": "Findings:"
+     }
+    }
+   ],
+   "sessions": [
+    {
+     "approach": [],
+     "completion": [],
+     "device_reached": [],
+     "encounter": [],
+     "examination": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "E1"
+      }
+     ],
+     "id": "X1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "linear echoendoscope"
+       }
+      ],
+      "state": "supported",
+      "value": "eus"
+     },
+     "part_of_session": [],
+     "reached": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": "second portion of the duodenum"
+        }
+       ],
+       "state": "supported",
+       "value": "second_portion_duodenum"
+      }
+     ],
+     "reached_anatomy": [],
+     "stations": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "other_statement",
+         "units": [
+          "S5"
+         ],
+         "words": "from the esophagus"
+        }
+       ],
+       "state": "supported",
+       "value": "esophagus"
+      },
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "other_statement",
+         "units": [
+          "S5"
+         ],
+         "words": "stomach and duodenum"
+        }
+       ],
+       "state": "supported",
+       "value": "stomach"
+      },
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "other_statement",
+         "units": [
+          "S5"
+         ],
+         "words": "stomach and duodenum"
+        }
+       ],
+       "state": "supported",
+       "value": "duodenum"
+      }
+     ],
+     "through": [],
+     "tract": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": "linear echoendoscope"
+        }
+       ],
+       "state": "supported",
+       "value": "upper"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "pass2": {
+  "i": {
+   "default": "faithful",
+   "unlisted": [],
+   "verdicts": []
+  },
+  "ii": {
+   "default": "faithful",
+   "unlisted": [
+    {
+     "kind": "stent",
+     "session": "X1",
+     "units": [
+      "S7"
+     ],
+     "what": "act"
+    }
+   ],
+   "verdicts": []
+  },
+  "iii": {
+   "default": "faithful",
+   "unlisted": [],
+   "verdicts": []
+  }
+ },
+ "proposals": [
+  {
+   "code": "43259",
+   "end": 178,
+   "start": 94
+  }
+ ],
+ "provenance": "synthetic: written for this fixture",
+ "refs": [
+  "G4",
+  "O1"
+ ],
+ "services": {},
+ "settled": {},
+ "subjects": {},
+ "title": "An unlisted EUS-guided act beside the EUS examination",
+ "variants": [
+  "i",
+  "ii",
+  "iii"
+ ]
+}

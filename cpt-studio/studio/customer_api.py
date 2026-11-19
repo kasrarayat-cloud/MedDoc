@@ -19,12 +19,19 @@ encounter_progress and progress.checks_summary. This module only words them for 
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Any, Optional
 
 from django.conf import settings
 
-from . import answers, models, progress, review
+from . import answers, interpretation, jobs, models, progress, review
 from .gi.profiles import PROFILES
-from .models import Decision, Proposal, ProviderRun, ReportArtifact, SourceRevision
+from .interpretation import overlay, readers, sentinel, wording
+from .interpretation.contract.types import Attribute, Kind, SessionKind
+from .interpretation.wording import MISSING as EVENT_FACTS_MISSING
+from .models import Decision, DecisionInvalidation, Proposal, ProviderRun, ReportArtifact, SourceRevision
 from .validation import questions
 
 # --- the customer vocabulary --------------------------------------------------------------------------------------
@@ -33,6 +40,8 @@ STATE_LABELS = {
     'processing': 'Processing', 'action_needed': 'Action needed', 'awaiting_detail': 'A few details needed',
     'ready': 'Ready for review', 'reviewed': 'Reviewed', 'no_codes': 'No codes suggested', 'stopped': 'Stopped',
     'failed': 'Could not finish', 'being_confirmed': 'Being confirmed',
+    # FINAL-V2 amendment 1, 5.1 (step 3c): the customer state while the codes are updated after a save
+    'updating': 'Updating codes',
 }
 # The stored (derived) encounter state -> the customer's. A state this table does not know reads as processing.
 STORED_STATES = {
@@ -70,7 +79,9 @@ FACT_WORDS = {'service_date': 'the date of service', 'setting': 'the place of se
               'target': 'the structure examined', 'cannulation': 'whether cannulation was achieved',
               'performed_status': 'whether the service was performed', 'base_included': 'how the codes are reported',
               'separate_em': 'a separate office visit',
-              'competing_codes': 'which of the codes proposed for the same act the documentation supports'}
+              'competing_codes': 'which of the codes proposed for the same act the documentation supports',
+              # the Gemini migration's facts (design/FINAL.md 7.4, 8.3), in their own words
+              **EVENT_FACTS_MISSING}
 LIMITATIONS = (
     'CPT descriptions are not shown: no licensed CPT descriptor is connected.',
     'CPT code-set membership for the date of service is not verified.',
@@ -82,12 +93,26 @@ NO_REFERENCE_FILE = 'No CMS fee-schedule file applies to the date of service, so
 REFERENCE_FAILED = 'The CMS reference check could not run for this document.'
 RECORDED_RESPONSE = 'These results come from a recorded test response, not a live check.'
 PARTIAL_READING = 'Part of the document could not be read; check the text against the original.'
+# The Gemini migration (design/FINAL.md 8.3): what a new-path assessment's reading can miss, naming no provider or model
+# (D22). It takes the place of LIMITATIONS' last sentence, which describes the earlier reading's wording checks.
+EVENTS_READING = ('The procedures documented were read by an automated interpreter, whose reading of each act is checked '
+                  "against the document's own words; it can still misread an act, so decide from the whole document.")
 
 # A server-composed customer string is refused when it carries any of these (the regex net of R4 6.6(3)): a label
 # built from the document's own words that matches falls back to CPT Studio's fixed sentence. The readers' own words
 # (routing, reader, cue, own passage: the engine's support details carry them) are machinery too.
+# FINAL-V2 4.12 [R:MO-2]: a provider name is bounded by letters and digits, never by \b - '_' is a word character, so
+# \bgemini\b let gemini_unknown and reading_gemini_x through - and so it is never matched inside a clinical word that
+# begins with a name (corticosteroid, cortical). PROVIDER_JOINED (step 3c's fail-closed reading of "joined forms",
+# recorded as a question): a capitalized name joined to a word by its case alone (GeminiTimeout, readingGemini), which
+# the letter-and-digit boundary cannot see; matched case-sensitively, so it never matches Corticosteroid or CORTICAL.
+PROVIDER_NAMES = 'corti|astra|fable|openai|anthropic|claude|gemini|google'
+PROVIDER_JOINED = 'Corti|Astra|Fable|Openai|OpenAI|Anthropic|Claude|Gemini|Google'
 FORBIDDEN = re.compile(
-    r'(?i)\b(?:corti|astra|fable|openai|anthropic|claude)\b|\bgpt-\d|\bclaude-[a-z]|@cptstudio-|\bcpt-studio:[a-z]'
+    rf'(?i)(?<![a-z0-9])(?:{PROVIDER_NAMES})(?![a-z0-9])'
+    rf'|(?-i:(?:{PROVIDER_JOINED})(?=[A-Z])|(?<=[a-z])(?:{PROVIDER_JOINED}))'
+    r'|\bgpt-\d|\bclaude-[a-z]|\bgemini-\d'
+    r'|@cptstudio-|\bcpt-studio:[a-z]'
     r'|(?<![0-9a-f])[0-9a-f]{32,}(?![0-9a-f])|\b(?:participants?|peer[ -]reviews?|vendors?|tokens?|credits?|traces?'
     r'|sha256|tool calls?|request ids?|replay|providers?|routing|readers?|cues?|own passages?)\b'
     r'|\b[a-z]+[.-][a-z_]+@\d+\b')
@@ -119,7 +144,7 @@ def _family_label(slug):
 
 
 def _act_label(kind):
-    from .validation.reconcile import act_label  # local import: the reconciliation's own constant labels
+    from .code_shapes import act_label  # the reconciliation's own constant labels, re-homed (ADJUDICATION R-2)
     return act_label(kind) if isinstance(kind, str) and kind else 'act'
 
 
@@ -128,7 +153,570 @@ def _code(value) -> str:
     return value if isinstance(value, str) and re.fullmatch(r'[0-9A-Z]{4,10}', value) else ''
 
 
+# --- design v2: the appraise stage, the held facts, and amendment 1's customer texts (step 3c) ----------------------
+#
+# FINAL-V2 4.12: progress names functions, never vendors - pass 2's step detail and its slow message, for
+# progress.DETAILS['appraise'] and SLOW_MESSAGES (step 5b; progress.py must read this module inside a function, or
+# hold equal literals pinned by a test: this module imports progress at its top). FINAL-V2 4.8 and 4.12 [R:MO-2]: a reviewer sees each held fact only as CPT
+# Studio's fixed sentence for its fact key (held_fact_words), never its cause.
+#
+# FINAL-V2 amendment 1 (DECISIONS D208; its sections 1.4, 3.9, 5.1-5.4, 6.2, 7.1-7.3): every customer text of the
+# automatic update, as constants - the TEXTS and their keys only. The functions that read an update's state for the page
+# (encounter_json's update keys, what_changed, decision_history, readiness by update state) are step 5d's, which uses
+# these and never re-words them. Where the amendment gives a text verbatim it is here verbatim (tests/v2/
+# test_update_customer.py finds each in AMENDMENT-1.md). The derived forms follow 7.1's three rules, each written out
+# and checked by the test against the rule applied to the base text: CASE C (update.kind 'documentation': no restore
+# clause; "from before your change" reads "from before the documentation was added"; the too-long and the
+# could-not-be-prepared texts end "Upload the document again, shorter or split, to have it read."), NO RESTORE
+# (update.restorable false within one revision: every restore clause dropped; the too-long text ends "Shorten the
+# document and upload it again."), and CHECK (update.kind 'check', A21: no "Your change is saved"; "from before your
+# change" and "from before your latest change" read "from before this update"; "after your change" dropped; no restore
+# clause). Every one names no provider or model and carries no held-fact cause.
+#
+# DECISIONS D225 (repair r3c; 3c P2, P3, P10): every customer sentence is true for its state. The three fixed lines get
+# a form for every state in which nothing runs (SAVED_CHANGES_LINES, saved_changes_line), BLOCKER_EXACT holds 5.3's two
+# customer texts and their check forms under an internal blocker per update state and kind (UPDATE_BLOCKERS,
+# update_blocker), and an A21 update's clearing has its own sentence (CLEARED_READ_AGAIN). Nothing earlier is changed;
+# the choosers are table lookups, as update_text is.
+
+APPRAISE_DETAIL = 'Checking the reading against the document'  # FINAL-V2 4.12, verbatim
+APPRAISE_SLOW = 'Checking the reading against the document is taking longer than usual for this document.'
+
+# FINAL-V2 4.4: the causes a held fact can carry (operator data). No customer string carries one (tests: the scan).
+HELD_FACT_CAUSES = ('reading_unknown', 'reading_contradicted', 'unestablished:', 'appraisal:', 'relation:', 'unlisted',
+                    'coding_rule:', 'context_missing', 'date_unknown')
+
+
+def _asked_of(attribute: Attribute, family: SessionKind) -> str:
+    """wording.ATTRIBUTE_PHRASES' phrase for a session ``attribute``, said of a session of ``family`` by its service
+    (wording.session_label): what a procedure-keyed item asks, in the words a conflict about that attribute uses."""
+    return wording.ATTRIBUTE_PHRASES[attribute].format(session=wording.session_label(wording.Slots(family=family)))
+
+
+def _described(family: SessionKind) -> str:
+    """What a procedure-keyed EXPLANATION asks (DECISIONS D284, G1-08; build list B8; D267: "names what its item asks"):
+    its route or tract is ESTABLISHED, so what is not found is the class the code describes - the held-fact sentence
+    names that class's performance, never a phrase of the attribute it states ("the route of ..." is known)."""
+    return f'whether the {wording.session_label(wording.Slots(family=family))} this code describes was performed'
+
+
+# DECISIONS D267 (repair r3c of round w9r; refute-r3c-r1 F7 = r3c Q10; D253 QX (ii)): the held-fact sentence of a
+# procedure-keyed held fact names what its item asks, never "in which procedure the act was done" where the procedure
+# is known - keyed by the item's message (wording.Message's value, which step 5b records with the held fact): the
+# anatomy the enteroscopy was passed through (ENTEROSCOPY_THROUGH), the route (ENTEROSCOPY_ROUTE, EXAMINATION_ROUTE),
+# each wording.ATTRIBUTE_PHRASES' own phrase, said of the session by its service, so a held fact and its item's sentence
+# read one vocabulary. PROCEDURE asks the procedure itself and has no entry: v1's MISSING sentence, as with no message.
+# DECISIONS D284 (G1-08; build list B8, step f3w): the three EXPLANATIONS - the two approach explanations and the tract's
+# (ENTEROSCOPY_APPROACH, EXAMINATION_APPROACH, ANOTHER_TRACT) - state an established route or tract and ask whether the
+# class the code describes was performed: "whether the <service> this code describes was performed" (``_described``).
+HELD_FACT_ASKS: Mapping[str, str] = MappingProxyType({
+    wording.Message.ENTEROSCOPY_THROUGH.value: _asked_of(Attribute.THROUGH, SessionKind.ENTEROSCOPY),
+    wording.Message.ENTEROSCOPY_ROUTE.value: _asked_of(Attribute.APPROACH, SessionKind.ENTEROSCOPY),
+    wording.Message.ENTEROSCOPY_APPROACH.value: _described(SessionKind.ENTEROSCOPY),
+    wording.Message.EXAMINATION_ROUTE.value: _asked_of(Attribute.APPROACH, SessionKind.EUS),
+    wording.Message.EXAMINATION_APPROACH.value: _described(SessionKind.EUS),
+    wording.Message.ANOTHER_TRACT.value: _described(SessionKind.EUS),
+})
+# DECISIONS D284 (G3-15; build list B7, step f3w): the customer's fixed sentence for an add-on its ADDON row holds - none
+# of its primary codes is counted for this encounter -, chosen by the item's message (wording.Message.ADDON's value:
+# the message step 5b records with the stored item, support['item']['message'], and read time carries on a question it
+# words live), never QUESTION_WORDS['performed_status'] ("could not confirm ... done", untrue of an established add-on
+# act) and never STALE_WORDS (the row was recomputed). ADDON_CHECK names the same row's withholding of a reinstated
+# add-on (overlay.ADDON_CHECK, review_view's withheld_by).
+ADDON_WORDS = answers.ADDON_STATEMENT  # r2 (D294): the add-on row's own statement too (one sentence, one source)
+ADDON_CHECK = overlay.ADDON_CHECK
+# r2 (DECISIONS D294, member words; WORDS-F1, F3, F6 and their class): the code's qualification for an item of a member
+# form (wording.member_form) - its form's own sentence, the same words its details row says (answers.FORM_MISSING),
+# never its key's QUESTION_WORDS: ADDON_WORDS for the add-on row, "could not confirm" what the form's row asks otherwise
+# r2b (DECISIONS D297, Q2): a form whose row states what CPT Studio's reading records (wording.FORM_RECORDED) says the
+# same here; a template form's acts are named per question (wording.form_text, ``_qualifications``)
+FORM_WORDS = {form: (ADDON_WORDS if form == wording.FORM_ADDON else wording.FORM_RECORDED[form]
+                     if form in wording.FORM_RECORDED else f'CPT Studio could not confirm from the document {missing}.')
+              for form, missing in answers.FORM_MISSING.items()}
+
+
+def held_fact_words(fact: object, message: object = None) -> str:
+    """CPT Studio's fixed sentence for a held fact's key (FINAL-V2 4.8: support.held_facts is shown to the reviewer
+    "only as CPT Studio's fixed sentence per fact key, never a cause" [R:MO-2]): BLOCKER_TEMPLATES' open-clarification
+    sentence over FACT_WORDS (which carries wording.MISSING, the five new facts of D181 among them), and for a conflict
+    (conflict:<kind>) the statement about that act - the act's label (wording.kind_words, the item's own) only when
+    <kind> is one of the contract's act kinds that name an act, else D254 rule 2's 'another act' with its article (D267,
+    refute-r3c-r1 F4: never "the other", never a bare "the act").
+
+    ``message`` (D267, repair r3c of round w9r): the item's message - a wording.Message or its value - that step 5b
+    records with a procedure-keyed held fact; a message of the held fact's own key that HELD_FACT_ASKS holds words what
+    its item asks (the route, the anatomy passed through, the tract). With no message, or any other, the key's sentence
+    stands - v1's pinned "in which procedure the act was done" for 'procedure'. It takes the key and the message id
+    alone, so no cause can reach it; a key it does not know reads the encounter's generic detail."""
+    text = fact if isinstance(fact, str) else ''
+    if text.startswith('conflict:'):
+        kind = next((member for member in Kind if member.value == text.split(':', 1)[1]), None)
+        about = (questions.missing('conflict:', wording.kind_words(kind)) if wording.named_kind(kind) else
+                 f'which statement about {wording.NO_KIND_LABEL} is right for this date')
+        return f'A detail is needed: {about}.'
+    asked = message.value if isinstance(message, wording.Message) else message if isinstance(message, str) else ''
+    item = next((member for member in wording.Message if member.value == asked), None)
+    if item is not None and item.value in HELD_FACT_ASKS and wording.MESSAGES[item].fact == text:
+        return f'A detail is needed: {HELD_FACT_ASKS[item.value]}.'
+    return f'A detail is needed: {FACT_WORDS.get(text, "a detail of the encounter")}.'
+
+
+# 5.1: the progress panel's title while an update is pending, and for kind 'check' (A21, nothing saved): the state label
+UPDATE_TITLE = 'Changes saved—updating codes'
+UPDATE_TITLE_CHECK = 'Updating codes'
+# 5.1: what was saved, from the update block (the saved values in the member's words: answers.CHOICE_LABELS)
+CHANGE_SERVICE_DATE = 'Date of service: {date}'
+CHANGE_SERVICE_DATE_REMOVED = 'Date of service removed'
+CHANGE_SETTING = 'Place of service: {value}'
+CHANGE_PATIENT_STATUS = 'Patient: {value}'
+CHANGE_BILLING_CONTEXT = 'Claim: {value}'
+# Step 5d's request (refute-5d-r1 P9; a missing text, to 3c's file through the integration owner): a choice whose
+# entered value the save removed - "Use what the document states", or an empty value - in 5.1's label
+# (WHAT_CHANGED_DETAIL_LABELS), as "Date of service removed" words a removed date. Never "not documented", which would
+# say the document states none while the update applies what it states.
+CHANGE_CHOICE_REMOVED = '{label}: entered value removed'
+CHANGE_DOCUMENTATION = 'Documentation added (revision {n})'
+CHANGE_SAVED_BY = 'Saved by {member}, {time}'
+# 5.1 [R3:binding-R3B-6]: the one fixed line shown in place of an empty saved-changes list, by why the codes are updated
+SAVED_CHANGES_UNFINISHED = ('The codes from before your change were not finished; they are being finished for these '
+                            'details.')
+SAVED_CHANGES_SAME_DETAILS = ('These are the details of the codes from before your change; the codes are made again '
+                              'because your answers, or an earlier check, changed since those codes were made.')
+SAVED_CHANGES_CHECK = 'An earlier check was settled, so the document is being read again with the current reading.'
+SAVED_CHANGES_EMPTY = {'unfinished': SAVED_CHANGES_UNFINISHED, 'same_details': SAVED_CHANGES_SAME_DETAILS,
+                       'check': SAVED_CHANGES_CHECK}
+# D225 (3c P2; repair r3c): each fixed line in a form for each update state, as UPDATE_EXPORT_NOTE has: the three above
+# are the 'updating' forms; these are the forms for every state in which nothing runs ('failed', 'stopped', 'paused',
+# 'being_confirmed'), so the panel never says the codes are being finished, made again or read again while nothing runs
+# (5.1 [R:truth-T4]; U21: "being updated" only in 'updating'). 5d chooses by update.state (saved_changes_line).
+SAVED_CHANGES_UNFINISHED_OTHER = ('The codes from before your change were not finished, and they have not been '
+                                  'finished for these details yet.')
+SAVED_CHANGES_SAME_DETAILS_OTHER = ('These are the details of the codes from before your change; the codes need to be '
+                                    'made again because your answers, or an earlier check, changed since those codes '
+                                    'were made, and they have not been made again yet.')
+# (refute-r3c-r1 P5) true whether or not the update's reading has run: an A21 update fails, stops, pauses or waits on a
+# confirmation at its document review too, after the document was read again (amendment 7.4: interpret, analyze,
+# predict, final), so the form says only what is owed - the codes - never that the document still needs reading
+SAVED_CHANGES_CHECK_OTHER = ('An earlier check was settled, so the codes need to be updated with the current reading; '
+                             'they have not been updated yet.')
+SAVED_CHANGES_LINES = {
+    'unfinished': {'updating': SAVED_CHANGES_UNFINISHED, 'other': SAVED_CHANGES_UNFINISHED_OTHER},
+    'same_details': {'updating': SAVED_CHANGES_SAME_DETAILS, 'other': SAVED_CHANGES_SAME_DETAILS_OTHER},
+    'check': {'updating': SAVED_CHANGES_CHECK, 'other': SAVED_CHANGES_CHECK_OTHER},
+}
+# 5.1: update.state's values; 'updating' is the one in which the update runs
+UPDATE_STATES = ('updating', 'failed', 'stopped', 'paused', 'being_confirmed')
+
+
+def update_state_form(state) -> str:
+    """The form key of an update in ``state`` (5.1's update.state): 'updating' while it runs, 'other' in every other
+    state - the keys of UPDATE_EXPORT_NOTE, UPDATE_BLOCKER_WORDS and SAVED_CHANGES_LINES. KeyError for a state 5.1 does
+    not name: never a form of another state."""
+    if not isinstance(state, str) or state not in UPDATE_STATES:
+        raise KeyError(state)
+    return 'updating' if state == 'updating' else 'other'
+
+
+def saved_changes_line(reason, state) -> str:
+    """The fixed line shown in place of an empty saved-changes list (5.1 [R3:binding-R3B-6]) for ``reason``
+    (SAVED_CHANGES_EMPTY's key: 'unfinished', 'same_details' or 'check') in the update's ``state`` (D225): the
+    'updating' form only while the update runs. KeyError for a reason or a state 5.1 does not name."""
+    return SAVED_CHANGES_LINES[reason][update_state_form(state)]
+
+
+# 5.1: the earlier codes' section, true in every update state [R:truth-T4]
+EARLIER_CODES_HEADING = 'Codes from before your change'
+EARLIER_CODES_HEADING_CHECK = 'Codes from before this update'
+EARLIER_CODES_MADE = ('Made {time}, with date of service {date}. They cannot be approved or exported: they are from '
+                      'before your latest change.')
+EARLIER_CODES_MADE_CHECK = ('Made {time}, with date of service {date}. They cannot be approved or exported: they are '
+                            'from before this update.')
+# 5.1: a detail row that takes "Not documented" or "Cannot confirm" while an update is pending (no control is drawn)
+ANSWER_AFTER_UPDATE = 'You can answer this once the codes are updated.'
+# 5.1: UPDATE_EXPORT_NOTE, by the update's state [R:truth-T4]: 'updating', and every other ('failed', 'stopped',
+# 'paused', 'being_confirmed')
+UPDATE_EXPORT_NOTE = {
+    'updating': ('Your change is saved and the codes are being updated. Exports are available again once the update '
+                 'finishes.'),
+    'other': ('Your change is saved, but the codes have not been updated yet; the panel above says why. The codes from '
+              'before your change cannot be exported as current.'),
+}
+UPDATE_EXPORT_NOTE_CHECK = {
+    'updating': 'The codes are being updated. Exports are available again once the update finishes.',
+    'other': ('The codes have not been updated yet; the panel above says why. The codes from before this update cannot '
+              'be exported as current.'),
+}
+# 5.1 [R:truth-T5][R2:truth-RT8]: the results section and the review bar's tally while an update is pending
+RESULTS_UPDATING = ('The updated codes appear here when the update finishes. The codes from before your change are shown '
+                    'below.')
+RESULTS_NOT_UPDATED = ('The codes have not been updated after your change yet; the panel above says why. The codes from '
+                       'before your change are shown below.')
+RESULTS_EARLIER_SHOWN = 'The codes from before your change are shown below.'
+RESULTS_NO_EARLIER_CODE = 'No code was suggested before your change.'  # in place of RESULTS_EARLIER_SHOWN
+TALLY_BEFORE = 'Before your change: '
+TALLY_NO_EARLIER_CODE = 'Before your change: no code suggested'
+RESULTS_UPDATING_CHECK = ('The updated codes appear here when the update finishes. The codes from before this update '
+                          'are shown below.')
+RESULTS_NOT_UPDATED_CHECK = ('The codes have not been updated yet; the panel above says why. The codes from before this '
+                             'update are shown below.')
+RESULTS_EARLIER_SHOWN_CHECK = 'The codes from before this update are shown below.'
+# The three below have no check form in 7.1's rules (none says "from before your change"); worded by the rule that no
+# check text names a change of the member's (recorded as a question)
+RESULTS_NO_EARLIER_CODE_CHECK = 'No code was suggested before this update.'
+TALLY_BEFORE_CHECK = 'Before this update: '
+TALLY_NO_EARLIER_CODE_CHECK = 'Before this update: no code suggested'
+# 2.5 [R:truth-T13]: the toast of a save that restored the earlier codes
+RESTORED_TOAST = 'Saved. The codes from before your change are current again.'
+
+# 5.3: the server-side refusals while an update is pending (internal = customer), and the readiness blocker
+UPDATE_DECISION = ('These codes are from before your latest change and cannot be decided on. Decide on the codes once '
+                   'they are updated.')
+UPDATE_DECISION_CHECK = ('These codes are from before this update and cannot be decided on. Decide on the codes once '
+                         'they are updated.')
+UPDATE_EXPORT = ('These codes are from before your latest change and cannot be exported as current. Exports are '
+                 'available again once the codes are updated; earlier downloads stay available, marked as earlier.')
+UPDATE_EXPORT_CHECK = ('These codes are from before this update and cannot be exported as current. Exports are '
+                       'available again once the codes are updated; earlier downloads stay available, marked as '
+                       'earlier.')
+UPDATE_ANSWER_WITHDRAW = 'You can change your answers once the codes are updated.'
+UPDATE_BLOCKER = 'The codes are from before the latest change; the update has not finished'  # review.readiness's (5b)
+# The blocker's customer words by the update's state and kind (customer_api.readiness, step 5d, chooses): while
+# 'updating', and in every other state. BLOCKER_EXACT holds the check kind's 'other' form, the one true in every state
+# and every kind: it never says "being updated" while nothing runs, nor names a change of the member's (A21).
+UPDATE_BLOCKER_WORDS = {
+    ('updating', 'details'): 'The codes are being updated after your change.',
+    ('other', 'details'): 'The codes have not been updated after your change yet.',
+    ('updating', 'check'): 'The codes are being updated.',
+    ('other', 'check'): 'The codes have not been updated yet.',
+}
+# D225 (3c P3; repair r3c): the internal blocker by the update's state and kind, keyed as UPDATE_BLOCKER_WORDS, so that
+# BLOCKER_EXACT holds 5.3's two customer texts and their check forms (amendment 10: "both UPDATE_BLOCKER texts, and
+# their check forms"): review.readiness (5b) adds update_blocker(state, kind) in place of UPDATE_BLOCKER, which stays
+# the state-free blocker in its form true in every state.
+UPDATE_BLOCKERS = {
+    ('updating', 'details'): 'The codes are from before the latest change; the update is running',
+    ('other', 'details'): 'The codes are from before the latest change; the update is not running',
+    ('updating', 'check'): 'The codes are from before this update; the update is running',
+    ('other', 'check'): 'The codes are from before this update; the update is not running',
+}
+
+
+def update_blocker(state, kind) -> str:
+    """The internal readiness blocker of a pending update in ``state`` (5.1's update.state) of ``kind`` (update.kind):
+    its check form for 'check' (A21), its details form for 'details' and 'documentation' (5.3's words after a change of
+    the member's). KeyError for a state or kind 5.1 does not name."""
+    if not isinstance(kind, str) or kind not in UPDATE_KINDS:
+        raise KeyError(kind)
+    return UPDATE_BLOCKERS[(update_state_form(state), 'check' if kind == 'check' else 'details')]
+
+
+# 1.4 (A12, A19): the save and addendum refusals; 3.9 (A13): the duplicate addendum (a KNOWN_TEMPLATES entry)
+SAVE_TOO_LONG = ('This document is too long to be read in one piece, so its details cannot be changed here. The codes '
+                 'shown stay as they are.')
+SAVE_UNPREPARED = ('This document could not be prepared for reading, so its details cannot be changed here. The codes '
+                   'shown stay as they are. Upload it again to change them.')
+ADDENDUM_TOO_LONG = ('With this documentation the document would be too long to be read in one piece, so it was not '
+                     'added.')
+ADDENDUM_UNPREPARED = 'This documentation could not be prepared for reading, so it was not added.'
+ADDENDUM_DOCUMENT_TOO_LONG = ('This document is too long to be read in one piece, so documentation cannot be added to it '
+                              'here. Upload it again, shorter or split, with the documentation included.')
+ADDENDUM_DOCUMENT_UNPREPARED = ('This document cannot be prepared for reading as it stands, so documentation cannot be '
+                                'added to it here. Upload it again with the documentation included, without bracketed '
+                                'markers such as [S2].')
+ADDENDUM_DUPLICATE = 'This documentation was already added as revision {n}.'
+RESTORE_REFUSED = ('The codes from before your change cannot be used again as they were, so their details cannot be '
+                   'restored until the update has finished.')
+
+# 7.2: retry_update's refusals (jobs.RETRY_BUSY and jobs.RETRY_UNKNOWN unchanged), and 7.1's action labels
+RETRY_UPDATE_NOTHING = 'There is no failed update to try again.'
+RETRY_UPDATE_HELD = ('Updating the codes is paused on this installation; resume once the coding service is available '
+                     'again.')
+RETRY_UPDATE_READING = 'This update failed while reading the document; use Try reading again.'
+RETRY_UPDATE_REFUSED_BEFORE = 'The coding service refused this same request before, so it is not sent again.'
+UPDATE_ACTION_LABELS = {'retry_reading': 'Try reading again', 'retry_update': 'Try updating again'}
+# Step 5d's request (refute-5d-r1 P4; a missing text, to 3c's file through the integration owner): the page's toast once
+# "Try updating again" was accepted (POST retry-update answered 201: one recorded attempt is queued)
+RETRY_UPDATE_ASKED = 'Asked. Updating the codes is tried once more.'
+
+# 7.1 [R2:truth-RT6][R3:truth-R3T-7]: a FIRST processing paused under the coding service's hold (progress.
+# provider_paused, step 5b), while the hold stands; once released the stage reads STOPPED_BY_SYSTEM
+PROVIDER_PAUSED = ('The coding service is paused on this installation, so this document\'s codes are not checked yet. '
+                   'Nothing more is sent to it until it is available again; resume once it is.')
+
+
+_WORKER_PAUSED = ('Processing is paused: the processing service is not responding right now. Your document is saved, '
+                  'and this page shows the next step once the service is back.')  # progress.MESSAGES['paused']
+
+
+@dataclass(frozen=True)
+class UpdateText:
+    """One row of amendment 7.1's table in its four forms (each a complete customer sentence): ``details`` for kind
+    'details' with update.restorable; ``no_restore`` for kind 'details' without it; ``documentation`` for kind
+    'documentation' (case C); ``check`` for kind 'check' (A21). ``phase`` and ``action`` are the row's; a 'resume'
+    is offered only where review.can_resume holds (7.1: "resume when can_resume")."""
+    details: str
+    no_restore: str
+    documentation: str
+    check: str
+    phase: str
+    action: str
+
+
+def _update_row(details, no_restore, documentation, check, phase, action) -> UpdateText:
+    return UpdateText(details, no_restore, documentation, check, phase, action)
+
+
+# 7.1's rows, by situation (progress.UPDATE_ERRORS' keys, step 5b, read these texts): the forms are written out, never
+# computed, so each can be read and grepped; the test re-derives each form from ``details`` by 7.1's rules.
+UPDATE_TEXTS = {
+    'reading_failed': _update_row(
+        'Your change is saved, but the codes could not be updated: reading the documented procedures could not be '
+        'completed. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: reading the documented procedures could not be '
+        'completed. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: reading the documented procedures could not be '
+        'completed. The codes shown are from before the documentation was added and cannot be approved or exported '
+        'until the update finishes.',
+        'The codes could not be updated: reading the documented procedures could not be completed. The codes shown are '
+        'from before this update and cannot be approved or exported until the update finishes.',
+        'failed', 'retry_reading'),
+    'appraisal_failed': _update_row(
+        'Your change is saved, but the codes could not be updated: checking the reading against the document could not '
+        'be completed. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: checking the reading against the document could not '
+        'be completed. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: checking the reading against the document could not '
+        'be completed. The codes shown are from before the documentation was added and cannot be approved or exported '
+        'until the update finishes.',
+        'The codes could not be updated: checking the reading against the document could not be completed. The codes '
+        'shown are from before this update and cannot be approved or exported until the update finishes.',
+        'failed', 'retry_reading'),
+    'too_long': _update_row(
+        'Your change is saved, but the codes could not be updated: this document is too long to be read in one piece. '
+        'The codes shown are from before your change and cannot be approved or exported. Restore the earlier details '
+        'to use them again, or shorten the document and upload it again.',
+        'Your change is saved, but the codes could not be updated: this document is too long to be read in one piece. '
+        'The codes shown are from before your change and cannot be approved or exported. Shorten the document and '
+        'upload it again.',
+        'Your change is saved, but the codes could not be updated: this document is too long to be read in one piece. '
+        'The codes shown are from before the documentation was added and cannot be approved or exported. Upload the '
+        'document again, shorter or split, to have it read.',
+        'The codes could not be updated: this document is too long to be read in one piece. The codes shown are from '
+        'before this update and cannot be approved or exported. Shorten the document and upload it again.',
+        'failed', 'none'),
+    'review_failed': _update_row(
+        'Your change is saved, but the codes could not be updated: the coding service could not complete its review. '
+        'The codes shown are from before your change and cannot be approved or exported until the update finishes.',
+        'Your change is saved, but the codes could not be updated: the coding service could not complete its review. '
+        'The codes shown are from before your change and cannot be approved or exported until the update finishes.',
+        'Your change is saved, but the codes could not be updated: the coding service could not complete its review. '
+        'The codes shown are from before the documentation was added and cannot be approved or exported until the '
+        'update finishes.',
+        'The codes could not be updated: the coding service could not complete its review. The codes shown are from '
+        'before this update and cannot be approved or exported until the update finishes.',
+        'failed', 'retry_update'),
+    'review_not_sent': _update_row(
+        'Your change is saved, but the codes could not be updated: the coding service could not be used just now, and '
+        'the document was not sent to it. The codes shown are from before your change and cannot be approved or '
+        'exported until the update finishes.',
+        'Your change is saved, but the codes could not be updated: the coding service could not be used just now, and '
+        'the document was not sent to it. The codes shown are from before your change and cannot be approved or '
+        'exported until the update finishes.',
+        'Your change is saved, but the codes could not be updated: the coding service could not be used just now, and '
+        'the document was not sent to it. The codes shown are from before the documentation was added and cannot be '
+        'approved or exported until the update finishes.',
+        'The codes could not be updated: the coding service could not be used just now, and the document was not sent '
+        'to it. The codes shown are from before this update and cannot be approved or exported until the update '
+        'finishes.',
+        'failed', 'retry_update'),
+    'review_held': _update_row(
+        'Your change is saved. Updating the codes is paused on this installation: the coding service refused its '
+        'requests, and nothing more is sent to it until it is available again. The codes shown are from before your '
+        'change and cannot be approved or exported until the update finishes. You can restore the earlier details to '
+        'use them again.',
+        'Your change is saved. Updating the codes is paused on this installation: the coding service refused its '
+        'requests, and nothing more is sent to it until it is available again. The codes shown are from before your '
+        'change and cannot be approved or exported until the update finishes.',
+        'Your change is saved. Updating the codes is paused on this installation: the coding service refused its '
+        'requests, and nothing more is sent to it until it is available again. The codes shown are from before the '
+        'documentation was added and cannot be approved or exported until the update finishes.',
+        'Updating the codes is paused on this installation: the coding service refused its requests, and nothing more '
+        'is sent to it until it is available again. The codes shown are from before this update and cannot be approved '
+        'or exported until the update finishes.',
+        'paused', 'resume'),
+    'review_refused_before': _update_row(
+        'Your change is saved, but the codes could not be updated: the coding service refused this same request '
+        'before, and it is not sent again. The codes shown are from before your change and cannot be approved or '
+        'exported. Restore the earlier details to use them again.',
+        'Your change is saved, but the codes could not be updated: the coding service refused this same request '
+        'before, and it is not sent again. The codes shown are from before your change and cannot be approved or '
+        'exported.',
+        'Your change is saved, but the codes could not be updated: the coding service refused this same request '
+        'before, and it is not sent again. The codes shown are from before the documentation was added and cannot be '
+        'approved or exported.',
+        'The codes could not be updated: the coding service refused this same request before, and it is not sent '
+        'again. The codes shown are from before this update and cannot be approved or exported.',
+        'failed', 'none'),
+    'review_unbuilt': _update_row(
+        'Your change is saved, but the codes could not be updated: the document could not be prepared for the coding '
+        'service, and nothing was sent. The codes shown are from before your change. Restore the earlier details to '
+        'use them again.',
+        'Your change is saved, but the codes could not be updated: the document could not be prepared for the coding '
+        'service, and nothing was sent. The codes shown are from before your change.',
+        'Your change is saved, but the codes could not be updated: the document could not be prepared for the coding '
+        'service, and nothing was sent. The codes shown are from before the documentation was added. Upload the '
+        'document again, shorter or split, to have it read.',
+        'The codes could not be updated: the document could not be prepared for the coding service, and nothing was '
+        'sent. The codes shown are from before this update.',
+        'failed', 'none'),
+    'processing_failed': _update_row(
+        'Your change is saved, but the codes could not be updated: processing could not be completed, and nothing was '
+        'sent. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: processing could not be completed, and nothing was '
+        'sent. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: processing could not be completed, and nothing was '
+        'sent. The codes shown are from before the documentation was added and cannot be approved or exported until '
+        'the update finishes.',
+        'The codes could not be updated: processing could not be completed, and nothing was sent. The codes shown are '
+        'from before this update and cannot be approved or exported until the update finishes.',
+        'failed', 'retry_update'),
+    'interpreter_paused': _update_row(
+        'Your change is saved. Updating the codes is paused on this installation, and nothing was sent. The codes shown '
+        'are from before your change and cannot be approved or exported until the update finishes. You can restore the '
+        'earlier details to use them again.',
+        'Your change is saved. Updating the codes is paused on this installation, and nothing was sent. The codes shown '
+        'are from before your change and cannot be approved or exported until the update finishes.',
+        'Your change is saved. Updating the codes is paused on this installation, and nothing was sent. The codes shown '
+        'are from before the documentation was added and cannot be approved or exported until the update finishes.',
+        'Updating the codes is paused on this installation, and nothing was sent. The codes shown are from before this '
+        'update and cannot be approved or exported until the update finishes.',
+        'paused', 'resume'),
+    'review_disabled': _update_row(
+        'Your change is saved. The coding service is not available on this installation right now, so the codes are '
+        'not updated yet, and nothing was sent. The codes shown are from before your change. Resume once it is '
+        'available, or restore the earlier details.',
+        'Your change is saved. The coding service is not available on this installation right now, so the codes are '
+        'not updated yet, and nothing was sent. The codes shown are from before your change. Resume once it is '
+        'available.',
+        'Your change is saved. The coding service is not available on this installation right now, so the codes are '
+        'not updated yet, and nothing was sent. The codes shown are from before the documentation was added. Resume '
+        'once it is available.',
+        'The coding service is not available on this installation right now, so the codes are not updated yet, and '
+        'nothing was sent. The codes shown are from before this update. Resume once it is available.',
+        'paused', 'resume'),
+    'being_confirmed': _update_row(
+        'Your change is saved. We are confirming whether an earlier check completed; the codes are updated once that '
+        'is settled, and nothing is sent again until then.',
+        'Your change is saved. We are confirming whether an earlier check completed; the codes are updated once that '
+        'is settled, and nothing is sent again until then.',
+        'Your change is saved. We are confirming whether an earlier check completed; the codes are updated once that '
+        'is settled, and nothing is sent again until then.',
+        'We are confirming whether an earlier check completed; the codes are updated once that is settled, and nothing '
+        'is sent again until then.',
+        'being_confirmed', 'none'),
+    'stopped_by_member': _update_row(
+        'Updating the codes was stopped. The codes shown are from before your change and cannot be approved or '
+        'exported until the update finishes. Resume to finish it, or restore the earlier details.',
+        'Updating the codes was stopped. The codes shown are from before your change and cannot be approved or '
+        'exported until the update finishes. Resume to finish it.',
+        'Updating the codes was stopped. The codes shown are from before the documentation was added and cannot be '
+        'approved or exported until the update finishes. Resume to finish it.',
+        'Updating the codes was stopped. The codes shown are from before this update and cannot be approved or exported '
+        'until the update finishes. Resume to finish it.',
+        'stopped', 'resume'),
+    'stopped_by_system': _update_row(
+        'Updating the codes paused before it finished. The codes shown are from before your change. Resume to finish '
+        'it.',
+        'Updating the codes paused before it finished. The codes shown are from before your change. Resume to finish '
+        'it.',
+        'Updating the codes paused before it finished. The codes shown are from before the documentation was added. '
+        'Resume to finish it.',
+        'Updating the codes paused before it finished. The codes shown are from before this update. Resume to finish '
+        'it.',
+        'stopped', 'resume'),
+    # 7.1's last row: the worker not responding reads progress.MESSAGES['paused'], unchanged, in every form - copied as
+    # a literal (pinned equal by test), so this table reads no attribute of progress while modules are imported
+    'worker_paused': _update_row(*(_WORKER_PAUSED,) * 4, 'paused', 'none'),
+}
+UPDATE_KINDS = ('details', 'documentation', 'check')
+
+
+def update_text(situation, kind, restorable) -> str:
+    """7.1's text of ``situation`` for an update of ``kind`` (update.kind) with ``restorable`` (update.restorable): the
+    case-C form for 'documentation', the check form for 'check', else the restore form only when ``restorable`` is
+    True. KeyError for a situation or kind 7.1 does not name: never a text of another row."""
+    row = UPDATE_TEXTS[situation]
+    if kind not in UPDATE_KINDS:
+        raise KeyError(kind)
+    if kind == 'documentation':
+        return row.documentation
+    if kind == 'check':
+        return row.check
+    return row.details if restorable is True else row.no_restore
+
+
+# 6.2: "What changed", from stored rows (customer_api.what_changed, step 5d), in these words
+WHAT_CHANGED_COMPARED = 'Compared with the codes as suggested on {time}, before any answer or decision'
+WHAT_CHANGED_SINCE = 'since the codes as suggested on {time}'  # 6.2: after an answer's recompute (see the question)
+WHAT_CHANGED_DETAIL_LABELS = {'service_date': 'Date of service', 'setting': 'Place of service',
+                              'patient_status': 'Patient', 'billing_context': 'Claim'}  # 5.1's labels
+WHAT_CHANGED_DETAIL = '{label}: {before} → {after}'  # step 2: the field's label with both values
+WHAT_CHANGED_NOT_DOCUMENTED = 'not documented'
+WHAT_CHANGED_TWO_DATES = 'two dates to choose from'
+# Step 5d's request (a missing text, to 3c's file through the integration owner): a place of service, patient status or
+# claim the document and the member disagree on (a legacy context's member conflict), which no other text words truly -
+# "not documented" would say the document gives none, "two dates" names the wrong fact
+WHAT_CHANGED_TWO_VALUES = 'two values to choose from'
+WHAT_CHANGED_DOCUMENTATION = 'Documentation added (revision {n})'
+WHAT_CHANGED_READ_AGAIN = 'The document was read again with the current reading.'
+WHAT_CHANGED_STATUS = {'ready': 'Ready for review', 'needs_detail': 'Needs a detail',
+                       'excluded': 'Excluded by a documentation check',
+                       'answered_away': 'Excluded: a needed detail is not documented'}
+WHAT_CHANGED_ADDED = '{code} is now suggested ({status})'
+WHAT_CHANGED_REMOVED = '{code} is no longer suggested'
+WHAT_CHANGED_REMOVED_REASON = '{code} is no longer suggested. {reason}'  # with the other-codes list's reason
+WHAT_CHANGED_ALTERNATIVE = 'Listed as an alternative only; not suggested for approval.'  # code_rows' own words
+WHAT_CHANGED_NOT_SUGGESTED = 'Not suggested: {reason}'  # code_rows' own form, _exclusion_reason lower-cased
+WHAT_CHANGED_STATUS_CHANGED = '{code}: {before} → {after}'
+WHAT_CHANGED_UNITS = '{code}: {before} → {after} units'
+WHAT_CHANGED_ITEM = '{code}: the detail needed changed: "{before}" → "{after}"'
+WHAT_CHANGED_UNCHANGED = '{n} codes unchanged'
+WHAT_CHANGED_UNCHANGED_ONE = '1 code unchanged'
+WHAT_CHANGED_DECISION_NOUNS = {Decision.APPROVE: 'Approval', Decision.REJECT: 'Rejection',
+                               Decision.REINSTATE: 'Reinstatement', Decision.CONFIRM: 'Confirmed exclusion'}
+WHAT_CHANGED_KEPT = '{action} of {code} kept: the code is unchanged.'
+WHAT_CHANGED_KEPT_THEN_CLEARED = ('{action} of {code} was kept by the update, then cleared when the codes were checked '
+                                  'again with the same details.')
+WHAT_CHANGED_KEPT_THEN_CHANGED = '{action} of {code} was kept by the update, then changed by a reviewer.'
+WHAT_CHANGED_ANSWERS = ('Some answers you gave before this change are not applied to the updated codes; they are listed '
+                        'under Earlier answers, not applied.')
+# 5.4: why an earlier decision no longer applies (first match wins), and 6.2 step 4's 'cleared' outcome
+CLEARED_BY_REVISION = 'Cleared when documentation was added (revision {n}).'
+CLEARED_NEW_READING = ('Made on the earlier reading of the document; the current codes come from a new reading, so it '
+                       'does not carry. Decide the current codes.')
+CLEARED_SAME_DETAILS = 'Cleared when the codes were checked again with the same details: the code it was made on changed.'
+CLEARED_DETAILS_CHANGED = 'Cleared when the details changed: the code it was made on changed.'
+# D225 (3c P10; repair r3c): an A21 update's (kind 'check') - a reading owed on the same values (a v2 revision whose
+# inventory is of an older version): its final records a new context with the same values, and no detail changed. 5d's
+# decision_history and what_changed choose it, never CLEARED_DETAILS_CHANGED, for such a clearing.
+CLEARED_READ_AGAIN = ('Cleared when the document was read again with the current reading: the code it was made on '
+                      'changed.')
+# 5.4: an earlier download, listed and linked (it downloads with the banner, step 5d)
+EARLIER_DOWNLOAD = 'Earlier — made on revision {n}; it may not show the current codes'
+
+
 # --- errors -------------------------------------------------------------------------------------------------------
+
+# The customer's words for jobs.SECOND_REVIEW_NOT_FINAL (KNOWN_ERRORS): the peer chain is 'the independent checks', as
+# in the confirmation's refusal below.
+SECOND_REVIEW_NOT_FINAL_WORDS = ('The independent checks for this document have not finished: resume processing to '
+                                 'finish them, then ask for a second review.')
 
 # Refusals from deeper layers (jobs.Refused, ValidationError, PermissionDenied, AttestationRefused) that are already in
 # CPT Studio's plain customer wording pass through; the rest are re-worded; anything this table does not know answers
@@ -139,6 +727,29 @@ KNOWN_ERRORS = {
     'This document could not be read to the end, so its context cannot be changed and nothing is sent for it. '
     'Upload it again, shorter or split.': None,
     'Wait for processing to finish (or stop it) before resuming.': None,
+    # the recorded retry of a reading (jobs.retry_reading; FINAL 11.3), already in the member's words
+    jobs.RETRY_BUSY: None,
+    jobs.RETRY_NOTHING: None,
+    jobs.RETRY_READ: None,
+    jobs.RETRY_UNKNOWN: None,
+    jobs.RETRY_PAUSED: None,
+    jobs.RETRY_TOO_LONG: None,
+    jobs.RETRY_CUT_OFF: None,  # AMENDMENT-2 1.5 [R:truth-T7]: a reading cut at its output limit
+    jobs.RETRY_DECLINED: None,  # AMENDMENT-2 1.5 [R:connector-CONN-1]: a declined reading's request
+    jobs.RETRY_UNBUILT: None,
+    # a write the legacy-call sentinel refused (FINAL 10.3): CPT Studio's sentence, naming no module or provider
+    sentinel.MESSAGES['executed']: None,
+    sentinel.MESSAGES['unavailable']: None,
+    # a gated write refused because a reading finished between its request's read of the encounter and its row lock
+    # (readers.moved; the Gemini migration's review, finding 3): retried by the member
+    readers.MOVED: None,
+    # a context save on a new-path revision whose reading ended without a result, or that was never read (S10's
+    # hand-off; jobs.change_context): already in the member's words, naming no module or provider
+    jobs.CONTEXT_UNREAD_MESSAGE: None,
+    jobs.CONTEXT_NONE_MESSAGE: None,
+    # a second review asked before its chain's final assessment (jobs._second_review_bounds): re-worded, as the
+    # confirmation's refusal below is, because 'peer reviews' names the machinery
+    jobs.SECOND_REVIEW_NOT_FINAL: SECOND_REVIEW_NOT_FINAL_WORDS,
     'Wait for processing to finish (or stop it) before asking for a second review.': None,
     'There is no current assessment to review again.': None,
     'No documented service is left without a supported proposal.': None,
@@ -196,6 +807,27 @@ KNOWN_ERRORS = {
     answers.BUSY: None,
     answers.STALE: None,
     answers.ALREADY_WITHDRAWN: None,
+    # FINAL-V2 amendment 1 (step 3c): the refusals while an update is pending (5.3; the check forms of A21), the save
+    # and addendum refusals (1.4) and retry_update's own (7.2) - each already the member's words, naming no provider
+    UPDATE_DECISION: None,
+    UPDATE_DECISION_CHECK: None,
+    UPDATE_EXPORT: None,
+    UPDATE_EXPORT_CHECK: None,
+    UPDATE_ANSWER_WITHDRAW: None,
+    SAVE_TOO_LONG: None,
+    SAVE_UNPREPARED: None,
+    ADDENDUM_TOO_LONG: None,
+    ADDENDUM_UNPREPARED: None,
+    ADDENDUM_DOCUMENT_TOO_LONG: None,
+    ADDENDUM_DOCUMENT_UNPREPARED: None,
+    RESTORE_REFUSED: None,
+    RETRY_UPDATE_NOTHING: None,
+    RETRY_UPDATE_HELD: None,
+    RETRY_UPDATE_READING: None,
+    RETRY_UPDATE_REFUSED_BEFORE: None,
+    # step 5d's request (answers._save_details, 1.4 and 5.1): an answer saved while an update is pending - the row's own
+    # sentence, true in every update state
+    ANSWER_AFTER_UPDATE: None,
 }
 KNOWN_TEMPLATES = (
     re.compile(r'(?:Approve|Reject|Reinstate for review|Revoke decision|Confirm exclusion) is not available for '
@@ -212,6 +844,8 @@ KNOWN_TEMPLATES = (
                r'document, so it was not read and nothing was sent\. Shorten it or split it, then upload it again\.'),
     re.compile(r'The attestation must read exactly: I read this passage in the source document; it documents [^\n]{1,80} '
                r'for this encounter\.'),
+    # FINAL-V2 amendment 1, 3.9 (A13): ADDENDUM_DUPLICATE, its revision number filled in
+    re.compile(r'This documentation was already added as revision [1-9][0-9]{0,5}\.'),
 )
 
 
@@ -254,6 +888,13 @@ BLOCKER_EXACT = {
         'The service date you entered differs from the document; choose which date to use.',
     'The provider request failed': 'The coding service could not finish for this document.',
     'The provider response was not used': "The coding service's answer could not be used.",
+    review.UNREADABLE_EVENTS_BLOCKER: 'This document must be checked again before its codes can be approved or exported.',
+    # FINAL-V2 amendment 1, 5.3: UPDATE_BLOCKER in the form true in every update state and kind; customer_api.readiness
+    # (step 5d) says it by the update's state and kind from UPDATE_BLOCKER_WORDS
+    UPDATE_BLOCKER: UPDATE_BLOCKER_WORDS[('other', 'check')],
+    # D225 (3c P3): 5.3's two customer texts and their check forms, each under the internal blocker of its update state
+    # and kind (UPDATE_BLOCKERS, which review.readiness adds: 5b)
+    **{UPDATE_BLOCKERS[key]: UPDATE_BLOCKER_WORDS[key] for key in UPDATE_BLOCKER_WORDS},
 }
 BLOCKER_TEMPLATES = (
     (re.compile(r'Revision \d+ has not been assessed yet'), lambda m: 'The latest version of the document has not been '
@@ -477,9 +1118,30 @@ WITHHELD_WORDS = {
     'review.reinstatement': 'This reinstated code needs a detail before it can be approved.',
     'em.same_day_if_reinstated': 'A separately identifiable office visit is not documented beside the procedure '
                                  'reinstated for the same day.',
+    # D284 (G3-15; build list B7): a reinstated add-on its ADDON row holds (overlay.ADDON_CHECK as withheld_by)
+    ADDON_CHECK: 'This reinstated add-on code is reported only together with a primary code, and none is counted for '
+                 'this encounter.',
 }
+
+
+def _addon_question(question: object, support: object) -> bool:
+    """Whether an open question a view shows is the ADDON row's (DECISIONS D284, build list B7), by the item's message: a
+    question read time words live carries its message (``question['message']``); a stored one (it has a row id) is the
+    stored item's when the record's item (``support['item']``, the message step 5b records) is ADDON and of its fact.
+    r2 (D294): the ADDON form of wording.asked_form, the one reading of a question's form."""
+    return wording.asked_form(question, support) == wording.FORM_ADDON
+
+
 STALE_WORDS = ('After the review decisions, a check that depends on the other codes could not be recomputed for this '
                'code.')
+# r2f (DECISIONS D309, RFEW-5): why a code a member's answer excluded is excluded, by the state of that answer - one that
+# stands excludes it until it is withdrawn; one withdrawn still excludes it while the update that applies the withdrawal
+# has not run (the W1 rule: an answer the assessment read stays in effect until its recompute), and the sentence says so,
+# never asking the member to withdraw what they already withdrew (the readiness blocker names the pending update)
+EXCLUDED_BY_ANSWER_WORDS = ('A detail this code needs was answered as not documented or not confirmable, so it is excluded '
+                            'until that answer is withdrawn.')
+EXCLUDED_BY_WITHDRAWN_ANSWER_WORDS = ('A detail this code needs was answered as not documented or not confirmable; that '
+                                      'answer was withdrawn, and the update that applies the withdrawal has not run yet.')
 
 
 def _reference_attention(proposal, view):
@@ -490,11 +1152,13 @@ def _reference_attention(proposal, view):
                for check in checks)
 
 
-def _qualifications(proposal, status, view, code):
+def _qualifications(proposal, status, view, code, standing=None):
     """What qualifies the code, in fixed sentences: why it needs a detail (a conflict, each open question the overlay
     leaves it), why approve is withheld, why it is excluded, a decision the overlay no longer supports (its readiness
     blocker), a check that could not be recomputed, its modifier review and a CMS fee-schedule check that needs
-    attention."""
+    attention. r2f (DECISIONS D309, RFEW-5): a code a member's answer excluded says why by the state of that answer
+    (``_excluded_by_answer``; ``standing``: the (code, family, fact) of every standing answer of the revision, read
+    here when not given)."""
     support = proposal.support or {}
     questions = list(view.questions) if view is not None else []
     out = []
@@ -513,6 +1177,12 @@ def _qualifications(proposal, status, view, code):
             elif fact == 'separate_em' and same_day:
                 # the visit a reinstated same-day procedure holds (refutation round 3, B-05): the gate's own sentence
                 out.append(WITHHELD_WORDS[review.SAME_DAY_EM_GATE])
+            elif wording.asked_form(question, support) in FORM_WORDS:
+                # D284 (B7) and r2 (D294): chosen by the item's message (its form), never by its key; r2b (D297, W2R-2):
+                # a template form names the acts its item records
+                named = wording.asked_act(question, support)
+                out.append(wording.form_text(FORM_WORDS[wording.asked_form(question, support)],
+                                             *((named[1], named[2]) if named is not None else ())))
             elif fact in QUESTION_WORDS:
                 out.append(QUESTION_WORDS[fact])
         if status == 'needs_detail' and not out:
@@ -522,12 +1192,11 @@ def _qualifications(proposal, status, view, code):
             out.append(WITHHELD_WORDS[withheld])
         if view is not None and view.same_day_held:
             out.append(WITHHELD_WORDS['em.same_day_if_reinstated'])
-    if status == 'excluded' and proposal.bucket == Proposal.EXCLUDED and not (view is not None
-                                                                           and view.reason == review.DETAIL_UNAVAILABLE):
+    if status == 'excluded' and review.bucket_of(proposal, view) == Proposal.EXCLUDED and not (
+            view is not None and view.reason == review.DETAIL_UNAVAILABLE):
         out.append(_exclusion_reason(proposal))
     if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
-        out.append('A detail this code needs was answered as not documented or not confirmable, so it is excluded '
-                   'until that answer is withdrawn.')
+        out.append(_excluded_by_answer(proposal, view, standing))
     if view is not None and view.blocker:
         out.append(customer_blocker(view.blocker))
     if view is not None and view.stale:
@@ -538,6 +1207,23 @@ def _qualifications(proposal, status, view, code):
     if _reference_attention(proposal, view):
         out.append('A CMS fee-schedule check for this code needs attention.')
     return list(dict.fromkeys(out))
+
+
+def standing_keys(revision_id: object) -> set[tuple[str, str, str]]:
+    """r2f (D309, RFEW-5): the (code, family, fact) of every standing (not withdrawn) member answer of a revision."""
+    return {(answer.code, answer.family, answer.fact) for answer in models.MemberAnswer.objects.filter(
+        revision_id=revision_id, revocation__isnull=True).only('code', 'family', 'fact')}
+
+
+def _excluded_by_answer(proposal: Any, view: Any, standing: Optional[set[tuple[str, str, str]]] = None) -> str:
+    """r2f (DECISIONS D309, RFEW-5): the sentence of a code a member's answer excluded (review.DETAIL_UNAVAILABLE), by the
+    state of the answer it rests on - its key (the code, its family, the fact the view says it answered): while one
+    stands, it is excluded until that answer is withdrawn; once none stands (withdrawn, the update that applies it not yet
+    run), it says that - never the advice to withdraw what was withdrawn."""
+    keys = standing_keys(proposal.assessment.revision_id) if standing is None else standing
+    if (proposal.code, proposal.family, view.answered) in keys:
+        return EXCLUDED_BY_ANSWER_WORDS
+    return EXCLUDED_BY_WITHDRAWN_ANSWER_WORDS
 
 
 def _status(proposal, decision, view):
@@ -554,7 +1240,9 @@ def _status(proposal, decision, view):
         return 'excluded', CONFIRMED_SUB_LABEL
     if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
         return 'excluded', UNAVAILABLE_SUB_LABELS.get(view.answer, UNAVAILABLE_SUB_LABEL)
-    if proposal.bucket == Proposal.EXCLUDED and action != Decision.REINSTATE:
+    # r2b (DECISIONS D297, W2R-1): a code read as the selected code it was (review.reopened) is never "excluded by a
+    # documentation check": its status is its view's
+    if review.bucket_of(proposal, view) == Proposal.EXCLUDED and action != Decision.REINSTATE:
         return 'excluded', CHECK_EXCLUDED_SUB_LABEL
     status = view.status if view is not None else proposal.status
     if status == Proposal.NEEDS_CLARIFICATION:
@@ -602,6 +1290,7 @@ def code_rows(assessment, current, views, membership=None, details=()):
     revision = assessment.revision
     acts = _act_index(assessment)
     proposals = list(assessment.proposals.order_by('position'))
+    standing = standing_keys(assessment.revision_id)  # r2f (D309, RFEW-5): the answers that stand, read once
     first, then, others = [], [], []
     for proposal in proposals:
         decision = current.get(proposal.pk)
@@ -628,7 +1317,7 @@ def code_rows(assessment, current, views, membership=None, details=()):
             'status': status, 'status_label': STATUS_LABELS[status], 'sub_label': sub_label,
             'summary': code_summary(proposal, view),
             'why': {'quotes': _quotes(proposal, revision.text, revision.pages, acts, status),
-                    'qualifications': _qualifications(proposal, status, view, code)},
+                    'qualifications': _qualifications(proposal, status, view, code, standing)},
             'detail_ids': [row['id'] for row in details if code and code in row['affects']],
             'allowed_actions': (list(review.allowed_actions(proposal, assessment, membership, views))
                                 if membership is not None else []),
@@ -776,12 +1465,18 @@ def limitations(assessment, revision):
     """The concise, true limitations: what is never checked, plus what this assessment could not check."""
     from .serializers import retrieval_failed, source_applied  # local import: the operator serializer's predicates
     out = list(LIMITATIONS)
+    events = assessment is not None and readers.for_assessment(assessment).kind == readers.EVENTS
+    if events:
+        out[-1] = EVENTS_READING  # the new path's reading, in place of the wording checks' (FINAL 8.3)
     if assessment is not None:
         if any(retrieval_failed(entry) for entry in assessment.retrieval or []):
             out.append(REFERENCE_FAILED)
         elif not source_applied(assessment.reference_sources):
             out.append(NO_REFERENCE_FILE)
-        if assessment.provider_run is not None and review.run_mode(assessment.provider_run) == 'replay':
+        interpreted = (assessment.event_inventory.provider_run if events and assessment.event_inventory_id
+                       else None)
+        if any(run is not None and review.run_mode(run) == 'replay'
+               for run in (assessment.provider_run, interpreted)):
             out.append(RECORDED_RESPONSE)
     if revision is not None and revision.extraction_status == SourceRevision.PARTIAL:
         out.append(PARTIAL_READING)
@@ -794,15 +1489,24 @@ NONE_APPROVED = 'No code has been approved.'
 NOT_COMPLETE = 'The review is not complete yet.'
 
 
-def readiness(encounter, assessment=None, current=None):
+def readiness(encounter, assessment=None, current=None, *, update=None):
     """{'draft', 'approved', 'blockers'}: a draft once an assessment exists; the approved export only when the review
     is complete (review.readiness over the review overlay: every suggested code resolved - approved, rejected, its
     exclusion confirmed, or its needed detail answered as unavailable - nothing processing, a settled result, no
     decision the overlay no longer supports) and it has an approved code to list (session decision (f) of 2026-11-03:
     the approved export lists the approved codes only, and a partial one is never built). The blockers in the
-    customer's words."""
+    customer's words.
+
+    FINAL-V2 amendment 1, 5.3 and 8.1 (step 5d): while an update of the codes is pending neither export is available
+    (draft and approved false) and the update's blocker reads by the update's state and kind (update_blocker_words:
+    "being updated" only while it runs [R:truth-T4]; no change of the member's named for an update no save started).
+    ``update``: the update block when the caller has it."""
     ready = review.readiness(encounter)
     blockers = customer_blockers(ready['blockers'])
+    if review.update_pending(encounter):
+        # the update's blocker alone: it says why neither export is available, in its state's words (a running stage's
+        # "Processing has not finished." and the state-free form would only repeat it)
+        return {'draft': False, 'approved': False, 'blockers': [update_blocker_words(encounter, update)]}
     approved = bool(ready['reviewed'])
     if approved:
         assessment = review.live_assessment(encounter) if assessment is None else assessment
@@ -819,19 +1523,25 @@ def readiness(encounter, assessment=None, current=None):
 
 
 def report_json(report, current=True):
+    """One customer export as the page lists it. ``revision`` (FINAL-V2 amendment 1, 5.4): the number of the revision its
+    codes were made on (its assessment's), so an earlier one says which."""
     return {'id': str(report.pk), 'kind': report.kind, 'fmt': report.fmt, 'filename': report.filename,
             'generated_at': _iso(report.generated_at), 'generated_by': report.generated_by.label(),
-            'download_url': f'/api/reports/{report.pk}/download', 'current': bool(current)}
+            'download_url': f'/api/reports/{report.pk}/download', 'current': bool(current),
+            'revision': report.assessment.revision.number}
 
 
 def _reports(encounter):
-    """The encounter's customer exports, newest first, each ``current`` while it still matches the saved decisions
-    (reports.customer_marker_digest: the same comparison the download answers 409 by)."""
+    """The encounter's customer exports, newest first, each ``current`` while it still matches the saved decisions AND no
+    update of the codes is pending (FINAL-V2 amendment 1, 5.4 and 8.3 [R:races-R1][R:truth-T1]: the same rule the download
+    reads, reports.customer_artifact_current); one that is not current downloads as an earlier export."""
     from .reports import customer_marker_digest  # local import: reports reads this module
-    artifacts = list(encounter.reports.filter(audience=ReportArtifact.CUSTOMER).select_related('generated_by')
-                     .order_by('-generated_at', '-pk'))
+    artifacts = list(encounter.reports.filter(audience=ReportArtifact.CUSTOMER)
+                     .select_related('generated_by', 'assessment__revision').order_by('-generated_at', '-pk'))
     marker = customer_marker_digest(encounter) if artifacts else None
-    return [report_json(artifact, marker is not None and artifact.snapshot_sha256 == marker) for artifact in artifacts]
+    pending = review.update_pending(encounter) if artifacts else False
+    return [report_json(artifact, marker is not None and artifact.snapshot_sha256 == marker and not pending)
+            for artifact in artifacts]
 
 
 RECHECK_NOT_COMPLETED = ('check_not_completed', 'The check of what is still open could not be completed')
@@ -909,8 +1619,11 @@ def activity(encounter):
 # --- the payloads --------------------------------------------------------------------------------------------------
 
 def _date_hold(encounter, assessment):
-    """Whether nothing was sent because the member's service date conflicts with the document (the held request)."""
+    """Whether nothing was sent because the member's service date conflicts with the document (the held request) - only
+    while the saved values are the current context's (FINAL-V2 amendment 1, 4.3 [R:truth-T3])."""
     if assessment is None or assessment.context_id != encounter.current_context_id:
+        return False
+    if review.values(assessment.context) != review.values(encounter):
         return False
     run = assessment.provider_run
     return (run is not None and run.state == ProviderRun.NOT_SENT
@@ -920,9 +1633,14 @@ def _date_hold(encounter, assessment):
 def customer_state(encounter, assessment=None):
     """The encounter's state as a member reads it. "Action needed" as soon as the current context holds a member's
     date that conflicts with the document (progress.date_held, the progress phase's own reading: known right after the
-    document is read, before anything is sent), as the list and the document page both say it."""
+    document is read, before anything is sent), as the list and the document page both say it - only while the saved
+    values are the context's (FINAL-V2 amendment 1, 4.3 [R:truth-T3]: during a case-B update the update's own state
+    decides). 'updating' while an update of the codes is pending and a stage that serves it is queued or running (5.1);
+    an update that nothing serves reads its own state (stopped, failed, being confirmed)."""
     if progress.date_held(encounter):
         return 'action_needed'
+    if review.update_pending(encounter) and review.busy_targets(encounter):
+        return 'updating'
     state = STORED_STATES.get(encounter.state, 'processing')
     if state in ('awaiting_detail', 'ready', 'no_codes', 'reviewed'):
         assessment = review.live_assessment(encounter) if assessment is None else assessment
@@ -953,7 +1671,8 @@ def session_json(user, membership):
     workspace = membership.workspace
     encounters = list(workspace.encounters.select_related('current_revision', 'current_context',
                                                           'current_assessment'))
-    queued = sum(1 for encounter in encounters if in_queue(encounter))
+    # R-6: each encounter's row read under its own label (readers.labelled), as the list's rows are
+    queued = sum(1 for encounter in encounters if readers.labelled(in_queue, encounter))
     return {'user': {'id': str(user.pk), 'label': user.label(), 'initials': _initials(user),
                      'actor_kind': user.actor_kind},
             'workspace': {'id': str(workspace.pk), 'name': workspace.name},
@@ -990,37 +1709,499 @@ def recheck_block(encounter, membership):
     return {'available': available, 'can_request': available and bool(membership.can_review)}
 
 
-def encounter_json(encounter, membership):
-    """GET /api/encounters/<id> (CORE-UX-DESIGN.md 7): every key listed, nothing else."""
+# --- FINAL-V2 amendment 1: the page while an update is pending, what changed, earlier decisions (step 5d) ----------------
+#
+# Every value below is derived from stored rows on each GET (5.5): whether the codes are fresh, the earlier codes
+# (review.earlier), the update block, what changed and the decision history. Every string is CPT Studio's fixed wording
+# (step 3c's constants above), with the member's own saved values said in the member's words (answers.CHOICE_LABELS,
+# long dates) and no stored free text: a member's label (who saved) as the activity shows it.
+
+# 5.1's order of the saved values, the date first
+UPDATE_FIELDS = ('service_date', 'setting', 'patient_status', 'billing_context')
+CHANGE_TEMPLATES = {'setting': CHANGE_SETTING, 'patient_status': CHANGE_PATIENT_STATUS,
+                    'billing_context': CHANGE_BILLING_CONTEXT}
+DECISION_HISTORY_LIMIT = 200
+_FAILED_STATES = ('extraction_failed', 'processing_failed', 'provider_failed', 'provider_not_run')
+
+
+def _date_words(value) -> str:
+    """A saved or stored date of service in the member's words ("10 November 2026"); one that is not a calendar date
+    reads as not documented (the API stores only calendar dates)."""
+    from datetime import date
+
+    try:
+        return answers._date_label(date.fromisoformat(value).isoformat()) if isinstance(value, str) else \
+            WHAT_CHANGED_NOT_DOCUMENTED
+    except ValueError:
+        return WHAT_CHANGED_NOT_DOCUMENTED
+
+
+def _choice_words(name, value) -> str:
+    """A saved choice in the member's words (answers.CHOICE_LABELS), else the value when the guard passes it."""
+    return answers.CHOICE_LABELS.get(name, {}).get(value) or plain(value) or WHAT_CHANGED_NOT_DOCUMENTED
+
+
+def _value_words(name, value) -> str:
+    if not value:
+        return WHAT_CHANGED_NOT_DOCUMENTED
+    return _date_words(value) if name == 'service_date' else _choice_words(name, value)
+
+
+def _change_lines(now, before) -> list:
+    """5.1: the saved values that differ from the earlier codes' own (review.values of each), in the member's words, in
+    5.1's order. A removed date reads "Date of service removed"; a removed choice reads "{label}: entered value removed"
+    (CHANGE_CHOICE_REMOVED; refute-5d-r1 P9: "Use what the document states" removes the member's value so that the
+    update applies the document's, which "not documented" would deny)."""
+    lines = []
+    for name in UPDATE_FIELDS:
+        value = now.get(name)
+        if value == before.get(name):
+            continue
+        if name == 'service_date':
+            lines.append(CHANGE_SERVICE_DATE.format(date=_date_words(value)) if value else CHANGE_SERVICE_DATE_REMOVED)
+        elif value:
+            lines.append(CHANGE_TEMPLATES[name].format(value=_value_words(name, value)))
+        else:
+            lines.append(CHANGE_CHOICE_REMOVED.format(label=WHAT_CHANGED_DETAIL_LABELS[name]))
+    return lines
+
+
+def _since(encounter, base):
+    """The later of the earlier codes ``base``'s creation and the newest restore (a context.changed row naming
+    ``restored``): the update began after it (5.1 [R:truth-T2])."""
+    rows = models.AuditEvent.objects.filter(encounter_id=encounter.pk)
+    since = base.created_at
+    restore = rows.filter(event='context.changed', data__has_key='restored').order_by('-created_at').first()
+    return restore.created_at if restore is not None and restore.created_at > since else since
+
+
+def _newest_save(encounter, base):
+    """(who, when) of the newest context.changed or revision.addendum row recorded since the update began (5.1: "Saved by
+    <member>, <time>"), else (None, None)."""
+    row = (models.AuditEvent.objects.filter(encounter_id=encounter.pk, event__in=('context.changed', 'revision.addendum'),
+                                            created_at__gt=_since(encounter, base))
+           .exclude(data__has_key='restored').select_related('actor').order_by('-created_at', '-pk').first())
+    if row is None:
+        return None, None
+    return (row.actor.label() if row.actor is not None else None), row.created_at
+
+
+def update_state(encounter, block=None) -> str:
+    """update.state (5.1): 'updating' while the update runs, else what stops it - 'failed', 'stopped', 'paused' or
+    'being_confirmed' - read as the progress panel reads it (progress.encounter_progress's phase; ``block`` when the caller
+    has it), the derived state deciding any phase that is not one of the five."""
+    block = progress.encounter_progress(encounter) if block is None else block
+    phase = block.get('phase')
+    if phase in UPDATE_STATES:
+        return phase
+    if block.get('busy') is True:
+        return 'updating'
+    derived = review._derive_state(encounter)
+    if derived == 'provider_unknown':
+        return 'being_confirmed'
+    return 'failed' if derived in _FAILED_STATES else 'stopped'
+
+
+def update_blocker_words(encounter, update=None) -> str:
+    """The readiness blocker of a pending update in the customer's words (5.3 [R:truth-T4]): UPDATE_BLOCKER_WORDS by the
+    update's state ('updating', or every other) and kind (the check form for an update no save started, A21)."""
+    if update is None:
+        base = review.earlier(encounter)
+        update = {'state': update_state(encounter), 'kind': review.update_kind(encounter, base=base)}
+    form = update_state_form(update['state'])
+    return UPDATE_BLOCKER_WORDS[(form, 'check' if update['kind'] == review.UPDATE_CHECK else 'details')]
+
+
+def _fact_words(name, fact) -> str:
+    """A coding-context fact of a context (EncounterContext.facts) in the member's words (6.2 step 2): its value (dates
+    long, choices by answers.CHOICE_LABELS), "two dates to choose from" (or, for a choice, "two values to choose from")
+    for a conflict, "not documented" for none."""
+    fact = fact if isinstance(fact, dict) else {}
+    value = fact.get('value')
+    if fact.get('origin') in ('document', 'user') and isinstance(value, str) and value:
+        return _value_words(name, value)
+    if fact.get('origin') == 'conflict':
+        return WHAT_CHANGED_TWO_DATES if name == 'service_date' else WHAT_CHANGED_TWO_VALUES
+    return WHAT_CHANGED_NOT_DOCUMENTED
+
+
+def _context_facts(assessment):
+    return (assessment.context.facts or {}) if assessment is not None and assessment.context_id else {}
+
+
+def update_block(encounter, block=None, base=None):
+    """The ``update`` block (5.1), or None while no update is pending: its state, kind (details | documentation |
+    check), whether a restore applies (review.restorable), what was saved (the saved values that differ from the earlier
+    codes' own, plus the revision when it differs; when none differs, the one fixed line that says why the codes are
+    updated, in the form of the update's state, D225), who saved last and when (none for an update no save started),
+    when the update began, and the earlier codes' time, revision, date of service and details."""
+    base = review.earlier(encounter) if base is None else base
+    if base is None:
+        return None
+    state = update_state(encounter, block)
+    kind = review.update_kind(encounter, base=base)
+    changes = _change_lines(review.values(encounter), review.values(base.context) if base.context_id else {})
     revision = encounter.current_revision
-    assessment = review.live_assessment(encounter)
-    state = customer_state(encounter, assessment)
-    current = review.current_decisions(assessment) if assessment is not None else {}
-    views = views_of(assessment, current)
-    details = details_rows(encounter, assessment, views, membership)
-    if assessment is not None:
-        codes, other_codes = code_rows(assessment, current, views, membership, details)
-        codes = [{key: value for key, value in row.items() if not key.startswith('_')} for row in codes]
-        completeness = review.reviewed_completeness(assessment, current) or {}
-        services = [service for service in (assessment.services or {}).get('services') or [] if isinstance(service, dict)]
+    if revision is not None and base.revision_id != revision.pk:
+        changes.append(CHANGE_DOCUMENTATION.format(n=revision.number))
+    if not changes:
+        reason = 'check' if kind == review.UPDATE_CHECK else ('same_details' if review.is_final(base) else 'unfinished')
+        changes = [saved_changes_line(reason, state)]
+    by, at = (None, None) if kind == review.UPDATE_CHECK else _newest_save(encounter, base)
+    facts = _context_facts(base)
+    return {'pending': True, 'state': state, 'kind': kind,
+            'restorable': bool(review.restorable(encounter, base=base)),
+            'changes': changes, 'saved_by': by, 'saved_at': _iso(at),
+            'started_at': _iso(progress.update_started_at(encounter, base)),
+            'earlier': {'made_at': _iso(base.created_at), 'revision': base.revision.number,
+                        'service_date': _fact_words('service_date', facts.get('service_date')),
+                        'details': _detail_lines(facts)}}
+
+
+def _detail_lines(facts) -> list:
+    """The details the earlier codes were made with (their context's facts), one line per field in 5.1's order and in
+    5.1's own forms ("Date of service: 10 November 2026", "Place of service: Office", ...): what update.earlier.details
+    lists."""
+    lines = []
+    for name in UPDATE_FIELDS:
+        words = _fact_words(name, facts.get(name))
+        lines.append(CHANGE_SERVICE_DATE.format(date=words) if name == 'service_date'
+                     else CHANGE_TEMPLATES[name].format(value=words))
+    return lines
+
+
+def _label_of(assessment) -> str:
+    """The sentinel label of an assessment's own engine (A14): new_path for the events engine, legacy_record else."""
+    return sentinel.NEW_PATH if interpretation.is_new_assessment(assessment) else sentinel.LEGACY_RECORD
+
+
+def _lower_first(text) -> str:
+    return text[:1].lower() + text[1:]
+
+
+def cleared_why(decision, invalidation) -> str:
+    """Why an earlier decision no longer applies (5.4), in fixed words chosen from the rows, first match wins: cleared by
+    an addendum; made on a legacy reading and cleared by a new reading; cleared by a final made with the same details (the
+    decision's own assessment's context, or another context with the same saved values over the same reading); cleared
+    by a reading of the document again with the same details (another context with the same saved values over another
+    reading - an update no save started, A21: step 3c's CLEARED_READ_AGAIN, its question Q7 option (a)); else cleared
+    when the details changed. The invalidation's own reason text is never shown."""
+    if invalidation.by_revision_id:
+        return CLEARED_BY_REVISION.format(n=invalidation.by_revision.number)
+    by = invalidation.by_context
+    own = decision.assessment.context if decision.assessment.context_id else None
+    if (by is not None and not interpretation.is_new_assessment(decision.assessment)
+            and interpretation.is_new_context(by)):
+        return CLEARED_NEW_READING
+    if by is not None and own is not None and by.pk == own.pk:
+        return CLEARED_SAME_DETAILS
+    if by is not None and own is not None and review.values(by) == review.values(own):
+        return CLEARED_SAME_DETAILS if by.event_inventory_id == own.event_inventory_id else CLEARED_READ_AGAIN
+    return CLEARED_DETAILS_CHANGED
+
+
+def decision_history(encounter, limit=DECISION_HISTORY_LIMIT) -> list:
+    """"Earlier decisions" (5.4): every Decision of the encounter that has a DecisionInvalidation, newest first (bounded),
+    each with its code, its action noun, who and when (decision_root's time: the reviewer's own act), the revision it was
+    made on, and why it no longer applies (cleared_why)."""
+    out = []
+    rows = (Decision.objects.filter(encounter=encounter, invalidation__isnull=False)
+            .select_related('invalidation__by_revision', 'invalidation__by_context', 'assessment__context', 'revision',
+                            'reviewer', 'proposal')
+            .order_by('-sequence')[:limit])
+    for decision in rows:
+        noun = WHAT_CHANGED_DECISION_NOUNS.get(decision.action)
+        code = _code(decision.proposal.code)
+        if noun is None or not code:
+            continue
+        out.append({'code': code, 'action': noun, 'by': decision.reviewer.label(),
+                    'by_kind': 'agent' if decision.reviewer_kind == models.User.AGENT else 'human',
+                    'at': _iso(review.decision_root(decision).created_at), 'revision': decision.revision.number,
+                    'why': cleared_why(decision, decision.invalidation)})
+    return out
+
+
+def _listed_rows(assessment):
+    """6.2 step 3: the proposals code_rows numbers, decided on stored fields only - selected, excluded and reinstatable,
+    or excluded by a member's answer - in stored order."""
+    return [proposal for proposal in assessment.proposals.order_by('position')
+            if proposal.bucket == Proposal.SELECTED or questions.answered_away(proposal)
+            or (proposal.bucket == Proposal.EXCLUDED and proposal.reinstatable)]
+
+
+def _row_status(proposal) -> str:
+    if questions.answered_away(proposal):
+        return 'answered_away'
+    if proposal.bucket == Proposal.SELECTED:
+        return 'needs_detail' if proposal.status == Proposal.NEEDS_CLARIFICATION else 'ready'
+    return 'excluded'
+
+
+def _row_facts(assessment):
+    """{proposal id: the fact of its row's detail} (6.2 step 3): the first clarification of ``assessment`` naming the
+    proposal (by creation order), else the first service-scoped clarification whose family is the proposal's. The
+    clarification's own fact, never its state (a later assessment withdraws it). r2 (DECISIONS D294): with the member
+    form of that question (wording.recorded_form of the proposal's item, when the item is of its fact), as (fact, form):
+    the detail a row asks is its fact AND its form. r2b (DECISIONS D297, W2R-2): with the kinds a template form names
+    (the item's act record), as (fact, form, act, whole)."""
+    clarifications = list(assessment.clarifications.select_related('proposal').order_by('created_at', 'pk'))
+    named, by_family = {}, {}
+    for item in clarifications:
+        if item.proposal_id is not None:
+            support = item.proposal.support if isinstance(item.proposal.support, dict) else {}
+            stored = support.get('item')
+            own = isinstance(stored, dict) and stored.get('fact') == item.fact
+            form = wording.recorded_form(stored) if own else ''
+            act = wording.recorded_act(stored.get('act_ref')) if own and isinstance(stored, dict) else None
+            named.setdefault(item.proposal_id, (item.fact, form, *((act[1], act[2]) if act is not None else ('', ''))))
+        elif item.scope == 'service':
+            by_family.setdefault(item.family, (item.fact, '', '', ''))
+    return lambda proposal: named.get(proposal.pk) or by_family.get(proposal.family) or ('', '', '', '')
+
+
+def _detail_prompt(fact, form='', act='', whole='') -> str:
+    """The prompt of the detail a code needs: its member form's row (answers.FORM_PROMPTS) when it has one - r2b (D297):
+    a template form's acts named from the kinds its item records (wording.form_text) - else its key's
+    (answers.PROMPTS)."""
+    return (wording.form_text(answers.FORM_PROMPTS[form], act, whole) if form in answers.FORM_PROMPTS
+            else answers.PROMPTS.get(fact, answers.DEFAULT_PROMPT))
+
+
+def _what_changed_codes(earlier, now):
+    """6.2 step 3: (entries, unchanged count). The listed rows of the earlier codes and of the current ones, paired by
+    code and within one code by stored position: added, removed (with the other-codes list's reason when the current
+    codes hold a stored proposal of that code they do not list), the status, the units and the detail needed."""
+    before_fact, after_fact = _row_facts(earlier), _row_facts(now)
+    listed_now = _listed_rows(now)
+    by_code = {}
+    for side, proposals in ((0, _listed_rows(earlier)), (1, listed_now)):
+        for proposal in proposals:
+            by_code.setdefault(proposal.code, ([], []))[side].append(proposal)
+    unlisted = {}
+    listed_ids = {proposal.pk for proposal in listed_now}
+    for proposal in now.proposals.order_by('position'):
+        if proposal.pk not in listed_ids:
+            unlisted.setdefault(proposal.code, proposal)
+    entries, unchanged = [], 0
+    for raw in sorted(by_code):
+        code = _code(raw)
+        if not code:
+            continue
+        before_rows, after_rows = by_code[raw]
+        for index in range(max(len(before_rows), len(after_rows))):
+            before = before_rows[index] if index < len(before_rows) else None
+            after = after_rows[index] if index < len(after_rows) else None
+            if before is None:
+                entries.append({'code': code, 'change': 'added', 'text': WHAT_CHANGED_ADDED.format(
+                    code=code, status=WHAT_CHANGED_STATUS[_row_status(after)])})
+                continue
+            if after is None:
+                other = unlisted.get(raw)
+                if other is None:
+                    text = WHAT_CHANGED_REMOVED.format(code=code)
+                else:
+                    reason = (WHAT_CHANGED_ALTERNATIVE if other.bucket == Proposal.ALTERNATIVE else
+                              WHAT_CHANGED_NOT_SUGGESTED.format(reason=_lower_first(_exclusion_reason(other))))
+                    text = WHAT_CHANGED_REMOVED_REASON.format(code=code, reason=reason)
+                entries.append({'code': code, 'change': 'removed', 'text': text})
+                continue
+            found = False
+            status_before, status_after = _row_status(before), _row_status(after)
+            if status_before != status_after:
+                found = True
+                entries.append({'code': code, 'change': 'status', 'text': WHAT_CHANGED_STATUS_CHANGED.format(
+                    code=code, before=WHAT_CHANGED_STATUS[status_before], after=WHAT_CHANGED_STATUS[status_after])})
+            if before.units != after.units:
+                found = True
+                entries.append({'code': code, 'change': 'units', 'text': WHAT_CHANGED_UNITS.format(
+                    code=code, before=before.units, after=after.units)})
+            if (status_before == status_after == 'needs_detail'
+                    and before_fact(before) != after_fact(after)):
+                found = True
+                entries.append({'code': code, 'change': 'detail', 'text': WHAT_CHANGED_ITEM.format(
+                    code=code, before=_detail_prompt(*before_fact(before)), after=_detail_prompt(*after_fact(after)))})
+            if not found:
+                unchanged += 1
+    return entries, unchanged
+
+
+def _last_of_chain(decision):
+    """The decision a chain of carries from ``decision`` ends at (Decision.carried_from followed forward)."""
+    node, seen = decision, set()
+    while node.pk not in seen:
+        seen.add(node.pk)
+        child = Decision.objects.filter(carried_from=node).order_by('-sequence').first()
+        if child is None:
+            return node
+        node = child
+    return node
+
+
+def _what_changed_decisions(encounter, earlier, now):
+    """6.2 step 4: the decisions the update acted on, read from rows - every decision on an assessment created before the
+    current context was recorded that a final on that context carried or invalidated, and, after an addendum, every one
+    invalidated for a revision recorded after the earlier codes' revision, up to and including the current one - each
+    kept, kept then cleared, kept then changed by a reviewer, or cleared (5.4's words). It never asks which assessment is
+    final, which reads the participants configured now."""
+    context = now.context
+    since = context.created_at
+    acted = {}
+    for child in (Decision.objects.filter(assessment__context=context, carried_from__isnull=False)
+                  .select_related('carried_from__assessment', 'carried_from__proposal')):
+        parent = child.carried_from
+        if parent.assessment.created_at < since:
+            acted[parent.pk] = parent
+    for invalidation in (DecisionInvalidation.objects.filter(by_context=context)
+                         .select_related('decision__assessment', 'decision__proposal')):
+        if invalidation.decision.assessment.created_at < since:
+            acted[invalidation.decision_id] = invalidation.decision
+    if now.revision_id != earlier.revision_id:
+        for invalidation in (DecisionInvalidation.objects.filter(
+                decision__encounter=encounter, by_revision__encounter=encounter,
+                by_revision__number__gt=earlier.revision.number, by_revision__number__lte=now.revision.number)
+                .select_related('decision__assessment', 'decision__proposal')):
+            acted[invalidation.decision_id] = invalidation.decision
+    current = {decision.pk for decision in review.current_decisions(now).values()}
+    entries = []
+    for decision in sorted(acted.values(), key=lambda item: (_code(item.proposal.code), item.sequence)):
+        noun, code = WHAT_CHANGED_DECISION_NOUNS.get(decision.action), _code(decision.proposal.code)
+        if noun is None or not code:
+            continue
+        invalidation = DecisionInvalidation.objects.filter(decision=decision).select_related(
+            'by_revision', 'by_context').first()
+        if invalidation is not None:
+            outcome, text = 'cleared', cleared_why(decision, invalidation)
+        else:
+            last = _last_of_chain(decision)
+            if last.pk in current:
+                outcome, text = 'kept', WHAT_CHANGED_KEPT.format(action=noun, code=code)
+            elif DecisionInvalidation.objects.filter(decision=last).exists():
+                outcome, text = 'kept_then_cleared', WHAT_CHANGED_KEPT_THEN_CLEARED.format(action=noun, code=code)
+            else:
+                outcome, text = 'kept_then_changed', WHAT_CHANGED_KEPT_THEN_CHANGED.format(action=noun, code=code)
+        entries.append({'code': code, 'action': noun, 'outcome': outcome, 'text': text})
+    return entries
+
+
+def _what_changed_answers(earlier, now):
+    """6.2 step 5 [R:truth-T11][R2:truth-RT5]: the fixed line when a standing member answer of the revision, answered
+    before the current context was recorded, is read by none of the current codes' stored rows (no clarification names it
+    as its answer, no proposal records it as answering it away), while the revision is the one the earlier codes were
+    made on; else None."""
+    if now.revision_id != earlier.revision_id:
+        return None
+    since = now.context.created_at
+    read = {str(pk) for pk in now.clarifications.filter(answer__isnull=False).values_list('answer_id', flat=True)}
+    for proposal in now.proposals.all():
+        marker = (proposal.support or {}).get(questions.ANSWERED_SUPPORT) if isinstance(proposal.support, dict) else None
+        if isinstance(marker, dict):
+            read |= {str(item) for item in marker.get('answers') or ()}
+    for answer in answers.standing_answers(now.revision_id):
+        if answer.answered_at < since and str(answer.pk) not in read:
+            return WHAT_CHANGED_ANSWERS
+    return None
+
+
+def what_changed(encounter):
+    """"What changed" (6.2; A8): None unless the encounter is fresh and its current context records an earlier assessment
+    E (4.5). The current assessment N is compared with E from stored rows only - never the review overlay, a reader, the
+    clock or the configuration - so it is the same on every read and in every process: E's time and revision; the
+    details that differ (and the documentation added, and a new reading); the codes; the decisions the update acted on;
+    and the answers line. The order is details, codes by code, decisions by code, the answers line."""
+    if not review.fresh(encounter):
+        return None
+    now = encounter.current_assessment
+    context = encounter.current_context
+    if now is None or context is None or not context.earlier_assessment_id:
+        return None
+    earlier = context.earlier_assessment
+    before, after = _context_facts(earlier), _context_facts(now)
+    details = []
+    for name in UPDATE_FIELDS:
+        old, new = _fact_words(name, before.get(name)), _fact_words(name, after.get(name))
+        if old != new:
+            details.append(WHAT_CHANGED_DETAIL.format(label=WHAT_CHANGED_DETAIL_LABELS[name], before=old, after=new))
+    if now.revision_id != earlier.revision_id:
+        details.append(WHAT_CHANGED_DOCUMENTATION.format(n=now.revision.number))
+    if review._engine_family(earlier.engine_version) != review._engine_family(now.engine_version):
+        details.append(WHAT_CHANGED_READ_AGAIN)
+    codes, unchanged = _what_changed_codes(earlier, now)
+    return {'compared_with': {'made_at': _iso(earlier.created_at), 'revision': earlier.revision.number},
+            'details': details, 'codes': codes, 'unchanged': unchanged,
+            'decisions': _what_changed_decisions(encounter, earlier, now),
+            'answers': _what_changed_answers(earlier, now)}
+
+
+def _strip(rows):
+    return [{key: value for key, value in row.items() if not key.startswith('_')} for row in rows]
+
+
+def encounter_json(encounter, membership):
+    """GET /api/encounters/<id> (CORE-UX-DESIGN.md 7): every key listed, nothing else.
+
+    FINAL-V2 amendment 1 (step 5d): while an update of the codes is pending, ``codes`` is [] and the earlier codes
+    (review.earlier: under A17 the current assessment itself) are ``earlier_codes`` - read-only rows (no allowed action),
+    read under their own sentinel label (A14) - and every other assessment-derived key (other codes, not separately
+    coded, still open, limitations, the details rows, the earlier answers) is read from them, never from an assessment
+    of the update that is not final [R:truth-T6]. ``update`` is the update block; ``what_changed`` is read once the codes
+    are fresh; ``decision_history`` lists every cleared decision."""
+    revision = encounter.current_revision
+    block = progress_block(encounter, membership)
+    base = review.earlier(encounter)
+    update = update_block(encounter, block, base) if base is not None else None
+    if base is None:
+        assessment = review.live_assessment(encounter)
+        state = customer_state(encounter, assessment)
+        current = review.current_decisions(assessment) if assessment is not None else {}
+        views = views_of(assessment, current)
+        details = details_rows(encounter, assessment, views, membership)
+        if assessment is not None:
+            codes, other_codes = code_rows(assessment, current, views, membership, details)
+            codes = _strip(codes)
+            completeness = review.reviewed_completeness(assessment, current) or {}
+            # the documented services the reader of the assessment's engine gives (FINAL 8.3): the stored services
+            # record, or the sessions of the new path's event coding
+            services = readers.for_assessment(assessment).services_list(assessment)
+        else:
+            codes, other_codes, completeness, services = [], [], {}, []
+        earlier_codes, earlier_answers = [], answers.earlier_answers(encounter, assessment)
+        limits = limitations(assessment, revision)
+        changed = what_changed(encounter)
     else:
-        codes, other_codes, completeness, services = [], [], {}, []
+        state = customer_state(encounter)
+        current = {}
+        with sentinel.relabel(_label_of(base)):  # A14: the earlier codes under their own label, whatever the encounter's
+            earlier_current = review.current_decisions(base)
+            views = views_of(base, earlier_current)
+            details = details_rows(encounter, base, views, membership)
+            rows, other_codes = code_rows(base, earlier_current, views, None, details)  # no member: no allowed action
+            earlier_codes = _strip(rows)
+            completeness = review.reviewed_completeness(base, earlier_current) or {}
+            services = readers.for_assessment(base).services_list(base)
+            earlier_answers = answers.earlier_answers(encounter, base)
+            limits = limitations(base, base.revision)
+        codes, assessment, changed = [], None, None
     return {
         'id': str(encounter.pk), 'title': encounter.title, 'created_at': _iso(encounter.created_at),
         'updated_at': _iso(encounter.updated_at), 'state': state, 'state_label': STATE_LABELS[state],
         'permissions': {'can_review': bool(membership.can_review)},
         'document': _document(encounter, revision),
         'service_date': answers.service_date_block(encounter),
-        'progress': progress_block(encounter, membership),
+        'progress': block,
         'checks': progress.checks_summary(encounter),
         'codes': codes, 'other_codes': other_codes,
         'not_separately_coded': _not_separately_coded(completeness, services),
         'details_needed': details,
-        'earlier_answers': answers.earlier_answers(encounter, assessment),
+        'earlier_answers': earlier_answers,
         'unresolved': _unresolved(completeness, services),
         'recheck': recheck_block(encounter, membership),
-        'limitations': limitations(assessment, revision),
-        'readiness': readiness(encounter, assessment, current),
+        'limitations': limits,
+        'readiness': readiness(encounter, assessment, current, update=update),
         'reports': _reports(encounter),
         'activity': activity(encounter),
+        # FINAL-V2 amendment 1, 5.1 and 6.2 (step 5d)
+        'update': update,
+        'earlier_codes': earlier_codes,
+        'what_changed': changed,
+        'decision_history': decision_history(encounter),
     }

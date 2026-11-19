@@ -27,6 +27,7 @@ Synthetic text only; no network (the suite's FakeProvider).
 """
 from django.test import SimpleTestCase
 
+from tests.legacy_chain import applied
 from tests.test_repairs_7c8_context import DateAssertions
 from tests.test_repairs_7c8_context3 import COLO_PLAIN, ELENA_DATE, HEAD, EndToEnd, date_fact, evidence_text
 
@@ -142,6 +143,7 @@ class StackOfAnotherDatedLabelTests(DateAssertions, SimpleTestCase):
         self.assert_document(text, '2026-10-07')
 
 
+@applied
 class StackOfAnotherDatedLabelRequestTests(EndToEnd):
     D1 = HEAD + 'Colonoscopy report\nPatient DOB:\nDate of service:\n01/01/1998\n10/14/2026\n' + COLO_PLAIN
     S4 = (HEAD + 'Colonoscopy report\nDate of service: 10/07/2026\nPatient:\nDate of service:\nSynthetic, Alex\n'
@@ -252,6 +254,7 @@ class BirthColumnBesideAnUndatedCellTests(DateAssertions, SimpleTestCase):
                     self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
 
 
+@applied
 class BirthColumnBesideAnUndatedCellRequestTests(EndToEnd):
     C1 = HEAD + birth_column('spaces', 'TBD') + COLO_PLAIN
 
@@ -314,6 +317,7 @@ class DigitsInADateOfServiceColumnTests(DateAssertions, SimpleTestCase):
                 self.assert_document(text, '2026-10-07')
 
 
+@applied
 class DigitsInADateOfServiceColumnRequestTests(EndToEnd):
     def test_k1_no_date_is_sent(self):
         text = HEAD + 'Colonoscopy report\n' + compact_column('spaces', '20261014') + 'Date of service: 10/07/2026\n' \
@@ -373,6 +377,7 @@ class BracketThatIsNoFormatTests(DateAssertions, SimpleTestCase):
         self.assert_member_conflict(text, '2026-10-27')
 
 
+@applied
 class BracketThatIsNoFormatRequestTests(EndToEnd):
     B2 = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Date (performed): 10/21/2026\n' \
         + COLO_PLAIN
@@ -453,6 +458,7 @@ class DateOfBirthBesideAQualifierTests(DateAssertions, SimpleTestCase):
         self.assert_document(text, '2026-10-14')
 
 
+@applied
 class DateOfBirthBesideAQualifierRequestTests(EndToEnd):
     OFFICE = (HEAD + 'GI office visit\nRepeat colonoscopy for Synthetic, Alex (DOB 01/01/1998) Procedure date: 11/04/2026\n'
               'Assessment and plan: colonoscopy will be scheduled.\n')
@@ -521,6 +527,7 @@ class DateAfterAWordBTests(DateAssertions, SimpleTestCase):
                 self.assert_member_conflict(text, ELENA_DATE)
 
 
+@applied
 class DateAfterAWordBRequestTests(EndToEnd):
     def test_p1_no_date_is_sent_where_the_subject_line_differs(self):
         text = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy part b. 10/21/2026\n' + COLO_PLAIN

@@ -14,6 +14,7 @@ from studio import models, reports, review
 from studio.gi.profiles import family_for_code
 from studio.reference.store import InMemoryReferenceLookup
 from studio.validation import checks
+from tests.legacy_chain import applied
 from tests.support import pipeline_factories as pf
 from tests.test_pipeline_api import drain
 from tests.test_repairs_pipeline import LIVE, ApiHarness
@@ -263,6 +264,7 @@ class AgentReinstatementTests(ReportCase):
                          r'Reinstated from exclusion by Reviewbot\d+ \(automated agent\) at [0-9T:-]+Z: ')
 
 
+@applied
 @override_settings(**LIVE)
 class ReinstatementGateTests(ApiHarness, TestCase):
     """fidelity:2 — a reinstated exclusion is held to the gates a selected code meets."""
@@ -370,6 +372,7 @@ class UncertainSameDayProcedureTests(EngineCase):
         self.assertFalse([c for c in visit.checks if c.id == 'em.same_day_procedure'])
 
 
+@applied
 @override_settings(**LIVE)
 class UncheckedBoxEvidenceTests(ApiHarness, TestCase):
     """A provider code citing an unchecked box ("☐ Biopsy") is excluded, never ready."""

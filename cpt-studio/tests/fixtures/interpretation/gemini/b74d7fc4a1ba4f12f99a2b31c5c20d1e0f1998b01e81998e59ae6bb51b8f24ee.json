@@ -1,0 +1,36 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\n  \"passages\": [\n    {\n      \"id\": \"P1\",\n      \"text\": \"Colonoscopy report (fictional)\"\n    },\n    {\n      \"id\": \"P2\",\n      \"text\": \"Date of service: 2026-10-14\"\n    },\n    {\n      \"id\": \"P3\",\n      \"text\": \"Procedure: Colonoscopy\"\n    },\n    {\n      \"id\": \"P4\",\n      \"text\": \"The colonoscope was advanced to the cecum and the examination was completed.\"\n    },\n    {\n      \"id\": \"P5\",\n      \"text\": \"Once, a 22 mm polyp was found in the ascending colon.\"\n    },\n    {\n      \"id\": \"P6\",\n      \"text\": \"It was removed piecemeal with a cold snare in four pieces.\"\n    }\n  ],\n  \"encounter\": {\n    \"date_of_service\": {\n      \"value\": \"2026-10-14\",\n      \"state\": \"stated\",\n      \"words\": \"2026-10-14\",\n      \"passages\": [\n        \"P2\"\n      ],\n      \"other_dates\": []\n    },\n    \"documenting_endoscopist\": {\n      \"words\": \"\",\n      \"passages\": []\n    },\n    \"team\": [],\n    \"anatomy\": [],\n    \"reach\": [\n      {\n        \"event\": \"E1\",\n        \"landmark\": \"cecum\",\n        \"words\": \"cecum\",\n        \"passages\": [\n          \"P4\"\n        ],\n        \"completion\": {\n          \"value\": \"complete\",\n          \"words\": \"the examination was completed\",\n          \"passages\": [\n            \"P4\"\n          ]\n        }\n      }\n    ],\n    \"visit_facts\": []\n  },\n  \"lesions\": [\n    {\n      \"id\": \"L1\",\n      \"words\": \"a 22 mm polyp was found in the ascending colon\",\n      \"landmark\": \"ascending_colon\",\n      \"site_words\": \"ascending colon\",\n      \"size_words\": \"22 mm\",\n      \"multiplicity\": \"single\",\n      \"passages\": [\n        \"P5\"\n      ]\n    }\n  ],\n  \"events\": [\n    {\n      \"id\": \"E1\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\n          \"P1\",\n          \"P3\"\n        ]\n      },\n      \"kind\": {\n        \"value\": \"examination\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\n          \"P3\",\n          \"P4\"\n        ]\n      },\n      \"technique\": {\n        \"value\": \"endoscope\",\n        \"words\": \"colonoscope\",\n        \"passages\": [\n          \"P4\"\n        ]\n      },\n      \"target\": {\n        \"lesion\": \"\",\n        \"landmark\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"was advanced to the cecum and the examination was completed\",\n        \"passages\": [\n          \"P4\"\n        ]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    },\n    {\n      \"id\": \"E2\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\n          \"P3\"\n        ]\n      },\n      \"kind\": {\n        \"value\": \"snare\",\n        \"words\": \"removed piecemeal with a cold snare\",\n        \"passages\": [\n          \"P6\"\n        ]\n      },\n      \"technique\": {\n        \"value\": \"cold_snare\",\n        \"words\": \"cold snare\",\n        \"passages\": [\n          \"P6\"\n        ]\n      },\n      \"target\": {\n        \"lesion\": \"L1\",\n        \"landmark\": \"ascending_colon\",\n        \"words\": \"It\",\n        \"passages\": [\n          \"P6\"\n        ]\n      },\n      \"time\": {\n        \"value\": \"unknown\",\n        \"words\": \"Once\",\n        \"passages\": [\n          \"P5\",\n          \"P6\"\n        ]\n      },\n      \"performer\": {\n        \"value\": \"unknown\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"was removed piecemeal with a cold snare in four pieces\",\n        \"passages\": [\n          \"P6\"\n        ]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"removal\",\n        \"words\": \"removed\",\n        \"passages\": [\n          \"P6\"\n        ]\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    }\n  ],\n  \"open_questions\": [\n    {\n      \"about\": \"time\",\n      \"events\": [\n        \"E2\"\n      ],\n      \"lesions\": [\n        \"L1\"\n      ],\n      \"passages\": [\n        \"P5\",\n        \"P6\"\n      ]\n    },\n    {\n      \"about\": \"performer\",\n      \"events\": [\n        \"E2\"\n      ],\n      \"lesions\": [\n        \"L1\"\n      ],\n      \"passages\": [\n        \"P5\",\n        \"P6\"\n      ]\n    }\n  ]\n}",
+            "thoughtSignature": "EmMKYQFpFH0TchotbP2Lif+KwfozAjqT8IGUG9mT9t5YzTnVZ0VpRDsJk78jtCSoSnBxwOnaeth5AZWy0wM55A/kCbrxd/GNb9j+Jzhdq8VbjcwbhGmQbMx6rVTvAHF0S2OZ2aQ="
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 7763,
+    "candidatesTokenCount": 1561,
+    "totalTokenCount": 9324,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7763
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1561
+      }
+    ]
+  },
+  "modelVersion": "gemini-4-argon",
+  "responseId": "4QHzarawM4ygz7IPr_v1iQk"
+}

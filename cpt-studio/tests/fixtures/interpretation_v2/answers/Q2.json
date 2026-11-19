@@ -1,0 +1,1732 @@
+{
+ "acts": {},
+ "answers": [],
+ "case": "Q2",
+ "caught": [
+  "entry@E4/0"
+ ],
+ "checked": [],
+ "considerations": {},
+ "date_of_service": "2031-03-14",
+ "document": "documents/Q2.txt",
+ "document_sha256": "7a91fe04bd77622a0505653701a2da6d12a6cfa3751431110b84cd936f9e5665",
+ "expect": {
+  "i": {
+   "43274": {
+    "item": "event_entry",
+    "item_kind": "explanation",
+    "status": "needs_clarification",
+    "why": "SUPPORT row 5: the act is told only in another role's entry: event_entry, an explanation (4.8, RANK 5); every SUPPORT witness stays a held fact (4.4: no early return, Q2)"
+   }
+  },
+  "ii": {
+   "43274": {
+    "item": "event_entry",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "SUPPORT row 5 unresolved (pass 2 contradicts the entry claim): event_entry, a question (RANK 5)"
+   }
+  }
+ },
+ "held": {
+  "i": {
+   "43274": [
+    "event_entry",
+    "event_performer"
+   ]
+  },
+  "ii": {
+   "43274": [
+    "event_entry",
+    "event_performer"
+   ]
+  }
+ },
+ "kind": "class",
+ "known": {},
+ "listed": {},
+ "member": [
+  "office",
+  "established"
+ ],
+ "note": "4.4 evaluates the code-specific rows over E* only (4.3: \"over its E* acts\"), so XCHG's duct fact is not recorded for a candidate that fails SUPPORT; S4's Q2 contract asks every unresolved required fact known. Built as the design; the step's NOTES, question Q-Q2.",
+ "pass1": {
+  "correct": {
+   "anatomy": [],
+   "doubts": [],
+   "encounter": {
+    "date_of_service": {
+     "options": [],
+     "sources": [
+      {
+       "link": "document_frame",
+       "units": [
+        "S2"
+       ],
+       "words": "03/14/2031"
+      }
+     ],
+     "state": "stated",
+     "value": "2031-03-14"
+    },
+    "documenting_clinician": [
+     {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": "Corvin Ashdale"
+       }
+      ],
+      "state": "supported",
+      "value": "P1"
+     }
+    ],
+    "other_dates": []
+   },
+   "events": [
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "duodenoscope",
+      "status_words": "was advanced",
+      "units": [
+       "S4"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "duodenoscope"
+       }
+      ],
+      "state": "supported",
+      "value": "examination"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "was advanced"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    },
+    {
+     "access_outcome": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "achieved"
+      }
+     ],
+     "anchor": {
+      "kind_words": "Deep biliary cannulation",
+      "status_words": "was achieved",
+      "units": [
+       "S5"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E2",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "Deep biliary cannulation"
+       }
+      ],
+      "state": "supported",
+      "value": "cannulation"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "was achieved"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S5"
+          ],
+          "words": "biliary"
+         }
+        ],
+        "state": "supported",
+        "value": "biliary"
+       }
+      ],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S5"
+          ],
+          "words": "sphincterotome"
+         }
+        ],
+        "state": "supported",
+        "value": "sphincterotome"
+       }
+      ],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    },
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "existing stent",
+      "status_words": "was removed",
+      "units": [
+       "S6"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E3",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S6"
+        ],
+        "words": "existing stent"
+       }
+      ],
+      "state": "supported",
+      "value": "stent_removal"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S6"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S6"
+        ],
+        "words": "was removed"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S6"
+          ],
+          "words": "snare"
+         }
+        ],
+        "state": "supported",
+        "value": "snare"
+       }
+      ],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    },
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "biliary stent",
+      "status_words": "was placed",
+      "units": [
+       "S7"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E4",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S7"
+        ],
+        "words": "biliary stent"
+       }
+      ],
+      "state": "supported",
+      "value": "stent"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S7"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S7"
+        ],
+        "words": "was placed"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S7"
+          ],
+          "words": "biliary stent"
+         }
+        ],
+        "state": "supported",
+        "value": "biliary"
+       }
+      ],
+      "lesion": [],
+      "places": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S7"
+          ],
+          "words": "common bile duct"
+         }
+        ],
+        "state": "supported",
+        "value": "common_bile_duct"
+       }
+      ],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    }
+   ],
+   "lesions": [],
+   "people": [
+    {
+     "id": "P1",
+     "name": {
+      "link": "statement",
+      "units": [
+       "S3"
+      ],
+      "words": "Corvin Ashdale"
+     },
+     "role": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S3"
+        ],
+        "words": "Endoscopist"
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     }
+    }
+   ],
+   "sections": [
+    {
+     "end": [],
+     "id": "N0",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S1"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "header"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [],
+      "words": ""
+     }
+    },
+    {
+     "end": [],
+     "id": "N1",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S4"
+         ],
+         "words": "Findings:"
+        }
+       ],
+       "state": "supported",
+       "value": "findings"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [
+       "S4"
+      ],
+      "words": "Findings:"
+     }
+    },
+    {
+     "end": [],
+     "id": "N2",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "section",
+        "units": [
+         "S7"
+        ],
+        "words": "Documented by Jo Rowe, RN"
+       }
+      ],
+      "state": "supported",
+      "value": "nursing"
+     },
+     "performer": [],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S7"
+         ],
+         "words": "Documented by Jo Rowe, RN:"
+        }
+       ],
+       "state": "supported",
+       "value": "nursing_note"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [
+       "S7"
+      ],
+      "words": "Documented by Jo Rowe, RN:"
+     }
+    }
+   ],
+   "sessions": [
+    {
+     "approach": [],
+     "completion": [],
+     "device_reached": [],
+     "encounter": [],
+     "examination": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "E1"
+      }
+     ],
+     "id": "X1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "duodenoscope"
+       }
+      ],
+      "state": "supported",
+      "value": "ercp"
+     },
+     "part_of_session": [],
+     "reached": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": "major papilla"
+        }
+       ],
+       "state": "supported",
+       "value": "ampulla"
+      }
+     ],
+     "reached_anatomy": [],
+     "stations": [],
+     "through": [],
+     "tract": []
+    }
+   ]
+  },
+  "misfiled": {
+   "anatomy": [],
+   "doubts": [],
+   "encounter": {
+    "date_of_service": {
+     "options": [],
+     "sources": [
+      {
+       "link": "document_frame",
+       "units": [
+        "S2"
+       ],
+       "words": "03/14/2031"
+      }
+     ],
+     "state": "stated",
+     "value": "2031-03-14"
+    },
+    "documenting_clinician": [
+     {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": "Corvin Ashdale"
+       }
+      ],
+      "state": "supported",
+      "value": "P1"
+     }
+    ],
+    "other_dates": []
+   },
+   "events": [
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "duodenoscope",
+      "status_words": "was advanced",
+      "units": [
+       "S4"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "duodenoscope"
+       }
+      ],
+      "state": "supported",
+      "value": "examination"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "was advanced"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    },
+    {
+     "access_outcome": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "achieved"
+      }
+     ],
+     "anchor": {
+      "kind_words": "Deep biliary cannulation",
+      "status_words": "was achieved",
+      "units": [
+       "S5"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E2",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "Deep biliary cannulation"
+       }
+      ],
+      "state": "supported",
+      "value": "cannulation"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "was achieved"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S5"
+          ],
+          "words": "biliary"
+         }
+        ],
+        "state": "supported",
+        "value": "biliary"
+       }
+      ],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S5"
+          ],
+          "words": "sphincterotome"
+         }
+        ],
+        "state": "supported",
+        "value": "sphincterotome"
+       }
+      ],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    },
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "existing stent",
+      "status_words": "was removed",
+      "units": [
+       "S6"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E3",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S6"
+        ],
+        "words": "existing stent"
+       }
+      ],
+      "state": "supported",
+      "value": "stent_removal"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S6"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S6"
+        ],
+        "words": "was removed"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S6"
+          ],
+          "words": "snare"
+         }
+        ],
+        "state": "supported",
+        "value": "snare"
+       }
+      ],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    },
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "biliary stent",
+      "status_words": "was placed",
+      "units": [
+       "S7"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E4",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S7"
+        ],
+        "words": "biliary stent"
+       }
+      ],
+      "state": "supported",
+      "value": "stent"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S7"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S7"
+        ],
+        "words": "was placed"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S7"
+          ],
+          "words": "biliary stent"
+         }
+        ],
+        "state": "supported",
+        "value": "biliary"
+       }
+      ],
+      "lesion": [],
+      "places": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "statement",
+          "units": [
+           "S7"
+          ],
+          "words": "common bile duct"
+         }
+        ],
+        "state": "supported",
+        "value": "common_bile_duct"
+       }
+      ],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    }
+   ],
+   "lesions": [],
+   "people": [
+    {
+     "id": "P1",
+     "name": {
+      "link": "statement",
+      "units": [
+       "S3"
+      ],
+      "words": "Corvin Ashdale"
+     },
+     "role": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S3"
+        ],
+        "words": "Endoscopist"
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     }
+    }
+   ],
+   "sections": [
+    {
+     "end": [],
+     "id": "N0",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S1"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "header"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [],
+      "words": ""
+     }
+    },
+    {
+     "end": [],
+     "id": "N1",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S4"
+         ],
+         "words": "Findings:"
+        }
+       ],
+       "state": "supported",
+       "value": "findings"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [
+       "S4"
+      ],
+      "words": "Findings:"
+     }
+    },
+    {
+     "end": [],
+     "id": "N2",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "section",
+        "units": [
+         "S7"
+        ],
+        "words": "Documented by Jo Rowe, RN"
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S7"
+         ],
+         "words": "Documented by Jo Rowe, RN:"
+        }
+       ],
+       "state": "supported",
+       "value": "nursing_note"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [
+       "S7"
+      ],
+      "words": "Documented by Jo Rowe, RN:"
+     }
+    }
+   ],
+   "sessions": [
+    {
+     "approach": [],
+     "completion": [],
+     "device_reached": [],
+     "encounter": [],
+     "examination": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "E1"
+      }
+     ],
+     "id": "X1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "duodenoscope"
+       }
+      ],
+      "state": "supported",
+      "value": "ercp"
+     },
+     "part_of_session": [],
+     "reached": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": "major papilla"
+        }
+       ],
+       "state": "supported",
+       "value": "ampulla"
+      }
+     ],
+     "reached_anatomy": [],
+     "stations": [],
+     "through": [],
+     "tract": []
+    }
+   ]
+  }
+ },
+ "pass2": {
+  "i": {
+   "default": "faithful",
+   "unlisted": [],
+   "verdicts": []
+  },
+  "ii": {
+   "default": "faithful",
+   "unlisted": [],
+   "verdicts": [
+    {
+     "fact": "entry@E4/0",
+     "qualifiers": [],
+     "role": "claim",
+     "verdict": "contradicts"
+    },
+    {
+     "fact": "entry@E4/0",
+     "qualifiers": [],
+     "role": "control",
+     "verdict": "supports"
+    }
+   ]
+  },
+  "iii": {
+   "default": "faithful",
+   "unlisted": [],
+   "verdicts": []
+  }
+ },
+ "proposals": [
+  {
+   "code": "43274",
+   "end": 368,
+   "start": 263
+  }
+ ],
+ "provenance": "synthetic: written for this fixture",
+ "refs": [
+  "Q2",
+  "BF12"
+ ],
+ "services": {},
+ "settled": {},
+ "subjects": {},
+ "title": "A first hold never pre-empts the code's other facts",
+ "variants": [
+  "i",
+  "ii",
+  "iii"
+ ]
+}

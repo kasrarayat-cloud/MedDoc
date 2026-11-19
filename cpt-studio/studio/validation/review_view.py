@@ -47,6 +47,10 @@ from studio.gi.profiles import PROFILES
 from studio.reference.store import PFS
 from studio.types import CodeReference, ReferenceSourceInfo, from_jsonable, to_jsonable
 from studio.validation import checks, engine, reconcile
+# Gemini migration (design/ADJUDICATION.md R-2): the member answers that close a documented service's question are
+# re-homed in studio/code_shapes.py; each name below is that module's own object, imported back so that every reader of
+# this module reads the same one.
+from studio.code_shapes import UNAVAILABLE_ANSWERS, _field, service_answers
 
 APPROVE, REJECT, REINSTATE, REVOKE, CONFIRM = 'approve', 'reject', 'reinstate', 'revoke', 'confirm'
 SELECTED, EXCLUDED, ALTERNATIVE = 'selected', 'excluded', 'alternative'
@@ -63,7 +67,6 @@ SEPARATE_EM_FACT = 'separate_em'  # checks.separate_em_clarification's fact: the
 # leaves the effective set, needs no decision and is never approvable, until the answer is revoked. No other value is
 # read here (a context fact goes through the context path and a new assessment).
 DETAIL_UNAVAILABLE = 'detail_unavailable'
-UNAVAILABLE_ANSWERS = ('not_documented', 'cannot_confirm')
 ANSWER_WORDS = {'not_documented': 'not documented', 'cannot_confirm': 'cannot be confirmed'}
 # The checks the engine records after a base hold (engine._proposal): an added base check goes before the first of them.
 _AFTER_BASE = ('facts.required', 'em.same_day_coverage', SAME_DAY_EM_GATE, 'em.same_day_procedure', DATE_CHECK,
@@ -135,6 +138,23 @@ class View:
     # the fact of the question that answer answered (completion repair 2026-11-06: the engine records it on the code it
     # excludes, engine._MemberAnswers), '' when no answer made it detail_unavailable
     answered: str = ''
+    # r2 (DECISIONS D294): the member form of that question (studio.interpretation.wording.member_form; '' for its fact
+    # key's own row), so the row that shows the answer in effect asks what the member answered
+    answered_form: str = ''
+    # r2b (DECISIONS D297, W2R-1): the fact of the member answer the engine excluded the code by (its stored marker) when
+    # read time's recount releases the hold that answer's item rests on - the answer then excludes nothing at read time:
+    # the code is read as the selected code it was, with its live holds, and every reader that reads the stored bucket
+    # reads it so (review.reopened) - '' otherwise
+    released_answer: str = ''
+    # r2d (DECISIONS D301, RBWX-5): the question the answer that left it detail_unavailable was bound to at read time,
+    # as its row showed it when asked - a live question's dict (its message, form, act record and quoted passages) or
+    # the stored question (its row id: read through the record's item) - so the row that shows the answer in effect
+    # shows that question's words and passages; None otherwise (an answer engine/assess applied is read from its record)
+    answered_question: Optional[Mapping] = None
+    # r2d (DECISIONS D301, RBWX-3): (fact, fingerprint) of each question read time asks live (id ''): the fingerprint
+    # engine/assess stores for that item (overlay.live_fingerprint), which the details door records with an answer to
+    # it and read time binds the answer by, so the AGAIN that presents the same item binds it alike
+    live_fingerprints: tuple = ()
 
 
 def stored_from(proposal, clarifications=None) -> Stored:
@@ -178,10 +198,6 @@ def _inventory(services):
         return None
 
 
-def _field(answer, name):
-    return answer.get(name) if isinstance(answer, Mapping) else getattr(answer, name, None)
-
-
 def proposal_answers(answers) -> dict:
     """{(code, family, fact): value} of the current member answers given for a code (P5 binds an answer to the code,
     family and fact it was asked of, never to a key) that leave its detail unavailable."""
@@ -191,13 +207,6 @@ def proposal_answers(answers) -> dict:
         if code and value in UNAVAILABLE_ANSWERS:
             out.setdefault((str(code), str(_field(answer, 'family') or ''), str(_field(answer, 'fact') or '')), value)
     return out
-
-
-def service_answers(answers) -> set:
-    """{(family, fact)} of the current member answers given for a documented service (no code): they close that
-    question and change nothing else."""
-    return {(str(_field(answer, 'family') or ''), str(_field(answer, 'fact') or '')) for answer in answers or ()
-            if not _field(answer, 'code') and _field(answer, 'value') in UNAVAILABLE_ANSWERS}
 
 
 def answered_by_engine(p: Stored) -> tuple[str, str]:

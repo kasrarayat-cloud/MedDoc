@@ -22,10 +22,11 @@ from unittest import mock
 
 from django.conf import settings
 from django.core.management import call_command
-from django.test import Client, override_settings
+from django.test import Client, SimpleTestCase, override_settings
 
 from studio import customer_api, models, progress, reports, review
 from studio.gi.catalogue import COMMON_BUNDLED
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import operator as ops
 from tests.support import pipeline_factories as pf
@@ -132,9 +133,15 @@ def denied_values():
 # --- the committed customer contract (CORE-UX-DESIGN.md 7): every key listed, nothing else ------------------------
 
 # completion repair (2026-11-06, U11): 'earlier_answers' - the standing answers no question asked now takes
+# FINAL-V2 amendment 1, 5.1 (step 5d): 'update', 'earlier_codes', 'what_changed' and 'decision_history'
 TOP_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document', 'service_date',
             'progress', 'checks', 'codes', 'other_codes', 'not_separately_coded', 'details_needed', 'earlier_answers',
-            'unresolved', 'recheck', 'limitations', 'readiness', 'reports', 'activity'}
+            'unresolved', 'recheck', 'limitations', 'readiness', 'reports', 'activity', 'update', 'earlier_codes',
+            'what_changed', 'decision_history'}
+UPDATE_KEYS = {'pending', 'state', 'kind', 'restorable', 'changes', 'saved_by', 'saved_at', 'started_at', 'earlier'}
+UPDATE_EARLIER_KEYS = {'made_at', 'revision', 'service_date', 'details'}
+WHAT_CHANGED_KEYS = {'compared_with', 'details', 'codes', 'unchanged', 'decisions', 'answers'}
+HISTORY_KEYS = {'code', 'action', 'by', 'by_kind', 'at', 'revision', 'why'}
 RECHECK_KEYS = {'available', 'can_request'}  # session decision (n), 2026-11-04
 DOCUMENT_KEYS = {'kind', 'name', 'media_type', 'size', 'page_count', 'revision', 'text', 'pages', 'reading',
                  'original_url'}
@@ -166,7 +173,7 @@ EARLIER_KEYS = {'answer_id', 'fact', 'family_label', 'prompt', 'affects', 'value
 CHOICE_KEYS = {'value', 'label'}
 SAVED_KEYS = {'value', 'label', 'by', 'at', 'answer_id'}
 READINESS_KEYS = {'draft', 'approved', 'blockers'}
-REPORT_KEYS = {'id', 'kind', 'fmt', 'filename', 'generated_at', 'generated_by', 'download_url', 'current'}
+REPORT_KEYS = {'id', 'kind', 'fmt', 'filename', 'generated_at', 'generated_by', 'download_url', 'current', 'revision'}
 ACTIVITY_KEYS = {'event', 'summary', 'actor', 'actor_kind', 'at'}
 SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'acknowledgement', 'counts', 'synthetic_only'}
 SESSION_USER_KEYS = {'id', 'label', 'initials', 'actor_kind'}
@@ -177,7 +184,7 @@ LIST_ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'date_co
 STATES = set(customer_api.STATE_LABELS)
 STATUSES = set(customer_api.STATUS_LABELS)
 PHASES = {'queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped', 'paused',
-          'being_confirmed'}
+          'being_confirmed', 'updating'}
 STEP_STATES = {'done', 'active', 'waiting', 'not_started', 'failed', 'stopped', 'skipped'}
 CHECK_STATES = {'done', 'running', 'waiting', 'unavailable', 'not_run'}
 # The operator serializer's keys a customer payload must never carry (R4 6.3's "drop" column)
@@ -259,6 +266,21 @@ def assert_contract(case, doc):
     for event in doc['activity']:
         case.assertEqual(set(event), ACTIVITY_KEYS)
         case.assertIn(event['actor_kind'], {'human', 'agent', 'system'})
+    # FINAL-V2 amendment 1, 5.1 (step 5d): the update block while one is pending, the earlier codes (read-only), what
+    # changed once the codes are updated, and the earlier decisions
+    if doc['update'] is not None:
+        case.assertEqual(set(doc['update']), UPDATE_KEYS)
+        case.assertEqual(set(doc['update']['earlier']), UPDATE_EARLIER_KEYS)
+        case.assertEqual(doc['codes'], [])
+    else:
+        case.assertEqual(doc['earlier_codes'], [])
+    for code in doc['earlier_codes']:
+        case.assertEqual(set(code), CODE_KEYS)
+        case.assertEqual(code['allowed_actions'], [])
+    if doc['what_changed'] is not None:
+        case.assertEqual(set(doc['what_changed']), WHAT_CHANGED_KEYS)
+    for item in doc['decision_history']:
+        case.assertEqual(set(item), HISTORY_KEYS)
     case.assertFalse(OPERATOR_ONLY & set(doc))
 
 
@@ -465,6 +487,7 @@ class SurfaceCase(HarnessCase):
         raise AssertionError('the decisions did not settle')
 
 
+@applied
 class ScenarioTests(SurfaceCase):
     def test_harness2_both_participants_after_peer_review(self):
         encounter_id = self.create()
@@ -665,6 +688,7 @@ class ScenarioTests(SurfaceCase):
         self.assertEqual(customer_api.customer_blocker('anything else'), 'The review is not complete yet.')
 
 
+@applied
 class ReportTests(SurfaceCase):
     """Customer reports (cpt-studio-customer-report@1), legacy artifacts and the stale approved export."""
 
@@ -728,7 +752,7 @@ class ReportTests(SurfaceCase):
                 self.assertNotIn(f'. {code["code"]} — units', txt, 'an unapproved code is never in the approved export')
         self.assertClean(texts + self.surface(self.encounter_id))
 
-    def test_a_stale_approved_export_answers_409_and_a_new_one_is_current(self):
+    def test_a_stale_approved_export_is_served_as_an_earlier_export_and_a_new_one_is_current(self):
         self.decide_all(self.encounter_id)
         report = self.export('approved', 'txt').json()
         client = self.signed_in(self.reviewer)
@@ -739,8 +763,11 @@ class ReportTests(SurfaceCase):
         response = self.post(f'/api/encounters/{self.encounter_id}/decisions', {'proposal_id': code['id'],
                                                                                 'action': 'revoke'})
         self.assertEqual(response.status_code, 201, response.content)
-        stale = client.get(report['download_url'])
-        self.assertEqual((stale.status_code, stale.json()), (409, {'error': customer_api.STALE_EXPORT, 'details': {}}))
+        stale = client.get(report['download_url'])  # FINAL-V2 amendment 1, 8.3 (A9): served as an earlier export
+        self.assertEqual(stale.status_code, 200)
+        self.assertTrue(stale.content.decode('utf-8').startswith(reports.EARLIER_BANNER + '\n'))
+        self.assertTrue(stale.content.endswith(bytes(models.ReportArtifact.objects.get(pk=report['id']).content)))
+        self.assertIn('-earlier.txt', stale['Content-Disposition'])
         self.assertFalse({item['id']: item for item in self.detail(self.encounter_id)['reports']}[report['id']]['current'])
         stored = models.ReportArtifact.objects.get(pk=report['id'])
         self.assertEqual(hashlib.sha256(bytes(stored.content)).hexdigest(), stored.sha256)  # never modified
@@ -829,3 +856,39 @@ class CollectedStaticTests(SurfaceCase):
         self.assertTrue(names)
         self.assertFalse({'ops.js', 'ops.css'} & set(names), names)
         self.assertEqual(Client().get('/static/studio/ops.js').status_code, 404)
+
+
+class ForbiddenNetFableTests(SimpleTestCase):
+    """AMENDMENT-2 section 9 (step F8): customer_api.FORBIDDEN - the net a server-composed customer string must pass -
+    already refuses the Fable interpreter's names (claude-[a-z], fable and anthropic bounded by letters and digits, the
+    capitalized joined forms); its test gains the vectors the shared denylist's readers run
+    (ops/verification/customer-denylist.json): the model id, the product name, the joined and underscored forms, and
+    not the clinical or ordinary words that only contain a name. No clinical word is added to any list (D230 (d))."""
+    HITS = ('claude-fable-5-2', 'Claude Fable 5.2', 'CLAUDE-FABLE-5-2', 'fable_unknown', 'AnthropicTimeout',
+            'Read by claude-fable-5-2.', 'held: fable_unknown.')
+    MISSES = ('affable', 'fabled', 'fables', 'An affable nurse', "Aesop's fables", 'fabled lands')
+
+    def test_the_fable_interpreters_names_are_refused_and_words_containing_them_are_not(self):
+        for text in self.HITS:
+            with self.subTest(hit=text):
+                self.assertIsNotNone(customer_api.FORBIDDEN.search(text))
+                self.assertEqual(customer_api.plain(text), '')
+        for text in self.MISSES:
+            with self.subTest(miss=text):
+                self.assertIsNone(customer_api.FORBIDDEN.search(text))
+                self.assertEqual(customer_api.plain(text), text)
+
+    def test_the_vectors_are_the_shared_denylists_own(self):
+        denylist = json.loads((Path(settings.BASE_DIR) / 'ops' / 'verification' / 'customer-denylist.json')
+                              .read_text(encoding='utf-8'))
+        vectors = {vector['text']: vector['hits'] for vector in denylist['vectors']}
+        for text in ('Interpreted by claude-fable-5-2', 'Read by Claude Fable 5.2', 'fable_unknown', 'AnthropicTimeout'):
+            with self.subTest(text=text):
+                self.assertTrue(vectors[text])  # a hit in the shared list too
+                self.assertIsNotNone(customer_api.FORBIDDEN.search(text))
+        for text in ('An affable nurse', 'fabled', "Aesop's fables"):
+            with self.subTest(text=text):
+                self.assertEqual(vectors[text], [])
+                self.assertIsNone(customer_api.FORBIDDEN.search(text))
+        model = [p for p in denylist['patterns'] if p['id'] == 'interpreter_model'][0]['source']
+        self.assertEqual(model, r'\b(?:gemini-4-(?:argon|carbon)|claude-fable-5-2)\b')

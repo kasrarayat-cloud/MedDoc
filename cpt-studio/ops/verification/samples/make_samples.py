@@ -6,7 +6,7 @@ One fictional two-lesion colonoscopy, as the platform-operator API serves it (to
 operator-encounter.json / operator-trace.json), as the customer API serves it (cpt-studio/CORE-UX-DESIGN.md section 7,
 customer-encounter.json and customer-session.json), as the customer page draws it (the DOM contract of section 8,
 customer-page.html and, with a few details needed, customer-page-details.html), and its customer reports
-(cpt-studio-customer-report@1, section 5: customer-report-{approved,draft}.{txt,csv}). Nothing here is a fixture of
+(cpt-studio-customer-report@2, section 5: customer-report-{approved,draft}.{txt,csv}). Nothing here is a fixture of
 the product: the product's own fixtures are its serializers' (tests/fixtures/customer/). These samples exist so the walk
 (ops/verify_browser.cjs), the download verifier (ops/verify_downloads.py) and the customer scanner
 (ops/scan_customer.py) are each tested against one agreed rendering of the contract.
@@ -41,7 +41,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 BANNER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE'
 SYNTHETIC_LINE = 'SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS'
-FORMAT = 'cpt-studio-customer-report@1'
+FORMAT = 'cpt-studio-customer-report@2'
 AGENT = 'CPT Studio review agent (automated agent)'
 AGENT_SUB = 'Agent-executed synthetic review — not clinical approval'
 NOTE = 'Agent-executed synthetic verification review'
@@ -334,9 +334,12 @@ def customer_encounter() -> dict:
         'readiness': {'draft': True, 'approved': True, 'blockers': []},
         'reports': [{'id': REPORTS[key], 'kind': key[0], 'fmt': key[1], 'filename': f'CPT-Studio-{key[0]}.{key[1]}',
                      'generated_at': GENERATED, 'generated_by': AGENT,
-                     'download_url': f'/api/reports/{REPORTS[key]}/download', 'current': True} for key in REPORTS],
+                     'download_url': f'/api/reports/{REPORTS[key]}/download', 'current': True, 'revision': 1}
+                    for key in REPORTS],
         'activity': [{'event': 'decision.recorded', 'summary': 'A review decision was recorded', 'actor': AGENT,
                       'actor_kind': 'agent', 'at': DECIDED[P80]}],
+        # FINAL-V2 amendment 1 (step 5d): no update pending, no earlier codes, nothing changed, no cleared decision
+        'update': None, 'earlier_codes': [], 'what_changed': None, 'decision_history': [],
     }
 
 
@@ -496,7 +499,7 @@ def details_encounter() -> dict:
     return enc
 
 
-# --- the customer reports (cpt-studio-customer-report@1; CORE-UX-DESIGN.md section 5) ---------------------------------
+# --- the customer reports (cpt-studio-customer-report@2; CORE-UX-DESIGN.md section 5) ---------------------------------
 #
 # The SNAPSHOTS studio.reports.customer_snapshot builds for this encounter (its draft from the customer rows, its
 # approved export from the approved items), with the generation stamp generate_customer passes the renderers.
@@ -512,8 +515,13 @@ def report_quote(q: dict) -> dict:
 
 
 def report_snapshot(enc: dict, kind: str) -> dict:
+    date = enc['service_date']['value']
     snap = {'format_version': REPORT_FORMAT, 'kind': kind, 'encounter': {'id': ENC, 'title': enc['title']},
-            'revision': {'id': REV, 'number': 1}, 'assessment': ASM, 'date_of_service': enc['service_date']['value'],
+            'revision': {'id': REV, 'number': 1}, 'assessment': ASM, 'date_of_service': date,
+            # @2 (FINAL-V2 amendment 1, 8.2): the assessment's own details and when its codes were made
+            'details_used': (f'date of service {date or "not documented"}; place of service not documented; '
+                             'patient not documented; claim not documented'),
+            'codes_made_at': GENERATED.replace('+00:00', 'Z'),
             'limitations': list(enc['limitations'])}
     decision_ids = {P80: D80, P85: D85}
     if kind == 'approved':

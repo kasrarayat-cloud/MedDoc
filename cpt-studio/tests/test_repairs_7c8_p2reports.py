@@ -19,9 +19,10 @@ from studio.gi.profiles import PROFILES
 from studio.providers.corti import ADAPTER_VERSION
 from studio.types import ProviderRequest, RawExchange
 from studio.validation import checks
-from tests.test_pipeline_api import FakeProvider, drain
-from tests.test_repairs_7c8_p1reports import (ASKED, COLONOSCOPY, EM_AND_COLONOSCOPY, NOT_A_FINDING, SCOPE,
-                                              SCOPE_SENTENCE, SNARE, Harness, SecondOutcome)
+from tests.legacy_chain import applied
+from tests.test_pipeline_api import FakeProvider, RecordedInterpretation, drain
+from tests.test_repairs_7c8_p1reports import (ASKED, COLONOSCOPY, COLONOSCOPY_INTERPRETATIONS, EM_AND_COLONOSCOPY,
+                                              NOT_A_FINDING, SCOPE, SCOPE_SENTENCE, SNARE, Harness, SecondOutcome)
 from tests.test_services_reconcile import run, sel, span
 from tests.test_services_second_review import TwoPassProvider, ask
 
@@ -99,6 +100,7 @@ def unproposed(result):
     return next(c for c in result.encounter_checks if c.id == 'services.unproposed')
 
 
+@applied
 class UnproposedNamesADetectedServiceWithoutAProposalTests(Harness):
     """reports2:0 (a regression from the installed 057a7d398, introduced by c0f0708f4): routing detected a performed EGD
     (or colonoscopy) and no selected proposal accounts for it, yet services.unproposed passed with "Every performed
@@ -199,13 +201,16 @@ class UnproposedKeepsWhatTheReconciliationAccountsForTests(SimpleTestCase):
 ADDENDUM = {'text': 'Signed by the fictional endoscopist.', 'synthetic_attestation': 'yes'}
 
 
-class PanelStatesTheShownAssessmentsSecondReviewTests(Harness):
+class PanelStatesTheShownAssessmentsSecondReviewTests(RecordedInterpretation, Harness):
     """reports2:1: the primary response read with no code, a reviewer asks for the second review and it ends unknown (or
     failed); an addendum (how a clarification is answered) then leaves revision 1's assessment on screen while revision
     2 is not assessed - its predict blocked by the unknown outcome, or stopped. second_review.run was null (it named a
     run only for an assessment of the current revision), so the suggestions panel said "No CPT codes were proposed for
     this document." beside the reconcile card. It names the second review made for the answer the SHOWN assessment
     reads, and the panel states that review's outcome."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
 
     def asked(self, second):
         self.use(SecondOutcome([], [('45378', SCOPE_SENTENCE)], second))
@@ -273,6 +278,7 @@ class PanelStatesTheShownAssessmentsSecondReviewTests(Harness):
         drain()
         reply = self.post(f'/api/encounters/{encounter_id}/addenda', ADDENDUM)
         self.assertEqual(reply.status_code, 201, reply.content)
+        self.register_addendum_lines(encounter_id, ADDENDUM['text'])  # the addendum revision, read from its own answer
         drain()
         encounter = models.Encounter.objects.get(pk=encounter_id)
         self.assertEqual((encounter.current_revision.number, encounter.current_assessment.revision.number), (2, 2))
@@ -296,12 +302,15 @@ def list_row(client, encounter_id):
     return row
 
 
-class StateLabelStatesTheSecondReviewOutcomeTests(Harness):
+class StateLabelStatesTheSecondReviewOutcomeTests(RecordedInterpretation, Harness):
     """reports2:2: the primary response read with no code; the second review a reviewer asked for was sent and its
     outcome is unknown, and a member reconciled it (or it failed: HTTP 500). The state is 'no_codes' - nothing is left
     to decide - and its label "No CPT codes proposed" was the documents-list badge and the "Most recent" line, while the
     same encounter's panel and blocker say the second review's outcome is unknown, or that it failed. The label states
     that outcome from the run's row; the state is unchanged."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
 
     def ended(self, second, reconcile=False):
         self.use(SecondOutcome([], [('45378', SCOPE_SENTENCE)], second))
@@ -410,6 +419,7 @@ class CandidateThenFailed(Scripted):
         return RawExchange(outcome='failed', sent=True, http_status=500, error='HTTP 500 from the provider.')
 
 
+@applied
 class NothingProposedIsSaidOnlyOfAResponseThatProposedNothingTests(Harness):
     """reports2:3 (pre-existing at 057a7d398): the provider SELECTED 45378 citing no passage (stored as excluded, "No
     exact source evidence", not reinstatable), or listed it only as a candidate (an alternative). The readiness blocker
@@ -529,6 +539,7 @@ def judged_marks(detail):
     return out['keys'], out['results']
 
 
+@applied
 class WalkReadsSupportSourceMarksTests(Harness):
     """reports2:4 (verified real; the post-install walk depends on it): app.js marks a selected proposal's exact
     support.source passages as '<id>:s<n>' (since c0f0708f4), and ops/verify_browser.cjs checkEvidenceMarks failed hard
@@ -704,6 +715,7 @@ class AnIncludedEgdIsAccountedForOnlyByACodeThatIncludesItTests(SimpleTestCase):
         self.assertEqual(covered, {'S1': ['43231'], 'S2': []})
 
 
+@applied
 class TheReportsNeverAccountForAnEgdBesideARectalEusTests(Harness):
     """reports2:0, round 2, through the API as the skeptic ran it: the provider selects only 45342 for the rectal EUS's
     sampling, the reviewer approves it, and the reviewed report is produced (201). The stored check, the reviewed TXT and

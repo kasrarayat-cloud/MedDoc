@@ -16,11 +16,12 @@ from django.test import Client, TestCase, override_settings
 
 from studio import models, review
 from tests import test_harness2_pipeline as hp
+from tests.legacy_chain import applied
 from tests.support.operator import OperatorReads
 from tests.support import factories as f
-from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS
+from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS
 from tests.test_harness2_r2_wording import R2WordingCase, browser
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 
 def _owner(case, name):
@@ -41,6 +42,7 @@ LATER = ' It proposed it after peer review.'
 POSITION_LINE = re.compile(r'Astra (proposed it|did not propose it|advised not to code it|gave no reading)\b')
 
 
+@applied
 class FirstReadingPositionTests(R2WordingCase):
     """Astra's frozen first reading lists 45385 with a quote the document does not hold (and 45380 on the biopsy).
     The engine counts no first-reading entry whose quotes were not found (refutation round 1, EV-2 = IND-3): Astra is
@@ -273,20 +275,27 @@ class CortiUnlistedCountMixin:
         self.assertFalse([line for line in lines if line.startswith('    Not listed: ')])
 
 
-class CortiUnlistedCountTests(CortiUnlistedCountMixin, R2WordingCase):
+class CortiUnlistedCountTests(RecordedInterpretation, CortiUnlistedCountMixin, R2WordingCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     pass
 
 
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
-class CortiOnlyUnlistedCountTests(CortiUnlistedCountMixin, R2WordingCase):
+class CortiOnlyUnlistedCountTests(RecordedInterpretation, CortiUnlistedCountMixin, R2WordingCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and I1's chain is extract, interpret, analyze, predict and assess.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_the_chain_is_i1_s(self):
         def edit(answer, text):
             answer['candidates'] = [_corti_item(LONG_CANDIDATE, text, SNARE)]
         encounter_id, detail = self.run_with(edit)
-        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'interpret', 'analyze', 'predict', 'assess'])
         self.assertEqual(detail['harness']['phase'], 0)
 
 
+@applied
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 class SecondReviewUnlistedTests(OperatorReads, TestCase):
     """falsegreen-6: Corti's row counts the codes its answers returned that cannot be listed - "its primary run and any
@@ -500,15 +509,21 @@ class RetrievalFailureStepMixin:
         self.assertNotIn('synthetic retrieval defect', json.dumps(final.retrieval))  # logged, never recorded
 
 
-class RetrievalFailureStepTests(RetrievalFailureStepMixin, R2WordingCase):
+class RetrievalFailureStepTests(RecordedInterpretation, RetrievalFailureStepMixin, R2WordingCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     pass
 
 
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
-class CortiOnlyRetrievalFailureStepTests(RetrievalFailureStepMixin, R2WordingCase):
+class CortiOnlyRetrievalFailureStepTests(RecordedInterpretation, RetrievalFailureStepMixin, R2WordingCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and I1's chain is extract, interpret, analyze, predict and assess.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_the_chain_is_i1_s(self):
         encounter_id = self.run_failing(TWO_EXTENTS)
-        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'interpret', 'analyze', 'predict', 'assess'])
 
 
 class RetrievalFailureEntryStepTests(OperatorReads, TestCase):

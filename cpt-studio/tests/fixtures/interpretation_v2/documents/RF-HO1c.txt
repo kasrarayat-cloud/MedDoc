@@ -1,0 +1,7 @@
+SYNTHETIC COLONOSCOPY REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+Findings: The colonoscope was advanced to the cecum.
+Biopsies of the sigmoid colon may have been taken.
+No biopsies were taken from the rectum.

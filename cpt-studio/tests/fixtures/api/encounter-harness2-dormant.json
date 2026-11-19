@@ -18,7 +18,7 @@
   "decision",
   "incomplete"
  ],
- "created_at": "2026-11-01T09:00:58Z",
+ "created_at": "2026-11-01T09:01:26Z",
  "created_by": "Synthetic Reviewer",
  "permissions": {
   "can_review": true,
@@ -204,7 +204,7 @@
   "number": 1,
   "kind": "paste",
   "revisions_total": 1,
-  "created_at": "2026-11-01T09:00:59Z",
+  "created_at": "2026-11-01T09:01:27Z",
   "source_file": null,
   "addendum_text": "",
   "addendum_offset": null,
@@ -284,7 +284,7 @@
   "user_values": {}
  },
  "routing": {
-  "version": "gi-routing@6",
+  "version": "gi-routing@12",
   "document_kind": "procedure_report",
   "families": [
    {
@@ -376,7 +376,8 @@
      "extent"
     ]
    }
-  ]
+  ],
+  "derived": false
  },
  "pipeline": {
   "busy": false,
@@ -388,63 +389,63 @@
     "kind": "extract",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:01:03Z",
+    "finished_at": "2026-11-01T09:01:32Z",
     "step_outcome": "done"
    },
    {
     "kind": "analyze",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:01:04Z",
+    "finished_at": "2026-11-01T09:01:33Z",
     "step_outcome": "done"
    },
    {
     "kind": "predict",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:01:05Z",
+    "finished_at": "2026-11-01T09:01:34Z",
     "step_outcome": "done"
    },
    {
     "kind": "astra",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:01:06Z",
+    "finished_at": "2026-11-01T09:01:35Z",
     "step_outcome": "done"
    },
    {
     "kind": "fable",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:01:07Z",
+    "finished_at": "2026-11-01T09:01:36Z",
     "step_outcome": "done"
    },
    {
     "kind": "assess",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:01:08Z",
+    "finished_at": "2026-11-01T09:01:37Z",
     "step_outcome": "done"
    },
    {
     "kind": "astra_peer",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:01:12Z",
+    "finished_at": "2026-11-01T09:01:46Z",
     "step_outcome": "done"
    },
    {
     "kind": "fable_peer",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:01:13Z",
+    "finished_at": "2026-11-01T09:01:47Z",
     "step_outcome": "done"
    },
    {
     "kind": "assess",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:01:14Z",
+    "finished_at": "2026-11-01T09:01:48Z",
     "step_outcome": "done"
    }
   ]
@@ -466,7 +467,7 @@
    "reused_from": null,
    "error": "",
    "reconciled": false,
-   "created_at": "2026-11-01T09:01:00Z",
+   "created_at": "2026-11-01T09:01:29Z",
    "purpose": "primary",
    "scope_items": [],
    "requested_model": "",
@@ -489,7 +490,7 @@
    "reused_from": null,
    "error": "",
    "reconciled": false,
-   "created_at": "2026-11-01T09:01:01Z",
+   "created_at": "2026-11-01T09:01:30Z",
    "purpose": "independent",
    "scope_items": [],
    "requested_model": "gpt-6-astra",
@@ -507,12 +508,12 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "50877d66fea78492b77cae860e5940b845317e6f52f22e5cab12eea18752f42e",
+   "request_sha256": "5e5df8d1e8833327e4305273f45384c044855320ea121ce2e63afa5cfac1118a",
    "response_sha256": "3d73902525f8cf0ca032076a9db50082848a309271ecbcbe5de9ad5b3af165c9",
    "reused_from": null,
    "error": "",
    "reconciled": false,
-   "created_at": "2026-11-01T09:01:02Z",
+   "created_at": "2026-11-01T09:01:31Z",
    "purpose": "independent",
    "scope_items": [],
    "requested_model": "claude-fable-5-1",
@@ -530,12 +531,12 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "17d74c5570c7124f2ee10a9db3f2263e4455ec667d9c0b1dcdd6509398d03693",
-   "response_sha256": "9814d008b675f9aff16968f2daba09b15d8fcc2ca7cc6660ecdf4ac0ec21e971",
+   "request_sha256": "941923b226073e43cc545e2fc8ff457033aecfb8409293bc05d2754f609829e2",
+   "response_sha256": "6f6eebb9447acfc89035a8c950e7d338a282e7e5e93545a6a197fae324a64fe2",
    "reused_from": null,
    "error": "",
    "reconciled": false,
-   "created_at": "2026-11-01T09:01:10Z",
+   "created_at": "2026-11-01T09:01:44Z",
    "purpose": "peer_review",
    "scope_items": [],
    "requested_model": "gpt-6-astra",
@@ -553,12 +554,12 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "8ff8ffc2c4e221fc46376b63c381568b5c007a7df4038229e3261f2ec6a8b639",
-   "response_sha256": "88053c2cadf1e2ed8bbdebaebe4d3e11cc90d0da2eae52831cc99df39dda7245",
+   "request_sha256": "357106b582016491a574e6b8729bf4f8d3658e0d418ceaab3134a963f3a79fa8",
+   "response_sha256": "368df96cdaa6e1ad070b3a0cafcf0dec915bf0a58d8a6e3dcd77781a60aa5579",
    "reused_from": null,
    "error": "",
    "reconciled": false,
-   "created_at": "2026-11-01T09:01:11Z",
+   "created_at": "2026-11-01T09:01:45Z",
    "purpose": "peer_review",
    "scope_items": [],
    "requested_model": "claude-fable-5-1",
@@ -576,8 +577,8 @@
  "assessment": {
   "id": "e2d00000-0000-4000-8000-000000000008",
   "profiles_version": "gi-profiles@3",
-  "engine_version": "cpt-studio-validation@6",
-  "created_at": "2026-11-01T09:01:15Z",
+  "engine_version": "cpt-studio-validation@10",
+  "created_at": "2026-11-01T09:01:49Z",
   "proposals": [
    {
     "id": "e2d00000-0000-4000-8000-000000000009",
@@ -636,20 +637,20 @@
       "id": "service.status",
       "label": "Service performed on this encounter",
       "detail": "The colonoscopy is documented as performed with snare removal (cold snare) of the 6 mm sessile polyp in the ascending colon.",
-      "source": "cpt-studio:gi-services@3",
+      "source": "cpt-studio:gi-services@7",
       "status": "pass"
      },
      {
       "id": "evidence.support",
       "label": "Passages show the coded act",
       "detail": "Every provider passage shows snare removal.",
-      "source": "cpt-studio:gi-services@3",
+      "source": "cpt-studio:gi-services@7",
       "status": "pass"
      },
      {
       "id": "facts.required",
       "label": "Required documentation (CPT Studio profile)",
-      "detail": "Not documented: extent reached.",
+      "detail": "CPT Studio could not find how far the examination reached.",
       "source": "cpt-studio:gi.colonoscopy@1",
       "status": "warn"
      },
@@ -866,21 +867,21 @@
      {
       "id": "service.status",
       "label": "Service performed on this encounter",
-      "detail": "The colonoscopy is documented as performed, but the document does not establish the forceps biopsy as done: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”. The routing-era reading of the passages it cites also holds it: No documentation establishes that Colonoscopy was performed on the date of service. Read as uncertain: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.” (cue “uncertain: A 3 mm polyp in the rectum was possibly biopsied”, linked passage). Routing reads it as performed elsewhere: “Colonoscopy.” (cue “section: procedure (Procedure)”, routing).",
-      "source": "cpt-studio:gi-services@3",
+      "detail": "The colonoscopy is documented as performed, but CPT Studio could not confirm the forceps biopsy as done: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”. The routing-era reading of the passages it cites also holds it: CPT Studio could not confirm that Colonoscopy was performed on the date of service. Read as uncertain: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.” (cue “uncertain: A 3 mm polyp in the rectum was possibly biopsied”, linked passage). Routing reads it as performed elsewhere: “Colonoscopy.” (cue “section: procedure (Procedure)”, routing).",
+      "source": "cpt-studio:gi-services@7",
       "status": "warn"
      },
      {
       "id": "evidence.support",
       "label": "Passages show the coded act",
       "detail": "Not checked: the documented service or act is not established as performed.",
-      "source": "cpt-studio:gi-services@3",
+      "source": "cpt-studio:gi-services@7",
       "status": "not_applicable"
      },
      {
       "id": "facts.required",
       "label": "Required documentation (CPT Studio profile)",
-      "detail": "Not documented: extent reached.",
+      "detail": "CPT Studio could not find how far the examination reached.",
       "source": "cpt-studio:gi.colonoscopy@1",
       "status": "warn"
      },
@@ -938,7 +939,7 @@
     "support": {
      "acts": [],
      "state": "uncertain",
-     "detail": "The colonoscopy is documented as performed, but the document does not establish the forceps biopsy as done: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”. The routing-era reading of the passages it cites also holds it: No documentation establishes that Colonoscopy was performed on the date of service. Read as uncertain: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.” (cue “uncertain: A 3 mm polyp in the rectum was possibly biopsied”, linked passage). Routing reads it as performed elsewhere: “Colonoscopy.” (cue “section: procedure (Procedure)”, routing).",
+     "detail": "The colonoscopy is documented as performed, but CPT Studio could not confirm the forceps biopsy as done: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”. The routing-era reading of the passages it cites also holds it: CPT Studio could not confirm that Colonoscopy was performed on the date of service. Read as uncertain: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.” (cue “uncertain: A 3 mm polyp in the rectum was possibly biopsied”, linked passage). Routing reads it as performed elsewhere: “Colonoscopy.” (cue “section: procedure (Procedure)”, routing).",
      "family": "gi.colonoscopy",
      "origin": "primary",
      "phases": {
@@ -1171,7 +1172,7 @@
     "id": "services.inventory",
     "label": "Documented services",
     "detail": "Documented as done on this encounter: colonoscopy (performed). The reading is advisory: it reads declared wording and can miss wording it does not recognise.",
-    "source": "cpt-studio:gi-services@3",
+    "source": "cpt-studio:gi-services@7",
     "status": "info"
    },
    {
@@ -1185,14 +1186,14 @@
     "id": "services.unresolved",
     "label": "Documented services without a supported proposal",
     "detail": "Every documented act that the coverage catalogue reconciles has a selected proposal, or is not separately reported under a profile rule. Wording the reader does not recognise is not covered by this check.",
-    "source": "cpt-studio:gi-catalogue@1",
+    "source": "cpt-studio:gi-catalogue@2",
     "status": "pass"
    },
    {
     "id": "services.conflicts",
     "label": "Conflicting statements",
     "detail": "No act is stated both as done and as not done for the same service and site.",
-    "source": "cpt-studio:gi-services@3",
+    "source": "cpt-studio:gi-services@7",
     "status": "pass"
    },
    {
@@ -1205,7 +1206,7 @@
    {
     "id": "participants.summary",
     "label": "Independent participants",
-    "detail": "Astra (OpenAI, gpt-6-astra) read the document. It proposed 2 codes (45385, 45380), 2 quoting the document verbatim. In peer review, after its first reading was frozen, it took 1 position on codes (1 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45381), 0 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 3 open questions; an answer is recorded and decides nothing by itself. 1 quote it gave in peer review was not found verbatim in the document and is never evidence. Fable (Anthropic, claude-fable-5-1) read the document. It proposed 1 code (45385), 1 quoting the document verbatim. In peer review, after its first reading was frozen, it took 0 positions on codes (0 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45380), 1 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 1 open question; an answer is recorded and decides nothing by itself. A participant never decides a status and agreement never promotes a code: a participant's code that the proposal provider selected, in scope and with an exact passage, in a response CPT Studio used, or that its bounded second review added as a proposal, is recorded on that proposal, which CPT Studio's own readers judge on the provider's passages alone; any other code a participant gives in a CPT or HCPCS code's shape, including one the provider only listed, one its second review listed without adding and one in a provider response CPT Studio did not use, is listed as an alternative and never added as a proposal, and one in neither shape is counted and never listed; and a participant's questions are notes that never block.",
+    "detail": "Astra (OpenAI, gpt-6-astra) read the document. It proposed 2 codes (45385, 45380), 2 quoting the document verbatim. In peer review, after its first reading was frozen, it took 1 position on codes (1 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45381), 0 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 3 open questions; an answer is recorded and decides nothing by itself. 1 quote it gave in peer review was not found verbatim in the document and is never evidence. Fable (Anthropic, claude-fable-5-1) read the document. It proposed 1 code (45385), 1 quoting the document verbatim. In peer review, after its first reading was frozen, it took 0 positions on codes (0 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45380), 1 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 1 open question; an answer is recorded and decides nothing by itself. A participant never decides a status and agreement never promotes a code: a participant's code that the proposal provider selected, in scope and with an exact passage, in a response CPT Studio used, or that its bounded second review added as a proposal, is recorded on that proposal, which CPT Studio's own readers judge on the provider's passages alone; a code a participant's independent first reading proposes, quoting the document verbatim, is read by those same readers from that reading's exact passages, whatever any other proposer did with it, and added as a proposal of its own where they read it as accounting for a documented service or act done on the date of service; codes of different proposers for the same act each reach review, held by one question naming the others, and none is preferred; it is then held or ready by those readers alone, and only a reviewer approves it; any other code a participant gives in a CPT or HCPCS code's shape, including one it gives only in peer review, is listed as an alternative, and one in neither shape is counted and never listed; and a participant's questions are notes that never block.",
     "source": "cpt-studio:harness@1",
     "status": "info"
    }
@@ -1256,7 +1257,7 @@
    "needs_clarification": 2
   },
   "services": {
-   "version": "gi-services@3",
+   "version": "gi-services@7",
    "problems": [],
    "services": [
     {
@@ -1408,10 +1409,15 @@
    "unresolved": 0,
    "included_by": {},
    "unresolved_items": [],
-   "catalogue_version": "gi-catalogue@1",
+   "catalogue_version": "gi-catalogue@2",
    "inventory_problems": []
   },
-  "second_run": null
+  "second_run": null,
+  "interpretation": {
+   "engine": "legacy",
+   "engine_version": "cpt-studio-validation@10",
+   "record": null
+  }
  },
  "clarifications": [
   {
@@ -1421,7 +1427,7 @@
    "family": "gi.colonoscopy",
    "fact": "extent",
    "question": "Colonoscopy: confirm the furthest extent reached.",
-   "reason": "The extent reached is not documented; the Colonoscopy profile requires it.",
+   "reason": "CPT Studio could not find how far the examination reached; the Colonoscopy profile requires it.",
    "state": "open",
    "candidates": [
     {
@@ -1510,7 +1516,7 @@
    "family": "gi.colonoscopy",
    "fact": "performed_status",
    "question": "The documented colonoscopy leaves the forceps biopsy in doubt (“A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”). Was a forceps biopsy performed on the date of service?",
-   "reason": "The colonoscopy is documented as performed, but the document does not establish the forceps biopsy as done: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”. The routing-era reading of the passages it cites also holds it: No documentation establishes that Colonoscopy was performed on the date of service. Read as uncertain: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.” (cue “uncertain: A 3 mm polyp in the rectum was possibly biopsied”, linked passage). Routing reads it as performed elsewhere: “Colonoscopy.” (cue “section: procedure (Procedure)”, routing).",
+   "reason": "The colonoscopy is documented as performed, but CPT Studio could not confirm the forceps biopsy as done: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”. The routing-era reading of the passages it cites also holds it: CPT Studio could not confirm that Colonoscopy was performed on the date of service. Read as uncertain: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.” (cue “uncertain: A 3 mm polyp in the rectum was possibly biopsied”, linked passage). Routing reads it as performed elsewhere: “Colonoscopy.” (cue “section: procedure (Procedure)”, routing).",
    "state": "open",
    "candidates": [
     {
@@ -1631,7 +1637,7 @@
    "family": "gi.colonoscopy",
    "fact": "extent",
    "question": "Colonoscopy: confirm the furthest extent reached.",
-   "reason": "The extent reached is not documented; the Colonoscopy profile requires it.",
+   "reason": "CPT Studio could not find how far the examination reached; the Colonoscopy profile requires it.",
    "state": "open",
    "candidates": [
     {
@@ -1790,7 +1796,7 @@
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "created_at": "2026-11-01T09:01:09Z",
+   "created_at": "2026-11-01T09:01:43Z",
    "data": {
     "proposals": 2
    }
@@ -1800,10 +1806,232 @@
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "created_at": "2026-11-01T09:01:16Z",
+   "created_at": "2026-11-01T09:01:54Z",
    "data": {
     "proposals": 3
    }
   }
- ]
+ ],
+ "what_changed_rows": {
+  "schema": "cpt-studio-what-changed-rows@1",
+  "fresh": true,
+  "current_assessment": "e2d00000-0000-4000-8000-000000000008",
+  "current_context": "e2d00000-0000-4000-8000-000000000010",
+  "assessments": {
+   "e2d00000-0000-4000-8000-000000000011": {
+    "created_at": "2026-11-01T09:01:38Z",
+    "revision": "e2d00000-0000-4000-8000-000000000007",
+    "context": "e2d00000-0000-4000-8000-000000000010",
+    "engine_version": "cpt-studio-validation@10",
+    "proposals": [
+     {
+      "id": "e2d00000-0000-4000-8000-000000000012",
+      "code": "45385",
+      "bucket": "selected",
+      "status": "needs_clarification",
+      "units": 1,
+      "position": 0,
+      "reinstatable": false,
+      "family": "gi.colonoscopy",
+      "answered_away": false,
+      "answers": [],
+      "other_reason": null
+     },
+     {
+      "id": "e2d00000-0000-4000-8000-000000000013",
+      "code": "45380",
+      "bucket": "selected",
+      "status": "needs_clarification",
+      "units": 1,
+      "position": 1,
+      "reinstatable": false,
+      "family": "gi.colonoscopy",
+      "answered_away": false,
+      "answers": [],
+      "other_reason": null
+     }
+    ],
+    "clarifications": [
+     {
+      "id": "e2d00000-0000-4000-8000-000000000014",
+      "created_at": "2026-11-01T09:01:39Z",
+      "proposal": "e2d00000-0000-4000-8000-000000000012",
+      "scope": "proposal",
+      "family": "gi.colonoscopy",
+      "fact": "extent",
+      "answer": null
+     },
+     {
+      "id": "e2d00000-0000-4000-8000-000000000015",
+      "created_at": "2026-11-01T09:01:40Z",
+      "proposal": "e2d00000-0000-4000-8000-000000000013",
+      "scope": "proposal",
+      "family": "gi.colonoscopy",
+      "fact": "performed_status",
+      "answer": null
+     },
+     {
+      "id": "e2d00000-0000-4000-8000-000000000016",
+      "created_at": "2026-11-01T09:01:41Z",
+      "proposal": "e2d00000-0000-4000-8000-000000000013",
+      "scope": "proposal",
+      "family": "gi.colonoscopy",
+      "fact": "extent",
+      "answer": null
+     },
+     {
+      "id": "e2d00000-0000-4000-8000-000000000017",
+      "created_at": "2026-11-01T09:01:42Z",
+      "proposal": null,
+      "scope": "encounter",
+      "family": "",
+      "fact": "service_date",
+      "answer": null
+     }
+    ]
+   },
+   "e2d00000-0000-4000-8000-000000000008": {
+    "created_at": "2026-11-01T09:01:49Z",
+    "revision": "e2d00000-0000-4000-8000-000000000007",
+    "context": "e2d00000-0000-4000-8000-000000000010",
+    "engine_version": "cpt-studio-validation@10",
+    "proposals": [
+     {
+      "id": "e2d00000-0000-4000-8000-000000000009",
+      "code": "45385",
+      "bucket": "selected",
+      "status": "needs_clarification",
+      "units": 1,
+      "position": 0,
+      "reinstatable": false,
+      "family": "gi.colonoscopy",
+      "answered_away": false,
+      "answers": [],
+      "other_reason": null
+     },
+     {
+      "id": "e2d00000-0000-4000-8000-00000000000b",
+      "code": "45380",
+      "bucket": "selected",
+      "status": "needs_clarification",
+      "units": 1,
+      "position": 1,
+      "reinstatable": false,
+      "family": "gi.colonoscopy",
+      "answered_away": false,
+      "answers": [],
+      "other_reason": null
+     },
+     {
+      "id": "e2d00000-0000-4000-8000-00000000000e",
+      "code": "45381",
+      "bucket": "alternative",
+      "status": "informational",
+      "units": 1,
+      "position": 2,
+      "reinstatable": false,
+      "family": "gi.colonoscopy",
+      "answered_away": false,
+      "answers": [],
+      "other_reason": "Listed as an alternative only; not suggested for approval."
+     }
+    ],
+    "clarifications": [
+     {
+      "id": "e2d00000-0000-4000-8000-00000000000a",
+      "created_at": "2026-11-01T09:01:50Z",
+      "proposal": "e2d00000-0000-4000-8000-000000000009",
+      "scope": "proposal",
+      "family": "gi.colonoscopy",
+      "fact": "extent",
+      "answer": null
+     },
+     {
+      "id": "e2d00000-0000-4000-8000-00000000000c",
+      "created_at": "2026-11-01T09:01:51Z",
+      "proposal": "e2d00000-0000-4000-8000-00000000000b",
+      "scope": "proposal",
+      "family": "gi.colonoscopy",
+      "fact": "performed_status",
+      "answer": null
+     },
+     {
+      "id": "e2d00000-0000-4000-8000-00000000000d",
+      "created_at": "2026-11-01T09:01:52Z",
+      "proposal": "e2d00000-0000-4000-8000-00000000000b",
+      "scope": "proposal",
+      "family": "gi.colonoscopy",
+      "fact": "extent",
+      "answer": null
+     },
+     {
+      "id": "e2d00000-0000-4000-8000-00000000000f",
+      "created_at": "2026-11-01T09:01:53Z",
+      "proposal": null,
+      "scope": "encounter",
+      "family": "",
+      "fact": "service_date",
+      "answer": null
+     }
+    ]
+   }
+  },
+  "contexts": {
+   "e2d00000-0000-4000-8000-000000000010": {
+    "created_at": "2026-11-01T09:01:28Z",
+    "revision": "e2d00000-0000-4000-8000-000000000007",
+    "version": "gi-context@5",
+    "facts": {
+     "setting": {
+      "name": "setting",
+      "note": "No place of service or care setting is documented.",
+      "value": null,
+      "origin": "missing",
+      "evidence": []
+     },
+     "service_date": {
+      "name": "service_date",
+      "note": "Conflicting documented values: 2026-10-21, 2026-10-22.",
+      "value": null,
+      "origin": "conflict",
+      "evidence": [
+       {
+        "end": 133,
+        "text": "Date of service: 2026-10-21",
+        "start": 106
+       },
+       {
+        "end": 160,
+        "text": "Procedure date: 2026-10-22",
+        "start": 134
+       }
+      ]
+     },
+     "patient_status": {
+      "name": "patient_status",
+      "note": "New or established patient status is not documented.",
+      "value": null,
+      "origin": "missing",
+      "evidence": []
+     },
+     "billing_context": {
+      "name": "billing_context",
+      "note": "No explicit professional or facility billing statement is documented.",
+      "value": "not_documented",
+      "origin": "missing",
+      "evidence": []
+     }
+    },
+    "earlier_assessment": null
+   }
+  },
+  "revisions": {
+   "e2d00000-0000-4000-8000-000000000007": {
+    "number": 1
+   }
+  },
+  "decisions": [],
+  "invalidations": [],
+  "member_answers": []
+ }
 }

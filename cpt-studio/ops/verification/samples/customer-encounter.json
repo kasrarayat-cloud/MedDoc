@@ -237,7 +237,8 @@
       "generated_at": "2026-11-03T22:10:00+00:00",
       "generated_by": "CPT Studio review agent (automated agent)",
       "download_url": "/api/reports/b0b0b0b0-0001-4c4c-8d8d-9e9e9e9e9e01/download",
-      "current": true
+      "current": true,
+      "revision": 1
     },
     {
       "id": "b0b0b0b0-0002-4c4c-8d8d-9e9e9e9e9e02",
@@ -247,7 +248,8 @@
       "generated_at": "2026-11-03T22:10:00+00:00",
       "generated_by": "CPT Studio review agent (automated agent)",
       "download_url": "/api/reports/b0b0b0b0-0002-4c4c-8d8d-9e9e9e9e9e02/download",
-      "current": true
+      "current": true,
+      "revision": 1
     },
     {
       "id": "b0b0b0b0-0003-4c4c-8d8d-9e9e9e9e9e03",
@@ -257,7 +259,8 @@
       "generated_at": "2026-11-03T22:10:00+00:00",
       "generated_by": "CPT Studio review agent (automated agent)",
       "download_url": "/api/reports/b0b0b0b0-0003-4c4c-8d8d-9e9e9e9e9e03/download",
-      "current": true
+      "current": true,
+      "revision": 1
     },
     {
       "id": "b0b0b0b0-0004-4c4c-8d8d-9e9e9e9e9e04",
@@ -267,7 +270,8 @@
       "generated_at": "2026-11-03T22:10:00+00:00",
       "generated_by": "CPT Studio review agent (automated agent)",
       "download_url": "/api/reports/b0b0b0b0-0004-4c4c-8d8d-9e9e9e9e9e04/download",
-      "current": true
+      "current": true,
+      "revision": 1
     }
   ],
   "activity": [
@@ -278,5 +282,9 @@
       "actor_kind": "agent",
       "at": "2026-11-03T22:05:00+00:00"
     }
-  ]
+  ],
+  "update": null,
+  "earlier_codes": [],
+  "what_changed": null,
+  "decision_history": []
 }

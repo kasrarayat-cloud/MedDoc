@@ -14,6 +14,7 @@ from django.test import TestCase, override_settings
 
 from ops.gi4 import regression
 from studio import jobs, models
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_gi4_state import LIVE, RetainedProvider, seed_reference
@@ -21,6 +22,7 @@ from tests.test_gi4_state import LIVE, RetainedProvider, seed_reference
 DOCS = regression.load_fixtures()
 
 
+@applied
 @override_settings(**LIVE)
 class MemberAskedOfferTests(OperatorReads, TestCase):
     def setUp(self):

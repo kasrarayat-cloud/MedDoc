@@ -1,0 +1,8 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy report (fictional)
+Date of service: 2026-10-14
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Indication: Screening.
+Procedure: Colonoscopy
+Findings: The colonoscope was advanced to the terminal ileum. A 7 mm sessile polyp was found in the transverse colon. The 7 mm polyp was removed with a cold snare and was not bleeding afterwards. It was discarded and was not sent to pathology.
+Impression: Transverse colon polyp, removed.

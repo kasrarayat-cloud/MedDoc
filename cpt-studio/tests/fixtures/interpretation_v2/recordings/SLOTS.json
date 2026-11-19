@@ -1,0 +1,7 @@
+{
+ "about": "FINAL-V2 8.1 step 6c: the replay recordings after D2 and D3 are added here by the integration owner (step 8), each slot a directory of recorded pass-1 and pass-2 responses keyed by request sha256 with its batch manifest (9.6). Until then each slot is empty and the tests that read it are skipped by name.",
+ "slots": {
+  "D2": {"directory": "D2", "owner": "integration owner, FINAL-V2 8.1 step 8", "status": "empty"},
+  "D3": {"directory": "D3", "owner": "integration owner, FINAL-V2 8.1 step 8", "status": "empty"}
+ }
+}

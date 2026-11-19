@@ -26,13 +26,15 @@ from studio.providers.base import canonical_body
 from studio.reference import passages as reference_passages
 from studio.reference import tools
 from studio.types import PeerReview, RawExchange, sha256_json, to_jsonable
+from tests.legacy_chain import applied
 from tests.support import docgen
 from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, ScriptedCorti, _WorkerDied
 from tests.test_participants_support import (OfflineMixin, astra_tool_call, astra_with, code, empty_reading,
                                              fable_tool_use, fable_with, service)
-from tests.test_pipeline_api import OFFICE_NOTE, drain
+from tests.test_pipeline_api import (OFFICE_NOTE, OFFICE_NOTE_STATE, RecordedInterpretation, drain, synthetic_event,
+                                     synthetic_interpretation, synthetic_lesion)
 from tests.test_repairs_pipeline import LIVE, RECONCILE_NOTE
 
 DAY = '2026-10-20'
@@ -50,6 +52,37 @@ TWO_EXTENTS = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-
                'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n'
                'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n'
                'A separate 12 mm flat lesion in the ascending colon was biopsied with cold forceps.\n' + LAND + '\n')
+UNDATED_TWO_EXTENTS = TWO_EXTENTS.replace('Date of service: 2026-10-14\n', '')
+
+
+def two_extents_interpretation(date='2026-10-14'):
+    """Gemini's synthetic answer to TWO_EXTENTS (design/FINAL.md 14.6; tests.test_pipeline_api.RecordedInterpretation;
+    UNDATED_TWO_EXTENTS without its date line, ``date`` None): the colonoscopy, the sigmoid polyp's hot snare removal and the ascending
+    lesion's cold forceps biopsy. It states no reach: the landmarks line names no endoscope, so no reach of this
+    encounter's examination verifies there (contract 5.4) - each code is held on the extent, as the legacy reading
+    holds them. Every claimed attribute is verified by normalization (RecordedInterpretationTests)."""
+    lines = {'P1': f'Date of service: {date}', 'P2': 'Procedure: Colonoscopy',
+             'P3': 'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.',
+             'P4': 'A separate 12 mm flat lesion in the ascending colon was biopsied with cold forceps.', 'P5': LAND}
+    if not date:
+        del lines['P1']
+    return synthetic_interpretation(
+        lines, date=(date, date, 'P1') if date else None,
+        lesions=[synthetic_lesion('L1', '9 mm pedunculated polyp', 'P3', 'sigmoid_colon', 'sigmoid colon', '9 mm'),
+                 synthetic_lesion('L2', '12 mm flat lesion', 'P4', 'ascending_colon', 'ascending colon', '12 mm')],
+        events=[synthetic_event('E1', ('colonoscopy', 'Colonoscopy', 'P2'), ('examination', 'Colonoscopy', 'P2'),
+                                ('performed', 'Procedure: Colonoscopy', 'P2')),
+                synthetic_event('E2', ('colonoscopy', '', ''), ('snare', 'removed', 'P3'),
+                                ('performed', 'was removed with a hot snare', 'P3'),
+                                technique=('hot_snare', 'hot snare', 'P3'),
+                                target=('L1', 'sigmoid_colon', '9 mm pedunculated polyp in the sigmoid colon', 'P3')),
+                synthetic_event('E3', ('colonoscopy', '', ''), ('biopsy', 'biopsied', 'P4'),
+                                ('performed', 'was biopsied', 'P4'), technique=('cold_forceps', 'cold forceps', 'P4'),
+                                target=('L2', 'ascending_colon', '12 mm flat lesion in the ascending colon', 'P4'))])
+
+
+TWO_EXTENTS_INTERPRETATIONS = ((TWO_EXTENTS, two_extents_interpretation()),
+                               (UNDATED_TWO_EXTENTS, two_extents_interpretation(None)))
 PFS_ROWS = {
     '45378': {'status': 'A', 'global_days': '000', 'mult_proc': '2', 'endo_base': None, 'pctc': '0'},
     '45380': {'status': 'A', 'global_days': '000', 'mult_proc': '3', 'endo_base': '45378', 'pctc': '0'},
@@ -300,31 +333,34 @@ class Harness2Case(OperatorReads, OfflineMixin, TestCase):
 
 # --- the chain --------------------------------------------------------------------------------------------------------
 
-class ChainTests(Harness2Case):
+class ChainTests(RecordedInterpretation, Harness2Case):
+    """Both phases of the chain (HARNESS.md 12.1). On the production chain (design/FINAL.md 14.6; slice S15): Gemini
+    reads OFFICE_NOTE from its recorded synthetic interpretation, and the interpret stage follows the extract."""
+
     def test_both_phases_run_in_order_with_their_keys(self):
         encounter_id = self.create()
         drain()
         chain = self.jobs_of(encounter_id)
-        self.assertEqual([j.kind for j in chain], ['extract', 'analyze', 'predict', 'astra', 'fable', 'assess',
-                                                   'astra_peer', 'fable_peer', 'assess'])
+        self.assertEqual([j.kind for j in chain], ['extract', 'interpret', 'analyze', 'predict', 'astra', 'fable',
+                                                   'assess', 'astra_peer', 'fable_peer', 'assess'])
         self.assertTrue(all(j.state == 'succeeded' for j in chain), [(j.kind, j.state, j.error) for j in chain])
         first, final = self.assessments(encounter_id)
         context, corti = self.encounter(encounter_id).current_context, self.runs_of(encounter_id, 'corti')[0]
         astra, fable = self.runs_of(encounter_id, 'astra', 'independent')[0], self.runs_of(encounter_id, 'fable')[0]
         phase1 = hashlib.sha256(f'{astra.pk},{fable.pk}'.encode()).hexdigest()[:12]
-        self.assertEqual(chain[5].idempotency_key, f'assess:{context.pk}:{corti.pk}:p:{phase1}')  # exactly as before
+        self.assertEqual(chain[6].idempotency_key, f'assess:{context.pk}:{corti.pk}:p:{phase1}')  # exactly as before
         digest = hashlib.sha256(str(first.pk).encode()).hexdigest()[:12]
-        self.assertEqual([j.idempotency_key for j in chain[6:8]], [f'astra_peer:{digest}', f'fable_peer:{digest}'])
+        self.assertEqual([j.idempotency_key for j in chain[7:9]], [f'astra_peer:{digest}', f'fable_peer:{digest}'])
         astra_peer = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
         fable_peer = self.runs_of(encounter_id, 'fable', 'peer_review')[0]
         ids = ','.join(map(str, (astra.pk, fable.pk, astra_peer.pk, fable_peer.pk)))
-        self.assertEqual(chain[8].idempotency_key,
+        self.assertEqual(chain[9].idempotency_key,
                          f'assess:{context.pk}:{corti.pk}:q:{hashlib.sha256(ids.encode()).hexdigest()[:12]}')
-        self.assertEqual({j.provider_run_id for j in chain[3:]}, {corti.pk})  # the Corti run travels on the chain
-        self.assertEqual({j.context_id for j in chain[3:]}, {context.pk})
+        self.assertEqual({j.provider_run_id for j in chain[4:]}, {corti.pk})  # the Corti run travels on the chain
+        self.assertEqual({j.context_id for j in chain[4:]}, {context.pk})
         self.assertEqual(self.encounter(encounter_id).current_assessment, final)
         self.assertEqual((jobs.assessment_phase(first), jobs.assessment_phase(final)), (1, 2))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
         self.assertEqual(len(self.corti.requests), 1)
         self.assertEqual([(self.sent(n, 'first'), self.sent(n, 'peer')) for n in ('astra', 'fable')], [(1, 1), (1, 1)])
         # I5 (refutation round 1, FG-2): each first request, as the real adapter built and stored it, is exactly the
@@ -341,6 +377,7 @@ class ChainTests(Harness2Case):
 
 # --- phase 1 on the tool loop (HARNESS.md 11.2, 12.1) -----------------------------------------------------------------
 
+@applied
 class PhaseOneLoopTests(Harness2Case):
     def setUp(self):
         super().setUp()
@@ -528,7 +565,7 @@ class PhaseOneLoopTests(Harness2Case):
         self.assertEqual(self.encounter(second).state, 'ready_for_review')
 
 
-class RefusalWordingTests(Harness2Case):
+class RefusalWordingTests(RecordedInterpretation, Harness2Case):
     """Refutation round 1, IND-2 (I9: no CPT descriptor text displayed): a model writes its own refusal, and it can
     write descriptor-like wording there. The refusal is named by its length; its words reach no record, page, report or
     trace."""
@@ -564,7 +601,7 @@ class RefusalWordingTests(Harness2Case):
         self.assertIn('the model refused (its message, 156 characters, is not repeated)', shown[0])
 
 
-class StopInLoopTests(Harness2Case):
+class StopInLoopTests(RecordedInterpretation, Harness2Case):
     """Refutation round 1, sends-3 (HARNESS.md 2: a Stop observed before sending): a member's Stop recorded while a tool
     loop runs ends it before its next exchange. The run records what was sent and has no final answer; the stage ends
     stopped. Harness repair 3, F-STOP: such a run is resumable, and a member's Resume continues it - a run of its own,
@@ -656,7 +693,7 @@ class StopInLoopTests(Harness2Case):
         self.assertEqual(jobs._failed_before(self.encounter(encounter_id), adapter, request), astra)
 
 
-class SingleExchangeRunTests(Harness2Case):
+class SingleExchangeRunTests(RecordedInterpretation, Harness2Case):
     """Refutation round 1, sends-2: before part B, harness@2's adapter version sent its body through the single-exchange
     send(), so a stored run of that version can hold an answer that still asks for tool calls, with no exchange
     recorded. Such a run is not a tool loop's answer: the identical request is never answered by reusing it."""
@@ -687,7 +724,7 @@ class SingleExchangeRunTests(Harness2Case):
 
 # --- what assess #1 and assess #2 record (HARNESS.md 12.3) ------------------------------------------------------------
 
-class RecordsTests(Harness2Case):
+class RecordsTests(RecordedInterpretation, Harness2Case):
     def test_assess_one_records_every_frozen_phase_one_output_and_assess_two_the_peer_reviews(self):
         encounter_id = self.create()
         drain()
@@ -740,18 +777,24 @@ class RecordsTests(Harness2Case):
 
 # --- the peer stages' gating (HARNESS.md 12.1) ------------------------------------------------------------------------
 
-class PeerGatingTests(Harness2Case):
+class PeerGatingTests(RecordedInterpretation, Harness2Case):
+    """The peer stages' gating (HARNESS.md 12.1). On the production chain (design/FINAL.md 14.6; slice S15): Gemini
+    reads OFFICE_NOTE from its recorded synthetic interpretation, so the interpret stage follows the extract and the
+    participants' stages start one later, and the state a finished chain leaves the note in is OFFICE_NOTE_STATE (its
+    visit facts are member values there, DECISIONS D3) - never provider_failed (I10), as before."""
+
     def test_a_participant_whose_first_reading_was_not_read_gets_no_peer_stage(self):
         self.adapters['astra'].first = [failed()]
         encounter_id = self.create()
         drain()
-        self.assertEqual(self.kinds(encounter_id)[3:], ['astra', 'fable', 'assess', 'fable_peer', 'assess'])
+        # after extract, interpret, analyze and predict (the interpret stage is the production chain's own)
+        self.assertEqual(self.kinds(encounter_id)[4:], ['astra', 'fable', 'assess', 'fable_peer', 'assess'])
         self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (0, 1))
         record = self.records(self.encounter(encounter_id).current_assessment)['astra']
         self.assertEqual((record['state'], record['peer_state'], record['peer_run'], record['peer_reason']),
                          ('failed', 'not_run', None, jobs.PEER_FIRST_NOT_READ))
         self.assertEqual(self.runs_of(encounter_id, 'astra', 'peer_review'), [])
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')  # I10: never provider_failed
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)  # I10: never provider_failed
 
     def test_no_first_reading_read_means_no_peer_review_and_assess_one_is_final(self):
         self.adapters['astra'].first = self.adapters['fable'].first = [failed()]
@@ -874,6 +917,7 @@ class ColonCase(Harness2Case):
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class PeerRequestTests(ColonCase):
     def test_the_peer_request_shows_exactly_the_frozen_inputs(self):
@@ -1020,6 +1064,7 @@ class PeerRequestTests(ColonCase):
         self.assertEqual(self.proposal(final, 'sel:1').status, 'needs_clarification')  # another question: untouched
 
 
+@applied
 class StableQuestionTests(ColonCase):
     """Pipeline Q2 (cost; refutation round 1's plan): a peer request names each open question by an id that is stable
     for the revision - the first clarification of the revision that asks the same thing, through the one identity
@@ -1064,6 +1109,7 @@ class StableQuestionTests(ColonCase):
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ReassessTests(ColonCase):
     def test_it_reads_what_the_final_assessment_read_plus_the_confirmations_and_sends_nothing(self):
@@ -1143,7 +1189,10 @@ class ReassessTests(ColonCase):
 
 # --- the send doors in phase 2: unknown outcomes, failures, reuse, I10 ------------------------------------------------
 
-class PeerSendDoorTests(Harness2Case):
+class PeerSendDoorTests(RecordedInterpretation, Harness2Case):
+    """The peer stages' send doors (HARNESS.md 12). On the production chain (design/FINAL.md 14.6; slice S15): Gemini
+    reads OFFICE_NOTE from its recorded synthetic interpretation."""
+
     def test_an_unknown_peer_outcome_blocks_every_later_send_and_reconcile_runs_phase_two_again(self):
         self.adapters['astra'].peer_loops = [[unknown()]]
         encounter_id = self.create()
@@ -1167,29 +1216,9 @@ class PeerSendDoorTests(Harness2Case):
         self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (2, 1))
         records = self.records(self.encounter(encounter_id).current_assessment)
         self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('read', 'read'))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
         reconciled = models.AuditEvent.objects.get(encounter_id=encounter_id, event='provider.reconciled')
         self.assertEqual(reconciled.data, {'run': str(astra[0].pk), 'provider': 'astra'})
-
-    def test_a_peer_request_that_failed_is_never_sent_again_and_an_answered_one_is_reused(self):
-        self.adapters['astra'].peer_loops = [[failed()]]
-        encounter_id = self.create()
-        drain()
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')  # I10: never provider_failed
-        response = self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'})
-        self.assertEqual(response.status_code, 201, response.content)
-        drain()
-        self.assertEqual(len(self.assessments(encounter_id)), 4)  # a new assess #1 and its own peer chain
-        astra = self.runs_of(encounter_id, 'astra', 'peer_review')
-        fable = self.runs_of(encounter_id, 'fable', 'peer_review')
-        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
-        self.assertEqual([r.state for r in astra], ['failed', 'not_sent'])
-        self.assertTrue(astra[1].error.startswith(jobs.FAILED_BEFORE_MESSAGE))
-        self.assertEqual((astra[1].request_sha256, astra[1].purpose), (astra[0].request_sha256, 'peer_review'))
-        self.assertEqual([(r.reused_from_id, r.request_sha256) for r in fable[1:]],
-                         [(fable[0].pk, fable[0].request_sha256)])
-        records = self.records(self.encounter(encounter_id).current_assessment)
-        self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('not_sent', 'read'))
 
     def test_one_participant_failing_in_phase_two_blocks_only_itself(self):
         self.adapters['astra'].peer = [failed()]
@@ -1199,7 +1228,7 @@ class PeerSendDoorTests(Harness2Case):
         record = self.records(self.encounter(encounter_id).current_assessment)
         self.assertEqual((record['astra']['peer_state'], record['astra']['peer_reason'], record['fable']['peer_state']),
                          ('failed', 'Overloaded (synthetic).', 'read'))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_peer_request_that_cannot_be_built_is_recorded_not_sent_and_blocks_only_itself(self):
         with mock.patch.object(self.adapters['astra'], 'build_peer_request', side_effect=ValueError('synthetic')), \
@@ -1267,12 +1296,43 @@ class PeerSendDoorTests(Harness2Case):
         record = self.records(self.encounter(encounter_id).current_assessment)['fable']
         self.assertEqual(record['peer_state'], 'refused')
         self.assertIn('not claude-fable-5-1', record['peer_reason'])
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
+
+
+@applied
+class PeerSendDoorReuseTests(Harness2Case):
+    """PeerSendDoorTests' reuse case (split from it; design/FINAL.md 14.6): it needs the setting save to leave the
+    peer requests identical, which holds where the reading already read the note's office setting - the LEGACY
+    reading. On the production chain the setting is a member value (DECISIONS D3), so the save changes the facts
+    the peer request shows and a new request is sent. It runs under the test-only legacy chain, verbatim."""
+
+    def test_a_peer_request_that_failed_is_never_sent_again_and_an_answered_one_is_reused(self):
+        self.adapters['astra'].peer_loops = [[failed()]]
+        encounter_id = self.create()
+        drain()
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')  # I10: never provider_failed
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        self.assertEqual(len(self.assessments(encounter_id)), 4)  # a new assess #1 and its own peer chain
+        astra = self.runs_of(encounter_id, 'astra', 'peer_review')
+        fable = self.runs_of(encounter_id, 'fable', 'peer_review')
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
+        self.assertEqual([r.state for r in astra], ['failed', 'not_sent'])
+        self.assertTrue(astra[1].error.startswith(jobs.FAILED_BEFORE_MESSAGE))
+        self.assertEqual((astra[1].request_sha256, astra[1].purpose), (astra[0].request_sha256, 'peer_review'))
+        self.assertEqual([(r.reused_from_id, r.request_sha256) for r in fable[1:]],
+                         [(fable[0].pk, fable[0].request_sha256)])
+        records = self.records(self.encounter(encounter_id).current_assessment)
+        self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('not_sent', 'read'))
 
 
 # --- the stale sweep, Stop, Resume, reconcile and the upgrade across phase 2 (HARNESS.md 12.1) -----------------------
 
-class SweepStopResumeTests(Harness2Case):
+class SweepStopResumeTests(RecordedInterpretation, Harness2Case):
+    """The peer stages swept, stopped, resumed and reconciled (HARNESS.md 12). On the production chain
+    (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic interpretation."""
+
     def age(self, job):
         models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
 
@@ -1301,7 +1361,7 @@ class SweepStopResumeTests(Harness2Case):
         drain()
         self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
         self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_peer_stage_left_mid_send_is_unknown_and_reconcile_runs_phase_two_again(self):
         encounter_id = self.create()
@@ -1321,7 +1381,7 @@ class SweepStopResumeTests(Harness2Case):
         drain()
         self.assertEqual((self.sent('astra', 'first'), self.sent('astra', 'peer'), self.sent('fable', 'peer')),
                          (1, 1, 1))  # the reconciled request again, once; Fable for the first time
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_peer_stage_that_died_with_its_run_only_reserved_is_resumable(self):
         encounter_id = self.create()
@@ -1348,7 +1408,7 @@ class SweepStopResumeTests(Harness2Case):
         final = self.encounter(encounter_id).current_assessment
         self.assertEqual(self.records(final)['astra']['peer_run'],
                          str(self.runs_of(encounter_id, 'astra', 'peer_review')[1].pk))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_stop_before_the_peer_stages_and_resume_runs_phase_two_once(self):
         encounter_id = self.create()
@@ -1373,7 +1433,7 @@ class SweepStopResumeTests(Harness2Case):
         self.assertEqual(self.client.post(f'/api/encounters/{other}/resume').status_code, 201)
         drain()
         final = self.encounter(other).current_assessment
-        self.assertEqual((jobs.assessment_phase(final), self.encounter(other).state), (2, 'ready_for_review'))
+        self.assertEqual((jobs.assessment_phase(final), self.encounter(other).state), (2, OFFICE_NOTE_STATE))
         self.assertIn(':q:', self.jobs_of(other)[-1].idempotency_key)
 
     def test_a_stop_observed_before_the_peer_sends_cancels_it_and_resume_sends_once(self):
@@ -1388,7 +1448,7 @@ class SweepStopResumeTests(Harness2Case):
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
         self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_reconcile_runs_phase_two_for_the_new_phase_one_set(self):
         self.adapters['astra'].first_loops = [[unknown()]]
@@ -1415,7 +1475,15 @@ class SweepStopResumeTests(Harness2Case):
         self.assertEqual({name: record['run'] for name, record in self.records(final).items()}, new_set)
         self.assertEqual({name: record['peer_state'] for name, record in self.records(final).items()},
                          {'astra': 'read', 'fable': 'read'})
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
+
+
+@applied
+class SweepStopResumeOnAnEarlierContextTests(Harness2Case):
+    """SweepStopResumeTests' upgrade case (split from it; design/FINAL.md 14.6): an assess queued on a context an
+    earlier gi-context version recorded, which the upgrade's remake follows - the legacy chain's own (the production
+    chain ends a stage given such a context StageCancelled, FINAL 9) - so it runs under the test-only legacy chain,
+    verbatim."""
 
     def test_an_assess_a_remake_queued_marks_its_peer_stages_which_stop_where_they_would_send(self):
         earlier = jobs.EARLIER_CONTEXT_VERSIONS[-1]
@@ -1443,6 +1511,7 @@ class SweepStopResumeTests(Harness2Case):
         self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
 
 
+@applied
 class SecondReviewTests(Harness2Case):
     def test_a_second_review_s_assess_runs_phase_two_and_its_assess_two_reads_the_second_review(self):
         from tests.test_services_second_review import REPORT, TwoPassProvider, ask
@@ -1474,7 +1543,7 @@ class SecondReviewTests(Harness2Case):
             self.assertEqual(self.records(final)[name]['peer_run'], str(peers[-1].pk))
 
 
-class PeerRunLookupTests(Harness2Case):
+class PeerRunLookupTests(RecordedInterpretation, Harness2Case):
     def test_assess_two_reads_only_the_peer_runs_made_for_its_assess_one(self):
         encounter_id = self.create()
         drain()
@@ -1496,6 +1565,7 @@ class PeerRunLookupTests(Harness2Case):
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions (the first makes its new peer request by a
 # confirmation the next assess #1 reads).
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class UpgradeChainTests(ColonCase):
     def upgrade(self, encounter_id):
@@ -1558,6 +1628,7 @@ def engine_refusing_harness(**kwargs):
     return REAL_ENGINE(**kwargs)
 
 
+@applied
 class CortiOnlyTests(Harness2Case):
     """I1: with Astra and Fable disabled, nothing of harness@2 runs - no peer stage, no second assess, no exchange, no
     new record key - and the engine is never given the revision's confirmations."""

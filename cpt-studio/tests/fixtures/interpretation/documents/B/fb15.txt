@@ -1,0 +1,15 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Facility: Meadowlark Endoscopy Center (fictional)
+Patient: Bernard Ashcombe (fictional)
+Date of birth: 11/04/1959
+Prior colonoscopy: 11/03/2023, with removal of three adenomas.
+Date of service: 11/06/2026
+Endoscopist: Cordelia Fairbanks, MD (fictional)
+Indication: Surveillance after the adenomas removed on 11/03/2023.
+Procedure: The colonoscope was advanced to the cecum. Bowel preparation was good.
+Findings:
+- Sigmoid colon: a 5 mm sessile polyp, removed with a cold snare and retrieved.
+- No residual polyp at the prior polypectomy sites; the rest of the colon was normal.
+Impression: One 5 mm sigmoid polyp, removed by cold snare.
+Plan: Await pathology to set the next surveillance interval.

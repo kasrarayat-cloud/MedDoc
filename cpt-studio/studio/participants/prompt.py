@@ -17,9 +17,19 @@ Since anthropic-messages@cptstudio-harness-4 (HARNESS.md, "Harness repair 3", F-
 FIELDS_INSTRUCTION too: all three of Fable's fresh readings on 2026-11-05 added an empty field of its own to
 not_coded[0] ("code_note": "", "service_ids_note": null, "evidence_note": "" and "reason_detail": ""), and the schema
 refused each whole. It is Fable's alone as well, and READING_VERSION stays unchanged.
+
+A RECORDED EXCEPTION to the rule above (Gemini migration, design/FINAL.md 6.6 and 16.10; DECISIONS D9): the heading of
+CPT Studio's own reading in a peer document is a parameter (peer_document's ``reading_heading``, READING_HEADINGS). Its
+default is the heading every peer request carried before the migration (READING_HEADING), so a legacy peer request is
+byte-identical; a peer review of a new-path assess #1 carries EVENTS_READING_HEADING. The adapter versions are NOT
+bumped: the rollback image reads stored participant runs only through readers keyed by adapter version, and the response
+format and its reader are unchanged - only the request shows another heading. Both headings, and the legacy bytes, are
+pinned by tests/test_peer_heading.py.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import hashlib
 import json
 import re
@@ -269,6 +279,36 @@ _QUESTION_KEYS = ('question_id', 'scope', 'fact', 'family', 'proposal_key', 'que
 _TOKEN = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}')  # a question id or a frozen input's name
 _SHA256 = re.compile(r'[0-9a-f]{64}')
 _DISPLAY_FIELDS = frozenset({'display', 'provider_display'})  # Corti's own wording: never shown to a peer (I9)
+# The heading of CPT Studio's own reading in a peer document (the module docstring's recorded exception; FINAL 6.6, D9):
+# the one every peer request carried before the Gemini migration, its default - a legacy peer request is byte-identical
+# - and the one a peer review of a new-path assess #1 carries. A closed list: no other text heads that section.
+READING_HEADING = "CPT Studio's rule-based reading - it can be wrong"
+EVENTS_READING_HEADING = "CPT Studio's reading after its first assessment - it can be wrong"
+READING_HEADINGS = (READING_HEADING, EVENTS_READING_HEADING)
+# The heading a peer_document given none uses: READING_HEADING unless a caller set another for its block
+# (using_reading_heading). A participant adapter's build_peer_request passes no heading, so this is how the pipeline's
+# peer stage names it for the request it builds (jobs.stage_peer); a ContextVar, so it holds for that call alone.
+_HEADING = contextvars.ContextVar('cpt_studio_peer_reading_heading', default=READING_HEADING)
+
+
+def _checked_heading(heading) -> str:
+    if heading not in READING_HEADINGS:
+        raise ValueError("CPT Studio's reading is headed only by one of prompt.READING_HEADINGS.")
+    return heading
+
+
+@contextlib.contextmanager
+def using_reading_heading(heading: str):
+    """While the block runs, a peer_document given no ``reading_heading`` heads CPT Studio's reading ``heading`` - one
+    of READING_HEADINGS (ValueError otherwise) - in this context only (a ContextVar: another thread's or task's requests
+    are untouched). jobs.stage_peer builds a peer review of a new-path assess #1 inside it, with EVENTS_READING_HEADING
+    (FINAL 6.6, D9); outside any such block the heading is READING_HEADING, as before the migration. Yields the
+    heading."""
+    token = _HEADING.set(_checked_heading(heading))
+    try:
+        yield heading
+    finally:
+        _HEADING.reset(token)
 
 
 def reading_answer(reading) -> dict:
@@ -311,15 +351,20 @@ def peer_framed_document(text: str, pages: Sequence, kind: str) -> Optional[str]
     return 'Document: a PDF; only its extracted text is given for this review.\n' + framed[len(first):]
 
 
-def peer_document(own, peers: dict, cpt_studio: dict, frozen: Sequence) -> str:
+def peer_document(own, peers: dict, cpt_studio: dict, frozen: Sequence, *,
+                  reading_heading: Optional[str] = None) -> str:
     """The phase-2 material as one text block (HARNESS.md 11.1): the participant's own frozen first reading (in the
-    reading schema's shape, reading_answer), the frozen peer conclusions exactly as given, CPT Studio's rule-based
-    reading - its open questions, held and excluded codes, and their reasons - then the open questions' ids and the
-    sha256 of each frozen input. Pure. Raises TypeError or ValueError when an input is not the documented shape:
-    ``peers`` {name: dict} for corti, astra or fable other than the participant itself, never carrying a 'display' or
+    reading schema's shape, reading_answer), the frozen peer conclusions exactly as given, CPT Studio's reading - its
+    open questions, held and excluded codes, and their reasons - under ``reading_heading``, then the open questions' ids
+    and the sha256 of each frozen input. Pure. ``reading_heading``: one of READING_HEADINGS; None takes the heading
+    using_reading_heading set, which is READING_HEADING (the legacy heading, so a legacy peer request is byte-identical)
+    unless a caller set another. Raises TypeError or ValueError when an input is not the documented shape: ``peers``
+    {name: dict} for corti, astra or fable other than the participant itself, never carrying a 'display' or
     'provider_display' field at any depth; ``cpt_studio`` exactly {open_questions, held, excluded}, each open question
     exactly {question_id, scope, fact, family, proposal_key, question, reason} (strings; ids unique tokens), held and
-    excluded lists of objects; ``frozen`` (name, sha256) pairs, names unique tokens, at least one."""
+    excluded lists of objects; ``frozen`` (name, sha256) pairs, names unique tokens, at least one; ``reading_heading``
+    not one of READING_HEADINGS."""
+    heading = _checked_heading(_HEADING.get() if reading_heading is None else reading_heading)
     questions = _open_questions(cpt_studio)
     pairs = _frozen_pairs(frozen)
     items = _peer_items(peers, getattr(own, 'provider', None))
@@ -331,7 +376,7 @@ def peer_document(own, peers: dict, cpt_studio: dict, frozen: Sequence) -> str:
         lines += [f'{name} ({_PEER_LABELS[name]}):', _json_line(conclusions)]
     if not items:
         lines.append('(no peer conclusion was recorded)')
-    lines += ['', "== CPT Studio's rule-based reading - it can be wrong ==",
+    lines += ['', f'== {heading} ==',
               _json_line({'open_questions': questions, 'held': list(cpt_studio['held']),
                           'excluded': list(cpt_studio['excluded'])}),
               '', _PEER_QUESTIONS, _json_line([item['question_id'] for item in questions]),

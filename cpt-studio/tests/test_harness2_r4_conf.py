@@ -44,12 +44,15 @@ from django.test import SimpleTestCase, override_settings
 from studio import jobs, models, reports, review
 from studio.types import sha256_json
 from tests import test_harness2_api as h2
+from tests import v2_documents, v2_replay
+from tests.legacy_chain import applied
 from tests.test_frontend import HARNESS2_SCENARIOS, _fixture
-from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, TWO_EXTENTS, ColonCase, answered, reading
+from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS, ColonCase,
+                                          answered, reading)
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
 from tests.test_harness2_r2_evidence import NO_BASIS, PRIOR, VISIT, page
 from tests.test_participants_support import code as code_item, empty_reading, service as service_item
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 ROOT = Path(settings.BASE_DIR)
 DORMANT = dict(STUDIO_OFFER_CONFIRMATIONS=True)  # the dormant confirmation path, as its own tests run it
@@ -149,6 +152,7 @@ EM_NOT_USED = 'Total time of 45 minutes is not used to select the level; the lev
 OFFICE_TAIL = 'Assessment: reflux, stable on current therapy.\nPlan: continue omeprazole.\n'
 
 
+@applied
 class BasisTests(PipelineCase):
     """d7-1 and truth-1 (a), through the real pipeline at the release default: Corti selects 99214 on the visit line,
     and Astra's first reading has one office visit service quoting a single sentence (the reading schema has no basis
@@ -225,14 +229,22 @@ class EncounterQuestionTests(h2.Harness2Case):
         self.assertEqual(review._review_state(self.encounter, self.final), 'needs_clarification')
 
 
-class CodeQuestionTests(ColonCase):
+class CodeQuestionTests(RecordedInterpretation, ColonCase):
     """Two colonoscopy codes Corti selects on a note with no extent reached, and 45378 Fable's peer review adds: four
     questions, each about a code; none about the encounter. Moved by refutation round 6 (R6-MEANING, the session's D14):
     the 45378 Fable's peer review adds is its alternative, never a proposal, so two questions, each about one of Corti's
     codes."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    # DECISIONS D243 class C: the test rejects through the product, which reads event_coding@2 only (FINAL-V2 6.5): its
+    # rows are design v2's, in replay (tests/v2_replay.py), from TWO_EXTENTS with its endoscopist named
+    # (tests/v2_documents.TWO_EXTENTS) - never the v1 chain's.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.TWO_EXTENTS, v2_documents.two_extents_answer),)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_question_about_a_code_holds_that_code_which_can_still_be_rejected(self):
-        encounter_id = self.create(TWO_EXTENTS)
+        encounter_id = self.create(v2_documents.TWO_EXTENTS)
         drain()
         encounter = self.encounter(encounter_id)
         final = encounter.current_assessment
@@ -262,6 +274,7 @@ EGD_AND_COLON = (HEAD + 'Procedure report (fictional)\nDate of service: 2026-10-
                  'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n')
 
 
+@applied
 class ServiceQuestionTests(PipelineCase):
     """A documented upper endoscopy with no extent, which no code carries, beside a colonoscopy code: the readers ask
     its extent as a question about the service, which holds neither a code nor the reviewed report."""
@@ -329,6 +342,7 @@ class ConfirmationWordingTests(h2.Harness2Case):
 
 # --- falsegreen-7, falsegreen-4: the case's and the fixtures' rows are the assess stage's -----------------------------
 
+@applied
 @override_settings(**h2.BOTH)
 class CaseRowsTests(h2.Harness2Case):
     def test_the_participants_entries_and_the_retrieval_are_the_stage_s(self):

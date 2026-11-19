@@ -1,0 +1,22 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Facility: Riverside Teaching Hospital Endoscopy Unit (fictional)
+Patient: Agnes Thorley (fictional)
+Date of service: November 2, 2026
+Attending endoscopist: Rafael Duquesne, MD (fictional)
+Fellow: Mina Halvorsen, MD (fictional), gastroenterology fellow
+Indication: Chronic watery diarrhea; personal history of colon polyps.
+History: In March 2024 Dr. Corwin Platt (fictional) performed a colonoscopy elsewhere.
+At that procedure Dr. Platt (fictional) removed a 4 mm rectal polyp with hot biopsy forceps.
+Procedure: The fellow advanced the colonoscope to the cecum under my direct supervision.
+The fellow removed a 7 mm descending colon polyp with a cold snare under my direct supervision.
+I took random cold forceps biopsies of the right and left colon for microscopic colitis.
+I was present for the entire procedure, from insertion to withdrawal of the colonoscope.
+Findings:
+- Descending colon: 7 mm sessile polyp, removed with a cold snare as above and retrieved.
+- Colonic mucosa normal throughout; random biopsies taken from the right and left colon.
+- Rectum: normal, with no residual polyp at the site treated in March 2024.
+Impression:
+1. 7 mm descending colon polyp, removed by cold snare.
+2. Normal-appearing colonic mucosa; random biopsies taken to evaluate for microscopic colitis.
+Plan: Await pathology.

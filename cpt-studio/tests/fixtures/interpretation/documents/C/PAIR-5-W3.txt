@@ -1,0 +1,11 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Patient: Synthetic Patient (fictional), 58-year-old man
+Date of service: November 9, 2026
+Endoscopist: A. Current, MD (fictional)
+Sedation: Monitored anesthesia care by the anesthesia team
+Indication: Surveillance colonoscopy.
+FINDINGS
+The colonoscope reached the cecum. Cold snare resection of the 9 mm descending colon polyp was initially unsuccessful because the polyp slipped from the snare. The polyp was then removed completely with a hot snare.
+IMPRESSION
+Descending colon polyp removed with a hot snare after a failed cold snare attempt.

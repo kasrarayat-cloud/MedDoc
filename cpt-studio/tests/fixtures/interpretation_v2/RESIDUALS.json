@@ -1,0 +1,1333 @@
+{
+ "about": "FINAL-V2 9.5 variant (iii): pass 2 shares pass 1's misreading. Each code's outcome is RECORDED as a residual, never counted as a pass; its rate is what the acceptance set measures. A shared filing of its own (DECISIONS D241) is a residual too. named: the residuals a ruling keeps as built and names beside a documented outcome (D244), or an open question leaves there; asserted as built, never counted as a pass.",
+ "cases": {
+  "A1": {
+   "codes": {
+    "44386": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "procedure",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "A1b": {
+   "codes": {
+    "44377": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "procedure",
+     "item_kind": "explanation",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "A2": {
+   "codes": {
+    "44386": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "procedure",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "A2b": {
+   "codes": {
+    "44377": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "procedure",
+     "item_kind": "explanation",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "A3": {
+   "codes": {
+    "44382": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "extent",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "A3b": {
+   "codes": {
+    "44361": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "procedure",
+     "item_kind": "explanation",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "BF1": {
+   "codes": {
+    "45330": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "statement_scope",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "99213": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [
+      "25"
+     ],
+     "item": "separate_em",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "BF11": {
+   "codes": {
+    "43262": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "statement_scope",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "43264": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "BF16": {
+   "codes": {
+    "43251": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "BF2": {
+   "codes": {
+    "99213": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "BF21": {
+   "codes": {
+    "43264": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "BF4": {
+   "codes": {
+    "43249": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "43255": {
+     "acts": [
+      "E4"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "act_part",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "BF6": {
+   "codes": {
+    "43259": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "BF8": {
+   "codes": {
+    "45381": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "conflict:tattoo",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "C1": {
+   "codes": {
+    "43239": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "43255": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "act_part",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "C2": {
+   "codes": {
+    "43251": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "43255": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "act_part",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "C3": {
+   "codes": {
+    "45382": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "act_cause",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "45388": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "C4": {
+   "codes": {
+    "43251": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "43270": {
+     "acts": [],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "CK-note8": {
+   "codes": {
+    "45378": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "base_included",
+     "item_kind": "explanation",
+     "status": "needs_clarification"
+    },
+    "45380": {
+     "acts": [
+      "E6",
+      "E7",
+      "E8"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "45381": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "statement_scope",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "45385": {
+     "acts": [
+      "E20"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [
+      "59|XS"
+     ],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "45386": {
+     "acts": [
+      "E4"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "45390": {
+     "acts": [
+      "E10"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [
+      "59|XS"
+     ],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "D1": {
+   "codes": {
+    "43236": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "statement_scope",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "43255": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "conflict:injection",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "D2": {
+   "codes": {
+    "45385": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "D3": {
+   "codes": {
+    "45380": {
+     "acts": [],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "conflict:biopsy",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "45385": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "E1": {
+   "codes": {
+    "45385": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "E2": {
+   "codes": {
+    "45385": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "event_performer",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "E3": {
+   "codes": {
+    "45385": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "E4": {
+   "codes": {
+    "45385": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "E5": {
+   "codes": {
+    "45380": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "G1": {
+   "codes": {
+    "43253": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "G2": {
+   "codes": {
+    "43253": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "45341": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "procedure",
+     "item_kind": "explanation",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "G3": {
+   "codes": {
+    "43240": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "target",
+     "item_kind": "explanation",
+     "status": "needs_clarification"
+    },
+    "43242": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "G4": {
+   "codes": {
+    "43259": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "G5": {
+   "codes": {
+    "99213": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "held",
+     "considerations": [
+      "25"
+     ],
+     "item": "separate_em",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "N1": {
+   "codes": {
+    "43235": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "base_included",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "N2": {
+   "codes": {
+    "43239": {
+     "acts": [],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "44369": {
+     "acts": [],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "N3": {
+   "codes": {
+    "45330": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "45378": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "O1": {
+   "codes": {
+    "99213": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Q1": {
+   "codes": {
+    "43239": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "43251": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Q2": {
+   "codes": {
+    "43274": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "event_performer",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Q3": {
+   "codes": {
+    "43264": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "event_performer",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "43265": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "competing_codes",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Q4": {
+   "codes": {
+    "43240": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "43259": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "base_included",
+     "item_kind": "explanation",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Q5": {
+   "codes": {
+    "45385": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Q6": {
+   "codes": {
+    "43239": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Q7": {
+   "codes": {
+    "45385": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "conflict:snare",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "RF-CO2d": {
+   "codes": {
+    "45378": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "base_included",
+     "item_kind": "explanation",
+     "status": "needs_clarification"
+    },
+    "45380": {
+     "acts": [
+      "E6",
+      "E7",
+      "E8"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "45381": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "statement_scope",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "45385": {
+     "acts": [
+      "E20"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [
+      "59|XS"
+     ],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "45386": {
+     "acts": [],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "statement_scope",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "45390": {
+     "acts": [
+      "E10"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [
+      "59|XS"
+     ],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "RF-CO7": {
+   "codes": {
+    "45385": {
+     "acts": [],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "excluded"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "RF-HO3": {
+   "codes": {
+    "45385": {
+     "acts": [
+      "E2",
+      "E3"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "RF-SCC": {
+   "codes": {
+    "43262": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "S1": {
+   "codes": {
+    "43259": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "S2": {
+   "codes": {
+    "43259": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "S3": {
+   "codes": {
+    "43235": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "base_included",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "S4": {
+   "codes": {
+    "43260": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "consideration_dropped",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "T1": {
+   "codes": {
+    "99213": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "T2": {
+   "codes": {
+    "45330": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "statement_scope",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "T3": {
+   "codes": {
+    "99213": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "held",
+     "considerations": [
+      "25"
+     ],
+     "item": "separate_em",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "T4": {
+   "codes": {
+    "99213": {
+     "acts": [
+      "E1"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "T5": {
+   "codes": {
+    "45380": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "45385": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "T6": {
+   "codes": {
+    "43262": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "explanation",
+     "status": "needs_clarification"
+    },
+    "43264": {
+     "acts": [
+      "E4"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "T7": {
+   "codes": {
+    "43264": {
+     "acts": [
+      "E4"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "T8": {
+   "codes": {
+    "43264": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "43265": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "T9": {
+   "codes": {
+    "45385": {
+     "acts": [
+      "E2"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "X1": {
+   "codes": {
+    "43274": {
+     "acts": [],
+     "against_documented": "held",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    },
+    "43276": {
+     "acts": [],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "performed_status",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Y1": {
+   "codes": {
+    "43264": {
+     "acts": [
+      "E4"
+     ],
+     "against_documented": "ready_on_the_wrong_act",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Y2": {
+   "codes": {
+    "43264": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "ready_on_the_wrong_act",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Y3": {
+   "codes": {
+    "43264": {
+     "acts": [
+      "E4"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Y4": {
+   "codes": {
+    "43264": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Y5": {
+   "codes": {
+    "43264": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Y6": {
+   "codes": {
+    "43264": {
+     "acts": [
+      "E3"
+     ],
+     "against_documented": "wrong_ready",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    },
+    "43274": {
+     "acts": [
+      "E4"
+     ],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": null,
+     "item_kind": null,
+     "status": "ready"
+    }
+   },
+   "counted_as_pass": false
+  },
+  "Y7": {
+   "codes": {
+    "43264": {
+     "acts": [],
+     "against_documented": "as_documented",
+     "considerations": [],
+     "item": "act_yield",
+     "item_kind": "question",
+     "status": "needs_clarification"
+    }
+   },
+   "counted_as_pass": false
+  }
+ },
+ "counts_by_class": {
+  "as_documented": 32,
+  "consideration_dropped": 1,
+  "held": 38,
+  "ready_on_the_wrong_act": 2,
+  "wrong_ready": 26
+ },
+ "named": {
+  "CK-note8": {
+   "i": [
+    {
+     "counted_as_pass": false,
+     "fact": "conflict:injection",
+     "id": "Q-N8b",
+     "naming": "DECISIONS D244 Q-N8b, option (a), as built and named: \"No carbon-particle tattoo was placed into the transverse-colon resection bed\" contradicts the saline lift there, a tattoo and an injection being one act kind (4.5); the lead counts it at D2-D3",
+     "subject": "E9",
+     "where": "service"
+    },
+    {
+     "counted_as_pass": false,
+     "fact": "statement_scope",
+     "id": "Q-ANAST",
+     "naming": "open, unruled (refute-6c-r2 finding E): 4.5 never sets the anastomotic-rim biopsy apart from the splenic-flexure lesion's biopsy denial (an altered place is never disjoint, and the rim biopsy names no lesion)",
+     "subject": "E3",
+     "where": "service"
+    }
+   ]
+  },
+  "RF-CO2d": {
+   "i": [
+    {
+     "counted_as_pass": false,
+     "fact": "conflict:injection",
+     "id": "Q-N8b",
+     "naming": "DECISIONS D244 Q-N8b, option (a), as built and named: \"No carbon-particle tattoo was placed into the transverse-colon resection bed\" contradicts the saline lift there, a tattoo and an injection being one act kind (4.5); the lead counts it at D2-D3",
+     "subject": "E9",
+     "where": "service"
+    }
+   ]
+  }
+ }
+}

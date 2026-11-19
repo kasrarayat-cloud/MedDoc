@@ -1,0 +1,8 @@
+SYNTHETIC ERCP REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+Findings: The duodenoscope was advanced to the major papilla.
+Deep biliary cannulation was achieved with a sphincterotome.
+A 15 mm stone in the common bile duct was fragmented with mechanical lithotripsy.
+At that time, the stone fragments were extracted from the bile duct with an extraction balloon.

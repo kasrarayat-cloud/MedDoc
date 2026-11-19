@@ -5,6 +5,7 @@ or performed is never excluded; one whose box cannot be read is held for a revie
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import drain
 from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import LIVE
@@ -15,6 +16,7 @@ from tests.test_repairs_status_r2_validation_api import MultiEvidenceApiCase
 DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 
+@applied
 @override_settings(**LIVE)
 class UploadsHoldWhatTheyCannotReadTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     def upload(self, name, data, content_type, *selections):

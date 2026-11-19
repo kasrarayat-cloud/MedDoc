@@ -73,6 +73,7 @@ from django.test.utils import CaptureQueriesContext  # noqa: E402
 from studio import models  # noqa: E402
 from studio.providers import CortiProvider  # noqa: E402
 from studio.providers import corti as corti_module  # noqa: E402
+from tests.legacy_chain import applied
 from tests.support import pipeline_factories as pf  # noqa: E402
 from tests.support.operator import OperatorReads  # noqa: E402
 
@@ -189,6 +190,7 @@ class LiveEncounter:
             return self.client.post(path, data=json.dumps(data), content_type='application/json')
 
 
+@applied
 @override_settings(**LIVE)
 class DateChangeRoutesBeforeSendingTests(OperatorReads, LiveEncounter, TestCase):
     def test_a_new_date_the_document_cannot_be_routed_for_in_time_sends_nothing(self):
@@ -287,6 +289,7 @@ from django.utils import timezone  # noqa: E402
 
 
 
+@applied
 @override_settings(**LIVE)
 class StoppedOrOverranAnalysisTests(OperatorReads, LiveEncounter, TestCase):
     def extracted_only(self, text=OFFICE_NOTE):
@@ -388,6 +391,7 @@ class StoppedOrOverranAnalysisTests(OperatorReads, LiveEncounter, TestCase):
 from studio import review  # noqa: E402
 
 
+@applied
 @override_settings(**LIVE)
 class AttestationStatusTests(OperatorReads, LiveEncounter, TestCase):
     def test_a_missing_or_wrong_acknowledgement_answers_400_and_records_nothing(self):
@@ -505,6 +509,7 @@ from studio.gi import context as gi_context  # noqa: E402
 from tests.test_repairs_r4c_lead_pipeline import Probe  # noqa: E402
 
 
+@applied
 @override_settings(**LIVE)
 class OneComputationPerChildTests(OperatorReads, LiveEncounter, TestCase):
     def test_each_child_computes_the_context_and_the_analysis_once(self):

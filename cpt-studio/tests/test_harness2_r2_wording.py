@@ -22,8 +22,9 @@ from studio import jobs
 from studio.validation import engine
 from tests import test_harness2_api as h2
 from tests import test_harness2_pipeline as hp
-from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS
-from tests.test_pipeline_api import drain
+from tests.legacy_chain import applied
+from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 APP = Path(settings.BASE_DIR) / 'studio' / 'operator' / 'ops.js'
 # What node evaluates an expression over: app.js's exports, the payload, and the page's visible text and parts.
@@ -100,6 +101,7 @@ class R2WordingCase(hp.ColonCase):
 
 # --- truth-6: "Corti did not propose this code" only when Corti has no entry for it ----------------------------------
 
+@applied
 class CortiRelationTests(R2WordingCase):
     """truth-6 (HARNESS.md 11.4): a participant's own proposal's card read "Corti did not propose this code" whenever
     Corti was not among its proposers - also beside Corti's own excluded selection of the code, which the card's own
@@ -199,10 +201,13 @@ class CortiRelationTests(R2WordingCase):
 
 # --- truth-11: a participant row never says "It proposed no code" beside the codes it cannot list ---------------------
 
-class UnlistedCodesTests(R2WordingCase):
+class UnlistedCodesTests(RecordedInterpretation, R2WordingCase):
     """truth-11 (HARNESS.md 7; the round-1 IND-1 repair's count sentence): a participant whose reading proposed only a
     code the engine cannot list read "It returned 1 code that cannot be listed ..." and then "It proposed no code." The
     row serves the count (unlisted_codes), and the page says what can be listed, never that it proposed nothing."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     LONG = '45385-SYNTHETIC-LONG-VALUE'
 
@@ -247,6 +252,7 @@ HELD = ('Peer review: none is read by this assessment: the service date entered 
 NOT_RECORDED = 'No peer review is recorded for this revision'
 
 
+@applied
 class PhaseOneFinalTests(R2WordingCase):
     """truth-9 (HARNESS.md 7: each row says plainly whether its step ran): after phase 2, a member date conflict made
     a new assess #1 the final assessment with no peer entries. Both peer rows read "Not run - No peer review is recorded
@@ -319,6 +325,7 @@ class PhaseOneFinalRowsTests(h2.Harness2Case):
 REPEATED = 'It listed 45385 again in peer review; it first proposed it in its independent reading.'
 
 
+@applied
 class PeerRepeatedCodeTests(R2WordingCase):
     """truth-8 (HARNESS.md 11.1): Astra's peer review listed 45385 again - its own frozen first reading's code, located
     with the same quote - and the peer row read "Codes it proposed after peer review, never independent: 45385." beside
@@ -406,6 +413,7 @@ class PeerRepeatedCodeTests(R2WordingCase):
 PLURAL = 'Polyp(s) in the sigmoid colon were removed with a hot snare.'
 
 
+@applied
 class DocumentQuoteTests(R2WordingCase):
     """IR2-4 (b) (I9; app.js's own rule that the document's text is shown as it is): a participant's position quote is
     its first LOCATED quote - an exact slice of the revision (jobs._first_located, I7) - and the code card withheld it
@@ -438,11 +446,14 @@ class DocumentQuoteTests(R2WordingCase):
 
 # --- FG2-5: every real code card states the PTP limit once -----------------------------------------------------------
 
-class ReferenceLineTests(R2WordingCase):
+class ReferenceLineTests(RecordedInterpretation, R2WordingCase):
     """FG2-5 (I4: PTP always "not verified"): the API's reference_check detail always ends with
     review.PTP_NOT_CONNECTED, and the page always appended its own "(NCCI procedure-to-procedure edits not verified:
     not connected)" too, so every real code card stated the PTP limit twice; only hand-written fixtures, whose details
     the API cannot produce, were tested. Each card the real API serves now states it exactly once."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_each_code_card_states_the_ptp_limit_once(self):
         encounter_id = self.create(TWO_EXTENTS)

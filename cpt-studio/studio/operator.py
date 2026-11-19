@@ -12,6 +12,12 @@ as stored with its sha256, the original with its sha256, the operator report and
 outcome. An operator's page and API reads of an encounter are audited as ``operator.viewed`` (never shown to
 customers: their activity is an allowlist, customer_api.ACTIVITY).
 
+The Gemini migration (design/FINAL.md 8.3, 11.2-11.3): the console also shows the interpreter hold's state on its
+session, offers the recorded retry of a failed reading (retry_reading: the operator may override the refusal of an
+answer cut off at its output limit, C5, which the audit row records) and the recorded release of the hold (interpreter,
+holds.release: the same act as ``manage.py interpreter_hold --release``). The encounter detail carries each
+assessment's interpretation section (serializers).
+
 The operator console is today's website, frozen: ``studio/operator/ops.js`` (a copy of ``studio/static/studio/app.js``
 with its API base switched to /ops/api/) and ``studio/operator/ops.css`` (a copy of its stylesheet), served by a gated
 view and never from ``static/`` (WhiteNoise serves that tree to anyone). It is read-only but for the operator report
@@ -190,8 +196,15 @@ def operator_api(*allowed):
                 return JsonResponse({'error': ' '.join(exc.messages)}, status=409)
             except RecursionError:
                 return JsonResponse({'error': 'The request is nested too deeply.'}, status=400)
+            except _sentinel().Tripped as exc:  # a new-path write the legacy-call sentinel refused (FINAL 10.3)
+                return JsonResponse({'error': str(exc), 'details': {'reason': exc.reason}}, status=409)
         return operator_view(_methods(*allowed)(handled))
     return decorate
+
+
+def _sentinel():
+    from .interpretation import sentinel  # local import: the operator module loads before the interpretation package
+    return sentinel
 
 
 def _encounter(encounter_id):
@@ -237,6 +250,8 @@ def session(request):
     from . import serializers
     from .gi.profiles import CATEGORY_NAME, CATEGORY_SLUG, PROFILES_VERSION
 
+    from .interpretation import holds
+
     user = request.user
     return JsonResponse({
         'user': serializers.user_json(user),
@@ -246,6 +261,8 @@ def session(request):
         'counts': {'documents': models.Encounter.objects.count(), 'queue': 0},
         'synthetic_only': settings.SYNTHETIC_ONLY, 'provider_mode': settings.PROVIDER_MODE,
         'release': settings.RELEASE_SHA,
+        # the interpreter hold (FINAL 11.2): installation-wide, with this web process's own mode beside it
+        'interpreter': holds.state(),
     })
 
 
@@ -254,6 +271,7 @@ def encounters(request):
     """Every encounter of every workspace (``?workspace=<uuid>`` narrows it), newest first: the operator serializer's
     list row, its workspace and how many provider runs it recorded."""
     from . import serializers
+    from .interpretation import readers
 
     rows = models.Encounter.objects.select_related('workspace', 'current_revision', 'current_context',
                                                    'current_assessment').order_by('-created_at')
@@ -265,8 +283,9 @@ def encounters(request):
         except (ValueError, ValidationError):
             from .api import ApiError
             raise ApiError(400, 'workspace must be a workspace id.')
+    # R-6: each encounter's row read under its own label (readers.labelled), in a request that names no encounter
     return JsonResponse({'encounters': [
-        {**serializers.encounter_summary(encounter),
+        {**readers.labelled(serializers.encounter_summary, encounter),
          'workspace': {'id': str(encounter.workspace_id), 'name': encounter.workspace.name},
          'provider_runs': encounter.provider_runs.count()} for encounter in rows]})
 
@@ -366,6 +385,48 @@ def original(request, encounter_id):
     response['X-Content-SHA256'] = source.sha256
     record_view(request.user, encounter, 'original')
     return response
+
+
+@operator_api('POST')
+def retry_reading(request, encounter_id):
+    """The recorded retry of a failed reading, from the console (design/FINAL.md 11.3; jobs.retry_reading): ``{"override":
+    true|false}``. ``override`` is the operator's recorded override of the refusal of an answer cut off at its output
+    limit (C5: a member is never offered that paid retry); the audit row 'interpretation.retry' records it. 409 with
+    the reason otherwise refused."""
+    from . import jobs
+    from .api import ApiError, _payload
+
+    data = _payload(request)
+    encounter = _encounter(encounter_id)
+    override = data.get('override', False)
+    if not isinstance(override, bool):
+        raise ApiError(400, 'override must be true or false.')
+    try:
+        job = jobs.retry_reading(encounter, request.user, override=override)
+    except jobs.Refused as exc:
+        raise ApiError(409, str(exc))
+    return JsonResponse({'retrying': True, 'job': str(job.pk), 'override': override}, status=201)
+
+
+@operator_api('GET', 'POST')
+def interpreter(request):
+    """The interpreter hold (design/FINAL.md 11.2; interpretation.holds): GET its state - every standing hold,
+    installation-wide, and this web process's own mode (a worker's mode is the worker's); POST ``{"note"}`` releases
+    every standing hold, each with an InterpreterHoldRelease naming this operator and the note (holds.release, the same
+    act as ``manage.py interpreter_hold --release``). Members then Resume."""
+    from .api import ApiError, _payload, _text_field
+    from .interpretation import holds
+
+    if request.method == 'GET':
+        return JsonResponse(holds.state())
+    data = _payload(request)
+    try:
+        released = holds.release(user=request.user, note=_text_field(data, 'note', 'The release note'))
+    except ValueError as exc:
+        raise ApiError(400, str(exc))
+    except PermissionError as exc:
+        raise ApiError(403, str(exc))
+    return JsonResponse({'released': [str(item.hold_id) for item in released], **holds.state()}, status=201)
 
 
 @operator_api('POST')

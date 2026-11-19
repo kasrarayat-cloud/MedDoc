@@ -34,6 +34,7 @@ Synthetic text only; no network (the suite's FakeProvider).
 from django.test import SimpleTestCase
 
 from studio.gi import context
+from tests.legacy_chain import applied
 from tests.test_repairs_7c8_context import DateAssertions
 from tests.test_repairs_7c8_context3 import COLO_BODY, ELENA_DATE, HEAD, EndToEnd, date_fact, evidence_text
 
@@ -93,6 +94,7 @@ class LowerCaseBirthLabelAfterANameTests(DateAssertions, SimpleTestCase):
                 self.assert_member_conflict(text, ELENA_DATE)
 
 
+@applied
 class LowerCaseBirthLabelAfterANameRequestTests(EndToEnd):
     TEXT = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy for Alex Synthetic b. 01/01/1998\n' \
         + COLO_BODY
@@ -182,6 +184,7 @@ class BracketAfterADateFieldTests(DateAssertions, SimpleTestCase):
         self.assert_member_conflict(text, '2026-10-27')
 
 
+@applied
 class BracketAfterADateFieldRequestTests(EndToEnd):
     TEXT = HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Date (signed): 10/27/2026\n' \
         + COLO_BODY
@@ -264,6 +267,7 @@ class DateAfterAFieldSValueEndedTests(DateAssertions, SimpleTestCase):
         self.assert_member_date(HEAD + 'EGD 10/14/2026    Signed: 10/27/2026\n' + COLO_PLAIN_BODY, '2026-10-14')
 
 
+@applied
 class DateAfterAFieldSValueEndedRequestTests(EndToEnd):
     def test_no_date_is_sent_where_the_subject_line_differs(self):
         text = (HEAD + 'Colonoscopy report\nDate of service: 10/14/2026\nRe: Colonoscopy - Referral date: 10/13/2026; '
@@ -369,6 +373,7 @@ class FieldStatingADateItCannotPlaceTests(DateAssertions, SimpleTestCase):
         self.assert_member_date(HEAD + 'DOB / Date of Service: 01/01/1998 / 10/14/2026\n' + COLO_BODY, '2026-10-14')
 
 
+@applied
 class FieldStatingADateItCannotPlaceRequestTests(EndToEnd):
     E1 = HEAD + STATED_LAYOUTS['A'].format(F='rescheduled to 10/14/2026') + COLO_BODY
 
@@ -463,6 +468,7 @@ class HeaderValuesArePlacedByPositionTests(DateAssertions, SimpleTestCase):
                 self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
 
 
+@applied
 class HeaderValuesArePlacedByPositionRequestTests(EndToEnd):
     def test_c2_s3_c10b_the_member_s_1998_is_held(self):
         for name, top in (('C2 a name split at a double space', 'Colonoscopy report - 10/14/2026\n'),
@@ -553,6 +559,7 @@ class DateQualifierOnTheLabelSLineTests(DateAssertions, SimpleTestCase):
                 self.assert_document(text, '2026-10-14')
 
 
+@applied
 class DateQualifierOnTheLabelSLineRequestTests(EndToEnd):
     VISIT = ('99213', 'seen in clinic for constipation')
 
@@ -630,6 +637,7 @@ class MemberDateNeverAgreesWithAnotherOccurrenceTests(DateAssertions, SimpleTest
         self.assertEqual(to_jsonable(fact)['evidence'], [{'start': quoted.start, 'end': quoted.end, 'text': quoted.text}])
 
 
+@applied
 class MemberDateNeverAgreesWithAnotherOccurrenceRequestTests(EndToEnd):
     VISIT = ('99213', 'seen in clinic for constipation')
     TEXT = HEAD + OFFICE_NOTE_TEXT + 'Next procedure date: 11/04/2026\n'

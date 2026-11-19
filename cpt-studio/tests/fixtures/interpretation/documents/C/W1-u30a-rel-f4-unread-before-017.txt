@@ -1,0 +1,6 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy report (fictional)
+Date of service: 2026-10-14
+Procedure: Colonoscopy
+The colonoscope was advanced to the cecum and the examination was completed.
+Once, a 22 mm polyp was found in the ascending colon. It was removed piecemeal with a cold snare in four pieces.

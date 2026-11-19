@@ -1,0 +1,13 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Date of service: November 8, 2026
+Endoscopist: A. Synthetic, MD (fictional)
+Procedure: Colonoscopy with biopsy
+HISTORY
+Surveillance after resection of a large sigmoid polyp.
+Colonoscopy and mucosal resection
+The colonoscope was advanced to the cecum. A 25 mm sigmoid polyp was lifted with saline and removed by endoscopic mucosal resection. Biopsies of the base were taken.
+FINDINGS
+Cecum reached. Sigmoid scar without residual polyp; cold forceps biopsies of the scar.
+IMPRESSION
+1. Sigmoid resection scar, biopsied.

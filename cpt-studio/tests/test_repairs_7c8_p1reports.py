@@ -14,12 +14,14 @@ from unittest import mock
 from django.conf import settings
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 
-from studio import models, reports
+from studio import interpretation, models, reports
 from studio.types import RawExchange
+from tests import v2_documents, v2_replay
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import drain
-from tests.test_services_second_review import TwoPassProvider, ask
+from tests.test_pipeline_api import OFFICE_INTERPRETATION, OFFICE_NOTE, RecordedInterpretation, drain
+from tests.test_services_second_review import REPORT_INTERPRETATION, TwoPassProvider, ask
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 APP = Path(settings.BASE_DIR) / 'studio' / 'operator' / 'ops.js'
@@ -32,6 +34,9 @@ The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.
 A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps; it was not removed.
 """
+# Gemini's synthetic answer to COLONOSCOPY (design/FINAL.md 14.6): its lines are tests.test_services_second_review.
+# REPORT's, so REPORT's answer is its own.
+COLONOSCOPY_INTERPRETATIONS = ((COLONOSCOPY, REPORT_INTERPRETATION),)
 COLONOSCOPY_THREE = COLONOSCOPY + 'A 20 mm sessile lesion in the ascending colon was dilated with a balloon to 15 mm.\n'
 SNARE = ('45385', 'was removed with a cold snare')
 BIOPSY = ('45380', 'was sampled with cold biopsy forceps')
@@ -163,6 +168,7 @@ class PrimaryInexact(TwoPassProvider):
                            usage={'creditsConsumed': 0.02}, usage_basis='provider_reported_credits_not_usd')
 
 
+@applied
 class SecondReviewSelectionIsNeverDroppedTests(Harness):
     """reports-0: the primary response selected 45380 without an exact passage, so 45380 was excluded early ("No exact
     source evidence", not reinstatable) and the biopsy stayed unresolved. The second review a reviewer asked for
@@ -228,6 +234,7 @@ class SecondReviewSelectionIsNeverDroppedTests(Harness):
         self.assertFalse(assessment.proposals.filter(bucket='alternative').exists())
 
 
+@applied
 class SecondReviewCheckNamesWhatItAccountsForTests(Harness):
     """reports-2: two asked items (a forceps biopsy and a balloon dilation); the second review selected only 45380. The
     stored check said 45380 "account[s] for them" - both asked items - while the same assessment still lists the
@@ -300,6 +307,7 @@ No polyps were seen.
 """
 
 
+@applied
 class DocumentedVisitWithoutAProposalTests(Harness):
     """reports-1: an office visit (documented as performed, with or without a significant, separately identifiable E/M)
     beside a same-day colonoscopy; the provider selected only 45378. The reconciliation does not list the visit as
@@ -421,20 +429,27 @@ class VisitNotCountedSaysWhyTruthfullyTests(SimpleTestCase):
 
 STILL_NEEDS = "each still needs a reviewer's decision"
 DECIDED = "Every documented service has a proposal with a reviewer's decision, but the review is not complete."
-CONTEXT_PENDING = 'The encounter context changed; re-assessment has not finished.'
+CONTEXT_PENDING = 'The codes are from before the latest change; the update has not finished.'  # amendment 1, 5.3
 
 
-class PendingReviewSaysWhatIsMissingTests(Harness):
+class PendingReviewSaysWhatIsMissingTests(RecordedInterpretation, Harness):
     """reports-3: both proposals approved, then a context change (the re-assessment queued) and a Stop. Coding
     completeness said "Every documented service has a proposal; each still needs a reviewer's decision" in the draft
     TXT, the draft CSV row, the API and the banner, while every proposal carried a current approval - which carried
     unchanged once resumed. pending_review names a missing decision only for the proposals that have none (counted as
     readiness counts them); when every proposal is decided it says what readiness still waits for."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    # DECISIONS D243 class C: a test that approves through the product, which reads event_coding@2 only (FINAL-V2 6.5),
+    # builds its rows by design v2's path in replay (tests/v2_replay.py) from the colonoscopy report with its endoscopist
+    # named (tests/v2_documents.COLONOSCOPY) - never the v1 chain's.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.COLONOSCOPY, v2_documents.colonoscopy_answer),)
 
     def approved(self, *codes):
         from tests.test_pipeline_api import FakeProvider
         self.use(FakeProvider(selections=[SNARE, BIOPSY]))
-        encounter_id = self.create(COLONOSCOPY)
+        encounter_id = self.create(v2_documents.COLONOSCOPY if v2_replay.marked(self) else COLONOSCOPY)
         drain()
         for code in codes:
             self.decide(encounter_id, code, 'approve')
@@ -444,6 +459,7 @@ class PendingReviewSaysWhatIsMissingTests(Harness):
         (row,) = [line for line in self.csv_text(encounter_id).split('\r\n') if '"coding_completeness"' in line]
         return row
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_every_proposal_decided_is_never_told_it_needs_a_decision(self):
         encounter_id = self.approved('45385', '45380')
         self.assertEqual(self.detail(encounter_id)['coding']['state'], 'reviewed')
@@ -471,6 +487,7 @@ class PendingReviewSaysWhatIsMissingTests(Harness):
         drain()
         self.assertEqual(self.detail(encounter_id)['coding']['state'], 'reviewed')  # the approvals carried unchanged
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_partly_decided_set_counts_what_still_needs_a_decision(self):
         coding = self.detail(self.approved('45385'))['coding']
         self.assertEqual(coding['state'], 'pending_review')
@@ -505,6 +522,7 @@ def mark_title(html, text):
     return found.group(1) if found else None
 
 
+@applied
 class NotCheckedPassagesAreNeverEvidenceTests(Harness):
     """reports-4: a biopsy code proposed for a colonoscopy where no biopsy is documented is held (act_missing); its stored
     support says "Not checked: the documented service or act is not established as performed" and keeps the service's
@@ -553,13 +571,17 @@ class NotCheckedPassagesAreNeverEvidenceTests(Harness):
 NONE_PROPOSED = 'No CPT codes were proposed for this document.'
 
 
-class NothingIsSaidOfAResponseNeverReadTests(Harness):
+class NothingIsSaidOfAResponseNeverReadTests(RecordedInterpretation, Harness):
     """reports-5: with the provider outcome unknown (a request sent, no complete response read), and still after a
     member reconciled it and stopped the one new attempt, the suggestions panel said "No CPT codes were proposed for this
     document" beside the stored provider check "...its outcome is unknown, so there are no CPT proposals... This is not a
     finding that no codes apply" (the export said "nothing from it was used"). The panel says nothing was proposed only
     of a response the assessment read; otherwise it shows the provider check's own wording - for an unknown outcome,
-    a failure and a provider that was not run alike."""
+    a failure and a provider that was not run alike.
+
+    On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
+    interpretation, and the run these tests assert about is Corti's primary run, which the interpretation's own run
+    now stands beside (FINAL 6.3)."""
 
     def codes_tab(self, encounter_id):
         return page(self.detail(encounter_id))['codes'].replace('&#x27;', "'")
@@ -570,7 +592,8 @@ class NothingIsSaidOfAResponseNeverReadTests(Harness):
                               outcome='unknown'))
         encounter_id = self.create(OFFICE_NOTE)
         drain()
-        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        # the encounter's one run but the interpretation's own, which the production chain makes before the predict
+        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id).exclude(purpose=interpretation.PURPOSE)
         self.assertEqual((run.state, run.sent), ('unknown', True))
         check = self.encounter_check(encounter_id, 'provider.status')
         self.assertEqual(check['status'], 'warn')
@@ -597,7 +620,9 @@ class NothingIsSaidOfAResponseNeverReadTests(Harness):
         self.addCleanup(patcher.stop)
         encounter_id = self.create(OFFICE_NOTE)
         drain()
-        self.assertFalse(models.ProviderRun.objects.filter(encounter_id=encounter_id).exists())
+        # no provider run but the interpretation's own, which the production chain makes before the predict
+        self.assertFalse(models.ProviderRun.objects.filter(encounter_id=encounter_id)
+                         .exclude(purpose=interpretation.PURPOSE).exists())
         check = self.encounter_check(encounter_id, 'provider.status')
         self.assertEqual(check['status'], 'not_verified')
         html = self.codes_tab(encounter_id)
@@ -632,6 +657,7 @@ def visit_beside_findings_read_in_part():
 CECUM = ('45378', 'The colonoscope was advanced to the cecum')
 
 
+@applied
 class UnresolvedCheckNamesTheUnlistedVisitTests(Harness):
     """Skeptic of the reports-1 repair (bc261aee3): completeness.not_listed held the office visit (covered [], never
     listed as unresolved beside a same-day procedure), and coding completeness and UNRESOLVED named it - yet the stored
@@ -726,6 +752,7 @@ PROBLEM_TAIL = ('the documented-service reading reported a problem, listed under
 EXCEPT_VISIT = f', except {UNLISTED_VISIT}, which no proposal accounts for and which is not listed as unresolved'
 
 
+@applied
 class UnresolvedSectionNamesTheUnlistedVisitTests(Harness):
     """Skeptic of the reports-1 repair (bc261aee3): the repair named the unlisted visit only on the closing line of a
     fully reconciled reading. Over a reading read in part (the visit, then a findings sentence of 1,315 characters),
@@ -829,13 +856,16 @@ def panel_copy(html):
     return [text.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&') for text in found]
 
 
-class SecondReviewOutcomeIsStatedTests(Harness):
+class SecondReviewOutcomeIsStatedTests(RecordedInterpretation, Harness):
     """Skeptic of the reports-5 repair (0f44cf065): the primary response was read with no code, the colonoscopy was
     offered for the second review and a reviewer asked for it (201). With that review's outcome unknown (sent, no
     response read), failed (HTTP 500) or refused whole (65 codes, over the cap), the suggestions panel still said "No
     CPT codes were proposed for this document": emptySelectionCopy read only summary.provider_status, the primary's
     'succeeded'. The panel states the outcome of the second review made for the answer the assessment reads (the API
     names it: second_review.run) whenever its response was not read or not used."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
 
     def asked(self, second, later=(('45378', SCOPE_SENTENCE),)):
         self.use(SecondOutcome([], list(later), second))
@@ -937,21 +967,27 @@ class FailedPrimary(TwoPassProvider):
         return RawExchange(outcome='failed', sent=True, http_status=500, error='HTTP 500 from the provider.')
 
 
-class RefusedResponseStateTests(Harness):
+class RefusedResponseStateTests(RecordedInterpretation, Harness):
     """Skeptic of the reports-5 repair: a response refused whole (65 selected codes, over the 64-code cap) - the primary's,
     or the second review's - left the encounter state 'no_codes', whose label "No CPT codes proposed" the documents list
     badge and the "Most recent" line show, beside the stored check "...was not used, so there are no CPT proposals. This
     is not a finding that no codes apply." (ARCHITECTURE, round 7 bypass:1: a response refused whole is never reported
     as one that proposed nothing). For the second review the readiness blocker said "No CPT code was proposed" too.
     The state is the provider's failure to give a usable result (provider_failed), state_run names the refused run, and
-    the label, the card and the blocker say that the response was not used."""
+    the label, the card and the blocker say that the response was not used.
+
+    On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE and COLONOSCOPY from their
+    recorded synthetic interpretations, and the run these tests assert about is Corti's primary run, which the
+    interpretation's own run now stands beside (FINAL 6.3)."""
+    interpretations = ((OFFICE_NOTE, OFFICE_INTERPRETATION),) + COLONOSCOPY_INTERPRETATIONS
 
     def test_a_primary_response_refused_whole_is_never_labelled_no_codes_proposed(self):
         from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider
         self.use(FakeProvider(selections=[OFFICE_TIME] * 65))
         encounter_id = self.create(OFFICE_NOTE)
         drain()
-        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        # the encounter's one run but the interpretation's own, which the production chain makes before the predict
+        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id).exclude(purpose=interpretation.PURPOSE)
         self.assertEqual(run.state, 'succeeded')
         self.assertEqual(self.encounter_check(encounter_id, 'provider.status')['status'], 'fail')
         detail = self.detail(encounter_id)
@@ -1007,7 +1043,7 @@ class RefusedResponseStateTests(Harness):
         self.use(FailedPrimary([], []))
         failed = self.create(OFFICE_NOTE)
         drain()
-        (run,) = models.ProviderRun.objects.filter(encounter_id=failed)
+        (run,) = models.ProviderRun.objects.filter(encounter_id=failed).exclude(purpose=interpretation.PURPOSE)
         detail = self.detail(failed)
         self.assertEqual((run.state, detail['state'], detail['state_label'], detail['state_run']),
                          ('failed', 'provider_failed', 'Provider request failed', str(run.pk)))
@@ -1021,11 +1057,14 @@ class RefusedResponseStateTests(Harness):
 READ_NONE = 'No CPT code was proposed in the response that was read'
 
 
-class SecondReviewOutcomeBlockerTests(Harness):
+class SecondReviewOutcomeBlockerTests(RecordedInterpretation, Harness):
     """Found while refuting the two repairs above: with the primary response read with nothing selected and the second
     review's outcome unknown (sent, no response read) or failed, the readiness blocker - in the API, the draft TXT's
     review status and the export dialog - still said "No CPT code was proposed", of a document whose second review was
     never read. It says that no code was proposed in the response that was read, and how the second review ended."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
 
     def asked(self, second, later=(('45378', SCOPE_SENTENCE),)):
         self.use(SecondOutcome([], list(later), second))

@@ -10,18 +10,23 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from studio import jobs, models
-from tests.test_pipeline_api import drain
+from tests.legacy_chain import applied
+from tests.test_pipeline_api import OFFICE_NOTE_STATE, RecordedInterpretation, drain
 from tests.support.operator import OperatorReads
-from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
+from tests.test_repairs_pipeline import FIRST_DATE, INTERPRETATIONS, LIVE, NO_DATE_NOTE, ApiHarness
 
 
 @override_settings(**LIVE)
-class ResumeOnlyTheLatestCancelledStageTests(OperatorReads, ApiHarness, TestCase):
+class ResumeOnlyTheLatestCancelledStageTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """pipeline:0 — a stale Resume never re-runs an older stage."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes from their recorded synthetic
+    # interpretations.
+    interpretations = INTERPRETATIONS
 
     def test_a_second_resume_after_the_resumed_send_failed_is_refused(self):
         encounter_id = self.create()
         jobs.run_job(jobs.claim_next())  # extract
+        jobs.run_job(jobs.claim_next())  # interpret
         jobs.run_job(jobs.claim_next())  # analyze: the predict is now queued
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
         drain()
@@ -42,7 +47,7 @@ class ResumeOnlyTheLatestCancelledStageTests(OperatorReads, ApiHarness, TestCase
             drain()
             self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
-        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_resume_after_a_completed_review_is_refused(self):
         encounter_id = self.create()
@@ -57,13 +62,16 @@ class ResumeOnlyTheLatestCancelledStageTests(OperatorReads, ApiHarness, TestCase
 
 
 @override_settings(**LIVE)
-class MetadataChangesNeverResendTests(OperatorReads, ApiHarness, TestCase):
+class MetadataChangesNeverResendTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """Round 3, pipeline3:0 — ARCHITECTURE 5.4: a setting or billing change leaves the request unchanged, so it
     re-checks with the run in use and sends nothing, whatever that run's outcome.
 
     fb65bf79f implemented pipeline:1, which its second, final verifier had REFUTED, and re-sent the identical
     request after a failed or not-sent run on every metadata save. These pin the contract instead.
     """
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE or NO_DATE_NOTE from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
 
     def change(self, encounter_id, *bodies):
         for body in bodies:
@@ -120,8 +128,11 @@ class MetadataChangesNeverResendTests(OperatorReads, ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class LegacyRunServiceDateTests(OperatorReads, ApiHarness, TestCase):
+class LegacyRunServiceDateTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """pipeline:2 — a run recorded before ProviderRun.service_date existed keeps the date its request carried."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes from their recorded synthetic
+    # interpretations.
+    interpretations = INTERPRETATIONS
 
     def legacy_run(self, encounter_id):
         run = models.Encounter.objects.get(pk=encounter_id).current_assessment.provider_run
@@ -150,15 +161,18 @@ class LegacyRunServiceDateTests(OperatorReads, ApiHarness, TestCase):
         # (the old assessment also used this run, so checking the run alone would pass either way).
         self.assertEqual(encounter.current_assessment.context_id, encounter.current_context_id)
         self.assertEqual(encounter.current_assessment.provider_run_id, run.pk)
-        self.assertEqual(encounter.state, 'ready_for_review')
+        self.assertEqual(encounter.state, OFFICE_NOTE_STATE)
         self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, state=models.Job.FAILED).exists())
         self.assertEqual(len(self.provider.sent), 1)
 
 
 @override_settings(**LIVE)
-class SettledStagesStayResumableTests(OperatorReads, ApiHarness, TestCase):
+class SettledStagesStayResumableTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """pipeline:3 — a stage the sweep settles, or that expires in the queue, can be resumed; it never strands
     the encounter as an extraction failure."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes from their recorded synthetic
+    # interpretations.
+    interpretations = INTERPRETATIONS
 
     def test_an_extract_cut_short_by_a_dead_worker_is_resumable(self):
         encounter_id = self.create()
@@ -171,7 +185,7 @@ class SettledStagesStayResumableTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(encounter.state, 'stopped')
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
-        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_stage_that_expired_in_the_queue_is_resumable(self):
         encounter_id = self.create()
@@ -180,20 +194,22 @@ class SettledStagesStayResumableTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'stopped')
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
-        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_an_extract_resumed_after_its_text_was_recorded_goes_on_to_analysis(self):
         encounter_id = self.create()
         job = jobs.claim_next()
         jobs.STAGES[models.Job.EXTRACT](job)  # the text is recorded, then the worker dies before saving the job
         models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
-        models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.ANALYZE).delete()
+        # the stage extract queued after recording the text: on the production chain the interpretation (FINAL 6.2)
+        models.Job.objects.filter(encounter_id=encounter_id, kind=jobs.INTERPRET).delete()
         jobs.mark_stale()
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
-        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, OFFICE_NOTE_STATE)
 
 
+@applied
 @override_settings(**LIVE)
 class RoutingSummaryTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:4 — the detail's routing is the routing the current assessment used."""

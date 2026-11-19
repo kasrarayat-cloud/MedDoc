@@ -43,13 +43,14 @@ from studio import candidates, jobs, models, review
 from studio.gi import context as gi_context
 from studio.types import EvidenceSpan, LocatedQuote, PageSpan, ParticipantReading, ParticipantService, sha256_json
 from tests import test_harness2_api as h2
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_frontend import candidate_id
-from tests.test_harness2_pipeline import HEAD, TWO_EXTENTS, ColonCase, answered, reading
+from tests.test_harness2_pipeline import HEAD, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS, ColonCase, answered, reading
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
 from tests.test_harness2_r2_peer import EMPTY_PEER, posted_bodies
 from tests.test_harness_pipeline import TIME_QUOTE
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 ROOT = Path(settings.BASE_DIR)
 SETTINGS_FILE = ROOT / 'cptstudio' / 'settings.py'
@@ -187,7 +188,10 @@ class EndpointTests(h2.Harness2Case):
         self.assertEqual(counts(), before)
 
 
-class ReassessTests(ColonCase):
+class ReassessTests(RecordedInterpretation, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_a_re_assessment_after_a_confirmation_is_refused_and_nothing_is_queued(self):
         encounter_id = self.create(TWO_EXTENTS)
         drain()
@@ -205,7 +209,10 @@ class ReassessTests(ColonCase):
         self.assertEqual((job.kind, ':c:' in job.idempotency_key), ('assess', True))
 
 
-class StoredRowTests(ColonCase):
+class StoredRowTests(RecordedInterpretation, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_a_stored_confirmation_is_never_read_and_the_assessment_is_the_one_made_without_it(self):
         twin = self.create(TWO_EXTENTS)  # the same document and answers, with no confirmation anywhere
         drain()
@@ -301,6 +308,7 @@ CONFIRMED = 'documented as performed on the same date'
 REVIEWER = 'Rowan Synthetic-Reviewer Zq'
 
 
+@applied
 class PeerRequestTests(PipelineCase):
     """Refutation round 3's peer-2 (verifier v3-peer-rest): a reviewer's confirmation of 45331's status, after a
     member's save, reached the next chain's peer requests as CPT Studio's own reading of 99213's same-day rule, and
@@ -377,6 +385,7 @@ class PeerRequestTests(PipelineCase):
 
 # --- falsegreen-11: the rows the API tests and the website fixtures pin are the pipeline's own ----------------------
 
+@applied
 @override_settings(**h2.BOTH)
 class CaseFidelityTests(h2.Harness2Case):
     """Refutation round 3's falsegreen-11: tests.test_harness2_api.Harness2Case - whose assessments the API tests pin

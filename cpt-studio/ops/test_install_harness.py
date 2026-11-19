@@ -23,7 +23,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import FakeOwnership, TemporaryDirectoryTest, guard_host, release_host, run_body  # noqa: E402
+from test_install import (FakeOwnership, TemporaryDirectoryTest, guard_host, pre_switch_answer,  # noqa: E402
+                          release_host, run_body)
 
 
 def setUpModule():
@@ -50,6 +51,12 @@ ANTHROPIC_FILE = f'export ANTHROPIC_API_KEY="{ANTHROPIC_VALUE}"  # synthetic\n'.
 CORTI_VALUE = 'synthetic-corti-client-secret-0123456789'
 CORTI_FILE = (f'CORTI_CLIENT_ID=synthetic-client\nCORTI_CLIENT_SECRET={CORTI_VALUE}\nCORTI_ENVIRONMENT=eu\n'
               'CORTI_TENANT_NAME=synthetic-tenant\n').encode()
+# The interpreter's credential (AMENDMENT-2 1.11): the Fable participant's file, whose synthetic stand-in is
+# ANTHROPIC_FILE; the earlier Gemini interpreter's own key copy (DECISIONS D14: one line GEMINI_API_KEY=<53 characters>,
+# 69 bytes), synthetic and in that shape, which the installer now only reports (install.LEGACY_INTERPRETER_COPY).
+INTERPRETER = install.INTERPRETER
+GEMINI_VALUE = 'synthetic-gemini-key-' + '0123456789abcdefghijklmnopqrstuvwxyz'[:32]
+GEMINI_FILE = f'GEMINI_API_KEY={GEMINI_VALUE}\n'.encode()
 
 
 def flags(argv, flag):
@@ -215,16 +222,42 @@ class StopTimeoutTests(unittest.TestCase):
                          [str(install.STOP_SECONDS['worker'])])
         # the access check sends once and must not be cut off before the send deadline
         self.assertGreater(install.ACCESS_CHECK_SECONDS, participant)
+        # AMENDMENT-2 1.12 (DECISIONS D289's G2-01): each of the interpreter's reading stages - its 1,320 s send, the
+        # 15 s recording and 45 s of its own work: 1,380 s - ends before the worker is stopped (D49's 510/560 s are the
+        # dormant Gemini adapter's alone now)
+        deadlines = settings_value('JOB_DEADLINE_SECONDS')
+        for kind, send in (('interpret', 'INTERPRETER_SEND_DEADLINE_SECONDS'),
+                           ('appraise', 'APPRAISER_SEND_DEADLINE_SECONDS')):
+            with self.subTest(kind=kind):
+                self.assertEqual((settings_value(send), deadlines[kind]), (1320, 1380))
+                self.assertGreater(deadlines[kind], settings_value(send))
+                self.assertGreater(install.STOP_SECONDS['worker'], deadlines[kind])
 
-    def test_the_worker_outlasts_a_whole_tool_loop_and_stops_at_the_stale_sweeps_bound(self):
+    def test_the_worker_outlasts_every_stage_deadline(self):
+        # W9R-BUILD-LIST B21 (G2-01 (i), F8's half; DECISIONS D289): with STOP_SECONDS['worker'] 1,800 (round r3, D322
+        # (4); 1,500 by AMENDMENT-2 1.12), the stop outlasts every stage kind's JOB_DEADLINE_SECONDS, so a deploy's
+        # docker stop lets the stage the worker is in finish - a reading's or a question round's sends included -
+        # instead of cutting it into an unknown outcome
+        self.assertEqual(install.STOP_SECONDS['worker'], 1800)
+        deadlines = settings_value('JOB_DEADLINE_SECONDS')
+        self.assertGreaterEqual(len(deadlines), 12)  # positive control: the whole table was read
+        self.assertEqual(max(deadlines.values()), 1588)  # the question stage's, the longest
+        self.assertEqual(max(value for kind, value in deadlines.items() if kind != 'question'), 1380)  # the readings'
+        for kind, deadline in deadlines.items():
+            with self.subTest(kind=kind):
+                self.assertGreater(install.STOP_SECONDS['worker'], deadline)
+
+    def test_the_worker_outlasts_a_whole_tool_loop_and_every_stale_sweeps_bound(self):
         # harness@2 (HARNESS.md 11.2): one participant phase is a loop of at most PARTICIPANT_MAX_EXCHANGES exchanges
         # within PARTICIPANT_LOOP_DEADLINE_SECONDS; a stop must let it record its outcome, and a stage the stop
-        # outlasts is one the stale-stage sweep settles as cut short anyway.
+        # outlasts is one the stale-stage sweep settles as cut short anyway. AMENDMENT-2 1.12: the reading stages
+        # have a stale threshold of their own (1,440 s; round r3: 1,560 s for appraise, which plans the first question
+        # round, and 1,768 s for the question stage), and the stop (1,800 s) is above every threshold.
         loop, stale = settings_value('PARTICIPANT_LOOP_DEADLINE_SECONDS'), settings_value('STALE_RUNNING_SECONDS')
-        self.assertEqual((loop, stale), (540, 600))
+        by_kind = settings_value('STALE_RUNNING_SECONDS_BY_KIND')
+        self.assertEqual((loop, stale, by_kind), (540, 600, {'interpret': 1440, 'appraise': 1560, 'question': 1768}))
         self.assertGreater(install.STOP_SECONDS['worker'], loop)
-        self.assertEqual(install.STOP_SECONDS['worker'], stale)
-        self.assertEqual(install.STOP_SECONDS['worker'], 600)
+        self.assertGreater(install.STOP_SECONDS['worker'], max([stale, *by_kind.values()]))
         self.assertEqual(install.STOP_SECONDS['web'], 30)  # the web sends nothing: unchanged
         self.assertGreater(loop, settings_value('PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS'))
 
@@ -252,8 +285,8 @@ class StopTimeoutTests(unittest.TestCase):
             install.remove_service_container(install.SERVICES['worker'], 'worker')
             install.stop_service_container(install.SERVICES['worker'], 'worker')
         stops = [(args, kwargs) for args, kwargs in calls if args[0] == 'stop']
-        self.assertEqual([args[:3] for args, _ in stops], [('stop', '--time', '600')] * 3)
-        self.assertTrue(all(kwargs['timeout'] > 600 for _, kwargs in stops))
+        self.assertEqual([args[:3] for args, _ in stops], [('stop', '--time', '1800')] * 3)  # round r3 (D322 (4))
+        self.assertTrue(all(kwargs['timeout'] > 1800 for _, kwargs in stops))
 
 
 class ServiceMountTests(unittest.TestCase):
@@ -461,7 +494,7 @@ class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
         self.assertIn('is not the 10150:10150 0400 regular file', self.refused())
 
     def test_phase_secrets_runs_the_participant_step_only_after_the_three_file_set(self):
-        order = []
+        order, copied = [], []
 
         def helper(body, params, **kwargs):
             order.append(body)
@@ -469,13 +502,30 @@ class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
                 return {'etc_dir': 'present'}
             if body is install.H_SECRETS:
                 return {'state': 'present', 'files': {}}
+            names = [entry['name'] for entry in params['participants']]
+            copied.append(names)
             return {'participants': {'astra': {'state': 'created'}, 'fable': {'state': 'not provided'}}}
-        stat = {install.PROVIDER_SOURCES: {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}}
-        with mock.patch.object(install, 'run_helper', helper), mock.patch.object(install, 'helper_stat',
-                                                                                 return_value=stat):
-            result = install.phase_secrets(SimpleNamespace())
-        self.assertEqual(order, [install.H_ETC_DIR, install.H_SECRETS, install.H_PARTICIPANT_SECRETS])
-        self.assertIn('participant credentials: astra created, fable not provided', result['summary'])
+        folder = {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}
+        for legacy, said in (({'exists': False}, 'absent'),
+                             ({'exists': True, 'kind': 'file', 'uid': 10150, 'gid': 10150, 'mode': '0o400'}, 'present')):
+            order.clear()
+            copied.clear()
+            stat = {install.PROVIDER_SOURCES: folder, install.LEGACY_INTERPRETER_COPY: legacy}
+            with self.subTest(legacy=said), mock.patch.object(install, 'run_helper', helper), \
+                    mock.patch.object(install, 'helper_stat', side_effect=lambda paths: {p: stat[p] for p in paths}):
+                result = install.phase_secrets(SimpleNamespace())
+                # AMENDMENT-2 1.11: one copy run - the participants', which copies the Fable participant's file, the
+                # interpreter's too - and no run of the interpreter's own
+                self.assertEqual(order, [install.H_ETC_DIR, install.H_SECRETS, install.H_PARTICIPANT_SECRETS])
+                self.assertEqual(copied, [['astra', 'fable']])  # the participants' set exactly as it was
+                self.assertIn('participant credentials: astra created, fable not provided', result['summary'])
+                self.assertIn("interpreter credentials: anthropic not provided (the fable participant's file)",
+                              result['summary'])
+                self.assertEqual(result['interpreter_credentials'],
+                                 {'anthropic': {'state': 'not provided', 'shared_with': 'fable'}})
+                # the earlier interpreter's key copy is reported, never written, read or removed
+                self.assertEqual(result['legacy_interpreter_copy']['state'], said)
+                self.assertEqual(install.LEGACY_COPY_NOTE in result['summary'], said == 'present')
 
         def refusing(body, params, **kwargs):
             order.append(body)
@@ -551,11 +601,18 @@ class AppWorld:
         (self.scan_dir / 'astra').write_bytes(OPENAI_FILE)
         (self.scan_dir / 'fable').write_bytes(ANTHROPIC_FILE)
         (self.scan_dir / 'corti').write_bytes(CORTI_FILE)
-        self.stat = {ASTRA['target']: INSTALLED, FABLE['target']: INSTALLED, install.CORTI_TARGET: INSTALLED}
+        # the interpreter's credential is the Fable participant's file (AMENDMENT-2 1.11), scanned under its own name
+        (self.scan_dir / INTERPRETER['name']).write_bytes(ANTHROPIC_FILE)
+        self.stat = {ASTRA['target']: INSTALLED, FABLE['target']: INSTALLED, install.CORTI_TARGET: INSTALLED,
+                     INTERPRETER['target']: INSTALLED}
+        self.interpreter = None  # the interpreter mode replace_services was named with (None: not named)
 
     def respond(self, command, kwargs):
         if command[:2] == ['manage', 'shell'] and command[-1] == install.CREDENTIALS_CHECK:
             return SimpleNamespace(returncode=0, stdout=b'corti-credentials-parse-ok\n', stderr=b'')
+        if command[:2] == ['manage', 'shell'] and command[-1] == install.INTERPRETER_CREDENTIALS_CHECK:
+            return self.answers.get(('parse', INTERPRETER['name'])) or SimpleNamespace(
+                returncode=0, stdout=f'{INTERPRETER["name"]}-credentials-parse-ok\n'.encode(), stderr=b'')
         if command[:2] == ['manage', 'shell']:
             name = next(name for name, body in install.PARTICIPANT_CREDENTIALS_CHECKS.items() if body == command[-1])
             return self.answers.get(('parse', name)) or SimpleNamespace(
@@ -573,14 +630,18 @@ class AppWorld:
 
     def app_script(self, image_id, env_bytes, body, params, **kwargs):
         self.timeline.append(('script', body))
+        if pre_switch_answer(body) is not None:  # design v2's reads before the switch (step 6b)
+            return self.answers.get(('script', body)) or pre_switch_answer(body)
         if body == install.UNRUNNABLE_STAGES:
             return {'known': ['analyze', 'assess', 'astra', 'extract', 'fable', 'predict', 'review2'], 'stuck': 0,
                     'kinds': []}
         return {'encounters': 0, 'changed': {}}
 
-    def replace(self, ctx, image_id, env_bytes, mode, reference, participants=None):
+    def replace(self, ctx, image_id, env_bytes, mode, reference, participants=None, **named):
         self.timeline.append(('replace', mode, reference, participants))
-        return {'started': {}, 'replaced': {}}
+        self.interpreter = named.pop('interpreter', None)
+        assert not named, named  # replace_services takes nothing else by name
+        return {'started': {}, 'replaced': {}, 'worker_started_at': '2026-11-09T10:00:00.000Z'}
 
     def helper(self, body, params, *, mounts, sensitive=False, **kwargs):
         """run_helper for H_CREDENTIAL_SCAN, its body run here on the synthetic credentials files."""
@@ -602,10 +663,12 @@ class AppWorld:
                 mock.patch.object(install, 'run_helper', self.helper)]
 
 
-def app_args(tmp, *, provider='disabled', astra='live', fable='live', access=None):
-    reference = RULING if 'live' in (provider, astra, fable) else ''
+def app_args(tmp, *, provider='disabled', astra='live', fable='live', access=None, interpreter=None):
+    reference = RULING if 'live' in (provider, astra, fable, interpreter) else ''
+    named = {} if interpreter is None else {'interpreter_mode': interpreter}  # as the earlier tests built args
     return SimpleNamespace(phase='app', revision=REVISION, receipts=str(tmp), provider_mode=provider,
-                           authorization_ref=reference, astra_mode=astra, fable_mode=fable, access_check=access)
+                           authorization_ref=reference, astra_mode=astra, fable_mode=fable, access_check=access,
+                           **named)
 
 
 class AppPhaseParticipantTests(TemporaryDirectoryTest):
@@ -690,8 +753,8 @@ class AppPhaseParticipantTests(TemporaryDirectoryTest):
         checks = [(index, event) for index, event in enumerate(timeline)
                   if event[0] == 'oneshot' and event[1] == ('manage', 'participant_access_check')]
         self.assertEqual([event[2] for _, event in checks],
-                         [['manage', 'participant_access_check', '--participant', 'astra'],
-                          ['manage', 'participant_access_check', '--participant', 'fable']])
+                         [['manage', 'participant_access_check', '--wait-for-lock', '--participant', 'astra'],
+                          ['manage', 'participant_access_check', '--wait-for-lock', '--participant', 'fable']])
         self.assertTrue(all(index > recompute for index, _ in checks))
         for (_, event), name in zip(checks, ('astra', 'fable')):
             kwargs, spec = event[3], install.PARTICIPANTS[name]
@@ -1145,15 +1208,21 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
             closed.update(kinds=kinds, reason=reason)
             return {'closed': 2, 'kinds': ['astra', 'fable'], 'hazards': {}, 'relabel': []}
         names = {install.SERVICES[role]: role for role in ('web', 'worker')}
+        def counted(image_id, env_bytes, body, params, **kwargs):  # ADJUDICATION P-1's note, read in this image
+            self.assertEqual((image_id, body), (IMAGE, install.INTERPRETATION_MADE))
+            return {'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}
         with mock.patch.object(install, 'inspect', side_effect=lambda kind, name: live.get(names.get(name))), \
                 mock.patch.object(install, 'docker', fake_docker), \
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \
                 mock.patch.object(install, 'require_db'), \
                 mock.patch.object(install, 'undo_hazards', return_value={}), \
                 mock.patch.object(install, 'close_undone_stages', close), \
+                mock.patch.object(install, 'app_script', counted), \
                 mock.patch.object(install, 'put_back_states', return_value={'encounters': 0, 'changed': {}}):
             details = install.phase_rollback_app(install.Context(SimpleNamespace(phase='rollback-app',
                                                                                  revision=REVISION), self.tmp))
+        self.assertEqual(details['interpretation']['note'],
+                         '0 assessments were made from event inventories; the earlier image reads them fail-closed')
         self.assertEqual(closed['kinds'], list(install.COMMON_STAGE_KINDS))
         self.assertEqual(closed['reason'], 'its web and worker were removed (rollback-app)')
         self.assertEqual(details['stages_closed']['kinds'], ['astra', 'fable'])

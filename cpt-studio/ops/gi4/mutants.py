@@ -249,7 +249,8 @@ PD_MUTANTS = (
            "        if _READING[kind] != 'own':\n", _PD_UNIT),
     Mutant('pd-head-reach', 'wide labels are read in the head only', _PD_CONTEXT,
            '    return min(head_lines_end(text, TITLE_LINES), first)\n', '    return len(text)\n', _PD_UNIT),
-    Mutant('pd-rule-a-readers-read-x', "a wide label's question is read as the narrow release's (every reader reads X)", _PD_CONTEXT,
+    Mutant('pd-rule-a-readers-read-x', "a wide label's question is read as the narrow release's (every reader reads X)",
+           'studio/context_facts.py',  # re-homed from studio/gi/context.py by the Gemini migration (S04)
            "    if get('origin') != 'conflict' or not note.startswith((_CHARGE_NOTE_HEAD, _WIDE_NOTE_HEAD)) \\\n",
            "    if get('origin') != 'conflict' or not note.startswith(_CHARGE_NOTE_HEAD) \\\n", _PD_UNIT),
     Mutant('pd-rule-a-only-x', "rule (a) takes only the date the installed reading sends", _PD_CONTEXT,

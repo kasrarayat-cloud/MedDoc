@@ -1,0 +1,7 @@
+SYNTHETIC ENDOSCOPY REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+EGD: The gastroscope was advanced to the second portion of the duodenum.
+Push enteroscopy: The enteroscope was then advanced to the proximal jejunum.
+On withdrawal, a polypectomy of a 7 mm gastric body polyp was performed.

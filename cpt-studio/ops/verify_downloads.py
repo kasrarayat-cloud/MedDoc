@@ -44,6 +44,12 @@ Format @4 adds, and these are checked only in a file that names that format:
            conflict row per persisted conflict; every source passage of a
            proposal row is the API's and quotes the revision text exactly
 
+The Gemini migration's new path (cpt-studio/design: FINAL.md 4.3, 8.3), read
+where the encounter JSON's assessment is the events engine's: its services
+record is a stub with no service, conflict or act (so no conflict entry is
+listed and no act's evidence is quoted: the anchors are support.source), and a
+contradiction is one line, the detail of its 'services.conflicts' check.
+
 And only where the encounter JSON records it: a bounded second review (its
 Origin lines, alternatives and usage entry), and a member date conflict's hold
 (PROVIDER USAGE lists it as recorded with nothing sent, no usage and no hashes,
@@ -591,11 +597,14 @@ def _txt_documented(doc, name, text, sections, api, revision_text) -> list[Resul
                       f'section {"missing" if heading is None else "differs"}: listed {sorted(listed)}, persisted '
                       f'{sorted(expected)}'))
     conflict_lines = body.get('CONFLICTS IN THE RECORD', [])
-    named = {(line.split('(', 1)[1].split(')', 1)[0], line[4:].split(' (', 1)[0].replace(' ', '_'))
-             for line in conflict_lines if line.startswith('  - ') and '(' in line}
-    out.append(Result(doc, name, 'txt.conflicts', 'pass' if named == conflicts else 'fail',
-                      f'{len(named)} conflict(s) listed, as persisted' if named == conflicts else
-                      f'listed {sorted(named)}, persisted {sorted(conflicts)}'))
+    if events_engine(api):
+        out.append(_txt_event_conflicts(doc, name, conflict_lines, api))
+    else:
+        named = {(line.split('(', 1)[1].split(')', 1)[0], line[4:].split(' (', 1)[0].replace(' ', '_'))
+                 for line in conflict_lines if line.startswith('  - ') and '(' in line}
+        out.append(Result(doc, name, 'txt.conflicts', 'pass' if named == conflicts else 'fail',
+                          f'{len(named)} conflict(s) listed, as persisted' if named == conflicts else
+                          f'listed {sorted(named)}, persisted {sorted(conflicts)}'))
     # A passage over several lines is one entry (the renderer continues it at nine spaces and closes it on its last
     # line), read like an evidence entry; an opener with no closing citation cannot be checked and fails.
     entries, unclosed = scan_entries(text.splitlines(), SOURCE_OPENER, SOURCE_OPENER)
@@ -605,6 +614,25 @@ def _txt_documented(doc, name, text, sections, api, revision_text) -> list[Resul
                       f'source passages that do not quote the revision text at their offsets: {wrong}' if wrong
                       else f'{len(entries)} source passage(s) quote the revision text exactly at their offsets'))
     return out
+
+
+LEGACY_CONFLICT_END = '; both sides kept, neither chosen:'  # reports._conflicts_section's line of a stored conflict
+EVENT_CONFLICTS_HEAD = 'Conflicting statements'  # every services.conflicts warning's detail starts so (assess.py)
+
+
+def _txt_event_conflicts(doc, name, lines, api) -> Result:
+    """CONFLICTS IN THE RECORD of a new-path assessment: the services.conflicts check's detail as its one line where the
+    check warns, and no conflict entry of a stored services record - the stub stores none - nor a warning the check does
+    not make (reports._conflicts_section over reports._event_services)."""
+    note = conflict_note(api)
+    entries = [line for line in lines if line.startswith('  - ')]
+    stored = [line for line in entries if line.endswith(LEGACY_CONFLICT_END)]
+    worded = [line for line in entries if line[4:].startswith(EVENT_CONFLICTS_HEAD)]
+    want = [f'  - {note}'] if note else []
+    ok = not stored and worded == want
+    return Result(doc, name, 'txt.conflicts', 'pass' if ok else 'fail',
+                  ('the services.conflicts warning is listed, as recorded' if note else 'no conflict listed, none recorded')
+                  if ok else f'listed {worded + stored}; recorded {want or "no conflict"}')
 
 
 # --- harness@2 (cpt-studio/HARNESS.md 12.6) -------------------------------------------------------------------------
@@ -1002,14 +1030,40 @@ def _csv_second_review(doc, name, items_rows, columns, api) -> Result:
                   str(wrong) if wrong else f'{len(items_rows)} row(s) carry their persisted origin')
 
 
+# The Gemini migration's new path (design/FINAL.md 4.3, 8.3): an assessment the events engine made
+# (interpretation.is_new_assessment: its engine label) carries the stub services record - no service, conflict or act -
+# and words a contradiction in its encounter check 'services.conflicts', which reports._event_services prints as the one
+# line of CONFLICTS IN THE RECORD (conflict_note).
+EVENTS_ENGINE = 'cpt-studio-events@'
+CONFLICTS_CHECK = 'services.conflicts'
+
+
+def events_engine(api: dict) -> bool:
+    """Whether the encounter JSON's assessment was made by the events engine (the new path)."""
+    return str(((api or {}).get('assessment') or {}).get('engine_version') or '').startswith(EVENTS_ENGINE)
+
+
+def conflict_note(api: dict) -> str:
+    """The new path's line of CONFLICTS IN THE RECORD (reports._event_services' conflict_note): the detail of the
+    assessment's 'services.conflicts' check where it warns; '' where it does not, or for a legacy assessment."""
+    if not events_engine(api):
+        return ''
+    for check in (api.get('assessment') or {}).get('encounter_checks') or []:
+        if isinstance(check, dict) and check.get('id') == CONFLICTS_CHECK and check.get('status') == 'warn':
+            return str(check.get('detail') or '')
+    return ''
+
+
 def _documented_expected(api: dict):
     """(coding state, {(service, label)} unresolved, {(service, subject)} conflicts, {proposal id: [source spans]})
-    as the encounter JSON persists them."""
+    as the encounter JSON persists them. A new-path assessment persists no conflict entry (its stub's list is empty and
+    nothing else is read as one): its contradictions are conflict_note's one line."""
     assessment = api.get('assessment') or {}
     completeness = assessment.get('completeness') or {}
     inventory = assessment.get('services') or {}
     unresolved = {(u.get('service', ''), u.get('label', '')) for u in completeness.get('unresolved_items') or []}
-    conflicts = {(c.get('service', ''), c.get('subject', '')) for c in inventory.get('conflicts') or []}
+    conflicts = set() if events_engine(api) else {(c.get('service', ''), c.get('subject', ''))
+                                                  for c in inventory.get('conflicts') or []}
     sources = {p.get('id'): list((p.get('support') or {}).get('source') or []) for p in assessment.get('proposals') or []}
     return ((api.get('coding') or {}).get('state'), unresolved, conflicts, sources)
 
@@ -1183,7 +1237,7 @@ def _csv_evidence(doc, name, rows, columns, items, revision_text) -> list[Result
     return out
 
 
-# --- customer reports (cpt-studio-customer-report@1; cpt-studio/CORE-UX-DESIGN.md section 5) ------------------------
+# --- customer reports (cpt-studio-customer-report@2; cpt-studio/CORE-UX-DESIGN.md section 5) ------------------------
 #
 # A customer report is checked against the OPERATOR view of the encounter (today's full encounter view, as
 # GET /ops/api/encounters/<id> serves it): --api-dir/<encounter id>.json when given, otherwise the operator snapshot the
@@ -1200,8 +1254,11 @@ def _csv_evidence(doc, name, rows, columns, items, revision_text) -> list[Result
 #     SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS
 #     CPT STUDIO — APPROVED CODES | CPT STUDIO — SUGGESTED CODES — NOT APPROVED
 #     [Agent-executed synthetic review — not clinical approval]       when agent review took part in a listed approval
-#     Report format: cpt-studio-customer-report@1
+#     Report format: cpt-studio-customer-report@2
 #     Encounter: <title>
+#     Document: revision <n>                                          @2 (FINAL-V2 amendment 1, 8.2): the assessment's
+#     Details used: date of service <..>; place of service <..>; patient <..>; claim <..>
+#     Codes made: <ISO time>
 #     Date of service: <YYYY-MM-DD> | not established
 #     Generated: <ISO time> by <label>
 #
@@ -1223,10 +1280,11 @@ def _csv_evidence(doc, name, rows, columns, items, revision_text) -> list[Result
 # it, never read back by stripping seven spaces (refutation round 3, B-04).
 #
 # CSV, as reports.render_customer_csv writes it: the header row (CUSTOMER_CSV_COLUMNS), a banner row (report_format =
-# the SYNTHETIC line, every other cell empty), one row per quotation of each code (a code with none has one row with
-# empty evidence cells), and the banner row again last.
+# the SYNTHETIC line, every other cell empty but @2's three - revision_number, details_used, codes_made_at, on every row),
+# one row per quotation of each code (a code with none has one row with empty evidence cells), and the banner row again
+# last.
 
-CUSTOMER_FORMAT = 'cpt-studio-customer-report@1'
+CUSTOMER_FORMAT = 'cpt-studio-customer-report@2'
 CUSTOMER_KINDS = ('draft', 'approved')
 CUSTOMER_DRAFT_HEADLINE = re.compile(r'\bSUGGESTED\s+CODES\s*[-–—:]+\s*NOT\s+APPROVED\b', re.I)
 CUSTOMER_APPROVED_HEADLINE = re.compile(r'\bAPPROVED\s+CODES\b', re.I)
@@ -1240,8 +1298,8 @@ AGENT_SUB_LABEL = 'Agent-executed synthetic review — not clinical approval'
 # opened by "Quote:" (or "Evidence:", "Source:", a bullet), its passage between the first and the last quote mark, its
 # place in a trailing (...) or [...] ("page P", "characters S–E", "chars S-E"); headings at column 0 after a blank line.
 CUSTOMER_ITEM_LINE = re.compile(rf'^ {{0,6}}(?P<number>\d+)[.)]\s+(?P<code>{CODE})\b(?P<rest>.*)$')
-CUSTOMER_FIELD = re.compile(r'^(?P<name>Report format|Encounter|Date of service|Generated at|Generated by|Generated):\s*'
-                            r'(?P<value>.*)$', re.I)
+CUSTOMER_FIELD = re.compile(r'^(?P<name>Report format|Encounter|Document|Details used|Codes made|Date of service|Generated at|'
+                            r'Generated by|Generated):\s*(?P<value>.*)$', re.I)
 CUSTOMER_GENERATED = re.compile(r'^(?P<at>\S+)\s+by\s+(?P<by>\S.*)$')
 CUSTOMER_APPROVER = re.compile(r'^Approved by:?\s*(?P<by>.+?)(?:\s*\((?P<kind>agent|human)\))?\s*(?:\bat\b|\bon\b|·|,)\s*'
                                r'(?P<at>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}:?\d{2}|UTC)?)\s*$',
@@ -1256,7 +1314,10 @@ CUSTOMER_KNOWN_HEADING = re.compile(r'^(?:SUGGESTED\s+CODES\s*[-–—:]+\s*NOT\
 # reports.CUSTOMER_CSV_COLUMNS: CORE-UX-DESIGN.md 5's columns, then review_label (the agent label of a row's approval)
 CUSTOMER_CSV_COLUMNS = ('report_format', 'encounter_title', 'date_of_service', 'number', 'code', 'units', 'modifiers', 'status',
                         'approved_by', 'approver_kind', 'approved_at', 'summary', 'evidence_text', 'evidence_page',
-                        'evidence_start', 'evidence_end', 'review_label')
+                        'evidence_start', 'evidence_end', 'review_label', 'revision_number', 'details_used', 'codes_made_at')
+# @2 (FINAL-V2 amendment 1, 8.2): what the codes were made from, the same on every row, the banner rows included
+CUSTOMER_MADE_CELLS = ('revision_number', 'details_used', 'codes_made_at')
+CUSTOMER_DOCUMENT = re.compile(r'^revision (?P<number>\d+)$')
 CUSTOMER_APPROVAL_CELLS = ('approved_by', 'approver_kind', 'approved_at')
 CUSTOMER_QUOTE_CONTINUATION = '       '
 ISO_TIMESTAMP_LOOSE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$')
@@ -1315,7 +1376,10 @@ def agent_reviewed(p: dict) -> bool:
 
 
 def act_index(api: dict) -> dict:
-    """CPT Studio's located acts by id, from the operator view's recorded reading (assessment.services)."""
+    """CPT Studio's located acts by id, from the operator view's recorded reading (assessment.services), whatever the
+    engine - as review.act_index reads it for customer_api._act_index and review.approved_items. A new-path assessment's
+    services record is the stub (design/FINAL.md 4.3, 8.3), which carries no act, so its anchors are its support.source
+    alone."""
     out = {}
     services = ((api.get('assessment') or {}).get('services') or {}).get('services')
     for service in services if isinstance(services, list) else []:
@@ -1477,7 +1541,8 @@ def parse_customer_txt(text: str) -> dict:
     codes_section = False
     item = None
     entry = None
-    names = {name.lower(): name for name in ('Report format', 'Encounter', 'Date of service', 'Generated at', 'Generated by', 'Generated')}
+    names = {name.lower(): name for name in ('Report format', 'Encounter', 'Document', 'Details used', 'Codes made', 'Date of service',
+                                             'Generated at', 'Generated by', 'Generated')}
 
     def close_entry():
         nonlocal entry
@@ -1734,6 +1799,15 @@ def check_customer_txt(doc: str, name: str, text: str, kind: str, api: dict | No
         out.append(Result(doc, name, 'header.generated_by', 'pass' if fields.get('Generated by') == generated_by else 'warn',
                           f'{fields.get("Generated by")!r} (the walk signed in as {generated_by!r})'))
     revision = api.get('revision') or {}
+    # @2: the revision, the details and the time the codes were made (the assessment's own)
+    document = CUSTOMER_DOCUMENT.match(fields.get('Document') or '')
+    number = revision.get('number')
+    out.append(Result(doc, name, 'header.document', 'pass' if document and int(document.group('number')) == number else 'fail',
+                      f'Document: {fields.get("Document")!r} (operator revision {number!r})'))
+    out.append(Result(doc, name, 'header.details_used', 'pass' if (fields.get('Details used') or '').startswith('date of service ')
+                      else 'fail', f'Details used: {fields.get("Details used")!r}'))
+    out.append(Result(doc, name, 'header.codes_made', 'pass' if ISO_TIMESTAMP_LOOSE.match(fields.get('Codes made') or '') else 'fail',
+                      f'Codes made: {fields.get("Codes made")!r}'))
     truth = customer_truth(api, kind)
     agent = any(t['agent'] for t in truth)
     out.append(Result(doc, name, 'header.agent_label', 'pass' if parsed['header_agent'] == agent else 'fail',
@@ -1752,8 +1826,11 @@ def check_customer_txt(doc: str, name: str, text: str, kind: str, api: dict | No
 
 
 def _banner_row(row) -> bool:
-    """reports.render_customer_csv's banner row: report_format the SYNTHETIC line, every other cell empty."""
-    return bool(row) and bool(SYNTHETIC_MARK.search(row[0])) and not any(cell.strip() for cell in row[1:])
+    """reports.render_customer_csv's banner row: report_format the SYNTHETIC line, every other cell empty but @2's three
+    (revision_number, details_used, codes_made_at: on every row, so a file with no code still states them)."""
+    made = {CUSTOMER_CSV_COLUMNS.index(column) for column in CUSTOMER_MADE_CELLS}
+    return bool(row) and bool(SYNTHETIC_MARK.search(row[0])) and not any(
+        cell.strip() for index, cell in enumerate(row[1:], start=1) if index not in made)
 
 
 def check_customer_csv(doc: str, name: str, text: str, kind: str, api: dict | None, trace: dict | None = None) -> list[Result]:
@@ -1787,6 +1864,13 @@ def check_customer_csv(doc: str, name: str, text: str, kind: str, api: dict | No
     date = established_date(api) or ''
     out.append(Result(doc, name, 'csv.constants', 'pass' if titles in ([api.get('title')], []) and dates in ([date], []) else 'fail',
                       f'encounter_title {titles}, date_of_service {dates} (operator {api.get("title")!r}, {date!r})'))
+    # @2: the three cells of what the codes were made from, one set across every row (the banner rows included)
+    made = sorted({tuple(undo_neutralisation(row[col[c]]) if col[c] < len(row) else '' for c in CUSTOMER_MADE_CELLS) for row in rows[1:]})
+    number = str((api.get('revision') or {}).get('number'))
+    made_ok = (len(made) == 1 and made[0][0] == number and made[0][1].startswith('date of service ')
+               and bool(ISO_TIMESTAMP_LOOSE.match(made[0][2])))
+    out.append(Result(doc, name, 'csv.made', 'pass' if made_ok else 'fail',
+                      f'revision_number, details_used, codes_made_at {made} (operator revision {number})'))
     groups: dict[str, list] = {}
     for row in data:
         groups.setdefault(cell(row, 'number'), []).append(row)

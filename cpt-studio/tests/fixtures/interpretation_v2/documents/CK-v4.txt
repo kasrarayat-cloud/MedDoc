@@ -1,0 +1,8 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Date of service: November 9, 2026
+Endoscopist: Daniel Achterberg, MD (fictional)
+History: No polypectomy was performed at the 2024 colonoscopy. This time as well.
+Procedure: The colonoscope was advanced to the cecum.
+Findings: A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare and retrieved.
+Impression: Sigmoid polyp.

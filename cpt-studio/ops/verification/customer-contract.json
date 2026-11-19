@@ -6,9 +6,10 @@
   "vocabulary": {
     "states": {"processing": "Processing", "action_needed": "Action needed", "awaiting_detail": "A few details needed",
                "ready": "Ready for review", "reviewed": "Reviewed", "no_codes": "No codes suggested", "stopped": "Stopped",
-               "failed": "Could not finish", "being_confirmed": "Being confirmed"},
+               "failed": "Could not finish", "being_confirmed": "Being confirmed", "updating": "Updating codes"},
     "code_statuses": {"ready": "Ready for review", "needs_detail": "Needs a detail", "approved": "Approved", "excluded": "Excluded"},
-    "phases": ["queued", "processing", "action_needed", "awaiting_detail", "completed", "partial", "failed", "stopped", "being_confirmed"],
+    "phases": ["queued", "processing", "action_needed", "awaiting_detail", "completed", "partial", "failed", "stopped", "being_confirmed",
+               "updating"],
     "steps": {"reading": "Reading your document", "identifying": "Identifying procedures", "checking": "Checking suggested codes",
               "preparing": "Preparing your results"},
     "step_states": ["done", "active", "waiting", "not_started", "failed", "stopped", "skipped"],
@@ -17,10 +18,12 @@
     "agent_sub_label": "Agent-executed synthetic review — not clinical approval",
     "rejected_sub_label": "Rejected in review",
     "details_heading": "A few details needed",
-    "none_approved_blocker": "No code has been approved."
+    "none_approved_blocker": "No code has been approved.",
+    "answer_after_update": "You can answer this once the codes are updated."
   },
   "types": {
-    "state": {"enum": ["processing", "action_needed", "awaiting_detail", "ready", "reviewed", "no_codes", "stopped", "failed", "being_confirmed"]},
+    "state": {"enum": ["processing", "action_needed", "awaiting_detail", "ready", "reviewed", "no_codes", "stopped", "failed", "being_confirmed",
+                       "updating"]},
     "span": {"nullable": true, "keys": {"text": "string", "start": "integer", "end": "integer"}},
     "quote": {"keys": {"text": "string", "start": "integer", "end": "integer", "page": "integer?", "exact": "boolean"}},
     "decision": {"nullable": true, "keys": {
@@ -70,10 +73,11 @@
       "value": "date?", "source": {"enum": ["document", "member", "conflict", "missing"]}, "document_value": "date?",
       "document_quote": {"ref": "span"}, "entered_value": "date?", "conflict": "boolean", "can_use_document_date": "boolean"}},
     "progress": {"keys": {
-      "phase": {"enum": ["queued", "processing", "action_needed", "awaiting_detail", "completed", "partial", "failed", "stopped", "being_confirmed", "paused"]},
+      "phase": {"enum": ["queued", "processing", "action_needed", "awaiting_detail", "completed", "partial", "failed", "stopped", "being_confirmed", "paused",
+                         "updating"]},
       "busy": "boolean", "steps": {"items": {"ref": "step"}}, "active_detail": "string", "started_at": "iso?", "finished_at": "iso?",
       "server_time": "iso", "slow": "boolean", "message": "string", "can_stop": "boolean", "can_resume": "boolean", "can_leave": "boolean",
-      "error": {"nullable": true, "keys": {"text": "string", "action": {"enum": ["resume", "new_document", "none"]}}}}},
+      "error": {"nullable": true, "keys": {"text": "string", "action": {"enum": ["resume", "new_document", "retry_reading", "retry_update", "none"]}}}}},
     "checks": {"items": {"keys": {"key": {"enum": ["document_review", "independent_checks", "coding_validation"]}, "label": "string",
                                   "state": {"enum": ["done", "running", "waiting", "unavailable", "not_run"]}}}},
     "codes": {"items": {"ref": "code"}},
@@ -85,6 +89,24 @@
     "readiness": {"keys": {"draft": "boolean", "approved": "boolean", "blockers": {"items": "string"}}},
     "reports": {"items": {"keys": {"id": "string", "kind": {"enum": ["draft", "approved"]}, "fmt": {"enum": ["txt", "csv"]},
                                    "filename": "string", "generated_at": "iso", "generated_by": "string", "download_url": "string",
-                                   "current": "boolean"}}},
-    "activity": {"items": {"keys": {"event": "string", "summary": "string", "actor": "string", "actor_kind": "string", "at": "iso"}}}}}
+                                   "current": "boolean", "revision": "integer"}}},
+    "activity": {"items": {"keys": {"event": "string", "summary": "string", "actor": "string", "actor_kind": "string", "at": "iso"}}},
+    "update": {"nullable": true, "keys": {
+      "pending": "boolean", "state": {"enum": ["updating", "failed", "stopped", "paused", "being_confirmed"]},
+      "kind": {"enum": ["details", "documentation", "check"]}, "restorable": "boolean", "changes": {"items": "string"},
+      "saved_by": "string?", "saved_at": "iso?", "started_at": "iso?",
+      "earlier": {"keys": {"made_at": "iso", "revision": "integer", "service_date": "string", "details": {"items": "string"}}}}},
+    "earlier_codes": {"items": {"ref": "code"}},
+    "what_changed": {"nullable": true, "keys": {
+      "compared_with": {"keys": {"made_at": "iso", "revision": "integer"}}, "details": {"items": "string"},
+      "codes": {"items": {"keys": {"code": "string", "change": {"enum": ["added", "removed", "status", "units", "detail"]},
+                                   "text": "string"}}},
+      "unchanged": "integer",
+      "decisions": {"items": {"keys": {"code": "string", "action": "string",
+                                       "outcome": {"enum": ["kept", "kept_then_cleared", "kept_then_changed", "cleared"]},
+                                       "text": "string"}}},
+      "answers": "string?"}},
+    "decision_history": {"items": {"keys": {"code": "string", "action": "string", "by": "string",
+                                            "by_kind": {"enum": ["human", "agent"]}, "at": "iso", "revision": "integer",
+                                            "why": "string"}}}}}
 }

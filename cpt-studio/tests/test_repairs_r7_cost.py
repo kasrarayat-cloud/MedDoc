@@ -47,6 +47,7 @@ from studio.reference.store import InMemoryReferenceLookup
 from studio.types import (EvidenceSpan, NormalizedResponse, PageSpan, ProviderCode, ProviderRequest, ReferenceSourceInfo,
                           RoutingResult, from_jsonable, to_jsonable)
 from studio.validation import checks, engine
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 from tests.test_repairs_r4d_sections2 import S3_QUESTION, HeldOrReadyAssertions, s3_note
@@ -241,6 +242,7 @@ class OwnLineNegationWordsTests(HeldOrReadyAssertions, unittest.TestCase):
 
 # --- declared:8, bounded:1, bounded:3: a document naming procedures past the cap is not read ----------------------
 
+@applied
 @override_settings(**LIVE)
 class MentionCapStageTests(TestCase):
     def setUp(self):
@@ -293,6 +295,7 @@ class MentionCapStageTests(TestCase):
 
 # --- bounded:1: the assess stage has the analyze stage's limits and as much again for the validation ---------------
 
+@applied
 @override_settings(**LIVE)
 class AssessLimitsTests(TestCase):
     def test_the_assess_stage_has_twice_the_analyze_stages_time_and_a_validation_allowance(self):

@@ -33,6 +33,7 @@ from tests import test_harness2_r6_meaning as r6m
 from tests import test_harness2_r7 as r7
 from tests import test_harness2_r8 as r8
 from tests import test_harness2_r9 as r9
+from tests.legacy_chain import applied
 
 he = r9.he
 ACK = review.ACKNOWLEDGEMENTS['human']
@@ -200,6 +201,7 @@ class InstrumentIsNeverNamedTests(SimpleTestCase):
         self.assertEqual(entry(result)['read_as'], 'the esophagoscopy as negated')
 
 
+@applied
 class FiledUnderAnotherFamilyPipelineTests(r6m.MeaningCase):
     def setUp(self):
         super().setUp()
@@ -253,6 +255,7 @@ NOT_THE_ACT = 'Passage the provider cited for {codes}, which does not show the c
 HOLDING = r9.HOLDING
 
 
+@applied
 class PieceHoldsTests(r6m.MeaningCase):
     def titles(self, detail):
         return {text: title for _, title, text in r6m.marks(detail)}

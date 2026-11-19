@@ -15,10 +15,12 @@ from django.test import Client, override_settings
 
 from studio import jobs, models, reports, review, serializers
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
-from tests.test_harness2_pipeline import (ASTRA_READING, TWO_EXTENTS, ColonCase, Harness2Case, answered, asks,
-                                          facts_call, unknown)
-from tests.test_pipeline_api import drain
+from tests.test_harness2_pipeline import (ASTRA_READING, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS, ColonCase,
+                                          Harness2Case, answered, asks, facts_call, two_extents_interpretation,
+                                          unknown)
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 
 def _proposal(detail, code):
@@ -30,6 +32,7 @@ def _proposal(detail, code):
 PEER_ONLY = 'Fable did not propose this code in its first reading. It proposed it after peer review.'
 
 
+@applied
 class PeerProposedPositionTests(ColonCase):
     """The default colon chain: Fable's peer review adds 45378 (support proposed_by ['fable'], phases {'fable':
     'peer_review'}). participant_positions reads the frozen first readings, so its position there is 'not_proposed' -
@@ -101,6 +104,8 @@ class PeerProposedPositionTests(ColonCase):
 NOT_CONNECTED = list(review.NOT_CONNECTED)
 NO_DATE = TWO_EXTENTS.replace('Date of service: 2026-10-14\n', '')
 OUTSIDE = TWO_EXTENTS.replace('Date of service: 2026-10-14', 'Date of service: 2025-03-02')  # before every release held
+# TWO_EXTENTS' recorded synthetic interpretations and OUTSIDE's (design/FINAL.md 14.6), its date the one it states
+OUTSIDE_INTERPRETATIONS = TWO_EXTENTS_INTERPRETATIONS + ((OUTSIDE, two_extents_interpretation('2025-03-02')),)
 NO_SOURCE_NO_DATE = ('No code was checked against the CMS reference files: no service date is established for this '
                      'encounter, so no dated CMS reference file applies.')
 NO_SOURCE_FOR_DATE = ('No code was checked against the CMS reference files: no installed CMS reference file applies '
@@ -128,7 +133,10 @@ class ReferenceValidationTruthMixin:
                              proposal.code)
 
 
-class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
+class ReferenceValidationTruthTests(RecordedInterpretation, ReferenceValidationTruthMixin, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_a_member_date_conflict_leaves_every_code_unchecked_and_the_row_says_so(self):
         encounter_id = self.create(TWO_EXTENTS)
         drain()
@@ -158,11 +166,14 @@ class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
 
 
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
-class CortiOnlyReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
+class CortiOnlyReferenceValidationTruthTests(RecordedInterpretation, ReferenceValidationTruthMixin, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and I1's chain is extract, interpret, analyze, predict and assess.
+    interpretations = OUTSIDE_INTERPRETATIONS
     def test_no_documented_date(self):
         encounter_id = self.create(NO_DATE)
         drain()
-        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])  # I1's chain
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'interpret', 'analyze', 'predict', 'assess'])  # I1's chain
         self.assertNoCodeChecked(encounter_id, NO_SOURCE_NO_DATE)
 
     def test_a_documented_date_no_installed_release_covers(self):
@@ -242,7 +253,10 @@ class RetrievalFailureWordingMixin:
         return encounter_id
 
 
-class RetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
+class RetrievalFailureWordingTests(RecordedInterpretation, RetrievalFailureWordingMixin, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_with_both_participants_after_peer_review(self):
         encounter_id = self.run_tampered()
         self.assertEqual(self.client.get(f'/ops/api/encounters/{encounter_id}').json()['harness']['phase'], 2)
@@ -250,10 +264,13 @@ class RetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
 
 
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
-class CortiOnlyRetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
+class CortiOnlyRetrievalFailureWordingTests(RecordedInterpretation, RetrievalFailureWordingMixin, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and I1's chain is extract, interpret, analyze, predict and assess.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_corti_only(self):
         encounter_id = self.run_tampered()
-        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])  # I1's chain
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'interpret', 'analyze', 'predict', 'assess'])  # I1's chain
         self.assertSaysWhatFailed(encounter_id)
 
 
@@ -261,6 +278,7 @@ class CortiOnlyRetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonC
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationEffectTests(ColonCase):
     """review.confirmation_effect states what the current assessment made of each reviewer-confirmed finding - read,
@@ -333,7 +351,7 @@ UNPRICED = ("not estimated: exchange 2 (outcome unknown) reported no usage and m
             "this run cannot be estimated from published rates")
 
 
-class CostCoverageTests(Harness2Case):
+class CostCoverageTests(RecordedInterpretation, Harness2Case):
     """A tool loop is priced exchange by exchange (pricing.estimate_loop), which counts an exchange that reported no
     usage and prices the rest. An exchange that may have reached the vendor - any not recorded not sent - and reported
     no usage leaves the run's cost unknown, so it has no estimate (the trace, the participant row, the reports), and
@@ -391,7 +409,7 @@ class CostCoverageTests(Harness2Case):
 
 # --- sends-r2-3: a tool result the participant was never sent is never shown as one it retrieved ---------------------
 
-class UndeliveredReferenceTests(Harness2Case):
+class UndeliveredReferenceTests(RecordedInterpretation, Harness2Case):
     """A tool call's refs are references its participant retrieved only when the exchange that carried its result to
     the participant was sent (the next exchange, recorded and not 'not_sent'). The loop records the tool calls it
     answered on exchange N even when it then ends without sending exchange N+1 - not sent, a Stop, a follow-up it could
@@ -473,7 +491,7 @@ class UndeliveredReferenceTests(Harness2Case):
 
 # --- truth-13: a reuse's references are said to be the retained run's, retrieved by its tool calls --------------------
 
-class ReusedRunReferenceTests(Harness2Case):
+class ReusedRunReferenceTests(RecordedInterpretation, Harness2Case):
     """A run that reuses a retained answer made no tool call: its references are the retained run's (HARNESS.md 12.7, a
     reuse shows the calls of the run it reuses), and the API names that run (references.reused_from, and each of the
     trace's references used), so the page, the trace and the reports say they were retrieved by the retained run's tool

@@ -1,0 +1,7 @@
+SYNTHETIC COLONOSCOPY REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+Findings: The colonoscope was advanced to the cecum.
+Cold forceps biopsies of the sigmoid colon were taken.
+Nursing note: Cold forceps biopsies of the rectum were taken.

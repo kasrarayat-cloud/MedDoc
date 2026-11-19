@@ -19,8 +19,9 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.utils import timezone
 
-from . import audit, candidates, participants, review
+from . import audit, candidates, interpretation, participants, review
 from . import answers as member_answers  # the details flow (P5)
+from .interpretation import readers
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
@@ -29,6 +30,7 @@ from .serializers import failure_note, peer_code_phases, retrieval_failed, shown
 from .types import CONTEXT_FACTS, sha256_json
 from .validation.checks import fact_label
 from .validation.engine import LISTED_NOT_PROPOSED
+from .validation.questions import answered_away
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
 KINDS = (DRAFT, REVIEWED)
@@ -97,7 +99,10 @@ class ReportNotReady(ValueError):
 
     def __init__(self, blockers):
         self.blockers = list(blockers)
-        super().__init__('The reviewed report is not available: ' + '; '.join(self.blockers) + '.')
+        # each blocker a clause; one worded as a sentence (review.UNREADABLE_EVENTS_BLOCKER, FINAL 8.1's own) loses its
+        # full stop here, so the message ends with one (the Gemini migration's review, finding 2: no doubled period)
+        super().__init__('The reviewed report is not available: ' + '; '.join(
+            blocker[:-1] if blocker.endswith('.') else blocker for blocker in self.blockers) + '.')
 
 
 def _ts(value):
@@ -185,7 +190,8 @@ def _list_for(proposal, decision, kind, view=None):
         return 'excluded'  # a needed detail answered as unavailable: excluded by the review overlay, never approved
     if action == Decision.APPROVE and kind == REVIEWED:
         return 'approved'
-    if proposal.bucket == Proposal.EXCLUDED and action in (None, Decision.CONFIRM):
+    # r2b (DECISIONS D297, W2R-1): a code read as the selected code it was (review.reopened) is decided as one
+    if review.bucket_of(proposal, view) == Proposal.EXCLUDED and action in (None, Decision.CONFIRM):
         return 'excluded'
     return 'undecided'
 
@@ -194,10 +200,13 @@ def _check(check):
     return {key: str(check.get(key) or '') for key in ('id', 'label', 'status', 'detail', 'source')}
 
 
-def _reinstated(proposal, decision):
-    """An excluded proposal carrying a decision was reinstated, unless that decision confirms the exclusion."""
-    return (proposal.bucket == Proposal.EXCLUDED and decision is not None
-            and decision.action != Decision.CONFIRM)
+def _reinstated(proposal, decision, view=None):
+    """An excluded proposal carrying a decision was reinstated, unless that decision confirms the exclusion - never a
+    code read as the selected code it was (r2b, D297 W2R-1: review.bucket_of over its effective view), and r2d (D301,
+    RBWX-4) never a code engine/assess excluded by a member's answer (answered_away): an answer's exclusion is no
+    reinstatement, whatever the decision a reviewer took while it read as selected (review.reinstated's rule)."""
+    return (review.bucket_of(proposal, view) == Proposal.EXCLUDED and not answered_away(proposal)
+            and decision is not None and decision.action != Decision.CONFIRM)
 
 
 def _item(proposal, decision, kind, text, view=None):
@@ -211,8 +220,9 @@ def _item(proposal, decision, kind, text, view=None):
         'family_label': _family_label(proposal.family), 'profile_version': proposal.profile_version,
         'status': status, 'status_label': review.status_label(status),
         'exclusion_reason': proposal.exclusion_reason, 'reinstatable': proposal.reinstatable,
-        'reinstated': _reinstated(proposal, decision),
-        'reinstated_by': _decision(review.reinstatement_for(decision)) if _reinstated(proposal, decision) else None,
+        'reinstated': _reinstated(proposal, decision, view),
+        'reinstated_by': (_decision(review.reinstatement_for(decision)) if _reinstated(proposal, decision, view)
+                          else None),
         'units': proposal.units, 'rationale': proposal.rationale,
         'evidence': [{'start': s['start'], 'end': s['end'], 'text': s['text'], 'page': s.get('page')} for s in exact],
         'unmatched_evidence': len(proposal.evidence or []) - len(exact),
@@ -255,7 +265,12 @@ def _exact_spans(spans, text):
 
 
 def _unresolved_item(item, text):
-    spans = item.get('evidence') or []
+    # a design v2 completeness (engine/coverage completeness) records each evidence span as [start, end] - the stored
+    # records carry no words (FINAL-V2 P9) - and the report quotes the revision's own slice of it (request of step 6a:
+    # an operator report of a v2 encounter with an unresolved documented service)
+    spans = [{'start': span[0], 'end': span[1], 'text': text[span[0]:span[1]]}
+             if isinstance(span, (list, tuple)) and len(span) == 2 and all(type(at) is int for at in span) else span
+             for span in item.get('evidence') or []]
     exact = _exact_spans(spans, text)
     return {'service': item.get('service', ''), 'family': item.get('family', ''), 'label': item.get('label', ''),
             'reason': item.get('reason', ''), 'evidence': exact, 'unmatched_evidence': len(spans) - len(exact)}
@@ -275,7 +290,13 @@ def _services(assessment, text, rejected=frozenset(), completeness=None):
     as accounting for a service (refutation r1, report-6), nor as including another service's examination (refutation
     P2FR, EUS-SECOND: "included in S2: that service's code includes this examination" beside the rejected 43242, the
     only code of S2 that includes it). ``completeness``: the reconciliation as the review leaves it
-    (review.reviewed_completeness: a code the reviewer reinstated counts as a selected one), else as recorded."""
+    (review.reviewed_completeness: a code the reviewer reinstated counts as a selected one), else as recorded.
+
+    The Gemini migration (design/FINAL.md 8.3): a new-path assessment's documented services are its event coding's
+    sessions, from the reader of its engine (_event_services); a legacy assessment's are read below, as before."""
+    reader = readers.for_assessment(assessment)
+    if reader.kind == readers.EVENTS:
+        return _event_services(reader, assessment, text, rejected, completeness)
     inventory = assessment.services or {}
     completeness = (assessment.completeness or {}) if completeness is None else completeness
     # the selected codes of the service each included service is read as part of that include its examination, as the
@@ -316,6 +337,37 @@ def _services(assessment, text, rejected=frozenset(), completeness=None):
         'catalogue_version': completeness.get('catalogue_version', ''),
         'inventory_version': inventory.get('version', ''),
         'reconciliation': _reconciliation(inventory, completeness),
+    }
+
+
+# The reading line of a new-path assessment's DOCUMENTED SERVICES (the interpretation and inventory versions it was made
+# from, an operator's surface: interpretation.LABEL)
+EVENTS_INVENTORY_VERSION = f'the documented events ({interpretation.LABEL})'
+
+
+def _event_services(reader, assessment, text, rejected, completeness):
+    """_services for a new-path assessment (FINAL 8.3): the sessions of its event coding as the reader gives them
+    (EventReader.services_section), the unresolved items, bundled acts and sessions not listed of its coverage as the
+    review leaves it, and no conflict list - the new path records a contradiction as a relation, which its encounter
+    check 'services.conflicts' words (``conflict_note``). A coding this release cannot read is said to be one, and
+    nothing is reconciled from it (fail-closed)."""
+    completeness = (assessment.completeness or {}) if completeness is None else completeness
+    rows = reader.services_section(assessment, completeness, rejected)
+    reinstated = [code for code in completeness.get('reinstated') or [] if isinstance(code, str)]
+    check = next((c for c in assessment.encounter_checks or () if isinstance(c, dict)
+                  and c.get('id') == 'services.conflicts' and c.get('status') == 'warn'), None)
+    return {
+        **({'reinstated': reinstated} if reinstated else {}),
+        'services': [{**row, 'family_label': _family_label(row['family'])} for row in rows or ()],
+        'unresolved': [_unresolved_item(u, text) for u in completeness.get('unresolved_items') or []],
+        'not_listed': [n.get('label', '') for n in completeness.get('not_listed') or [] if n.get('label')],
+        'bundled': [{'label': b.get('label', ''), 'why': b.get('why', '')} for b in completeness.get('bundled') or []],
+        'conflicts': [], 'conflict_note': str(check.get('detail') or '') if check is not None else '',
+        'attributions': [],
+        'problems': [] if rows is not None else [review.UNREADABLE_EVENTS_BLOCKER],
+        'catalogue_version': completeness.get('catalogue_version', ''),
+        'inventory_version': EVENTS_INVENTORY_VERSION,
+        'reconciliation': 'missing' if not completeness or rows is None else 'reconciled',
     }
 
 
@@ -521,14 +573,41 @@ def _fact_title(fact):
 
 def _located(quotes, text, index):
     """The located spans of ``quotes`` that are exact slices of the revision text, each once, in text order, with
-    their page."""
+    their page. ``index``: _paging's (page index, page_of)."""
+    pages, page_of = index
     spans = {}
     for quote in quotes or ():
         for span in getattr(quote, 'spans', ()) or ():
             if _matches({'start': span.start, 'end': span.end, 'text': span.text}, text):
                 spans[(span.start, span.end)] = {'start': span.start, 'end': span.end, 'text': span.text,
-                                                 'page': candidates._page_of(index, span.start)}
+                                                 'page': page_of(pages, span.start)}
     return [spans[key] for key in sorted(spans)]
+
+
+def _paging(assessment, pages):
+    """(page index, page_of) of ``pages``: candidates._page_index and _page_of for a legacy assessment, as before; for
+    a new-path one the same reading made here (_page_index, _page_of: studio.candidates is the legacy reader's, and no
+    code of it runs on the new path, design/FINAL.md 10.1)."""
+    if readers.for_assessment(assessment).kind == readers.EVENTS:
+        return _page_index(pages), _page_of
+    return candidates._page_index(pages), candidates._page_of
+
+
+def _page_index(pages) -> tuple:
+    """(start, end, page) of each well-formed page span, by start (candidates._page_index's reading)."""
+    out = []
+    for page in pages or ():
+        if isinstance(page, dict):
+            start, end, number = page.get('start'), page.get('end'), page.get('page')
+        else:
+            start, end, number = getattr(page, 'start', None), getattr(page, 'end', None), getattr(page, 'page', None)
+        if type(start) is int and type(end) is int and type(number) is int and 0 <= start <= end:
+            out.append((start, end, number))
+    return tuple(sorted(out))
+
+
+def _page_of(index, position: int):
+    return next((number for start, end, number in index if start <= position < end), None)
 
 
 def _harness2(assessment):
@@ -558,7 +637,7 @@ def _peer_reviews(assessment, phase):
         return {'recorded': False, 'owed': due and not predates, 'predates': predates,
                 **({'held': True} if held else {}), **({'unowned': True} if unowned else {}), 'participants': []}
     revision = assessment.revision
-    text, index = revision.text, candidates._page_index(revision.pages)
+    text, index = revision.text, _paging(assessment, revision.pages)
     out = []
     for name in review.MODEL_PARTICIPANTS:
         record = records.get(name)
@@ -758,7 +837,29 @@ def snapshot(encounter, kind):
         'harness': bool(assessment.participants),
         # harness@2 (HARNESS.md 11-12), only where a model participant took part: a Corti-only snapshot is harness@1's
         **_harness2(assessment),
+        # the Gemini migration (design/FINAL.md 3.1, 8.3; D22): a new-path assessment's interpretation section, from the
+        # reader of its engine; a legacy snapshot carries none, so it is what it always was
+        **_interpretation(assessment),
     }
+
+
+def _interpretation(assessment) -> dict:
+    """{'interpretation': ...} of a new-path assessment for the operator's report - its D22 record, the event
+    inventory it was made from (id, versions, sha256, state) and the interpreter run that inventory was read from
+    (state, models, usage, estimated cost) - or {} for a legacy assessment."""
+    reader = readers.for_assessment(assessment)
+    if reader.kind != readers.EVENTS:
+        return {}
+    section = reader.interpretation_section(assessment)
+    inventory, run = section.get('inventory') or {}, section.get('run') or {}
+    return {'interpretation': {
+        'engine_version': section.get('engine_version', ''), 'record': section.get('record') or {},
+        'problems': list(section.get('problems') or ()),
+        'inventory': {key: inventory.get(key) for key in ('id', 'state', 'interpretation_version', 'inventory_version',
+                                                          'sha256')} if inventory else None,
+        'run': {key: run.get(key) for key in ('id', 'provider', 'state', 'requested_model', 'returned_model', 'usage',
+                                              'estimated_cost')} if run else None,
+        'hold': (section.get('hold') or {}).get('reason')}}
 
 
 def snapshot_digest(snap):
@@ -1189,7 +1290,8 @@ def _participants_section(snap):
             from .serializers import corti_unlisted_words  # local: the row's own sentences, each answer's count apart
 
             second = entry.get('unlisted_second_review') or 0
-            words = corti_unlisted_words(entry['unlisted_codes'] - second, second)
+            events = interpretation.is_new_assessment(_Engine(snap['assessment']['engine_version']))
+            words = corti_unlisted_words(entry['unlisted_codes'] - second, second, events=events)
             lines.append(f'    Not listed: {_indent(words, "      ")}')
         if entry['unverified_quotes']:
             lines.append(f'    Unverified quotes: {entry["unverified_quotes"]} (not found in the document; never used '
@@ -1544,6 +1646,8 @@ def _conflicts_section(snap):
         for side in conflict['sides']:
             lines.append(f'      {side["role"]} entry, {side["status"]}: ' + (f'"{_indent(side["text"], "        ")}"'
                                                                               if side['exact'] else NO_EXACT_PASSAGE))
+    if documented.get('conflict_note'):  # a new-path assessment's contradictions (its services.conflicts check)
+        lines.append(f'  - {_indent(documented["conflict_note"], "    ")}')
     closing = _unestablished(documented, 1, lines)
     if closing:
         return lines + [closing]
@@ -1590,6 +1694,36 @@ def _visible(part):
     return CONTROL.sub(lambda m: f'\\x{ord(m.group()):02x}', part)
 
 
+class _Engine:
+    """An engine version as interpretation.is_new_assessment reads one (a snapshot records the version only)."""
+
+    def __init__(self, engine_version):
+        self.engine_version = engine_version
+
+
+def _interpretation_section(snap):
+    section = snap['interpretation']
+    record, inventory, run = section.get('record') or {}, section.get('inventory') or {}, section.get('run') or {}
+    sentinel_record = record.get('sentinel') or {}
+    lines = [f'  Engine: {section.get("engine_version", "")} · interpretation {record.get("interpretation_version", "")}'
+             f' · inventory {record.get("inventory_version", "")}']
+    if inventory:
+        lines.append(f'  Event inventory: {inventory.get("id")} · {inventory.get("state")} · sha256 {inventory.get("sha256")}')
+    if run:
+        cost = run.get('estimated_cost')
+        lines.append(f'  Interpreter run: {run.get("id")} · {run.get("provider")} · {run.get("state")} · requested '
+                     f'{run.get("requested_model") or "-"} · returned {run.get("returned_model") or "-"}'
+                     + (f' · estimated cost USD {cost}' if cost else ''))
+    if sentinel_record:
+        lines.append(f'  Legacy-call sentinel: {sentinel_record.get("legacy_calls")} legacy calls recorded '
+                     f'(scope {sentinel_record.get("scope")}, {sentinel_record.get("tool")}, deny set '
+                     f'{sentinel_record.get("deny_size")}, positive control {sentinel_record.get("positive_control")})')
+    if section.get('hold'):
+        lines.append(f'  Interpreter hold set by this run: {section["hold"]}')
+    lines += [f'  Record problem: {problem}' for problem in section.get('problems') or ()]
+    return lines
+
+
 def render_txt(snap) -> bytes:
     kind = snap['kind']
     lines = [HEADLINES[kind], SYNTHETIC_LINE]
@@ -1621,6 +1755,8 @@ def render_txt(snap) -> bytes:
                  ('REVIEW PARTICIPANTS', _participants_section(snap))]
     if 'peer_review' in snap:
         sections += [(PEER_TITLE, _peer_section(snap)), (REFERENCES_TITLE, _references_section(snap))]
+    if 'interpretation' in snap:  # a new-path assessment's (FINAL 8.3), never in a legacy report
+        sections.append(('INTERPRETATION', _interpretation_section(snap)))
     sections += [('PROVIDER USAGE', _provider_section(snap)),
                  ('REFERENCE SOURCES', _reference_section(snap)),
                  ('REFERENCE RETRIEVAL', _retrieval_section(snap)),
@@ -1790,7 +1926,30 @@ def _filename(snap, fmt):
     return f'CPT-Studio-{snap["kind"]}-{snap["encounter"]["id"][:8]}-r{snap["revision"]["number"]}-{stamp}.{fmt}'
 
 
+OPERATOR_REPORT_GATE, CUSTOMER_REPORT_GATE = 'reports.generate', 'reports.generate_customer'  # FINAL 10.3
+
+
+def _new_path(encounter) -> bool:
+    """Whether the report would be made from a new-path assessment (the encounter's live assessment the events
+    engine's): its generation is then a write the legacy-call sentinel gates (FINAL 10.3)."""
+    return interpretation.is_new_assessment(review.live_assessment(encounter))
+
+
 def generate(encounter, kind, fmt, user, *, operator=False):
+    """_generate (below), gated on a new-path assessment (design/FINAL.md 10.3): its snapshot is made in a new_path
+    sentinel scope of its own, asked again as the last thing before the artifact's transaction commits - when it counted
+    an execution of the legacy reader, or this process cannot vouch for its count, nothing is stored, the trip is
+    audited ('sentinel.tripped') and sentinel.Tripped is raised. The scope is opened from ``encounter`` as the request
+    read it and decided again from the locked row, first: when a reading finished in between and the two differ, nothing
+    is made and readers.PathMoved (a ValueError: 409) is raised. A legacy assessment's report is made as before."""
+    with readers.write_scope(OPERATOR_REPORT_GATE, _new_path(encounter)) as gate:
+        try:
+            return _generate(encounter, kind, fmt, user, operator=operator, gate=gate)
+        except readers.GateClosed as closed:
+            readers.refuse(OPERATOR_REPORT_GATE, closed, encounter=encounter, actor=user)
+
+
+def _generate(encounter, kind, fmt, user, *, operator, gate):
     """Snapshot -> render -> store the bytes once (immutable) with their sha256 and the snapshot digest. This is the
     operator's full report (audience 'operator'; CORE-UX-DESIGN.md 5): a member of the workspace may make one through
     this function, and a platform operator through /ops/ (``operator=True``: a grant, never a membership, is checked).
@@ -1808,6 +1967,10 @@ def generate(encounter, kind, fmt, user, *, operator=False):
         raise PermissionDenied('Only an active member of this workspace can generate its reports.')
     with transaction.atomic():
         locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
+        if readers.moved(gate, _new_path(locked)):
+            # the gate decided from the LOCKED row (review finding 3): a reading finished since the request read the
+            # encounter moved it to the other path, and nothing is computed or stored under a scope that does not fit it
+            raise readers.PathMoved()
         snap = snapshot(locked, kind)
         content = RENDERERS[fmt](snap)
         artifact = ReportArtifact.objects.create(
@@ -1816,10 +1979,11 @@ def generate(encounter, kind, fmt, user, *, operator=False):
             snapshot_sha256=snapshot_digest(snap), generated_by=user, audience=ReportArtifact.OPERATOR)
         audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
                      assessment=snap['assessment']['id'], kind=kind, fmt=fmt, audience=ReportArtifact.OPERATOR)
+        readers.check(gate)  # the last thing before the commit (FINAL 10.3): a refusal stores nothing
     return artifact
 
 
-# --- the customer report (CORE-UX-DESIGN.md 5): cpt-studio-customer-report@1 ----------------------------------------
+# --- the customer report (CORE-UX-DESIGN.md 5): cpt-studio-customer-report@2 ----------------------------------------
 #
 # Built from the customer contract (studio.customer_api), never from the operator snapshot above: the suggested codes
 # with their status, units, decided modifiers, one sentence of CPT Studio's own reading and the exact quotations (the
@@ -1829,8 +1993,16 @@ def generate(encounter, kind, fmt, user, *, operator=False):
 # assessment, the current decisions and the member's standing answers it was made from), so a download can tell whether
 # an approved export still matches the persisted decisions (customer_artifact_current) - and nothing that is not a
 # decision (a later run, a job, a reference check, new wording) ever makes one stale (critic C8).
+#
+# FINAL-V2 amendment 1, section 8 (step 5d; A7, A9): the format is @2 - every new export states the revision, the details
+# and the time its codes were made, read from the ASSESSMENT's own revision and context, never from the encounter's
+# current context, which a later save changes (8.2). While an update is pending no customer export is made (8.1:
+# customer_snapshot refuses under the encounter's lock). An export is current only while its marker matches AND no update
+# is pending (8.3); one that is not current is downloaded as an EARLIER export (earlier_download: a banner in front of
+# the stored bytes, the stored artifact never changed). The marker never gains the member values: every artifact stored
+# before the install was digested without them (8.2 [R:truth-T1]).
 
-CUSTOMER_FORMAT = 'cpt-studio-customer-report@1'
+CUSTOMER_FORMAT = 'cpt-studio-customer-report@2'
 APPROVED = ReportArtifact.APPROVED
 CUSTOMER_KINDS = (DRAFT, APPROVED)
 CUSTOMER_HEADLINES = {DRAFT: 'CPT STUDIO — SUGGESTED CODES — NOT APPROVED', APPROVED: 'CPT STUDIO — APPROVED CODES'}
@@ -1841,28 +2013,91 @@ CUSTOMER_TITLES = {DRAFT: 'Suggested codes — not approved', APPROVED: 'Approve
 # alone in a spreadsheet still says it (truth rule 7; session decisions (h) and (i) of 2026-11-03: "everywhere").
 CUSTOMER_CSV_COLUMNS = ('report_format', 'encounter_title', 'date_of_service', 'number', 'code', 'units', 'modifiers',
                         'status', 'approved_by', 'approver_kind', 'approved_at', 'summary', 'evidence_text',
-                        'evidence_page', 'evidence_start', 'evidence_end', 'review_label')
+                        'evidence_page', 'evidence_start', 'evidence_end', 'review_label',
+                        # format @2 (amendment 1, 8.2): what the codes were made from, on every row
+                        'revision_number', 'details_used', 'codes_made_at')
+# 8.2: the details the codes were made with, in the export's words - the value, "not established" for a value the
+# document and the member disagree on, "not documented" for none
+DETAILS_USED_LABELS = (('service_date', 'date of service'), ('setting', 'place of service'), ('patient_status', 'patient'),
+                       ('billing_context', 'claim'))
+NOT_DOCUMENTED, NOT_ESTABLISHED_VALUE = 'not documented', 'not established'
+# 8.3 [R:truth-T14]: the banner of an earlier export - a marker also differs when only the details changed and every code
+# and decision carried, so it never claims that the codes or the decisions changed
+EARLIER_BANNER = 'EARLIER EXPORT — MAY NOT SHOW THE CURRENT CODES'
+EARLIER_MADE = ('Made {at} on revision {n}. This document has changed since (its details, its documentation, its codes or '
+                'its decisions); create a new export for the current codes.')
+EARLIER_SUFFIX = '-earlier'
 
 
 class CustomerExportNotReady(ValueError):
-    """The approved export was asked for before it is available."""
+    """The approved export was asked for before it is available. ``updating`` (amendment 1, 8.1): no export of either
+    kind is made because an update of the codes is pending - its blockers are the update's customer blocker, and the
+    API answers UPDATE_EXPORT (or its check form, ``message``)."""
 
-    def __init__(self, blockers):
+    def __init__(self, blockers, *, updating=False, message=''):
         self.blockers = list(blockers)
-        super().__init__('The approved export is not available yet.')
+        self.updating = bool(updating)
+        self.message = message
+        super().__init__(message or 'The approved export is not available yet.')
 
 
 def _customer_quote(quote):
     return {'text': quote['text'], 'page': quote.get('page'), 'start': quote['start'], 'end': quote['end']}
 
 
+def _detail_value(fact):
+    """One coding-context fact of a context (EncounterContext.facts) as the export states it (8.2): its value when the
+    document or the member gives one, "not established" when they disagree (a conflict), "not documented" for none."""
+    fact = fact if isinstance(fact, dict) else {}
+    value = fact.get('value')
+    if fact.get('origin') in ('document', 'user') and isinstance(value, str) and value:
+        return value
+    return NOT_ESTABLISHED_VALUE if fact.get('origin') == 'conflict' else NOT_DOCUMENTED
+
+
+def _context_details(context):
+    """(date of service or None, the "Details used" words) of the context an assessment was made on (8.2): read from
+    that context's facts, never from the encounter's current context. A choice is said in the member's words
+    (answers.CHOICE_LABELS)."""
+    facts = (context.facts or {}) if context is not None else {}
+    parts = []
+    for name, label in DETAILS_USED_LABELS:
+        value = _detail_value(facts.get(name))
+        if name in member_answers.CHOICE_LABELS:
+            value = member_answers.CHOICE_LABELS[name].get(value, value)
+        parts.append(f'{label} {value}')
+    date = _detail_value(facts.get('service_date'))
+    return (date if date not in (NOT_DOCUMENTED, NOT_ESTABLISHED_VALUE) else None), '; '.join(parts)
+
+
+def update_refusal(encounter):
+    """CustomerExportNotReady when an update of ``encounter``'s codes is pending (amendment 1, 8.1 and 5.3: no export of
+    the earlier codes, of either kind), else None: its message UPDATE_EXPORT (UPDATE_EXPORT_CHECK for an update no save
+    started, A21) and its blocker review.UPDATE_BLOCKER in the customer's words (customer_api.BLOCKER_EXACT: the form true
+    in every update state and kind)."""
+    from . import customer_api  # local import: the customer layer reads this module
+
+    if not review.update_pending(encounter):
+        return None
+    kind = review.update_kind(encounter)
+    message = customer_api.UPDATE_EXPORT_CHECK if kind == review.UPDATE_CHECK else customer_api.UPDATE_EXPORT
+    return CustomerExportNotReady([customer_api.customer_blocker(review.UPDATE_BLOCKER)], updating=True,
+                                  message=message)
+
+
 def customer_snapshot(encounter, kind):
-    """Everything a customer report shows, read from persisted rows through the customer contract."""
+    """Everything a customer report shows, read from persisted rows through the customer contract. Refused while an
+    update of the codes is pending (amendment 1, 8.1: CustomerExportNotReady with ``updating``), read again here so that
+    a save between the request's read and the encounter's lock is seen. The revision, the details and the time the codes
+    were made are the assessment's own (8.2)."""
     from . import customer_api  # local import: the customer layer reads this module
 
     if kind not in CUSTOMER_KINDS:
         raise ValueError('Choose a draft or an approved export.')
     encounter = Encounter.objects.select_related('workspace').get(pk=encounter.pk)
+    refused = update_refusal(encounter)
+    if refused is not None:
+        raise refused
     assessment = review.live_assessment(encounter)
     if assessment is None:
         raise ValueError('There is no assessment of the current revision to report yet.')
@@ -1872,10 +2107,11 @@ def customer_snapshot(encounter, kind):
     if kind == APPROVED and not ready['approved']:
         raise CustomerExportNotReady(ready['blockers'])
     views = customer_api.views_of(assessment, current)  # the review overlay: statuses as the decisions leave them
+    date, details = _context_details(assessment.context if assessment.context_id else None)
     snap = {'format_version': CUSTOMER_FORMAT, 'kind': kind,
             'encounter': {'id': str(encounter.pk), 'title': encounter.title},
             'revision': {'id': str(revision.pk), 'number': revision.number}, 'assessment': str(assessment.pk),
-            'date_of_service': member_answers.service_date_block(encounter)['value'],
+            'date_of_service': date, 'details_used': details, 'codes_made_at': _ts(assessment.created_at),
             'limitations': customer_api.limitations(assessment, revision)}
     if kind == APPROVED:
         items = customer_api.approved_export_items(assessment, current, views)
@@ -1925,10 +2161,41 @@ def customer_marker_digest(encounter):
 
 
 def customer_artifact_current(report) -> bool:
-    """Whether a customer artifact still matches the persisted decisions it was made from: its stored marker digest
-    equals the encounter's now."""
-    marker = customer_marker_digest(report.encounter)
-    return marker is not None and report.snapshot_sha256 == marker
+    """Whether a customer artifact is current (amendment 1, 8.3 [R:races-R1][R:truth-T1][R:legacy-L1]): its stored
+    marker digest equals the encounter's now AND no update of the codes is pending (review.update_pending) - a case-B save
+    keeps the context, the assessment, the decisions and the answers, so the marker alone stays byte-identical while the
+    codes it shows are earlier codes. A restore (fresh again, the marker unchanged) makes it current again by itself.
+    The encounter is read afresh, never from a row the caller holds (a save since its read would not be in it)."""
+    encounter = Encounter.objects.get(pk=report.encounter_id)
+    marker = customer_marker_digest(encounter)
+    return marker is not None and report.snapshot_sha256 == marker and not review.update_pending(encounter)
+
+
+def earlier_filename(filename) -> str:
+    """The download name of an earlier export (8.3): the stored name with '-earlier' before its extension."""
+    stem, dot, extension = str(filename).rpartition('.')
+    return f'{stem}{EARLIER_SUFFIX}.{extension}' if dot and stem else f'{filename}{EARLIER_SUFFIX}'
+
+
+def earlier_download(report):
+    """(bytes, filename) of a customer artifact that is not current, served as an EARLIER export (amendment 1, 8.3; A9):
+    the stored bytes unchanged behind a banner - TXT: the two banner lines and a blank line before them; CSV: one row after
+    the header row whose report_format cell carries the two sentences (one per line) and whose other cells are empty -
+    and the stored name with '-earlier'. The revision is the artifact's assessment's, so a @1 artifact, whose body names
+    no revision, is marked too. The artifact itself (content, sha256) is never changed: ReportArtifact is immutable."""
+    content = bytes(report.content)
+    made = EARLIER_MADE.format(at=_ts(report.generated_at), n=report.assessment.revision.number)
+    if report.fmt == 'csv':
+        text = content.decode('utf-8')
+        cut = text.find('\r\n')
+        header, rest = (text, '') if cut < 0 else (text[:cut + 2], text[cut + 2:])
+        columns = next(csv.reader([header.rstrip('\r\n')]), [])
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator='\r\n')
+        writer.writerow([f'{EARLIER_BANNER}\n{made}'] + [''] * max(len(columns) - 1, 0))
+        body = (header if header.endswith('\r\n') else header + '\r\n') + buffer.getvalue() + rest
+        return body.encode('utf-8'), earlier_filename(report.filename)
+    return f'{EARLIER_BANNER}\n{made}\n\n'.encode('utf-8') + content, earlier_filename(report.filename)
 
 
 def _customer_header(snap, generated):
@@ -1938,6 +2205,10 @@ def _customer_header(snap, generated):
     if snap.get('agent_review'):
         lines.append(AGENT_LINE)
     return lines + [f'Report format: {snap["format_version"]}', f'Encounter: {snap["encounter"]["title"]}',
+                    # format @2 (amendment 1, 8.2): what the codes were made from - the assessment's own revision,
+                    # details and time
+                    f'Document: revision {snap["revision"]["number"]}', f'Details used: {snap["details_used"]}',
+                    f'Codes made: {snap["codes_made_at"]}',
                     f'Date of service: {snap["date_of_service"] or "not established"}',
                     f'Generated: {generated["at"]} by {generated["by"]}']
 
@@ -1978,11 +2249,15 @@ def render_customer_csv(snap, generated) -> bytes:
     of one code (a code with none has one row with empty evidence cells), its number repeated. The approval cells
     (approved_by, approver_kind - the approver's own kind - and approved_at) are the approved export's; review_label
     carries the agent-executed synthetic review label on each row of an approval agent review took part in, in both
-    kinds."""
+    kinds. Format @2 (amendment 1, 8.2): revision_number, details_used and codes_made_at - the assessment's own - on every
+    row, the banner rows included, so a file with no code still states what it was made from."""
     approved = snap['kind'] == APPROVED
+    made = {'revision_number': snap['revision']['number'], 'details_used': snap['details_used'],
+            'codes_made_at': snap['codes_made_at']}
     base = {'report_format': snap['format_version'], 'encounter_title': snap['encounter']['title'],
-            'date_of_service': snap['date_of_service'] or ''}
+            'date_of_service': snap['date_of_service'] or '', **made}
     banner = {column: '' for column in CUSTOMER_CSV_COLUMNS}
+    banner.update(made)
     banner['report_format'] = SYNTHETIC_LINE
     rows = [banner]
     for item in snap['items']:
@@ -2010,6 +2285,15 @@ CUSTOMER_RENDERERS = {'txt': render_customer_txt, 'csv': render_customer_csv}
 
 
 def generate_customer(encounter, kind, fmt, user):
+    """_generate_customer (below), gated on a new-path assessment as generate is (design/FINAL.md 10.3)."""
+    with readers.write_scope(CUSTOMER_REPORT_GATE, _new_path(encounter)) as gate:
+        try:
+            return _generate_customer(encounter, kind, fmt, user, gate)
+        except readers.GateClosed as closed:
+            readers.refuse(CUSTOMER_REPORT_GATE, closed, encounter=encounter, actor=user)
+
+
+def _generate_customer(encounter, kind, fmt, user, gate):
     """The customer report: snapshot -> render -> store once with audience 'customer', its sha256 and the digest of
     its decision marker (customer_marker), read under the same encounter lock as the snapshot. Any active member of the
     workspace may make one (as before, viewers included)."""
@@ -2022,6 +2306,8 @@ def generate_customer(encounter, kind, fmt, user):
         raise PermissionDenied('Only an active member of this workspace can create its exports.')
     with transaction.atomic():
         locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
+        if readers.moved(gate, _new_path(locked)):  # the gate decided from the LOCKED row (review finding 3), as generate
+            raise readers.PathMoved()
         snap = customer_snapshot(locked, kind)
         now = timezone.now()
         generated = {'at': _ts(now), 'by': user.label()}
@@ -2034,4 +2320,5 @@ def generate_customer(encounter, kind, fmt, user):
             generated_by=user, audience=ReportArtifact.CUSTOMER)
         audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
                      assessment=snap['assessment'], kind=kind, fmt=fmt, audience=ReportArtifact.CUSTOMER)
+        readers.check(gate)  # the last thing before the commit (FINAL 10.3)
     return artifact

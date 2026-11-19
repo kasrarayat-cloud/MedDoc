@@ -3,6 +3,7 @@
 Each test reproduces a confirmed finding's input and asserts the corrected
 behaviour. Synthetic data only; the provider is an in-process fake.
 """
+import copy
 import json
 import threading
 import time
@@ -15,10 +16,11 @@ from django.utils import timezone
 
 from studio import jobs, models
 from studio.types import ExtractionResult, PageSpan, RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_frontend import PLAIN_STATIC
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
+from tests.test_pipeline_api import OFFICE_INTERPRETATION, OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 NO_DATE_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
@@ -26,6 +28,24 @@ NO_DATE_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 # is never changed by a member's value, which is a conflict instead (session interpretation 11).
 FIRST_DATE = '2026-10-20'
 RECONCILE_NOTE = 'Checked the provider console: no response was recorded.'
+
+
+def _no_date_interpretation():
+    """Gemini's synthetic answer to NO_DATE_NOTE (design/FINAL.md 14.6): OFFICE_NOTE's, the date line and its date
+    gone - the date of service not stated. Normalized, the visit's attributes are verified as in OFFICE_NOTE's; the
+    scheduled colonoscopy's time stays unverified (date_unchecked: with no date of service there is nothing to check
+    the date in its words against), as the contract leaves it."""
+    answer = copy.deepcopy(OFFICE_INTERPRETATION)
+    answer['passages'] = [item for item in answer['passages'] if item['text'] != 'Date of service: 2026-10-20']
+    answer['encounter']['date_of_service'] = {'value': '', 'state': 'not_stated', 'words': '', 'passages': [],
+                                              'other_dates': []}
+    return answer
+
+
+NO_DATE_INTERPRETATION = _no_date_interpretation()
+# The recorded synthetic interpretations of both notes, for a class on the production chain that uploads either
+# (tests.test_pipeline_api.RecordedInterpretation.interpretations).
+INTERPRETATIONS = ((OFFICE_NOTE, OFFICE_INTERPRETATION), (NO_DATE_NOTE, NO_DATE_INTERPRETATION))
 
 
 class ScriptedProvider(FakeProvider):
@@ -71,15 +91,22 @@ class ApiHarness:
         return self.client.post(path, data=json.dumps(data), content_type='application/json')
 
     def runs(self, encounter_id):
-        return list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at'))
+        """The encounter's runs of Corti's primary request, oldest first: the runs these tests assert about (on the
+        production chain the interpretation's own run stands beside them, design/FINAL.md 6.3)."""
+        return list(models.ProviderRun.objects.filter(encounter_id=encounter_id, purpose=models.ProviderRun.PRIMARY)
+                    .order_by('created_at'))
 
     def unknown_run_id(self, encounter_id):
-        return str(models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown').pk)
+        return str(models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown',
+                                                  purpose=models.ProviderRun.PRIMARY).pk)
 
 
 @override_settings(**LIVE)
-class ReconcileReleasesOneAttemptTests(OperatorReads, ApiHarness, TestCase):
+class ReconcileReleasesOneAttemptTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """provider:0 and provider:1 — one reconciliation, at most one new provider attempt."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes, and the addendum revision that
+    # states the date, from their recorded synthetic interpretations.
+    interpretations = INTERPRETATIONS
 
     def test_reconcile_is_refused_while_a_predict_is_queued(self):
         self.provider.outcome = 'unknown'
@@ -116,6 +143,10 @@ class ReconcileReleasesOneAttemptTests(OperatorReads, ApiHarness, TestCase):
         response = self.post(f'/api/encounters/{encounter_id}/addenda',
                              {'text': 'Date of service: 2026-10-20', 'synthetic_attestation': 'yes'})
         self.assertEqual(response.status_code, 201, response.content)
+        self.register_addendum_lines(  # Gemini reads the date of service the addendum states
+            encounter_id, 'Date of service: 2026-10-20',
+            date_of_service={'value': '2026-10-20', 'state': 'stated', 'words': '2026-10-20', 'passages': ['A1'],
+                             'other_dates': []})
         # The addendum's pipeline is queued in the same transaction, so the encounter is busy.
         response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': run_id, 'note': RECONCILE_NOTE})
@@ -149,8 +180,12 @@ class ReconcileReleasesOneAttemptTests(OperatorReads, ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class ContextChangeRepredictTests(OperatorReads, ApiHarness, TestCase):
+class ContextChangeRepredictTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """provider:2 and fidelity:1 — the run in use is compared on its own request, not the previous context."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes from their recorded synthetic
+    # interpretations. The assess door's test on a context the archived jobs.make_context made is
+    # ContextChangeRepredictOnALegacyContextTests.
+    interpretations = INTERPRETATIONS
 
     def test_setting_change_after_stopped_date_change_repredicts_for_the_new_date(self):
         encounter_id = self.create(NO_DATE_NOTE, service_date=FIRST_DATE)
@@ -180,6 +215,14 @@ class ContextChangeRepredictTests(OperatorReads, ApiHarness, TestCase):
         self.assertNotEqual(encounter.current_assessment.pk, first.pk)
         self.assertNotEqual(encounter.current_assessment.context_id, first.context_id)
         self.assertEqual(encounter.current_assessment.provider_run_id, first.provider_run_id)
+
+
+@applied
+@override_settings(**LIVE)
+class ContextChangeRepredictOnALegacyContextTests(OperatorReads, ApiHarness, TestCase):
+    """provider:2's assess door on a LEGACY context (split from ContextChangeRepredictTests; design/FINAL.md 14.6): the
+    context is the archived jobs.make_context's, which the production chain never makes, so the test runs under the
+    test-only legacy chain, verbatim."""
 
     def test_assess_refuses_a_run_requested_for_another_service_date(self):
         encounter_id = self.create()
@@ -254,7 +297,7 @@ class StopRecordTests(OperatorReads, ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class InputBoundaryTests(OperatorReads, ApiHarness, TestCase):
+class InputBoundaryTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """security:2 and ingest:13 — text the database cannot store answers a JSON 400, never a 500."""
 
     def test_nul_in_pasted_text_is_refused_with_json(self):
@@ -331,6 +374,7 @@ class AddendumExtractionTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(models.SourceRevision.objects.filter(encounter_id=encounter_id).count(), 1)
 
 
+@applied
 @override_settings(**LIVE)
 class ConcurrentContextTests(OperatorReads, TransactionTestCase):
     """fidelity:3 — a second concurrent context change waits for the first and is refused, never half-applied."""
@@ -378,7 +422,7 @@ class ConcurrentContextTests(OperatorReads, TransactionTestCase):
             release.set()
             a.join(10)
             b.join(10)
-        self.assertIsInstance(results['A'], models.EncounterContext)
+        self.assertIsInstance(results['A'].context, models.EncounterContext)  # a ContextSave (amendment 1, 2.7)
         self.assertIsInstance(results['B'], jobs.Refused)
         self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.user_values, {'service_date': '2026-10-22'})
@@ -391,6 +435,7 @@ HISTORY_NOTE = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nProcedure: Colonos
 HISTORY_QUOTE = 'Colonoscopy 03/14/2021: hot snare polypectomy of a 12 mm sigmoid polyp'
 
 
+@applied
 @override_settings(**LIVE)
 class MemberServiceDateRoutingTests(OperatorReads, ApiHarness, TestCase):
     """status:6 — a member-supplied service date reaches routing and span status, not only assessment."""

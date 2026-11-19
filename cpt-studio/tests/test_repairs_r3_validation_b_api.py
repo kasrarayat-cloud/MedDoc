@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from django.test import TestCase, override_settings
 
 from studio.models import ReferenceCodeFact, ReferenceSource
+from tests.legacy_chain import applied
 from tests.test_reports import section
 from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import LIVE
@@ -21,6 +22,7 @@ def xxx():
     return {'status': 'A', 'global_days': 'XXX', 'mult_proc': '0', 'endo_base': None, 'pctc': '0'}
 
 
+@applied
 @override_settings(**LIVE)
 class RoundThreeValidationApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     def setUp(self):

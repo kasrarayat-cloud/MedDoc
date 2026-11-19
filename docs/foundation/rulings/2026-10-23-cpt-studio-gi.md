@@ -3053,3 +3053,637 @@ its files were hashed, and its four-result counterexample registry (1,374 entrie
 
 (h) **Spending.** Gemini calls run in purposeful, bounded batches with concurrency one; every request's usage is recorded and
 reported. The legacy reader's code stays in the tree for rollback only and is not deleted in this change.
+
+## Owner message, 2026-11-11 — the Gemini spending cap raised to about $300
+
+Received 2026-11-11T06:27Z in session 30a58364, after the session reported that the project's monthly spending cap (reached
+2026-11-10 13:56Z at about $26) blocked the migration's live checks. Verbatim:
+
+> i SET HIGH SPENING LIMIT AROUND 300 CAP FOR NOW DONT WORRY ABOUYT IT
+
+**Session interpretation.** This is the money decision (standing authority class d). The cap is now about $300 for the month.
+The migration's planned live checks may send within it: g1 x3 on the test instance (about $4.60 in all), the test-instance
+walk, and the c6/c7 blind walks after the install. Interpretation (h) of the 2026-11-09 directive still governs every send:
+purposeful, bounded batches with concurrency one, each with its own cost cap, and every request's usage recorded and reported.
+A 429 with no QuotaFailure detail is still a hold, never retried in a loop (DECISIONS D39).
+
+## Owner directive, 2026-11-12 — Gemini owns the open-ended clinical interpretation; the phrase-by-phrase repair campaign stops
+
+Received in session 68197eb1 (continuing 30a58364) after the session reported that the migration's narrowing-only repair rounds
+were not converging. Since round 5f (05a881a75), 14 repair builders had produced 7 integrable repairs, and every review found new
+critical wordings, mostly paraphrases of the classes just repaired. The session asked how to proceed. The owner chose "Gemini
+judges, fail closed (Recommended)", then wrote, verbatim:
+
+> Proceed with option 1. This confirms my existing decision: Gemini must own the open-ended clinical interpretation. Stop the phrase-by-phrase semantic repair campaign.
+>
+> Update HARNESS.md and the migration checklist before continuing. Preserve the current work and evidence.
+>
+> Required implementation:
+>
+> - [ ] Move judgments about timing, causality, entry ownership, targets, techniques, examined stations and extent into Gemini’s structured, source-linked event inventory. Represent supported facts, explicit negatives, contradictions and unknowns distinctly.
+> - [ ] Remove remaining keyword-based reinterpretations and semantic vetoes from the new path. Do not reproduce the old reader under a new “verification” name. Keep deterministic schema, source-integrity, revision-binding and applicable coding-rule checks.
+> - [ ] Define verification honestly. A quote existing in the document does not prove that it supports the claimed meaning. Check attachment to the correct event and surrounding qualifications. Gemini must not certify its own answer simply by setting “verified=true”.
+> - [ ] Hold only decisions dependent on unresolved required facts. Give one focused explanation or question. Let unrelated supported codes proceed. Preserve broad denials and genuine contradictions; never treat an unknown target as proof that statements cannot conflict.
+> - [ ] Keep Corti, Astra and Fable as coding participants. Model agreement alone must not approve a code. Preserve reviewer approval and customer-facing provider confidentiality.
+>
+> Before changing the prompt, freeze the acceptance cases and expected outcomes. Include independent documents, previous failures, equivalent paraphrases, meaning-changing variants and repeated runs. Measure both wrong READY results and unnecessary holds. An all-held result cannot pass.
+>
+> Use necessary fresh Gemini recordings in small, bounded batches under my existing testing authority. Preserve prior recordings and distinguish fresh calls from replay.
+>
+> After the new interpretation path passes meaningful checks, complete installation and the actual website workflow: upload, processing, review, save, reload and downloaded reports. Verify the deployed runtime uses Gemini and does not invoke the retired semantic vetoes.
+>
+> Keep the current site available until the replacement is ready to switch. Preserve existing records and rollback capability.
+>
+> Continue through the authorized implementation and verification. Report the installed revision, remaining defects, incorrect approvals, unnecessary holds, usage and actual download results. Do not call the migration complete at the design, recording or offline-test stage.
+
+**Session interpretation.**
+
+(a) **What stops, and what is preserved.**
+- STOPPED: the phrase-by-phrase repair campaign, refutation rounds 5-6 with repair rounds 5-5h, each adding deterministic word
+  readers for the next counterexample.
+- PRESERVED as evidence and as the baseline: the branch `feat/cpt-studio-gemini-interpreter-20261109` at 4726a8ce6, pushed and
+  confirmed on origin; DECISIONS D1-D177 with every integration entry; the session's `gemini-migration/` directory (rounds,
+  reviews, refutation results with their case files, the audited differential gate `gate5/` and its run on 05a881a75, the FRESH
+  recordings and scores); the U32 c4 registry (1,374 entries).
+- Nothing is deleted.
+
+(b) **What Gemini owns.** The structured, source-linked event inventory carries the judgments of timing (including relative to the
+date of service), causality (what an act was part of or caused by), entry ownership (whose entry an act is told in), targets,
+techniques, examined stations and extent.
+- Each is an attribute with its source link and a state that keeps four things apart: supported, explicitly negated, contradicted,
+  and unknown.
+
+(c) **What the deterministic layer keeps, and what leaves the new path.**
+- Keeps: schema validation, source integrity, revision binding, the attachment checks of (d), and the applicable coding-rule checks
+  (reference rows, CPT and NCCI relations, base and modifier rules) over the inventory's facts.
+- Leaves the new path: every reader that re-reads the document's words to reinterpret an attribute Gemini owns, or to veto a code.
+  Examples are the same-day frames, label and signature grammars, yield and denial clause readers, site and route phrase readers,
+  and station word readers.
+- It is not reproduced under another name. The legacy reader stays archived for rollback only.
+
+(d) **Verification, honestly.** A cited quote existing in the revision proves only that the quote exists.
+- The design must check each claimed fact's ATTACHMENT to the right event (the span lies within that event's own cited
+  statement), and the SURROUNDING QUALIFICATIONS of that statement (negation, uncertainty, plan, another occasion or another
+  performer), by means the design states and refutes.
+- The interpreter's own flag never establishes support. No field Gemini sets ("verified", a confidence) certifies its own answer.
+
+(e) **Holds.**
+- Only a decision that depends on an unresolved required fact is held, with one focused explanation or question.
+- Unrelated supported codes proceed.
+- Broad denials and genuine contradictions are preserved.
+- An unknown target never proves that two statements cannot conflict.
+
+(f) **Participants and approval.** Corti, Astra and Fable stay coding participants. Model agreement alone never approves a code.
+Reviewer approval stays required. Provider and model names stay out of customer screens and downloads.
+
+(g) **Acceptance, frozen BEFORE the prompt changes.**
+- The cases and their expected outcomes are committed by hash before any prompt change. They include:
+  - independent documents (g1, sealed; c6 and c7 stay sealed for the post-install walk);
+  - previous failures (the registry, the refutation rounds' confirmed findings, FRESH's recorded failures);
+  - equivalent paraphrases;
+  - meaning-changing variants;
+  - repeated runs.
+- Measured: wrong READY results (wrong code, wrong act or wrong facts), wrong exclusions and dropped genuine questions, AND
+  unnecessary holds.
+- The pass thresholds are fixed before measuring. An all-held result cannot pass.
+
+(h) **Recordings.** Fresh Gemini calls run under the existing testing authority (the cap of about $300, 2026-11-11), in small,
+bounded batches with concurrency one; every request's usage is recorded.
+- Fresh calls are labelled apart from replays.
+- Prior recordings (fresh-frozen, fresh2-frozen, the trial's) are kept unchanged.
+
+(i) **Installation.**
+- Only after the new interpretation path passes the frozen checks, through the established path (PR, CI, `scripts/merge-pr.sh`,
+  a committed declaration, `scripts/run-ruled-mutation.sh`).
+- Then the actual website workflow on the installed site: upload, processing, review, save, reload and downloaded reports.
+- Then verification that the deployed runtime uses Gemini and invokes none of the retired semantic vetoes.
+- The current site (c2e53f8e) stays available until the switch; existing records and the rollback image are kept.
+
+(j) **Report.** The installed revision, the remaining defects, the incorrect approvals, the unnecessary holds, the usage and the
+actual download results. The migration is NOT complete at the design, recording or offline-test stage.
+
+## Owner directive, 2026-11-12 — funding authority for the migration; the second Gemini call approved
+
+Received 2026-11-12 in session 68197eb1 (continuing 30a58364). The session had put four owner items:
+- the per-report cost of design v2's second Gemini call (class d);
+- the testing budget against the cap of about $300 (class d);
+- the loss on legacy encounters, where a context change needs an explicit re-check (class b);
+- a separate test key after the switch (class d).
+
+Verbatim:
+
+> I approve the second Gemini call per report. Keep the two-pass interpretation and checking design.
+>
+> You have my full funding support for the necessary Gemini, Corti, Astra, Fable and development-agent usage required to complete this CPT Studio migration. Do not pause for repeated price or testing-budget approvals.
+>
+> For this project’s authorized synthetic development, testing and verification, this instruction supersedes earlier owner-imposed monetary ceilings, including the approximately $300 campaign budget. Do not invent another spending ceiling. Continue using purposeful batches and record actual usage and costs.
+>
+> Record this authority in HARNESS.md and the relevant server execution controls. Preserve historical budgets, reservations, consumed attempts, failures and unknown costs. Do not fabricate credits or reset accounting.
+>
+> Continue through:
+> - Implementation of Gemini as the primary interpreter.
+> - Independent testing of both incorrect code acceptance and unnecessary holds.
+> - Resolution of the critical and materially incomplete findings.
+> - The PDF-library security update and required checks.
+> - Installation while keeping the existing website available.
+> - Actual upload, review, save, reload and downloaded-report verification.
+>
+> Keep Corti, Astra and Fable working on code proposals/review. Preserve reviewer approval, evidence integrity, tenant isolation, synthetic-only operation and customer-facing provider confidentiality.
+>
+> Actual authentication, quota or payment failures still require diagnosis. This approval does not authorize new subscriptions, automatic top-ups, new vendor agreements or real-patient processing.
+>
+> Do not return to endless phrase-by-phrase repairs of the old semantic reader. Complete the replacement, update the checklist with evidence, and report the installed revision, verified results, remaining limitations and measured costs.
+
+### Session interpretation, 2026-11-12 (68197eb1, on receipt) — recorded, not owner-ruled
+
+(a) **The second call is approved** (class d). Design v2's two passes stand: the interpretation, then the appraisal. The
+per-document cost of FINAL-V2 7.1 is accepted.
+
+(b) **Funding.** The usage needed to complete this migration is funded: Gemini, Corti, Astra, Fable and development
+agents.
+- For this project's authorized synthetic development, testing and verification, this supersedes the owner-imposed
+  monetary ceilings. That includes the testing authority of 2026-11-11 (about $300) as a ceiling on the session's sends.
+- The session invents no new ceiling. It no longer stops at a campaign total, and it no longer asks for price or
+  testing-budget approvals.
+- Batches stay purposeful. Each batch has a cost guard sized from its own estimate: the guard stops a runaway loop and is
+  not a ceiling on the work.
+- Actual usage and cost are recorded per request and per batch, and reported.
+
+(c) **What it does not change.** The Gemini project's own monthly spending cap is a setting in the owner's Google account.
+- The session does not change that cap and does not work around it.
+- A provider-side quota, authentication or payment failure is an installation-wide hold (DECISIONS D39). That covers a 429
+  with or without quota detail, a 401 or 403, and a billing error. The hold is diagnosed and reported to the owner, and
+  never retried in a loop.
+- No subscription, automatic top-up, vendor agreement or key is created.
+- No real patient's document is processed: synthetic data only.
+
+(d) **Accounting.** Every historical budget, reservation, consumed attempt, failure and unknown cost stays recorded as it
+was, including:
+- the cap stop of 2026-11-10 13:56Z, at about $26 estimated;
+- the 23 sends refused after it;
+- the void g1 runs 2 and 3;
+- estimates still marked as estimates.
+
+Nothing is credited back or reset. The ledger continues from that history: the session's
+`gemini-migration/USAGE-LEDGER.md`, summarised in `cpt-studio/HARNESS.md`.
+
+(e) **Server execution controls.** Every provider run records `CPT_STUDIO_AUTHORIZATION_REF`, and that reference is this
+file. This section is the authority those runs cite from now on.
+- The live gate refuses a send when no authorization reference is configured; that stays.
+- FINAL-V2 7.6's three budget rules are superseded as DECISIONS D183 records:
+  - the owner receiving the total before the acceptance run;
+  - the project-level stop at the cap less a reserve;
+  - the question of a key after the switch.
+- Per-batch guards remain.
+
+(f) **Scope** continues through:
+- the implementation of Gemini as the primary interpreter;
+- independent testing of incorrect code acceptance (wrong READY) and of unnecessary holds;
+- the resolution of the critical and materially incomplete findings;
+- the PDF-library (pypdf) security update with its required checks;
+- the installation, with the existing website kept available;
+- the actual upload, review, save, reload and downloaded-report verification.
+
+Corti, Astra and Fable stay. Reviewer approval, evidence integrity, tenant isolation, synthetic-only operation and
+customer-facing provider confidentiality are preserved.
+
+(g) **Still open.** This message does not answer the class-b item: a legacy approval does not carry across engines, and a
+context change on a legacy encounter needs an explicit re-check (FINAL-V2 6.2). It gates the install and is asked again
+before the install.
+
+(h) **No phrase-by-phrase repair of the old semantic reader.** The replacement is completed and the checklist updated with
+evidence. The report gives the installed revision, the verified results, the remaining limitations and the measured costs.
+
+## Owner amendment, 2026-11-12 — automatic recheck after a save; the mandatory "Check again" is removed
+
+Received 2026-11-12 in session 68197eb1 (continuing 30a58364). The session had asked the owner to accept, before the
+install, the class-b loss in FINAL-V2 6.2: a context change on a legacy encounter would need an explicit "Check again".
+Verbatim:
+
+> Amend my previous acceptance: make Gemini rechecking automatic after a successful save of changes affecting clinical content or coding context. Remove the mandatory “Check again” step from the normal workflow.
+>
+> Requirements:
+> - Queue the recheck in the background after saving. Do not call providers on every keystroke or for cosmetic changes.
+> - Show “Changes saved—updating codes” with truthful progress.
+> - Prevent duplicate submissions. Bind results to the exact saved revision; results from an older revision must never overwrite newer work.
+> - Rerun only stages whose inputs changed. Reuse results only when their inputs and relevant versions still match.
+> - Preserve historical approvals and reports. While updated coding is pending, prevent approval or export of stale codes as current.
+> - When complete, show the updated codes and what changed. Keep final reviewer approval explicit.
+> - Keep a manual Retry button for failures, with a clear explanation. Handle quota and payment failures without repeated requests.
+>
+> Apply this to edited legacy encounters as well as new encounters. Verify rapid successive edits, failures, reload persistence and actual exports. Record this as superseding the earlier mandatory manual-recheck decision, then continue implementation and installation.
+
+### Session interpretation, 2026-11-12 (68197eb1, on receipt) — recorded, not owner-ruled
+
+(a) **What it supersedes.** FINAL-V2 6.2's "Legacy encounters and context saves" rule is superseded: a context save there
+stored the values, queued nothing, and left the explicit "Check again" as the only way the document was read again
+(refutation finding MO-4's resolution). With it go the matching parts of 7.4 and 8.1 step 5b. D178's class-b item is
+closed: the owner's answer is automatic rechecking, not the loss. DECISIONS D184 records it.
+
+(b) **Triggers.** A recheck follows a SUCCESSFUL save that changes clinical content or coding context:
+- a new revision of the document, such as an upload or an addendum;
+- a context save whose effective values differ from the current context's: the date of service, the setting, patient
+  status, billing context or another coding-context field.
+
+These trigger nothing:
+- a save with no changed value;
+- a change to a field no coding rule reads, such as a title;
+- a decision, a member answer and display state, which keep their own existing flows;
+- typing. Saves are explicit.
+
+(c) **What runs.** Only the stages whose inputs changed run, and a stored result is reused only when its inputs and the
+relevant versions match:
+- On a revision with a v2 inventory at the current versions, a context save re-derives over the frozen inventory and
+  re-assesses, and no Gemini call is made. A code-proposing participant is asked again only when its own request changed;
+  its retained answer to the identical request is otherwise reused.
+- On a legacy revision, one without such an inventory, the two Gemini passes run once for the revision. A later save
+  reuses them by their request hash (FINAL-V2 7.4 doors 1 and 2) and re-derives with the newest values.
+
+(d) **Binding and no overwrite.**
+- Each result is bound to the exact revision and context it was computed for.
+- An assessment becomes current only when, under the encounter's row lock, its revision and context are still the
+  encounter's current ones. A result for an older revision or context is kept as history and never displaces newer
+  work.
+- Duplicate submissions are prevented: provider stages are keyed by revision and request, the single-flight lock and the
+  stage doors apply, and a superseded queued stage ends without sending.
+
+(e) **While pending.**
+- The screen says "Changes saved—updating codes", with truthful progress naming the stages that actually run.
+- The earlier codes are shown as earlier and cannot be approved or exported as current.
+- Earlier approvals and downloaded reports stay as records.
+
+(f) **When done.** The screen shows the updated codes and what changed against the codes it replaced. Approval stays a
+reviewer's explicit act, and an approval never carries across engines (D7).
+
+(g) **Failures.** A failed stage offers a manual Retry with a clear explanation of what failed. Quota, authentication and
+payment failures are the installation-wide hold (D39): no repeated requests, a truthful "Paused", an operator's release.
+
+(h) **Scope and proof.** Legacy encounters and new encounters alike. The tests and the installed walk verify:
+- rapid successive edits;
+- failures, with Retry and the hold;
+- persistence across a reload;
+- actual exports, refused while pending and correct after.
+
+The behaviour is designed and refuted as FINAL-V2 amendment 1 before it is built.
+
+## Owner directive, 2026-11-13 — the interpreter's model swapped from gemini-4-argon to gemini-4-carbon at maximum reasoning, with no separate qualification
+
+Received 2026-11-13 in session 68197eb1, after the session explained that a model swap reuses the whole build and needs
+only a re-run of the measurement. Verbatim:
+
+> I found tthat Google has Carbon much betetr than Aragon i want you to swap Aragon to Carbon max reasening i dont need any test or qualification just a simpel swap i approved since aragon was good it should carbon paly better so dont waste token and time on testing jsuta simpel swap
+
+### Session interpretation, 2026-11-13 (68197eb1, on receipt) — recorded, not owner-ruled
+
+(a) **The swap.** Google's documentation, read 2026-11-13 at aistudio.google.com (ai.google.dev redirects there):
+- the model ID is `gemini-4-carbon`, listed as stable (docs/models/gemini-4-carbon), with structured outputs, thinking
+  levels low, medium (the default) and high, and a 65,536-token synchronous output limit;
+- "maximum reasoning depth on gemini-4-carbon" is the thinking level `high` (docs/thinking);
+- "upgrading to gemini-4-carbon requires no request schema changes": change the model ID; thinking tokens count toward
+  the output limit; temperature, top_p and top_k are ignored, not rejected (docs/whats-new-gemini-4-carbon);
+- prices are identical to gemini-4-argon: $2.00 input and $10.00 output (thinking included) per million tokens through
+  2026-11-30, $4.00 and $20.00 from 2026-12-01 (docs/pricing).
+
+So the interpreter's MODEL becomes `gemini-4-carbon`. Both passes request thinking level high, and maxOutputTokens rises
+from 32,768 to 65,536, so the longer reasoning cannot truncate an answer. The price table names the new model at the same
+rates.
+
+(b) **"No test or qualification."** No separate qualification of Carbon is run, and no Carbon-specific measurement batch.
+The migration's own steps stay as the owner's earlier directives require them: the D1-D3 recordings, the frozen acceptance
+and the installed walk. They were planned before this message, and none had yet sent anything to any model, so they now
+measure Carbon, at no extra cost. The code's own unit tests and merge gate run as for any change. They make no provider call.
+
+(c) **Evidence stays true.** The recorded and frozen Argon answers (tests/fixtures/interpretation: the FRESH recordings
+and their variance re-runs) stay labelled gemini-4-argon, and the tests that replay them read them as Argon's recordings.
+Earlier reports keep the model they measured.
+
+(d) **Customers.** The customer denylist gains the full ID `gemini-4-carbon`, never the bare word "carbon", which is
+clinical vocabulary (a carbon-particle tattoo).
+
+(e) **Latency and cost.** The HTTP timeouts are kept until D1 measures the latency at high reasoning (Google's migration
+note asks that they allow for longer reasoning). The per-token prices are unchanged, but high reasoning spends more output
+tokens per document, so the cost per document rises; every send's usage and cost is recorded as before. The monthly
+spending cap of about $300 (owner message 2026-11-11) may be reached by the remaining recordings and the exam. A cap hit
+is a hold that is never retried (D39), and the cap is the owner's decision (class d).
+
+(f) **When.** No Gemini call happens before step 8's first recording. The code change lands right after the running build
+(wf_0d97cbf6-b97) integrates, before that recording, because the build's steps are editing the same files now. DECISIONS
+D230 records it.
+
+## Owner directive, 2026-11-15 — the interpreter's model switched from gemini-4-carbon to Claude Fable 5.2
+
+Received 2026-11-15 in session 31dfc45d, as the owner's answer to a choice put to him after step 8's first paid batches
+(the D1 probes, the D2 comparison at Gemini's low and medium reasoning, and an owner-approved probe of Claude Fable 5.2 on
+the same ten development notes). The question, verbatim:
+
+> Fable 5.2 read better than Gemini but costs ~10x more, and all three models hit the same design problems (long notes too big, single-value rule, engine caution). How do you want to proceed?
+
+The owner chose, verbatim, the option:
+
+> Switch to Fable now — Commit to Fable 5.2 as the interpreter and build its connector alongside the redesign. Best reading so far, but the acceptance run would cost roughly $1,000 at current sizes.
+
+What had been put before him (PLAN.md, 2026-11-15 entries; the same ten notes, design v2 as built):
+- notes fully read: 4 (Gemini low), 1 (Gemini medium), 6 (Fable 5.2 at effort high);
+- the two 19 KB notes cut at the per-response limit by all three (Carbon 32,768 tokens; Fable 64,000 as sent);
+- single-value refusals 4 / 1 / 2, Fable's on the same two notes Gemini low refused;
+- READY-expected codes found READY 0 of 4 / 0 of 1 / 3 of 8;
+- one wrong READY (A-v5 45380) from Gemini medium and from Fable, the same row;
+- cost for the ten notes $1.72 / $4.28 / $18.32; time per short note 1-2 / 5-10 / 2.5-4.5 minutes.
+
+### Session interpretation, 2026-11-15 (31dfc45d, on receipt) — recorded, not owner-ruled
+
+(a) **The switch.** The interpreter's model becomes Anthropic's `claude-fable-5-2`, through the Anthropic Messages API,
+with CPT Studio's existing Anthropic credential (the key the installed site's Fable 5.1 second reader already uses; the
+worker's bind source /etc/cpt-studio/anthropic-credentials.env). Facts (the claude-api reference, cached 2026-11-03):
+$8.00 input and $40.00 output (thinking included) per million tokens; 1M-token context; 128K maximum output; thinking is
+always on and its depth is set by `output_config.effort` (low, medium, high, xhigh, max) - the owner chose high, the
+recommended starting level; no sampling parameter is accepted (temperature is a 400); no assistant prefill; a decline
+returns `stop_reason: refusal`; the model requires 30-day data retention, which the account already meets (it serves
+Fable 5.1 today).
+
+(b) **No fallback model.** An answer is read only when Anthropic reports `claude-fable-5-2` (D13's exactness, carried to
+the new provider); a refusal is a hold, never answered by another model. The reference recommends server-side fallbacks
+by default; for the interpreter the provenance rule governs. Recorded so the owner can revisit it.
+
+(c) **What carries over and what is built.** Design v2's contract - the local schemas, the readers, settle, the engine,
+the store and read time - is provider-independent and stays. Built next (AMENDMENT-2, a design round and a build round):
+the Fable connector (requests, response reading and classification, usage and cost, recording and replay, Stop and
+resume), and the fixes step 8 measured on every model: the answer format too large for long notes, the single-value slot
+rule that refuses a whole answer, the engine's caution (unnecessary holds), and the shared wrong READY on A-v5 45380,
+investigated first-hand.
+
+(d) **Gemini.** The Gemini connector and D230's Carbon settings stay in the code until the Fable connector is built and
+measured, then retire from the interpreter's path by DECISIONS. The Gemini recordings stay labelled as Gemini's; D1 and D2
+are evidence.
+
+(e) **Cost.** Measured: about $1.2-1.7 per short note for both passes at effort high. The acceptance run at today's sizes
+would be roughly $1,000, as the owner was told. Google's ~$300 cap does not cover Anthropic spend; the Anthropic
+account's limits are the owner's. Before the acceptance run is sent, the owner receives its total and decides (class d),
+as FINAL-V2 7.6 requires.
+
+(f) **The installed site** is unchanged until the install; its Fable 5.1 second reader is unaffected. DECISIONS D275
+records it.
+
+## Owner directive, 2026-11-15 — accuracy fixes are general rules in the engine and the code, never per document
+
+Received 2026-11-15 in session 31dfc45d, while the hold-cause analysis of the Fable 5.2 ten-note probe was running,
+verbatim:
+
+> make sure you Fix the issues in cod and engine not only pdf by pdf u know what im saying?
+
+### Session interpretation, 2026-11-15 (31dfc45d, on receipt) — recorded, not owner-ruled
+
+(a) **A fix is a rule for a class of inputs.** Every fix to the reading, the engine or the instruction is stated as a
+rule over the reading's data model (fact states, a statement's scope and links, relation kinds, a coding rule's
+predicate), justified by the design or a ruling. It is never keyed to a document: no case ids, offsets, phrases or word
+lists taken from the development notes, and no exception for one code that the code's own rule does not demand.
+
+(b) **Proved beyond the notes it came from.** Synthetic inputs outside the development set (one the fix must release,
+one it must still hold), replay over every recorded batch (Gemini's readings included, as the cross-reader check), and
+the engine's whole `tests.v2` package against a clean baseline. A refutation lens attacks generality.
+
+(c) **Instructions and limits.** Instruction text is a general principle with a generic example. The two probe sentences
+of 2026-11-15 (probe tree probe-fable52-v2), which echo two development notes' words, are rewritten. The claim bound and
+the output maximum are sized from the provider's capacity for the size bound, never set to what two notes needed.
+
+## Owner directive, 2026-11-15 — no acceptance run of the sealed set; paid testing is one short and one realistic note at a time
+
+Received 2026-11-15 in session 31dfc45d, in four messages, after the owner asked what the acceptance run would cost (the
+answer given: 347 reads under D178 condition 1, about $510-540 with prompt caching, $616 without, $670 at the
+128,000-token worst; 645 reads about $920-1,250; a half-price Batches path not designed). Verbatim:
+
+> no dont do that test only 2 short and 2 long we dont have to test 216 doc
+
+> i havent seen any doctor has 5pGes for gi is it neccerly to test suck a long pdf like this?
+
+> no focus on short and realistic long pdf if 2 short and 2 relaistic gone failed or you need to run another test run one by one like one short kne relistic pdf vheck and then again but dont run like 200 seal at the same time we have limited budget so make sure you soing one by one and if you feelpdf gone good and works perfectly then move to the next step and stop twsting
+
+> to make sure do 10 short and 10 realistic then if you feel need more you can do it tho
+
+### Session interpretation, 2026-11-15 (31dfc45d, on receipt) — recorded, not owner-ruled
+
+(a) **What is not run.** The acceptance run A (and A') over the sealed set, and the development batches D1-D3.
+
+(b) **What is run.** Ten pairs, each one short development note and one realistic long note, sent one pair at a time
+through the built Fable connector on the test image. Every row is read before the next send.
+
+(c) **The bar per pair.** A pair passes when every code row is right: no wrong READY, no wrong exclusion, and no hold the
+expectation does not ask for. Any failure stops the sends; the class is fixed generally (the directive above), re-checked
+free by replaying that recording through the fixed engine, and testing continues on new documents (a document that drove
+a fix is no longer a test document). After ten passing pairs testing stops; more only when the evidence calls for it, as
+the owner allows.
+
+(d) **Realistic length.** A GI note as physicians write it is about two pages. The 19 KB development notes (about five
+pages) are stress material and are not tested with money. INTERPRET_MAX_CHARS stays 20,000 (no capability change); the
+build sizes the output maximum and the claim bound for it, as the long-note evidence of 2026-11-15 measured.
+
+(e) **The documents.** The short set is pre-registered by rule (PLAN.md, 2026-11-15). The ten long notes are written
+blind (an author, an independent coder, an adjudicator) and sealed until each pair's test.
+
+(f) **What is given up**, recorded so it is not mistaken later: ten pairs cannot establish the acceptance bar
+statistically (READY recall at least 70%, unnecessary holds at most 15%, zero wrong READY in every run). The evidence for
+the install becomes the free replays of every recording through the built engine, the ten pairs and the walk. Expected
+spend about $40-50, reported pair by pair.
+
+## Owner answer, 2026-11-15 — the Anthropic account's headroom for the ten-pair test
+
+Received 2026-11-15 in session 31dfc45d. Asked (DECISIONS D279 item 4) whether the Anthropic account that the installed
+site's Fable 5.1 second reader shares has at least about $60 of headroom for the ten pairs (about $40-50 expected), the
+owner answered, verbatim:
+
+> yes i have $200 budget in api account
+
+### Session interpretation, 2026-11-15 (31dfc45d, on receipt) — recorded, not owner-ruled
+
+(a) D279 item 4 is satisfied; the first pair may be sent once the build lands.
+
+(b) Each pair's batch carries D277's per-pair cap (about twice its modelled cost). A test-total stop protects the site:
+before any send that could take the test's recorded spend past $100, the sends stop and the owner is asked, so at least
+about $100 of the $200 stays for the site's reader.
+
+(c) The probes of 2026-11-15 ($42.17 by the harness's upper bound) were sent on the same account before this answer;
+whether the $200 is counted before or after them is not known, and either way the test fits.
+
+## Owner directive, 2026-11-16 — no approval stop on the test spend; the session manages the budget
+
+Received 2026-11-16 in session 31dfc45d, answering the session's note that the owner would be asked only if the test's
+spend went past $100. Verbatim:
+
+> Dont ask me if it is past jsut do ityou have my permision but try to handle the budget tho dont run any unneccry test
+
+### Session interpretation, 2026-11-16 (31dfc45d, on receipt) — recorded, not owner-ruled (DECISIONS D293)
+
+(a) The $100 test-total stop of the previous answer is no longer an approval gate. The paid-test tools hold a protective
+ceiling of $120 (`TEST_TOTAL_USD`). It keeps a reserve for the installed site's Fable 5.1 second reader on the shared
+account, whether the owner's $200 is counted before or after the 2026-11-15 probes ($42.17). At the ceiling the sends
+stop and the owner is told that the account needs topping up. The owner is not asked for leave.
+
+(b) No unnecessary paid test. Only the ten pairs are sent. A failed pair's document is never re-sent: its fix is
+re-checked free by replay, and the next new pair confirms it. There are no confidence batches and no re-runs of a passed
+pair, and the post-install walk is kept to the minimum that verifies the install.
+
+(c) The pre-registered short set is restated by its own rule (DECISIONS D293). Two documents exposed during the build
+are withdrawn: B/fb01, which a build step's test run read, and B/fb09, which became that test's fixture in its place.
+Nothing else about the test protocol changes.
+
+## Owner directive, 2026-11-17 — Fable judges the readings; code keeps only the fixed billing rules
+
+Received 2026-11-17 in session 31dfc45d. Verbatim:
+
+> How can we reduce the holds by Fable agents i dont want to keep coding and run a new models i want to use AI isntead
+> of running patch and models is it possible? ... my main goal is not to using old way we have ai and agents right?
+
+The owner was asked how far the system should rely on Fable's judgment instead of new code patches, and chose "Fable
+judges readings (Recommended)". The two addenda, the same night, verbatim:
+
+> make sure Fable has enough pwoer to handle this matter as well if system miss or unsure to put a code on hold Fable
+> has to enter and fix as much as it can find proof to release the code but in safe good way
+
+> dont forget dont put any restriction for fable
+
+### Session interpretation, 2026-11-17 (31dfc45d, on receipt) — recorded, not owner-ruled (DECISIONS D306)
+
+(a) Fable answers the engine's own reading doubts. These are: does this sentence apply to that act; which procedure
+part; the same polyp; an act's session, date relation, entry, performer or target. Each becomes a question claim with
+its exact negation. An answer is established only when the claim is supported with a located quote from the note AND
+its negation is rejected.
+
+(b) Code keeps only the fixed billing tables (bundling, add-ons, units, competing codes, base-included). It also keeps
+the facts a document truly lacks, which stay with the coder. No new per-pattern rule is written.
+
+(c) No restriction on Fable's power. It sees the whole note. It answers at the connector's maximum output (128,000
+tokens) and its highest reasoning. Every reading-uncertainty hold is in scope, and no question is dropped for a claim
+bound. The only conditions on a release are the owner's safety bar: located proof and an agreeing cross-check, under
+the appraisal's health thresholds. Clause (c) was later amended for cost alone by the owner's approval of 2026-11-18:
+the per-document ceiling, below.
+
+## Owner decision, 2026-11-17 — one calibration item per question request
+
+Received 2026-11-17 in session 738699b2, after the paid probe's step 1 long. Fable answered every keyed question and
+all calibration items right, and both remaining holds came from the session's own proof check and question wording.
+The owner asked, verbatim:
+
+> why would we repari the old system even tho we know fable handle all those matter easily? i want you to reportm e what
+> are you reapring now since Fable handled everything
+
+Offered three options (one calibration item per request, none, or four), the owner chose "One per request
+(Recommended)".
+
+### Session interpretation, 2026-11-17 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D319)
+
+(a) Every question request carries exactly one calibration item: a known-false claim with its exact negation. A
+calibration claim answered "supports" refuses that request.
+
+(b) The item is a live check that Fable still answers honestly, for example after a model update, at about half the
+cost of four items.
+
+## Owner directive, 2026-11-17 — Fable passed: build round r3 and install it on the live site at effort max
+
+Received 2026-11-17 in session 738699b2. Verbatim:
+
+> We dont need to make proccess complicated so question is is fable pass the test on high accuracy as you tested i would
+> say yes so fable works perfectly rather the old system so build it and then install the whole update on live website
+> what is wrong now?
+
+After the session's report of cost and time per note at maximum effort (about $3 and 10 minutes for a short note, about
+$12 and 25-55 minutes for a long one, against under $1 today), verbatim:
+
+> Keep on the max and go live
+
+### Session interpretation, 2026-11-17 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D320)
+
+(a) The paid probe ends. Pairs 5-10 are dropped.
+
+(b) Round r3's question stage is built into the app on int3, then integrated, refuted adversarially, repaired and
+checked.
+
+(c) One confirmation pair (a short and a long note, about $15) is the only paid step left.
+
+(d) The install follows with its declaration and the owner's walk. On the live site the question stage runs at effort
+max with 128,000 output tokens.
+
+(e) The customer surface is unchanged.
+
+## Owner approval, 2026-11-17 — the install's accepted-capability loss and the cost per note at effort max
+
+Received 2026-11-17T18:27:53Z in session 738699b2. What the session put to the owner, verbatim:
+
+> Approvals made on the old engine don't carry over: an old note has to be re-checked before it can be approved or
+> exported again. Nothing already saved or downloaded is changed.
+
+> the cost per note at max effort (about $3 short, about $12 long)
+
+The owner's answer, verbatim:
+
+> i approve
+
+### Session interpretation, 2026-11-17 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D321)
+
+(a) The class-b loss is accepted. A legacy assessment's approval does not carry across engines, and a new approval or
+export of a legacy note is refused until it is checked again by its explicit act. Existing decisions and downloaded
+reports stay as records.
+
+(a') Narrowed by the build, recorded 2026-11-18 (DECISIONS D329 (3)): clause (a) was broader than the code. A legacy note
+nobody touches stays as it is today: its assessment, decisions and exports stand, and its codes can still be approved or
+exported. From its first saved change, or a Resume, every decision and export waits for the new reading. When that
+reading completes, the legacy decisions are cleared ("the interpretation changed") and kept as records. This loses less
+than the owner accepted, so no new approval was needed; the owner was told the exact behaviour.
+
+(b) The per-note cost at effort max is accepted.
+
+(c) Neither approval replaces a gate. CI, the confirmation pair, the declaration landed before the act, the D15
+runtime rollback test and the walk all stand.
+
+## Owner approval, 2026-11-18 — the live site's cost ceiling per document: $25 of question worst case, 4 requests at once
+
+Received 2026-11-18 in session 738699b2. Round r3's second adversarial pass had built a synthetic note that would have
+reserved and sent about $800 of questions in one round, with nothing to stop it. The session proposed a ceiling of $25
+per document of Fable's follow-up questions, and 4 requests at once. The owner's words, verbatim:
+
+> should we put limit for live? because i want to put somthing liek pay as you go so why should we limit into 25$?
+
+> i understand now so do you think $25 would be good?
+
+(The session answered yes.)
+
+> what if someone has a pdf which is cost more than like 25$ maybe it cost 30$
+
+(The session answered that the note is still read and decided, and only the codes whose next questions would pass the
+ceiling go to the coder.)
+
+> ok
+
+### Session interpretation, 2026-11-18 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D326)
+
+(a) QUESTION_DOCUMENT_CEILING_USD = 25 and QUESTION_ROUND_CONCURRENCY = 4 on the live site, written by the install and
+named in its declaration. The ceiling counts the reserved worst case of the question stage, not the bill and not the
+reading.
+
+(b) A round that would pass the ceiling is not sent. Its questions stay unresolved, and those codes go to the coder.
+
+(c) At most a note costs about $35: reading up to about $10, questions up to $25. A document over 20,000 characters or
+40 pages is not sent to Fable at all. Corrected 2026-11-18 (DECISIONS D329 (4)): the ceiling counts per version of a
+document, so an addendum or a new version starts a new reading with its own $25. The worst reading measured is $11.06,
+so a version costs at most about $36.
+
+(d) This amends the 2026-11-17 directive's clause (c) ("no restriction") for cost alone. A later change is a settings
+change, on the owner's figure.
+
+## Owner direction, 2026-11-18 — the API account is the owner's to manage; release first, then his walk on the live site
+
+Received 2026-11-18T21:27:35Z in session 738699b2. The session had asked him to raise or top up the Anthropic account
+before the confirmation pair, because the account's $200 figure left the pair about $33 of room against a worst case of
+about $72. His words, verbatim:
+
+> dont worry about the api budget ill take care of it by my self jsut focus to relase and i wanna walk live and try my
+> docs as soon as possible
+
+### Session interpretation, 2026-11-18 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D331)
+
+(a) The account's figure and its top-up are the owner's. The confirmation pair's cap is its full worst case, and the
+harness's provider figure is set from his direction so that the project threshold does not bind before that worst case.
+The $120 protective test ceiling stands. A provider refusal for money stops the pair as a money stop, and he is told at
+once.
+
+(b) Every safe overlap is taken on the way to the install. Commit, CI and the test image run beside the last adversarial
+pass and the final check. No gate is skipped.
