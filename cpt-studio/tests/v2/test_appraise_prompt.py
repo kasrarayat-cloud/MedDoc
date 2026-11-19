@@ -149,7 +149,11 @@ FINAL_V2 = APP / 'docs' / 'gemini-migration' / 'FINAL-V2.md'
 # censuses; 9.5 gate 6's route table), every earlier line kept; the scanned sections 2.1-2.4 byte for byte unchanged
 # (22,480 characters); recomputed by the same function. Was
 # 3d650284a79bed7b120248c28aa71989ca06d5c1e320d399e980726495a101d9.
-FINAL_V2_SHA256 = '248d1af97a3bd59b32f346f0ee91dd299b1e91faa0b32b5c76abab0afa7c4834'
+# int8 (round r3's round 6, DECISIONS D336 (1); 2026-11-19, session 738699b2): FINAL-V2 gains two dated notes,
+# insertions only (4.3 the guard's construction rule completed in the release direction; 9.4 its censuses), every
+# earlier line kept; the scanned sections 2.1-2.4 byte for byte unchanged; recomputed by the same function. Was
+# 248d1af97a3bd59b32f346f0ee91dd299b1e91faa0b32b5c76abab0afa7c4834.
+FINAL_V2_SHA256 = '9f0d1794482bb6bc603059cfc543f55f85c3a63c2386107defd710d7872408f1'
 DEV_EXCLUSION = APP / 'docs' / 'gemini-migration' / 'acceptance-a1' / 'DEV-EXCLUSION.sha256'
 EVIDENCE = Path(os.environ.get('CPT_STUDIO_DESIGN_EVIDENCE', '/home/claude/cpt-studio-completion-20261106'))
 SURVEY_4 = EVIDENCE / 'gemini-migration' / 'design-v2' / 'survey' / 'failures.md'

@@ -18279,3 +18279,264 @@ four refutation lenses (false READY, design, reproduction, generality: 40 findin
   - Repaired by a builder on a copy of build2, then refuted by one lens on the seal (binding, the log, the check, and
     any refusal that could depend on the batch), with serious findings verified. Launched when the 1-minute load is
     under 10.
+- **D335 int7 integrated (wf_515b9e8d-5ae, integrate:int7, finished 2026-11-19T02:34Z), committed to the draft PR
+  branch as fe6ba4eb0a74e04e942bf42b0454655ba6e3fcbe (02:35:17Z) and pushed; the test image built; the integrator's
+  questions ruled (session 738699b2, 2026-11-19T02:38Z).**
+  - int7.diff c495799a... (int3 -> int7, 168 files, +29,661 -750); int7-repair.diff 69a43fe3... (int6 -> int7, 25
+    files); int6-tools.diff and int4-testinst.diff unchanged. Gates: tests.v2 4,197; v1 8,830 (7 skipped); ops 840;
+    ops/verification 69; tools 411 on int7; v2dbtests 4; D15 tooling 9 + 7; FINAL-V2 readers 300; mypy --strict. Of 160
+    lane and record mutants, 158 killed and 2 equivalent on int7 (0 of 7,128 census shapes differ; two compound mutants
+    proving their rule killed). Every earlier reproduction gives int6's result or a ruled move to held. The rig moves 0
+    of 84 rows against int6 (0 wrong READY); pairs 1-4 and both probe notes byte-identical to int6.
+  - The commit: commit_int7.sh (patch -p0 --fuzz=0, no offset or fuzz; 168 files equal to int7; DECISIONS synced as a
+    prefix extension; the six rulings appended to docs/foundation/RULINGS.md and the GI archive; 171 files staged, no
+    extra). Both in-flight views empty before the push; origin confirmed fe6ba4eb. CI started: secrets-scan
+    44445481551, CI 44445481728, cpt-studio 44445481550.
+  - The test image (checklist C1): cpt-studio-test:fe6ba4eb0a74 sha256:11e61e50...; migration_safety all safe through
+    0015_inventory_appraisal; manage check no issues. Its tree: trees/int7-fe6ba4eb0a74 (git archive + COMMIT), equal to
+    the checked int7 tree except DECISIONS.md (the newer synced copy) and the test caches.
+  - C2: cpt-studio-precheck:fe6ba4eb0a74 (fa45fd9a...), built the installer's way: apt and user steps CACHED; the
+    requirements step ran (pypdf 6.21.2 -> 6.21.4). Offline against cpt-studio:c2e53f8e7d33: dpkg 166 packages, identical
+    (500b6abd...); pip freeze 23, the only difference pypdf 6.21.2 -> 6.21.4; uid 10150 on both. No builder prune until
+    the image phase.
+  - The integrator's questions, each built fail-closed (a hold, never a READY):
+    - Q1 (an IRA's rectal-stump sigmoidoscopy held): ruled as built. rules6's alternative widens a release and waits for
+      after go-live, with R5R-5's remedy.
+    - Q2 (row 7's joins and the controlled() comment): not changed now. The guard only adds holds relative to int6 and
+      every arm. The comment is extended to name the guard's row 7 at the next change of that test file (no assertion
+      moves); no new commit for a comment.
+    - Q3 (an approach established as a denial holds per-anus codes): ruled as built; the alternative widens a release and
+      waits.
+    - Q4 (a right hemicolectomy filed with neither subtype nor joins held): ruled as built, D330 (1)'s closure. The
+      confirmation pair measures how often live-shaped notes file both.
+    - Q5 (rules6's confirmations): confirmed as built.
+    - Q6: the fourth pass's oracle lens (L6) was launched before this ruling. A divergence it files on Q1, Q3, Q4 or Q5's
+      shapes that is a hold is a recorded cost, not a finding; any READY there is a finding.
+    - Q7: confirmed. FINAL-V2's 6.2 and 7.6 notes restate the lead's rulings and change no wording above them.
+- **D336 Round r3's fourth adversarial pass over int7 (wf_515b9e8d-5ae; 8 lenses) and its final check: NOT READY. The
+  lower-GI path guard's construction rule (D330 (1)) is incomplete in the release direction; its holds on common
+  histories are recorded costs for go-live. The lead's rulings (session 738699b2, 2026-11-19T04:21Z). Findings whole:
+  r3h/findings5.json.**
+  - What came back. Every finding is on constructed notes; none reaches a development row; every false READY is
+    pre-existing on int6 (int7 narrowed int6's exposure).
+    - L1 false release through an answer: NOTHING FOUND. L2, L3, L5 and L7: lows only.
+    - L4 properties: L4P-1 (verified high): the guard's early return on an approach the pouch class accepts (transanal,
+      D219) releases 463 of 463 held pouch shapes for 44385 and 44386. L4P-2 (verified high): the pouch family's
+      ANASTOMOSIS_JOINS row reads a pouch joins member as-is, so a coloanal or colorectal join beside an ileal pouch is
+      harmless. L4P-3 (verified low, inside R5R-9's class) and L4P-4: R5R-9's reach and organ clauses read only
+      supported points, so a 9.4 weakening grows READY (P-MONO). L4P-5 (verified medium): a joins member or type pass 2
+      rejected, with no control, narrows an entry onto rows 7 and 3, so it releases on rejected, uncontrolled
+      readings (P-CONTROLLED).
+    - The final check, NOT READY: finding 1 is L4P-1's class (a pouchoscopy per anus); finding 2: an empty joins list
+      matches the OUTSIDE row, so a silent anastomosis at the jejunum releases 45380 and 45331; lows 3-5 on rows (a
+      one-member joins list, STOMA's any organ, the upper rows with a lower-GI organ).
+    - L6 oracle and L8 common holds: wrong holds on common histories (L6O-1, L8-2, L8-3, L8-7 medium; L8-1 low on
+      verification) and pre-existing false READYs on contradictory filings (L6O-2 to L6O-5, low).
+  - (1) THE RELEASE DIRECTION, ruled by principle: D330 (1)'s construction rule, completed. An entry is harmless for a
+    family only if EVERY reading it may have lies within a harmless row, where:
+    - (a) no early return: the guard reads every anatomy entry whatever the session's approach. The only exemption is
+      an established FAILURE of the code's own row or class on the established approach (the code holds anyway).
+      (L4P-1; final check 1.)
+    - (b) every attribute is read by its widest possible value unless it is ESTABLISHED through a control (the claim
+      supported and its control rejected). An attribute the contract's CONTROLS does not control (anatomy joins; a
+      type with no type control) is read only to hold: on a READY path it is always at its widest. A claim pass 2
+      rejected with no control is fully open, never narrowed to the complement of its rejected value. An empty joins
+      list of an entry that may be an anastomosis is every landmark; a one-member list is that member plus every
+      landmark. A joins member a subtype defines (a pouch member of a coloanal or colorectal join) is read as the
+      subtype's end. (L4P-2, L4P-5; final check 2 and 3.)
+    - (c) P-MONO for every hold clause: a hold reads every value a member may be (facts.possibly, _may_be), never only
+      supported values, so no weakening on 9.4's lattice grows READY. (L4P-3, L4P-4: R5R-9's reach and organ clauses.)
+    - (d) P-CONTROLLED made honest: every attribute read on a READY path is declared on that path, and
+      test_requirements' partition passes with the declaration true. test_properties.controlled()'s (anatomy, joins)
+      reason ("read on a READY path only to HOLD") becomes true of every reader, the guard included. D335 Q2's ruling
+      ("not changed") is WITHDRAWN: L4P-5 shows the release.
+    - (e) A contradictory filing (an upper-tract type or subtype with a lower-GI organ, an impossible join, a route
+      the filing contradicts) is read at its widest: no attribute decides alone against another one that contradicts
+      it. (Final check 4 and 5; L6O-2 to L6O-5.)
+    - (f) The censuses. D330 (1)'s census extends to every route family x every approach and through state x every
+      attribute's state (established, claimed, doubted, silent, rejected, uncontrolled) x the widest values, with its
+      completeness test. A P-MONO census runs over 9.4's weakening lattice for every route-table family. A
+      P-CONTROLLED census checks every harmless row's reads against CONTROLS.
+    - The development filings stay as int7 decides them (CommonInputTests; the rig, pairs 1-4 and both probes: 0
+      rows moved), each READY resting on controlled readings: an ileocolic subtype decides its ends, and filed joins
+      only add holds. A development row that moves is a question for the lead, with its row.
+  - (2) THE HOLD DIRECTION: recorded costs for go-live, not built. Each is fail-safe: a hold for the coder with the
+    existing reason, 0 questions.
+    - Non-digestive alterations filed at organ 'other' (L6O-1, L8-1): a bypass, repair, replacement or transplant
+      outside the GI tract holds every lower-GI family.
+    - Anal-canal alterations beside a per-anus code (L8-2); upper-tract alterations naming the small bowel (L8-3); a
+      lower-GI stoma's sibling type control that is true as worded (L8-7, D314/D315's class at pass 2); the lows L8-4
+      to L8-6, L6O-6 and L6O-7.
+    - Why not built: each closing rule reads an uncontrolled or ambiguous filing in the release direction. L6O-1's
+      verifier: CABG at 'other' gives the engine the same facts as a lower-GI alteration misfiled at 'other'. L8-2's:
+      the altered-canal rule releases an anal closure beside a contradictory statement.
+    - The remedy is Fable's judgment, not a new table row (D306). AFTER GO-LIVE, the guard's blocking doubts become
+      question claims with exact-negation controls, asked within the ceiling: an entry's organ outside the lower
+      digestive tract, a stoma's or pouch's route, R5R-5's organ.
+    - The confirmation pair and the owner's walk measure how often live notes file such entries. The owner is told
+      this cost before the install.
+  - (3) The lows of every lens (L2E-1, L3H-1 to L3H-4, L5R7-1, L7R3H-1) are recorded, not built. L3H-4 (the gate
+    oracle's proof overlap, tooling) and L5R7-1 (the post-send child +8.4% CPU, over its 120 s bound at x1.25) are
+    re-measured on int8.
+  - (4) Round 6. One builder applies (1) on int7 and integrates int8: every suite, mutation proofs, every reproduction
+    of findings 1 to 5, and the re-checks. Then the fifth adversarial pass and the final check run in parallel. The
+    pass has five lenses: false release, properties and censuses, request bytes, a fresh differential oracle in the
+    release direction, and common holds measured against int7 and int6 (a cost report). int7's commit fe6ba4eb
+    stays on the branch, and int8 is committed on top of it once integrated, with CI and the image run beside the
+    pass. Launched when the 1-minute load is under 10.
+  - Addendum (2026-11-19T04:22Z): the workflow finished. findings5.json sha256 9968b23f628e6288...: confirmed L4P-1 and L4P-2
+    (high), L4P-4 and L4P-5 (medium; L4P-4 a P-MONO break of R5R-9's organ clause, reached end to end only by pass 1
+    contradicting itself about one stoma's organ), and the hold costs L6O-1, L8-2, L8-3 and L8-7 (medium); L4P-3 and
+    L8-1 low on verification; 16 lows; the final check's six findings whole. (1) covers every confirmed release
+    finding; (2) records the hold costs.
+- **D337 The key tool's round 3 (wf_c00d4fb4-48e): USABLE. The seal log, the bound chain and the check mode, as D334
+  ruled; the refutation found lows only. The lead's ruling (session 738699b2, 2026-11-19T04:22Z).**
+  - keylist-tools3.diff ab41fd47... (replaces keylist-tools2.diff; key_requests.py 5d0ccc53...): 79 tests red to green;
+    10 of 11 mutants killed, the 11th (the Cf strip) equivalent; the tools suite 490 OK with DevsetTests; v2dbtests 4
+    OK; mypy --strict. Every D334 refusal is raised by name with nothing written, and every pre-seal output and
+    refusal is byte-identical across answer directions (29 scenarios). The whole sequence passes for a 2-round, a
+    1-round, a pair and a 3-round document.
+  - The refuter's four lows, recorded:
+    - SEAL3-1: invisible letters (Default_Ignorable code points) pass the letter-or-digit test. The lead's keys are
+      plain words.
+    - SEAL3-2: a key holding lone surrogates seals, then cannot be listed. The lead writes keys with json.dump.
+    - SEAL3-3: a second seal log is a second chain. It is the known limit's audit: every seal line goes into PLAN.md
+      with its UTC, and the check's chain is compared with it.
+    - SEAL3-4: --end takes any well-formed id. The lead ends exactly the documents of documents.json, by copy.
+  - The builder's questions: Q1, keep the wording. Q2, confirmed: every document is ENDed. Q3: the lead passes the
+    log from round 1. Q4 and Q5: confirmed. Q6: the lead's E-COMMANDS edit (sections 0, 4c and 4d, and the check before
+    section 5). Q7: yes, test_key_requests runs on the install tree before E4.
+- **D338 The D15 runtime rollback test on int7, run early beside round 6 (run dir d15-r3-20261119T024708Z, database
+  cptg_d15r3c): 7 of 8 PASS; assertion 2 FAILS on the two update-pending legacy encounters, which AMENDMENT-1 9.4 states
+  as a rollback limit. The runner is wrong, not the product. The lead's ruling (session 738699b2, 2026-11-19T04:34Z).**
+  - The run, by the tools lane's D15 tooling and its update part (d15tool-u): main (10 scenes, frozen), the stack
+    worker's replay check (passed), update (pending before analyze 57c110c6, pending after analyze bc47403c, completed
+    f5c72233, A21 4932708e, resave of 57c110c6's setting), late (queued interpret, appraise and question; the auth
+    hold); declared 4e1a1de1...; the runner from the worktree at fe6ba4eb. Two tooling gaps were worked around in the
+    run dir's copies only: hypothesis mounted read-only, and a 10150-owned replay base for the freeze. The main
+    part's reinstatement is revoked after it is recorded, as s17's D15B did.
+  - PASS: 1 (17 one-shots, 497 requests, no 500), 3, 4, 5 (the note exact, nothing refuses), 6, 7 (every required
+    kind), 8 (U17: the three named update_pending, 57c110c6 reverted, the resave taking effect on the old web).
+  - FAIL, assertion 2: 22 findings, all on 4932708e (A21) and bc47403c (pending after analyze). The old image shows the
+    legacy codes with their own actions (the draft offer; confirm and reinstate on an excluded legacy code), where the
+    candidate shows them as the earlier codes while a reading is owed.
+  - Why this is the runner: AMENDMENT-1 9.4 states exactly these as a rollback limit, "as D59's reinstatable limit is".
+    For a pending-after-analyze encounter the old image shows the legacy codes; per-code approval and the draft export
+    do not check the context. For A21 it reads the reconciled run as an outcome still being confirmed, with nothing
+    pending. The undo names them update_pending and the note tells the operator; it is reported, never a refusal, and
+    U17 records the old image's reading. FINAL-V2 6.4's "never less held" governs v2 assessments. The runner's
+    assertion 2 applies it to these legacy encounters too, with no exemption.
+  - RULED: the runner's assertion 2 RECORDS, never fails, a difference on an encounter the close named update_pending
+    and the note lists, exactly when the old image shows that encounter's legacy assessment as stored:
+    - its proposals by id, each with its stored status;
+    - only the legacy release's own actions and offers on them;
+    - no v2 proposal, no status other than the stored one, and nothing on an encounter the close or the note does not
+      name.
+    Anything else on such an encounter still fails, and every other encounter keeps "never less held". The record goes
+    into the transcript as U17's measurement. Pending-before-analyze encounters stay as assertion 8 judges them. D59's
+    reinstatable limit is unchanged (the scenario revokes its reinstatement).
+  - Built by one builder in the runner (ops/rollback_check.py and ops/test_rollback_check.py only), RED on int7's runner
+    with the run's own 22 findings, re-judged offline from d15.json's comparison. Refuted independently, with serious
+    findings verified. Committed on top of int8, then the D15 re-run on int8's image must PASS 8 of 8.
+- **D339 The D15 runner fix (wf_8fe50167-e73): built, refuted and verified, with one medium confirmed (D338R-1). "As
+  stored" means what the legacy release shows for its stored state, not the stored row's status alone. The lead's
+  ruling (session 738699b2, 2026-11-19T06:13Z).**
+  - Built: ops-d15fix.diff 8a0a393a... (rollback_check.py 481c6644..., test_rollback_check.py 6eb3f61a...).
+    - 18 new tests RED on int7's runner and GREEN, with the 57 existing tests unchanged.
+    - Mutants M1-M3 and X1-X10 are killed. Ops 858 OK, verification 69 OK.
+    - Offline, the r3 transcript re-judged records 22 of 22, and no other verdict moves.
+  - D338R-1 (medium, reproduced by its verifier): the runner expects each legacy row's status from Proposal.status
+    alone (CUSTOMER_STATUS_OF). c2e53f8e shows a row's status and actions over its current decision and the member
+    answers (customer_api._status, review._actions).
+    - Assertion 2 therefore fails the stated limit on any legacy encounter with an approve, reject or confirm decision,
+      or with an answer that makes a needed detail unavailable.
+    - Probed on the run's 84 legacy encounters, 35 fail. By decision kind: approve 30, reject 5, unavailable answer 4;
+      some encounters have more than one kind.
+    - It is never a wrong record. The r3 run passed only because its picks had no decisions, and the A21 pick is one
+      candidate away from one that has.
+  - D338R-3 (low): LEGACY_ACTIONS is a union over decision states. c2e53f8e offers nothing on an undecided,
+    non-reinstatable excluded row. It is not reachable today, because an approve there needs a reinstatement first,
+    which changes the status. The same rule closes it.
+  - D338R-2 (low): the legacy_rows SQL is pinned only by substrings, and two SQL mutants survive (both fail closed).
+  - RULED, clarifying D338: "as stored" is what the legacy release c2e53f8e computes from the stored legacy state, read
+    by the runner's own SQL after the close and before the renders. That state is:
+    - each proposal's bucket, status, reinstatable flag and checks;
+    - its current legacy decision, as c2e53f8e defines "current";
+    - the member answers c2e53f8e's review overlay reads for it.
+  - From that state:
+    - The expected status is c2e53f8e's _status over it. Where the overlay's status could differ from the stored one,
+      the stored one is expected, so a mismatch fails.
+    - The allowed actions are exactly those c2e53f8e's _actions can produce on it. An action whose gate SQL cannot read
+      (exact evidence, the reinstatement check, the same-day hold) is allowed but never required. There is no union
+      over decision states.
+  - How it is built:
+    - Ported by principle: every branch of the two functions, each cited by its c2e53f8e line, pinned by a branch
+      table.
+    - Where the candidate's own legacy path is identical to c2e53f8e's (shown by a source diff in the notes), a Django
+      test-database parity test runs the candidate's functions against the port on legacy rows with each decision
+      kind.
+    - The legacy_rows SQL runs on real rows in the ops suite, including an encounter with an older legacy assessment
+      and a v2 assessment beside its current legacy one.
+    - The D15 tooling's update part picks at least one decided legacy encounter (a legacy approve) for a pending set,
+      so that the int8 run exercises the rule on an instance. This goes in a new copy, d15tool-u2.
+  - The builder's questions:
+    - Q1 (an encounter named values_saved alone stays never-less-held): accepted.
+    - Q2: this ruling.
+    - Q3 (only the draft export is a recorded offer, per 9.4): accepted.
+    - Q4 (assertion 3 is outside D338): accepted as recorded.
+  - Next: one builder on the D338 tree (r3j/build/tree), RED on its runner; then an independent refutation, with
+    serious findings verified. The result is one diff from int7 for the two files, committed on top of int8. The D15
+    re-run on int8's image, with d15tool-u2, must PASS 8 of 8.
+
+- **D340 int8 integrated (wf_38a9cd59-300, repair:int8, finished 2026-11-19T07:43Z): D336 (1) built on int7, every gate
+  green, the builder's ten questions ruled. int8 is committed on top of int7 on the draft PR, with CI and the test image
+  run beside the fifth pass (D336 (4)). The lead's rulings (session 738699b2, 2026-11-19T07:48:44Z). Notes: r3i/int8/NOTES.md.**
+  - The build. int8.diff (int3 to int8, -p1) sha256 f8a8657f6bbe9d81...; int8-repair.diff (int7 to int8, -p0, 15
+    files: the engine's catalogue.py, evaluate.py and requirements.py, FINAL-V2.md's dated notes at 4.3 and 9.4,
+    RESIDUALS.json, and tests) sha256 b81bb67ead5d215a.... int6-tools.diff and int4-testinst.diff are unchanged.
+  - Gates. tests.v2 4,229 OK. v1 8,830 with one wall-clock failure (CoverageCostTests) at load ~18; that module alone
+    30 OK. ops 840 OK; ops/verification 69 OK; tools 411 OK; v2dbtests 4 OK; D15 tooling 9 + 7 OK; mypy --strict
+    clean. Mutation: 143 mutants, 141 killed, 2 equivalent (0 of 7,128 census shapes differ; their compound mutants
+    are killed); every D336 (1) item 15 of 15 killed; every restore sha256-equal. The new module test_r3i_guard is RED
+    on int7 (127 failures, 42 errors) and GREEN on int8.
+  - Censuses. StateCensus 5,095 shapes; RouteStateCensus 5,760; PMonoCensus 34 held scenes x 4,109 weakenings (SC-B's
+    deletion named as the residual); ControlledCensus; Int7Monotone 379,945 checks with 0 releases beyond int7.
+  - Reproductions and re-checks. L4P-1 463 to 0; L4P-2 0 open shapes of 92,750; L4P-4 432 to 0; L4P-5 held; L4P-3
+    only SC-B's deletion. The seven-batch rig 21 of 21 stages; int8 against int7 84 rows, 0 moved. Pairs 1-4 and both
+    probe notes are byte-identical to int7.
+  - Hold costs (D336 (2), not built; 0 READY on int8 where int7 held). L6O-1 85 to 97 of 113; L8-1 48 to 52 of 78;
+    L8-2 42 of 63 unchanged; L8-3 30 to 54 of 66; L8-7 32 to 60 of 60; the L8 matrices 263 to 428 of 672, 233 to 326 of
+    516, 36 of 54 unchanged; the L6 lane's READY 146 to 122 of 244 and 34 to 26 of 56. Every new hold is D336 (1)'s
+    class cost: an uncontrolled type, an anastomosis without a controlled subtype, a one-member joins list, and every
+    possible lower-tract stoma or ileal pouch beside a per-anus code. The owner is told these figures before the
+    install.
+  - Q1 RULED, as built. D336 (1) (b)'s "established through a control" governs a claim pass 2 appraised: only the
+    claim supported with its control rejected narrows the attribute, and a claim pass 2 rejected or doubted is open. A
+    claimed value of a controlled attribute (a subtype, an absence's organ, a stoma or pouch type) that pass 2 was not
+    asked about decides as Fable read it (D306), as int7 decided, and as D336's own sentence on the development filings
+    requires ("an ileocolic subtype decides its ends"). An attribute the contract does not control is always read at
+    its widest. The strict reading would move A-v6, A-note8 x5, C-C2MEM-023 x2 and r3-probe-2 and break D330 (1)'s
+    must-keeps. The fifth pass judges int8 under this reading.
+  - Q2 RULED, the intended scope. The approach has no control in the contract, so a supported per-anus approach is a
+    single verdict and stays at its widest (D336 (1) (b)); it does not count as established. D312 (5)'s boundary is
+    narrowed for the guard. The cost (L8-7 60 of 60; the matrices' stoma histories 52 to 100 of 128) is D336 (2)'s.
+    Its remedy is the post-go-live route question with an exact-negation control.
+  - Q3 confirmed: D336 (1) (b) supersedes D330 (1) (c)'s R5R-4 READY (F3a to F3d) and the Jc boundary.
+  - Q4: REQUIREMENTS_VERSION stays @3 with its rules pin restated (D327 (3): nothing has shipped under @3).
+  - Q5: noted; this entry and its commit sync DECISIONS.md.
+  - Q6 confirmed: a subtype without a sibling control (other, pancreaticojejunal) never decides a release; a Whipple
+    holds.
+  - Q7 confirmed: RESIDUALS.json re-recorded by its writer (A2's 44386 wrong_ready to as_documented).
+  - Q8 confirmed: LOWER's own hold answers first for 44406/44407 beside a silent anastomosis (status unchanged).
+  - Q9. The pruned trees were the LEAD's: reap3 (PLAN 06:20:18Z) moved build-v2/a2b/r3/design/exp/trees/<B>-int2 x4
+    and design/exp/int2-copy. Its list excluded sent-trees and probe-send but not trees the re-check tooling reads.
+    The cross-check they served compared a second copy of each recording's contract files; the recording trees
+    (trees/<recording>) are the authority and are kept. The builder's substitute is accepted: the swapped files' sha256
+    against int7's rerig logs and its own pre-prune rigs. From now on a reap list is checked against the scripts of
+    every running round before anything moves. L3H-4's one-oracle rule stays a recorded low.
+  - Q10: the read-only exclusion-list read is accepted, as for every earlier integrator.
+  - Disclosure (the builder's own). One find over testinst/ listed the names under its secrets/; no file was opened.
+    Recorded. Later briefs forbid any listing under testinst/secrets/.
+  - Next. Commit int8 on top of int7 (the repair diff, DECISIONS.md synced), push after the two-view check, then CI on
+    the new head, the test image and its C2 precheck, and D1-D4 on int8's image. D339's runner fix is committed on top
+    when its round completes, and D15 re-runs on int8's image.

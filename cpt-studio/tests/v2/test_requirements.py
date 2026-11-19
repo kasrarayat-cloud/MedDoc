@@ -92,11 +92,16 @@ REQUIREMENTS_PINS = {
     # 26686159cea2 (int6's @3) superseded, the label kept (DECISIONS D327 (3): nothing has shipped under @3). Round r3's
     # round 5 (DECISIONS D330 (1), lane rules6): the route table's row reads the session's reach to hold only (the
     # ileoscopy's colonic reach, R5R-9) - d48cf1f6d27652da43eb68c5f536acb904e1e52e5b7e1b7f912d0c2009932769 (rules5's)
-    # superseded, as its owning function requirements.rules_canonical gives it, the label kept (nothing has shipped)
+    # superseded, as its owning function requirements.rules_canonical gives it, the label kept (nothing has shipped).
+    # Round r3's round 6 (DECISIONS D336 (1) (d), r3i/int8, 2026-11-19): the route table's row and LOWER read every
+    # anatomy entry's subtype on the READY path (the path guard's harmless set releases an anastomosis on its
+    # controlled subtype; its joins and the reach stay hold-only) - e5c9398d3aa5aff90c20b48de1903144c0abc53ed2c46d7703bc
+    # 285248d6d228 (int7's) superseded, as its owning function requirements.rules_canonical gives it, the label kept
+    # (D327 (3): nothing has shipped under @3; a question for the lead in r3i/int8/NOTES.md)
     'cpt-requirements@3': {
         'table': '1b0f0d18e5d3328d923f43bd033b75559e439c849dafae259ddd6e64b89820e5',
         'rank': '4c0c972d7c8f05b48bc4cebfaa1628c8e7d772ebb3dbcd4146a0eb80da3c26c1',
-        'rules': 'e5c9398d3aa5aff90c20b48de1903144c0abc53ed2c46d7703bc285248d6d228',
+        'rules': '678133f4f97f061e0dc65865210735ff4977cea92d04a50c6412f5d5fc19ea2b',
         'claimed': '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81',
     },
 }

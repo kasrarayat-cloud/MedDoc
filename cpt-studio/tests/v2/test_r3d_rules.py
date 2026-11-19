@@ -570,6 +570,12 @@ class AnusRouteTests(SimpleTestCase):
                         # as anything but per anus establishes no per-anus route: the path guard's table hold
                         self.assertIs(row.truth, U)
                         self.assertEqual(witnesses(row), [(ROUTE, A.TYPE, X1, None)])
+                    elif e_name == 'a Roux limb (another type)':
+                        # round r3's round 6 (DECISIONS D336 (1) (b)): a Roux limb's type has no control, so it never
+                        # decides a release - the path guard's table hold where the arm leaves the route met (moved by
+                        # evaluate.path_guard)
+                        self.assertIs(row.truth, U)
+                        self.assertEqual(witnesses(row), [(ROUTE, A.TYPE, X1, None)])
                     else:
                         self.assertIs(row.truth, T)
                     checked += 1

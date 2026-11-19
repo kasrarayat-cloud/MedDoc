@@ -204,7 +204,10 @@ def subtype_states(value):
 
 
 def subtype_holds(may_be) -> bool:
-    return may_be is None or any(NO_COLON_BESIDE[value] for value in may_be)
+    # round r3's round 6 (DECISIONS D336 (1) (b)): the census's anastomosis files no joins, so its two unnamed ends are
+    # its subtype's own where every subtype it may be names them - else (OTHER among them) every landmark, the ileum
+    # below the colon included (moved by evaluate.joins_ileum_below_colon_possible)
+    return may_be is None or any(NO_COLON_BESIDE[value] for value in may_be) or SUB.OTHER in may_be
 
 
 class SubtypeTests(SimpleTestCase):
@@ -285,7 +288,10 @@ class SubtypeTests(SimpleTestCase):
                 # path guard holds them (moved by evaluate.path_guard); every subtype that keeps a colon or names the
                 # upper tract, its sibling too, stays READY
                 held = guard_held(R, '45380')
-                self.assertEqual(bool(held), name in ('the subtype silent', 'other, supported'))
+                # round r3's round 6 (DECISIONS D336 (1) (b)): the pancreaticojejunal subtype has no control (3.2.3
+                # pairs it with no sibling), so it never decides a release - held too (moved by evaluate.path_guard)
+                self.assertEqual(bool(held), name in ('the subtype silent', 'other, supported',
+                                                      'pancreaticojejunal, supported'))
                 self.assertEqual(held_of(R, '45380'), held)
                 self.assertIs(route_row(R, 45380).truth, U if held else T)
 
@@ -612,10 +618,15 @@ class RangeTests(SimpleTestCase):
                 anus = RD.anus_scope(approach=sup(AP.TRANSANAL), entries=entries)
                 self.assertEqual(held_of(anus, '45380'), guard_held(anus, '45380'))
                 S = RR.stoma_scope(reached=(sup(EX.CECUM),), organ=sup(LM.ILEUM), entries=entries)
-                self.assertTrue(evaluate.colonic_route(S, X1))
+                # round r3's round 6 (DECISIONS D336 (1) (b)): the anastomosis of no subtype and no joins may join any
+                # two ends, so it leaves no colonic route either (moved by evaluate.joins_ileum_below_colon_possible)
+                self.assertEqual(evaluate.colonic_route(S, X1), not guarded)
                 self.assertEqual(held_of(S, '44389'), guard_held(S, '44389'))
                 E = RD.eus_stoma(sup(EX.CECUM), organ=sup(LM.SIGMOID_COLON), entries=entries)
-                self.assertEqual(held_of(E, '44406'), guard_held(E, '44406'))
+                # round r3's round 6 (DECISIONS D336 (1) (b)): beside the anastomosis of no subtype and no joins LOWER's
+                # own colonic route is not met (its ends may be any two), so LOWER's hold answers before the guard's
+                # (moved by evaluate.joins_ileum_below_colon_possible: the same status, an existing reason)
+                self.assertEqual(held_of(E, '44406'), LOWER_HOLD if guarded else guard_held(E, '44406'))
                 self.assertEqual(bool(guard_held(anus, '45380')), guarded)
 
 

@@ -22,6 +22,14 @@ The guard only holds; no answer lifts it (D324 (4)).
   its run, r3h/rules6/out/rows_probe-i6.jsonl), and D328 (1) (c)'s common inputs end to end.
 - VariantTests: at least six constructed variants per route family beyond the findings.
 - MonotonicityTests (P-MONO) and RequirementsTests (D330 (1) (a): the route table's row in requirements_of).
+
+Round r3's round 6 (DECISIONS D336 (1); r3i/int8): the construction rule completed in the release direction - every
+attribute is read by its widest possible value unless the contract CONTROLS it, so each row releases on ONE controlled
+claim (a controlled type, the organ claim of an absence, a controlled subtype), joins and every uncontrolled type are
+read only to hold, a claim pass 2 rejected with no control is fully open, an anastomosis's unnamed ends are every
+landmark or its subtype's own, a contradictory filing is read at its widest, and the per-anus approach (no control) is
+never established. The DECLARED set, the oracle and every pin it owns below moved with it (each marked D336);
+tests/v2/test_r3i_guard.py holds the findings, the state census, the P-MONO and P-CONTROLLED censuses.
 """
 from __future__ import annotations
 
@@ -90,34 +98,33 @@ ABSENT = {
     'ILEAL_STOMA': OUTSIDE | lm('other') | COLON_ALL | lm('rectum', 'anal_canal') | ILEAL_PARTS,
     'POUCH': OUTSIDE | lm('other') | COLON_ALL | lm('rectum') | ILEAL_PARTS,
 }
-# family -> [(shape, types, subtypes, organs, joins, joins_filed)]
-COMMON_ROWS = (
-    ('absent', None, None, None, None, False),     # filled per family: ABSENT
-    ('anastomosis_upper', frozenset({AT.ANASTOMOSIS}), UPPER_SUBTYPES, ALL_PLACES, OUTSIDE | lm('pouch'), False),
-    ('upper_alteration', frozenset({AT.GASTRIC_POUCH, AT.ROUX_LIMB}), ALL_SUBTYPES, ALL_PLACES, OUTSIDE | lm('pouch'),
-     False),
-    ('outside', ALL_TYPES - {AT.ILEAL_POUCH}, ALL_SUBTYPES, OUTSIDE, OUTSIDE, False),
-    ('stoma', frozenset({AT.STOMA}), ALL_SUBTYPES, ALL_PLACES, ALL_PLACES, False),   # D310 (1); its organ never read
-)
+# DECISIONS D336 (1) (b): what the contract CONTROLS, DECLARED from 3.2.3's tables (never read from engine/catalogue or
+# contract/claims - tests/v2/test_r3i_guard.py's P-CONTROLLED census ties both to these): the anatomy types with a
+# sibling control, the subtypes with one (OTHER and pancreaticojejunal have none), the approaches with a contrary (per
+# anus has none)
+CONTROLLED_TYPES = frozenset({AT.ILEAL_POUCH, AT.GASTRIC_POUCH, AT.STOMA})
+CONTROLLED_SUBTYPES = ALL_SUBTYPES - {SUB.OTHER, SUB.PANCREATICOJEJUNAL}
+CONTROLLED_APPROACHES = frozenset({AP.ORAL, AP.THROUGH_STOMA, AP.THROUGH_POUCH})
+# family -> [(shape, decided_by, values, organs, joins)] (DECISIONS D336 (1)): each row RELEASES ON ONE CONTROLLED CLAIM
+# - decided_by 'type' (a controlled type), 'organ' (the organ claim of an entry filed surgically absent: the absence form)
+# or 'subtype' (a controlled subtype, which names an anastomosis) - every value of which lies within ``values``; a filed
+# organ within ``organs`` and every place of each joins member within ``joins`` are read only to HOLD. No row releases on
+# joins (D330 (1)'s rows 7 and 9 are gone) or on an uncontrolled type (row 4, OUTSIDE, and the Roux limb are gone)
 COLON_JOINS = SMALL_BOWEL | COLON_ALL | lm('rectum', 'anal_canal', 'pouch')
-NAMED_JOINS = SMALL_BOWEL | COLON_ALL | lm('rectum', 'anal_canal') | OUTSIDE
 POUCH_JOINS = SMALL_BOWEL | lm('rectum', 'anal_canal', 'pouch')
+UPPER_JOINS = OUTSIDE | lm('pouch')
 
 
 def declared_rows(family: str) -> list:
-    rows = []
-    for shape, types, subtypes, organs, joins, filed in COMMON_ROWS:
-        if shape == 'absent':
-            rows.append((shape, frozenset({AT.SURGICALLY_ABSENT}), ALL_SUBTYPES, ABSENT[family], ABSENT[family], False))
-        else:
-            rows.append((shape, types, subtypes, organs, joins, filed))
+    rows = [('absent', 'organ', ABSENT[family], ABSENT[family], ABSENT[family]),
+            ('anastomosis_upper', 'subtype', UPPER_SUBTYPES & CONTROLLED_SUBTYPES, ALL_PLACES, UPPER_JOINS),
+            # a gastric pouch's filed organ outside the lower GI tract (D336 (1) (e): an upper type at a lower organ)
+            ('upper_alteration', 'type', frozenset({AT.GASTRIC_POUCH}), OUTSIDE, UPPER_JOINS),
+            ('stoma', 'type', frozenset({AT.STOMA}), ALL_PLACES, ALL_PLACES)]   # D310 (1); its organ never read
     if family == 'POUCH':
-        rows += [('anastomosis_pouch', frozenset({AT.ANASTOMOSIS}), ILEUM_BELOW, ALL_PLACES, POUCH_JOINS, False),
-                 ('anastomosis_joins', frozenset({AT.ANASTOMOSIS}), ALL_SUBTYPES, ALL_PLACES, POUCH_JOINS | OUTSIDE,
-                  True)]
+        rows.append(('anastomosis_pouch', 'subtype', ILEUM_BELOW, ALL_PLACES, POUCH_JOINS))
     else:
-        rows += [('anastomosis_colon', frozenset({AT.ANASTOMOSIS}), COLON_KEEPING, ALL_PLACES, COLON_JOINS, False),
-                 ('anastomosis_joins', frozenset({AT.ANASTOMOSIS}), ALL_SUBTYPES, ALL_PLACES, NAMED_JOINS, True)]
+        rows.append(('anastomosis_colon', 'subtype', COLON_KEEPING, ALL_PLACES, COLON_JOINS))
     return rows
 
 
@@ -146,12 +153,13 @@ SUBTYPE_ENDS = {
 }
 
 
-def oracle_ileum_below(subtypes, subtype_silent: bool, joins) -> bool:
-    """The ileum joined below the colon, DECLARED (D327 (1), the D328 addendum, D330 (1) (c), R5R-6): a filed subtype
-    that may be ileorectal or ileoanal; or joins - one member that may lie below the colon (the rectum, the anal canal or
-    no placed organ); two or more where one may lie in the small bowel beside another that may lie below - a member
-    naming no placed organ read as either, unless the subtype is filed and every subtype it may be names its ends: then
-    as one of those ends."""
+def oracle_ileum_below(subtypes, subtype_silent: bool, joins, may_be_anastomosis: bool = False) -> bool:
+    """The ileum joined below the colon, DECLARED (D327 (1), the D328 addendum, D330 (1) (c), R5R-6, D336 (1) (b)): a
+    filed subtype that may be ileorectal or ileoanal; or joins - one member that may lie below the colon (the rectum, the
+    anal canal or no placed organ); two or more where one may lie in the small bowel beside another that may lie below - a
+    member naming no placed organ read as either, unless the subtype is filed and every subtype it may be names its ends:
+    then as one of those ends. D336 (1) (b): an entry that may be an anastomosis has two ends, and each its joins list does
+    not name may be every landmark - or, its subtype filed and naming its ends, one of those."""
     if not subtype_silent and subtypes & ILEUM_BELOW:
         return True
     ends = None
@@ -160,21 +168,55 @@ def oracle_ileum_below(subtypes, subtype_silent: bool, joins) -> bool:
     members = [((member - NO_ORGAN) | ends) if ends is not None and member & NO_ORGAN else member for member in joins]
     below = lm('rectum', 'anal_canal') | NO_ORGAN
     small = SMALL_BOWEL | NO_ORGAN
-    if len(members) == 1:
-        return bool(members[0] & below)
+    if len(members) == 1 and members[0] & below:
+        return True
+    if len(members) < 2 and may_be_anastomosis:
+        members += [ends if ends is not None else ALL_PLACES] * (2 - len(members))
     return any(members[i] & small and members[j] & below for i in range(len(members)) for j in range(len(members))
                if i != j)
 
 
-def oracle_harmless(family: str, types, subtypes, subtype_silent: bool, organs, _organ_supported, joins) -> bool:
-    """The declared release set's verdict on one entry whose fields may be these values (``_organ_supported``: the
-    organ's SUPPORTED value or None - no row reads it: a stoma's organ is never read in the release direction)."""
-    if family not in ILEUM_BELOW_HARMLESS and oracle_ileum_below(subtypes, subtype_silent, joins):
+def oracle_decided(types, subtypes, subtype_silent: bool, organs, organ_silent: bool):
+    """D336 (1) (b) and (e), DECLARED: the controlled claim that decides an entry's shape - ('subtype', its values) for a
+    filed subtype that may only be controlled ones beside a type that may only be an anastomosis; ('organ', its values)
+    for an entry that may only be surgically absent, its organ filed (the absence form); ('type', its values) for a type
+    that may only be controlled ones, the subtype silent - else None (the widest reading, which no row holds)."""
+    if not subtype_silent:
+        if subtypes and subtypes <= CONTROLLED_SUBTYPES and types == {AT.ANASTOMOSIS}:
+            return 'subtype', subtypes
+        return None
+    if types == {AT.SURGICALLY_ABSENT}:
+        return ('organ', organs) if not organ_silent else None
+    if types and types <= CONTROLLED_TYPES:
+        return 'type', types
+    return None
+
+
+def oracle_ends_contradicted(subtypes, organs, organ_silent: bool, joins) -> bool:
+    """D336 (1) (e), DECLARED: for some subtype the entry may be, a filed organ or a joins member that may name a placed
+    organ outside that subtype's own ends (a landmark naming no placed organ names an end)."""
+    fields = list(joins) + ([] if organ_silent else [organs])
+    return any(place not in SUBTYPE_ENDS[subtype] and place not in NO_ORGAN
+               for subtype in subtypes for found in fields for place in found)
+
+
+def oracle_harmless(family: str, types, subtypes, subtype_silent: bool, organs, organ_silent: bool, joins) -> bool:
+    """The declared release set's verdict (D330 (1), D336 (1)) on one entry whose fields may be these values - the
+    caller's widest reading of each: a silent field, an open denial, an established negation or a claim pass 2 rejected
+    with no control left, every value."""
+    if family not in ILEUM_BELOW_HARMLESS and oracle_ileum_below(subtypes, subtype_silent, joins,
+                                                                AT.ANASTOMOSIS in types):
         return False
-    for _shape, r_types, r_subtypes, r_organs, r_joins, filed in declared_rows(family):
-        if not (types <= r_types and subtypes <= r_subtypes and organs <= r_organs):
+    decided = oracle_decided(types, subtypes, subtype_silent, organs, organ_silent)
+    if decided is None:
+        return False
+    by, values = decided
+    if by == 'subtype' and oracle_ends_contradicted(values, organs, organ_silent, joins):
+        return False
+    for _shape, r_by, r_values, r_organs, r_joins in declared_rows(family):
+        if r_by != by or not values <= r_values:
             continue
-        if filed and not joins:
+        if not organ_silent and not organs <= r_organs:
             continue
         if all(member <= r_joins for member in joins):
             return True
@@ -183,12 +225,14 @@ def oracle_harmless(family: str, types, subtypes, subtype_silent: bool, organs, 
 
 # Each field state the census files: (label, the fact or None for silent, the values it may be).
 def field_states(values, enum, others):
-    """Every state of one field over ``values``: silent; supported; claimed (unappraised); a contradiction's sides with
-    each of ``others``; an established negation; an open denial."""
+    """Every state of one field over ``values``: silent; supported; claimed (unappraised); rejected (D336 (1) (b): a claim
+    pass 2 contradicted with no control left, fully open); a contradiction's sides with each of ``others``; an established
+    negation; an open denial."""
     yield 'silent', None, frozenset(enum)
     for value in values:
         yield f'{value.value} supported', sup(value), frozenset({value})
         yield f'{value.value} claimed', unres(value, UNAPPRAISED), frozenset({value})
+        yield f'{value.value} rejected', unres(value, ct.Reason.APPRAISAL_CONTRADICTS), frozenset(enum)
     for value in values[:3]:
         for other in others:
             if other is not value:
@@ -409,17 +453,23 @@ class FindingTests(SimpleTestCase):
         self.assertEqual(status(diagnostic, '44380', FK)[0], HELD)
 
     def test_r5r_4_and_r5r_6_a_colon_that_remains_beside_the_join_stays_ready(self):
-        # RED: held on rules5 by the table's own hold (R5R-4: verify-rules5-R5R-4; R5R-6: e2e1 F3d), READY on int6
+        # RED: held on rules5 by the table's own hold (R5R-4: verify-rules5-R5R-4; R5R-6: e2e1 F3d), READY on int6.
+        # Round r3's round 6 (DECISIONS D336 (1) (b), final check 3, superseding D330 (1) (c)'s release): a joins list of
+        # ONE member is that member plus every landmark - an IRA or an IPAA whose other end pass 1 did not file - and the
+        # subtype OTHER has no control, so R5R-4's three one-member filings hold now (moved by evaluate.path_guard);
+        # R5R-6's colonic J-pouch, a controlled coloanal subtype that decides its ends, stays READY
+        moved = {'a Crohn ileo-ileal anastomosis, joins [ileum]', 'a closed loop ileostomy after LAR, joins [ileum]',
+                 'a Roux-en-Y jejuno-jejunal anastomosis, joins [jejunum]'}
         for name, (history, anatomy) in R5R_4.items():
             with self.subTest(case=name):
                 case = note(history, FC, BX_CECUM, kind='colonoscopy', kind_words='colonoscope', approach=PER_ANUS,
                             reached=CECUM, anatomy=anatomy, place='cecum', place_words='cecum')
-                self.assertEqual(status(case, '45380', BX_CECUM), (READY, ()))
-        # 44389 through a Hartmann colostomy to the cecum beside an ileo-ileal anastomosis (R5R-4's FactSet)
+                self.assertEqual(status(case, '45380', BX_CECUM), (HELD, (ROUTE,)) if name in moved else (READY, ()))
+        # 44389 through a Hartmann colostomy to the cecum beside an ileo-ileal anastomosis (R5R-4's FactSet): held now
         S = RR.stoma_scope(reached=(sup(EX.CECUM),), organ=sup(LM.SIGMOID_COLON),
                            entries={Y2: entry_of(type=sup(AT.ANASTOMOSIS), subtype=sup(SUB.OTHER),
                                                  joins=(sup(LM.ILEUM),))})
-        self.assertEqual(held_of(S, '44389'), [])
+        self.assertIn(ROUTE, [held[1] for held in held_of(S, '44389')])
 
     def test_r5r_7_another_established_approach_holds_the_per_anus_codes(self):
         # RED (probe6): READY on int6 and rules5 for each approach SUPPORTED oral, transnasal, through a gastrostomy or
@@ -503,7 +553,7 @@ class FindingTests(SimpleTestCase):
 
 
 def table_rows(family: str) -> set:
-    return {(row.shape.value, row.types, row.subtypes, row.organs, row.joins, row.joins_filed)
+    return {(row.shape.value, row.decided_by.value, row.values, row.organs, row.joins)
             for row in catalogue.HARMLESS[needs(family)]}
 
 
@@ -547,17 +597,24 @@ class HarmlessSetTests(SimpleTestCase):
         self.assertEqual(set(SUBTYPE_ENDS), ALL_SUBTYPES - {SUB.OTHER})
 
     def test_no_row_holds_an_ileal_pouch_a_whole_colon_beside_a_colon_or_an_anal_canal_per_anus(self):
-        # the release set's boundaries the findings rest on, read off the table itself
+        # the release set's boundaries the findings rest on, read off the table itself; D336 (1) (b): each row releases
+        # on ONE controlled claim - a controlled type, the organ claim of an absence, a controlled subtype - never on
+        # joins or on an uncontrolled type
         for family in FAMILIES:
             for row in catalogue.HARMLESS[needs(family)]:
                 with self.subTest(family=family, shape=row.shape.value):
-                    self.assertNotIn(AT.ILEAL_POUCH, row.types)
+                    self.assertIn(row.decided_by, (A.TYPE, A.ORGAN, A.SUBTYPE))
+                    self.assertNotIn(AT.ILEAL_POUCH, row.values)
+                    if row.decided_by is A.TYPE:
+                        self.assertLessEqual(row.values, CONTROLLED_TYPES)
+                    if row.decided_by is A.SUBTYPE:
+                        self.assertLessEqual(row.values, CONTROLLED_SUBTYPES)
                     if row.shape.value == 'stoma':  # a stoma's organ is never read in the release direction (D330 (d))
-                        self.assertEqual((row.types, row.organs), (frozenset({AT.STOMA}), ALL_PLACES))
-                    if family in ('COLON', 'RECTUM_AND_SIGMOID', 'COLONIC_STOMA') and AT.SURGICALLY_ABSENT in row.types:
-                        self.assertNotIn(LM.COLON, row.organs)
-                    if family in ('COLON', 'RECTUM_AND_SIGMOID', 'POUCH') and AT.SURGICALLY_ABSENT in row.types:
-                        self.assertNotIn(LM.ANAL_CANAL, row.organs)
+                        self.assertEqual((row.values, row.organs), (frozenset({AT.STOMA}), ALL_PLACES))
+                    if family in ('COLON', 'RECTUM_AND_SIGMOID', 'COLONIC_STOMA') and row.decided_by is A.ORGAN:
+                        self.assertNotIn(LM.COLON, row.values)
+                    if family in ('COLON', 'RECTUM_AND_SIGMOID', 'POUCH') and row.decided_by is A.ORGAN:
+                        self.assertNotIn(LM.ANAL_CANAL, row.values)
 
 
 # === the census: every entry shape over the contract's finite vocabularies ============================================
@@ -602,10 +659,9 @@ class CensusTests(SimpleTestCase):
         shapes = []
         for (tl, tf, tv), (sl, sf, sv), (ol, of, ov), joins in itertools.product(TYPE_STATES, SUBTYPE_STATES, ORGAN_STATES,
                                                                                   JOIN_REPS):
-            organ_supported = of.value if of is not None else None
             shapes.append(((tl, sl, ol, tuple(j.value for j in joins)),
                            shape_facts(tf, sf, of, [sup(j) for j in joins]),
-                           (tv, sv, sf is None, ov, organ_supported, tuple(frozenset({j}) for j in joins))))
+                           (tv, sv, sf is None, ov, of is None, tuple(frozenset({j}) for j in joins))))
         wrong, checked, harmless = self.census(shapes)
         self.assertEqual(wrong[:20], [])
         self.assertEqual(checked, 9 * 15 * 51 * len(JOIN_REPS) * 5)
@@ -617,13 +673,13 @@ class CensusTests(SimpleTestCase):
         for (sl, sf, sv), joins in itertools.product(SUBTYPE_STATES, lists):
             shapes.append((('anastomosis', sl, 'silent', tuple(j.value for j in joins)),
                            shape_facts(sup(AT.ANASTOMOSIS), sf, None, [sup(j) for j in joins]),
-                           (frozenset({AT.ANASTOMOSIS}), sv, sf is None, ALL_PLACES, None,
+                           (frozenset({AT.ANASTOMOSIS}), sv, sf is None, ALL_PLACES, True,
                             tuple(frozenset({j}) for j in joins))))
         for tl, tv in (('gastric_pouch', AT.GASTRIC_POUCH), ('surgically_absent', AT.SURGICALLY_ABSENT)):
             for joins in lists[:51]:  # an alteration of another type, its joins of one member
                 shapes.append(((tl, 'silent', 'stomach', tuple(j.value for j in joins)),
                                shape_facts(sup(tv), None, sup(LM.STOMACH), [sup(j) for j in joins]),
-                               (frozenset({tv}), ALL_SUBTYPES, True, frozenset({LM.STOMACH}), LM.STOMACH,
+                               (frozenset({tv}), ALL_SUBTYPES, True, frozenset({LM.STOMACH}), False,
                                 tuple(frozenset({j}) for j in joins))))
         wrong, checked, harmless = self.census(shapes)
         self.assertEqual(wrong[:20], [])
@@ -663,13 +719,11 @@ class CensusTests(SimpleTestCase):
                     fields = dict(plain)
                     fields[attribute] = (state, possible)
                     organ_fact = fields[A.ORGAN][0]
-                    supported = (organ_fact.value if organ_fact is not None and organ_fact.result is ct.Result.SUPPORTED
-                                 else None)
                     shapes.append(((name, attribute.value, label),
                                    shape_facts(fields[A.TYPE][0], fields[A.SUBTYPE][0], organ_fact,
                                                [sup(j) for j in joins]),
                                    (fields[A.TYPE][1], fields[A.SUBTYPE][1], fields[A.SUBTYPE][0] is None,
-                                    fields[A.ORGAN][1], supported, tuple(frozenset({j}) for j in joins))))
+                                    fields[A.ORGAN][1], organ_fact is None, tuple(frozenset({j}) for j in joins))))
             for position, member in enumerate(joins):
                 for label, state, possible in field_states([member], LM, others[A.JOINS]):
                     if state is None:
@@ -681,7 +735,7 @@ class CensusTests(SimpleTestCase):
                     shapes.append(((name, f'joins[{position}]', label),
                                    shape_facts(plain[A.TYPE][0], plain[A.SUBTYPE][0], plain[A.ORGAN][0], members),
                                    (plain[A.TYPE][1], plain[A.SUBTYPE][1], plain[A.SUBTYPE][0] is None,
-                                    plain[A.ORGAN][1], organ if organ else None, tuple(sets))))
+                                    plain[A.ORGAN][1], plain[A.ORGAN][0] is None, tuple(sets))))
         wrong, checked, harmless = self.census(shapes)
         self.assertEqual(wrong[:20], [])
         self.assertTrue(0 < harmless < checked)
@@ -689,7 +743,10 @@ class CensusTests(SimpleTestCase):
     def test_every_approach_and_through_state_of_a_per_anus_route(self):
         # the route's own entry is the guard's too (R5R-7, R5R-8): held when the approach is filed or supported as
         # anything but per anus, when its through may name an entry that may be a stoma or a pouch, and - the approach
-        # silent - when an entry may be a stoma or a pouch (int6's reading: stoma_possible, pouch_possible)
+        # silent - when an entry may be a stoma or a pouch (int6's reading: stoma_possible, pouch_possible). D336 (1) (b)
+        # (final check 4): per anus has no control, so an approach supported per anus is read as a silent one is - every
+        # approach not established through a control (CONTROLLED_APPROACHES) holds beside an entry that may be a stoma of
+        # the lower tract or an ileal pouch
         approaches = {'silent': (None, None)}
         for value in AP:
             approaches[f'{value.value} supported'] = (sup(value), frozenset({value}))
@@ -719,6 +776,16 @@ class CensusTests(SimpleTestCase):
                     'Y9 supported (no such entry)': sup(Id.parse('Y9')), 'Y2 or Y3': contra(Y2, Y3),
                     'Y2 established denied': neg(Y2), 'Y2, an open denial': open_denial(Y2)}
 
+        def lower_route_entry(facts) -> bool:
+            # an entry whose type may be a stoma, its organ not SUPPORTED at a placed organ outside the colon and the
+            # ileum (int6's lower_stoma_possible), or may be an ileal pouch - DECLARED over these entries' states
+            value = facts[A.TYPE][0].value
+            organ = facts.get(A.ORGAN)
+            outside = (organ is not None and organ[0].result is ct.Result.SUPPORTED and organ[0].value not in NO_ORGAN
+                       and organ[0].value not in COLON_ALL | lm('ileum', 'terminal_ileum', 'neo_terminal_ileum',
+                                                                'small_bowel'))
+            return (value is AT.STOMA and not outside) or value is AT.ILEAL_POUCH
+
         def may_be_stoma_or_pouch(facts) -> bool:
             if facts is None:  # no such entry: a silent type may be anything
                 return True
@@ -734,10 +801,11 @@ class CensusTests(SimpleTestCase):
         for (a_name, (approach, a_values)), (e_name, anatomy), (t_name, through) in itertools.product(
                 approaches.items(), entries.items(), throughs.items()):
             R = per_anus_scope(45331, approach=approach, through=through, entries=anatomy)
-            if approach is None:
-                expected = evaluate.stoma_possible(R, X1) or evaluate.pouch_possible(R, X1)
-            else:
-                expected = not a_values <= {AP.TRANSANAL}
+            expected = approach is not None and not a_values <= {AP.TRANSANAL}
+            controlled = (approach is not None and approach.result is ct.Result.SUPPORTED
+                          and approach.value in CONTROLLED_APPROACHES)
+            if not controlled:
+                expected = expected or any(lower_route_entry(facts) for facts in anatomy.values())
             if through is not None:  # the entries it may name (an entry the FactSet does not hold: anything)
                 names = {'Y2 supported': {Y2}, 'Y2 claimed': {Y2}, 'Y9 supported (no such entry)': {Id.parse('Y9')},
                          'Y2 or Y3': {Y2, Y3}}.get(t_name, set(anatomy) | {Y2})
@@ -822,8 +890,12 @@ class EndToEndCensusTests(SimpleTestCase):
                                     [sup(j) for j in members])
                 R, code, number = family_control(family, {Y7: facts})
                 expected = oracle_harmless(family, frozenset({typ}), frozenset({subtype}) if subtype else ALL_SUBTYPES,
-                                           subtype is None, frozenset({organ}) if organ else ALL_PLACES, organ,
+                                           subtype is None, frozenset({organ}) if organ else ALL_PLACES, organ is None,
                                            tuple(frozenset({j}) for j in members))
+                lower = COLON_ALL | lm('ileum', 'terminal_ileum', 'neo_terminal_ileum', 'small_bowel')
+                if (ROUTE_OF[family] is AP.TRANSANAL and typ is AT.STOMA
+                        and (organ is None or organ in NO_ORGAN or organ in lower)):
+                    expected = False  # D336 (1) (b): per anus has no control - a stoma of the lower tract may be the route
                 found = assessed(R, code, number)[0]
                 if (found == READY) != expected:
                     wrong.append((family, typ.value, organ and organ.value, subtype and subtype.value,
@@ -875,6 +947,10 @@ def family_control(family: str, extra=None, *, approach_silent=False):
 # === completeness: the guard reads every row of the route table ======================================================
 
 ANASTOMOSIS_SILENT = entry_of(type=sup(AT.ANASTOMOSIS))         # no family's row holds it (the D328 residual)
+# D336 (1) (b): an entry only the guard reads - a Roux limb (its type has no control, so no row releases on it; no arm
+# reads a Roux limb), so a hold beside it is the guard's own (a silent anastomosis now meets D327 (1)'s arms too, whose
+# own hold - LOWER's for 44406 and 44407 - answers before the guard does)
+GUARD_ONLY = entry_of(type=sup(AT.ROUX_LIMB))
 CHOLECYSTECTOMY = entry_of(type=sup(AT.SURGICALLY_ABSENT), organ=sup(LM.GALLBLADDER))
 
 
@@ -907,7 +983,7 @@ class CompletenessTests(SimpleTestCase):
             with self.subTest(code=code):
                 self.assertIsNotNone(catalogue.lower_route(str(code)))
                 self.assertEqual(witnesses(route_row(met_scope(code), code)), [])
-                found = witnesses(route_row(met_scope(code, {Y7: ANASTOMOSIS_SILENT}), code))
+                found = witnesses(route_row(met_scope(code, {Y7: GUARD_ONLY}), code))
                 self.assertIn((ROUTE, A.TYPE, X1, None), found)
 
     def test_with_no_harmless_row_every_lower_gi_code_holds_beside_any_entry(self):
@@ -954,8 +1030,7 @@ def claimed_entry(t, organ=None, subtype=None, joins=(), organ_sup=False) -> dic
 def claimed_args(t, organ=None, subtype=None, joins=(), organ_sup=False) -> tuple:
     """The oracle's reading of a ``claimed_entry``."""
     return (frozenset({t}), frozenset({subtype}) if subtype else ALL_SUBTYPES, subtype is None,
-            frozenset({organ}) if organ else ALL_PLACES, organ if organ_sup else None,
-            tuple(frozenset({j}) for j in joins))
+            frozenset({organ}) if organ else ALL_PLACES, organ is None, tuple(frozenset({j}) for j in joins))
 
 
 # rows_probe.py's representatives (r3h/rules6/scripts/rows_probe.py, its ENTRIES): name -> claimed_entry's arguments
@@ -1003,7 +1078,13 @@ REPRESENTATIVES = {
 # rows_probe-i6.jsonl, run read-only on int6, its manifest equal before and after): READY in every case the declared set
 # holds harmless - DECLARED here as the count of such cases per family (the approach filed per anus and, per anus, also
 # silent), so a representative the set gains or loses moves this pin
-INT6_READY_HARMLESS = {'COLON': 28, 'RECTUM_AND_SIGMOID': 28, 'COLONIC_STOMA': 29, 'ILEAL_STOMA': 29, 'POUCH': 25}
+# Round r3's round 6 (DECISIONS D336 (1) (b), r3i/int8): the declared set no longer holds harmless the seven
+# representatives whose release rested on an uncontrolled attribute - an anastomosis of silent or OTHER subtype by its
+# joins (subtype silent [ileum, colon], [stomach, duodenum]; other [ileum], [jejunum]), a Roux limb, another
+# alteration and a bypass by their types - so each family's count falls by seven (moved by the declared set, the
+# owner; each of the seven now holds: test_r3i_guard.FindingTests); was COLON 28, R&S 28, COLONIC_STOMA 29,
+# ILEAL_STOMA 29, POUCH 25
+INT6_READY_HARMLESS = {'COLON': 21, 'RECTUM_AND_SIGMOID': 21, 'COLONIC_STOMA': 22, 'ILEAL_STOMA': 22, 'POUCH': 18}
 
 
 class CommonInputTests(SimpleTestCase):
@@ -1019,9 +1100,13 @@ class CommonInputTests(SimpleTestCase):
                         continue
                     R, code, number = family_control(family, {Y7: claimed_entry(*args)}, approach_silent=silent)
                     limit = silent and args[0] is AT.STOMA and not (args[4:] and args[4])
+                    # D336 (1) (b) (final check 4): per anus has no control, so a stoma whose organ is not SUPPORTED
+                    # outside the lower tract may be the route - the guard's own hold beside a supported per-anus approach
+                    per_anus_stoma = (not silent and family in ('COLON', 'RECTUM_AND_SIGMOID') and args[0] is AT.STOMA
+                                      and not (args[4:] and args[4]))
                     with self.subTest(family=family, approach='silent' if silent else 'per anus', entry=name):
                         self.assertEqual(assessed(R, code, number), (HELD, ('reading_unknown',)) if limit
-                                         else (READY, ()))
+                                         else (HELD, (ROUTE,)) if per_anus_stoma else (READY, ()))
                     if not silent:
                         counts[family] = counts.get(family, 0) + 1
         self.assertEqual(counts, INT6_READY_HARMLESS)
@@ -1088,16 +1173,21 @@ GASTRIC_BYPASS = {Y3: entry_of(type=sup(AT.GASTRIC_POUCH), organ=sup(LM.STOMACH)
 VARIANTS = {
     'COLON': {
         'an ileal resection (the ileum absent)': ({Y7: absent(LM.ILEUM)}, READY),
+        # D336 (1) (b): no row releases on joins (an uncontrolled attribute), so its silent subtype decides nothing
         'a jejunocolic anastomosis its joins name, its subtype silent': ({Y7: anastomosis(LM.JEJUNUM, LM.COLON)},
-                                                                         READY),
-        'a Whipple procedure (three upper anastomoses)': (WHIPPLE, READY),
+                                                                         HELD),
+        # D336 (1) (b): the pancreaticojejunal subtype has no control, so it never decides a release
+        'a Whipple procedure (three upper anastomoses)': (WHIPPLE, HELD),
+        # D336 (1) (b): another alteration's type has no control, so it never decides a release (L8-4's recorded cost)
         'a gastric band (another alteration of the stomach)': (
-            {Y7: entry_of(type=sup(AT.OTHER_ALTERATION), organ=sup(LM.STOMACH))}, READY),
+            {Y7: entry_of(type=sup(AT.OTHER_ALTERATION), organ=sup(LM.STOMACH))}, HELD),
         'a repaired rectal fistula (another alteration of the rectum)': (
             {Y7: entry_of(type=sup(AT.OTHER_ALTERATION), organ=sup(LM.RECTUM))}, HELD),
         'a bypass of the colon': ({Y7: entry_of(type=sup(AT.BYPASS), organ=sup(LM.COLON))}, HELD),
         'an anastomosis of another pair, its joins silent': ({Y7: anastomosis(subtype=SUB.OTHER)}, HELD),
-        'a gastrostomy beside the route established per anus (D310 (1))': ({Y7: STOMA_CLAIMED}, READY),
+        # D336 (1) (b) (final check 4): per anus has no control, so beside a stoma whose organ pass 1 only claimed the
+        # route is never established per anus (R5R-5's class with the approach supported)
+        'a gastrostomy beside the route per anus (D310 (1)), its organ claimed': ({Y7: STOMA_CLAIMED}, HELD),
     },
     'RECTUM_AND_SIGMOID': {
         'a total colectomy (the colon absent)': ({Y7: absent(LM.COLON)}, HELD),
@@ -1108,7 +1198,7 @@ VARIANTS = {
         'an appendectomy (other absent)': ({Y7: absent(LM.OTHER)}, READY),
         'an ultralow anterior resection (the rectum absent, a coloanal anastomosis)': (
             {Y5: absent(LM.RECTUM), Y7: anastomosis(LM.COLON, LM.ANAL_CANAL, subtype=SUB.COLOANAL)}, READY),
-        'a Whipple procedure': (WHIPPLE, READY),
+        'a Whipple procedure (its pancreaticojejunal subtype uncontrolled, D336 (1) (b))': (WHIPPLE, HELD),
         'an S-pouch filed another alteration of the pouch': (
             {Y7: entry_of(type=sup(AT.OTHER_ALTERATION), organ=sup(LM.POUCH))}, HELD),
         'a cholecystectomy and a gastric bypass': ({Y1: CHOLECYSTECTOMY, **GASTRIC_BYPASS}, READY),
@@ -1172,7 +1262,9 @@ class VariantTests(SimpleTestCase):
                                                                          [(ROUTE, A.TYPE, X1, None)])},
             45341: {'an appendectomy': ({Y7: absent(LM.OTHER)}, []),
                     'the colon absent': ({Y7: absent(LM.COLON)}, [(ROUTE, A.TYPE, X1, None)]),
-                    'a stoma beside the route established per anus': ({Y7: STOMA_CLAIMED}, []),
+                    # D336 (1) (b) (final check 4): the per-anus approach has no control, so a stoma may be the route
+                    'a stoma beside the route per anus, its organ claimed': ({Y7: STOMA_CLAIMED},
+                                                                            [(ROUTE, A.TYPE, X1, None)]),
                     'an ileorectal anastomosis': ({Y7: anastomosis(LM.ILEUM, LM.RECTUM, subtype=SUB.ILEORECTAL)},
                                                   [(ROUTE, A.TYPE, X1, None)])},
             44406: {'a cholecystectomy': ({Y7: CHOLECYSTECTOMY}, []),

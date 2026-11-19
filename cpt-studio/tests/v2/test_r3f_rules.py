@@ -514,12 +514,14 @@ class CompletenessTests(SimpleTestCase):
         for code in (45380, 45391, 45392, 45331, 45330, 45341, 45342, 44389, 44382, 44380, 44386):
             # round r3's round 5 (D330 (1), lane rules6): the per-anus scene's entry another alteration OF THE STOMACH -
             # of no stated organ it matches no row of the ruled harmless set and the path guard would hold the code
-            # before its row is removed
+            # before its row is removed. Round r3's round 6 (DECISIONS D336 (1) (b)): another alteration's type has no
+            # control, so no row releases on it either - the per-anus entry is a cholecystectomy (an absence, decided by
+            # its organ claim: the gallbladder lies outside the lower GI tract)
             R = scope(code, approach=sup(AP.TRANSANAL) if catalogue.lower_route(str(code)).route is AP.TRANSANAL
                       else sup(catalogue.lower_route(str(code)).route), through=sup(Y1),
                       entries={Y1: STOMA_ENTRY if code in (44389, 44382, 44380) else
-                               POUCH_ENTRY if code == 44386 else entry_of(type=sup(AT.OTHER_ALTERATION),
-                                                                          organ=sup(LM.STOMACH))},
+                               POUCH_ENTRY if code == 44386 else entry_of(type=sup(AT.SURGICALLY_ABSENT),
+                                                                          organ=sup(LM.GALLBLADDER))},
                       reached=sup(EX.CECUM) if code == 44389 else None)
             with self.subTest(code=code):
                 self.assertNotIn(ROUTE, [w[0] for w in witnesses(route_row(R, code))])
@@ -664,8 +666,10 @@ class IlealStomaTests(SimpleTestCase):
                 R = ileoscopy(organ)
                 self.assertEqual(evaluate.colonic_stoma_possible(R, X1), colonic)
                 # round r3's round 5 (D330 (1), lane rules6, R5R-9): an organ FILED that may lie nowhere in the ileum
-                # (the jejunum) is no ileal stoma either (moved by evaluate.ileal_stoma_contradicted)
-                held = colonic or name == 'the jejunum, supported'
+                # (the jejunum) is no ileal stoma either (moved by evaluate.ileal_stoma_contradicted). Round r3's round 6
+                # (DECISIONS D336 (1) (c), L4P-4: P-MONO): an organ that MAY lie outside the ileum holds - the ileum with
+                # a doubt's reading of the jejunum too (moved by evaluate.ileal_stoma_contradicted)
+                held = colonic or name in ('the jejunum, supported', "the ileum claimed, a doubt's reading of the jejunum")
                 self.assertEqual(evaluate.ileal_stoma_contradicted(R, X1), held)
                 self.assertEqual(witnesses(route_row(R, code)), [(ROUTE, A.TYPE, X1, None)] if held else [])
 
@@ -760,7 +764,10 @@ class AddendumTests(SimpleTestCase):
     # --- Q1: LOWER declares the anatomy subtype read (P-INDEP) ---
     def test_q1_lower_reads_every_entrys_subtype_and_joins_to_hold_only(self):
         reads = {(read.role, read.attribute): read.paths for read in RQ.RULES[Tag.LOWER].reads}
-        self.assertEqual(reads[(RQ.Role.ANATOMY, A.SUBTYPE)], {RQ.Path.HOLD})
+        # round r3's round 6 (DECISIONS D336 (1) (d)): LOWER's row reads the path guard, whose harmless set releases an
+        # anastomosis on its controlled subtype - declared on the READY path (moved by requirements.RULES); the joins
+        # stay hold-only
+        self.assertEqual(reads[(RQ.Role.ANATOMY, A.SUBTYPE)], {RQ.Path.READY})
         self.assertEqual(reads[(RQ.Role.ANATOMY, A.JOINS)], {RQ.Path.HOLD})
         colfull = {(read.role, read.attribute): read.paths for read in RQ.RULES[Tag.COLFULL].reads}
         self.assertEqual(colfull[(RQ.Role.ANATOMY, A.JOINS)], {RQ.Path.HOLD})
@@ -828,8 +835,11 @@ class AddendumTests(SimpleTestCase):
             # round r3's round 5 (DECISIONS D330 (1) (c), lane rules6, R5R-4): a list of one member names one organ (the
             # anastomosis of that organ to itself), so it holds only where the member may lie below the colon (the
             # rectum, the anal canal, no placed organ); and the path guard holds a member no row of the ruled harmless
-            # set names (a landmark naming no placed organ, an established or open denial: moved by path_guard)
-            expected = below
+            # set names (a landmark naming no placed organ, an established or open denial: moved by path_guard). Round
+            # r3's round 6 (DECISIONS D336 (1) (b), final check 3, superseding (c)'s release): a one-member list of an
+            # entry that may be an anastomosis is that member plus every landmark, so it holds where the member may lie
+            # in the small bowel too (moved by evaluate.joins_ileum_below_colon_possible)
+            expected = small or below
             with self.subTest(joins=[label]):
                 self.assertEqual(evaluate.joins_ileum_below_colon_possible(R, Y2), expected)
                 self.assertEqual(evaluate.whole_colon_absent_possible(R), expected)
@@ -859,9 +869,14 @@ class AddendumTests(SimpleTestCase):
             'the subtype ileorectal, the joins the ileum and the colon (OR)': anastomosis(
                 sup(LM.ILEUM), sup(LM.COLON), subtype=sup(SUB.ILEORECTAL)),
             'the joins the jejunum and the rectum': anastomosis(sup(LM.JEJUNUM), sup(LM.RECTUM)),
+            # round r3's round 6 (DECISIONS D336 (1) (b), final check 2 and 3): moved here from ``as_before`` - an
+            # anastomosis's ends its joins list does not name may be every landmark (both silent: the residual; one
+            # member: the ileum plus any other end), so each may join the ileum below the colon (moved by
+            # evaluate.joins_ileum_below_colon_possible)
+            'the subtype and the joins both silent (the recorded residual)': anastomosis(),
+            'the joins the ileum alone': anastomosis(sup(LM.ILEUM)),
         }
         as_before = {
-            'the subtype and the joins both silent (the recorded residual)': anastomosis(),
             'the joins the ileum and the colon (the development set filing)': anastomosis(
                 sup(LM.ILEUM), sup(LM.COLON), subtype=sup(SUB.ILEOCOLIC)),
             'the joins the ileum and the colon, the subtype silent': anastomosis(sup(LM.ILEUM), sup(LM.COLON)),
@@ -874,9 +889,6 @@ class AddendumTests(SimpleTestCase):
                                                                                        sup(LM.JEJUNUM)),
             'the joins the pouch and the colon (one end each way: never the same member twice)': anastomosis(
                 sup(LM.POUCH), sup(LM.COLON)),
-            # round r3's round 5 (DECISIONS D330 (1) (c), lane rules6, R5R-4): moved here from ``holds`` - one member
-            # names one organ, and the ileum alone is no ileum joined below the colon
-            'the joins the ileum alone': anastomosis(sup(LM.ILEUM)),
         }
         # round r3's round 5 (D330 (1), lane rules6): after the arms, the path guard holds an anastomosis no row of the
         # ruled harmless set holds - its subtype and joins both silent (the D328 addendum's residual, closed), or a joins
@@ -891,9 +903,13 @@ class AddendumTests(SimpleTestCase):
                 with self.subTest(case=name, code=code):
                     self.assertEqual(evaluate.whole_colon_absent_possible(R), expected)
                     guard = guarded(R, code)
-                    self.assertEqual(guard, name in ('the subtype and the joins both silent (the recorded residual)',
-                                                     'the joins the pouch and the colon (one end each way: never the '
-                                                     'same member twice)') or expected)
+                    # round r3's round 6 (DECISIONS D336 (1) (b)): no row releases on joins (an uncontrolled attribute),
+                    # so only an anastomosis whose controlled subtype decides it may pass the guard - the development
+                    # set's ileocolic filing and the colorectal anastomosis; every entry of silent subtype holds (moved by
+                    # evaluate.path_guard)
+                    self.assertEqual(guard, expected or name not in (
+                        'the joins the ileum and the colon (the development set filing)',
+                        'the joins the sigmoid colon and the rectum (a colorectal anastomosis)'))
                     if code == '44406':
                         self.assertEqual(held_of(R, code), RD.LOWER_HOLD if expected else TABLE_HOLD if guard else [])
                     else:
@@ -946,8 +962,10 @@ COLONIC_EUS = {  # 45391 and 45392 per anus: a colon to traverse
     'a9 a right hemicolectomy (the right colon, an ileocolic anastomosis joining the ileum to the colon)': (dict(
         approach=sup(AP.TRANSANAL), entries={**RD_absences(LM.RIGHT_COLON), Y2: anastomosis(
             sup(LM.ILEUM), sup(LM.COLON), subtype=sup(SUB.ILEOCOLIC))}), 'ready'),
-    'a10 per anus beside a Hartmann colostomy (the approach established)': (dict(
-        approach=sup(AP.TRANSANAL), entries={Y1: COLOSTOMY, **RD_absences(LM.SIGMOID_COLON)}), 'ready'),
+    # round r3's round 6 (DECISIONS D336 (1) (b) and (e), final check 4): was 'ready' - per anus has no control, so
+    # beside a colostomy the route is never established per anus (moved by evaluate.path_guard)
+    'a10 per anus beside a Hartmann colostomy (the approach supported)': (dict(
+        approach=sup(AP.TRANSANAL), entries={Y1: COLOSTOMY, **RD_absences(LM.SIGMOID_COLON)}), 'hold'),
 }
 RECTAL_EUS = {  # 45341 and 45342 per anus: a rectum and sigmoid
     'b1 an ileal pouch (an IPAA), per anus': (dict(approach=sup(AP.TRANSANAL), entries={Y2: POUCH_ENTRY}), 'hold'),
@@ -963,8 +981,9 @@ RECTAL_EUS = {  # 45341 and 45342 per anus: a rectum and sigmoid
     'b6 after a total abdominal colectomy with an IRA (the rectal stump)': (dict(
         approach=sup(AP.TRANSANAL), entries={Y1: ABSENT_COLON, Y2: anastomosis(
             sup(LM.ILEUM), sup(LM.RECTUM), subtype=sup(SUB.ILEORECTAL))}), 'hold'),
-    'b7 per anus beside an end colostomy (the approach established)': (dict(approach=sup(AP.TRANSANAL),
-                                                                          entries={Y1: COLOSTOMY}), 'ready'),
+    # round r3's round 6 (DECISIONS D336 (1) (b) and (e), final check 4): was 'ready' (moved by evaluate.path_guard)
+    'b7 per anus beside an end colostomy (the approach supported)': (dict(approach=sup(AP.TRANSANAL),
+                                                                        entries={Y1: COLOSTOMY}), 'hold'),
     'b8 an ordinary rectal EUS (no anatomy, the approach silent)': (dict(), 'ready'),
 }
 SIGMOIDOSCOPY = {  # 45330-45350 per anus: a rectum and sigmoid
@@ -978,8 +997,10 @@ SIGMOIDOSCOPY = {  # 45330-45350 per anus: a rectum and sigmoid
         entries={Y1: ILEOSTOMY, **RD_absences(LM.SIGMOID_COLON)}), 'asked'),
     'c5 the approach claimed per anus (unresolved) beside a colostomy': (dict(
         approach=unres(AP.TRANSANAL, UNAPPRAISED), entries={Y1: COLOSTOMY}), 'asked'),
-    'c6 per anus after an LAR with a loop ileostomy (the approach established)': (dict(
-        approach=sup(AP.TRANSANAL), entries={Y1: ILEOSTOMY, **RD_absences(LM.SIGMOID_COLON)}), 'ready'),
+    # round r3's round 6 (DECISIONS D336 (1) (b) and (e), final check 4): was 'ready' - L8-7's recorded cost class
+    # (a diverting loop ileostomy beside a per-anus code; moved by evaluate.path_guard)
+    'c6 per anus after an LAR with a loop ileostomy (the approach supported)': (dict(
+        approach=sup(AP.TRANSANAL), entries={Y1: ILEOSTOMY, **RD_absences(LM.SIGMOID_COLON)}), 'hold'),
     # round r3's round 5 (D330 (1), lane rules6): was 'ready' - the path guard (moved by evaluate.path_guard)
     'c7 per anus after a total abdominal colectomy with an IRA': (dict(
         approach=sup(AP.TRANSANAL), entries={Y1: ABSENT_COLON, Y2: anastomosis(

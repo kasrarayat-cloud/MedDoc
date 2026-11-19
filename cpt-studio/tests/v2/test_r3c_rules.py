@@ -276,11 +276,13 @@ class ColonicRouteTests(SimpleTestCase):
         }
         # round r3's round 5 (DECISIONS D330 (1), lane rules6): the colonic route stays met for each, but an anastomosis
         # whose subtype and joins are both silent is the D328 addendum's residual, which the lower-GI path guard holds
-        # after this arm with the table's own hold
+        # after this arm with the table's own hold. Round r3's round 6 (DECISIONS D336 (1) (b)): its two unnamed ends may
+        # be every landmark, so it may join the ileum below the colon - the colonic route is not met either (the same
+        # table hold; moved by evaluate.joins_ileum_below_colon_possible)
         guarded = {'an anastomosis whose organ is the colon'}
         for name, R in cases.items():
             with self.subTest(case=name):
-                self.assertTrue(evaluate.colonic_route(R, X1))
+                self.assertEqual(evaluate.colonic_route(R, X1), name not in guarded)
                 for code in sorted(evaluate.STOMA_ROUTE_CODES):
                     self.assertIs(route_row(R, code).truth, evaluate.Truth.U if name in guarded else T)
                 self.assertEqual(held_of(R, '44389'), [('procedure', ROUTE, A.TYPE, 'X1', 'question')]
@@ -352,10 +354,16 @@ class ColonicRouteTests(SimpleTestCase):
         held = stoma_scope(**colostomy, entries={Y3: {A.TYPE: (unres(STOMA),)}})
         self.assertFalse(evaluate.colonic_route(held, X1))
         self.assertEqual(held_of(held, '44389'), [('procedure', ROUTE, A.TYPE, 'X1', 'question')])
-        for name, facts in (('a second colostomy', {A.TYPE: (sup(STOMA),), A.ORGAN: (sup(LM.TRANSVERSE_COLON),)}),
-                            ('an anastomosis', {A.TYPE: (sup(ct.AnatomyType.ANASTOMOSIS),)})):
+        # round r3's round 6 (DECISIONS D336 (1) (b)): an anastomosis whose subtype and joins are silent may join any two
+        # ends - the ileum below the colon among them - so it leaves no colonic route (moved by
+        # evaluate.joins_ileum_below_colon_possible); with an ileocolic subtype, which decides its ends, it does not
+        for name, facts, met in (
+                ('a second colostomy', {A.TYPE: (sup(STOMA),), A.ORGAN: (sup(LM.TRANSVERSE_COLON),)}, True),
+                ('an anastomosis', {A.TYPE: (sup(ct.AnatomyType.ANASTOMOSIS),)}, False),
+                ('an ileocolic anastomosis', {A.TYPE: (sup(ct.AnatomyType.ANASTOMOSIS),),
+                                              A.SUBTYPE: (sup(ct.AnastomosisSubtype.ILEOCOLIC),)}, True)):
             with self.subTest(entry=name):
-                self.assertTrue(evaluate.colonic_route(stoma_scope(**colostomy, entries={Y3: facts}), X1))
+                self.assertEqual(evaluate.colonic_route(stoma_scope(**colostomy, entries={Y3: facts}), X1), met)
 
     def test_the_hold_is_the_route_tables_own_worded_as_before(self):
         # D320 (i): no new words - the colonic-route hold is the table's own no-stoma hold (procedure at RANK row 8,
@@ -444,7 +452,10 @@ class StomaOrganTests(SimpleTestCase):
                     # against the ruled harmless set - a stoma is harmless whatever its organ, and so is an entry that
                     # may be another alteration of an organ outside the lower GI tract; one that may be another
                     # alteration of the rectum matches no row and holds with the table's own hold
-                    guarded = organ is LM.RECTUM and t_name == "a doubt's reading"
+                    # round r3's round 6 (DECISIONS D336 (1) (b)): a doubt between another alteration (a type with no
+                    # control) and a stoma leaves no controlled claim to decide the entry - the guard holds it beside
+                    # every organ (the OUTSIDE row released on an uncontrolled type; moved by evaluate.path_guard)
+                    guarded = t_name == "a doubt's reading"
                     for code in sorted(evaluate.ANUS_ROUTE_CODES):
                         self.assertIs(route_row(R, code).truth, evaluate.Truth.U if guarded else T)
                     self.assertEqual(held_of(R, '45385'), [('procedure', ROUTE, A.TYPE, 'X1', 'question')]

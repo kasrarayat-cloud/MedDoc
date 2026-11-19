@@ -69,8 +69,8 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from types import MappingProxyType
 
-from studio.interpretation.contract.types import (AnastomosisSubtype, AnatomyType, Approach, Device, Extent, Kind,
-                                                  Landmark, Purpose, SessionKind, Station, Tract)
+from studio.interpretation.contract.types import (AnastomosisSubtype, AnatomyType, Approach, Attribute, Device,
+                                                  Extent, Kind, Landmark, Purpose, SessionKind, Station, Tract)
 from studio.interpretation.engine.anatomy import (ALTERED, ANASTOMOSIS_PLACE, UNPLACED, Place, Region, compatible,
                                                 contains, in_regions, region)
 
@@ -776,53 +776,85 @@ def lower_route(code: object) -> LowerRoute | None:
     return LOWER_ROUTES.get(found) if found is not None else None
 
 
-# --- the ruled harmless set: the lower-GI path guard's release set (DECISIONS D330 (1)) ------------------------------
+# --- the ruled harmless set: the lower-GI path guard's release set (DECISIONS D330 (1), completed by D336 (1)) -------
 #
 # Four rounds each found the next post-surgical lower-GI shape a listed arm missed - the enumeration failure in the
 # release direction - so DECISIONS D330 (1) inverts the default: after every arm of a route row (engine/evaluate,
 # ``path_guard``), a lower-GI code - every row of LOWER_ROUTES - is held with the table's own hold unless EVERY anatomy
 # entry of the document is, for that code's route, (i) the entry the route itself uses (the stoma or the pouch the
 # session established it entered through) or (ii) a match for a row of this ONE finite typed table for that route family
-# (the row's ``needs``). An entry matches a row only when every possible value of every field it files lies within the
-# row - its type, its subtype, its organ (each read by engine/evaluate's ``_may_be``: a silent or unreadable field may be
-# every member of its enumeration, so it matches only a row holding them all), and every member of its joins list (an
-# empty list names no member; ``joins_filed`` rows need one). The table is the RELEASE set: a shape it omits costs a
-# hold, never a false READY. Every set below is an enumeration of members computed from engine/anatomy's regions and
-# containment (never a word list); each row's one-line anatomical reason is in the lane's NOTES (r3h/rules6) and its
-# comment here.
+# (the row's ``needs``). The table is the RELEASE set: a shape it omits costs a hold, never a false READY. Every set below
+# is an enumeration of members computed from engine/anatomy's regions and containment (never a word list); each row's
+# one-line anatomical reason is in its comment here and in the NOTES (r3h/rules6; r3i/int8 for D336).
+#
+# DECISIONS D336 (1) completes the construction rule in the release direction: an entry is harmless for a family only
+# if EVERY reading it may have lies within a row, where every attribute is read by its widest possible value unless the
+# contract CONTROLS it (b). So each row RELEASES ON ONE CONTROLLED CLAIM - ``decided_by``: an anatomy type the contract
+# controls (CONTROLLED_TYPES: 3.2.3's type siblings), the organ claim of an entry filed surgically absent (the absence
+# form: its claim states that the organ is surgically absent, controlled by its own negation), or a subtype the contract
+# controls (CONTROLLED_SUBTYPES: 3.2.3's subtype siblings; a subtype names an anastomosis). A type the contract does not
+# control (an anastomosis, a Roux limb, a bypass, another alteration; an absence but by its organ claim) and every member
+# of a joins list (no control: an attribute read only to HOLD) never decide a release; a row reads them only to hold: a
+# filed organ must lie within ``organs`` and every possible place of each joins member within ``joins``, or the entry is
+# no match (engine/evaluate ``harmless_row``). No row releases on joins, so the rows that did (an anastomosis its joins
+# name, D330 (1)'s row 7, and the pouch family's row 9) and the row that took any type wholly outside the lower GI tract
+# (row 4: it released on an uncontrolled type, and on an empty joins list read as naming nothing) are gone.
 
 
 @unique
 class EntryShape(Enum):
-    """The entry shapes of the ruled harmless set (DECISIONS D330 (1)): an organ filed surgically absent; an anastomosis
-    of a colon-keeping subtype, of the upper tract, or - beside a pouch code - the pouch's own ileoanal or ileorectal
-    join; an anastomosis its joins name, whatever its subtype; an alteration of the upper tract by its type (a gastric
-    pouch, a Roux limb: DECISIONS D141); any alteration but an ileal pouch wholly outside the lower GI tract;
-    a stoma beside a route established otherwise (DECISIONS D310 (1): the route is the established fact)."""
+    """The entry shapes of the ruled harmless set (DECISIONS D330 (1), D336 (1)), each released on one controlled claim:
+    an organ filed surgically absent (its organ claim, the absence form); an anastomosis of a colon-keeping subtype, of
+    the upper tract, or - beside a pouch code - the pouch's own ileoanal or ileorectal join (its subtype); a gastric
+    pouch (its type: an alteration of the upper tract, DECISIONS D141); a stoma beside a route established otherwise (its
+    type; DECISIONS D310 (1): the route is the established fact)."""
     ABSENT = 'absent'
     ANASTOMOSIS_COLON = 'anastomosis_colon'
     ANASTOMOSIS_UPPER = 'anastomosis_upper'
     ANASTOMOSIS_POUCH = 'anastomosis_pouch'
-    ANASTOMOSIS_JOINS = 'anastomosis_joins'
     UPPER_ALTERATION = 'upper_alteration'
-    OUTSIDE = 'outside'
     STOMA = 'stoma'
 
 
 @dataclass(frozen=True, slots=True)
 class Harmless:
-    """One row of the ruled harmless set (DECISIONS D330 (1)): ``needs``, the route family (the route table's anatomy
-    need: catalogue.LowerRoute.needs), ``shape``, and the values each field of a matching entry may possibly take -
-    ``types``, ``subtypes`` and ``organs`` (members of their enumerations), ``joins`` (every member of its joins list);
-    ``joins_filed``: the row needs a joins list of at least one member (it reads what the anastomosis joins, its subtype
-    whatever)."""
+    """One row of the ruled harmless set (DECISIONS D330 (1), D336 (1)): ``needs``, the route family (the route table's
+    anatomy need: catalogue.LowerRoute.needs); ``shape``; ``decided_by``, the controlled claim the row releases on
+    (Attribute.TYPE: a type the contract controls; Attribute.ORGAN: the organ claim of an entry filed surgically absent;
+    Attribute.SUBTYPE: a subtype the contract controls) and ``values``, the values of that claim it releases on - every
+    value the claim may be must lie within them; and, read only to HOLD, ``organs`` (where a filed organ may lie: each
+    possible value; a silent organ files nothing) and ``joins`` (where each possible place of every joins member may
+    lie)."""
     needs: RouteAnatomy
     shape: EntryShape
-    types: frozenset[AnatomyType]
-    subtypes: frozenset[AnastomosisSubtype]
+    decided_by: Attribute
+    values: frozenset[AnatomyType | AnastomosisSubtype | Landmark]
     organs: frozenset[Landmark]
     joins: frozenset[Landmark]
-    joins_filed: bool = False
+
+
+# What the contract CONTROLS (DECISIONS D336 (1) (b): contract/claims.py's CONTROLS with its sibling tables, 3.2.3), as
+# enumerations of members - the engine imports no contract module, so tests/v2/test_r3i_guard.py's P-CONTROLLED census
+# pins each equal to the contract's own tables:
+# - CONTROLLED_TYPES: the anatomy types whose claim has a contrary control (3.2.3: "ileal_pouch, gastric_pouch, stoma ...
+#   the sibling type"); every other type is decided by a single verdict, so it is read only to hold;
+# - CONTROLLED_SUBTYPES: the anastomosis subtypes with a sibling control (every pair 3.2.3 lists, both ways) - OTHER and
+#   pancreaticojejunal have none (3.2.3 pairs no sibling with them), so they are decided by a single verdict;
+# - CONTROLLED_APPROACHES: the approaches with a contrary control (the approach table: oral against a stoma or a pouch)
+#   - per anus has none, so the per-anus route is never established through a control (engine/evaluate,
+#   ``_anus_route_contradicted``);
+# - ABSENCE_TYPE: the type whose organ claim states the absence (the organ's only claim form, controlled by its negation);
+# - SUBTYPE_TYPE: the type a subtype names (its claim's form, "This anastomosis is ...").
+CONTROLLED_TYPES: frozenset[AnatomyType] = frozenset({AnatomyType.ILEAL_POUCH, AnatomyType.GASTRIC_POUCH,
+                                                       AnatomyType.STOMA})
+CONTROLLED_SUBTYPES: frozenset[AnastomosisSubtype] = frozenset({
+    AnastomosisSubtype.ILEOCOLIC, AnastomosisSubtype.COLOCOLIC, AnastomosisSubtype.COLORECTAL, AnastomosisSubtype.COLOANAL,
+    AnastomosisSubtype.ILEORECTAL, AnastomosisSubtype.ILEOANAL, AnastomosisSubtype.GASTROJEJUNAL,
+    AnastomosisSubtype.GASTRODUODENAL, AnastomosisSubtype.ESOPHAGOJEJUNAL, AnastomosisSubtype.ESOPHAGOGASTRIC,
+    AnastomosisSubtype.HEPATICOJEJUNAL, AnastomosisSubtype.CHOLEDOCHODUODENAL})
+CONTROLLED_APPROACHES: frozenset[Approach] = frozenset({Approach.ORAL, Approach.THROUGH_STOMA, Approach.THROUGH_POUCH})
+ABSENCE_TYPE: AnatomyType = AnatomyType.SURGICALLY_ABSENT
+SUBTYPE_TYPE: AnatomyType = AnatomyType.ANASTOMOSIS
 
 
 # The places, from engine/anatomy's regions and containment:
@@ -852,8 +884,7 @@ ILEAL_PARTS: frozenset[Landmark] = frozenset(landmark for landmark in Landmark i
 # ILEUM_BELOW_SUBTYPES and OTHER): those that keep a colon (ileocolic, colocolic, colorectal, coloanal); those of the
 # upper tract, the bile duct and the pancreas; those that join the ileum below the colon (ileorectal, ileoanal), the
 # pouch's own join (an ileal pouch is the ileum joined to the anus or the rectum); OTHER joins another pair, so it is in
-# no subtype row (an anastomosis of it is harmless only by what its joins name). A subtype the enumeration gains is in
-# no row until classified.
+# no subtype row (and the contract gives it no control). A subtype the enumeration gains is in no row until classified.
 COLON_KEEPING_SUBTYPES: frozenset[AnastomosisSubtype] = frozenset({
     AnastomosisSubtype.ILEOCOLIC, AnastomosisSubtype.COLOCOLIC, AnastomosisSubtype.COLORECTAL,
     AnastomosisSubtype.COLOANAL})
@@ -863,22 +894,18 @@ UPPER_SUBTYPES: frozenset[AnastomosisSubtype] = frozenset({
     AnastomosisSubtype.PANCREATICOJEJUNAL})
 ILEUM_BELOW_SUBTYPES: frozenset[AnastomosisSubtype] = frozenset({
     AnastomosisSubtype.ILEORECTAL, AnastomosisSubtype.ILEOANAL})
-_TYPES: frozenset[AnatomyType] = frozenset(AnatomyType)
-_SUBTYPES: frozenset[AnastomosisSubtype] = frozenset(AnastomosisSubtype)
 _LANDMARKS: frozenset[Landmark] = frozenset(Landmark)
-# What a harmless anastomosis may join: a colon-keeping one the small bowel (an ileocolic join), the colon, the rectum,
-# the anal canal or a pouch - a colonic J-pouch, its subtype filed colon-keeping (R5R-6); one its joins name (its subtype
-# whatever) the small bowel, the colon, the rectum, the anal canal or an organ outside the lower GI tract - never a
-# landmark naming no placed organ, whose end may be anything; the pouch's own join the small bowel, the rectum, the anal
-# canal or the pouch; an upper one an organ outside the lower GI tract or a pouch (a gastric pouch's own end).
+# Where each joins member of a matching entry may lie (read only to HOLD - no row releases on joins): an anastomosis that
+# keeps a colon the small bowel (an ileocolic join), the colon, the rectum, the anal canal or a pouch - a colonic
+# J-pouch, its subtype filed colon-keeping (R5R-6); the pouch's own join the small bowel, the rectum, the anal canal or
+# the pouch; an upper anastomosis or a gastric pouch an organ outside the lower GI tract or a pouch (a gastric pouch's
+# own end). engine/evaluate reads each member of a subtype's row within that subtype's own ends too (SUBTYPE_ENDS).
 _COLON_JOINS: frozenset[Landmark] = (SMALL_BOWEL_LANDMARKS | COLON_LANDMARKS | RECTUM_LANDMARKS | ANUS_LANDMARKS
                                      | frozenset({Landmark.POUCH}))
-_NAMED_JOINS: frozenset[Landmark] = (SMALL_BOWEL_LANDMARKS | COLON_LANDMARKS | RECTUM_LANDMARKS | ANUS_LANDMARKS
-                                     | OUTSIDE_LOWER_GI)
 _POUCH_JOINS: frozenset[Landmark] = (SMALL_BOWEL_LANDMARKS | RECTUM_LANDMARKS | ANUS_LANDMARKS
                                      | frozenset({Landmark.POUCH}))
 _UPPER_JOINS: frozenset[Landmark] = OUTSIDE_LOWER_GI | frozenset({Landmark.POUCH})
-# The organs each route family's ABSENT row holds (the reasons: NOTES, r3h/rules6): every family an organ outside the
+# The organs each route family's ABSENT row releases (the reasons: NOTES, r3h/rules6): every family an organ outside the
 # lower GI tract, an organ the table does not name (other: the appendix among them) and the rectum (D328 (1): there is
 # no rectum-absent arm); a colon to traverse and a rectum and sigmoid a part of the colon (a segment, a side, a point:
 # the colon as a whole, or the entries together covering it, is no part - DECISIONS D327 (1)) and the small bowel; a
@@ -898,53 +925,46 @@ _ABSENT_ORGANS: Mapping[RouteAnatomy, frozenset[Landmark]] = MappingProxyType({
 
 
 def _harmless_rows(needs: RouteAnatomy) -> tuple[Harmless, ...]:
-    """The rows of one route family (DECISIONS D330 (1); each row's reason in its comment and the lane's NOTES)."""
-    _A, _S = AnatomyType, EntryShape
+    """The rows of one route family (DECISIONS D330 (1), D336 (1); each row's reason in its comment and the NOTES)."""
+    _S = EntryShape
+    _TYPE, _ORGAN, _SUBTYPE = Attribute.TYPE, Attribute.ORGAN, Attribute.SUBTYPE
     absent = _ABSENT_ORGANS[needs]
     rows = (
-        # an organ filed surgically absent that the family's route and need do not pass (its subtype whatever: one that
-        # may join the ileum below the colon is held by the family rule, HARMLESS_ILEUM_BELOW)
-        Harmless(needs, _S.ABSENT, frozenset({_A.SURGICALLY_ABSENT}), _SUBTYPES, absent, absent),
-        # an anastomosis of the upper tract, the bile duct or the pancreas: it joins no lower-GI organ
-        Harmless(needs, _S.ANASTOMOSIS_UPPER, frozenset({_A.ANASTOMOSIS}), UPPER_SUBTYPES, _LANDMARKS, _UPPER_JOINS),
-        # a gastric pouch or a Roux limb: an alteration of the upper tract by its type (DECISIONS D141)
-        Harmless(needs, _S.UPPER_ALTERATION, frozenset({_A.GASTRIC_POUCH, _A.ROUX_LIMB}), _SUBTYPES, _LANDMARKS,
+        # an organ filed surgically absent that the family's route and need do not pass, released on its organ claim
+        # (the absence form: "The <organ> is surgically absent", controlled by its negation) - its joins within the same
+        # organs, its subtype silent (a subtype names an anastomosis: a filed one contradicts the absence)
+        Harmless(needs, _S.ABSENT, _ORGAN, absent, absent, absent),
+        # an anastomosis of the upper tract or the bile duct (its subtype, controlled): it joins no lower-GI organ - the
+        # pancreaticojejunal subtype has no control (3.2.3 pairs it with no sibling), so it never decides a release
+        Harmless(needs, _S.ANASTOMOSIS_UPPER, _SUBTYPE, UPPER_SUBTYPES & CONTROLLED_SUBTYPES, _LANDMARKS, _UPPER_JOINS),
+        # a gastric pouch: an alteration of the upper tract by its type (controlled: its sibling is the ileal pouch;
+        # DECISIONS D141), a filed organ outside the lower GI tract (an upper-tract type at a lower-GI organ, or at a
+        # landmark naming no placed organ, is a contradictory filing: D336 (1) (e)). A Roux limb's type has no control,
+        # so it never decides a release
+        Harmless(needs, _S.UPPER_ALTERATION, _TYPE, frozenset({AnatomyType.GASTRIC_POUCH}), OUTSIDE_LOWER_GI,
                  _UPPER_JOINS),
-        # any alteration but an ileal pouch whose organ and joins lie wholly outside the lower GI tract (a stoma among the
-        # readings of its type adds nothing: a stoma is harmless whatever its organ, the next row)
-        Harmless(needs, _S.OUTSIDE, _TYPES - frozenset({_A.ILEAL_POUCH}), _SUBTYPES, OUTSIDE_LOWER_GI,
-                 OUTSIDE_LOWER_GI),
-        # a stoma beside the route its code's row establishes otherwise: per anus the approach established per anus (a
-        # silent one reads per anus only when no entry may be a stoma, and a through that may name one holds: the guard's
-        # own route clauses), through a stoma the stoma the route uses (route_entries) or the colonic or ileal route its
-        # arms read, through a pouch the pouch - DECISIONS D310 (1): the route is the established fact, and a diverting
-        # stoma is no part of it. Its organ is never read here: a stoma's organ is never claimed or askable, and pass 1's
-        # unverified organ is never read in the release direction (D330 (d))
-        Harmless(needs, _S.STOMA, frozenset({_A.STOMA}), _SUBTYPES, _LANDMARKS, _LANDMARKS),
+        # a stoma (its type, controlled) beside the route its code's row establishes otherwise: through a stoma the
+        # stoma the route uses (route_entries) or the colonic or ileal route its arms read, through a pouch the pouch -
+        # DECISIONS D310 (1): the route is the established fact, and a diverting stoma is no part of it. Per anus the
+        # route is never established through a control (the contract gives per anus no contrary, D336 (1) (b)), so the
+        # guard's own per-anus clause holds any entry that may be a stoma (engine/evaluate ``_anus_route_contradicted``).
+        # Its organ is never read here: a stoma's organ is never claimed or askable (D330 (d))
+        Harmless(needs, _S.STOMA, _TYPE, frozenset({AnatomyType.STOMA}), _LANDMARKS, _LANDMARKS),
     )
     if needs is RouteAnatomy.POUCH:
         return rows + (
-            # the pouch's own join: an ileal pouch is the ileum joined to the anus or the rectum
-            Harmless(needs, _S.ANASTOMOSIS_POUCH, frozenset({_A.ANASTOMOSIS}), ILEUM_BELOW_SUBTYPES, _LANDMARKS,
-                     _POUCH_JOINS),
-            Harmless(needs, _S.ANASTOMOSIS_JOINS, frozenset({_A.ANASTOMOSIS}), _SUBTYPES, _LANDMARKS,
-                     _POUCH_JOINS | OUTSIDE_LOWER_GI, joins_filed=True),
+            # the pouch's own join (its subtype, controlled): an ileal pouch is the ileum joined to the anus or the rectum
+            Harmless(needs, _S.ANASTOMOSIS_POUCH, _SUBTYPE, ILEUM_BELOW_SUBTYPES, _LANDMARKS, _POUCH_JOINS),
         )
     return rows + (
-        # an anastomosis that keeps a colon (a right hemicolectomy's ileocolic join, a segmental colectomy's colocolic,
-        # an anterior resection's colorectal or coloanal, a colonic J-pouch's)
-        Harmless(needs, _S.ANASTOMOSIS_COLON, frozenset({_A.ANASTOMOSIS}), COLON_KEEPING_SUBTYPES, _LANDMARKS,
-                 _COLON_JOINS),
-        # an anastomosis whose filed joins name only placed organs it may join with a colon remaining (an ileo-ileal or
-        # jejuno-jejunal join, an ileocolic or colorectal one its joins name): one that may join the ileum below the
-        # colon is held by the family rule (HARMLESS_ILEUM_BELOW)
-        Harmless(needs, _S.ANASTOMOSIS_JOINS, frozenset({_A.ANASTOMOSIS}), _SUBTYPES, _LANDMARKS, _NAMED_JOINS,
-                 joins_filed=True),
+        # an anastomosis that keeps a colon (its subtype, controlled: a right hemicolectomy's ileocolic join, a
+        # segmental colectomy's colocolic, an anterior resection's colorectal or coloanal, a colonic J-pouch's)
+        Harmless(needs, _S.ANASTOMOSIS_COLON, _SUBTYPE, COLON_KEEPING_SUBTYPES, _LANDMARKS, _COLON_JOINS),
     )
 
 
 # THE TABLE: the route families (the route table's needs) -> their rows, in RouteAnatomy's order. One finite typed table;
-# tests/v2/test_r3g_rules.py's census and completeness tests pin it.
+# tests/v2/test_r3g_rules.py's and tests/v2/test_r3i_guard.py's census and completeness tests pin it.
 HARMLESS: Mapping[RouteAnatomy, tuple[Harmless, ...]] = MappingProxyType({
     needs: _harmless_rows(needs) for needs in RouteAnatomy})
 # The family rules beside the rows, each an enumeration of route families:

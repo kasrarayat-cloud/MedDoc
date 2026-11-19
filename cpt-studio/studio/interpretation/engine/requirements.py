@@ -474,10 +474,13 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     # below the colon: DECISIONS D327 (1) and the D328 addendum's Q3). Asked and explained at RANK row 8 (procedure), as
     # COLFULL's route and LOWER's stoma class are. DECISIONS D330 (1): the lower-GI path guard reads the same facts (every
     # entry's type, organ, subtype and joins against the ruled harmless set, the approach and the through of a per-anus
-    # route) and, for the ileoscopy through a stoma, the session's REACH - a reach supported at or past the cecum holds
-    # (R5R-9) - to hold only
+    # route) and, for the ileoscopy through a stoma, the session's REACH - a reach that may lie at or past the cecum
+    # holds (R5R-9) - to hold only. DECISIONS D336 (1) (d) (P-CONTROLLED made honest): the guard's harmless set releases
+    # an anastomosis on its SUBTYPE (a subtype the contract controls decides its shape and its ends), so the subtype is
+    # read on the READY path; its JOINS are read only to hold (no row releases on joins: an uncontrolled attribute), as
+    # is the reach
     Requirement.ROUTE_TABLE: Rule((_r(_SESSION, _A.APPROACH), _r(_SESSION, _A.THROUGH), _r(Role.ANATOMY, _A.TYPE),
-                                   _r(Role.ANATOMY, _A.ORGAN), _r(Role.ANATOMY, _A.SUBTYPE, _HOLD),
+                                   _r(Role.ANATOMY, _A.ORGAN), _r(Role.ANATOMY, _A.SUBTYPE),
                                    _r(Role.ANATOMY, _A.JOINS, _HOLD), _r(_SESSION, _A.REACHED, _HOLD)),
                                   asks=(_PROCEDURE,), explains=(_PROCEDURE,)),
     # --- the code-specific rows (the table's tags) ---
@@ -531,9 +534,11 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     # where pass 2 never established it, as COLFULL's route reads it. DECISIONS D328's addendum (rules4 Q1, Q3): the
     # colonic route's colon arm (DECISIONS D327 (1)) reads every entry's SUBTYPE and JOINS too, and - D328 (1) - the per-
     # anus classes' route rows read them (a colonoscopic EUS needs a colon to traverse): both to hold only (a subtype or
-    # joins that may join the ileum below the colon never releases), so P-INDEP's closure holds them
+    # joins that may join the ileum below the colon never releases), so P-INDEP's closure holds them. DECISIONS D336 (1)
+    # (d): LOWER's row reads the path guard too, whose harmless set releases an anastomosis on its controlled SUBTYPE, so
+    # the subtype is read on the READY path; the joins stay hold-only
     Tag.LOWER: Rule((_r(_SESSION, _A.REACHED), _r(_SESSION, _A.APPROACH), _r(Role.ANATOMY, _A.TYPE),
-                     _r(Role.ANATOMY, _A.ORGAN), _r(Role.ANATOMY, _A.SUBTYPE, _HOLD),
+                     _r(Role.ANATOMY, _A.ORGAN), _r(Role.ANATOMY, _A.SUBTYPE),
                      _r(Role.ANATOMY, _A.JOINS, _HOLD)),
                     asks=(_EXTENT, _PROCEDURE), explains=(_EXTENT, _PROCEDURE)),
     Tag.ENT: Rule((_r(_SESSION, _A.APPROACH), _r(_SESSION, _A.THROUGH), _r(_SESSION, _A.REACHED),

@@ -3233,7 +3233,12 @@ def controlled() -> set:
     # JOINS on a READY path only to HOLD - joins that may join the ileum to the rectum or the anus hold the colonoscopy
     # codes (evaluate.joins_ileum_below_colon_possible), and no verdict on a member releases one (a member contradicted
     # or unresolved keeps every value it may be) - so a yes-bias there can only hold; the contract's UNCONTROLLED is not
-    # moved (it is the fact pass's, CONTROLS_SHA256_V3: a question for the integrator, NOTES)
+    # moved (it is the fact pass's, CONTROLS_SHA256_V3: a question for the integrator, NOTES). Round r3's round 6
+    # (DECISIONS D336 (1) (d), withdrawing D335 Q2's "not changed"): now true of EVERY reader, the lower-GI path guard
+    # included - no row of its ruled harmless set releases on joins (engine/catalogue.HARMLESS: each row releases on one
+    # controlled claim, a type, an absence's organ or a subtype; its joins are read only as a hold, harmless_row), a
+    # member pass 2 rejected with no control is fully open (evaluate.rejected_open), and an anastomosis's ends its list
+    # does not name are every landmark or its subtype's own (joins_ileum_below_colon_possible)
     out |= {(IdFamily.ANATOMY, A.JOINS)}
     return out
 

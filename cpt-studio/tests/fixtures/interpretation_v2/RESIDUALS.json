@@ -37,11 +37,11 @@
      "acts": [
       "E2"
      ],
-     "against_documented": "wrong_ready",
+     "against_documented": "as_documented",
      "considerations": [],
-     "item": null,
-     "item_kind": null,
-     "status": "ready"
+     "item": "procedure",
+     "item_kind": "question",
+     "status": "needs_clarification"
     }
    },
    "counted_as_pass": false
@@ -1290,11 +1290,11 @@
   }
  },
  "counts_by_class": {
-  "as_documented": 31,
+  "as_documented": 32,
   "consideration_dropped": 1,
   "held": 38,
   "ready_on_the_wrong_act": 2,
-  "wrong_ready": 27
+  "wrong_ready": 26
  },
  "named": {
   "CK-note8": {

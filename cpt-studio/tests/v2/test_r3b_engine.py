@@ -417,6 +417,10 @@ class StomaPossibleTests(SimpleTestCase):
         # them with the table's own hold - an approach filed (denied) as anything but per anus establishes no per-anus
         # route (R5R-7), and an anastomosis whose subtype and joins are both silent is the D328 addendum's residual
         guarded = {'through_stoma denied, a stoma entry', 'silent, an anastomosis'}
+        # round r3's round 6 (DECISIONS D336 (1) (b) and (e), final check 4): the contract gives per anus no control, so
+        # an approach supported per anus is never ESTABLISHED through one - beside an entry that may be a stoma the guard
+        # reads it as a silent approach and holds (D312 (5)'s boundary stays for this arm; moved by evaluate.path_guard)
+        guarded |= {'transanal established, a stoma entry'}
         for name, doc in cases.items():
             with self.subTest(case=name):
                 R = doc.build()

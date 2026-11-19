@@ -1619,6 +1619,31 @@ coder (D330 (1) (d), R5R-5: the remedy after go-live is a pass-2 claim on the st
 template, never pass 1's unverified organ read to release); a Kock pouch entered through its continent stoma holds 44386
 for the coder (R5R-3).
 
+**DECISIONS D336 (1) (2026-11-19; built in round r3's round 6, int8), the guard's construction rule completed in the
+release direction.** An entry is harmless for a family only if EVERY reading it may have lies within a row, where every
+attribute is read by its widest possible value unless the contract CONTROLS it (3.2.3). So each row of the harmless set
+releases on ONE controlled claim (`catalogue.Harmless.decided_by`): a type with a sibling control (a stoma, an ileal or a
+gastric pouch: `catalogue.CONTROLLED_TYPES`), the organ claim of an entry filed surgically absent (the absence form,
+controlled by its own negation), or a subtype with a sibling control (`catalogue.CONTROLLED_SUBTYPES`: every subtype but
+other and pancreaticojejunal), which names an anastomosis (`evaluate.release_reading`). Joins (no control) and every type
+without one (an anastomosis, a Roux limb, a bypass, another alteration; an absence but by its organ claim) are read only to
+hold: no row releases on them, so the rows that did - an anastomosis its joins name, its pouch-family twin, and an
+alteration wholly outside the lower GI tract, which also read an empty joins list as naming nothing - are gone. A claim
+pass 2 rejected with no control left is fully open (`evaluate.rejected_open`); an anastomosis's ends its joins list does
+not name are every landmark, or its subtype's own ends where every subtype it may be names them
+(`evaluate.joins_ileum_below_colon_possible`); a contradictory filing is read at its widest - a subtype beside another
+type, an upper-tract type at a lower-GI organ or at a landmark naming no placed organ, a joins member or an organ outside a
+subtype's own ends (`evaluate.subtype_ends_contradicted`), a colonoscopy through a stoma filed outside the colon and the
+ileum (`evaluate.colonic_route_stoma_contradicted`). The per-anus approach has no control (the approach table names no
+contrary for it), so it is never established: beside an entry that may be a stoma of the lower tract or an ileal pouch, a
+per-anus code holds whatever approach is filed (`evaluate._anus_route_contradicted`; R5R-5's class with the approach
+supported). The guard reads every entry whatever the approach; only an established failure of the code's own row or class
+exempts (`evaluate._accepted_approaches`: per anus is the pouch class's own, D219). R5R-9's reach and organ clauses read
+every value a member may be (P-MONO). The development filings stay as int7 decided them, each resting on a controlled
+reading (an ileocolic subtype decides its ends; an absence its organ claim). The holds this adds on common histories are
+recorded costs (D336 (2)): fail-safe, an existing reason, no question; the remedy after go-live is Fable's judgment, never
+a new table row.
+
 A code's REQUIRED facts are exactly these, over its E* acts, their session, the statements paired with its candidates
 (4.5), the doubts that name their facts, the unlisted statements that touch them (3.2.6) and the encounter's date. Nothing
 else can hold it (4.9).
@@ -2981,6 +3006,14 @@ The guard census (4.3): every entry shape over the contract's finite vocabularie
 members x organ, silent included - x every route family x the approach and through states: a shape outside the harmless
 set holds, every harmless row keeps the common controls as int6 decided them, and the guard reads every row of the route
 table (`tests/v2/test_r3g_rules`); no 9.4 weakening of a scene the guard holds releases it (P-MONO).
+
+**Round r3's round 6 (DECISIONS D336 (1) (f); int8, 2026-11-19).** The guard's censuses (`tests/v2/test_r3i_guard`):
+every route family x every approach and through state x every attribute's state (established, supported uncontrolled,
+claimed, doubted, contradicted, silent, rejected, an established negation, an open denial) x the widest values, against
+the declared release set, with its completeness test; 9.4's weakening lattice over every route-table family's held
+scenes (P-MONO); every harmless row's reads against the contract's CONTROLS, every census release resting on a controlled
+claim and never on joins, and every READY-path read declared on that path (P-CONTROLLED); and every entry the guard holds
+harmless was harmless in int7's declared set (the round only adds holds).
 
 ### 9.5 Gate 6 and the failure classes as fixtures [B][C]
 
