@@ -604,6 +604,14 @@ def _perturb(code: str, requirement: object, state: str) -> tuple[Built, tuple] 
         if U:
             reach = _first(doc, 'sessions', X(1), A.REACHED)
             _set(doc, 'sessions', X(1), A.REACHED, unres(reach.value))
+            # round r3's round 7 (DECISIONS D342 (1) (a), L4P8-3): the route table's ileoscopy through a stoma (44380-
+            # 44384) reads its reach by the one predicate - a reached point pass 2 did not establish (unres: appraisal
+            # unclear) may be the cecum, so the examination may be a colonoscopy through the stoma (R5R-9): the table's
+            # own hold (RANK 8) answers before the reach question (moved by evaluate.ileal_stoma_contradicted)
+            table_row = CAT.lower_route(code)
+            if table_row is not None and table_row.needs is CAT.RouteAnatomy.ILEAL_STOMA:
+                return built, (H_, 'procedure', Q_, 'D342 (1) (a): R5R-9 reads the unresolved reach at its widest '
+                                                    '(RANK 8)')
             return built, (H_, 'extent' if requirement is not Tag.LOWER else 'extent', Q_,
                            '4.3: the reach unresolved (RANK 14)')
         if requirement is Tag.LOWER:

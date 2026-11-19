@@ -1390,37 +1390,63 @@ LOWER_STOMA_ORGANS: frozenset[Landmark] = frozenset(
 _NO_ORGAN: frozenset[Landmark] = anatomy.UNPLACED | anatomy.ALTERED
 
 
+def settled_narrows(found: Fact) -> bool:
+    """DECISIONS D342 (1) (a), THE ONE PREDICATE over settle's outcome (FINAL-V2 3.3's truth table: contract/settle.row
+    and decide) for every claim a release decides on - a subtype, an absence's organ, a controlled type, any claim a
+    harmless row reads - and for every reader built on ``_may_be``, the guard's and the route rows' hold clauses
+    included: whether the settled claim ``found`` may NARROW the reading to what it carries. Exactly two settled states
+    do:
+    - ESTABLISHED through its control (3.3 row 8: every check passed, pass 2 supported the claim attached and rejected
+      its control where it has one - facts.established);
+    - UNAPPRAISED (3.3 row 6: pass 2 was never asked, and pass 1 had no doubt, no contradiction and no failed check -
+      settle's row-6 outcome, unresolved for its one reason; DECISIONS D340 Q1: such a claim decides as Fable read it).
+    Every other settled state is read at its WIDEST, whatever its reason - this is one predicate over the settled result,
+    never a list of the states it widens: pass 1's contradiction or doubt (rows 1, 2), a silent slot (3), a failed check
+    (4), pass 1's qualifier (5), indistinct cards (7), every pair outcome pass 2 left unestablished (row 9: unclear,
+    qualified, detached, incoherent, missing, contradicted with its control rejected or not, the control missing), and any
+    fact a later reading leaves unresolved. int8's reading widened only a claim pass 2 contradicted with no option left
+    (``rejected_open``), so a claim pass 2 doubted - an honest "unclear" on a subtype pass 1 over-read - still decided
+    the guard's release at its claimed value and its sibling's (L4P8-1, L5R8-1, L6R-1, L9-1; the final check's finding
+    1). Every 9.4 weakening acts on an established fact and leaves it in a widened state or a claim of the same value,
+    so none narrows a reading (P-MONO)."""
+    return facts_.established(found) or (found.result is Result.UNRESOLVED
+                                         and tuple(found.reasons) == (Reason.UNAPPRAISED,))
+
+
 def _may_be(found: Fact, value: AnatomyType | Landmark | AnastomosisSubtype | Approach | Extent | Id) -> bool:
-    """Whether an anatomy entry's ``found`` may hold ``value``, read fail-closed for a closure that only HOLDS (D324
-    (5)): facts.possibly (supported at it; not established, its claimed value, a reading, a side, an unrejected
-    control's value, an open denial; a silent slot), or any established negation - an established negation never
-    rules a value out here: it names no value of its own, and the fact pass has no negated form for an entry's type
-    and no control for its negated organ (contract/claims.py), so a negation is read to hold only, never to release.
-    Only a fact SUPPORTED at another value rules ``value`` out; every 9.4 weakening only widens it. DECISIONS D327 (1)
-    reads an entry's subtype so too (``ileum_below_colon_possible``).
+    """Whether an anatomy entry's (or a session's) ``found`` may hold ``value``, read fail-closed for a closure that only
+    HOLDS (D324 (5)) and for the release reading alike (DECISIONS D342 (1) (a): the same predicate for every reader):
+    - where the settled claim may narrow (``settled_narrows``: established, or unappraised), facts.possibly - supported
+      at it; unappraised, its claimed value and what it carries;
+    - any established negation - it never rules a value out here: it names no value of its own, and the fact pass has no
+      negated form for an entry's type and no control for its negated organ (contract/claims.py), so a negation is read
+      to hold only, never to release;
+    - every other settled state (pass 2 asked and did not establish it, pass 1 doubted or contradicted it, a check failed
+      on it, a silent slot): EVERY value of its enumeration - never its claimed value, an unrejected control's value or a
+      doubt's readings alone - but a value an established negation answer ruled out (facts.ruled_out: DECISIONS D324
+      (1), a negation answer removes only its value).
+    So only a fact SUPPORTED at another value, or a claim pass 2 was never asked of another value, rules ``value`` out.
+    DECISIONS D336 (1) (b) (L4P-5) widened a claim pass 2 rejected with no control left (int8's ``rejected_open``);
+    D342 (1) (a) completes it as one predicate. Every 9.4 weakening only widens it (``settled_narrows``)."""
+    return _possibly_settled(found, value) or found.result is Result.NEGATED
 
-    DECISIONS D336 (1) (b) (L4P-5): a claim pass 2 REJECTED with no control left (``rejected_open``: its claim
-    contradicted and no unrejected control's value among its options) is fully open - every value of its enumeration,
-    never narrowed to its rejected value, nor to the complement of it. facts.possibly reads such a fact as its claimed
-    value only, so a rejected joins member or type narrowed an entry onto a harmless row; read so, every reader built on
-    this one (each hold clause, and the harmless set's release reading) sees every value. No 9.4 weakening yields a
-    rejected claim (each acts on an established fact), so P-MONO is unchanged."""
-    return facts_.possibly(found, value) or found.result is Result.NEGATED or rejected_open(found)
 
-
-def rejected_open(found: Fact) -> bool:
-    """DECISIONS D336 (1) (b): whether ``found`` is a claim pass 2 rejected with no control left - not established, its
-    reasons naming the appraisal's contradiction (3.3 row 9: the claim contradicted, uncontrolled, or its control
-    rejected too), and no option (no unrejected control's value: the only option such a fact can carry). It is read as
-    every value (``_may_be``)."""
-    return (found.result is Result.UNRESOLVED and Reason.APPRAISAL_CONTRADICTS in found.reasons
-            and not found.options)
+def _possibly_settled(found: Fact, value: AnatomyType | Landmark | AnastomosisSubtype | Approach | Extent | Id) -> bool:
+    """DECISIONS D342 (1) (a): ``found`` may hold ``value`` by the one predicate alone - facts.possibly where the settled
+    claim may narrow (``settled_narrows``: established - an established negation of a claim the contract writes in a
+    negated form of its own, a session's reached point, names no value -, or unappraised); every value of its
+    enumeration but one an established negation answer ruled out (facts.ruled_out) where it may not. ``_may_be`` adds the
+    anatomy entry's rule that an established negation names no value at all and rules none out; a session's reach is
+    read by this one (R5R-9's reach clause, ``ileal_stoma_contradicted``), where "the cecum was not reached" established
+    rules the cecum out and reaches nothing."""
+    return facts_.possibly(found, value) or (not settled_narrows(found) and value not in facts_.ruled_out(found))
 
 
 def _possible_as_filed(found: Fact, value: AnatomyType | Id) -> bool:
-    """``_may_be`` before DECISIONS D336 (1) (b)'s widening of a rejected claim: facts.possibly or any established
-    negation - read where the guard EXEMPTS an entry (``route_entries`` while the act's session is not established:
-    an entry that may be the route's own), where a wider reading would exempt more and so hold less."""
+    """``_may_be`` before DECISIONS D336 (1) (b)'s and D342 (1) (a)'s widening of a claim that is neither established nor
+    unappraised: facts.possibly or any established negation - read where the guard EXEMPTS an entry (``route_entries``
+    while the act's session is not established: an entry that may be the route's own), where a wider reading would
+    exempt more and so hold less."""
     return facts_.possibly(found, value) or found.result is Result.NEGATED
 
 
@@ -1595,7 +1621,16 @@ def joins_ileum_below_colon_possible(R: FactSet, entry: Id) -> bool:
     the jejunum may be jejuno-rectal, and a one-member [ileum] may be an ileorectal or an ileoanal join whose other end
     pass 1 did not file - both hold; an ileocolic subtype decides its ends, so its joins left silent join the ileum to
     the colon and hold nothing. Every 9.4 weakening of the type only widens whether it may be an anastomosis, and of the
-    subtype only widens (or turns off) its ends, so none turns it False."""
+    subtype only widens (or turns off) its ends, so none turns it False.
+
+    DECISIONS D342 (1) (b) (L9-2, L6R-3: A FILED FIELD NAMES ITS SHAPE): a FILED joins list names an anastomosis whatever
+    the entry's uncontrolled type, so a list of one member has an unnamed end - every landmark, or its subtype's own ends
+    - beside a surgically absent organ, a Roux limb, another alteration or a silent type as beside an anastomosis; only
+    a CONTROLLED type established as another shape (``_own_shape``: a stoma, an ileal or a gastric pouch, read by
+    ``settled_narrows``) reads its list otherwise, as its own join (a gastric pouch joined to the jejunum). An EMPTY list
+    files nothing: it names its two unnamed ends only for an entry that may be an anastomosis (D336 (1) (b)). Every 9.4
+    weakening of the type only widens what it may be, so it only turns a controlled type's own join into an
+    anastomosis's (more ends), never the reverse."""
     joins = facts_.members(R, entry, _A.JOINS)
     subtype = _fact(R, entry, _A.SUBTYPE)
     named = [value for value in AnastomosisSubtype if _may_be(subtype, value)]
@@ -1607,12 +1642,24 @@ def joins_ileum_below_colon_possible(R: FactSet, entry: Id) -> bool:
         places.append((found - _NO_ORGAN) | ends if ends is not None and found & _NO_ORGAN else found)
     if len(places) == 1 and places[0] & _BELOW_COLON_PLACES:  # D330 (1) (c): one member that may lie below the colon
         return True
-    if len(places) < 2 and _may_be(_fact(R, entry, _A.TYPE), AnatomyType.ANASTOMOSIS):  # D336 (1) (b): the unnamed ends
+    type_ = _fact(R, entry, _A.TYPE)
+    if ((not places and _may_be(type_, AnatomyType.ANASTOMOSIS))  # D336 (1) (b): an empty list's two unnamed ends
+            or (len(places) == 1 and not _own_shape(type_))):  # D342 (1) (b): a filed member's unnamed end
         places += [ends if ends is not None else frozenset(Landmark)] * (2 - len(places))
     small = [bool(found & _SMALL_BOWEL_PLACES) for found in places]
     below = [bool(found & _BELOW_COLON_PLACES) for found in places]
     return any(small[one] and below[other] for one in range(len(places)) for other in range(len(places))
                if one != other)
+
+
+def _own_shape(type_: Fact) -> bool:
+    """DECISIONS D342 (1) (b): whether an entry's type ``type_`` is a CONTROLLED type established as a shape of its own -
+    every value it may be (``_may_be``, so ``settled_narrows``: established, or unappraised) one the contract controls
+    (catalogue.CONTROLLED_TYPES: a stoma, an ileal pouch, a gastric pouch) - so its filed joins list is read as its own
+    join rather than as an anastomosis's. An uncontrolled type (surgically absent, a Roux limb, a bypass, another
+    alteration, an anastomosis), a silent type or one in any widened state is no such shape."""
+    types = frozenset(value for value in AnatomyType if _may_be(type_, value))
+    return bool(types) and types <= catalogue.CONTROLLED_TYPES
 
 
 def whole_colon_absent_possible(R: FactSet) -> bool:
@@ -1863,14 +1910,17 @@ def ileal_stoma_contradicted(R: FactSet, session: Id | None) -> bool:
     held only on a SUPPORTED colonic point, each let one 9.4 weakening (an added ileal reading; a cecum made unresolved
     or doubted) release 44382. Read so, every 9.4 weakening only widens an organ, a reached point or the stomas passed
     (never makes an organ silent), so none turns it False; deleting the established colonic point leaves the reach the
-    record would have had without it (SC-B's list-completeness residual)."""
+    record would have had without it (SC-B's list-completeness residual). DECISIONS D342 (1) (a) (L4P8-3): the reach
+    clause reads each reached member by the one predicate too (``_possibly_settled``), so a member pass 2 left
+    unestablished (rejected, unclear, ...), pass 1 doubted or a failed check left open may be every point, the cecum
+    among them; an established member reads its value (a reached point, or - established denied - none)."""
     if colonic_stoma_possible(R, session):
         return True
     for entry in _stomas_passed(R, session):
         organ = _fact(R, entry, _A.ORGAN)
         if not facts_.silent(organ) and any(_may_be(organ, place) for place in Landmark if place not in ILEAL_PLACES):
             return True
-    return session is not None and any(facts_.possibly(member, point)
+    return session is not None and any(_possibly_settled(member, point)  # D342 (1) (a): the one predicate (L4P8-3)
                                        for member in facts_.members(R, session, _A.REACHED) for point in AT_OR_PAST_CECUM)
 
 
@@ -2015,7 +2065,9 @@ def release_reading(R: FactSet, entry: Id) -> ReleaseReading | None:
     widest possible value unless the contract CONTROLS it, so an entry's shape is decided only by a controlled claim, and
     None - the widest reading, which no row of the harmless set holds - when no controlled claim decides it, or when its
     filing contradicts the claim that would (D336 (1) (e): no attribute decides alone against another one that
-    contradicts it). Each field is read by ``_may_be`` (a claim pass 2 rejected with no control is fully open):
+    contradicts it). Each field is read by ``_may_be`` - DECISIONS D342 (1) (a): a claim narrows only when established
+    through its control or unappraised; in every other settled state (pass 2 asked and did not establish it, pass 1
+    doubted or contradicted it, a check failed) it is every value, so it decides nothing:
     - a FILED subtype names an anastomosis: it decides the shape (Attribute.SUBTYPE) when every subtype it may be is one
       the contract controls (catalogue.CONTROLLED_SUBTYPES - OTHER has no sibling) and the entry's type may only be an
       anastomosis (catalogue.SUBTYPE_TYPE: a type filed otherwise, silent, contradicted or rejected contradicts it, as an
@@ -2201,6 +2253,62 @@ def colonic_route_stoma_contradicted(R: FactSet, session: Id | None) -> bool:
     return any(outside(entry) for entry in stomas)
 
 
+def _route_may_use(found: catalogue.LowerRoute, R: FactSet, session: Id | None) -> tuple[Id, ...]:
+    """DECISIONS D342 (1) (c): the anatomy entries that may be the route's OWN entry - for a through-stoma or a pouch row
+    (catalogue.ROUTE_OWN), every entry whose type may be the route's type (``_may_be``: the one predicate) and that the
+    session's through may name (``_may_be``; a silent through may name any) - only the entry the through names when it is
+    SUPPORTED naming an anatomy entry. With ``session`` None every entry whose type may be the route's type. A per-anus
+    route uses none."""
+    own = catalogue.ROUTE_OWN.get(found.needs)
+    if found.route is Approach.TRANSANAL or own is None:
+        return ()
+    entries = tuple(entry for entry in R.anatomy if _may_be(_fact(R, entry, _A.TYPE), own.type))
+    if session is None:
+        return entries
+    through = _fact(R, session, _A.THROUGH)
+    if (through.result is Result.SUPPORTED and isinstance(through.value, Id)
+            and through.value.family is IdFamily.ANATOMY):
+        return tuple(entry for entry in entries if entry == through.value)
+    return tuple(entry for entry in entries if _may_be(through, entry))
+
+
+def own_entry_outside(R: FactSet, entry: Id, own: catalogue.OwnAnatomy) -> bool:
+    """DECISIONS D342 (1) (c) (D336 (1) (e)'s unbuilt part: L4P8-2, L9-3, the final check's finding 2): whether anatomy
+    entry ``entry``, read as the route's own entry, files a field that may lie outside its type's own anatomy
+    (``own``: catalogue.ROUTE_OWN) - read by (a) and (b), in the hold direction like every other entry:
+    - a FILED organ some value of which (``_may_be``) lies outside ``own.organs`` (a silent organ files nothing);
+    - a FILED subtype some value of which lies outside ``own.subtypes`` (a stoma joins nothing: every filed subtype; an
+      ileal pouch, its own ileorectal or ileoanal join);
+    - a joins member some place of which lies outside ``own.joins`` - the own entry's type is a controlled type
+      established as its own shape (its route requires it), so its list is read as filed, as its own join (D342 (1) (b)).
+    Every 9.4 weakening only widens what a field may be, so none turns it False."""
+    organ, subtype = _fact(R, entry, _A.ORGAN), _fact(R, entry, _A.SUBTYPE)
+    if not facts_.silent(organ) and any(_may_be(organ, place) for place in Landmark if place not in own.organs):
+        return True
+    if not facts_.silent(subtype) and any(_may_be(subtype, value) for value in AnastomosisSubtype
+                                          if value not in own.subtypes):
+        return True
+    return any(_may_be(member, place) for member in facts_.members(R, entry, _A.JOINS) for place in Landmark
+               if place not in own.joins)
+
+
+def route_own_entry_contradicted(found: catalogue.LowerRoute, R: FactSet, session: Id | None) -> bool:
+    """DECISIONS D342 (1) (c), THE ROUTE'S OWN ENTRY: whether the entry the route of ``found`` itself uses is not
+    certain - its established type gives the route, and its organ, subtype and joins must lie within that type's own
+    anatomy (``own_entry_outside``); read in the hold direction, every entry that may be the route's own
+    (``_route_may_use``) is read so, and one that files a field outside its type's anatomy holds. With ``session`` None
+    (the act's session not established) it holds only what holds whatever the session (D312 checker S3's principle, as
+    ``colonic_route_stoma_contradicted`` reads its stomas): every such entry files one. A per-anus route has no own
+    entry."""
+    own = catalogue.ROUTE_OWN.get(found.needs)
+    if found.route is Approach.TRANSANAL or own is None:
+        return False
+    entries = _route_may_use(found, R, session)
+    if session is None:
+        return bool(entries) and all(own_entry_outside(R, entry, own) for entry in entries)
+    return any(own_entry_outside(R, entry, own) for entry in entries)
+
+
 def _accepted_approaches(found: catalogue.LowerRoute) -> frozenset[Approach]:
     """The approaches the code's own row or class accepts (DECISIONS D336 (1) (a)): its route's, and, for a route that
     passes an entry of a type, the approaches that enter an entry of that type directly (classes.ENTRY_APPROACHES - D219:
@@ -2229,7 +2337,12 @@ def path_guard(found: catalogue.LowerRoute, R: FactSet, session: Id | None) -> b
     accepts (``_accepted_approaches``) adds nothing - the code is held by that explanation anyway (the enteroscopy
     class's, the colonoscopy through a stoma's own row, LOWER's stoma class's), so its item stays it. Per anus, which the
     pouch class accepts (D219), is no such failure: a pouchoscopy per anus reads every entry. Every 9.4 weakening only
-    widens what each field may be (a weakened approach no longer establishes another route), so none turns it False."""
+    widens what each field may be (a weakened approach no longer establishes another route), so none turns it False.
+
+    DECISIONS D342 (1): every field it reads is read by the one predicate (``settled_narrows``, through ``_may_be``); a
+    filed joins list names an anastomosis whatever the entry's uncontrolled type (``joins_ileum_below_colon_possible``);
+    and the route's own entry - exempt from the harmless set (``route_entries``) - is read in the hold direction too: its
+    organ, subtype and joins within its type's own anatomy (``route_own_entry_contradicted``)."""
     if found.route is not Approach.TRANSANAL and session is not None:
         approach = _fact(R, session, _A.APPROACH)
         if approach.result is Result.SUPPORTED and approach.value not in _accepted_approaches(found):
@@ -2240,6 +2353,8 @@ def path_guard(found: catalogue.LowerRoute, R: FactSet, session: Id | None) -> b
     if found.needs not in catalogue.HARMLESS_WHOLE_COLON and segments_absent_possible(R):
         return True
     if found.needs is catalogue.RouteAnatomy.COLONIC_STOMA and colonic_route_stoma_contradicted(R, session):
+        return True
+    if route_own_entry_contradicted(found, R, session):  # DECISIONS D342 (1) (c): the route's own entry
         return True
     return found.route is Approach.TRANSANAL and session is not None and _anus_route_contradicted(R, session)
 

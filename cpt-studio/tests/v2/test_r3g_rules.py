@@ -116,7 +116,10 @@ UPPER_JOINS = OUTSIDE | lm('pouch')
 
 
 def declared_rows(family: str) -> list:
-    rows = [('absent', 'organ', ABSENT[family], ABSENT[family], ABSENT[family]),
+    # round r3's round 7 (DECISIONS D342 (1) (b)): an absence's organ claim decides nothing about its joins - a filed
+    # joins list names an anastomosis - so the absent row admits none (was: its joins within the same organs; L9-2,
+    # L6R-3)
+    rows = [('absent', 'organ', ABSENT[family], ABSENT[family], frozenset()),
             ('anastomosis_upper', 'subtype', UPPER_SUBTYPES & CONTROLLED_SUBTYPES, ALL_PLACES, UPPER_JOINS),
             # a gastric pouch's filed organ outside the lower GI tract (D336 (1) (e): an upper type at a lower organ)
             ('upper_alteration', 'type', frozenset({AT.GASTRIC_POUCH}), OUTSIDE, UPPER_JOINS),
@@ -153,13 +156,18 @@ SUBTYPE_ENDS = {
 }
 
 
-def oracle_ileum_below(subtypes, subtype_silent: bool, joins, may_be_anastomosis: bool = False) -> bool:
+def oracle_ileum_below(subtypes, subtype_silent: bool, joins, may_be_anastomosis: bool = False,
+                       own_shape: bool = False) -> bool:
     """The ileum joined below the colon, DECLARED (D327 (1), the D328 addendum, D330 (1) (c), R5R-6, D336 (1) (b)): a
     filed subtype that may be ileorectal or ileoanal; or joins - one member that may lie below the colon (the rectum, the
     anal canal or no placed organ); two or more where one may lie in the small bowel beside another that may lie below - a
     member naming no placed organ read as either, unless the subtype is filed and every subtype it may be names its ends:
     then as one of those ends. D336 (1) (b): an entry that may be an anastomosis has two ends, and each its joins list does
-    not name may be every landmark - or, its subtype filed and naming its ends, one of those."""
+    not name may be every landmark - or, its subtype filed and naming its ends, one of those. Round r3's round 7
+    (DECISIONS D342 (1) (b)): a FILED list names an anastomosis whatever the entry's uncontrolled type, so a list of one
+    member has its unnamed end beside every type but a controlled type established as a shape of its own (``own_shape``:
+    a stoma, an ileal or a gastric pouch, its own join); an empty list names its ends only for an entry that may be an
+    anastomosis."""
     if not subtype_silent and subtypes & ILEUM_BELOW:
         return True
     ends = None
@@ -170,7 +178,7 @@ def oracle_ileum_below(subtypes, subtype_silent: bool, joins, may_be_anastomosis
     small = SMALL_BOWEL | NO_ORGAN
     if len(members) == 1 and members[0] & below:
         return True
-    if len(members) < 2 and may_be_anastomosis:
+    if (not members and may_be_anastomosis) or (len(members) == 1 and not own_shape):
         members += [ends if ends is not None else ALL_PLACES] * (2 - len(members))
     return any(members[i] & small and members[j] & below for i in range(len(members)) for j in range(len(members))
                if i != j)
@@ -205,7 +213,8 @@ def oracle_harmless(family: str, types, subtypes, subtype_silent: bool, organs, 
     caller's widest reading of each: a silent field, an open denial, an established negation or a claim pass 2 rejected
     with no control left, every value."""
     if family not in ILEUM_BELOW_HARMLESS and oracle_ileum_below(subtypes, subtype_silent, joins,
-                                                                AT.ANASTOMOSIS in types):
+                                                                AT.ANASTOMOSIS in types,
+                                                                bool(types) and types <= CONTROLLED_TYPES):
         return False
     decided = oracle_decided(types, subtypes, subtype_silent, organs, organ_silent)
     if decided is None:
@@ -226,8 +235,8 @@ def oracle_harmless(family: str, types, subtypes, subtype_silent: bool, organs, 
 # Each field state the census files: (label, the fact or None for silent, the values it may be).
 def field_states(values, enum, others):
     """Every state of one field over ``values``: silent; supported; claimed (unappraised); rejected (D336 (1) (b): a claim
-    pass 2 contradicted with no control left, fully open); a contradiction's sides with each of ``others``; an established
-    negation; an open denial."""
+    pass 2 contradicted with no control left, fully open); a contradiction's sides with each of ``others`` (D342 (1) (a):
+    read at its widest); an established negation; an open denial."""
     yield 'silent', None, frozenset(enum)
     for value in values:
         yield f'{value.value} supported', sup(value), frozenset({value})
@@ -236,7 +245,9 @@ def field_states(values, enum, others):
     for value in values[:3]:
         for other in others:
             if other is not value:
-                yield f'{value.value} or {other.value}', contra(value, other), frozenset({value, other})
+                # round r3's round 7 (DECISIONS D342 (1) (a)): a pass-1 contradiction is read at its WIDEST - every value
+                # (was: its two sides)
+                yield f'{value.value} or {other.value}', contra(value, other), frozenset(enum)
     yield 'established negation', neg(values[0]), frozenset(enum)
     yield 'open denial', open_denial(values[0]), frozenset(enum)
 

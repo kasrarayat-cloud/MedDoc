@@ -31040,10 +31040,10 @@
   {
    "code": "44380",
    "expect": {
-    "item": "extent",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.3: the reach unresolved (RANK 14)"
+    "why": "D342 (1) (a): R5R-9 reads the unresolved reach at its widest (RANK 8)"
    },
    "requirement": "R6:extent",
    "state": "U"
@@ -31486,10 +31486,10 @@
   {
    "code": "44381",
    "expect": {
-    "item": "extent",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.3: the reach unresolved (RANK 14)"
+    "why": "D342 (1) (a): R5R-9 reads the unresolved reach at its widest (RANK 8)"
    },
    "requirement": "R6:extent",
    "state": "U"
@@ -31957,10 +31957,10 @@
   {
    "code": "44382",
    "expect": {
-    "item": "extent",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.3: the reach unresolved (RANK 14)"
+    "why": "D342 (1) (a): R5R-9 reads the unresolved reach at its widest (RANK 8)"
    },
    "requirement": "R6:extent",
    "state": "U"
@@ -32407,10 +32407,10 @@
   {
    "code": "44384",
    "expect": {
-    "item": "extent",
+    "item": "procedure",
     "item_kind": "question",
     "status": "needs_clarification",
-    "why": "4.3: the reach unresolved (RANK 14)"
+    "why": "D342 (1) (a): R5R-9 reads the unresolved reach at its widest (RANK 8)"
    },
    "requirement": "R6:extent",
    "state": "U"

@@ -444,6 +444,10 @@ class SegmentTests(SimpleTestCase):
         checked = held = 0
         for (first, f_fact), (second, s_fact) in itertools.product(states, repeat=2):
             gone = any(covered((a, b, LM.TRANSVERSE_COLON)) >= SEGMENTS for a in first for b in second)
+            # round r3's round 7 (DECISIONS D342 (1) (a)): a pass-1 contradiction is read at its WIDEST - every place, the
+            # colon as a whole among them - so a contradicted entry covers the colon alone (moved by evaluate._may_be,
+            # settled_narrows; was: one of its two sides per reading)
+            gone = gone or len(first) > 1 or len(second) > 1
             R = RD.anus_scope(approach=sup(AP.TRANSANAL), entries=absences(f_fact, s_fact, LM.TRANSVERSE_COLON))
             with self.subTest(first=[p.value for p in first], second=[p.value for p in second]):
                 self.assertEqual(evaluate.segments_absent_possible(R), gone)
@@ -455,15 +459,23 @@ class SegmentTests(SimpleTestCase):
 
     def test_an_entry_that_may_be_either_side_is_never_both_sides_as_before(self):
         # the boundary (green on int6 too): beside the transverse colon, ONE entry contradicted between the right and
-        # the left colon (or a doubt of one with a reading of the other) leaves a colon in every reading - 45380 READY
+        # the left colon (or a doubt of one with a reading of the other) leaves a colon in every reading - 45380 READY.
+        # Round r3's round 7 (DECISIONS D342 (1) (a)): a pass-1 contradiction or doubt is read at its WIDEST - every
+        # place, the colon as a whole among them - so either entry may file the colon gone: the table's own hold (moved
+        # by evaluate._may_be, settled_narrows); the same sides filed as two claims pass 2 was never asked
+        # (unappraised) leave a colon in every reading, READY as before
         for name, first in {"a contradiction's sides the right and the left colon": contra(LM.RIGHT_COLON,
                                                                                              LM.LEFT_COLON),
                             "the right colon claimed, a doubt's reading of the left": doubted(LM.RIGHT_COLON,
                                                                                             LM.LEFT_COLON)}.items():
             with self.subTest(case=name):
                 R = RD.anus_scope(approach=sup(AP.TRANSANAL), entries=absences(first, LM.TRANSVERSE_COLON))
-                self.assertEqual(held_of(R, '45380'), [])
-                self.assertIs(route_row(R, 45380).truth, T)
+                self.assertEqual(held_of(R, '45380'), TABLE_HOLD)
+                self.assertIs(route_row(R, 45380).truth, U)
+        R = RD.anus_scope(approach=sup(AP.TRANSANAL),
+                          entries=absences(EF.unres(LM.RIGHT_COLON, ct.Reason.UNAPPRAISED), LM.TRANSVERSE_COLON))
+        self.assertEqual(held_of(R, '45380'), [])
+        self.assertIs(route_row(R, 45380).truth, T)
 
     def test_four_segments_of_five_or_sides_that_leave_a_segment_out_leave_45380_as_before(self):
         # the boundary (green on int6 too): every four of the five segments filed absent that keeps a segment of a

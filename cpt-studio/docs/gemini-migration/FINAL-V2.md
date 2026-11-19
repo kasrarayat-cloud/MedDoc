@@ -1644,6 +1644,25 @@ reading (an ileocolic subtype decides its ends; an absence its organ claim). The
 recorded costs (D336 (2)): fail-safe, an existing reason, no question; the remedy after go-live is Fable's judgment, never
 a new table row.
 
+**DECISIONS D342 (1) (2026-11-19; built in round r3's round 7, int9), one predicate over settle's outcome.** The note above
+restates D336 (1) (b) as "unless the contract CONTROLS it"; the ruling reads "unless it is ESTABLISHED through a control",
+and the code now does. Every claim a release decides on - a subtype, an absence's organ, a controlled type, any claim a
+harmless row reads - and every reader built on it, the hold clauses included (R5R-9's reach clause), reads ONE predicate
+over 3.3's outcome (`evaluate.settled_narrows`): a claim narrows the reading only when ESTABLISHED through its control (row
+8) or UNAPPRAISED (row 6: pass 2 never asked and pass 1 had no doubt - D340 Q1, so it decides as Fable read it); every other
+state - a claim pass 2 was asked and did not establish (unclear, qualified, detached, incoherent, missing, contradicted
+whether or not its control was rejected, the control missing), a failed check, pass 1's qualifier, a pass-1 doubt or
+contradiction, indistinct cards - is read at its widest, whatever its reason (`evaluate._may_be`,
+`evaluate._possibly_settled`); int8 widened only a claim rejected with no option left (`rejected_open`, gone). A FILED field
+names its shape: a filed joins list names an anastomosis whatever the entry's uncontrolled type, so a list of one member
+has an unnamed end - every landmark, or the subtype's own ends - unless the type is a controlled type established as a
+shape of its own (`evaluate._own_shape`), and an absence's organ claim decides nothing about its joins (the absent rows
+admit none). The route's own entry - exempt from the harmless set - is read in the hold direction like every other entry:
+its organ, subtype and joins within its type's own anatomy (`catalogue.ROUTE_OWN`, `evaluate.route_own_entry_contradicted`),
+or the route is not certain. The development filings stay as int8 decided them. The holds this adds (an unestablished
+claim beside a lower-GI code; an absence that files a join) are recorded costs (D342 (2), D336 (2)): fail-safe, an
+existing reason, no question.
+
 A code's REQUIRED facts are exactly these, over its E* acts, their session, the statements paired with its candidates
 (4.5), the doubts that name their facts, the unlisted statements that touch them (3.2.6) and the encounter's date. Nothing
 else can hold it (4.9).
@@ -3014,6 +3033,15 @@ the declared release set, with its completeness test; 9.4's weakening lattice ov
 scenes (P-MONO); every harmless row's reads against the contract's CONTROLS, every census release resting on a controlled
 claim and never on joins, and every READY-path read declared on that path (P-CONTROLLED); and every entry the guard holds
 harmless was harmless in int7's declared set (the round only adds holds).
+
+**Round r3's round 7 (DECISIONS D342 (1) (d); int9, 2026-11-19).** The guard's censuses (`tests/v2/test_r3m_guard`): settle's
+whole outcome table - every claim verdict x every control verdict (attached or not, every qualifier), a failed check, pass
+1's qualifier, a pass-1 doubt or contradiction, indistinct cards, a silent slot, unappraised, for a supported and a
+negated claim - x every controlled claim (every controlled subtype, every absence organ, every controlled type) and the
+claims a harmless row reads beside them x every route family, its completeness derived from `settle.appraise` and
+`settle.decide` themselves; the predicate is exactly rows 6 and 8; the joins census over every type state x a list of 0, 1
+and 2 members over every landmark; the route census over every through family's own entry x its organ, subtype and joins
+in every state x the through's states.
 
 ### 9.5 Gate 6 and the failure classes as fixtures [B][C]
 

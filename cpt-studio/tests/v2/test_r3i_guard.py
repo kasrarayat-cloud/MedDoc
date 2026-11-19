@@ -333,6 +333,17 @@ class FindingTests(SimpleTestCase):
                 R = R3F.scope(code, approach=sup(AP.TRANSANAL), entries={Y1: anastomosis(member, subtype=subtype)})
                 with self.subTest(subtype=subtype and subtype.value, member=member.value, code=code):
                     held_by_route(self, assessed(R, code))    # int7: READY
+                    # round r3's round 7 (DECISIONS D342 (1) (d)): the unnamed end pinned on the guard's own reader (the
+                    # final check's info finding: mutant FC.b2 survived here, the status held by release_reading anyway)
+                    self.assertTrue(evaluate.ileum_below_colon_possible(R, Y1))
+        # D342 (1) (b): a filed joins list names an anastomosis whatever the entry's uncontrolled type - an absence filing
+        # one ileal end has its unnamed end too (the reader; the status is held by the absent row's empty joins as well)
+        for member in (LM.ILEUM, LM.SMALL_BOWEL, LM.TERMINAL_ILEUM):
+            R = R3F.scope(45380, approach=sup(AP.TRANSANAL),
+                          entries={Y1: entry_of(type=sup(AT.SURGICALLY_ABSENT), organ=sup(LM.RECTUM), joins=(sup(member),))})
+            with self.subTest(absence_joins=member.value):
+                self.assertTrue(evaluate.ileum_below_colon_possible(R, Y1))
+                held_by_route(self, assessed(R, 45380))
 
     def test_final_check_4_a_stoma_beside_a_per_anus_code_holds(self):
         # final check 4: beside a SUPPORTED per-anus approach any stoma was harmless; D336 (1) (b) and (e): the contract
@@ -541,8 +552,10 @@ def states_of(enum, value, other, controlled):
     every = frozenset(enum)
     yield ('established' if value in controlled else 'supported uncontrolled'), sup(value), frozenset({value})
     yield 'claimed', claimed(value), frozenset({value})
-    yield 'doubted', doubted(value, other), frozenset({value, other})
-    yield 'contradicted', contra(value, other), frozenset({value, other})
+    # round r3's round 7 (DECISIONS D342 (1) (a)): a pass-1 doubt or contradiction is read at its WIDEST - every value
+    # (was: its value and its reading or side; tests/v2/test_r3m_guard.py enumerates settle's whole outcome table)
+    yield 'doubted', doubted(value, other), every
+    yield 'contradicted', contra(value, other), every
     yield 'silent', None, every
     yield 'rejected', rejected(value), every
     yield 'established negation', neg(value), every
@@ -744,6 +757,8 @@ def declared_guard(family, approach, a_values, controlled, through, t_name, anat
             own = {named[0]}
     if any(entry not in own and not G.oracle_harmless(family, *read[entry][2]) for entry in anatomy):
         return True
+    if route is not AP.TRANSANAL and own_entry_outside_declared(family, through, t_name, anatomy):
+        return True  # round r3's round 7 (DECISIONS D342 (1) (c)): the route's own entry within its type's anatomy
     if family == 'COLONIC_STOMA':  # (e): a stoma passed through whose filed organ may lie outside the lower tract
         stomas = [entry for entry in anatomy if AT.STOMA in read[entry][0]]
         if through is not None and through.result is ct.Result.SUPPORTED:
@@ -770,6 +785,41 @@ def declared_guard(family, approach, a_values, controlled, through, t_name, anat
         types, organ, _args = read[name]
         if types & {AT.STOMA, AT.ILEAL_POUCH, AT.GASTRIC_POUCH} or (organ is not None and organ.value in
                                                                      (LM.STOMA, LM.POUCH)):
+            return True
+    return False
+
+
+# Round r3's round 7 (DECISIONS D342 (1) (c)), DECLARED from the ruling: the anatomy each through family's own entry may
+# file - a colonic stoma the colon's and the ileum's places, an ileal stoma the ileum's, no subtype for a stoma; an
+# ileal pouch the ileum's places and the pouch, its own ileorectal or ileoanal join, the pouch family's joins
+ILEAL_OWN = G.lm('ileum', 'terminal_ileum', 'neo_terminal_ileum', 'small_bowel')
+OWN_DECLARED = {  # family -> (type, organs, subtypes, joins)
+    'COLONIC_STOMA': (AT.STOMA, LOWER_STOMA, frozenset(), LOWER_STOMA),
+    'ILEAL_STOMA': (AT.STOMA, ILEAL_OWN, frozenset(), ILEAL_OWN),
+    'POUCH': (AT.ILEAL_POUCH, ILEAL_OWN | G.lm('pouch'), G.ILEUM_BELOW, G.POUCH_JOINS),
+}
+
+
+def own_entry_outside_declared(family, through, t_name, anatomy) -> bool:
+    """D342 (1) (c), DECLARED: every entry that may be the route's own - its type may be the route's type, the session's
+    through may name it (a supported through names only its entry; a through not established, every entry it may be:
+    a claimed one its value, a contradiction's sides, a silent, denied or rejected one every entry) - files an organ, a
+    subtype or a joins member outside its type's own anatomy."""
+    wanted, organs, subtypes, joins = OWN_DECLARED[family]
+    if through is not None and through.result is ct.Result.SUPPORTED:
+        names = {through.value}
+    else:
+        names = {'Y1 claimed': {Y1}, 'Y1 or Y7': {Y1, Y7}}.get(t_name, set(anatomy))
+    for entry in names & set(anatomy):
+        facts = anatomy[entry]
+        type_ = facts.get(A.TYPE, (None,))[0]
+        if type_ is not None and type_.value is not wanted and type_.result is not ct.Result.NEGATED:
+            continue  # an entry whose type is established or claimed otherwise is never the route's own
+        organ = facts.get(A.ORGAN, (None,))[0]
+        subtype = facts.get(A.SUBTYPE, (None,))[0]
+        if organ is not None and organ.value not in organs or subtype is not None and subtype.value not in subtypes:
+            return True
+        if any(member.value not in joins for member in facts.get(A.JOINS, ())):
             return True
     return False
 

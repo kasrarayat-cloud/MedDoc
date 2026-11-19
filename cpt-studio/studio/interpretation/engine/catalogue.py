@@ -931,9 +931,11 @@ def _harmless_rows(needs: RouteAnatomy) -> tuple[Harmless, ...]:
     absent = _ABSENT_ORGANS[needs]
     rows = (
         # an organ filed surgically absent that the family's route and need do not pass, released on its organ claim
-        # (the absence form: "The <organ> is surgically absent", controlled by its negation) - its joins within the same
-        # organs, its subtype silent (a subtype names an anastomosis: a filed one contradicts the absence)
-        Harmless(needs, _S.ABSENT, _ORGAN, absent, absent, absent),
+        # (the absence form: "The <organ> is surgically absent", controlled by its negation) - its subtype silent (a
+        # subtype names an anastomosis: a filed one contradicts the absence) and, DECISIONS D342 (1) (b), its joins list
+        # empty: a filed joins list names an anastomosis, about which the absence's organ claim decides nothing (L9-2,
+        # L6R-3: int8 read a list filed on an absence as places of the absence, within the same organs)
+        Harmless(needs, _S.ABSENT, _ORGAN, absent, absent, frozenset()),
         # an anastomosis of the upper tract or the bile duct (its subtype, controlled): it joins no lower-GI organ - the
         # pancreaticojejunal subtype has no control (3.2.3 pairs it with no sibling), so it never decides a release
         Harmless(needs, _S.ANASTOMOSIS_UPPER, _SUBTYPE, UPPER_SUBTYPES & CONTROLLED_SUBTYPES, _LANDMARKS, _UPPER_JOINS),
@@ -967,6 +969,44 @@ def _harmless_rows(needs: RouteAnatomy) -> tuple[Harmless, ...]:
 # tests/v2/test_r3g_rules.py's and tests/v2/test_r3i_guard.py's census and completeness tests pin it.
 HARMLESS: Mapping[RouteAnatomy, tuple[Harmless, ...]] = MappingProxyType({
     needs: _harmless_rows(needs) for needs in RouteAnatomy})
+# DECISIONS D342 (1) (c), THE ROUTE'S OWN ENTRY (D336 (1) (e)'s unbuilt part: L4P8-2, L9-3, the final check's finding
+# 2): the entry a through-stoma or a pouch row's route itself uses is exempt from the harmless set (engine/evaluate
+# ``route_entries``), and is read in the hold direction like every other entry instead - its established type gives the
+# route, and its organ, subtype and joins must lie within that type's own anatomy, or the route is not certain
+# (``route_own_entry_contradicted``). One row per through family, from engine/anatomy's regions and containment:
+# - a colonic stoma's (the colonoscopy through a stoma): a stoma of the lower tract - the colon's and the ileum's places
+#   (every landmark compatible with the colon or the ileum: evaluate.LOWER_STOMA_ORGANS, which colonic_route_stoma_
+#   contradicted reads), its joins the same; no subtype (a stoma names no join);
+# - an ileal stoma's (the ileoscopy through a stoma): the ileum's places (compatible with the ileum: evaluate.
+#   ILEAL_PLACES, which ileal_stoma_contradicted reads), its joins the same; no subtype;
+# - an ileal pouch's (the endoscopy of a pouch): the ileum's places and the pouch's own landmark; its own join, the
+#   ileum joined to the rectum or the anus (ILEUM_BELOW_SUBTYPES); its joins the pouch family's own (the small bowel, the
+#   rectum, the anal canal, the pouch).
+# A landmark naming no placed organ (other, an anastomosis, a stoma) is none of a stoma's places, so a stoma filed at one
+# holds, as colonic_route_stoma_contradicted holds it; tests/v2/test_r3m_guard.py pins each row.
+@dataclass(frozen=True, slots=True)
+class OwnAnatomy:
+    """THE ROUTE'S OWN ENTRY's anatomy for one through family (DECISIONS D342 (1) (c)): ``needs``, the route family;
+    ``type``, the controlled type the route passes (a stoma, an ileal pouch); and where the entry's filed fields may lie -
+    ``organs``, ``subtypes`` (every value a filed subtype may be), ``joins`` (every place of each member)."""
+    needs: RouteAnatomy
+    type: AnatomyType
+    organs: frozenset[Landmark]
+    subtypes: frozenset[AnastomosisSubtype]
+    joins: frozenset[Landmark]
+
+
+LOWER_STOMA_PLACES: frozenset[Landmark] = frozenset(
+    landmark for landmark in Landmark if compatible(landmark, Landmark.COLON) or compatible(landmark, Landmark.ILEUM))
+ILEAL_PLACES: frozenset[Landmark] = frozenset(landmark for landmark in Landmark if compatible(landmark, Landmark.ILEUM))
+ROUTE_OWN: Mapping[RouteAnatomy, OwnAnatomy] = MappingProxyType({
+    RouteAnatomy.COLONIC_STOMA: OwnAnatomy(RouteAnatomy.COLONIC_STOMA, AnatomyType.STOMA, LOWER_STOMA_PLACES,
+                                           frozenset(), LOWER_STOMA_PLACES),
+    RouteAnatomy.ILEAL_STOMA: OwnAnatomy(RouteAnatomy.ILEAL_STOMA, AnatomyType.STOMA, ILEAL_PLACES, frozenset(),
+                                         ILEAL_PLACES),
+    RouteAnatomy.POUCH: OwnAnatomy(RouteAnatomy.POUCH, AnatomyType.ILEAL_POUCH, ILEAL_PLACES | {Landmark.POUCH},
+                                   ILEUM_BELOW_SUBTYPES, _POUCH_JOINS),
+})
 # The family rules beside the rows, each an enumeration of route families:
 # - HARMLESS_WHOLE_COLON: the families beside which the colon may be gone as a whole - an ileal stoma's and a pouch's
 #   own anatomy after a colectomy. For every other family the colon filed absent as a whole is no harmless shape, nor are

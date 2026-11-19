@@ -270,6 +270,9 @@ class ColonicRouteTests(SimpleTestCase):
                                                                                      sup(LM.SIGMOID_COLON))),
             'the right colon claimed absent': stoma_scope(reached=(sup(EX.TRANSVERSE_COLON),),
                                                           absent=(unres(ABSENT), unres(LM.RIGHT_COLON))),
+            'the right colon claimed absent, pass 2 never asked': stoma_scope(
+                reached=(sup(EX.TRANSVERSE_COLON),), absent=(unres(ABSENT, ct.Reason.UNAPPRAISED),
+                                                             unres(LM.RIGHT_COLON, ct.Reason.UNAPPRAISED))),
             'an anastomosis whose organ is the colon': stoma_scope(reached=(sup(EX.CECUM),),
                                                                    absent=(sup(ct.AnatomyType.ANASTOMOSIS),
                                                                            sup(LM.COLON))),
@@ -280,6 +283,11 @@ class ColonicRouteTests(SimpleTestCase):
         # be every landmark, so it may join the ileum below the colon - the colonic route is not met either (the same
         # table hold; moved by evaluate.joins_ileum_below_colon_possible)
         guarded = {'an anastomosis whose organ is the colon'}
+        # round r3's round 7 (DECISIONS D342 (1) (a)): unres's default reason is pass 2's appraisal_unclear - a claim
+        # pass 2 was asked and did not establish, read at its WIDEST: the entry may be the colon filed absent as a whole,
+        # so the route is not colonic (the table's own hold; moved by evaluate._may_be, settled_narrows). The same
+        # absence pass 2 was never asked (unappraised: D340 Q1) decides as filed - READY as before
+        guarded |= {'the right colon claimed absent'}
         for name, R in cases.items():
             with self.subTest(case=name):
                 self.assertEqual(evaluate.colonic_route(R, X1), name not in guarded)
@@ -441,7 +449,8 @@ class StomaOrganTests(SimpleTestCase):
         organs = (LM.ESOPHAGUS, LM.DISTAL_ESOPHAGUS, LM.STOMACH, LM.GASTRIC_ANTRUM, LM.PYLORUS, LM.DUODENUM,
                   LM.SECOND_PORTION_DUODENUM, LM.JEJUNUM, LM.BILE_DUCT, LM.GALLBLADDER, LM.PANCREAS, LM.RECTUM)
         types = {'supported': sup(STOMA), 'claimed': unres(STOMA), "a doubt's reading": doubted(ct.AnatomyType.OTHER_ALTERATION,
-                                                                                               STOMA)}
+                                                                                               STOMA),
+                 'claimed, pass 2 never asked': unres(STOMA, ct.Reason.UNAPPRAISED)}
         for organ in organs:
             for t_name, entry_type in types.items():
                 with self.subTest(organ=organ.value, type=t_name):
@@ -456,6 +465,11 @@ class StomaOrganTests(SimpleTestCase):
                     # control) and a stoma leaves no controlled claim to decide the entry - the guard holds it beside
                     # every organ (the OUTSIDE row released on an uncontrolled type; moved by evaluate.path_guard)
                     guarded = t_name == "a doubt's reading"
+                    # round r3's round 7 (DECISIONS D342 (1) (a)): 'claimed' is unres's default, pass 2's
+                    # appraisal_unclear - a controlled type pass 2 was asked and did not establish is read at its WIDEST
+                    # and decides no release (the table's own hold; moved by evaluate._may_be, settled_narrows); the
+                    # stoma pass 2 was never asked (unappraised: D340 Q1) decides as filed, as before
+                    guarded = guarded or t_name == 'claimed'
                     for code in sorted(evaluate.ANUS_ROUTE_CODES):
                         self.assertIs(route_row(R, code).truth, evaluate.Truth.U if guarded else T)
                     self.assertEqual(held_of(R, '45385'), [('procedure', ROUTE, A.TYPE, 'X1', 'question')]

@@ -1359,11 +1359,20 @@ class D253Items(SimpleTestCase):
         cases = [
             ('44380', 'through not filed', stoma_route(), ct.Attribute.THROUGH, X(1), ct.Approach.TRANSANAL,
              ct.Extent.ILEUM, unit(6)),
+            # round r3's round 7 (DECISIONS D342 (1) (a)): the entry type not established that the route part asks is one
+            # pass 2 was never asked (unappraised: D340 Q1 - it decides as filed, so no row of the path guard holds it);
+            # the same type pass 2 left unclear is read at its WIDEST and holds by the table's own hold first (below)
             ('44380', 'entry type unresolved', stoma_route(sup(ct.Approach.THROUGH_STOMA, spans=(unit(4),)),
                                                            through=sup(TE.Y(1), spans=(unit(3),)),
-                                                           entry_type=unres(ct.AnatomyType.STOMA, spans=(unit(8),))),
+                                                           entry_type=unres(ct.AnatomyType.STOMA, ct.Reason.UNAPPRAISED,
+                                                                            spans=(unit(8),))),
              ct.Attribute.TYPE, TE.Y(1), ct.Approach.THROUGH_STOMA, ct.Extent.ILEUM, unit(6)),
         ]
+        R = stoma_route(sup(ct.Approach.THROUGH_STOMA, spans=(unit(4),)), through=sup(TE.Y(1), spans=(unit(3),)),
+                        entry_type=unres(ct.AnatomyType.STOMA, spans=(unit(8),)))
+        found, _worded = self.item('44380', R, self.enteroscopy_hold('44380', R))
+        self.assertEqual((found.held.fact, found.held.cause, found.held.attribute, found.held.subject),
+                         ('procedure', 'coding_rule:stoma_route', ct.Attribute.TYPE, X(1)))
         for code, name, R, attribute, subject, approach, reached, words in cases:
             with self.subTest(code=code, case=name):
                 found, worded = self.item(code, R, self.enteroscopy_hold(code, R))

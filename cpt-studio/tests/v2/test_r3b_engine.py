@@ -373,12 +373,20 @@ class StomaPossibleTests(SimpleTestCase):
         # the must-change pin (D312 (5)): an established (or possible) stoma entry beside an approach pass 2 never
         # established - transanal only unresolved - held 45385 on nothing: facts.possibly kept the unresolved claim's
         # value and ruled the stoma route out. A stoma route is possible: held on the approach question
-        for entry in (sup(ct.AnatomyType.STOMA), unres(ct.AnatomyType.STOMA)):
-            with self.subTest(entry=entry.result.value):
+        # round r3's round 7 (DECISIONS D342 (1) (a)): unres's default reason is pass 2's appraisal_unclear - an entry
+        # type pass 2 was asked and did not establish is read at its WIDEST: it may be an ileal pouch or the colon filed
+        # absent, so the table's own hold answers first (moved by evaluate._may_be, settled_narrows); the stoma pass 2
+        # was never asked (unappraised: D340 Q1) keeps the approach question
+        for name, entry, expected in (
+                ('supported', sup(ct.AnatomyType.STOMA), [('procedure', A.APPROACH, 'question')]),
+                ('unresolved', unres(ct.AnatomyType.STOMA), [('procedure', A.TYPE, 'question')]),
+                ('unappraised', unres(ct.AnatomyType.STOMA, ct.Reason.UNAPPRAISED),
+                 [('procedure', A.APPROACH, 'question')])):
+            with self.subTest(entry=name):
                 R = route_note(unres(ct.Approach.TRANSANAL, ct.Reason.GEOMETRY_SECTION), entry).build()
                 self.assertTrue(evaluate.stoma_possible(R, X1))
                 self.assertEqual([(fact, attribute, kind) for fact, _cause, attribute, kind in route_holds(R, '45385')],
-                                 [('procedure', A.APPROACH, 'question')])
+                                 expected)
 
     def test_the_approachs_own_through_stoma_reading_makes_a_stoma_route_possible_without_an_entry(self):
         # F.11 (3): with no anatomy entry at all, the approach's own reading of a stoma route holds the code - its
@@ -412,6 +420,8 @@ class StomaPossibleTests(SimpleTestCase):
             'silent, no entry': route_note(),
             'silent, an anastomosis': route_note(entry=sup(ct.AnatomyType.ANASTOMOSIS)),
             'transanal only unresolved, no entry': route_note(unres(ct.Approach.TRANSANAL, ct.Reason.GEOMETRY_SECTION)),
+            'transanal claimed, pass 2 never asked, no entry': route_note(unres(ct.Approach.TRANSANAL,
+                                                                                ct.Reason.UNAPPRAISED)),
         }
         # round r3's round 5 (DECISIONS D330 (1), lane rules6): the lower-GI path guard, after this arm, holds two of
         # them with the table's own hold - an approach filed (denied) as anything but per anus establishes no per-anus
@@ -421,6 +431,10 @@ class StomaPossibleTests(SimpleTestCase):
         # an approach supported per anus is never ESTABLISHED through one - beside an entry that may be a stoma the guard
         # reads it as a silent approach and holds (D312 (5)'s boundary stays for this arm; moved by evaluate.path_guard)
         guarded |= {'transanal established, a stoma entry'}
+        # round r3's round 7 (DECISIONS D342 (1) (a)): an approach a failed check left unresolved is read at its WIDEST -
+        # it may be through a stoma or a pouch, so the guard's per-anus clause (R5R-7) holds it (moved by
+        # evaluate._anus_route_contradicted over _may_be); one pass 2 was never asked (unappraised) reads as filed
+        guarded |= {'transanal only unresolved, no entry'}
         for name, doc in cases.items():
             with self.subTest(case=name):
                 R = doc.build()

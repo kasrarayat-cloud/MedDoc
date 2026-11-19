@@ -637,7 +637,9 @@ ORGAN_STATES = {
     'the terminal ileum, claimed': (unres(LM.TERMINAL_ILEUM, UNAPPRAISED), False),
     'the small bowel, supported': (sup(LM.SMALL_BOWEL), False),
     'the jejunum, supported': (sup(LM.JEJUNUM), False),
-    "the ileum claimed, a doubt's reading of the jejunum": (doubted(LM.ILEUM, LM.JEJUNUM), False),
+    # round r3's round 7 (DECISIONS D342 (1) (a)): a pass-1 doubt is read at its WIDEST - every organ, the colon among
+    # them (moved by evaluate._may_be; was: the ileum or the jejunum, no colon)
+    "the ileum claimed, a doubt's reading of the jejunum": (doubted(LM.ILEUM, LM.JEJUNUM), True),
     'the descending colon, supported (a colostomy)': (sup(LM.DESCENDING_COLON), True),
     'the sigmoid colon, claimed': (unres(LM.SIGMOID_COLON, UNAPPRAISED), True),
     'the colon, supported': (sup(LM.COLON), True),
@@ -750,8 +752,9 @@ def member_states():
     for place, (small, below) in JOIN_PLACES.items():
         yield f'{place.value} supported', sup(place), (small, below)
         yield f'{place.value} claimed', unres(place, UNAPPRAISED), (small, below)
-        side_small, side_below = JOIN_PLACES[LM.COLON]
-        yield f'{place.value} or the colon', contra(place, LM.COLON), (small or side_small, below or side_below)
+        # round r3's round 7 (DECISIONS D342 (1) (a)): a pass-1 contradiction is read at its WIDEST - every place, so
+        # it may lie in the small bowel and below the colon (moved by evaluate._may_be; was: its two sides)
+        yield f'{place.value} or the colon', contra(place, LM.COLON), (True, True)
     yield 'the colon established denied (hold-only)', neg(LM.COLON), (True, True)
     yield 'an open denial of the ileum', open_denial(LM.ILEUM), (True, True)
 
@@ -801,6 +804,10 @@ class AddendumTests(SimpleTestCase):
                                                                       unres(LM.LEFT_COLON, UNAPPRAISED)),
             "the right colon, and the left colon a contradiction's side": RD_absences(
                 LM.RIGHT_COLON, contra(LM.HEPATIC_FLEXURE, LM.LEFT_COLON)),
+            # round r3's round 7 (DECISIONS D342 (1) (a)): a pass-1 contradiction is read at its WIDEST - every place, the
+            # colon as a whole among them (moved from kept by evaluate._may_be, settled_narrows)
+            "either side (one entry's two sides) beside the transverse": RD_absences(
+                contra(LM.RIGHT_COLON, LM.LEFT_COLON), LM.TRANSVERSE_COLON),
         }
         kept = {
             'the right colon alone': RD_absences(LM.RIGHT_COLON),
@@ -812,8 +819,8 @@ class AddendumTests(SimpleTestCase):
                                                                 LM.DESCENDING_COLON),
             'four segments, the cecum kept': RD_absences(LM.ASCENDING_COLON, LM.TRANSVERSE_COLON, LM.DESCENDING_COLON,
                                                         LM.SIGMOID_COLON),
-            "either side (one entry's two sides) beside the transverse": RD_absences(
-                contra(LM.RIGHT_COLON, LM.LEFT_COLON), LM.TRANSVERSE_COLON),
+            'the right colon claimed (pass 2 never asked) beside the transverse': RD_absences(
+                unres(LM.RIGHT_COLON, UNAPPRAISED), LM.TRANSVERSE_COLON),
         }
         for name, entries in {**held, **kept}.items():
             with self.subTest(case=name):

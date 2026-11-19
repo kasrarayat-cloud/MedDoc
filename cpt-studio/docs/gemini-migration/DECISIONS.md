@@ -18577,3 +18577,126 @@ four refutation lenses (false READY, design, reproduction, generality: 40 findin
   - Next. Commit on top of int8. Push, superseding f94b1d13's in-flight CI by declaration (the runs are the lead's
     own; the descendant's citation covers int8). Build the final head's test image, run C2, D1-D4, and D15 on a FRESH
     database with d15tool-u2, which must PASS 8 of 8.
+
+- **D342 Round 6's fifth adversarial pass over int8 (wf_38a9cd59-300; 5 lenses, 15 agents) and its final check: NOT
+  READY. One release-direction class is confirmed three times as high: a controlled claim that pass 2 was asked about
+  and did not establish still decides the guard's release. Round 7 builds D336 (1) (b) and (e) as one predicate. The
+  lead's rulings (session 738699b2, 2026-11-19T09:19:45Z). Findings whole: r3i/findings6.json (f3aa0dd48445a7c0...).**
+  - What came back.
+    - L4P8-1, L6R-1 and L9-1 are verified high; L5R8-1 (verified medium) and the final check's finding 1 (medium) are
+      the same class.
+      - int8's _may_be widens a controlled claim only when pass 2 rejected it with no option left (rejected_open).
+        Every other appraised outcome still narrows the reading to the claimed value and its sibling: unclear,
+        qualified, detached, incoherent, missing, or contradicted with the control not rejected. So does a pass-1
+        doubt. Each subtype's sibling sits in the same harmless row.
+      - On the production path: "Subtotal colectomy with an ileal anastomosis", pass 1 guesses ileocolic and an honest
+        pass 2 answers unclear. 45380 is READY with 0 questions; 11,292 FactSet rows rest on such a claim.
+      - Pre-existing on int7, which is READY everywhere; int8 narrowed it. It breaks D336 (1) (b) and D340 Q1 ("a claim
+        pass 2 rejected or doubted is open").
+    - L9-2 and L6R-3 (verified medium). A joins list filed on an entry of an uncontrolled type (surgically_absent) is
+      read as places of the absence, and a one-member list gets no unnamed end. "Proctectomy with an ileal
+      anastomosis" filed as one entry gives 45380, 45331, 45342 and 45392 READY. Pre-existing.
+    - Low on verification: L4P8-2 and L6R-2. The final check's finding 2 (low) and L9-3: D336 (1) (e) is not applied to
+      the route's own pouch or stoma (its organ, subtype and joins). L6R-2 is D340 Q1's own carve-out, an unappraised
+      claim, as ruled.
+    - The final check's finding 3 (medium) is a hold cost and a conflict between two rulings. Uncontrolled types at
+      upper organs now hold every per-anus code; int6 and int7 released them, and D330 (1) kept int6's decisions on
+      entries outside the lower GI tract. Examples: a fundoplication filed other_alteration at the stomach or the GE
+      junction; a gastric bypass filed bypass or roux_limb; a Whipple's pancreaticojejunal anastomosis.
+    - Lows:
+      - L4P8-3: R5R-9's reach clause reads facts.possibly, not _may_be.
+      - L5R8-2: a paid question that can never release (L7R3H-1's class).
+      - L5R8-3: a stale pin-history record.
+      - L6R-4 and L9-4: RCOL-P1.
+      - L8R6-1 to L8R6-5: cost reports.
+      - The final check's infos: mutant FC.b2 survives test_r3i_guard (test_r3f_rules kills it), and v1's
+        CoverageCostTests misses its wall-clock bound at load ~20, as on int7.
+  - (1) THE RULE, by principle, in the engine (round 7, int9):
+    - (a) ONE PREDICATE over settle's outcome, for every claim a release decides on: a subtype, an absence's organ, a
+      controlled type, and any claim a harmless row reads.
+      - The claim narrows the reading only when ESTABLISHED through its control (the claim supported and its control
+        rejected), or UNAPPRAISED (pass 2 never asked and pass 1 had no doubt: D340 Q1).
+      - Every other state reads at its widest, whatever its reason: every row-9 appraisal outcome, a failed check, a
+        pass-1 doubt or a pass-1 contradiction. It is one predicate, not a list of reasons.
+      - The same predicate feeds every reader the guard and the route rows use, the hold clauses included (R5R-9's
+        reach clause: L4P8-3).
+    - (b) A FILED FIELD NAMES ITS SHAPE. A filed joins list names an anastomosis whatever the entry's uncontrolled
+      type; its unnamed ends are every landmark, or the subtype's own ends. An absence's organ claim decides nothing
+      about its joins. Only a CONTROLLED type established as another shape (a gastric pouch's own join) reads it
+      otherwise. (L9-2, L6R-3.)
+    - (c) THE ROUTE'S OWN ENTRY is read in the hold direction like every other entry. Its established type gives the
+      route; its organ, subtype and joins, read by (a) and (b), must lie within that type's own anatomy, or the route
+      is not certain. This is D336 (1) (e)'s unbuilt part (L4P8-2, L9-3, the final check's finding 2).
+    - (d) THE CENSUSES.
+      - The state census enumerates settle's whole outcome table for every controlled claim and every route family:
+        claim verdict x control verdict, a failed check, a pass-1 doubt or contradiction, and unappraised.
+      - The joins census varies the entry's type: every uncontrolled type, with 0, 1 and 2 members.
+      - The route census varies the own entry's other fields.
+      - Mutant FC.b2 is killed inside test_r3i_guard.
+    - The development filings stay as int8 decides them, 0 rows moved; the verifiers' sketches of the strict predicate
+      moved 0 development rows. A development row that moves is a question for the lead, with its row.
+  - (2) Hold costs. D336 (2) stands, and the final check's finding 3 joins it. D336 (1) (b) governs D330 (1)'s
+    keep-list: an uncontrolled type is never established. So an entry at an upper organ whose type has no control
+    holds the lower-GI codes: a fundoplication, a gastric bypass or Roux limb, a Whipple's pancreaticojejunal
+    anastomosis. Recorded, not built. The remedy is the post-go-live question claims (D336 (2)), and the owner is told.
+  - (3) The lows are recorded, not built. L5R8-2 goes with L7R3H-1's class; RCOL-P1 stays a recorded low.
+  - (4) Round 7.
+    - One builder applies (1) on the committed head 57b48228 (int8 + the D339 runner) and integrates int9.
+    - Then four lenses run, beside the final check: the guard in the release direction; properties and censuses; a
+      fresh differential oracle; and the common-hold cost report. The final check also confirms the request bytes and
+      the customer surface are unchanged.
+    - int9 is committed on top of 57b48228, with CI and the image run beside the pass, and D15 re-runs on int9's image.
+    - Launched when the 1-minute load is under 10.
+  - Recorded here: D15 on 57b48228 PASSES 8 of 8 (d15.json 18a0183f..., cptg_d15r3d). C1, C2 and D1-D4 on 57b48228 pass
+    as PLAN 08:36Z records.
+- **D343 Round 7's build: int9 = the committed head 57b48228 + D342 (1), built by principle (wf_eb1ccb6b-85e,
+  repair:int9). Its six questions ruled. The lead's rulings (session 738699b2, 2026-11-19T13:12:35Z). Deliverables:
+  r3m/int9-repair.diff (54fedde1d0b424aa..., 15 files, committed head -> int9) and r3m/int9.diff (b233009ba5d1dd83...,
+  int3 -> int9); notes r3m/int9/NOTES.md.**
+  - What was built.
+    - (a) One predicate over settle's outcome (evaluate.settled_narrows): a claim narrows only when established through
+      its control or unappraised. Every reader the guard and the route rows use reads it, the hold clauses included.
+      int8's rejected_open is gone.
+    - (b) A filed joins list names an anastomosis whatever the entry's uncontrolled type; a one-member list keeps its
+      unnamed end beside every type but a controlled type established as its own shape. The ABSENT rows admit no joins.
+    - (c) The route's own entry (catalogue.ROUTE_OWN): its organ, subtype and joins must lie within its type's own
+      anatomy, read in the hold direction.
+    - (d) tests/v2/test_r3m_guard.py: 23 tests, the state census over settle's whole outcome table (39,095 checks, its
+      completeness derived from settle), the joins census (33,150 shapes x 6, 14,080, 494), the route census. RED on
+      int8 (890 failures, 125 errors), OK on int9. FC.b2 is killed inside test_r3i_guard.
+    - Customer surface unchanged: every new hold is the route table's own (coding_rule:stoma_route); no new reason,
+      wording, prompt, contract or migration.
+  - Gates. tests.v2 4,252 OK; v1 8,830 with CoverageCostTests' two wall-clock subtests over their bound at load 18-21
+    (the module alone OK at 12.02, as on int7 and int8); ops 878 OK; ops/verification 69 OK; tools 411 OK; v2dbtests 4
+    OK; D15 tooling 9 + 7 OK; mypy --strict as int8. Mutation: 161 mutants, 157 killed, 4 equivalent by census (0
+    differ in 1,104,000, 338,100 and 2 x 7,128 checks, each with a positive control). The seven-batch rig moves 0 of 84
+    rows against int8; pairs 1-4 byte-identical; both probes byte-identical, score (ii) 0. Every confirmed finding of
+    findings6 and the final check's findings 1 and 2: RED on int8, GREEN on int9. 0 READY on int9 where int8 held, in
+    any reproduction, matrix or re-check.
+  - The rulings.
+    - Q1 CONFIRMED. R5R-9's reach clause reads the predicate (_possibly_settled), not the anatomy entry's hold-only
+      negation rule. The reach is the act's own fact, not an anatomy field: an established "did not reach X" is
+      established and narrows (D342 (1) (a)); every other state of a reach reads at its widest.
+    - Q2 CONFIRMED as built, not narrowed to the through's entry. With the session known, any candidate own entry
+      outside its type's anatomy holds. With the session not established, the code is held anyway by SUPPORT row 6's
+      session question; "every candidate outside" decides only whether that question may release it, and once an
+      answer establishes the session the guard reads every candidate in the hold direction.
+    - Q3 SUPERSEDED. L4P8-1's structural sub-test asserts int8's mechanism (a subtype's sibling as its narrowing
+      control). (a) removes the mechanism: an unestablished subtype reads at its widest, so its sibling decides
+      nothing. Every L4P8-1 expectation is GREEN and the released-outcome census goes 336 -> 0. No catalogue change.
+      The sub-test stays in the record as RED by construction, not as an open defect.
+    - Q4 ACCEPTED. The four synthetic pins (gate-6 44380/44381/44382/44384 R6:extent U, test_questions qx_ii,
+      test_r3b_engine StomaPossibleTests) stay held; the first item becomes the table's existing hold. A question that
+      could have released them is no longer asked: a D342 (2) cost, on the owner's list.
+    - Q5 ADDED to D342 (2)'s cost list. A right hemicolectomy whose note reaches the cecum the history files absent
+      (pass 1's anatomy_conflict) holds 45380 per anus or with the approach silent: 6 matrix rows, 0 development rows.
+      Fail-safe, the existing reason, no question. A surveillance note that says "cecum" after a right hemicolectomy
+      is a common way to write, so the owner is told this class by name.
+    - Q6 ACCEPTED, the disclosures recorded. The run copies read the int9 tree's own DEV-EXCLUSION copy. Disclosed:
+      one read-only read of the worktree's list through the not-yet-re-pointed base copy; python -c runs started in the
+      worktree before about 11:05Z (import listing only); six bytecode caches written at 11:53Z under other rounds'
+      scripts directories and one scratchpad file, each removed with rm and rmdir (no recursive delete) at 13:08Z. The
+      lead checked at 13:12Z: 0 files in the worktree newer than 09:22Z, and git status shows nothing in cpt-studio.
+      Later lanes run Python with -B and -I.
+  - Next (D342 (4)). int9 is committed on top of 57b48228; CI, the C1 image, C2 and D15 on int9's image run beside the
+    sixth pass (attack6: four lenses) and check:final7, which started at 13:09Z.
