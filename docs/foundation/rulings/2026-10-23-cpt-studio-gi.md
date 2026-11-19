@@ -3687,3 +3687,59 @@ once.
 
 (b) Every safe overlap is taken on the way to the install. Commit, CI and the test image run beside the last adversarial
 pass and the final check. No gate is skipped.
+
+## Owner directive, 2026-11-19 — round 7 is the last adversarial round; then the paid test, its results, then the live walk
+
+Received 2026-11-19T15:09:47Z in session 738699b2, after he asked how far the live walk was and was told round 7 was
+running. His words, verbatim:
+
+> round 7 would be last round tho then acter the fixes run the laid test and give me the results then live walk
+
+### Session interpretation, 2026-11-19 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D344)
+
+(a) Round 7 is the last adversarial round. Its findings are fixed by principle (int10, DECISIONS D345-D346), then the
+paid confirmation pair ("laid test" read as the paid test) runs on the fixed build, its results go to him, then the
+install and his walk.
+
+(b) What it does not change: the refutation pass over the finished diff still runs on the code that decides codes, as a
+focused check of int10's repair, beside the paid pair.
+
+## Owner decision, 2026-11-19 — the paid test starts beside round 7's checks, over the preflight's load line
+
+Answered on 2026-11-19 between 18:52:45Z and 18:59:56Z in session 738699b2. He was told the paid test was blocked by the
+server-load safety check (a load of about 22 while round 7's checks ran their suites; the check says wait above 10, a
+limit set when the server had 14 cores; it now has 40, with 23 GB free and the live site healthy) and that waiting could
+add up to about an hour. His answer, verbatim:
+
+> Start now (Recommended)
+
+### Session interpretation, 2026-11-19 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D347)
+
+The confirmation pair's steps ran without waiting for the load. Memory, swap and the co-tenants were read before each
+heavy step and the send; a memory block, an OOM kill or a co-tenant change would still have stopped it.
+
+## Owner directive, 2026-11-19 — go live now; no more patch rounds; Fable judges the codes
+
+Answered on 2026-11-19 by 20:08Z in session 738699b2. He was told the confirmation pair cost $6.71; the codes he would see
+came out 9 right and 1 sent to the coder unnecessarily, with no wrong code, and Fable's answers matched the session's own
+sealed reading; but the safety check on codes that were not proposed found a wrong-code gap (a wrongly proposed
+esophagoscopy code on an EGD note, or a 30 mm-plus balloon code for an 18 mm balloon, could show READY; Fable answered
+correctly, the gap is in the code rules), and the pre-agreed rule stops the install until it is fixed. Asked whether to
+fix first or install now and fix later, his words, verbatim:
+
+> Bro i dont want to have rule to block our fable decesion since he is the best stop patching and rules delete the rules
+> and anythign is block our things let fable completly judge for codes through me to the live aasp
+
+### Session interpretation, 2026-11-19 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D349)
+
+(a) Go live as soon as possible, on int10 as built. The pre-registered stop (DECISIONS D348: score (ii) 6) is overridden by
+the owner; the gap is his accepted risk until the next change (class a).
+
+(b) No more patch rounds: round 7's remaining findings are recorded, not built.
+
+(c) The direction: Fable judges the codes completely, and the deterministic rules that hold or overrule its judgment are
+removed. That is a rebuild of the decision layer, not a setting: it is the next change after go-live, and its scope is
+confirmed with him before it is built.
+
+(d) The repository's mechanisms (the pre-push hook, the merge wrapper, the declaration gate of the install) still apply;
+they are steps, not reviews.
