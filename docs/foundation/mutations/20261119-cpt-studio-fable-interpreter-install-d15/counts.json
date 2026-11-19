@@ -1,0 +1,168 @@
+{
+ "at": "2026-11-19T19:06:31+00:00",
+ "calls": [
+  {
+   "db": "cptg_r3i10_counts",
+   "exit": 0,
+   "image": "sha256:c95f1f4b730d",
+   "read_only_session": false,
+   "seconds": 7.9,
+   "what": "Migrating the copy with the candidate (as the install's migrate phase)"
+  },
+  {
+   "answer": {
+    "assessments": 0,
+    "encounter_count": 0,
+    "encounters": [],
+    "engine_version": "cpt-studio-events@1",
+    "interpretation_version": "gemini-events@1",
+    "inventories": 0
+   },
+   "db": "cptg_r3i10_counts",
+   "exit": 0,
+   "image": "sha256:c95f1f4b730d",
+   "read_only_session": true,
+   "seconds": 5.5,
+   "what": "Reading the target for design v1 rows"
+  },
+  {
+   "answer": {
+    "a21": {
+     "count": 0,
+     "encounters": []
+    },
+    "holds": {
+     "interpreter": [],
+     "provider": {
+      "astra": [],
+      "corti": [],
+      "fable": []
+     }
+    },
+    "refused": {
+     "corti_sent": {
+      "count": 0,
+      "newest": null
+     },
+     "corti_token": {
+      "count": 0,
+      "newest": null
+     },
+     "participant_sent": {
+      "count": 0,
+      "newest": null
+     }
+    },
+    "size": {
+     "bound_chars": 20000,
+     "bound_pages": 40,
+     "encounters": {
+      "over_chars": [],
+      "over_pages": [],
+      "unframed": [
+       "4593c5b9-9ba7-4342-90fd-342b9b38df3c"
+      ]
+     },
+     "longest_chars": 19398,
+     "over_chars": 0,
+     "over_pages": 0,
+     "unframed": 1,
+     "unframed_empty": 1,
+     "unframed_unextracted": 1,
+     "without_inventory": 86
+    },
+    "values": {
+     "count": 0,
+     "encounters": [],
+     "first_install": true
+    }
+   },
+   "db": "cptg_r3i10_counts",
+   "exit": 0,
+   "image": "sha256:c95f1f4b730d",
+   "read_only_session": true,
+   "seconds": 7.5,
+   "what": "Counting what the owner is told before the switch (amendment 1, 9.5)"
+  }
+ ],
+ "candidate": {
+  "id": "sha256:c95f1f4b730d7f51d719932fb9b10be63598cc556f9b58a2d2f79e20ad08bcb3",
+  "revision": "394f1c1e3148f98c766c97b83170a4b3079796cd",
+  "tag": "cpt-studio-test:394f1c1e3148"
+ },
+ "copied_at": "2026-11-19T19:06:32+00:00",
+ "copy": "cptg_r3i10_counts",
+ "db": "cptg_r3i10",
+ "db_written": false,
+ "install_counts": {
+  "a21": {
+   "count": 0,
+   "encounters": []
+  },
+  "counted": true,
+  "holds": {
+   "interpreter": [],
+   "provider": {
+    "astra": [],
+    "corti": [],
+    "fable": []
+   }
+  },
+  "refused": {
+   "corti_sent": {
+    "count": 0,
+    "newest": null
+   },
+   "corti_token": {
+    "count": 0,
+    "newest": null
+   },
+   "participant_sent": {
+    "count": 0,
+    "newest": null
+   }
+  },
+  "report": [
+   "1 encounter(s) have no text because their extraction failed or has not run: the installed release refuses a change of their details too, so nothing is lost there (not class b)",
+   "an addendum that would take a document over 20000 characters, or whose text cannot be framed, is refused before it is recorded (A12); the longest current document is 19398 characters"
+  ],
+  "size": {
+   "bound_chars": 20000,
+   "bound_pages": 40,
+   "encounters": {
+    "over_chars": [],
+    "over_pages": [],
+    "unframed": [
+     "4593c5b9-9ba7-4342-90fd-342b9b38df3c"
+    ]
+   },
+   "longest_chars": 19398,
+   "over_chars": 0,
+   "over_pages": 0,
+   "unframed": 1,
+   "unframed_empty": 1,
+   "unframed_unextracted": 1,
+   "without_inventory": 86
+  },
+  "values": {
+   "count": 0,
+   "encounters": [],
+   "first_install": true
+  }
+ },
+ "label": "install counts (AMENDMENT-1 9.5)",
+ "migrate": {
+  "exit": 0,
+  "tail": "Operations to perform:\n  Apply all migrations: auth, contenttypes, sessions, studio\nRunning migrations:\n  Applying studio.0014_event_inventory... OK\n  Applying studio.0015_inventory_appraisal... OK\n"
+ },
+ "schema": "cpt-studio-d15-rollback@2",
+ "v1_refusal": null,
+ "v1_rows": {
+  "assessments": 0,
+  "encounter_count": 0,
+  "encounters": [],
+  "engine_version": "cpt-studio-events@1",
+  "interpretation_version": "gemini-events@1",
+  "inventories": 0
+ }
+}
