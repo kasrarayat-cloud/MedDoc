@@ -302,19 +302,6 @@ class UpdateNoteTests(unittest.TestCase):
                 self.assertIn('were not read (a close did not say what it read)', note['note'])
 
 
-class RetiredKindTests(unittest.TestCase):
-    def test_the_retired_kind_must_be_armed_as_pinned_with_its_control_ok(self):
-        good = {'retired_size': 1312, 'pinned_retired_size': 1312, 'retired_control': 'ok', 'retired_armed': True}
-        self.assertEqual(install.retired_problems(good), [])
-        cases = {'size': {**good, 'retired_size': 1311}, 'unpinned': {**good, 'pinned_retired_size': 0},
-                 'not int': {**good, 'retired_size': '1312', 'pinned_retired_size': '1312'},
-                 'control': {**good, 'retired_control': 'failed'}, 'unarmed': {**good, 'retired_armed': False},
-                 'silent': {}}
-        for label, found in cases.items():
-            with self.subTest(label=label):
-                self.assertTrue(install.retired_problems(found))
-        self.assertTrue(install.retired_problems(None))
-
 
 # --- the app phase -----------------------------------------------------------------------------------------------------
 
@@ -326,7 +313,7 @@ class AppPhaseV1RowsTests(TemporaryDirectoryTest):
         for patcher in patches:
             patcher.start()
         try:
-            return install.phase_app(install.Context(app_args(self.tmp, astra='disabled', fable='disabled'), self.tmp))
+            return install.phase_app(install.Context(app_args(self.tmp, coding='disabled'), self.tmp))
         finally:
             for patcher in reversed(patches):
                 patcher.stop()
@@ -556,7 +543,7 @@ class AssertionAcrossInstallsTests(V2Rows):
         for patcher in patches:
             patcher.start()
         try:
-            return install.phase_app(install.Context(app_args(self.tmp, astra='disabled', fable='disabled'), self.tmp))
+            return install.phase_app(install.Context(app_args(self.tmp, coding='disabled'), self.tmp))
         finally:
             for patcher in reversed(patches):
                 patcher.stop()
@@ -2051,95 +2038,6 @@ class RollbackAppOnTheDatabaseTests(V2Rows):
         self.assertEqual(rerun['reverted'], {str(encounter.pk): {'setting': {'saved': 'office', 'restored': None}}})
         self.assertIn('ask each member to save the change again on the earlier web',
                       install.with_update_note({'note': 'counted'}, [rerun])['note'])
-
-
-# --- refutation 6b-r1 P1: the walk's routing checks on the operator view the real serializer and report build -------
-
-WALK = Path(__file__).resolve().parent / 'verify_browser.cjs'
-WALK_ROUTING = """
-const vb = require(process.argv[1]);
-let input = '';
-process.stdin.on('data', chunk => { input += chunk; });
-process.stdin.on('end', () => {
-  const { expected, view } = JSON.parse(input);
-  process.stdout.write(JSON.stringify(vb.checkRouting(expected, view).map(item => [item.id, item.status, item.reason])));
-});
-"""
-EXPECTED_ROUTING = {'families': {'gi.colonoscopy': {
-    'presence': 'required', 'status_in': ['performed'],
-    'facts': {'extent': {'value_contains_any': ['cecum']}, 'target': {'value_contains_any': ['cecum']}},
-    'informational': {'facts': {'em_basis': {'value_contains_any': ['time']}}}}}}
-
-
-def walk_routing(expected, view):
-    """[[id, status, reason]] of ops/verify_browser.cjs checkRouting over ``view`` (node runs the file)."""
-    import shutil
-    import subprocess
-    node = shutil.which('node')
-    if node is None:
-        raise AssertionError('node is not installed; the walk checks need it')
-    done = subprocess.run([node, '-e', WALK_ROUTING, str(WALK)], input=json.dumps({'expected': expected, 'view': view},
-                                                                                  default=str),
-                          capture_output=True, text=True, timeout=60, check=False)
-    if done.returncode:
-        raise AssertionError(done.stderr[-3000:])
-    return json.loads(done.stdout)
-
-
-def labelled_as_requested(routing, result):
-    """The routing serializers._routing_json serves, with request R-SER applied (6b-3 NOTES: a ROUTING_VERSION_V2 run is
-    labelled derived and names its inventory, exactly as the ROUTING_VERSION branch labels it); unchanged once served so."""
-    from studio import interpretation
-    if routing.get('version') == interpretation.ROUTING_VERSION_V2 and routing.get('derived') is not True:
-        routing = {**routing, 'derived': True, 'derived_from': 'the event inventory',
-                   'inventory': result.get('inventory'), 'inventory_sha256': result.get('inventory_sha256')}
-    return routing
-
-
-class WalkV2StandInOnRealRowsTests(V2Rows):
-    """The operator view of a v2 encounter as the REAL serializers._routing_json and report.interpretation_section_v2
-    build it, judged by the walk's own checkRouting: the stand-in and each status judged, no per-fact expectation failed
-    (refutation 6b-r1 P1: every one failed, and the walk's own v2 tests passed only on a hand-drawn sample)."""
-
-    def operator_view(self):
-        from studio import models, serializers
-        from studio.interpretation import report
-        encounter = self.extracted(self.encounter('v2-walk'))
-        made = self.inventory(encounter)
-        context = self.context(encounter, version='gemini-context@2', inventory=made)
-        # engine/derive.routing_stand_in's shape: one finding per family an act names, nothing a reading carries
-        result = {'version': 'gemini-routing@2', 'document_kind': '', 'findings': [
-            {'family': 'gi.colonoscopy', 'status': 'performed', 'mentions': [], 'facts': [], 'missing': []}],
-            'inventory': str(made.pk), 'inventory_sha256': made.sha256}
-        routing = models.RoutingRun.objects.create(revision=encounter.current_revision, version=result['version'],
-                                                   result=result, sha256='0' * 64)
-        assessment = models.Assessment.objects.create(
-            encounter=encounter, revision=encounter.current_revision, context=context, routing=routing,
-            profiles_version='synthetic@1', engine_version='cpt-studio-events@2', sha256='1' * 64,
-            provider_run=self.made_run(encounter), event_inventory=made)
-        models.Encounter.objects.filter(pk=encounter.pk).update(current_context=context, current_assessment=assessment)
-        served = serializers._routing_json(models.Encounter.objects.get(pk=encounter.pk))
-        section = json.loads(json.dumps(report.interpretation_section_v2(assessment), default=str))
-        return served, section, result
-
-    def test_the_walk_judges_the_real_v2_operator_view_and_fails_no_fact_on_it(self):
-        served, section, result = self.operator_view()
-        view = {'routing': labelled_as_requested(served, result), 'assessment': {'interpretation': section}}
-        judged = walk_routing(EXPECTED_ROUTING, view)
-        self.assertEqual([(item_id, status) for item_id, status, _ in judged], [
-            ('routing.stand_in', 'pass'), ('routing.gi.colonoscopy.status', 'pass'),
-            ('routing.gi.colonoscopy.fact.extent', 'skipped'), ('routing.gi.colonoscopy.fact.target', 'skipped'),
-            ('routing.gi.colonoscopy.info.fact.em_basis', 'skipped')])
-        self.assertTrue(all('not judged on a design v2 stand-in' in reason for _, status, reason in judged
-                            if status == 'skipped'))
-        # as served now: until request R-SER lands the stand-in fails on its label alone; no fact fails either way
-        as_served = walk_routing(EXPECTED_ROUTING, {'routing': served, 'assessment': {'interpretation': section}})
-        failing = [(item_id, reason) for item_id, status, reason in as_served if status == 'fail']
-        if served.get('derived') is True:
-            self.assertEqual(failing, [])
-        else:
-            self.assertEqual([item_id for item_id, _ in failing], ['routing.stand_in'])
-            self.assertIn('it is not labelled derived; it names no event inventory', failing[0][1])
 
 
 if __name__ == '__main__':

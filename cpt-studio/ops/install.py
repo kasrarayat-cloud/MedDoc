@@ -69,14 +69,15 @@ SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
 # reading's send is cut into an UNKNOWN outcome (HARNESS.md 8, 11.2; AMENDMENT-2 1.12). Round r3 (DECISIONS D322 (4))
 # adds the question stage: one job per round of question requests sent concurrently, each within
 # QUESTION_SEND_DEADLINE_SECONDS (1,408 s), inside its JOB_DEADLINE_SECONDS (1,588 s) and its stale-stage threshold
-# (1,768 s) - for a round of one wave, which is every round at the figures this installer writes (DECISIONS D325 (3):
-# QUESTION_FIGURES below; a round sends at most QUESTION_ROUND_CONCURRENCY requests at once, and a worker asked to stop
-# starts no further wave of it, so the stop never waits for more than the wave in flight). So 1,800 s outlasts every
-# stage's deadline (the question stage's 1,588 s the longest) and every stale-stage
+# (1,768 s) - for a round of one wave, which is every round at the figures installers before the Fable coding build
+# wrote (DECISIONS D325 (3): a round sends at most QUESTION_ROUND_CONCURRENCY requests at once, and a worker asked to
+# stop starts no further wave of it, so the stop never waits for more than the wave in flight). So 1,800 s outlasts
+# every stage's deadline (the question stage's 1,588 s the longest) and every stale-stage
 # threshold (STALE_RUNNING_SECONDS, 600 s; STALE_RUNNING_SECONDS_BY_KIND, 1,440 s and 1,560 s for the two reading
 # passes and 1,768 s for the question stage): a stage still running when the stop timeout passes is one the stale-stage
 # sweep settles as cut short anyway, so waiting longer buys nothing. A deploy may so wait up to 30 minutes for the old
-# worker to stop (AMENDMENT-2 1.12's 1,500 s before round r3).
+# worker to stop (AMENDMENT-2 1.12's 1,500 s before round r3). The Fable coding build (DECISIONS D351-D353) keeps the
+# value: the bound of its own stage (a reader send and a checker send per round) is the application's to state.
 STOP_SECONDS = {'web': 30, 'worker': 1800}
 # The incoming web of a blue/green install, renamed to SERVICES['web'] once the old web is drained and stopped.
 INCOMING_WEB = SERVICES['web'] + '-next'
@@ -108,14 +109,20 @@ APP_ENV = f'{ETC_DIR}/app.env'
 DB_ENV = f'{ETC_DIR}/db.env'
 APP_ENV_KEYS = ('CPT_STUDIO_SECRET_KEY', 'CPT_STUDIO_DB_PASSWORD')
 DB_ENV_KEYS = ('POSTGRES_PASSWORD',)
-CORTI_SOURCE = '/etc/quillmd-corti-test/credentials.env'
+# Corti's installed copy, which the Fable coding build (DECISIONS D351-D353) neither requires, copies nor mounts for its
+# own pair: the secrets phase no longer reads Corti's source, and an app phase starts its pair with Corti disabled. The
+# copy an earlier install wrote stays on the host, untouched (deleting a key copy is the owner's decision, class d), and
+# only a switch-back to an earlier revision's pair given --provider-mode live mounts it, as that pair's own app did.
 CORTI_TARGET = f'{ETC_DIR}/corti-credentials.env'
-CORTI_KEYS = ('CORTI_CLIENT_ID', 'CORTI_CLIENT_SECRET', 'CORTI_ENVIRONMENT', 'CORTI_TENANT_NAME')
 # The harness participants' credentials (HARNESS.md 8), optional and kept apart from the all-or-nothing set above:
 # adding them to it would read every existing install as partial. Each is copied unread from the source the owner
 # places (root 0600 in a root 0700 directory) when it exists, checked by key NAME only, and mounted read-only into the
 # worker alone, for a live participant only; the web is given the path and no file, as for Corti. A missing source
 # leaves that participant disabled. Models and endpoints are the adapters' constants, never the installer's.
+# The Fable coding build drops the participants (D351): an app phase starts its pair with both disabled, and the secrets
+# phase copies the Anthropic source alone (CODER). Their entries stay for a switch-back to an earlier revision's pair,
+# which is started with the modes its own app phase was given (--astra-mode, --fable-mode), from the copies already on
+# the host.
 PROVIDER_SOURCES = '/etc/cpt-studio-provider-sources'
 PARTICIPANTS = {
     'astra': {'source': f'{PROVIDER_SOURCES}/openai.env', 'target': f'{ETC_DIR}/openai-credentials.env',
@@ -147,6 +154,8 @@ PARTICIPANT_FILE_LIMIT = 32_000  # the size the application's loaders accept (HA
 # and the endpoint are the adapter's constants (studio/interpretation/fable_adapter.py), never the installer's. The
 # installer no longer copies or mounts the earlier interpreter's key copy, LEGACY_INTERPRETER_COPY: one left on a host
 # stays untouched and is reported (preflight, secrets), because deleting a key copy is the owner's decision (class d).
+# The Fable coding build has no interpreter (D351): an app phase starts its pair with it disabled, and
+# --interpreter-mode is a switch-back's alone, for an earlier revision's pair that runs one.
 INTERPRETER = {'name': 'anthropic', 'source': f'{PROVIDER_SOURCES}/anthropic.env',
                'target': f'{ETC_DIR}/anthropic-credentials.env', 'mounted': '/run/cpt-studio/anthropic-credentials.env',
                'file_env': 'CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE', 'mode_env': 'CPT_STUDIO_GEMINI_MODE',
@@ -157,20 +166,25 @@ INTERPRETER = {'name': 'anthropic', 'source': f'{PROVIDER_SOURCES}/anthropic.env
 INTERPRETER_SHARES = 'fable'  # the participant whose credentials file the interpreter reads (AMENDMENT-2 1.11)
 LEGACY_INTERPRETER_COPY = f'{ETC_DIR}/gemini.env'  # the Gemini interpreter's own key copy, never written or read now
 INTERPRETER_MODES = ('disabled', 'live', 'replay')  # FINAL 13: --interpreter-mode live|replay|disabled
-# An access check sends one coding request (Corti, after the OAuth token request its adapter sends first) or one run of
-# the pipeline's tool loop, one request per exchange and at most PARTICIPANT_MAX_EXCHANGES (Astra, Fable): the
-# participant send deadline (330 s) and the container's start, 420 s. Before it sends it takes the installation-wide
-# provider lock, which a reading's send holds for its whole stream, and the installer asks it to wait for that lock
-# (ACCESS_CHECK_WAIT_FLAG): up to the interpreter's longest send deadline plus 60 s (1,380 s, the command computes it
-# from settings), so a reading in flight never fails an install (AMENDMENT-2 1.11 [R:cost-F-COST-8]). Round r3: a
-# question round holds the lock for its sends, each within QUESTION_SEND_DEADLINE_SECONDS (1,408 s), so the wait covers
-# 1,408 + 60 = 1,468 s once the command reads that row too (NOTES' question Q-LOCKWAIT), and the one-shot's timeout covers
-# that wait: 1,468 + 420 = 1,888 s, rounded up to 1,900 s. DECISIONS D325 (3): a round holds the lock for all of its
-# waves - one at the figures this installer writes (QUESTION_FIGURES); at figures allowing more, a check that meets a
-# later wave in flight fails when its wait ends, sending nothing, as for a reading in flight past the wait.
-ACCESS_CHECK_SECONDS = 1900
-ACCESS_CHECK_WAIT_FLAG = '--wait-for-lock'
-ACCESS_CHECK_OUTPUT_LIMIT = 64 * 1024
+# The Fable coder's credential (DECISIONS D351-D353; the build specification, sections 4.1 and 11): CPT Studio's
+# existing Anthropic credential - the same source, copy and worker path as PARTICIPANTS['fable'] and INTERPRETER, so one
+# bind serves whichever of them holds it (worker_credential_mounts) - and the only credentials file an app phase
+# requires or mounts. The secrets phase copies it, once, unread and checked by key NAME only (H_PARTICIPANT_SECRETS:
+# ANTHROPIC_API_KEY and an optional ANTHROPIC_WORKSPACE_ID); --coding-mode live needs that copy, which the application's
+# own loader (studio.fable.credentials.load_anthropic_credentials) must read in the worker's mount layout, offline,
+# before anything changes; the WORKER alone binds it, read-only, at /run/cpt-studio/anthropic-credentials.env. The web
+# is given the mode and the path and no file (service_problems refuses any bind in a web). The model, its effort and its
+# endpoint are the application's constants and settings; the installer writes the mode (CPT_STUDIO_CODING_MODE:
+# --coding-mode, live on the live install), the effort (CPT_STUDIO_CODING_EFFORT: CODING_EFFORT, the owner's setting)
+# and the two owner figures (coding_figures) into every container it starts. No access check: an install sends nothing.
+CODER = {'name': 'anthropic', 'source': f'{PROVIDER_SOURCES}/anthropic.env',
+         'target': f'{ETC_DIR}/anthropic-credentials.env', 'mounted': '/run/cpt-studio/anthropic-credentials.env',
+         'file_env': 'CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE', 'mode_env': 'CPT_STUDIO_CODING_MODE',
+         'effort_env': 'CPT_STUDIO_CODING_EFFORT', 'module': 'studio.fable.credentials',
+         'loader': 'load_anthropic_credentials', 'setting': 'ANTHROPIC_CREDENTIALS_FILE',
+         'required': ('ANTHROPIC_API_KEY',), 'optional': ('ANTHROPIC_WORKSPACE_ID',)}
+CODING_MODES = ('disabled', 'live')  # --coding-mode: the installer never starts a pair replaying
+CODING_EFFORT = 'max'  # the owner's setting (the build specification, section 4.1)
 # The CMS passage files the revision commits (HARNESS.md 5), in the repository and as the image ships them (/app is the
 # image's copy of cpt-studio/, built from git archive of the revision).
 PASSAGE_DATA = f'{APP}/studio/reference/data'
@@ -183,9 +197,6 @@ OPERATOR_ACCOUNTS_SPEC = (('ops-agent', 'agent', 'CPT Studio operations agent'),
                           ('platform-operator', 'human', 'CPT Studio platform operator'))
 OPERATOR_CREDENTIALS = 'operator-credentials.json'
 OPS_AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/ops-agent-credentials.json')
-REASSESS_LIMIT = 20  # encounters per reassess phase
-REASSESS_SECONDS = 300
-UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 
 NGINX_AVAILABLE = Path('/etc/nginx/sites-available')
 NGINX_ENABLED = Path('/etc/nginx/sites-enabled')
@@ -399,13 +410,13 @@ def check_tree(revision, declaration_commit) -> dict:
 PHASE_ARGUMENTS = {
     'pfs_zip': {'reference'}, 'mue_zip': {'reference'},
     'pfs_retrieved_at': {'reference'}, 'mue_retrieved_at': {'reference'},
-    'provider_mode': {'app', 'switch-back'}, 'authorization_ref': {'app', 'switch-back'},
-    'astra_mode': {'app', 'switch-back'}, 'fable_mode': {'app', 'switch-back'}, 'access_check': {'app'},
-    'interpreter_mode': {'app', 'switch-back'},
+    'coding_mode': {'app', 'switch-back'}, 'authorization_ref': {'app', 'switch-back'},
+    # an earlier revision's modes, which only a switch-back to its pair is given (the Fable coding build has none)
+    'provider_mode': {'switch-back'}, 'astra_mode': {'switch-back'}, 'fable_mode': {'switch-back'},
+    'interpreter_mode': {'switch-back'},
     'owner_username': {'provision'}, 'owner_display_name': {'provision'}, 'agent_username': {'provision'},
     'agent_display_name': {'provision'}, 'workspace_name': {'provision'},
     'reset_passwords': {'provision', 'operators'},
-    'encounter': {'reassess'}, 'dry_run': {'reassess'},
 }
 
 
@@ -418,39 +429,39 @@ def parse_args(argv=None):
     parser.add_argument('--mue-zip')
     parser.add_argument('--pfs-retrieved-at', help='when the operator downloaded the PFS zip, ISO-8601 with offset')
     parser.add_argument('--mue-retrieved-at', help='when the operator downloaded the MUE zip, ISO-8601 with offset')
-    parser.add_argument('--provider-mode', choices=('disabled', 'live'))
+    parser.add_argument('--coding-mode', choices=CODING_MODES,
+                        help='the Fable coder (DECISIONS D351-D353; CPT_STUDIO_CODING_MODE): required by app - live on '
+                             'the live install, sending under --authorization-ref with the Anthropic credentials file '
+                             'mounted into the worker alone, or disabled; a switch-back gives the previous pair\'s '
+                             '(disabled when not given)')
     parser.add_argument('--authorization-ref')
-    parser.add_argument('--astra-mode', choices=('disabled', 'live'), help='Astra (OpenAI); disabled when not given')
-    parser.add_argument('--fable-mode', choices=('disabled', 'live'), help='Fable (Anthropic); disabled when not given')
+    parser.add_argument('--provider-mode', choices=('disabled', 'live'),
+                        help='switch-back only, and required there: Corti\'s mode for the previous pair, as its own '
+                             'app phase was given it (the Fable coding build has no Corti)')
+    parser.add_argument('--astra-mode', choices=('disabled', 'live'),
+                        help='switch-back only: Astra (OpenAI) for the previous pair; disabled when not given')
+    parser.add_argument('--fable-mode', choices=('disabled', 'live'),
+                        help='switch-back only: the Fable participant (Anthropic) for the previous pair; disabled when '
+                             'not given')
     parser.add_argument('--interpreter-mode', choices=INTERPRETER_MODES,
-                        help='the interpreter (Claude Fable 5.2, AMENDMENT-2: the Fable participant\'s Anthropic key; '
-                             'design/FINAL.md 13): disabled when not given, which pauses '
-                             "every upload's reading (verify reports an app phase that did not give it); live sends "
-                             'under --authorization-ref; replay sends nothing and answers only from a recording in '
-                             'the image, which ships no Fable recording, so every reading fails unsent')
-    parser.add_argument('--access-check', action='store_true', default=None,
-                        help='after the app phase, check each live participant with real requests: one coding '
-                             'request for Corti, and for Astra and for Fable one run of the tool loop, one request '
-                             'per exchange and at most PARTICIPANT_MAX_EXCHANGES (4)')
+                        help='switch-back only: the previous pair\'s interpreter (Claude Fable 5.2, AMENDMENT-2: the '
+                             'Fable participant\'s Anthropic key; design/FINAL.md 13), disabled when not given; live '
+                             'sends under --authorization-ref; replay sends nothing and answers only from a recording '
+                             'in the image, which ships no Fable recording, so every reading fails unsent')
     parser.add_argument('--owner-username')
     parser.add_argument('--owner-display-name')
     parser.add_argument('--agent-username')
     parser.add_argument('--agent-display-name')
     parser.add_argument('--workspace-name')
     parser.add_argument('--reset-passwords', action='store_true', default=None)
-    parser.add_argument('--encounter', action='append',
-                        help='reassess: an encounter id to re-assess from its retained responses (repeatable)')
-    parser.add_argument('--dry-run', action='store_true', default=None,
-                        help='reassess: pass --dry-run to reassess_retained (nothing is queued)')
     args = parser.parse_args(argv)
     problem = argument_problem(args)
     if problem:
         parser.error(problem)
     args.astra_mode = args.astra_mode or 'disabled'
     args.fable_mode = args.fable_mode or 'disabled'
-    # --interpreter-mode stays None when it is not given (interpreter_mode reads that as disabled), so the app receipt
-    # can say whether it was given: verify does not call an interpreter left disabled by default verified (the review of
-    # S14, finding 2; design/FINAL.md 13: the install uses live)
+    # --interpreter-mode and --coding-mode stay None when they are not given (interpreter_mode and coding_mode read that
+    # as disabled); app refuses to run without an explicit --coding-mode (argument_problem)
     args.agent_username = args.agent_username or 'review-agent'
     args.agent_display_name = args.agent_display_name or 'CPT Studio review agent'
     args.owner_display_name = args.owner_display_name or ''
@@ -471,20 +482,16 @@ def argument_problem(args) -> str:
             problem = retrieved_at_problem(value)
             if problem:
                 return problem
-    if args.phase == 'reassess':
-        encounters = args.encounter or []
-        if not encounters:
-            return '--phase reassess needs at least one --encounter <id>.'
-        if len(encounters) > REASSESS_LIMIT:
-            return f'--phase reassess takes at most {REASSESS_LIMIT} --encounter ids per run.'
-        if len(set(encounters)) != len(encounters):
-            return '--encounter ids must not repeat.'
-        for value in encounters:
-            if not UUID_RE.fullmatch(value):
-                return f'--encounter {value!r} is not a lowercase encounter id (UUID).'
     if args.phase in ('app', 'switch-back'):
-        if args.provider_mode is None:
-            return f'--phase {args.phase} needs an explicit --provider-mode (disabled or live).'
+        coding = getattr(args, 'coding_mode', None)
+        if args.phase == 'app' and coding is None:
+            return '--phase app needs an explicit --coding-mode (disabled or live).'
+        if args.phase == 'switch-back' and args.provider_mode is None:
+            return ("--phase switch-back needs an explicit --provider-mode (disabled or live): the previous pair's, as "
+                    'its own app phase was given it.')
+        # The Fable coder sends under the recorded authority every live mode needs (jobs._live_gate).
+        if coding == 'live' and not args.authorization_ref:
+            return '--coding-mode live needs --authorization-ref (a ruling file tracked at the revision).'
         if args.provider_mode == 'live' and not args.authorization_ref:
             return '--provider-mode live needs --authorization-ref (a ruling file tracked at the revision).'
         # A live participant sends under the same recorded authority as Corti (HARNESS.md 8; jobs._live_gate).
@@ -496,12 +503,10 @@ def argument_problem(args) -> str:
         interpreting = getattr(args, 'interpreter_mode', None) == 'live'
         if interpreting and not args.authorization_ref:
             return '--interpreter-mode live needs --authorization-ref (a ruling file tracked at the revision).'
-        if args.authorization_ref and args.provider_mode == 'disabled' and not participants and not interpreting:
-            return ('--authorization-ref only applies to --provider-mode live, --astra-mode live, --fable-mode live or '
-                    '--interpreter-mode live.')
-        if args.access_check and args.provider_mode != 'live' and not participants:
-            return ('--access-check checks each live participant: give --provider-mode live, --astra-mode live or '
-                    '--fable-mode live.')
+        if (args.authorization_ref and coding != 'live' and args.provider_mode != 'live' and not participants
+                and not interpreting):
+            return ('--authorization-ref only applies to --coding-mode live, or to a switch-back\'s --provider-mode '
+                    'live, --astra-mode live, --fable-mode live or --interpreter-mode live.')
         reference = args.authorization_ref
         if reference and (not AUTH_REF_RE.fullmatch(reference) or '..' in reference.split('/') or len(reference) > 200):
             return '--authorization-ref must be a relative repository path.'
@@ -831,10 +836,11 @@ else:
 print(json.dumps(R))
 '''
 
-# Secrets are generated here, inside the helper; only names and modes leave it.
+# Secrets are generated here, inside the helper; only names and modes leave it. The Fable coding build's set is the two
+# files below: Corti's copy is no longer part of it, read or written (an earlier install's stays as it is).
 H_SECRETS = '''
 T = '/target'
-FILES = {'app': 'app.env', 'db': 'db.env', 'corti': 'corti-credentials.env'}
+FILES = {'app': 'app.env', 'db': 'db.env'}
 
 def names(raw):
     out = []
@@ -867,23 +873,16 @@ def stage(name, data, uid, mode):
         os.close(fd)
     return tmp
 
-source = read('/source/credentials.env')
 present = {k: os.path.lexists(os.path.join(T, v)) for k, v in FILES.items()}
-missing = [k for k in P['corti_keys'] if k not in names(source)]
 expected = {'app.env': {'regular': True, 'uid': 0, 'gid': 0, 'mode': '0o600'},
-            'db.env': {'regular': True, 'uid': 0, 'gid': 0, 'mode': '0o600'},
-            'corti-credentials.env': {'regular': True, 'uid': P['uid'], 'gid': P['uid'], 'mode': '0o400'}}
-if missing:
-    R = {'error': 'the Corti credentials file lacks key name(s): ' + ', '.join(missing)}
-elif all(present.values()):
+            'db.env': {'regular': True, 'uid': 0, 'gid': 0, 'mode': '0o600'}}
+if all(present.values()):
     found = {name: describe(name) for name in expected}
     problems = [name for name in expected if found[name] != expected[name]]
     if names(read(os.path.join(T, 'app.env'))) != P['app_keys']:
         problems.append('app.env keys')
     if names(read(os.path.join(T, 'db.env'))) != P['db_keys']:
         problems.append('db.env keys')
-    if read(os.path.join(T, 'corti-credentials.env')) != source:
-        problems.append('corti-credentials.env differs from its source')
     if problems:
         R = {'error': 'existing secrets are not as installed: ' + ', '.join(problems)}
     else:
@@ -896,8 +895,7 @@ else:
     password = secrets.token_urlsafe(32)
     app_env = 'CPT_STUDIO_SECRET_KEY=' + key + '\\nCPT_STUDIO_DB_PASSWORD=' + password + '\\n'
     staged = [(stage('app.env', app_env.encode(), 0, 0o600), 'app.env'),
-              (stage('db.env', ('POSTGRES_PASSWORD=' + password + '\\n').encode(), 0, 0o600), 'db.env'),
-              (stage('corti-credentials.env', source, P['uid'], 0o400), 'corti-credentials.env')]
+              (stage('db.env', ('POSTGRES_PASSWORD=' + password + '\\n').encode(), 0, 0o600), 'db.env')]
     for tmp, name in staged:
         os.link(tmp, os.path.join(T, name))
         os.unlink(tmp)
@@ -905,7 +903,7 @@ else:
     os.fsync(d)
     os.close(d)
     found = {name: describe(name) for name in expected}
-    R = {'state': 'created', 'files': found, 'corti_key_names_present': list(P['corti_keys'])}
+    R = {'state': 'created', 'files': found}
     if any(found[name] != expected[name] for name in expected):
         R = {'error': 'secrets were written but their ownership or mode is wrong'}
 print(json.dumps(R, sort_keys=True))
@@ -917,7 +915,8 @@ print(json.dumps(R, sort_keys=True))
 # Only key NAMES are read, and only the expected names are ever reported: a line setting any other key is counted, never
 # echoed (a key pasted without its name would otherwise be printed as one). A copy is written once, byte for byte,
 # 10150:10150 0400, and read back; a copy already there must equal its source (to rotate: remove the copy by hand, run
-# the secrets phase, then the app phase, whose new worker mounts the new file). Values never leave the helper.
+# the secrets phase, then the app phase, whose new worker mounts the new file). Values never leave the helper. The Fable
+# coding build runs it over the coder's Anthropic file alone (coding_secrets): the rules are the participants', kept.
 H_PARTICIPANT_SECRETS = '''
 T, S = '/target', '/sources'
 EXPECTED = {'regular': True, 'uid': P['uid'], 'gid': P['uid'], 'mode': '0o400'}
@@ -1273,27 +1272,19 @@ def validate_env_text(text, keys):
         raise InstallError('A protected environment file lacks: ' + ', '.join(k for k in keys if k not in seen) + '.')
 
 
-def participant_secrets() -> dict:
-    """The harness participants' credentials (H_PARTICIPANT_SECRETS): each source the owner placed is copied once into
-    /etc/cpt-studio (10150:10150 0400), checked by key name only; a missing source leaves its participant 'not
-    provided'. The sources directory is mounted only once it is seen to be a root-owned 0700 directory (and the helper
-    looks again); anything else refuses with nothing written. {participant: {state, source, key_names}}."""
-    return copied_credentials(PARTICIPANTS, 'participant')
-
-
-def interpreter_secrets(participants: object) -> dict[Any, Any]:
-    """The interpreter's credential (AMENDMENT-2 1.11): the file of the participant INTERPRETER_SHARES names, so the
-    participants' run of the secrets phase copied it - unread, checked by key name only, 10150:10150 0400 - and nothing
-    is copied again for the interpreter: its entry is that participant's, read from ``participants``
-    (participant_secrets' answer) and named the interpreter's. An answer that does not say what was done with that
-    file refuses (DECISIONS D66: never read as "none"). {INTERPRETER['name']: {state, source, key_names,
-    shared_with}}."""
-    entry = participants.get(INTERPRETER_SHARES) if isinstance(participants, dict) else None
+def coding_secrets() -> dict:
+    """The Fable coder's credential (CODER; H_PARTICIPANT_SECRETS, the participants' rules): its source, when the owner
+    placed it, is copied once into /etc/cpt-studio (10150:10150 0400), checked by key name only; a missing source leaves
+    it 'not provided', and the coder can then only be installed disabled. The sources directory is mounted only once it
+    is seen to be a root-owned 0700 directory (and the helper looks again); anything else refuses with nothing written.
+    No other source is copied: the Astra (OpenAI) one is no longer read. {CODER['name']: {state, source, key_names}}. An
+    answer that does not say what was done with the file refuses (DECISIONS D66: never read as "none")."""
+    copied = copied_credentials({CODER['name']: CODER}, 'coding')
+    entry = copied.get(CODER['name']) if isinstance(copied, dict) else None
     if not (isinstance(entry, dict) and isinstance(entry.get('state'), str)):
-        raise InstallError(f"The copy of the participants' credentials did not say what it did with the "
-                           f"{INTERPRETER_SHARES} participant's file, which the interpreter reads (AMENDMENT-2 1.11).",
-                           details={'participant_credentials': participants})
-    return {INTERPRETER['name']: {**entry, 'shared_with': INTERPRETER_SHARES}}
+        raise InstallError("The copy of the coding credentials did not say what it did with the Anthropic file.",
+                           details={'coding_credentials': copied})
+    return {CODER['name']: entry}
 
 
 LEGACY_COPY_NOTE = (f"{LEGACY_INTERPRETER_COPY}, the earlier Gemini interpreter's key copy, is left untouched: "
@@ -1981,6 +1972,15 @@ def interpreter_mode(args) -> str:
     return mode
 
 
+def coding_mode(args) -> str:
+    """The Fable coder's mode from --coding-mode; 'disabled' when not given (or for an args object that does not name
+    it), as every one-shot runs it. app refuses to run without it given (argument_problem)."""
+    mode = getattr(args, 'coding_mode', None) or 'disabled'
+    if mode not in CODING_MODES:
+        raise InstallError(f'The coding mode must be one of {", ".join(CODING_MODES)}, not {mode!r}.')
+    return mode
+
+
 def participant_mount(name) -> str:
     """A participant's credentials file, read-only at the worker's path (HARNESS.md 8)."""
     spec = PARTICIPANTS[name]
@@ -1993,39 +1993,49 @@ def interpreter_mount() -> str:
     return f'type=bind,src={INTERPRETER["target"]},dst={INTERPRETER["mounted"]},readonly'
 
 
-def worker_credential_mounts(participants: list[str] | tuple[str, ...], interpreter: bool) -> list[str]:
+def coder_mount() -> str:
+    """The Fable coder's credentials file, read-only at the worker's path (CODER: the same file and path as the Fable
+    participant's and the interpreter's, so this is interpreter_mount() to the byte)."""
+    return f'type=bind,src={CODER["target"]},dst={CODER["mounted"]},readonly'
+
+
+def worker_credential_mounts(participants: list[str] | tuple[str, ...], interpreter: bool,
+                             coder: bool = False) -> list[str]:
     """The credentials binds of a worker - or of a one-shot in its layout - that holds the files of ``participants``
-    (participant names) and, when ``interpreter`` is true, the interpreter's: each file bound ONCE (AMENDMENT-2 1.11:
-    the interpreter's file is the Fable participant's, so a worker with both live binds it one time; Docker refuses a
-    container that names one destination twice). The participants' come first, in their order, then the interpreter's
-    when it is a file of its own."""
-    binds = [participant_mount(name) for name in participants] + ([interpreter_mount()] if interpreter else [])
+    (participant names) and, when ``interpreter`` is true, the interpreter's, and when ``coder`` is true, the Fable
+    coder's: each file bound ONCE (AMENDMENT-2 1.11: the interpreter's file is the Fable participant's, and the coder's
+    is that same file, so a worker with more than one of them live binds it one time; Docker refuses a container that
+    names one destination twice). The participants' come first, in their order, then the interpreter's and the coder's
+    when each is a file of its own."""
+    binds = ([participant_mount(name) for name in participants] + ([interpreter_mount()] if interpreter else [])
+             + ([coder_mount()] if coder else []))
     return list(dict.fromkeys(binds))
 
 
-# DECISIONS D325 (3) (the second adversarial pass's L7P2-2; class d): the question stage's two figures are the owner's -
-# the worst case it reserves for one document over every round (QUESTION_DOCUMENT_CEILING_USD: a round that would pass
-# it is refused about itself and never sent) and the question requests in flight at once (QUESTION_ROUND_CONCURRENCY:
-# the rest of a round wait their turn in the same job) - and they are settings, never constants of this script: every
-# container this installer starts (the web, the worker and each one-shot: runtime_env) is given both, at the values the
-# revision's own cptstudio/settings.py gives them (question_figures reads its defaults - 25 US dollars a document and
-# 4 requests at once, D325's proposal - without running it), so the installed environment states them and settings.py
-# stays their one copy. At those figures a round is at most 4 requests, one wave, and the question stage keeps its rows
-# (the worker's stop timeout below outlasts them); a stopping worker starts no further wave of a round.
-QUESTION_FIGURES = ('QUESTION_DOCUMENT_CEILING_USD', 'QUESTION_ROUND_CONCURRENCY')
+# The Fable coding build's two owner figures (the build specification, sections 3.1 and 3.2; DECISIONS D325 (3)'s rule,
+# class d, which made the question stage's two figures settings) - the spending ceiling of one document, its revision,
+# over every round (DOCUMENT_CEILING_USD: a send whose worst case would pass it fails its round, never sent) and the
+# documents coded at once (CONCURRENT_DOCUMENTS: the worker's threads, each holding one provider slot) - are settings,
+# never constants of this script: every container this installer starts (the web, the worker and each one-shot:
+# runtime_env) is given both, at the values the revision's own cptstudio/settings.py gives them (coding_figures reads
+# its defaults - 25 US dollars a document and 4 documents at once, the specification's - without running it), so the
+# installed environment states them and settings.py stays their one copy. They replace the question stage's pair
+# (QUESTION_DOCUMENT_CEILING_USD, QUESTION_ROUND_CONCURRENCY), which no container is given now: an earlier revision's
+# pair a switch-back starts reads its own defaults for them, the values this installer gave before.
+CODING_FIGURES = ('DOCUMENT_CEILING_USD', 'CONCURRENT_DOCUMENTS')
 SETTINGS_SOURCE = SELF.parents[1] / 'cptstudio' / 'settings.py'
 
 
-def question_figures(source: str | None = None) -> dict[str, str]:
-    """{'CPT_STUDIO_<name>': value} for each of QUESTION_FIGURES: the default the revision's cptstudio/settings.py gives
+def coding_figures(source: str | None = None) -> dict[str, str]:
+    """{'CPT_STUDIO_<name>': value} for each of CODING_FIGURES: the default the revision's cptstudio/settings.py gives
     it (its one ``_env('<name>', '<value>')`` call, read with ast - nothing is imported or run; ``source``: that file's
-    text, read from SETTINGS_SOURCE when not given), checked as settings.py checks it when it loads - the ceiling a
-    non-negative amount of US dollars, the concurrency a whole number of requests, at least 1. InstallError when a
+    text, read from SETTINGS_SOURCE when not given), checked as a setting of its kind is checked - the ceiling a
+    non-negative amount of US dollars, the concurrency a whole number of documents, at least 1. InstallError when a
     figure is missing, given more than once or malformed: no container is started without both."""
     from decimal import Decimal, InvalidOperation
 
     text = source if source is not None else SETTINGS_SOURCE.read_text(encoding='utf-8')
-    found: dict[str, list[str]] = {name: [] for name in QUESTION_FIGURES}
+    found: dict[str, list[str]] = {name: [] for name in CODING_FIGURES}
     for node in ast.walk(ast.parse(text)):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == '_env'
                 and len(node.args) == 2 and not node.keywords):
@@ -2040,7 +2050,7 @@ def question_figures(source: str | None = None) -> dict[str, str]:
             raise InstallError(f'cptstudio/settings.py gives {name} {len(values)} defaults, not one; nothing was '
                                'started.')
         value = values[0]
-        if name == 'QUESTION_DOCUMENT_CEILING_USD':
+        if name == 'DOCUMENT_CEILING_USD':
             try:
                 amount = Decimal(value)
             except InvalidOperation:
@@ -2056,13 +2066,16 @@ def question_figures(source: str | None = None) -> dict[str, str]:
 
 
 def runtime_env(provider_mode, authorization_ref, *, credentials=False, participants=None, files=(), interpreter=None,
-                interpreter_file=False):
+                interpreter_file=False, coding=None, coding_file=False):
     """-e flags. Each harness participant is named with its mode - ``participants`` maps them; one not given is
     disabled, as in every one-shot - and a live one (or one in ``files``) with its credentials path. The interpreter is
     named with its mode (``interpreter``; disabled when not given, as in every one-shot), its credentials path when it
     is live (or ``interpreter_file``), and the replay directory when it replays (tests/fixtures/interpretation/; the
-    image ships no Fable recording, so a replayed interpreter fails every reading unsent). Every container is given the
-    question stage's two figures (DECISIONS D325 (3): QUESTION_FIGURES, at the revision's settings values)."""
+    image ships no Fable recording, so a replayed interpreter fails every reading unsent). Those are an earlier
+    revision's modes, which only a switch-back gives anything but disabled. The Fable coder is named with its mode
+    (``coding``: CODING_MODES; disabled when not given, as in every one-shot) and its credentials path when it is live
+    (or ``coding_file``). Every container is given the coder's effort (CODING_EFFORT) and the two owner figures
+    (CODING_FIGURES, at the revision's settings values)."""
     values = {'CPT_STUDIO_DB_HOST': DB_CONTAINER, 'CPT_STUDIO_DB_PORT': '5432', 'CPT_STUDIO_DB_NAME': DB_NAME,
               'CPT_STUDIO_DB_USER': DB_USER, 'CPT_STUDIO_HTTPS': '1', 'CPT_STUDIO_TRUST_PROXY': '1',
               'CPT_STUDIO_PROVIDER_MODE': provider_mode, 'CPT_STUDIO_AUTHORIZATION_REF': authorization_ref}
@@ -2081,7 +2094,14 @@ def runtime_env(provider_mode, authorization_ref, *, credentials=False, particip
         values[INTERPRETER['file_env']] = INTERPRETER['mounted']
     if interpreting == 'replay':
         values[INTERPRETER['replay_env']] = INTERPRETER['replay_dir']
-    values.update(question_figures())  # D325 (3): the owner's two figures, as settings
+    coder = coding or 'disabled'
+    if coder not in CODING_MODES:
+        raise InstallError(f'The coding mode must be one of {", ".join(CODING_MODES)}, not {coder!r}.')
+    values[CODER['mode_env']] = coder
+    values[CODER['effort_env']] = CODING_EFFORT
+    if coder == 'live' or coding_file:
+        values[CODER['file_env']] = CODER['mounted']
+    values.update(coding_figures())  # the owner's two figures, as settings
     flags = []
     for name, value in values.items():
         flags += ['-e', f'{name}={value}']
@@ -2089,14 +2109,15 @@ def runtime_env(provider_mode, authorization_ref, *, credentials=False, particip
 
 
 def service_args(role, image_id, revision, provider_mode, authorization_ref, participants=None, *, name=None,
-                 port=WEB_PORT, interpreter=None):
+                 port=WEB_PORT, interpreter=None, coding=None):
     """docker run arguments for a long-running role; secrets arrive on stdin as an env-file. ``participants`` maps each
-    harness participant to its mode (disabled when not given), and ``interpreter`` is the interpreter's (disabled when
-    not given). A web is named ``name`` (the incoming web of a blue/green install: INCOMING_WEB) and publishes
-    127.0.0.1:``port``; every other argument is the same."""
+    harness participant to its mode (disabled when not given), ``interpreter`` is the interpreter's and ``coding`` the
+    Fable coder's (each disabled when not given). A web is named ``name`` (the incoming web of a blue/green install:
+    INCOMING_WEB) and publishes 127.0.0.1:``port``; every other argument is the same."""
     live = provider_mode == 'live'
     modes = {name: (participants or {}).get(name) or 'disabled' for name in PARTICIPANTS}
     interpreting = interpreter or 'disabled'
+    coder = coding or 'disabled'
     container = name or SERVICES[role]
     if container not in ((SERVICES['web'], INCOMING_WEB) if role == 'web' else (SERVICES['worker'],)):
         raise InstallError(f'{container} is not a name a CPT Studio {role} is started under.')
@@ -2106,21 +2127,23 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref, par
               '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--stop-timeout', str(STOP_SECONDS[role]),
               '--mount', f'type=volume,src={FILES_VOLUME},dst={STATE_DIR}', '--env-file', '/dev/stdin']
     environment = runtime_env(provider_mode, authorization_ref, credentials=live, participants=modes,
-                              interpreter=interpreting)
+                              interpreter=interpreting, coding=coder)
     if role == 'web':
         # The path, never the file. A context change in the web builds the request it would send to tell a
         # re-check from a re-send (jobs._run_answers); building a request opens nothing, and only the worker
         # sends. Without the path, live mode had no provider in the web, so every setting or billing save
         # re-predicted and the worker re-sent a failed or not-sent request (pre-install review, 2026-10-26).
         # A live harness participant alike: its adapter builds requests without credentials (HARNESS.md 8). And the
-        # interpreter alike (design/FINAL.md 13; its adapter reads the key only to send, interpretation.fable_adapter).
+        # interpreter alike (design/FINAL.md 13; its adapter reads the key only to send, interpretation.fable_adapter),
+        # and the Fable coder (CODER: only the worker sends).
         return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{port}:8000', *environment,
                 image_id, 'web']
     extra = ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
-    # the worker alone holds a live participant's key and the live interpreter's (D14), each file once: the
-    # interpreter's is the Fable participant's (AMENDMENT-2 1.11), one bind target whichever of them is live
+    # the worker alone holds a live participant's key, the live interpreter's (D14) and the live coder's, each file
+    # once: the interpreter's and the coder's are the Fable participant's (AMENDMENT-2 1.11; CODER), one bind target
+    # whichever of them is live
     for bind in worker_credential_mounts([name for name, mode in modes.items() if mode == 'live'],
-                                         interpreting == 'live'):
+                                         interpreting == 'live', coder == 'live'):
         extra += ['--mount', bind]
     return [*common, *hardening('1536m', 256, '1g'), '--no-healthcheck', *extra, *environment, image_id, 'worker']
 
@@ -2137,18 +2160,20 @@ def db_args() -> list:
 
 
 def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UID}', timeout=600,
-            network=None, credentials=False, participant_files=(), environment=None, interpreter_file=False):
-    """A --rm container of the app image with provider calls disabled - Corti's, every participant's and the
-    interpreter's (design/FINAL.md 13) - unless ``environment`` gives its -e flags; returns the completed process.
-    ``credentials``, ``participant_files`` (participant names) and ``interpreter_file`` mount those credentials files
-    read-only at the worker's paths, each file once (worker_credential_mounts)."""
+            network=None, credentials=False, participant_files=(), environment=None, interpreter_file=False,
+            coding_file=False):
+    """A --rm container of the app image with provider calls disabled - Corti's, every participant's, the
+    interpreter's (design/FINAL.md 13) and the Fable coder's - unless ``environment`` gives its -e flags; returns the
+    completed process. ``credentials``, ``participant_files`` (participant names), ``interpreter_file`` and
+    ``coding_file`` mount those credentials files read-only at the worker's paths, each file once
+    (worker_credential_mounts)."""
     name = f'cpt-studio-oneshot-{secrets.token_hex(8)}'
     if credentials:
         mounts = [*mounts, f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly']
-    mounts = [*mounts, *worker_credential_mounts(participant_files, interpreter_file)]
+    mounts = [*mounts, *worker_credential_mounts(participant_files, interpreter_file, coding_file)]
     if environment is None:
         environment = runtime_env('disabled', '', credentials=credentials, files=participant_files,
-                                  interpreter_file=interpreter_file)
+                                  interpreter_file=interpreter_file, coding_file=coding_file)
     argv = [DOCKER, 'run', '--rm', '--name', name, '--pull=never', '--network', network or NETWORK,
             '--no-healthcheck', '--log-driver=none', '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=oneshot',
             *hardening('768m', 128, '256m', user=user), '--env-file', '/dev/stdin', *environment,
@@ -2183,6 +2208,16 @@ INTERPRETER_CREDENTIALS_CHECK = ('from django.conf import settings\n'
                                  f'from {INTERPRETER["module"]} import {INTERPRETER["loader"]}\n'
                                  f'{INTERPRETER["loader"]}(settings.{INTERPRETER["setting"]})\n'
                                  f"print('{INTERPRETER['name']}-credentials-parse-ok')\n")
+# The Fable coder's, likewise: its own loader (CODER: studio.fable.credentials.load_anthropic_credentials, the strict
+# reader moved from the participants - a regular file, not a link, owner-only, at most 32,000 bytes, KEY=VALUE,
+# ANTHROPIC_API_KEY required and ANTHROPIC_WORKSPACE_ID optional), in the worker's mount layout, offline, with the coder
+# itself disabled: format and permissions only, before anything changes. It proves, too, that the image imports the
+# package the coder sends through; an image before the Fable coding build has none and fails it, so a switch-back to
+# such a revision gives --coding-mode disabled (its pair reads no coding mode).
+CODING_CREDENTIALS_CHECK = ('from django.conf import settings\n'
+                            f'from {CODER["module"]} import {CODER["loader"]}\n'
+                            f'{CODER["loader"]}(settings.{CODER["setting"]})\n'
+                            "print('coding-credentials-parse-ok')\n")
 
 # Run by `manage shell -c` in an image of the app (APP_SCRIPT_PRELUDE gives it P, the parameters, and ANSWER); each
 # prints one ANSWER line. UNRUNNABLE_STAGES uses only what every revision's models have (057a7d39's included): it is
@@ -3241,11 +3276,13 @@ def service_problems(container, role, image_id, port=None) -> list:
                 else [{}])
     if bindings not in expected:
         problems.append('unexpected published ports')
-    # Only the worker holds a credentials file, read-only (HARNESS.md 8): Corti's, a live participant's and the live
-    # interpreter's (design/FINAL.md 13, D14). A web holds none, whatever it is configured for.
+    # Only the worker holds a credentials file, read-only (HARNESS.md 8): the live Fable coder's (CODER) - or, in an
+    # earlier revision's pair, Corti's, a live participant's and the live interpreter's (design/FINAL.md 13, D14). A web
+    # holds none, whatever it is configured for.
     binds = [(mount.get('Source'), mount.get('Destination'), mount.get('RW'))
              for mount in container.get('Mounts') or [] if mount.get('Type') == 'bind']
-    allowed = ({(CORTI_TARGET, CREDENTIALS_IN_CONTAINER), (INTERPRETER['target'], INTERPRETER['mounted'])}
+    allowed = ({(CODER['target'], CODER['mounted']), (CORTI_TARGET, CREDENTIALS_IN_CONTAINER),
+                (INTERPRETER['target'], INTERPRETER['mounted'])}
                | {(spec['target'], spec['mounted']) for spec in PARTICIPANTS.values()})
     if role == 'web' and binds:
         problems.append('the web holds a bind-mounted file (only the worker holds credentials)')
@@ -4141,9 +4178,9 @@ def put_back_states(closed, older_image, image_id, env_bytes) -> dict:
 
 
 def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *,
-                     interpreter=None) -> dict:
+                     interpreter=None, coding=None) -> dict:
     """Replace the web and worker (``participants``: each harness participant's mode, disabled when not given;
-    ``interpreter``: the interpreter's, disabled when not given) the way
+    ``interpreter``: the interpreter's, and ``coding``: the Fable coder's, each disabled when not given) the way
     replacement_plan reads the host - after migrate, as before, and right before anything is started or stopped (a
     refusal starts and stops nothing; preflight has refused the same states before the install began): a served site
     is switched blue/green (switch_services, which never stops its web; it needs this install's preflight receipt, the
@@ -4153,6 +4190,7 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref,
     summary = {key: plan[key] for key in ('mode', 'why', 'vhost', 'vhost_sha256', 'live', 'idle', 'port') if key in plan}
     # named only when it is not the default, so a stand-in of either keeps the arguments it always had
     interpreting = {'interpreter': interpreter} if (interpreter or 'disabled') != 'disabled' else {}
+    interpreting.update({'coding': coding} if (coding or 'disabled') != 'disabled' else {})
     if plan['mode'] == 'blue-green':
         preflight = require_receipt(ctx, 'preflight')
         services = switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants,
@@ -4164,7 +4202,7 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref,
 
 
 def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *,
-                  port=WEB_PORT, interpreter=None) -> dict:
+                  port=WEB_PORT, interpreter=None, coding=None) -> dict:
     """The swap of a host where nothing is served through the vhost (replacement_plan's 'fresh'). Park
     the old pair, start the new pair, its web on 127.0.0.1:``port`` (``participants``: each harness participant's
     mode, disabled when not given); on any failure stop what was started, close every stage it left open
@@ -4187,7 +4225,8 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
             if role == 'worker':
                 worker_started_at = utc_now_ms()
             docker('run', '-d', *service_args(role, image_id, ctx.revision, provider_mode, authorization_ref,
-                                              participants, port=port, interpreter=interpreter),
+                                              participants, port=port, interpreter=interpreter,
+                                              **({'coding': coding} if coding else {})),
                    input=env_bytes, quiet=True)
             # WEB_PORT is wait_service's own default, and is left to it (callers' stand-ins keep its three arguments)
             started[role] = wait_service(role, ctx.revision, image_id, **({'port': port} if port != WEB_PORT else {}))
@@ -4811,7 +4850,7 @@ def stop_incoming_web() -> str:
 
 
 def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *, preflight,
-                    plan, interpreter=None) -> dict:
+                    plan, interpreter=None, coding=None) -> dict:
     """The blue/green replacement (replacement_plan's 'blue-green'): the serving web is never stopped before the switch
     is verified and drained.
 
@@ -4847,7 +4886,8 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
     try:
         step('S1')
         docker('run', '-d', *service_args('web', image_id, ctx.revision, provider_mode, authorization_ref, participants,
-                                          name=INCOMING_WEB, port=idle, interpreter=interpreter),
+                                          name=INCOMING_WEB, port=idle, interpreter=interpreter,
+                                          **({'coding': coding} if coding else {})),
                input=env_bytes, quiet=True)
         started['web'] = wait_service('web', ctx.revision, image_id, name=INCOMING_WEB, port=idle)
         record['smoke'] = smoke_web(idle)
@@ -4858,7 +4898,8 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
                                            from_revision=plan['web']['revision'])
         step('S4')
         docker('run', '-d', *service_args('worker', image_id, ctx.revision, provider_mode, authorization_ref,
-                                          participants, interpreter=interpreter), input=env_bytes, quiet=True)
+                                          participants, interpreter=interpreter,
+                                          **({'coding': coding} if coding else {})), input=env_bytes, quiet=True)
         started['worker'] = wait_service('worker', ctx.revision, image_id)
         step('S5')
         record['drain'] = drain_web(live)
@@ -5371,33 +5412,20 @@ def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, 
 
 # --- phases ------------------------------------------------------------------------
 
-def participant_source_problems(paths) -> list:
-    """The participants' sources are optional - a missing one leaves its participant disabled - but one that is there
-    must be root-only, in a root-only directory, or the secrets phase refuses it (HARNESS.md 8). ``paths``:
-    helper_stat's answer for PROVIDER_SOURCES and each source."""
+def coding_source_problems(paths) -> list:
+    """The Fable coder's source (CODER) is optional here - preflight does not know the mode the app phase will be given,
+    and the app phase refuses --coding-mode live without its copy - but one that is there must be root-only, in a
+    root-only directory, or the secrets phase refuses it (HARNESS.md 8's rules). No other source is judged: the secrets
+    phase reads no other now (Corti's and Astra's are no longer read). ``paths``: helper_stat's answer for
+    PROVIDER_SOURCES and CODER's source."""
     problems = []
     folder = paths[PROVIDER_SOURCES]
     if folder.get('exists') and folder != {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}:
         problems.append(f'{PROVIDER_SOURCES} is not a root-owned 0700 directory')
-    for spec in PARTICIPANTS.values():
-        found = paths[spec['source']]
-        if found.get('exists') and found != {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o600'}:
-            problems.append(f'{spec["source"]} is not a root-owned 0600 regular file')
-    return problems
-
-
-def interpreter_source_problems(paths) -> list:
-    """The interpreter's source (design/FINAL.md 13), read as a participant's: optional here - preflight does not know
-    the mode the app phase will be given, and the app phase refuses --interpreter-mode live without its copy - but one
-    that is there must be a root-owned 0600 regular file, or the secrets phase refuses it. ``paths``: helper_stat's
-    answer, the source included (its directory is participant_source_problems'). AMENDMENT-2 1.11: the source is a
-    participant's (INTERPRETER_SHARES), judged once, by participant_source_problems, so nothing is said of it twice."""
-    if INTERPRETER['source'] in {spec['source'] for spec in PARTICIPANTS.values()}:
-        return []
-    found = paths[INTERPRETER['source']]
+    found = paths[CODER['source']]
     if found.get('exists') and found != {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o600'}:
-        return [f'{INTERPRETER["source"]} is not a root-owned 0600 regular file']
-    return []
+        problems.append(f'{CODER["source"]} is not a root-owned 0600 regular file')
+    return problems
 
 
 def phase_preflight(ctx) -> dict:
@@ -5443,19 +5471,14 @@ def phase_preflight(ctx) -> dict:
     details['images'] = {ref: bool(inspect('image', ref)) for ref in (HELPER_IMAGE, POSTGRES_IMAGE)}
     if not all(details['images'].values()):
         problems.append('a pinned image (helper or postgres) is not present locally')
-    participant_paths = [path for spec in PARTICIPANTS.values() for path in (spec['source'], spec['target'])]
-    # each path once: the interpreter's source and copy are the Fable participant's (AMENDMENT-2 1.11), and the earlier
-    # interpreter's own key copy is stat'd only to be reported (LEGACY_INTERPRETER_COPY; never a problem)
+    # the Fable coder's source and copy are the only credentials paths read (CODER; Corti's source is no longer
+    # required), and the earlier interpreter's own key copy is stat'd only to be reported (LEGACY_INTERPRETER_COPY;
+    # never a problem)
     details['paths'] = helper_stat(list(dict.fromkeys([
-        CORTI_SOURCE, ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR, PROVIDER_SOURCES, *participant_paths,
-        INTERPRETER['source'], INTERPRETER['target'], LEGACY_INTERPRETER_COPY])))
-    if not details['paths'][CORTI_SOURCE].get('exists'):
-        problems.append(f'{CORTI_SOURCE} is missing')
-    problems += participant_source_problems(details['paths'])
-    problems += interpreter_source_problems(details['paths'])
-    details['participant_sources'] = {name: 'present' if details['paths'][spec['source']].get('exists') else 'absent'
-                                      for name, spec in PARTICIPANTS.items()}
-    details['interpreter_source'] = 'present' if details['paths'][INTERPRETER['source']].get('exists') else 'absent'
+        ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR, PROVIDER_SOURCES, CODER['source'], CODER['target'],
+        LEGACY_INTERPRETER_COPY])))
+    problems += coding_source_problems(details['paths'])
+    details['coding_source'] = 'present' if details['paths'][CODER['source']].get('exists') else 'absent'
     details['legacy_interpreter_copy'] = legacy_copy_state(details['paths'])
     details['letsencrypt'] = le_state()
     if not all(details['letsencrypt']['dirs'].values()):
@@ -5486,24 +5509,16 @@ def phase_preflight(ctx) -> dict:
 
 def phase_secrets(ctx) -> dict:
     etc = run_helper(H_ETC_DIR, {}, mounts=['type=bind,src=/etc,dst=/host-etc'])
-    result = run_helper(H_SECRETS, {'uid': APP_UID, 'corti_keys': list(CORTI_KEYS), 'app_keys': list(APP_ENV_KEYS),
-                                    'db_keys': list(DB_ENV_KEYS)},
-                        mounts=[f'type=bind,src={ETC_DIR},dst=/target',
-                                f'type=bind,src={CORTI_SOURCE},dst=/source/credentials.env,readonly'],
-                        sensitive=True)
-    # The harness participants' credentials, after the set above and never part of it (HARNESS.md 8).
-    participants = participant_secrets()
-    states = ', '.join(f'{name} {entry["state"]}' for name, entry in participants.items())
-    # Then the interpreter's (AMENDMENT-2 1.11, D14): the Fable participant's file, which the run above copied - unread,
-    # by key name only - and nothing is copied again; the earlier interpreter's own key copy is only reported.
-    interpreter = interpreter_secrets(participants)
-    copied = ', '.join(f'{name} {entry["state"]} (the {entry["shared_with"]} participant\'s file)'
-                       for name, entry in interpreter.items())
+    result = run_helper(H_SECRETS, {'app_keys': list(APP_ENV_KEYS), 'db_keys': list(DB_ENV_KEYS)},
+                        mounts=[f'type=bind,src={ETC_DIR},dst=/target'], sensitive=True)
+    # The Fable coder's credentials, after the set above and never part of it (CODER: the participants' rules). Corti's
+    # source is no longer read and Astra's no longer copied; copies an earlier install wrote are left as they are, and
+    # the earlier interpreter's own key copy is only reported.
+    coding = coding_secrets()
+    states = ', '.join(f'{name} {entry["state"]}' for name, entry in coding.items())
     legacy = legacy_copy_state(helper_stat([LEGACY_INTERPRETER_COPY]))
-    return {'etc_dir': etc['etc_dir'], **result, 'participant_credentials': participants,
-            'interpreter_credentials': interpreter, 'legacy_interpreter_copy': legacy,
-            'summary': f'secrets {result["state"]}; participant credentials: {states}; interpreter credentials: '
-                       f'{copied}; values never left the helper'
+    return {'etc_dir': etc['etc_dir'], **result, 'coding_credentials': coding, 'legacy_interpreter_copy': legacy,
+            'summary': f'secrets {result["state"]}; coding credentials: {states}; values never left the helper'
                        + (f'; {legacy["note"]}' if legacy['state'] == 'present' else '')}
 
 
@@ -5758,49 +5773,43 @@ def extract_archive(data: bytes, destination: Path):
         os.chmod(directory, 0o755)
 
 
-# The image gate for the PDF reader (pypdf-r6 FC-4): the image reads one synthetic PDF through its own extraction child,
-# as the worker reads every upload, and the install is refused unless it reads as installed pypdf 6.21.2 reads it. The
-# PDF is the in-image guard for the layer's first patch (tests/support/pypdf_guards.py, 'a /BaseEncoding array'):
-# unpatched pypdf 6.21.4 reads its last line as U+FFFD at status ok, and a refusal of the layer
-# (studio/ingest/pypdf_compat.py) fails it with the refusal's reason in the result's engine. The other image gates
-# (manage check, the WSGI import) never start the child, so without this one a refusal would first show as the
-# worker's first PDF failing after the switch. Pinned: the guard's bytes and the reading measured on installed
-# 6.21.2 (c2e53f8e) and on this layer through the real child (pypdf-r7 repair).
-PDF_GATE_GUARD = 'a /BaseEncoding array'
-PDF_GATE_PDF_SHA256 = '940628eda1b0cfdbab1fa7bbd50b7b150620ae5cd0c4de450a25333e9e0cc48b'
-PDF_GATE_READING = {'status': 'ok', 'text_sha256': '1eaa26cb4899629de5e4965dc55c902f0d63aa4a0b66402e52324ef32bbf10c8'}
-PDF_GATE_SCRIPT = (
-    'import hashlib, importlib.util, json\n'
-    'from studio.ingest import Limits, extract_document\n'
-    "spec = importlib.util.spec_from_file_location('pypdf_guards', 'tests/support/pypdf_guards.py')\n"
-    'guards = importlib.util.module_from_spec(spec)\n'
-    'spec.loader.exec_module(guards)\n'
-    f'data = guards.GUARDS[{PDF_GATE_GUARD!r}][1]\n'
-    "result = extract_document(data, 'guard.pdf', 'application/pdf', ocr=None, limits=Limits(timeout_s=60))\n"
-    "print(json.dumps({'pdf_sha256': hashlib.sha256(data).hexdigest(), 'status': result.status,\n"
-    "                  'text_sha256': hashlib.sha256(result.text.encode('utf-8')).hexdigest(),\n"
-    "                  'messages': list(result.messages), 'engine': result.engine}))\n")
+# The image checks of the Fable coding build (DECISIONS D351-D353; the build specification, section 11), run with the
+# other image gates' options (as the image's own user, on its read-only root, without a network). The image reads no
+# PDF and runs no OCR now (the coding step sends the original file), so the earlier PDF gate and OCR version checks are
+# gone. Two checks replace them:
+#   soffice   LibreOffice converts an uploaded DOCX to PDF (`soffice --headless --convert-to pdf`, in a bounded child):
+#             `soffice --version` must run and name LibreOffice; its version line is reported in the receipt, never
+#             pinned (Debian's package moves with the pinned base image). HOME is the container's tmpfs, so a profile it
+#             may want is written nowhere else.
+#   anthropic the official SDK the coder sends through must import and be exactly the pinned release
+#             (ANTHROPIC_SDK_VERSION; requirements.txt pins the same): another one would send differently than the
+#             build was proven with.
+# A failure of either refuses the image, with what the command printed in the failure log.
+ANTHROPIC_SDK_VERSION = '2.11.0'
+ANTHROPIC_SDK_SCRIPT = 'import anthropic; print(anthropic.__version__)'
 
 
-def pdf_reading_gate(smoke, image_id) -> dict:
-    """The image's reading of the guard PDF (PDF_GATE_*), run with the other image gates' ``smoke`` options: as the
-    image's own user, on its read-only root, without a network. Refuses the install unless it is installed 6.21.2's."""
-    done = docker(*smoke, '--entrypoint', 'python', image_id, '-c', PDF_GATE_SCRIPT, check=False, timeout=120)
-    try:
-        reading = json.loads(done.stdout.decode('utf-8', 'replace').strip().splitlines()[-1])
-        if not isinstance(reading, dict):
-            raise ValueError('not an object')
-    except (ValueError, IndexError) as exc:
-        raise InstallError(f'The image could not read the guard PDF through its extraction child (exit '
-                           f'{done.returncode}, {type(exc).__name__}); its PDF reader would fail every upload.',
-                           output=(done.stdout + done.stderr)[-8192:]) from None
-    found = {'pdf_sha256': reading.get('pdf_sha256'), 'status': reading.get('status'),
-             'text_sha256': reading.get('text_sha256')}
-    if done.returncode or found != {'pdf_sha256': PDF_GATE_PDF_SHA256, **PDF_GATE_READING}:
-        raise InstallError('The image does not read the guard PDF as the PDF reader was checked to read it (pypdf '
-                           f'6.21.2\'s reading): measured {found}, messages {reading.get("messages")}, engine '
-                           f'{reading.get("engine")}.', details={'pdf_reading': reading})
-    return reading
+def image_soffice(smoke, image_id) -> str:
+    """The image's `soffice --version` line (image checks above); refuses unless it ran and names LibreOffice."""
+    done = docker(*smoke, '-e', 'HOME=/tmp', '--entrypoint', 'soffice', image_id, '--version', check=False,
+                  timeout=120)
+    named = [line.strip() for line in done.stdout.decode('utf-8', 'replace').splitlines()
+             if line.strip().startswith('LibreOffice ')]
+    if done.returncode or not named:
+        raise InstallError(f'The image cannot run `soffice --version` (exit {done.returncode}), so every Word upload '
+                           'would fail its conversion.', output=(done.stdout + done.stderr)[-8192:])
+    return named[0]
+
+
+def image_anthropic(smoke, image_id) -> str:
+    """The anthropic SDK release the image imports (image checks above); refuses unless it is ANTHROPIC_SDK_VERSION."""
+    done = docker(*smoke, '--entrypoint', 'python', image_id, '-c', ANTHROPIC_SDK_SCRIPT, check=False, timeout=120)
+    lines = [line.strip() for line in done.stdout.decode('utf-8', 'replace').splitlines() if line.strip()]
+    found = lines[-1] if lines else ''
+    if done.returncode or found != ANTHROPIC_SDK_VERSION:
+        raise InstallError(f'The image does not import anthropic {ANTHROPIC_SDK_VERSION} (exit {done.returncode}, '
+                           f'printed {found[:40]!r}).', output=(done.stdout + done.stderr)[-8192:])
+    return found
 
 
 def phase_image(ctx) -> dict:
@@ -5837,25 +5846,19 @@ def phase_image(ctx) -> dict:
         raise InstallError('The built image does not carry the revision, label, user and release it must.')
     smoke = ['run', '--rm', '--pull=never', '--network', 'none', '--read-only', '--tmpfs', '/tmp',
              '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--no-healthcheck']
-    languages = docker(*smoke, '--entrypoint', 'tesseract', image['Id'], '--list-langs').stdout.decode().split()
-    tesseract = docker(*smoke, '--entrypoint', 'tesseract', image['Id'], '--version').stdout.decode().splitlines()[0]
-    pdftoppm = docker(*smoke, '--entrypoint', 'pdftoppm', image['Id'], '-v')
     check = docker(*smoke, '-e', 'CPT_STUDIO_SECRET_KEY=image-smoke-check-only', image['Id'], 'manage', 'check',
                    '--fail-level', 'ERROR', check=False, timeout=120)
     # Loading the WSGI application runs the middleware, which reads every static
     # file: as the image's own user on a read-only root, exactly as the web role.
     wsgi = docker(*smoke, '-e', 'CPT_STUDIO_SECRET_KEY=image-smoke-check-only', '--entrypoint', 'python',
                   image['Id'], '-c', 'import cptstudio.wsgi', check=False, timeout=120)
-    if 'eng' not in languages or check.returncode or wsgi.returncode:
-        raise InstallError('The image lacks English OCR data, fails Django system checks, or cannot load the '
-                           'web application as its own user.',
-                           output=(check.stdout + check.stderr + wsgi.stdout + wsgi.stderr)[-8192:])
-    pdf_reading = pdf_reading_gate(smoke, image['Id'])
+    if check.returncode or wsgi.returncode:
+        raise InstallError('The image fails Django system checks, or cannot load the web application as its own '
+                           'user.', output=(check.stdout + check.stderr + wsgi.stdout + wsgi.stderr)[-8192:])
+    office = image_soffice(smoke, image['Id'])
+    sdk = image_anthropic(smoke, image['Id'])
     return {'image_id': image['Id'], 'tag': tag, 'base': base, 'size_bytes': image.get('Size'),
-            'source_archive_sha256': sha256(archive), 'build_log': build_log, 'tesseract': tesseract,
-            'tesseract_languages': [item for item in languages if item in ('eng', 'osd')],
-            'pdftoppm': (pdftoppm.stdout + pdftoppm.stderr).decode().splitlines()[0],
-            'pdf_reading': pdf_reading,
+            'source_archive_sha256': sha256(archive), 'build_log': build_log, 'soffice': office, 'anthropic': sdk,
             'migrations': {'baseline': f'{ROLLING_BASELINE:04d}', 'after_baseline': migrations},
             'summary': f'built {tag} = {image["Id"][:19]}'}
 
@@ -5891,19 +5894,27 @@ def phase_db(ctx) -> dict:
     return details
 
 
-def pair_modes(mode, participants=None, interpreter=None) -> str:
+def pair_modes(mode, participants=None, interpreter=None, coding=None) -> str:
     """'provider live, astra disabled, fable live': how the pair was started; ', interpreter live' follows when the
-    caller names the interpreter's mode (``interpreter``)."""
+    caller names the interpreter's mode (``interpreter``), and ', coding live' when it names the Fable coder's
+    (``coding``)."""
     return ', '.join([f'provider {mode}'] + [f'{name} {(participants or {}).get(name) or "disabled"}'
                                              for name in PARTICIPANTS]
-                     + ([f'interpreter {interpreter}'] if interpreter is not None else []))
+                     + ([f'interpreter {interpreter}'] if interpreter is not None else [])
+                     + ([f'coding {coding}'] if coding is not None else []))
 
 
-def after_swap_failure(image_id, mode, states, error, parked, participants=None, interpreter=None) -> str:
+def coding_summary(mode) -> str:
+    """'coding live, effort max': how an app phase starts its pair (the Fable coding build runs no other provider)."""
+    return f'coding {mode}, effort {CODING_EFFORT}'
+
+
+def after_swap_failure(image_id, mode, states, error, parked) -> str:
     """The receipt of an app phase stopped once its new pair runs (refutation p2, install2:2): whether the stored list
-    states were recomputed (``states``, RECOMPUTE_STATES' answer, or None), what stopped it, and what is left to do."""
+    states were recomputed (``states``, RECOMPUTE_STATES' answer, or None), what stopped it, and what is left to do.
+    ``mode``: the coding mode the pair runs with."""
     cause = str(error) or type(error).__name__
-    running = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants, interpreter)}), but '
+    running = f'web and worker running {image_id[:19]} ({coding_summary(mode)}), but '
     back = 'or, to go back, run --phase rollback-app, then rename the parked pair back.'
     if states is None:
         if any((parked or {}).values()):
@@ -5914,119 +5925,15 @@ def after_swap_failure(image_id, mode, states, error, parked, participants=None,
             f'previous pair (*-previous) could not be removed ({cause}): remove what is left of it by hand; ' + back)
 
 
-def access_receipt(stdout: bytes):
-    """The access check's JSON receipt - its whole stdout, else its last non-empty line - as a JSON object, or None."""
-    text = stdout.decode('utf-8', 'replace').strip()
-    for candidate in (text, text.splitlines()[-1] if text else ''):
-        try:
-            value = json.loads(candidate)
-        except ValueError:
-            continue
-        if isinstance(value, dict):
-            return value
-    return None
-
-
-def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) -> dict:
-    """``manage participant_access_check --participant <name>`` sends real requests to the participant's vendor
-    ('corti', 'astra' or 'fable'): one coding request for Corti, after its OAuth token request, and for Astra or Fable one
-    run of the pipeline's tool loop, one request
-    per exchange and at most PARTICIPANT_MAX_EXCHANGES. So it runs only with --access-check, once the new pair runs. A one-shot with the
-    worker's mount and network for that participant: its credentials file read-only at the worker's path and
-    cpt-studio-net, that participant live under the authorization the worker has, every other one disabled. What the
-    container wrote is recorded (its JSON receipt here; its stdout and the last 8 KiB of its stderr in a log) only once
-    a root helper found no credential value in it (credential_free). {ok, exit, recorded, receipt, log, problem}.
-
-    A check that exits non-zero is reported by what its output says (refutation round 5, sends-1), never by its exit
-    status alone and never with a cause the installer does not know: its receipt's error, else the last non-empty line
-    of its stderr, each scanned with the rest and repeated only whole and only up to 300 characters (otherwise named,
-    never cut). Only the end of stderr is kept and scanned, so a line that began before it is never taken for a whole
-    one.
-
-    It is asked to wait for the installation-wide provider lock (ACCESS_CHECK_WAIT_FLAG; AMENDMENT-2 1.11
-    [R:cost-F-COST-8]): the new worker may be in a reading's send, which holds that lock for up to the interpreter's
-    send deadline, and the check waits that out (the deadline plus 60 s) before it would refuse, inside
-    ACCESS_CHECK_SECONDS."""
-    if name == 'corti':
-        environment = runtime_env('live', authorization_ref, credentials=True)
-        files = {'credentials': True}
-    else:
-        environment = runtime_env('disabled', authorization_ref, participants={name: 'live'})
-        files = {'participant_files': (name,)}
-    try:
-        command = ['manage', 'participant_access_check', ACCESS_CHECK_WAIT_FLAG, '--participant', name]
-        result = oneshot(image_id, command, env_bytes, network=NETWORK, environment=environment,
-                         timeout=ACCESS_CHECK_SECONDS, **files)
-    except InstallError as error:  # it did not finish: whether its request reached the vendor is not known
-        return {'ok': False, 'recorded': False, 'problem': f'{error} Whether its request reached the vendor is not '
-                                                           'known; nothing it wrote was recorded.'}
-    stdout, stderr = result.stdout, result.stderr[-8192:]
-    entry = {'ok': False, 'exit': result.returncode, 'recorded': False}
-    if len(stdout) > ACCESS_CHECK_OUTPUT_LIMIT:
-        return {**entry, 'problem': f'it wrote more than {ACCESS_CHECK_OUTPUT_LIMIT} bytes; nothing it wrote was '
-                                    'recorded.'}
-    if not credential_free([stdout, stderr], [name]):
-        return {**entry, 'problem': 'what it wrote carries a value from its credentials file, or that could not be '
-                                    'told; nothing it wrote was recorded.'}
-    receipt = access_receipt(stdout)
-    entry.update(recorded=True, receipt=receipt, log=ctx.log(f'access-check-{name}', stdout + stderr))
-    if result.returncode:
-        limit = 300
-        error = receipt.get('error') if receipt is not None else None
-        error = error.strip() if isinstance(error, str) else ''
-        pieces = stderr.decode('utf-8', 'replace').split('\n')
-        cut = len(result.stderr) > len(stderr)
-        if cut and result.stderr[-len(stderr) - 1:-len(stderr)] != b'\n':
-            pieces = pieces[1:]  # the end of a line that began before what was kept: never taken for a whole line
-        lines = [piece.strip() for piece in pieces if piece.strip()]
-        if error:
-            said = (f'its receipt says: {error}' if len(error) <= limit
-                    else f"its receipt's error is longer than {limit} characters, so it is not repeated here.")
-        elif lines:
-            said = (f'the last line of text on its stderr says: {lines[-1]}' if len(lines[-1]) <= limit
-                    else f'the last line of text on its stderr is longer than {limit} characters, so it is not '
-                         'repeated here.')
-        elif cut:
-            said = 'only the end of its stderr was kept, with no whole line of text in it, so no line is repeated here.'
-        else:
-            said = ('there is no text on its stderr.' if receipt is not None
-                    else 'there is no JSON receipt and no text on its stderr.')
-        entry['problem'] = f'it exited {result.returncode}, and {said}'
-    elif receipt is None:
-        entry['problem'] = 'its output was not one JSON receipt.'
-    else:
-        entry['ok'] = True
-    return entry
-
-
-def access_check_failure(image_id, mode, participants, states, checks, error=None) -> str:
-    """The receipt of an app phase whose pair is installed and whose access check did not pass, or stopped. A check
-    that did not pass is named with what its output says (participant_access_check's problem), and no cause is added
-    to it (refutation round 5, sends-1: every failure was told to fix the credentials or the vendor account, beside a
-    receipt recording that the vendor had answered and CPT Studio had stopped the loop, or a refusal that sent
-    nothing)."""
-    done = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants)}), the stored list states ' \
-           f'recomputed ({len((states or {}).get("changed") or {})} changed) and the previous pair removed, but '
-    if error is not None:
-        cause = str(error) or type(error).__name__
-        return (done + f'the access check stopped ({cause}) after {", ".join(checks) or "none"}: the pair stays '
-                'installed; run --phase app again with --access-check to check again.')
-    failed = {name: check.get('problem', '') for name, check in checks.items() if not check.get('ok')}
-    return (done + 'the access check did not pass for ' + '; '.join(f'{name} ({problem})'
-                                                                  for name, problem in failed.items())
-            + ' The pair stays installed with those participants live. Under access_checks, this phase\'s receipt '
-              'records each check and, where what it wrote was recorded, its JSON receipt (if it wrote one) and the '
-              'path of its log. Once the cause is known, run --phase app again with --access-check, or install with '
-              'that participant disabled.')
-
-
-def check_credential_files(mode, live, interpreter='disabled'):
-    """Every credentials file a live provider, participant or interpreter needs, before anything changes: a missing
-    participant source leaves no file, and that participant is installed disabled or not at all (HARNESS.md 8); a live
-    interpreter needs the file the secrets phase copied (design/FINAL.md 13)."""
+def check_credential_files(mode, live, interpreter='disabled', coding='disabled'):
+    """Every credentials file a live provider, participant, interpreter or Fable coder needs, before anything changes:
+    a missing source leaves no file, and its holder is installed disabled or not at all (HARNESS.md 8); a live
+    interpreter or coder needs the file the secrets phase copied (design/FINAL.md 13; CODER). An app phase names the
+    coder alone; a switch-back names the previous pair's modes."""
     wanted = (([CORTI_TARGET] if mode == 'live' else []) + [PARTICIPANTS[name]['target'] for name in live]
-              + ([INTERPRETER['target']] if interpreter == 'live' else []))
-    found = helper_stat(wanted) if wanted else {}
+              + ([INTERPRETER['target']] if interpreter == 'live' else [])
+              + ([CODER['target']] if coding == 'live' else []))
+    found = helper_stat(list(dict.fromkeys(wanted))) if wanted else {}
     if mode == 'live':
         target = found[CORTI_TARGET]
         if target != {'exists': True, 'kind': 'file', 'uid': APP_UID, 'gid': APP_UID, 'mode': '0o400'}:
@@ -6042,9 +5949,14 @@ def check_credential_files(mode, live, interpreter='disabled'):
         raise InstallError(f'--interpreter-mode live: {INTERPRETER["target"]} is not the {APP_UID}:{APP_UID} 0400 file '
                            f'the secrets phase copies from {INTERPRETER["source"]}; nothing was changed. Place the '
                            'source and run --phase secrets first.')
+    if coding == 'live' and found[CODER['target']] != {'exists': True, 'kind': 'file', 'uid': APP_UID, 'gid': APP_UID,
+                                                       'mode': '0o400'}:
+        raise InstallError(f'--coding-mode live: {CODER["target"]} is not the {APP_UID}:{APP_UID} 0400 file the '
+                           f'secrets phase copies from {CODER["source"]}; nothing was changed. Place the source and '
+                           'run --phase secrets first.')
 
 
-def check_credential_parsing(image_id, env, mode, live, interpreter='disabled'):
+def check_credential_parsing(image_id, env, mode, live, interpreter='disabled', coding='disabled'):
     """The application's own loaders read each live credentials file in ``image_id``, in the worker's mount layout,
     with no network: format and permissions only, before anything changes."""
     if mode == 'live':
@@ -6074,22 +5986,33 @@ def check_credential_parsing(image_id, env, mode, live, interpreter='disabled'):
             raise InstallError(f'The application cannot load {INTERPRETER["target"]} as mounted for the worker '
                                '(--interpreter-mode live; format and permissions only; nothing was sent or changed).',
                                output=output if credential_free([output], [INTERPRETER['name']]) else b'')
+    if coding == 'live':
+        # And the live Fable coder's (CODER): its own loader, the coder itself disabled; its error is kept only once a
+        # root helper found no value from the file in it.
+        parsed = oneshot(image_id, ['manage', 'shell', '-c', CODING_CREDENTIALS_CHECK], env, network='none',
+                         coding_file=True, timeout=120)
+        if parsed.returncode or b'coding-credentials-parse-ok' not in parsed.stdout:
+            output = parsed.stderr[-2048:]
+            raise InstallError(f'The application cannot load {CODER["target"]} as mounted for the worker '
+                               '(--coding-mode live; format and permissions only; nothing was sent or changed).',
+                               output=output if credential_free([output], [CODER['name']]) else b'')
 
 
 def phase_app(ctx) -> dict:
-    mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
-    modes = participant_modes(ctx.args)
-    live = [name for name in PARTICIPANTS if modes[name] == 'live']
-    interpreter = interpreter_mode(ctx.args)  # design/FINAL.md 13: --interpreter-mode; disabled when not given
-    access = bool(getattr(ctx.args, 'access_check', None))
+    """The Fable coding build's app phase (DECISIONS D351-D353): the new pair runs the Fable coder in the mode
+    --coding-mode gives (live on the live install, under --authorization-ref) and every earlier provider disabled -
+    Corti, the participants and the interpreter - so the Anthropic copy is the only credentials file it requires, and
+    its worker alone mounts it. Everything else is as it always was: the migration, the reads before the switch, the
+    blue/green replacement and the recompute of the stored list states. No access check: nothing is sent."""
+    mode, reference = coding_mode(ctx.args), ctx.args.authorization_ref or ''
     if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{ctx.revision}:{reference}'],
                          check=False).returncode:
         raise InstallError('--authorization-ref is not a file tracked at the revision.')
     image_id = installed_image(ctx)
     require_db()
-    check_credential_files(mode, live, interpreter)
+    check_credential_files('disabled', [], coding=mode)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
-    check_credential_parsing(image_id, env, mode, live, interpreter)
+    check_credential_parsing(image_id, env, 'disabled', [], coding=mode)
     migrate = oneshot(image_id, ['migrate'], env)
     migrate_log = ctx.log('migrate', migrate.stdout + migrate.stderr)
     if migrate.returncode:
@@ -6114,37 +6037,30 @@ def phase_app(ctx) -> dict:
     # Amendment 1, 9.5: the install counts, read-only, before the switch, printed into this receipt - never a refusal.
     counts = install_counts(image_id, env)
     try:
-        return _app_after_counts(ctx, image_id, env, mode, reference, modes, interpreter, access, live, migrate_log,
-                                 unrunnable, v1, counts)
+        return _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnable, v1, counts)
     except InstallError as error:  # the receipt of a failure after the read carries the counts too
         if error.details is None or isinstance(error.details, dict):
             error.details = {**(error.details or {}), 'install_counts': counts}
         raise
 
 
-def _app_after_counts(ctx, image_id, env, mode, reference, modes, interpreter, access, live, migrate_log, unrunnable,
-                      v1, counts) -> dict:
-    """phase_app once the target is known to hold no design v1 row and the install counts are read: the replacement,
-    the recompute of the stored list states and the opt-in access checks, as they always were."""
-    # The interpreter's mode is named only when it is not the default, as swap_services leaves WEB_PORT to
-    # wait_service: a stand-in of replace_services keeps the six arguments it always had.
-    services = replace_services(ctx, image_id, env, mode, reference, modes,
-                                **({'interpreter': interpreter} if interpreter != 'disabled' else {}))
-    # ADJUDICATION P-7: the verify one-shot counts legacy-engine assessments made since the NEW WORKER started - S4 of a
-    # blue/green switch, the worker's start of a swap - never since the install began (until S2 the old worker runs).
-    # 'given': whether --interpreter-mode was given at all - verify reports an interpreter left disabled only because it
-    # was not (the review of S14, finding 2: FINAL 13's install is live, and a disabled mode pauses every upload's
-    # reading, 11.2).
-    steps = services.get('steps') if isinstance(services.get('steps'), dict) else {}
-    interpreting = {'mode': interpreter, 'given': getattr(ctx.args, 'interpreter_mode', None) is not None,
-                    'credentials_loaded': interpreter == 'live',
-                    'worker_started_at': steps.get('S4') or services.get('worker_started_at')}
+def _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnable, v1, counts) -> dict:
+    """phase_app once the target is known to hold no design v1 row and the install counts are read: the replacement
+    and the recompute of the stored list states, as they always were."""
+    # The coder's mode is named only when it is not the default, as swap_services leaves WEB_PORT to wait_service: a
+    # stand-in of replace_services keeps the six arguments it always had. Corti, the participants and the interpreter
+    # are started disabled (replace_services' defaults).
+    services = replace_services(ctx, image_id, env, 'disabled', reference, None,
+                                **({'coding': mode} if mode != 'disabled' else {}))
+    coding = {'mode': mode, 'effort': CODING_EFFORT, 'credentials_loaded': mode == 'live',
+              'figures': coding_figures()}
     # Refutation p1, migrate-2: the stored list states are recomputed with this revision's derivation (RECOMPUTE_STATES)
     # - once this pair has replaced the old one, never before, so a failure path restores the old pair over the states
-    # it derived. Blue/green (I-state): only once the drained old web has stopped too (switch_services' S5). Nothing is refused for it (round-7c8 skeptic, sk:2: refusing while an outcome was unknown also refused
-    # a same-revision re-run - a provider-mode switch during an incident - and the reinstall the failure path's receipt
-    # asks for, until a member reconciled on the running web: a released, paid send, and on a restored older web one
-    # its own rules make). Nothing is sent.
+    # it derived. Blue/green (I-state): only once the drained old web has stopped too (switch_services' S5). Nothing is
+    # refused for it (round-7c8 skeptic, sk:2: refusing while an outcome was unknown also refused a same-revision re-run
+    # - a mode switch during an incident - and the reinstall the failure path's receipt asks for, until a member
+    # reconciled on the running web: a released, paid send, and on a restored older web one its own rules make).
+    # Nothing is sent.
     # Refutation p2, install2:2: and before the parked pair is removed (retire_parked), so the documented recovery for a
     # parked pair left in place (a `docker rm` that fails, an installer interrupted) finds them recomputed; whatever
     # stops this phase once the new pair runs - the recompute, the removal, a Ctrl-C - leaves a receipt that says
@@ -6156,29 +6072,13 @@ def _app_after_counts(ctx, image_id, env, mode, reference, modes, interpreter, a
         states = app_script(image_id, env, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
         retire_parked(parked)
     except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
-        raise InstallError(after_swap_failure(image_id, mode, states, error, parked, modes, interpreter),
-                           details={**services, 'states_recomputed': states, 'interpreter': interpreting}) from error
-    # Opt-in, last: each live participant - Corti too, when the provider is live (checklist 1.3: all three) - is
-    # checked once with real requests (participant_access_check), never without the flag.
-    checks, checked = None, (['corti'] if mode == 'live' else []) + live
-    if access:
-        checks = {}
-        try:
-            for name in checked:
-                checks[name] = participant_access_check(ctx, image_id, env, name, reference)
-        except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
-            raise InstallError(access_check_failure(image_id, mode, modes, states, checks, error),
-                               details={**services, 'states_recomputed': states, 'access_checks': checks}) from error
-        if not all(check['ok'] for check in checks.values()):
-            raise InstallError(access_check_failure(image_id, mode, modes, states, checks),
-                               details={**services, 'states_recomputed': states, 'access_checks': checks})
-    return {'image_id': image_id, 'provider_mode': mode, 'authorization_ref': reference, 'participants': modes,
-            'participant_credentials_loaded': live, 'migrate_log': migrate_log, 'unrunnable_stages': unrunnable,
-            'states_recomputed': states, 'access_checks': checks if access else 'not run (no --access-check)',
-            **services, 'interpreter': interpreting, 'v1_rows': v1, 'install_counts': counts,
-            'summary': f'web and worker running {image_id[:19]} ({pair_modes(mode, modes, interpreter)})'
-                       + switched_summary(services) + '; no design v1 row' + counts_summary(counts)
-                       + (f'; access checked: {", ".join(checked)}' if access else '')}
+        raise InstallError(after_swap_failure(image_id, mode, states, error, parked),
+                           details={**services, 'states_recomputed': states, 'coding': coding}) from error
+    return {'image_id': image_id, 'coding': coding, 'authorization_ref': reference, 'migrate_log': migrate_log,
+            'unrunnable_stages': unrunnable, 'states_recomputed': states, **services, 'v1_rows': v1,
+            'install_counts': counts,
+            'summary': f'web and worker running {image_id[:19]} ({coding_summary(mode)})'
+                       + switched_summary(services) + '; no design v1 row' + counts_summary(counts)}
 
 
 def switched_summary(services) -> str:
@@ -6196,10 +6096,11 @@ def phase_switch_back(ctx) -> dict:
     removed; after a same-revision re-run, the pair switch_back_target reads, DECISIONS D83), by the blue/green switch
     in reverse. rollback-app's checks run first and refuse, stopping nothing, while
     this revision recorded what an older revision would act on, or show, wrongly (undo_hazards). ``--provider-mode``,
-    the participant modes and ``--interpreter-mode`` are the previous pair's, as its own app phase was given them (a
-    revision before the Gemini migration has no interpreter: leave it disabled; one before AMENDMENT-2 has no Fable
-    adapter, so its interpreter's loader check fails live: give it disabled or replay). What this revision made from
-    event
+    the participant modes, ``--interpreter-mode`` and ``--coding-mode`` are the previous pair's, as its own app phase
+    was given them (a revision before the Gemini migration has no interpreter: leave it disabled; one before AMENDMENT-2
+    has no Fable adapter, so its interpreter's loader check fails live: give it disabled or replay; one before the Fable
+    coding build has no coder, so its coder's loader check fails live: give --coding-mode disabled). What this revision
+    made from event
     inventories is never a refusing reason: the receipt declares it in a note and the switch goes on (ADJUDICATION
     P-1). DECISIONS D59, D65, D82, D95 and D110: it refuses only on encounters with a record created since
     replaced_since's time - the earliest time recorded by the app receipt the pair is read from and by every app
@@ -6210,6 +6111,7 @@ def phase_switch_back(ctx) -> dict:
     modes = participant_modes(ctx.args)
     live = [name for name in PARTICIPANTS if modes[name] == 'live']
     interpreter = interpreter_mode(ctx.args)
+    coding = coding_mode(ctx.args)  # disabled unless given: a pair before the Fable coding build reads none
     # D83: the receipt the target is read from - the newest successful app receipt, or after a same-revision re-run the
     # newest since the last switch-back naming another revision whose image is present - and the since is read from it
     entry, prev_image, prev_revision = switch_back_target(ctx, require_receipt_entry(ctx, 'app'))
@@ -6227,9 +6129,9 @@ def phase_switch_back(ctx) -> dict:
         raise InstallError(f'The site is not served by this revision\'s web through its HTTPS stage, so there is '
                            'nothing to switch back from; nothing was changed.', details={'plan': plan})
     preflight = require_receipt(ctx, 'preflight')
-    check_credential_files(mode, live, interpreter)
+    check_credential_files(mode, live, interpreter, coding)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
-    check_credential_parsing(prev_image, env, mode, live, interpreter)
+    check_credential_parsing(prev_image, env, mode, live, interpreter, coding)
     since = replaced_since(ctx, entry)  # D59, D82: the touched filter's since, read once for every check of this phase
     reads = target_reads(prev_image, env, stage_kinds_of(prev_image, env))
     hazards = switch_back_hazards(undo_hazards(image_id, env, ctx.revision), reads,
@@ -6244,13 +6146,14 @@ def phase_switch_back(ctx) -> dict:
                            details={'hazards': hazards, 'touched_since': since.isoformat()})
     services = switch_back_services(ctx, image_id, env, prev_image, prev_revision, mode, reference, modes,
                                     preflight=preflight, plan=plan, interpreter=interpreter, reads=reads,
-                                    touched_since=since)
+                                    touched_since=since, **({'coding': coding} if coding != 'disabled' else {}))
     availability = services.get('availability') or {}
     note = (services.get('interpretation') or {}).get('note')
+    named = pair_modes(mode, modes, interpreter, coding if coding != 'disabled' else None)
     return {'image_id': image_id, 'previous': {'image': prev_image, 'revision': prev_revision},
             'provider_mode': mode, 'authorization_ref': reference, 'participants': modes,
-            'interpreter_mode': interpreter, **services,
-            'summary': f'switched back to {prev_revision[:12]} ({pair_modes(mode, modes, interpreter)}) on '
+            'interpreter_mode': interpreter, 'coding_mode': coding, **services,
+            'summary': f'switched back to {prev_revision[:12]} ({named}) on '
                        f'{plan["idle"]}: {availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')}
 
@@ -6364,7 +6267,8 @@ def replaced_since(ctx, entry) -> dt.datetime:
 
 
 def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, provider_mode, authorization_ref,
-                         participants, *, preflight, plan, interpreter=None, reads=None, touched_since=None) -> dict:
+                         participants, *, preflight, plan, interpreter=None, reads=None, touched_since=None,
+                         coding=None) -> dict:
     """The switch in reverse, never stopping the serving web first:
 
       B2  start the previous revision's web, INCOMING_WEB, on the idle port; health_ok for ITS revision; smoke_web
@@ -6434,7 +6338,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
     try:
         step('B2')
         docker('run', '-d', *service_args('web', prev_image, prev_revision, provider_mode, authorization_ref,
-                                          participants, name=INCOMING_WEB, port=idle, interpreter=interpreter),
+                                          participants, name=INCOMING_WEB, port=idle, interpreter=interpreter,
+                                          **({'coding': coding} if coding else {})),
                input=env_bytes, quiet=True)
         started['web'] = wait_service('web', prev_revision, prev_image, name=INCOMING_WEB, port=idle)
         record['smoke'] = smoke_web(idle)
@@ -6484,7 +6389,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         put_back.append(put_back_states(closes['second'], prev_image, image_id, env_bytes))
         step('B8')
         docker('run', '-d', *service_args('worker', prev_image, prev_revision, provider_mode, authorization_ref,
-                                          participants, interpreter=interpreter), input=env_bytes, quiet=True)
+                                          participants, interpreter=interpreter,
+                                          **({'coding': coding} if coding else {})), input=env_bytes, quiet=True)
         started['worker'] = wait_service('worker', prev_revision, prev_image)
         step('B9')
         retire_parked(parked)
@@ -6885,20 +6791,6 @@ for username in P['usernames']:
                        'actor_kind': user.actor_kind, 'active': user.is_active}
 print(ANSWER + json.dumps({'accounts': found}))
 '''
-# The reassess phase's read of each named encounter's jobs, before and after `manage reassess_retained`.
-REASSESS_JOBS = '''
-from studio import models
-found = {}
-for pk in P['encounters']:
-    encounter = models.Encounter.objects.filter(pk=pk).first()
-    if encounter is None:
-        found[pk] = None
-        continue
-    found[pk] = {'state': encounter.state,
-                 'jobs': [[str(job.pk), job.kind, job.state, job.idempotency_key]
-                          for job in models.Job.objects.filter(encounter_id=pk).order_by('created_at', 'pk')]}
-print(ANSWER + json.dumps({'encounters': found}))
-'''
 
 
 def operator_document(ctx, username, kind, password) -> dict:
@@ -7037,62 +6929,6 @@ def phase_operators(ctx) -> dict:
             'operator_credentials': f'{ETC_DIR}/{OPERATOR_CREDENTIALS}', 'agent_credentials': str(OPS_AGENT_CREDENTIALS),
             'summary': 'operator accounts ' + ', '.join(f'{username} {state}' for username, state in outcome.items())
                        + '; granted and read back as operators with no membership'}
-
-
-def phase_reassess(ctx) -> dict:
-    """Re-assess the named encounters from what is already recorded (ops/INSTALL.md, reassess): for each, in its own
-    one-shot of this revision's image (provider disabled), the application's command `manage reassess_retained
-    --encounter <id> --tag <revision>`, which queues the re-assessment of the retained responses and never sends;
-    `--dry-run` is passed through. Each encounter's jobs are read before and after (REASSESS_JOBS), so the receipt
-    names the jobs that appeared as measured, not as said; a dry run after which one appeared fails the phase."""
-    encounters, dry = list(ctx.args.encounter), bool(ctx.args.dry_run)
-    # The worker makes the re-assessment, so the participants it must read are the worker's: this revision's app
-    # receipt names the modes its pair runs with. The one-shot below runs with every participant disabled, and the
-    # command would otherwise compare the final's participants with that (refusing every harness encounter).
-    app = require_receipt(ctx, 'app')
-    modes = (app.get('details') or {}).get('participants')
-    if not isinstance(modes, dict) or not all(isinstance(mode, str) for mode in modes.values()):
-        raise InstallError("This revision's app receipt names no participant modes; nothing was re-assessed.")
-    running = sorted(name for name, mode in modes.items() if mode != 'disabled')
-    image_id = installed_image(ctx)
-    require_db()
-    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
-    pending = oneshot(image_id, ['manage', 'migrate', '--check'], env, timeout=120)
-    if pending.returncode:
-        raise InstallError(f'This revision\'s migrations are not all applied (manage migrate --check exited '
-                           f'{pending.returncode}): run --phase app first. Nothing was re-assessed.')
-    before = app_script(image_id, env, REASSESS_JOBS, {'encounters': encounters},
-                        what='Reading the named encounters\' jobs')['encounters']
-    missing = [pk for pk in encounters if before.get(pk) is None]
-    if missing:
-        raise InstallError(f'{len(missing)} named encounter(s) do not exist ({", ".join(missing)}); nothing was '
-                           're-assessed.')
-    results = {}
-    for number, pk in enumerate(encounters, start=1):
-        command = (['manage', 'reassess_retained', '--encounter', pk, '--tag', ctx.revision,
-                    '--participants', ','.join(running) or 'none'] + (['--dry-run'] if dry else []))
-        result = oneshot(image_id, command, env, timeout=REASSESS_SECONDS)
-        log = ctx.log(f'reassess-{number:02d}', result.stdout + result.stderr)
-        results[pk] = {'exit': result.returncode, 'log': log, 'receipt': access_receipt(result.stdout),
-                       'output': result.stdout.decode('utf-8', 'replace').strip()[-2000:]}
-        if result.returncode:
-            done = [key for key in results if key != pk]
-            raise InstallError(f'reassess_retained for {pk} failed (exit {result.returncode}); see {log}. '
-                               + (f'It ran before for {", ".join(done)}.' if done else 'It ran for no encounter before.'),
-                               details={'encounters': results})
-    after = app_script(image_id, env, REASSESS_JOBS, {'encounters': encounters},
-                       what='Reading the named encounters\' jobs again')['encounters']
-    for pk in encounters:
-        known = {job[0] for job in before[pk]['jobs']}
-        results[pk].update(jobs_appeared=[job for job in (after.get(pk) or {}).get('jobs', []) if job[0] not in known],
-                           state_before=before[pk]['state'], state_after=(after.get(pk) or {}).get('state'))
-    appeared = sum(len(entry['jobs_appeared']) for entry in results.values())
-    if dry and appeared:
-        raise InstallError(f'A dry run was followed by {appeared} new job(s) on the named encounters; read them in '
-                           'this receipt.', details={'encounters': results})
-    return {'tag': ctx.revision, 'dry_run': dry, 'participants': running, 'encounters': results,
-            'summary': f'reassess_retained {"(dry run) " if dry else ""}for {len(encounters)} encounter(s): '
-                       f'{appeared} job(s) appeared'}
 
 
 def acme_probe(ctx, label) -> dict:
@@ -7310,45 +7146,6 @@ def other_lineages(le: dict) -> tuple:
             set(le['live']) - {DOMAIN})
 
 
-# Verify's one-shot of the D22 report (design/FINAL.md 13; DECISIONS D22; ADJUDICATION P-7): `manage
-# interpretation_report --since <the new worker's start> --self-test --json` in this revision's image, the interpreter
-# disabled as in every one-shot (a one-shot's mode is its own, so the worker's is read from the worker's configuration).
-# Nothing is written or sent. Every check of its self-test named here must have run and passed - one that ran fewer
-# checks proves less than it says - and the hold state is reported beside it, never judged here (a standing hold is the
-# operator's to release, with `manage interpreter_hold --release`). AMENDMENT-2 8.5 and section 9: 'model constant'
-# is the report's comparison of interpretation.MODEL_V3, fable_adapter.MODEL and fable_adapter.ENDPOINT with the
-# written-out report.D275_MODEL and report.D275_ENDPOINT (and the dormant Gemini adapter's with D13_MODEL and
-# FINAL_ENDPOINT), each with its literal, never with each other; the installer requires it run and passed, by name.
-INTERPRETATION_SELF_TEST = ('sentinel installed', 'deny set as pinned', 'positive control', 'positive control trips',
-                            'model constant', 'no new-path legacy execution recorded',
-                            'every new-path assessment carries its record', 'no sentinel trip',
-                            'no legacy-engine assessment')
-INTERPRETATION_REPORT_SECONDS = 180
-INTERPRETATION_REPORT_LIMIT = 1024 * 1024  # bytes of the report's JSON that are read; more is refused, never cut
-
-
-def worker_mode_of(container: Any, variable: Any) -> str | None:
-    """The mode ``container`` was started with in ``variable`` (a mode variable: CPT_STUDIO_GEMINI_MODE, or a
-    participant's CPT_STUDIO_<NAME>_MODE), read from Docker's record of its environment, and nothing else of that record
-    is read out (the env-file's values are there too). None when it names none, or more than one."""
-    env = ((container or {}).get('Config') or {}).get('Env') or []
-    found = [entry.split('=', 1)[1] for entry in env if isinstance(entry, str) and entry.startswith(variable + '=')]
-    return found[0] if len(found) == 1 else None
-
-
-def worker_interpreter_mode(container: Any) -> str | None:
-    """The interpreter mode ``container`` was started with: its one CPT_STUDIO_GEMINI_MODE (worker_mode_of)."""
-    return worker_mode_of(container, INTERPRETER['mode_env'])
-
-
-def holds_interpreter_key(container) -> bool:
-    """Whether ``container`` holds the interpreter's credentials file, read-only, at the worker's path."""
-    return any(mount.get('Type') == 'bind'
-               and (mount.get('Source'), mount.get('Destination'), mount.get('RW'))
-               == (INTERPRETER['target'], INTERPRETER['mounted'], False)
-               for mount in (container or {}).get('Mounts') or [])
-
-
 def utc_moment(value):
     """An ISO 8601 date and time with its offset ('Z' or '+00:00') as an aware datetime; None otherwise."""
     try:
@@ -7356,134 +7153,6 @@ def utc_moment(value):
     except ValueError:
         return None
     return moment if moment.tzinfo is not None and moment.utcoffset() is not None else None
-
-
-def interpretation_evidence(ctx, image_id, worker) -> tuple:
-    """(evidence, problems) of verify's D22 one-shot. Its window starts at the newest successful app receipt's
-    new-worker start (ADJUDICATION P-7: S4 of a blue/green switch, the worker's start of a swap - never the install's
-    start: the old worker runs until S2, and its legacy assessments are not this revision's). The worker's interpreter
-    mode must be the one that receipt installed, which is disabled only where --interpreter-mode said so (FINAL 13: the
-    install uses live). The interpreter's key is the Fable participant's file (AMENDMENT-2 1.11), so the worker must
-    hold it whenever its interpreter or that participant is live, and a bind is reported only when neither is
-    [R:replay-R3]: a worker with the participant live and the interpreter disabled or replayed holds it rightly, and
-    verifies clean (D14's rule, the key in the worker only, is unchanged). A worker that names no interpreter mode and
-    holds no key but the live participant's, with no app receipt of this revision beside it, is no pair this installer
-    started (every pair it starts names one): there is nothing of the interpreter to read, and the evidence says so.
-    With an app receipt, or a worker that names a mode or holds the key for no live holder, every missing piece is a
-    problem."""
-    app = latest_receipt(ctx.receipts, 'app', ctx.revision)
-    mode = worker_interpreter_mode(worker)
-    sharing = worker_mode_of(worker, PARTICIPANTS[INTERPRETER_SHARES]['mode_env'])
-    evidence = {'worker_mode': mode, 'worker_holds_key': holds_interpreter_key(worker),
-                'key_shared_with': {INTERPRETER_SHARES: sharing}}
-    if app is None:
-        if mode is None and (not evidence['worker_holds_key'] or sharing == 'live'):
-            return ({**evidence, 'self_test': 'not run',
-                     'summary': 'interpretation self-test not run: the worker names no interpreter mode and no app '
-                                'receipt of this revision names its new worker'}, [])
-        return ({**evidence, 'self_test': 'not run', 'summary': 'interpretation self-test not run'},
-                ["no successful app receipt of this revision names its new worker's start, so the interpretation "
-                 'self-test was not read (ADJUDICATION P-7)'])
-    installed = (app.get('details') or {}).get('interpreter') or {}
-    since = installed.get('worker_started_at')
-    evidence.update(app_mode=installed.get('mode'), app_mode_given=installed.get('given'), since=since)
-    problems = []
-    if mode != installed.get('mode'):
-        problems.append(f"the worker's interpreter mode is {mode or 'not named'}, but the app phase installed "
-                        f"{installed.get('mode') or 'none'}")
-    # The review of S14, finding 2: FINAL 13's install is live, and its D22 evidence shows "mode live". Disabled is the
-    # default when --interpreter-mode is not given - as in the app command ops/INSTALL.md documents - and it pauses
-    # every upload's reading (FINAL 11.2), so an installation left so by default is not verified; one given disabled
-    # is the operator's choice. A receipt that does not say whether it was given is read as not given.
-    if installed.get('mode') == 'disabled' and installed.get('given') is not True:
-        problems.append('the app phase installed the interpreter disabled only because --interpreter-mode was not '
-                        "given, so every upload's reading is paused (design/FINAL.md 11.2; the install uses live, "
-                        'FINAL 13): rerun --phase app with --interpreter-mode live, or with --interpreter-mode '
-                        'disabled to keep it paused')
-    # AMENDMENT-2 1.11 [R:replay-R3]: the shared file is expected whenever the interpreter or the participant whose file
-    # it is is live, and a bind is reported only when neither is
-    if mode == 'live' and not evidence['worker_holds_key']:
-        problems.append(f"the live interpreter's worker does not hold {INTERPRETER['target']} read-only")
-    elif sharing == 'live' and not evidence['worker_holds_key']:
-        problems.append(f"the worker of the live {INTERPRETER_SHARES} participant does not hold "
-                        f"{INTERPRETER['target']} read-only")
-    if mode != 'live' and sharing != 'live' and evidence['worker_holds_key']:
-        problems.append(f'the worker holds {INTERPRETER["target"]}, but neither its interpreter nor the '
-                        f'{INTERPRETER_SHARES} participant is live')
-    asked = utc_moment(since) if isinstance(since, str) else None
-    if asked is None:
-        problems.append("the app receipt names no new worker's start, so the interpretation self-test was not read "
-                        '(ADJUDICATION P-7)')
-        return {**evidence, 'self_test': 'not run', 'summary': f'interpreter {mode}: self-test not run'}, problems
-    result = oneshot(image_id, ['manage', 'interpretation_report', '--since', since, '--self-test', '--json'],
-                     read_protected_env(APP_ENV, APP_ENV_KEYS), timeout=INTERPRETATION_REPORT_SECONDS)
-    evidence.update(exit=result.returncode, log=ctx.log('interpretation-report', result.stdout + result.stderr[-8192:]))
-    parsed = None
-    if len(result.stdout) <= INTERPRETATION_REPORT_LIMIT:
-        try:
-            parsed = json.loads(result.stdout.decode('utf-8'))
-        except (UnicodeDecodeError, ValueError):
-            parsed = None
-    report = parsed.get('report') if isinstance(parsed, dict) else None
-    test = parsed.get('self_test') if isinstance(parsed, dict) else None
-    checks = test.get('checks') if isinstance(test, dict) else None
-    if not (isinstance(report, dict) and isinstance(checks, list)
-            and all(isinstance(check, dict) and isinstance(check.get('name'), str) for check in checks)):
-        problems.append(f'the interpretation report did not answer its JSON report and self-test (exit '
-                        f'{result.returncode}); see {evidence["log"]}')
-        return {**evidence, 'self_test': 'unread', 'summary': f'interpreter {mode}: self-test unread'}, problems
-    evidence.update(self_test=test, report=report)
-    named = {check['name']: check for check in checks}
-    missing = [name for name in INTERPRETATION_SELF_TEST if name not in named]
-    failed = [check for check in checks if check.get('ok') is not True]
-    if missing:
-        problems.append('the interpretation self-test did not run: ' + ', '.join(missing))
-    if failed:
-        problems.append('the interpretation self-test failed: ' + '; '.join(
-            f'{check["name"]} ({check.get("detail")})' for check in failed))
-    if test.get('passed') is not True and not failed:
-        problems.append('the interpretation self-test did not say it passed')
-    if result.returncode and not failed:
-        problems.append(f'the interpretation report exited {result.returncode}; see {evidence["log"]}')
-    # design v2 (FINAL-V2 5.7 measures 1-3; step 6a's request R6): the RETIRED kind is read too - armed, its size its
-    # pin, its positive control ok - from the report's own sentinel record (this one-shot's sentinel.status()); its
-    # probe trips through 'positive control trips', whose ok needs sentinel.trip_test's retired_tripped since step 6a
-    retired = retired_problems(report.get('sentinel'))
-    problems += retired
-    evidence['retired'] = {key: (report.get('sentinel') or {}).get(key) if isinstance(report.get('sentinel'), dict)
-                           else None for key in ('retired_size', 'pinned_retired_size', 'retired_control',
-                                                 'retired_armed', 'retired_modules')}
-    window = utc_moment((report.get('window') or {}).get('since'))
-    if window != asked:
-        problems.append(f'the interpretation report read from {window.isoformat() if window else "an unnamed time"}, '
-                        f'not from the new worker\'s start ({since})')
-    hold = report.get('hold') if isinstance(report.get('hold'), dict) else {}
-    standing = [item.get('reason') for item in hold.get('standing') or [] if isinstance(item, dict)]
-    held = (f'standing ({", ".join(sorted(set(map(str, standing))))})' if hold.get('held') else
-            'none standing' if hold.get('held') is False else 'not read')
-    passed = not (missing or failed or result.returncode or retired) and test.get('passed') is True
-    evidence['summary'] = (f'interpreter {mode}: self-test {"passed" if passed else "FAILED"} '
-                           f'({len(INTERPRETATION_SELF_TEST) - len(missing)} of {len(INTERPRETATION_SELF_TEST)} checks '
-                           f'run; the retired kind {"as pinned" if not retired else "NOT as pinned"}) since the new '
-                           f'worker started ({since}); interpreter hold {held}')
-    return evidence, problems
-
-
-def retired_problems(found) -> list:
-    """Design v2 (FINAL-V2 5.7 measures 1-3; step 6a's request R6): what is wrong with the RETIRED kind in the D22
-    report's sentinel record ``found`` (sentinel.status() of the report's process): [] when it is armed, its size equals
-    its pin (RETIRED_SIZE) and its positive control passed. A record that does not say is wrong, never read as fine."""
-    if not isinstance(found, dict):
-        return ['the interpretation report carries no sentinel record, so the retired kind was not read']
-    problems = []
-    size, pinned = found.get('retired_size'), found.get('pinned_retired_size')
-    if not (type(size) is int and type(pinned) is int and pinned > 0 and size == pinned):
-        problems.append(f'the retired kind holds {size!r} code objects, pinned {pinned!r} (FINAL-V2 5.7 measure 1)')
-    if found.get('retired_control') != 'ok':
-        problems.append(f'the retired kind\'s positive control is {found.get("retired_control")!r}, not ok (5.7 measure 3)')
-    if found.get('retired_armed') is not True:
-        problems.append('the retired kind is not armed in the report\'s process (5.7 measure 2)')
-    return problems
 
 
 def phase_verify(ctx) -> dict:
@@ -7545,17 +7214,12 @@ def phase_verify(ctx) -> dict:
     if foreign:
         problems.append(f'uid {APP_UID} now runs {foreign} task(s) outside CPT Studio')
     appeared = sorted(set(now) - set(preflight['containers']) - {DB_CONTAINER, *SERVICES.values()})
-    # The D22 evidence (design/FINAL.md 13; ADJUDICATION P-7): the interpreter's mode as the worker was started with it,
-    # and the interpretation report's self-test since the new worker started.
-    interpreting, interpretation_problems = interpretation_evidence(ctx, image_id, pair.get('worker'))
-    problems += interpretation_problems
     details = {'evidence': evidence, 'containers_appeared_elsewhere': appeared, 'image_id': image_id,
-               'web_port': port, 'interpretation': interpreting}
+               'web_port': port}
     if problems:
         raise InstallError(f'verify found {len(problems)} difference(s): ' + '; '.join(problems) + '.',
                            details={**details, 'problems': problems})
-    return {**details, 'summary': f'installed {ctx.revision[:12]} verified; co-tenants and app.quillmd.com unchanged; '
-                                  + interpreting['summary']}
+    return {**details, 'summary': f'installed {ctx.revision[:12]} verified; co-tenants and app.quillmd.com unchanged'}
 
 
 def keep_layout(ctx):
@@ -8037,7 +7701,7 @@ def phase_rollback_vhost(ctx) -> dict:
 PHASES = {
     'preflight': phase_preflight, 'secrets': phase_secrets, 'image': phase_image, 'db': phase_db,
     'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'license-note': phase_license_note,
-    'provision': phase_provision, 'operators': phase_operators, 'reassess': phase_reassess,
+    'provision': phase_provision, 'operators': phase_operators,
     'http-vhost': phase_http_vhost, 'cert': phase_cert, 'https-vhost': phase_https_vhost,
     'verify': phase_verify, 'switch-back': phase_switch_back, 'rollback-app': phase_rollback_app,
     'rollback-vhost': phase_rollback_vhost,

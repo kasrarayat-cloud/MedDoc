@@ -1,5 +1,6 @@
 """Offline tests of the blue/green install (ops/install.py switch_services and phase_switch_back; ops/INSTALL.md app,
-switch-back), the availability record, the drain, the port-aware vhost phases, and the operators and reassess phases.
+switch-back), the availability record, the drain, the port-aware vhost phases, and the operators phase (the reassess
+phase went with the Fable coding build, DECISIONS D351).
 No Docker, sudo, nginx, database (but the marked in-image script tests) or network: the host guard of test_install
 refuses every one of them.
 
@@ -390,6 +391,8 @@ class BlueGreenWorld:
         if command[:2] == ['manage', 'shell'] and command[-1] == install.INTERPRETER_CREDENTIALS_CHECK:
             return self.done(SimpleNamespace(
                 returncode=0, stdout=f'{install.INTERPRETER["name"]}-credentials-parse-ok\n'.encode(), stderr=b''))
+        if command[:2] == ['manage', 'shell'] and command[-1] == install.CODING_CREDENTIALS_CHECK:
+            return self.done(SimpleNamespace(returncode=0, stdout=b'coding-credentials-parse-ok\n', stderr=b''))
         return self.done(SimpleNamespace(returncode=0, stdout=b'corti-credentials-parse-ok\n', stderr=b''))
 
     def rendered_vhosts(self, revision, port=install.WEB_PORT):
@@ -437,8 +440,8 @@ class BlueGreenWorld:
 
 
 def app_args(tmp, **extra):
-    values = dict(phase='app', revision=REVISION, receipts=str(tmp), provider_mode='disabled', authorization_ref='',
-                  astra_mode='disabled', fable_mode='disabled', access_check=None)
+    """An app phase's arguments (the Fable coding build: --coding-mode and --authorization-ref)."""
+    values = dict(phase='app', revision=REVISION, receipts=str(tmp), coding_mode='disabled', authorization_ref='')
     values.update(extra)
     return SimpleNamespace(**values)
 
@@ -623,7 +626,7 @@ class SuccessPathTests(TemporaryDirectoryTest):
             patcher.start()
         try:
             code = install.main(['--phase', 'app', '--revision', REVISION, '--receipts', str(receipts),
-                                 '--provider-mode', 'disabled'])
+                                 '--coding-mode', 'disabled'])
         finally:
             for patcher in reversed(patches):
                 patcher.stop()
@@ -1517,7 +1520,6 @@ class SwitchBackTests(TemporaryDirectoryTest):
 # --- the new phases' arguments -------------------------------------------------------------------------------------------
 
 ENCOUNTER = '5f0c2a1e-8b9d-4c3e-a7f6-0123456789ab'
-ENCOUNTER_2 = '6a1d3b2f-9cae-4d4f-b807-123456789abc'
 
 
 class ArgumentTestCase(unittest.TestCase):
@@ -1549,10 +1551,12 @@ class SwitchBackArgumentTests(ArgumentTestCase):
         self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--access-check')
 
 
-class OperatorsAndReassessArgumentTests(ArgumentTestCase):
+class OperatorsArgumentTests(ArgumentTestCase):
     def test_the_phases_are_in_the_table(self):
-        for phase, function in (('operators', install.phase_operators), ('reassess', install.phase_reassess)):
-            self.assertIs(install.PHASES[phase], function)
+        self.assertIs(install.PHASES['operators'], install.phase_operators)
+        # the Fable coding build has no reassess phase: its command, reassess_retained, read the retained responses of
+        # the removed deterministic layer (DECISIONS D351)
+        self.assertNotIn('reassess', install.PHASES)
 
     def test_operators_takes_only_reset_passwords(self):
         self.assertIsNone(self.parse('--phase', 'operators').reset_passwords)
@@ -1560,25 +1564,6 @@ class OperatorsAndReassessArgumentTests(ArgumentTestCase):
         for extra in (('--owner-username', 'owner'), ('--provider-mode', 'disabled'), ('--encounter', ENCOUNTER)):
             with self.subTest(extra=extra):
                 self.refused('--phase', 'operators', *extra)
-
-    def test_reassess_takes_one_to_twenty_distinct_encounter_ids_and_dry_run(self):
-        args = self.parse('--phase', 'reassess', '--encounter', ENCOUNTER, '--encounter', ENCOUNTER_2, '--dry-run')
-        self.assertEqual((args.encounter, args.dry_run), ([ENCOUNTER, ENCOUNTER_2], True))
-        self.assertIn('needs at least one --encounter', self.refused('--phase', 'reassess'))
-        self.assertIn('must not repeat', self.refused('--phase', 'reassess', '--encounter', ENCOUNTER, '--encounter',
-                                                      ENCOUNTER))
-        for value in (ENCOUNTER.upper(), ENCOUNTER[:-1], 'effe4d0b b449', '../x', ENCOUNTER + ';'):
-            with self.subTest(value=value):
-                self.assertIn('is not a lowercase encounter id', self.refused('--phase', 'reassess', '--encounter',
-                                                                             value))
-        many = []
-        for index in range(install.REASSESS_LIMIT + 1):
-            many += ['--encounter', f'00000000-0000-4000-8000-{index:012d}']
-        self.assertIn('at most 20', self.refused('--phase', 'reassess', *many))
-        for phase in ('app', 'verify', 'operators'):
-            with self.subTest(phase=phase):
-                self.refused('--phase', phase, '--dry-run')
-                self.refused('--phase', phase, '--encounter', ENCOUNTER)
 
 
 # --- the operators phase ------------------------------------------------------------------------------------------------
@@ -1752,126 +1737,13 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
                 self.run_phase(reset=True)
 
     def test_the_in_image_scripts_compile_and_never_print_a_password(self):
-        for body in (install.OPERATOR_ACCOUNTS, install.OPERATOR_CHECK, install.REASSESS_JOBS):
+        for body in (install.OPERATOR_ACCOUNTS, install.OPERATOR_CHECK):
             compile(install.APP_SCRIPT_PRELUDE.format(payload='e30=', answer=install.APP_SCRIPT_ANSWER) + body,
                     'script', 'exec')
         self.assertNotIn('print(password', install.OPERATOR_ACCOUNTS)
         self.assertIn('user.memberships.exists()', install.OPERATOR_ACCOUNTS)
         self.assertNotIn('Membership', install.OPERATOR_ACCOUNTS)  # it never creates one
         self.assertIn('from studio.operator import is_operator', install.OPERATOR_CHECK)
-
-
-# --- the reassess phase -------------------------------------------------------------------------------------------------
-
-class ReassessPhaseTests(TemporaryDirectoryTest):
-    def setUp(self):
-        super().setUp()
-        self.commands, self.reads = [], []
-        self.jobs = {ENCOUNTER: [['j1', 'assess', 'succeeded', 'k1']], ENCOUNTER_2: []}
-        self.queues = {ENCOUNTER: [['j2', 'assess', 'queued', 'k1:c:tag']], ENCOUNTER_2: [['j3', 'assess', 'queued',
-                                                                                         'k2:c:tag']]}
-        self.exit = {}
-        self.app_receipt({'astra': 'live', 'fable': 'live'})
-
-    def app_receipt(self, participants):
-        install.write_receipt(self.tmp, 'app', {'phase': 'app', 'ok': True, 'revision': REVISION,
-                                                'details': {'participants': participants}})
-
-    def app_script(self, image_id, env, body, params, **kwargs):
-        self.assertEqual(body, install.REASSESS_JOBS)
-        self.reads.append(list(params['encounters']))
-        return {'encounters': {pk: None if pk not in self.jobs else {'state': 'ready_for_review',
-                                                                    'jobs': list(self.jobs[pk])}
-                               for pk in params['encounters']}}
-
-    def oneshot(self, image_id, command, env, **kwargs):
-        self.commands.append((command, kwargs))
-        if command[:2] == ['manage', 'reassess_retained']:
-            pk = command[3]
-            if not self.exit.get(pk) and '--dry-run' not in command:
-                self.jobs[pk] += self.queues[pk]
-            return SimpleNamespace(returncode=self.exit.get(pk, 0), stdout=json.dumps({'queued': True}).encode(),
-                                   stderr=b'')
-        return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
-
-    def run_phase(self, encounters, dry=None):
-        ctx = install.Context(SimpleNamespace(phase='reassess', revision=REVISION, receipts=str(self.tmp),
-                                              encounter=encounters, dry_run=dry), self.tmp)
-        with mock.patch.multiple(install, installed_image=mock.Mock(return_value=IMAGE), require_db=mock.Mock(),
-                                 read_protected_env=mock.Mock(return_value=b''), app_script=self.app_script,
-                                 oneshot=self.oneshot):
-            return install.phase_reassess(ctx)
-
-    def test_each_named_encounter_is_reassessed_by_the_contract_and_its_new_jobs_are_measured(self):
-        details = self.run_phase([ENCOUNTER, ENCOUNTER_2])
-        self.assertEqual([command for command, _ in self.commands], [
-            ['manage', 'migrate', '--check'],
-            ['manage', 'reassess_retained', '--encounter', ENCOUNTER, '--tag', REVISION, '--participants', 'astra,fable'],
-            ['manage', 'reassess_retained', '--encounter', ENCOUNTER_2, '--tag', REVISION, '--participants',
-             'astra,fable']])
-        self.assertEqual(details['participants'], ['astra', 'fable'])
-        self.assertEqual(self.reads, [[ENCOUNTER, ENCOUNTER_2]] * 2)  # before and after
-        self.assertEqual(details['encounters'][ENCOUNTER]['jobs_appeared'], [['j2', 'assess', 'queued', 'k1:c:tag']])
-        self.assertEqual(details['encounters'][ENCOUNTER_2]['jobs_appeared'], [['j3', 'assess', 'queued', 'k2:c:tag']])
-        self.assertEqual(details['encounters'][ENCOUNTER]['receipt'], {'queued': True})
-        self.assertTrue(Path(details['encounters'][ENCOUNTER]['log']).exists())
-        self.assertEqual((details['tag'], details['dry_run']), (REVISION, False))
-        self.assertIn('2 job(s) appeared', details['summary'])
-        for command, kwargs in self.commands:
-            self.assertNotIn('environment', kwargs)  # the one-shot's default: provider and participants disabled
-
-    def test_a_dry_run_passes_the_flag_and_fails_when_a_job_appeared(self):
-        details = self.run_phase([ENCOUNTER], dry=True)
-        self.assertEqual(self.commands[1][0][-1], '--dry-run')
-        self.assertEqual(details['encounters'][ENCOUNTER]['jobs_appeared'], [])
-        self.jobs[ENCOUNTER].append(['j9', 'assess', 'queued', 'member'])  # someone else's, meanwhile
-        original = self.app_script
-        calls = []
-
-        def script(*args, **kwargs):
-            calls.append(1)
-            answer = original(*args, **kwargs)
-            if len(calls) == 1:
-                answer['encounters'][ENCOUNTER]['jobs'].pop()
-            return answer
-        self.app_script = script
-        with self.assertRaisesRegex(install.InstallError, 'A dry run was followed by 1 new job'):
-            self.run_phase([ENCOUNTER], dry=True)
-
-    def test_the_participants_are_the_app_receipt_s_and_none_without_a_receipt_runs_nothing(self):
-        # the worker's modes, from this revision's app receipt: the one-shot itself runs with every participant
-        # disabled, so the command is told whom the worker reads (a harness encounter was refused otherwise)
-        self.app_receipt({'astra': 'live', 'fable': 'disabled'})
-        self.run_phase([ENCOUNTER])
-        self.assertEqual(self.commands[1][0][-2:], ['--participants', 'astra'])
-        self.commands.clear()
-        self.app_receipt({'astra': 'disabled', 'fable': 'disabled'})
-        self.run_phase([ENCOUNTER_2])
-        self.assertEqual(self.commands[1][0][-2:], ['--participants', 'none'])
-        for receipt in self.tmp.glob('app-*'):
-            receipt.unlink()
-        self.commands.clear()
-        with self.assertRaisesRegex(install.InstallError, 'No successful --phase app receipt'):
-            self.run_phase([ENCOUNTER])
-        self.assertEqual(self.commands, [])
-
-    def test_an_unknown_encounter_refuses_before_any_command_and_a_failure_says_what_ran(self):
-        with self.assertRaisesRegex(install.InstallError, 'do not exist'):
-            self.run_phase(['00000000-0000-4000-8000-000000000000'])
-        self.assertEqual([command[:2] for command, _ in self.commands], [['manage', 'migrate']])
-        self.commands.clear()
-        self.exit = {ENCOUNTER_2: 1}
-        with self.assertRaisesRegex(install.InstallError, f'failed \\(exit 1\\).*It ran before for {ENCOUNTER}'):
-            self.run_phase([ENCOUNTER, ENCOUNTER_2])
-
-    def test_it_refuses_while_this_revision_s_migrations_are_not_applied(self):
-        def pending(image_id, command, env, **kwargs):
-            self.commands.append((command, kwargs))
-            return SimpleNamespace(returncode=1, stdout=b'', stderr=b'')
-        self.oneshot = pending
-        with self.assertRaisesRegex(install.InstallError, 'run --phase app first'):
-            self.run_phase([ENCOUNTER])
-        self.assertEqual(self.reads, [])
 
 
 # --- the in-image scripts on a real database (CI's disposable PostgreSQL; skipped, never passed, without one) -----------
@@ -1935,23 +1807,6 @@ class OperatorAccountsOnTheDatabaseTests(DatabaseTest):
             run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, passwords), 'reset': True})
 
 
-class ReassessJobsOnTheDatabaseTests(DatabaseTest):
-    def test_the_jobs_of_each_named_encounter_in_order_and_none_for_an_unknown_one(self):
-        from django.utils import timezone
-        from studio import models
-        encounter = self.encounter('reassess')
-        for index, (kind, state) in enumerate((('extract', 'succeeded'), ('assess', 'queued'))):
-            models.Job.objects.create(encounter=encounter, revision=encounter.current_revision, kind=kind, state=state,
-                                      idempotency_key=f'synthetic-reassess-{index}',
-                                      deadline_at=timezone.now() + dt.timedelta(minutes=30))
-        missing = '00000000-0000-4000-8000-000000000000'
-        answer = run_in_image(install.REASSESS_JOBS, {'encounters': [str(encounter.pk), missing]})
-        found = answer['encounters'][str(encounter.pk)]
-        self.assertEqual([job[1:] for job in found['jobs']], [['extract', 'succeeded', 'synthetic-reassess-0'],
-                                                             ['assess', 'queued', 'synthetic-reassess-1']])
-        self.assertEqual(found['state'], encounter.state)
-        self.assertIsNone(answer['encounters'][missing])
-
 
 # --- what INSTALL.md says ---------------------------------------------------------------------------------------------------
 
@@ -1985,8 +1840,8 @@ class InstallDocTests(unittest.TestCase):
 
     def test_the_tables_name_the_ports_and_the_new_phases(self):
         self.says('`127.0.0.1:9150` or `127.0.0.1:9151` → 8000', self.said)
-        for row in ('| 9a | `operators` |', '| 9b | `reassess` |'):
-            self.says(row, self.said)
+        self.says('| 9a | `operators` |', self.said)
+        self.assertNotIn('`reassess`', self.said)  # the phase is gone (DECISIONS D351)
         self.says('ops-agent-credentials.json` (0600, top-level `username` and `password`)', self.said)
         self.says('`operator-credentials.json` (root 0600', self.said)
         self.assertEqual(str(install.OPS_AGENT_CREDENTIALS), '/home/claude/.cpt-studio/ops-agent-credentials.json')
@@ -2058,7 +1913,9 @@ def run_holding_the_key(world, phase, args):
 
 
 def live_app_args(tmp):
-    return app_args(tmp, interpreter_mode='live', authorization_ref=RULING)
+    """An app phase that installs the Fable coder live (DECISIONS D351-D353): its key is the same file, at the same
+    worker path, as the interpreter's (install.CODER), so KEY_MOUNT is the coder's bind too."""
+    return app_args(tmp, coding_mode='live', authorization_ref=RULING)
 
 
 def webs_never_hold_the_key(test, world):
@@ -2068,12 +1925,12 @@ def webs_never_hold_the_key(test, world):
 
 
 class InterpreterBlueGreenTests(TemporaryDirectoryTest):
-    """The REAL phase_app and phase_switch_back with the interpreter, on the fake host: its key reaches the new worker
-    alone, the switch is the one without it, the receipt names the new worker's start (P-7), and a switch-back declares
-    what was made from event inventories and goes on (P-1). The world's invariants held after every call, or the test
-    would have failed inside the fake."""
+    """The REAL phase_app with the Fable coder and phase_switch_back with the interpreter, on the fake host: the coder's
+    key reaches the new worker alone and the switch is the one without it; a switch-back declares what was made from
+    event inventories and goes on (P-1), and starts a previous pair that runs the interpreter with the mode it is given.
+    The world's invariants held after every call, or the test would have failed inside the fake."""
 
-    def test_a_live_interpreter_is_switched_in_with_its_key_in_the_new_worker_alone(self):
+    def test_a_live_coder_is_switched_in_with_its_key_in_the_new_worker_alone(self):
         world = BlueGreenWorld(self.tmp)
         details, error = run_holding_the_key(world, install.phase_app, live_app_args(self.tmp))
         self.assertIsNone(error, error and str(error))
@@ -2088,25 +1945,38 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
             ('recompute', IMAGE, 'all'), ('rm', WORKER + '-previous'), ('rm', WEB + '-previous')])     # S6
         self.assertEqual(world.names(), {WEB: (IMAGE, 9151, True), WORKER: (IMAGE, None, True)})
         worker, web = world.runs[WORKER], world.runs[NEXT]
-        self.assertEqual(flags(worker, '--mount')[-1], KEY_MOUNT)  # read-only, at the worker's path
+        self.assertEqual(install.coder_mount(), KEY_MOUNT)  # the coder's file is the interpreter's, at its path
+        self.assertEqual(flags(worker, '--mount')[-1], KEY_MOUNT)  # read-only, at the worker's path, once
+        self.assertEqual(flags(worker, '--mount').count(KEY_MOUNT), 1)
         webs_never_hold_the_key(self, world)
         for argv in (worker, web):  # the web is given the mode and the path, and no file
-            self.assertIn('CPT_STUDIO_GEMINI_MODE=live', flags(argv, '-e'))
-            self.assertIn(f'{KEY["file_env"]}={KEY["mounted"]}', flags(argv, '-e'))
-            self.assertIn('CPT_STUDIO_FABLE_MODE=disabled', flags(argv, '-e'))  # the participant as it was given
+            env = flags(argv, '-e')
+            self.assertIn('CPT_STUDIO_CODING_MODE=live', env)
+            self.assertIn('CPT_STUDIO_CODING_EFFORT=max', env)
+            self.assertIn(f'{install.CODER["file_env"]}={install.CODER["mounted"]}', env)
+            for name, value in install.coding_figures().items():
+                self.assertIn(f'{name}={value}', env)
+            # every earlier provider disabled, and no file of theirs named or mounted
+            for disabled in ('CPT_STUDIO_PROVIDER_MODE', 'CPT_STUDIO_GEMINI_MODE', 'CPT_STUDIO_ASTRA_MODE',
+                             'CPT_STUDIO_FABLE_MODE'):
+                self.assertIn(f'{disabled}=disabled', env)
+            self.assertFalse([item for item in env if item.startswith(('CPT_STUDIO_CORTI_CREDENTIALS_FILE=',
+                                                                       'CPT_STUDIO_OPENAI_CREDENTIALS_FILE='))])
+            self.assertFalse([item for item in env if item.startswith('CPT_STUDIO_QUESTION_')])
+        self.assertEqual(flags(worker, '--mount')[1:], [KEY_MOUNT])  # the files volume, then the coder's key alone
         # the loader read the copy offline in this revision's image, before migrate and before anything started
         image, command, kwargs = world.oneshots[0]
         self.assertEqual((image, command, kwargs),
-                         (IMAGE, ['manage', 'shell', '-c', install.INTERPRETER_CREDENTIALS_CHECK],
-                          {'network': 'none', 'interpreter_file': True, 'timeout': 120}))
+                         (IMAGE, ['manage', 'shell', '-c', install.CODING_CREDENTIALS_CHECK],
+                          {'network': 'none', 'coding_file': True, 'timeout': 120}))
         self.assertEqual(world.oneshots[1][1], ['migrate'])
         self.assertLess(world.events.index(('oneshot', ('manage', 'shell'))),
                         world.events.index(('run', 'web', NEXT, 9151, IMAGE)))
-        # P-7: verify's window starts where the new worker did (S4), never where the install began (S1)
-        self.assertEqual(details['interpreter'], {'mode': 'live', 'given': True, 'credentials_loaded': True,
-                                                  'worker_started_at': details['steps']['S4']})
+        self.assertEqual(details['coding'], {'mode': 'live', 'effort': 'max', 'credentials_loaded': True,
+                                             'figures': install.coding_figures()})
+        self.assertNotIn('interpreter', details)
         self.assertGreater(details['steps']['S4'], details['steps']['S1'])
-        self.assertIn('(provider disabled, astra disabled, fable disabled, interpreter live)', details['summary'])
+        self.assertIn('(coding live, effort max)', details['summary'])
 
     def test_without_its_installed_copy_the_install_refuses_before_anything_starts(self):
         world = BlueGreenWorld(self.tmp)
@@ -2120,11 +1990,11 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         finally:
             for patcher in reversed(patches):
                 patcher.stop()
-        self.assertIn(f'--interpreter-mode live: {KEY["target"]} is not the', str(caught.exception))
+        self.assertIn(f'--coding-mode live: {install.CODER["target"]} is not the', str(caught.exception))
         self.assertEqual(world.acts('run', 'stop', 'rename', 'vhost', 'oneshot', 'recorder'), [])
         self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
 
-    def test_ctrl_c_at_any_call_of_a_live_interpreters_install_is_never_swallowed_and_no_web_holds_the_key(self):
+    def test_ctrl_c_at_any_call_of_a_live_coders_install_is_never_swallowed_and_no_web_holds_the_key(self):
         clean = BlueGreenWorld(self.tmp)
         self.assertIsNone(run_holding_the_key(clean, install.phase_app, live_app_args(self.tmp))[1])
         total = clean.calls
@@ -2219,6 +2089,39 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         self.assertIn('interpreter live) on 9150', details['summary'])
 
 
+    def test_a_previous_pair_that_codes_is_started_with_the_coding_mode_it_is_given(self):
+        # a switch-back from a later Fable coding revision to an earlier one (DECISIONS D351-D353): --coding-mode is the
+        # previous pair's, as its own app phase was given it
+        world = self.switched_in()
+        args = switch_back_args(self.tmp, coding_mode='live', authorization_ref=RULING)
+        details, error = run_holding_the_key(world, install.phase_switch_back, args)
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(flags(world.runs[WORKER], '--mount')[-1], KEY_MOUNT)
+        self.assertEqual(flags(world.runs[WORKER], '--mount').count(KEY_MOUNT), 1)
+        webs_never_hold_the_key(self, world)
+        for argv in (world.runs[NEXT], world.runs[WORKER]):
+            self.assertIn('CPT_STUDIO_CODING_MODE=live', flags(argv, '-e'))
+            self.assertIn('CPT_STUDIO_GEMINI_MODE=disabled', flags(argv, '-e'))
+        # its loader check ran in the PREVIOUS pair's image, before anything was started
+        (image, command, kwargs), = [shot for shot in world.oneshots
+                                     if shot[1][-1] == install.CODING_CREDENTIALS_CHECK]
+        self.assertEqual((image, kwargs), (OLD_IMAGE, {'network': 'none', 'coding_file': True, 'timeout': 120}))
+        self.assertLess(world.events.index(('oneshot', ('manage', 'shell'))),
+                        world.events.index(('run', 'web', NEXT, 9150, OLD_IMAGE)))
+        self.assertEqual(details['coding_mode'], 'live')
+        self.assertIn('coding live) on 9150', details['summary'])
+
+    def test_a_previous_pair_before_the_coding_build_is_started_with_the_coder_disabled_and_no_key(self):
+        world = self.switched_in()
+        details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
+        self.assertIsNone(error, error and str(error))
+        for argv in (world.runs[NEXT], world.runs[WORKER]):
+            self.assertIn('CPT_STUDIO_CODING_MODE=disabled', flags(argv, '-e'))
+            self.assertNotIn(KEY_MOUNT, flags(argv, '--mount'))
+        self.assertEqual(details['coding_mode'], 'disabled')
+        self.assertNotIn('coding', details['summary'].split(' on ')[0])  # the summary names no mode it did not get
+
+
 class SwitchBackTargetTests(unittest.TestCase):
     """DECISIONS D51 (the S17 rollback test, D15 assertion 5): a switch-back refuses only on what this revision wrote
     that the revision it returns to would act on, or show, wrongly. A reason that revision reads - participants and
@@ -2300,8 +2203,9 @@ class SwitchBackSinceTests(TemporaryDirectoryTest):
         for patcher in patches:
             patcher.start()
         try:
-            code = install.main(['--phase', phase, '--revision', REVISION, '--receipts', str(self.receipts),
-                                 '--provider-mode', 'disabled'])
+            # an app phase names the coder's mode; a switch-back the previous pair's (here, Corti disabled)
+            modes = ['--coding-mode', 'disabled'] if phase == 'app' else ['--provider-mode', 'disabled']
+            code = install.main(['--phase', phase, '--revision', REVISION, '--receipts', str(self.receipts), *modes])
         finally:
             for patcher in reversed(patches):
                 patcher.stop()
