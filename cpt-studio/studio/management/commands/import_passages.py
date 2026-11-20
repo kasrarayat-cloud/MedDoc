@@ -2,7 +2,7 @@
 
     manage.py import_passages --data studio/reference/data/cms-ncci-policy-manual-2026-ch6.json
 
-The data files are studio/reference/data/*.json (studio/reference/passages.py describes them); ops/verify_passages.py
+The data files are studio/reference/data/*.json (studio/reference/passages.py describes them); ops/verify_passages.py (removed 2026-11-20 with the earlier PDF reader)
 proves their passages against the publishers' PDFs. A passage that quotes a CPT code description is never imported.
 Re-running with the same file is a no-op that says so; anything else under a loaded source's key, the same file under
 another key, and a window that overlaps a loaded source of the same kind are refused.

@@ -207,9 +207,13 @@ class ParticipantServiceArgumentTests(unittest.TestCase):
             compile(body, name, 'exec')
             self.assertIn(f'from studio.participants.credentials import {loader}\n', body)
             self.assertIn(f'{loader}(settings.{setting})\n', body)
-            # the setting the check reads is the one settings.py defines from the variable the installer sets
-            source = (APP_ROOT / 'cptstudio' / 'settings.py').read_text(encoding='utf-8')
+            # the setting the check reads is the one the EARLIER revision's settings.py defines from the variable the
+            # installer sets: these checks run only on a switch-back, inside that revision's image (skipped in a clone
+            # without that commit, as test_install.earlier_text says)
+            source = earlier_text('cptstudio/settings.py')
             self.assertIn(f"{setting} = _env('{setting}', '')", source)
+            # and the loader exists in that revision's studio/participants/credentials.py
+            self.assertIn(f'def {loader}(', earlier_text('studio/participants/credentials.py'))
             self.assertEqual(install.PARTICIPANTS[name]['file_env'], f'CPT_STUDIO_{setting}')
 
     def test_no_secret_name_or_value_is_ever_an_argument(self):

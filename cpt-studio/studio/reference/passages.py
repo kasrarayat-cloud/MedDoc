@@ -1,7 +1,7 @@
 """CMS reference passages: the data files, their import and their retrieval (HARNESS.md 5).
 
 A passage is verbatim CMS text: read from the publisher's PDF with pypdf, runs of whitespace collapsed to one space and
-nothing else changed. ops/verify_passages.py proves it again from the PDFs (the file's sha256 first, then every passage
+nothing else changed. ops/verify_passages.py (removed 2026-11-20 with the earlier PDF reader) proves it again from the PDFs (the file's sha256 first, then every passage
 on its own page). One JSON data file per source, in studio/reference/data/:
 
     {"source": {key, kind, publisher, title, release, url, sha256, retrieved_at, effective_start, effective_end,

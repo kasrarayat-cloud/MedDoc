@@ -368,7 +368,7 @@ def login_form(page: _Page, origin: str) -> tuple[list | None, list]:
 
 def session_checks(status: int | None, data, username: str, workspace: str) -> list[dict]:
     """The account the session serves: the credentials' username, a human account, a reviewer, an active
-    membership (studio/api.py session serves only an active one; serializers.session_json's can_review is
+    membership (studio/api.py session serves only an active one; customer.session_json's can_review is
     Membership.can_review, true only for an active owner or reviewer), in the named workspace."""
     read = status == 200 and isinstance(data, dict)
     data = data if read else {}

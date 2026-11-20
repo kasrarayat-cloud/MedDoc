@@ -20,16 +20,8 @@ from pypdf import PdfReader
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
-# This suite reads the PDFs generate.py renders with pypdf, in this process: pypdf 6.21.4 is read as 6.21.2 reads, as
-# the extraction child (studio/ingest/_child.py) and the tests package (tests/__init__.py) read it. CI discovers this
-# directory on its own, so the tests package never runs here (pypdf-r6 FC-1). The layer refuses, and this module
-# fails to import, when pypdf is not the proven 6.21.4.
-sys.path.insert(0, str(ROOT))
-try:
-    from studio.ingest import pypdf_compat as _pypdf_compat
-finally:
-    sys.path.remove(str(ROOT))
-_pypdf_compat.apply()
+# This suite reads the PDFs generate.py renders with plain pypdf (a test-only dependency in requirements-dev). The
+# service no longer reads PDFs at all: the coding review receives the original file.
 
 
 def _load(name, path):
@@ -41,15 +33,11 @@ def _load(name, path):
 
 
 generate = _load('cpt_verification_generate', HERE / 'generate.py')
-profiles = _load('cpt_verification_profiles', ROOT / 'studio' / 'gi' / 'profiles.py')
 
 MANIFEST_PATH = HERE / 'manifest.json'
 MANIFEST = json.loads(MANIFEST_PATH.read_text(encoding='utf-8'))
 DOCS = {d['id']: d for d in MANIFEST['documents']}
 CODE_TOKEN = re.compile(r'(?<![\w.-])(?:\d{5}|\d{4}[FTU])(?![\w-])')
-SERVICE_STATUSES = {'performed', 'incomplete', 'planned', 'historical', 'cancelled', 'negated', 'uncertain'}
-CONTEXT_FACTS = {'service_date', 'setting', 'billing_context', 'patient_status'}
-REQUIRED_FACTS = {fact for p in profiles.PROFILES.values() for fact in p.required_facts}
 
 
 def normalized(text):
@@ -131,67 +119,6 @@ class ManifestTests(unittest.TestCase):
                 expected = doc['author_expected_cpt']
                 self.assertIs(expected['adjudicated'], False)
                 self.assertTrue(expected['note'])
-
-    def test_family_slugs_exist_in_the_gi_profiles(self):
-        for doc in MANIFEST['documents']:
-            routing = doc['expected_routing']
-            slugs = set(routing['families']) | set(routing['not_performed'])
-            slugs |= {item['family'] for item in doc['must_not_code'] + doc['incomplete_services']}
-            if doc['review_plan']['reject']:
-                slugs.add(doc['review_plan']['reject']['family'])
-            with self.subTest(doc=doc['id']):
-                self.assertLessEqual(slugs, set(profiles.PROFILES))
-
-    def test_routing_expectations_use_the_contract_vocabulary(self):
-        for doc in MANIFEST['documents']:
-            for slug, family in doc['expected_routing']['families'].items():
-                with self.subTest(doc=doc['id'], family=slug):
-                    self.assertIn(family['presence'], {'required', 'optional'})
-                    self.assertLessEqual(set(family['status_in']), SERVICE_STATUSES)
-                    self.assertLessEqual(set(family.get('facts', {})), REQUIRED_FACTS)
-                    self.assertLessEqual(set(family.get('missing_includes', []) + family.get('missing_excludes', [])),
-                                         REQUIRED_FACTS)
-
-    def test_a_family_expected_performed_is_never_also_listed_not_performed(self):
-        for doc in MANIFEST['documents']:
-            routing = doc['expected_routing']
-            for slug in routing['not_performed']:
-                family = routing['families'].get(slug)
-                if family:
-                    with self.subTest(doc=doc['id'], family=slug):
-                        self.assertFalse({'performed', 'incomplete'} & set(family['status_in']))
-
-    def test_must_not_code_families_are_not_performed_or_are_held_for_clarification(self):
-        for doc in MANIFEST['documents']:
-            for item in doc['must_not_code']:
-                family = doc['expected_routing']['families'].get(item['family'])
-                with self.subTest(doc=doc['id'], family=item['family']):
-                    self.assertTrue(item['reason'])
-                    if family and 'performed' in family['status_in']:
-                        self.assertTrue(doc['expected_clarifications'])
-
-    def test_context_and_clarification_facts_use_known_names(self):
-        for doc in MANIFEST['documents']:
-            with self.subTest(doc=doc['id']):
-                self.assertLessEqual(set(doc['expected_context']), CONTEXT_FACTS)
-                facts = {item['fact'] for item in doc['expected_clarifications']}
-                self.assertLessEqual(facts, CONTEXT_FACTS | REQUIRED_FACTS)
-
-    def test_missing_information_note_expects_the_four_clarifications(self):
-        facts = {item['fact'] for item in DOCS['gi-07']['expected_clarifications']}
-        self.assertEqual(facts, {'service_date', 'setting', 'patient_status', 'em_basis'})
-        self.assertEqual(DOCS['gi-07']['upload']['service_date'], None)
-
-    def test_uploads_never_supply_a_service_date(self):
-        for doc in MANIFEST['documents']:
-            with self.subTest(doc=doc['id']):
-                self.assertIsNone(doc['upload']['service_date'])
-
-    def test_designated_rejections_name_a_profiled_family(self):
-        rejecting = {d['id']: d['review_plan']['reject'] for d in MANIFEST['documents'] if d['review_plan']['reject']}
-        self.assertEqual(set(rejecting), {'gi-03', 'gi-04', 'gi-08'})
-        for plan in rejecting.values():
-            self.assertTrue(plan['prefer_codes'] and plan['reason'])
 
 
 class ClassifyAndWrapTests(unittest.TestCase):
@@ -330,17 +257,6 @@ class GeneratedOutputTests(unittest.TestCase):
                 with self.subTest(doc=doc['id']):
                     self.assertEqual(self.output(doc['id']), (HERE / doc['source']).read_bytes())
 
-    def test_the_pdf_layer_reads_this_suites_pdfs(self):
-        # The PDFs below are read in this process with pypdf, as the extraction child reads them (pypdf-r6 FC-1).
-        sys.path.insert(0, str(ROOT))
-        try:
-            from studio.ingest import pypdf_compat
-        finally:
-            sys.path.remove(str(ROOT))
-        self.assertIsNotNone(pypdf_compat.applied(), 'pypdf is read here without the compatibility layer')
-        import pypdf._cmap
-        self.assertTrue(pypdf._cmap._parse_encoding.__code__.co_filename.startswith('<pypdf_compat '))
-
     def test_pdf_text_layer_reproduces_the_source(self):
         for doc in MANIFEST['documents']:
             if doc['delivery']['format'] == 'pdf':
@@ -385,7 +301,6 @@ class GeneratedOutputTests(unittest.TestCase):
             self.assertEqual(archive.infolist()[0].filename, '[Content_Types].xml')
 
 
-
 class NotUtf8DeliveryTests(unittest.TestCase):
     """The delivery the 2026-11-05 walk uses for the failure state: a .txt CPT Studio must refuse to read."""
 
@@ -397,22 +312,6 @@ class NotUtf8DeliveryTests(unittest.TestCase):
         with self.assertRaises(UnicodeDecodeError):
             rendered.decode('utf-8')
         self.assertEqual(generate.FORMATS['non-utf8-txt'], '.txt')
-
-    def test_cpt_studio_refuses_to_read_it(self):
-        # the product's own text reader (studio.ingest.text.extract_txt), loaded on its own: no Django needed
-        root = HERE.parent.parent
-        sys.path.insert(0, str(root))
-        try:
-            from studio.ingest import text as ingest_text
-            from studio.ingest.extract import Limits
-        except Exception as exc:  # pragma: no cover - the product package is not importable here
-            self.skipTest(f'studio.ingest is not importable: {exc}')
-        finally:
-            sys.path.remove(str(root))
-        source = (generate.BANNER + '\nColonoscopy report (fictional).\n').encode('ascii')
-        result = ingest_text.extract_txt(generate.RENDERERS['non-utf8-txt'](source, '', ''), Limits())
-        self.assertEqual((result.status, result.text, result.messages), ('failed', '', ('The text file is not valid UTF-8.',)))
-        self.assertEqual(ingest_text.extract_txt(source, Limits()).status, 'ok', 'the same source without the byte reads')
 
 
 if __name__ == '__main__':

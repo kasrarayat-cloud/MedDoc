@@ -1,6 +1,10 @@
 # Test and CI tooling only (never installed in the service image).
 # requirements-dev.txt pins these plus their dependencies on top of requirements.txt.
 -r requirements.txt
+# The test-document generator (ops/verification/generate.py) writes .docx files and its test reads the PDFs back;
+# the service itself reads neither format any more.
+python-docx==1.2.0
+pypdf==6.21.4
 pillow==13.0.0
 reportlab==4.5.1
 pip_audit==2.10.1

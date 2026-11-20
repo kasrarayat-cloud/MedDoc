@@ -1013,7 +1013,12 @@ async function verifyDocument(page, ctx, sessions, doc) {
   }
   if (enc) {
     await step('quotes', async () => {
-      // clicking a quote moves the viewer to its page (#page=N): one quote with a page, through the page itself
+      // clicking a quote moves the viewer to its page (#page=N): one quote with a page, through the page itself. Only a
+      // PDF view has pages to move to; a text view finds the passage instead, so the check applies to PDF views only.
+      if ((enc.document || {}).view_media_type !== 'application/pdf') {
+        add(skip('quotes.jump', 'the document is not viewed as a PDF'));
+        return;
+      }
       const paged = (enc.codes || []).flatMap(code => (code.quotes || []).map(quote => ({ code: code.code, page: quote?.page })))
         .find(quote => Number.isInteger(quote.page));
       if (!paged) {

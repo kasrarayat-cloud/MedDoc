@@ -905,8 +905,9 @@ test of the Gemini migration, the GI round-4 proof harness and the differential
 "what changed" check read the earlier pipeline's records, exports and code and
 were removed with their tests: the walk (`ops/walk.cjs`) scans every customer
 response, DOM text and download for the denylist and checks the exports.
-`ops/verify_passages.py` runs on the operator's host (no image) and needs pypdf,
-which the build removes from the image's requirements.
+`ops/verify_passages.py`, the host tool that re-proved the reference passages
+from the publishers' PDFs through the earlier PDF reader, was removed with that
+reader; the committed passage files and their import are unchanged.
 
 ## Reinstalling an older revision
 
