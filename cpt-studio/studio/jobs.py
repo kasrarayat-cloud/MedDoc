@@ -22,12 +22,14 @@ import time
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.db import IntegrityError, close_old_connections, connection, transaction
 from django.utils import timezone
 
 from . import audit, models, state
+from .storage import OriginalCorrupted, read_original, store_original
 from .fable import (BUSY, CEILING, CONVERT, DECLINED, DOCUMENT, FAILED, HOLD, STORAGE, TOO_LONG, UNAVAILABLE,
                     UNKNOWN, UNREADABLE)
 from .fable import client as fable_client
@@ -383,10 +385,11 @@ def _code(job, round_):
         _fail(round_, UNAVAILABLE)
     _live_gate(job, coder, round_.revision, round_)
     try:
-        document = fable_document.prepare(round_.revision)
+        document = fable_document.prepare(round_.revision, converter=_stored_conversion(round_))
     except fable_document.DocumentError as exc:
         log.info('round %s: the document was not sent (%s)', round_.pk, exc.detail or exc.failure_kind)
         _fail(round_, exc.failure_kind, text=exc.text)
+    _keep_view(round_, document, encounter)
     context = round_.context or {}
     reader_request = fable_client.build_request(system=prompts.READER_SYSTEM, document=document,
                                                 instruction=prompts.reader_instruction(context),
@@ -419,6 +422,47 @@ def _code(job, round_):
                  codes=len(combined['codes']), questions=len(combined['questions']))
     return {'round': str(round_.pk), 'reader_run': str(reader_run.pk), 'checker_run': str(checker_run.pk),
             'codes': len(combined['codes'])}
+
+
+def _stored_conversion(round_):
+    """For a Word document: a converter answering with the PDF a round of this revision already read and stored (the
+    newest), so a resumed round, and every later round of the revision, reads - and the customer's viewer shows - the
+    same pages; it converts afresh when that file can no longer be read back unchanged. None (convert) when no round
+    of the revision stored one."""
+    stored = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_storage_name__isnull=False)
+              .exclude(view_pdf_storage_name='').order_by('-number').first())
+    if stored is None:
+        return None
+
+    def reuse(data):
+        try:
+            return read_original(SimpleNamespace(storage_name=stored.view_pdf_storage_name,
+                                                 sha256=stored.view_pdf_sha256))
+        except (OriginalCorrupted, OSError):
+            log.warning('round %s: the stored conversion of round %s could not be read back; converting again',
+                        round_.pk, stored.pk)
+            return fable_document.convert_docx(data)
+    return reuse
+
+
+def _keep_view(round_, document, encounter):
+    """Record on ``round_`` the PDF a Word document was converted to, as it is sent (CodingRound.view_pdf_*): the file
+    an earlier round of the revision stored when the bytes are the same, else stored now (storage.store_original). A
+    failure to store is logged and coding goes on: the viewer then shows no page of a Word document."""
+    if document.kind != 'docx' or round_.view_pdf_sha256 == document.sha256:
+        return
+    same = (Round.objects.filter(revision_id=round_.revision_id, view_pdf_sha256=document.sha256,
+                                 view_pdf_storage_name__isnull=False).exclude(view_pdf_storage_name='')
+            .order_by('-number').first())
+    if same is not None:
+        name = same.view_pdf_storage_name
+    else:
+        try:
+            name, _digest, _size = store_original(encounter.workspace_id, document.data, 'converted.pdf')
+        except Exception:  # noqa: BLE001 - logged; the coding does not depend on the viewer's copy
+            log.exception('round %s: the converted PDF could not be stored for the viewer', round_.pk)
+            return
+    _update_round(round_, view_pdf_storage_name=name, view_pdf_sha256=document.sha256)
 
 
 def _reused(round_, purpose):
@@ -465,7 +509,8 @@ def _send(job, round_, purpose, request, coder):
     try:
         if standing_holds().exists():
             _fail(round_, HOLD)
-        worst = pricing.worst_case_usd(request.input_bytes, fable_client.MAX_TOKENS)
+        counted = _counted_input(coder, request)
+        worst = pricing.worst_case_usd(request.input_bytes, fable_client.MAX_TOKENS, input_tokens=counted)
         spent = spent_usd(round_.revision)
         if spent + worst > ceiling_usd():
             log.info('round %s: %s refused at the ceiling (spent %s, worst case %s)', round_.pk, purpose, spent, worst)
@@ -477,7 +522,8 @@ def _send(job, round_, purpose, request, coder):
             service_date=_service_date(round_), purpose=purpose, endpoint=coder.endpoint,
             requested_model=fable_client.MODEL,
             scope={'round': str(round_.pk), 'mode': coder.mode, 'effort': request.params['output_config']['effort'],
-                   'worst_usd': pricing.usd(worst), 'slot': slot})
+                   'worst_usd': pricing.usd(worst), 'worst_basis': 'count' if counted else 'bytes',
+                   'input_tokens_counted': counted, 'slot': slot})
         try:
             if _stop_requested(job, encounter):
                 run.state, run.error, run.finished_at = (Run.CANCELLED, 'Stopped before sending; nothing was sent.',
@@ -513,6 +559,20 @@ def _send(job, round_, purpose, request, coder):
                  http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms, purpose=purpose,
                  fallback=outcome.fallback)
     return run
+
+
+def _counted_input(coder, request):
+    """The request's input tokens by the coder's free token count (the live coder's, BUILD-SPEC 3.2), or None - the
+    spend check then estimates from the bytes. A replay or a test coder counts nothing."""
+    count = getattr(coder, 'count_input_tokens', None)
+    if not callable(count):
+        return None
+    try:
+        tokens = count(request)
+    except Exception:  # noqa: BLE001 - logged; the bytes estimate stands in
+        log.exception('the token count of a coding request raised; estimating from its bytes')
+        return None
+    return tokens if type(tokens) is int and tokens > 0 else None
 
 
 def _finish_run(run, outcome):

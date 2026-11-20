@@ -1,7 +1,10 @@
 """Creating an encounter from an upload or pasted text — the one place it happens.
 
-The API and the evaluation command both call this, so the synthetic
-attestation, immutable original storage and pipeline start cannot diverge.
+The API calls this, so the synthetic attestation, immutable original storage
+and the first coding round cannot diverge. The practice's own information
+entered at upload - the date of service and the insurance (BUILD-SPEC 2: one of
+jobs.INSURANCE, 'unknown' for not sure) - is kept in Encounter.user_values, which
+every coding round's context is taken from (jobs.context_snapshot).
 """
 import hashlib
 from datetime import timedelta
@@ -59,8 +62,10 @@ def find_upload(*, user, workspace, client_key, data=None, text=''):
     return encounter
 
 
-def create_encounter(*, membership, user, title, service_date='', data=None, filename='', text='', client_key=None):
-    """Create encounter + revision 1 and start the pipeline after commit.
+def create_encounter(*, membership, user, title, service_date='', insurance='unknown', data=None, filename='', text='',
+                     client_key=None):
+    """Create encounter + revision 1 and queue its first coding round (trigger
+    upload) in the same transaction.
 
     Exactly one of (data, filename) or text. Raises ValidationError with a
     member-readable message for anything invalid. The caller has already
@@ -70,6 +75,8 @@ def create_encounter(*, membership, user, title, service_date='', data=None, fil
     """
     if (data is None) == (not text.strip()):
         raise ValidationError('Provide either a file or pasted text.')
+    if insurance not in jobs.INSURANCE:
+        raise ValidationError('Choose the insurance: Medicare, Medicaid, commercial or other, or not sure.')
     media_type = None
     if data is not None:
         if len(data) > settings.MAX_UPLOAD_BYTES:
@@ -79,7 +86,8 @@ def create_encounter(*, membership, user, title, service_date='', data=None, fil
         raise ValidationError(f'Pasted text is longer than {settings.MAX_PASTE_CHARS} characters.')
     now = timezone.now()
     try:
-        return _create(membership, user, title, service_date, data, filename, text, media_type, now, client_key)
+        return _create(membership, user, title, service_date, insurance, data, filename, text, media_type, now,
+                       client_key)
     except IntegrityError:
         # the database's one row per member and key (Encounter.client_key's unique index): the first POST of this
         # attempt committed while this one ran; its encounter is the answer, and nothing of this one was stored
@@ -89,11 +97,11 @@ def create_encounter(*, membership, user, title, service_date='', data=None, fil
         raise DuplicateUpload(existing) from None
 
 
-def _create(membership, user, title, service_date, data, filename, text, media_type, now, client_key):
+def _create(membership, user, title, service_date, insurance, data, filename, text, media_type, now, client_key):
+    values = {'service_date': service_date, 'insurance': insurance} if service_date else {'insurance': insurance}
     with transaction.atomic():
         encounter = models.Encounter.objects.create(
-            workspace=membership.workspace, title=title, created_by=user, client_key=client_key,
-            user_values={'service_date': service_date} if service_date else {})
+            workspace=membership.workspace, title=title, created_by=user, client_key=client_key, user_values=values)
         source_file = None
         if data is not None:
             storage_name, digest, size = store_original(membership.workspace_id, data, filename)
@@ -109,6 +117,6 @@ def _create(membership, user, title, service_date, data, filename, text, media_t
         encounter.save(update_fields=['current_revision', 'updated_at'])
         audit.record(membership.workspace, 'encounter.created', encounter=encounter, actor=user, kind=revision.kind,
                      sha256=source_file.sha256 if source_file else None, media_type=media_type or 'text/plain')
-        # Queued in the same transaction: the encounter is never visible without its pipeline.
-        jobs.start_pipeline(revision, user)
+        # Queued in the same transaction: the encounter is never visible without its first coding round.
+        jobs.start_round(encounter, revision, models.CodingRound.UPLOAD, user)
     return encounter

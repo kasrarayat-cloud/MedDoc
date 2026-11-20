@@ -145,3 +145,7 @@ def _value(value: str, number: int) -> str:
         raise CredentialsError(f'Line {number} of the Anthropic credentials file uses an escape sequence; escapes are '
                                'not supported.')
     return content
+
+
+# The name the installer's offline credentials check calls (ops/install.py CODER['loader']).
+load_anthropic_credentials = load

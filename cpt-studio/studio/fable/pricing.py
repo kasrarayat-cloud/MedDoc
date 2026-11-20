@@ -23,8 +23,8 @@ REQUIRED = ('input', 'output')
 USAGE_BASIS = 'as reported in the final message usage'  # ProviderRun.usage_basis (60 characters at most)
 BASIS = ('estimated from published claude-fable-5-2 rates as of 2026-11-03 (fallback attempts priced at the same '
          'rates, an upper bound); not reconciled to an invoice')
-# The worst case of one send (3.2): its input bytes / 3 as tokens plus a 2,000-token margin at the input rate, and its
-# whole max_tokens at the output rate.
+# The worst case of one send (3.2): its input tokens - counted by the API's free token count when the count answered,
+# else its input bytes / 3 - plus a 2,000-token margin at the input rate, and its whole max_tokens at the output rate.
 BYTES_PER_TOKEN = 3
 MARGIN_TOKENS = 2_000
 _MILLION = Decimal(1_000_000)
@@ -56,10 +56,14 @@ def cost_usd(usage: object) -> Optional[Decimal]:
     return total / _MILLION
 
 
-def worst_case_usd(input_bytes: int, max_tokens: int) -> Decimal:
-    """The most one send can cost: ``input_bytes`` / 3 as tokens plus the margin at the input rate, and ``max_tokens``
-    at the output rate."""
-    tokens = Decimal(input_bytes) / BYTES_PER_TOKEN + MARGIN_TOKENS
+def worst_case_usd(input_bytes: int, max_tokens: int, input_tokens: Optional[int] = None) -> Decimal:
+    """The most one send can cost: its input tokens plus the margin at the input rate, and ``max_tokens`` at the output
+    rate. The input tokens are ``input_tokens`` (the API's count of the request) when it is a whole positive number,
+    else ``input_bytes`` / 3."""
+    if type(input_tokens) is int and input_tokens > 0:
+        tokens = Decimal(input_tokens) + MARGIN_TOKENS
+    else:
+        tokens = Decimal(input_bytes) / BYTES_PER_TOKEN + MARGIN_TOKENS
     return (tokens * RATES['input'] + Decimal(max_tokens) * RATES['output']) / _MILLION
 
 

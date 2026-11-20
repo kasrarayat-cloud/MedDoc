@@ -18,6 +18,11 @@ The outcome of one send:
 Modes (settings.CODING_MODE): ``live`` calls the API with the key read from settings.ANTHROPIC_CREDENTIALS_FILE at send
 time (never logged, stored or put in a message); ``replay`` reads a recorded final message from
 settings.CODING_REPLAY_DIR/<request sha256>.json and calls nothing; ``disabled`` (the default) has no coder.
+
+The spend check's input (BUILD-SPEC 3.2): live, a request's input tokens are counted before it is sent by the API's free
+token count (``client.beta.messages.count_tokens`` with the same model, system, messages, output_config and betas;
+nothing is generated or billed, and the SDK client retries nothing), LiveCoder.count_input_tokens; when the count fails
+for any reason it is None and the spend check estimates from the bytes, as before.
 """
 from __future__ import annotations
 
@@ -45,6 +50,8 @@ BASE_URL = 'https://api.anthropic.com'
 ENDPOINT = f'{BASE_URL}/v1/messages'
 WORKSPACE_HEADER = 'anthropic-workspace-id'
 CONNECT_SECONDS, WRITE_SECONDS, POOL_SECONDS = 20, 120, 20
+COUNT_READ_SECONDS = 60  # the token count's own read timeout: it answers with a number, not a stream
+COUNT_KEYS = ('model', 'system', 'messages', 'output_config', 'betas')  # what count_tokens takes of a request
 LIVE, REPLAY, DISABLED = 'live', 'replay', 'disabled'
 SUCCEEDED_STATE, FAILED_STATE, UNKNOWN_STATE, NOT_SENT_STATE = 'succeeded', 'failed', 'unknown', 'not_sent'
 FINISHED_STOPS = ('end_turn', 'stop_sequence')
@@ -80,6 +87,12 @@ def build_request(*, system: str, document, instruction: str, effort: str) -> Re
     stored = body(document.stored_block)
     return Request(params=body(document.block), stored=stored, sha256=hashlib.sha256(canonical(stored)).hexdigest(),
                    input_bytes=document.size + len(system.encode('utf-8')) + len(instruction.encode('utf-8')))
+
+
+def count_params(request: Request) -> dict:
+    """The token count's keyword arguments for ``request``: its model, system, messages (the document included),
+    output_config and betas - count_tokens takes no max_tokens and no fallbacks."""
+    return {key: request.params[key] for key in COUNT_KEYS if key in request.params}
 
 
 @dataclass(frozen=True)
@@ -198,6 +211,33 @@ class LiveCoder:
                         timeout=anthropic.Timeout(connect=CONNECT_SECONDS, read=read, write=WRITE_SECONDS,
                                                   pool=POOL_SECONDS),
                         default_headers={WORKSPACE_HEADER: found.workspace_id} if found.workspace_id else None)
+
+    def count_input_tokens(self, request: Request) -> Optional[int]:
+        """The input tokens of ``request`` by the API's free token count (POST /v1/messages/count_tokens), or None when
+        it cannot be counted - the credentials refused, an error of any kind, an answer that is not a whole positive
+        number - in which case the spend check estimates from the bytes. Never raises; logs only the error's type."""
+        try:
+            sdk = self.client()
+        except Exception:  # noqa: BLE001 - the credentials file refused or the client not made: the send will say so
+            return None
+        try:
+            counted = sdk.beta.messages.count_tokens(
+                **count_params(request),
+                timeout=anthropic.Timeout(connect=CONNECT_SECONDS, read=COUNT_READ_SECONDS, write=WRITE_SECONDS,
+                                          pool=POOL_SECONDS))
+        except Exception as exc:  # noqa: BLE001 - a count that failed bills nothing; the bytes estimate stands in
+            log.warning('the token count of a coding request failed (%s); estimating from its bytes',
+                        type(exc).__name__)
+            return None
+        finally:
+            closing = getattr(sdk, 'close', None)
+            if callable(closing):
+                try:
+                    closing()
+                except Exception:  # noqa: BLE001 - the count is already in hand
+                    log.warning('the SDK client could not be closed')
+        tokens = getattr(counted, 'input_tokens', None)
+        return tokens if type(tokens) is int and tokens > 0 else None
 
     def send(self, request: Request) -> Outcome:
         try:

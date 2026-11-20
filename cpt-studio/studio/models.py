@@ -902,6 +902,11 @@ class CodingRound(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    # A Word document's PDF conversion, as this round read it (jobs._keep_view), stored once like an original (storage):
+    # the customer's viewer shows these pages, so the pages the quotes name are the pages shown. Null for a PDF, a text
+    # file or a paste, and while nothing was converted.
+    view_pdf_storage_name = models.CharField(max_length=200, null=True, blank=True)
+    view_pdf_sha256 = models.CharField(max_length=64, null=True, blank=True)
 
     class Meta:
         ordering = ['number']
