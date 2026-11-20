@@ -14,8 +14,9 @@ studio.customer). Vendor and model names, usage, costs, hashes and request ids a
                                              latest round's cost, updated) and the standing holds, with their release
     GET  /ops/encounters/<id>                its rounds (trigger, state, failure, cost, context), each run (models, served
                                              by a fallback, tokens, cost, latency, state, ids), the reader's and the
-                                             checker's whole answers, the final codes, decisions, answers, audit events,
-                                             and the original with its sha256
+                                             checker's whole answers, the final codes, every review of the checker that
+                                             belongs to no line (in full, with the lines it reaches), decisions,
+                                             answers, audit events, and the original with its sha256
     GET  /ops/encounters/<id>/original       the original exactly as stored, with its sha256
     POST /ops/encounters/<id>/reconcile      the reconciliation of an unknown run: run, note (at least 12 characters)
     POST /ops/encounters/<id>/retry          a new round of a failed latest round (jobs.retry)
@@ -237,6 +238,11 @@ def round_view(round_) -> dict:
             'codes': [{**code, 'modifiers': code.get('modifiers') if isinstance(code.get('modifiers'), list) else None}
                       for code in round_.codes or () if isinstance(code, dict)],
             'questions': [item for item in round_.questions or () if isinstance(item, dict)],
+            # every review of a done round that belongs to no line, in full (FIX-SPEC-2 section 3): fable.result's own
+            # placement over the round's stored lines
+            'unmatched': [{'number': item['number'], 'reaches': item['reaches'], 'json': _pretty(item['review'])}
+                          for item in (fable_result.unmatched_reviews(round_.codes, round_.checker_result)
+                                       if round_.state == models.CodingRound.DONE else ())],
             'problems': [item for item in round_.problems or () if isinstance(item, str)],
             'citations': _pretty(round_.citations or {}), 'reader_result': _pretty(round_.reader_result),
             'checker_result': _pretty(round_.checker_result)}

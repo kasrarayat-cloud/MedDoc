@@ -1,12 +1,14 @@
-"""The customer contract (BUILD-SPEC 6; client contract customer-2026-11-21): every payload the customer page reads,
+"""The customer contract (BUILD-SPEC 6; client contract customer-2026-11-22): every payload the customer page reads,
 built from stored rows on each request.
 
 - session_json: GET /api/session.
 - list_rows: GET /api/encounters.
 - encounter_json: GET /api/encounters/<id> - the document and its in-page view, the practice's context, the progress of
   the latest coding round, its code lines (each with its line, the second check's verdict, its quotes, its current
-  decision and the decisions the member may record), its questions (each naming the lines it affects), every answer
-  given, its documentation notes, the export readiness, the exports and the activity.
+  decision - with the id an undo names - and the decisions the member may record), its questions (each naming the
+  lines it affects), every answer given, its notes (the documentation problems, then the reason of every review the
+  second check wrote that could not be tied to one line), the export readiness, the exports and the activity (a
+  decision named by its line and its code).
 - view_content: what GET /api/encounters/<id>/original?view=1 serves - the original PDF or text, a pasted text, or for
   a Word document the PDF the coding review read (CodingRound.view_pdf_*: the converted file, so the pages the quotes
   name are the pages shown).
@@ -20,10 +22,17 @@ lines it affects, and the codes it shows are those lines' codes. An encounter wi
 earlier system) reads as an earlier review, with nothing of the earlier tables shown: Review again (POST retry) codes it
 with the current version.
 
+The second check as the customer reads it (FIX-SPEC-2 section 3): its verdict and reason as written; "The second check
+did not give a clear verdict." where its verdict is neither exactly agree nor exactly disagree (never "disagrees"); CPT
+Studio's own sentence where it gave none, where a review could not be placed on the line, or - on a line it added - with
+the status it gave that line.
+
 Display hygiene (BUILD-SPEC 7.4): the text the coding review wrote - reasons, the second check's reasons, questions,
-documentation notes and the evidence quotes its JSON gave - passes through shown(), which replaces vendor and model
-names (the shared denylist's name rules, ops/verification/customer-denylist.json; a test pins them) with "the system"
-and changes nothing else. Codes, modifiers, statuses and the passages the API cited from the document are never touched.
+documentation notes, the reasons of reviews no line could hold, and the evidence quotes its JSON gave - passes through
+shown(), which replaces vendor and model names (the shared denylist's name rules, ops/verification/customer-denylist.json;
+a test pins them) with "the system" and changes nothing else. Codes, modifiers, statuses and the passages the API cited
+from the document are never touched (a modifier is part of the code line Fable returned; a blank modifier item carries
+nothing and is never shown).
 No payload carries a provider, model, usage, cost, hash, run or request id, and a platform operator's act reads as CPT
 Studio's: the activity names members of the workspace only.
 """
@@ -38,6 +47,7 @@ from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from . import decisions, jobs, models, state
+from .fable import result as fable_result
 from .storage import ALLOWED_SUFFIXES, read_original
 
 Round, Revision, Export = models.CodingRound, models.SourceRevision, models.ExportArtifact
@@ -53,15 +63,21 @@ CODE_STATUS_LABELS = {'ready': 'Ready for approval', 'needs_answer': 'Needs your
                       'needs_review': 'Needs your review', 'not_supported': 'Not supported'}
 QUEUED, READING, CHECKING, DONE, FAILED, STOPPED = 'queued', 'reading', 'checking', 'done', 'failed', 'stopped'
 BUSY_PHASES = (QUEUED, READING, CHECKING)
-# The second check's reason where it gave no verdict on a line, or where a review could not be placed on it: CPT
-# Studio's own sentences (fable.result.combine counts the reviews behind each).
+# The second check's reason where it gave no verdict on a line, gave no clear one, or where a review could not be placed
+# on it: CPT Studio's own sentences (fable.result.combine counts the reviews behind each).
 ADDED_BY_CHECK = 'The second check found this code; it needs your review.'
+ADDED_WITH_STATUS = 'The second check found this code and listed it as {status}; it needs your review.'
+CHECK_STATUS_WORDS = {'ready': 'ready for approval', 'needs_answer': 'needing an answer'}  # a missed code's statuses
 NOT_CHECKED = 'The second check did not review this code.'
+UNCLEAR_VERDICT = 'The second check did not give a clear verdict.'
 UNMATCHED_CHECK = ('A review by the second check names this line or this code but not both, so this code needs your '
                    'review.')
 ALSO_UNMATCHED = ('Another review by the second check names this line or this code but not both, so this code needs '
                   'your review.')
 UNPLACED_CHECK = 'A review by the second check names none of these lines, so this code needs your review.'
+ALSO_UNPLACED = 'Another review by the second check names none of these lines, so this code needs your review.'
+# A note on the encounter for each review that belongs to no line (FIX-SPEC-2 section 3), with its reason as written
+UNPLACED_NOTE = 'The second check made a comment that could not be tied to one line'
 OPERATOR = 'CPT Studio'  # who an act of anyone but a member of the workspace reads as (a platform operator's)
 STOPPING_MESSAGE = 'Stopping. A step that is already running finishes; nothing after it starts.'
 STOPPED_MESSAGE = 'Stopped by a workspace member. Resume to continue the coding review.'
@@ -334,10 +350,11 @@ def quotes(row, index) -> list:
 
 
 def decision_json(decision) -> Optional[dict]:
+    """A line's current decision as the page shows it; ``id`` is what an undo names (FIX-SPEC-2 section 5)."""
     if decision is None:
         return None
-    return {'action': decision.action, 'by': decision.reviewer.label(), 'at': iso(decision.created_at),
-            'note': decision.note}
+    return {'id': str(decision.pk), 'action': decision.action, 'by': decision.reviewer.label(),
+            'at': iso(decision.created_at), 'note': decision.note}
 
 
 def _count(value) -> int:
@@ -345,32 +362,39 @@ def _count(value) -> int:
 
 
 def check_json(row) -> dict:
-    """The second check as the customer reads it: its verdict on a reader line and its reason as written, or CPT
-    Studio's sentence where it gave none - and where a review could not be placed on a line (fable.result.combine),
-    the sentence that says so, never that the line was not reviewed."""
+    """The second check as the customer reads it (module docstring): its verdict on a reader line and its reason as
+    written; for a verdict neither exactly agree nor exactly disagree, no verdict and the sentence that says it gave no
+    clear one; CPT Studio's sentence where it gave none, or for a line it added, with the status it gave it - and where a
+    review could not be placed on a line (fable.result.combine), the sentence that says so, never that the line was not
+    reviewed."""
     if row.get('listed_by') == 'checker':
-        return {'agrees': None, 'reason': ADDED_BY_CHECK}
+        words = CHECK_STATUS_WORDS.get(row.get('listed_status'))
+        return {'agrees': None, 'reason': ADDED_WITH_STATUS.format(status=words) if words else ADDED_BY_CHECK}
     check = row.get('second_check') if isinstance(row.get('second_check'), dict) else {}
     agrees = check.get('agrees') if isinstance(check.get('agrees'), bool) else None
-    unmatched = _count(check.get('unmatched'))
+    unmatched, unplaced = _count(check.get('unmatched')), _count(check.get('unplaced'))
     if agrees is None:
-        reason = UNMATCHED_CHECK if unmatched else UNPLACED_CHECK if _count(check.get('unplaced')) else NOT_CHECKED
+        reason = UNMATCHED_CHECK if unmatched else UNPLACED_CHECK if unplaced else NOT_CHECKED
         return {'agrees': None, 'reason': reason}
-    reason = _shown_or(check.get('reason'))
-    if unmatched:
-        reason = f'{reason} {ALSO_UNMATCHED}' if reason else ALSO_UNMATCHED
-    return {'agrees': agrees, 'reason': reason}
+    words = [_shown_or(check.get('reason'))]
+    if agrees is False and check.get('verdict') != fable_result.DISAGREE:  # neither agree nor disagree, as written
+        agrees, words = None, [UNCLEAR_VERDICT, *words]
+    words += [ALSO_UNMATCHED] * bool(unmatched) + [ALSO_UNPLACED] * bool(unplaced)
+    return {'agrees': agrees, 'reason': ' '.join(word for word in words if word) or None}
 
 
 def _modifiers(value) -> Optional[list]:
-    """A line's modifiers as stored (a list of strings), or None when they were not given."""
-    return list(value) if isinstance(value, list) and all(isinstance(item, str) for item in value) else None
+    """A line's modifiers as stored (a list of strings; a blank item carries nothing and is not shown), or None when
+    they were not given - the page, the JSON and the exports show the same list (FIX-SPEC-2 section 2)."""
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        return None
+    return [item for item in value if item.strip()]
 
 
 def code_json(row, index, decision, can_review: bool) -> dict:
     status = row.get('status')
     return {'line': row.get('line'), 'code': row.get('code'),
-            'units': row.get('units') if type(row.get('units')) is int and row['units'] > 0 else None,
+            'units': row.get('units') if type(row.get('units')) is int and row['units'] >= 0 else None,
             'modifiers': _modifiers(row.get('modifiers')),
             'status': status, 'status_label': CODE_STATUS_LABELS.get(status, 'Not reviewable'),
             'reason': _shown_or(row.get('reason'), ''), 'second_check': check_json(row),
@@ -415,9 +439,15 @@ def answers_json(encounter) -> list:
 
 
 def notes_json(round_) -> list:
+    """The notes on a done round: its documentation problems, then a note for every review of the second check that
+    belongs to no line (fable.result.unmatched_reviews), with its reason as written (FIX-SPEC-2 section 3)."""
     if round_ is None or round_.state != Round.DONE:
         return []
-    return [shown(item) for item in round_.problems or () if isinstance(item, str) and item.strip()]
+    notes = [shown(item) for item in round_.problems or () if isinstance(item, str) and item.strip()]
+    for item in fable_result.unmatched_reviews(round_.codes, round_.checker_result):
+        reason = _shown_or(item['reason'])
+        notes.append(f'{UNPLACED_NOTE}: {reason}' if reason else f'{UNPLACED_NOTE}.')
+    return notes
 
 
 def readiness(round_, current) -> dict:
@@ -489,7 +519,9 @@ def _activity_text(event, numbers, members) -> str:
     if name == 'decision.recorded' and 'round' in data and isinstance(data.get('code'), str):
         words = {decisions.APPROVE: 'approved', decisions.REJECT: 'rejected',
                  decisions.REVOKE: 'undid the decision on'}.get(data.get('action'))
-        return f'{who} {words} {data["code"]}.' if words else ''
+        line = data.get('line')  # two lines can hold one code: the line names which (FIX-SPEC-2 section 5)
+        named = f'{line} {data["code"]}' if isinstance(line, str) and line else data['code']
+        return f'{who} {words} {named}.' if words else ''
     if name == 'export.created':
         return f'{"Approved" if data.get("kind") == Export.APPROVED else "Draft"} download made by {who}.'
     if name == 'pipeline.stopped':

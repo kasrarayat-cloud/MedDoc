@@ -1,4 +1,4 @@
-"""The customer API (BUILD-SPEC 6; client contract customer-2026-11-21): the contract's keys exactly (held to
+"""The customer API (BUILD-SPEC 6; client contract customer-2026-11-22): the contract's keys exactly (held to
 ops/verification/customer-contract.json by the shipped reader, ops/scan_customer.py, and to the spec's own key lists),
 tenancy (404 outside the membership), the reviewer gate, answers starting a new round with every answer so far, the
 vendor-name scan over every customer JSON response, the in-page view's headers, a Word document's converted view, the
@@ -107,7 +107,9 @@ class ContractTests(ApiCase):
         self.assertEqual(codes['45380']['allowed_actions'], [])
         self.assertEqual(codes['43251']['allowed_actions'], [])
         self.assertEqual(codes['43239']['second_check'], {'agrees': False, 'reason': 'The biopsy site is not stated.'})
-        self.assertEqual(codes['45378']['second_check'], {'agrees': None, 'reason': customer.ADDED_BY_CHECK})
+        self.assertEqual(codes['45378']['second_check'], {
+            'agrees': None, 'reason': 'The second check found this code and listed it as ready for approval; it needs '
+                                      'your review.'})
         self.assertEqual(codes['45380']['question'], 'Was a biopsy taken from a separate site?')
         # quotes are the API's citations (the reader's on page 1, then the checker's on page 2), each passage once
         self.assertEqual(codes['45385']['quotes'], [{'text': 'removed by cold snare', 'page': 1},
@@ -178,17 +180,17 @@ class ContractTests(ApiCase):
                          (409, 'This document reached its spending limit.'))
 
     def test_an_outdated_page_and_a_signed_out_caller_are_refused(self):
-        for earlier in ('customer-2026-11-13', 'customer-2026-11-20'):
+        for earlier in ('customer-2026-11-13', 'customer-2026-11-20', 'customer-2026-11-21'):
             response = self.client.get('/api/session', HTTP_X_CPT_STUDIO_CLIENT=earlier)
             self.assertEqual((response.status_code, response.json()), (409, client_contract.OUTDATED))
         self.assertEqual(Client().get('/api/session').status_code, 401)
-        self.assertEqual(client_contract.VERSION, 'customer-2026-11-21')
+        self.assertEqual(client_contract.VERSION, 'customer-2026-11-22')
 
 
 class TenancyAndRoleTests(ApiCase):
     def test_every_customer_url_of_another_workspace_answers_404(self):
         enc = self.done()
-        export = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'txt'}).json()
+        export = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'txt', 'round': 1}).json()
         outsider = self.client_for(self.outsider)
         for url in (f'/api/encounters/{enc.pk}', f'/api/encounters/{enc.pk}/original',
                     f'/api/encounters/{enc.pk}/original?view=1', export['download_url']):
@@ -231,7 +233,7 @@ class TenancyAndRoleTests(ApiCase):
         self.assertEqual(upload.status_code, 403)
         self.assertEqual(models.CodeDecision.objects.count(), 0)
         self.assertEqual(models.CodingAnswer.objects.count(), 0)
-        self.assertEqual(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'csv'},
+        self.assertEqual(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'csv', 'round': 1},
                                         client=viewer).status_code, 201)
 
 
@@ -362,7 +364,8 @@ class VendorNameScanTests(ApiCase):
         responses.append(self.post_json(f'/api/encounters/{enc.pk}/decisions', {
             'round': 1, 'line': 'L1', 'code': '45385', 'action': 'approve',
             'acknowledgement': decisions.ACKNOWLEDGEMENTS['human']}))
-        responses.append(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'approved', 'fmt': 'txt'}))
+        responses.append(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'approved', 'fmt': 'txt',
+                                                                               'round': 1}))
         responses.append(self.post_json(f'/api/encounters/{enc.pk}/answers', {'answers': [
             {'question_id': payload['questions'][0]['id'], 'text': 'Yes.'}]}))
         responses.append(self.client.get(f'/api/encounters/{enc.pk}'))

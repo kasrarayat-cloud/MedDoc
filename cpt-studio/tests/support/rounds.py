@@ -165,20 +165,31 @@ class CustomerCase:
         self.run_next()
         return state.latest_round(encounter)
 
-    def decide(self, encounter, line, code, action, *, user=None, round_number=None, kind='human', note=''):
-        """POST a decision as the page sends it (FIX-SPEC 1): the round shown, the line, its code."""
+    def decide(self, encounter, line, code, action, *, user=None, round_number=None, kind='human', note='',
+               decision=None):
+        """POST a decision as the page sends it (FIX-SPEC 1): the round shown, the line, its code; an undo names the
+        decision it undoes (FIX-SPEC-2 section 5) - by default the one the page shows the member now."""
+        client = self.client_for(user or self.reviewer)
         if round_number is None:
             round_number = state.latest_round(encounter).number
         body = {'round': round_number, 'line': line, 'code': code, 'action': action, 'note': note,
                 'acknowledgement': ACKNOWLEDGEMENTS[kind] if action == 'approve' else ''}
-        return self.client_for(user or self.reviewer).post(
-            f'/api/encounters/{encounter.pk}/decisions', data=json.dumps(body), content_type='application/json')
+        if action == 'revoke':
+            if decision is None:
+                rows = client.get(f'/api/encounters/{encounter.pk}').json().get('codes') or []
+                shown = next((row['decision'] for row in rows if row.get('line') == line and row.get('decision')), None)
+                decision = (shown or {}).get('id')
+            body['decision'] = decision
+        return client.post(f'/api/encounters/{encounter.pk}/decisions', data=json.dumps(body),
+                           content_type='application/json')
 
     def export_text(self, encounter, kind, fmt='txt', user=None):
-        """Make an export through the API and download it: its text."""
+        """Make an export through the API, naming the round the page shows (FIX-SPEC-2 section 5), and download it:
+        its text."""
         client = self.client_for(user or self.reviewer)
-        made = client.post(f'/api/encounters/{encounter.pk}/reports', data=json.dumps({'kind': kind, 'fmt': fmt}),
-                           content_type='application/json')
+        shown = client.get(f'/api/encounters/{encounter.pk}').json().get('round') or {}
+        made = client.post(f'/api/encounters/{encounter.pk}/reports', data=json.dumps(
+            {'kind': kind, 'fmt': fmt, 'round': shown.get('number')}), content_type='application/json')
         assert made.status_code == 201, made.content
         return client.get(made.json()['download_url']).content.decode('utf-8')
 

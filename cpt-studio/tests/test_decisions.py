@@ -23,8 +23,10 @@ class DecisionCase(r.CustomerCase, TestCase):
             r.row('45380', 'needs_answer', question='Was a biopsy taken?'), r.row('43251', 'not_supported')])
         self.client = self.client_for(self.reviewer)
 
-    def decide(self, code, action, *, acknowledgement=None, note='', client=None, line=None, round_number=None):
-        """POST a decision as the page sends it: the latest round's number and the line holding ``code``."""
+    def decide(self, code, action, *, acknowledgement=None, note='', client=None, line=None, round_number=None,
+               decision=None):
+        """POST a decision as the page sends it: the latest round's number and the line holding ``code``; an undo
+        names the decision it undoes (FIX-SPEC-2 section 5) - by default the one the page shows on that line now."""
         latest = state.latest_round(self.enc)
         if line is None:
             line = next((row['line'] for row in latest.codes if row.get('code') == code), 'L99')
@@ -32,6 +34,12 @@ class DecisionCase(r.CustomerCase, TestCase):
                 'action': action, 'note': note,
                 'acknowledgement': ACK['human'] if acknowledgement is None and action == 'approve' else
                 (acknowledgement or '')}
+        if action == 'revoke':
+            if decision is None:
+                shown = next((row['decision'] for row in self.codes(client)[0]['codes']
+                              if row['line'] == line and row['decision']), None)
+                decision = (shown or {}).get('id')
+            body['decision'] = decision
         return (client or self.client).post(f'/api/encounters/{self.enc.pk}/decisions', data=json.dumps(body),
                                             content_type='application/json')
 
@@ -116,8 +124,8 @@ class ActionTests(DecisionCase):
         self.assertEqual(payload['readiness'], {'draft': True, 'approved': True, 'blockers': []})
         texts = [item['text'] for item in payload['activity']]
         label = self.reviewer.label()
-        self.assertEqual(texts[-4:], [f'{label} rejected 43239.', f'{label} undid the decision on 43239.',
-                                      f'{label} approved 43239.', f'{label} approved 45385.'])
+        self.assertEqual(texts[-4:], [f'{label} rejected L2 43239.', f'{label} undid the decision on L2 43239.',
+                                      f'{label} approved L2 43239.', f'{label} approved L1 45385.'])
 
     def test_only_the_actions_a_status_allows_are_recorded(self):
         _, codes = self.codes()
@@ -126,7 +134,7 @@ class ActionTests(DecisionCase):
         for code, action, status, message in (
                 ('45380', 'approve', 409, decisions.NOT_DECIDABLE['needs_answer']),
                 ('43251', 'reject', 409, decisions.NOT_DECIDABLE['not_supported']),
-                ('45385', 'revoke', 409, decisions.NOTHING_TO_UNDO),
+                ('45385', 'revoke', 400, decisions.DECISION_REQUIRED),
                 ('99999', 'approve', 409, decisions.NOT_IN_ROUND),
                 ('45385', 'confirm', 400, 'Choose approve, reject or undo.'),
                 ('', 'approve', 400, 'Name the code to decide on.')):
@@ -147,9 +155,10 @@ class ActionTests(DecisionCase):
         self.assertEqual(Decision.objects.count(), 0)
 
     def test_no_decision_is_recorded_on_a_round_that_is_not_the_latest_done_one(self):
-        self.assertEqual(self.decide('45385', 'approve').status_code, 201)
+        approved = self.decide('45385', 'approve')
+        self.assertEqual(approved.status_code, 201)
         r.write_round(self.enc, state_=models.CodingRound.QUEUED)
-        response = self.decide('45385', 'revoke', line='L1', round_number=1)
+        response = self.decide('45385', 'revoke', line='L1', round_number=1, decision=approved.json()['id'])
         self.assertEqual((response.status_code, response.json()['error']), (409, decisions.ROUND_CHANGED))
         payload, _ = self.codes()
         self.assertEqual((payload['codes'], payload['readiness']['draft']), ([], False))

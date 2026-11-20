@@ -10,10 +10,12 @@ from tests.support import rounds as r
 
 
 class ParseTests(SimpleTestCase):
-    def test_only_the_last_json_fence_is_read(self):
-        broken = 'analysis ```json\n{"a": 1}\n``` more ```json\n{"a": 2}\n``` and ```json\n{broken\n```'
+    def test_only_the_last_fenced_block_is_read(self):
+        broken = 'analysis\n```json\n{"a": 1}\n```\nmore\n```json\n{"a": 2}\n```\nand\n```json\n{broken\n```'
         self.assertIsNone(result.last_json(broken))
-        self.assertEqual(result.last_json('```json\n{"a": 1}\n``` then ```json\n{"a": 2}\n```'), {'a': 2})
+        self.assertEqual(result.last_json('```json\n{"a": 1}\n```\nthen\n```json\n{"a": 2}\n```'), {'a': 2})
+        # a fence opens and closes only on a line of its own (markdown): ``` inside a line is text, never a fence
+        self.assertEqual(result.last_json('Use ```json``` blocks.\n```json\n{"a": 3}\n```'), {'a': 3})
 
     def test_without_a_fence_the_widest_brace_span_is_read(self):
         self.assertEqual(result.last_json('The result: {"codes": [{"code": "45380"}]} done.'),
@@ -98,13 +100,19 @@ class CombineTests(SimpleTestCase):
 
     def test_an_unmatched_review_is_counted_on_the_lines_it_reaches(self):
         combined = self.combine([f.code('45385'), f.code('45380')],
-                                [r.review('L1', '45385'), r.review('L2', '45380'), f.review('45385', 'disagree'),
-                                 r.review('L7', '99999', 'disagree')])
+                                [r.review('L1', '45385'), r.review('L2', '45380'), f.review('45385', 'disagree')])
         first, second = combined['codes']
         self.assertEqual((first['status'], first['second_check']['agrees'], first['second_check']['unmatched']),
                          ('needs_review', True, 1))
         self.assertEqual((second['status'], second['second_check']['unmatched']), ('ready', 0))
-        self.assertEqual({first['second_check']['unplaced'], second['second_check']['unplaced']}, {1})
+        self.assertEqual({first['second_check']['unplaced'], second['second_check']['unplaced']}, {0})
+        # a review naming an unknown line and a code no line holds: the code cannot tell which line it is about, so
+        # every line goes to a human (FIX-SPEC-2 section 3)
+        placed_nowhere = self.combine([f.code('45385'), f.code('45380')],
+                                      [r.review('L1', '45385'), r.review('L2', '45380'),
+                                       r.review('L7', '99999', 'disagree')])['codes']
+        self.assertEqual([(row['status'], row['second_check']['unmatched'], row['second_check']['unplaced'])
+                          for row in placed_nowhere], [('needs_review', 0, 1), ('needs_review', 0, 1)])
 
     def test_missed_codes_are_added_as_needs_review_lines(self):
         missed = {'code': '45380', 'units': 1, 'modifiers': ['59'], 'status': 'ready', 'reason': 'Biopsy taken.',
@@ -116,23 +124,25 @@ class CombineTests(SimpleTestCase):
         self.assertEqual(added['modifiers'], ['59'])
         self.assertIsNone(added['second_check'])
 
-    def test_a_field_of_the_wrong_type_is_not_shown_and_an_integer_modifier_is_its_string(self):
-        item = {**f.code('45385'), 'units': '2', 'modifiers': ['59', 7], 'reason': ['x'], 'question': 3,
+    def test_a_field_is_read_in_its_shape_and_an_integer_modifier_is_its_string(self):
+        item = {**f.code('45385'), 'units': '2', 'modifiers': ['59', 7], 'reason': ['x', 'y'], 'question': None,
                 'evidence': [{'quote': 'ok', 'page': 'one'}, {'quote': 5}, 'text']}
         shown = self.combine([item], [r.review('L1', '45385')])['codes'][0]
         self.assertEqual((shown['units'], shown['modifiers'], shown['reason'], shown['question']),
-                         (None, ['59', '7'], None, None))
+                         (2, ['59', '7'], 'x y', None))
         self.assertEqual(shown['evidence'], [{'quote': 'ok', 'page': None}])
         self.assertEqual(shown['code'], '45385')
-        for units in (0, -1, 1.0, True):
-            with self.subTest(units=units):
-                row = self.combine([{**f.code('45385'), 'units': units}], [r.review('L1', '45385')])['codes'][0]
-                self.assertIsNone(row['units'])
+        for units in (-1, 1.0, True, '2.0'):  # any other shape cannot be read (FIX-SPEC-2 section 2)
+            with self.subTest(units=units), self.assertRaises(result.Unreadable):
+                self.combine([{**f.code('45385'), 'units': units}], [r.review('L1', '45385')])
+        # zero is a value, shown as written: the reader writes it for a code it does not support
+        zero = self.combine([{**f.code('45385', 'not_supported'), 'units': 0}], [r.review('L1', '45385')])['codes'][0]
+        self.assertEqual(zero['units'], 0)
 
     def test_questions_are_both_lists_with_folded_duplicates_shown_once(self):
         combined = self.combine(
             [f.code('45385')], [r.review('L1', '45385')],
-            reader_questions=[{'question': 'Was the  polyp\nremoved whole?', 'affects': ['45385']}, 7, None],
+            reader_questions=[{'question': 'Was the  polyp\nremoved whole?', 'affects': ['45385']}, '  '],
             checker_questions=[{'question': 'WAS the polyp removed whole?', 'affects': ['45380']},
                                {'question': 'Which payer applies?', 'affects': None}])
         self.assertEqual(combined['questions'], [
@@ -142,7 +152,7 @@ class CombineTests(SimpleTestCase):
 
     def test_problems_are_the_readers_documentation_problems(self):
         combined = self.combine([f.code('45385')], [r.review('L1', '45385')], problems=['No signature.', 4])
-        self.assertEqual(combined['problems'], ['No signature.'])
+        self.assertEqual(combined['problems'], ['No signature.', '4'])
 
     def test_the_listing_the_checker_is_given(self):
         reader = f.reader_result([f.code('45385', modifiers=['PT'], question=None)])
@@ -158,9 +168,9 @@ class CitationTests(SimpleTestCase):
             f.text_block('Overview of the note.', [f.page_cite('SYNTHETIC PROCEDURE NOTE', 1)]),
             f.text_block('\nLINE L1 45385\n'),
             f.text_block('Snare removal.', [f.page_cite('removed by cold snare', 2)]),
-            f.text_block('\n### LINE L2 45380\nBiopsy taken.', [f.page_cite('biopsy', 3)]),
+            f.text_block('\n### LINE L2 45380\n'), f.text_block('Biopsy taken.', [f.page_cite('biopsy', 3)]),
             f.text_block(f.fenced(self.READER))])
-        checker = f.message([f.text_block('REVIEW L1 45385\nAgreed.', [f.char_cite('cold snare', 10)]),
+        checker = f.message([f.text_block('REVIEW L1 45385\n'), f.text_block('Agreed.', [f.char_cite('cold snare', 10)]),
                              f.text_block(f.fenced(f.checker_result([r.review('L1', '45385')])))])
         found = result.citations(reader, checker)
         self.assertEqual(found['_document'], [{'text': 'SYNTHETIC PROCEDURE NOTE', 'page': 1, 'source': 'reader'}])
@@ -170,7 +180,7 @@ class CitationTests(SimpleTestCase):
 
     def test_markers_are_case_sensitive_whole_lines(self):
         reader = f.message([f.text_block('Code: 45385\nText.', [f.page_cite('x', 1)]),
-                            f.text_block('\nLINE L3 0001U\n', [f.page_cite('y', 2)]),
+                            f.text_block('\nLINE L3 0001U\n'), f.text_block('Lab.', [f.page_cite('y', 2)]),
                             f.text_block('\nline L1 45385\n'), f.text_block('Text.', [f.page_cite('z', 3)]),
                             f.text_block(f.fenced(self.READER))])
         found = result.citations(reader, None)
@@ -188,7 +198,8 @@ class CitationTests(SimpleTestCase):
         self.assertEqual(result.citations(reader, None), {'_document': [{'text': 'x', 'page': 1, 'source': 'reader'}]})
 
     def test_malformed_citations_are_skipped(self):
-        reader = f.message([f.text_block('LINE L1 45385\n', [{'type': 'page_location'}, 'x',
-                                                              {**f.page_cite('q', 1), 'start_page_number': '1'}]),
+        reader = f.message([f.text_block('LINE L1 45385\n'),
+                            f.text_block('Text.', [{'type': 'page_location'}, 'x',
+                                                   {**f.page_cite('q', 1), 'start_page_number': '1'}]),
                             f.text_block(f.fenced(self.READER))])
         self.assertEqual(result.citations(reader, None), {'L1': [{'text': 'q', 'page': None, 'source': 'reader'}]})

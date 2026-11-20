@@ -17,8 +17,9 @@ HEADER = 'X-CPT-Studio-Client'
 # The Fable coding build (BUILD-SPEC 6): the encounter payload is the coding round's codes, questions, answers, notes and
 # decisions, and the page draws them - a new build. customer-2026-11-21 (the fix pass, FIX-SPEC section 1): every code
 # row carries its line, a question the lines it affects, modifiers may be null (not given), and a decision names the
-# round and the line it was made on.
-VERSION = 'customer-2026-11-21'
+# round and the line it was made on. customer-2026-11-22 (FIX-SPEC-2 section 5): a decision shown carries its id, an
+# undo names the decision it undoes, and an export names the round the page shows.
+VERSION = 'customer-2026-11-22'
 WSGI_KEY = 'HTTP_' + HEADER.upper().replace('-', '_')
 OUTDATED = {'error': 'CPT Studio was updated. Reload this page to continue.', 'error_code': 'client_outdated'}
 

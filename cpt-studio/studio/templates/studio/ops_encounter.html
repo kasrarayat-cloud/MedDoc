@@ -89,10 +89,10 @@
   <tbody>
   {% for code in item.codes %}
     <tr>
-      <td class="mono">{{ code.line|default:"-" }}</td><td class="mono">{{ code.code }}</td><td class="num">{% if code.units %}{{ code.units }}{% else %}not given{% endif %}</td><td class="mono">{% if code.modifiers is None %}not given{% elif code.modifiers %}{{ code.modifiers|join:", " }}{% else %}none{% endif %}</td>
+      <td class="mono">{{ code.line|default:"-" }}</td><td class="mono">{{ code.code }}</td><td class="num">{% if code.units is None %}not given{% else %}{{ code.units }}{% endif %}</td><td class="mono">{% if code.modifiers is None %}not given{% elif code.modifiers %}{{ code.modifiers|join:", " }}{% else %}none{% endif %}</td>
       <td>{{ code.status }}</td><td>{{ code.listed_by }}</td><td>{{ code.listed_status|default:"" }}</td>
       <td>{{ code.reason|default:"" }}</td>
-      <td>{% if code.second_check %}{% if code.second_check.agrees is True %}<span class="flag ok">agrees</span>{% elif code.second_check.agrees is False %}<span class="flag bad">{{ code.second_check.verdict|default:"disagrees" }}</span>{% else %}<span class="flag">not reviewed</span>{% endif %} {{ code.second_check.reason|default:"" }}{% if code.second_check.correct_code and code.second_check.correct_code != code.code %} <span class="mono">(would report {{ code.second_check.correct_code }})</span>{% endif %}{% else %}<span class="muted">listed by the checker</span>{% endif %}</td>
+      <td>{% if code.second_check %}{% if code.second_check.agrees is True %}<span class="flag ok">agrees</span>{% elif code.second_check.agrees is False %}{% if code.second_check.verdict == "disagree" %}<span class="flag bad">disagrees</span>{% else %}<span class="flag bad">no clear verdict{% if code.second_check.verdict %} ({{ code.second_check.verdict }}){% endif %}</span>{% endif %}{% elif code.second_check.unmatched or code.second_check.unplaced %}<span class="flag warn">no review of its own</span>{% else %}<span class="flag">not reviewed</span>{% endif %}{% if code.second_check.unmatched %} <span class="flag warn">{{ code.second_check.unmatched }} review(s) name this line or its code but not both</span>{% endif %}{% if code.second_check.unplaced %} <span class="flag warn">{{ code.second_check.unplaced }} review(s) tied to no line</span>{% endif %} {{ code.second_check.reason|default:"" }}{% if code.second_check.correct_code and code.second_check.correct_code != code.code %} <span class="mono">(would report {{ code.second_check.correct_code }})</span>{% endif %}{% else %}<span class="muted">listed by the checker</span>{% endif %}</td>
       <td>{{ code.question|default:"" }}</td>
     </tr>
   {% endfor %}
@@ -100,6 +100,11 @@
 </table></div>
 {% else %}
 <p class="muted">No codes (the round is not done, or found none).</p>
+{% endif %}
+{% if item.unmatched %}
+<h3>Reviews that belong to no line</h3>
+<p class="muted">The checker's reviews that name no line of the reader's, or a line holding another code. Each sends the lines it reaches to a human; one that reaches no line by its line or its code sends every line, and the customer reads each one's reason as a note.</p>
+<ol>{% for review in item.unmatched %}<li>Review {{ review.number }} · {% if review.reaches %}reaches {{ review.reaches|join:", " }}{% else %}names no line and no line's code: every line needs review{% endif %}<pre>{{ review.json }}</pre></li>{% endfor %}</ol>
 {% endif %}
 {% if item.questions %}<h3>Questions</h3><ol>{% for question in item.questions %}<li>{{ question.text }} <span class="muted">({{ question.source }}; lines {{ question.lines|join:", "|default:"none" }}; codes {{ question.codes|join:", "|default:"none" }})</span></li>{% endfor %}</ol>{% endif %}
 {% if item.problems %}<h3>Documentation problems</h3><ul>{% for problem in item.problems %}<li>{{ problem }}</li>{% endfor %}</ul>{% endif %}

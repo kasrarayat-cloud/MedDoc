@@ -17,9 +17,11 @@ stored text can forge a line of the export; in the CSV a line break stays a line
 read as LF) and every other such character is escaped.
 
 Readiness: a draft needs the latest round done; the approved export needs a code of it approved (customer.readiness, the
-rule the page shows). Each export is stored once as an ExportArtifact (immutable) with its sha256; a download serves the
-stored bytes. An export made from an earlier round stays listed and downloadable, marked earlier (customer.report_json).
-The text the coding review wrote passes through the same display hygiene as the page (customer.shown).
+rule the page shows). A request names the round the page shows (FIX-SPEC-2 section 5): one that is not the latest is
+refused as changed, so a page left open never downloads a round its member did not see. Each export is stored once as
+an ExportArtifact (immutable) with its sha256; a download serves the stored bytes. An export made from an earlier round
+stays listed and downloadable, marked earlier (customer.report_json). The text the coding review wrote passes through
+the same display hygiene as the page (customer.shown).
 """
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ from datetime import timezone as dt_timezone
 from django.db import transaction
 from django.utils import timezone
 
-from . import audit, customer, models, state
+from . import audit, customer, decisions, models, state
 
 Round, Export = models.CodingRound, models.ExportArtifact
 DRAFT, APPROVED = Export.DRAFT, Export.APPROVED
@@ -52,6 +54,7 @@ TRIGGER_WORDS = {Round.ANSWERS: ', after the practice answered questions', Round
 DECISION_WORDS = {models.CodeDecision.APPROVE: 'approved', models.CodeDecision.REJECT: 'rejected'}
 NOTHING_YET = 'There is nothing to export yet.'
 APPROVED_NOT_YET = 'The approved export is not available yet.'
+ROUND_REQUIRED = 'Name the coding review the export is made from.'
 # Leading characters a spreadsheet may read as a formula (fullwidth forms and line starts included, beyond the minimum).
 FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r', '\n', '＝', '＋', '－', '＠')
 # Shown escaped (\xNN, \uNNNN): what a terminal, printer or spreadsheet acts on (C0 controls but TAB and LF, DEL, C1
@@ -229,14 +232,17 @@ RENDERERS = {Export.TXT: render_txt, Export.CSV: render_csv}
 
 # --- making and serving an export ------------------------------------------------------------------------------------------
 
-def create(encounter, user, kind, fmt) -> models.ExportArtifact:
-    """Make and store one export of the latest round (any active member of the workspace may; the caller has scoped
-    the encounter to the member). ValueError for an unknown kind or format; NotReady when it is not available now."""
+def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact:
+    """Make and store one export of the latest round, which must be round ``round_number`` - the one the page shows
+    (any active member of the workspace may; the caller has scoped the encounter to the member). ValueError for an
+    unknown kind or format; decisions.Refused (409, changed) for another round; NotReady when it is not available now."""
     if kind not in KINDS or fmt not in FORMATS:
         raise ValueError('Choose a draft or an approved export as TXT or CSV.')
     with transaction.atomic():
         locked = models.Encounter.objects.select_for_update().select_related('workspace').get(pk=encounter.pk)
         round_ = state.latest_round(locked)
+        if round_ is None or round_.number != round_number:
+            raise decisions.Refused(409, decisions.ROUND_CHANGED)
         current = state.current_decisions(round_) if round_ is not None and round_.state == Round.DONE else {}
         ready = customer.readiness(round_, current)
         if not ready['draft']:

@@ -84,7 +84,7 @@ class DecidedContractTests(r.CustomerCase, TestCase):
         reject = self.decide(enc, 'L3', '43239', 'reject')
         for response in (approve, reject):
             self.assertEqual(response.status_code, 201, response.content)
-            self.assertEqual(set(response.json()), {'line', 'code', 'action', 'by', 'at', 'note'})
+            self.assertEqual(set(response.json()), {'id', 'line', 'code', 'action', 'by', 'at', 'note'})
         response = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}')
         payload = response.json()
         self.assertEqual([code['decision']['action'] for code in payload['codes'] if code['decision']],

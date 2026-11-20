@@ -6,13 +6,16 @@ outside the document.
 Line identity (FIX-SPEC section 1): the reader's codes are the lines L1..Ln in the order of its JSON list and the
 checker's missed codes the lines M1..Mk in theirs. Each section starts with a marker line that studio.fable.result reads
 to file a citation under its line: `LINE L<n> <code>` (reader), `REVIEW L<n> <code>` and `MISSED M<k> <code>`
-(checker). The checker is given every reader line with its label and names the line each review is about.
+(checker). The checker is given every reader line with its label and names the line each review is about. Both end
+their last section with a line holding exactly `END` (FIX-SPEC-2 section 4), so what they write after it - an overview,
+documentation problems - is never read as part of the last line's section.
 """
 from __future__ import annotations
 
 import json
 
 READER_MARK, CHECKER_MARK, MISSED_MARK = 'LINE', 'REVIEW', 'MISSED'  # the section markers (result.citations)
+END_MARK = 'END'  # the line that ends the last section (result.citations)
 
 _OFFICE = ("Write for the physician's office. Never mention artificial intelligence, models, software, vendors or "
            "'the first coder'; say 'the coding review' or 'the second check' if you must refer to a review.")
@@ -25,7 +28,7 @@ Decide which codes the document supports for the services it documents, with uni
 
 """ + _OFFICE + """
 
-Write your analysis first, citing the document for every fact you rely on. Write one section per code you list, in the order of your final JSON list, each starting with a line that holds exactly `LINE L<n> <code>`: L1 for the first code of the list, L2 for the second, and so on. Cite the document for each fact in that section. Write anything that is not about one listed code, such as an overview or documentation problems, before the first section or under a heading line of its own (a line starting with #), and write no heading inside a section. Then end your reply with the final result as one JSON object in a ```json fenced block. Inside the JSON, copy quotes as plain text and do not use citations. Use this shape:
+Write your analysis first, citing the document for every fact you rely on. Write one section per code you list, in the order of your final JSON list, each starting with a line that holds exactly `LINE L<n> <code>`: L1 for the first code of the list, L2 for the second, and so on. Cite the document for each fact in that section. End your last section with a line that holds exactly `END`. Write anything that is not about one listed code, such as an overview or documentation problems, before the first section or after that END line, and write no heading inside a section. Then end your reply with the final result as one JSON object in a ```json fenced block. Inside the JSON, copy quotes as plain text and do not use citations. Use this shape:
 
 {
   "document_kind": "short description, for example 'EGD and colonoscopy procedure report'",
@@ -53,7 +56,7 @@ First read the whole document yourself, every page, and form your own view of wh
 
 """ + _OFFICE + """
 
-Write your analysis first, citing the document for every fact you rely on. Write one section per review, each starting with a line that holds exactly `REVIEW L<n> <code>` with the line and the code as the first coder listed them, and one section per missed code, each starting with a line that holds exactly `MISSED M<k> <code>`: M1 for the first code of your missed_codes list, M2 for the second, and so on. Cite the document for each fact in a section. Write anything that is not about one line before the first section or under a heading line of its own (a line starting with #), and write no heading inside a section. Then end your reply with the final result as one JSON object in a ```json fenced block. Inside the JSON, copy quotes as plain text and do not use citations. Use this shape:
+Write your analysis first, citing the document for every fact you rely on. Write one section per review, each starting with a line that holds exactly `REVIEW L<n> <code>` with the line and the code as the first coder listed them, and one section per missed code, each starting with a line that holds exactly `MISSED M<k> <code>`: M1 for the first code of your missed_codes list, M2 for the second, and so on. Cite the document for each fact in a section. End your last section with a line that holds exactly `END`. Write anything that is not about one line before the first section or after that END line, and write no heading inside a section. Then end your reply with the final result as one JSON object in a ```json fenced block. Inside the JSON, copy quotes as plain text and do not use citations. Use this shape:
 
 {
   "reviews": [

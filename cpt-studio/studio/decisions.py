@@ -6,7 +6,9 @@ that is not the latest, or a latest round not done, is refused as changed (the p
 hold, or one holding another code, is refused too - so a decision is never recorded on a line its reviewer did not see.
 - a ready or needs_review line may be approved or rejected; a needs_answer line is answered first (that starts a new
   round) and a not_supported line is never decided;
-- a line with a current decision may only have it revoked, and is then decided again;
+- a line with a current decision may only have it revoked, and is then decided again; an undo (revoke) names the
+  decision it undoes - the id the page shows for the current decision - and is refused as changed when that is not the
+  line's current decision (FIX-SPEC-2 section 5), so a page left open never undoes a decision its member did not see;
 - an approval carries the review attestation for the reviewer's kind, exactly (ACKNOWLEDGEMENTS, unchanged from the
   earlier review module).
 Every decision is a new CodeDecision row - append-only, ordered by studio_decision_sequence; the latest row per line is
@@ -62,8 +64,8 @@ ROUND_CHANGED = 'This coding review has changed. Reload to see the latest.'
 NOT_IN_ROUND = 'That code is not part of this coding review. Reload to see the latest.'
 ROUND_REQUIRED = 'Name the coding review the decision was made on.'
 LINE_REQUIRED = 'Name the code line to decide on.'
+DECISION_REQUIRED = 'Name the decision to undo.'
 DECIDED_ALREADY = 'This code already has a decision. Undo it first.'
-NOTHING_TO_UNDO = 'This code has no decision to undo.'
 NOT_DECIDABLE = {'needs_answer': 'Answer the question about this code first; the coding review then reads it again.',
                  'not_supported': 'A code the coding review found not supported cannot be approved or rejected.'}
 ATTESTATION_REFUSED = 'The acknowledgement is not the current review attestation. Reload the page and approve again.'
@@ -124,10 +126,12 @@ def _locked(encounter):
     return models.Encounter.objects.select_for_update().select_related('workspace').get(pk=encounter.pk)
 
 
-def record(encounter, user, membership, *, round_number, line, code, action, acknowledgement='',
-           note='') -> models.CodeDecision:
+def record(encounter, user, membership, *, round_number, line, code, action, acknowledgement='', note='',
+           decision=None) -> models.CodeDecision:
     """Record ``action`` on line ``line`` (holding ``code``) of round ``round_number`` - the round the page showed,
-    which must be the encounter's latest and done - by ``user`` (BUILD-SPEC 6; FIX-SPEC 1), or Refused."""
+    which must be the encounter's latest and done - by ``user`` (BUILD-SPEC 6; FIX-SPEC 1); an undo names the decision
+    it undoes (``decision``: the id the page shows, which must be the line's current decision; FIX-SPEC-2 section 5).
+    Refused otherwise."""
     if not isinstance(action, str) or action not in ACTIONS:
         raise Refused(400, 'Choose approve, reject or undo.')
     if not isinstance(code, str) or not code:
@@ -136,6 +140,8 @@ def record(encounter, user, membership, *, round_number, line, code, action, ack
         raise Refused(400, LINE_REQUIRED)
     if type(round_number) is not int or round_number < 1:
         raise Refused(400, ROUND_REQUIRED)
+    if action == REVOKE and (not isinstance(decision, str) or not decision):
+        raise Refused(400, DECISION_REQUIRED)
     note = _text(note, 'The note')
     acknowledgement = _text(acknowledgement, 'The acknowledgement')
     with transaction.atomic():
@@ -148,12 +154,12 @@ def record(encounter, user, membership, *, round_number, line, code, action, ack
             raise Refused(409, NOT_IN_ROUND)
         row = rows[0]
         current = state.current_decisions(round_).get(line)
+        if action == REVOKE and (current is None or str(current.pk) != decision):
+            raise Refused(409, ROUND_CHANGED)  # the page showed a decision that is no longer this line's current one
         allowed = allowed_actions(row, current, bool(membership.can_review))
         if action not in allowed:
             if current is not None:
                 raise Refused(409, DECIDED_ALREADY)
-            if action == REVOKE:
-                raise Refused(409, NOTHING_TO_UNDO)
             raise Refused(409, NOT_DECIDABLE.get(row.get('status'), 'This code cannot be decided here.'))
         if action == APPROVE and (not acknowledgement or acknowledgement != acknowledgement_for(user)):
             raise Refused(400, ATTESTATION_REFUSED)

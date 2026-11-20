@@ -28,8 +28,8 @@ class SectionTests(SimpleTestCase):
             f.text_block('\nCode 45380 is not reported for the same lesion; the biopsy was of that polyp.',
                          [f.page_cite('cold biopsy of the same polyp before the snare', 1)]),
             f.text_block('\nThe removal was complete.', [f.page_cite('the polyp was completely removed', 2)]),
-            f.text_block('\n\nLINE L2 45380\nNo separate biopsy.', [f.page_cite('no other lesions were biopsied', 2)])),
-            None)
+            f.text_block('\n\nLINE L2 45380\n'),
+            f.text_block('No separate biopsy.', [f.page_cite('no other lesions were biopsied', 2)])), None)
         self.assertEqual(texts(found, 'L1'), ['hot snare polypectomy of the 8 mm sigmoid polyp',
                                               'cold biopsy of the same polyp before the snare',
                                               'the polyp was completely removed'])
@@ -97,12 +97,15 @@ class SectionTests(SimpleTestCase):
         self.assertEqual(found['_document'], [{'text': 'biopsy', 'page': None, 'source': 'checker'}])
 
     def test_a_cited_block_split_by_a_section_change_files_under_the_document(self):
+        # FIX-SPEC-2 section 4: a cited block whose own text holds a marker files under the document, wherever the
+        # marker stands in it
         found = result.citations(self.reader(
             f.text_block('LINE L1 45385\n'),
             f.text_block('The polyp was removed.\nLINE L2 45380\n', [f.page_cite('polyp was removed', 1)]),
-            f.text_block('\nLINE L2 45380\nA biopsy was taken.', [f.page_cite('biopsy taken', 2)])), None)
-        self.assertEqual(texts(found, '_document'), ['polyp was removed'])
-        self.assertEqual(texts(found, 'L2'), ['biopsy taken'])
+            f.text_block('\nLINE L2 45380\nA biopsy was taken.', [f.page_cite('biopsy taken', 2)]),
+            f.text_block('A second biopsy.', [f.page_cite('second biopsy', 2)])), None)
+        self.assertEqual(texts(found, '_document'), ['polyp was removed', 'biopsy taken'])
+        self.assertEqual(texts(found, 'L2'), ['second biopsy'])
 
     def test_a_heading_marker_and_hcpcs_codes_are_read(self):
         reader_result = f.reader_result([f.code('G2211'), f.code('0001U'), f.code('45385')])

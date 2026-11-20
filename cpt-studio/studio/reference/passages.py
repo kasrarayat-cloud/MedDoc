@@ -1,4 +1,4 @@
-"""CMS reference passages: the data files, their import and their retrieval (HARNESS.md 5).
+"""CMS reference passages: the data files, their import and their loading (HARNESS.md 5).
 
 A passage is verbatim CMS text: read from the publisher's PDF with pypdf, runs of whitespace collapsed to one space and
 nothing else changed. ops/verify_passages.py (removed 2026-11-20 with the earlier PDF reader) proves it again from the PDFs (the file's sha256 first, then every passage
@@ -25,37 +25,10 @@ ReferencePassage rows, each passage's sha256 that of its UTF-8 text. The same fi
 retrieval time may differ, as for import_reference); anything else under a loaded key is refused, as is the same file
 under another key, and a window that overlaps a loaded source of the same kind.
 
-Retrieval (``retrieve``) is pure and deterministic. For each code (sorted, unique) it records every lookup it makes, the
-PFS and MUE facts ``lookup`` returns (each with its source's key, release, window and sha256), and the passages these
-rules select, only from a passage source whose window covers the service date (one source per kind, as for the facts;
-with no service date no dated passage applies, and a note says so):
-
-- the definition of each of the code's own PFS values (pfs.status, pfs.global_days, pfs.mult_proc, pfs.pctc), from the
-  PFS documentation of the release its facts came from, and the endoscopic base code field's definition (pfs.endo_base)
-  when the code names a base;
-- the endoscopy rules below. An endoscopy is a code with multiple procedure indicator 3; its family is the endoscopic
-  base it names, and a base that is itself proposed belongs to its family:
-
-  | passage                          | selected when                                                       | for       |
-  |----------------------------------|---------------------------------------------------------------------|-----------|
-  | ncci.endoscopy 1                 | a proposed code is the endoscopic base another proposed code names  | both      |
-  |   (surgical includes diagnostic) |                                                                     |           |
-  | ncci.endoscopy 2                 | two or more proposed codes name one endoscopic base                 | each      |
-  |   (the most comprehensive code)  |                                                                     |           |
-  | claims.multiple_endoscopy 13     | one family has two or more proposed codes                           | each      |
-  | claims.multiple_endoscopy 14     | a family and a proposed code outside it whose multiple procedure    | all of    |
-  |   (unrelated endoscopies or      |   indicator is 1, 2 or 3                                            |   them    |
-  |   other surgery)                 |                                                                     |           |
-  | ncci.endoscopy 4                 | a code in rule 4's ranges (43753-43757, 91010-91299) and an         | that code |
-  |                                  |   endoscopy                                                         |           |
-  | ncci.endoscopy 7                 | one of rule 7's codes (43450, 43453) and an endoscopy               | that code |
-  | ncci.endoscopy 16                | rule 16's code (76000) and an endoscopy                             | that code |
-
-  The other stored rules are not selected in harness@1: they turn on what codes and indicators cannot show (rule 3 on
-  units, rule 12 on which family's anatomy contains another's, the rest on the procedure's circumstances).
-
-``notes`` say what was not retrieved and why. Passages, rules and notes only inform the reviewer: nothing here decides a
-status (I2).
+No retrieval (FIX-SPEC-2 section 8, 2026-11-20). The retrieval that read these passages for a code, with the dormant
+endoscopy rule set that grouped codes into endoscopic families and picked NCCI rules by code ranges and code lists,
+was deleted: the coding review reads the document itself, and no code-family or code-specific rule logic is kept.
+The data files, their import and load_passages stay.
 """
 from __future__ import annotations
 
@@ -63,48 +36,25 @@ import hashlib
 import json
 import re
 import unicodedata
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Iterable, Mapping, Optional
 
 from django.db import transaction
 from django.utils import timezone
 
 from studio.models import PassageSource, ReferencePassage
-from studio.reference.store import (MUE, PFS, CodeReference, ReferenceLookup, ReferenceSourceInfo, applied_sources,
-                                    source_applies)
 
 PFS_DOCUMENTATION = 'cms-pfs-documentation'
 NCCI_MANUAL = 'cms-ncci-policy-manual'
 CLAIMS_MANUAL = 'cms-claims-manual'
 KIND_LABELS = {PFS_DOCUMENTATION: 'CMS PFS file documentation', NCCI_MANUAL: 'CMS NCCI Policy Manual',
                CLAIMS_MANUAL: 'CMS Claims Processing Manual'}
-# Every topic a passage is retrieved by, in the order a retrieval lists them, with the kind of source that states it.
+# Every topic a data file's passage may carry, with the kind of source that states it (the import checks it).
 TOPICS = {'pfs.status': PFS_DOCUMENTATION, 'pfs.global_days': PFS_DOCUMENTATION, 'pfs.mult_proc': PFS_DOCUMENTATION,
           'pfs.endo_base': PFS_DOCUMENTATION, 'pfs.pctc': PFS_DOCUMENTATION, 'ncci.endoscopy': NCCI_MANUAL,
           'claims.multiple_endoscopy': CLAIMS_MANUAL}
-TOPIC_ORDER = {topic: index for index, topic in enumerate(TOPICS)}
 FIELD_TOPICS = ('pfs.endo_base',)  # a field's own definition, not a value's: topic_value is ''
-
-PFS_FIELDS = ('status', 'global_days', 'mult_proc', 'endo_base', 'pctc')
-MUE_FIELDS = ('value', 'mai', 'rationale')
-FACT_LABELS = {'pfs.status': 'PFS status code', 'pfs.global_days': 'PFS global surgery days',
-               'pfs.mult_proc': 'PFS multiple procedure indicator', 'pfs.endo_base': 'PFS endoscopic base code',
-               'pfs.pctc': 'PFS PC/TC indicator', 'mue.value': 'MUE value', 'mue.mai': 'MUE adjudication indicator',
-               'mue.rationale': 'MUE rationale'}
-
-ENDOSCOPY = '3'  # multiple procedure indicator 3: the special rules for multiple endoscopic procedures
-MULTIPLE_SURGERY = ('1', '2', '3')  # the indicators under which a code is ranked with other procedures
-RULE_4_RANGES = ((43753, 43757), (91010, 91299))  # NCCI Ch. VI C.4's own ranges
-RULE_7_CODES = ('43450', '43453')  # NCCI Ch. VI C.7's own codes
-RULE_16_CODES = ('76000',)  # NCCI Ch. VI C.16's own code
-
-NO_DATE_NOTE = 'Service date unknown; no dated passage applies.'
-# What HARNESS.md 5 names as not connected, worded as the encounter API reports it.
-NOT_CONNECTED = ('NCCI procedure-to-procedure edits (AMA licence agreement not accepted)',
-                 'AMA CPT descriptors and guidelines (no licence)', 'Payer policies')
 
 # --- data files ----------------------------------------------------------------------------------------------------
 
@@ -349,7 +299,7 @@ def import_data_file(path) -> tuple[PassageSource, bool]:
     return source, True
 
 
-# --- loading and retrieval -----------------------------------------------------------------------------------------
+# --- loading ---------------------------------------------------------------------------------------------------------
 
 def load_passages() -> list[dict]:
     """Every imported passage with its source's key, kind, title, release, window, file sha256 and url, sorted by
@@ -367,201 +317,3 @@ def load_passages() -> list[dict]:
                        'topic': row.topic, 'topic_value': row.topic_value, 'text': row.text, 'sha256': row.sha256})
     return sorted(loaded, key=lambda p: (p['source_key'], p['passage_key']))
 
-
-def _codes(codes) -> list[str]:
-    if isinstance(codes, str):
-        raise TypeError('codes must be an iterable of codes, not one string.')
-    found = set()
-    for code in codes:
-        if not isinstance(code, str) or not code:
-            raise ValueError(f'{code!r} is not a code.')
-        found.add(code)
-    return sorted(found)
-
-
-def _index(passages) -> tuple[dict, tuple[ReferenceSourceInfo, ...]]:
-    """(source key, topic, topic value) -> its passages by key; and each passage source, as the window rule reads it."""
-    index, sources = defaultdict(list), {}
-    for passage in passages:
-        key = passage['source_key']
-        info = ReferenceSourceInfo(
-            key=key, kind=passage['kind'], publisher='', title=passage.get('source_title', ''),
-            release=passage['release'], url=passage.get('url', ''), sha256=passage.get('source_sha256', ''),
-            effective_start=passage['effective_start'], effective_end=passage['effective_end'], license_note='',
-            scope_note='')
-        if sources.setdefault(key, info) != info:
-            raise ValueError(f'The passages of {key} disagree about their source.')
-        if passage_sha256(passage['text']) != passage['sha256']:
-            raise ValueError(f'Passage {key}/{passage["passage_key"]} does not match its sha256.')
-        index[(key, passage['topic'], passage['topic_value'])].append(passage)
-    for found in index.values():
-        found.sort(key=lambda p: p['passage_key'])
-    return index, tuple(sources[key] for key in sorted(sources))
-
-
-def _unapplied(kind, sources, service_date) -> str:
-    covering = [s.key for s in sources if s.kind == kind and source_applies(s, service_date)]
-    if covering:
-        return (f'{len(covering)} {KIND_LABELS[kind]} passage sources cover {service_date.isoformat()} '
-                f'({", ".join(covering)}); none was used because the applicable one is ambiguous.')
-    return f'No {KIND_LABELS[kind]} passage source covers {service_date.isoformat()}.'
-
-
-def _facts(reference: CodeReference, fact_sources: Mapping[str, ReferenceSourceInfo]) -> list[dict]:
-    facts = []
-    for kind, prefix, fields, found in ((PFS, 'pfs', PFS_FIELDS, reference.pfs),
-                                        (MUE, 'mue', MUE_FIELDS, reference.mue)):
-        if not found:
-            continue
-        source = fact_sources.get(found.get('source_key'))
-        if source is None:
-            raise ValueError(f'{reference.code}: the lookup names source {found.get("source_key")!r}, which it '
-                             'does not list.')
-        for field in fields:
-            if field in found:
-                facts.append({'source_key': source.key, 'release': source.release,
-                              'effective': [source.effective_start, source.effective_end], 'sha256': source.sha256,
-                              'field': f'{prefix}.{field}', 'value': found[field], 'kind': kind,
-                              'label': FACT_LABELS[f'{prefix}.{field}']})
-    return facts
-
-
-def _endoscopy_rules(references: Mapping[str, CodeReference]) -> dict[str, dict[tuple[str, str], list[str]]]:
-    """code -> {(topic, topic value): why} for the endoscopy rules in the module docstring's table."""
-    codes = set(references)
-    pfs = {code: ref.pfs for code, ref in references.items() if ref.pfs}
-    indicator = {code: facts.get('mult_proc') for code, facts in pfs.items()}
-    base = {code: facts.get('endo_base') or '' for code, facts in pfs.items()}
-    endoscopies = sorted(code for code in pfs if indicator[code] == ENDOSCOPY)
-    rules = defaultdict(lambda: defaultdict(set))
-
-    def add(code, topic, value, reason):
-        rules[code][(topic, value)].add(reason)
-
-    named = defaultdict(list)  # endoscopic base -> the proposed codes that name it (rules 1 and 2)
-    for code in sorted(pfs):
-        if base[code] and base[code] != code:
-            named[base[code]].append(code)
-    for root, members in sorted(named.items()):
-        if root in codes:
-            for member in members:
-                for code in (member, root):
-                    add(code, 'ncci.endoscopy', '1', f'{root} is the endoscopic base of {member}')
-        if len(members) >= 2:
-            for member in members:
-                add(member, 'ncci.endoscopy', '2', f'{", ".join(members)} name the endoscopic base {root}')
-
-    families = defaultdict(set)  # base -> its proposed codes: the endoscopies naming it, and itself when proposed
-    for code in endoscopies:
-        families[base[code] or code].add(code)
-    for root, members in families.items():
-        if root in codes:
-            members.add(root)
-    partners = defaultdict(set)  # code -> the proposed codes it is ranked with outside its family (item 14)
-    for root, members in sorted(families.items()):
-        if len(members) >= 2:
-            family = ', '.join(sorted(members))
-            for member in members:
-                add(member, 'claims.multiple_endoscopy', '13', f'{family} are one endoscopic family (base {root})')
-        for other in sorted(pfs):
-            if other not in members and indicator[other] in MULTIPLE_SURGERY:
-                for member in members:
-                    partners[member].add(other)
-                    partners[other].add(member)
-    for code, others in partners.items():
-        add(code, 'claims.multiple_endoscopy', '14', f'{code} is not of one endoscopic family with '
-                                                     f'{", ".join(sorted(others))}')
-
-    for code in sorted(codes):
-        others = ', '.join(e for e in endoscopies if e != code)
-        if not others:
-            continue
-        with_endoscopy = f'with {others}, of multiple procedure indicator 3'
-        # Only ASCII digits are a code number: str.isdigit() is also true of superscript, subscript and circled digits,
-        # which int() refuses, and of other scripts' digits, which int() reads as a number no CPT code string is
-        # (refutation round 1, parity-1: a Corti code ending in '²' stopped the whole assessment).
-        if code.isascii() and code.isdigit() and any(low <= int(code) <= high for low, high in RULE_4_RANGES):
-            add(code, 'ncci.endoscopy', '4', f'{code} is in rule 4\'s ranges, {with_endoscopy}')
-        if code in RULE_7_CODES:
-            add(code, 'ncci.endoscopy', '7', f'{code} is one of rule 7\'s codes, {with_endoscopy}')
-        if code in RULE_16_CODES:
-            add(code, 'ncci.endoscopy', '16', f'{code} is rule 16\'s code, {with_endoscopy}')
-    return {code: {key: sorted(reasons) for key, reasons in found.items()} for code, found in rules.items()}
-
-
-def _pfs_queries(code, reference: CodeReference, when: str, notes: list) -> list[tuple[str, str, str]]:
-    if not reference.pfs:
-        notes.append(f'{code} has no PFS facts for {when}; no PFS definition was retrieved for it.')
-        return []
-    queries = []
-    for field in PFS_FIELDS:
-        value = reference.pfs.get(field)
-        if not value:
-            continue
-        if f'pfs.{field}' in FIELD_TOPICS:
-            queries.append((f'pfs.{field}', '', f'{code} names the endoscopic base {value}'))
-        else:
-            queries.append((f'pfs.{field}', value, ''))
-    return queries
-
-
-def _shown(passage) -> dict:
-    return {name: passage[name] for name in ('source_key', 'release', 'passage_key', 'section', 'page', 'topic',
-                                             'topic_value', 'sha256', 'text')}
-
-
-def retrieve(codes: Iterable[str], service_date: Optional[date], lookup: ReferenceLookup,
-             passages: Iterable[Mapping]) -> list[dict]:
-    """One retrieval trace per code (sorted, unique): {code, service_date, facts, passages, lookups, notes}. Pure: the
-    lookup and the passages (load_passages' dicts) are its only inputs, and the same inputs give the same list."""
-    wanted = _codes(codes)
-    if service_date is not None and (not isinstance(service_date, date) or isinstance(service_date, datetime)):
-        raise TypeError('service_date must be a date or None.')
-    index, passage_sources = _index(passages)
-    applied = applied_sources(passage_sources, service_date)  # kind -> the one passage source covering the date
-    fact_sources = {source.key: source for source in lookup.sources()}
-    references = {code: lookup.lookup(code, service_date) for code in wanted}
-    rules = _endoscopy_rules(references)
-    when = service_date.isoformat() if service_date else 'an unknown date'
-    entries = []
-    for code in wanted:
-        reference = references[code]
-        facts = _facts(reference, fact_sources)
-        lookups = [f'reference lookup {code} on {when}: ' + (', '.join(reference.applicable_sources)
-                                                             or 'no source applied')]
-        notes = list(reference.notes)
-        selected = {}
-        if service_date is None:
-            notes.append(NO_DATE_NOTE)
-        else:
-            queries = _pfs_queries(code, reference, when, notes)
-            triggered = rules.get(code, {})
-            queries += [(topic, value, '; '.join(triggered[(topic, value)]))
-                        for topic, value in sorted(triggered, key=lambda k: (TOPIC_ORDER[k[0]], len(k[1]), k[1]))]
-            fact_release = fact_sources[reference.pfs['source_key']].release if reference.pfs else None
-            noted = set()
-            for topic, value, reason in queries:
-                kind = TOPICS[topic]
-                source, why = applied.get(kind), None
-                if source is None:
-                    why = _unapplied(kind, passage_sources, service_date)
-                elif kind == PFS_DOCUMENTATION and source.release != fact_release:
-                    why = (f'The {KIND_LABELS[kind]} covering {when} ({source.key}) is release {source.release}, not '
-                           f'{fact_release} of the facts; its definitions were not used.')
-                if why is not None:
-                    if kind not in noted:
-                        notes.append(why)
-                        noted.add(kind)
-                    continue
-                found = index.get((source.key, topic, value), [])
-                shown = f'{topic}={value}' if value else topic
-                lookups.append(f'passages {shown} in {source.key}' + (f' ({reason})' if reason else '')
-                               + f': {len(found)}')
-                if not found:
-                    notes.append(f'{source.key} has no passage for {shown}.')
-                for passage in found:
-                    selected.setdefault((TOPIC_ORDER[topic], source.key, passage['passage_key']), passage)
-        entries.append({'code': code, 'service_date': service_date.isoformat() if service_date else None,
-                        'facts': facts, 'passages': [_shown(selected[key]) for key in sorted(selected)],
-                        'lookups': lookups, 'notes': notes})
-    return entries

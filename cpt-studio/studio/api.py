@@ -1,4 +1,4 @@
-"""The customer JSON API (BUILD-SPEC 6; client contract customer-2026-11-21). Session auth; CSRF enforced on every POST by
+"""The customer JSON API (BUILD-SPEC 6; client contract customer-2026-11-22). Session auth; CSRF enforced on every POST by
 the middleware; every response no-store (access.SecurityHeadersMiddleware).
 
 Every handler resolves the caller's ACTIVE membership first and scopes every row through it, so another workspace's
@@ -12,10 +12,12 @@ record - runs, models, usage, hashes, the coding review's whole answers - is a p
     POST /api/encounters                            an upload or a paste (multipart); starts coding round 1
     GET  /api/encounters/<id>                       customer.encounter_json
     POST /api/encounters/<id>/answers               {answers: [{question_id, text}]} -> a new round
-    POST /api/encounters/<id>/decisions             {round, line, code, action, acknowledgement, note}: one line of
-                                                    the round the page shows (409 when that round changed)
+    POST /api/encounters/<id>/decisions             {round, line, code, action, acknowledgement, note, decision}: one
+                                                    line of the round the page shows; an undo names the decision it
+                                                    undoes (409 when the round or that decision changed)
     POST /api/encounters/<id>/stop | resume | retry
-    POST /api/encounters/<id>/reports               {kind: draft|approved, fmt: txt|csv}
+    POST /api/encounters/<id>/reports               {kind: draft|approved, fmt: txt|csv, round}: an export of the round
+                                                    the page shows (409 when it is not the latest)
     GET  /api/encounters/<id>/original[?view=1]     the original (download), or the in-page view (inline)
     GET  /api/reports/<id>/download                 a stored export, exactly as stored
 """
@@ -224,14 +226,16 @@ def answers(request, encounter_id):
 @api_view
 def decide(request, encounter_id):
     """{round: the round number the page shows, line: "L2", code: "20610", action: approve|reject|revoke,
-    acknowledgement, note} -> 201 {line, code, action, by, at, note} (decisions.record: 409 when the round is not the
-    latest done one, or the line is not in it with that code)."""
+    acknowledgement, note, decision: for an undo, the id of the decision it undoes} -> 201 {id, line, code, action, by,
+    at, note} (decisions.record: 409 when the round is not the latest done one, the line is not in it with that code, or
+    an undo names a decision that is not the line's current one)."""
     data = _payload(request)
     encounter, membership = scoped_encounter(request.user, encounter_id)
     _require_reviewer(membership)
     decision = decisions.record(encounter, request.user, membership, round_number=data.get('round'),
                                 line=data.get('line'), code=data.get('code'), action=data.get('action'),
-                                acknowledgement=data.get('acknowledgement'), note=data.get('note'))
+                                acknowledgement=data.get('acknowledgement'), note=data.get('note'),
+                                decision=data.get('decision'))
     return JsonResponse({'line': decision.line, 'code': decision.code, **customer.decision_json(decision)}, status=201)
 
 
@@ -269,14 +273,17 @@ def retry(request, encounter_id):
 @require_POST
 @api_view
 def create_report(request, encounter_id):
-    """{kind: draft|approved, fmt: txt|csv} -> 201 the export as the page lists it (exports.create)."""
+    """{kind: draft|approved, fmt: txt|csv, round: the round number the page shows} -> 201 the export as the page lists
+    it (exports.create: 409 when that round is not the latest)."""
     data = _payload(request)
     encounter, _ = scoped_encounter(request.user, encounter_id)
-    kind, fmt = data.get('kind'), data.get('fmt')
+    kind, fmt, round_number = data.get('kind'), data.get('fmt'), data.get('round')
     if kind not in exports.KINDS or fmt not in exports.FORMATS:
         raise ApiError(400, 'Choose a draft or an approved export as TXT or CSV.')
+    if type(round_number) is not int or round_number < 1:
+        raise ApiError(400, exports.ROUND_REQUIRED)
     try:
-        export = exports.create(encounter, request.user, kind, fmt)
+        export = exports.create(encounter, request.user, kind, fmt, round_number=round_number)
     except exports.NotReady as exc:
         raise ApiError(409, exc.message, blockers=exc.blockers)
     return JsonResponse(customer.report_json(export, export.round_id), status=201)

@@ -9,7 +9,7 @@ import json
 
 from django.test import TestCase
 
-from studio import decisions, exports, models
+from studio import decisions, exports, models, state
 from tests.support import rounds as r
 
 Export = models.ExportArtifact
@@ -36,7 +36,10 @@ class ExportCase(r.CustomerCase, TestCase):
         return (client or self.client).post(path, data=json.dumps(body), content_type='application/json')
 
     def export(self, kind, fmt, client=None):
-        return self.post(f'/api/encounters/{self.enc.pk}/reports', {'kind': kind, 'fmt': fmt}, client=client)
+        """POST an export as the page sends it: naming the round it shows, the latest (FIX-SPEC-2 section 5)."""
+        number = state.latest_round(self.enc).number
+        return self.post(f'/api/encounters/{self.enc.pk}/reports', {'kind': kind, 'fmt': fmt, 'round': number},
+                         client=client)
 
     def line_of(self, code):
         return next(row['line'] for row in self.round.codes if row['code'] == code)
@@ -47,6 +50,7 @@ class ExportCase(r.CustomerCase, TestCase):
                              {'round': self.round.number, 'line': self.line_of(code), 'code': code,
                               'action': 'approve', 'acknowledgement': ACK[kind]}, client=client)
         self.assertEqual(response.status_code, 201, response.content)
+        return response.json()
 
     def download(self, row, client=None):
         response = (client or self.client).get(row['download_url'])
@@ -143,9 +147,9 @@ class ApprovedTests(ExportCase):
         self.assertEqual(refused.json(), {'error': exports.APPROVED_NOT_YET,
                                           'details': {'blockers': ['No code has been approved.']}})
         self.approve('45385')
-        self.approve('45380', user=self.agent, kind='agent')
+        first = self.approve('45380', user=self.agent, kind='agent')
         reject = self.post(f'/api/encounters/{self.enc.pk}/decisions',
-                           {'round': 1, 'line': 'L2', 'code': '45380', 'action': 'revoke'},
+                           {'round': 1, 'line': 'L2', 'code': '45380', 'action': 'revoke', 'decision': first['id']},
                            client=self.client_for(self.agent))
         self.assertEqual(reject.status_code, 201)
         self.approve('45380', user=self.agent, kind='agent')
