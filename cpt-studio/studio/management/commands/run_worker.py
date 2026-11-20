@@ -10,39 +10,36 @@ HEARTBEAT_JOIN_SECONDS = 5
 
 
 class Command(BaseCommand):
-    help = 'Run the CPT Studio pipeline worker until SIGTERM/SIGINT (the current stage finishes first).'
+    help = ('Run the CPT Studio worker - CPT_STUDIO_CONCURRENT_DOCUMENTS threads, each on its own database connection - '
+            'until SIGTERM/SIGINT (each thread finishes its current job first).')
 
     def add_arguments(self, parser):
         parser.add_argument('--poll-seconds', type=float, default=1.0)
+        parser.add_argument('--threads', type=int, default=None,
+                            help='Worker threads (default: settings.CONCURRENT_DOCUMENTS).')
         parser.add_argument('--once', action='store_true', help='Process queued jobs until none are left, then exit.')
 
     def handle(self, *args, **options):
-        stopping = {'flag': False}
+        stopping = threading.Event()
 
         def request_stop(signum, frame):
-            stopping['flag'] = True
+            stopping.set()
 
         signal.signal(signal.SIGTERM, request_stop)
         signal.signal(signal.SIGINT, request_stop)
-        # Decision (j): the process beats at once and then every jobs.HEARTBEAT_SECONDS from a thread of its own, so the
-        # progress panel can tell a worker that is gone from one that is busy with a long stage. The thread beats until
-        # this process is done working - its loop has returned - never until the stop is asked for: a SIGTERM (the
-        # installer's `docker stop`) lets the current stage finish, and a worker finishing it is busy, not gone
-        # (refutation r2, L5-2). `--once` beats the same way while it drains the queue (L5-6).
+        # One heartbeat for the process: it beats at once and then every jobs.HEARTBEAT_SECONDS from a thread of its
+        # own until the worker's threads are done - never until the stop is asked for: a SIGTERM lets each thread finish
+        # its current job, and a worker finishing one is busy, not gone. `--once` beats the same way while it drains.
         done = threading.Event()
         jobs.beat()
         heartbeat = jobs.start_heartbeat(done.is_set)
         try:
             if options['once']:
                 jobs.mark_stale()
-                while not stopping['flag']:
-                    job = jobs.claim_next()
-                    if job is None:
-                        break
-                    jobs.run_job(job)
+                jobs.drain(stopping.is_set, threads=options['threads'], poll_seconds=options['poll_seconds'])
                 return
             self.stdout.write('CPT Studio worker started.')
-            jobs.work(lambda: stopping['flag'], poll_seconds=options['poll_seconds'])
+            jobs.work(stopping.is_set, poll_seconds=options['poll_seconds'], threads=options['threads'])
             self.stdout.write('CPT Studio worker stopped.')
         finally:
             done.set()

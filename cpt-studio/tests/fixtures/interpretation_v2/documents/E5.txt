@@ -1,8 +1,0 @@
-SYNTHETIC COLONOSCOPY REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-Findings: The colonoscope was advanced to the cecum.
-Pathology report
-Final diagnosis
-Sigmoid colon, biopsy: tubular adenoma.

@@ -1,6 +1,0 @@
-SYNTHETIC ENDOSCOPY REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-EGD: The gastroscope was advanced to the second portion of the duodenum.
-Push enteroscopy: Two angioectasias in the proximal jejunum were treated with argon plasma coagulation.

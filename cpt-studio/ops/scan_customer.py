@@ -14,16 +14,20 @@ links, retrieval logs and rule ids out of every customer screen, API response an
   for each encounter named (--encounter, repeatable) or listed (--all, at most --limit, newest first):
     GET /api/encounters/<id>             against the contract (every key listed, nothing else), scanned
     GET <document.original_url>          its status and headers only: the document is the customer's own
-    GET <reports[].download_url>         every customer report, scanned whole, with no X-Content-SHA256 header
-    GET every /ops/ URL of it            each must answer 404 to this session
-    GET /api/encounters/<id>/trace       must answer 404 (removed for everyone)
+    GET <document.view_url>              likewise (the original, or the PDF a Word file was converted to)
+    GET <reports[].download_url>         every customer export, scanned whole, with no X-Content-SHA256 header
+    GET every /ops/ URL of it            each must answer 404 to this session (the operator console's pages)
+    GET every removed URL of it          each must answer 404 (the earlier trace and operator API, for everyone)
   POST /logout/ and GET /api/session     the session must then be refused (verify_login.py's sign-out proof)
 
-Every body and header is scanned with ops/verification/customer-denylist.json (the walk ops/verify_browser.cjs and
-ops/verify_downloads.py read the same list, and this module's tests run its vectors) and every payload is held to
-ops/verification/customer-contract.json. A string that is a quotation of the encounter's own document is not scanned.
---operator-json DIR adds the operator view's own identifiers (run ids, request hashes, models, check ids ...): files
-<encounter id>.json (GET /ops/api/encounters/<id>, read by an operator) and, optionally, <encounter id>.trace.json.
+Every body and header is scanned with ops/verification/customer-denylist.json (the browser walk ops/walk.cjs reads the
+same list, and this module's tests run its vectors) and every payload is held to ops/verification/customer-contract.json
+- the Fable coding build's customer contract (client contract customer-2026-11-22); the Django suite holds the server to
+the same file through this module's readers (tests/test_api_customer.py). A string that is one of the encounter's own
+quotations - the passages of its document its codes cite - is not scanned. --operator-json DIR adds an operator view's
+own identifiers, read by the paths the denylist names (deny_value_paths; files <encounter id>.json and, optionally,
+<encounter id>.trace.json): the Fable coding build's operator console is server-rendered and its denylist names none, so
+the option only matters for a denylist that names some.
 
 Sign-in and transport are ops/verify_login.py's: --credentials a private JSON file with top-level "username" and
 "password" (or --username with --password-file), refused if a group or other user may read it; TLS verified; a plain
@@ -70,18 +74,19 @@ DENY_SHAPE = re.compile(DENYLIST['deny_value_shape'])
 ISO_TIMESTAMP = re.compile(CONTRACT['iso_pattern'])
 DATE_ONLY = re.compile(CONTRACT['date_pattern'])
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-# Response headers that carry no customer-facing wording (ops/verify_browser.cjs UNSCANNED_HEADERS).
+# Response headers that carry no customer-facing wording (as the walk's own list, ops/walk.cjs).
 UNSCANNED_HEADERS = frozenset({'set-cookie', 'date', 'etag', 'last-modified', 'content-length', 'content-security-policy',
                                'content-security-policy-report-only', 'strict-transport-security', 'permissions-policy',
                                'report-to', 'nel', 'expires', 'cache-control', 'vary', 'connection', 'keep-alive',
                                'transfer-encoding', 'content-encoding', 'accept-ranges', 'age'})
-OPS_GET_PATHS = ('/ops/', '/ops/assets/ops.js', '/ops/api/encounters', '/ops/api/encounters/{id}',
-                 '/ops/api/encounters/{id}/trace', '/ops/api/encounters/{id}/reports')
-REMOVED_PATHS = ('/api/encounters/{id}/trace',)
+# The operator console's GET pages (studio/operator.py, cptstudio/urls.py), each 404 to a customer; and what was removed
+# for everyone - the earlier trace, the earlier operator API and its script - each 404 whoever asks.
+OPS_GET_PATHS = ('/ops/', '/ops/encounters/{id}', '/ops/encounters/{id}/original')
+REMOVED_PATHS = ('/api/encounters/{id}/trace', '/ops/api/encounters/{id}', '/ops/assets/ops.js')
 MAX_HITS = 60
 
 
-# --- the shared denylist (ops/verification/customer-denylist.json); ops/verify_browser.cjs is the same reader -------
+# --- the shared denylist (ops/verification/customer-denylist.json); ops/walk.cjs is the same reader ----------------
 
 @dataclass
 class ScanContext:
@@ -103,14 +108,22 @@ def _excerpt(text: str, at: int, length: int) -> str:
     return ('…' if start else '') + re.sub(r'\s+', ' ', text[start:end]) + ('…' if end < len(text) else '')
 
 
-def scan_text(text, ctx: ScanContext, surface: str, where: str = '', hits: list | None = None) -> list:
+# A JSON value that is never a passage of the document: a code line's modifier is part of the code line the coding
+# review returned, so it is scanned whole even when a quotation holds the same words (SEC-S4: a modifier 'Claude' beside
+# a cited 'Dr. Claude Example ...' was set aside as a part of the quotation). The walk's scanJson reads the same paths.
+NEVER_QUOTED = re.compile(r'\.modifiers\[\d+\]$')
+
+
+def scan_text(text, ctx: ScanContext, surface: str, where: str = '', hits: list | None = None,
+              quotable: bool = True) -> list:
     """The hits of one string on one surface ({id, severity, surface, where, match}). A string that is a substring of
-    the document text is a quotation of it and is not scanned (bundle text always is)."""
+    the document text is a quotation of it and is not scanned (bundle text always is), unless it is not ``quotable``
+    (NEVER_QUOTED)."""
     hits = [] if hits is None else hits
     raw = text if isinstance(text, str) else ('' if text is None else str(text))
     if not raw.strip():
         return hits
-    if surface != 'bundle' and ctx.document_text and raw in ctx.document_text:
+    if quotable and surface != 'bundle' and ctx.document_text and raw in ctx.document_text:
         return hits
     cleaned = raw
     for allowed in ctx.allowed:
@@ -130,10 +143,11 @@ def scan_text(text, ctx: ScanContext, surface: str, where: str = '', hits: list 
 
 
 def scan_json(value, ctx: ScanContext, where: str = '$', hits: list | None = None, surface: str = 'json') -> list:
-    """Every string value and every key of a JSON value; a forbidden key is a hit by itself."""
+    """Every string value and every key of a JSON value; a forbidden key is a hit by itself; a value at a NEVER_QUOTED
+    path is scanned whole."""
     hits = [] if hits is None else hits
     if isinstance(value, str):
-        return scan_text(value, ctx, surface, where, hits)
+        return scan_text(value, ctx, surface, where, hits, quotable=not NEVER_QUOTED.search(where))
     if isinstance(value, list):
         for index, item in enumerate(value):
             scan_json(item, ctx, f'{where}[{index}]', hits, surface)
@@ -148,7 +162,7 @@ def scan_json(value, ctx: ScanContext, where: str = '$', hits: list | None = Non
 
 
 def csv_rows(text: str) -> list:
-    """RFC 4180 rows (quoted cells, doubled quotes, CR LF or LF), as ops/verify_browser.cjs csvRows reads them."""
+    """RFC 4180 rows (quoted cells, doubled quotes, CR LF or LF)."""
     rows, row, cell, quoted, i = [], [], '', False, 0
     while i < len(text):
         ch = text[i]
@@ -182,7 +196,7 @@ def csv_rows(text: str) -> list:
 
 def scan_file(text: str, ctx: ScanContext, name: str, fmt: str, hits: list | None = None) -> list:
     """A downloaded file, whole: a CSV cell by cell, a TXT line by line, any quoted passage that is the document's own
-    text set aside (a report quotes the document)."""
+    text set aside (an export quotes the document)."""
     hits = [] if hits is None else hits
     if fmt == 'csv':
         for r, row in enumerate(csv_rows(text), start=1):
@@ -233,6 +247,14 @@ def harvest(value, dotted: str) -> list:
     return [node for node in nodes if isinstance(node, str)]
 
 
+def quotations(encounter) -> str:
+    """The encounter's own quotations - every passage of its document a code cites (codes[].quotes[].text) - one per
+    line: what scan_text sets aside as the document's own text."""
+    quotes = [quote.get('text') for code in ((encounter or {}).get('codes') or []) if isinstance(code, dict)
+              for quote in (code.get('quotes') or []) if isinstance(quote, dict)]
+    return '\n'.join(quote for quote in quotes if isinstance(quote, str) and quote.strip())
+
+
 def deny_values_from(encounter: dict, trace: dict | None = None) -> list:
     """Every identifier the operator view (and its trace) holds that a customer surface must never carry:
     identifier-shaped (a digit or . : @ / - in it) and at least deny_value_min_length long."""
@@ -243,7 +265,7 @@ def deny_values_from(encounter: dict, trace: dict | None = None) -> list:
     return sorted({v for v in values if len(v) >= DENYLIST['deny_value_min_length'] and DENY_SHAPE.search(v)})
 
 
-# --- the shared contract (ops/verification/customer-contract.json); ops/verify_browser.cjs shapeProblems ------------
+# --- the shared contract (ops/verification/customer-contract.json) --------------------------------------------------
 
 def _kind(value) -> str:
     if value is None:
@@ -451,7 +473,7 @@ class Scanner:
         probe = scan_context()
         answer = self.get(f'/api/encounters/{encounter_id}')
         data = answer.json()
-        text = ((operator or {}).get('revision') or {}).get('text') or ((data or {}).get('document') or {}).get('text') or ''
+        text = ((operator or {}).get('revision') or {}).get('text') or quotations(data)
         ctx = scan_context(text, deny_values_from(operator, trace) if operator else (), [urlsplit(self.origin).hostname or ''])
         scan_headers(answer.headers, ctx, f'GET /api/encounters/{encounter_id}', self.hits['header'])
         record = {'id': encounter_id, 'status': answer.status, 'operator_view': operator is not None, 'reports': 0}
@@ -460,11 +482,12 @@ class Scanner:
             return record
         scan_json(data, ctx, f'GET /api/encounters/{encounter_id}', self.hits['json'])
         self.checks.append(check_contract(data, 'encounter', f'customer.contract.{short}'))
-        original = (data.get('document') or {}).get('original_url')
-        if isinstance(original, str) and original.startswith('/'):
-            got = self.get(original, '*/*', read_body=False)  # its headers: the document itself is the customer's own
-            scan_headers(got.headers, ctx, f'GET {original}', self.hits['header'])
-            self.checks.append(login.check(f'original.{short}', 'hard', got.status == 200, f'GET {original} answered HTTP {got.status}'))
+        for name, field in (('original', 'original_url'), ('view', 'view_url')):
+            address = (data.get('document') or {}).get(field)
+            if isinstance(address, str) and address.startswith('/'):
+                got = self.get(address, '*/*', read_body=False)  # its headers: the document itself is the customer's own
+                scan_headers(got.headers, ctx, f'GET {address}', self.hits['header'])
+                self.checks.append(login.check(f'{name}.{short}', 'hard', got.status == 200, f'GET {address} answered HTTP {got.status}'))
         for report in data.get('reports') or []:
             url = report.get('download_url') if isinstance(report, dict) else None
             if not (isinstance(url, str) and url.startswith('/api/reports/')):

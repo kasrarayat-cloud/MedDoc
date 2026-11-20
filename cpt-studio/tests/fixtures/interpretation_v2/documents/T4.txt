@@ -1,7 +1,0 @@
-SYNTHETIC OFFICE VISIT NOTE
-Date of service: 03/14/2031
-Clinician: Corvin Ashdale, MD (fictional)
-
-The patient was seen in the office today for follow-up of rectal bleeding.
-Excision of a 1 cm sebaceous cyst on the upper back was performed in the office.
-Total time spent on the date of the encounter was 30 minutes.

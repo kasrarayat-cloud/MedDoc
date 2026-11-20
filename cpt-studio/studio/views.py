@@ -1,4 +1,9 @@
-"""Health, sign-in/out and the single-page shell."""
+"""Health, sign-in/out and the single-page shell.
+
+The shell's Content-Security-Policy is the site's own (access.SecurityHeadersMiddleware) with frame-src 'self' named, so
+the review page's viewer frames the in-page view of the original (GET /api/encounters/<id>/original?view=1, which only
+CPT Studio's own pages may frame) and nothing else.
+"""
 from datetime import timedelta
 
 from django.conf import settings
@@ -12,10 +17,13 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
-from .access import active_membership
+from .access import SecurityHeadersMiddleware, active_membership
 from .api import UNSTORABLE
 from .models import LoginAttempt
 from .operator import is_operator
+
+
+INDEX_CSP = SecurityHeadersMiddleware.CSP.replace("frame-ancestors 'none'", "frame-src 'self'; frame-ancestors 'none'")
 
 
 @require_GET
@@ -98,4 +106,6 @@ def index(request):
     if is_operator(request.user) and not request.user.memberships.filter(active=True).exists():
         return redirect('/ops/')  # an operator with no membership has no workspace here: the diagnostics are theirs
     active_membership(request.user)  # 404 for accounts without an active workspace
-    return render(request, 'studio/index.html', {'release': settings.RELEASE_SHA})
+    response = render(request, 'studio/index.html', {'release': settings.RELEASE_SHA})
+    response.headers['Content-Security-Policy'] = INDEX_CSP
+    return response

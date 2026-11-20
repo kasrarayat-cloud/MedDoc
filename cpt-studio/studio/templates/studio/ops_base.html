@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}Operator console{% endblock %} · CPT Studio</title>
+  <style>
+    :root { color-scheme: light; --ink: #1b2a26; --muted: #5d6b67; --line: #d8dfdc; --soft: #f3f6f5; --accent: #183d35;
+            --warn: #8a4b00; --bad: #9b1c1c; --ok: #1f6b45; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: #fff; }
+    header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; padding: 12px 20px; background: var(--accent); color: #fff; }
+    header a { color: #fff; }
+    header .meta { font-size: 12px; opacity: .8; }
+    main { padding: 16px 20px 48px; max-width: 1400px; }
+    h1 { font-size: 20px; margin: 4px 0 12px; }
+    h2 { font-size: 16px; margin: 28px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+    h3 { font-size: 14px; margin: 18px 0 6px; }
+    table { border-collapse: collapse; width: 100%; margin: 6px 0 12px; }
+    th, td { text-align: left; vertical-align: top; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+    th { background: var(--soft); font-weight: 600; white-space: nowrap; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+    pre { white-space: pre-wrap; word-break: break-word; background: var(--soft); padding: 10px; border: 1px solid var(--line); max-height: 600px; overflow: auto; }
+    details { margin: 6px 0; }
+    summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+    .card { border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
+    .muted { color: var(--muted); }
+    .flag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 12px; background: var(--soft); border: 1px solid var(--line); }
+    .flag.bad { color: var(--bad); border-color: var(--bad); }
+    .flag.warn { color: var(--warn); border-color: var(--warn); }
+    .flag.ok { color: var(--ok); border-color: var(--ok); }
+    .notice { padding: 8px 12px; border-radius: 6px; margin: 10px 0; }
+    .notice.error { background: #fdecec; color: var(--bad); border: 1px solid #f2c2c2; }
+    .notice.done { background: #e9f6ef; color: var(--ok); border: 1px solid #bfe3cf; }
+    form.inline { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; margin: 6px 0; }
+    textarea { width: min(560px, 100%); min-height: 54px; font: inherit; }
+    button { font: inherit; padding: 4px 12px; border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 4px; cursor: pointer; }
+    .scroll { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong><a href="/ops/">CPT Studio · Operator console</a></strong>
+    <span class="meta">Synthetic data only · release {{ release }}</span>
+  </header>
+  <main id="main">
+    {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+    {% if done %}<p class="notice done" role="status">{{ done }}</p>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

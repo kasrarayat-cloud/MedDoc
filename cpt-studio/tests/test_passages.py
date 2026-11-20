@@ -1,8 +1,9 @@
 """CMS reference passages: the bundled data files, their import and load_passages (HARNESS.md 5).
 
 The data files are the curated passages themselves; these tests hold them to their schema and to the curation the
-harness needs. That every passage is verbatim in its PDF is proved by ops/verify_passages.py against the publishers'
-files, which CI does not have (tests/test_passages_verify.py tests that script on a synthetic PDF).
+harness needed. That every passage is verbatim in its PDF was proved by ops/verify_passages.py (removed 2026-11-20 with the earlier PDF reader) against the publishers'
+files, which CI does not have; that script read the PDFs with pypdf, which went with the earlier pipeline (DECISIONS
+D351-D352), and so did its test.
 """
 import copy
 import hashlib

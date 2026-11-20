@@ -15,7 +15,12 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from studio import audit, models
-from studio.gi.profiles import CATEGORY_NAME, CATEGORY_SLUG, PROFILES_VERSION
+
+# The workspace category's identity, as studio/gi/profiles.py defined it (that module went with the earlier pipeline,
+# DECISIONS D351-D352): unchanged, so provisioning finds, and leaves as it is, the category an installation already has.
+CATEGORY_SLUG = 'gastroenterology'
+CATEGORY_NAME = 'Gastroenterology'
+PROFILES_VERSION = 'gi-profiles@3'
 
 
 def _password(path):

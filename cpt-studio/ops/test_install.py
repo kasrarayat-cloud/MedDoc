@@ -67,8 +67,12 @@ _HOST_GUARDS = []
 
 
 def guard_host():
+    # and the door's wall-clock ceiling a phase that stops a worker needs (install.check_door_ceiling), as an operator
+    # gives it to the door (RULED_ACT_MAX_SECS); its own tests set it themselves
     patches = [mock.patch.object(subprocess, 'run', _guarded_run),
-               mock.patch.object(socket, 'create_connection', _guarded_connect)]
+               mock.patch.object(socket, 'create_connection', _guarded_connect),
+               mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': str(
+                   2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN)})]
     for patcher in patches:
         patcher.start()
     _HOST_GUARDS.append(patches)
@@ -91,9 +95,45 @@ def tearDownModule():
     release_host()
 
 
-# Design v2 (FINAL-V2 6.2 [R:MO-1]; amendment 1, 9.5; step 6b): the two reads the app phase makes after migrate and before
-# the switch, as a target with no design v1 row and nothing to count answers them - the stand-ins every app-phase world
-# of these suites gives (ops/test_install_v2.py runs both scripts on real rows and judges every other answer).
+# The revision a switch-back returns to - the one the Fable coding build replaces (e426c747c7b7, installed 2026-11-19).
+# Corti, the harness participants and the interpreter exist only in ITS tree and image, so what the installer names for
+# them (CORTI, PARTICIPANTS, INTERPRETER and their loader checks) is held to that tree's files, read from git: this tree
+# no longer has them (BUILD-SPEC section 10). A clone without that commit (a shallow CI checkout) skips such a test -
+# skipped, never passed - and a full clone proves it.
+EARLIER_REVISION = 'e426c747c7b73996d7f9fb4d598517aa0bc4d89a'
+REPO_ROOT = Path(__file__).resolve().parents[2]  # git reads the earlier tree's paths from the repository's root
+
+
+def _earlier(*argv) -> bytes:
+    done = _REAL_SUBPROCESS_RUN(['git', '-C', str(REPO_ROOT), *argv], capture_output=True, check=False)
+    if done.returncode:
+        raise unittest.SkipTest(f'the earlier revision {EARLIER_REVISION[:12]} is not in this clone')
+    return done.stdout
+
+
+def earlier_text(path: str) -> str:
+    """cpt-studio/``path`` as the earlier revision has it."""
+    return _earlier('show', f'{EARLIER_REVISION}:cpt-studio/{path}').decode('utf-8')
+
+
+def earlier_files(path: str) -> list:
+    """Every file under cpt-studio/``path`` in the earlier revision, relative to cpt-studio/."""
+    listed = _earlier('ls-tree', '-r', '--name-only', EARLIER_REVISION, '--', f'cpt-studio/{path}').decode('utf-8')
+    return sorted(line[len('cpt-studio/'):] for line in listed.splitlines() if line.strip())
+
+
+def earlier_literal(path: str, name: str):
+    """A module-level literal of the earlier revision's ``path``, read from its source (no import)."""
+    import ast
+    for node in ast.parse(earlier_text(path)).body:
+        if isinstance(node, ast.Assign) and any(getattr(target, 'id', None) == name for target in node.targets):
+            return ast.literal_eval(node.value)
+    raise LookupError(f'{name} is not a literal of {path} at {EARLIER_REVISION[:12]}')
+
+
+# The two reads the app phase makes after migrate and before the switch, as a target with no design v1 row and nothing to
+# count answers them - the stand-ins every app-phase world of these suites gives (ops/test_install_fable_scripts.py runs
+# INSTALL_COUNTS on real rows and judges every other answer; ops/test_install_v2.py runs V1_ROWS).
 def clean_v1_rows() -> dict:
     """V1_ROWS' answer on a target that holds no design v1 row."""
     return {'engine_version': install.V1_ENGINE_VERSION, 'interpretation_version': install.V1_INTERPRETATION_VERSION,
@@ -102,13 +142,9 @@ def clean_v1_rows() -> dict:
 
 def clean_counts() -> dict:
     """INSTALL_COUNTS' answer on a target with nothing to count and no hold standing."""
-    return {'size': {'bound_chars': 20000, 'bound_pages': 40, 'longest_chars': 0, 'without_inventory': 0,
-                     'over_chars': 0, 'over_pages': 0, 'unframed': 0, 'unframed_empty': 0, 'unframed_unextracted': 0,
-                     'encounters': {'over_chars': [], 'over_pages': [], 'unframed': []}},
-            'values': {'count': 0, 'first_install': True, 'encounters': []},
-            'refused': {name: {'count': 0, 'newest': None} for name in ('corti_sent', 'participant_sent', 'corti_token')},
-            'a21': {'count': 0, 'encounters': []},
-            'holds': {'provider': {'corti': [], 'astra': [], 'fable': []}, 'interpreter': []}}
+    return {'encounters': {'count': 0, 'coded': 0}, 'jobs': {}, 'runs': {},
+            'unknown': {'count': 0, 'encounter_count': 0, 'encounters': [], 'in_flight': {'reserved': 0, 'sending': 0}},
+            'tables': {name: 0 for name in install.COUNTED_TABLES}, 'holds': {'standing': 0}}
 
 
 def pre_switch_answer(body):
@@ -464,9 +500,13 @@ class ArgumentTests(unittest.TestCase):
 
     def test_valid_invocations(self):
         self.assertEqual(self.parse('--phase', 'preflight').phase, 'preflight')
-        args = self.parse('--phase', 'app', '--provider-mode', 'live', '--authorization-ref',
+        args = self.parse('--phase', 'app', '--coding-mode', 'live', '--authorization-ref',
                           'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-        self.assertEqual(args.provider_mode, 'live')
+        self.assertEqual((args.coding_mode, args.provider_mode), ('live', None))
+        self.assertEqual(self.parse('--phase', 'app', '--coding-mode', 'disabled').coding_mode, 'disabled')
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'live', '--authorization-ref',
+                          'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
+        self.assertEqual((args.provider_mode, args.coding_mode), ('live', None))  # the previous pair's Corti
         args = self.parse('--phase', 'provision', '--owner-username', 'owner')
         self.assertEqual((args.agent_username, args.workspace_name), ('review-agent', 'Gastroenterology'))
         self.assertEqual(self.parse('--phase', 'reference', '--pfs-zip', '/x/a.zip', '--mue-zip', '/x/b.zip',
@@ -478,17 +518,23 @@ class ArgumentTests(unittest.TestCase):
         self.refused('--revision', 'A' * 40, '--receipts', '/tmp/r', '--phase', 'preflight')
         self.refused('--phase', 'install-everything')
         self.refused('--phase', 'preflight', '--provider-mode', 'live')
-        self.refused('--phase', 'app', '--pfs-zip', '/x/a.zip', '--provider-mode', 'disabled')
+        self.refused('--phase', 'app', '--pfs-zip', '/x/a.zip', '--coding-mode', 'disabled')
         self.refused('--phase', 'reference', '--pfs-zip', '/x/a.zip')
         zips = ('--pfs-zip', '/x/a.zip', '--mue-zip', '/x/b.zip', '--pfs-retrieved-at', '2026-10-23T20:59:00Z')
         self.refused('--phase', 'reference', *zips)
         for moment in ('2026-10-23T20:59:00', 'yesterday', '2999-01-01T00:00:00Z'):
             self.refused('--phase', 'reference', *zips, '--mue-retrieved-at', moment)
-        self.refused('--phase', 'app')
-        self.refused('--phase', 'app', '--provider-mode', 'live')
-        self.refused('--phase', 'app', '--provider-mode', 'disabled', '--authorization-ref', 'docs/x.md')
+        self.refused('--phase', 'app')  # the coding mode is always explicit
+        self.refused('--phase', 'app', '--coding-mode', 'live')  # live needs the recorded authority
+        self.refused('--phase', 'app', '--coding-mode', 'replay')  # the installer never starts a pair replaying
+        self.refused('--phase', 'app', '--coding-mode', 'disabled', '--authorization-ref', 'docs/x.md')
+        # the Fable coding build has no Corti: --provider-mode is a switch-back's, for the previous pair
+        self.refused('--phase', 'app', '--coding-mode', 'disabled', '--provider-mode', 'disabled')
+        self.refused('--phase', 'switch-back')
+        self.refused('--phase', 'switch-back', '--provider-mode', 'live')
         for reference in ('../outside.md', '/etc/passwd', 'docs/../../x', 'docs/x.md; rm -rf /', 'a' * 201):
-            self.refused('--phase', 'app', '--provider-mode', 'live', '--authorization-ref', reference)
+            self.refused('--phase', 'app', '--coding-mode', 'live', '--authorization-ref', reference)
+        self.refused('--phase', 'reassess', '--encounter', 'e' * 8)  # the reassess phase is gone
         self.refused('--phase', 'provision')
         self.refused('--phase', 'provision', '--owner-username', 'Owner')
         self.refused('--phase', 'provision', '--owner-username', 'ab')
@@ -706,7 +752,7 @@ class DockerArgumentTests(unittest.TestCase):
         # above every stage's deadline (the question stage's 1,588 s the longest, a reading pass's 1,380 s; a
         # participant phase's tool loop 540 s) and every stale-stage threshold (600 s; the reading passes' 1,440 s and
         # 1,560 s, the question stage's 1,768 s): test_install_harness pins them against settings.py
-        self.assertEqual(self.flags(live, '--stop-timeout'), ['1800'])  # round r3 (D322 (4)); 1500 by AMENDMENT-2 1.12
+        self.assertEqual(self.flags(live, '--stop-timeout'), ['3600'])  # the Fable coding build (1800 since round r3)
         self.assertEqual(self.flags(live, '-p'), [])
         disabled = install.service_args('worker', self.IMAGE, REVISION, 'disabled', '')
         self.assertNotIn('corti', ' '.join(disabled).lower())
@@ -966,6 +1012,8 @@ class VhostHelperTests(TemporaryDirectoryTest):
 
 
 class SecretsHelperTests(TemporaryDirectoryTest):
+    """H_SECRETS in-process: the Fable coding build's set is app.env and db.env alone (DECISIONS D351-D353) - Corti's
+    source is no longer read, and an earlier install's Corti copy beside them is neither checked nor touched."""
     CORTI = (b'# synthetic test credentials\nCORTI_CLIENT_ID=client\nexport CORTI_CLIENT_SECRET=not-a-real-secret\n'
              b'CORTI_ENVIRONMENT=eu\nCORTI_TENANT_NAME=tenant\n')
 
@@ -973,47 +1021,47 @@ class SecretsHelperTests(TemporaryDirectoryTest):
         super().setUp()
         self.target = self.tmp / 'target'
         self.target.mkdir(mode=0o700)
-        self.source = self.tmp / 'credentials.env'
-        self.source.write_bytes(self.CORTI)
         self.fake = FakeOwnership()
 
     def run_secrets(self):
-        params = {'uid': install.APP_UID, 'corti_keys': list(install.CORTI_KEYS),
-                  'app_keys': list(install.APP_ENV_KEYS), 'db_keys': list(install.DB_ENV_KEYS)}
-        return run_body(install.H_SECRETS, params, {"'/target'": repr(str(self.target)),
-                                                    "'/source/credentials.env'": repr(str(self.source))}, self.fake)
+        params = {'app_keys': list(install.APP_ENV_KEYS), 'db_keys': list(install.DB_ENV_KEYS)}
+        # no source is mounted: a body that still read one would fail here on the path the old mount used
+        return run_body(install.H_SECRETS, params, {"'/target'": repr(str(self.target))}, self.fake)
 
     def test_creates_secrets_once_then_reports_present(self):
         created = self.run_secrets()
         self.assertEqual(created['state'], 'created')
-        self.assertEqual(created['files']['corti-credentials.env'],
-                         {'regular': True, 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'})
+        self.assertEqual(sorted(created['files']), ['app.env', 'db.env'])
+        self.assertEqual(created['files']['app.env'], {'regular': True, 'uid': 0, 'gid': 0, 'mode': '0o600'})
         app_env = (self.target / 'app.env').read_text()
         install.validate_env_text(app_env, install.APP_ENV_KEYS)
         password = app_env.split('CPT_STUDIO_DB_PASSWORD=')[1].strip()
         self.assertEqual((self.target / 'db.env').read_text(), f'POSTGRES_PASSWORD={password}\n')
-        self.assertEqual((self.target / 'corti-credentials.env').read_bytes(), self.CORTI)
         self.assertNotIn(password, json.dumps(created))
-        self.assertNotIn('not-a-real-secret', json.dumps(created))
-        self.assertEqual(sorted(p.name for p in self.target.iterdir()), ['app.env', 'corti-credentials.env', 'db.env'])
+        self.assertEqual(sorted(p.name for p in self.target.iterdir()), ['app.env', 'db.env'])
+        self.assertNotIn('corti_key_names_present', created)
         again = self.run_secrets()
         self.assertEqual(again['state'], 'present')
         self.assertEqual((self.target / 'app.env').read_text(), app_env)
 
-    def test_refuses_missing_corti_names_without_writing(self):
-        self.source.write_bytes(b'CORTI_CLIENT_ID=x\nCORTI_CLIENT_SECRET=y\n')
-        result = self.run_secrets()
-        self.assertIn('CORTI_ENVIRONMENT', result['error'])
-        self.assertNotIn('=x', result['error'])
-        self.assertEqual(list(self.target.iterdir()), [])
+    def test_an_earlier_installs_corti_copy_is_left_as_it_is(self):
+        self.run_secrets()
+        corti = self.target / 'corti-credentials.env'
+        corti.write_bytes(self.CORTI)
+        os.chmod(corti, 0o400)
+        again = self.run_secrets()
+        self.assertEqual(again['state'], 'present')
+        self.assertEqual(sorted(again['files']), ['app.env', 'db.env'])  # never described, so never judged
+        self.assertEqual(corti.read_bytes(), self.CORTI)
+        self.assertNotIn('not-a-real-secret', json.dumps(again))
 
-    def test_refuses_partial_state_and_changed_sources(self):
+    def test_refuses_partial_state_and_changed_keys(self):
         (self.target / 'app.env').write_text('CPT_STUDIO_SECRET_KEY=' + 'k' * 40 + '\n')
         self.assertIn('partial', self.run_secrets()['error'])
         (self.target / 'app.env').unlink()
         self.run_secrets()
-        self.source.write_bytes(self.CORTI + b'# rotated\n')
-        self.assertIn('differs', self.run_secrets()['error'])
+        (self.target / 'db.env').write_text('POSTGRES_PASSWORD=x\nEXTRA=y\n')
+        self.assertIn('db.env keys', self.run_secrets()['error'])
 
 
 class RootFileHelperTests(TemporaryDirectoryTest):
@@ -1469,6 +1517,15 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'own_service_ids', return_value=[]):
             return install.phase_verify(self.ctx('verify'))
 
+    def test_verify_runs_no_one_shot_and_records_no_interpreter_evidence(self):
+        # the Fable coding build removed the D22 report's one-shot (DECISIONS D351): verify reads the host alone
+        own = f'{install.DOMAIN}.conf'
+        renewed = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'b'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
+        with mock.patch.object(install, 'oneshot', side_effect=AssertionError('verify started a one-shot')):
+            details = self.run_verify(renewed)
+        self.assertNotIn('interpretation', details)
+        self.assertTrue(details['summary'].endswith('co-tenants and app.quillmd.com unchanged'), details['summary'])
+
     def test_verify_after_a_reinstall_accepts_this_domains_own_renewed_lineage(self):
         own = f'{install.DOMAIN}.conf'
         renewed = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'b'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
@@ -1503,9 +1560,9 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         oneshot.assert_not_called()
 
     def test_live_app_stops_before_migrating_when_credentials_do_not_load(self):
-        ctx = self.ctx('app', provider_mode='live',
+        ctx = self.ctx('app', coding_mode='live',
                        authorization_ref='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-        corti = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'}
+        coder = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'}
         # credentials, then migrate, then the read of the queue for stages this revision cannot run (refutation r1),
         # design v2's two reads before the switch (FINAL-V2 6.2's v1 rows; amendment 1, 9.5's counts), then, once the
         # pair is replaced, the recompute of the stored list states (refutation p1, migrate-2)
@@ -1526,12 +1583,13 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                     return SimpleNamespace(returncode=0, stderr=b'', stdout=answer.encode() + b'\n')
                 parsed = loads or command[:2] != ['manage', 'shell']
                 return SimpleNamespace(returncode=0 if parsed else 1, stderr=b'CredentialsError: refused',
-                                       stdout=b'corti-credentials-parse-ok\n' if parsed else b'')
+                                       stdout=b'coding-credentials-parse-ok\n' if parsed else b'')
             with self.subTest(loads=loads), \
                     mock.patch.object(install, 'run', return_value=SimpleNamespace(returncode=0)), \
                     mock.patch.object(install, 'installed_image', return_value='sha256:' + 'c' * 64), \
                     mock.patch.object(install, 'require_db'), \
-                    mock.patch.object(install, 'helper_stat', return_value={install.CORTI_TARGET: corti}), \
+                    mock.patch.object(install, 'helper_stat', return_value={install.CODER['target']: coder}), \
+                    mock.patch.object(install, 'credential_free', return_value=True), \
                     mock.patch.object(install, 'read_protected_env', return_value=b''), \
                     mock.patch.object(install, 'oneshot', fake_oneshot), \
                     mock.patch.object(install, 'replace_services', return_value={}) as replace:
@@ -1542,7 +1600,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                         install.phase_app(ctx)
             self.assertEqual(len(commands), expected_commands)
             self.assertEqual(commands[0][:2], ['manage', 'shell'])
-            self.assertIn(install.CREDENTIALS_CHECK, commands[0][-1])
+            self.assertIn(install.CODING_CREDENTIALS_CHECK, commands[0][-1])
             self.assertEqual(replace.called, loads)
 
     def test_installed_image_must_carry_this_revision(self):

@@ -64,7 +64,7 @@
   <dialog id="uploadDialog" class="dialog upload-dialog" aria-labelledby="uploadTitle">
     <form id="uploadForm" novalidate>
       <div class="dialog-header"><div><span class="eyebrow">NEW DOCUMENT</span><h2 id="uploadTitle">Start with the source.</h2></div><button type="button" class="icon-button" data-close aria-label="Close upload"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div>
-      <p class="dialog-copy">One encounter at a time: the original document stays beside every suggested code and the passages that support it.</p>
+      <p class="dialog-copy">One encounter at a time: the original document stays beside every code and the passages it rests on.</p>
       <div class="preview-notice"><svg aria-hidden="true"><use href="#i-info"/></svg><span>Synthetic documents only. Do not upload or paste real patient information. Every export is marked SYNTHETIC — NOT FOR BILLING.</span></div>
       <div id="fileFields">
         <label class="drop-zone compact" id="dialogDrop"><input type="file" id="uploadFile" accept=".pdf,.docx,.txt"><span class="upload-icon"><svg aria-hidden="true"><use href="#i-upload"/></svg></span><strong>Choose a document</strong><span>or drop it here · PDF, DOCX, TXT · up to 15 MB</span></label>
@@ -72,8 +72,8 @@
       </div>
       <label class="field-label paste-field" id="pasteField" hidden>Clinical text <span>(kept exactly as pasted)</span><textarea id="pasteText" rows="8" placeholder="Paste the synthetic clinical note…"></textarea></label>
       <button type="button" class="button subtle paste-toggle" id="pasteToggle" aria-expanded="false" aria-controls="pasteField">Paste text instead</button>
-      <div class="form-grid"><label>Specialty<select id="specialty" disabled><option>Gastroenterology</option></select></label><label>Service date<input id="serviceDate" type="date"></label></div>
-      <p class="field-help" id="fileHelp">Optional. Leave the date blank to use the date of service the document states. If a date you enter differs from the document, nothing is checked until you choose one of the two.</p>
+      <div class="form-grid three"><label>Specialty<select id="specialty" disabled><option>Gastroenterology</option></select></label><label>Service date<input id="serviceDate" type="date"></label><label>Insurance<select id="insurance"><option value="medicare">Medicare</option><option value="medicaid">Medicaid</option><option value="commercial">Commercial or other</option><option value="unknown" selected>Not sure</option></select></label></div>
+      <p class="field-help" id="fileHelp">Both are optional and go to the coding review as information from the practice. Leave the date blank to use the date of service the document states. Insurance can change which code applies.</p>
       <label class="check-label"><input id="syntheticAttestation" type="checkbox"><span>This document is synthetic and contains no real patient information.</span></label>
       <p class="upload-status" id="uploadStatus" role="status" hidden></p>
       <p class="form-error" id="uploadError" role="alert" hidden></p>
@@ -84,24 +84,12 @@
     <form id="reviewForm" novalidate>
       <div class="dialog-header"><div><span class="eyebrow" id="reviewEyebrow">CODE REVIEW</span><h2 id="reviewTitle">Make the decision visible.</h2></div><button type="button" class="icon-button" data-close aria-label="Close review"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div>
       <p class="dialog-copy" id="reviewCopy"></p>
-      <div class="review-summary"><span class="code-small" id="reviewCode"></span><div><strong id="reviewStatus"></strong><small id="reviewSummary"></small></div></div>
-      <label class="check-label" id="reviewAckLabel"><input id="reviewAcknowledgement" type="checkbox"><span id="reviewAckText"></span></label>
-      <label class="field-label review-modifier" id="reviewModifierField" hidden>Modifier <span>(optional — choose one only if it applies)</span><select id="reviewModifier"><option value="">No modifier</option><option value="59">59</option><option value="XS">XS</option></select><small class="field-help" id="reviewModifierHelp"></small></label>
+      <div class="review-summary"><span class="code-small" id="reviewCode"></span><div><strong id="reviewStatus"></strong><small class="review-line" id="reviewLine"></small><small id="reviewSummary"></small></div></div>
+      <label class="check-label" id="reviewAcknowledgement"><input id="reviewAckBox" type="checkbox"><span id="reviewAckText"></span></label>
       <label class="field-label">Review note <span>(optional)</span><textarea id="reviewNote" rows="3" placeholder="Add context for the next reviewer…" maxlength="600"></textarea></label>
       <div class="preview-notice"><svg aria-hidden="true"><use href="#i-info"/></svg><span id="reviewNotice"></span></div>
       <p class="form-error" id="reviewError" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close>Cancel</button><button type="submit" class="button primary" id="saveReview" disabled><span id="saveReviewLabel">Approve code</span> <svg aria-hidden="true"><use href="#i-check"/></svg></button></div>
-    </form>
-  </dialog>
-  <dialog id="addendumDialog" class="dialog" aria-labelledby="addendumTitle">
-    <form id="addendumForm" novalidate>
-      <div class="dialog-header"><div><span class="eyebrow">ADDENDUM · PHYSICIAN DOCUMENTATION</span><h2 id="addendumTitle">Add to the documentation.</h2></div><button type="button" class="icon-button" data-close aria-label="Close addendum"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div>
-      <p class="dialog-copy">For the physician's own documentation only. The addendum is added to the original text as a new revision, current decisions no longer apply, and the document is processed again. To say a detail is not documented, use the choices on the review page instead.</p>
-      <div class="clarification-question" id="addendumQuestion"></div>
-      <label class="field-label">Addendum text<textarea id="addendumText" rows="6" maxlength="20000" placeholder="Add the missing documentation…"></textarea></label>
-      <label class="check-label"><input id="addendumAttestation" type="checkbox"><span>This addendum is synthetic and contains no real patient information.</span></label>
-      <p class="form-error" id="addendumError" role="alert" hidden></p>
-      <div class="dialog-actions"><button type="button" class="button secondary" data-close>Cancel</button><button type="submit" class="button primary" id="saveAddendum">Add addendum <svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
     </form>
   </dialog>
   <dialog id="exportDialog" class="dialog" aria-labelledby="exportTitle">
@@ -115,7 +103,7 @@
   <dialog id="aboutDialog" class="dialog" aria-labelledby="aboutTitle">
     <div class="dialog-header"><div><span class="eyebrow">SYNTHETIC DEMONSTRATION</span><h2 id="aboutTitle">Meet CPT Studio.</h2></div><button type="button" class="icon-button" data-close aria-label="Close information"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div>
     <p class="dialog-copy">A standalone workspace for reviewing suggested CPT codes against the original clinical documentation.</p>
-    <ul class="about-list"><li><svg aria-hidden="true"><use href="#i-check"/></svg>Original PDF, DOCX or pasted text kept beside every suggestion</li><li><svg aria-hidden="true"><use href="#i-check"/></svg>Suggestions go through a document review, independent checks and coding validation</li><li><svg aria-hidden="true"><use href="#i-check"/></svg>Every decision recorded with reviewer and time</li></ul>
+    <ul class="about-list"><li><svg aria-hidden="true"><use href="#i-check"/></svg>Original PDF, Word document or pasted text kept beside every code</li><li><svg aria-hidden="true"><use href="#i-check"/></svg>Every code read from the whole document and checked a second time</li><li><svg aria-hidden="true"><use href="#i-check"/></svg>Every decision recorded with reviewer and time</li></ul>
     <p class="about-footnote">Synthetic documents only. Not for billing, claims or clinical use. No accuracy percentage, payer acceptance or regulatory certification is asserted.</p>
     <div class="dialog-actions"><button type="button" class="button primary" data-close>Continue <svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
   </dialog>

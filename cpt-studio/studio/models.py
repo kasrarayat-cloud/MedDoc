@@ -198,6 +198,7 @@ class SourceRevision(models.Model):
             raise ValidationError('Extraction for this revision was already recorded.')
 
 
+# legacy records; read by nothing in the coding path
 class EncounterContext(ImmutableModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='contexts')
@@ -230,6 +231,7 @@ class EncounterContext(ImmutableModel):
                                            related_name='+')
 
 
+# legacy records; read by nothing in the coding path
 class RoutingRun(ImmutableModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='routings')
@@ -299,6 +301,7 @@ class ProviderRun(models.Model):
         indexes = [models.Index(fields=['provider', 'adapter_version', 'request_sha256'])]
 
 
+# legacy records; read by nothing in the coding path
 class EventInventory(ImmutableModel):
     """Gemini migration (FINAL 4.1, D6): the one persisted reading of a revision's documented clinical events - Gemini's
     stored answer, read under ``interpretation_version`` and normalized and verified under ``inventory_version`` - that
@@ -341,6 +344,7 @@ class EventInventory(ImmutableModel):
                                 name='studio_inventory_versions')]
 
 
+# legacy records; read by nothing in the coding path
 class Assessment(ImmutableModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='assessments')
@@ -381,6 +385,7 @@ class Assessment(ImmutableModel):
         ordering = ['created_at']
 
 
+# legacy records; read by nothing in the coding path
 class Proposal(ImmutableModel):
     SELECTED, ALTERNATIVE, EXCLUDED = 'selected', 'alternative', 'excluded'
     READY, NEEDS_CLARIFICATION, STATUS_EXCLUDED, INFORMATIONAL = 'ready', 'needs_clarification', 'excluded', 'informational'
@@ -410,6 +415,7 @@ class Proposal(ImmutableModel):
         constraints = [models.UniqueConstraint(fields=['assessment', 'key'], name='one_proposal_key_per_assessment')]
 
 
+# legacy records; read by nothing in the coding path
 class Clarification(models.Model):
     OPEN, ANSWERED, WITHDRAWN = 'open', 'answered', 'withdrawn'
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -434,6 +440,7 @@ class Clarification(models.Model):
         ordering = ['created_at']
 
 
+# legacy records; read by nothing in the coding path
 class FindingConfirmation(ImmutableModel):
     """A reviewer-confirmed answer to an open question (HARNESS.md 11.3): the passage a participant located, accepted by
     an owner or reviewer with an attestation. Append-only and bound to its revision: a new revision's assessment never
@@ -458,6 +465,7 @@ class FindingConfirmation(ImmutableModel):
         ordering = ['created_at']
 
 
+# legacy records; read by nothing in the coding path
 class Decision(ImmutableModel):
     APPROVE, REJECT, REINSTATE, REVOKE, CONFIRM = 'approve', 'reject', 'reinstate', 'revoke', 'confirm'
     ACTIONS = [(APPROVE, 'Approve'), (REJECT, 'Reject'), (REINSTATE, 'Reinstate for review'), (REVOKE, 'Revoke decision'),
@@ -490,6 +498,7 @@ class Decision(ImmutableModel):
         ordering = ['sequence']
 
 
+# legacy records; read by nothing in the coding path
 class DecisionInvalidation(ImmutableModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     decision = models.OneToOneField(Decision, on_delete=models.PROTECT, related_name='invalidation')
@@ -499,6 +508,7 @@ class DecisionInvalidation(ImmutableModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+# legacy records; read by nothing in the coding path
 class MemberAnswer(ImmutableModel):
     """A member's answer to a detail CPT Studio asked (directive section 4; P5 FLOW, 2026-11-03): that it is not
     documented, or that the member cannot confirm it. Bound to its revision and to the question it answered - the code,
@@ -531,6 +541,7 @@ class MemberAnswer(ImmutableModel):
         ordering = ['answered_at']
 
 
+# legacy records; read by nothing in the coding path
 class MemberAnswerRevocation(ImmutableModel):
     """A member's answer withdrawn: by the member ('withdrawn'), or by a later answer to the same detail
     ('superseded'), so at most one answer to a detail ever stands and a withdrawn one is never resurrected."""
@@ -577,6 +588,7 @@ class Job(models.Model):
         indexes = [models.Index(fields=['state', 'created_at'])]
 
 
+# legacy records; read by nothing in the coding path
 class ReportArtifact(ImmutableModel):
     DRAFT, REVIEWED = 'draft', 'reviewed'
     # A customer report's approved export (cpt-studio-customer-report@1): approved items only (CORE-UX-DESIGN.md 5).
@@ -657,6 +669,7 @@ class InterpreterHoldRelease(ImmutableModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+# legacy records; read by nothing in the coding path
 class ProviderHold(ImmutableModel):
     """FINAL-V2 amendment 1 (docs/gemini-migration/AMENDMENT-1.md 7.3, A16 and A20; adopted as DECISIONS D208): the
     installation-wide hold of one provider - Corti, Astra or Fable - set when a refusal of that provider means further
@@ -681,6 +694,7 @@ class ProviderHold(ImmutableModel):
         ordering = ['created_at']
 
 
+# legacy records; read by nothing in the coding path
 class ProviderHoldRelease(ImmutableModel):
     """The end of one ProviderHold, recorded by the ``provider_hold --release <provider>`` management command
     (AMENDMENT-1.md 7.3: an operator, holding an operator grant, as for ``interpreter_hold``); the hold row stays.
@@ -706,6 +720,7 @@ class AuditEvent(ImmutableModel):
         ordering = ['created_at']
 
 
+# legacy records; read by nothing in the coding path
 class ReferenceSource(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     key = models.CharField(max_length=60, unique=True)
@@ -727,6 +742,7 @@ class ReferenceSource(models.Model):
         constraints = [models.CheckConstraint(condition=Q(effective_start__lte=models.F('effective_end')), name='reference_window_ordered')]
 
 
+# legacy records; read by nothing in the coding path
 class ReferenceCodeFact(models.Model):
     id = models.BigAutoField(primary_key=True)
     source = models.ForeignKey(ReferenceSource, on_delete=models.PROTECT, related_name='facts')
@@ -739,6 +755,7 @@ class ReferenceCodeFact(models.Model):
         indexes = [models.Index(fields=['code'])]
 
 
+# legacy records; read by nothing in the coding path
 class ProviderExchange(models.Model):
     """One HTTP exchange of a participant run's tool loop (HARNESS.md 11.2): what was sent (stored form; a PDF original
     is named by sha256, never its bytes), what came back, exactly. A run's own request and response fields hold its first
@@ -765,6 +782,7 @@ class ProviderExchange(models.Model):
         constraints = [models.UniqueConstraint(fields=['run', 'turn'], name='one_exchange_per_run_turn')]
 
 
+# legacy records; read by nothing in the coding path
 class ToolCall(models.Model):
     """A reference tool call a participant made, as CPT Studio executed it (HARNESS.md 11.2): the tool trace. ``refs``
     lists every reference the result returned (passage keys and 'fact:<source>:<code>:<field>' refs), each dated by its
@@ -784,6 +802,7 @@ class ToolCall(models.Model):
         constraints = [models.UniqueConstraint(fields=['exchange', 'call_id'], name='one_tool_call_per_exchange_id')]
 
 
+# legacy records; read by nothing in the coding path
 class PassageSource(models.Model):
     """A CMS document whose verbatim passages the harness retrieves (HARNESS.md 5). Kept apart from ReferenceSource,
     whose rows every lookup lists, so importing passages never changes an assessment's reference-source entries."""
@@ -808,6 +827,7 @@ class PassageSource(models.Model):
                                               name='passage_window_ordered')]
 
 
+# legacy records; read by nothing in the coding path
 class ReferencePassage(models.Model):
     """One verbatim passage of a PassageSource, with where it is (page, section) and the rule it states, keyed by what
     retrieval matches it on (topic, e.g. 'pfs.mult_proc' with value '3')."""
@@ -847,3 +867,110 @@ class WorkerBeat(models.Model):
     beat_at = models.DateTimeField()
     revision = models.CharField(max_length=64, blank=True)
     pid = models.PositiveIntegerField(null=True, blank=True)
+
+
+# --- the coding path (BUILD-SPEC section 2; migration 0016, new tables only) --------------------------------------------
+
+class CodingRound(models.Model):
+    """One coding of an encounter's document by the Fable reader and checker (studio.jobs.stage_code): the context it
+    was coded with (the practice's service date and insurance, and every answer so far), its two runs, their parsed
+    results as written, and the combined codes, questions, problems and citations (studio.fable.result). A new upload,
+    a set of answers or a retry makes a new round; the latest round is the encounter's codes."""
+    UPLOAD, ANSWERS, RETRY = 'upload', 'answers', 'retry'
+    TRIGGERS = [(UPLOAD, 'Upload'), (ANSWERS, 'Answers'), (RETRY, 'Retry')]
+    QUEUED, RUNNING, DONE, FAILED, CANCELLED = 'queued', 'running', 'done', 'failed', 'cancelled'
+    STATES = [(QUEUED, 'Queued'), (RUNNING, 'Running'), (DONE, 'Done'), (FAILED, 'Failed'), (CANCELLED, 'Cancelled')]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='rounds')
+    revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='coding_rounds')
+    number = models.PositiveIntegerField()
+    trigger = models.CharField(max_length=10, choices=TRIGGERS)
+    # {"service_date": str|null, "insurance": "medicare"|"medicaid"|"commercial"|"unknown",
+    #  "answers": [{"question": str, "answer": str}]}
+    context = models.JSONField()
+    state = models.CharField(max_length=10, choices=STATES, default=QUEUED)
+    reader_run = models.ForeignKey(ProviderRun, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    checker_run = models.ForeignKey(ProviderRun, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    reader_result = models.JSONField(null=True, blank=True)
+    checker_result = models.JSONField(null=True, blank=True)
+    codes = models.JSONField(default=list)
+    questions = models.JSONField(default=list)
+    problems = models.JSONField(default=list)
+    citations = models.JSONField(default=dict)  # line -> [{"text", "page", "source"}]; "_document": filed under no line
+    error = models.TextField(blank=True)  # the customer's sentence for a failed round
+    failure_kind = models.CharField(max_length=24, blank=True)  # studio.fable.FAILURE_KINDS
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    # A Word document's PDF conversion, as this round read it (jobs._keep_view), stored once like an original (storage):
+    # the customer's viewer shows these pages, so the pages the quotes name are the pages shown. Null for a PDF, a text
+    # file or a paste, and while nothing was converted.
+    view_pdf_storage_name = models.CharField(max_length=200, null=True, blank=True)
+    view_pdf_sha256 = models.CharField(max_length=64, null=True, blank=True)
+
+    class Meta:
+        ordering = ['number']
+        constraints = [models.UniqueConstraint(fields=['encounter', 'number'], name='one_coding_round_number')]
+
+
+class CodingAnswer(ImmutableModel):
+    """A member's answer to a question a round asked; every answer so far goes into the next round's context."""
+    MAX_CHARS = 2000
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='coding_answers')
+    round = models.ForeignKey(CodingRound, on_delete=models.PROTECT, related_name='answers')
+    question = models.TextField()
+    answer = models.TextField()
+    answered_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    answered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['answered_at']
+
+    def save(self, *args, **kwargs):
+        if len(self.answer or '') > self.MAX_CHARS:
+            raise ValidationError(f'An answer can be at most {self.MAX_CHARS:,} characters.')
+        super().save(*args, **kwargs)
+
+
+class CodeDecision(ImmutableModel):
+    """A reviewer's decision on one code line of one round (FIX-SPEC 1: the line, L1.. or M1.., and the code it holds).
+    Append-only: the current decision for (round, line) is the latest row by sequence, and ``revoke`` clears it."""
+    APPROVE, REJECT, REVOKE = 'approve', 'reject', 'revoke'
+    ACTIONS = [(APPROVE, 'Approve'), (REJECT, 'Reject'), (REVOKE, 'Revoke decision')]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='code_decisions')
+    round = models.ForeignKey(CodingRound, on_delete=models.PROTECT, related_name='decisions')
+    line = models.CharField(max_length=4)
+    code = models.CharField(max_length=8)
+    action = models.CharField(max_length=8, choices=ACTIONS)
+    reviewer = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    reviewer_kind = models.CharField(max_length=8)  # human | agent
+    acknowledgement = models.TextField(blank=True)
+    note = models.TextField(blank=True)
+    # Recording order from the decisions' existing sequence (as Decision.sequence): unique across both tables.
+    sequence = models.BigIntegerField(
+        db_default=models.Func(models.Value(DECISION_SEQUENCE), function='nextval'), unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['sequence']
+
+
+class ExportArtifact(ImmutableModel):
+    """An export of one round (draft or approved, txt or csv), stored as generated; downloads serve these bytes."""
+    DRAFT, APPROVED = 'draft', 'approved'
+    TXT, CSV = 'txt', 'csv'
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='exports')
+    round = models.ForeignKey(CodingRound, on_delete=models.PROTECT, related_name='exports')
+    kind = models.CharField(max_length=10, choices=[(DRAFT, 'Draft'), (APPROVED, 'Approved')])
+    fmt = models.CharField(max_length=4, choices=[(TXT, 'Text'), (CSV, 'CSV')])
+    filename = models.CharField(max_length=200)
+    content = models.BinaryField()
+    sha256 = models.CharField(max_length=64)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']

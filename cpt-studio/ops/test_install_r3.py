@@ -524,77 +524,6 @@ class WindowedRecordTests(TemporaryDirectoryTest):
                           '1 encounter(s): participant 1'])
 
 
-class WrittenSinceOnTheDatabaseTests(unittest.TestCase):
-    """CLOSE_STAGES' 'written_since' on real rows (a disposable PostgreSQL; skipped, never passed, without one): of the
-    answers and modifiers it names, exactly those written at or after its 'since'."""
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        import test_install_harness2 as harness2
-        problem = harness2.database_problem()
-        if problem:
-            raise unittest.SkipTest(problem)
-        harness2.database()
-        cls.run_in_image = staticmethod(harness2.run_in_image)
-
-    def setUp(self):
-        from django.db import transaction
-        atomic = transaction.atomic()
-        atomic.__enter__()
-
-        def rollback():
-            transaction.set_rollback(True)
-            atomic.__exit__(None, None, None)
-        self.addCleanup(rollback)
-
-    def answered(self):
-        from studio import answers
-        from tests.test_cux_review import persist
-        s = persist('selected')
-        detail = answers.detail_id('base_included', 'gi.colonoscopy', '45378')
-        saved = answers.save_details(s.encounter, s.reviewer,
-                                     [{'id': detail, 'fact': 'base_included', 'value': 'cannot_confirm'}])
-        self.assertEqual(saved['saved'], 1)
-        return str(s.encounter.pk)
-
-    def modified(self):
-        from tests.test_cux_review import decide, persist
-        s = persist('pair')
-        decide(s, '45380', 'approve', modifiers=['XS'], note='Synthetic: a separate lesion.')
-        return str(s.encounter.pk)
-
-    def close(self, since):
-        return self.run_in_image(install.CLOSE_STAGES, {'since': since.isoformat(), 'note': 'Synthetic close.',
-                                                        'kinds': sorted(install.COMMON_STAGE_KINDS)})
-
-    def test_only_what_was_written_since_is_named_written_since(self):
-        from django.utils import timezone
-        old_answer, old_modifier = self.answered(), self.modified()
-        since = timezone.now()
-        new_answer, new_modifier = self.answered(), self.modified()
-        closed = self.close(since)
-        self.assertEqual(closed['hazards'], {old_answer: ['member_answer'], old_modifier: ['modifier'],
-                                             new_answer: ['member_answer'], new_modifier: ['modifier']})
-        self.assertEqual(closed['written_since'], {new_answer: ['member_answer'], new_modifier: ['modifier']})
-        # and the installer reads them so: the new ones hold, the old ones are named only
-        written, before, unplaced = install.web_written_by_time(closed)
-        self.assertEqual((written, before, unplaced), (
-            {new_answer: ['member_answer'], new_modifier: ['modifier']},
-            {old_answer: ['member_answer'], old_modifier: ['modifier']}, {}))
-        # control: from before all of them, every one was written since
-        everything = self.close(since - dt.timedelta(days=1))
-        self.assertEqual(everything['written_since'], everything['hazards'])
-
-    def test_a_close_that_names_no_answer_or_modifier_answers_as_it_did(self):
-        from django.utils import timezone
-        from tests.test_cux_review import persist
-        persist('selected')
-        closed = self.close(timezone.now() - dt.timedelta(days=1))
-        self.assertEqual(closed['hazards'], {})
-        self.assertNotIn('written_since', closed)  # the exact answer the suite pins (tests.test_repairs_r1_m)
-
-
 # --- D-1: rollback-app in the S4 keep layout reads its own baseline ------------------------------------------------
 
 STATE = {}
@@ -672,7 +601,7 @@ class KeepBaselineEndToEndTests(TemporaryDirectoryTest):
             if kind == 'image' and name in (install.HELPER_IMAGE, install.POSTGRES_IMAGE):
                 return {'Id': name}
             return world_inspect(kind, name)
-        present = {install.CORTI_SOURCE, install.ETC_DIR, *install.LE_DIRS, install.ACME_CHALLENGE_DIR}
+        present = {install.ETC_DIR, *install.LE_DIRS, install.ACME_CHALLENGE_DIR}
 
         def helper_stat(paths):
             return {path: ({'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o755'} if path in present
@@ -712,9 +641,13 @@ class KeepBaselineEndToEndTests(TemporaryDirectoryTest):
             path.unlink()
         code, line, receipt = self.run_phase(world, 'preflight')
         self.assertEqual((code, receipt['ok']), (0, True), line)
+        # the Fable coding build's preflight requires no Corti source and reads the coder's alone (DECISIONS D351)
+        self.assertEqual(receipt['details']['coding_source'], 'absent')
+        for gone in ('participant_sources', 'interpreter_source'):
+            self.assertNotIn(gone, receipt['details'])
         world.unhealthy.add(WORKER)
         world.close_answer = told({'e1': ['member_answer']}, {'e1': ['member_answer']})
-        code, line, receipt = self.run_phase(world, 'app', '--provider-mode', 'disabled')
+        code, line, receipt = self.run_phase(world, 'app', '--coding-mode', 'disabled')
         self.assertEqual(code, 1)
         self.assertIn('the new web keeps serving on 9151', line['summary'])
         # the named record is cleared on this revision's web
@@ -866,8 +799,8 @@ class SwitchBackCloseReceiptTests(TemporaryDirectoryTest):
                 self.assertEqual(failure.details['failed_at'], 'B4')
                 message = str(failure)
                 self.assertNotIn('Nothing was closed.', message)  # refute-r3 D-5
-                self.assertIn('The close was started and gave no answer, so it may have closed some or all of this '
-                              "revision's open stages before it stopped", message)
+                self.assertIn('The close was started and gave no answer, so it may have closed stages since', message)
+                self.assertIn("and set no member's details back (this revision's close changes none)", message)
                 self.assertTrue(failure.details['closes']['first_started_at'])
                 self.assertEqual(world.names(), {WEB: (IMAGE, 9151, True), WORKER: (IMAGE, None, True)})
 

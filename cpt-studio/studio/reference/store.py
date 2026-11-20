@@ -12,11 +12,11 @@ about one code begins with that code.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
-from typing import Callable, Iterable, Mapping, Optional
+from typing import Callable, Iterable, Mapping, Optional, Protocol
 
 from studio.models import ReferenceCodeFact, ReferenceSource
-from studio.types import CodeReference, ReferenceSourceInfo
 
 PFS = 'cms-pfs'
 MUE = 'cms-mue-practitioner'
@@ -26,6 +26,38 @@ UNKNOWN_DATE_NOTE = 'Service date unknown; dated references cannot be applied.'
 
 # (source key, code) -> {modifier: facts}
 RowReader = Callable[[str, str], Mapping[str, dict]]
+
+
+# The reference types (moved here from studio/types.py, which went with the earlier pipeline; unchanged): one installed
+# source as the lookups name it, one code's applicable facts, and what a lookup over the store answers.
+@dataclass(frozen=True)
+class ReferenceSourceInfo:
+    key: str
+    kind: str
+    publisher: str
+    title: str
+    release: str
+    url: str
+    sha256: str
+    effective_start: str  # ISO date
+    effective_end: str  # ISO date
+    license_note: str
+    scope_note: str
+
+
+@dataclass(frozen=True)
+class CodeReference:
+    code: str
+    pfs: Optional[dict] = None  # {status, global_days, mult_proc, endo_base, pctc, source_key}
+    mue: Optional[dict] = None  # {value, mai, rationale, source_key}
+    applicable_sources: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
+
+
+class ReferenceLookup(Protocol):
+    def sources(self) -> tuple[ReferenceSourceInfo, ...]: ...
+
+    def lookup(self, code: str, service_date: Optional[date]) -> CodeReference: ...
 
 
 def source_applies(source: ReferenceSourceInfo, service_date: Optional[date]) -> bool:

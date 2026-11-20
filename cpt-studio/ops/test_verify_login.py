@@ -304,6 +304,19 @@ class SignInTests(Base):
         self.assertEqual(oct((self.dir / 'evidence' / vl.EVIDENCE_NAME).stat().st_mode & 0o777), '0o600')
         self.assertIn('login demo-reviewer at http://127.0.0.1', out)
 
+    def test_every_request_names_the_fable_coding_builds_customer_page(self):
+        # the client contract of the Fable coding build's second fix pass (customer-2026-11-22, FIX-SPEC-2 section 5: an
+        # Undo names its decision, a download its round; studio/client_contract.py VERSION, pinned equal by
+        # tests/test_cux_client_contract.py): a call naming another build is answered 409 client_outdated
+        self.assertEqual((vl.CLIENT_HEADER, vl.CLIENT_VERSION), ('X-CPT-Studio-Client', 'customer-2026-11-22'))
+        stub = self.stub()
+        code, out, err, evidence, _ = self.run_tool(stub.base)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(len(stub.log), 5)
+        for entry in stub.log:
+            with self.subTest(request=f'{entry["method"]} {entry["path"]}'):
+                self.assertEqual(entry['headers'].get('X-CPT-Studio-Client'), 'customer-2026-11-22')
+
     def test_each_hard_check_fails_on_the_broken_server_shape_it_exists_for(self):
         cases = [
             ('the sign-in page fails', {'page': 'error'}, ['login.form'], EXPECTED[:1]),
@@ -662,10 +675,11 @@ class ContractTests(unittest.TestCase):
         api = self.read('studio', 'api.py')
         self.assertIn("            return JsonResponse({'error': 'Sign in to continue.'}, status=401)", api)
         self.assertIn('@require_GET\n@api_view\ndef session(request):\n    membership = active_membership(request.user)', api)
-        serializers = self.read('studio', 'serializers.py')
-        self.assertIn("            'actor_kind': user.actor_kind, 'initials': _initials(user)}", serializers)
-        self.assertIn("        'role': membership.role, 'can_review': membership.can_review,", serializers)
-        self.assertIn("        'workspace': {'id': str(workspace.pk), 'name': workspace.name,", serializers)
+        self.assertIn('    return JsonResponse(customer.session_json(request.user, membership))', api)
+        customer = self.read('studio', 'customer.py')
+        self.assertIn("                     'actor_kind': user.actor_kind},", customer)
+        self.assertIn("            'role': membership.role, 'can_review': bool(membership.can_review),", customer)
+        self.assertIn("            'workspace': {'id': str(workspace.pk), 'name': workspace.name},", customer)
         models = self.read('studio', 'models.py')
         self.assertIn("    HUMAN, AGENT = 'human', 'agent'", models)
         self.assertIn("    OWNER, REVIEWER, VIEWER = 'owner', 'reviewer', 'viewer'", models)

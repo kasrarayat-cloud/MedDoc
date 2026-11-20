@@ -3743,3 +3743,58 @@ confirmed with him before it is built.
 
 (d) The repository's mechanisms (the pre-push hook, the merge wrapper, the declaration gate of the install) still apply;
 they are steps, not reviews.
+
+## Owner directive, 2026-11-20 — no line of the old coding code; Fable takes its place; the page break solved by the API
+
+Given on 2026-11-20 at about 00:20Z in session 738699b2, after the read-only diagnosis of his live test document
+(document E: both codes held by the old rule layer - a PDF page break turned into a paragraph break, a date-frame rule on
+a blank DATE OF SURGERY - and by one Fable doubt; no question ever reached Fable). His words, verbatim:
+
+> ok So i dont want to have any old codes i mean 0 line from old code also fable should be take too old code palce
+> completely idont wanna see any single old code that cause us a patching or fixing remove it and then for pdf break what
+> ai agent or ai sulotion do you usgesst? i dont want you to build a system by code i want you to use agent in order to
+> use api report me what is your plan before procced
+
+### Session interpretation, 2026-11-20 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D351)
+
+(a) "Old code" is every line that reads the note or decides, holds, overrules or changes a code. All of it goes. The
+platform that never reads the note's meaning stays: accounts, upload and storage, the job runner, run metering,
+approvals, exports, audit, the operator gate, install and rollback.
+
+(b) The page break is solved by sending the ORIGINAL PDF to Fable through the Messages API (each page as text and as a
+picture) with API citations for quoted proof, not by any text-joining code. Anthropic's Managed Agents was not proposed:
+beta, session history kept, not eligible for HIPAA BAA or zero data retention.
+
+(c) The plan was put to him before anything proceeded, as he asked.
+
+## Owner decision, 2026-11-20 — the plan approved: a second Fable read, the other suggesters dropped, his PDFs as the test
+
+Given on 2026-11-20 at about 00:28Z in session 738699b2, answering the plan (a Fable reader and an independent Fable
+checker per document; Corti, Astra and Fable 5.1 asked about; a proof on document E and two earlier test documents first).
+His words, verbatim:
+
+> i approve all of your decison here is the lsit of real pdf doc with out name so you can test it up on new design tho
+> [a download link] downloaded it fro mthis link also old codes i dotn want my site again my engine my agents again block
+> by old engine everything should run smoothly by agenbts ai you ask me about corti and astra and fable 5.1 my question
+> is do we need it? or its better to let one agent handle everyhting like make several subagents liek parrel agents to
+> do our task what do you think?
+
+and, minutes later: "i apprecitae if you can make me a new workflow design and how its work but you have my full
+permission to run the new design tho".
+
+### Session interpretation, 2026-11-20 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D352-D354)
+
+(a) The second, independent Fable read is part of the design; a code reaches "ready for approval" only when both reads
+agree on it, and nothing is final without a human approval.
+
+(b) Corti, Astra and the Fable 5.1 participants are dropped. The session's answer to his question: one Fable reader and
+one Fable checker per note (coding needs the whole note in one view); the parallel work is across documents, four at
+once.
+
+(c) "Full permission to run the new design" covers the proof (D353: 9 of 9 documents coded right, $19.09) and the build
+on a branch (D354). The production install still goes through the ruled-act door with a committed declaration, and the
+owner is asked before anything goes live.
+
+(d) His documents are real notes with the names removed and the dates still present. They were handled as patient data
+(private folders, nothing printed or committed). The site stays synthetic-only as it is; he was told that real patient
+documents need a HIPAA business associate agreement and that setting changed, which is his decision and was not taken.

@@ -2,20 +2,31 @@
 // Local visual-check server for the CPT Studio customer page. NOT used in production.
 //
 // Serves studio/templates/studio/*.html rendered as plain HTML (only the template tags those files use are supported;
-// anything else fails loudly), the files in studio/static/studio/, and a mock of the customer JSON API backed by the
-// hand-made customer fixtures in tests/fixtures/customer/ (design section 7). Binds 127.0.0.1 on the first free port
-// in 9170-9179.
+// anything else fails loudly), the files in studio/static/studio/, and a mock of the customer JSON API (client contract
+// customer-2026-11-22) backed by the hand-made customer fixtures in tests/fixtures/customer/. Binds 127.0.0.1 on the
+// port given as --port=N, else on the first free port in 9170-9179.
+// A decision names the coding review the page shows and a line of it, as the server takes it ({round, line, code,
+// action, acknowledgement, note}, and for an Undo the decision it undoes: {..., decision}): a round that is not the
+// document's latest finished one, a line it does not have, a code that is not that line's, or an Undo naming another
+// decision than the line's current one is answered 409 with the server's sentence (decisionAnswer). A download names
+// the coding review the page shows ({kind, fmt, round}): another round is answered 409 the same way (reportAnswer).
 //
 // Request headers understood by the mock: "X-Preview-Session: agent" serves the agent session;
 // "X-Preview-Encounters: empty" serves an empty document list.
-// A new upload answers 201 with the "just uploaded" fixture's id and plays it forward on each read: waiting to start,
-// then the checks running, then results (or "Action needed" when the upload entered a date of service that differs
-// from the document's). The same client_key from the same session answers with the same id and creates nothing.
-// Every other mutation (decisions, details, answer revocation, stop, resume, addenda, downloads) answers as the real
-// API does on success and never changes a fixture.
-// POST /__preview__/reset restarts the uploads; POST /__preview__/outdated makes every API call answer 409
-// {"error_code": "client_outdated"} until the next reset; POST /__preview__/offline makes reads of a document fail
-// (503) until the next reset, which shows the page's reconnecting line.
+// A new upload answers 201 with the reading fixture's id and plays it forward on each read of the document: reading,
+// then checking, then questions for you; sending answers plays a second coding review forward to ready for approval.
+// The same client_key from the same session answers with the same id and creates nothing. A retry the document offers
+// (the failed fixture's Retry, the earlier review's Review again) plays that document forward the same way. Every other
+// change (decisions, stop, resume, downloads) answers as the real server does on success and never changes a fixture.
+// The original document of every fixture is a synthetic one made here (SYNTHETIC_DOCUMENTS): a two-page PDF, plain text
+// or a Word file. GET .../original downloads it; GET .../original?view=1 serves what the page's viewer shows, inline
+// and framable by this origin only: the PDF or the text, and for a Word document the PDF of its pages (as the server
+// serves the PDF the coding review read) - once converted: a Word document of an earlier review, or one uploaded here
+// before its second read, has no view (404). The fixtures quote these documents exactly, on the pages given
+// (tests/frontend/app.test.cjs).
+// POST /__preview__/reset restarts the uploads and the retried documents; POST /__preview__/outdated makes every API
+// call answer 409 {"error_code": "client_outdated"} until the next reset; POST /__preview__/offline makes reads of a
+// document fail (503) until the next reset, which shows the page's reconnecting line.
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -29,35 +40,211 @@ const FIXTURES = path.join(ROOT, 'tests', 'fixtures', 'customer');
 const HOST = '127.0.0.1';
 const PORTS = Array.from({ length: 10 }, (_, i) => 9170 + i);
 const MAX_BODY = 16 * 1024 * 1024;
+const MAX_ANSWER_CHARS = 2000;
 const CSRF = crypto.randomBytes(16).toString('hex');
 const STATIC_TYPES = { 'styles.css': 'text/css; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'favicon.svg': 'image/svg+xml' };
-// Same policy as studio.access.SecurityHeadersMiddleware, so violations surface here.
-const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
+// The page's policy, as studio.access.SecurityHeadersMiddleware sends it, with the viewer's frame allowed from this
+// origin only, so violations surface here.
+const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
+// The in-page view of an original: framable by this origin only.
+const VIEW_CSP = "frame-ancestors 'self'";
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const ACTIONS = new Set(['approve', 'reject', 'reinstate', 'confirm', 'revoke']);
-const MODIFIERS = new Set(['59', 'XS']);
-const DETAIL_VALUES = new Set(['not_documented', 'cannot_confirm', 'use_document']);
-// This release offers no reviewer confirmation of a located answer; the server refuses it with this sentence.
-const CONFIRMATIONS_NOT_OFFERED = 'This release offers no reviewer confirmation, so nothing was recorded.';
+const ACTIONS = new Set(['approve', 'reject', 'revoke']);
+// The server's answer to a decision made on a coding review, or a line, that is no longer what it has.
+const CHANGED = 'This coding review has changed. Reload to see the latest.';
+const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const UPLOAD_TYPES = { pdf: 'application/pdf', txt: 'text/plain', docx: DOCX_TYPE };
+const INSURANCE = new Set(['medicare', 'medicaid', 'commercial', 'unknown']);
 
-const readJson = name => JSON.parse(fs.readFileSync(path.join(FIXTURES, name), 'utf8'));
-const fixtures = {
-  session: readJson('session.json'),
-  agent: readJson('session-agent.json'),
-  encounters: readJson('encounters.json'),
-  empty: readJson('encounters-empty.json'),
-  byId: new Map(fs.readdirSync(FIXTURES).filter(name => /^encounter-.+\.json$/.test(name)).sort().map(name => {
-    const doc = readJson(name);
-    return [doc.id, doc];
-  })),
+// The synthetic documents the fixtures' quotes come from: invented, no real patient.
+const SYNTHETIC_DOCUMENTS = {
+  'synthetic-egd-colonoscopy.pdf': {
+    type: 'application/pdf',
+    pages: [
+      ['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Endoscopy report (fictional)',
+        'Patient: Riley Synthetic. Date of service: 2026-11-02.', 'Procedures: upper endoscopy (EGD) and colonoscopy.',
+        'EGD: The endoscope was passed to the second part of the duodenum.', 'Patchy erythema was seen in the gastric antrum.',
+        'Cold forceps biopsies were taken from the gastric antrum.'],
+      ['Colonoscopy: The colonoscope was advanced to the cecum.', 'The appendiceal orifice and the ileocecal valve were identified.',
+        'A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.', 'A 4 mm polyp in the ascending colon was removed with cold forceps.',
+        'Bowel preparation quality was not recorded.', 'Impression: antral erythema; two colon polyps removed.'],
+    ],
+  },
+  'synthetic-colonoscopy-note.txt': {
+    type: 'text/plain',
+    pages: [['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Colonoscopy note (fictional)',
+      'Patient: Jordan Synthetic. Date of service: 2026-11-05.', 'The colonoscope was advanced to the cecum.',
+      'A 12 mm pedunculated polyp in the descending colon was removed.', 'A 3 mm polyp in the rectum was seen and left in place.',
+      'Upper endoscopy was planned but is not recorded as performed.']],
+  },
+  'pasted-cancelled-colonoscopy': {
+    type: 'text/plain',
+    pages: [['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Procedure note (fictional)',
+      'Patient: Casey Synthetic. Date of service: 2026-11-06.', 'The patient arrived for colonoscopy.',
+      'The procedure was cancelled before sedation because the patient had eaten that morning.', 'No scope was inserted.']],
+  },
+  // a Word file of two pages; its view is the PDF of the same pages, so the quoted pages are the pages shown
+  'synthetic-colonoscopy-report.docx': {
+    type: DOCX_TYPE,
+    pages: [
+      ['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Colonoscopy report (fictional)',
+        'Patient: Morgan Synthetic. Date of service: 2026-11-09.', 'Indication: surveillance after an earlier polyp removal.',
+        'The colonoscope was advanced to the cecum and the terminal ileum was entered.',
+        'Two biopsies were taken from the cecum with cold forceps.'],
+      ['A 7 mm sessile polyp in the transverse colon was removed with a cold snare.',
+        'The polypectomy site was marked with a submucosal ink injection.', 'The bowel preparation was rated good.',
+        'Impression: one transverse colon polyp removed and its site marked; cecal biopsies taken.'],
+    ],
+  },
 };
-// Named by file, never by which fixture a directory listing happens to give first.
-const uploaded = readJson('encounter-queued.json');
-const checking = readJson('encounter-processing.json');
-const results = readJson('encounter-ready.json');
-const dateHold = readJson('encounter-action-needed.json');
+
+function pdfText(value) {
+  return value.replace(/[\\()]/g, ch => `\\${ch}`);
+}
+
+// A minimal, valid PDF of plain text pages (Helvetica 11 pt), so the viewer has real pages to open at #page=N.
+function syntheticPdf(pages) {
+  const objects = [];
+  objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objects[2] = `<< /Type /Pages /Kids [${pages.map((_, i) => `${4 + i * 2} 0 R`).join(' ')}] /Count ${pages.length} >>`;
+  objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+  pages.forEach((lines, i) => {
+    const stream = ['BT', '/F1 11 Tf', '16 TL', '56 740 Td', ...lines.flatMap(line => [`(${pdfText(line)}) Tj`, 'T*']), 'ET'].join('\n');
+    objects[4 + i * 2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`;
+    objects[5 + i * 2] = `<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`;
+  });
+  let body = '%PDF-1.4\n';
+  const offsets = [];
+  for (let id = 1; id < objects.length; id += 1) {
+    offsets[id] = Buffer.byteLength(body, 'latin1');
+    body += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+  }
+  const xref = Buffer.byteLength(body, 'latin1');
+  body += `xref\n0 ${objects.length}\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}`;
+  body += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(body, 'latin1');
+}
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, value) => {
+  let crc = value;
+  for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+  return crc >>> 0;
+});
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+// A ZIP archive of [name, bytes] entries, stored without compression (all a Word file needs to open).
+function storedZip(entries) {
+  const parts = [];
+  const directory = [];
+  let offset = 0;
+  for (const [name, data] of entries) {
+    const file = Buffer.from(name, 'utf8');
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x21, 12);  // 1 January 1980
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(file.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x21, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(file.length, 28);
+    central.writeUInt32LE(offset, 42);
+    parts.push(local, file, data);
+    directory.push(central, file);
+    offset += local.length + file.length + data.length;
+  }
+  const listing = Buffer.concat(directory);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(listing.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, listing, end]);
+}
+
+function xmlText(value) {
+  return value.replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+}
+
+// A minimal, valid Word file: one paragraph per line and a page break between pages.
+function syntheticDocx(pages) {
+  const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const paragraph = line => `<w:p><w:r><w:t xml:space="preserve">${xmlText(line)}</w:t></w:r></w:p>`;
+  const body = pages.map(lines => lines.map(paragraph).join('')).join('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
+  return storedZip([
+    ['[Content_Types].xml', Buffer.from(`${head}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`, 'utf8')],
+    ['_rels/.rels', Buffer.from(`${head}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`, 'utf8')],
+    ['word/document.xml', Buffer.from(`${head}<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr></w:body></w:document>`, 'utf8')],
+  ]);
+}
+
+// One synthetic document's bytes and type as uploaded: a PDF of its pages, a Word file of them, or its lines as plain
+// text.
+function documentBytes(name) {
+  const source = SYNTHETIC_DOCUMENTS[name] || SYNTHETIC_DOCUMENTS['synthetic-colonoscopy-note.txt'];
+  if (source.type === 'application/pdf') return { bytes: syntheticPdf(source.pages), type: source.type };
+  if (source.type === DOCX_TYPE) return { bytes: syntheticDocx(source.pages), type: source.type };
+  return { bytes: Buffer.from(`${source.pages.flat().join('\n')}\n`, 'utf8'), type: 'text/plain; charset=utf-8' };
+}
+
+// What the viewer is served of one synthetic document: the PDF or text as uploaded, and for a Word file the PDF of its
+// pages (the server serves the PDF the coding review read: the converted file).
+function viewBytes(name) {
+  if (SYNTHETIC_DOCUMENTS[name]?.type === DOCX_TYPE) return { bytes: syntheticPdf(SYNTHETIC_DOCUMENTS[name].pages), type: 'application/pdf' };
+  return documentBytes(name);
+}
+
+// The synthetic document a fixture's original stands for: by its name, a pasted text by its own key, else by its type.
+function documentFor(doc) {
+  const name = doc?.document?.name;
+  if (typeof name === 'string' && Object.hasOwn(SYNTHETIC_DOCUMENTS, name)) return name;
+  if (doc?.document?.kind === 'paste') return 'pasted-cancelled-colonoscopy';
+  const type = doc?.document?.media_type;
+  if (type === DOCX_TYPE) return 'synthetic-colonoscopy-report.docx';
+  return type === 'application/pdf' ? 'synthetic-egd-colonoscopy.pdf' : 'synthetic-colonoscopy-note.txt';
+}
+
+// The fixtures, read when the server starts (requiring this file for its documents reads nothing). The played
+// stages are named by file, never by which fixture a directory listing happens to give first.
+let fixtures = null;
+
+function loadFixtures() {
+  const readJson = name => JSON.parse(fs.readFileSync(path.join(FIXTURES, name), 'utf8'));
+  return {
+    session: readJson('session.json'),
+    agent: readJson('session-agent.json'),
+    encounters: readJson('encounters.json'),
+    empty: readJson('encounters-empty.json'),
+    byId: new Map(fs.readdirSync(FIXTURES).filter(name => /^encounter-.+\.json$/.test(name)).sort().map(name => {
+      const doc = readJson(name);
+      return [doc.id, doc];
+    })),
+    reading: readJson('encounter-reading.json'),
+    checking: readJson('encounter-checking.json'),
+    asking: readJson('encounter-awaiting-answer.json'),
+    results: readJson('encounter-ready.json'),
+  };
+}
+
 const uploads = new Map();  // '<session> <client_key>' -> encounter id
-const plays = new Map();    // encounter id -> {reads, at, held}
+// encounter id -> {reads, at, started, answered, round, trigger, title, name, kind, mediaType, size, context, answers,
+// converted}: an uploaded or retried document, played forward
+const plays = new Map();
 const reports = new Map();
 const flags = { outdated: false, offline: false };
 
@@ -120,26 +307,57 @@ function formField(body, name) {
   return match ? match[1] : '';
 }
 
-const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
-
-// The just-uploaded document, played forward one read at a time, with its times taken from the upload.
-function played(id) {
-  const play = plays.get(id);
-  play.reads += 1;
-  const now = Date.now();
-  const shift = doc => ({
-    ...doc, id, title: uploaded.title, created_at: iso(play.at),
-    progress: { ...doc.progress, started_at: iso(play.at + 1000), server_time: iso(now), finished_at: doc.progress.finished_at ? iso(now - 1000) : null },
-  });
-  if (play.reads <= 2) return shift(uploaded);
-  if (play.held) return { ...shift(dateHold), document: { ...dateHold.document, original_url: `/api/encounters/${id}/original` } };
-  if (play.reads <= 6) return { ...shift(checking), document: { ...checking.document, original_url: `/api/encounters/${id}/original` } };
-  return { ...shift(results), document: { ...results.document, original_url: `/api/encounters/${id}/original` } };
+// The uploaded file's name, if the upload carried a file.
+function formFileName(body) {
+  const match = /name="file"; filename="([^"\r\n]*)"/.exec(body);
+  return match ? match[1] : '';
 }
 
-function encounterFor(id) {
-  if (plays.has(id)) return played(id);
+const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+const clone = value => JSON.parse(JSON.stringify(value));
+
+// What the viewer shows of a played document, as the server builds it: a PDF or a text as uploaded; a Word file nothing
+// until the coding review has converted it (here from its second read on), then that PDF.
+function playedView(id, play) {
+  const view = `/api/encounters/${id}/original?view=1`;
+  if (play.mediaType !== DOCX_TYPE) {
+    return { view_url: view, view_media_type: play.mediaType === 'application/pdf' ? 'application/pdf' : 'text/plain', converted: false };
+  }
+  play.converted = play.converted || play.reads > 1;
+  return play.converted ? { view_url: view, view_media_type: 'application/pdf', converted: true } : { view_url: null, view_media_type: null, converted: false };
+}
+
+// An uploaded or retried document, one stage further on each read of it (advance), with its times taken from the upload
+// or the retry.
+function played(id, advance) {
+  const play = plays.get(id);
+  if (advance) play.reads += 1;
+  const now = Date.now();
+  const { reading, checking, asking, results } = fixtures;
+  const stages = play.answered ? [[2, reading], [4, checking], [Infinity, results]] : [[2, reading], [5, checking], [Infinity, asking]];
+  const base = clone(stages.find(([limit]) => play.reads <= limit)[1]);
+  const done = !base.progress.busy;
+  return {
+    ...base, id, title: play.title, created_at: iso(play.at), updated_at: iso(now), context: play.context,
+    document: {
+      ...base.document, name: play.name, kind: play.kind, media_type: play.mediaType, size: play.size,
+      original_url: play.kind === 'paste' ? null : `/api/encounters/${id}/original`, ...playedView(id, play),
+    },
+    progress: { ...base.progress, started_at: iso(play.started), server_time: iso(now), finished_at: done ? iso(now - 1000) : null },
+    round: { number: play.round + (play.answered ? 1 : 0), trigger: play.answered ? 'answers' : play.trigger, finished_at: done ? iso(now - 1000) : null },
+    answers: play.answers,
+  };
+}
+
+// A document by id: a played one (only a read of the document itself moves it on), else a fixture.
+function encounterFor(id, advance = false) {
+  if (plays.has(id)) return played(id, advance);
   return fixtures.byId.get(id) || null;
+}
+
+// The play of a document from now on: an upload, or a retry of a fixture that offers one.
+function startPlay(id, from) {
+  plays.set(id, { reads: 0, started: Date.now() + 1000, answered: false, converted: false, ...from });
 }
 
 async function handleApi(req, res, url) {
@@ -150,7 +368,8 @@ async function handleApi(req, res, url) {
   }
   if (flags.outdated) return json(res, 409, { error: 'CPT Studio was updated. Reload the page.', error_code: 'client_outdated' });
   const agent = req.headers['x-preview-session'] === 'agent';
-  if (method === 'GET' && route === '/api/session') return json(res, 200, agent ? fixtures.agent : fixtures.session);
+  const session = agent ? fixtures.agent : fixtures.session;
+  if (method === 'GET' && route === '/api/session') return json(res, 200, session);
   if (method === 'GET' && route === '/api/encounters') {
     return json(res, 200, req.headers['x-preview-encounters'] === 'empty' ? fixtures.empty : fixtures.encounters);
   }
@@ -159,47 +378,61 @@ async function handleApi(req, res, url) {
     if (!/^multipart\/form-data/.test(req.headers['content-type'] || '')) return apiError(res, 400, 'Send the document as a file or as pasted text.');
     if (formField(body, 'synthetic_attestation') !== 'yes') return apiError(res, 400, 'Confirm that the document is synthetic.');
     if (!/name="(file|text)"/.test(body)) return apiError(res, 400, 'Attach a file or paste the text.');
+    const insurance = formField(body, 'insurance') || 'unknown';
+    if (!INSURANCE.has(insurance)) return apiError(res, 400, 'Choose the insurance, or Not sure.');
     const key = formField(body, 'client_key');
     if (!new RegExp(`^${UUID}$`).test(key)) return apiError(res, 400, 'This upload could not be identified. Reload the page and try again.');
     const seen = uploads.get(`${agent ? 'agent' : 'human'} ${key}`);
     if (seen) return json(res, 201, { id: seen });
-    const id = uploaded.id;
+    const id = fixtures.reading.id;
+    const file = formFileName(body);
     const date = formField(body, 'service_date');
+    // the played document keeps one type and size from the upload on, as a real one does
+    const mediaType = file ? UPLOAD_TYPES[(/\.(pdf|docx|txt)$/i.exec(file) || [])[1]?.toLowerCase()] || 'text/plain' : 'text/plain';
+    const shown = documentFor({ document: { name: file, kind: file ? 'upload' : 'paste', media_type: mediaType } });
     uploads.set(`${agent ? 'agent' : 'human'} ${key}`, id);
-    plays.set(id, { reads: 0, at: Date.now(), held: Boolean(date) && date !== results.service_date.document_value });
+    startPlay(id, {
+      at: Date.now(), answers: [], round: 1, trigger: 'upload',
+      title: file ? file.replace(/\.(pdf|docx|txt)$/i, '') : 'Pasted clinical text', name: file || null, kind: file ? 'upload' : 'paste',
+      mediaType, size: documentBytes(shown).bytes.length,
+      context: { service_date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null, insurance },
+    });
     return json(res, 201, { id });
   }
   let match = new RegExp(`^/api/encounters/(${UUID})$`).exec(route);
   if (match && method === 'GET') {
     if (flags.offline) return apiError(res, 503, 'The service is not available right now.');
-    const doc = encounterFor(match[1]);
+    const doc = encounterFor(match[1], true);
     return doc ? json(res, 200, doc) : apiError(res, 404, 'Not found.');
   }
-  match = new RegExp(`^/api/encounters/(${UUID})/clarifications/(${UUID})/confirm$`).exec(route);
-  if (match) return apiError(res, 409, CONFIRMATIONS_NOT_OFFERED);
-  match = new RegExp(`^/api/encounters/(${UUID})/details/(${UUID})/revoke$`).exec(route);
-  if (match) {
-    if (method !== 'POST') return apiError(res, 405, 'Method not allowed.');
+  match = new RegExp(`^/api/encounters/(${UUID})/original$`).exec(route);
+  if (match && method === 'GET') {
     const doc = encounterFor(match[1]);
     if (!doc) return apiError(res, 404, 'Not found.');
-    const known = (doc.details_needed || []).some(row => row.saved && row.saved.answer_id === match[2]);
-    return known ? json(res, 201, { revoked: true }) : apiError(res, 404, 'That answer is not part of this document.');
-  }
-  match = new RegExp(`^/api/encounters/(${UUID})/(decisions|details|addenda|stop|resume|reports|original)$`).exec(route);
-  if (match) {
-    const doc = encounterFor(match[1]);
-    if (!doc) return apiError(res, 404, 'Not found.');
-    const [, , action] = match;
-    if (action === 'original' && method === 'GET') {
-      if (!doc.document.original_url) return apiError(res, 404, 'This document was pasted, so there is no original file.');
-      return send(res, 200, 'Synthetic preview placeholder: the original file is served by the real API.\n', {
-        'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename="synthetic-original-placeholder.bin"',
-      });
+    const view = url.searchParams.get('view') === '1';
+    if (view && !doc.document.view_url) return apiError(res, 404, 'Not found.');
+    if (!view && !doc.document.original_url) return apiError(res, 404, 'This document was pasted, so there is no original file.');
+    const name = documentFor(doc);
+    const filename = doc.document.name || 'pasted-text.txt';
+    if (!view) {
+      const { bytes, type } = documentBytes(name);
+      return send(res, 200, bytes, { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${filename}"` });
     }
+    // a converted Word document is served as the PDF it became, under the Word file's name (studio/customer.py)
+    const { bytes, type } = viewBytes(name);
+    const shownName = doc.document.converted === true ? `${filename.replace(/\.[^.]*$/, '')}.pdf` : filename;
+    return send(res, 200, bytes, {
+      'Content-Type': type, 'Content-Disposition': `inline; filename="${shownName}"`, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP,
+    });
+  }
+  match = new RegExp(`^/api/encounters/(${UUID})/(answers|decisions|stop|resume|retry|reports)$`).exec(route);
+  if (match) {
+    const doc = encounterFor(match[1]);
+    if (!doc) return apiError(res, 404, 'Not found.');
     if (method !== 'POST') return apiError(res, 405, 'Method not allowed.');
     const body = parseJson(await readBody(req));
     if (!body) return apiError(res, 400, 'This could not be saved. Reload the page and try again.');
-    return handleMutation(res, doc, action, body);
+    return handleChange(res, doc, match[2], body, session);
   }
   match = new RegExp(`^/api/reports/(${UUID})/download$`).exec(route);
   if (match && method === 'GET') {
@@ -210,49 +443,84 @@ async function handleApi(req, res, url) {
   return apiError(res, 404, 'Not found.');
 }
 
-function handleMutation(res, doc, action, body) {
-  if (action === 'decisions') {
-    const code = (doc.codes || []).find(item => item.id === body.proposal_id);
-    if (!code || !ACTIONS.has(body.action)) return apiError(res, 400, 'That code or action is not part of this document.');
-    if (!code.allowed_actions.includes(body.action)) return apiError(res, 409, 'This action is not available for this code right now.');
-    if (body.action === 'approve' && !String(body.acknowledgement || '').trim()) return apiError(res, 400, 'An approval needs the confirmation that you read the document.');
-    const modifiers = Array.isArray(body.modifiers) ? body.modifiers : [];
-    if (modifiers.length > 1 || modifiers.some(item => !MODIFIERS.has(item)) || (modifiers.length && !(code.modifier_review?.options || []).includes(modifiers[0]))) {
-      return apiError(res, 400, 'Choose one modifier the review offers, or none.');
-    }
-    return json(res, 201, { decision: { id: crypto.randomUUID(), proposal_id: code.id, action: body.action, note: body.note || '', modifiers } });
-  }
-  if (action === 'details') {
-    const answers = Array.isArray(body.answers) ? body.answers : [];
-    if (!answers.length) return apiError(res, 400, 'Choose an answer for at least one detail.');
-    const rows = new Map((doc.details_needed || []).map(row => [row.id, row]));
-    for (const answer of answers) {
-      const row = rows.get(answer?.id);
-      if (!row || row.fact !== answer.fact || row.saved) return apiError(res, 409, 'A detail was already answered or is no longer asked. Reload the page.');
-      const allowed = DETAIL_VALUES.has(answer.value) ? (answer.value === 'use_document' ? row.control === 'date' && Boolean(row.document_value) : row.allow.includes(answer.value))
-        : row.control === 'choice' ? row.choices.some(choice => choice.value === answer.value) : row.control === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(answer.value);
-      if (!allowed) return apiError(res, 400, 'One of the answers is not one of the choices offered.');
-    }
-    return json(res, 201, { saved: answers.length });
-  }
-  if (action === 'addenda') {
-    if (!String(body.text || '').trim() || body.synthetic_attestation !== 'yes') return apiError(res, 400, 'Write the addendum and confirm that it is synthetic.');
-    return json(res, 201, { revision: (doc.document?.revision || 1) + 1 });
-  }
-  if (action === 'stop') return doc.progress?.can_stop ? json(res, 200, { stopped: true }) : apiError(res, 409, 'Nothing is running for this document.');
-  if (action === 'resume') return doc.progress?.can_resume ? json(res, 200, { resumed: true }) : apiError(res, 409, 'There is nothing to resume for this document.');
-  if (!['draft', 'approved'].includes(body.kind) || !['txt', 'csv'].includes(body.fmt)) return apiError(res, 400, 'Choose a download.');
+// Whether `round` is the number of `doc`'s latest coding review and that review has finished: what a decision and a
+// download must name.
+function latestFinished(doc, round) {
+  return doc.progress?.phase === 'done' && Number.isInteger(doc.round?.number) && round === doc.round.number;
+}
+
+// [status, payload] of POST decisions on `doc`, as the server answers it: 409 CHANGED unless `round` is the number of the
+// document's latest coding review, that review has finished, `line` is one of its lines and `code` is that line's code;
+// then the line's own allowed actions, the exact approval statement, and for an Undo the id of the line's current
+// decision (an Undo naming another one is 409 CHANGED: it would undo a decision the member never saw). Nothing here
+// changes a fixture.
+function decisionAnswer(doc, body, session) {
+  const line = latestFinished(doc, body.round) ? (doc.codes || []).find(item => item.line === body.line) : null;
+  if (!line || line.code !== body.code) return [409, { error: CHANGED, details: {} }];
+  if (!ACTIONS.has(body.action)) return [400, { error: 'Choose approve, reject or undo.', details: {} }];
+  if (!line.allowed_actions.includes(body.action)) return [409, { error: 'This action is not available for this line right now.', details: {} }];
+  if (body.action === 'revoke' && (typeof body.decision !== 'string' || body.decision !== line.decision?.id)) return [409, { error: CHANGED, details: {} }];
+  if (body.action === 'approve' && body.acknowledgement !== session.acknowledgement) return [400, { error: 'An approval needs the exact confirmation statement.', details: {} }];
+  return [201, { line: line.line, code: line.code, id: crypto.randomUUID(), action: body.action, by: session.user.label, at: iso(Date.now()), note: typeof body.note === 'string' ? body.note : '' }];
+}
+
+// [status, payload] of POST reports on `doc`, as the server answers it: 400 for a kind or format it does not make; 409
+// CHANGED unless `round` is the number of the document's latest coding review and that review has finished; 409 with
+// the readiness blockers when the download asked for is not available; else 201 with the report as the page lists it.
+// The download is a mock (registered in `reports`); nothing here changes a fixture.
+function reportAnswer(doc, body) {
+  if (!['draft', 'approved'].includes(body.kind) || !['txt', 'csv'].includes(body.fmt)) return [400, { error: 'Choose a download.', details: {} }];
+  if (!latestFinished(doc, body.round)) return [409, { error: CHANGED, details: {} }];
   if (body.kind === 'approved' && doc.readiness?.approved !== true) {
-    return apiError(res, 409, 'The approved download is not available yet.', { blockers: doc.readiness?.blockers || [] });
+    return [409, { error: 'The approved download is not available yet.', details: { blockers: doc.readiness?.blockers || [] } }];
   }
-  if (body.kind === 'draft' && doc.readiness?.draft !== true) return apiError(res, 409, 'Nothing can be downloaded yet.', { blockers: doc.readiness?.blockers || [] });
+  if (body.kind === 'draft' && doc.readiness?.draft !== true) return [409, { error: 'Nothing can be downloaded yet.', details: { blockers: doc.readiness?.blockers || [] } }];
   const id = crypto.randomUUID();
   const filename = `cpt-studio-preview-${body.kind}.${body.fmt}`;
   const content = body.fmt === 'csv'
     ? 'notice,kind\r\n"SYNTHETIC — NOT FOR BILLING","preview mock"\r\n'
     : `SYNTHETIC — NOT FOR BILLING\nCPT Studio preview mock download (${body.kind}).\nThe real download is built by the server from the saved decisions.\n`;
   reports.set(id, { content, filename, type: body.fmt === 'csv' ? 'text/csv; charset=utf-8' : 'text/plain; charset=utf-8' });
-  return json(res, 201, { id, kind: body.kind, fmt: body.fmt, filename, download_url: `/api/reports/${id}/download` });
+  return [201, { id, kind: body.kind, fmt: body.fmt, filename, generated_at: iso(Date.now()), download_url: `/api/reports/${id}/download`, current: true }];
+}
+
+function handleChange(res, doc, action, body, session) {
+  if (action === 'answers') {
+    const answers = Array.isArray(body.answers) ? body.answers : [];
+    if (!answers.length) return apiError(res, 400, 'Write an answer to at least one question.');
+    const questions = new Map((doc.questions || []).map(question => [question.id, question]));
+    for (const answer of answers) {
+      if (!questions.has(answer?.question_id)) return apiError(res, 409, 'A question is no longer asked. Reload the page.');
+      const value = typeof answer.text === 'string' ? answer.text.trim() : '';
+      if (!value || [...value].length > MAX_ANSWER_CHARS) return apiError(res, 400, 'Each answer needs text, up to 2,000 characters.');
+    }
+    const play = plays.get(doc.id);
+    if (play) {
+      play.answered = true;
+      play.reads = 0;
+      play.started = Date.now() + 1000;
+      play.answers = answers.map(answer => ({ question: questions.get(answer.question_id).text, answer: answer.text.trim(), by: session.user.label, at: iso(Date.now()) }));
+    }
+    return json(res, 201, { round: { number: (doc.round?.number || 0) + 1, trigger: 'answers', finished_at: null } });
+  }
+  if (action === 'decisions') {
+    const [status, payload] = decisionAnswer(doc, body, session);
+    return json(res, status, payload);
+  }
+  if (action === 'stop') return doc.progress?.can_stop ? json(res, 200, { stopped: true }) : apiError(res, 409, 'Nothing is running for this document.');
+  if (action === 'resume') return doc.progress?.can_resume ? json(res, 201, { resumed: true }) : apiError(res, 409, 'There is nothing to resume for this document.');
+  if (action === 'retry') {
+    if (!doc.progress?.can_retry) return apiError(res, 409, 'This document cannot be retried right now.');
+    // a new coding review of the document (an earlier review's first): played forward from here, as an upload is
+    const number = (doc.round?.number || 0) + 1;
+    startPlay(doc.id, {
+      at: Date.parse(doc.created_at), answers: doc.answers || [], round: number, trigger: 'retry', title: doc.title,
+      name: doc.document.name, kind: doc.document.kind, mediaType: doc.document.media_type, size: doc.document.size, context: doc.context,
+    });
+    return json(res, 201, { round: { number, trigger: 'retry', finished_at: null } });
+  }
+  const [status, payload] = reportAnswer(doc, body);
+  return json(res, status, payload);
 }
 
 async function handle(req, res) {
@@ -299,9 +567,10 @@ async function handle(req, res) {
 }
 
 function listen(ports) {
+  fixtures = fixtures || loadFixtures();
   const [port, ...rest] = ports;
   if (port === undefined) {
-    process.stderr.write('No free port in 9170-9179.\n');
+    process.stderr.write('No free port.\n');
     process.exit(1);
   }
   const server = http.createServer((req, res) => {
@@ -325,4 +594,9 @@ function listen(ports) {
   process.once('SIGTERM', stop);
 }
 
-listen(PORTS);
+if (require.main === module) {
+  const asked = process.argv.map(arg => /^--port=(\d{2,5})$/.exec(arg)).find(Boolean);
+  listen(asked ? [Number(asked[1])] : PORTS);
+}
+
+module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, CHANGED };

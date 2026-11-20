@@ -1,7 +1,15 @@
 'use strict';
-// CPT Studio customer page, drawn from the customer encounter contract (API.md, "Core repair and customer
-// interface"). Rendering builds markup strings; every value that comes from the server passes through escapeHtml.
-// Everything above "browser wiring" is pure and unit-tested under node (tests/frontend/app.test.cjs).
+// CPT Studio customer page, drawn from the customer encounter contract (client contract customer-2026-11-22: the build
+// specification, sections 6 and 7, with the fix passes' line identity). Every code row is named by its line ("L1".."Ln",
+// "M1".."Mk"), never by its code alone: one code may stand on two lines. The review dialog, the reason it shows, the
+// buttons and every decision use the row's line and the number of the coding review the page shows; an Undo names the
+// decision it undoes (the id the page shows for it), and a download names the coding review the export dialog was
+// opened on. What a dialog's act names - the document, the coding review, the line, its code - is fixed when the dialog
+// opens, and leaving the document closes it. An act the server refuses because what the page shows changed reads the
+// document again and says so. Rendering builds markup strings; every
+// value that comes from the server passes through escapeHtml. Text the coding review wrote (reasons, questions,
+// documentation notes, quoted passages) is shown as written and escaped like every other value. Everything above
+// "browser wiring" is pure and unit-tested under node (tests/frontend/app.test.cjs).
 
 const POLL_BASE_MS = 2500;
 const POLL_MAX_MS = 15000;
@@ -9,148 +17,102 @@ const POLL_MAX_ERROR_MS = 30000;
 const TICK_MS = 1000;
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const MAX_PASTE_CHARS = 400000;
-const MAX_ADDENDUM_CHARS = 20000;
+const MAX_ANSWER_CHARS = 2000;
 const UPLOAD_NAME = /\.(pdf|docx|txt)$/i;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const REPORT_URL = /^\/api\/reports\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/download$/i;
-const ORIGINAL_URL = /^\/api\/encounters\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/original$/i;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const PARAGRAPH_BREAK = /\n(?:[^\S\n]*\n)+/g;
+const UUID_PART = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const UUID = new RegExp(`^${UUID_PART}$`, 'i');
+const REPORT_URL = new RegExp(`^/api/reports/${UUID_PART}/download$`, 'i');
+const ORIGINAL_URL = new RegExp(`^/api/encounters/${UUID_PART}/original$`, 'i');
+// The in-page view of the original: the same path with view=1 among plain query parameters, nothing else.
+const VIEW_URL = new RegExp(`^/api/encounters/${UUID_PART}/original\\?(?:[\\w.-]+=[\\w.-]*&)*view=1(?:&[\\w.-]+=[\\w.-]*)*$`, 'i');
 // The page tells the server which build of this page is asking. A server that no longer serves this build refuses the
 // call with a conflict status and {"error_code": "client_outdated"}, and the page asks the member to reload.
 const CLIENT_HEADER = 'X-CPT-Studio-Client';
-const CLIENT_VERSION = 'customer-2026-11-13';
+const CLIENT_VERSION = 'customer-2026-11-22';
 const OUTDATED_TEXT = 'CPT Studio was updated — reload the page to continue.';
+// What the page says when the server refuses a decision with a conflict status (the coding review the page shows, or a
+// line of it, is no longer the latest): nothing was recorded, and the page has read the document again.
+const CHANGED_TEXT = 'This coding review has changed, so nothing was recorded. The page now shows the latest.';
 const OFFLINE_TEXT = 'The server could not be reached. Check the connection and try again.';
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;', '`': '&#x60;' };
 
-const AGENT_REVIEW = 'Agent-executed synthetic review — not clinical approval';
+// The encounter states and their fixed labels (the build specification, section 5), and 'earlier': a document an
+// earlier version of CPT Studio reviewed, with no coding review of this version and so no codes.
 const STATE_LABELS = {
-  processing: 'Processing', action_needed: 'Action needed', awaiting_detail: 'A few details needed', ready: 'Ready for review',
-  reviewed: 'Reviewed', no_codes: 'No codes suggested', stopped: 'Stopped', failed: 'Could not finish', being_confirmed: 'Being confirmed',
-  updating: 'Updating codes',
+  processing: 'Processing', stopped: 'Stopped', failed: 'Could not finish', awaiting_answer: 'Questions for you',
+  needs_review: 'Needs your review', ready: 'Ready for approval', reviewed: 'Reviewed', no_codes: 'No codes found',
+  earlier: 'Earlier review',
 };
-const STATE_TONES = { ready: 'green', reviewed: 'green', action_needed: 'amber', awaiting_detail: 'amber', being_confirmed: 'amber', failed: 'amber' };
-// The customer states that wait on a member (a date to choose, a detail to answer, codes to review). The review queue
-// lists the rows the server marks in_queue - these and what the review queue's rule holds waiting - and the badge counts
-// the same rows (customer_api.in_queue).
-const QUEUE_STATES = new Set(['action_needed', 'awaiting_detail', 'ready']);
-const QUEUED_AFTER_DONE_TITLE = 'Waiting for the next step';
-const RECHECK_LABEL = 'Check what is still open again';
-const RECHECK_NOTE = 'The document review is asked once more about what is still open. This can be asked for once for this result.';
-// status -> [label, badge tone, badge icon]
+const STATE_TONES = { ready: 'green', reviewed: 'green', awaiting_answer: 'amber', needs_review: 'amber', failed: 'amber' };
+// The states that wait on a member: questions to answer, codes to review or to approve.
+const QUEUE_STATES = new Set(['awaiting_answer', 'needs_review', 'ready']);
+// code status -> [label, badge tone, badge icon]
 const CODE_STATUSES = {
-  ready: ['Ready for review', 'green', ''],
-  needs_detail: ['Needs a detail', 'amber', 'info'],
-  approved: ['Approved', 'green', 'check'],
-  excluded: ['Excluded', 'gray', ''],
+  ready: ['Ready for approval', 'green', ''],
+  needs_answer: ['Needs your answer', 'amber', 'help'],
+  needs_review: ['Needs your review', 'amber-outline', 'info'],
+  not_supported: ['Not supported', 'gray', ''],
 };
-const STEP_KEYS = ['reading', 'identifying', 'checking', 'preparing'];
-const STEP_LABELS = { reading: 'Reading your document', identifying: 'Identifying procedures', checking: 'Checking suggested codes', preparing: 'Preparing your results' };
-const STEP_STATES = { done: 'Done', active: 'In progress', waiting: 'Waiting to start', not_started: 'Not started', failed: 'Did not finish', stopped: 'Stopped', skipped: 'Not needed' };
-const STEP_ICONS = { done: 'check', active: 'clock', failed: 'close', stopped: 'stop' };
-const CHECK_KEYS = ['document_review', 'independent_checks', 'coding_validation'];
-const CHECK_LABELS = { document_review: 'Document review', independent_checks: 'Independent checks', coding_validation: 'Coding validation' };
-const CHECK_STATES = { done: 'Done', running: 'In progress', waiting: 'Waiting', unavailable: 'Unavailable', not_run: 'Not run' };
-const CHECK_ICONS = { done: 'circle-check', running: 'clock', waiting: 'clock', unavailable: 'info', not_run: 'info' };
-// FINAL-V2 amendment 1, 5.1: 'updating' while the codes are updated after a save (the server's progress.PHASES).
-const PHASES = ['uploading', 'queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped', 'being_confirmed', 'paused', 'updating'];
-const PHASE_TITLES = {
-  uploading: 'Uploading your document', queued: 'Waiting to start', processing: 'Processing your document', action_needed: 'Action needed',
-  awaiting_detail: 'Results ready', completed: 'Results ready', partial: 'Results ready, with a limitation', failed: 'Processing could not finish',
-  stopped: 'Processing stopped', being_confirmed: 'An earlier check is being confirmed', paused: 'Processing paused',
-  updating: 'Changes saved—updating codes',
-};
-// Only these phases draw an animated step, and only while the server says the document is busy.
-const ANIMATED_PHASES = new Set(['uploading', 'queued', 'processing', 'updating']);
-// These phases draw the whole progress panel; the others (results are ready) draw one compact line.
-const PANEL_PHASES = new Set(['uploading', 'queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed', 'paused', 'updating']);
-// The page polls the document while it is busy (a paused document is busy, so its panel moves on by itself once the
-// processing service answers again: decision (j)), while an earlier check is being confirmed, and while codes update.
-const POLL_PHASES = new Set(['queued', 'processing', 'being_confirmed', 'updating']);
-const STATE_PHASES = { processing: 'processing', action_needed: 'action_needed', awaiting_detail: 'awaiting_detail', failed: 'failed', stopped: 'stopped', being_confirmed: 'being_confirmed', updating: 'updating' };
-const LEAVE_NOTES = {
-  uploading: 'Keep this page open until the upload finishes.',
-  queued: 'You can leave this page — processing continues, and the document stays in Documents.',
-  processing: 'You can leave this page — processing continues, and the document stays in Documents.',
-  action_needed: 'You can leave this page — the document waits in the Review queue until you choose.',
-  being_confirmed: 'You can leave this page — the document stays in Documents while this is settled.',
-  paused: 'You can leave this page — your document is saved.',
-  // the server serves can_leave for every state (progress.encounter_progress); a stopped or failed document is kept
-  // too, so its panel says so (the 2026-11-05 acceptance walk: the stopped panel told nobody they could leave). Nothing
-  // more is promised: saving a detail on a stopped document restarts its processing without Resume
-  // (jobs.change_context clears the stop), so "nothing runs until it is resumed" would not be true.
-  stopped: 'You can leave this page — the document stays in Documents.',
-  failed: 'You can leave this page — the document stays in Documents.',
-  updating: 'You can leave this page — processing continues, and the document stays in Documents.',
-};
-const DETAIL_ANSWERS = { not_documented: 'Not documented', cannot_confirm: 'Cannot confirm' };
-const USE_DOCUMENT = 'use_document';
-// Removing the member's entered date of service (the server's own clear path), where the document gives no single date.
-const CLEAR_DATE = 'clear';
-const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text', addendum: 'Document with addendum' };
-// The button the notice offers for the error's action. retry_reading: one more attempt at reading a document whose
-// reading could not be completed, recorded as the member's (POST .../retry-reading; never offered for a document too long
-// to be read in one piece, which says to shorten or split it instead).
-const ERROR_ACTIONS = { resume: ['resume', 'Resume processing'], new_document: ['upload', 'Upload a new document'], retry_reading: ['retry-reading', 'Try reading again'], retry_update: ['retry-update', 'Try updating again'] };
-const RETRY_ASKED = 'Asked. The documented procedures are being read again.';
-// FINAL-V2 amendment 1, 7.2 (A10): "Try updating again" - one recorded attempt at a failed update (POST .../retry-update);
-// the server's sentence (customer_api.RETRY_UPDATE_ASKED, step 3c's words), held equal by the page tests
-const RETRY_UPDATE_ASKED = 'Asked. Updating the codes is tried once more.';
-
-// --- FINAL-V2 amendment 1: the codes are updated automatically after a save --------------------------------------------
-// The server's own customer sentences (studio/customer_api.py, step 3c's constants), copied here verbatim - the page
-// tests hold each copy equal to the server's - and chosen by the update block's state and kind: "being updated" only
-// while the update runs (5.1 [R:truth-T4]); an update no save started (kind 'check') never names a change of the member's.
-const UPDATE_TITLE = 'Changes saved—updating codes';
-const UPDATE_TITLE_CHECK = 'Updating codes';
-const CHANGE_SAVED_BY = 'Saved by {member}, {time}';
-const EARLIER_CODES_HEADING = 'Codes from before your change';
-const EARLIER_CODES_HEADING_CHECK = 'Codes from before this update';
-const EARLIER_CODES_MADE = 'Made {time}, with date of service {date}. They cannot be approved or exported: they are from before your latest change.';
-const EARLIER_CODES_MADE_CHECK = 'Made {time}, with date of service {date}. They cannot be approved or exported: they are from before this update.';
-const ANSWER_AFTER_UPDATE = 'You can answer this once the codes are updated.';
-const UPDATE_EXPORT_NOTE = {
-  updating: 'Your change is saved and the codes are being updated. Exports are available again once the update finishes.',
-  other: 'Your change is saved, but the codes have not been updated yet; the panel above says why. The codes from before your change cannot be exported as current.',
-};
-const UPDATE_EXPORT_NOTE_CHECK = {
-  updating: 'The codes are being updated. Exports are available again once the update finishes.',
-  other: 'The codes have not been updated yet; the panel above says why. The codes from before this update cannot be exported as current.',
-};
-const RESULTS_UPDATING = 'The updated codes appear here when the update finishes. The codes from before your change are shown below.';
-const RESULTS_NOT_UPDATED = 'The codes have not been updated after your change yet; the panel above says why. The codes from before your change are shown below.';
-const RESULTS_EARLIER_SHOWN = 'The codes from before your change are shown below.';
-const RESULTS_NO_EARLIER_CODE = 'No code was suggested before your change.';
-const TALLY_BEFORE = 'Before your change: ';
-const TALLY_NO_EARLIER_CODE = 'Before your change: no code suggested';
-const RESULTS_UPDATING_CHECK = 'The updated codes appear here when the update finishes. The codes from before this update are shown below.';
-const RESULTS_NOT_UPDATED_CHECK = 'The codes have not been updated yet; the panel above says why. The codes from before this update are shown below.';
-const RESULTS_EARLIER_SHOWN_CHECK = 'The codes from before this update are shown below.';
-const RESULTS_NO_EARLIER_CODE_CHECK = 'No code was suggested before this update.';
-const TALLY_BEFORE_CHECK = 'Before this update: ';
-const TALLY_NO_EARLIER_CODE_CHECK = 'Before this update: no code suggested';
-const RESTORED_TOAST = 'Saved. The codes from before your change are current again.';
-const WHAT_CHANGED_COMPARED = 'Compared with the codes as suggested on {time}, before any answer or decision';
-const WHAT_CHANGED_UNCHANGED = '{n} codes unchanged';
-const WHAT_CHANGED_UNCHANGED_ONE = '1 code unchanged';
-const EARLIER_DOWNLOAD = 'Earlier — made on revision {n}; it may not show the current codes';
-// update.state's values (customer_api.UPDATE_STATES); 'updating' is the one in which the update runs
-const UPDATE_STATES = ['updating', 'failed', 'stopped', 'paused', 'being_confirmed'];
-const ACKNOWLEDGEMENTS = {
-  human: 'I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This synthetic review is not clinical approval or billing advice.',
-  agent: 'I am an automated agent. I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This agent-executed synthetic review is not clinical approval or billing advice.',
-};
-const ACTION_BUTTONS = [['approve', 'primary', 'Approve', 'check'], ['reject', 'secondary', 'Reject', ''], ['reinstate', 'secondary', 'Reinstate for review', ''], ['confirm', 'secondary', 'Confirm exclusion', ''], ['revoke', 'secondary', 'Undo decision', '']];
-const DECISION_TITLES = { approve: 'Approved', reject: 'Rejected', reinstate: 'Reinstated for review', confirm: 'Exclusion confirmed' };
+// a current decision -> [shown status, label, badge tone, badge icon]
+const DECISIONS = { approve: ['approved', 'Approved', 'green', 'check'], reject: ['rejected', 'Rejected', 'gray', 'close'] };
+// [action, button kind, label, icon]: the only decision buttons the page draws, each only when the server allows it.
+const ACTION_BUTTONS = [['approve', 'primary', 'Approve', 'check'], ['reject', 'secondary', 'Reject', ''], ['revoke', 'secondary', 'Undo', '']];
+// A line of a coding review: "L1".."Ln" for the codes it listed, in its order, then "M1".."Mk" for the codes the second
+// check added. A decision names one; a row without one is shown and never decided.
+const LINE = /^[LM][1-9][0-9]{0,2}$/;
+// The id the server gives a line's current decision (the CodeDecision's own id): what an Undo names, so the server can
+// refuse to undo a decision the member never saw. A decision without one the page can send back is shown, never undone.
+const DECISION_ID = /^[A-Za-z0-9-]{1,64}$/;
+// Units or modifiers the coding review did not give (the contract's null): said so - never a number, never nothing, and
+// never "No modifier", which is the coding review saying there is none. Units are a whole number as the coding review
+// wrote them, 0 included (it writes 0 on a code it does not support), and shown as that number: "0 units".
+const UNITS_NOT_GIVEN = 'Units not given';
+const MODIFIERS_NOT_GIVEN = 'Modifiers not given';
 const REVIEW_COPY = {
   approve: { eyebrow: 'APPROVE', title: 'Make the decision visible.', button: 'Approve code' },
   reject: { eyebrow: 'REJECT', title: 'Leave a clear record.', button: 'Reject code' },
-  reinstate: { eyebrow: 'REINSTATE', title: 'Bring it back for review.', button: 'Reinstate for review' },
-  confirm: { eyebrow: 'CONFIRM EXCLUSION', title: 'Agree with the exclusion, on the record.', button: 'Confirm exclusion' },
 };
-const MODIFIER_CHOICES = ['59', 'XS'];
+const TALLY = [
+  ['approved', 'approved', 'approved'], ['rejected', 'rejected', 'rejected'], ['ready', 'ready for approval', 'ready for approval'],
+  ['needs_review', 'needs your review', 'need your review'], ['needs_answer', 'needs your answer', 'need your answer'],
+  ['not_supported', 'not supported', 'not supported'],
+];
+const PHASES = ['queued', 'reading', 'checking', 'done', 'failed', 'stopped', 'earlier'];
+const BUSY_PHASES = new Set(['queued', 'reading', 'checking']);
+const PHASE_TITLES = {
+  queued: 'Waiting to start', reading: 'Reading your document', checking: 'Checking the codes a second time',
+  done: 'Coding review finished', failed: 'The coding review could not finish', stopped: 'The coding review was stopped',
+  earlier: 'Earlier review',
+};
+const STEP_KEYS = ['reading', 'checking', 'finished'];
+const STEP_LABELS = { reading: 'Reading', checking: 'Checking', finished: 'Finished' };
+const STEP_STATES = { done: 'Done', active: 'In progress', waiting: 'Waiting', failed: 'Did not finish', stopped: 'Stopped', unknown: '' };
+const STEP_ICONS = { done: 'check', active: 'clock', failed: 'close', stopped: 'stop' };
+// phase -> the state of each step. A review that failed or was stopped does not say how far it got, so the earlier
+// steps claim nothing. An earlier review has no coding review of this version, so it has no steps at all.
+const PHASE_STEPS = {
+  queued: ['waiting', 'waiting', 'waiting'], reading: ['active', 'waiting', 'waiting'], checking: ['done', 'active', 'waiting'],
+  done: ['done', 'done', 'done'], failed: ['unknown', 'unknown', 'failed'], stopped: ['unknown', 'unknown', 'stopped'],
+  earlier: [],
+};
+const LEAVE_NOTE = 'You can leave this page. The coding review keeps running, and the document stays in Documents.';
+// [action, progress flag, address, button kind, label, icon, what the page says once the server accepts it]
+const PROGRESS_ACTIONS = [
+  ['stop', 'can_stop', 'stop', 'secondary', 'Stop', 'stop', 'Stopping. A step that is already running finishes; nothing after it starts.'],
+  ['resume', 'can_resume', 'resume', 'primary', 'Resume', 'arrow', 'Resumed. The coding review continues.'],
+  ['retry', 'can_retry', 'retry', 'primary', 'Retry', 'arrow', 'The coding review starts again.'],
+];
+// An earlier review's retry: the same act (POST retry), which codes the document with the current version.
+const REVIEW_AGAIN = 'Review again';
+// document.view_media_type -> the in-page viewer: the PDF (opened at a quoted page) or the text; anything else, none.
+const VIEW_KINDS = { 'application/pdf': 'pdf', 'text/plain': 'text' };
+const CONVERTED_NOTE = 'Shown as the PDF the coding review read (converted from the Word file).';
+const INSURANCE_CHOICES = [['medicare', 'Medicare'], ['medicaid', 'Medicaid'], ['commercial', 'Commercial or other'], ['unknown', 'Not sure']];
+const INSURANCE_VALUES = new Set(INSURANCE_CHOICES.map(([value]) => value));
+const INSURANCE_SHOWN = { medicare: 'Medicare', medicaid: 'Medicaid', commercial: 'Commercial or other' };
+const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text' };
+const TRIGGER_TEXT = { answers: 'after your answers', retry: 'after a retry' };
 const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review' };
 const LIST_HEADER = '<div class="list-header"><span>DOCUMENT</span><span>STATUS</span><span class="date-header">SERVICE DATE</span><span></span></div>';
 
@@ -178,6 +140,10 @@ function strings(value) {
 
 function objects(value) {
   return list(value).filter(item => item && typeof item === 'object' && !Array.isArray(item));
+}
+
+function record(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
 function icon(name, className = '') {
@@ -245,6 +211,10 @@ function safeOriginalUrl(url) {
   return typeof url === 'string' && ORIGINAL_URL.test(url) ? url : '';
 }
 
+function safeViewUrl(url) {
+  return typeof url === 'string' && VIEW_URL.test(url) ? url : '';
+}
+
 function pollDelay(count, errors) {
   if (errors > 0) return Math.min(POLL_MAX_ERROR_MS, POLL_BASE_MS * 2 ** errors);
   return Math.min(POLL_MAX_MS, Math.round(POLL_BASE_MS * 1.25 ** count));
@@ -309,125 +279,45 @@ function codePoints(value) {
   return [...String(value)].length;
 }
 
-// API offsets are Python code points; JavaScript strings index UTF-16 units.
-// Returns null when the two coincide (no surrogates), else point -> unit offsets.
-function codeUnitOffsets(source) {
-  if (!/[\uD800-\uDFFF]/.test(source)) return null;
-  const offsets = [0];
-  let unit = 0;
-  for (const ch of source) {
-    unit += ch.length;
-    offsets.push(unit);
-  }
-  return offsets;
+function isoTime(value) {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : '';
 }
 
-function isExactSpan(source, span, length, unit) {
-  return Boolean(span) && span.exact !== false && Number.isInteger(span.start) && Number.isInteger(span.end)
-    && span.start >= 0 && span.start < span.end && span.end <= length && typeof span.text === 'string'
-    && source.slice(unit(span.start), unit(span.end)) === span.text;
-}
-
-// Overlapping spans become one mark carrying every key; touching spans stay separate.
-function mergeSpans(spans) {
-  const sorted = [...spans].sort((a, b) => a.start - b.start || a.end - b.end || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  const merged = [];
-  for (const span of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && span.start < last.end) {
-      last.end = Math.max(last.end, span.end);
-      if (!last.keys.includes(span.key)) last.keys.push(span.key);
+// A quoted passage inside a text: [start, end] in the text's own offsets, or null. Runs of white space count as one
+// space on both sides (a line break in the document may be a space in the quote), and a case-blind match is the
+// fallback.
+function collapseSpace(source) {
+  const chars = [];
+  const map = [];
+  let space = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const ch = source[index];
+    if (/\s/.test(ch)) {
+      if (!space && chars.length) {
+        chars.push(' ');
+        map.push(index);
+      }
+      space = true;
     } else {
-      merged.push({ start: span.start, end: span.end, keys: [span.key] });
+      chars.push(ch);
+      map.push(index);
+      space = false;
     }
   }
-  return merged;
+  return { flat: chars.join(''), map };
 }
 
-// Page k runs from its recorded start to the next page's start (the last to the end
-// of the text), so separators and any unpaged text are never dropped.
-function pageRanges(pages, length, unit, unitLength) {
-  const valid = Array.isArray(pages) && pages.length > 0 && pages.every((page, i) => page
-    && Number.isInteger(page.page) && Number.isInteger(page.start) && Number.isInteger(page.end)
-    && page.start >= 0 && page.start <= page.end && page.end <= length && (i === 0 || page.start >= pages[i - 1].end));
-  if (!valid) return [{ page: 1, start: 0, end: unitLength }];
-  return pages.map((page, i) => ({
-    page: page.page,
-    start: i === 0 ? 0 : unit(page.start),
-    end: i === pages.length - 1 ? unitLength : unit(pages[i + 1].start),
-  }));
-}
-
-function paragraphRanges(source, start, end) {
-  const part = source.slice(start, end);
-  const ranges = [];
-  const add = (from, to) => {
-    while (from < to && part[from] === '\n') from += 1;
-    while (to > from && part[to - 1] === '\n') to -= 1;
-    if (part.slice(from, to).trim()) ranges.push([start + from, start + to]);
-  };
-  let cursor = 0;
-  for (const match of part.matchAll(PARAGRAPH_BREAK)) {
-    add(cursor, match.index);
-    cursor = match.index + match[0].length;
-  }
-  add(cursor, part.length);
-  return ranges;
-}
-
-function paragraphPieces(source, start, end, marks) {
-  const pieces = [];
-  let cursor = start;
-  for (const mark of marks) {
-    if (mark.end <= start || mark.start >= end) continue;
-    const from = Math.max(mark.start, start);
-    const to = Math.min(mark.end, end);
-    if (from > cursor) pieces.push({ text: source.slice(cursor, from), keys: null });
-    pieces.push({ text: source.slice(from, to), keys: mark.keys });
-    cursor = to;
-  }
-  if (cursor < end) pieces.push({ text: source.slice(cursor, end), keys: null });
-  return pieces;
-}
-
-// spans: [{key, start, end, text, exact}] in code points. A span is marked only when
-// text[start:end] equals its text; anything else is reported as unlocated.
-function layoutDocument(source, pages, spans) {
-  const body = String(source || '');
-  const offsets = codeUnitOffsets(body);
-  const length = offsets ? offsets.length - 1 : body.length;
-  const unit = point => (offsets ? offsets[point] : point);
-  const located = [];
-  const unlocated = [];
-  for (const span of spans) {
-    if (isExactSpan(body, span, length, unit)) located.push({ key: span.key, start: unit(span.start), end: unit(span.end) });
-    else unlocated.push(span.key);
-  }
-  const marks = mergeSpans(located);
-  return {
-    pages: pageRanges(pages, length, unit, body.length).map(page => ({
-      page: page.page,
-      paragraphs: paragraphRanges(body, page.start, page.end).map(([from, to]) => paragraphPieces(body, from, to, marks)),
-    })),
-    unlocated,
-  };
-}
-
-function excerpt(value, limit = 80) {
-  const flat = String(value ?? '').split(/\s+/).filter(Boolean).join(' ');
-  const points = [...flat];
-  return points.length <= limit ? flat : `${points.slice(0, limit - 1).join('').trimEnd()}…`;
+function findPassage(source, passage) {
+  const hay = collapseSpace(String(source ?? ''));
+  const want = collapseSpace(String(passage ?? '')).flat.trim();
+  if (!want) return null;
+  let at = hay.flat.indexOf(want);
+  if (at < 0) at = hay.flat.toLowerCase().indexOf(want.toLowerCase());
+  if (at < 0) return null;
+  return [hay.map[at], hay.map[at + want.length - 1] + 1];
 }
 
 // --- the customer contract, read defensively ---------------------------------------
-
-function codesOf(doc) {
-  return objects(doc?.codes);
-}
-
-function detailsOf(doc) {
-  return objects(doc?.details_needed);
-}
 
 function canReview(doc) {
   return doc?.permissions?.can_review === true;
@@ -437,20 +327,67 @@ function stateLabel(stateName, label) {
   return lookup(STATE_LABELS, stateName, text(label) || 'Unknown');
 }
 
-// The phase the progress panel shows: the upload in flight (client only), else the server's, else read from the state.
-function progressPhase(doc, ui = {}) {
-  if (ui.uploading) return 'uploading';
+// Every code the page can show, one row per line of the coding review, in the served order.
+function codesOf(doc) {
+  return objects(doc?.codes).filter(code => text(code.code));
+}
+
+// The line a code row stands on, or '' when the server named none the page can use. Given the document, also '' when
+// the same line is named on two of its rows: the page cannot tell which one a decision is about, so it decides neither.
+function lineOf(code, doc) {
+  const line = typeof code?.line === 'string' && LINE.test(code.line) ? code.line : '';
+  if (!line || doc === undefined) return line;
+  return codesOf(doc).filter(item => item.line === line).length === 1 ? line : '';
+}
+
+// The number of the coding review the page shows: what every decision names, so the server can refuse one made on a
+// coding review that is no longer the latest.
+function roundNumber(doc) {
+  const number = doc?.round?.number;
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+// What names a row on the page (its ids, its quotes): its line; only a row without one falls back to its place.
+function rowRef(code, position, doc) {
+  return lineOf(code, doc) || `row-${position + 1}`;
+}
+
+// The one row on `line` of the coding review the page shows, or null (no row, or more than one).
+function findLine(doc, line) {
+  const wanted = typeof line === 'string' && LINE.test(line) ? line : '';
+  const rows = wanted ? codesOf(doc).filter(code => lineOf(code) === wanted) : [];
+  return rows.length === 1 ? rows[0] : null;
+}
+
+function questionsOf(doc) {
+  return objects(doc?.questions).filter(question => typeof question.id === 'string' && question.id && text(question.text));
+}
+
+function answersOf(doc) {
+  return objects(doc?.answers).filter(item => text(item.question) || text(item.answer));
+}
+
+function notesOf(doc) {
+  return strings(doc?.notes);
+}
+
+// The progress phase: the server's, else read from the state. 'earlier' is never 'done': it has no codes to show.
+function progressPhase(doc) {
   const phase = doc?.progress?.phase;
   if (PHASES.includes(phase)) return phase;
-  return lookup(STATE_PHASES, doc?.state, 'completed');
+  return lookup({ processing: 'queued', failed: 'failed', stopped: 'stopped', earlier: 'earlier' }, doc?.state, 'done');
 }
 
+function isBusy(doc) {
+  return doc?.progress?.busy === true || BUSY_PHASES.has(progressPhase(doc));
+}
+
+// The page polls a document while its coding review is queued or running.
 function shouldPoll(doc) {
-  const progress = doc?.progress;
-  return Boolean(progress) && (progress.busy === true || POLL_PHASES.has(progress.phase));
+  return Boolean(doc) && isBusy(doc);
 }
 
-// One code's status as the list shows it: the contract's four statuses, each with its own fixed label.
+// One code's status, with its fixed label; a status this page does not know is never shown as reviewable.
 function codeStatus(code) {
   const key = typeof code?.status === 'string' ? code.status : '';
   const known = lookup(CODE_STATUSES, key, null);
@@ -458,173 +395,197 @@ function codeStatus(code) {
   return { key: key || 'unknown', label: text(code?.status_label) || 'Not reviewable', tone: 'gray', icon: '' };
 }
 
-function isAgentDecision(code) {
-  return code?.decision?.by_kind === 'agent';
+function currentDecision(code) {
+  const decision = code?.decision;
+  return decision && typeof decision === 'object' && lookup(DECISIONS, decision.action, null) ? decision : null;
 }
 
-// The line under a code: an agent approval always says it is an agent-executed synthetic review, whatever else the
-// server sends; a rejection says so when the server sends nothing.
-function rowSubLabel(code) {
-  if (codeStatus(code).key === 'approved' && isAgentDecision(code)) return AGENT_REVIEW;
-  const served = text(code?.sub_label);
-  if (served) return served;
-  return code?.decision?.action === 'reject' ? 'Rejected in review' : '';
+// The id of the decision that stands on a row, exactly as served, or '' when there is none the page can name.
+function decisionId(code) {
+  const id = currentDecision(code)?.id;
+  return typeof id === 'string' && DECISION_ID.test(id) ? id : '';
+}
+
+// What the badge says: the decision once one stands (Approved, Rejected), else the code's status.
+function shownStatus(code) {
+  const decision = currentDecision(code);
+  if (!decision) return codeStatus(code);
+  const [key, label, tone, iconName] = DECISIONS[decision.action];
+  return { key, label, tone, icon: iconName };
 }
 
 function unitsLabel(units) {
-  return Number.isInteger(units) && units > 0 ? plural(units, 'unit', 'units') : '';
+  return Number.isInteger(units) && units >= 0 ? plural(units, 'unit', 'units') : UNITS_NOT_GIVEN;
 }
 
-function modifierLabel(code) {
-  const chosen = strings(code?.modifiers);
-  if (chosen.length) return `Modifier ${chosen.join(', ')}`;
-  if (!code?.modifier_review) return '';
-  return codeStatus(code).key === 'approved' ? 'No modifier' : 'Modifier review';
+// A row's modifiers as served: a list of strings ([] when the coding review says there is none), or null when it gave
+// none the page can state - the contract's null, or anything that is not a list of modifiers, which is shown as not
+// given and never read as "none".
+function modifiersOf(code) {
+  const modifiers = code?.modifiers;
+  if (!Array.isArray(modifiers) || modifiers.some(item => typeof item !== 'string' || !item.trim())) return null;
+  return modifiers.map(item => item.trim());
 }
 
-// The modifier choices of one approval: none, 59 or XS - never both, never prefilled, never a free list.
-function reviewModifierOptions(code) {
-  const review = code?.modifier_review;
-  if (!review || typeof review !== 'object') return [];
-  const offered = MODIFIER_CHOICES.filter(choice => list(review.options).includes(choice));
-  return offered.length ? [['', 'No modifier'], ...offered.map(choice => [choice, choice])] : [];
+function modifiersLabel(code) {
+  const modifiers = modifiersOf(code);
+  if (modifiers === null) return MODIFIERS_NOT_GIVEN;
+  if (!modifiers.length) return 'No modifier';
+  return `${modifiers.length === 1 ? 'Modifier' : 'Modifiers'} ${modifiers.join(', ')}`;
 }
 
-function hasAgentDecision(doc) {
-  return codesOf(doc).some(code => code.decision && isAgentDecision(code));
+// The line as the review dialog states it: its units and its modifiers, so two lines of one code read apart.
+function lineDetail(code) {
+  return `${unitsLabel(code?.units)} · ${modifiersLabel(code)}`;
 }
 
-function attestationText(session) {
-  return session?.acknowledgement || (session?.user?.actor_kind === 'agent' ? ACKNOWLEDGEMENTS.agent : ACKNOWLEDGEMENTS.human);
+// The second check's verdict on one code, and its reason as written. Without a verdict the server's reason opens with
+// its own sentence ("The second check did not review this code.", or "The second check did not give a clear verdict."
+// before the review's own reason), which is then the whole line, shown as given.
+function secondCheck(code) {
+  const check = record(code?.second_check);
+  const verdict = check.agrees === true ? 'agrees' : check.agrees === false ? 'disagrees' : 'none';
+  const reason = text(check.reason);
+  if (verdict === 'none' && reason) return { verdict, label: reason, reason: '' };
+  const label = { agrees: 'Second check: agrees.', disagrees: 'Second check: disagrees.', none: 'Second check: no verdict.' }[verdict];
+  return { verdict, label, reason };
 }
 
-// The review bar's tally; while an update is pending it reads the earlier codes, prefixed "Before your change: ", never
-// "No codes yet" while they exist (5.1 [R:truth-T5][R2:truth-RT8]).
+function quotePage(quote) {
+  return Number.isInteger(quote?.page) && quote.page > 0 ? quote.page : null;
+}
+
+function quotesOf(code) {
+  return objects(code?.quotes).filter(quote => text(quote.text)).map(quote => ({ text: text(quote.text), page: quotePage(quote) }));
+}
+
+// One quoted passage of one row: the row's line (its place, for a row without one) and the passage's place in it.
+function quoteKey(code, index, position, doc) {
+  return `${rowRef(code, position, doc)}#${index}`;
+}
+
+// The viewer's address for one page of the original (a PDF opens at #page=N), or the plain view address.
+function viewerUrl(viewUrl, page) {
+  const base = safeViewUrl(viewUrl);
+  if (!base) return '';
+  return Number.isInteger(page) && page > 0 ? `${base}#page=${page}` : base;
+}
+
+// What the in-page viewer shows, as the server says in document.view_media_type (never read from media_type, the type
+// of the original): 'pdf' (an iframe of view_url, opened at #page=N for a quoted page; for a Word document the PDF the
+// coding review read), 'text' (the text, where a quoted passage is found) or 'none' (no viewer, only the download).
+function viewerKind(documentPart) {
+  const part = record(documentPart);
+  if (!safeViewUrl(part.view_url)) return 'none';
+  return lookup(VIEW_KINDS, part.view_media_type, 'none');
+}
+
+// The decision buttons one row gets: those the server allows, for a member who may review, in a fixed order - and none
+// for a row the page cannot name by its line, or on a page that does not know which coding review it shows; no Undo of
+// a decision the page cannot name by its id.
+function allowedActions(code, doc) {
+  if (!canReview(doc) || !lineOf(code, doc) || roundNumber(doc) === null) return [];
+  const allowed = list(code?.allowed_actions);
+  return ACTION_BUTTONS.filter(([name]) => allowed.includes(name) && (name !== 'revoke' || decisionId(code)))
+    .map(([name]) => name);
+}
+
+// What a decision on one row names: the coding review the page shows, the row's line and its code as served, and the
+// decision that stands on it (its id: what an Undo undoes).
+function decisionTarget(code, doc) {
+  return { round: roundNumber(doc), line: lineOf(code, doc), code: typeof code?.code === 'string' ? code.code : '',
+    decision: decisionId(code) };
+}
+
+// The body of POST decisions: {round, line, code, action, acknowledgement, note}, and for an Undo the decision it undoes
+// ({..., decision}).
+function decisionBody(target, action, acknowledgement = '', note = '') {
+  const named = record(target);
+  return {
+    round: named.round, line: named.line, code: named.code, action,
+    acknowledgement: action === 'approve' && typeof acknowledgement === 'string' ? acknowledgement : '',
+    note: action === 'revoke' ? '' : text(note),
+    ...(action === 'revoke' ? { decision: typeof named.decision === 'string' ? named.decision : '' } : {}),
+  };
+}
+
+// The answers one send carries: every question answered on this page, trimmed, in the order asked - or the sentence
+// that says what is missing.
+function answersPayload(doc, drafts) {
+  const typed = drafts instanceof Map ? drafts : new Map();
+  const answers = [];
+  for (const question of questionsOf(doc)) {
+    const value = text(typed.get(question.id));
+    if (!value) continue;
+    if (codePoints(value) > MAX_ANSWER_CHARS) return 'An answer can be at most 2,000 characters. Shorten it, then send.';
+    answers.push({ question_id: question.id, text: value });
+  }
+  if (!answers.length) return 'Write an answer to at least one question, then send.';
+  return { answers };
+}
+
+function insuranceLabel(value) {
+  return INSURANCE_CHOICES.find(([key]) => key === value)?.[1] || 'Not sure';
+}
+
+// The insurance as the review page states it: a named insurance, else that none was given.
+function insuranceText(value) {
+  return lookup(INSURANCE_SHOWN, value, 'Insurance not given');
+}
+
 function tallyText(doc) {
-  const update = updateOf(doc);
-  const counts = { approved: 0, ready: 0, needs_detail: 0, excluded: 0 };
-  for (const code of update ? earlierCodesOf(doc) : codesOf(doc)) {
-    const key = codeStatus(code).key;
-    if (Object.hasOwn(counts, key)) counts[key] += 1;
+  const counts = new Map();
+  for (const code of codesOf(doc)) {
+    const key = shownStatus(code).key;
+    counts.set(key, (counts.get(key) || 0) + 1);
   }
-  const parts = [
-    counts.approved ? `${counts.approved} approved` : '',
-    counts.ready ? `${counts.ready} ready for review` : '',
-    counts.needs_detail ? `${plural(counts.needs_detail, 'needs', 'need')} a detail` : '',
-    counts.excluded ? `${counts.excluded} excluded` : '',
-  ].filter(Boolean);
-  if (update) {
-    const check = updateIsCheck(update);
-    if (!earlierCodesOf(doc).length || !parts.length) return check ? TALLY_NO_EARLIER_CODE_CHECK : TALLY_NO_EARLIER_CODE;
-    return `${check ? TALLY_BEFORE_CHECK : TALLY_BEFORE}${parts.join(' · ')}`;
-  }
-  return parts.length ? parts.join(' · ') : 'No codes yet';
+  const parts = TALLY.filter(([key]) => counts.get(key)).map(([key, one, many]) => `${counts.get(key)} ${counts.get(key) === 1 ? one : many}`);
+  if (parts.length) return parts.join(' · ');
+  return progressPhase(doc) === 'done' && !isBusy(doc) ? 'No codes found' : 'No codes yet';
+}
+
+// Whether the page offers the export dialog: whenever the server allows a download (a draft once the coding review has
+// finished, codes or none; the approved download once a code is approved), or there are downloads made earlier to list.
+function exportOffered(doc) {
+  const readiness = record(doc?.readiness);
+  return readiness.draft === true || readiness.approved === true || objects(doc?.reports).length > 0;
+}
+
+function readinessText(doc) {
+  const readiness = record(doc?.readiness);
+  if (readiness.approved === true) return 'The approved download is available. It lists only approved codes.';
+  if (readiness.draft === true) return 'You can download the codes as a draft. Approve codes to download them as approved.';
+  return 'Downloads become available when the coding review finishes.';
 }
 
 function exportStatusText(doc) {
-  const update = updateOf(doc);
-  if (update) return updateExportNote(update);
-  const readiness = doc?.readiness || {};
+  const readiness = record(doc?.readiness);
   const blockers = strings(readiness.blockers);
-  if (readiness.approved === true) {
-    return `Every suggested code has a decision. The approved download lists only approved codes.${hasAgentDecision(doc) ? ` Includes ${AGENT_REVIEW.charAt(0).toLowerCase()}${AGENT_REVIEW.slice(1)}.` : ''}`;
-  }
-  const head = readiness.draft === true ? 'Draft only: the codes are suggestions, not approvals.' : 'Nothing can be downloaded yet.';
+  if (readiness.approved === true) return 'At least one code is approved. The approved download lists only approved codes, with who approved them.';
+  const head = readiness.draft === true ? 'Draft only: the codes are the coding review\'s, not approvals.' : 'Nothing can be downloaded yet.';
   return blockers.length ? `${head} Before the approved download: ${blockers.join(' ')}` : head;
 }
 
-function serviceDateText(date, long = true) {
-  const value = date || {};
-  if (value.conflict === true || value.source === 'conflict') {
-    const documented = formatDate(value.document_value, long);
-    const entered = formatDate(value.entered_value, long);
-    return documented && entered ? `Two dates: the document says ${documented}, you entered ${entered}` : 'Two different dates';
-  }
-  const shown = formatDate(value.value, long);
-  if (!shown) return 'Not documented';
-  return value.source === 'member' ? `${shown} (entered)` : shown;
+function emptyCodesText(doc) {
+  if (isBusy(doc)) return 'Codes appear here when the coding review finishes.';
+  const phase = progressPhase(doc);
+  if (phase === 'failed') return 'No codes: the coding review could not finish.';
+  if (phase === 'stopped') return 'No codes: the coding review was stopped before it finished.';
+  if (phase === 'earlier') return 'Codes appear here once the document is reviewed again with the current version.';
+  return 'The coding review found no CPT code to report for this document.';
 }
 
-// --- the update block (FINAL-V2 amendment 1, 5.1), read defensively ---
-
-// The pending update, or null: the server's block only when it says it is pending.
-function updateOf(doc) {
-  const update = doc?.update;
-  return update && typeof update === 'object' && !Array.isArray(update) && update.pending === true ? update : null;
-}
-
-// Whether the update runs: only the server's 'updating' - any other state, or one this page does not know, is a state in
-// which nothing runs, so nothing on the page says the codes are being updated (5.1 [R:truth-T4]).
-function updateRunning(update) {
-  return Boolean(update) && update.state === 'updating';
-}
-
-// An update no save started (kind 'check', A21): no text names a change of the member's.
-function updateIsCheck(update) {
-  return Boolean(update) && update.kind === 'check';
-}
-
-function earlierCodesOf(doc) {
-  return objects(doc?.earlier_codes);
-}
-
-function updateTitle(update) {
-  return updateIsCheck(update) ? UPDATE_TITLE_CHECK : UPDATE_TITLE;
-}
-
-// A server sentence with its {name} slots filled; a slot with no value is left as it is.
-function fill(template, values) {
-  return template.replace(/\{(\w+)\}/g, (match, key) => (Object.hasOwn(values, key) ? String(values[key]) : match));
-}
-
-// UPDATE_EXPORT_NOTE by the update's state and kind (5.1 [R:truth-T4]).
-function updateExportNote(update) {
-  const notes = updateIsCheck(update) ? UPDATE_EXPORT_NOTE_CHECK : UPDATE_EXPORT_NOTE;
-  return notes[updateRunning(update) ? 'updating' : 'other'];
-}
-
-// The results section while an update is pending (5.1 [R:truth-T5][R2:truth-RT8]): never that no codes were suggested
-// while earlier codes exist, and never that the earlier codes are shown below when they listed none.
-function updateResultsText(doc, update) {
-  const check = updateIsCheck(update);
-  const head = updateRunning(update) ? (check ? RESULTS_UPDATING_CHECK : RESULTS_UPDATING) : (check ? RESULTS_NOT_UPDATED_CHECK : RESULTS_NOT_UPDATED);
-  if (earlierCodesOf(doc).length) return head;
-  return head.replace(check ? RESULTS_EARLIER_SHOWN_CHECK : RESULTS_EARLIER_SHOWN, check ? RESULTS_NO_EARLIER_CODE_CHECK : RESULTS_NO_EARLIER_CODE);
-}
-
-// Whether a details row takes a value in the one save now: a context row (the date, a choice) whenever the member may
-// review - a context save is accepted while processing runs or an update is pending (A1) - and a row that takes "Not
-// documented" or "Cannot confirm" only while nothing runs and no update is pending (1.4). A choice row whose saved
-// answer is "Not documented" takes one of its values while an update is pending (valueOverAnswer).
-function rowEditable(row, doc) {
-  if (!canReview(doc)) return false;
-  if (valueOverAnswer(row, doc)) return true;
-  if (!answerable(row)) return false;
-  if (row.control === 'date' || row.control === 'choice') return true;
-  return doc?.progress?.busy !== true && !updateOf(doc);
-}
-
-function answersOpen(doc) {
-  return canReview(doc) && doc?.progress?.busy !== true && !updateOf(doc);
-}
-
-// A choice row whose saved answer is "Not documented", while an update is pending: the answer is not withdrawn then
-// (1.4: "Change this answer" is hidden), but the row still takes one of its values - a context save, which the server
-// accepts during an update (A1; 5.1(3): the choice rows stay editable; A19 names this very save) and which replaces that
-// answer (answers._save_details: a value given for a detail said not to be documented supersedes the answer, and no
-// answer is recorded). Outside an update the row keeps "Change this answer" - or, while processing runs, only its saved
-// line: the stage then is most often that answer's own recompute, a member's act during which a context save is refused
-// (A18).
-function valueOverAnswer(row, doc) {
-  return row?.control === 'choice' && Boolean(row.saved) && typeof row.saved === 'object' && canReview(doc) && Boolean(updateOf(doc));
+// A row's name as the part of an element id: letters and digits only.
+function rowKey(value) {
+  return String(value ?? '').replace(/[^A-Za-z0-9]/g, '_');
 }
 
 // --- rendering (pure string builders) ----------------------------------------------
 
 const state = {
-  session: null, route: null, routeSerial: 0, doc: null, docKey: '', layout: null, selectedEvidence: [],
+  session: null, route: null, routeSerial: 0, doc: null, docKey: '', viewerKey: '', selectedQuote: '',
   poll: { timer: 0, count: 0, errors: 0 }, tickTimer: 0, clock: 0, reconnecting: false, outdated: false,
-  upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, addendum: null,
+  upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, exporting: null,
   open: new Set(), answers: new Map(), pending: new Set(), toastTimer: 0, leaving: false,
 };
 
@@ -637,23 +598,18 @@ function badge(tone, label, iconName = '', attributes = '') {
 }
 
 function stateBadge(stateName, label) {
-  const iconName = stateName === 'reviewed' ? 'check' : stateName === 'processing' || stateName === 'updating' ? 'clock' : '';
+  const iconName = stateName === 'reviewed' ? 'check' : stateName === 'processing' ? 'clock' : '';
   return badge(lookup(STATE_TONES, stateName, 'gray'), stateLabel(stateName, label), iconName);
-}
-
-function rowDate(row) {
-  return formatDate(row?.service_date) || (row?.date_conflict === true ? 'Date to choose' : 'Not documented');
 }
 
 function documentRow(row) {
   const tone = lookup(STATE_TONES, row.state, 'gray');
-  const open = Number.isInteger(row.open_details) && row.open_details > 0 ? plural(row.open_details, 'detail needed', 'details needed') : '';
-  const meta = [lookup(KIND_LABELS, row.kind, ''), open].filter(Boolean).join(' · ');
-  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(row.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(row.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${stateBadge(row.state, row.state_label)}</span><span class="doc-row-date">${escapeHtml(rowDate(row))}</span>${icon('chevron', 'row-arrow')}</a>`;
+  const meta = [lookup(KIND_LABELS, row.kind, ''), lookup(INSURANCE_SHOWN, row.insurance, '')].filter(Boolean).join(' · ');
+  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(row.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(text(row.title) || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${stateBadge(row.state, row.state_label)}</span><span class="doc-row-date">${escapeHtml(formatDate(row.service_date) || 'Not entered')}</span>${icon('chevron', 'row-arrow')}</a>`;
 }
 
 function inQueue(row) {
-  return row?.in_queue === true;
+  return QUEUE_STATES.has(row?.state);
 }
 
 function listRows(name, rows) {
@@ -670,7 +626,7 @@ function listBody(name, rows) {
 function listDescription(name, rows) {
   if (name === 'queue') {
     const count = listRows('queue', rows).length;
-    return count ? `${count === 1 ? 'One document waits' : `${count} documents wait`} on you: a date to choose, a detail to answer, codes to review, or something still open.` : 'No document waits on you for a date, a detail, a review decision or something still open.';
+    return count ? `${count === 1 ? 'One document waits' : `${count} documents wait`} on you: questions to answer, or codes to review or approve.` : 'No document waits on you for an answer or a decision.';
   }
   return `${plural(rows.length, 'synthetic document', 'synthetic documents')} in this workspace.`;
 }
@@ -678,614 +634,307 @@ function listDescription(name, rows) {
 function inviteMarkup(rows) {
   const recent = rows?.[0];
   if (rows === null) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>Loading recent documents…</strong><p>One moment.</p></span>`;
-  if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see suggested codes beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
-  const detail = ['Most recent', stateLabel(recent.state, recent.state_label), formatDate(recent.service_date) || (recent.date_conflict === true ? 'date to choose' : 'service date not documented')].join(' · ');
-  return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>${escapeHtml(recent.title || 'Untitled document')}</strong><p>${escapeHtml(detail)}</p></span><button type="button" class="button secondary" data-open="${escapeHtml(recent.id)}">Open review ${icon('arrow')}</button>`;
+  if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see its CPT codes beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
+  const detail = ['Most recent', stateLabel(recent.state, recent.state_label), formatDate(recent.service_date) || 'service date not entered'].join(' · ');
+  return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>${escapeHtml(text(recent.title) || 'Untitled document')}</strong><p>${escapeHtml(detail)}</p></span><button type="button" class="button secondary" data-open="${escapeHtml(recent.id)}">Open review ${icon('arrow')}</button>`;
 }
 
 function overviewView() {
-  return `<section class="view-entrance"><div class="heading-row home-heading"><div><span class="eyebrow">A CLEARER VIEW OF EVERY CODE</span><h1>Precision starts<br>with the <em>evidence.</em></h1><p>A focused workspace to turn clinical documentation into evidence-backed CPT suggestions.</p></div><div class="heading-actions"><span class="only-tag">CPT ONLY</span><button type="button" class="button primary" data-action="upload" aria-label="New document">${icon('plus')}<span class="desktop-label">New document</span></button></div></div>
+  return `<section class="view-entrance"><div class="heading-row home-heading"><div><span class="eyebrow">A CLEARER VIEW OF EVERY CODE</span><h1>Precision starts<br>with the <em>evidence.</em></h1><p>A focused workspace that reads clinical documentation and suggests CPT codes, each with its reason and the passages it rests on.</p></div><div class="heading-actions"><span class="only-tag">CPT ONLY</span><button type="button" class="button primary" data-action="upload" aria-label="New document">${icon('plus')}<span class="desktop-label">New document</span></button></div></div>
   <div class="home-grid"><section class="upload-panel"><div class="panel-heading">${icon('file')}<h2>Start a coding review</h2><span class="small-badge">One encounter at a time</span></div><button type="button" class="drop-zone" id="overviewDrop" data-action="upload"><span class="upload-icon">${icon('upload')}</span><strong>Bring the original document.</strong><span>Choose a file, drop it here or paste the text</span><span>PDF, DOCX or TXT</span></button><div class="upload-footnote">${icon('info')}<span>Synthetic documents only. Do not upload real patient information.</span></div><div class="sample-invite" id="recentInvite">${inviteMarkup(null)}</div></section>
-  <aside class="story-panel"><span class="eyebrow">BUILT AROUND THE CLINICAL STORY</span><h2>A clearer path.<br>From note to code.</h2><ol class="workflow-list"><li><span class="workflow-number">01</span><span><strong>Read the whole note</strong><p>Begin with the original documentation and encounter context.</p></span></li><li><span class="workflow-number">02</span><span><strong>See why each code is there</strong><p>Every suggested code links to the passages of the document that support it.</p></span></li><li><span class="workflow-number">03</span><span><strong>Make a clear decision</strong><p>Answer the few details that are missing, then approve or exclude each code.</p></span></li></ol><div class="story-bottom">${icon('link')}Evidence beside the decision. Always.</div></aside></div>
+  <aside class="story-panel"><span class="eyebrow">BUILT AROUND THE CLINICAL STORY</span><h2>A clearer path.<br>From note to code.</h2><ol class="workflow-list"><li><span class="workflow-number">01</span><span><strong>Bring the original document</strong><p>The coding review reads the whole document, every page of it.</p></span></li><li><span class="workflow-number">02</span><span><strong>See why each code is there</strong><p>Every code comes with its reason, the passages it rests on and a second check.</p></span></li><li><span class="workflow-number">03</span><span><strong>Answer, then decide</strong><p>Answer any questions about the document, then approve or reject each code.</p></span></li></ol><div class="story-bottom">${icon('link')}Evidence beside the decision. Always.</div></aside></div>
   <div class="section-heading"><h2>Recent documents</h2><a href="#documents">View all ${icon('arrow')}</a></div><div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div></section>`;
 }
 
 function documentsView(name) {
   const queue = name === 'queue';
-  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'WHAT WAITS ON YOU' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'A date to choose, a detail to answer, codes to review, or something still open: each document shows its next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field list-search">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><p class="checks-disclaimer">${queue ? 'A document that is still being processed is not listed here; it appears once it needs you.' : 'Synthetic documents only. Each review decision is tied to the revision it was made on.'}</p></section>`;
+  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'WHAT WAITS ON YOU' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'Questions to answer and codes to review or approve: each document shows its next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field list-search">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><p class="checks-disclaimer">${queue ? 'A document that is still being processed is not listed here; it appears once it needs you.' : 'Synthetic documents only. Each decision is tied to the coding review it was made on.'}</p></section>`;
 }
 
 function howItWorksView() {
-  return `<section class="view-entrance"><div class="heading-row how-heading"><div><span class="eyebrow">A FOCUSED PRODUCT, BY DESIGN</span><h1>A reason behind<br><em>every suggestion.</em></h1><p>A standalone CPT workspace that keeps the original clinical story and the coding review connected.</p></div><button type="button" class="button primary" data-action="upload">Start a coding review ${icon('arrow')}</button></div><div class="flow-overview"><article class="flow-card"><span class="step">01</span><h2>The source<br>comes first.</h2><p>Upload the original PDF or Word document, or paste the note. The text is kept exactly as read, and anything that could not be read is listed.</p></article><article class="flow-card"><span class="step">02</span><h2>Four plain<br>stages.</h2><p>Reading your document, identifying procedures, checking suggested codes and preparing your results. The checks are a document review, independent checks and coding validation. A code is kept only with passages quoted exactly from the document.</p></article><article class="flow-card"><span class="step">03</span><h2>Review makes<br>the difference.</h2><p>Answer the few details that are missing, approve or exclude each code, and download the suggested codes as a draft or the approved codes alone. A changed document invalidates earlier decisions.</p></article></div><div class="how-note"><strong>This is a synthetic demonstration.</strong><br>Licensed CPT descriptors and NCCI procedure-to-procedure edits are not connected in this release, so descriptors are not shown and those edits are not checked. The checks read the wording of the document and can miss wording they do not recognise, so every code needs a reviewer who reads the whole document. Accuracy has not been independently evaluated; no accuracy percentage or payment guarantee is claimed.</div><button type="button" class="button secondary" data-action="about">${icon('info')}About CPT Studio</button></section>`;
+  return `<section class="view-entrance"><div class="heading-row how-heading"><div><span class="eyebrow">A FOCUSED PRODUCT, BY DESIGN</span><h1>A reason behind<br><em>every suggestion.</em></h1><p>A standalone CPT workspace that keeps the original clinical story and the coding review connected.</p></div><button type="button" class="button primary" data-action="upload">Start a coding review ${icon('arrow')}</button></div><div class="flow-overview"><article class="flow-card"><span class="step">01</span><h2>The source<br>comes first.</h2><p>Upload the original PDF, Word document or text file, or paste the note. The coding review reads the whole document as it is, and you can open it beside the codes.</p></article><article class="flow-card"><span class="step">02</span><h2>Read, then<br>checked again.</h2><p>The coding review suggests each code with its reason and the passages it rests on. A second check then reviews every code on its own. Where the two disagree, the code needs your review.</p></article><article class="flow-card"><span class="step">03</span><h2>Review makes<br>the difference.</h2><p>Answer any questions about the document; your answers start a new coding review. Then approve or reject each code, and download the codes as a draft or the approved codes alone.</p></article></div><div class="how-note"><strong>This is a synthetic demonstration.</strong><br>Licensed CPT descriptors are not shown in this release. The coding review reads the wording of the document and can be wrong, so every code needs a reviewer who reads the whole document. Accuracy has not been independently evaluated; no accuracy percentage or payment guarantee is claimed.</div><button type="button" class="button secondary" data-action="about">${icon('info')}About CPT Studio</button></section>`;
 }
 
 function messageView(title, detail, retry = false) {
-  return `<section class="view-entrance"><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="check-list-card"><p class="empty-state"><strong>${escapeHtml(title)}</strong><br>${escapeHtml(detail)}</p>${retry ? '<p class="empty-state"><button type="button" class="button secondary" data-action="retry">Try again</button></p>' : ''}</div></section>`;
+  return `<section class="view-entrance"><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="check-list-card"><p class="empty-state"><strong>${escapeHtml(title)}</strong><br>${escapeHtml(detail)}</p>${retry ? '<p class="empty-state"><button type="button" class="button secondary" data-action="reload-view">Try again</button></p>' : ''}</div></section>`;
 }
 
-// The upload is acknowledged from the server's 201, before the document is first read back; once the reading stage is
-// past, the stages below it say what is happening and the acknowledgement says only that the upload arrived.
-function uploadAck(ack, extra = '', reading = true) {
+// The upload is acknowledged from the server's answer, before the document is first read back.
+function uploadAck(ack, extra = '') {
   if (!ack) return '';
   const at = formatTimestamp(new Date(ack.at).toISOString());
-  return `<div class="upload-ack" role="status">${icon('circle-check')}<div><strong>${reading ? 'Uploaded. Reading your document…' : 'Uploaded.'}</strong><p>${escapeHtml(`Received ${at}.`)}${extra ? ` ${escapeHtml(extra)}` : ''}</p></div></div>`;
+  return `<div class="upload-ack" role="status">${icon('circle-check')}<div><strong>Uploaded. The coding review starts shortly.</strong><p>${escapeHtml(`Received ${at}.`)}${extra ? ` ${escapeHtml(extra)}` : ''}</p></div></div>`;
 }
 
 function ackView(ack) {
   return `<section class="view-entrance review-view"><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="review-column ack-column">${uploadAck(ack, 'You can leave this page; the document stays in Documents.')}</div></section>`;
 }
 
-// Every key that marks a passage in the source: each code's quotes ('<code id>:q<n>') and the document's date.
-function documentLayout(doc) {
-  const spans = [];
-  const codes = new Map();
-  for (const code of codesOf(doc)) {
-    objects(code.why?.quotes).forEach((quote, index) => {
-      const key = `${code.id}:q${index}`;
-      spans.push({ ...quote, key });
-      codes.set(key, String(code.code ?? ''));
-    });
-  }
-  const dateQuote = doc?.service_date?.document_quote;
-  if (dateQuote && typeof dateQuote === 'object') spans.push({ ...dateQuote, exact: true, key: 'date:document' });
-  const documentPart = doc?.document || {};
-  const layout = layoutDocument(documentPart.text || '', documentPart.pages, spans);
-  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes };
-}
-
-function renderPieces(pieces, layout) {
-  return pieces.map(piece => {
-    if (!piece.keys) return escapeHtml(piece.text);
-    const cited = [...new Set(piece.keys.map(key => layout.codes.get(key)).filter(Boolean))];
-    const title = [cited.length ? `Cited for ${joinWords(cited)}` : '', piece.keys.includes('date:document') ? 'Date of service in the document' : ''].filter(Boolean).join('; ');
-    return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(title)}">${escapeHtml(piece.text)}</button>`;
-  }).join('');
-}
-
-function sourceName(documentPart) {
-  return text(documentPart.name) || lookup({ paste: 'Pasted clinical text', addendum: 'Document with addendum' }, documentPart.kind, 'Original document');
-}
-
-function sourcePanel(doc, layout) {
-  const documentPart = doc.document || {};
-  const reading = documentPart.reading || {};
-  const hasText = Boolean(documentPart.text);
-  const total = Math.max(Number.isInteger(documentPart.page_count) ? documentPart.page_count : 0, layout.pages.length);
-  const subtitle = ['Gastroenterology', text(reading.label), Number.isInteger(documentPart.revision) ? `Revision ${documentPart.revision}` : ''].filter(Boolean).join(' · ');
-  const notes = strings(reading.messages);
-  if (documentPart.kind === 'addendum') notes.unshift('This revision adds an addendum to the earlier text; decisions made on earlier revisions no longer apply.');
-  if (reading.status === 'pending') notes.push('The text appears here once the document has been read.');
-  const metadata = [['SERVICE DATE', serviceDateText(doc.service_date)], ['DOCUMENT', [lookup(KIND_LABELS, documentPart.kind, ''), Number.isInteger(documentPart.size) && documentPart.kind !== 'paste' ? formatSize(documentPart.size) : ''].filter(Boolean).join(' · ') || 'Not recorded'], ['PAGES', total ? String(total) : 'Not recorded']]
-    .map(([label, value]) => `<span><b>${label}</b>${escapeHtml(value)}</span>`).join('');
-  const header = `<span class="paper-eyebrow">${escapeHtml(`${state.session?.workspace?.name || 'CPT Studio'} · synthetic document`.toUpperCase())}</span><h3>${escapeHtml(sourceName(documentPart))}</h3><p class="paper-subtitle">${escapeHtml(subtitle)}</p><div class="paper-metadata">${metadata}</div>`;
-  const emptyText = reading.status === 'failed' ? 'No text could be read from this document.' : 'The document text appears here once it has been read.';
-  const papers = layout.pages.map((page, index) => {
-    const body = page.paragraphs.map(pieces => `<p class="source-text">${renderPieces(pieces, layout)}</p>`).join('');
-    return `<article class="source-paper" data-page="${escapeHtml(page.page)}" aria-label="${escapeHtml(`Page ${page.page}`)}">${index === 0 ? header : ''}${body || (index === 0 && !hasText ? `<p class="card-empty">${emptyText}</p>` : '')}<div class="paper-footer"><span>SYNTHETIC DOCUMENT · NOT FOR BILLING</span><span>${hasText ? escapeHtml(`${pad(page.page)} / ${pad(total)}`) : ''}</span></div></article>`;
-  }).join('');
-  const pageLabel = hasText ? `Page ${layout.pages[0].page} of ${total}` : 'No text yet';
-  const originalUrl = safeOriginalUrl(documentPart.original_url);
-  const original = originalUrl ? `<a href="${escapeHtml(originalUrl)}" download>${icon('download')}Download original</a>` : '';
-  return `<section class="source-panel" aria-label="Source document"><div class="source-toolbar">${icon('file')}<h2>Original document</h2><span class="page-number" id="pageNumber" data-total="${escapeHtml(total)}">${escapeHtml(pageLabel)}</span></div><div class="source-paper-wrap" id="sourceScroll">${notes.map(note => `<div class="reference-note">${icon('info')}<span>${escapeHtml(note)}</span></div>`).join('')}${papers}</div><div class="source-bottom"><span></span>Original text as read${original}</div></section>`;
-}
+// --- the review page: the heading ---
 
 function reviewMeta(doc) {
-  const date = doc.service_date || {};
-  const dateItem = date.conflict === true ? 'Service date: two dates to choose from' : formatDate(date.value) ? `Service date ${formatDate(date.value)}` : 'Service date not documented';
-  const revision = Number.isInteger(doc.document?.revision) ? `Revision ${doc.document.revision}` : '';
-  return [`<span>${stateBadge(doc.state, doc.state_label)}</span>`, ...[dateItem, revision].filter(Boolean).map(item => `<span>${escapeHtml(item)}</span>`)].join('');
+  const context = record(doc?.context);
+  const date = formatDate(context.service_date);
+  const items = [date ? `Date of service ${date}` : 'Date of service not entered', insuranceText(context.insurance)];
+  const round = record(doc?.round);
+  if (Number.isInteger(round.number) && round.number > 0) {
+    const trigger = lookup(TRIGGER_TEXT, round.trigger, '');
+    items.push(`Coding review ${round.number}${trigger ? `, ${trigger}` : ''}`);
+  }
+  return [`<span>${stateBadge(doc?.state, doc?.state_label)}</span>`, ...items.map(item => `<span>${escapeHtml(item)}</span>`)].join('');
+}
+
+function reviewHeading(doc) {
+  const download = exportOffered(doc) ? `<button type="button" class="button secondary" data-action="export">${icon('download')}<span>Download</span></button>` : '';
+  return `<div class="heading-row review-heading"><div><span class="eyebrow">CODING REVIEW · GASTROENTEROLOGY</span><h1>${escapeHtml(text(doc?.title) || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}<span>New document</span></button>${download}</div></div>`;
+}
+
+// --- the original document and its quoted passages (left) ---
+
+function documentName(part) {
+  return text(part.name) || (part.kind === 'paste' ? 'Pasted text' : 'Original document');
+}
+
+// The viewer of the original: an iframe of view_url for a PDF or a text, with a note under it when the PDF is the one a
+// Word document was converted to; with no view, no viewer at all and only the "Download original" link.
+function viewerPanel(doc) {
+  const part = record(doc?.document);
+  const kind = viewerKind(part);
+  const name = documentName(part);
+  const original = safeOriginalUrl(part.original_url);
+  const frame = kind === 'none' ? ''
+    : `<iframe id="documentViewer" class="viewer-frame" src="${escapeHtml(viewerUrl(part.view_url, null))}" title="${escapeHtml(`Original document: ${name}`)}" referrerpolicy="same-origin"></iframe>`;
+  const note = kind === 'pdf' && part.converted === true ? `<p class="viewer-note">${icon('info')}<span>${escapeHtml(CONVERTED_NOTE)}</span></p>` : '';
+  const meta = [lookup(KIND_LABELS, part.kind, ''), Number.isInteger(part.size) && part.size > 0 ? formatSize(part.size) : ''].filter(Boolean).join(' · ');
+  const download = original ? `<a class="viewer-download" id="downloadOriginal" href="${escapeHtml(original)}" download>${icon('download')}Download original</a>` : '';
+  return `<section class="viewer-panel${kind === 'none' ? ' no-view' : ''}" aria-labelledby="viewerTitle"><div class="viewer-toolbar">${icon('file')}<h2 id="viewerTitle">Original document</h2><span class="viewer-name">${escapeHtml(name)}</span></div>${frame}${note}<div class="viewer-bottom"><span>${escapeHtml(meta || 'Original as received')}</span>${download}</div></section>`;
+}
+
+function quoteBody(quote) {
+  return `<q class="quote-text">${escapeHtml(quote.text)}</q><span class="quote-page">${quote.page ? escapeHtml(`Page ${quote.page}`) : ''}</span>`;
+}
+
+function quotesLead(doc) {
+  const kind = viewerKind(doc?.document);
+  if (kind === 'pdf') return 'Each code rests on these passages. Choose one to open its page in the document.';
+  if (kind === 'text') return 'Each code rests on these passages. Choose one to find it in the document.';
+  return 'Each code rests on these passages of the original document.';
+}
+
+// The hint a quoted passage carries, where the viewer can show it.
+function quoteTitle(doc) {
+  return ['pdf', 'text'].includes(viewerKind(doc?.document)) ? ' title="Show this passage in the document"' : '';
+}
+
+function quotesPanel(doc) {
+  const entries = codesOf(doc).flatMap((code, position) => quotesOf(code).map((quote, index) => ({ code, quote, index, position })));
+  const items = entries.map(({ code, quote, index, position }) => `<li><button type="button" class="quote" data-code="${escapeHtml(code.code)}" data-line="${escapeHtml(lineOf(code, doc))}" data-page="${quote.page ?? ''}" data-quote="${escapeHtml(quoteKey(code, index, position, doc))}"${quoteTitle(doc)}><span class="quote-code">${escapeHtml(code.code)}</span>${quoteBody(quote)}</button></li>`).join('');
+  const empty = isBusy(doc) ? 'Quoted passages appear here when the coding review finishes.'
+    : progressPhase(doc) === 'earlier' ? 'Quoted passages appear here once the document is reviewed again.' : 'No passage of the document is quoted.';
+  return `<section class="quotes-panel" id="quotesPanel" aria-labelledby="quotesTitle"><div class="quotes-head"><h2 id="quotesTitle">Quoted passages</h2>${entries.length ? `<span class="small-badge">${entries.length}</span>` : ''}</div>`
+    + (entries.length ? `<p class="quotes-lead">${escapeHtml(quotesLead(doc))}</p><ol class="quote-list">${items}</ol>` : `<p class="quotes-empty">${escapeHtml(empty)}</p>`)
+    + '</section>';
 }
 
 // --- the progress panel ---
 
-function normalizedSteps(progress) {
-  const served = new Map(objects(progress?.steps).map(step => [step.key, step]));
-  return STEP_KEYS.map(key => {
-    const step = served.get(key) || {};
-    return { key, label: STEP_LABELS[key], state: lookup(STEP_STATES, step.state, null) ? step.state : 'not_started', started_at: step.started_at, finished_at: step.finished_at };
-  });
+function progressSteps(phase) {
+  const states = lookup(PHASE_STEPS, phase, PHASE_STEPS.queued);
+  return states.map((stepState, index) => ({ key: STEP_KEYS[index], label: STEP_LABELS[STEP_KEYS[index]], state: stepState }));
 }
 
-function isoTime(value) {
-  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : '';
+function progressStep(step, animate) {
+  const stateText = lookup(STEP_STATES, step.state, '');
+  const iconName = lookup(STEP_ICONS, step.state, '');
+  return `<li class="progress-step${step.state === 'active' && animate ? ' is-animated' : ''}" data-step="${step.key}" data-state="${step.state}"><span class="step-mark" aria-hidden="true">${iconName ? icon(iconName) : ''}</span><span class="step-text"><strong>${escapeHtml(step.label)}</strong>${stateText ? `<small>${escapeHtml(stateText)}</small>` : ''}</span></li>`;
 }
 
-// [label, markup] of the time the panel states: elapsed, ticking, while busy; the total once finished; else null.
-function progressTime(progress, phase, ui) {
+// [label, markup] of the time the panel states: elapsed, ticking, while busy; the total once ended; else null.
+function progressTime(progress, phase, busy, ui) {
   const started = isoTime(progress?.started_at);
   if (!started) return null;
-  if (progress.busy === true && ANIMATED_PHASES.has(phase)) {
+  if (busy) {
     const now = (ui.nowMs ?? Date.now()) + (ui.clock || 0);
     return ['Elapsed', `<span data-elapsed data-since="${escapeHtml(started)}">${escapeHtml(elapsedText(started, now))}</span>`];
   }
-  const finished = isoTime(progress.finished_at);
+  const finished = isoTime(progress?.finished_at);
   if (!finished) return null;
-  // a document that did not finish - failed, stopped, or paused before it was read (nothing running) - ran for its time
-  return [['failed', 'stopped', 'paused'].includes(phase) ? 'Ran for' : 'Finished in', `<span data-elapsed data-since="${escapeHtml(started)}" data-until="${escapeHtml(finished)}">${escapeHtml(durationText(Date.parse(finished) - Date.parse(started)))}</span>`];
+  return [phase === 'done' ? 'Finished in' : 'Ran for', `<span data-elapsed data-since="${escapeHtml(started)}" data-until="${escapeHtml(finished)}">${escapeHtml(durationText(Date.parse(finished) - Date.parse(started)))}</span>`];
 }
 
-function progressStep(step, active, animate, detail) {
-  const stateText = lookup(STEP_STATES, step.state, 'Not started');
-  const iconName = lookup(STEP_ICONS, step.state, '');
-  const showDetail = active && detail;
-  return `<li class="progress-step${active && animate ? ' is-animated' : ''}" data-step="${step.key}" data-state="${step.state}"><span class="step-mark" aria-hidden="true">${iconName ? icon(iconName) : ''}</span><span class="step-text"><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(stateText)}${showDetail ? ` · ${escapeHtml(detail)}` : ''}</small></span></li>`;
-}
-
-// The error's action is offered only to a member who may take it, and Resume only once (the panel's own Resume button
-// may already offer it).
-function progressError(error, { canAct = false, resumeShown = false } = {}) {
-  if (!error || typeof error !== 'object' || !text(error.text)) return '';
-  const offered = lookup(ERROR_ACTIONS, error.action, null);
-  const action = canAct && offered && !(offered[0] === 'resume' && resumeShown) ? offered : null;
-  return `<div class="progress-error" role="alert">${icon('info')}<div><p>${escapeHtml(error.text)}</p>${action ? `<button type="button" class="button secondary" data-action="${action[0]}">${escapeHtml(action[1])}</button>` : ''}</div></div>`;
-}
-
-// What the pending update saves (5.1): the saved values that differ from the earlier codes' own (or the one fixed line
-// that says why the codes are updated) and who saved last, when - none for an update no save started (kind 'check').
-function updateSaved(update) {
-  if (!update) return '';
-  const changes = strings(update.changes);
-  const by = text(update.saved_by);
-  const at = formatTimestamp(update.saved_at);
-  const saved = !updateIsCheck(update) && by && at ? fill(CHANGE_SAVED_BY, { member: by, time: at }) : '';
-  if (!changes.length && !saved) return '';
-  return `<div class="update-saved">${changes.length ? `<ul class="update-changes">${changes.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}${saved ? `<p class="update-saved-by">${escapeHtml(saved)}</p>` : ''}</div>`;
+// Stop, Resume and Retry, each only when the server offers it and the member may review: Stop while the review runs,
+// the other two once it does not. An earlier review's retry is "Review again".
+function progressButtons(doc, busy, phase) {
+  if (!canReview(doc)) return '';
+  const progress = record(doc?.progress);
+  return PROGRESS_ACTIONS.filter(([action, flag]) => progress[flag] === true && (action === 'stop' ? busy : !busy))
+    .map(([action, , , kind, label, iconName]) => {
+      const shown = action === 'retry' && phase === 'earlier' ? REVIEW_AGAIN : label;
+      return `<button type="button" class="button ${kind}" data-action="${action}">${action === 'stop' ? `${icon(iconName)}${shown}` : `${shown} ${icon(iconName)}`}</button>`;
+    }).join('');
 }
 
 function progressPanel(doc, ui = {}) {
-  const progress = doc?.progress || {};
-  const phase = progressPhase(doc, ui);
-  const update = updateOf(doc);
-  const busy = progress.busy === true || phase === 'uploading';
+  const progress = record(doc?.progress);
+  const phase = progressPhase(doc);
+  const busy = isBusy(doc);
+  const animate = busy && (phase === 'reading' || phase === 'checking' || phase === 'queued');
+  const steps = progressSteps(phase).map(step => progressStep(step, animate)).join('');
+  const time = progressTime(progress, phase, busy, ui);
   const message = text(progress.message);
-  const time = progressTime(progress, phase, ui);
-  if (!PANEL_PHASES.has(phase)) {
+  const failure = text(record(progress.error).text);
+  if (phase === 'done' && !busy) {
     const took = time ? ` · ${time[0].toLowerCase()} ${time[1]}` : '';
-    return `<section class="progress-panel progress-done" data-phase="${phase}" aria-label="Processing">${icon(phase === 'partial' ? 'info' : 'circle-check')}<div><p class="progress-summary"><strong>${escapeHtml(PHASE_TITLES[phase])}</strong>${took}</p>${(phase === 'partial' || phase === 'awaiting_detail') && message ? `<p class="progress-message">${escapeHtml(message)}</p>` : ''}</div></section>`;
+    return `<section class="progress-panel progress-compact" data-phase="done" aria-labelledby="progressTitle"><div class="progress-head">${icon('circle-check')}<div class="progress-status"><p class="progress-summary"><strong id="progressTitle">${escapeHtml(PHASE_TITLES.done)}</strong>${took}</p>${message ? `<p class="progress-message">${escapeHtml(message)}</p>` : ''}</div></div><ol class="progress-steps">${steps}</ol></section>`;
   }
-  const animate = busy && ANIMATED_PHASES.has(phase);
-  const steps = normalizedSteps(progress);
-  const activeIndex = steps.findIndex(step => step.state === 'active');
-  const detail = text(progress.active_detail);
-  const showAck = ui.ack && ui.ack.id === doc?.id && ANIMATED_PHASES.has(phase);
-  const canAct = canReview(doc);
-  const stop = canAct && progress.can_stop === true && busy ? `<button type="button" class="button secondary" data-action="stop">${icon('stop')}Stop processing</button>` : '';
-  const resume = canAct && progress.can_resume === true && !busy ? `<button type="button" class="button primary" data-action="resume">Resume processing ${icon('arrow')}</button>` : '';
-  const leave = progress.can_leave !== false ? lookup(LEAVE_NOTES, phase, '') : '';
-  const slow = progress.slow === true && busy;
-  const headIcon = phase === 'action_needed' || phase === 'paused' ? 'info' : phase === 'failed' ? 'close' : phase === 'stopped' ? 'stop' : 'clock';
-  // a step that waits its turn after one the panel shows done - this run's, or one kept from an earlier run - is not
-  // "Waiting to start": the server's own rule over the same served steps (progress.next_step_queued), by which its
-  // message says the same (progress.NEXT_STEP_QUEUED)
-  // FINAL-V2 amendment 1, 5.1: while the update runs the panel is titled "Changes saved—updating codes" ("Updating codes"
-  // for an update no save started); in every other state of an update it keeps the state's own title, which never says
-  // the codes are being updated while nothing runs (5.1 [R:truth-T4]), and the notice below says why
-  const title = phase === 'updating' ? updateTitle(update)
-    : phase === 'queued' && steps.some(step => step.state === 'done') ? QUEUED_AFTER_DONE_TITLE : PHASE_TITLES[phase];
-  // the error says its own sentence below; the head does not repeat it
-  const said = message && !(progress.error && typeof progress.error === 'object' && text(progress.error.text) === message) ? message : '';
+  const headIcon = lookup({ failed: 'close', stopped: 'stop', earlier: 'info' }, phase, 'clock');
+  const showAck = ui.ack && ui.ack.id === doc?.id && busy;
+  const said = message && message !== failure ? message : '';
+  const buttons = progressButtons(doc, busy, phase);
   return `<section class="progress-panel${busy ? ' progress-card' : ''}" data-phase="${phase}" aria-labelledby="progressTitle">`
-    + `<div class="progress-head"><span class="progress-icon${animate ? ' is-animated' : ''}">${icon(headIcon)}</span><div class="progress-status" aria-live="polite"><h2 id="progressTitle">${escapeHtml(title)}</h2>${said ? `<p class="progress-message${slow ? ' slow' : ''}">${escapeHtml(said)}</p>` : ''}</div></div>`
-    + updateSaved(update)
-    + (showAck ? uploadAck(ui.ack, '', ['waiting', 'active', 'not_started'].includes(steps[0].state)) : '')
-    + `<ol class="progress-steps">${steps.map((step, index) => progressStep(step, index === activeIndex, animate, detail)).join('')}</ol>`
+    + `<div class="progress-head"><span class="progress-icon${animate ? ' is-animated' : ''}">${icon(headIcon)}</span><div class="progress-status" aria-live="polite"><h2 id="progressTitle">${escapeHtml(PHASE_TITLES[phase])}</h2>${said ? `<p class="progress-message">${escapeHtml(said)}</p>` : ''}</div></div>`
+    + (showAck ? uploadAck(ui.ack) : '')
+    + (steps ? `<ol class="progress-steps">${steps}</ol>` : '')
     + (time ? `<p class="progress-time">${time[0]} ${time[1]}</p>` : '')
-    + `<p class="progress-reconnecting" role="status"${ui.reconnecting && shouldPoll(doc) ? '' : ' hidden'}>Reconnecting…</p>`
-    + progressError(progress.error, { canAct, resumeShown: Boolean(resume) })
-    + (leave ? `<p class="leave-note">${escapeHtml(leave)}</p>` : '')
-    + (stop || resume ? `<div class="progress-actions">${stop}${resume}</div>` : '')
+    + `<p class="progress-reconnecting" role="status"${ui.reconnecting && busy ? '' : ' hidden'}>Reconnecting…</p>`
+    + (failure ? `<div class="progress-error" role="alert">${icon('info')}<div><p>${escapeHtml(failure)}</p></div></div>` : '')
+    + (busy ? `<p class="leave-note">${escapeHtml(LEAVE_NOTE)}</p>` : '')
+    + (buttons ? `<div class="progress-actions">${buttons}</div>` : '')
     + '</section>';
 }
 
-function checksPanel(doc) {
-  const served = new Map(objects(doc?.checks).map(check => [check.key, check]));
-  if (!served.size) return '';
-  const items = CHECK_KEYS.filter(key => served.has(key)).map(key => {
-    const check = served.get(key);
-    const checkState = lookup(CHECK_STATES, check.state, null) ? check.state : 'not_run';
-    return `<li class="check-step" data-check="${key}" data-state="${checkState}">${icon(CHECK_ICONS[checkState])}<span><strong>${escapeHtml(CHECK_LABELS[key])}</strong><small>${escapeHtml(CHECK_STATES[checkState])}</small></span></li>`;
-  });
-  return `<ul class="checks-panel" aria-label="Checks">${items.join('')}</ul>`;
+// --- questions for you, and the answers given earlier ---
+
+function questionsLead(count, editable, busy) {
+  if (busy) return 'You can answer once the coding review has finished.';
+  if (!editable) return 'A reviewer can answer these questions.';
+  return `${count === 1 ? 'The coding review has one question' : `The coding review has ${count} questions`} about this document. Answer what you can, then send all answers at once.`;
 }
 
-// --- the "A few details needed" panel ---
-
-function detailAnswer(row, ui) {
-  const answer = ui.answers?.get?.(row.id);
-  return answer && typeof answer.value === 'string' ? answer.value : '';
-}
-
-function answerButton(row, value, label, pending, action = '') {
-  const pressed = pending === value;
-  const hook = action ? `data-action="${action}"` : `data-detail-choice="${value}"`;
-  return `<button type="button" class="button secondary detail-choice" id="detail-${escapeHtml(row.id)}-${value}" ${hook} data-detail="${escapeHtml(row.id)}" aria-pressed="${pressed}">${escapeHtml(label)}</button>`;
-}
-
-function allowedAnswers(row, pending) {
-  return Object.keys(DETAIL_ANSWERS).filter(value => list(row.allow).includes(value)).map(value => answerButton(row, value, DETAIL_ANSWERS[value], pending)).join('');
-}
-
-function quoteLine(quote) {
-  return quote && typeof quote.text === 'string' && quote.text ? `<q class="detail-quote">${escapeHtml(excerpt(quote.text, 120))}</q>` : '';
-}
-
-function offers(row, value) {
-  return objects(row.choices).some(choice => choice.value === value);
-}
-
-// The dates the date row offers as the document's own (the server's choices whose value is a calendar date).
-function documentedDates(row) {
-  return row?.control === 'date' ? objects(row.choices).filter(choice => typeof choice.value === 'string' && Boolean(parseIsoDate(choice.value))) : [];
-}
-
-function addendumButton(row) {
-  return row.addendum_allowed === true ? `<button type="button" class="button subtle detail-addendum" data-action="addendum" data-detail="${escapeHtml(row.id)}">Add to the documentation (physician)</button>` : '';
-}
-
-// The date row: the document's side beside the member's - its one date with the quote, each date it states, or its
-// own wording where it gives no date the page may show - then only the ways the server offers: "Use document date",
-// one of the document's dates, another date, removing the entered date, the physician's addendum. Never prefilled: the
-// date field holds only what the member typed on this page.
-function dateControl(row, ui) {
-  const pending = detailAnswer(row, ui);
-  const documented = formatDate(row.document_value, true);
-  const entered = formatDate(row.entered_value, true);
-  const stated = documentedDates(row);
-  const side = documented ? `<strong>${escapeHtml(documented)}</strong>${quoteLine(row.quote)}`
-    : stated.length ? `<strong>${escapeHtml(joinWords(stated.map(choice => formatDate(choice.value, true))))}</strong>`
-      : row.quote && typeof row.quote.text === 'string' && row.quote.text ? `<strong><q>${escapeHtml(excerpt(row.quote.text, 120))}</q></strong>` : '<strong>Not stated</strong>';
-  // offered exactly where the server offers it (a choice of the row: the document states one date, and the member's
-  // entry contradicts it), so the save the button makes is one the server accepts; never for a date only asked
-  const useDocument = documented && offers(row, USE_DOCUMENT) ? answerButton(row, USE_DOCUMENT, 'Use document date', pending, 'use-document-date') : '';
-  const remove = offers(row, CLEAR_DATE) ? answerButton(row, CLEAR_DATE, 'Remove the entered date', pending, 'clear-date') : '';
-  const radios = stated.map(choice => `<label class="detail-radio"><input type="radio" name="detail-${escapeHtml(row.id)}" id="detail-${escapeHtml(row.id)}-${escapeHtml(choice.value)}" value="${escapeHtml(choice.value)}" data-detail="${escapeHtml(row.id)}"${pending === choice.value ? ' checked' : ''}><span>${escapeHtml(text(choice.label) || formatDate(choice.value, true))}</span></label>`).join('');
-  const typed = parseIsoDate(pending) && !stated.some(choice => choice.value === pending) ? pending : '';
-  return `<div class="detail-dates"><div class="detail-document-date"><span class="detail-date-label">Document</span>${side}</div><div class="detail-entered-date"><span class="detail-date-label">You entered</span><strong>${escapeHtml(entered || 'Nothing entered')}</strong></div></div>`
-    + `<div class="detail-controls">${radios}${useDocument}<label class="detail-date-input">${stated.length || row.saved ? 'Or enter another date' : 'Or enter the date of service'}<input type="date" id="detail-${escapeHtml(row.id)}-date" data-detail-input data-detail="${escapeHtml(row.id)}"${typed ? ` value="${escapeHtml(typed)}"` : ''}></label>${remove}${allowedAnswers(row, pending)}${addendumButton(row)}</div>`;
-}
-
-// ``answers``: whether "Not documented" may be recorded now (never while processing runs or an update is pending, 1.4);
-// ``update``: while one is pending the row shows the value saved for it (5.1 [R:truth-T3]: "Saved: ...").
-function choiceControl(row, ui, answers = true, update = null) {
-  const pending = detailAnswer(row, ui);
-  const radios = objects(row.choices).filter(choice => typeof choice.value === 'string' && choice.value).map(choice => {
-    const checked = pending === choice.value;
-    return `<label class="detail-radio"><input type="radio" name="detail-${escapeHtml(row.id)}" id="detail-${escapeHtml(row.id)}-${escapeHtml(choice.value)}" value="${escapeHtml(choice.value)}" data-detail="${escapeHtml(row.id)}"${checked ? ' checked' : ''}><span>${escapeHtml(choice.label || choice.value)}</span></label>`;
+function questionsPanel(doc, ui = {}) {
+  const questions = questionsOf(doc);
+  if (!questions.length) return '';
+  const busy = isBusy(doc);
+  const editable = canReview(doc) && !busy;
+  const drafts = ui.answers instanceof Map ? ui.answers : new Map();
+  const rows = questions.map((question, index) => {
+    const field = `answer-${index + 1}`;
+    const codes = strings(question.codes);
+    const lead = `<span class="question-number">${escapeHtml(`Question ${index + 1}`)}</span><span class="question-text">${escapeHtml(text(question.text))}</span>`;
+    const draft = typeof drafts.get(question.id) === 'string' ? drafts.get(question.id) : '';
+    return `<li class="question-row" data-question="${escapeHtml(question.id)}">${editable ? `<label class="question-label" for="${field}">${lead}</label>` : `<p class="question-label">${lead}</p>`}`
+      + (codes.length ? `<p class="question-codes">${escapeHtml(`About ${joinWords(codes)}`)}</p>` : '')
+      + (editable ? `<textarea id="${field}" class="question-answer" data-answer="${escapeHtml(question.id)}" rows="3" maxlength="${MAX_ANSWER_CHARS}" placeholder="Your answer">${escapeHtml(draft)}</textarea>` : '')
+      + '</li>';
   }).join('');
-  const entered = text(row.entered_value);
-  const label = entered ? text(objects(row.choices).find(choice => choice.value === entered)?.label) || entered : '';
-  const saved = update && label ? `<p class="detail-saved-value">Saved: <strong>${escapeHtml(label)}</strong></p>` : '';
-  return `${saved}<div class="detail-controls">${radios}${answers ? allowedAnswers(row, pending) : ''}</div>`;
+  const send = editable ? `<p class="form-error" id="answersError" role="alert" hidden></p><div class="questions-actions"><button type="button" class="button primary" id="sendAnswers" data-action="send-answers">Send answers ${icon('arrow')}</button><p>Your answers start a new coding review of the whole document. Its codes replace these when it finishes, and decisions on these codes do not carry over.</p></div>` : '';
+  return `<section class="questions-panel" id="questionsPanel" aria-labelledby="questionsTitle"><div class="questions-head">${icon('help')}<div><h2 id="questionsTitle">Questions for you</h2><p>${escapeHtml(questionsLead(questions.length, editable, busy))}</p></div></div><ol class="question-list">${rows}</ol>${send}</section>`;
 }
 
-function confirmControl(row, ui) {
-  const pending = detailAnswer(row, ui);
-  return `<div class="detail-controls">${allowedAnswers(row, pending)}${addendumButton(row)}</div>`;
-}
-
-// Completion repair (2026-11-06, U10): a clinical question says what CPT Studio could not confirm (the server's fixed
-// sentence, never that the document leaves it out) and shows the passages it concerns - exact slices of the document,
-// with their page - so the member answers with them in view. Every sentence is the server's fixed wording.
-function questionPassages(row) {
-  const passages = objects(row.passages).filter(item => typeof item.text === 'string' && item.text);
-  const statement = text(row.statement);
-  if (!statement && !passages.length) return '';
-  const label = passages.length === 1 ? 'The passage this question concerns' : 'The passages this question concerns';
-  const items = passages.map(item => `<li><q class="detail-quote">${escapeHtml(excerpt(item.text, 240))}</q>${Number.isInteger(item.page) ? `<span class="detail-page">Page ${item.page}</span>` : ''}</li>`).join('');
-  return `<div class="detail-question">${statement ? `<p class="detail-statement">${escapeHtml(statement)}</p>` : ''}${passages.length ? `<p class="detail-passages-label">${label}</p><ul class="detail-passages">${items}</ul>` : ''}</div>`;
-}
-
-// Answers saved for a question no longer asked, or now asked differently: kept, never applied (completion repair
-// 2026-11-06, U11), each with why - the server's fixed sentence - and a way to withdraw it.
-function earlierAnswers(doc) {
-  const items = objects(doc?.earlier_answers).filter(item => typeof item.answer_id === 'string' && item.answer_id);
+function answersPanel(doc) {
+  const items = answersOf(doc);
   if (!items.length) return '';
-  // Withdraw is hidden while processing runs or an update is pending (FINAL-V2 amendment 1, 1.4 [R:truth-T12])
-  const editable = answersOpen(doc);
   const rows = items.map(item => {
-    const affects = strings(item.affects);
     const by = [text(item.by), formatTimestamp(item.at)].filter(Boolean).join(', ');
-    const withdraw = editable ? `<button type="button" class="meta-link" data-action="revoke-detail" data-answer="${escapeHtml(item.answer_id)}" id="earlier-${escapeHtml(item.answer_id)}-revoke">Withdraw this answer</button>` : '';
-    return `<li class="earlier-answer" data-answer="${escapeHtml(item.answer_id)}"><span class="detail-family">${escapeHtml(text(item.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(text(item.prompt))}</span><span class="earlier-value">Saved: <strong>${escapeHtml(text(item.label) || lookup(DETAIL_ANSWERS, item.value, ''))}</strong>${affects.length ? ` for ${escapeHtml(joinWords(affects))}` : ''}${by ? ` — ${escapeHtml(by)}` : ''}</span><span class="earlier-why">${escapeHtml(text(item.why_text))}</span>${withdraw}</li>`;
+    return `<li class="answer-item"><p class="answer-question">${escapeHtml(text(item.question))}</p><p class="answer-text">${escapeHtml(text(item.answer))}</p>${by ? `<small>${escapeHtml(by)}</small>` : ''}</li>`;
   }).join('');
-  return `<div class="earlier-answers"><h3>Earlier answers, not applied</h3><ul>${rows}</ul></div>`;
+  return `<section class="answers-panel" id="answersPanel" aria-labelledby="answersTitle"><h2 id="answersTitle">Earlier answers</h2><p>The coding review reads these with the document.</p><ol class="answer-list">${rows}</ol></section>`;
 }
 
-// A date of service the member entered, saved: it has no answer to withdraw, so the row itself corrects or removes it.
-function changeableDate(row) {
-  return row?.control === 'date' && Boolean(row.saved) && typeof row.saved === 'object' && !text(row.saved.answer_id);
-}
+// --- the codes ---
 
-// Whether a row takes an answer in the one save: an open row, or a saved date the member entered.
-function answerable(row) {
-  return Boolean(row) && (!row.saved || changeableDate(row));
-}
-
-// ``editable``: whether the saved answer may be withdrawn ("Change this answer": never while processing runs or an update
-// is pending); ``dates``: whether a saved date the member entered may be changed (a context save, accepted then too).
-function savedAnswer(row, editable, ui = {}, dates = editable) {
-  const saved = row.saved;
-  const value = text(saved.label) || lookup(DETAIL_ANSWERS, saved.value, saved.value === USE_DOCUMENT ? 'Use document date' : formatDate(saved.value, true) || text(saved.value));
-  const by = [text(saved.by), formatTimestamp(saved.at)].filter(Boolean).join(', ');
-  const change = editable && typeof saved.answer_id === 'string' && saved.answer_id ? `<button type="button" class="meta-link" data-action="revoke-detail" data-answer="${escapeHtml(saved.answer_id)}" id="detail-${escapeHtml(row.id)}-revoke">Change this answer</button>` : '';
-  const line = `<p class="detail-saved">${icon('check')}<span>Saved: <strong>${escapeHtml(value)}</strong>${by ? ` — ${escapeHtml(by)}` : ''}</span>${change}</p>`;
-  return line + (dates && changeableDate(row) ? dateControl(row, ui) : '');
-}
-
-// FINAL-V2 amendment 1, 5.1: the date and choice rows (context rows) stay editable while processing runs or an update is
-// pending - a rapid successive edit is a context save (A1) - and a row that takes "Not documented" or "Cannot confirm"
-// says "You can answer this once the codes are updated." with no control while an update is pending (1.4). A choice row
-// saved "Not documented" keeps its saved line then, without "Change this answer", and its values to choose from.
-function detailRow(row, doc, ui) {
-  const update = updateOf(doc);
-  const answers = answersOpen(doc);
-  const context = canReview(doc) && (row.control === 'date' || row.control === 'choice');
-  const affects = strings(row.affects);
-  const waiting = update && canReview(doc) ? `<p class="detail-wait">${escapeHtml(ANSWER_AFTER_UPDATE)}</p>`
-    : '<p class="detail-wait">Answers can be saved once processing has finished.</p>';
-  const control = valueOverAnswer(row, doc) ? savedAnswer(row, false, ui, false) + choiceControl(row, ui, false, update)
-    : row.saved ? savedAnswer(row, answers, ui, canReview(doc))
-      : context ? (row.control === 'date' ? dateControl(row, ui) : choiceControl(row, ui, answers, update))
-        : !answers ? waiting : confirmControl(row, ui);
-  // radios are a group, named by its legend; the legend comes first, holding the family and the prompt
-  const radios = row.control === 'choice' || documentedDates(row).length > 0;
-  const tag = radios && rowEditable(row, doc) ? 'fieldset' : 'div';
-  const lead = tag === 'fieldset' ? 'legend' : 'div';
-  return `<${tag} class="detail-row${row.saved ? ' is-saved' : ''}" data-detail="${escapeHtml(row.id)}" data-fact="${escapeHtml(row.fact)}"><${lead} class="detail-lead"><span class="detail-family">${escapeHtml(text(row.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(row.prompt)}</span></${lead}>${affects.length ? `<p class="detail-affects">Affects ${escapeHtml(joinWords(affects))}</p>` : ''}${questionPassages(row)}${control}</${tag}>`;
-}
-
-function detailsPanel(doc, ui = {}) {
-  const rows = detailsOf(doc);
-  const earlier = earlierAnswers(doc);
-  if (!rows.length && !earlier) return '';
-  const open = rows.filter(row => !row.saved).length;
-  // "nothing is checked" only while the member's date holds the document (Action needed): a date asked after the
-  // checks ran, or one to confirm, leaves the codes that do not depend on it reviewable
-  const held = doc?.state === 'action_needed' || doc?.progress?.phase === 'action_needed';
-  const dateOnly = open && rows.filter(row => !row.saved).every(row => row.control === 'date');
-  // "You can change an answer below" only where one can be changed now: while answers wait (processing runs or an update
-  // is pending) a saved answer is not withdrawn, so it holds only for a row that still takes a value (a saved date; a
-  // choice saved "Not documented" while an update is pending)
-  const changeable = answersOpen(doc) || rows.some(row => rowEditable(row, doc));
-  // while an update is pending no code is reviewable (the earlier codes are not decided on), so the lead says only what
-  // is needed
-  const lead = !rows.length ? 'No detail is needed now.'
-    : !open ? (changeable ? 'Every detail has an answer. You can change an answer below.' : 'Every detail has an answer.')
-      : dateOnly && held ? 'Choose the date of service. Nothing is checked until you do.'
-        : updateOf(doc) ? `${plural(open, 'detail is', 'details are')} needed.`
-          : `${plural(open, 'detail is', 'details are')} needed. Answer what you can; codes that do not depend on them stay reviewable.`;
-  const save = rows.some(row => rowEditable(row, doc)) ? `<div class="details-actions"><button type="button" class="button primary" data-action="save-details" id="saveDetails">Save answers ${icon('check')}</button><p>One save records every answer above. Nothing here changes the document itself.</p></div>` : '';
-  // refutation cycle 1 (answers F7): with only earlier answers left, the panel never says details are needed
-  const title = rows.length ? 'A few details needed' : 'Earlier answers';
-  return `<section class="details-panel" aria-labelledby="detailsTitle"><div class="details-head">${icon('info')}<div><h2 id="detailsTitle">${title}</h2><p>${escapeHtml(lead)}</p></div></div>${rows.map(row => detailRow(row, doc, ui)).join('')}<p class="form-error" id="detailsError" role="alert" hidden></p>${save}${earlier}</section>`;
-}
-
-// --- the codes-first result list ---
-
-function decisionButton(action, code) {
+// One decision button of one row: named by the row's line (its id and data-line), with the code it decides.
+function decisionButton(action, code, position, doc) {
   const [, kind, label, iconName] = ACTION_BUTTONS.find(([name]) => name === action);
-  return `<button type="button" class="button ${kind}" id="act-${escapeHtml(code.id)}-${action}" data-decision="${action}" data-proposal="${escapeHtml(code.id)}">${label}${iconName ? ` ${icon(iconName)}` : ''}</button>`;
+  return `<button type="button" class="button ${kind}" id="act-${rowKey(rowRef(code, position, doc))}-${action}" data-decision="${action}" data-code="${escapeHtml(code.code)}" data-line="${escapeHtml(lineOf(code, doc))}">${label}${iconName ? ` ${icon(iconName)}` : ''}</button>`;
 }
 
-function rowActions(code) {
-  const allowed = list(code.allowed_actions);
-  const buttons = ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => decisionButton(name, code));
-  return buttons.length ? `<div class="result-actions">${buttons.join('')}</div>` : '';
+function codeQuotes(code, doc, position) {
+  const quotes = quotesOf(code);
+  if (!quotes.length) return '<p class="code-quotes code-quotes-empty">No passage of the document is quoted for this code.</p>';
+  return `<ul class="code-quotes" aria-label="${escapeHtml(`Passages quoted for ${code.code}`)}">${quotes.map((quote, index) => `<li><button type="button" class="code-quote" data-quote="${escapeHtml(quoteKey(code, index, position, doc))}" data-view-page="${quote.page ?? ''}"${quoteTitle(doc)}>${quoteBody(quote)}</button></li>`).join('')}</ul>`;
 }
 
-// The agent label is stated once per row: here, unless the row's own line under the code already says it.
 function decisionLine(code) {
-  const decision = code.decision;
-  if (!decision || typeof decision !== 'object') return '';
-  const labelled = rowSubLabel(code) === AGENT_REVIEW;
-  const title = `${lookup(DECISION_TITLES, decision.action, 'Decision recorded')} by ${text(decision.by) || 'a reviewer whose name was not recorded'}`;
-  const modifiers = strings(decision.modifiers);
-  const kind = decision.by_kind === 'agent' ? (labelled ? '' : 'agent-executed synthetic review — not clinical approval') : 'synthetic review — not clinical approval';
-  const detail = [formatTimestamp(decision.at), modifiers.length ? `modifier ${modifiers.join(', ')}` : '', kind].filter(Boolean).join(' · ');
+  const decision = currentDecision(code);
+  if (!decision) return '';
+  const title = `${DECISIONS[decision.action][1]} by ${text(decision.by) || 'a reviewer whose name was not recorded'}`;
+  const when = formatTimestamp(decision.at);
   const note = text(decision.note);
-  return `<div class="result-decision">${icon('shield')}<div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p>${note ? `<p>${escapeHtml(`Note: ${note}`)}</p>` : ''}</div></div>`;
+  return `<div class="code-decision">${icon('shield')}<div><strong>${escapeHtml(title)}</strong>${when ? `<p>${escapeHtml(`${when} · synthetic review, not clinical approval`)}</p>` : ''}${note ? `<p>${escapeHtml(`Note: ${note}`)}</p>` : ''}</div></div>`;
 }
 
-function whyQuote(code, quote, index, layout) {
-  const key = `${code.id}:q${index}`;
-  const attributes = `data-start="${escapeHtml(quote.start)}" data-end="${escapeHtml(quote.end)}" data-page="${escapeHtml(quote.page)}"`;
-  if (layout.unlocated.has(key)) {
-    return `<li><span class="why-quote unlocated" ${attributes}>${escapeHtml(quote.text)}</span><small class="why-unlocated">Not found at this place in the document.</small></li>`;
-  }
-  return `<li><button type="button" class="why-quote" data-evidence="${escapeHtml(key)}" ${attributes} title="Show this passage in the document">${escapeHtml(quote.text)}</button></li>`;
+function codeHint(code) {
+  if (currentDecision(code)) return '';
+  const key = codeStatus(code).key;
+  if (key === 'needs_answer') return '<p class="code-hint">Answer the question above to finish this code.</p>';
+  if (key === 'not_supported') return '<p class="code-hint">The document does not support this code, so it cannot be approved.</p>';
+  return '';
 }
 
-function modifierReview(code) {
-  const review = code.modifier_review;
-  if (!review || typeof review !== 'object') return '';
-  const sources = strings(review.sources);
-  return `<div class="why-modifier"><strong>Modifier review</strong>${text(review.text) ? `<p>${escapeHtml(review.text)}</p>` : ''}${sources.length ? `<p class="why-sources">${escapeHtml(`Source: ${sources.join('; ')}`)}</p>` : ''}<p class="why-sources">No modifier is added automatically; the reviewer may choose one when approving.</p></div>`;
-}
-
-function whyThisCode(code, layout, ui = {}) {
-  const quotes = objects(code.why?.quotes).filter(quote => typeof quote.text === 'string' && quote.text);
-  const qualifications = strings(code.why?.qualifications);
-  const key = `why:${code.id}`;
-  const body = [
-    quotes.length ? `<p class="why-label">From the document</p><ul class="why-quotes">${objects(code.why?.quotes).map((quote, index) => (typeof quote.text === 'string' && quote.text ? whyQuote(code, quote, index, layout) : '')).join('')}</ul>` : '<p class="why-label">No passage of the document is quoted for this code.</p>',
-    qualifications.length ? `<ul class="why-qualifications">${qualifications.map(item => `<li class="why-qualification">${escapeHtml(item)}</li>`).join('')}</ul>` : '',
-    modifierReview(code),
-  ].join('');
-  return `<details class="why-code" data-key="${escapeHtml(key)}"${ui.open?.has?.(key) ? ' open' : ''}><summary>Why this code?</summary><div class="why-body">${body}</div></details>`;
-}
-
-function resultRow(code, index, doc, layout, ui = {}) {
-  const status = codeStatus(code);
-  const number = Number.isInteger(code.number) && code.number > 0 ? code.number : index + 1;
-  const modifiers = strings(code.modifiers);
-  const units = unitsLabel(code.units);
-  return `<li class="result-row" id="card-${escapeHtml(code.id)}" tabindex="-1" data-proposal="${escapeHtml(code.id)}" data-code="${escapeHtml(code.code)}" data-status="${escapeHtml(status.key)}" data-units="${escapeHtml(Number.isInteger(code.units) ? code.units : '')}" data-modifiers="${escapeHtml(modifiers.join(' '))}">`
-    + `<div class="result-head"><span class="result-number">${escapeHtml(number)}</span><span class="result-code">${escapeHtml(code.code)}</span><span class="result-units">${escapeHtml(units)}</span><span class="result-modifiers">${escapeHtml(modifierLabel(code))}</span>${badge(status.tone, status.label, status.icon, ` data-status="${escapeHtml(status.key)}"`)}</div>`
-    + `<p class="result-sub">${escapeHtml(rowSubLabel(code))}</p>`
-    + `<p class="result-summary">${escapeHtml(text(code.summary) || 'No explanation was recorded for this code.')}</p>`
+// One row: one line of the coding review (`position` is its place in the served list, which names only a row the server
+// gave no line).
+function codeRow(code, doc, position = 0) {
+  const status = shownStatus(code);
+  const decision = currentDecision(code);
+  const check = secondCheck(code);
+  const question = text(code.question);
+  const actions = allowedActions(code, doc);
+  return `<li class="code-row" id="code-${rowKey(rowRef(code, position, doc))}" tabindex="-1" data-code="${escapeHtml(code.code)}" data-line="${escapeHtml(lineOf(code, doc))}" data-status="${escapeHtml(codeStatus(code).key)}"${decision ? ` data-decision="${escapeHtml(decision.action)}"` : ''} data-units="${escapeHtml(Number.isInteger(code.units) && code.units >= 0 ? code.units : '')}" data-modifiers="${escapeHtml((modifiersOf(code) || []).join(' '))}">`
+    + `<div class="code-head"><span class="code-number">${escapeHtml(code.code)}</span><span class="code-units">${escapeHtml(unitsLabel(code.units))}</span><span class="code-modifiers">${escapeHtml(modifiersLabel(code))}</span>${badge(status.tone, status.label, status.icon, ` data-status="${escapeHtml(status.key)}"`)}</div>`
+    + `<p class="code-reason">${escapeHtml(text(code.reason) || 'No reason was given for this code.')}</p>`
+    + `<p class="code-check" data-check="${check.verdict}">${icon(check.verdict === 'agrees' ? 'circle-check' : 'info')}<span><strong>${escapeHtml(check.label)}</strong>${check.reason ? ` ${escapeHtml(check.reason)}` : ''}</span></p>`
+    + (question ? `<p class="code-question">${icon('help')}<span>${escapeHtml(question)}</span></p>` : '')
+    + codeQuotes(code, doc, position)
     + decisionLine(code)
-    + `<div class="result-foot">${whyThisCode(code, layout, ui)}${rowActions(code)}</div>`
+    + codeHint(code)
+    + (actions.length ? `<div class="code-actions">${actions.map(action => decisionButton(action, code, position, doc)).join('')}</div>` : '')
     + '</li>';
-}
-
-function emptyResults(doc, ui) {
-  // FINAL-V2 amendment 1, 5.1 [R:truth-T5]: while an update is pending the codes are the earlier codes, shown below -
-  // never "no codes were suggested" (the failed, stopped and paused sentences below say so)
-  const update = updateOf(doc);
-  if (update) return updateResultsText(doc, update);
-  const phase = progressPhase(doc, ui);
-  return lookup({
-    uploading: 'Suggested codes appear here when processing finishes.', queued: 'Suggested codes appear here when processing finishes.', processing: 'Suggested codes appear here when processing finishes.',
-    action_needed: 'Nothing has been checked yet. Choose the date of service to continue.', failed: 'No codes were suggested.', stopped: 'Processing stopped before codes were suggested.',
-    being_confirmed: 'Suggested codes appear here once the earlier check is confirmed.',
-    // paused: nothing was suggested yet, and nothing was decided about the document - it is read once processing resumes
-    paused: 'Processing is paused, so no codes have been suggested yet. Suggested codes appear here once processing resumes.',
-  }, phase, 'No CPT codes were suggested for this document.');
 }
 
 function reviewBar(doc) {
-  const readiness = doc.readiness || {};
-  const update = updateOf(doc);
-  const line = update ? updateExportNote(update) : readiness.approved === true ? 'Every code has a decision. The approved download is available.' : readiness.draft === true ? 'You can download the suggested codes as a draft. The approved download waits for every decision.' : 'Downloads become available when results are ready.';
-  return `<div class="review-bar"><div><p class="review-tally">${escapeHtml(tallyText(doc))}</p><p class="review-readiness">${escapeHtml(line)}</p></div><button type="button" class="button secondary" data-action="export">${icon('download')}Review and download</button></div>`;
+  return `<div class="review-bar"><div><p class="review-tally">${escapeHtml(tallyText(doc))}</p><p class="review-readiness">${escapeHtml(readinessText(doc))}</p></div><button type="button" class="button secondary" data-action="export">${icon('download')}Review and download</button></div>`;
 }
 
-function resultList(doc, layout, ui = {}) {
+function codesSection(doc) {
   const codes = codesOf(doc);
-  if (!codes.length) return `<p class="results-empty">${escapeHtml(emptyResults(doc, ui))}</p>`;
-  return `<ol class="result-list" aria-label="Suggested CPT codes">${codes.map((code, index) => resultRow(code, index, doc, layout, ui)).join('')}</ol>`;
+  const bar = codes.length || exportOffered(doc) ? reviewBar(doc) : '';
+  return `<section class="codes-section" aria-labelledby="codesTitle"><div class="results-topline"><h2 id="codesTitle">CPT codes</h2>${codes.length ? `<span class="small-badge">${codes.length}</span>` : ''}</div>`
+    + `<ol id="codesList" class="codes-list" aria-label="CPT codes"${codes.length ? '' : ' hidden'}>${codes.map((code, position) => codeRow(code, doc, position)).join('')}</ol>`
+    + (codes.length ? '' : `<p class="results-empty">${escapeHtml(emptyCodesText(doc))}</p>`)
+    + `${bar}</section>`;
 }
 
-function resultsSection(doc, layout, ui = {}) {
-  const codes = codesOf(doc);
-  const bar = codes.length || earlierCodesOf(doc).length || objects(doc.reports).length ? reviewBar(doc) : '';
-  return `<section class="results-section" aria-labelledby="resultsTitle"><div class="results-topline"><h2 id="resultsTitle">Suggested codes</h2>${codes.length ? `<span class="small-badge">${escapeHtml(codes.length)}</span>` : ''}</div>${checksPanel(doc)}${resultList(doc, layout, ui)}${bar}</section>`;
-}
-
-function notSeparatelyCoded(doc) {
-  const items = objects(doc.not_separately_coded).filter(item => text(item.label));
-  if (!items.length) return '';
-  return `<section class="result-notes not-coded"><h3>Not separately coded</h3><ul>${items.map(item => `<li><strong>${escapeHtml(item.label)}</strong>${text(item.reason) ? `<span>${escapeHtml(item.reason)}</span>` : ''}</li>`).join('')}</ul></section>`;
-}
-
-function otherCodes(doc, ui = {}) {
-  const items = objects(doc.other_codes).filter(item => text(item.code));
-  if (!items.length) return '';
-  const key = 'other-codes';
-  return `<details class="other-codes" data-key="${key}"${ui.open?.has?.(key) ? ' open' : ''}><summary>Other codes considered (not suggested)</summary><ul>${items.map(item => `<li><span class="other-code">${escapeHtml(item.code)}</span><span>${escapeHtml(text(item.reason) || 'Not supported by the document.')}</span></li>`).join('')}</ul></details>`;
-}
-
-// The re-check of what is still open (customer_api.recheck_block): offered only when the server says this member can
-// ask for it now; it is asked for once per result and never runs by itself.
-function recheckOffer(doc) {
-  if (doc?.recheck?.can_request !== true) return '';
-  return `<div class="recheck-offer"><button type="button" class="button secondary" data-action="recheck">${escapeHtml(RECHECK_LABEL)}</button><p class="recheck-note">${escapeHtml(RECHECK_NOTE)}</p></div>`;
-}
-
-function notesSection(doc) {
-  const unresolved = strings(doc.unresolved);
-  const limitations = strings(doc.limitations);
-  // the re-check of what is still open is never offered on the earlier codes (FINAL-V2 amendment 1, 5.1 [R:truth-T15])
-  const recheck = updateOf(doc) ? '' : recheckOffer(doc);
-  if (!unresolved.length && !limitations.length && !recheck) return '';
-  return `<section class="result-notes limitations">${unresolved.length || recheck ? `<h3>Still open</h3>${unresolved.length ? `<ul class="unresolved-list">${unresolved.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}${recheck}` : ''}${limitations.length ? `<h3>Limitations</h3><ul class="limitation-list">${limitations.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</section>`;
+// Documentation notes: what the coding review noticed about the documentation itself, as written, then each comment of
+// the second check that could not be tied to one line (the server's sentence with its reason as written). Shown once a
+// review has finished, so "no notes" is never said of a review still running.
+function notesPanel(doc) {
+  const notes = notesOf(doc);
+  if (!notes.length && !(progressPhase(doc) === 'done' && !isBusy(doc))) return '';
+  const body = notes.length ? `<p>What the coding review noticed about the documentation itself, and any comment of the second check that could not be tied to one line.</p><ul class="notes-list">${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : '<p class="notes-empty">The coding review made no notes about the documentation.</p>';
+  return `<section class="notes-panel" id="notesPanel" aria-labelledby="notesTitle"><h2 id="notesTitle">Documentation notes</h2>${body}</section>`;
 }
 
 function activityLog(doc, ui = {}) {
-  const items = objects(doc.activity).filter(item => text(item.summary));
+  const items = objects(doc?.activity).filter(item => text(item.text));
   if (!items.length) return '';
   const key = 'activity';
   return `<details class="activity-log" data-key="${key}"${ui.open?.has?.(key) ? ' open' : ''}><summary>History</summary><ol>${items.map(item => {
-    const actor = text(item.actor);
-    const by = [actor ? `${actor}${item.actor_kind === 'agent' && !/automated agent/i.test(actor) ? ' (automated agent)' : ''}` : '', formatTimestamp(item.at)].filter(Boolean).join(' · ');
-    return `<li><strong>${escapeHtml(item.summary)}</strong>${by ? `<small>${escapeHtml(by)}</small>` : ''}</li>`;
+    const at = formatTimestamp(item.at);
+    return `<li><strong>${escapeHtml(text(item.text))}</strong>${at ? `<small>${escapeHtml(at)}</small>` : ''}</li>`;
   }).join('')}</ol></details>`;
 }
 
-// --- FINAL-V2 amendment 1: the earlier codes, what changed, earlier decisions ---
-
-// One row of the earlier codes (5.1): read-only and greyed - no decision button, its quotes as text (the source panel
-// marks only the current codes' passages) - with its status, units, summary and the decision it carried. Its hooks are
-// its own (li.earlier-row in ol.earlier-list), never the current codes' ol.result-list > li.result-row[data-proposal]
-// that the walk reads as the codes the API serves (CORE-UX-DESIGN 8): the earlier codes are not those codes.
-function earlierRow(code, index, ui = {}) {
-  const status = codeStatus(code);
-  const number = Number.isInteger(code.number) && code.number > 0 ? code.number : index + 1;
-  const quotes = objects(code.why?.quotes).filter(quote => typeof quote.text === 'string' && quote.text);
-  const qualifications = strings(code.why?.qualifications);
-  const key = `earlier-why:${code.id}`;
-  const why = quotes.length || qualifications.length ? `<details class="why-code" data-key="${escapeHtml(key)}"${ui.open?.has?.(key) ? ' open' : ''}><summary>Why this code?</summary><div class="why-body">${quotes.length ? `<p class="why-label">From the document</p><ul class="why-quotes">${quotes.map(quote => `<li><span class="why-quote">${escapeHtml(quote.text)}</span></li>`).join('')}</ul>` : ''}${qualifications.length ? `<ul class="why-qualifications">${qualifications.map(item => `<li class="why-qualification">${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</div></details>` : '';
-  return `<li class="earlier-row" data-code="${escapeHtml(code.code)}" data-status="${escapeHtml(status.key)}">`
-    + `<div class="result-head"><span class="result-number">${escapeHtml(number)}</span><span class="result-code">${escapeHtml(code.code)}</span><span class="result-units">${escapeHtml(unitsLabel(code.units))}</span><span class="result-modifiers">${escapeHtml(modifierLabel(code))}</span>${badge('gray', status.label, status.icon, ` data-status="${escapeHtml(status.key)}"`)}</div>`
-    + `<p class="result-sub">${escapeHtml(rowSubLabel(code))}</p>`
-    + `<p class="result-summary">${escapeHtml(text(code.summary) || 'No explanation was recorded for this code.')}</p>`
-    + decisionLine(code)
-    + (why ? `<div class="result-foot">${why}</div>` : '')
-    + '</li>';
+function reviewColumn(doc, ui = {}) {
+  return `${progressPanel(doc, ui)}${questionsPanel(doc, ui)}${answersPanel(doc)}${codesSection(doc)}${notesPanel(doc)}${activityLog(doc, ui)}`;
 }
 
-// The earlier codes while an update is pending (5.1, A7): headed "Codes from before your change", with when they were
-// made and with which date of service, and that they cannot be approved or exported - true in every update state
-// [R:truth-T4] - then the rows, read-only, and the earlier codes' other sections inside it, never as the document's
-// current findings [R:truth-T6].
-function earlierCodesSection(doc, ui = {}) {
-  const update = updateOf(doc);
-  if (!update) return '';
-  const check = updateIsCheck(update);
-  const earlier = update.earlier && typeof update.earlier === 'object' ? update.earlier : {};
-  const time = formatTimestamp(earlier.made_at);
-  const date = text(earlier.service_date);
-  const made = time && date ? fill(check ? EARLIER_CODES_MADE_CHECK : EARLIER_CODES_MADE, { time, date }) : '';
-  const codes = earlierCodesOf(doc);
-  const heading = check ? EARLIER_CODES_HEADING_CHECK : EARLIER_CODES_HEADING;
-  const rows = codes.length ? `<ol class="earlier-list" aria-label="${escapeHtml(heading)}">${codes.map((code, index) => earlierRow(code, index, ui)).join('')}</ol>`
-    : `<p class="results-empty">${escapeHtml(check ? RESULTS_NO_EARLIER_CODE_CHECK : RESULTS_NO_EARLIER_CODE)}</p>`;
-  return `<section class="earlier-codes" aria-labelledby="earlierTitle"><div class="earlier-head"><h2 id="earlierTitle">${escapeHtml(heading)}</h2>${made ? `<p class="earlier-made">${escapeHtml(made)}</p>` : ''}</div>${rows}${notSeparatelyCoded(doc)}${otherCodes(doc, ui)}${notesSection(doc)}</section>`;
-}
-
-// "What changed" (6.2), once the codes are updated: against the codes as suggested before the change, from stored rows -
-// the details, the codes, how many are unchanged, the decisions the update acted on and the answers line, in that order.
-function whatChangedSection(doc) {
-  const changed = doc?.what_changed;
-  if (!changed || typeof changed !== 'object' || Array.isArray(changed) || updateOf(doc)) return '';
-  const compared = changed.compared_with && typeof changed.compared_with === 'object' ? changed.compared_with : {};
-  const time = formatTimestamp(compared.made_at);
-  const unchanged = Number.isInteger(changed.unchanged) && changed.unchanged > 0
-    ? (changed.unchanged === 1 ? WHAT_CHANGED_UNCHANGED_ONE : fill(WHAT_CHANGED_UNCHANGED, { n: changed.unchanged })) : '';
-  const lines = [...strings(changed.details), ...objects(changed.codes).map(item => text(item.text)).filter(Boolean), unchanged].filter(Boolean);
-  const decisions = objects(changed.decisions).map(item => text(item.text)).filter(Boolean);
-  const answers = text(changed.answers);
-  return `<section class="what-changed" aria-labelledby="whatChangedTitle"><h2 id="whatChangedTitle">What changed</h2>`
-    + (time ? `<p class="what-changed-compared">${escapeHtml(fill(WHAT_CHANGED_COMPARED, { time }))}</p>` : '')
-    + (lines.length ? `<ul class="what-changed-list">${lines.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '')
-    + (decisions.length ? `<ul class="what-changed-decisions">${decisions.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '')
-    + (answers ? `<p class="what-changed-answers">${escapeHtml(answers)}</p>` : '')
-    + '</section>';
-}
-
-// "Earlier decisions" (5.4): every decision that no longer applies, newest first, with who, when, the revision it was
-// made on and why - the server's fixed sentence, never the stored reason.
-function earlierDecisions(doc, ui = {}) {
-  const items = objects(doc?.decision_history).filter(item => text(item.code) && text(item.why));
-  if (!items.length) return '';
-  const key = 'earlier-decisions';
-  return `<details class="earlier-decisions" data-key="${key}"${ui.open?.has?.(key) ? ' open' : ''}><summary>Earlier decisions</summary><ol>${items.map(item => {
-    const by = text(item.by);
-    const meta = [by ? `${by}${item.by_kind === 'agent' && !/automated agent/i.test(by) ? ' (automated agent)' : ''}` : '', formatTimestamp(item.at), Number.isInteger(item.revision) ? `revision ${item.revision}` : ''].filter(Boolean).join(' · ');
-    return `<li><strong>${escapeHtml(`${text(item.action) || 'Decision'} of ${text(item.code)}`)}</strong>${meta ? `<small>${escapeHtml(meta)}</small>` : ''}<p>${escapeHtml(text(item.why))}</p></li>`;
-  }).join('')}</ol></details>`;
-}
-
-function reviewView(doc, layout, ui = {}) {
-  const codes = codesOf(doc);
-  const update = updateOf(doc);
-  const download = codes.length || earlierCodesOf(doc).length || objects(doc.reports).length ? `<button type="button" class="button secondary" data-action="export">${icon('download')}<span>Download</span></button>` : '';
-  // while an update is pending the earlier codes' sections are drawn inside their own section, never as the document's
-  // current findings (5.1 [R:truth-T6]); "What changed" stands above the codes once they are updated (6.1)
-  const findings = update ? earlierCodesSection(doc, ui) : `${notSeparatelyCoded(doc)}${otherCodes(doc, ui)}${notesSection(doc)}`;
+// The whole review page. The right column, the heading and the quoted passages are redrawn on their own after a read
+// that changes them (renderDocument), so the original document's viewer is never reloaded under the member.
+function reviewView(doc, ui = {}) {
   return `<section class="${ui.entrance ? 'view-entrance ' : ''}review-view"><a class="back-link" href="#documents">${icon('arrow')}All documents</a>`
-    + `<div class="heading-row review-heading"><div><span class="eyebrow">CODING REVIEW · GASTROENTEROLOGY</span><h1>${escapeHtml(doc.title || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}<span>New document</span></button>${download}</div></div>`
-    + `<div class="review-layout"><div class="review-column">${progressPanel(doc, ui)}${detailsPanel(doc, ui)}${whatChangedSection(doc)}${resultsSection(doc, layout, ui)}${findings}${earlierDecisions(doc, ui)}${activityLog(doc, ui)}</div>${sourcePanel(doc, layout)}</div></section>`;
+    + `<div id="reviewHead">${reviewHeading(doc)}</div>`
+    + `<div class="review-layout"><div class="review-column" id="reviewColumn">${reviewColumn(doc, ui)}</div><div class="viewer-column">${viewerPanel(doc)}<div id="quotesBox">${quotesPanel(doc)}</div></div></div></section>`;
 }
 
 // --- the export dialog ---
@@ -1294,38 +943,51 @@ function exportOption(kind, fmt, enabled, title, detail) {
   return `<button type="button" class="export-option" data-export-kind="${kind}" data-export-fmt="${fmt}"${enabled ? '' : ' disabled'}><span class="export-format">${fmt.toUpperCase()}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></span>${icon('download')}</button>`;
 }
 
-// FINAL-V2 amendment 1, 5.4 and 8.3 (A9): an export that is not current is still listed and linked - it downloads with
-// its EARLIER banner - labelled as made on its revision and that it may not show the current codes [R:truth-T14].
+// An export made from an earlier coding review is still listed and linked, and says so.
 function reportItem(report) {
   const url = safeDownloadUrl(report.download_url);
   const name = text(report.filename) || 'Download';
-  const kind = report.kind === 'approved' ? 'Approved codes' : 'Suggested codes (draft)';
-  const meta = [kind, formatTimestamp(report.generated_at), text(report.generated_by)].filter(Boolean).join(' · ');
+  const kind = report.kind === 'approved' ? 'Approved codes' : 'Codes (draft)';
+  const meta = [kind, formatTimestamp(report.generated_at)].filter(Boolean).join(' · ');
   const link = url ? `<a href="${escapeHtml(url)}" download>${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`;
-  if (report.current !== true) {
-    if (!Number.isInteger(report.revision)) {
-      return `<li class="report-item stale"><span>${escapeHtml(name)}</span><small>${escapeHtml(`${meta} · No longer matches the saved decisions; create a new download.`)}</small></li>`;
-    }
-    return `<li class="report-item earlier">${link}<small>${escapeHtml(`${meta} · ${fill(EARLIER_DOWNLOAD, { n: report.revision })}`)}</small></li>`;
-  }
+  if (report.current !== true) return `<li class="report-item earlier">${link}<small>${escapeHtml(`${meta} · Earlier: made from an earlier coding review; it may not show the current codes`)}</small></li>`;
   return `<li class="report-item">${link}<small>${escapeHtml(meta)}</small></li>`;
 }
 
 function exportOptions(doc) {
-  const readiness = doc?.readiness || {};
-  const update = updateOf(doc);
-  // while an update is pending both kinds are disabled, with the note by the update's state (5.1 [R:truth-T4])
-  const draft = readiness.draft === true && !update;
-  const approved = readiness.approved === true && !update;
+  const readiness = record(doc?.readiness);
+  const draft = readiness.draft === true;
+  const approved = readiness.approved === true;
   const blockers = strings(readiness.blockers);
   const reports = objects(doc?.reports);
-  const draftDetail = 'Every suggested code with its status. Nothing in it is approved.';
+  const draftDetail = 'Every code with its status, units, modifiers, reason and quoted passages. Nothing in it is approved.';
   const approvedDetail = 'Only approved codes, with who approved them and when.';
-  const why = update ? `<div class="export-blockers update-export-note"><p>${escapeHtml(updateExportNote(update))}</p></div>`
-    : !approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : '';
-  return `<div class="export-group"><div class="evidence-label">Suggested codes — not approved</div>${exportOption('draft', 'txt', draft, 'Suggested codes as text', draftDetail)}${exportOption('draft', 'csv', draft, 'Suggested codes as a spreadsheet (CSV)', draftDetail)}</div>`
+  const why = !approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : '';
+  return `<div class="export-group"><div class="evidence-label">Codes — not approved</div>${exportOption('draft', 'txt', draft, 'Codes as text (draft)', draftDetail)}${exportOption('draft', 'csv', draft, 'Codes as a spreadsheet (CSV, draft)', draftDetail)}</div>`
     + `<div class="export-group"><div class="evidence-label">Approved codes</div>${exportOption('approved', 'txt', approved, 'Approved codes as text', approvedDetail)}${exportOption('approved', 'csv', approved, 'Approved codes as a spreadsheet (CSV)', approvedDetail)}${why}</div>`
     + (reports.length ? `<div class="export-group"><div class="evidence-label">Earlier downloads</div><ul class="report-list">${reports.map(reportItem).join('')}</ul></div>` : '');
+}
+
+// The multipart body of one upload attempt, or the sentence that says what is missing.
+function uploadForm(fields, key) {
+  const form = new FormData();
+  if (fields.paste) {
+    if (!text(fields.text)) return 'Paste the clinical text, or switch back to uploading a file.';
+    if (codePoints(fields.text) > MAX_PASTE_CHARS) return 'The pasted text is longer than 400,000 characters. Upload it as a file instead.';
+    form.append('text', fields.text);
+  } else {
+    if (!fields.file) return 'Choose a PDF, DOCX or TXT document, or paste the text instead.';
+    form.append('file', fields.file, fields.file.name);
+  }
+  if (fields.serviceDate && !parseIsoDate(fields.serviceDate)) return 'Enter the service date as a valid date, or leave it blank.';
+  const insurance = fields.insurance ?? 'unknown';
+  if (!INSURANCE_VALUES.has(insurance)) return 'Choose the insurance, or Not sure.';
+  if (!fields.attested) return 'Confirm that the document is synthetic and contains no real patient information.';
+  if (fields.serviceDate) form.append('service_date', fields.serviceDate);
+  form.append('insurance', insurance);
+  form.append('synthetic_attestation', 'yes');
+  form.append('client_key', key);
+  return form;
 }
 
 // --- browser wiring ------------------------------------------------------------------
@@ -1334,8 +996,15 @@ class ApiError extends Error {
   constructor(message, status = 0, data = null) {
     super(message);
     this.status = status;
+    this.code = data && typeof data === 'object' && typeof data.error_code === 'string' ? data.error_code : '';
     this.details = data && typeof data === 'object' && data.details && typeof data.details === 'object' ? data.details : null;
   }
+}
+
+// A decision the server refused because what the page shows is no longer the latest: a conflict status that is not the
+// stale-build notice (which asks for a reload of the whole page instead).
+function changedUnderPage(error) {
+  return error instanceof ApiError && error.status === 409 && error.code !== 'client_outdated';
 }
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -1358,6 +1027,7 @@ function showUpdateNotice() {
   if (notice) notice.hidden = false;
 }
 
+// One call to the customer API. A change the server accepts with no body reads as an empty answer; a read must be JSON.
 async function api(path, { method = 'GET', json, form } = {}) {
   const headers = { Accept: 'application/json', [CLIENT_HEADER]: CLIENT_VERSION };
   let body;
@@ -1385,8 +1055,9 @@ async function api(path, { method = 'GET', json, form } = {}) {
     throw new ApiError(OUTDATED_TEXT, 409, data);
   }
   if (!response.ok) throw new ApiError(errorText(response.status, data), response.status, data);
-  if (!data || typeof data !== 'object') throw new ApiError('The server answered in a way this page cannot read. Reload the page and try again.', response.status);
-  return data;
+  if (data && typeof data === 'object') return data;
+  if (method !== 'GET') return {};
+  throw new ApiError('The server answered in a way this page cannot read. Reload the page and try again.', response.status);
 }
 
 function toast(message) {
@@ -1423,6 +1094,15 @@ function openDialog(id) {
 function closeDialog(id) {
   const dialog = $(`#${id}`);
   if (dialog.open) dialog.close();
+}
+
+// The review and export dialogs belong to the document they were opened on: a route (a link, browser Back) closes them,
+// so nothing one showed is saved while the page shows another.
+function closeDocumentDialogs() {
+  state.review = null;
+  state.exporting = null;
+  closeDialog('reviewDialog');
+  closeDialog('exportDialog');
 }
 
 function closeNavigation() {
@@ -1498,11 +1178,12 @@ function route() {
   const serial = ++state.routeSerial;
   stopPolling();
   stopTicker();
+  closeDocumentDialogs();
   if (next.name !== 'doc' || next.id !== state.doc?.id) {
     state.doc = null;
     state.docKey = '';
-    state.layout = null;
-    state.selectedEvidence = [];
+    state.viewerKey = '';
+    state.selectedQuote = '';
     state.open = new Set();
     state.answers = new Map();
     state.reconnecting = false;
@@ -1524,8 +1205,10 @@ async function showList(name, serial) {
   $('#main').innerHTML = name === 'workspace' ? overviewView() : documentsView(name);
   let rows;
   try {
-    ({ encounters: rows } = await api('/api/encounters'));
+    const data = await api('/api/encounters');
+    rows = Array.isArray(data) ? data : data.encounters;
     if (!Array.isArray(rows)) throw new ApiError('The server answered with a document list this page cannot read.');
+    rows = objects(rows);
   } catch (error) {
     if (serial !== state.routeSerial) return;
     $('#documentsTable').innerHTML = `${LIST_HEADER}<p class="empty-state">${escapeHtml(`Documents could not be loaded. ${error.message}`)}</p>`;
@@ -1601,7 +1284,7 @@ async function loadDocument(id, serial, silent) {
   state.poll.errors = 0;
   state.reconnecting = false;
   state.clock = clockOffset(doc.progress?.server_time, Date.now());
-  if (state.ack?.id === doc.id && !(doc.progress?.busy === true)) state.ack = null;
+  if (state.ack?.id === doc.id && !isBusy(doc)) state.ack = null;
   renderDocument(doc, !silent);
   schedulePoll(serial);
 }
@@ -1629,29 +1312,47 @@ function refreshIfWaiting() {
   if (state.route?.name === 'doc' && shouldPoll(state.doc) && !document.hidden) refreshDocument();
 }
 
+// Where the focus was, so a redraw can put it back: the element's id, the code row it sits in (its line and its code),
+// and the caret of an answer being typed.
 function focusTarget() {
   const element = document.activeElement;
   if (!element || !$('#main').contains(element)) return null;
-  if (element.id) return { id: element.id };
-  if (element.dataset.proposal) return { proposal: element.dataset.proposal };
-  return null;
+  const row = element.closest?.('.code-row');
+  const target = { id: element.id || '', line: row?.dataset.line || '', code: row?.dataset.code || '' };
+  if (element.tagName === 'TEXTAREA' && typeof element.selectionStart === 'number') target.selection = [element.selectionStart, element.selectionEnd];
+  return target.id || target.line ? target : null;
 }
 
+// Focus goes back to the same element, or to its row; never onto another code that a new coding review put on that line.
 function restoreFocus(target) {
   if (!target) return;
-  const element = target.id ? document.getElementById(target.id) : document.getElementById(`card-${target.proposal}`);
-  element?.focus({ preventScroll: true });
+  let element = target.id ? document.getElementById(target.id) : null;
+  if (!element && target.line) element = document.getElementById(`code-${rowKey(target.line)}`);
+  if (!element) return;
+  const row = element.closest?.('.code-row');
+  if (target.code && row && row.dataset.code !== target.code) return;
+  element.focus({ preventScroll: true });
+  if (target.selection && element.tagName === 'TEXTAREA') {
+    try {
+      element.setSelectionRange(target.selection[0], target.selection[1]);
+    } catch {
+      // the field is no longer the one the caret was in
+    }
+  }
 }
 
 // What decides whether a read of the document redraws the page: everything served but the server's clock, which moves
-// on every read and changes nothing drawn (the elapsed time follows state.clock, set from it before each draw). So a poll
-// that brings nothing new - an update waiting on its step, an outcome being confirmed - never redraws the page under a
-// member typing in the details panel, where a date being typed holds no value until it is whole (FINAL-V2 amendment 1,
-// 5.1(3): the context rows stay editable while the page polls an update).
+// on every read and changes nothing drawn (the elapsed time follows state.clock).
 function renderKey(doc) {
   const progress = doc && typeof doc === 'object' ? doc.progress : null;
   if (!progress || typeof progress !== 'object' || Array.isArray(progress)) return JSON.stringify(doc);
   return JSON.stringify({ ...doc, progress: { ...progress, server_time: null } });
+}
+
+// What the viewer shows: the page redraws it only when this changes, so a poll never reloads the original.
+function viewerKey(doc) {
+  const part = record(doc?.document);
+  return `${doc?.id || ''} ${viewerKind(part)} ${part.converted === true} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
 }
 
 function renderDocument(doc, fresh, force = false) {
@@ -1660,25 +1361,35 @@ function renderDocument(doc, fresh, force = false) {
     state.doc = doc;  // the same page: only the server's clock moved
     return;
   }
-  const keep = fresh ? null : { source: $('#sourceScroll')?.scrollTop || 0, window: window.scrollY, focus: focusTarget() };
+  const keep = fresh ? null : { window: window.scrollY, focus: focusTarget() };
+  const frame = viewerKey(doc);
+  const partial = !fresh && frame === state.viewerKey && $('#reviewHead') && $('#reviewColumn') && $('#quotesBox');
+  // a passage chosen on one coding review names a line of it: another coding review's same line is another passage
+  if (roundNumber(doc) !== roundNumber(state.doc)) state.selectedQuote = '';
   state.doc = doc;
   state.docKey = key;
-  state.layout = documentLayout(doc);
-  $('#main').innerHTML = reviewView(doc, state.layout, uiState({ entrance: fresh }));
+  const ui = uiState({ entrance: fresh });
+  if (partial) {
+    $('#reviewHead').innerHTML = reviewHeading(doc);
+    $('#quotesBox').innerHTML = quotesPanel(doc);
+    $('#reviewColumn').innerHTML = reviewColumn(doc, ui);
+  } else {
+    state.viewerKey = frame;
+    state.selectedQuote = '';
+    $('#main').innerHTML = reviewView(doc, ui);
+  }
   if (keep) {
-    if ($('#sourceScroll')) $('#sourceScroll').scrollTop = keep.source;
     window.scrollTo({ top: keep.window, behavior: 'instant' });
     restoreFocus(keep.focus);
   }
-  if (state.selectedEvidence.length) applyHighlight(state.selectedEvidence);
-  updatePageNumber();
+  markSelectedQuote();
   tick();
 }
 
 // Elapsed time on the page: one timer that rewrites only the [data-elapsed] text, while the document is busy.
 function tick() {
   stopTicker();
-  if (state.route?.name !== 'doc' || state.doc?.progress?.busy !== true) return;
+  if (state.route?.name !== 'doc' || !isBusy(state.doc)) return;
   const nodes = $$('[data-elapsed][data-since]:not([data-until])');
   if (!nodes.length) return;
   const now = Date.now() + state.clock;
@@ -1686,89 +1397,115 @@ function tick() {
   state.tickTimer = setTimeout(tick, TICK_MS);
 }
 
-function evidenceKeys(element) {
-  return (element.dataset.keys || element.dataset.evidence || '').split(' ').filter(Boolean);
+// --- quoted passages: open the page, or find the passage in a text document ---
+
+function findQuote(key) {
+  const codes = codesOf(state.doc);
+  for (let position = 0; position < codes.length; position += 1) {
+    const quotes = quotesOf(codes[position]);
+    for (let index = 0; index < quotes.length; index += 1) if (quoteKey(codes[position], index, position, state.doc) === key) return { code: codes[position], quote: quotes[index] };
+  }
+  return null;
 }
 
-function applyHighlight(keys) {
-  const wanted = new Set(keys);
-  let first = null;
-  $$('.evidence-mark').forEach(mark => {
-    const selected = evidenceKeys(mark).some(key => wanted.has(key));
-    mark.classList.toggle('selected', selected);
-    if (selected && !first) first = mark;
+function markSelectedQuote() {
+  $$('[data-quote]').forEach(element => {
+    const selected = Boolean(state.selectedQuote) && element.dataset.quote === state.selectedQuote;
+    element.classList.toggle('selected', selected);
+    if (selected) element.setAttribute('aria-current', 'true');
+    else element.removeAttribute('aria-current');
   });
-  $$('.why-quote[data-evidence]').forEach(quote => quote.classList.toggle('selected', wanted.has(quote.dataset.evidence)));
-  return first;
 }
 
-function highlightEvidence(keys, scroll = true) {
-  state.selectedEvidence = keys;
-  const first = applyHighlight(keys);
-  if (!scroll || !first) return;
-  first.scrollIntoView({ behavior: reducedMotion() ? 'instant' : 'smooth', block: 'center' });
-  updatePageNumber();
+// Selects the passage inside the viewer of a text document and scrolls it into view. Best effort: a viewer this page
+// cannot read (another origin, a PDF, not loaded yet) is left as it is.
+function revealInFrame(frame, passage) {
+  try {
+    const view = frame.contentWindow;
+    const page = frame.contentDocument;
+    if (!view || !page?.body) return false;
+    const walker = page.createTreeWalker(page.body, 4);
+    const nodes = [];
+    let source = '';
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      nodes.push([node, source.length]);
+      source += node.nodeValue;
+    }
+    const found = findPassage(source, passage);
+    if (!found) return false;
+    const place = offset => {
+      let index = nodes.length - 1;
+      while (index > 0 && nodes[index][1] > offset) index -= 1;
+      return [nodes[index][0], offset - nodes[index][1]];
+    };
+    const range = page.createRange();
+    range.setStart(...place(found[0]));
+    range.setEnd(...place(found[1]));
+    const selection = view.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const box = range.getBoundingClientRect();
+    view.scrollBy(0, box.top - view.innerHeight / 3);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-function updatePageNumber() {
-  const box = $('#sourceScroll');
-  const label = $('#pageNumber');
-  const papers = box ? $$('.source-paper', box) : [];
-  if (!label || papers.length < 2) return;
-  const view = box.getBoundingClientRect();
-  const middle = view.top + view.height / 2;
-  let current = papers[0];
-  for (const paper of papers) if (paper.getBoundingClientRect().top <= middle) current = paper;
-  label.textContent = `Page ${current.dataset.page} of ${label.dataset.total}`;
+// The PDF viewer opens the quoted page (#page=N); the text viewer finds the passage, since a text has no pages.
+function showQuote(key) {
+  const found = findQuote(key);
+  if (!found) return;
+  state.selectedQuote = key;
+  markSelectedQuote();
+  const frame = $('#documentViewer');
+  if (!frame) return;
+  if (found.quote.page && viewerKind(state.doc?.document) === 'pdf') {
+    const url = viewerUrl(state.doc?.document?.view_url, found.quote.page);
+    if (url) frame.src = url;
+  } else {
+    revealInFrame(frame, found.quote.text);
+  }
+  frame.scrollIntoView({ behavior: reducedMotion() ? 'instant' : 'smooth', block: 'nearest' });
 }
 
-function findCode(id) {
-  return codesOf(state.doc).find(code => code.id === id) || null;
+// --- decisions: each names the row's line and the coding review the page shows ---
+
+function reviewCopyText(action, agent) {
+  if (action === 'reject') return 'A rejected code is left out of the approved download. Add a note so the next reviewer knows why.';
+  return agent
+    ? 'This approval is recorded as an agent-executed synthetic review, with the agent\'s name and the time. It applies to this code in this coding review only; a new coding review starts without it.'
+    : 'Your approval is recorded with your name and the time. It applies to this code in this coding review only; a new coding review starts without it.';
 }
 
-function setModifierField(code, action) {
-  const options = action === 'approve' ? reviewModifierOptions(code) : [];
-  const field = $('#reviewModifierField');
-  const select = $('#reviewModifier');
-  select.replaceChildren(...options.map(([value, label]) => {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = label;
-    return option;
-  }));
-  select.value = '';
-  field.hidden = !options.length;
-  const review = code?.modifier_review;
-  $('#reviewModifierHelp').textContent = options.length ? [text(review?.text), strings(review?.sources).length ? `Source: ${strings(review.sources).join('; ')}.` : ''].filter(Boolean).join(' ') : '';
-}
-
-async function openReview(proposalId, action) {
-  const code = findCode(proposalId);
-  if (!code || !REVIEW_COPY[action]) return;
+// The review dialog of one line: what the decision will name (the document, the coding review shown, the line, its
+// code) is fixed when the dialog opens, so a redraw while it is open never moves the decision to another row, another
+// coding review or another document.
+async function openReview(line, action) {
+  const code = findLine(state.doc, line);
+  if (!code || !REVIEW_COPY[action] || !allowedActions(code, state.doc).includes(action)) return;
+  const target = { ...decisionTarget(code, state.doc), encounter: state.doc.id };
   if (!state.session && !(await loadSession())) {
     toast('Your identity could not be confirmed, so no decision can be recorded. Reload the page and try again.');
     return;
   }
-  const agent = isAgent();
+  const acknowledgement = typeof state.session?.acknowledgement === 'string' ? state.session.acknowledgement : '';
+  if (action === 'approve' && !acknowledgement.trim()) {
+    toast('The approval statement could not be loaded, so no approval can be recorded. Reload the page and try again.');
+    return;
+  }
   const copy = REVIEW_COPY[action];
-  const revision = Number.isInteger(state.doc.document?.revision) ? state.doc.document.revision : 1;
-  const body = {
-    approve: agent ? `This approval is recorded as an agent-executed synthetic review, with the agent's identity and the time, against revision ${revision} of this document. A changed document invalidates it.` : `Your approval is recorded with your identity and the time, against revision ${revision} of this document. A changed document invalidates it.`,
-    reject: 'A rejected code is excluded from the approved download. Add a note so the next reviewer knows why.',
-    reinstate: 'This code was excluded when the document was checked. Reinstating records your judgement and makes it reviewable; it does not approve it.',
-    confirm: 'This code was excluded when the document was checked. Confirming records your judgement that the exclusion is right.',
-  }[action];
-  state.review = { proposalId, action };
+  state.review = { ...target, action };
   $('#reviewEyebrow').textContent = copy.eyebrow;
   $('#reviewTitle').textContent = copy.title;
-  $('#reviewCopy').textContent = body;
+  $('#reviewCopy').textContent = reviewCopyText(action, isAgent());
   $('#reviewCode').textContent = code.code;
+  $('#reviewLine').textContent = lineDetail(code);
   $('#reviewStatus').textContent = codeStatus(code).label;
-  $('#reviewSummary').textContent = text(code.summary);
-  $('#reviewAckLabel').hidden = action !== 'approve';
-  $('#reviewAcknowledgement').checked = false;
-  $('#reviewAckText').textContent = attestationText(state.session);
-  setModifierField(code, action);
+  $('#reviewSummary').textContent = text(code.reason);
+  $('#reviewAcknowledgement').hidden = action !== 'approve';
+  $('#reviewAckBox').checked = false;
+  $('#reviewAckText').textContent = action === 'approve' ? acknowledgement : '';
   $('#reviewNote').value = '';
   $('#reviewNotice').textContent = 'A review decision records a judgement; it is not billing advice.';
   $('#saveReviewLabel').textContent = copy.button;
@@ -1787,8 +1524,8 @@ async function guarded(key, task) {
   }
 }
 
-function postDecision(body) {
-  return api(`/api/encounters/${encodeURIComponent(state.doc.id)}/decisions`, { method: 'POST', json: body });
+function postDecision(encounter, body) {
+  return api(`/api/encounters/${encodeURIComponent(encounter)}/decisions`, { method: 'POST', json: body });
 }
 
 async function afterChange(message) {
@@ -1797,180 +1534,88 @@ async function afterChange(message) {
   await refreshDocument();
 }
 
+// A decision refused because the coding review changed under the page: nothing was recorded, so the page says so and
+// reads the document again. Nothing is sent again; the member decides on what the page now shows.
+async function afterConflict() {
+  toast(CHANGED_TEXT);
+  loadSession();
+  await refreshDocument();
+}
+
 function submitReview(event) {
   event.preventDefault();
   const review = state.review;
   if (!review || !state.doc) return undefined;
-  if (review.action === 'approve' && !$('#reviewAcknowledgement').checked) {
-    showError('reviewError', 'Confirm that you reviewed the document for this code.');
+  const approve = review.action === 'approve';
+  if (approve && !$('#reviewAckBox').checked) {
+    showError('reviewError', 'Confirm the statement above to approve this code.');
     return undefined;
   }
   return guarded('review', async () => {
     const button = $('#saveReview');
     setBusy(button, true);
     hideError('reviewError');
-    const body = { proposal_id: review.proposalId, action: review.action, note: $('#reviewNote').value.trim(), acknowledgement: review.action === 'approve' ? $('#reviewAckText').textContent : '' };
-    if (review.action === 'approve' && !$('#reviewModifierField').hidden) {
-      const chosen = $('#reviewModifier').value;
-      body.modifiers = MODIFIER_CHOICES.includes(chosen) ? [chosen] : [];
-    }
+    const body = decisionBody(review, review.action, approve ? state.session?.acknowledgement : '', $('#reviewNote').value);
     try {
-      await postDecision(body);
-      const code = findCode(review.proposalId)?.code || 'the code';
+      await postDecision(review.encounter, body);
       closeDialog('reviewDialog');
-      await afterChange({ approve: `Approval recorded for ${code}.`, reject: `Rejection recorded for ${code}.`, reinstate: `${code} reinstated for review.`, confirm: `Exclusion of ${code} confirmed.` }[review.action]);
+      await afterChange(approve ? `Approval recorded for ${review.code}.` : `Rejection recorded for ${review.code}.`);
     } catch (error) {
-      showError('reviewError', error.message);
+      if (changedUnderPage(error)) {
+        closeDialog('reviewDialog');
+        await afterConflict();
+      } else {
+        showError('reviewError', error.message);
+      }
     } finally {
-      setBusy(button, review.action === 'approve' && !$('#reviewAcknowledgement').checked);
+      setBusy(button, approve && !$('#reviewAckBox').checked);
     }
   });
 }
 
-function revokeDecision(proposalId, button) {
-  return guarded(`revoke:${proposalId}`, async () => {
+// Undo posts at once, naming the decision the row shows (the server refuses it when that is no longer the one standing).
+function revokeDecision(code, button) {
+  const target = decisionTarget(code, state.doc);
+  const encounter = state.doc.id;
+  return guarded(`revoke:${target.line}`, async () => {
     setBusy(button, true);
     try {
-      await postDecision({ proposal_id: proposalId, action: 'revoke', note: '', acknowledgement: '' });
-      await afterChange(`Decision undone for ${findCode(proposalId)?.code || 'the code'}.`);
+      await postDecision(encounter, decisionBody(target, 'revoke'));
+      await afterChange(`Decision undone for ${target.code}.`);
     } catch (error) {
-      toast(error.message);
       setBusy(button, false);
+      if (changedUnderPage(error)) await afterConflict();
+      else toast(error.message);
     }
   });
 }
 
-function handleDecision(action, proposalId, button) {
-  if (action === 'revoke') return revokeDecision(proposalId, button);
-  return openReview(proposalId, action);
+// A decision button's click: the row is found by the button's line, never by its code.
+function handleDecision(action, line, button) {
+  const code = findLine(state.doc, line);
+  if (!code || !allowedActions(code, state.doc).includes(action)) return undefined;
+  if (action === 'revoke') return revokeDecision(code, button);
+  return openReview(lineOf(code, state.doc), action);
 }
 
-// --- details: every answer is a selection until the one save sends them all ---
+// --- answers: typed on the page, sent together ---
 
-function findDetail(id) {
-  return detailsOf(state.doc).find(row => row.id === id) || null;
-}
-
-function syncDetailRow(id) {
-  const row = $$('.detail-row').find(element => element.dataset.detail === id);
-  if (!row) return;
-  const value = state.answers.get(id)?.value || '';
-  $$('[data-detail-choice], [data-action="use-document-date"], [data-action="clear-date"]', row).forEach(button => {
-    const own = button.dataset.detailChoice || (button.dataset.action === 'clear-date' ? CLEAR_DATE : USE_DOCUMENT);
-    button.setAttribute('aria-pressed', String(own === value));
-  });
-  $$('input[type="radio"]', row).forEach(input => { input.checked = input.value === value; });
-  // the date field keeps only a date typed as the answer: choosing anything else empties it
-  const date = $('input[data-detail-input]', row);
-  if (date && date.value && date.value !== value) date.value = '';
-}
-
-function chooseDetail(id, value) {
-  const row = findDetail(id);
-  if (!answerable(row) && !valueOverAnswer(row, state.doc)) return;
-  if (state.answers.get(id)?.value === value) state.answers.delete(id);
-  else state.answers.set(id, { fact: row.fact, value });
-  hideError('detailsError');
-  syncDetailRow(id);
-}
-
-function enterDetailDate(input) {
-  const row = findDetail(input.dataset.detail);
-  if (!answerable(row)) return;
-  if (parseIsoDate(input.value)) state.answers.set(row.id, { fact: row.fact, value: input.value });
-  else if (parseIsoDate(state.answers.get(row.id)?.value || '')) state.answers.delete(row.id);
-  hideError('detailsError');
-  syncDetailRow(row.id);
-}
-
-// The answers the one save sends: the rows that take a value now (rowEditable) - while processing runs or an update is
-// pending, only context values, never "Not documented" or "Cannot confirm" (1.4) - chosen on this page.
-function detailAnswers(doc) {
-  const open = answersOpen(doc);
-  return detailsOf(doc).filter(row => rowEditable(row, doc) && state.answers.has(row.id))
-    .map(row => ({ id: row.id, fact: row.fact, value: state.answers.get(row.id).value }))
-    .filter(item => open || !Object.hasOwn(DETAIL_ANSWERS, item.value));
-}
-
-function saveDetails(button) {
+function sendAnswers(button) {
   if (!state.doc) return undefined;
-  const answers = detailAnswers(state.doc);
-  if (!answers.length) {
-    showError('detailsError', 'Choose an answer for at least one detail, then save.');
+  const payload = answersPayload(state.doc, state.answers);
+  if (typeof payload === 'string') {
+    showError('answersError', payload);
     return undefined;
   }
-  return guarded('details', async () => {
+  return guarded('answers', async () => {
     setBusy(button, true);
-    hideError('detailsError');
+    hideError('answersError');
     try {
-      const saved = await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/details`, { method: 'POST', json: { answers } });
-      for (const answer of answers) state.answers.delete(answer.id);
-      // an answer recomputes the results (completion repair 2026-11-06, U11): the page shows the progress, then them; a
-      // save that restored the earlier codes says so (FINAL-V2 amendment 1, 1.3 [R:truth-T13])
-      const done = answers.length === 1 ? 'Answer saved.' : `${answers.length} answers saved.`;
-      await afterChange(saved?.restored === true ? RESTORED_TOAST : saved?.reassessing === true ? `${done} The results are being updated.` : done);
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/answers`, { method: 'POST', json: payload });
+      for (const item of payload.answers) state.answers.delete(item.question_id);
+      await afterChange(payload.answers.length === 1 ? 'Answer sent. A new coding review has started.' : `${payload.answers.length} answers sent. A new coding review has started.`);
     } catch (error) {
-      showError('detailsError', error.message);
-      setBusy(button, false);
-    }
-  });
-}
-
-function revokeDetail(button) {
-  if (!state.doc) return undefined;
-  const answerId = button.dataset.answer;
-  return guarded(`revoke-detail:${answerId}`, async () => {
-    setBusy(button, true);
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/details/${encodeURIComponent(answerId)}/revoke`, { method: 'POST', json: {} });
-      await afterChange('The answer was withdrawn. You can answer again.');
-    } catch (error) {
-      toast(error.message);
-      setBusy(button, false);
-    }
-  });
-}
-
-// --- addendum: the physician's own documentation, as a new revision ---
-
-function openAddendum(detailId) {
-  const row = findDetail(detailId);
-  state.addendum = { detailId: row?.id || null };
-  $('#addendumQuestion').textContent = row ? text(row.prompt) : '';
-  $('#addendumQuestion').hidden = !row;
-  $('#addendumText').value = '';
-  $('#addendumAttestation').checked = false;
-  hideError('addendumError');
-  openDialog('addendumDialog');
-}
-
-function submitAddendum(event) {
-  event.preventDefault();
-  if (!state.doc || !state.addendum) return undefined;
-  const body = $('#addendumText').value;
-  if (!body.trim()) {
-    showError('addendumError', 'Write the addendum text.');
-    return undefined;
-  }
-  if (codePoints(body.trim()) > MAX_ADDENDUM_CHARS) {
-    showError('addendumError', 'An addendum can be at most 20,000 characters.');
-    return undefined;
-  }
-  if (!$('#addendumAttestation').checked) {
-    showError('addendumError', 'Confirm that the addendum is synthetic and contains no real patient information.');
-    return undefined;
-  }
-  return guarded('addendum', async () => {
-    const button = $('#saveAddendum');
-    setBusy(button, true);
-    hideError('addendumError');
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/addenda`, { method: 'POST', json: { text: body, clarification_id: state.addendum.detailId, synthetic_attestation: 'yes' } });
-      closeDialog('addendumDialog');
-      await afterChange('Addendum added as a new revision. Processing has started.');
-    } catch (error) {
-      showError('addendumError', error.message);
-    } finally {
+      showError('answersError', error.message);
       setBusy(button, false);
     }
   });
@@ -2039,30 +1684,11 @@ function setPasteMode(paste) {
   hideError('uploadError');
 }
 
-// The multipart body of one upload attempt, or the sentence that says what is missing.
-function uploadForm(fields, key) {
-  const form = new FormData();
-  if (fields.paste) {
-    if (!fields.text.trim()) return 'Paste the clinical text, or switch back to uploading a file.';
-    if (codePoints(fields.text) > MAX_PASTE_CHARS) return 'The pasted text is longer than 400,000 characters. Upload it as a file instead.';
-    form.append('text', fields.text);
-  } else {
-    if (!fields.file) return 'Choose a PDF, DOCX or TXT document, or paste the text instead.';
-    form.append('file', fields.file, fields.file.name);
-  }
-  if (fields.serviceDate && !parseIsoDate(fields.serviceDate)) return 'Enter the service date as a valid date, or leave it blank.';
-  if (!fields.attested) return 'Confirm that the document is synthetic and contains no real patient information.';
-  if (fields.serviceDate) form.append('service_date', fields.serviceDate);
-  form.append('synthetic_attestation', 'yes');
-  form.append('client_key', key);
-  return form;
-}
-
 async function submitUpload(event) {
   event.preventDefault();
   if (state.upload.busy) return;
   if (!state.upload.key) state.upload.key = newClientKey(randomBytes);
-  const form = uploadForm({ paste: state.upload.paste, text: $('#pasteText').value, file: state.upload.file, serviceDate: $('#serviceDate').value, attested: $('#syntheticAttestation').checked }, state.upload.key);
+  const form = uploadForm({ paste: state.upload.paste, text: $('#pasteText').value, file: state.upload.file, serviceDate: $('#serviceDate').value, insurance: $('#insurance').value, attested: $('#syntheticAttestation').checked }, state.upload.key);
   if (typeof form === 'string') {
     showError('uploadError', form);
     return;
@@ -2090,15 +1716,17 @@ async function submitUpload(event) {
   }
 }
 
-// --- stop, resume, export ---
+// --- stop, resume, retry, export ---
 
-function stopProcessing(button) {
-  if (!state.doc) return undefined;
-  return guarded('stop', async () => {
+function progressAction(action, button) {
+  const entry = PROGRESS_ACTIONS.find(([name]) => name === action);
+  if (!state.doc || !entry) return undefined;
+  const [, , address, , , , done] = entry;
+  return guarded(action, async () => {
     setBusy(button, true);
     try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/stop`, { method: 'POST', json: {} });
-      await afterChange('Stopping. Steps that have not started will not run.');
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/${address}`, { method: 'POST', json: {} });
+      await afterChange(done);
     } catch (error) {
       toast(error.message);
       setBusy(button, false);
@@ -2106,70 +1734,12 @@ function stopProcessing(button) {
   });
 }
 
-function requestRecheck(button) {
-  if (!state.doc) return undefined;
-  return guarded('recheck', async () => {
-    setBusy(button, true);
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/second-review`, { method: 'POST', json: {} });
-      await afterChange('Asked. The document review looks once more at what is still open.');
-    } catch (error) {
-      toast(error.message);
-      setBusy(button, false);
-    }
-  });
-}
-
-function resumeProcessing(button) {
-  if (!state.doc) return undefined;
-  return guarded('resume', async () => {
-    setBusy(button, true);
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/resume`, { method: 'POST', json: {} });
-      await afterChange('Processing resumed.');
-    } catch (error) {
-      toast(error.message);
-      setBusy(button, false);
-    }
-  });
-}
-
-// The recorded retry of a reading that could not be completed (the notice's "Try reading again"): one more attempt,
-// asked once; a refusal says why in the server's own words (processing runs, an earlier outcome is being confirmed,
-// reading is paused, the document is too long to be read in one piece ...).
-function retryReading(button) {
-  if (!state.doc) return undefined;
-  return guarded('retry-reading', async () => {
-    setBusy(button, true);
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/retry-reading`, { method: 'POST', json: {} });
-      await afterChange(RETRY_ASKED);
-    } catch (error) {
-      toast(error.message);
-      setBusy(button, false);
-    }
-  });
-}
-
-// The recorded retry of a failed update (FINAL-V2 amendment 1, 7.2: "Try updating again"): one more attempt, asked once;
-// a refusal says why in the server's own words.
-function retryUpdate(button) {
-  if (!state.doc) return undefined;
-  return guarded('retry-update', async () => {
-    setBusy(button, true);
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/retry-update`, { method: 'POST', json: {} });
-      await afterChange(RETRY_UPDATE_ASKED);
-    } catch (error) {
-      toast(error.message);
-      setBusy(button, false);
-    }
-  });
-}
-
+// The export dialog names the document and the coding review it was opened on: its options are built from them, and a
+// download names that coding review, so one that changed under the dialog is refused rather than made from another.
 function openExport() {
   if (!state.doc) return;
-  const readiness = state.doc.readiness || {};
+  state.exporting = { encounter: state.doc.id, round: roundNumber(state.doc) };
+  const readiness = record(state.doc.readiness);
   $('#exportStatus').classList.toggle('reviewed', readiness.approved === true);
   $('#exportStatus').textContent = exportStatusText(state.doc);
   $('#exportOptions').innerHTML = exportOptions(state.doc);
@@ -2187,15 +1757,19 @@ function startDownload(url, filename) {
   link.remove();
 }
 
+// POST reports {kind, fmt, round}: the round the export dialog was opened on. A refusal that says what is missing (its
+// readiness blockers) is shown in the dialog; any other conflict means the coding review changed under the dialog, so
+// the dialog closes and the page reads the document again and says so.
 function generateReport(kind, fmt) {
-  if (!state.doc) return undefined;
+  const exporting = state.exporting;
+  if (!exporting || exporting.round === null) return undefined;
   return guarded('export', async () => {
     const options = $$('#exportOptions .export-option');
     const enabled = options.filter(option => !option.disabled);
     enabled.forEach(option => setBusy(option, true));
     hideError('exportError');
     try {
-      const report = await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/reports`, { method: 'POST', json: { kind, fmt } });
+      const report = await api(`/api/encounters/${encodeURIComponent(exporting.encounter)}/reports`, { method: 'POST', json: { kind, fmt, round: exporting.round } });
       const url = safeDownloadUrl(report.download_url);
       if (!url) throw new ApiError('The download could not be started. Try again.');
       startDownload(url, report.filename);
@@ -2203,7 +1777,13 @@ function generateReport(kind, fmt) {
       refreshDocument();
     } catch (error) {
       const blockers = strings(error.details?.blockers);
-      showError('exportError', blockers.length ? `${error.message} ${blockers.join(' ')}` : error.message);
+      if (changedUnderPage(error) && !blockers.length) {
+        if (state.exporting === exporting) state.exporting = null;
+        closeDialog('exportDialog');
+        await afterConflict();
+      } else {
+        showError('exportError', blockers.length ? `${error.message} ${blockers.join(' ')}` : error.message);
+      }
     } finally {
       enabled.forEach(option => setBusy(option, false));
     }
@@ -2237,19 +1817,14 @@ function onClick(event) {
     location.hash = `doc/${open.dataset.open}`;
     return;
   }
-  const evidence = target.closest('[data-evidence]');
-  if (evidence) {
-    highlightEvidence(evidenceKeys(evidence));
+  const quote = target.closest('[data-quote]');
+  if (quote) {
+    showQuote(quote.dataset.quote);
     return;
   }
   const decision = target.closest('[data-decision]');
   if (decision) {
-    handleDecision(decision.dataset.decision, decision.dataset.proposal, decision);
-    return;
-  }
-  const choice = target.closest('[data-detail-choice]');
-  if (choice) {
-    chooseDetail(choice.dataset.detail, choice.dataset.detailChoice);
+    handleDecision(decision.dataset.decision, decision.dataset.line, decision);
     return;
   }
   const report = target.closest('[data-export-kind]');
@@ -2263,35 +1838,25 @@ function onClick(event) {
     upload: () => openUpload(),
     about: () => openDialog('aboutDialog'),
     export: openExport,
-    addendum: () => openAddendum(action.dataset.detail),
-    'use-document-date': () => chooseDetail(action.dataset.detail, USE_DOCUMENT),
-    'clear-date': () => chooseDetail(action.dataset.detail, CLEAR_DATE),
-    'save-details': () => saveDetails(action),
-    'revoke-detail': () => revokeDetail(action),
-    stop: () => stopProcessing(action),
-    resume: () => resumeProcessing(action),
-    'retry-reading': () => retryReading(action),
-    'retry-update': () => retryUpdate(action),
-    recheck: () => requestRecheck(action),
+    'send-answers': () => sendAnswers(action),
+    stop: () => progressAction('stop', action),
+    resume: () => progressAction('resume', action),
+    retry: () => progressAction('retry', action),
     reload: () => location.reload(),
-    retry: route,
+    'reload-view': route,
   })[action.dataset.action]?.();
-}
-
-function onChange(event) {
-  const input = event.target;
-  if (input.matches?.('.detail-row input[type="radio"]')) chooseDetail(input.dataset.detail, input.value);
-  else if (input.matches?.('input[data-detail-input]')) enterDetailDate(input);
 }
 
 function onInput(event) {
   const input = event.target;
   if (input.id === 'documentSearch') applySearch();
-  else if (input.matches?.('input[data-detail-input]')) enterDetailDate(input);
-  else if (['pasteText', 'serviceDate'].includes(input.id)) forgetAttemptKey();
+  else if (input.matches?.('textarea[data-answer]')) {
+    state.answers.set(input.dataset.answer, input.value);
+    hideError('answersError');
+  } else if (['pasteText', 'serviceDate', 'insurance'].includes(input.id)) forgetAttemptKey();
 }
 
-// The open "Why this code?" and other disclosures survive a refresh of the page's data.
+// The open History disclosure survives a refresh of the page's data.
 function onToggle(event) {
   const element = event.target;
   if (!(element instanceof HTMLDetailsElement) || !element.dataset.key) return;
@@ -2306,14 +1871,14 @@ function onKeydown(event) {
 function bindDialogs() {
   $('#uploadForm').addEventListener('submit', submitUpload);
   $('#reviewForm').addEventListener('submit', submitReview);
-  $('#addendumForm').addEventListener('submit', submitAddendum);
   $('#uploadFile').addEventListener('change', event => setUploadFile(event.target.files?.[0]));
+  $('#insurance').addEventListener('change', forgetAttemptKey);
   $('#clearFile').addEventListener('click', () => setUploadFile(null));
   $('#pasteToggle').addEventListener('click', () => {
     setPasteMode(!state.upload.paste);
     (state.upload.paste ? $('#pasteText') : $('#uploadFile')).focus();
   });
-  $('#reviewAcknowledgement').addEventListener('change', event => { $('#saveReview').disabled = !event.target.checked; });
+  $('#reviewAckBox').addEventListener('change', event => { $('#saveReview').disabled = !event.target.checked; });
   $('#uploadDialog').addEventListener('cancel', event => { if (state.upload.busy) event.preventDefault(); });
 }
 
@@ -2340,15 +1905,9 @@ function bindDragAndDrop() {
 
 function boot() {
   document.addEventListener('click', onClick);
-  document.addEventListener('change', onChange);
   document.addEventListener('input', onInput);
   document.addEventListener('keydown', onKeydown);
   document.addEventListener('toggle', onToggle, true);
-  let pageFrame = 0;
-  document.addEventListener('scroll', event => {
-    if (event.target.id !== 'sourceScroll' || pageFrame) return;
-    pageFrame = requestAnimationFrame(() => { pageFrame = 0; updatePageNumber(); });
-  }, true);
   bindDialogs();
   bindDragAndDrop();
   $('#menuButton').addEventListener('click', () => {
@@ -2370,28 +1929,19 @@ function boot() {
 
 if (typeof module === 'object' && module.exports) {
   module.exports = {
-    escapeHtml, lookup, parseIsoDate, formatDate, formatTimestamp, readCookie, safeDownloadUrl, safeOriginalUrl, pollDelay,
-    parseRoute, isClientOutdated, errorText, newClientKey, durationText, clockOffset, elapsedText, codeUnitOffsets, mergeSpans,
-    pageRanges, paragraphRanges, paragraphPieces, layoutDocument, progressPhase, shouldPoll, codeStatus, rowSubLabel, unitsLabel,
-    modifierLabel, reviewModifierOptions, hasAgentDecision, attestationText, tallyText, exportStatusText, serviceDateText,
-    documentRow, listBody, listDescription, inviteMarkup, overviewView, documentsView, howItWorksView, inQueue, uploadAck, ackView,
-    documentLayout, sourcePanel, reviewMeta, progressPanel, checksPanel, detailsPanel, detailRow, questionPassages, earlierAnswers, detailAnswers, answerable, resultRow, resultList,
-    resultsSection, whyThisCode, decisionLine, reviewBar, notSeparatelyCoded, otherCodes, notesSection, recheckOffer, activityLog, reviewView,
-    exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES, RECHECK_LABEL, RECHECK_NOTE, QUEUED_AFTER_DONE_TITLE,
-    STEP_KEYS, CHECK_KEYS, MODIFIER_CHOICES, ERROR_ACTIONS, RETRY_ASKED, emptyResults, retryReading, onClick,
-    // FINAL-V2 amendment 1 (step 5d)
-    updateOf, updateRunning, updateIsCheck, updateTitle, updateSaved, updateExportNote, updateResultsText, earlierCodesSection,
-    earlierRow, whatChangedSection, earlierDecisions, reportItem, rowEditable, retryUpdate, saveDetails, onInput, onChange,
-    chooseDetail, enterDetailDate, PHASES, PHASE_TITLES, STATE_LABELS, RETRY_UPDATE_ASKED, UPDATE_STATES,
-    // step 5d round 2: a choice row saved "Not documented" while an update is pending; the redraw key of a read
-    valueOverAnswer, renderKey, renderDocument,
-    TEXTS: {
-      UPDATE_TITLE, UPDATE_TITLE_CHECK, CHANGE_SAVED_BY, EARLIER_CODES_HEADING, EARLIER_CODES_HEADING_CHECK, EARLIER_CODES_MADE,
-      EARLIER_CODES_MADE_CHECK, ANSWER_AFTER_UPDATE, UPDATE_EXPORT_NOTE, UPDATE_EXPORT_NOTE_CHECK, RESULTS_UPDATING, RESULTS_NOT_UPDATED,
-      RESULTS_EARLIER_SHOWN, RESULTS_NO_EARLIER_CODE, TALLY_BEFORE, TALLY_NO_EARLIER_CODE, RESULTS_UPDATING_CHECK, RESULTS_NOT_UPDATED_CHECK,
-      RESULTS_EARLIER_SHOWN_CHECK, RESULTS_NO_EARLIER_CODE_CHECK, TALLY_BEFORE_CHECK, TALLY_NO_EARLIER_CODE_CHECK, RESTORED_TOAST,
-      WHAT_CHANGED_COMPARED, WHAT_CHANGED_UNCHANGED, WHAT_CHANGED_UNCHANGED_ONE, EARLIER_DOWNLOAD, RETRY_UPDATE_ASKED,
-    },
+    escapeHtml, lookup, parseIsoDate, formatDate, formatTimestamp, readCookie, safeDownloadUrl, safeOriginalUrl, safeViewUrl,
+    pollDelay, parseRoute, isClientOutdated, errorText, newClientKey, durationText, clockOffset, elapsedText, findPassage,
+    canReview, stateLabel, codesOf, lineOf, roundNumber, findLine, questionsOf, answersOf, notesOf, progressPhase, isBusy,
+    shouldPoll, codeStatus, currentDecision, shownStatus, unitsLabel, modifiersLabel, lineDetail, secondCheck, quotesOf,
+    quoteKey, viewerUrl, viewerKind, allowedActions, decisionTarget, decisionBody, answersPayload, insuranceLabel,
+    insuranceText, tallyText, exportOffered, readinessText, exportStatusText, emptyCodesText, documentRow, inQueue, listBody,
+    listDescription, inviteMarkup, overviewView, documentsView, howItWorksView, messageView, uploadAck, ackView, reviewMeta,
+    reviewHeading, viewerPanel, quotesPanel, progressSteps, progressPanel, questionsPanel, answersPanel, codeRow,
+    codesSection, notesPanel, activityLog, reviewColumn, reviewView, reportItem, exportOptions, uploadForm, renderKey,
+    viewerKey, api, sendAnswers, submitReview, handleDecision, progressAction, onClick, onInput, showQuote, state,
+    STATE_LABELS, CODE_STATUSES, DECISIONS, ACTION_BUTTONS, PHASES, PHASE_TITLES, STEP_KEYS, STEP_LABELS, PROGRESS_ACTIONS,
+    INSURANCE_CHOICES, QUEUE_STATES, OUTDATED_TEXT, CHANGED_TEXT, UNITS_NOT_GIVEN, MODIFIERS_NOT_GIVEN, CLIENT_HEADER,
+    CLIENT_VERSION, MAX_ANSWER_CHARS, CONVERTED_NOTE, REVIEW_AGAIN,
   };
 }
 if (typeof document !== 'undefined') boot();

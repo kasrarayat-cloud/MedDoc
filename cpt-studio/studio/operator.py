@@ -1,53 +1,62 @@
-"""Platform-operator diagnostics (CORE-UX-DESIGN.md 5; R4-api-leak-surface 6.2, 6.4).
+"""The platform-operator console (BUILD-SPEC 9): server-rendered pages under /ops/.
 
 An operator is a user holding an OperatorGrant that no OperatorRevocation ended - nothing else. No workspace role
 confers it (a practice owner is not an operator) and nothing here reads a Membership to decide it. Grants are recorded
 by the ``grant_operator`` management command only, never over HTTP.
 
 Every URL under /ops/ answers anyone who is not an operator - signed out, a member of any role, the owner of any
-workspace, a revoked operator - exactly what an unknown URL answers (Django's 404), so the surface's existence is not
-disclosed (access.py's policy, never a 403). For an operator they serve the complete provenance the customer surface
-leaves out: today's full encounter serializer (studio.serializers), the administrative trace, every report artifact
-as stored with its sha256, the original with its sha256, the operator report and the reconciliation of an unknown
-outcome. An operator's page and API reads of an encounter are audited as ``operator.viewed`` (never shown to
-customers: their activity is an allowlist, customer_api.ACTIVITY).
+workspace, a revoked operator - exactly what an unknown URL answers (Django's 404), before the method, the body, the
+CSRF token or any record is read, so the surface's existence is not disclosed. An operator's read of an encounter page
+or its original is audited as ``operator.viewed`` (never shown to customers: their activity is a fixed set of sentences,
+studio.customer). Vendor and model names, usage, costs, hashes and request ids are shown here; this is the record.
 
-The Gemini migration (design/FINAL.md 8.3, 11.2-11.3): the console also shows the interpreter hold's state on its
-session, offers the recorded retry of a failed reading (retry_reading: the operator may override the refusal of an
-answer cut off at its output limit, C5, which the audit row records) and the recorded release of the hold (interpreter,
-holds.release: the same act as ``manage.py interpreter_hold --release``). The encounter detail carries each
-assessment's interpretation section (serializers).
+    GET  /ops/                               every encounter of every workspace (title, workspace, state, rounds,
+                                             latest round's cost, updated) and the standing holds, with their release
+    GET  /ops/encounters/<id>                its rounds (trigger, state, failure, cost, context), each run (models, served
+                                             by a fallback, tokens, cost, latency, state, ids), the reader's and the
+                                             checker's whole answers, the final codes, every review of the checker that
+                                             belongs to no line (in full, with the lines it reaches), decisions,
+                                             answers, audit events, and the original with its sha256
+    GET  /ops/encounters/<id>/original       the original exactly as stored, with its sha256
+    POST /ops/encounters/<id>/reconcile      the reconciliation of an unknown run: run, note (at least 12 characters)
+    POST /ops/encounters/<id>/retry          a new round of a failed latest round (jobs.retry)
+    POST /ops/holds/release                  every standing hold released: note (jobs.release_holds)
 
-The operator console is today's website, frozen: ``studio/operator/ops.js`` (a copy of ``studio/static/studio/app.js``
-with its API base switched to /ops/api/) and ``studio/operator/ops.css`` (a copy of its stylesheet), served by a gated
-view and never from ``static/`` (WhiteNoise serves that tree to anyone). It is read-only but for the operator report
-and the reconciliation: the customer actions (decisions, context, addenda, stop, resume, the second review) are not
-under /ops/, so the console's buttons for them answer 404 there.
+Every POST carries the CSRF token (checked after the gate, for operators only) and answers with a redirect to the page
+it came from, or that page again with the refusal and a 4xx status.
 """
+from __future__ import annotations
+
 import functools
+import json
 import re
-from dataclasses import dataclass
 from datetime import timedelta
+from decimal import Decimal
 from importlib import import_module
-from pathlib import Path
 
 from django.conf import settings
-from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import Http404, HttpResponse, JsonResponse
+from django.core.exceptions import ValidationError
+from django.db.models import Count
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_protect
 
-from . import audit, models
+from . import audit, jobs, models, state
+from .fable import pricing
+from .fable import result as fable_result
+from .storage import OriginalCorrupted, read_original
 
-ASSETS = Path(__file__).resolve().parent / 'operator'
-ASSET_TYPES = {'ops.js': 'text/javascript; charset=utf-8', 'ops.css': 'text/css; charset=utf-8'}
 VIEWED = 'operator.viewed'
-# One audit row per operator, encounter and view within this window: the console polls an encounter that is
-# processing, and each poll is not a new act of looking.
+# One audit row per operator, encounter and view within this window: a page reloaded is not a new act of looking.
 VIEW_AUDIT_WINDOW = timedelta(minutes=10)
 MAX_REASON_CHARS = 2000
+MAX_NOTE_CHARS = 2000
+LIST_LIMIT = 200
+ANSWER_TEXT_CHARS = 400_000  # a run's stored answer shown at most this long
 UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
+DONE = {'reconciled': 'The reconciliation was recorded.', 'retried': 'A new coding round was queued.',
+        'released': 'The standing holds were released.'}
 
 
 # --- who is an operator -------------------------------------------------------------------------------------------
@@ -101,25 +110,6 @@ def revoke(user, reason, revoked_by):
     return out
 
 
-@dataclass(frozen=True)
-class ReadOnlyAccess:
-    """What the operator serializer is given in place of a membership for an operator who is not a member of the
-    encounter's workspace: it allows no review action, no stop or resume and no second-review ask."""
-    user_id: object
-    workspace_id: object
-    active: bool = True
-    role: str = 'operator'
-    can_review: bool = False
-
-
-def access_for(user, encounter):
-    """The operator's own active membership of the encounter's workspace when they hold one - the payload is then what
-    serializers.encounter_detail always gave that member - else read-only access."""
-    membership = (models.Membership.objects.select_related('workspace').filter(
-        user=user, workspace_id=encounter.workspace_id, active=True).first())
-    return membership or ReadOnlyAccess(user_id=user.pk, workspace_id=encounter.workspace_id)
-
-
 def record_view(user, encounter, view, **data):
     """Audit an operator's read of ``encounter`` as operator.viewed - once per operator, encounter and view within
     VIEW_AUDIT_WINDOW."""
@@ -135,23 +125,17 @@ def record_view(user, encounter, view, **data):
 def _as_an_unknown_url(request):
     """Leave ``request``'s session exactly as an unknown URL leaves it - never read: the gate had to read it to know the
     user, and SessionMiddleware answers a request whose session was read with "Vary: Cookie" (and deletes a stale
-    session cookie it loaded), which an unknown URL's 404 never carries. So the session is handed back unread, keyed by
-    the cookie the request brought, as SessionMiddleware made it."""
+    session cookie it loaded), which an unknown URL's 404 never carries."""
     if hasattr(request, 'session'):
         store = import_module(settings.SESSION_ENGINE).SessionStore
         request.session = store(request.COOKIES.get(settings.SESSION_COOKIE_NAME))
 
 
 def operator_view(view):
-    """Anyone who is not an operator gets exactly what an unknown URL gets - Django's 404, its body and its headers -
-    before the method, the body, the CSRF token or the record is read; an operator gets the view.
-
-    Refutation round 2, L4-2 and L4-3: Django resolves a URL before CsrfViewMiddleware runs, and an unknown URL stops
-    there, so a CSRF check run before this gate answered every non-operator's POST to a real route 403 where an unknown
-    URL answers 404; reading the session for the gate added "Vary: Cookie"; and CommonMiddleware redirected /ops to
-    /ops/. So the global CSRF check is skipped here (csrf_exempt) and the same check (csrf_protect) runs after the gate,
-    for operators only - their writes still need the token -, the session is handed back unread to a non-operator, and
-    no operator URL is reached by appending a slash."""
+    """Anyone who is not an operator gets exactly what an unknown URL gets - Django's 404 - before the method, the body,
+    the CSRF token or the record is read; an operator gets the view. Django resolves a URL before CsrfViewMiddleware runs
+    and an unknown URL stops there, so the global CSRF check is skipped here (csrf_exempt) and the same check
+    (csrf_protect) runs after the gate, for operators only; no operator URL is reached by appending a slash."""
     protected = csrf_protect(view)
 
     @functools.wraps(view)
@@ -170,215 +154,187 @@ def _methods(*allowed):
         @functools.wraps(view)
         def wrapper(request, *args, **kwargs):
             if request.method not in allowed:
-                return JsonResponse({'error': 'Method not allowed.'}, status=405, headers={'Allow': ', '.join(allowed)})
+                return HttpResponse(status=405, headers={'Allow': ', '.join(allowed)})
             return view(request, *args, **kwargs)
         return wrapper
     return decorate
 
 
-def operator_api(*allowed):
-    """An operator JSON endpoint: the gate first (operator_view), then the method, then the API's error handling with the
-    full wording (this is the diagnostics surface: an operator reads what the stage or the adapter said)."""
-    from .api import ApiError  # local import: api imports the customer layer, which imports this module
-
-    def decorate(view):
-        @functools.wraps(view)
-        def handled(request, *args, **kwargs):
-            try:
-                return view(request, *args, **kwargs)
-            except ApiError as exc:
-                return JsonResponse({'error': exc.message, 'details': exc.details}, status=exc.status)
-            except Http404:
-                return JsonResponse({'error': 'Not found.'}, status=404)
-            except PermissionDenied as exc:
-                return JsonResponse({'error': str(exc) or 'Not allowed.'}, status=403)
-            except ValidationError as exc:
-                return JsonResponse({'error': ' '.join(exc.messages)}, status=409)
-            except RecursionError:
-                return JsonResponse({'error': 'The request is nested too deeply.'}, status=400)
-            except _sentinel().Tripped as exc:  # a new-path write the legacy-call sentinel refused (FINAL 10.3)
-                return JsonResponse({'error': str(exc), 'details': {'reason': exc.reason}}, status=409)
-        return operator_view(_methods(*allowed)(handled))
-    return decorate
-
-
-def _sentinel():
-    from .interpretation import sentinel  # local import: the operator module loads before the interpretation package
-    return sentinel
-
-
 def _encounter(encounter_id):
     try:
-        return models.Encounter.objects.select_related('workspace', 'workspace__category', 'created_by').get(
+        return models.Encounter.objects.select_related('workspace', 'created_by', 'current_revision').get(
             pk=encounter_id)
     except (models.Encounter.DoesNotExist, ValueError, TypeError, ValidationError):
         raise Http404()
 
 
-# --- the console --------------------------------------------------------------------------------------------------
-
-@operator_view
-@ensure_csrf_cookie
-def index(request):
-    if request.method != 'GET':
-        return HttpResponse(status=405, headers={'Allow': 'GET'})
-    return render(request, 'studio/ops.html', {'release': settings.RELEASE_SHA})
-
-
-def _asset(name):
-    @operator_view
-    def serve(request):
-        if request.method != 'GET':
-            return HttpResponse(status=405, headers={'Allow': 'GET'})
-        try:
-            data = (ASSETS / name).read_bytes()
-        except OSError:
-            raise Http404()
-        return HttpResponse(data, content_type=ASSET_TYPES[name])
-    serve.__name__ = f'asset_{name.replace(".", "_")}'
-    return serve
-
-
-script = _asset('ops.js')
-stylesheet = _asset('ops.css')
-
-
-@operator_api('GET')
-def session(request):
-    """The console's session, in the shape of serializers.session_json (the console reads it as the website did): the
-    operator, no workspace of their own, nothing to review."""
-    from . import serializers
-    from .gi.profiles import CATEGORY_NAME, CATEGORY_SLUG, PROFILES_VERSION
-
-    from .interpretation import holds
-
-    user = request.user
-    return JsonResponse({
-        'user': serializers.user_json(user),
-        'workspace': {'id': '', 'name': 'Operator diagnostics', 'subtitle': 'Every synthetic workspace, read-only',
-                      'category': {'slug': CATEGORY_SLUG, 'name': CATEGORY_NAME, 'profiles_version': PROFILES_VERSION}},
-        'role': 'operator', 'can_review': False, 'acknowledgement': '',
-        'counts': {'documents': models.Encounter.objects.count(), 'queue': 0},
-        'synthetic_only': settings.SYNTHETIC_ONLY, 'provider_mode': settings.PROVIDER_MODE,
-        'release': settings.RELEASE_SHA,
-        # the interpreter hold (FINAL 11.2): installation-wide, with this web process's own mode beside it
-        'interpreter': holds.state(),
-    })
-
-
-@operator_api('GET')
-def encounters(request):
-    """Every encounter of every workspace (``?workspace=<uuid>`` narrows it), newest first: the operator serializer's
-    list row, its workspace and how many provider runs it recorded."""
-    from . import serializers
-    from .interpretation import readers
-
-    rows = models.Encounter.objects.select_related('workspace', 'current_revision', 'current_context',
-                                                   'current_assessment').order_by('-created_at')
-    workspace = request.GET.get('workspace')
-    if workspace:
-        try:
-            rows = rows.filter(workspace_id=workspace)
-            list(rows[:1])
-        except (ValueError, ValidationError):
-            from .api import ApiError
-            raise ApiError(400, 'workspace must be a workspace id.')
-    # R-6: each encounter's row read under its own label (readers.labelled), in a request that names no encounter
-    return JsonResponse({'encounters': [
-        {**readers.labelled(serializers.encounter_summary, encounter),
-         'workspace': {'id': str(encounter.workspace_id), 'name': encounter.workspace.name},
-         'provider_runs': encounter.provider_runs.count()} for encounter in rows]})
-
-
-@operator_api('GET')
-def encounter_detail(request, encounter_id):
-    """Today's full serializers.encounter_detail: the harness, every provider run, the activity with its data."""
-    from . import serializers
-
-    encounter = _encounter(encounter_id)
-    payload = serializers.encounter_detail(encounter, access_for(request.user, encounter))
-    record_view(request.user, encounter, 'detail')
-    return JsonResponse(payload)
-
-
-@operator_api('GET')
-def trace(request, encounter_id):
-    """The administrative trace of the current revision (HARNESS.md 7): each participant's runs and full readings, the
-    retrieval traces and the reconciliation table (serializers.trace_json)."""
-    from . import serializers
-
-    encounter = _encounter(encounter_id)
-    payload = serializers.trace_json(encounter)
-    record_view(request.user, encounter, 'trace')
-    return JsonResponse(payload)
-
-
-def report_row(report):
-    return {'id': str(report.pk), 'audience': report.audience, 'kind': report.kind, 'fmt': report.fmt,
-            'filename': report.filename, 'sha256': report.sha256, 'snapshot_sha256': report.snapshot_sha256,
-            'generated_by': report.generated_by.label(),
-            'generated_at': report.generated_at.isoformat() if report.generated_at else None,
-            'download_url': f'/ops/api/reports/{report.pk}/download'}
-
-
-@operator_api('GET', 'POST')
-def encounter_reports(request, encounter_id):
-    """GET: every report artifact of the encounter - customer and operator, legacy included - with its audience and
-    hashes. POST ``{"kind": "draft"|"reviewed", "fmt": "txt"|"csv"}``: the operator's full report (format
-    cpt-studio-report@4, reports.generate), under the readiness the reviewed report has always needed."""
-    from . import reports, review, serializers
-    from .api import ApiError, _payload
-
-    encounter = _encounter(encounter_id)
-    if request.method == 'GET':
-        payload = {'reports': [report_row(r) for r in encounter.reports.select_related('generated_by')
-                               .order_by('-generated_at', '-pk')]}
-        record_view(request.user, encounter, 'reports')
-        return JsonResponse(payload)
-    data = _payload(request)
-    kind, fmt = str(data.get('kind', '')), str(data.get('fmt', ''))
-    if kind not in {models.ReportArtifact.DRAFT, models.ReportArtifact.REVIEWED} or fmt not in {'txt', 'csv'}:
-        raise ApiError(400, 'Choose a draft or reviewed report as TXT or CSV.')
-    if encounter.current_assessment_id is None:
-        raise ApiError(409, 'There is nothing to report yet.')
-    if kind == models.ReportArtifact.REVIEWED:
-        ready = review.readiness(encounter)
-        if not ready['reviewed']:
-            raise ApiError(409, 'The reviewed report is not available yet.', blockers=ready['blockers'])
-    try:
-        report = reports.generate(encounter, kind, fmt, request.user, operator=True)
-    except ValueError as exc:
-        raise ApiError(409, str(exc))
-    return JsonResponse(serializers._report_json(report), status=201)
-
-
-@operator_api('GET')
-def download_report(request, report_id):
-    """Any artifact - a customer's, an operator's, one recorded before the audience existed - exactly as stored, with its
-    sha256 (rollback evidence: nothing is ever re-rendered)."""
-    try:
-        report = models.ReportArtifact.objects.select_related('encounter__workspace').get(pk=report_id)
-    except (models.ReportArtifact.DoesNotExist, ValueError, ValidationError):
-        raise Http404()
-    content = bytes(report.content)
-    content_type = 'text/csv; charset=utf-8' if report.fmt == 'csv' else 'text/plain; charset=utf-8'
-    response = HttpResponse(content, content_type=content_type)
-    response['Content-Disposition'] = f'attachment; filename="{report.filename}"'
-    response['X-Content-SHA256'] = report.sha256
-    record_view(request.user, report.encounter, 'download', report=str(report.pk))
+def _see_other(url):
+    response = HttpResponseRedirect(url)
+    response.status_code = 303
     return response
 
 
-@operator_api('GET')
+def _pretty(value) -> str:
+    return json.dumps(value, indent=1, ensure_ascii=False, sort_keys=True, default=str)
+
+
+# --- what the pages show --------------------------------------------------------------------------------------------
+
+def round_runs(round_):
+    return list(models.ProviderRun.objects.filter(purpose__in=jobs.PURPOSES, scope__round=str(round_.pk))
+                .select_related('reconciled_by').order_by('created_at', 'pk'))
+
+
+def runs_cost(runs):
+    """(the priced cost of ``runs`` as a string, how many could not be priced)."""
+    total, unpriced = Decimal(0), 0
+    for run in runs:
+        cost = jobs.run_cost(run)
+        if cost is None:
+            unpriced += int(bool(run.sent))
+        else:
+            total += cost
+    return pricing.usd(total), unpriced
+
+
+def _answer_text(run) -> str:
+    """The run's whole stored answer as text: the message's text blocks, or the stored bytes when they are no message."""
+    if not run.response_bytes:
+        return ''
+    try:
+        text = fable_result.message_text(jobs.stored_message(run))
+    except ValueError:
+        text = bytes(run.response_bytes).decode('utf-8', 'replace')
+    return text[:ANSWER_TEXT_CHARS]
+
+
+def _tokens(usage) -> dict:
+    usage = usage if isinstance(usage, dict) else {}
+    keys = ('input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens')
+    iterations = usage.get('iterations') if isinstance(usage.get('iterations'), list) else []
+    return {**{key: usage.get(key) for key in keys}, 'iterations': len(iterations)}
+
+
+def run_view(run) -> dict:
+    scope = run.scope if isinstance(run.scope, dict) else {}
+    cost = jobs.run_cost(run)
+    return {'run': run, 'role': {jobs.READER: 'reader', jobs.CHECKER: 'checker'}.get(run.purpose, run.purpose),
+            'fallback': bool(scope.get('fallback')), 'tokens': _tokens(run.usage),
+            'cost': pricing.usd(cost) if cost is not None else None, 'worst_usd': scope.get('worst_usd'),
+            'counted_input_tokens': scope.get('input_tokens_counted'), 'stop_reason': scope.get('stop_reason'),
+            'failure_kind': scope.get('failure_kind'), 'error_type': scope.get('error_type'),
+            'can_reconcile': run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is None,
+            'answer': _answer_text(run), 'request': _pretty(run.request_body)}
+
+
+def round_view(round_) -> dict:
+    runs = round_runs(round_)
+    cost, unpriced = runs_cost(runs)
+    context = round_.context if isinstance(round_.context, dict) else {}
+    return {'round': round_, 'service_date': context.get('service_date'), 'insurance': context.get('insurance'),
+            'answers': context.get('answers') if isinstance(context.get('answers'), list) else [],
+            'cost': cost, 'unpriced': unpriced, 'runs': [run_view(run) for run in runs],
+            # modifiers the coding review did not give stay None (shown "not given", FIX-SPEC 2), never read as none
+            'codes': [{**code, 'modifiers': code.get('modifiers') if isinstance(code.get('modifiers'), list) else None}
+                      for code in round_.codes or () if isinstance(code, dict)],
+            'questions': [item for item in round_.questions or () if isinstance(item, dict)],
+            # every review of a done round that belongs to no line, in full (FIX-SPEC-2 section 3): fable.result's own
+            # placement over the round's stored lines
+            'unmatched': [{'number': item['number'], 'reaches': item['reaches'], 'json': _pretty(item['review'])}
+                          for item in (fable_result.unmatched_reviews(round_.codes, round_.checker_result)
+                                       if round_.state == models.CodingRound.DONE else ())],
+            'problems': [item for item in round_.problems or () if isinstance(item, str)],
+            'citations': _pretty(round_.citations or {}), 'reader_result': _pretty(round_.reader_result),
+            'checker_result': _pretty(round_.checker_result)}
+
+
+def holds_view():
+    return [{'hold': hold, 'run': hold.run} for hold in jobs.standing_holds().select_related('run')]
+
+
+def encounter_view(encounter, **extra) -> dict:
+    rounds = list(models.CodingRound.objects.filter(encounter_id=encounter.pk).order_by('-number'))
+    latest = rounds[0] if rounds else None
+    source = encounter.files.order_by('uploaded_at', 'pk').first()
+    revision = encounter.current_revision
+    events = [{'event': event, 'data': _pretty(event.data)}
+              for event in encounter.audit_events.select_related('actor').order_by('created_at', 'pk')]
+    failed = latest is not None and latest.state == models.CodingRound.FAILED
+    # a send of the failed round that may have reached the vendor with no outcome known waits for the reconcile first:
+    # jobs.retry refuses it until then (FIX-SPEC 4), so the retry is not offered
+    waits = failed and jobs.awaiting_reconcile(latest)
+    return {'encounter': encounter, 'state_label': state.label(encounter.state) if latest else 'Earlier review',
+            'source': source, 'revision': revision,
+            'pasted_chars': len(revision.pasted_text or '') if revision is not None and source is None else None,
+            'rounds': [round_view(round_) for round_ in rounds],
+            'can_retry': failed and not jobs.busy(encounter) and not waits, 'retry_waits': waits,
+            'decisions': list(models.CodeDecision.objects.filter(encounter_id=encounter.pk)
+                              .select_related('reviewer', 'round').order_by('sequence')),
+            'answers': list(models.CodingAnswer.objects.filter(encounter_id=encounter.pk)
+                            .select_related('answered_by', 'round').order_by('answered_at', 'pk')),
+            'events': events, 'holds': holds_view(), 'release': settings.RELEASE_SHA,
+            'note_chars': jobs.RECONCILE_NOTE_CHARS, **extra}
+
+
+def _note(request, limit=MAX_NOTE_CHARS) -> str:
+    note = request.POST.get('note', '')
+    if UNSTORABLE.search(note):
+        raise jobs.Refused('The note contains a NUL character or an invalid Unicode code point.')
+    if len(note) > limit:
+        raise jobs.Refused(f'The note can be at most {limit:,} characters.')
+    return note
+
+
+# --- the pages ------------------------------------------------------------------------------------------------------
+
+@operator_view
+@_methods('GET')
+def index(request):
+    return _index_page(request, done=DONE.get(request.GET.get('done', '')))
+
+
+def _index_page(request, *, error=None, done=None, status=200):
+    rows = []
+    encounters = (models.Encounter.objects.select_related('workspace').annotate(rounds_count=Count('rounds'))
+                  .order_by('-updated_at')[:LIST_LIMIT])
+    for encounter in encounters:
+        latest = state.latest_round(encounter)
+        cost, unpriced = runs_cost(round_runs(latest)) if latest is not None else (None, 0)
+        rows.append({'encounter': encounter, 'latest': latest, 'cost': cost, 'unpriced': unpriced,
+                     'state_label': state.label(encounter.state) if latest is not None else 'Earlier review'})
+    return render(request, 'studio/ops_index.html', {
+        'rows': rows, 'total': models.Encounter.objects.count(), 'limit': LIST_LIMIT, 'holds': holds_view(),
+        'error': error, 'done': done, 'release': settings.RELEASE_SHA, 'mode': settings.CODING_MODE},
+        status=status)
+
+
+@operator_view
+@_methods('GET')
+def encounter_page(request, encounter_id):
+    encounter = _encounter(encounter_id)
+    response = render(request, 'studio/ops_encounter.html',
+                      encounter_view(encounter, done=DONE.get(request.GET.get('done', ''))))
+    record_view(request.user, encounter, 'detail')
+    return response
+
+
+def _refused(request, encounter, message, status):
+    return render(request, 'studio/ops_encounter.html', encounter_view(encounter, error=message), status=status)
+
+
+@operator_view
+@_methods('GET')
 def original(request, encounter_id):
     """The original upload exactly as stored, with its sha256."""
-    from .storage import read_original
-
     encounter = _encounter(encounter_id)
-    source = encounter.files.order_by('uploaded_at').first()
+    source = encounter.files.order_by('uploaded_at', 'pk').first()
     if source is None:
         raise Http404()
-    data = read_original(source)
+    try:
+        data = read_original(source)
+    except (OriginalCorrupted, OSError):
+        return HttpResponse('The stored original no longer matches its recorded sha256 or cannot be read.',
+                            status=409, content_type='text/plain; charset=utf-8')
     response = HttpResponse(data, content_type=source.media_type)
     safe_name = re.sub(r'[^A-Za-z0-9._-]+', '_', source.original_name)[:120] or 'original'
     response['Content-Disposition'] = f'attachment; filename="{safe_name}"'
@@ -387,69 +343,45 @@ def original(request, encounter_id):
     return response
 
 
-@operator_api('POST')
-def retry_reading(request, encounter_id):
-    """The recorded retry of a failed reading, from the console (design/FINAL.md 11.3; jobs.retry_reading): ``{"override":
-    true|false}``. ``override`` is the operator's recorded override of the refusal of an answer cut off at its output
-    limit (C5: a member is never offered that paid retry); the audit row 'interpretation.retry' records it. 409 with
-    the reason otherwise refused."""
-    from . import jobs
-    from .api import ApiError, _payload
-
-    data = _payload(request)
-    encounter = _encounter(encounter_id)
-    override = data.get('override', False)
-    if not isinstance(override, bool):
-        raise ApiError(400, 'override must be true or false.')
-    try:
-        job = jobs.retry_reading(encounter, request.user, override=override)
-    except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
-    return JsonResponse({'retrying': True, 'job': str(job.pk), 'override': override}, status=201)
-
-
-@operator_api('GET', 'POST')
-def interpreter(request):
-    """The interpreter hold (design/FINAL.md 11.2; interpretation.holds): GET its state - every standing hold,
-    installation-wide, and this web process's own mode (a worker's mode is the worker's); POST ``{"note"}`` releases
-    every standing hold, each with an InterpreterHoldRelease naming this operator and the note (holds.release, the same
-    act as ``manage.py interpreter_hold --release``). Members then Resume."""
-    from .api import ApiError, _payload, _text_field
-    from .interpretation import holds
-
-    if request.method == 'GET':
-        return JsonResponse(holds.state())
-    data = _payload(request)
-    try:
-        released = holds.release(user=request.user, note=_text_field(data, 'note', 'The release note'))
-    except ValueError as exc:
-        raise ApiError(400, str(exc))
-    except PermissionError as exc:
-        raise ApiError(403, str(exc))
-    return JsonResponse({'released': [str(item.hold_id) for item in released], **holds.state()}, status=201)
-
-
-@operator_api('POST')
+@operator_view
+@_methods('POST')
 def reconcile(request, encounter_id):
-    """Record the reconciliation of one unknown outcome (``{"provider_run_id", "note"}``, the note at least 12
-    characters) and release one new attempt (jobs.reconcile): operator work, since deciding whether a vendor received a
-    request needs the vendor's request id, which only an operator may see."""
-    from . import jobs
-    from .api import ApiError, _identifier, _payload, _text_field
-
-    data = _payload(request)
+    """Record the reconciliation of one unknown run (jobs.reconcile): who looked, when and what they found. It queues
+    nothing; a retry starts a new round."""
     encounter = _encounter(encounter_id)
-    note = _text_field(data, 'note', 'The reconciliation note').strip()
-    if len(note) < 12:
-        raise ApiError(400, 'Describe how the unknown outcome was reconciled (at least 12 characters).')
     try:
-        run = encounter.provider_runs.get(pk=_identifier(data.get('provider_run_id')))
+        run = encounter.provider_runs.get(pk=request.POST.get('run', ''))
     except (models.ProviderRun.DoesNotExist, ValueError, ValidationError):
-        raise ApiError(404, 'That provider request is not part of this document.')
+        return _refused(request, encounter, 'That run is not part of this document.', 404)
     try:
-        recorded = jobs.reconcile(encounter, run, request.user, note)
+        recorded = jobs.reconcile(encounter, run, request.user, _note(request))
     except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
+        return _refused(request, encounter, str(exc), 400)
     if recorded is None:
-        raise ApiError(409, 'Only an unreconciled unknown outcome can be reconciled.')
-    return JsonResponse({'reconciled': str(run.pk)}, status=201)
+        return _refused(request, encounter, 'Only an unreconciled unknown outcome can be reconciled.', 409)
+    return _see_other(f'/ops/encounters/{encounter.pk}?done=reconciled')
+
+
+@operator_view
+@_methods('POST')
+def retry(request, encounter_id):
+    """A new round of the encounter's failed latest round (jobs.retry), requested by the operator."""
+    encounter = _encounter(encounter_id)
+    try:
+        jobs.retry(encounter, request.user)
+    except jobs.Refused as exc:
+        return _refused(request, encounter, str(exc), 409)
+    return _see_other(f'/ops/encounters/{encounter.pk}?done=retried')
+
+
+@operator_view
+@_methods('POST')
+def release_holds(request):
+    """Release every standing hold, each with a release naming this operator and the note (jobs.release_holds)."""
+    try:
+        released = jobs.release_holds(user=request.user, note=_note(request))
+    except jobs.Refused as exc:
+        return _index_page(request, error=str(exc), status=400)
+    if not released:
+        return _index_page(request, error='No hold was standing.', status=409)
+    return _see_other('/ops/?done=released')

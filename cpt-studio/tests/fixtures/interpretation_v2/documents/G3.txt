@@ -1,9 +1,0 @@
-SYNTHETIC EUS REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-Findings: A linear echoendoscope was advanced to the second portion of the duodenum.
-EUS imaging was performed from the esophagus, stomach and duodenum.
-A 9 cm pancreatic pseudocyst was seen adjacent to the gastric body.
-Under EUS guidance, the pseudocyst was punctured from the gastric body with a 19-gauge needle and 20 mL of fluid was aspirated.
-EUS-guided transmural drainage of the pseudocyst was then performed across the posterior gastric wall.

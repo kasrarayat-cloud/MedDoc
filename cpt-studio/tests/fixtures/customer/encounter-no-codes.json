@@ -1,0 +1,66 @@
+{
+ "id": "f8000000-0000-4000-8000-000000000001",
+ "title": "Synthetic cancelled colonoscopy",
+ "created_at": "2026-11-20T06:30:00Z",
+ "updated_at": "2026-11-20T06:34:20Z",
+ "state": "no_codes",
+ "state_label": "No codes found",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "name": null,
+  "media_type": "text/plain",
+  "size": 297,
+  "kind": "paste",
+  "original_url": null,
+  "view_url": "/api/encounters/f8000000-0000-4000-8000-000000000001/original?view=1",
+  "view_media_type": "text/plain",
+  "converted": false
+ },
+ "context": {
+  "service_date": null,
+  "insurance": "unknown"
+ },
+ "progress": {
+  "phase": "done",
+  "busy": false,
+  "started_at": "2026-11-20T06:30:01Z",
+  "finished_at": "2026-11-20T06:34:20Z",
+  "server_time": "2026-11-20T08:10:00Z",
+  "message": "",
+  "can_stop": false,
+  "can_resume": false,
+  "can_retry": false,
+  "error": null
+ },
+ "round": {
+  "number": 1,
+  "trigger": "upload",
+  "finished_at": "2026-11-20T06:34:20Z"
+ },
+ "codes": [],
+ "questions": [],
+ "answers": [],
+ "notes": [
+  "The procedure was cancelled before it began, so there is no procedure to code."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": false,
+  "blockers": [
+   "No code has been approved."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "at": "2026-11-20T06:30:00Z",
+   "text": "Pasted by Reviewer."
+  },
+  {
+   "at": "2026-11-20T06:34:20Z",
+   "text": "Coding review 1 finished with no codes."
+  }
+ ]
+}

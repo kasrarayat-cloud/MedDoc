@@ -1,0 +1,186 @@
+{
+ "id": "fc000000-0000-4000-8000-000000000001",
+ "title": "Synthetic EGD and colonoscopy, one code on two lines",
+ "created_at": "2026-11-20T07:20:00Z",
+ "updated_at": "2026-11-20T07:36:10Z",
+ "state": "needs_review",
+ "state_label": "Needs your review",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "name": "synthetic-egd-colonoscopy.pdf",
+  "media_type": "application/pdf",
+  "size": 1673,
+  "kind": "upload",
+  "original_url": "/api/encounters/fc000000-0000-4000-8000-000000000001/original",
+  "view_url": "/api/encounters/fc000000-0000-4000-8000-000000000001/original?view=1",
+  "view_media_type": "application/pdf",
+  "converted": false
+ },
+ "context": {
+  "service_date": "2026-11-02",
+  "insurance": "medicaid"
+ },
+ "progress": {
+  "phase": "done",
+  "busy": false,
+  "started_at": "2026-11-20T07:29:02Z",
+  "finished_at": "2026-11-20T07:34:40Z",
+  "server_time": "2026-11-20T07:40:00Z",
+  "message": "",
+  "can_stop": false,
+  "can_resume": false,
+  "can_retry": false,
+  "error": null
+ },
+ "round": {
+  "number": 2,
+  "trigger": "retry",
+  "finished_at": "2026-11-20T07:34:40Z"
+ },
+ "codes": [
+  {
+   "line": "L1",
+   "code": "43239",
+   "units": 1,
+   "modifiers": [],
+   "status": "ready",
+   "status_label": "Ready for approval",
+   "reason": "Cold forceps biopsies were taken from the gastric antrum during the upper endoscopy (page 1). An upper endoscopy with biopsy is coded 43239.",
+   "second_check": {
+    "agrees": true,
+    "reason": "The biopsy and the extent of the upper endoscopy are both documented on page 1."
+   },
+   "question": null,
+   "quotes": [
+    {
+     "text": "Cold forceps biopsies were taken from the gastric antrum.",
+     "page": 1
+    }
+   ],
+   "decision": null,
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ]
+  },
+  {
+   "line": "L2",
+   "code": "45385",
+   "units": 1,
+   "modifiers": [],
+   "status": "ready",
+   "status_label": "Ready for approval",
+   "reason": "A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare (page 2). Colonoscopy with removal by snare is coded 45385.",
+   "second_check": {
+    "agrees": true,
+    "reason": "Removal by snare is documented, and the colonoscope reached the cecum."
+   },
+   "question": null,
+   "quotes": [
+    {
+     "text": "A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.",
+     "page": 2
+    }
+   ],
+   "decision": null,
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ]
+  },
+  {
+   "line": "L3",
+   "code": "45380",
+   "units": 1,
+   "modifiers": [],
+   "status": "needs_review",
+   "status_label": "Needs your review",
+   "reason": "A 4 mm polyp in the ascending colon was removed with cold forceps (page 2). Colonoscopy with removal by cold forceps is coded 45380.",
+   "second_check": {
+    "agrees": false,
+    "reason": "The forceps removal is a separate structure from the sigmoid polyp removed by snare, so this line needs modifier XS, which it does not carry."
+   },
+   "question": null,
+   "quotes": [
+    {
+     "text": "A 4 mm polyp in the ascending colon was removed with cold forceps.",
+     "page": 2
+    }
+   ],
+   "decision": {
+    "id": "fc200000-0000-4000-8000-000000000003",
+    "action": "reject",
+    "by": "Reviewer",
+    "at": "2026-11-20T07:36:10Z",
+    "note": "Kept the line with modifier XS instead."
+   },
+   "allowed_actions": [
+    "revoke"
+   ]
+  },
+  {
+   "line": "M1",
+   "code": "45380",
+   "units": null,
+   "modifiers": [
+    "XS"
+   ],
+   "status": "needs_review",
+   "status_label": "Needs your review",
+   "reason": "The 4 mm ascending colon polyp was removed with cold forceps (page 2), a separate structure from the sigmoid polyp removed by snare, so 45380 is reported with modifier XS.",
+   "second_check": {
+    "agrees": null,
+    "reason": "The second check found this code and listed it as ready for approval; it needs your review."
+   },
+   "question": null,
+   "quotes": [
+    {
+     "text": "A 4 mm polyp in the ascending colon was removed with cold forceps.",
+     "page": 2
+    }
+   ],
+   "decision": null,
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ]
+  }
+ ],
+ "questions": [],
+ "answers": [],
+ "notes": [
+  "Bowel preparation quality was not recorded."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": false,
+  "blockers": [
+   "No code has been approved."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "at": "2026-11-20T07:20:00Z",
+   "text": "Uploaded by Reviewer."
+  },
+  {
+   "at": "2026-11-20T07:27:12Z",
+   "text": "Coding review 1 could not finish."
+  },
+  {
+   "at": "2026-11-20T07:29:00Z",
+   "text": "Reviewer asked for the coding review again."
+  },
+  {
+   "at": "2026-11-20T07:34:40Z",
+   "text": "Coding review 2 finished."
+  },
+  {
+   "at": "2026-11-20T07:36:10Z",
+   "text": "Reviewer rejected L3 45380."
+  }
+ ]
+}

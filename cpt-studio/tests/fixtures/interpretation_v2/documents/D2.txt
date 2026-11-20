@@ -1,8 +1,0 @@
-SYNTHETIC COLONOSCOPY REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-Findings: The colonoscope was advanced to the cecum.
-A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare.
-No polypectomy was performed in the prior segment.
-It is unclear whether the 4 mm rectal polyp was removed.
