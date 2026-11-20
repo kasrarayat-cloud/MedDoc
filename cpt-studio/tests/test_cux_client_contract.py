@@ -4,10 +4,11 @@ client_outdated before the view runs; a download (a browser navigation) and the 
 copy of the value (the server's, the page's app.js, ops/verify_login.py's and the walk's, ops/walk.cjs, and the contract
 file the tools read, ops/verification/customer-contract.json) is the same one.
 
-The fix pass's line identity (FIX-SPEC section 1) is a new page build, customer-2026-11-21: a page of the build
-before it posts decisions without the round and the line. Its copies land in three lanes - the server's and the
-contract file's (F1a), the page's (F1b), the tools' (F3) - so in a tree holding only some of them OneValueTests fails,
-naming the copy that differs, until all are merged."""
+The fix pass's line identity (FIX-SPEC section 1) made the build customer-2026-11-21; the second fix pass (FIX-SPEC-2
+section 5) makes it customer-2026-11-22: an Undo names the decision it undoes and a download names the round shown, so
+a page of the build before it would post an Undo the server refuses and a download that names no round. Its copies
+land in two lanes - the server's and the contract file's (G1), the page's and the tools' (G2) - so in a tree holding
+only some of them OneValueTests fails, naming the copy that differs, until both are merged."""
 from __future__ import annotations
 
 import importlib.util
@@ -21,8 +22,8 @@ from studio import client_contract
 from tests.support import coding as f
 
 ROOT = Path(__file__).resolve().parents[1]
-# FIX-SPEC section 1: decisions name the round shown and the line - the build every copy names
-CURRENT_BUILD = 'customer-2026-11-21'
+# FIX-SPEC-2 section 5: an Undo names its decision and a download its round - the build every copy names
+CURRENT_BUILD = 'customer-2026-11-22'
 
 
 def without_contract(client):
@@ -69,7 +70,7 @@ class ContractTests(TestCase):
 
 
 class OneValueTests(SimpleTestCase):
-    def test_the_build_is_the_line_identity_build(self):
+    def test_the_build_is_the_second_fix_pass_build(self):
         self.assertEqual(client_contract.VERSION, CURRENT_BUILD)
 
     def test_the_test_package_acts_as_the_current_page(self):

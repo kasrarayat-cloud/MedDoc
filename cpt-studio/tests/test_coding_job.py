@@ -4,12 +4,16 @@ threads; and the money rules of the fix pass (FIX-SPEC 4): a send's worst case c
 after a recorded outcome never leads to the read being sent again, an unknown outcome waits for the operator's
 reconcile, both paid reads are reused after a crash, the ceiling counts every earlier run of the revision (checker runs
 and billed failures included), a read reserved but never sent is sent on Resume, and a slot whose database session ended
-mid-send is not taken by another send. Synthetic documents only; nothing reaches the network."""
+mid-send is not taken by another send; and the money rules of the second fix pass (FIX-SPEC-2 section 6): a job queued
+again and taken over by another thread stays the worker's own, so its checker is paid once, and an answer whose outcome
+could not be written stays unknown - in the stage, while it is left sending, and after the stale sweep - so nothing
+sends it again before an operator's reconcile. Synthetic documents only; nothing reaches the network."""
 import io
 import signal
 import tempfile
 import threading
 import time
+import uuid
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -18,7 +22,8 @@ from unittest import mock
 import anthropic
 from django.conf import settings
 from django.core.management import call_command
-from django.db import connection
+from django.db import DatabaseError, connection
+from django.db.models.query import QuerySet
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -516,6 +521,190 @@ class CrashRecoveryTests(CodingCase):
         self.assertEqual(len(self.runs(jobs.READER)), 1)
         self.assertEqual([(run.state, run.sent) for run in self.runs(jobs.CHECKER)],
                          [(Run.CANCELLED, False), (Run.SUCCEEDED, True)])
+
+
+class SweptMidway(f.FakeCoder):
+    """A FakeCoder that runs ``during_checker_count`` once, while the checker's request is being counted - after the
+    reader answered, before the checker is reserved or sent: where a stale sweep and a member's Resume can land."""
+
+    def __init__(self, *args, during_checker_count=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.during_checker_count = during_checker_count
+
+    def count_input_tokens(self, request):
+        counted = super().count_input_tokens(request)
+        if self.during_checker_count is not None and request.stored['system'] == prompts.CHECKER_SYSTEM:
+            hook, self.during_checker_count = self.during_checker_count, None
+            hook()
+        return counted
+
+
+@override_settings(CONCURRENT_DOCUMENTS=2)
+class LiveHandoffTests(CodingCase):
+    """money-live-handoff-double-checker (FIX-SPEC-2 section 6): a code job finds no free provider slot and is queued
+    again; the thread that queued it sleeps (REQUEUE_SECONDS) still inside its live block while another thread claims
+    the job and runs it. The job is the worker's own - never swept - while ANY of its threads runs it: the first thread
+    leaving its block must not unmark the job the second still runs, or once the job is an hour old the periodic sweep
+    takes it for dead, cancels its round and offers Resume, and the resumed job and the running one both pay for the
+    checker. The two threads are played in turn here, exactly interleaved; the mark has no thread of its own."""
+
+    def test_the_live_mark_holds_while_any_thread_still_runs_the_job(self):
+        key = uuid.uuid4()
+        with jobs._live(key):            # the thread that queued the job again
+            second = jobs._live(key)     # the thread that took it over
+            second.__enter__()
+        self.assertIn(key, jobs._live_ids(), 'the second thread still runs the job')
+        second.__exit__(None, None, None)
+        self.assertNotIn(key, jobs._live_ids())
+
+    def test_a_job_taken_over_during_its_requeue_stays_live_and_pays_for_its_checker_once(self):
+        outcome = {}
+
+        def an_hour_on_the_sweep_runs_and_a_member_presses_resume():
+            Job.objects.filter(pk=job.pk).update(
+                started_at=timezone.now() - timedelta(seconds=jobs.CODE_STALE_SECONDS + 60))
+            jobs.mark_stale()  # the worker's periodic sweep, as its main thread runs it
+            try:
+                jobs.resume(self.enc, self.user)  # what the page offers once the round reads interrupted
+            except jobs.Refused as refused:
+                outcome['resume'] = str(refused)
+                return
+            outcome['resume'] = 'accepted'
+            self.run_next()  # a third thread runs the resumed job: it reuses the paid reader and sends the checker
+        fake = self.use(SweptMidway(reader=f.succeeded(f.reader_message(READER)),
+                                    checker=f.succeeded(f.checker_message(CHECKER)),
+                                    during_checker_count=an_hour_on_the_sweep_runs_and_a_member_presses_resume))
+        round_ = self.start()
+        job = jobs.claim_next()
+        taken, here, real_sleep = {}, threading.current_thread(), time.sleep
+
+        def sleep_while_another_thread_takes_the_job(seconds):
+            if taken or threading.current_thread() is not here:  # any other sleep is a sleep
+                return real_sleep(seconds)
+            claimed = jobs.claim_next()  # the job queued again, claimed by another thread
+            taken['job'], taken['live'] = claimed, jobs._live(claimed.pk)
+            taken['live'].__enter__()   # its own live block, around its own run_job (below)
+            return None
+        with jobs._live(job.pk):  # the first thread's block (jobs._worker_thread)
+            with mock.patch.object(jobs, '_take_slot', side_effect=jobs.Requeue('every provider slot is in use')), \
+                    mock.patch.object(jobs.time, 'sleep', side_effect=sleep_while_another_thread_takes_the_job):
+                jobs.run_job(job)
+        self.assertEqual(taken['job'].pk, job.pk)
+        live_after_the_first_left = job.pk in jobs._live_ids()
+        try:
+            jobs.run_job(taken['job'])
+        finally:
+            taken['live'].__exit__(None, None, None)
+        round_.refresh_from_db()
+        self.assertEqual(fake.roles(), ['reader', 'checker'])  # the checker is paid for once
+        self.assertEqual([(run.state, run.sent) for run in self.runs(jobs.CHECKER)], [(Run.SUCCEEDED, True)])
+        self.assertEqual(outcome['resume'], jobs.BUSY_MESSAGE)  # the job was never swept: nothing to resume
+        self.assertTrue(live_after_the_first_left, 'the thread that took the job over still ran it')
+        self.assertEqual((Job.objects.get(pk=job.pk).state, round_.state), (Job.SUCCEEDED, Round.DONE))
+        self.assertEqual(Job.objects.filter(encounter=self.enc).count(), 1)
+        self.assertNotIn(job.pk, jobs._live_ids())
+
+
+class UnrecordedOutcomeTests(CodingCase):
+    """The reader answered, and its outcome could not be written (_finish_run's write failed): the read may have been
+    billed, so it is held UNKNOWN - counted at its worst case against the ceiling, Resume and Retry waiting for an
+    operator's reconcile - whichever write records that (money-fg-unrecorded-outcome: _settle_unrecorded's small write;
+    money-fg-reconcile-sending-arm: none, the run left 'sending', which blocks Retry as unknown does;
+    money-fg-orphan-sweep-not-sent: the stale sweep's orphan loop, which settles it unknown, never not sent)."""
+
+    def setUp(self):
+        super().setUp()
+        self.fake = self.use(f.FakeCoder(reader=f.succeeded(f.reader_message(READER)),
+                                         checker=f.succeeded(f.checker_message(CHECKER))))
+
+    def code_with(self, *, settle_fails=False, rounds_fail=False):
+        """Run the round's job with the outcome's write failing - and _settle_unrecorded's (``settle_fails``) and the
+        round's writes after it (``rounds_fail``) failing too; the job as it ended."""
+        broken = {'rounds': False}
+        real_update = QuerySet.update
+
+        def refusing_update(queryset, **fields):
+            if (settle_fails and queryset.model is Run) or (broken['rounds'] and queryset.model is Round):
+                raise DatabaseError('synthetic: the row cannot be written')
+            return real_update(queryset, **fields)
+
+        def outcome_not_written(run, outcome, **kwargs):
+            broken['rounds'] = rounds_fail
+            raise DatabaseError('synthetic: the outcome cannot be written')
+        with mock.patch.object(jobs, '_finish_run', side_effect=outcome_not_written), \
+                mock.patch.object(QuerySet, 'update', refusing_update), \
+                self.assertLogs('studio.jobs', level='ERROR') as logged:
+            job = self.run_next()
+        self.assertTrue(any('could not be recorded' in line for line in logged.output))
+        return job
+
+    def assert_held_until_reconciled(self, round_, run):
+        """The read counts at its worst case, and nothing sends it again before an operator has looked."""
+        self.assertEqual(jobs._held_cost(run), Decimal(run.scope['worst_usd']))
+        self.assertTrue(jobs.awaiting_reconcile(round_), f'a {run.state} read that may have been billed waits for the '
+                        'operator\'s reconcile')
+        with self.assertRaises(jobs.Refused) as waits:
+            jobs.retry(self.enc, self.user)
+        self.assertEqual(str(waits.exception), jobs.RECONCILE_FIRST)
+        self.assertIsNone(jobs.resume(self.enc, self.user))
+        self.assertEqual(self.fake.roles(), ['reader'])
+
+    def test_an_answer_whose_outcome_was_not_written_is_held_unknown(self):
+        round_ = self.start()
+        job = self.code_with()
+        round_.refresh_from_db()
+        (run,) = self.runs()
+        self.assertEqual((run.state, run.sent, run.error), (Run.UNKNOWN, True, jobs.UNRECORDED_MESSAGE))
+        self.assertEqual((job.state, round_.state, round_.failure_kind), (Job.FAILED, Round.FAILED, 'unknown'))
+        self.assert_held_until_reconciled(round_, run)
+        self.assertTrue(jobs.reconcile(self.enc, run, self.user, 'Checked the console: the charge is listed.'))
+        self.assertEqual(jobs.retry(self.enc, self.user).number, 2)  # once the operator has looked, a human may retry
+
+    def test_a_run_left_sending_blocks_a_retry_before_the_sweep_settles_it(self):
+        round_ = self.start()
+        job = self.code_with(settle_fails=True)
+        round_.refresh_from_db()
+        (run,) = self.runs()
+        self.assertEqual((run.state, job.state, round_.state, round_.failure_kind),
+                         (Run.SENDING, Job.FAILED, Round.FAILED, 'unknown'))
+        self.assert_held_until_reconciled(round_, run)
+        jobs.mark_stale()  # the periodic sweep at once: the orphan loop waits STALE_RUNNING_SECONDS
+        run.refresh_from_db()
+        self.assertEqual(run.state, Run.SENDING)
+        self.assert_held_until_reconciled(round_, run)
+
+    def age(self, *rows):
+        for row in rows:
+            type(row).objects.filter(pk=row.pk).update(
+                created_at=row.created_at - timedelta(seconds=settings.STALE_RUNNING_SECONDS + 60))
+
+    def test_the_sweep_settles_a_run_left_sending_unknown_never_not_sent(self):
+        round_ = self.start()
+        self.code_with(settle_fails=True)
+        (run,) = self.runs()
+        self.age(run)
+        jobs.mark_stale()
+        run.refresh_from_db()
+        round_.refresh_from_db()
+        self.assertEqual((run.state, run.sent, run.error), (Run.UNKNOWN, True, jobs.ORPHANED_SENDING_MESSAGE))
+        self.assertEqual((round_.state, round_.failure_kind), (Round.FAILED, 'unknown'))
+        self.assert_held_until_reconciled(round_, run)
+        self.assertTrue(jobs.reconcile(self.enc, run, self.user, 'Checked the console: the charge is listed.'))
+        self.assertEqual(jobs.retry(self.enc, self.user).number, 2)
+
+    def test_a_round_left_running_with_a_run_left_sending_is_failed_unknown_by_the_sweep(self):
+        round_ = self.start()
+        job = self.code_with(settle_fails=True, rounds_fail=True)
+        round_.refresh_from_db()
+        (run,) = self.runs()
+        self.assertEqual((run.state, job.state, round_.state), (Run.SENDING, Job.FAILED, Round.RUNNING))
+        self.age(run, round_)
+        jobs.mark_stale()
+        run.refresh_from_db()
+        round_.refresh_from_db()
+        self.assertEqual((run.state, run.sent), (Run.UNKNOWN, True))
+        self.assertEqual((round_.state, round_.failure_kind), (Round.FAILED, 'unknown'))  # never cancelled for a Resume
+        self.assert_held_until_reconciled(round_, run)
 
 
 class FailureTests(CodingCase):

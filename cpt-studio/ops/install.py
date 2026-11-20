@@ -4416,10 +4416,20 @@ def undo_switch(ctx, failure, reached, *, image_id, env_bytes, plan, preflight, 
                           details=details)
 
 
-# What a stage the close closed reads afterwards (CLOSE_STAGES): said wherever an undo says a close may have closed one.
-CLOSED_STAGES_SAID = ('a coding job it closed stays failed, with the installer\'s note, its round stopped, and a Resume '
-                      'continues that round whenever this revision serves again; a stage of another kind it closed stays '
-                      'failed, with the installer\'s note')
+# What a stage the close closed reads afterwards (CLOSE_STAGES): said wherever an undo says a close may have closed one -
+# the switch-back that refuses after B4's close, and every close that raised or gave no answer. A coding job ends as its
+# own stage would have ended it (studio.jobs.abandoned_outcome, the stale sweep's rule), so the sentence says each way
+# (install-2): only a round with nothing it sent unsettled reads stopped for a Resume; one whose request was in flight
+# or whose send's outcome is unknown is failed as unknown and waits for an operator's reconcile; one whose send failed is
+# failed with that send's kind.
+CLOSED_STAGES_SAID = ('a coding job it closed ends as its own stage would have ended it, with the installer\'s note: with '
+                      'nothing it sent unsettled, the job reads failed and its round stopped, and a Resume continues '
+                      'that round whenever this revision serves again; with a request in flight or a send whose unknown '
+                      'outcome no operator has reconciled, the job reads unknown and its round failed as unknown, so no '
+                      'Resume continues it and a retry waits for an operator\'s reconcile; with a send that failed, the '
+                      'job reads failed and its round failed with that send\'s kind, so no Resume continues it and a '
+                      'retry starts a new round; a stage of another kind it closed stays failed, with the installer\'s '
+                      'note')
 
 
 def close_did_not_finish(what, error) -> str:

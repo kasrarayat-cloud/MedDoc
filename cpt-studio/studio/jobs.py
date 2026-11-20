@@ -749,19 +749,28 @@ STAGES = {CODE: stage_code}
 
 # --- the worker --------------------------------------------------------------------------------------------------------
 
-_LIVE: set = set()  # the jobs this process's threads are running now: never swept
+# The jobs this process's threads are running now, never swept: job id -> how many threads are inside a _live block for
+# it. A count, not a set (money-live-handoff-double-checker, FIX-SPEC-2 section 6): a job queued again (no free provider
+# slot) is saved QUEUED while the thread that queued it is still inside its block (it sleeps REQUEUE_SECONDS there), so
+# another thread can claim and run the job meanwhile; the first thread leaving must not unmark the job the second still
+# runs, or the stale sweep would take it for dead, cancel its round and offer a Resume that pays for the checker again.
+_LIVE: dict = {}
 _LIVE_LOCK = threading.Lock()
 
 
 @contextlib.contextmanager
 def _live(job_id):
     with _LIVE_LOCK:
-        _LIVE.add(job_id)
+        _LIVE[job_id] = _LIVE.get(job_id, 0) + 1
     try:
         yield
     finally:
         with _LIVE_LOCK:
-            _LIVE.discard(job_id)
+            left = _LIVE.get(job_id, 0) - 1
+            if left > 0:
+                _LIVE[job_id] = left
+            else:
+                _LIVE.pop(job_id, None)
 
 
 def _live_ids() -> set:

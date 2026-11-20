@@ -1,7 +1,8 @@
 'use strict';
-// Unit tests for the customer page, studio/static/studio/app.js, over the customer contract customer-2026-11-21 (the
-// build specification, sections 6 and 7, with the fix pass's line identity: every code row is named by its line, and a
-// decision names the line and the coding review the page shows) and its fixtures in tests/fixtures/customer.
+// Unit tests for the customer page, studio/static/studio/app.js, over the customer contract customer-2026-11-22 (the
+// build specification, sections 6 and 7, with the fix passes' line identity: every code row is named by its line, a
+// decision names the line and the coding review the page shows, an Undo the decision it undoes and a download the
+// coding review its dialog was opened on) and its fixtures in tests/fixtures/customer.
 // Run: node --test tests/frontend/
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -234,7 +235,10 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
     if (!byId.has(id)) byId.set(id, fakeElement());
     return byId.get(id);
   };
-  global.document = { cookie: 'cptstudio_csrf=token123', querySelector: element, querySelectorAll: () => [], activeElement: null, hidden: false };
+  // a download the page starts (startDownload: a hidden link it clicks) is recorded as {download, filename}
+  const link = () => fakeElement({ click() { calls.push({ download: this.href, filename: this.download }); }, remove() {} });
+  global.document = { cookie: 'cptstudio_csrf=token123', querySelector: element, querySelectorAll: () => [], activeElement: null, hidden: false,
+    createElement: link, body: { appendChild() {} } };
   global.fetch = async (url, init = {}) => {
     const method = init.method || 'GET';
     calls.push({ url, method: init.method, headers: init.headers, body: init.body, credentials: init.credentials, cache: init.cache });
@@ -260,6 +264,16 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
 }
 
 const posted = calls => calls.filter(call => call.method === 'POST').map(call => ({ url: call.url, body: JSON.parse(call.body) }));
+
+// A click the page's own handler receives (onClick): the target's closest(selector) is an element with `dataset`.
+function click(selector, dataset) {
+  app.onClick({ target: { closest: wanted => (wanted === selector ? fakeElement({ dataset }) : null) } });
+}
+
+// Lets the page's own asynchronous work run until `done()` holds (at most 50 turns of the event loop).
+async function settle(done) {
+  for (let turn = 0; turn < 50 && !done(); turn += 1) await new Promise(resolve => setImmediate(resolve));
+}
 
 // --- helpers kept from the earlier page ---------------------------------------------------------------------------
 
@@ -333,7 +347,7 @@ test('every upload attempt carries a version-4 client key', () => {
 });
 
 test('the page names its build, and a 409 client_outdated is the update notice while other answers are plain sentences', () => {
-  assert.equal(app.CLIENT_VERSION, 'customer-2026-11-21');
+  assert.equal(app.CLIENT_VERSION, 'customer-2026-11-22');
   assert.equal(app.CLIENT_HEADER, 'X-CPT-Studio-Client');
   assert.equal(app.isClientOutdated(409, { error_code: 'client_outdated' }), true);
   assert.equal(app.isClientOutdated(409, { error: 'x' }), false);
@@ -1347,7 +1361,7 @@ test('Approve opens the dialog with the session\'s statement; the approval posts
     assert.deepEqual(Object.keys(sent.body), ['round', 'line', 'code', 'action', 'acknowledgement', 'note']);
     const call = calls.find(item => item.method === 'POST');
     assert.deepEqual([call.headers['X-CSRFToken'], call.headers['X-CPT-Studio-Client'], call.headers['Content-Type'], call.credentials, call.cache],
-      ['token123', 'customer-2026-11-21', 'application/json', 'same-origin', 'no-store']);
+      ['token123', 'customer-2026-11-22', 'application/json', 'same-origin', 'no-store']);
     assert.equal(element('#reviewDialog').open, false);
   });
 });
@@ -1366,7 +1380,7 @@ test('Reject asks only for an optional note; Undo posts revoke; an action the se
     // the round named is the one the page shows (the reviewed document is on its second coding review)
     Object.assign(app.state, { doc: fixture('encounter-reviewed.json') });
     await app.handleDecision('revoke', 'L1', fakeElement());
-    assert.deepEqual(posted(calls).pop().body, { round: 2, line: 'L1', code: '43239', action: 'revoke', acknowledgement: '', note: '' });
+    assert.deepEqual(posted(calls).pop().body, { round: 2, line: 'L1', code: '43239', action: 'revoke', acknowledgement: '', note: '', decision: 'f6200000-0000-4000-8000-000000000001' });
     const before = calls.length;
     element('#reviewDialog').open = false;
     await app.handleDecision('approve', 'L1', fakeElement());
@@ -1420,7 +1434,7 @@ test('one code on two lines: each row is drawn, quoted, reviewed and decided as 
     assert.deepEqual(posted(calls).pop().body, { round: 2, line: 'M1', code: '45380', action: 'approve', acknowledgement: session.acknowledgement, note: '' });
     // Undo on the rejected line names that line
     await app.handleDecision('revoke', 'L3', fakeElement());
-    assert.deepEqual(posted(calls).pop().body, { round: 2, line: 'L3', code: '45380', action: 'revoke', acknowledgement: '', note: '' });
+    assert.deepEqual(posted(calls).pop().body, { round: 2, line: 'L3', code: '45380', action: 'revoke', acknowledgement: '', note: '', decision: 'fc200000-0000-4000-8000-000000000003' });
     assert.equal(posted(calls).length, 2);
   });
   // the page's clicks carry the line: the button's data-line reaches the decision
@@ -1508,7 +1522,7 @@ test('a decision refused because the coding review changed (409) reloads the doc
   ] }, async ({ calls, element }) => {
     Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 4, docKey: '', viewerKey: '' });
     await app.handleDecision('revoke', 'L2', fakeElement());
-    assert.deepEqual(posted(calls).map(call => call.body), [{ round: 2, line: 'L2', code: '45385', action: 'revoke', acknowledgement: '', note: '' }]);
+    assert.deepEqual(posted(calls).map(call => call.body), [{ round: 2, line: 'L2', code: '45385', action: 'revoke', acknowledgement: '', note: '', decision: 'f6200000-0000-4000-8000-000000000002' }]);
     assert.equal(calls.filter(call => call.method === 'GET' && call.url === reviewedAt).length, 1);
     assert.equal(element('#toast').textContent, app.CHANGED_TEXT);
   });
@@ -1528,6 +1542,215 @@ test('a decision refused because the coding review changed (409) reloads the doc
   }
 });
 
+test('Undo names the decision it undoes: the id the page shows for the line\'s current decision (LINES-5)', async () => {
+  const session = fixture('session.json');
+  const reviewed = fixture('encounter-reviewed.json');
+  const address = `/api/encounters/${reviewed.id}`;
+  const shown = reviewed.codes.map(code => code.decision.id);
+  assert.deepEqual(shown, ['f6200000-0000-4000-8000-000000000001', 'f6200000-0000-4000-8000-000000000002', 'f6200000-0000-4000-8000-000000000003']);
+  await withPage({}, async ({ calls }) => {
+    Object.assign(app.state, { session, doc: reviewed, route: null });
+    await app.handleDecision('revoke', 'L2', fakeElement());
+    assert.deepEqual(posted(calls), [{ url: `${address}/decisions`,
+      body: { round: 2, line: 'L2', code: '45385', action: 'revoke', acknowledgement: '', note: '', decision: shown[1] } }]);
+  });
+  // approve and reject name no decision: there is none on the line yet
+  await withPage({}, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: fixture('encounter-ready.json'), route: null });
+    await app.handleDecision('reject', 'L1', fakeElement());
+    await app.submitReview({ preventDefault() {} });
+    await app.handleDecision('approve', 'L2', fakeElement());
+    element('#reviewAckBox').checked = true;
+    await app.submitReview({ preventDefault() {} });
+    assert.deepEqual(posted(calls).map(call => Object.keys(call.body)), [['round', 'line', 'code', 'action', 'acknowledgement', 'note'],
+      ['round', 'line', 'code', 'action', 'acknowledgement', 'note']]);
+  });
+  // a current decision the page cannot name - no id, or one that is not an id - offers no Undo, and none is sent
+  for (const id of [undefined, null, '', ' ', 7, 'a decision', 'x'.repeat(65), ['f6200000'], {}]) {
+    const doc = clone(reviewed);
+    if (id === undefined) delete doc.codes[0].decision.id;
+    else doc.codes[0].decision.id = id;
+    assert.deepEqual(app.allowedActions(doc.codes[0], doc), [], JSON.stringify(id));
+    assert.equal(dom(render(doc)).all('li.code-row[data-line="L1"] button[data-decision]').length, 0, JSON.stringify(id));
+    assert.equal(dom(render(doc)).all('li.code-row[data-line="L2"] button[data-decision="revoke"]').length, 1, 'the other lines keep theirs');
+    await withPage({}, async ({ calls }) => {
+      Object.assign(app.state, { session, doc, route: null });
+      await app.handleDecision('revoke', 'L1', fakeElement());
+      assert.deepEqual(posted(calls), [], JSON.stringify(id));
+    });
+  }
+  // the page drew Coder13's approval; meanwhile it was undone and Coder19 rejected the line. The Undo names the approval
+  // the page showed, the server refuses it (409: not the current decision), and the page reads the document again and
+  // says so - it never undoes a decision the member did not see
+  const now = clone(reviewed);
+  now.codes[0].decision = { id: 'f6200000-0000-4000-8000-000000000009', action: 'reject', by: 'Coder19', at: '2026-11-20T08:10:00Z', note: 'Not documented.' };
+  const changed = { error: 'This coding review has changed. Reload to see the latest.', details: {} };
+  await withPage({ answers: [
+    { match: (method, url) => method === 'POST' && url === `${address}/decisions`, status: 409, body: changed },
+    { match: (method, url) => method === 'GET' && url === address, status: 200, body: now },
+  ] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 11, docKey: '', viewerKey: app.viewerKey(reviewed) });
+    await app.handleDecision('revoke', 'L1', fakeElement());
+    assert.deepEqual(posted(calls).map(call => call.body.decision), [shown[0]]);
+    assert.equal(element('#toast').textContent, app.CHANGED_TEXT);
+    assert.equal(app.state.doc.codes[0].decision.by, 'Coder19', 'the page now shows the decision that stands');
+    assert.match(element('#reviewColumn').innerHTML, /Rejected by Coder19/);
+  });
+});
+
+test('the review dialog keeps the round, line and code it opened on while the page redraws under it (LINES-3)', async () => {
+  const session = fixture('session.json');
+  const doc = fixture('encounter-ready.json');
+  const address = `/api/encounters/${doc.id}`;
+  // what the server has once the read lands: a second coding review, with another line under L2
+  const newer = clone(doc);
+  newer.round = { number: 2, trigger: 'answers', finished_at: '2026-11-20T08:40:00Z' };
+  newer.codes[1] = { ...newer.codes[1], modifiers: ['PT'], reason: 'A different line of a later coding review.' };
+  const changed = { error: 'This coding review has changed. Reload to see the latest.', details: {} };
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  await withPage({ answers: [
+    { match: (method, url) => method === 'POST' && url === `${address}/decisions`, status: 201, body: { line: 'L1', code: '43239', action: 'approve' } },
+    { match: (method, url) => method === 'GET' && url === address, status: 200, body: held },
+    { match: (method, url) => method === 'POST' && url === `${address}/decisions`, status: 409, body: changed },
+    { match: (method, url) => method === 'GET' && url === address, status: 200, body: newer },
+  ] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc, route: { name: 'doc', id: doc.id }, routeSerial: 12, docKey: '', viewerKey: app.viewerKey(doc) });
+    // L1 is approved, and the read of the document that follows the approval is still in flight
+    await app.handleDecision('approve', 'L1', fakeElement());
+    element('#reviewAckBox').checked = true;
+    const first = app.submitReview({ preventDefault() {} });
+    await settle(() => calls.some(call => call.method === 'GET' && call.url === address));
+    // meanwhile the member opens L2's dialog: it shows round 1's L2
+    await app.handleDecision('approve', 'L2', fakeElement());
+    assert.deepEqual([element('#reviewDialog').open, element('#reviewCode').textContent, element('#reviewLine').textContent],
+      [true, '45385', '1 unit · No modifier']);
+    // the read lands: round 2 has finished, and the page redraws under the open dialog
+    release(newer);
+    await first;
+    assert.equal(app.state.doc.round.number, 2);
+    assert.match(element('#reviewColumn').innerHTML, /Modifier PT/);
+    assert.equal(element('#reviewDialog').open, true, 'the redraw leaves the dialog open');
+    // the member saves: the decision names what the dialog showed - round 1, L2, 45385 - never the round redrawn
+    element('#reviewAckBox').checked = true;
+    await app.submitReview({ preventDefault() {} });
+    assert.deepEqual(posted(calls).map(call => call.body), [
+      { round: 1, line: 'L1', code: '43239', action: 'approve', acknowledgement: session.acknowledgement, note: '' },
+      { round: 1, line: 'L2', code: '45385', action: 'approve', acknowledgement: session.acknowledgement, note: '' }]);
+    // the server refuses round 1 (no longer the latest): the dialog closes, the page reads again and says so
+    assert.equal(element('#reviewDialog').open, false);
+    assert.equal(element('#toast').textContent, app.CHANGED_TEXT);
+    assert.equal(calls.filter(call => call.method === 'GET' && call.url === address).length, 2);
+  });
+});
+
+test('a decision posts to the document its dialog opened on, and leaving that document closes the dialog', async () => {
+  const session = fixture('session.json');
+  const first = fixture('encounter-ready.json');
+  const second = { ...clone(first), id: 'f5000000-0000-4000-8000-0000000000b2', title: 'Synthetic second document' };
+  // Approve open on the first document's L1, the member goes to the second one (browser Back runs route()): the dialog
+  // of a document the page no longer shows is closed, so nothing it showed can be saved on the other one
+  await withPage({ answers: [{ match: (method, url) => method === 'GET' && url === `/api/encounters/${second.id}`, status: 200, body: second }] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: first, route: { name: 'doc', id: first.id }, routeSerial: 13, docKey: '', viewerKey: app.viewerKey(first) });
+    await app.handleDecision('approve', 'L1', fakeElement());
+    assert.equal(element('#reviewDialog').open, true);
+    global.location.hash = `#doc/${second.id}`;
+    click('[data-action]', { action: 'reload-view' });  // route(), as the hash change runs it
+    await settle(() => app.state.doc?.id === second.id);
+    assert.equal(app.state.doc.id, second.id);
+    assert.equal(element('#reviewDialog').open, false, 'the dialog of a document no longer shown is closed');
+    element('#reviewAckBox').checked = true;
+    await app.submitReview({ preventDefault() {} });
+    assert.deepEqual(posted(calls), [], 'nothing is decided once its dialog is gone');
+  });
+  // and whichever document the page shows when the dialog is saved, the decision goes to the one it opened on
+  await withPage({}, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: first, route: null });
+    await app.handleDecision('approve', 'L1', fakeElement());
+    app.state.doc = second;
+    element('#reviewAckBox').checked = true;
+    await app.submitReview({ preventDefault() {} });
+    assert.deepEqual(posted(calls).map(call => call.url), [`/api/encounters/${first.id}/decisions`]);
+  });
+});
+
+test('a download names the coding review its dialog was opened on; one refused because it changed reloads the page (LINES-6)', async () => {
+  const session = fixture('session.json');
+  const reviewed = fixture('encounter-reviewed.json');
+  const address = `/api/encounters/${reviewed.id}`;
+  const report = { id: 'f6100000-0000-4000-8000-0000000000a1', kind: 'approved', fmt: 'txt', filename: 'CPT-Studio-approved-r2-20261120T090000.txt',
+    generated_at: '2026-11-20T09:00:00Z', download_url: '/api/reports/f6100000-0000-4000-8000-0000000000a1/download', current: true };
+  // the option posts {kind, fmt, round}: the number of the coding review the page shows; then the download starts
+  await withPage({ answers: [{ match: (method, url) => method === 'POST' && url === `${address}/reports`, status: 201, body: report }] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 14, docKey: '', viewerKey: app.viewerKey(reviewed) });
+    click('[data-action]', { action: 'export' });
+    assert.equal(element('#exportDialog').open, true);
+    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'txt' });
+    await settle(() => calls.some(call => call.download));
+    assert.deepEqual(posted(calls), [{ url: `${address}/reports`, body: { kind: 'approved', fmt: 'txt', round: 2 } }]);
+    assert.deepEqual(calls.filter(call => call.download).map(call => [call.download, call.filename]), [[report.download_url, report.filename]]);
+  });
+  // the dialog was opened on round 1; the page has moved on to round 2 under it: the option still names round 1, the
+  // server refuses it (409, no blockers), and the page closes the dialog, reads the document again and says so
+  const ready = fixture('encounter-ready.json');
+  const later = { ...clone(ready), round: { number: 2, trigger: 'answers', finished_at: '2026-11-20T08:40:00Z' } };
+  const changed = { error: 'This coding review has changed. Reload to see the latest.', details: {} };
+  await withPage({ answers: [
+    { match: (method, url) => method === 'POST' && url === `/api/encounters/${ready.id}/reports`, status: 409, body: changed },
+    { match: (method, url) => method === 'GET' && url === `/api/encounters/${ready.id}`, status: 200, body: later },
+  ] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: ready, route: { name: 'doc', id: ready.id }, routeSerial: 15, docKey: '', viewerKey: app.viewerKey(ready) });
+    click('[data-action]', { action: 'export' });
+    app.state.doc = later;
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    await settle(() => element('#toast').textContent === app.CHANGED_TEXT && app.state.doc.round.number === 2 && calls.some(call => call.method === 'GET'));
+    assert.deepEqual(posted(calls).map(call => call.body), [{ kind: 'draft', fmt: 'txt', round: 1 }]);
+    assert.equal(element('#exportDialog').open, false, 'the dialog of a coding review that changed is closed');
+    assert.equal(element('#toast').textContent, app.CHANGED_TEXT);
+    assert.equal(calls.filter(call => call.method === 'GET' && call.url === `/api/encounters/${ready.id}`).length, 1, 'the document is read again');
+    assert.deepEqual(calls.filter(call => call.download), [], 'nothing is downloaded');
+  });
+  // a refusal that says what is missing (409 with the readiness blockers) stays in the dialog and reads nothing again
+  const blocked = { error: 'The approved export is not available yet.', details: { blockers: ['No code has been approved.'] } };
+  await withPage({ answers: [{ match: (method, url) => method === 'POST' && url === `${address}/reports`, status: 409, body: blocked }] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 16, docKey: '', viewerKey: app.viewerKey(reviewed) });
+    click('[data-action]', { action: 'export' });
+    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'csv' });
+    await settle(() => element('#exportError').textContent !== '');
+    assert.equal(element('#exportError').textContent, 'The approved export is not available yet. No code has been approved.');
+    assert.equal(element('#exportDialog').open, true);
+    assert.equal(calls.filter(call => call.method === 'GET' && call.url === address).length, 0);
+    assert.notEqual(element('#toast').textContent, app.CHANGED_TEXT);
+  });
+  // a page that does not know which coding review it shows posts no download
+  const roundless = { ...clone(reviewed), round: null };
+  await withPage({}, async ({ calls }) => {
+    Object.assign(app.state, { session, doc: roundless, route: null });
+    click('[data-action]', { action: 'export' });
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    await settle(() => false);
+    assert.deepEqual(posted(calls), []);
+  });
+});
+
+test('the activity names a decision\'s line with its code ("L2 45380"), drawn as the server writes it', () => {
+  let checked = 0;
+  for (const name of ENCOUNTERS) {
+    const doc = fixture(name);
+    for (const item of doc.activity) {
+      const decided = /^.+? (?:approved|rejected|undid the decision on) (\S+) (\S+)\.$/.exec(item.text);
+      if (!/ (?:approved|rejected|undid the decision on) /.test(item.text)) continue;
+      assert.ok(decided && LINE_ID.test(decided[1]), `${name}: ${item.text}`);
+      assert.ok(doc.codes.some(code => code.line === decided[1] && code.code === decided[2]), `${name}: ${item.text}`);
+      checked += 1;
+    }
+  }
+  assert.ok(checked >= 4, checked);
+  const page = dom(render(fixture('encounter-reviewed.json'), { open: new Set(['activity']) }));
+  assert.deepEqual(page.all('details.activity-log li strong').map(item => item.text).filter(text => / L\d /.test(text)),
+    ['Reviewer approved L1 43239.', 'Reviewer approved L2 45385.', 'Reviewer rejected L3 45380.']);
+});
+
 test('the preview server answers decisions as the server does: by round and line, 409 when the coding review changed', () => {
   const session = fixture('session.json');
   const doc = fixture('encounter-same-code.json');
@@ -1540,10 +1763,32 @@ test('the preview server answers decisions as the server does: by round and line
   }
   assert.equal(preview.CHANGED, 'This coding review has changed. Reload to see the latest.');
   assert.equal(preview.decisionAnswer(doc, body({ line: 'L3' }), session)[0], 409, 'a decided line takes only Undo');
-  assert.equal(preview.decisionAnswer(doc, body({ line: 'L3', action: 'revoke', acknowledgement: '' }), session)[0], 201);
+  // an Undo names the decision it undoes: the line's current one, or 409 (LINES-5)
+  const undo = extra => body({ line: 'L3', action: 'revoke', acknowledgement: '', decision: 'fc200000-0000-4000-8000-000000000003', ...extra });
+  assert.equal(preview.decisionAnswer(doc, undo(), session)[0], 201);
+  for (const stale of [{ decision: undefined }, { decision: '' }, { decision: 'fc200000-0000-4000-8000-000000000009' }, { decision: 3 }]) {
+    assert.deepEqual(preview.decisionAnswer(doc, undo(stale), session), [409, { error: preview.CHANGED, details: {} }], JSON.stringify(stale));
+  }
   assert.equal(preview.decisionAnswer(doc, body({ acknowledgement: 'yes' }), session)[0], 400);
   const running = fixture('encounter-reading.json');
   assert.equal(preview.decisionAnswer(running, body({ round: 1 }), session)[0], 409, 'nothing is decided while a review runs');
+});
+
+test('the preview server answers downloads as the server does: by the round shown, 409 when the coding review changed', () => {
+  const reviewed = fixture('encounter-reviewed.json');
+  const [status, report] = preview.reportAnswer(reviewed, { kind: 'approved', fmt: 'txt', round: 2 });
+  assert.equal(status, 201);
+  assert.deepEqual([report.kind, report.fmt, report.current, app.safeDownloadUrl(report.download_url) === report.download_url], ['approved', 'txt', true, true]);
+  for (const stale of [{ round: 1 }, { round: '2' }, { round: undefined }, { round: 3 }]) {
+    assert.deepEqual(preview.reportAnswer(reviewed, { kind: 'draft', fmt: 'csv', ...stale }), [409, { error: preview.CHANGED, details: {} }], JSON.stringify(stale));
+  }
+  const ready = fixture('encounter-ready.json');
+  assert.deepEqual(preview.reportAnswer(ready, { kind: 'approved', fmt: 'txt', round: 1 }),
+    [409, { error: 'The approved download is not available yet.', details: { blockers: ['No code has been approved.'] } }]);
+  assert.equal(preview.reportAnswer(ready, { kind: 'draft', fmt: 'txt', round: 1 })[0], 201);
+  assert.equal(preview.reportAnswer(ready, { kind: 'zip', fmt: 'txt', round: 1 })[0], 400);
+  const running = fixture('encounter-reading.json');
+  assert.equal(preview.reportAnswer(running, { kind: 'draft', fmt: 'txt', round: 1 })[0], 409, 'nothing is exported while a review runs');
 });
 
 test('Send answers posts the typed answers once, to /answers, and forgets only what was sent', async () => {

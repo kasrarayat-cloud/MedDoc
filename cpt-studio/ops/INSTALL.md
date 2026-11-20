@@ -734,14 +734,21 @@ without ever stopping the serving web first: **B2** the
 previous image's web starts as `cpt-studio-web-next` on the idle port and must
 answer `/health/` with ITS revision and serve its pages; **B3** this revision's
 worker is parked; **B4** every coding job still queued or running is closed
-(failed, its round stopped; one left sending recorded unknown) and every open
+as its own stage would have ended it (failed, its round stopped, when nothing it
+sent is unsettled; unknown, its round failed as unknown, when its request was in
+flight - that request recorded unknown - or a send of it was left unknown and
+not reconciled; failed, its round failed with that send's kind, when a send of
+it failed: (a) below) and every open
 stage of another kind the previous worker does not run is failed (as
 `rollback-app` closes them; let the queue drain first: **Switching back to the
 pipeline before the Fable coding build**, below), the switch-back refusing to
 go on while the close names a record, and the previous image derives the stored
 state of every encounter this revision coded with its own code (the put-back) -
 and before that close, the baseline and this revision's records are read
-again, so nothing is closed for a switch that cannot pass or would refuse;
+again, so nothing is closed for a switch that cannot pass or would refuse on
+what that read finds (a request the close itself finds in flight is recorded
+unknown, and that record still refuses the switch-back after the close; the
+receipt then says what the close closed, each way above);
 **B5** the upstream is switched to the idle port (`/health/` = the previous
 revision; a reload of the switched file that was asked for and then failed is
 treated as applied, as in `app`: nginx is reloaded with this revision's vhost

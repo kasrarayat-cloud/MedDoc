@@ -486,6 +486,64 @@ class FourTablesWordingTests(unittest.TestCase):
             self.assertIn(KEPT, install.coding_note(IMAGE, b'', 'a' * 40)['note'])
 
 
+class ClosedStagesSaidTests(FableRows):
+    """install-2 residue: CLOSED_STAGES_SAID is what an undo's receipt says of the stages its close already closed (the
+    switch-back that refuses after B4's close, every close that raised or gave no answer). It said every coding job
+    closed "stays failed, ..., its round stopped, and a Resume continues that round" - false for the round whose request
+    was in flight (its job unknown, its round failed as unknown, no Resume, a retry waiting for the reconcile) and for
+    one whose send failed (its round failed with that send's kind). The sentence must say what the rows read after the
+    real close, for each kind of coding job it closes."""
+
+    def test_the_sentence_says_what_the_close_did_to_each_kind_of_coding_job(self):
+        from studio import jobs, models
+        Run = models.ProviderRun
+        queued, queued_round = self.coded('queued', state='queued', stored='processing')
+        queued_job = self.code_job(queued, queued_round, 'queued')
+        sending, sending_round = self.coded('sending', state='running', stored='processing')
+        sending_job = self.code_job(sending, sending_round, 'running')
+        self.coding_run(sending, sending_round, state='sending', sent=False)  # its request in flight at the close
+        failed, failed_round = self.coded('failed-send', state='running', stored='processing')
+        failed_job = self.code_job(failed, failed_round, 'running')
+        self.coding_run(failed, failed_round)  # the reader's read succeeded
+        too_long = self.coding_run(failed, failed_round, purpose='coding_checker', state='failed')
+        Run.objects.filter(pk=too_long.pk).update(scope={'round': str(failed_round.pk), 'failure_kind': jobs.TOO_LONG})
+        closed = self.close(EARLIER_KINDS)
+        self.assertEqual(closed['rounds'], {'cancelled': 1, 'failed': 2})
+        said = ' '.join(install.CLOSED_STAGES_SAID.split())
+        for job, round_ in ((queued_job, queued_round), (sending_job, sending_round), (failed_job, failed_round)):
+            job.refresh_from_db()
+            round_.refresh_from_db()
+        # nothing it sent unsettled: the job failed, its round stopped, and a Resume continues the round
+        self.assertEqual((queued_job.state, queued_round.state), ('failed', 'cancelled'))
+        self.assertIsNotNone(jobs.resume(queued, queued.created_by))
+        self.assertIn('with nothing it sent unsettled, the job reads failed and its round stopped, and a Resume continues '
+                      'that round whenever this revision serves again', said)
+        # its request in flight: the job unknown, its round failed as unknown, no Resume, a retry waiting for the reconcile
+        self.assertEqual((sending_job.state, sending_round.state, sending_round.failure_kind), ('unknown', 'failed', 'unknown'))
+        self.assertIsNone(jobs.resume(sending, sending.created_by))
+        with self.assertRaises(jobs.Refused) as waits:
+            jobs.retry(sending, sending.created_by)
+        self.assertEqual(str(waits.exception), jobs.RECONCILE_FIRST)
+        self.assertIn('with a request in flight or a send whose unknown outcome no operator has reconciled, the job reads '
+                      'unknown and its round failed as unknown, so no Resume continues it and a retry waits for an '
+                      'operator\'s reconcile', said)
+        # a send that failed: the job failed, its round failed with that send's kind, no Resume, a retry a new round
+        self.assertEqual((failed_job.state, failed_round.state, failed_round.failure_kind), ('failed', 'failed', jobs.TOO_LONG))
+        self.assertIsNone(jobs.resume(failed, failed.created_by))
+        self.assertEqual(jobs.retry(failed, failed.created_by).number, 2)
+        self.assertIn('with a send that failed, the job reads failed and its round failed with that send\'s kind, so no '
+                      'Resume continues it and a retry starts a new round', said)
+        # and never the old blanket claim; a stage of another kind is still said as before
+        self.assertNotIn('a coding job it closed stays failed, with the installer\'s note, its round stopped', said)
+        self.assertIn('a stage of another kind it closed stays failed, with the installer\'s note', said)
+
+    def test_the_refused_switch_back_and_every_unanswered_close_carry_it(self):
+        self.assertIn(install.CLOSED_STAGES_SAID, install.possibly_set_back('2026-11-20T08:00:00Z'))
+        self.assertIn(install.CLOSED_STAGES_SAID, install.close_did_not_finish('the stages', RuntimeError('synthetic')))
+        source = ' '.join(Path(install.__file__).read_text(encoding='utf-8').split())
+        self.assertIn("closing = f'. As for what the close already closed: {CLOSED_STAGES_SAID}.'", source)
+
+
 class HazardsOnTheDatabaseTests(FableRows):
     def test_only_an_unreconciled_unknown_coding_run_is_a_hazard(self):
         encounter, round_ = self.coded('unknown')

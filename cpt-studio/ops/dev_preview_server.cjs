@@ -3,11 +3,13 @@
 //
 // Serves studio/templates/studio/*.html rendered as plain HTML (only the template tags those files use are supported;
 // anything else fails loudly), the files in studio/static/studio/, and a mock of the customer JSON API (client contract
-// customer-2026-11-21) backed by the hand-made customer fixtures in tests/fixtures/customer/. Binds 127.0.0.1 on the
+// customer-2026-11-22) backed by the hand-made customer fixtures in tests/fixtures/customer/. Binds 127.0.0.1 on the
 // port given as --port=N, else on the first free port in 9170-9179.
 // A decision names the coding review the page shows and a line of it, as the server takes it ({round, line, code,
-// action, acknowledgement, note}): a round that is not the document's latest finished one, a line it does not have, or
-// a code that is not that line's is answered 409 with the server's sentence (decisionAnswer).
+// action, acknowledgement, note}, and for an Undo the decision it undoes: {..., decision}): a round that is not the
+// document's latest finished one, a line it does not have, a code that is not that line's, or an Undo naming another
+// decision than the line's current one is answered 409 with the server's sentence (decisionAnswer). A download names
+// the coding review the page shows ({kind, fmt, round}): another round is answered 409 the same way (reportAnswer).
 //
 // Request headers understood by the mock: "X-Preview-Session: agent" serves the agent session;
 // "X-Preview-Encounters: empty" serves an empty document list.
@@ -441,17 +443,45 @@ async function handleApi(req, res, url) {
   return apiError(res, 404, 'Not found.');
 }
 
+// Whether `round` is the number of `doc`'s latest coding review and that review has finished: what a decision and a
+// download must name.
+function latestFinished(doc, round) {
+  return doc.progress?.phase === 'done' && Number.isInteger(doc.round?.number) && round === doc.round.number;
+}
+
 // [status, payload] of POST decisions on `doc`, as the server answers it: 409 CHANGED unless `round` is the number of the
 // document's latest coding review, that review has finished, `line` is one of its lines and `code` is that line's code;
-// then the line's own allowed actions and the exact approval statement. Nothing here changes a fixture.
+// then the line's own allowed actions, the exact approval statement, and for an Undo the id of the line's current
+// decision (an Undo naming another one is 409 CHANGED: it would undo a decision the member never saw). Nothing here
+// changes a fixture.
 function decisionAnswer(doc, body, session) {
-  const finished = doc.progress?.phase === 'done' && Number.isInteger(doc.round?.number);
-  const line = finished && body.round === doc.round.number ? (doc.codes || []).find(item => item.line === body.line) : null;
+  const line = latestFinished(doc, body.round) ? (doc.codes || []).find(item => item.line === body.line) : null;
   if (!line || line.code !== body.code) return [409, { error: CHANGED, details: {} }];
   if (!ACTIONS.has(body.action)) return [400, { error: 'Choose approve, reject or undo.', details: {} }];
   if (!line.allowed_actions.includes(body.action)) return [409, { error: 'This action is not available for this line right now.', details: {} }];
+  if (body.action === 'revoke' && (typeof body.decision !== 'string' || body.decision !== line.decision?.id)) return [409, { error: CHANGED, details: {} }];
   if (body.action === 'approve' && body.acknowledgement !== session.acknowledgement) return [400, { error: 'An approval needs the exact confirmation statement.', details: {} }];
-  return [201, { line: line.line, code: line.code, action: body.action, by: session.user.label, at: iso(Date.now()), note: typeof body.note === 'string' ? body.note : '' }];
+  return [201, { line: line.line, code: line.code, id: crypto.randomUUID(), action: body.action, by: session.user.label, at: iso(Date.now()), note: typeof body.note === 'string' ? body.note : '' }];
+}
+
+// [status, payload] of POST reports on `doc`, as the server answers it: 400 for a kind or format it does not make; 409
+// CHANGED unless `round` is the number of the document's latest coding review and that review has finished; 409 with
+// the readiness blockers when the download asked for is not available; else 201 with the report as the page lists it.
+// The download is a mock (registered in `reports`); nothing here changes a fixture.
+function reportAnswer(doc, body) {
+  if (!['draft', 'approved'].includes(body.kind) || !['txt', 'csv'].includes(body.fmt)) return [400, { error: 'Choose a download.', details: {} }];
+  if (!latestFinished(doc, body.round)) return [409, { error: CHANGED, details: {} }];
+  if (body.kind === 'approved' && doc.readiness?.approved !== true) {
+    return [409, { error: 'The approved download is not available yet.', details: { blockers: doc.readiness?.blockers || [] } }];
+  }
+  if (body.kind === 'draft' && doc.readiness?.draft !== true) return [409, { error: 'Nothing can be downloaded yet.', details: { blockers: doc.readiness?.blockers || [] } }];
+  const id = crypto.randomUUID();
+  const filename = `cpt-studio-preview-${body.kind}.${body.fmt}`;
+  const content = body.fmt === 'csv'
+    ? 'notice,kind\r\n"SYNTHETIC — NOT FOR BILLING","preview mock"\r\n'
+    : `SYNTHETIC — NOT FOR BILLING\nCPT Studio preview mock download (${body.kind}).\nThe real download is built by the server from the saved decisions.\n`;
+  reports.set(id, { content, filename, type: body.fmt === 'csv' ? 'text/csv; charset=utf-8' : 'text/plain; charset=utf-8' });
+  return [201, { id, kind: body.kind, fmt: body.fmt, filename, generated_at: iso(Date.now()), download_url: `/api/reports/${id}/download`, current: true }];
 }
 
 function handleChange(res, doc, action, body, session) {
@@ -489,18 +519,8 @@ function handleChange(res, doc, action, body, session) {
     });
     return json(res, 201, { round: { number, trigger: 'retry', finished_at: null } });
   }
-  if (!['draft', 'approved'].includes(body.kind) || !['txt', 'csv'].includes(body.fmt)) return apiError(res, 400, 'Choose a download.');
-  if (body.kind === 'approved' && doc.readiness?.approved !== true) {
-    return apiError(res, 409, 'The approved download is not available yet.', { blockers: doc.readiness?.blockers || [] });
-  }
-  if (body.kind === 'draft' && doc.readiness?.draft !== true) return apiError(res, 409, 'Nothing can be downloaded yet.', { blockers: doc.readiness?.blockers || [] });
-  const id = crypto.randomUUID();
-  const filename = `cpt-studio-preview-${body.kind}.${body.fmt}`;
-  const content = body.fmt === 'csv'
-    ? 'notice,kind\r\n"SYNTHETIC — NOT FOR BILLING","preview mock"\r\n'
-    : `SYNTHETIC — NOT FOR BILLING\nCPT Studio preview mock download (${body.kind}).\nThe real download is built by the server from the saved decisions.\n`;
-  reports.set(id, { content, filename, type: body.fmt === 'csv' ? 'text/csv; charset=utf-8' : 'text/plain; charset=utf-8' });
-  return json(res, 201, { id, kind: body.kind, fmt: body.fmt, filename, generated_at: iso(Date.now()), download_url: `/api/reports/${id}/download`, current: true });
+  const [status, payload] = reportAnswer(doc, body);
+  return json(res, status, payload);
 }
 
 async function handle(req, res) {
@@ -579,4 +599,4 @@ if (require.main === module) {
   listen(asked ? [Number(asked[1])] : PORTS);
 }
 
-module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, CHANGED };
+module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, CHANGED };

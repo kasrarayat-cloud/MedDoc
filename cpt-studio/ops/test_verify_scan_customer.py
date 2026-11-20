@@ -35,6 +35,9 @@ USERNAME, PASSWORD = 'review-agent', 'Synthetic-scan pass&+%<>"é-2026'
 ENCOUNTER_ID = 'f6000000-0000-4000-8000-0000000000a1'
 DRAFT_ID, APPROVED_ID = 'f6000000-0000-4000-8000-0000000000d1', 'f6000000-0000-4000-8000-0000000000d2'
 QUOTE = 'Cold forceps biopsies were taken from the gastric antrum.'
+# DECISION IDS (FIX-SPEC-2 section 5): a current decision carries its id once the contract lists it (lane G1)
+DECISION_IDS = 'id' in sc.CONTRACT['types']['decision']['keys']
+DECISION_ID = 'f6000000-0000-4000-8000-0000000000e1'
 
 
 def session_json() -> dict:
@@ -66,7 +69,8 @@ def encounter_json() -> dict:
                    'reason': 'Biopsies were taken during the upper endoscopy (page 1).',
                    'second_check': {'agrees': True, 'reason': 'The biopsy is documented on page 1.'},
                    'question': None, 'quotes': [{'text': QUOTE, 'page': 1}],
-                   'decision': {'action': 'approve', 'by': 'Review agent', 'at': '2026-11-20T07:52:10Z', 'note': ''},
+                   'decision': {**({'id': DECISION_ID} if DECISION_IDS else {}), 'action': 'approve', 'by': 'Review agent',
+                                'at': '2026-11-20T07:52:10Z', 'note': ''},
                    'allowed_actions': ['revoke']}],
         'questions': [], 'answers': [], 'notes': [],
         'readiness': {'draft': True, 'approved': True, 'blockers': []},
@@ -76,7 +80,7 @@ def encounter_json() -> dict:
                     {'id': APPROVED_ID, 'kind': 'approved', 'fmt': 'csv', 'filename': 'synthetic-egd-approved.csv',
                      'generated_at': '2026-11-20T07:54:00Z', 'download_url': f'/api/reports/{APPROVED_ID}/download',
                      'current': True}],
-        'activity': [{'at': '2026-11-20T07:52:10Z', 'text': 'Review agent approved 43239.'}]}
+        'activity': [{'at': '2026-11-20T07:52:10Z', 'text': 'Review agent approved L1 43239.'}]}
 
 
 EXPORTS = {

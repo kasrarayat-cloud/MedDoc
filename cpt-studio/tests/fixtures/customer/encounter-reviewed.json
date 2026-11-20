@@ -64,6 +64,7 @@
     }
    ],
    "decision": {
+    "id": "f6200000-0000-4000-8000-000000000001",
     "action": "approve",
     "by": "Reviewer",
     "at": "2026-11-20T07:52:10Z",
@@ -97,6 +98,7 @@
     }
    ],
    "decision": {
+    "id": "f6200000-0000-4000-8000-000000000002",
     "action": "approve",
     "by": "Reviewer",
     "at": "2026-11-20T07:52:40Z",
@@ -128,6 +130,7 @@
     }
    ],
    "decision": {
+    "id": "f6200000-0000-4000-8000-000000000003",
     "action": "reject",
     "by": "Reviewer",
     "at": "2026-11-20T07:53:40Z",
@@ -198,15 +201,15 @@
   },
   {
    "at": "2026-11-20T07:52:10Z",
-   "text": "Reviewer approved 43239."
+   "text": "Reviewer approved L1 43239."
   },
   {
    "at": "2026-11-20T07:52:40Z",
-   "text": "Reviewer approved 45385."
+   "text": "Reviewer approved L2 45385."
   },
   {
    "at": "2026-11-20T07:53:40Z",
-   "text": "Reviewer rejected 45380."
+   "text": "Reviewer rejected L3 45380."
   },
   {
    "at": "2026-11-20T07:55:00Z",
