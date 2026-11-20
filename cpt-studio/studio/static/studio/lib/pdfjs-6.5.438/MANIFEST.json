@@ -1,0 +1,92 @@
+{
+  "schema": "cpt-studio-third-party@1",
+  "name": "pdfjs-dist",
+  "version": "6.5.438",
+  "license": "Apache-2.0",
+  "source": "the npm registry tarball pdfjs-dist-6.5.438.tgz, unpacked; every file below is byte-identical to the file of the same path under the tarball's package/ directory",
+  "npm_integrity": "sha512-vg8Pw1x+AFKy4AMDvhuWl5cOYV8d698UoEANoFFhc79hqXDnZQqnOXoxw3HG907WHOg1JYOvLhP756boddFxpA==",
+  "npm_shasum": "e7f8986ec4ea04057b5d9d2f0e5b63ea94d2303f",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 10174,
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "why": "the library licence (Apache-2.0)"
+    },
+    {
+      "path": "build/pdf.min.mjs",
+      "bytes": 474284,
+      "sha256": "3a88402882cfa3e7e72c2c9b5149f52f0f88baf1c5b62aa11a41abdbc2072440",
+      "why": "the library (display layer): loaded by the review page with import() when a document is viewed as a PDF"
+    },
+    {
+      "path": "build/pdf.worker.min.mjs",
+      "bytes": 1271915,
+      "sha256": "1e64c8240e54735ec5913b37acd5134747799cb8c6bb3777c70adbc01232d2aa",
+      "why": "the library worker (parsing, text content): started by pdf.min.mjs as a same-origin module worker"
+    },
+    {
+      "path": "standard_fonts/FoxitDingbats.pfb",
+      "bytes": 29513,
+      "sha256": "845c752392b6c914fb989c75a08b7792b88f542d2499042ef2889f8c814a16ed",
+      "why": "the ZapfDingbats standard font, likewise (check marks of form fields drawn on the page)"
+    },
+    {
+      "path": "standard_fonts/FoxitSymbol.pfb",
+      "bytes": 16729,
+      "sha256": "47967d055530e7357088a08403115425643ec2cdfd6201ba8af0fbd7116c1539",
+      "why": "the Symbol standard font, which the library fetches when a document uses it without embedding it (system fonts stand in for the other standard fonts)"
+    },
+    {
+      "path": "standard_fonts/LICENSE_FOXIT",
+      "bytes": 1553,
+      "sha256": "b578cdd2345840ada550bd12519533812320d5f1d21cf4c1c7e1b1b0a31c98b7",
+      "why": "licence of the two standard fonts (BSD-3-Clause)"
+    },
+    {
+      "path": "wasm/LICENSE_JBIG2",
+      "bytes": 12862,
+      "sha256": "9e66b7f1b934a28b37f3bc4dac97915de1674271e79a0a88182a18ed9731b4d1",
+      "why": "licence of the JBIG2 decoder (BSD-3-Clause)"
+    },
+    {
+      "path": "wasm/LICENSE_OPENJPEG",
+      "bytes": 2112,
+      "sha256": "a6af136f3e15038a666b61f376612a07d9a4e48cb7c01adbf3e33b3f14ab49b6",
+      "why": "licence of the JPEG 2000 decoder (BSD-2-Clause)"
+    },
+    {
+      "path": "wasm/LICENSE_PDFJS_JBIG2",
+      "bytes": 555,
+      "sha256": "aad3cce09842e00e9e11ad5e8fef8cc02fbc3a3768fe2f007443b9cee37aaee5",
+      "why": "licence of the library wrapper of that decoder (Apache-2.0)"
+    },
+    {
+      "path": "wasm/LICENSE_PDFJS_OPENJPEG",
+      "bytes": 1285,
+      "sha256": "717fc62da03292dbb4dd0c8280bd4ce7bb8550dcf31d772bc93455fb50313425",
+      "why": "licence of the library wrapper of that decoder (BSD-2-Clause)"
+    },
+    {
+      "path": "wasm/jbig2_nowasm_fallback.js",
+      "bytes": 132439,
+      "sha256": "70150223396487e1ccfef7eac61fc780074ad7fcc9e843b702a8a3bc23107494",
+      "why": "JBIG2 image decoder in plain JavaScript, loaded by the worker for the same reason"
+    },
+    {
+      "path": "wasm/openjpeg_nowasm_fallback.js",
+      "bytes": 338458,
+      "sha256": "2855f1590e7fd7abbbf204cd13a5c09d30c92fe2c9313fb72b64aa763fe8b4f3",
+      "why": "JPEG 2000 image decoder in plain JavaScript, loaded by the worker because the viewer runs with useWasm false (no WebAssembly, so no wasm-unsafe-eval in the policy)"
+    }
+  ],
+  "not_included": [
+    "build/pdf.mjs, build/pdf.worker.mjs and their source maps: the minified builds are the same code",
+    "build/pdf.sandbox*.mjs and wasm/quickjs-eval.*: document scripting is never run",
+    "build/pdf.renderer*.mjs: pages are drawn on the main thread (disableWorkerRendering)",
+    "wasm/*.wasm and iccs/: no WebAssembly is used (useWasm false), so colour profiles fall back to the device colour spaces",
+    "cmaps/: predefined CJK character maps, which documents in English do not need",
+    "standard_fonts/ other than Symbol and ZapfDingbats: with useSystemFonts the library never fetches the other Type 1 fonts, and the four Liberation Sans files (GPL-2.0 with a font exception) are only its last url() source after the local() system fonts it names for the Helvetica family, so a computer with none of those draws such text in its generic sans-serif",
+    "web/ (the full viewer and its stylesheet), image_decoders/, legacy/ and types/"
+  ]
+}
