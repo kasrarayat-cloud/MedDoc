@@ -175,6 +175,37 @@ if GEMINI_MODE not in {'disabled', 'replay', 'live'}:
     raise RuntimeError('CPT_STUDIO_GEMINI_MODE must be disabled, replay or live.')
 GEMINI_CREDENTIALS_FILE = _env('GEMINI_CREDENTIALS_FILE', '')
 GEMINI_REPLAY_DIR = _env('GEMINI_REPLAY_DIR', '')
+# The coding step (studio/fable/; BUILD-SPEC 3 and 4): Claude Fable 5.2 reads the original document twice, as the reader
+# and as the checker. CODING_MODE 'disabled' (the default) sends nothing; 'replay' reads recorded final messages from
+# CODING_REPLAY_DIR by request sha256 and calls nothing; 'live' calls the Anthropic API with the key read at send time
+# from ANTHROPIC_CREDENTIALS_FILE (above; mounted in the worker only). CODING_EFFORT is output_config.effort ('max', the
+# owner's setting); CODING_READ_TIMEOUT_SECONDS bounds each wait for a byte of the stream (anthropic.Timeout's read).
+CODING_MODE = _env('CODING_MODE', 'disabled')
+if CODING_MODE not in {'disabled', 'replay', 'live'}:
+    raise RuntimeError('CPT_STUDIO_CODING_MODE must be disabled, replay or live.')
+CODING_REPLAY_DIR = _env('CODING_REPLAY_DIR', '')
+CODING_EFFORT = _env('CODING_EFFORT', 'max')
+if CODING_EFFORT not in {'low', 'medium', 'high', 'xhigh', 'max'}:
+    raise RuntimeError('CPT_STUDIO_CODING_EFFORT must be low, medium, high, xhigh or max.')
+_read_timeout = _env('CODING_READ_TIMEOUT_SECONDS', '900')
+if not (_read_timeout.isascii() and _read_timeout.isdigit()) or int(_read_timeout) < 1:
+    raise RuntimeError('CPT_STUDIO_CODING_READ_TIMEOUT_SECONDS must be a whole number of seconds, at least 1.')
+CODING_READ_TIMEOUT_SECONDS = int(_read_timeout)
+# The owner's two figures (class d), one default each here, which the installer gives every container: the most one
+# document's revision may cost - every coding run already on it, priced from its usage (a run whose cost is not known
+# counts at its reserved worst case), plus the next send's worst case (jobs.spent_usd, fable.pricing.worst_case_usd) -
+# and the documents coded at once, which is both the worker's threads and its provider slots (jobs.work, _take_slot).
+DOCUMENT_CEILING_USD = _env('DOCUMENT_CEILING_USD', '25')
+try:
+    _document_ceiling: Decimal | None = Decimal(DOCUMENT_CEILING_USD)
+except InvalidOperation:
+    _document_ceiling = None
+if _document_ceiling is None or not _document_ceiling.is_finite() or _document_ceiling < 0:
+    raise RuntimeError('CPT_STUDIO_DOCUMENT_CEILING_USD must be a non-negative amount of US dollars.')
+_documents = _env('CONCURRENT_DOCUMENTS', '4')
+if not (_documents.isascii() and _documents.isdigit()) or int(_documents) < 1:
+    raise RuntimeError('CPT_STUDIO_CONCURRENT_DOCUMENTS must be a whole number of documents, at least 1.')
+CONCURRENT_DOCUMENTS = int(_documents)
 # Release scope after refutation round 3 (HARNESS.md 12.10, the session's D7): this release offers no reviewer
 # confirmation of a participant's located passage. A code-level literal, deliberately never read from the environment or
 # an installer file, so no variable, file or member action turns it on; only a test's override_settings does, for the

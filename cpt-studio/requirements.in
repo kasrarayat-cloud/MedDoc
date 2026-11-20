@@ -16,3 +16,5 @@ pypdf==6.21.4
 # pypdf's AES provider: without it every AES-encrypted PDF fails to open.
 cryptography==50.0.1
 python-docx==1.2.0
+# The coding pass's client (studio/fable/client.py): Anthropic's official SDK, whose transport is httpx2.
+anthropic==2.11.0
