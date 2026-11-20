@@ -7,14 +7,17 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
 from html.parser import HTMLParser
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.staticfiles.storage import staticfiles_storage
+from django.core.management import call_command
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from studio import customer
+from studio import customer, views
 
 ROOT = Path(settings.BASE_DIR)
 STATIC = ROOT / 'studio' / 'static' / 'studio'
@@ -24,6 +27,11 @@ CUSTOMER_FIXTURES = ROOT / 'tests' / 'fixtures' / 'customer'
 APPROVED_CSS_LENGTH = 32785
 APPROVED_CSS_SHA256 = '4d68468c74e7b47d80472b9c95c6947189051089349b1559863ded7bd7b047e8'
 PLAIN_STATIC = {**settings.STORAGES, 'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}}
+# The pinned PDF library the review page draws a PDF with (DECISIONS D368): the files its manifest lists, each byte-identical
+# to the npm tarball pdfjs-dist-6.5.438.tgz (sha512 integrity below), and nothing else.
+PDF_LIB = STATIC / 'lib' / 'pdfjs-6.5.438'
+PDF_LIB_NAME = 'studio/lib/pdfjs-6.5.438'
+PDF_LIB_INTEGRITY = 'sha512-vg8Pw1x+AFKy4AMDvhuWl5cOYV8d698UoEANoFFhc79hqXDnZQqnOXoxw3HG907WHOg1JYOvLhP756boddFxpA=='
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 # GET /api/session, /api/encounters and /api/encounters/<id>, exactly as the contract file lists them (the build
 # specification, section 6, with document.view_media_type, document.converted and the state 'earlier')
@@ -114,6 +122,14 @@ class ShellTemplateTests(SimpleTestCase):
             self.assertIn(path, html)
         self.assertIn('name="csrfmiddlewaretoken"', html)
         self.assertNotRegex(html, r'\{[%{]')
+
+    def test_index_names_the_pinned_pdf_library_on_its_body_and_loads_no_more_scripts(self):
+        html = self.render_index()
+        body = re.search(r'<body ([^>]*)>', html).group(1)
+        self.assertEqual(dict(re.findall(r'(data-pdf-module|data-pdf-worker)="([^"]*)"', body)), {
+            'data-pdf-module': f'/static/{PDF_LIB_NAME}/build/pdf.min.mjs',
+            'data-pdf-worker': f'/static/{PDF_LIB_NAME}/build/pdf.worker.min.mjs'})
+        self.assertNotIn('modulepreload', html, 'the library is loaded only when a PDF is viewed')
 
     def test_index_obeys_the_content_security_policy(self):
         audit = _audit(self.render_index())
@@ -283,6 +299,81 @@ class CustomerFixtureTests(SimpleTestCase):
             with self.subTest(path.name):
                 found = [value for value in _strings(_customer(path.name)) if FORBIDDEN.search(value)]
                 self.assertEqual(found, [])
+
+
+class PdfLibraryTests(SimpleTestCase):
+    """The PDF library the review page loads for a document viewed as a PDF: pinned, served by this site with its licence,
+    loadable under the shell's policy (its modules as JavaScript, through Django and WhiteNoise, after collectstatic with
+    the manifest storage the image builds with)."""
+
+    def manifest(self):
+        return json.loads((PDF_LIB / 'MANIFEST.json').read_text(encoding='utf-8'))
+
+    def test_every_pinned_file_is_listed_with_its_checksum_and_nothing_else_is_there(self):
+        manifest = self.manifest()
+        self.assertEqual((manifest['name'], manifest['version'], manifest['license']), ('pdfjs-dist', '6.5.438', 'Apache-2.0'))
+        self.assertEqual(manifest['npm_integrity'], PDF_LIB_INTEGRITY)
+        listed = {item['path']: item for item in manifest['files']}
+        present = {path.relative_to(PDF_LIB).as_posix() for path in PDF_LIB.rglob('*') if path.is_file()}
+        self.assertEqual(present, set(listed) | {'MANIFEST.json'})
+        for name, item in listed.items():
+            with self.subTest(name):
+                data = (PDF_LIB / name).read_bytes()
+                self.assertEqual((len(data), hashlib.sha256(data).hexdigest()), (item['bytes'], item['sha256']))
+                self.assertTrue(item['why'])
+        self.assertTrue((PDF_LIB / 'LICENSE').read_text(encoding='utf-8').startswith('\n                                 Apache License'))
+        # the minified builds, the worker, the two image decoders without WebAssembly and two standard fonts: no source maps,
+        # no scripting sandbox, no WebAssembly, no renderer worker
+        self.assertEqual(sorted(name for name in listed if not name.split('/')[-1].startswith('LICENSE')), [
+            'build/pdf.min.mjs', 'build/pdf.worker.min.mjs', 'standard_fonts/FoxitDingbats.pfb', 'standard_fonts/FoxitSymbol.pfb',
+            'wasm/jbig2_nowasm_fallback.js', 'wasm/openjpeg_nowasm_fallback.js'])
+
+    def test_the_library_evaluates_no_code_from_strings(self):
+        for name in ('build/pdf.min.mjs', 'build/pdf.worker.min.mjs', 'wasm/jbig2_nowasm_fallback.js', 'wasm/openjpeg_nowasm_fallback.js'):
+            with self.subTest(name):
+                text = (PDF_LIB / name).read_text(encoding='utf-8')
+                self.assertIsNone(re.search(r'(?<![\w$.])eval\s*\(|\bnew\s+Function\s*\(|(?<![\w$.])Function\s*\(', text))
+                self.assertNotIn('sourceMappingURL', text)
+
+    def test_the_shell_policy_lets_the_library_run_with_no_eval_and_no_webassembly(self):
+        csp = dict(part.strip().split(' ', 1) for part in views.INDEX_CSP.split(';'))
+        self.assertEqual(csp['script-src'], "'self'", 'the module and its same-origin module worker (worker-src falls back to it)')
+        self.assertEqual(csp['connect-src'], "'self'", 'the PDF from the view address')
+        self.assertNotIn('worker-src', csp)
+        self.assertNotIn('child-src', csp)
+        self.assertNotIn('eval', views.INDEX_CSP, "neither 'unsafe-eval' nor 'wasm-unsafe-eval'")
+        self.assertEqual(csp['frame-src'], "'self'", "the browser's own viewer, where the library cannot run")
+
+    def test_collectstatic_with_the_manifest_storage_serves_the_library_as_javascript(self):
+        # module scripts and module workers are refused when served as another type under nosniff
+        with tempfile.TemporaryDirectory() as root, override_settings(STATIC_ROOT=Path(root) / 'static'):
+            call_command('collectstatic', interactive=False, verbosity=0)
+            html = render_to_string('studio/index.html', {'release': 'test-release'}, request=RequestFactory().get('/'))
+            body = re.search(r'<body ([^>]*)>', html).group(1)
+            named = dict(re.findall(r'data-pdf-(module|worker)="([^"]*)"', body))
+            self.assertEqual(named, {'module': staticfiles_storage.url(f'{PDF_LIB_NAME}/build/pdf.min.mjs'),
+                                     'worker': staticfiles_storage.url(f'{PDF_LIB_NAME}/build/pdf.worker.min.mjs')})
+            for kind, address in named.items():
+                with self.subTest(kind):
+                    self.assertRegex(address, rf'^/static/{re.escape(PDF_LIB_NAME)}/build/pdf(\.worker)?\.min\.[0-9a-f]{{12}}\.mjs$')
+            # what the worker asks for by name, next to it: the image decoders without WebAssembly and the standard fonts
+            fallback = f'/static/{PDF_LIB_NAME}/wasm/openjpeg_nowasm_fallback.js'
+            font = f'/static/{PDF_LIB_NAME}/standard_fonts/FoxitDingbats.pfb'
+            for address, kind in ((named['module'], 'text/javascript'), (named['worker'], 'text/javascript'),
+                                  (fallback, 'text/javascript'), (font, '')):
+                with self.subTest(address):
+                    response = self.client.get(address)
+                    self.assertEqual(response.status_code, 200)
+                    if kind:
+                        self.assertEqual(response['Content-Type'].split(';')[0], kind)
+                    self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
+                    data = b''.join(response.streaming_content) if response.streaming else response.content
+                    source = PDF_LIB / address.split(f'{PDF_LIB_NAME}/', 1)[1]
+                    if source.exists():
+                        self.assertEqual(data, source.read_bytes())
+                    else:  # a hashed name: the same bytes as the file it names
+                        original = re.sub(r'\.[0-9a-f]{12}(\.mjs)$', r'\1', address.split(f'{PDF_LIB_NAME}/', 1)[1])
+                        self.assertEqual(data, (PDF_LIB / original).read_bytes())
 
 
 class BrowserLogicTests(SimpleTestCase):

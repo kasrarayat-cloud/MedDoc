@@ -12,8 +12,9 @@ so the numbering is kept; sections that described the removed pipeline say so in
 2. Plain English for a physician's office.
 3. One page build at a time: the page names its build on every API call (client contract `customer-2026-11-22`) and
    asks the member to reload when the server is newer.
-4. No inline script, handler or style attribute from server text; one same-origin script; server text is escaped
-   (`escapeHtml`) before it reaches the DOM.
+4. No inline script, handler or style attribute from server text; one same-origin script tag (for a document viewed as a
+   PDF the page also loads the pinned PDF library, same-origin modules named on `<body>`; section 8); server text is
+   escaped (`escapeHtml`) before it reaches the DOM, and a PDF's own text reaches it as text only.
 5. Keyboard and screen-reader use: every control is a button, link or labelled field; focus is kept across the page's
    redraws; status messages are announced (`role="status"`).
 6. Customer-facing text never names a vendor or model (Corti, Astra, Fable, OpenAI, Anthropic, Claude, Gemini, Google,
@@ -32,8 +33,10 @@ answer its questions (a new round) -> approve or reject each code -> download a 
 
 `studio/templates/studio/index.html` (the shell and its dialogs), `studio/static/studio/app.js` (the page),
 `studio/static/studio/styles.css` (the owner-approved stylesheet: its first 32,785 bytes are pinned and stay
-byte-identical; additions define no new tokens). `tests/test_frontend.py` and `tests/frontend/app.test.cjs` hold them to
-this contract; `ops/walk.cjs` checks it on the deployed site.
+byte-identical; additions define no new tokens), `studio/static/studio/lib/pdfjs-6.5.438/` (the PDF library the viewer
+draws a PDF with: pdfjs-dist 6.5.438, only the files its `MANIFEST.json` lists with their sha256, its licence beside
+them). `tests/test_frontend.py` and `tests/frontend/app.test.cjs` hold them to this contract; `ops/walk.cjs` checks it on
+the deployed site.
 
 ## 3. Readers
 
@@ -87,10 +90,18 @@ is the machine-readable copy.
 The encounter view has two columns.
 
 Left, the document:
-- `#documentViewer` - an iframe of `document.view_url` (the PDF, the text, or a Word document's converted PDF), and
-  `#downloadOriginal` ("Download original") for an upload.
+- `#documentViewer[data-view-url]` - the viewer of `document.view_url`, which keeps that address in `data-view-url`. For a
+  PDF (or a Word document's converted PDF) it is a scrolling region (`div.pdf-viewer[role=region]`) the page draws the
+  PDF's pages in with the pinned PDF library: every page as `.pdf-page[data-page]`, fitted to the region's width, drawn
+  only near the visible area (the others are placeholders of their size) and redrawn when the width changes, each with
+  its canvas and a transparent, selectable text layer (`.pdf-text`); `#viewerPage` in the toolbar says "Page N of M".
+  Where the library cannot run (it does not load, the browser lacks what it needs, the document is refused), the
+  browser's own viewer is framed in the region instead (`[data-mode=frame]`, as before). For a text it is an iframe of
+  the text. Under it, `#viewerMark` (`role=status`, polite) says what choosing a quote marked; under that, the note that
+  a PDF is a Word document's converted PDF; then `#downloadOriginal` ("Download original") for an upload.
 - `#quotesPanel` ("Quoted passages") - every quote of every line as `button.quote[data-code][data-line][data-page]`;
-  choosing one moves the viewer to that page (`#page=N`).
+  choosing one (or a row's own quote) opens its page and marks its words there (below). The chosen button stays
+  selected (`.selected`, `aria-current`) until another is chosen.
 
 Right, top to bottom:
 - `section.progress-panel[data-phase]` - the steps `.progress-step[data-step=reading|checking|finished][data-state]`
@@ -119,11 +130,47 @@ it), `#reviewNote` and `#saveReview` (enabled once the box is ticked). The uploa
 `#uploadFile`, `#pasteText`, `#serviceDate`, `#insurance`, `#syntheticAttestation` and `#startReview`. The export
 dialog: `#exportDialog`.
 
+### Marking a quoted passage (the owner's direction of 2026-11-20, DECISIONS D368)
+
+The one statement of the rule; the code is `locateQuote` (PDF) and `findPassages` (text) in `studio/static/studio/app.js`,
+and the docs elsewhere point here.
+
+- A PDF quote is located by its own characters only, in the text of its page as the PDF library reads it (the page's text
+  items, in order): white space is ignored entirely, Unicode NFKC applies to both sides, and a match is exact-case first,
+  case-blind only where there is no exact-case occurrence, and always of whole characters (never half of a ligature,
+  never a letter without its accent). No fuzzy or nearest match, no word list.
+- It is looked for on the quote's page. Only where it is not there, on that page and the next joined, keeping only a
+  passage that starts on the quote's page and runs onto the next (the marked part on each page is shown). Nothing is
+  ever marked on another page; a quote found only on another page is not marked. A quote with no page is looked for on
+  every page, and its pages are named.
+- Every occurrence found is marked (`span.pdf-mark[data-occurrence]` around exactly the matched characters of the text
+  layer, in the page's lime beneath the drawing) and counted in the note: "Marked on page 2.", "These words appear 2
+  times on page 1. Each is marked.", "Marked on page 1, continuing onto page 2." Where nothing is found, nothing is
+  marked, the page still opens and the note says "The exact words could not be found on page N, so nothing is marked.
+  Page N is shown." Never a partial match.
+- The mark stays until another quote is chosen or the document changes (a newer coding review clears it with the
+  passage chosen); it is painted again whenever its page is drawn again (a new width, scrolled back into view), and a
+  read of the document that only changes the codes never reloads the viewer. Scrolling to it respects
+  `prefers-reduced-motion`.
+- In the browser's own viewer (where the library cannot run) a quote opens its page (`#page=N`) and the note says
+  "Marking is not available for this document. Page N is shown."
+- A text document keeps its own rule (`findPassages`, as `findPassage`: runs of white space count as one space, exact
+  case before case-blind): every occurrence is marked inside the text's frame and the note says how many, or that the
+  exact words could not be found.
+- It reads no meaning, adds no word list or code rule, and never holds or changes a code (owner condition D358). The
+  viewer keeps what it marked on `#documentViewer` (`data-marked`, `data-mark-status`, `data-mark-pages`,
+  `data-mark-count`) for the walk.
+- The library runs with no eval, no WebAssembly (so the policy needs neither `'unsafe-eval'` nor `'wasm-unsafe-eval'`:
+  JPEG 2000 and JBIG2 images use its plain-JavaScript decoders, colour profiles fall back to the device colour spaces),
+  no document scripting, no XFA and no layer of links or form fields (form fields' appearances are drawn on the page); it
+  reads only the same-origin view address.
+
 ## 9. Install and verify
 
 `ops/install.py` installs a revision (`ops/INSTALL.md`). `ops/walk.cjs` then drives the real page with a synthetic
 document at desktop width and at 390 px (no horizontal scroll): upload, poll to done, the DOM contract above and the JSON
-contract, an answer when one is asked, one approval through the dialog (the History naming the line with its code), both
+contract, every quote chosen and its marks read back (its words on its page, or the note saying they could not be
+found, and nothing marked on another page; counted), an answer when one is asked, one approval through the dialog (the History naming the line with its code), both
 exports downloaded twice to equal bytes (each request naming the round shown), the approval undone through the row's
 Undo (naming the decision shown), the denylist scan over every JSON body, the DOM and the downloads, and every `/ops/`
 path refused to the customer.

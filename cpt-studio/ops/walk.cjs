@@ -28,8 +28,10 @@
  * context as uploaded; the page against the DOM contract of section 7 (the progress panel and its steps, the questions
  * panel, the code rows - by line, two lines of one code being two rows - with their number, units (a number shown as
  * that number, 0 included, units not given shown as "not given"), modifiers (each served one, and no other), status
- * badge, reason, second check, quotes and exactly the allowed buttons, the quotes panel - a quote with a page moves the
- * viewer to #page=N - the notes panel, the document viewer and its "Download original" link, the export button); the first
+ * badge, reason, second check, quotes and exactly the allowed buttons, the quotes panel, the notes panel, the document
+ * viewer - its view address - and its "Download original" link, the export button); every quote chosen through the quotes
+ * panel, its marked words read back from the viewer: equal to the quote's (white space ignored) on its page, or from it
+ * onto the next, or the note saying they could not be found, and nothing marked on another page - counted; the first
  * question, when there is one, answered through the panel and the new round waited for and checked again; one READY
  * line approved through #reviewDialog as the page draws it (the acknowledgement checkbox #reviewAckBox inside its label
  * #reviewAcknowledgement, which carries the session's acknowledgement; an agent-executed synthetic review), the page's
@@ -640,6 +642,8 @@ function readEncounterDom() {
   const text = el => (el ? el.textContent : '').replace(/\s+/g, ' ').trim();
   const panel = document.querySelector('section.progress-panel');
   const questions = document.querySelector('section#questionsPanel');
+  // the viewer keeps the view address on its element (data-view-url): the PDF region the page draws in, or the text's frame;
+  // a viewer without it is read by its frame's address
   const viewer = document.querySelector('#documentViewer');
   const frame = viewer ? (viewer.tagName === 'IFRAME' ? viewer : viewer.querySelector('iframe')) : null;
   const original = Array.from(document.querySelectorAll('a')).find(a => /download original/i.test(a.textContent || ''));
@@ -667,7 +671,8 @@ function readEncounterDom() {
     quotes: Array.from(document.querySelectorAll('#quotesPanel .quote')).map(q => ({ code: q.getAttribute('data-code'),
       page: q.getAttribute('data-page') })),
     notes: notes ? text(notes) : null,
-    viewer: viewer ? { src: frame ? frame.getAttribute('src') : null, original: original ? original.getAttribute('href') : null } : null,
+    viewer: viewer ? { view: viewer.getAttribute('data-view-url') || (frame ? frame.getAttribute('src') : null),
+      original: original ? original.getAttribute('href') : null } : null,
     exportButton: Boolean(document.querySelector('[data-action="export"]')),
   };
 }
@@ -685,6 +690,157 @@ function sameTarget(href, url, base) {
 
 function quoteKey(code, page) {
   return `${code}|${page === null || page === undefined ? '' : String(page)}`;
+}
+
+// --- the quoted words marked in the viewer (DECISIONS D368) -------------------------------------------------------------
+
+// The quotes the page lists, in its order: {code, line, text, page} of every quote of every code that has words.
+function servedQuotes(enc) {
+  return (Array.isArray(enc?.codes) ? enc.codes : []).flatMap(code => (Array.isArray(code?.quotes) ? code.quotes : [])
+    .filter(quote => typeof quote?.text === 'string' && quote.text.trim())
+    .map(quote => ({ code: code.code, line: code.line ?? null, text: quote.text.trim(), page: Number.isInteger(quote.page) && quote.page > 0 ? quote.page : null })));
+}
+
+// Text as the marks are compared with their quote: NFKC, white space ignored entirely.
+function foldMarked(text) {
+  return String(text ?? '').normalize('NFKC').replace(/\s+/gu, '');
+}
+
+// One chosen quote judged against what the viewer showed (readMarks): {outcome, off_page, mismatched, problems}. outcome:
+// 'once' or 'multi' (marked, the marked text of every occurrence being the quote's words, white space ignored - in its
+// case, or in another where the page has no exact-case occurrence), 'not_found' (nothing marked, and the note says the
+// words could not be found), 'unavailable' (the browser's own viewer is shown: no marking) or 'unresolved'. A mark on a
+// page that is neither the quote's nor, for an occurrence that starts on it, the next is off_page.
+function judgeQuote(quote, reading) {
+  const out = { outcome: 'unresolved', off_page: 0, mismatched: 0, problems: [] };
+  const name = `quote ${quote?.line || quote?.code || '?'}${quote?.page ? ` (page ${quote.page})` : ''}`;
+  if (!quote || !reading) {
+    out.problems.push(`${name}: the viewer did not answer`);
+    return out;
+  }
+  if (reading.mode === 'frame') {
+    out.outcome = 'unavailable';
+    out.problems.push(`${name}: the PDF is shown by the browser's own viewer, so nothing could be marked`);
+    return out;
+  }
+  const marks = Array.isArray(reading.marks) ? reading.marks : [];
+  const page = quote.page;
+  const occurrences = new Map();
+  for (const mark of marks) {
+    if (!occurrences.has(mark.occurrence)) occurrences.set(mark.occurrence, []);
+    occurrences.get(mark.occurrence).push(mark);
+  }
+  if (reading.mode === 'pdf' && page) {
+    for (const parts of occurrences.values()) {
+      const starts = parts.some(part => part.page === page);
+      for (const part of parts) if (!(part.page === page || (starts && part.page === page + 1))) out.off_page += 1;
+    }
+    // the pages the viewer says it marked: the quote's, and the next only beside it
+    const claimed = Array.isArray(reading.pages) ? reading.pages : [];
+    out.off_page += claimed.filter(number => number !== page && !(number === page + 1 && claimed.includes(page))).length;
+    if (out.off_page) out.problems.push(`${name}: ${out.off_page} mark(s) on another page`);
+  }
+  if (reading.status !== 'marked') {
+    if (marks.length) out.problems.push(`${name}: ${marks.length} mark(s) shown, but the viewer says ${reading.status || 'nothing'}`);
+    else if (/could not be found|does not have|has \d+ pages?/.test(reading.note || '')) out.outcome = 'not_found';
+    else out.problems.push(`${name}: nothing marked, and the note does not say the words could not be found`);
+    return out;
+  }
+  const wanted = foldMarked(quote.text);
+  for (const parts of occurrences.values()) {
+    const shown = foldMarked(parts.map(part => part.text).join(''));
+    if (shown !== wanted && shown.toLowerCase() !== wanted.toLowerCase()) out.mismatched += 1;
+  }
+  if (out.mismatched) out.problems.push(`${name}: ${out.mismatched} marked occurrence(s) are not the quote's words`);
+  if (occurrences.size !== reading.count) out.problems.push(`${name}: ${occurrences.size} occurrence(s) marked, the viewer counted ${reading.count}`);
+  if (page && reading.mode === 'pdf' && !(reading.note || '').includes(`page ${page}`)) out.problems.push(`${name}: the note does not name page ${page}`);
+  if (!out.problems.length) out.outcome = reading.count === 1 ? 'once' : 'multi';
+  return out;
+}
+
+// The check over every quote chosen ({quote, reading}), counted: how many were marked once, more than once, not found,
+// unavailable, marked off their page and marked with other text. It passes when every quote was marked as its words or
+// said not to be found, and nothing was marked on another page.
+function quoteMarkChecks(chosen) {
+  const data = { quotes: chosen.length, marked_once: 0, marked_multi: 0, not_found: 0, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0 };
+  const problems = [];
+  for (const { quote, reading } of chosen) {
+    const judged = judgeQuote(quote, reading);
+    data[{ once: 'marked_once', multi: 'marked_multi', not_found: 'not_found', unavailable: 'unavailable' }[judged.outcome] || 'unresolved'] += 1;
+    data.off_page += judged.off_page;
+    data.mismatched += judged.mismatched;
+    problems.push(...judged.problems);
+  }
+  const summary = `${data.quotes} quote(s) chosen: ${data.marked_once} marked once, ${data.marked_multi} marked more than once, `
+    + `${data.not_found} not found (the note says so), ${data.off_page} mark(s) off the quote's page, ${data.mismatched} marked with other words`;
+  return check('quotes.marks', chosen.length > 0 && problems.length === 0 && data.off_page === 0, problems.length ? `${summary}; ${problems.slice(0, 8).join('; ')}` : summary, data);
+}
+
+// Runs in the page: what the viewer shows of the quote chosen last - its mode, what it says it marked (the data-mark-*
+// state the page keeps on #documentViewer), the note, the pages drawn and every mark on them (page, occurrence, text);
+// for a text document, the marks inside its frame.
+function readMarks() {
+  const viewer = document.querySelector('#documentViewer');
+  if (!viewer) return null;
+  const note = document.querySelector('#viewerMark');
+  const out = { mode: viewer.tagName === 'IFRAME' ? 'text' : viewer.getAttribute('data-mode') || 'loading',
+    marked: viewer.getAttribute('data-marked') || '', status: viewer.getAttribute('data-mark-status') || '',
+    pages: (viewer.getAttribute('data-mark-pages') || '').split(' ').filter(Boolean).map(Number),
+    count: Number(viewer.getAttribute('data-mark-count') || 0), note: note ? note.textContent : '', drawn: [], marks: [] };
+  if (out.mode === 'text') {
+    try {
+      out.marks = Array.from(viewer.contentDocument.querySelectorAll('mark[data-quote-mark]'))
+        .map((mark, index) => ({ page: null, occurrence: index, text: mark.textContent }));
+    } catch {
+      out.marks = [];
+    }
+    return out;
+  }
+  out.drawn = Array.from(viewer.querySelectorAll('.pdf-page')).filter(item => item.querySelector('.pdf-text'))
+    .map(item => Number(item.getAttribute('data-page')));
+  out.marks = Array.from(viewer.querySelectorAll('.pdf-page .pdf-mark')).map(mark => ({
+    page: Number(mark.closest('.pdf-page').getAttribute('data-page')), occurrence: Number(mark.getAttribute('data-occurrence')),
+    text: mark.textContent }));
+  return out;
+}
+
+// Chooses every quote in the quotes panel, in order, and reads what the viewer marked for each ({quote, reading}): a page
+// the viewer says it marked but has not drawn yet (it draws the pages near the visible area only) is scrolled to first.
+async function chooseQuotes(page, enc) {
+  const served = servedQuotes(enc);
+  const buttons = page.locator('#quotesPanel .quote');
+  const total = await buttons.count();
+  const chosen = [];
+  for (let index = 0; index < total; index += 1) {
+    const button = buttons.nth(index);
+    const key = await button.getAttribute('data-quote');
+    await button.click();
+    const ready = await page.waitForFunction(wanted => {
+      const viewer = document.querySelector('#documentViewer');
+      return Boolean(viewer) && (viewer.getAttribute('data-marked') === wanted || viewer.getAttribute('data-mode') === 'frame');
+    }, key, { timeout: UI_TIMEOUT_MS }).then(() => true).catch(() => false);
+    let reading = ready ? await page.evaluate(readMarks) : null;
+    if (reading && reading.mode === 'pdf') {
+      // every page drawn at any read, with the marks it showed then: the pages said to be marked are drawn in turn
+      const shown = new Map();
+      const take = now => {
+        for (const number of now?.drawn || []) shown.set(number, now.marks.filter(mark => mark.page === number));
+      };
+      take(reading);
+      for (const number of reading.status === 'marked' ? reading.pages : []) {
+        await page.evaluate(wanted => {
+          const target = document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"]`);
+          if (target && !target.querySelector('.pdf-mark')) target.scrollIntoView({ block: 'center' });
+        }, number);
+        await page.waitForFunction(wanted => Boolean(document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"] .pdf-mark`)),
+          number, { timeout: UI_TIMEOUT_MS }).catch(() => null);
+        take(await page.evaluate(readMarks));
+      }
+      reading = { ...reading, marks: [...shown.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, marks]) => marks) };
+    }
+    chosen.push({ quote: served[index] || null, key, reading });
+  }
+  return chosen;
 }
 
 // Whether ``text`` shows ``token`` as a whole word - not inside a longer run of letters and digits: 45385 in
@@ -809,9 +965,9 @@ function domChecks(enc, dom, base) {
   out.push(check('dom.notes', unshown.length === 0, unshown.length ? `${unshown.length} documentation note(s) not shown in section#notesPanel`
     : `${notes.length} documentation note(s) shown`));
   const documentPart = enc?.document || {};
-  out.push(check('dom.viewer', !!dom?.viewer && sameTarget(dom.viewer.src, documentPart.view_url, base)
+  out.push(check('dom.viewer', !!dom?.viewer && sameTarget(dom.viewer.view, documentPart.view_url, base)
     && sameTarget(dom.viewer.original, documentPart.original_url, base),
-  `#documentViewer frame ${JSON.stringify(dom?.viewer?.src ?? null)} and "Download original" ${JSON.stringify(dom?.viewer?.original ?? null)}; served ${documentPart.view_url} and ${documentPart.original_url}`));
+  `#documentViewer views ${JSON.stringify(dom?.viewer?.view ?? null)} and "Download original" ${JSON.stringify(dom?.viewer?.original ?? null)}; served ${documentPart.view_url} and ${documentPart.original_url}`));
   if (enc?.readiness?.draft === true) out.push(check('dom.export', !!dom?.exportButton, 'the export button is offered while a draft can be made'));
   return out;
 }
@@ -887,11 +1043,13 @@ function stopRequested(outDir) {
 // --- browser steps -----------------------------------------------------------------------------------------------------
 
 // Runs in the page: every text node and the wording attributes of every element (scripts, styles and templates aside;
-// the CSRF field's token is no wording), for the negative scan.
+// the CSRF field's token is no wording), for the negative scan. The PDF viewer's text layers (.pdf-text) are aside too:
+// they hold the document's own text, which the PDF library put there, as the framed viewer's content was never read -
+// the original is the customer's own document; the viewer's note and labels around them are read.
 function collectDomStrings() {
   const out = [];
   const keep = /^(?:aria-[\w-]+|data-[\w-]+|title|alt|placeholder|value|label|href|src|action|download|content)$/i;
-  const ignore = el => Boolean(el && el.closest && el.closest('script, style, template, noscript'));
+  const ignore = el => Boolean(el && el.closest && el.closest('script, style, template, noscript, #documentViewer .pdf-text'));
   const csrf = el => el.getAttribute && el.getAttribute('name') === 'csrfmiddlewaretoken';
   const describe = el => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}`;
   const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
@@ -1349,26 +1507,22 @@ async function verifyDocument(page, ctx, sessions, doc) {
   }
   if (enc) {
     await step('quotes', async () => {
-      // clicking a quote moves the viewer to its page (#page=N): one quote with a page, through the page itself. Only a
-      // PDF view has pages to move to; a text view finds the passage instead, so the check applies to PDF views only.
-      if ((enc.document || {}).view_media_type !== 'application/pdf') {
-        add(skip('quotes.jump', 'the document is not viewed as a PDF'));
+      // every quote chosen through the page: its words marked on its page (or, from it, onto the next), or the note says
+      // they could not be found; nothing marked on another page (quoteMarkChecks)
+      const view = (enc.document || {}).view_media_type;
+      if (view !== 'application/pdf' && view !== 'text/plain') {
+        add(skip('quotes.marks', 'the document has no view'));
         return;
       }
-      const paged = (enc.codes || []).flatMap(code => (code.quotes || []).map(quote => ({ code: code.code, page: quote?.page })))
-        .find(quote => Number.isInteger(quote.page));
-      if (!paged) {
-        add(skip('quotes.jump', 'no quote names a page'));
+      if (!servedQuotes(enc).length) {
+        add(skip('quotes.marks', 'no passage is quoted'));
         return;
       }
-      await page.locator(`#quotesPanel .quote[data-code="${String(paged.code).replace(/"/g, '\\"')}"][data-page="${paged.page}"]`).first().click();
-      const src = await page.waitForFunction(wanted => {
-        const viewer = document.querySelector('#documentViewer');
-        const frame = viewer && (viewer.tagName === 'IFRAME' ? viewer : viewer.querySelector('iframe'));
-        const value = frame ? frame.getAttribute('src') || '' : '';
-        return value.endsWith(`#page=${wanted}`) ? value : false;
-      }, paged.page, { timeout: 5000 }).then(handle => handle.jsonValue()).catch(() => null);
-      add(check('quotes.jump', !!src, `a quote of ${paged.code} on page ${paged.page} ${src ? 'moved' : 'did not move'} the viewer to #page=${paged.page}`));
+      await viewFor(page, ctx, enc);
+      const chosen = await chooseQuotes(page, enc);
+      const made = quoteMarkChecks(chosen);
+      record.quote_marks = made.data;
+      add(made);
     });
     await step('answers', async () => {
       if (enc.progress?.phase !== 'done' || !(enc.questions || []).length) {
@@ -1591,6 +1745,7 @@ module.exports = {
   contractFor, scanContext, addQuotes, ownWording, NEVER_QUOTED, scanText, scanJson, scanFile, scanHeaders, checkScan,
   expectedActions,
   jsonChecks, showsToken, unitsProblem, modifiersProblem, domChecks, readEncounterDom, collectDomStrings, approve,
+  servedQuotes, foldMarked, judgeQuote, quoteMarkChecks, readMarks, chooseQuotes,
   servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportTxt,
   exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,
   evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,

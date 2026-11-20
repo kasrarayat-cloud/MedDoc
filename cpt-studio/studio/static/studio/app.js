@@ -308,13 +308,173 @@ function collapseSpace(source) {
 }
 
 function findPassage(source, passage) {
+  return findPassages(source, passage)[0] || null;
+}
+
+// Each UTF-16 unit lower-cased where that keeps it one unit (a letter whose lower case is longer is compared as written),
+// so the offsets of a case-blind search stay those of the text.
+function lowerUnits(value) {
+  return value.replace(/[\s\S]/g, unit => {
+    const lower = unit.toLowerCase();
+    return lower.length === 1 ? lower : unit;
+  });
+}
+
+// Every place a quoted passage occurs in a text, left to right and without overlap, as [start, end] in the text's own
+// offsets: the text document's rule (findPassage), counted.
+function findPassages(source, passage) {
   const hay = collapseSpace(String(source ?? ''));
   const want = collapseSpace(String(passage ?? '')).flat.trim();
-  if (!want) return null;
-  let at = hay.flat.indexOf(want);
-  if (at < 0) at = hay.flat.toLowerCase().indexOf(want.toLowerCase());
-  if (at < 0) return null;
-  return [hay.map[at], hay.map[at + want.length - 1] + 1];
+  if (!want) return [];
+  const places = (flat, needle) => {
+    const found = [];
+    for (let at = flat.indexOf(needle); at >= 0; at = flat.indexOf(needle, at + needle.length)) found.push(at);
+    return found;
+  };
+  let found = places(hay.flat, want);
+  if (!found.length) found = places(lowerUnits(hay.flat), lowerUnits(want));
+  return found.map(at => [hay.map[at], hay.map[at + want.length - 1] + 1]);
+}
+
+// --- the quoted words, marked on a page of a PDF (the owner's direction of 2026-11-20, DECISIONS D368) --------------
+// A page's text is the strings of its text items, in order, as the PDF library reads them. Quoted words are located by
+// their own characters only: white space is ignored entirely and Unicode NFKC applies to both sides; a match is exact-case
+// first, case-blind only where there is no exact-case one, and always of whole characters (never half of a ligature, never
+// a letter without its accent). They are looked for on the quote's page; only where they are not there, on that page and
+// the next joined, keeping a passage that starts on the quote's page and runs onto the next. Nothing is ever marked on
+// another page, and nothing partial or nearest is marked. A quote with no page is looked for on every page. Every
+// occurrence found is marked and counted. Nothing here reads what the words mean.
+
+// One character with the marks that follow it (or marks with nothing before them): the unit NFKC is applied to.
+const TEXT_UNIT = /\P{M}\p{M}*|\p{M}+/gu;
+
+// The folded text of [page, strings] runs: each unit of each string through NFKC, its white space dropped, as written
+// (`exact`) and lower-cased (`blind`), with the unit every UTF-16 position of either came from. units[i] is
+// {page, item, start, end}: the item's place in its page's strings, and the unit's offsets in that item's own string.
+function foldText(runs) {
+  const units = [];
+  const exact = { text: '', owner: [] };
+  const blind = { text: '', owner: [] };
+  const append = (into, value, unit) => {
+    into.text += value;
+    for (let index = 0; index < value.length; index += 1) into.owner.push(unit);
+  };
+  for (const [page, strings] of runs) {
+    list(strings).forEach((value, item) => {
+      if (typeof value !== 'string') return;
+      for (const match of value.matchAll(TEXT_UNIT)) {
+        const folded = match[0].normalize('NFKC').replace(/\s+/gu, '');
+        if (!folded) continue;
+        units.push({ page, item, start: match.index, end: match.index + match[0].length });
+        append(exact, folded, units.length - 1);
+        append(blind, folded.toLowerCase(), units.length - 1);
+      }
+    });
+  }
+  return { units, exact, blind };
+}
+
+// Where `needle` occurs in one folded text, left to right without overlap, as [first unit, last unit]. A place that would
+// begin or end inside a unit is no occurrence.
+function foldedOccurrences(folded, needle) {
+  const found = [];
+  if (!needle) return found;
+  const { text: hay, owner } = folded;
+  let from = 0;
+  for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, from)) {
+    const end = at + needle.length;
+    if ((at === 0 || owner[at - 1] !== owner[at]) && (end === hay.length || owner[end - 1] !== owner[end])) {
+      found.push([owner[at], owner[end - 1]]);
+      from = end;
+    } else {
+      from = at + 1;
+    }
+  }
+  return found;
+}
+
+// Where one quote is marked: {page, pageCount, status, scope, caseBlind, count, pages, marks}. `texts` holds the item
+// strings of every page (texts[p - 1] for page p; null for a page not read) and its length is the document's page count.
+// status: 'marked', 'not_found', 'missing_page' (the quote names a page the document does not have) or 'empty' (no
+// character to look for); scope: 'page', 'continued' (from the quote's page onto the next) or 'document' (a quote with no
+// page). marks[p] lists, in reading order, {item, start, end, occurrence}: what of item `item`'s own string is marked on
+// page p, and which occurrence (0, 1, ...) it is part of; pages lists the pages that hold a mark.
+function locateQuote(quote, texts) {
+  const pages = list(texts);
+  const page = quotePage(quote);
+  const result = { page, pageCount: pages.length, status: 'not_found', scope: page ? 'page' : 'document', caseBlind: false,
+    count: 0, pages: [], marks: {} };
+  const wanted = foldText([[0, [typeof quote?.text === 'string' ? quote.text : '']]]);
+  if (!wanted.exact.text) return { ...result, status: 'empty' };
+  if (page && page > pages.length) return { ...result, status: 'missing_page' };
+  const search = (numbers, keep) => {
+    const folded = foldText(numbers.map(number => [number, pages[number - 1]]));
+    for (const caseBlind of [false, true]) {
+      const found = foldedOccurrences(caseBlind ? folded.blind : folded.exact, caseBlind ? wanted.blind.text : wanted.exact.text)
+        .filter(([first, last]) => keep(folded.units[first], folded.units[last]));
+      if (found.length) return { folded, found, caseBlind };
+    }
+    return null;
+  };
+  let hit;
+  if (!page) {
+    hit = search(pages.map((_, index) => index + 1), () => true);
+  } else {
+    hit = search([page], () => true);
+    if (!hit && page < pages.length) {
+      hit = search([page, page + 1], (first, last) => first.page === page && last.page === page + 1);
+      if (hit) result.scope = 'continued';
+    }
+  }
+  if (!hit) return result;
+  const marks = {};
+  hit.found.forEach(([first, last], occurrence) => {
+    let open = null;
+    for (let index = first; index <= last; index += 1) {
+      const unit = hit.folded.units[index];
+      if (open && open.page === unit.page && open.item === unit.item) {
+        open.end = unit.end;
+      } else {
+        open = { page: unit.page, item: unit.item, start: unit.start, end: unit.end, occurrence };
+        (marks[unit.page] ||= []).push(open);
+      }
+    }
+  });
+  const marked = Object.keys(marks).map(Number).sort((a, b) => a - b);
+  for (const number of marked) marks[number] = marks[number].map(({ item, start, end, occurrence }) => ({ item, start, end, occurrence }));
+  return { ...result, status: 'marked', caseBlind: hit.caseBlind, count: hit.found.length, pages: marked, marks };
+}
+
+function pagesText(numbers) {
+  return numbers.length === 1 ? `page ${numbers[0]}` : `pages ${joinWords(numbers.map(String))}`;
+}
+
+// What the note under the viewer says of one quote chosen in a PDF.
+function markNote(result) {
+  const { page, status, scope, count, pages } = record(result);
+  if (status === 'marked') {
+    if (scope === 'continued') {
+      return count === 1 ? `Marked on page ${page}, continuing onto page ${page + 1}.`
+        : `These words appear ${count} times, starting on page ${page} and continuing onto page ${page + 1}. Each is marked.`;
+    }
+    if (scope === 'page') return count === 1 ? `Marked on page ${page}.` : `These words appear ${count} times on page ${page}. Each is marked.`;
+    return count === 1 ? `Marked on ${pagesText(list(pages))}.` : `These words appear ${count} times, on ${pagesText(list(pages))}. Each is marked.`;
+  }
+  if (status === 'missing_page') return `This passage names page ${page}, but the document has ${plural(record(result).pageCount, 'page', 'pages')}. Nothing is marked.`;
+  if (status === 'empty') return 'This passage has no words to mark.';
+  return page ? `The exact words could not be found on page ${page}, so nothing is marked. Page ${page} is shown.`
+    : 'The exact words could not be found in this document, so nothing is marked.';
+}
+
+// The note when the PDF is shown by the browser's own viewer, which can open a page but not mark words on it.
+function frameNote(page) {
+  return page ? `Marking is not available for this document. Page ${page} is shown.` : 'Marking is not available for this document.';
+}
+
+// The note for a passage of a text document, found by the text rule (findPassages).
+function textMarkNote(count) {
+  if (!count) return 'The exact words could not be found in the document, so nothing is marked.';
+  return count === 1 ? 'Marked in the document.' : `These words appear ${count} times in the document. Each is marked.`;
 }
 
 // --- the customer contract, read defensively ---------------------------------------
@@ -464,7 +624,8 @@ function quoteKey(code, index, position, doc) {
   return `${rowRef(code, position, doc)}#${index}`;
 }
 
-// The viewer's address for one page of the original (a PDF opens at #page=N), or the plain view address.
+// The viewer's address for one page of the original (the browser's own PDF viewer, where the page cannot draw the PDF
+// itself, opens at #page=N), or the plain view address.
 function viewerUrl(viewUrl, page) {
   const base = safeViewUrl(viewUrl);
   if (!base) return '';
@@ -472,8 +633,9 @@ function viewerUrl(viewUrl, page) {
 }
 
 // What the in-page viewer shows, as the server says in document.view_media_type (never read from media_type, the type
-// of the original): 'pdf' (an iframe of view_url, opened at #page=N for a quoted page; for a Word document the PDF the
-// coding review read), 'text' (the text, where a quoted passage is found) or 'none' (no viewer, only the download).
+// of the original): 'pdf' (the PDF of view_url drawn in the page, a quoted passage marked on its page; for a Word
+// document the PDF the coding review read), 'text' (the text, where a quoted passage is marked) or 'none' (no viewer,
+// only the download).
 function viewerKind(documentPart) {
   const part = record(documentPart);
   if (!safeViewUrl(part.view_url)) return 'none';
@@ -587,6 +749,9 @@ const state = {
   poll: { timer: 0, count: 0, errors: 0 }, tickTimer: 0, clock: 0, reconnecting: false, outdated: false,
   upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, exporting: null,
   open: new Set(), answers: new Map(), pending: new Set(), toastTimer: 0, leaving: false,
+  // the PDF viewer of the document shown (browser wiring), the PDF library once it is asked for, and the passage of a
+  // text document being marked
+  viewer: null, pdfLibrary: null, framePassage: null,
 };
 
 function uiState(overrides = {}) {
@@ -695,19 +860,30 @@ function documentName(part) {
   return text(part.name) || (part.kind === 'paste' ? 'Pasted text' : 'Original document');
 }
 
-// The viewer of the original: an iframe of view_url for a PDF or a text, with a note under it when the PDF is the one a
-// Word document was converted to; with no view, no viewer at all and only the "Download original" link.
+// The viewer of the original, #documentViewer, which keeps the view address in data-view-url: for a PDF (or the PDF a Word
+// document was converted to) a scrolling region the page draws the PDF's pages in (the browser wiring below; where that
+// cannot run, the browser's own viewer in a frame), with the page shown in the toolbar; for a text an iframe of the text.
+// Under it, the note that says what choosing a quote marked (a polite live region), then the note when the PDF is the one
+// a Word document was converted to. With no view, no viewer at all and only the "Download original" link.
 function viewerPanel(doc) {
   const part = record(doc?.document);
   const kind = viewerKind(part);
   const name = documentName(part);
+  const view = viewerUrl(part.view_url, null);
   const original = safeOriginalUrl(part.original_url);
-  const frame = kind === 'none' ? ''
-    : `<iframe id="documentViewer" class="viewer-frame" src="${escapeHtml(viewerUrl(part.view_url, null))}" title="${escapeHtml(`Original document: ${name}`)}" referrerpolicy="same-origin"></iframe>`;
+  const label = escapeHtml(`Original document: ${name}`);
+  let frame = '';
+  if (kind === 'pdf') {
+    frame = `<div id="documentViewer" class="viewer-frame pdf-viewer" data-view-url="${escapeHtml(view)}" role="region" aria-label="${label}" tabindex="0"><p class="pdf-status">Opening the document…</p></div>`;
+  } else if (kind === 'text') {
+    frame = `<iframe id="documentViewer" class="viewer-frame" src="${escapeHtml(view)}" data-view-url="${escapeHtml(view)}" title="${label}" referrerpolicy="same-origin"></iframe>`;
+  }
+  const marked = kind === 'none' ? '' : '<p class="viewer-mark" id="viewerMark" role="status" aria-live="polite"></p>';
+  const page = kind === 'pdf' ? '<span class="viewer-page" id="viewerPage"></span>' : '';
   const note = kind === 'pdf' && part.converted === true ? `<p class="viewer-note">${icon('info')}<span>${escapeHtml(CONVERTED_NOTE)}</span></p>` : '';
   const meta = [lookup(KIND_LABELS, part.kind, ''), Number.isInteger(part.size) && part.size > 0 ? formatSize(part.size) : ''].filter(Boolean).join(' · ');
   const download = original ? `<a class="viewer-download" id="downloadOriginal" href="${escapeHtml(original)}" download>${icon('download')}Download original</a>` : '';
-  return `<section class="viewer-panel${kind === 'none' ? ' no-view' : ''}" aria-labelledby="viewerTitle"><div class="viewer-toolbar">${icon('file')}<h2 id="viewerTitle">Original document</h2><span class="viewer-name">${escapeHtml(name)}</span></div>${frame}${note}<div class="viewer-bottom"><span>${escapeHtml(meta || 'Original as received')}</span>${download}</div></section>`;
+  return `<section class="viewer-panel${kind === 'none' ? ' no-view' : ''}" aria-labelledby="viewerTitle"><div class="viewer-toolbar">${icon('file')}<h2 id="viewerTitle">Original document</h2><span class="viewer-name">${escapeHtml(name)}</span>${page}</div>${frame}${marked}${note}<div class="viewer-bottom"><span>${escapeHtml(meta || 'Original as received')}</span>${download}</div></section>`;
 }
 
 function quoteBody(quote) {
@@ -716,8 +892,8 @@ function quoteBody(quote) {
 
 function quotesLead(doc) {
   const kind = viewerKind(doc?.document);
-  if (kind === 'pdf') return 'Each code rests on these passages. Choose one to open its page in the document.';
-  if (kind === 'text') return 'Each code rests on these passages. Choose one to find it in the document.';
+  if (kind === 'pdf') return 'Each code rests on these passages. Choose one to open its page and mark its words there.';
+  if (kind === 'text') return 'Each code rests on these passages. Choose one to mark it in the document.';
   return 'Each code rests on these passages of the original document.';
 }
 
@@ -1179,6 +1355,7 @@ function route() {
   stopPolling();
   stopTicker();
   closeDocumentDialogs();
+  closeViewer();  // every route redraws #main, and with it the viewer
   if (next.name !== 'doc' || next.id !== state.doc?.id) {
     state.doc = null;
     state.docKey = '';
@@ -1364,8 +1541,10 @@ function renderDocument(doc, fresh, force = false) {
   const keep = fresh ? null : { window: window.scrollY, focus: focusTarget() };
   const frame = viewerKey(doc);
   const partial = !fresh && frame === state.viewerKey && $('#reviewHead') && $('#reviewColumn') && $('#quotesBox');
-  // a passage chosen on one coding review names a line of it: another coding review's same line is another passage
-  if (roundNumber(doc) !== roundNumber(state.doc)) state.selectedQuote = '';
+  // a passage chosen on one coding review names a line of it: another coding review's same line is another passage, so
+  // the passage chosen and its mark go
+  const another = roundNumber(doc) !== roundNumber(state.doc);
+  if (another) state.selectedQuote = '';
   state.doc = doc;
   state.docKey = key;
   const ui = uiState({ entrance: fresh });
@@ -1373,10 +1552,14 @@ function renderDocument(doc, fresh, force = false) {
     $('#reviewHead').innerHTML = reviewHeading(doc);
     $('#quotesBox').innerHTML = quotesPanel(doc);
     $('#reviewColumn').innerHTML = reviewColumn(doc, ui);
+    if (another) clearViewerMark();
   } else {
     state.viewerKey = frame;
     state.selectedQuote = '';
+    closeViewer();
+    state.framePassage = null;
     $('#main').innerHTML = reviewView(doc, ui);
+    mountViewer(doc);
   }
   if (keep) {
     window.scrollTo({ top: keep.window, behavior: 'instant' });
@@ -1452,21 +1635,520 @@ function revealInFrame(frame, passage) {
   }
 }
 
-// The PDF viewer opens the quoted page (#page=N); the text viewer finds the passage, since a text has no pages.
+// Choosing a quote: the PDF viewer opens the quoted page and marks the quote's words there (locateQuote); the text viewer
+// marks the passage in the text (findPassages), since a text has no pages. The note under the viewer says what was
+// marked. The mark stays until another quote is chosen or the document changes.
 function showQuote(key) {
   const found = findQuote(key);
-  if (!found) return;
+  if (!found) return undefined;
   state.selectedQuote = key;
   markSelectedQuote();
-  const frame = $('#documentViewer');
-  if (!frame) return;
-  if (found.quote.page && viewerKind(state.doc?.document) === 'pdf') {
-    const url = viewerUrl(state.doc?.document?.view_url, found.quote.page);
-    if (url) frame.src = url;
-  } else {
-    revealInFrame(frame, found.quote.text);
+  const element = $('#documentViewer');
+  if (!element) return undefined;
+  const kind = viewerKind(state.doc?.document);
+  let shown;
+  if (kind === 'pdf' && state.viewer && state.viewer.element === element) shown = showPdfQuote(state.viewer, found.quote, key);
+  else if (kind === 'text') markInFrame(element, found.quote.text, key);
+  element.scrollIntoView?.({ behavior: reducedMotion() ? 'instant' : 'smooth', block: 'nearest' });
+  return shown;
+}
+
+// A new coding review names other passages: the mark of one chosen on the earlier one, and its note, go.
+function clearViewerMark() {
+  const viewer = state.viewer;
+  if (viewer) {
+    viewer.mark = null;
+    viewer.pending = null;
+    viewer.reveal = 0;
+    viewer.markSerial += 1;
+    for (const page of viewer.pages) paintPage(viewer, page);
+    setMarkState(viewer.element, '', null);
   }
-  frame.scrollIntoView({ behavior: reducedMotion() ? 'instant' : 'smooth', block: 'nearest' });
+  const frame = $('#documentViewer');
+  if (state.framePassage !== null && frame?.tagName === 'IFRAME') {
+    state.framePassage = null;
+    paintFrame(frame);
+  }
+  setMarkNote('');
+}
+
+function setMarkNote(message, missing = false) {
+  const note = $('#viewerMark');
+  if (!note) return;
+  note.textContent = message;
+  note.classList.toggle('is-missing', Boolean(message) && missing);
+}
+
+// What the viewer marked, on the viewer element, for the walk to check against the page: the quote, what was found, on
+// which pages and how many times.
+function setMarkState(element, key, result) {
+  if (!element?.dataset) return;
+  element.dataset.marked = key || '';
+  element.dataset.markStatus = result ? result.status : '';
+  element.dataset.markPages = result ? result.pages.join(' ') : '';
+  element.dataset.markCount = result ? String(result.count) : '';
+}
+
+function scrollBehavior() {
+  return reducedMotion() ? 'instant' : 'smooth';
+}
+
+// --- the PDF viewer: the original's pages drawn in the page, near the visible area only, fitted to its width --------
+// The PDF library (pdf.js; a pinned copy this site serves, listed with its licence and a checksum of every file in
+// studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json) is loaded only when a document is viewed as a PDF; the page shell
+// names its module and worker (data-pdf-module and data-pdf-worker on <body>). It reads only the same-origin view address,
+// runs with no WebAssembly, no document scripting, no XFA and no layer of links or form fields (form fields' appearances
+// are drawn on the page), and the PDF's text reaches the page as text only, in its text layer. Where it cannot run - the
+// module or the worker does not load, this browser lacks what it needs, the document is refused - the browser's own viewer
+// is framed instead, as before, and a quote opens its page there (#page=N) without a mark.
+
+const PDF_VIEW = { gap: 12, near: '100% 0px', resizeMs: 150, stallMs: 20000, maxCanvasPixels: 16777216 };
+
+function pdfAssets() {
+  const data = (typeof document === 'object' && document.body?.dataset) || {};
+  const asset = value => (typeof value === 'string' && /^\/static\/[\w./-]+\.mjs$/.test(value) ? value : '');
+  return { module: asset(data.pdfModule), worker: asset(data.pdfWorker) };
+}
+
+// What the viewer and the library call with no fallback of their own; a browser without them gets the frame.
+function pdfCapable() {
+  return typeof IntersectionObserver === 'function' && typeof ResizeObserver === 'function'
+    && typeof Promise.withResolvers === 'function' && typeof Map.prototype.getOrInsertComputed === 'function';
+}
+
+function loadPdfLibrary() {
+  if (!state.pdfLibrary) {
+    const { module, worker } = pdfAssets();
+    state.pdfLibrary = module && worker && pdfCapable()
+      ? import(module).then(library => {
+        library.GlobalWorkerOptions.workerSrc = worker;
+        return library;
+      })
+      : Promise.reject(new Error('The PDF library cannot run in this browser.'));
+    state.pdfLibrary.catch(() => {});
+  }
+  return state.pdfLibrary;
+}
+
+// Draws the PDF of a document viewed as one into #documentViewer (after a full redraw of the review page).
+function mountViewer(doc) {
+  closeViewer();
+  const element = $('#documentViewer');
+  const view = safeViewUrl(element?.dataset?.viewUrl);
+  if (!element || !view || viewerKind(doc?.document) !== 'pdf') return;
+  const viewer = {
+    element, view, name: documentName(record(doc?.document)), mode: 'loading', library: null, task: null, pages: [],
+    texts: new Map(), mark: null, pending: null, markSerial: 0, reveal: 0, frame: null, watch: null, resize: null,
+    onScroll: null, width: 0, ratio: 1, stallTimer: 0, resizeTimer: 0, labelFrame: 0,
+  };
+  state.viewer = viewer;
+  openPdf(viewer);
+}
+
+function closeViewer() {
+  const viewer = state.viewer;
+  state.viewer = null;
+  if (!viewer) return;
+  stopPdf(viewer);
+  viewer.mode = 'closed';
+}
+
+async function openPdf(viewer) {
+  try {
+    const library = await loadPdfLibrary();
+    if (state.viewer !== viewer) return;
+    const worker = new URL(library.GlobalWorkerOptions.workerSrc, location.href);
+    viewer.library = library;
+    viewer.task = library.getDocument({
+      url: viewer.view, withCredentials: false, isEvalSupported: false, enableXfa: false, useWasm: false,
+      wasmUrl: new URL('../wasm/', worker).href, standardFontDataUrl: new URL('../standard_fonts/', worker).href,
+      useSystemFonts: true, disableWorkerRendering: true, stopAtErrors: false, verbosity: library.VerbosityLevel.ERRORS,
+    });
+    // a download that stops moving for this long is given up, and the frame shown instead
+    const stalled = () => {
+      clearTimeout(viewer.stallTimer);
+      viewer.stallTimer = setTimeout(() => fallbackViewer(viewer), PDF_VIEW.stallMs);
+    };
+    viewer.task.onProgress = stalled;
+    stalled();
+    const pdf = await viewer.task.promise;
+    clearTimeout(viewer.stallTimer);
+    const proxies = await Promise.all(Array.from({ length: pdf.numPages }, (_, index) => pdf.getPage(index + 1)));
+    if (state.viewer !== viewer || viewer.mode !== 'loading') return;
+    buildPages(viewer, proxies);
+  } catch {
+    clearTimeout(viewer.stallTimer);
+    fallbackViewer(viewer);
+  }
+}
+
+// Every page as a placeholder of its size; pages near the visible area are drawn (IntersectionObserver), the others
+// released, and a new width re-fits and redraws them (ResizeObserver, debounced).
+function buildPages(viewer, proxies) {
+  const holder = document.createElement('div');
+  holder.className = 'pdf-pages';
+  viewer.pages = proxies.map((proxy, index) => {
+    const element = document.createElement('div');
+    element.className = 'pdf-page';
+    element.dataset.page = String(index + 1);
+    element.setAttribute('role', 'group');
+    element.setAttribute('aria-label', `Page ${index + 1} of ${proxies.length}`);
+    holder.append(element);
+    return { number: index + 1, proxy, element, viewport: null, near: false, drawn: '', drawing: '', serial: 0, render: null,
+      layer: null, painted: [] };
+  });
+  viewer.element.replaceChildren(holder);
+  viewer.element.dataset.mode = 'pdf';
+  viewer.mode = 'pdf';
+  layoutPages(viewer);
+  viewer.watch = new IntersectionObserver(entries => nearPages(viewer, entries), { root: viewer.element, rootMargin: PDF_VIEW.near });
+  for (const page of viewer.pages) viewer.watch.observe(page.element);
+  viewer.resize = new ResizeObserver(() => {
+    clearTimeout(viewer.resizeTimer);
+    viewer.resizeTimer = setTimeout(() => relayoutPages(viewer), PDF_VIEW.resizeMs);
+  });
+  viewer.resize.observe(viewer.element);
+  viewer.onScroll = () => {
+    if (!viewer.labelFrame) viewer.labelFrame = requestAnimationFrame(() => { viewer.labelFrame = 0; showPageLabel(viewer); });
+  };
+  viewer.element.addEventListener('scroll', viewer.onScroll, { passive: true });
+  showPageLabel(viewer);
+  if (viewer.pending) {
+    const { quote, key } = viewer.pending;
+    viewer.pending = null;
+    showPdfQuote(viewer, quote, key);
+  }
+}
+
+// (not named innerWidth: a function declared here is a property of window, and window.innerWidth is read)
+function viewerWidth(element) {
+  const style = getComputedStyle(element);
+  return Math.max(1, element.clientWidth - parseFloat(style.paddingLeft || '0') - parseFloat(style.paddingRight || '0'));
+}
+
+// Each page fitted to the viewer's width: its placeholder takes the page's size, and the text layer its scale.
+function layoutPages(viewer) {
+  viewer.width = viewerWidth(viewer.element);
+  viewer.ratio = window.devicePixelRatio || 1;
+  for (const page of viewer.pages) {
+    const natural = page.proxy.getViewport({ scale: 1 });
+    page.viewport = page.proxy.getViewport({ scale: viewer.width / natural.width });
+    const { style } = page.element;
+    style.width = `${Math.floor(page.viewport.width)}px`;
+    style.height = `${Math.floor(page.viewport.height)}px`;
+    style.setProperty('--total-scale-factor', String(page.viewport.scale * (page.viewport.userUnit || 1)));
+    style.setProperty('--scale-round-x', '1px');
+    style.setProperty('--scale-round-y', '1px');
+  }
+}
+
+function relayoutPages(viewer) {
+  if (state.viewer !== viewer || viewer.mode !== 'pdf') return;
+  if (Math.abs(viewerWidth(viewer.element) - viewer.width) < 1 && (window.devicePixelRatio || 1) === viewer.ratio) return;
+  // the page at the top of the view stays there, at the same place in it
+  const top = viewer.element.scrollTop;
+  const anchor = viewer.pages.findLast(page => page.element.offsetTop <= top) || viewer.pages[0];
+  const within = anchor ? (top - anchor.element.offsetTop) / Math.max(1, anchor.element.offsetHeight) : 0;
+  layoutPages(viewer);
+  if (anchor) viewer.element.scrollTop = anchor.element.offsetTop + within * anchor.element.offsetHeight;
+  for (const page of viewer.pages) if (page.near) drawPage(viewer, page);
+}
+
+function nearPages(viewer, entries) {
+  if (state.viewer !== viewer || viewer.mode !== 'pdf') return;
+  for (const entry of entries) {
+    const page = viewer.pages[Number(entry.target.dataset.page) - 1];
+    if (!page) continue;
+    page.near = entry.isIntersecting;
+    if (page.near) drawPage(viewer, page);
+    else releasePage(page);
+  }
+}
+
+// The canvas's pixels per CSS pixel: the screen's, unless a page would need more pixels than one canvas should hold.
+function outputRatio(viewport, ratio) {
+  const area = viewport.width * viewport.height;
+  return area * ratio * ratio > PDF_VIEW.maxCanvasPixels ? Math.sqrt(PDF_VIEW.maxCanvasPixels / area) : ratio;
+}
+
+function pageContent(viewer, number) {
+  if (!viewer.texts.has(number)) viewer.texts.set(number, viewer.pages[number - 1].proxy.getTextContent());
+  return viewer.texts.get(number);
+}
+
+// Draws one page: its canvas (annotation appearances drawn on it), then its text layer from the same text content the
+// quotes are located in, then the marks of the chosen quote on that page. A page redrawn keeps its old drawing until the
+// new one is ready.
+async function drawPage(viewer, page) {
+  const key = `${page.viewport.scale} ${viewer.ratio}`;
+  if (page.drawn === key || page.drawing === key) return;
+  cancelPage(page);
+  page.drawing = key;
+  const { serial, viewport } = page;
+  const { library } = viewer;
+  const live = () => state.viewer === viewer && viewer.mode === 'pdf' && page.serial === serial;
+  const ratio = outputRatio(viewport, viewer.ratio);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.floor(viewport.width * ratio);
+  canvas.height = Math.floor(viewport.height * ratio);
+  canvas.setAttribute('aria-hidden', 'true');
+  try {
+    page.render = page.proxy.render({ canvas, viewport, annotationMode: library.AnnotationMode.ENABLE,
+      transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0] });
+    await page.render.promise;
+    const content = await pageContent(viewer, page.number);
+    if (!live()) return;
+    const text = document.createElement('div');
+    text.className = 'pdf-text';
+    page.drawn = '';  // no mark is painted on a text layer still being built
+    page.element.replaceChildren(canvas, text);
+    page.layer = new library.TextLayer({ textContentSource: content, container: text, viewport });
+    page.painted = [];
+    await page.layer.render();
+    if (!live()) return;
+    page.drawn = key;
+    page.drawing = '';
+    paintPage(viewer, page);
+    if (viewer.reveal === page.number) {
+      viewer.reveal = 0;
+      scrollToQuote(viewer, page);
+    }
+  } catch (error) {
+    if (!live() || ['RenderingCancelledException', 'AbortException'].includes(error?.name)) return;
+    fallbackViewer(viewer);
+  }
+}
+
+function cancelPage(page) {
+  page.serial += 1;
+  page.drawing = '';
+  page.render?.cancel();
+  page.render = null;
+}
+
+function releasePage(page) {
+  cancelPage(page);
+  page.layer?.cancel();
+  page.layer = null;
+  page.painted = [];
+  page.drawn = '';
+  page.element.replaceChildren();
+}
+
+// The chosen quote's marks on one drawn page: the text layer's spans of the marked items, each split into its unmarked
+// text and span.pdf-mark[data-occurrence] around exactly the marked characters. Text only, never markup.
+function paintPage(viewer, page) {
+  if (!page.layer || !page.drawn) return;
+  const divs = page.layer.textDivs;
+  const strings = page.layer.textContentItemsStr;
+  for (const item of page.painted) if (divs[item]) divs[item].textContent = strings[item];
+  page.painted = [];
+  const byItem = new Map();
+  for (const mark of list(viewer.mark?.result?.marks?.[page.number])) {
+    if (!byItem.has(mark.item)) byItem.set(mark.item, []);
+    byItem.get(mark.item).push(mark);
+  }
+  for (const [item, parts] of byItem) {
+    const div = divs[item];
+    const value = strings[item];
+    if (!div || typeof value !== 'string') continue;
+    div.textContent = '';
+    let at = 0;
+    for (const part of parts) {
+      if (part.start > at) div.append(value.slice(at, part.start));
+      const span = document.createElement('span');
+      span.className = 'pdf-mark';
+      span.dataset.occurrence = String(part.occurrence);
+      span.textContent = value.slice(part.start, part.end);
+      div.append(span);
+      at = part.end;
+    }
+    if (at < value.length) div.append(value.slice(at));
+    page.painted.push(item);
+  }
+}
+
+// Scrolls the viewer to a page: to its first mark when the page is drawn and marked, else to its top.
+function scrollToQuote(viewer, page) {
+  let top = page.element.offsetTop - PDF_VIEW.gap;
+  const mark = page.drawn ? page.element.querySelector('.pdf-mark') : null;
+  if (mark) {
+    const within = mark.getBoundingClientRect().top - page.element.getBoundingClientRect().top;
+    top = page.element.offsetTop + within - viewer.element.clientHeight / 3;
+  }
+  viewer.element.scrollTo({ top: Math.max(0, top), behavior: scrollBehavior() });
+}
+
+function showPageLabel(viewer) {
+  const label = $('#viewerPage');
+  if (!label || viewer.mode !== 'pdf' || !viewer.pages.length) return;
+  const middle = viewer.element.scrollTop + viewer.element.clientHeight / 2;
+  const current = viewer.pages.findLast(page => page.element.offsetTop <= middle) || viewer.pages[0];
+  label.textContent = `Page ${current.number} of ${viewer.pages.length}`;
+}
+
+// One quote chosen in a PDF: the text of its page (and the next) or of every page is read, the quote located
+// (locateQuote), its marks painted on every drawn page, the note set and the page scrolled to.
+async function showPdfQuote(viewer, quote, key) {
+  if (viewer.mode === 'frame') return frameQuote(viewer, quote);
+  if (viewer.mode !== 'pdf') {
+    viewer.pending = { quote, key };
+    return undefined;
+  }
+  const serial = ++viewer.markSerial;
+  const count = viewer.pages.length;
+  const page = quotePage(quote);
+  const wanted = page ? [page, page + 1].filter(number => number <= count) : viewer.pages.map(item => item.number);
+  const texts = Array.from({ length: count }, () => null);
+  try {
+    const contents = await Promise.all(wanted.map(number => pageContent(viewer, number)));
+    contents.forEach((content, index) => {
+      texts[wanted[index] - 1] = list(content?.items).filter(item => typeof item?.str === 'string').map(item => item.str);
+    });
+  } catch {
+    fallbackViewer(viewer);
+    return undefined;
+  }
+  if (state.viewer !== viewer || viewer.mode !== 'pdf' || viewer.markSerial !== serial) return undefined;
+  const result = locateQuote(quote, texts);
+  viewer.mark = { key, quote, result };
+  for (const item of viewer.pages) paintPage(viewer, item);
+  setMarkState(viewer.element, key, result);
+  setMarkNote(markNote(result), result.status !== 'marked');
+  const target = viewer.pages[(result.pages[0] || (page && page <= count ? page : 0)) - 1];
+  if (target) {
+    viewer.reveal = result.status === 'marked' && !target.drawn ? target.number : 0;
+    scrollToQuote(viewer, target);
+  }
+  return result;
+}
+
+// The frame (the browser's own viewer) opens a quote's page; it cannot mark the words, and the note says so.
+function frameQuote(viewer, quote) {
+  const page = quotePage(quote);
+  if (page && viewer.frame) viewer.frame.src = viewerUrl(viewer.view, page);
+  setMarkState(viewer.element, '', null);
+  setMarkNote(frameNote(page), true);
+  return undefined;
+}
+
+// Where the library cannot run, the browser's own viewer is framed in its place (today's viewer), at the page of the
+// quote being shown, if any.
+function fallbackViewer(viewer) {
+  if (state.viewer !== viewer || viewer.mode === 'frame' || viewer.mode === 'closed') return;
+  stopPdf(viewer);
+  const chosen = viewer.pending?.quote || viewer.mark?.quote || null;
+  const page = quotePage(chosen);
+  viewer.mode = 'frame';
+  viewer.pending = null;
+  viewer.mark = null;
+  const frame = document.createElement('iframe');
+  frame.className = 'viewer-fallback';
+  frame.title = `Original document: ${viewer.name}`;
+  frame.setAttribute('referrerpolicy', 'same-origin');
+  frame.src = viewerUrl(viewer.view, page);
+  viewer.element.replaceChildren(frame);
+  viewer.element.dataset.mode = 'frame';
+  viewer.frame = frame;
+  const label = $('#viewerPage');
+  if (label) label.textContent = '';
+  setMarkState(viewer.element, '', null);
+  if (chosen) setMarkNote(frameNote(page), true);
+}
+
+function stopPdf(viewer) {
+  clearTimeout(viewer.stallTimer);
+  clearTimeout(viewer.resizeTimer);
+  if (viewer.labelFrame) cancelAnimationFrame(viewer.labelFrame);
+  viewer.watch?.disconnect();
+  viewer.resize?.disconnect();
+  if (viewer.onScroll) viewer.element.removeEventListener('scroll', viewer.onScroll);
+  for (const page of viewer.pages) {
+    cancelPage(page);
+    page.layer?.cancel();
+  }
+  viewer.task?.destroy()?.catch?.(() => {});
+  Object.assign(viewer, { watch: null, resize: null, onScroll: null, task: null, pages: [], texts: new Map(), labelFrame: 0 });
+}
+
+// --- a passage of a text document, marked inside its frame (the text rule: findPassages) ---------------------------
+
+const waitingFrames = new WeakSet();
+
+function frameDocument(frame) {
+  try {
+    const page = frame.contentDocument;
+    return page && page.body && page.URL !== 'about:blank' && page.readyState === 'complete' ? page : null;
+  } catch {
+    return null;
+  }
+}
+
+// Marks every occurrence of the passage in the text frame, once its text has loaded.
+function markInFrame(frame, passage, key) {
+  state.framePassage = { passage, key };
+  if (frameDocument(frame)) {
+    paintFrame(frame);
+    return;
+  }
+  if (waitingFrames.has(frame)) return;
+  waitingFrames.add(frame);
+  frame.addEventListener('load', () => {
+    waitingFrames.delete(frame);
+    paintFrame(frame);
+  }, { once: true });
+}
+
+// The marks of the passage chosen (state.framePassage) in the text frame: mark[data-quote-mark] elements around each
+// occurrence, in the page's lime, and the note. A frame this page cannot read falls back to selecting the passage, as
+// before.
+function paintFrame(frame) {
+  const chosen = state.framePassage;
+  const page = frameDocument(frame);
+  if (!page) return;
+  try {
+    for (const old of page.querySelectorAll('mark[data-quote-mark]')) old.replaceWith(...old.childNodes);
+    page.body.normalize();
+    if (!chosen) {
+      setMarkState(frame, '', null);
+      return;
+    }
+    const walker = page.createTreeWalker(page.body, 4);
+    const nodes = [];
+    let source = '';
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      nodes.push([node, source.length]);
+      source += node.nodeValue;
+    }
+    const found = findPassages(source, chosen.passage);
+    const place = offset => {
+      let index = nodes.length - 1;
+      while (index > 0 && nodes[index][1] > offset) index -= 1;
+      return [nodes[index][0], offset - nodes[index][1]];
+    };
+    const lime = getComputedStyle(document.documentElement).getPropertyValue('--lime').trim();
+    let first = null;
+    for (const [start, end] of [...found].reverse()) {
+      const range = page.createRange();
+      range.setStart(...place(start));
+      range.setEnd(...place(end));
+      const mark = page.createElement('mark');
+      mark.setAttribute('data-quote-mark', '');
+      mark.style.backgroundColor = lime || 'Mark';
+      mark.style.color = 'inherit';
+      mark.append(range.extractContents());
+      range.insertNode(mark);
+      first = mark;
+    }
+    frame.dataset.marked = chosen.key || '';
+    frame.dataset.markStatus = found.length ? 'marked' : 'not_found';
+    frame.dataset.markCount = String(found.length);
+    setMarkNote(textMarkNote(found.length), !found.length);
+    // only the frame's own window scrolls (scrollIntoView would move the review page too)
+    if (first) frame.contentWindow.scrollBy({ top: first.getBoundingClientRect().top - frame.contentWindow.innerHeight / 3, behavior: scrollBehavior() });
+  } catch {
+    revealInFrame(frame, chosen?.passage || '');
+  }
 }
 
 // --- decisions: each names the row's line and the coding review the page shows ---
@@ -1942,6 +2624,8 @@ if (typeof module === 'object' && module.exports) {
     STATE_LABELS, CODE_STATUSES, DECISIONS, ACTION_BUTTONS, PHASES, PHASE_TITLES, STEP_KEYS, STEP_LABELS, PROGRESS_ACTIONS,
     INSURANCE_CHOICES, QUEUE_STATES, OUTDATED_TEXT, CHANGED_TEXT, UNITS_NOT_GIVEN, MODIFIERS_NOT_GIVEN, CLIENT_HEADER,
     CLIENT_VERSION, MAX_ANSWER_CHARS, CONVERTED_NOTE, REVIEW_AGAIN,
+    findPassages, foldText, foldedOccurrences, locateQuote, markNote, frameNote, textMarkNote, pdfAssets, pdfCapable,
+    mountViewer, closeViewer, showPdfQuote, frameQuote, fallbackViewer, clearViewerMark, paintPage, renderDocument, PDF_VIEW,
   };
 }
 if (typeof document !== 'undefined') boot();

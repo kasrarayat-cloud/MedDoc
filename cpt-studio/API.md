@@ -167,7 +167,10 @@ approved it, their kind and when. Units or modifiers the coding review did not g
 Without `view`: the uploaded original as an attachment, exactly as stored (`404` for a paste). With `view=1`: what the
 in-page viewer shows (the PDF or text, the pasted text, or a Word document's converted PDF), `Content-Disposition:
 inline`, `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: frame-ancestors 'self'`. A stored file that no longer
-matches its sha256 answers `409`.
+matches its sha256 answers `409`. The review page fetches a PDF view itself (same origin, the session's cookie) and
+draws it with its pinned PDF library, marking a chosen quote's words on its page; where that cannot run it frames this
+address (`#page=N`) as before. The rule is [`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8, "Marking a quoted
+passage"; this endpoint and the contract are unchanged by it.
 
 ### `GET /api/reports/<id>/download`
 

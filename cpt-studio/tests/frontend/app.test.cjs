@@ -679,16 +679,32 @@ test('every fixture draws the DOM contract: viewer, quotes, progress, questions,
   for (const name of ENCOUNTERS) {
     const doc = fixture(name);
     const page = dom(render(doc));
-    // the original: an iframe of view_url when the server names a view type, else no viewer at all; the note under a
-    // converted Word document's PDF; the download of the original when there is one
+    // the original when the server names a view type, else no viewer at all: a PDF in the region the page draws it in, a
+    // text in an iframe, each keeping view_url in data-view-url, with the polite note under it that says what a chosen
+    // quote marked; the note under a converted Word document's PDF; the download of the original when there is one
     const viewer = page.one('#documentViewer');
-    if (doc.document.view_media_type) {
+    if (doc.document.view_media_type === 'application/pdf') {
+      assert.ok(viewer && viewer.tag === 'div' && viewer.attr('class') === 'viewer-frame pdf-viewer', name);
+      assert.equal(viewer.attr('data-view-url'), doc.document.view_url, name);
+      assert.deepEqual([viewer.attr('role'), viewer.attr('tabindex')], ['region', '0'], name);
+      assert.match(viewer.attr('aria-label'), /^Original document: /, name);
+      assert.equal(page.all('iframe').length, 0, `${name}: the page draws the PDF itself`);
+      assert.equal(page.one('.viewer-toolbar #viewerPage').text, '', name);
+    } else if (doc.document.view_media_type) {
       assert.ok(viewer && viewer.tag === 'iframe', name);
       assert.equal(viewer.attr('src'), doc.document.view_url, name);
+      assert.equal(viewer.attr('data-view-url'), doc.document.view_url, name);
       assert.ok(viewer.attr('title'), name);
+      assert.equal(page.one('#viewerPage'), null, `${name}: a text has no pages`);
     } else {
       assert.equal(viewer, null, name);
       assert.equal(page.all('iframe').length, 0, name);
+    }
+    const note = page.one('.viewer-panel p#viewerMark');
+    if (doc.document.view_media_type) {
+      assert.deepEqual([note?.attr('role'), note?.attr('aria-live'), note?.text], ['status', 'polite', ''], name);
+    } else {
+      assert.equal(note, null, `${name}: nothing to mark where nothing is shown`);
     }
     assert.deepEqual(page.all('.viewer-panel .viewer-note').map(note => note.text), doc.document.converted ? [app.CONVERTED_NOTE] : [], name);
     const download = page.one('#downloadOriginal');
@@ -851,7 +867,7 @@ test('units the coding review did not give read "Units not given", never a numbe
   assert.equal(dom(render(doc)).one('li.code-row[data-line="L3"] .code-units').text, '1 unit');
 });
 
-test('quote page links: a page opens the viewer at view_url#page=N; a text quote has no page', () => {
+test('quote page links: a quote names its page; the browser\'s own viewer opens at view_url#page=N; a text quote has no page', () => {
   const view = `/api/encounters/${UUID}/original?view=1`;
   assert.equal(app.viewerUrl(view, 3), `${view}#page=3`);
   assert.equal(app.viewerUrl(view, null), view);
@@ -869,11 +885,11 @@ test('quote page links: a page opens the viewer at view_url#page=N; a text quote
   assert.deepEqual(panel.slice(0, 3), ['L1#0', 'L1#1', 'L2#0']);
   assert.deepEqual(page.all('li.code-row .code-quote').map(quote => quote.attr('data-view-page')), ['1', '1', '2', '2', '2']);
   assert.equal(page.one('#quotesPanel .quote').one('.quote-page').text, 'Page 1');
-  assert.match(page.one('#quotesPanel .quotes-lead').text, /open its page/);
-  // a text document's quotes carry no page, and the panel says they are found in the document
+  assert.equal(page.one('#quotesPanel .quotes-lead').text, 'Each code rests on these passages. Choose one to open its page and mark its words there.');
+  // a text document's quotes carry no page, and the panel says they are marked in the document
   const text = dom(render(fixture('encounter-awaiting-answer.json')));
   assert.deepEqual(text.all('#quotesPanel .quote').map(quote => quote.attr('data-page')), ['', '', '']);
-  assert.match(text.one('#quotesPanel .quotes-lead').text, /find it in the document/);
+  assert.equal(text.one('#quotesPanel .quotes-lead').text, 'Each code rests on these passages. Choose one to mark it in the document.');
 });
 
 test('the viewer follows document.view_media_type, never media_type: a PDF or a text in the page, else only the download', () => {
@@ -922,14 +938,16 @@ test('a Word document is viewed as the PDF the coding review read, with the note
   assert.equal(app.CONVERTED_NOTE, 'Shown as the PDF the coding review read (converted from the Word file).');
   const panel = dom(app.viewerPanel(doc)).one('section.viewer-panel');
   const children = panel.children.filter(child => typeof child !== 'string').map(child => child.attr('class') || child.attr('id'));
-  assert.deepEqual(children, ['viewer-toolbar', 'viewer-frame', 'viewer-note', 'viewer-bottom'], 'the note sits under the viewer');
-  assert.equal(panel.one('iframe#documentViewer').attr('src'), doc.document.view_url);
+  assert.deepEqual(children, ['viewer-toolbar', 'viewer-frame pdf-viewer', 'viewer-mark', 'viewer-note', 'viewer-bottom'],
+    'the notes sit under the viewer: what a chosen quote marked, then that the PDF is a converted one');
+  assert.equal(panel.one('div#documentViewer').attr('data-view-url'), doc.document.view_url);
+  assert.equal(panel.all('iframe').length, 0);
   assert.equal(panel.one('.viewer-note').text, app.CONVERTED_NOTE);
   assert.equal(panel.one('.viewer-name').text, 'synthetic-colonoscopy-report.docx');
   assert.equal(panel.one('#downloadOriginal').attr('href'), doc.document.original_url, 'the download is the Word file itself');
   // its quotes open their pages: the PDF's pages are the pages the quotes name
   const page = dom(render(doc));
-  assert.match(page.one('#quotesPanel .quotes-lead').text, /open its page/);
+  assert.match(page.one('#quotesPanel .quotes-lead').text, /open its page and mark its words/);
   assert.deepEqual(page.all('#quotesPanel .quote').map(quote => quote.attr('data-page')), ['2', '1', '1', '2']);
   // the note only for a converted PDF: not for a PDF or a text uploaded as such, not without a view
   for (const name of ['encounter-ready.json', 'encounter-awaiting-answer.json', 'encounter-no-codes.json', 'encounter-earlier.json']) {
@@ -962,29 +980,169 @@ test('the second check without a verdict shows the server\'s own sentence as giv
   assert.equal(app.tallyText(doc), '1 ready for approval · 2 need your review');
 });
 
-test('a quote opens its page in the PDF viewer; in the text viewer the passage is found instead', async () => {
-  const frame = () => fakeElement({ src: 'unchanged', scrollIntoView() {} });
+// A viewer element as the browser wiring holds it: what it is given to show, and the data it is marked with.
+function viewerElement(extra = {}) {
+  return fakeElement({ children: [], replaceChildren(...nodes) { this.children = nodes; }, scrollIntoView() {}, removeEventListener() {},
+    scrollTo(options) { this.scrolled = options; }, ...extra });
+}
+
+// One page of a PDF as the library serves it: its text items, read once each.
+function pdfPage(strings, reads) {
+  return { getTextContent: async () => { reads.push(strings); return { items: strings.map(str => ({ str, hasEOL: false })) }; } };
+}
+
+test('where the PDF library cannot run, the browser\'s own viewer is framed and opens a quoted page, saying it cannot mark', async () => {
   const word = fixture('encounter-word.json');
-  await withPage({ elements: { documentViewer: frame() } }, async ({ element }) => {
-    Object.assign(app.state, { doc: word, route: null });
-    app.showQuote('L2#0');
-    assert.equal(element('#documentViewer').src, `${word.document.view_url}#page=1`);
-    assert.equal(app.state.selectedQuote, 'L2#0');
-    app.showQuote('M1#0');
-    assert.equal(element('#documentViewer').src, `${word.document.view_url}#page=2`);
-    app.showQuote('L9#0');
-    app.showQuote('45381#0');
-    assert.equal(app.state.selectedQuote, 'M1#0', 'a quote the page does not hold changes nothing');
-  });
-  // a text has no pages: even a quote that names one is looked for in the text, and the viewer is not moved
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  const saved = { viewer: app.state.viewer, pdfLibrary: app.state.pdfLibrary };
+  try {
+    await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+      Object.assign(app.state, { doc: word, route: null, pdfLibrary: null });
+      // no module named on the page (and no IntersectionObserver here): the library is refused before anything loads
+      assert.deepEqual(app.pdfAssets(), { module: '', worker: '' });
+      assert.equal(app.pdfCapable(), false);
+      app.mountViewer(word);
+      await settle(() => app.state.viewer?.mode === 'frame');
+      const viewer = app.state.viewer;
+      assert.equal(viewer.mode, 'frame');
+      assert.equal(element.dataset.mode, 'frame');
+      assert.deepEqual(element.children, [viewer.frame], 'the frame alone, in the viewer\'s place');
+      assert.equal(viewer.frame.src, word.document.view_url);
+      assert.equal(viewer.frame.className, 'viewer-fallback');
+      assert.equal(viewer.frame.title, 'Original document: synthetic-colonoscopy-report.docx');
+      assert.equal(find('#viewerMark').textContent, '', 'nothing said before a quote is chosen');
+      app.showQuote('L2#0');
+      assert.equal(viewer.frame.src, `${word.document.view_url}#page=1`);
+      assert.equal(app.state.selectedQuote, 'L2#0');
+      assert.equal(find('#viewerMark').textContent, 'Marking is not available for this document. Page 1 is shown.');
+      assert.ok(find('#viewerMark').classList.contains('is-missing'));
+      assert.equal(element.dataset.marked, '', 'nothing marked');
+      app.showQuote('M1#0');
+      assert.equal(viewer.frame.src, `${word.document.view_url}#page=2`);
+      app.showQuote('L9#0');
+      app.showQuote('45381#0');
+      assert.equal(app.state.selectedQuote, 'M1#0', 'a quote the page does not hold changes nothing');
+      assert.equal(viewer.frame.src, `${word.document.view_url}#page=2`);
+      app.closeViewer();
+      assert.equal(app.state.viewer, null);
+      assert.equal(viewer.mode, 'closed');
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('a quote chosen in the PDF viewer reads its page and the next, is located, and says what was marked', async () => {
+  const word = fixture('encounter-word.json');
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  const reads = [];
+  // the synthetic Word document's two pages, as its PDF's text items (dev_preview_server.cjs SYNTHETIC_DOCUMENTS)
+  const pages = preview.SYNTHETIC_DOCUMENTS['synthetic-colonoscopy-report.docx'].pages;
+  const pageAt = number => ({ number, proxy: pdfPage(pages[number - 1], reads), element: fakeElement({ offsetTop: 400 * (number - 1), querySelector: () => null }),
+    drawn: '', layer: null, painted: [] });
+  const saved = { viewer: app.state.viewer };
+  try {
+    await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+      Object.assign(app.state, { doc: word, route: null });
+      const viewer = { element, view: word.document.view_url, name: 'x', mode: 'loading', pages: [], texts: new Map(), mark: null, pending: null,
+        markSerial: 0, reveal: 0, frame: null };
+      app.state.viewer = viewer;
+      // while the PDF is still opening, the choice waits
+      app.showQuote('L2#0');
+      assert.deepEqual(viewer.pending, { quote: { text: 'Two biopsies were taken from the cecum with cold forceps.', page: 1 }, key: 'L2#0' });
+      viewer.pending = null;
+      Object.assign(viewer, { mode: 'pdf', pages: [pageAt(1), pageAt(2)] });
+      const result = await app.showQuote('L2#0');
+      assert.deepEqual(reads, pages, 'the quote\'s page and the next are read');
+      assert.equal(result.status, 'marked');
+      assert.deepEqual([result.scope, result.count, result.pages, result.caseBlind], ['page', 1, [1], false]);
+      assert.deepEqual(viewer.mark.key, 'L2#0');
+      assert.equal(find('#viewerMark').textContent, 'Marked on page 1.');
+      assert.equal(find('#viewerMark').classList.contains('is-missing'), false);
+      assert.deepEqual([element.dataset.marked, element.dataset.markStatus, element.dataset.markPages, element.dataset.markCount], ['L2#0', 'marked', '1', '1']);
+      assert.deepEqual(element.scrolled, { top: 0, behavior: 'smooth' }, 'the page is scrolled to');
+      // a second read of the same pages comes from what was read
+      await app.showQuote('M1#0');
+      assert.equal(reads.length, 2);
+      assert.equal(find('#viewerMark').textContent, 'Marked on page 2.');
+      assert.equal(element.scrolled.top, 400 - app.PDF_VIEW.gap);
+      // a quote whose words are not on its page: nothing marked, the page still opened, and the note says so
+      const missing = clone(word);
+      missing.codes[0].quotes[0] = { text: 'A passage that is in no page of this document.', page: 2 };
+      app.state.doc = missing;
+      const none = await app.showQuote('L1#0');
+      assert.deepEqual([none.status, none.count, none.pages], ['not_found', 0, []]);
+      assert.equal(find('#viewerMark').textContent, 'The exact words could not be found on page 2, so nothing is marked. Page 2 is shown.');
+      assert.ok(find('#viewerMark').classList.contains('is-missing'));
+      assert.deepEqual([element.dataset.marked, element.dataset.markStatus, element.dataset.markCount], ['L1#0', 'not_found', '0']);
+      assert.equal(element.scrolled.top, 400 - app.PDF_VIEW.gap);
+      // a newer coding review clears the mark and its note
+      app.clearViewerMark();
+      assert.equal(viewer.mark, null);
+      assert.equal(find('#viewerMark').textContent, '');
+      assert.equal(element.dataset.marked, '');
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('a read that changes the page never reloads the viewer: its mark stays, a new coding review clears it, a new document closes it', async () => {
+  const word = fixture('encounter-word.json');
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  const saved = { viewer: app.state.viewer };
+  try {
+    await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+      const viewer = { element, view: word.document.view_url, name: 'x', mode: 'pdf', pages: [], texts: new Map(), markSerial: 0, reveal: 0, frame: null,
+        mark: { key: 'L2#0', quote: word.codes[1].quotes[0], result: { status: 'marked', pages: [1], count: 1, marks: {} } }, pending: null };
+      Object.assign(app.state, { doc: word, route: { name: 'doc', id: word.id }, docKey: 'drawn', viewerKey: app.viewerKey(word), selectedQuote: 'L2#0', viewer });
+      find('#viewerMark').textContent = 'Marked on page 1.';
+      // the same coding review, read again with a change (a decision recorded): the review column is redrawn, the viewer kept
+      const decided = clone(word);
+      decided.codes[1].reason = `${decided.codes[1].reason} Again.`;
+      app.renderDocument(decided, false);
+      assert.equal(app.state.viewer, viewer, 'the same viewer');
+      assert.equal(viewer.mode, 'pdf');
+      assert.equal(viewer.mark.key, 'L2#0', 'its mark stays');
+      assert.equal(app.state.selectedQuote, 'L2#0');
+      assert.equal(find('#viewerMark').textContent, 'Marked on page 1.');
+      // a newer coding review of the same document: the passage chosen and its mark go, the viewer stays
+      const newer = clone(decided);
+      newer.round = { ...newer.round, number: newer.round.number + 1 };
+      app.renderDocument(newer, false);
+      assert.equal(app.state.viewer, viewer);
+      assert.equal(viewer.mark, null);
+      assert.equal(app.state.selectedQuote, '');
+      assert.equal(find('#viewerMark').textContent, '');
+      // another view of the document (another viewer key): the page is redrawn whole and the viewer closed
+      const other = clone(newer);
+      other.document.converted = false;
+      app.renderDocument(other, false);
+      assert.equal(viewer.mode, 'closed', 'the old viewer is closed');
+      assert.notEqual(app.state.viewer, viewer);
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('a text has no pages: a quote is marked in the text frame, never by moving the frame', async () => {
   const text = clone(fixture('encounter-awaiting-answer.json'));
   text.codes[0].quotes[0].page = 1;
-  await withPage({ elements: { documentViewer: frame() } }, async ({ element }) => {
-    Object.assign(app.state, { doc: text, route: null });
-    app.showQuote('L1#0');
-    assert.equal(element('#documentViewer').src, 'unchanged');
-    assert.equal(app.state.selectedQuote, 'L1#0');
-  });
+  const frame = fakeElement({ tagName: 'IFRAME', src: 'unchanged', scrollIntoView() {} });
+  const saved = { framePassage: app.state.framePassage };
+  try {
+    await withPage({ elements: { documentViewer: frame } }, async () => {
+      Object.assign(app.state, { doc: text, route: null });
+      app.showQuote('L1#0');
+      assert.equal(frame.src, 'unchanged');
+      assert.equal(app.state.selectedQuote, 'L1#0');
+      // the frame's text is not loaded here: the passage waits for it
+      assert.deepEqual(app.state.framePassage, { passage: text.codes[0].quotes[0].text, key: 'L1#0' });
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
 });
 
 test('the progress panel: three steps per phase, Stop, Resume and Retry only when offered to a reviewer', () => {
@@ -1904,6 +2062,222 @@ test('a quoted passage is found in a text despite line breaks and case', () => {
   assert.equal(app.findPassage(source, 'not in the text'), null);
   assert.equal(app.findPassage(source, '   '), null);
   assert.deepEqual(app.findPassage('\u{1F600} cecum', 'cecum'), [3, 8], 'offsets are the text\'s own UTF-16 units');
+});
+
+test('a text document\'s passage is counted by the same rule: every occurrence, exact case before case-blind', () => {
+  const source = 'The cecum was reached.\nThe  cecum\nwas reached again. the cecum was reached';
+  assert.deepEqual(app.findPassages(source, 'The cecum was reached'), [[0, 21], [23, 45]], 'exact case: the lower-case one is not counted');
+  assert.equal(source.slice(23, 45), 'The  cecum\nwas reached', 'white space runs are one space');
+  assert.deepEqual(app.findPassages(source, 'THE CECUM WAS REACHED'), [[0, 21], [23, 45], [53, 74]], 'case-blind: all three');
+  assert.deepEqual(app.findPassages(source, 'not in it'), []);
+  assert.deepEqual(app.findPassages(source, ' \n '), []);
+  assert.deepEqual(app.findPassages('aaaa', 'aa'), [[0, 2], [2, 4]], 'left to right, without overlap');
+  assert.deepEqual(app.findPassage(source, 'THE CECUM WAS REACHED'), [0, 21], 'findPassage is the first of them');
+  // a letter whose lower case is two units is compared as written, so no offset moves
+  assert.deepEqual(app.findPassages('İstanbul cecum', 'CECUM'), [[9, 14]]);
+  assert.equal(app.textMarkNote(0), 'The exact words could not be found in the document, so nothing is marked.');
+  assert.equal(app.textMarkNote(1), 'Marked in the document.');
+  assert.equal(app.textMarkNote(3), 'These words appear 3 times in the document. Each is marked.');
+});
+
+// --- the quoted words, marked on a page of a PDF (the owner's direction of 2026-11-20, DECISIONS D368) ------------------
+
+// What locateQuote marks, as [page, the marked text of each item part, occurrence], read back from the page strings.
+function markedParts(result, texts) {
+  return Object.entries(result.marks).flatMap(([page, parts]) => parts.map(part => [Number(page), texts[page - 1][part.item].slice(part.start, part.end), part.occurrence]));
+}
+
+test('the matcher marks the quote\'s own characters: white space ignored entirely, NFKC on both sides', () => {
+  const pages = [['Patchy erythema was seen in the gastric antrum.', 'Cold forceps biop', 'sies were taken.'], ['Second page.']];
+  // exact: one item
+  const exact = app.locateQuote({ text: 'Patchy erythema was seen in the gastric antrum.', page: 1 }, pages);
+  assert.deepEqual([exact.status, exact.scope, exact.count, exact.pages, exact.caseBlind], ['marked', 'page', 1, [1], false]);
+  assert.deepEqual(markedParts(exact, pages), [[1, 'Patchy erythema was seen in the gastric antrum.', 0]]);
+  // white space differences: line breaks and runs of spaces in the quote, a word split across two items on the page
+  const spaced = app.locateQuote({ text: 'Cold  forceps\nbiopsies were', page: 1 }, pages);
+  assert.deepEqual(markedParts(spaced, pages), [[1, 'Cold forceps biop', 0], [1, 'sies were', 0]]);
+  // ...and white space ignored entirely: the page's "biop" + "sies" is the quote's "biopsies", a quote without spaces too
+  assert.equal(app.locateQuote({ text: 'Coldforcepsbiopsies', page: 1 }, pages).count, 1);
+  // only the characters matched are marked: no white space before or after them
+  const inner = app.locateQuote({ text: 'erythema was', page: 1 }, pages);
+  assert.deepEqual(inner.marks, { 1: [{ item: 0, start: 7, end: 19, occurrence: 0 }] });
+  // NFKC: a ligature on the page and plain letters in the quote, and the other way round; full-width letters; NBSP
+  const ligature = [['The ﬁnding was conﬁrmed.', 'Ｓｎａｒｅ polypectomy']];
+  assert.deepEqual(markedParts(app.locateQuote({ text: 'finding was confirmed', page: 1 }, ligature), ligature), [[1, 'ﬁnding was conﬁrmed', 0]]);
+  assert.equal(app.locateQuote({ text: 'Snare polypectomy', page: 1 }, ligature).count, 1);
+  assert.equal(app.locateQuote({ text: 'The ﬁnding', page: 1 }, [['The finding']]).count, 1);
+  // whole characters only: never half of a ligature, never a letter without its accent
+  assert.equal(app.locateQuote({ text: 'The f', page: 1 }, ligature).status, 'not_found');
+  const accented = [['café au lait']];
+  assert.equal(app.locateQuote({ text: 'cafe au', page: 1 }, accented).status, 'not_found');
+  assert.deepEqual(markedParts(app.locateQuote({ text: 'café au', page: 1 }, accented), accented), [[1, 'café au', 0]], 'composed and decomposed are one character');
+  // offsets are the item's own UTF-16 units, astral characters included
+  const astral = [['\u{1F600} cecum reached']];
+  assert.deepEqual(app.locateQuote({ text: 'cecum', page: 1 }, astral).marks, { 1: [{ item: 0, start: 3, end: 8, occurrence: 0 }] });
+});
+
+test('the matcher is exact-case first, case-blind only where no exact-case occurrence exists, and counts every one', () => {
+  const pages = [['Gastric antrum biopsy. The gastric antrum was red. gastric antrum.']];
+  const exact = app.locateQuote({ text: 'gastric antrum', page: 1 }, pages);
+  assert.deepEqual([exact.count, exact.caseBlind], [2, false], 'the capitalised one is not counted while exact ones exist');
+  assert.deepEqual(markedParts(exact, pages).map(([, , occurrence]) => occurrence), [0, 1]);
+  const blind = app.locateQuote({ text: 'GASTRIC ANTRUM', page: 1 }, pages);
+  assert.deepEqual([blind.count, blind.caseBlind], [3, true]);
+  assert.equal(app.markNote(blind), 'These words appear 3 times on page 1. Each is marked.');
+  // duplicates: each is marked and counted, left to right, never overlapping
+  const twice = [['the gastric antrum.', 'x', 'the gastric antrum.']];
+  const both = app.locateQuote({ text: 'the gastric antrum.', page: 1 }, twice);
+  assert.deepEqual(markedParts(both, twice), [[1, 'the gastric antrum.', 0], [1, 'the gastric antrum.', 1]]);
+  assert.equal(app.markNote(both), 'These words appear 2 times on page 1. Each is marked.');
+  assert.equal(app.locateQuote({ text: 'aa', page: 1 }, [['aaaa']]).count, 2);
+});
+
+test('the matcher looks on the quote\'s page, then from it onto the next, and never marks another page', () => {
+  const pages = [['First page text.', 'It ends with the start of a'], ['passage that runs on.', 'Only on page two.'], ['Only on page three.']];
+  // not found: nothing marked, and the page is named
+  const none = app.locateQuote({ text: 'Not in the document.', page: 1 }, pages);
+  assert.deepEqual([none.status, none.count, none.pages, none.marks], ['not_found', 0, [], {}]);
+  assert.equal(app.markNote(none), 'The exact words could not be found on page 1, so nothing is marked. Page 1 is shown.');
+  // continuation: it starts on the quote's page and runs onto the next; the marked part on each page is shown
+  const run = app.locateQuote({ text: 'the start of a passage that runs on', page: 1 }, pages);
+  assert.deepEqual([run.status, run.scope, run.count, run.pages], ['marked', 'continued', 1, [1, 2]]);
+  assert.deepEqual(markedParts(run, pages), [[1, 'the start of a', 0], [2, 'passage that runs on', 0]]);
+  assert.equal(app.markNote(run), 'Marked on page 1, continuing onto page 2.');
+  // a quote found only on another page is NOT marked: not the next page, not any other
+  for (const [text, page] of [['Only on page two.', 1], ['Only on page three.', 1], ['Only on page three.', 2], ['First page text.', 2]]) {
+    const other = app.locateQuote({ text, page }, pages);
+    assert.deepEqual([other.status, other.pages, other.marks], ['not_found', [], {}], `${text} on page ${page}`);
+  }
+  // a passage that starts on the page before the quote's is not the quote's page's either
+  assert.equal(app.locateQuote({ text: 'the start of a passage that runs on', page: 2 }, pages).status, 'not_found');
+  // the quote's own page wins: found there, the next page is not looked at
+  const both = [['repeat me'], ['repeat me']];
+  assert.deepEqual(app.locateQuote({ text: 'repeat me', page: 2 }, both).pages, [2]);
+  // the last page has no next page
+  assert.equal(app.locateQuote({ text: 'three. More', page: 3 }, pages).status, 'not_found');
+  // case-blind continuation only where there is no exact one
+  const shouting = app.locateQuote({ text: 'THE START OF A PASSAGE', page: 1 }, pages);
+  assert.deepEqual([shouting.scope, shouting.caseBlind, shouting.pages], ['continued', true, [1, 2]]);
+  // only the pages read are needed: the quote's page and the next
+  assert.equal(app.locateQuote({ text: 'passage that runs on', page: 2 }, [null, ['passage that runs on.'], null]).count, 1);
+});
+
+test('a quote with no page is looked for on every page, every occurrence marked, the pages named', () => {
+  const pages = [['The cecum was reached.'], ['No match here.'], ['The cecum was reached again.', 'the cecum']];
+  const all = app.locateQuote({ text: 'The cecum', page: null }, pages);
+  assert.deepEqual([all.status, all.scope, all.count, all.pages, all.caseBlind], ['marked', 'document', 2, [1, 3], false]);
+  assert.equal(app.markNote(all), 'These words appear 2 times, on pages 1 and 3. Each is marked.');
+  const one = app.locateQuote({ text: 'No match here.' }, pages);
+  assert.equal(app.markNote(one), 'Marked on page 2.');
+  const none = app.locateQuote({ text: 'Absent words.', page: null }, pages);
+  assert.equal(app.markNote(none), 'The exact words could not be found in this document, so nothing is marked.');
+  const across = app.locateQuote({ text: 'reached. No match', page: null }, pages);
+  assert.deepEqual([across.count, across.pages], [1, [1, 2]]);
+  assert.equal(app.markNote(across), 'Marked on pages 1 and 2.');
+  const three = app.locateQuote({ text: 'e' }, [['e'], ['e'], ['e']]);
+  assert.equal(app.markNote(three), 'These words appear 3 times, on pages 1, 2 and 3. Each is marked.');
+});
+
+test('the matcher refuses empty and odd input, and names a page the document does not have', () => {
+  const pages = [['Some text.']];
+  for (const quote of [null, undefined, {}, { text: '' }, { text: '   \n\t ' }, { text: 7 }, { text: null, page: 1 }]) {
+    const result = app.locateQuote(quote, pages);
+    assert.deepEqual([result.status, result.count, result.marks], ['empty', 0, {}], JSON.stringify(quote));
+  }
+  assert.equal(app.markNote(app.locateQuote({ text: ' ' }, pages)), 'This passage has no words to mark.');
+  const beyond = app.locateQuote({ text: 'Some text.', page: 4 }, pages);
+  assert.deepEqual([beyond.status, beyond.pageCount, beyond.marks], ['missing_page', 1, {}]);
+  assert.equal(app.markNote(beyond), 'This passage names page 4, but the document has 1 page. Nothing is marked.');
+  // a page that is not a positive whole number is no page: every page is searched
+  for (const page of [0, -1, 1.5, '1', null]) assert.equal(app.locateQuote({ text: 'Some text.', page }, pages).scope, 'document', String(page));
+  // no pages, unreadable pages and odd items
+  assert.equal(app.locateQuote({ text: 'x', page: 1 }, null).status, 'missing_page');
+  assert.equal(app.locateQuote({ text: 'x' }, []).status, 'not_found');
+  assert.equal(app.locateQuote({ text: 'Some', page: 1 }, [['', null, 7, 'Some', { str: 'x' }]]).count, 1);
+  assert.deepEqual(app.locateQuote({ text: 'Some', page: 1 }, [['', null, 7, 'Some']]).marks, { 1: [{ item: 3, start: 0, end: 4, occurrence: 0 }] });
+  assert.equal(app.locateQuote({ text: 'x', page: 1 }, [null]).status, 'not_found');
+  assert.equal(app.markNote(null), 'The exact words could not be found in this document, so nothing is marked.');
+  assert.equal(app.frameNote(3), 'Marking is not available for this document. Page 3 is shown.');
+  assert.equal(app.frameNote(null), 'Marking is not available for this document.');
+});
+
+test('a drawn page\'s marks split exactly the matched characters out of the text layer\'s spans, as text only', async () => {
+  const strings = ['Cold forceps <b>biopsies</b>', 'were taken.', 'Other text.'];
+  const made = [];
+  const element = () => {
+    const node = { children: [], dataset: {}, className: '', set textContent(value) { this.children = value === '' ? [] : [value]; },
+      get textContent() { return this.children.map(child => (typeof child === 'string' ? child : child.textContent)).join(''); },
+      append(...items) { this.children.push(...items); } };
+    made.push(node);
+    return node;
+  };
+  const saved = global.document;
+  global.document = { createElement: element };
+  try {
+    const divs = strings.map(value => { const div = element(); div.textContent = value; return div; });
+    const page = { number: 1, drawn: 'key', layer: { textDivs: divs, textContentItemsStr: strings }, painted: [] };
+    const result = app.locateQuote({ text: 'forceps <b>biopsies</b> were', page: 1 }, [strings]);
+    app.paintPage({ mark: { key: 'L1#0', result } }, page);
+    const shape = div => div.children.map(child => (typeof child === 'string' ? child : [child.className, child.dataset.occurrence, child.textContent]));
+    assert.deepEqual(shape(divs[0]), ['Cold ', ['pdf-mark', '0', 'forceps <b>biopsies</b>']], 'the markup-like text stays text');
+    assert.deepEqual(shape(divs[1]), [['pdf-mark', '0', 'were'], ' taken.']);
+    assert.deepEqual(shape(divs[2]), ['Other text.'], 'an item with no mark is not touched');
+    assert.deepEqual(page.painted, [0, 1]);
+    // another quote: the spans painted before are restored first
+    app.paintPage({ mark: { key: 'L2#0', result: app.locateQuote({ text: 'Other', page: 1 }, [strings]) } }, page);
+    assert.deepEqual([shape(divs[0]), shape(divs[1]), shape(divs[2])], [[strings[0]], [strings[1]], [['pdf-mark', '0', 'Other'], ' text.']]);
+    // no mark (the document changed, or a new coding review): every span as it was
+    app.paintPage({ mark: null }, page);
+    assert.deepEqual(divs.map(shape), strings.map(value => [value]));
+    // a page not drawn yet is left alone; it is painted when it is drawn
+    app.paintPage({ mark: { key: 'L1#0', result } }, { ...page, layer: null });
+    assert.deepEqual(divs.map(shape), strings.map(value => [value]));
+  } finally {
+    global.document = saved;
+  }
+});
+
+test('nothing the page script declares shadows a property of window the page or the walk reads', () => {
+  // app.js is a classic script: every function it declares at its top level becomes a property of window, so one named
+  // innerWidth replaced window.innerWidth (the walk's viewport check reads it) while the viewer was being built
+  const source = fs.readFileSync(BUNDLE, 'utf8');
+  const declared = [...source.matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)|^(?:const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm)].map(match => match[1] || match[2]);
+  assert.ok(declared.includes('locateQuote') && declared.includes('viewerWidth'), 'the declarations are read');
+  const windowProperties = ['innerWidth', 'innerHeight', 'outerWidth', 'outerHeight', 'scrollX', 'scrollY', 'pageXOffset', 'pageYOffset', 'screenX',
+    'screenY', 'screenLeft', 'screenTop', 'devicePixelRatio', 'name', 'status', 'closed', 'length', 'opener', 'parent', 'top', 'frames', 'self',
+    'window', 'document', 'location', 'history', 'navigator', 'origin', 'event', 'external', 'screen', 'visualViewport', 'performance', 'crypto',
+    'open', 'close', 'stop', 'focus', 'blur', 'print', 'alert', 'confirm', 'prompt', 'find', 'scroll', 'scrollTo', 'scrollBy', 'moveTo', 'moveBy',
+    'resizeTo', 'resizeBy', 'postMessage', 'fetch', 'getComputedStyle', 'getSelection', 'matchMedia', 'requestAnimationFrame',
+    'cancelAnimationFrame', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'structuredClone', 'atob', 'btoa',
+    'customElements', 'localStorage', 'sessionStorage', 'indexedDB', 'caches', 'menubar', 'toolbar', 'statusbar', 'scrollbars', 'personalbar',
+    'locationbar', 'onload', 'onerror', 'onresize', 'onscroll', 'reportError', 'createImageBitmap', 'IntersectionObserver', 'ResizeObserver',
+    'Worker', 'URL', 'Map', 'Promise'];
+  assert.deepEqual(declared.filter(name => windowProperties.includes(name)), []);
+});
+
+test('the PDF library is named on the page as same-origin static modules, and nothing else is accepted', () => {
+  const saved = global.document;
+  try {
+    const page = data => { global.document = { body: { dataset: data } }; return app.pdfAssets(); };
+    const module = '/static/studio/lib/pdfjs-6.5.438/build/pdf.min.0123456789ab.mjs';
+    const worker = '/static/studio/lib/pdfjs-6.5.438/build/pdf.worker.min.0123456789ab.mjs';
+    assert.deepEqual(page({ pdfModule: module, pdfWorker: worker }), { module, worker });
+    for (const bad of ['https://cdn.example/pdf.mjs', '//cdn.example/pdf.mjs', '/static/x.js', 'data:text/javascript,1', '/api/x.mjs', '/static/a b.mjs', 7, null]) {
+      assert.deepEqual(page({ pdfModule: bad, pdfWorker: bad }), { module: '', worker: '' }, String(bad));
+    }
+    assert.deepEqual(page(undefined), { module: '', worker: '' });
+  } finally {
+    global.document = saved;
+  }
+  // the shell names the pinned copy; the page script names no address of its own
+  const template = fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8');
+  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/build\/pdf\.worker\.min\.mjs' %\}">/);
+  const bundle = fs.readFileSync(BUNDLE, 'utf8');
+  assert.ok(!bundle.includes('pdfjs-6.5.438/build'), 'the bundle reads the addresses from the page');
+  // the library is opened with no eval, no WebAssembly, no XFA and the page drawn on the main thread, from the view address
+  assert.match(bundle, /library\.getDocument\(\{\n\s+url: viewer\.view, withCredentials: false, isEvalSupported: false, enableXfa: false, useWasm: false,/);
+  assert.match(bundle, /disableWorkerRendering: true/);
+  assert.ok(!/AnnotationLayer|XfaLayer|enableScripting/.test(bundle), 'no annotation or XFA layer, no document scripting');
 });
 
 test('the overview, the documents list and How it works speak of the coding review and the second check', () => {

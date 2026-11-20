@@ -2,9 +2,9 @@
 // Local visual-check server for the CPT Studio customer page. NOT used in production.
 //
 // Serves studio/templates/studio/*.html rendered as plain HTML (only the template tags those files use are supported;
-// anything else fails loudly), the files in studio/static/studio/, and a mock of the customer JSON API (client contract
-// customer-2026-11-22) backed by the hand-made customer fixtures in tests/fixtures/customer/. Binds 127.0.0.1 on the
-// port given as --port=N, else on the first free port in 9170-9179.
+// anything else fails loudly), the files in studio/static/studio/ (the PDF library's as its manifest lists them), and a
+// mock of the customer JSON API (client contract customer-2026-11-22) backed by the hand-made customer fixtures in
+// tests/fixtures/customer/. Binds 127.0.0.1 on the port given as --port=N, else on the first free port in 9170-9179.
 // A decision names the coding review the page shows and a line of it, as the server takes it ({round, line, code,
 // action, acknowledgement, note}, and for an Undo the decision it undoes: {..., decision}): a round that is not the
 // document's latest finished one, a line it does not have, a code that is not that line's, or an Undo naming another
@@ -43,6 +43,12 @@ const MAX_BODY = 16 * 1024 * 1024;
 const MAX_ANSWER_CHARS = 2000;
 const CSRF = crypto.randomBytes(16).toString('hex');
 const STATIC_TYPES = { 'styles.css': 'text/css; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'favicon.svg': 'image/svg+xml' };
+// The PDF library the review page loads for a PDF view (studio/static/studio/lib/), served as the site serves it: exactly
+// the files its manifest lists, scripts as JavaScript (a module or module worker of another type is refused under
+// nosniff), anything else as bytes.
+const PDF_LIB = 'lib/pdfjs-6.5.438/';
+const PDF_LIB_FILES = new Set(JSON.parse(fs.readFileSync(path.join(STATIC, PDF_LIB, 'MANIFEST.json'), 'utf8')).files.map(file => `${PDF_LIB}${file.path}`));
+const PDF_LIB_TYPES = { '.mjs': 'text/javascript; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
 // The page's policy, as studio.access.SecurityHeadersMiddleware sends it, with the viewer's frame allowed from this
 // origin only, so violations surface here.
 const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
@@ -562,6 +568,9 @@ async function handle(req, res) {
   const name = url.pathname.startsWith('/static/studio/') ? url.pathname.slice('/static/studio/'.length) : '';
   if (req.method === 'GET' && Object.hasOwn(STATIC_TYPES, name)) {
     return send(res, 200, fs.readFileSync(path.join(STATIC, name)), { 'Content-Type': STATIC_TYPES[name] });
+  }
+  if (req.method === 'GET' && PDF_LIB_FILES.has(name)) {
+    return send(res, 200, fs.readFileSync(path.join(STATIC, name)), { 'Content-Type': PDF_LIB_TYPES[path.extname(name)] || 'application/octet-stream' });
   }
   return send(res, 404, 'Not found', { 'Content-Type': 'text/plain; charset=utf-8' });
 }

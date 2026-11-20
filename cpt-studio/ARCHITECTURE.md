@@ -251,8 +251,15 @@ switched back to. Nothing writes them.
 
 Session authentication with Argon2 password hashes and a sign-in throttle (8 failures per username, 24 per client, in 15
 minutes); CSRF on every POST; `Cache-Control: no-store` on everything but static files; a Content-Security-Policy with
-`script-src 'self'` and no inline script (the page shell adds `frame-src 'self'` for the document viewer, and only the
-in-page view of an original may be framed, by CPT Studio's own pages); `X-Frame-Options: DENY` elsewhere. Every customer
+`script-src 'self'` and no inline script (the page shell adds `frame-src 'self'` for the text viewer and for the
+browser's own PDF viewer, framed where the page cannot draw a PDF itself, and only the in-page view of an original may
+be framed, by CPT Studio's own pages); `X-Frame-Options: DENY` elsewhere. The PDF library the review page draws a PDF
+with (pdfjs-dist 6.5.438, the files `studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json` lists with their sha256 and
+the npm integrity of the tarball, its licence beside them; nothing from a CDN) loads as same-origin modules and a
+same-origin module worker under `script-src 'self'` (`worker-src` falls back to it), served as JavaScript by WhiteNoise
+under `nosniff`. It runs with no eval and no WebAssembly - the policy has neither `'unsafe-eval'` nor
+`'wasm-unsafe-eval'` - with no document scripting, no XFA and no layer of links or form fields, reads only the
+same-origin view address, and puts a PDF's text in the page as text only (its text layer). Every customer
 query is scoped through the caller's active membership, so another workspace's records answer 404. Text the database
 cannot store (NUL, a lone surrogate) is refused with a 400 rather than altered; only a title or a file name has it
 replaced.
@@ -263,7 +270,10 @@ replaced.
 
 ## 8. The customer page
 
-[`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8: the DOM and copy contract the browser walk checks.
+[`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8: the DOM and copy contract the browser walk checks, and the one
+statement of how a chosen quote's words are marked in the document viewer ("Marking a quoted passage", DECISIONS D368:
+its own characters on its page, white space ignored, NFKC, exact case first, every occurrence counted, never another
+page). It is display only: it reads no meaning and never holds or changes a code.
 
 ## 9. Verification
 
@@ -272,7 +282,8 @@ replaced.
   decisions, answers, exports, the operator console, the page's templates and node tests, and the reference data.
   Synthetic text only; nothing is sent.
 - CI (`scripts/ci/verify-cpt-studio.sh`): checks, migration drift, the Django suite, the ops unit suites, the browser
-  walk's own tests (`ops/test_walk.cjs`) and a dependency audit.
+  walk's own tests (`ops/test_walk.cjs`; where Playwright is installed they choose every quote of the dev preview's
+  synthetic documents in Chromium and read the marks back) and a dependency audit.
 - After an install, `ops/walk.cjs` drives the real page with a synthetic document: upload, poll, the DOM and JSON
   contract, an answer, an approval through the dialog, both exports re-downloaded byte for byte, the denylist scan, a
   390 px viewport, and every `/ops/` path refused to the customer.
