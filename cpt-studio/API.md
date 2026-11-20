@@ -169,8 +169,10 @@ in-page viewer shows (the PDF or text, the pasted text, or a Word document's con
 inline`, `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: frame-ancestors 'self'`. A stored file that no longer
 matches its sha256 answers `409`. The review page fetches a PDF view itself (same origin, the session's cookie) and
 draws it with its pinned PDF library, marking a chosen quote's words on its page; where the browser cannot run that
-library, or the library cannot draw the document, it frames this address (`#page=N`) as before and says which. The rule is [`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8, "Marking a quoted
-passage"; this endpoint and the contract are unchanged by it.
+library, the library does not work or answer in time, or it cannot draw the document, the page frames this address
+instead, a new frame at `#page=N` for a quote on another page, and says why. The rule is
+[`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8, "Marking a quoted passage"; this endpoint and the contract are
+unchanged by it.
 
 ### `GET /api/reports/<id>/download`
 

@@ -275,8 +275,10 @@ replaced.
 
 [`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8: the DOM and copy contract the browser walk checks, and the one
 statement of how a chosen quote's words are marked in the document viewer ("Marking a quoted passage", DECISIONS D368:
-its own characters on its page, white space ignored, NFKC, exact case first, every occurrence counted, never another
-page). It is display only: it reads no meaning and never holds or changes a code.
+its own characters on its page, white space ignored, NFKC and format characters dropped on both sides, exact case first,
+never inside a longer word, an overprinted copy counted once, every occurrence counted, never another page; the notes,
+the zoom, the time limits and the fallback to the browser's own viewer with its reasons; the known limits). It is
+display only: it reads no meaning and never holds or changes a code.
 
 ## 9. Verification
 

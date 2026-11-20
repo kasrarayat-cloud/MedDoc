@@ -93,13 +93,15 @@ The encounter view has two columns.
 Left, the document:
 - `#documentViewer[data-view-url]` - the viewer of `document.view_url`, which keeps that address in `data-view-url`. For a
   PDF (or a Word document's converted PDF) it is a scrolling region (`div.pdf-viewer[role=region]`) the page draws the
-  PDF's pages in with the pinned PDF library: every page as `.pdf-page[data-page]`, fitted to the region's width, drawn
-  only near the visible area (the others are placeholders of their size) and redrawn when the width changes, each with
-  its canvas and a transparent, selectable text layer (`.pdf-text`); `#viewerPage` in the toolbar says "Page N of M".
-  Where the library cannot run (it does not load, the browser lacks what it needs, the document is refused), the
-  browser's own viewer is framed in the region instead (`[data-mode=frame]`, as before). For a text it is an iframe of
-  the text. Under it, `#viewerMark` (`role=status`, polite) says what choosing a quote marked; under that, the note that
-  a PDF is a Word document's converted PDF; then `#downloadOriginal` ("Download original") for an upload.
+  PDF's pages in with the pinned PDF library: every page as `.pdf-page[data-page]`, fitted to the region's width at the
+  zoom chosen, drawn only near the visible area (the others are placeholders of their size) and redrawn when the width,
+  the zoom or the screen's pixel ratio changes, each with its canvas and a transparent, selectable text layer
+  (`.pdf-text`; an overprint copy's span is `span[data-overprint="1"]`). The toolbar holds `#viewerPage` ("Page N of M")
+  and, once the pages are drawn, the zoom `#viewerZoom` (`button[data-zoom=out|in|fit]`, "Zoom out", "Zoom in", "Fit
+  width", and the level `#zoomLevel`, "100%"). Where the library cannot run or cannot draw the document, the browser's
+  own viewer is framed in the region instead (`[data-mode=frame]`, `data-fallback` saying why). For a text it is an
+  iframe of the text. Under it, `#viewerMark` (`role=status`, polite) says what choosing a quote marked; under that, the
+  note that a PDF is a Word document's converted PDF; then `#downloadOriginal` ("Download original") for an upload.
 - `#quotesPanel` ("Quoted passages") - every quote of every line as `button.quote[data-code][data-line][data-page]`;
   choosing one (or a row's own quote) opens its page and marks its words there (below). The chosen button stays
   selected (`.selected`, `aria-current`) until another is chosen.
@@ -133,48 +135,93 @@ dialog: `#exportDialog`.
 
 ### Marking a quoted passage (the owner's direction of 2026-11-20, DECISIONS D368)
 
-The one statement of the rule; the code is `locateQuote` (PDF) and `findPassages` (text) in `studio/static/studio/app.js`,
-and the docs elsewhere point here.
+The one statement of the rule; the code is `locateQuote` and `pageText` (PDF) and `findPassages` (text) in
+`studio/static/studio/app.js`, and the docs elsewhere point here. The walk's own judge (section 9) states the same rule
+apart from the page script.
 
-- A PDF quote is located by its own characters only, in the text of its page as the PDF library reads it (the page's text
-  items, joined in order): white space is ignored entirely, Unicode NFKC applies to both sides, and a match is exact-case
-  first, case-blind only where there is no exact-case occurrence, and always of whole characters. No fuzzy or nearest
-  match, no word list.
-- The characters are cut from the page's whole text, across its items: the characters a person sees (Unicode extended
-  grapheme clusters, `Intl.Segmenter`), joined again wherever NFKC combines two of them, so that NFKC of the page's text
-  is exactly its characters' NFKC, in order (`pageCharacters`). So a letter is never marked without its accent, even
-  where the PDF draws the accent as a text item of its own (the library starts a new item where the font changes), and
-  no half of a ligature, of a Hangul syllable written as jamo or of an emoji sequence is ever a match. White space is
-  dropped after the cut (an accent that follows a space stands on its own), and a character never spans two pages.
-- It is looked for on the quote's page. Only where it is not there, on that page and the next joined, keeping only a
-  passage that starts on the quote's page and runs onto the next (the marked part on each page is shown). Nothing is
-  ever marked on another page; a quote found only on another page is not marked. A quote with no page is looked for on
-  every page, and its pages are named.
-- Every occurrence found is marked (`span.pdf-mark[data-occurrence]` around exactly the matched characters of the text
-  layer, in the page's lime beneath the drawing) and counted in the note: "Marked on page 2.", "These words appear 2
-  times on page 1. Each is marked.", "Marked on page 1, continuing onto page 2." Where nothing is found, nothing is
-  marked, the page still opens and the note says "The exact words could not be found on page N, so nothing is marked.
-  Page N is shown." Never a partial match.
+- **A page's text** is its text items as the PDF library reads them, joined in order, with three steps: an item drawn a
+  second time over itself to look bold is an overprint copy and is left out (its string, after NFKC, is the string of one
+  of the eight items before it, holds a character that is not white space, and its origin lies within max(1, 0.2 x its
+  font height) PDF units of that item's origin); a line break follows every item the library ends a line with
+  (`hasEOL`); and Unicode format characters (`\p{Cf}`) are dropped, as the library already drops them. An overprint copy
+  is never marked, and its span in the text layer says so (`data-overprint="1"`).
+- **A quote is located by its own characters only** in that text: white space is ignored entirely, format characters are
+  dropped and Unicode NFKC applies, on both sides, and a match is exact-case first, case-blind only where there is no
+  exact-case occurrence, and always of whole characters (`Intl.Segmenter` grapheme clusters, joined again wherever NFKC
+  combines two of them, so that NFKC of the page's text is exactly its characters' NFKC). No fuzzy or nearest match, no
+  word list.
+- **Word edges.** Where the quote's first character is a letter or a digit (`\p{L}`, `\p{N}`), the page's character just
+  before a match must not be a letter, a digit or a combining mark (`\p{L}`, `\p{N}`, `\p{M}`), and the same holds for
+  the quote's last character and the character just after the match; the start and the end of a page are edges. So
+  "pain" is not counted inside "painless", nor "polyp" inside "polypectomy". The edges are read in the page's text above
+  (copies left out, line breaks in); white space inside the quote stays ignored, so a quote whose words the page runs
+  together into one whole word ("not able" for "notable") is still found. A place turned away is passed over by one
+  character only, so a word right after it is still found.
+- **Pages.** It is looked for on the quote's page. Only where it is not there, on that page and the next joined, keeping
+  only a passage that starts on the quote's page and runs onto the next (the marked part on each page is shown; the edges
+  are read on each page). Nothing is ever marked on another page; a quote found only on another page is not marked. A
+  quote with no page is looked for on every page, and its pages are named. Each page's prepared text is made once per
+  document and reused; a quote with no page reads and prepares the pages in slices, so the page never stops answering
+  for long.
+- **What the matcher marks is whole characters of the text as the library reads it**, which is not always the text as
+  drawn: two letters a PDF declares for one drawn ligature are two characters (only the word-edge rule keeps a mark from
+  beginning or ending between them), and a spacing accent drawn over a letter is a character of its own (the letter can
+  be marked without it). A letter keeps a combining accent the PDF draws as an item of its own.
+- **Marks and notes.** Every occurrence found is marked (`mark.pdf-mark[data-occurrence]`, role mark, around exactly the
+  matched characters of the text layer, in the page's lime beneath the drawing) and counted in the note: "Marked on page
+  2.", "These words appear 2 times on page 1. Each is marked.", "Marked on page 1, continuing onto page 2." Where nothing
+  is found, nothing is marked and the page still opens: "The exact words were not found in the searchable text of page
+  N, so nothing is marked. Page N is shown." (with no page: "... of this document, so nothing is marked."); where the
+  quote's page has no searchable text at all (no character after folding, copies left out, whatever the next page
+  holds): "Page N has no text the viewer can search (it may be a scanned image), so nothing is marked. Page N is shown."
+  (with no page, where the whole document has none: "This document has no text the viewer can search (it may be a
+  scanned image), so nothing is marked."). Never a partial match.
 - The mark stays until another quote is chosen or the document changes (a newer coding review clears it with the
-  passage chosen); it is painted again whenever its page is drawn again (a new width, scrolled back into view), and a
-  read of the document that only changes the codes never reloads the viewer. Scrolling to it respects
+  passage chosen); it is painted again whenever its page is drawn again (a new width or zoom, scrolled back into view),
+  and a read of the document that only changes the codes never reloads the viewer. Scrolling to it respects
   `prefers-reduced-motion`.
-- Where the PDF is not drawn in the page, the browser's own viewer is framed instead: a quote opens its page (`#page=N`)
-  and the note says why, plainly. "Marking needs a newer browser. Page N is shown." where this browser lacks what
-  marking needs (`pdfCapable`) or the library or its worker does not load in it; "This document cannot be drawn here, so
-  nothing is marked. Page N is shown." where the library runs but refuses the document, or a page or its text fails;
-  "The document took too long to load here, so nothing is marked. Page N is shown." where the download stops moving for
-  20 seconds. The viewer keeps the reason on `#documentViewer` (`data-fallback`: `browser`, `document` or `slow`).
-- Browsers that mark (measured in Chromium with each candidate built-in deleted in the page and in the library's worker,
-  versions from MDN's browser-compat-data): Chrome and Edge 119+, Firefox 125+ (so ESR 128 and 140, not 115), Safari
-  17.4+ on macOS, iOS and iPadOS, Samsung Internet 25+. The floor is set by what the legacy library calls with no stand-in
+- **Zoom.** "Zoom out", "Zoom in" and "Fit width" step through 75%, 100% (the page fitted to the viewer's width), 125%,
+  150%, 200% and 300%; a page wider than the viewer scrolls across inside it, the page at the top of the view stays at
+  the top, and the text layer and the marks follow at every step. A new width keeps the zoom (relative to the new fitted
+  width); a step that can go no further is `aria-disabled`, so the focus stays on it.
+- **The browser's own viewer.** Where the PDF is not drawn in the page, the browser's own viewer is framed instead and a
+  quote opens its page there: a quote on another page than the frame was opened at gets a new frame at `#page=N` (the
+  browser's viewer opens the page only as its frame loads); the same page, or no page, keeps the frame. Nothing is
+  marked, and the note says why, then the quote's page, never what the frame shows: "Marking needs a newer browser. The
+  quote is on page N." where this browser lacks what marking needs (`pdfCapable`); "The marking tool did not work here,
+  so nothing is marked. The quote is on page N." where the library or its worker does not load, or has not loaded within
+  20 seconds, or, once the document has opened, a page's drawing or text has not settled within 20 seconds; "This
+  document cannot be drawn here, so nothing is marked. The quote is on page N." where the library refuses the document,
+  finds no page in it, or fails on a page's drawing or text; "The document took too long to load here, so nothing is
+  marked. The quote is on page N." where the download stops moving for 20 seconds before the document opens (that timer
+  stops once it has opened). With no page, the reason sentence alone. The viewer keeps the reason on `#documentViewer`
+  (`data-fallback`: `browser`, `library`, `document` or `slow`), and the note names the page of the quote being chosen.
+  The time limits count only the time the page is visible (a hidden tab draws nothing). A library that failed or timed
+  out is tried again for the next document opened, at fresh addresses (`?attempt=2`, `3`, ...: the browser remembers a
+  module that failed to load, by its address, for the life of the page); the document that failed stays framed.
+- **Browsers that mark** (measured in Chromium only, with each candidate built-in deleted in the page and in the
+  library's worker; Firefox and Safari were not run, and their versions are MDN's browser-compat-data for what the
+  measurement found needed): Chrome and Edge 119+, Firefox 125+ (so ESR 128 and 140, not 115), Safari 17.4+ on macOS, iOS
+  and iPadOS, Samsung Internet 25+. The floor is set by what the legacy library calls with no stand-in
   (`Promise.withResolvers`, `ArrayBuffer.prototype.transferToFixedLength`, `Array.prototype.at`; `structuredClone` and
-  `Object.hasOwn` on paths the test documents did not take) and by the matcher's `Intl.Segmenter` (Firefox 125); it brings
-  its own stand-ins for the rest (the modern build would have needed Chrome and Edge 147, Firefox 144, Safari 26.2).
-  Older browsers get the browser's own viewer and the newer-browser note, without downloading the library.
+  `Object.hasOwn` on paths the test documents did not take) and by the matcher's `Intl.Segmenter` (Firefox 125). The
+  legacy build puts back itself, when missing, what else it calls (seen present again once it had run): Map and WeakMap
+  `getOrInsert` and `getOrInsertComputed`, `Math.sumPrecise`, `Promise.try`, Uint8Array `fromBase64`, `toBase64`,
+  `toHex`, `setFromBase64` and `setFromHex`, `Iterator` with its `map`, `filter`, `toArray`, `flatMap`, `forEach`,
+  `some`, `every` and `find`, the seven new Set methods, `URL.parse`, and Response and Blob `bytes()`; it does not put
+  back `Uint8Array.fromHex`, `Iterator.from`, `Iterator.prototype.reduce`, `Array.prototype.findLast` and
+  `findLastIndex` or `Float16Array`, which the documents never needed (the library does not call them on the viewer's
+  paths, or tests for them first). Older browsers get the browser's own viewer and the newer-browser note, without
+  downloading the library.
+- **Drawing.** Pages away from the view are released and the library lets go of what it decoded to draw them (a
+  40-page 300 dpi scan scrolled to the end and back stays near 300 MB, against 1.5 GB before); a change of the screen's
+  pixel ratio with no change of size redraws the canvases at the new ratio; in forced colours (Windows contrast themes)
+  the drawn page keeps its own white ground, so it stays legible and the mark visible, while the note and the page label
+  keep the forced colours; in the desktop layout the quoted passages keep their approved share of the column (at most
+  36%), however long the document.
 - A text document keeps its own rule (`findPassages`, as `findPassage`: runs of white space count as one space, exact
-  case before case-blind): every occurrence is marked inside the text's frame and the note says how many, or that the
-  exact words could not be found.
+  case before case-blind, no word edges): every occurrence is marked inside the text's frame (marked, not selected: the
+  marks stay while a selection would not) and the note says how many, or that the exact words could not be found.
 - It reads no meaning, adds no word list or code rule, and never holds or changes a code (owner condition D358). The
   viewer keeps what it marked on `#documentViewer` (`data-marked`, `data-mark-status`, `data-mark-pages`,
   `data-mark-count`) for the walk.
@@ -184,13 +231,27 @@ and the docs elsewhere point here.
   reads only the same-origin view address. The one place each legacy file could build a function from a string is
   core-js's lookup of the global object, `Function("return this")`, reached only where `globalThis`, `window`, `self`
   and `global` are all missing (never in a browser), and the policy would refuse it anyway; `tests/test_frontend.py`
-  allows that occurrence by its exact bytes and nothing else.
+  allows that occurrence by its exact bytes.
 - The text layer is placed by the page's own CSS: `position:absolute; inset:0` over the page, and each span's font size
   and transform computed (`calc()`, `var()`) from the custom properties and percentage offsets the library writes inline.
   The library's CSS `round()` sizes for the layer, which Chrome and Edge before 125 ignore, are not needed (measured: the
   marks do not move without them). What a browser at the floor may lack only changes looks, never a mark:
   `scrollbar-gutter` (Safari before 18.2), `overscroll-behavior`, `color-mix()` in the selection colour,
   `forced-color-adjust`.
+
+**Known limits** (recorded, not defects):
+- Only pages near the visible area are drawn, so only their text is in the page: a screen reader reads the text of the
+  pages near the view, not of the whole document at once (the marked words are role mark on the drawn page).
+- On a dark fill the highlight is faint: the drawing is multiplied over the mark like a highlighter, so a dark band
+  darkens the lime with it (white text on a dark band shows the mark mainly as a tint of the glyphs).
+- Words the page shows as an image (a scanned page) or drawn by a form field's appearance are not in the searchable
+  text: a page with no searchable text says so; a page with some text says the exact words were not found in its
+  searchable text.
+- A quote with no page on a very long PDF reads and prepares every page once (in slices: no main-thread task above about
+  60 ms measured at 100, 300 and 600 pages); the coding review's PDF limit of 600 pages bounds it.
+- Text documents: the case-blind fallback lowers one UTF-16 unit at a time, so case that depends on context (a Greek
+  final sigma) or astral letters (Deseret) is not matched case-blind; quotes are cited from the document, so the
+  exact-case match normally comes first.
 
 ## 9. Install and verify
 
