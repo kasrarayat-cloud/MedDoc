@@ -14,6 +14,7 @@ F1a's migration 0016) is skipped until that field exists.
 
 Synthetic data only; the coding review is a fake coder (tests.support), nothing reaches the network."""
 import json
+from datetime import timedelta
 
 from django.test import Client, TestCase, override_settings
 
@@ -128,8 +129,14 @@ class InactiveMembershipTests(TenancyCase):
                 self.assertEqual(self.write(client, name).status_code, WRITE_STATUS[name])
 
     def test_a_member_inactive_here_and_active_elsewhere_sees_only_the_other_workspace(self):
-        models.Membership.objects.create(user=self.outsider, workspace=self.ws, role=models.Membership.REVIEWER,
-                                         active=False)
+        active = models.Membership.objects.get(user=self.outsider, workspace=self.other_ws)
+        inactive = models.Membership.objects.create(user=self.outsider, workspace=self.ws,
+                                                    role=models.Membership.REVIEWER, active=False)
+        # the membership the member was removed from is the OLDER one (FG-4 residue): the session and the list land on
+        # the oldest active membership, so a door that took the oldest membership whatever its state would land here
+        models.Membership.objects.filter(pk=inactive.pk).update(created_at=active.created_at - timedelta(hours=1))
+        self.assertEqual(list(models.Membership.objects.filter(user=self.outsider).order_by('created_at')
+                              .values_list('workspace_id', 'active')), [(self.ws.pk, False), (self.other_ws.pk, True)])
         client = Client()
         signed_in = client.post('/login/', {'username': self.outsider.username, 'password': 'synthetic-pass-123!'})
         self.assertEqual(signed_in.status_code, 302)

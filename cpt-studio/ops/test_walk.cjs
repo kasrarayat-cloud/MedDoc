@@ -12,6 +12,10 @@
  * when customer-contract.json lists it (lane F1a), and the browser test checks the posted line once the page's fixtures
  * serve one (lane F1b).
  *
+ * DECISION IDS (FIX-SPEC-2 section 5): a served decision carries its id when customer-contract.json lists one (lane G1),
+ * and the tests marked so check that the walk's Undo - and the page's, in the browser - names it; the browser test also
+ * checks that the page's download names the round shown.
+ *
  *   node ops/test_walk.cjs            (or: node --test --test-reporter=tap ops/test_walk.cjs)
  */
 const assert = require('node:assert/strict');
@@ -34,6 +38,13 @@ const CONTRACT = JSON.parse(fs.readFileSync(path.join(__dirname, 'verification',
 const LINES = Object.prototype.hasOwnProperty.call(CONTRACT.types.code.keys, 'line');
 // and whether it lists each question's `lines`, the lines the question affects (lane F1a, FIX-SPEC section 3)
 const QUESTION_LINES = Object.prototype.hasOwnProperty.call(CONTRACT.types.question.keys, 'lines');
+// DECISION IDS (FIX-SPEC-2 section 5): whether the contract on disk gives a current decision its id (lane G1 adds it); a
+// served decision carries it then, and an Undo names it
+const DECISION_IDS = Object.prototype.hasOwnProperty.call(CONTRACT.types.decision.keys, 'id');
+// A current decision as the server serves it: with its id when the contract lists one.
+function decision(fields, id = 'f6200000-0000-4000-8000-000000000001') {
+  return { ...(DECISION_IDS ? { id } : {}), ...fields };
+}
 const ACK = 'I reviewed this code against the document.';
 
 function scratch() {
@@ -360,14 +371,14 @@ test('the encounter JSON is held to customer-contract.json: every key it lists, 
   assert.deepEqual(walk.shapeProblems(encounter(), CONTRACT.encounter), []);
   assert.deepEqual(failed(walk.jsonChecks(encounter(), doc)), []);
   const decided = encounter();
-  decided.codes[0] = { ...decided.codes[0], decision: { action: 'approve', by: 'Review agent', at: '2026-11-20T10:06:00Z', note: '' },
+  decided.codes[0] = { ...decided.codes[0], decision: decision({ action: 'approve', by: 'Review agent', at: '2026-11-20T10:06:00Z', note: '' }),
     allowed_actions: ['revoke'] };
   assert.deepEqual(walk.shapeProblems(decided, CONTRACT.encounter), []);
   const mutations = [
     [enc => { enc.internal_round_id = 'x'; }, '$.internal_round_id: not in the customer contract'],
     [enc => { enc.document.storage_hint = 'x'; }, '$.document.storage_hint: not in the customer contract'],
     [enc => { enc.progress.phase_detail = 'x'; }, '$.progress.phase_detail: not in the customer contract'],
-    [enc => { enc.codes[0].decision = { action: 'approve', by: 'R', at: '2026-11-20T10:06:00Z', note: '', acknowledgement: 'x' };
+    [enc => { enc.codes[0].decision = decision({ action: 'approve', by: 'R', at: '2026-11-20T10:06:00Z', note: '', acknowledgement: 'x' });
       enc.codes[0].allowed_actions = ['revoke']; }, '$.codes[0].decision.acknowledgement: not in the customer contract'],
     [enc => { delete enc.document.view_media_type; }, '$.document.view_media_type: missing (the contract lists it)'],
     [enc => { enc.document.kind = 'txt'; }, '$.document.kind: "txt" is not one of upload|paste'],
@@ -477,6 +488,59 @@ test('LINE IDENTITY: one approval decides one line, on the round it was made on'
   assert.match(walk.approvalProblems(before, before, before.codes[1]).join(), /20610 \(L2\): decision null/);
 });
 
+test('DECISION IDS: an Undo posts the round shown, the line, its code and the id of the decision it undoes', () => {
+  const approved = decision({ action: 'approve', by: 'Review agent', at: '2026-11-20T10:06:00Z', note: '' },
+    'f6200000-0000-4000-8000-0000000000a2');
+  const enc = encounter({ codes: [row('20610', 'ready', { line: 'L1' }),
+    row('20610', 'ready', { line: 'L2', modifiers: ['LT'], decision: { ...approved, id: 'f6200000-0000-4000-8000-0000000000a2' }, allowed_actions: ['revoke'] })] });
+  const code = enc.codes[1];
+  const body = { round: 1, line: 'L2', code: '20610', action: 'revoke', acknowledgement: '', note: '', decision: 'f6200000-0000-4000-8000-0000000000a2' };
+  assert.deepEqual(walk.undoRequestProblems(body, enc, code), []);
+  const wrong = [
+    [{ ...body, decision: undefined }, /decision undefined, not the one shown \("f6200000-0000-4000-8000-0000000000a2"\)/],
+    [{ ...body, decision: 'f6200000-0000-4000-8000-0000000000a9' }, /decision "f6200000-0000-4000-8000-0000000000a9", not the one shown/],
+    [{ ...body, line: 'L1' }, /line "L1", not "L2"/],
+    [{ ...body, round: 2 }, /round 2, not the round shown \(1\)/],
+    [{ ...body, code: '20611' }, /code "20611"/],
+    [{ ...body, action: 'reject' }, /action "reject", not "revoke"/],
+  ];
+  for (const [posted, said] of wrong) assert.match(walk.undoRequestProblems(posted, enc, code).join('; '), said);
+  assert.deepEqual(walk.undoRequestProblems(null, enc, code), ['the page posted no JSON object']);
+  // a served decision with no id cannot be named, so no Undo of it can be right
+  const unnamed = structuredClone(enc);
+  delete unnamed.codes[1].decision.id;
+  assert.match(walk.undoRequestProblems(body, unnamed, unnamed.codes[1]).join(), /names no id/);
+});
+
+test('the History names a decided line with its code ("L2 45380"), as a whole phrase', () => {
+  const enc = encounter({ activity: [{ at: '2026-11-20T10:06:00Z', text: 'Review agent approved L2 20610.' },
+    { at: '2026-11-20T10:07:00Z', text: 'Review agent approved L12 20610.' }] });
+  assert.deepEqual(walk.activityNaming(enc, { line: 'L2', code: '20610' }), ['Review agent approved L2 20610.']);
+  assert.deepEqual(walk.activityNaming(enc, { line: 'L1', code: '20610' }), [], 'L12 is not L1');
+  assert.deepEqual(walk.activityNaming(encounter({ activity: [{ at: '2026-11-20T10:06:00Z', text: 'Review agent approved 20610.' }] }),
+    { line: 'L2', code: '20610' }), [], 'the code alone does not name the line');
+  assert.deepEqual(walk.activityNaming({}, { line: 'L2', code: '20610' }), []);
+});
+
+test('DECISION IDS: one Undo clears one line\'s decision, on the round it was made on', () => {
+  const approved = decision({ action: 'approve', by: 'Review agent', at: '2026-11-20T10:06:00Z', note: '' });
+  const before = encounter({ codes: [row('20610', 'ready', { line: 'L1', decision: approved, allowed_actions: ['revoke'] }),
+    row('20610', 'ready', { line: 'L2', modifiers: ['LT'], decision: approved, allowed_actions: ['revoke'] })] });
+  const after = structuredClone(before);
+  after.codes[1] = { ...after.codes[1], decision: null, allowed_actions: ['approve', 'reject'] };
+  assert.deepEqual(walk.undoProblems(before, after, before.codes[1]), []);
+  const both = structuredClone(after);  // one Undo clearing every row of the code
+  both.codes[0] = { ...both.codes[0], decision: null, allowed_actions: ['approve', 'reject'] };
+  assert.match(walk.undoProblems(before, both, before.codes[1]).join(), /20610 \(L1\): decision "approve" became null/);
+  assert.match(walk.undoProblems(before, before, before.codes[1]).join(), /20610 \(L2\): decision "approve" still stands/);
+  const closed = structuredClone(after);
+  closed.codes[1].allowed_actions = [];
+  assert.match(walk.undoProblems(before, closed, before.codes[1]).join(), /20610 \(L2\): actions \[\], not \[approve,reject\]/);
+  const moved = structuredClone(after);
+  moved.round = { ...moved.round, number: 2 };
+  assert.match(walk.undoProblems(before, moved, before.codes[1]).join(), /round 2 after round 1/);
+});
+
 test('the review dialog is driven as the page draws it', () => {
   // FG-A: studio/templates/studio/index.html draws the acknowledgement as a checkbox inside the label that carries it
   const html = fs.readFileSync(path.join(__dirname, '..', 'studio', 'templates', 'studio', 'index.html'), 'utf8');
@@ -530,6 +594,31 @@ test('the review dialog is driven through the page itself, in a browser', async 
   }, () => {
     assert.deepEqual(walk.decisionRequestProblems(made.body, enc, code, session.acknowledgement), []);
   });
+  // the draft download through the export dialog, as the walk makes it: the page's request names the round shown
+  await t.test('the page\'s download names the round shown', async () => {
+    await page.goto(`${base}/#doc/${id}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(count => document.querySelectorAll('ol#codesList > li.code-row').length === count, enc.codes.length, { timeout: 15000 });
+    const out = scratch();
+    const download = await walk.exportTxt(page, { base, out }, enc, 'draft', out);
+    assert.equal(download.status, 201);
+    assert.deepEqual(walk.exportRequestProblems(download.body, enc, 'draft'), []);
+    // the preview's file is a mock (no banner at its end, no codes): only what the page and the download did is held here
+    const checks = Object.fromEntries(walk.exportChecks(download, enc, 'draft').map(item => [item.id, item.status]));
+    assert.deepEqual([checks['export.draft'], checks['export.draft.request'], checks['export.draft.same_bytes']], ['pass', 'pass', 'pass']);
+  });
+  // the Undo of a decided line through the page (tests/fixtures/customer/encounter-reviewed.json): its request names the
+  // decision the page shows, and the preview, as the server, accepts only that one
+  await t.test('DECISION IDS: the page\'s Undo names the decision it undoes', async () => {
+    const reviewedId = 'f6000000-0000-4000-8000-000000000001';
+    const reviewed = await (await page.request.get(`${base}/api/encounters/${reviewedId}`, { headers: walk.CLIENT_HEADERS })).json();
+    const decided = reviewed.codes.find(item => item.decision && item.allowed_actions.includes('revoke'));
+    assert.ok(decided && typeof decided.decision.id === 'string', 'the reviewed fixture serves a decided line with its id');
+    await page.goto(`${base}/#doc/${reviewedId}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(count => document.querySelectorAll('ol#codesList > li.code-row').length === count, reviewed.codes.length, { timeout: 15000 });
+    const undone = await walk.undo(page, { base, session }, reviewed, decided);
+    assert.equal(undone.status, 201);
+    assert.deepEqual(walk.undoRequestProblems(undone.body, reviewed, decided), []);
+  });
 });
 
 function freePort() {
@@ -570,13 +659,21 @@ test('an export is a .txt between SYNTHETIC banners, the same bytes twice, namin
   enc.codes[0].decision = { action: 'approve' };
   const text = 'SYNTHETIC - NOT FOR BILLING\nApproved codes\n43239 approved by Review agent\nSYNTHETIC - NOT FOR BILLING\n';
   const item = { kind: 'approved', status: 201, filename: 'gi-02-approved.txt', suggested: 'gi-02-approved.txt', size: text.length,
-    sha256: 'a'.repeat(64), text, refetch: { status: 200, sha256: 'a'.repeat(64), size: text.length } };
+    sha256: 'a'.repeat(64), text, refetch: { status: 200, sha256: 'a'.repeat(64), size: text.length },
+    body: { kind: 'approved', fmt: 'txt', round: 1 } };
   assert.deepEqual(failed(walk.exportChecks(item, enc, 'approved')), []);
+  // the page's request names the kind, the format and the round shown (FIX-SPEC-2 section 5)
+  for (const body of [{ kind: 'approved', fmt: 'txt' }, { kind: 'approved', fmt: 'txt', round: 2 }, { kind: 'approved', fmt: 'txt', round: '1' },
+    { kind: 'draft', fmt: 'txt', round: 1 }, { kind: 'approved', fmt: 'csv', round: 1 }, null]) {
+    assert.deepEqual(failed(walk.exportChecks({ ...item, body }, enc, 'approved')), ['export.approved.request'], JSON.stringify(body));
+  }
+  assert.match(walk.exportRequestProblems({ kind: 'approved', fmt: 'txt', round: 2 }, enc, 'approved').join(), /round 2, not the round shown \(1\)/);
+  assert.deepEqual(walk.exportRequestProblems(null, enc, 'draft'), ['the page posted no JSON object']);
   assert.deepEqual(failed(walk.exportChecks({ ...item, refetch: { ...item.refetch, sha256: 'b'.repeat(64) } }, enc, 'approved')),
     ['export.approved.same_bytes']);
   assert.deepEqual(failed(walk.exportChecks({ ...item, text: text.replace(/SYNTHETIC - NOT FOR BILLING\n$/, '') }, enc, 'approved')),
     ['export.approved.synthetic']);
-  assert.deepEqual(failed(walk.exportChecks(item, enc, 'draft')), ['export.draft.codes']);  // the draft names every code
+  assert.deepEqual(failed(walk.exportChecks({ ...item, body: { ...item.body, kind: 'draft' } }, enc, 'draft')), ['export.draft.codes']);  // the draft names every code
   assert.deepEqual(failed(walk.exportChecks({ kind: 'draft', error: 'the export option is disabled' }, enc, 'draft')), ['export.draft']);
 });
 
@@ -604,9 +701,9 @@ test('the evidence says per document pass or fail with the reasons of every fail
 });
 
 test('the walk names the current customer build and refuses to upload unless paid requests are accepted', () => {
-  assert.deepEqual(walk.CLIENT_HEADERS, { 'X-CPT-Studio-Client': 'customer-2026-11-21' });
+  assert.deepEqual(walk.CLIENT_HEADERS, { 'X-CPT-Studio-Client': 'customer-2026-11-22' });
   const source = fs.readFileSync(path.join(__dirname, 'walk.cjs'), 'utf8');
-  assert.ok(source.includes("const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-21' };"));
+  assert.ok(source.includes("const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-22' };"));
   assert.ok(source.includes('chromium.launch({ headless: true })'));
   const session = { can_review: true, acknowledgement: 'I reviewed this code against the document.' };
   assert.deepEqual(walk.sessionProblems(session, { allowLiveProvider: true }), []);

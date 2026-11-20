@@ -1,9 +1,12 @@
 'use strict';
-// CPT Studio customer page, drawn from the customer encounter contract (client contract customer-2026-11-21: the build
-// specification, sections 6 and 7, with the fix pass's line identity). Every code row is named by its line ("L1".."Ln",
+// CPT Studio customer page, drawn from the customer encounter contract (client contract customer-2026-11-22: the build
+// specification, sections 6 and 7, with the fix passes' line identity). Every code row is named by its line ("L1".."Ln",
 // "M1".."Mk"), never by its code alone: one code may stand on two lines. The review dialog, the reason it shows, the
-// buttons and every decision use the row's line and the number of the coding review the page shows, and a decision the
-// server refuses because that coding review changed reads the document again. Rendering builds markup strings; every
+// buttons and every decision use the row's line and the number of the coding review the page shows; an Undo names the
+// decision it undoes (the id the page shows for it), and a download names the coding review the export dialog was
+// opened on. What a dialog's act names - the document, the coding review, the line, its code - is fixed when the dialog
+// opens, and leaving the document closes it. An act the server refuses because what the page shows changed reads the
+// document again and says so. Rendering builds markup strings; every
 // value that comes from the server passes through escapeHtml. Text the coding review wrote (reasons, questions,
 // documentation notes, quoted passages) is shown as written and escaped like every other value. Everything above
 // "browser wiring" is pure and unit-tested under node (tests/frontend/app.test.cjs).
@@ -25,7 +28,7 @@ const VIEW_URL = new RegExp(`^/api/encounters/${UUID_PART}/original\\?(?:[\\w.-]
 // The page tells the server which build of this page is asking. A server that no longer serves this build refuses the
 // call with a conflict status and {"error_code": "client_outdated"}, and the page asks the member to reload.
 const CLIENT_HEADER = 'X-CPT-Studio-Client';
-const CLIENT_VERSION = 'customer-2026-11-21';
+const CLIENT_VERSION = 'customer-2026-11-22';
 const OUTDATED_TEXT = 'CPT Studio was updated — reload the page to continue.';
 // What the page says when the server refuses a decision with a conflict status (the coding review the page shows, or a
 // line of it, is no longer the latest): nothing was recorded, and the page has read the document again.
@@ -58,6 +61,9 @@ const ACTION_BUTTONS = [['approve', 'primary', 'Approve', 'check'], ['reject', '
 // A line of a coding review: "L1".."Ln" for the codes it listed, in its order, then "M1".."Mk" for the codes the second
 // check added. A decision names one; a row without one is shown and never decided.
 const LINE = /^[LM][1-9][0-9]{0,2}$/;
+// The id the server gives a line's current decision (the CodeDecision's own id): what an Undo names, so the server can
+// refuse to undo a decision the member never saw. A decision without one the page can send back is shown, never undone.
+const DECISION_ID = /^[A-Za-z0-9-]{1,64}$/;
 // Units or modifiers the coding review did not give (the contract's null): said so - never a number, never nothing, and
 // never "No modifier", which is the coding review saying there is none.
 const UNITS_NOT_GIVEN = 'Units not given';
@@ -393,6 +399,12 @@ function currentDecision(code) {
   return decision && typeof decision === 'object' && lookup(DECISIONS, decision.action, null) ? decision : null;
 }
 
+// The id of the decision that stands on a row, exactly as served, or '' when there is none the page can name.
+function decisionId(code) {
+  const id = currentDecision(code)?.id;
+  return typeof id === 'string' && DECISION_ID.test(id) ? id : '';
+}
+
 // What the badge says: the decision once one stands (Approved, Rejected), else the code's status.
 function shownStatus(code) {
   const decision = currentDecision(code);
@@ -467,25 +479,31 @@ function viewerKind(documentPart) {
 }
 
 // The decision buttons one row gets: those the server allows, for a member who may review, in a fixed order - and none
-// for a row the page cannot name by its line, or on a page that does not know which coding review it shows.
+// for a row the page cannot name by its line, or on a page that does not know which coding review it shows; no Undo of
+// a decision the page cannot name by its id.
 function allowedActions(code, doc) {
   if (!canReview(doc) || !lineOf(code, doc) || roundNumber(doc) === null) return [];
   const allowed = list(code?.allowed_actions);
-  return ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => name);
+  return ACTION_BUTTONS.filter(([name]) => allowed.includes(name) && (name !== 'revoke' || decisionId(code)))
+    .map(([name]) => name);
 }
 
-// What a decision on one row names: the coding review the page shows, the row's line and its code as served.
+// What a decision on one row names: the coding review the page shows, the row's line and its code as served, and the
+// decision that stands on it (its id: what an Undo undoes).
 function decisionTarget(code, doc) {
-  return { round: roundNumber(doc), line: lineOf(code, doc), code: typeof code?.code === 'string' ? code.code : '' };
+  return { round: roundNumber(doc), line: lineOf(code, doc), code: typeof code?.code === 'string' ? code.code : '',
+    decision: decisionId(code) };
 }
 
-// The body of POST decisions: {round, line, code, action, acknowledgement, note}.
+// The body of POST decisions: {round, line, code, action, acknowledgement, note}, and for an Undo the decision it undoes
+// ({..., decision}).
 function decisionBody(target, action, acknowledgement = '', note = '') {
   const named = record(target);
   return {
     round: named.round, line: named.line, code: named.code, action,
     acknowledgement: action === 'approve' && typeof acknowledgement === 'string' ? acknowledgement : '',
     note: action === 'revoke' ? '' : text(note),
+    ...(action === 'revoke' ? { decision: typeof named.decision === 'string' ? named.decision : '' } : {}),
   };
 }
 
@@ -565,7 +583,7 @@ function rowKey(value) {
 const state = {
   session: null, route: null, routeSerial: 0, doc: null, docKey: '', viewerKey: '', selectedQuote: '',
   poll: { timer: 0, count: 0, errors: 0 }, tickTimer: 0, clock: 0, reconnecting: false, outdated: false,
-  upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null,
+  upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, exporting: null,
   open: new Set(), answers: new Map(), pending: new Set(), toastTimer: 0, leaving: false,
 };
 
@@ -1075,6 +1093,15 @@ function closeDialog(id) {
   if (dialog.open) dialog.close();
 }
 
+// The review and export dialogs belong to the document they were opened on: a route (a link, browser Back) closes them,
+// so nothing one showed is saved while the page shows another.
+function closeDocumentDialogs() {
+  state.review = null;
+  state.exporting = null;
+  closeDialog('reviewDialog');
+  closeDialog('exportDialog');
+}
+
 function closeNavigation() {
   const wasOpen = $('#sidebar').classList.contains('open');
   $('#sidebar').classList.remove('open');
@@ -1148,6 +1175,7 @@ function route() {
   const serial = ++state.routeSerial;
   stopPolling();
   stopTicker();
+  closeDocumentDialogs();
   if (next.name !== 'doc' || next.id !== state.doc?.id) {
     state.doc = null;
     state.docKey = '';
@@ -1447,12 +1475,13 @@ function reviewCopyText(action, agent) {
     : 'Your approval is recorded with your name and the time. It applies to this code in this coding review only; a new coding review starts without it.';
 }
 
-// The review dialog of one line: what the decision will name (the coding review shown, the line, its code) is fixed when
-// the dialog opens, so a redraw while it is open never moves the decision to another row.
+// The review dialog of one line: what the decision will name (the document, the coding review shown, the line, its
+// code) is fixed when the dialog opens, so a redraw while it is open never moves the decision to another row, another
+// coding review or another document.
 async function openReview(line, action) {
   const code = findLine(state.doc, line);
   if (!code || !REVIEW_COPY[action] || !allowedActions(code, state.doc).includes(action)) return;
-  const target = decisionTarget(code, state.doc);
+  const target = { ...decisionTarget(code, state.doc), encounter: state.doc.id };
   if (!state.session && !(await loadSession())) {
     toast('Your identity could not be confirmed, so no decision can be recorded. Reload the page and try again.');
     return;
@@ -1492,8 +1521,8 @@ async function guarded(key, task) {
   }
 }
 
-function postDecision(body) {
-  return api(`/api/encounters/${encodeURIComponent(state.doc.id)}/decisions`, { method: 'POST', json: body });
+function postDecision(encounter, body) {
+  return api(`/api/encounters/${encodeURIComponent(encounter)}/decisions`, { method: 'POST', json: body });
 }
 
 async function afterChange(message) {
@@ -1525,7 +1554,7 @@ function submitReview(event) {
     hideError('reviewError');
     const body = decisionBody(review, review.action, approve ? state.session?.acknowledgement : '', $('#reviewNote').value);
     try {
-      await postDecision(body);
+      await postDecision(review.encounter, body);
       closeDialog('reviewDialog');
       await afterChange(approve ? `Approval recorded for ${review.code}.` : `Rejection recorded for ${review.code}.`);
     } catch (error) {
@@ -1541,12 +1570,14 @@ function submitReview(event) {
   });
 }
 
+// Undo posts at once, naming the decision the row shows (the server refuses it when that is no longer the one standing).
 function revokeDecision(code, button) {
   const target = decisionTarget(code, state.doc);
+  const encounter = state.doc.id;
   return guarded(`revoke:${target.line}`, async () => {
     setBusy(button, true);
     try {
-      await postDecision(decisionBody(target, 'revoke'));
+      await postDecision(encounter, decisionBody(target, 'revoke'));
       await afterChange(`Decision undone for ${target.code}.`);
     } catch (error) {
       setBusy(button, false);
@@ -1700,8 +1731,11 @@ function progressAction(action, button) {
   });
 }
 
+// The export dialog names the document and the coding review it was opened on: its options are built from them, and a
+// download names that coding review, so one that changed under the dialog is refused rather than made from another.
 function openExport() {
   if (!state.doc) return;
+  state.exporting = { encounter: state.doc.id, round: roundNumber(state.doc) };
   const readiness = record(state.doc.readiness);
   $('#exportStatus').classList.toggle('reviewed', readiness.approved === true);
   $('#exportStatus').textContent = exportStatusText(state.doc);
@@ -1720,15 +1754,19 @@ function startDownload(url, filename) {
   link.remove();
 }
 
+// POST reports {kind, fmt, round}: the round the export dialog was opened on. A refusal that says what is missing (its
+// readiness blockers) is shown in the dialog; any other conflict means the coding review changed under the dialog, so
+// the dialog closes and the page reads the document again and says so.
 function generateReport(kind, fmt) {
-  if (!state.doc) return undefined;
+  const exporting = state.exporting;
+  if (!exporting || exporting.round === null) return undefined;
   return guarded('export', async () => {
     const options = $$('#exportOptions .export-option');
     const enabled = options.filter(option => !option.disabled);
     enabled.forEach(option => setBusy(option, true));
     hideError('exportError');
     try {
-      const report = await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/reports`, { method: 'POST', json: { kind, fmt } });
+      const report = await api(`/api/encounters/${encodeURIComponent(exporting.encounter)}/reports`, { method: 'POST', json: { kind, fmt, round: exporting.round } });
       const url = safeDownloadUrl(report.download_url);
       if (!url) throw new ApiError('The download could not be started. Try again.');
       startDownload(url, report.filename);
@@ -1736,7 +1774,13 @@ function generateReport(kind, fmt) {
       refreshDocument();
     } catch (error) {
       const blockers = strings(error.details?.blockers);
-      showError('exportError', blockers.length ? `${error.message} ${blockers.join(' ')}` : error.message);
+      if (changedUnderPage(error) && !blockers.length) {
+        if (state.exporting === exporting) state.exporting = null;
+        closeDialog('exportDialog');
+        await afterConflict();
+      } else {
+        showError('exportError', blockers.length ? `${error.message} ${blockers.join(' ')}` : error.message);
+      }
     } finally {
       enabled.forEach(option => setBusy(option, false));
     }

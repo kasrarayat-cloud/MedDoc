@@ -33,9 +33,13 @@
  * question, when there is one, answered through the panel and the new round waited for and checked again; one READY
  * line approved through #reviewDialog as the page draws it (the acknowledgement checkbox #reviewAckBox inside its label
  * #reviewAcknowledgement, which carries the session's acknowledgement; an agent-executed synthetic review), the page's
- * request naming the round shown, the line and its code, and the line - that line only - decided; the draft and the approved TXT
- * exported through the export dialog as real browser downloads, each fetched again from its download_url and compared
- * byte for byte; a 390x844 viewport with no horizontal scroll; every /ops/ path 404 to the customer (GET, and POST with
+ * request naming the round shown, the line and its code, the line - that line only - decided, and the History naming the
+ * line with its code ("L2 45380"); the draft and the approved TXT
+ * exported through the export dialog as real browser downloads, the page's request naming the round shown ({kind, fmt,
+ * round}), each fetched again from its download_url and compared byte for byte; that approval then undone through the
+ * row's Undo, the page's request naming the round shown, the line, its code and the id of the decision it undoes (the
+ * one the page showed), and the line - that line only - open again; a 390x844 viewport with no horizontal scroll; every
+ * /ops/ path 404 to the customer (GET, and POST with
  * a valid CSRF token for an encounter id that does not exist, so a broken gate changes nothing), never 200 to nobody
  * signed in, and 200 to the operator (the positive control: a broken instrument and a closed door read the same). Every
  * customer API body and header the page or the walk received, every DOM text node and wording attribute, and every
@@ -55,7 +59,7 @@ const PLAYWRIGHT = process.env.CPT_VERIFY_PLAYWRIGHT
   || '/opt/meddoc-pro/.worktrees/private-os-isolation/rebuild/.runtime/browser-deps/node_modules/playwright';
 const EVIDENCE_SCHEMA = 'cpt-studio-walk-evidence@1';
 // studio/client_contract.py VERSION, with app.js and ops/verify_login.py (tests/test_cux_client_contract.py pins them).
-const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-21' };
+const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-22' };
 const VIEWPORTS = { desktop: { width: 1440, height: 1000 }, mobile: { width: 390, height: 844 } };
 const UI_TIMEOUT_MS = 30000;
 const POLL_MS = 3000;
@@ -1128,6 +1132,89 @@ function approvalProblems(before, after, code) {
   return problems;
 }
 
+// Undoes one decided served row through the page: its row's Undo button (button[data-decision="revoke"] in the row of its
+// line), which posts at once. {status, body}: the decision POST's status and the JSON the page posted.
+async function undo(page, ctx, enc, code) {
+  const selector = value => String(value).replace(/"/g, '\\"');
+  const row = `ol#codesList > li.code-row[data-line="${selector(code.line)}"]`;
+  const [response] = await Promise.all([
+    page.waitForResponse(r => r.request().method() === 'POST' && pathnameOf(r.url()) === `/api/encounters/${enc.id}/decisions`, { timeout: 60000 }),
+    page.locator(`${row} button[data-decision="revoke"][data-code="${selector(code.code)}"]`).click(),
+  ]);
+  let body = null;
+  try {
+    body = response.request().postDataJSON();
+  } catch {
+    body = null;
+  }
+  return { status: response.status(), body };
+}
+
+// What is wrong with the JSON the page posted to undo the decision on ``code`` of ``enc`` (FIX-SPEC-2 section 5: the round
+// number shown, the line, its code, the action, and the id of the decision the page showed on that line - so the server
+// can refuse to undo one the member never saw); [] when nothing is.
+function undoRequestProblems(body, enc, code) {
+  if (!isObject(body)) return ['the page posted no JSON object'];
+  const problems = [];
+  if (body.action !== 'revoke') problems.push(`action ${JSON.stringify(body.action)}, not "revoke"`);
+  if (body.code !== code?.code) problems.push(`code ${JSON.stringify(body.code)}, not ${JSON.stringify(code?.code)}`);
+  if (typeof code?.line !== 'string') problems.push(`the served row of ${code?.code} names no line`);
+  else if (body.line !== code.line) problems.push(`line ${JSON.stringify(body.line)}, not ${JSON.stringify(code.line)}`);
+  if (!Number.isInteger(enc?.round?.number) || body.round !== enc.round.number) {
+    problems.push(`round ${JSON.stringify(body.round)}, not the round shown (${JSON.stringify(enc?.round?.number ?? null)})`);
+  }
+  const shown = isObject(code?.decision) ? code.decision.id : undefined;
+  if (typeof shown !== 'string' || !shown) problems.push(`the served decision of ${rowName(code)} names no id`);
+  else if (body.decision !== shown) problems.push(`decision ${JSON.stringify(body.decision)}, not the one shown (${JSON.stringify(shown)})`);
+  return problems;
+}
+
+// What is wrong after one Undo of the decision on ``code`` (``before`` and ``after``: the encounter read before and after
+// it): that row no longer decided and offering what its status allows, on the same round - and no other row's decision
+// changed; [] when nothing is.
+function undoProblems(before, after, code) {
+  const problems = [];
+  const undone = servedRow(after?.codes, code);
+  if (!undone) {
+    problems.push(`${rowName(code)}: not served after the undo`);
+  } else {
+    if (isObject(undone.decision)) problems.push(`${rowName(code)}: decision ${JSON.stringify(undone.decision.action ?? null)} still stands`);
+    if (!sameList(undone.allowed_actions, expectedActions(undone))) {
+      problems.push(`${rowName(code)}: actions [${sorted(undone.allowed_actions)}], not [${expectedActions(undone)}]`);
+    }
+  }
+  if (after?.round?.number !== before?.round?.number) problems.push(`round ${after?.round?.number} after round ${before?.round?.number}`);
+  (Array.isArray(before?.codes) ? before.codes : []).forEach(other => {
+    if (other?.line === code?.line) return;
+    const now = servedRow(after?.codes, other);
+    if ((now?.decision?.action ?? null) !== (other?.decision?.action ?? null)) {
+      problems.push(`${rowName(other)}: decision ${JSON.stringify(other?.decision?.action ?? null)} became ${JSON.stringify(now?.decision?.action ?? null)}`);
+    }
+  });
+  return problems;
+}
+
+// What is wrong with the JSON the page posted for a download of ``kind`` (FIX-SPEC-2 section 5: {kind, fmt, round}, the
+// round the page shows - so the server can refuse one made from a coding review the member never saw); [] when nothing is.
+function exportRequestProblems(body, enc, kind, fmt = 'txt') {
+  if (!isObject(body)) return ['the page posted no JSON object'];
+  const problems = [];
+  if (body.kind !== kind) problems.push(`kind ${JSON.stringify(body.kind)}, not ${JSON.stringify(kind)}`);
+  if (body.fmt !== fmt) problems.push(`fmt ${JSON.stringify(body.fmt)}, not ${JSON.stringify(fmt)}`);
+  if (!Number.isInteger(enc?.round?.number) || body.round !== enc.round.number) {
+    problems.push(`round ${JSON.stringify(body.round)}, not the round shown (${JSON.stringify(enc?.round?.number ?? null)})`);
+  }
+  return problems;
+}
+
+// The History entries of ``enc`` that name the decided line ``code`` as the activity names a decision (FIX-SPEC-2 section
+// 5): its line with its code ("L2 45380"), as a whole phrase.
+function activityNaming(enc, code) {
+  const named = `${code?.line} ${code?.code}`;
+  return (Array.isArray(enc?.activity) ? enc.activity : [])
+    .filter(item => typeof item?.text === 'string' && showsToken(item.text, named)).map(item => item.text);
+}
+
 async function exportTxt(page, ctx, enc, kind, outDir) {
   await page.locator('[data-action="export"]').first().click();
   await page.locator('#exportDialog[open]').waitFor({ state: 'visible', timeout: UI_TIMEOUT_MS });
@@ -1142,11 +1229,17 @@ async function exportTxt(page, ctx, enc, kind, outDir) {
     option.click(),
   ]);
   const report = await response.json().catch(() => null);
+  let body = null;
+  try {
+    body = response.request().postDataJSON();
+  } catch {
+    body = null;
+  }
   const file = path.join(outDir, `${safeName(enc.id)}-${kind}.txt`);
   await download.saveAs(file);
   const bytes = fs.readFileSync(file);
   await page.keyboard.press('Escape');
-  const result = { kind, fmt: 'txt', status: response.status(), filename: report?.filename ?? null,
+  const result = { kind, fmt: 'txt', status: response.status(), filename: report?.filename ?? null, body,
     suggested: download.suggestedFilename(), path: path.relative(ctx.out, file), sha256: sha256(bytes), size: bytes.length,
     text: bytes.toString('utf8') };
   if (typeof report?.download_url === 'string') {
@@ -1190,9 +1283,12 @@ function opsChecks(found) {
 function exportChecks(item, enc, label) {
   if (item.error) return [check(`export.${label}`, false, item.error)];
   const lines = item.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const asked = exportRequestProblems(item.body, enc, label);
   const out = [
     check(`export.${label}`, item.status === 201 && item.size > 0 && /\.txt$/i.test(item.filename || item.suggested || ''),
       `POST answered ${item.status}; ${item.size} bytes saved as ${item.suggested}`),
+    check(`export.${label}.request`, asked.length === 0, asked.length ? `the page posted ${asked.join('; ')}`
+      : `the page posted ${label}, txt, round ${enc?.round?.number}`),
     check(`export.${label}.same_bytes`, item.refetch?.status === 200 && item.refetch.sha256 === item.sha256,
       item.refetch ? `the second download answered ${item.refetch.status}, ${item.refetch.size} bytes, ${item.refetch.sha256 === item.sha256 ? 'the same bytes' : 'other bytes'}`
         : 'the report named no download_url to fetch again'),
@@ -1227,6 +1323,7 @@ async function verifyDocument(page, ctx, sessions, doc) {
   ctx.hits = { json: [], header: [], dom: [], file: [] };
   ctx.contract = new Set();
   let enc = null;
+  let approvedRow = null;  // the row the approve step decided: the undo step undoes it
   try {
     const uploaded = await uploadDocument(page, ctx, doc);
     record.encounter_id = uploaded.id;
@@ -1302,9 +1399,13 @@ async function verifyDocument(page, ctx, sessions, doc) {
       enc = isObject(after.json) ? after.json : enc;
       const decided = servedRow(enc.codes, ready);
       record.approved = decided?.decision?.action === 'approve' ? rowName(ready) : null;
+      approvedRow = record.approved ? ready : null;
       const wrong = approvalProblems(before, enc, ready);
       add(check('approve.recorded', wrong.length === 0, wrong.length ? wrong.join('; ')
         : `${rowName(ready)} approved on round ${enc.round?.number}, only the undo offered, the approved export offered, no other row changed`));
+      const named = activityNaming(enc, ready);
+      add(check('approve.activity', named.length > 0, named.length ? `the History names ${ready.line} ${ready.code}: ${JSON.stringify(named[named.length - 1])}`
+        : `no History entry names ${ready.line} ${ready.code} (the line with its code)`));
       add(...domChecks(enc, await viewFor(page, ctx, enc), ctx.base).filter(item => item.id.startsWith('dom.codes'))
         .map(item => ({ ...item, id: `approved.${item.id}` })));
     });
@@ -1321,6 +1422,25 @@ async function verifyDocument(page, ctx, sessions, doc) {
         if (made.text) scanFile(made.text, ctx.scan, `${kind}.txt`, ctx.hits.file);
       });
     }
+    await step('undo', async () => {
+      const decided = approvedRow ? servedRow(enc.codes, approvedRow) : null;
+      if (!decided || !isObject(decided.decision)) {
+        add(skip('undo', 'no approval was made to undo'));
+        return;
+      }
+      await viewFor(page, ctx, enc);
+      const made = await undo(page, ctx, enc, decided);
+      const asked = undoRequestProblems(made.body, enc, decided);
+      add(check('undo.request', asked.length === 0, asked.length ? `the page posted ${asked.join('; ')}`
+        : `the page posted round ${enc.round?.number}, line ${decided.line}, ${decided.code}, revoke, naming the decision shown`));
+      add(check('undo.saved', made.status === 201, `POST decisions answered ${made.status}`));
+      const before = enc;
+      const after = await getJson(page, ctx, `/api/encounters/${encodeURIComponent(enc.id)}`);
+      enc = isObject(after.json) ? after.json : enc;
+      const wrong = undoProblems(before, enc, decided);
+      add(check('undo.recorded', wrong.length === 0, wrong.length ? wrong.join('; ')
+        : `${rowName(decided)}'s approval undone on round ${enc.round?.number}, the line open again, no other row changed`));
+    });
     await step('viewport', async () => {
       await page.setViewportSize(VIEWPORTS.mobile);
       try {
@@ -1461,7 +1581,8 @@ module.exports = {
   readPrivate, loadCredentials, debugMayLog, secretForms, scrubSecret, compileDenylist, denylist, contract, shapeProblems,
   contractFor, scanContext, addQuotes, ownWording, scanText, scanJson, scanFile, scanHeaders, checkScan, expectedActions,
   jsonChecks, showsToken, unitsProblem, modifiersProblem, domChecks, readEncounterDom, collectDomStrings, approve,
-  servedRow, decisionRequestProblems, approvalProblems, opsChecks, exportChecks, summarize, documentResult,
+  servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportTxt,
+  exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,
   evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
 };
 
