@@ -1,9 +1,5 @@
-"""Repair round r2b, builder records2 (DECISIONS D297 R2RX-3, R2RX-4 and records Q2). Synthetic transcripts and the
-tree's own texts only; no Docker, no database, no network.
-
-R2RX-3 - whenever the D15 judge's verdict or transcript changes, a test drives rollback_check's Check.assess on a
-synthetic transcript and pins assertion 7's verdict, problems and reported evidence (d15.json's evidence and
-D15-SUMMARY.txt's line) for a Fable and a non-Fable v2 candidate, and for a candidate before design v2.
+"""Repair round r2b, builder records2 (DECISIONS D297 R2RX-4 and records Q2). The tree's own texts only; no Docker,
+no database, no network. (R2RX-3, the D15 judge's assertion 7, went with that test in the Fable coding build.)
 
 R2RX-4 - whenever a guard claims every statement of a bound, it reads every form a statement takes or states the forms
 it reads: ops/test_r2r_records.py's F4 guard now reads the forms its STOP_FORMS lists in every ops text, each with its
@@ -34,117 +30,11 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-import rollback_check as rc  # noqa: E402
+from test_install import earlier_files, earlier_literal, earlier_text  # noqa: E402
 import test_r2r_records as F4  # noqa: E402  (the F4 guard: STOP_FORMS, prose, stop_statements, spellings)
 
 OPS = Path(__file__).resolve().parent
 APP_ROOT = OPS.parent
-ALL = rc.SCENARIO_V2 + rc.SCENARIO_V3
-START = '2031-05-20T10:00:00+00:00'
-
-
-def tearDownModule():
-    harness2 = sys.modules.get('test_install_harness2')
-    if harness2 is not None and 'connection' in harness2._DATABASE:  # test_r2r_records' database tests made it
-        connection = harness2._DATABASE.pop('connection')
-        connection.creation.destroy_test_db(harness2._DATABASE.pop('old_name'), verbosity=0)
-
-
-def counts(kinds=ALL, **overrides) -> dict:
-    """Every record kind of ``kinds`` counted once, but ``overrides``."""
-    return {**{key: 1 for key, _, _ in kinds}, **overrides}
-
-
-# --- R2RX-3: the D15 judge, driven on a synthetic transcript ----------------------------------------------------------
-
-class R2BRJudgeAssertion7Tests(unittest.TestCase):
-    """rollback_check.Check.assess over a synthetic d15 transcript (every other assertion's inputs are the transcript's
-    own and fail or pass as they may: only assertion 7 is pinned): its verdict, problems and reported evidence, and the
-    summary line D15-SUMMARY.txt prints for it."""
-
-    def judge(self, found, *, v2: bool, fable: bool, question: bool = False) -> tuple:
-        """(assertion 7's record, its D15-SUMMARY.txt lines: its verdict, its evidence and each problem printed) of
-        Check.assess on a transcript whose switch-back counted ``found`` before it ran."""
-        worker = {'running': True, 'restarts': 0, 'oom_killed': False}
-        check = rc.Check.__new__(rc.Check)
-        check.record = {
-            'started_at': START,
-            'switch_back': {'scenario_v2': found, 'note': None, 'independent': {}, 'refusals': {}, 'closed_stages': [],
-                            'unrunnable_after_close': {'stuck': 0}, 'update': {}},
-            'http': {'health': 200, 'statuses': {'200': 1}}, 'comparison': {'encounters': 1, 'findings': []},
-            'recompute': {}, 'renders': {},
-            'worker': {'after_20s': worker, 'at_end': worker, 'open_at_start': {}, 'interpret_jobs_at_start': [],
-                       'reading_jobs_at_start': [], 'started_at': START}}
-        check.instance = SimpleNamespace(calls=[])
-        check.views, check.declared, check.v2, check.fable = {}, None, v2, fable
-        check.question = question  # round r3: a candidate whose installer knows the question stage (question_candidate)
-        check.candidate = {'tag': 'cpt-studio:candidate', 'revision': 'c' * 40}
-        check.previous = {'tag': 'cpt-studio:previous', 'revision': 'p' * 40}
-        check.args = SimpleNamespace(db='test_r2br_synthetic')
-        with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):
-            check.out = Path(folder)
-            check.assess()
-            summary = (check.out / 'D15-SUMMARY.txt').read_text(encoding='utf-8').splitlines()
-        seventh = [item for item in check.record['assertions'] if item['assertion'] == 7]
-        self.assertEqual(len(seventh), 1)
-        at = next(index for index, line in enumerate(summary) if line.startswith('  7. '))
-        end = next(index for index, line in enumerate(summary) if line.startswith('  8. '))
-        return seventh[0], summary[at:end]
-
-    def assertSeventh(self, found, *, v2, fable, result, problems, reported, question=False):
-        seventh, lines = self.judge(found, v2=v2, fable=fable, question=question)
-        self.assertEqual((seventh['result'], seventh['problems']), (result, problems))
-        self.assertEqual(seventh['evidence']['reported_not_required'], reported)
-        self.assertEqual((seventh['evidence']['v2_candidate'], seventh['evidence']['fable_candidate'],
-                          seventh['evidence']['question_candidate'], seventh['evidence']['scenario_v2']),
-                         (v2, fable, question, found))
-        self.assertTrue(lines[0].startswith(f'  7. {result}  '), lines[0])
-        self.assertEqual(lines[1], f'       evidence: v2 candidate {v2}; Fable candidate {fable}; question candidate '
-                                   f'{question}; record kinds {found}; reported, never required: {reported}')
-        self.assertEqual(lines[2:], [f'       - {problem}' for problem in problems])
-        return seventh, lines
-
-    def test_a_fable_candidate_without_a_declined_hold_passes_and_reports_it(self):
-        self.assertSeventh(counts(declined_hold=0), v2=True, fable=True, result='PASS', problems=[],
-                           reported={'declined_hold': 0})
-
-    def test_a_fable_candidate_is_judged_on_its_new_versions_kinds(self):
-        """The candidate's Fable kinds are required: a run without the Fable inventory fails assertion 7, and the
-        declined hold is still reported."""
-        problem = f'fable_inventory: the run holds no an event inventory of {rc.PAIR_V3} and {rc.INVENTORY_V3}'
-        seventh, lines = self.assertSeventh(counts(declined_hold=0, fable_inventory=0), v2=True, fable=True,
-                                            result='FAIL', problems=[problem], reported={'declined_hold': 0})
-        self.assertEqual(lines[2:], [f'       - {problem}'])  # each problem is printed under the evidence
-
-    def test_a_question_candidate_is_judged_on_the_question_stages_kinds(self):
-        """Round r3: a candidate with the question stage requires its records - a run without an answer-released code
-        fails assertion 7 naming it - and the same counts pass a candidate without the stage (the boundary)."""
-        found = counts(rc.SCENARIO_V2 + rc.SCENARIO_V3 + rc.SCENARIO_R3, declined_hold=0, question_released=0)
-        problem = 'question_released: the run holds no a code an established answer released'
-        self.assertSeventh(found, v2=True, fable=True, question=True, result='FAIL', problems=[problem],
-                           reported={'declined_hold': 0})
-        self.assertSeventh(found, v2=True, fable=True, question=False, result='PASS', problems=[],
-                           reported={'declined_hold': 0})
-        self.assertSeventh(counts(rc.SCENARIO_V2 + rc.SCENARIO_V3 + rc.SCENARIO_R3, declined_hold=0), v2=True,
-                           fable=True, question=True, result='PASS', problems=[], reported={'declined_hold': 0})
-
-    def test_an_uncounted_declined_hold_is_reported_as_not_counted(self):
-        self.assertSeventh(counts(declined_hold='RuntimeError: psql failed'), v2=True, fable=True, result='PASS',
-                           problems=[], reported={'declined_hold': "not counted ('RuntimeError: psql failed')"})
-
-    def test_a_v2_candidate_that_is_not_fables_is_judged_on_6_4s_kinds_alone(self):
-        """The boundary: no SCENARIO_V3 kind is required or reported for it - the Fable kinds at 0 change nothing - and
-        a missing 6.4 kind fails it."""
-        none_of_v3 = counts(**{key: 0 for key, _, _ in rc.SCENARIO_V3})
-        self.assertSeventh(none_of_v3, v2=True, fable=False, result='PASS', problems=[], reported={})
-        missing = counts(rc.SCENARIO_V2, held_code=0)
-        title = dict((key, title) for key, title, _ in rc.SCENARIO_V2)['held_code']
-        self.assertSeventh(missing, v2=True, fable=False, result='FAIL', problems=[f'held_code: the run holds no {title}'],
-                           reported={})
-
-    def test_a_candidate_before_design_v2_is_not_judged_on_record_kinds(self):
-        self.assertSeventh({}, v2=False, fable=False, result='PASS', problems=[], reported={})
-        self.assertSeventh(None, v2=False, fable=True, result='PASS', problems=[], reported={})
 
 
 # --- R2RX-4: every form a statement of the stop bound takes --------------------------------------------------------
@@ -180,7 +70,7 @@ class R2BRStopBoundFormsTests(unittest.TestCase):
     """The F4 guard reads every form it lists, in every ops text, whole when wrapped; a stale value planted in any of
     them is refused, and a statement of the bound in a form it does not list fails its completeness test."""
     INSTALL_MD, INSTALL_PY = OPS / 'INSTALL.md', OPS / 'install.py'
-    OLD = 1500  # the worker's bound before round r3 (600 before AMENDMENT-2 1.12): the stale value a missed one keeps
+    OLD = 1800  # the worker's bound before the Fable coding build (round r3's): the stale value a missed one keeps
 
     def test_the_guard_reads_the_texts_as_they_stand(self):
         for path in F4.ops_texts():
@@ -195,15 +85,15 @@ class R2BRStopBoundFormsTests(unittest.TestCase):
         old = self.OLD
         plants = (
             # (the text, its statement as it stands, the same statement stale)
-            (self.INSTALL_MD, 'read-only root, stop timeout 1,800 s', f'read-only root, stop timeout {old} s'),
-            (self.INSTALL_PY, 'So 1,800 s outlasts', f'So {old} s outlasts'),
-            (self.INSTALL_PY, 'may so wait up to 30 minutes', f'may so wait up to {old // 60} minutes'),
-            (self.INSTALL_MD, "The worker's stop timeout (1,800 s", f"The worker's stop timeout ({old} s"),
-            (self.INSTALL_MD, 'can take\n  up to 30 minutes', f'can take\n  up to {old // 60} minutes'),
-            (self.INSTALL_MD, 'about a second when idle, up to 1,800 s', f'about a second when idle, up to {old} s'),
-            (self.INSTALL_MD, 'when the 1,800 s pass', f'when the {old} s pass'),
-            (self.INSTALL_MD, '`docker\n  stop --time 1800`', f'`docker\n  stop --time {old}`'),
-            (self.INSTALL_PY, "(STOP_SECONDS['worker'], 1,800 s)", f"(STOP_SECONDS['worker'], {old} s)"),
+            (self.INSTALL_MD, 'read-only root, stop timeout 3,600 s', f'read-only root, stop timeout {old} s'),
+            (self.INSTALL_PY, 'So 3,600 s outlasts', f'So {old} s outlasts'),
+            (self.INSTALL_PY, 'may so wait up to 60 minutes', f'may so wait up to {old // 60} minutes'),
+            (self.INSTALL_MD, "The worker's stop timeout (3,600 s", f"The worker's stop timeout ({old} s"),
+            (self.INSTALL_MD, 'can take\n  up to 60 minutes', f'can take\n  up to {old // 60} minutes'),
+            (self.INSTALL_MD, 'about a second when idle, up to 3,600 s', f'about a second when idle, up to {old} s'),
+            (self.INSTALL_MD, 'when the 3,600 s pass', f'when the {old} s pass'),
+            (self.INSTALL_MD, '`docker\n  stop --time 3600`', f'`docker\n  stop --time {old}`'),
+            (self.INSTALL_PY, "(STOP_SECONDS['worker'], 3,600 s)", f"(STOP_SECONDS['worker'], {old} s)"),
         )
         for path, now, then in plants:
             with self.subTest(path=path.name, statement=then):
@@ -211,16 +101,16 @@ class R2BRStopBoundFormsTests(unittest.TestCase):
                 self.assertTrue(stale(path, planted(path, now, then)), 'the guard did not read the stale statement')
 
     def test_a_wrapped_statement_is_read_whole(self):
-        """INSTALL.md's '(up to' and '1,800 s; ...' stand on two lines: the guard reads them as one statement."""
+        """INSTALL.md's '(up to' and '3,600 s; ...' stand on two lines: the guard reads them as one statement."""
         text = self.INSTALL_MD.read_text(encoding='utf-8')
-        self.assertTrue(re.search(r'\(up to\n\s+1,800 s;', text), 'the wrapped statement this test reads moved')
-        self.assertTrue(stale(self.INSTALL_MD, re.sub(r'\(up to\n(\s+)1,800 s;', rf'(up to\n\g<1>{self.OLD} s;', text,
+        self.assertTrue(re.search(r'\(up to\n\s+3,600 s;', text), 'the wrapped statement this test reads moved')
+        self.assertTrue(stale(self.INSTALL_MD, re.sub(r'\(up to\n(\s+)3,600 s;', rf'(up to\n\g<1>{self.OLD} s;', text,
                                                       count=1)))
 
     def test_a_statement_of_the_bound_in_a_form_the_guard_does_not_list_fails_its_completeness_test(self):
-        text = planted(self.INSTALL_MD, 'stop timeout 1,800 s', 'stop timeout 1,800 s (the worker is given 1,800 '
+        text = planted(self.INSTALL_MD, 'stop timeout 3,600 s', 'stop timeout 3,600 s (the worker is given 3,600 '
                                                                 'seconds to finish its stage)')
-        self.assertEqual(unlisted(self.INSTALL_MD, text), ['1,800 seconds'])
+        self.assertEqual(unlisted(self.INSTALL_MD, text), ['3,600 seconds'])
         self.assertEqual(stale(self.INSTALL_MD, text), [])  # its value is right: only the completeness test reads it
 
     def test_the_other_bounds_are_never_read_as_a_stop_bound(self):
@@ -235,27 +125,19 @@ class R2BRStopBoundFormsTests(unittest.TestCase):
 
 # --- records Q2: the recordings the image ships ------------------------------------------------------------------------
 
-def module_literal(path: str, name: str):
-    """A module-level literal of a tree file, read from its source (no import)."""
-    import ast
-    tree = ast.parse((APP_ROOT / path).read_text(encoding='utf-8'))
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(getattr(target, 'id', None) == name for target in node.targets):
-            return ast.literal_eval(node.value)
-    raise LookupError(name)
-
-
 def shipped_fable_recordings() -> list:
-    """The Fable recordings the image ships: each file of the interpreter's recording folder (fable_adapter's
-    recording_folder - its provider's name, PROVIDER_V3 - with its recording_suffix) under the replay directory
-    install.INTERPRETER names, read in the tree the image copies to /app (deploy/.dockerignore keeps tests/)."""
-    adapter = (APP_ROOT / 'studio' / 'interpretation' / 'fable_adapter.py').read_text(encoding='utf-8')
+    """The Fable recordings the image a switch-back starts ships - the interpreter exists only in the earlier revision's
+    pair, so its image is the earlier revision's tree (test_install.earlier_files; skipped in a clone without that
+    commit): each file of the interpreter's recording folder (fable_adapter's recording_folder - its provider's name,
+    PROVIDER_V3 - with its recording_suffix) under the replay directory install.INTERPRETER names, read in the tree that
+    image copies to /app (its deploy/.dockerignore keeps tests/)."""
+    adapter = earlier_text('studio/interpretation/fable_adapter.py')
     if "    recording_folder = NAME\n    recording_suffix = '.sse'\n" not in adapter or \
             'NAME = interpretation.PROVIDER_V3' not in adapter:
         raise AssertionError('the Fable adapter reads its recordings elsewhere: read its folder and suffix again')
-    replay_dir = APP_ROOT / PurePosixPath(install.INTERPRETER['replay_dir']).relative_to('/app')
-    folder = replay_dir / module_literal('studio/interpretation/__init__.py', 'PROVIDER_V3')
-    return sorted(str(path.relative_to(APP_ROOT)) for path in folder.rglob('*.sse')) if folder.is_dir() else []
+    replay_dir = PurePosixPath(install.INTERPRETER['replay_dir']).relative_to('/app')
+    folder = replay_dir / earlier_literal('studio/interpretation/__init__.py', 'PROVIDER_V3')
+    return [path for path in earlier_files(str(folder)) if path.endswith('.sse')]
 
 
 def texts() -> dict:
@@ -276,8 +158,8 @@ class R2BRShippedRecordingsTests(unittest.TestCase):
     def test_the_image_ships_no_fable_recording(self):
         self.assertEqual(shipped_fable_recordings(), [])
         # the replay directory itself ships (tests/ stays in the image), holding the v1 FRESH recordings (gemini/)
-        replay_dir = APP_ROOT / PurePosixPath(install.INTERPRETER['replay_dir']).relative_to('/app')
-        self.assertTrue((replay_dir / 'gemini').is_dir())
+        replay_dir = PurePosixPath(install.INTERPRETER['replay_dir']).relative_to('/app')
+        self.assertTrue(earlier_files(str(replay_dir / 'gemini')))
 
     def test_no_ops_text_names_a_fable_recording_the_image_does_not_ship(self):
         shipped = shipped_fable_recordings()

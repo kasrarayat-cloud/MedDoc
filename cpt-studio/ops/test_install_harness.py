@@ -27,8 +27,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import (FakeOwnership, TemporaryDirectoryTest, guard_host, pre_switch_answer,  # noqa: E402
-                          release_host, run_body)
+from test_install import (FakeOwnership, TemporaryDirectoryTest, earlier_text, guard_host,  # noqa: E402
+                          pre_switch_answer, release_host, run_body)
 
 
 def setUpModule():
@@ -68,8 +68,10 @@ def flags(argv, flag):
 
 
 def settings_value(name):
-    """A literal assignment in cptstudio/settings.py, read with ast (no Django settings are loaded here)."""
-    tree = ast.parse((APP_ROOT / 'cptstudio' / 'settings.py').read_text(encoding='utf-8'))
+    """A literal assignment in the EARLIER revision's cptstudio/settings.py, read with ast (no Django settings are loaded
+    here): the stage deadlines of the pipeline before the Fable coding build, whose worker this installer parks on the
+    way in and starts again on a switch-back (test_install.earlier_text; skipped in a clone without that commit)."""
+    tree = ast.parse(earlier_text('cptstudio/settings.py'))
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
             return ast.literal_eval(node.value)
@@ -242,11 +244,11 @@ class StopTimeoutTests(unittest.TestCase):
                 self.assertGreater(install.STOP_SECONDS['worker'], deadlines[kind])
 
     def test_the_worker_outlasts_every_stage_deadline(self):
-        # W9R-BUILD-LIST B21 (G2-01 (i), F8's half; DECISIONS D289): with STOP_SECONDS['worker'] 1,800 (round r3, D322
-        # (4); 1,500 by AMENDMENT-2 1.12), the stop outlasts every stage kind's JOB_DEADLINE_SECONDS, so a deploy's
-        # docker stop lets the stage the worker is in finish - a reading's or a question round's sends included -
-        # instead of cutting it into an unknown outcome
-        self.assertEqual(install.STOP_SECONDS['worker'], 1800)
+        # W9R-BUILD-LIST B21 (G2-01 (i), F8's half; DECISIONS D289): with STOP_SECONDS['worker'] 3,600 (the Fable coding
+        # build; 1,800 since round r3), the stop outlasts every stage kind's JOB_DEADLINE_SECONDS of the earlier worker
+        # this installer stops, so a deploy's docker stop lets the stage it is in finish - a reading's or a question
+        # round's sends included - instead of cutting it into an unknown outcome
+        self.assertEqual(install.STOP_SECONDS['worker'], 3600)
         deadlines = settings_value('JOB_DEADLINE_SECONDS')
         self.assertGreaterEqual(len(deadlines), 12)  # positive control: the whole table was read
         self.assertEqual(max(deadlines.values()), 1588)  # the question stage's, the longest
@@ -260,7 +262,7 @@ class StopTimeoutTests(unittest.TestCase):
         # within PARTICIPANT_LOOP_DEADLINE_SECONDS; a stop must let it record its outcome, and a stage the stop
         # outlasts is one the stale-stage sweep settles as cut short anyway. AMENDMENT-2 1.12: the reading stages
         # have a stale threshold of their own (1,440 s; round r3: 1,560 s for appraise, which plans the first question
-        # round, and 1,768 s for the question stage), and the stop (1,800 s) is above every threshold.
+        # round, and 1,768 s for the question stage), and the stop (3,600 s) is above every threshold.
         loop, stale = settings_value('PARTICIPANT_LOOP_DEADLINE_SECONDS'), settings_value('STALE_RUNNING_SECONDS')
         by_kind = settings_value('STALE_RUNNING_SECONDS_BY_KIND')
         self.assertEqual((loop, stale, by_kind), (540, 600, {'interpret': 1440, 'appraise': 1560, 'question': 1768}))
@@ -293,8 +295,8 @@ class StopTimeoutTests(unittest.TestCase):
             install.remove_service_container(install.SERVICES['worker'], 'worker')
             install.stop_service_container(install.SERVICES['worker'], 'worker')
         stops = [(args, kwargs) for args, kwargs in calls if args[0] == 'stop']
-        self.assertEqual([args[:3] for args, _ in stops], [('stop', '--time', '1800')] * 3)  # round r3 (D322 (4))
-        self.assertTrue(all(kwargs['timeout'] > 1800 for _, kwargs in stops))
+        self.assertEqual([args[:3] for args, _ in stops], [('stop', '--time', '3600')] * 3)  # the Fable coding build
+        self.assertTrue(all(kwargs['timeout'] > 3600 for _, kwargs in stops))
 
 
 class ServiceMountTests(unittest.TestCase):
@@ -1129,9 +1131,11 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
             closed.update(kinds=kinds, reason=reason)
             return {'closed': 2, 'kinds': ['astra', 'fable'], 'hazards': {}, 'relabel': []}
         names = {install.SERVICES[role]: role for role in ('web', 'worker')}
-        def counted(image_id, env_bytes, body, params, **kwargs):  # ADJUDICATION P-1's note, read in this image
-            self.assertEqual((image_id, body), (IMAGE, install.INTERPRETATION_MADE))
-            return {'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}
+        def counted(image_id, env_bytes, body, params, **kwargs):  # the declared note, read in this image
+            self.assertEqual((image_id, body), (IMAGE, install.CODING_MADE))
+            return {'coding': {'encounters': [], 'created': [], 'rounds': 0, 'answers': 0,
+                               'decisions': {'approve': 0, 'reject': 0, 'revoke': 0}, 'approved': 0,
+                               'exports': {'draft': 0, 'approved': 0}}}
         with mock.patch.object(install, 'inspect', side_effect=lambda kind, name: live.get(names.get(name))), \
                 mock.patch.object(install, 'docker', fake_docker), \
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \
@@ -1142,8 +1146,9 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'put_back_states', return_value={'encounters': 0, 'changed': {}}):
             details = install.phase_rollback_app(install.Context(SimpleNamespace(phase='rollback-app',
                                                                                  revision=REVISION), self.tmp))
-        self.assertEqual(details['interpretation']['note'],
-                         '0 assessments were made from event inventories; the earlier image reads them fail-closed')
+        self.assertEqual(details['not_carried_back']['note'],
+                         'this revision coded no encounter: there is nothing of its own to carry back, and the earlier '
+                         'revision shows its own records only')
         self.assertEqual(closed['kinds'], list(install.COMMON_STAGE_KINDS))
         self.assertEqual(closed['reason'], 'its web and worker were removed (rollback-app)')
         self.assertEqual(details['stages_closed']['kinds'], ['astra', 'fable'])
@@ -1159,7 +1164,8 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
                                                  'e3': ['unknown']})
         self.assertEqual(shown, {'e1': ['participant'], 'e2': ['participant']})
         self.assertEqual(acting, {'e2': ['outcome'], 'e3': ['unknown']})
-        self.assertIn("support__origin='participant'", install.UNDO_HAZARDS)
+        # the earlier pipeline's reason: this revision writes no proposal, so its own hazard read never names one
+        self.assertNotIn('participant', install.UNDO_HAZARDS)
         compile(install.UNDO_HAZARDS_READ, 'undo-hazards', 'exec')
 
     def test_rollback_app_refuses_before_stopping_anything_while_a_participant_code_is_held(self):

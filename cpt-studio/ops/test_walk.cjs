@@ -1,8 +1,8 @@
 'use strict';
 /*
  * Unit tests for ops/walk.cjs's pure helpers: argument parsing, the documents and credentials it reads, the denylist
- * scan (every vector of ops/verification/customer-denylist.json, which ops/verify_downloads.py and ops/scan_customer.py
- * run too, so the readers cannot drift apart), the JSON and DOM contract checks, and the evidence's shape. No browser,
+ * scan (every vector of ops/verification/customer-denylist.json, which ops/scan_customer.py
+ * runs too, so the readers cannot drift apart), the JSON and DOM contract checks, and the evidence's shape. No browser,
  * network or server: synthetic values only.
  *
  *   node ops/test_walk.cjs            (or: node --test --test-reporter=tap ops/test_walk.cjs)

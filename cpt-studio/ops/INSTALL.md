@@ -15,7 +15,7 @@ run the next. Nothing here was executed by the session that wrote it.
 | image | `cpt-studio:<sha12>`, built from `git archive <revision> cpt-studio/`, label `org.opencontainers.image.revision=<revision>` |
 | database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg` |
 | web | container `cpt-studio-web`, gunicorn, read-only root, uid 10150, `127.0.0.1:9150` or `127.0.0.1:9151` → 8000: a fresh host starts on 9150, and each install after it starts the incoming web `cpt-studio-web-next` on the other port and switches to it (blue/green, **app**), so the port alternates |
-| worker | container `cpt-studio-worker`, read-only root, stop timeout 1,800 s (round r3, DECISIONS D322 (4): above every stage's deadline - the question stage's 1,588 s, a round of question requests sent concurrently within their 1,408 s deadline - one wave of at most `QUESTION_ROUND_CONCURRENCY` requests at the installed figures, DECISIONS D325 (3) - the longest; the reading passes' 1,380 s - and every stale-stage threshold, 600 s, the reading passes' 1,440 s and 1,560 s and the question stage's 1,768 s; a deploy may wait up to 30 minutes for it; AMENDMENT-2 1.12's 1,500 s before round r3), the only holder of a credentials file: the Fable coder's Anthropic file, read-only, when `--coding-mode live` (an earlier revision's pair a `switch-back` starts holds what its own `app` gave it: Corti's, a live participant's, the interpreter's) |
+| worker | container `cpt-studio-worker`, read-only root, stop timeout 3,600 s (the Fable coding build: one coding stage prepares the document - a Word file converted in a bounded child of at most 60 s - then streams the reader's send and the checker's, each up to 96,000 output tokens at effort max, about 1,000 s each at the slowest rate measured, so a round can pass 2,000 s; the bound is `studio.jobs.CODE_STALE_SECONDS`, the age at which the stale sweep takes a running coding job for a dead worker's; a deploy may wait up to 60 minutes for it; round r3's question stage had 1,800 s before it), the only holder of a credentials file: the Fable coder's Anthropic file, read-only, when `--coding-mode live` (an earlier revision's pair a `switch-back` starts holds what its own `app` gave it: Corti's, a live participant's, the interpreter's) |
 | network | `cpt-studio-net` (bridge). Web and worker reach the database as `cpt-studio-db:5432` |
 | files | volume `cpt-studio-files` at `/var/lib/cpt-studio` (originals, reference copies) |
 | secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `initial-credentials.json` (root 0600), `operator-credentials.json` (root 0600, the human platform operator's login, **operators**). The Fable coding build (DECISIONS D351-D353) neither reads Corti's source nor writes Corti's copy: a `corti-credentials.env` an earlier install wrote is left as it is, and only a `switch-back` to an earlier pair given `--provider-mode live` mounts it |
@@ -43,6 +43,14 @@ The tree must be clean, and HEAD must be the revision or a descendant that
 changed nothing under `cpt-studio/` or the ruled-mutation door (so a docs-only
 commit carrying the declaration is accepted). The declaration must name the
 revision and carry no unfilled revision placeholder.
+
+**The door's ceiling.** The door kills what it runs after `RULED_ACT_MAX_SECS`
+of wall clock (`scripts/lib/run-watched.sh`; by default as long as one worker's
+stop), wherever it is. `app`, `switch-back` and `rollback-app` may each wait for
+a worker to stop once or twice (each wait up to 60 minutes since the Fable
+coding build), so they refuse to start, changing nothing, unless the ceiling is
+at least 9,000 s (two stops and a margin; the receipt's `door.ceiling`): run
+them as `RULED_ACT_MAX_SECS=9000 bash scripts/run-ruled-mutation.sh ...`.
 
 Each phase prints one JSON line `{"phase", "ok", "summary", "receipt"}` and
 writes `<phase>-<UTC>.json` (0600) plus any command logs into the receipts
@@ -173,7 +181,11 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   an index of a class the check does not read, `RunPython`, other SQL, a form
   the check does not read, a file in the migrations directory that is not a
   migration) is refused. The receipt records each checked migration and why it
-  passed. 0006, 0007 and 0008 pass: 0007 adds `endpoint`, `requested_model`,
+  passed. 0016 (the Fable coding build) passes: four new tables -
+  `CodingRound` (its two nullable columns of the converted Word view among
+  them), `CodingAnswer`, `CodeDecision` and `ExportArtifact` - and a constraint
+  on a table it creates; no column is added to an existing table. 0006, 0007
+  and 0008 pass: 0007 adds `endpoint`, `requested_model`,
   `returned_model` and `response_id` to `studio_providerrun` and `participants`
   and `retrieval` to `studio_assessment`, each NOT NULL and each given a
   database default by the same migration's SQL, and creates `PassageSource` and
@@ -199,7 +211,18 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   never pinned), and `python -c "import anthropic; print(anthropic.__version__)"`
   must print exactly anthropic 2.11.0, the SDK release the coder sends through
   (the receipt's `anthropic`). Either failing refuses the image, with what the
-  command printed in the failure log.
+  command printed in the failure log. Then the **conversion gate**: a real
+  Word-to-PDF conversion inside the built image, as the worker runs one - the
+  application's own entry point (`studio.fable.document.convert_docx`:
+  LibreOffice in its bounded child, 60 s, a throwaway HOME and profile, no
+  inherited environment) under the worker's runtime constraints (user
+  10150:10150, a read-only root, `/tmp` a tmpfs, the worker's memory and pids
+  limits) and with no network - of a tiny synthetic Word document the installer
+  builds (`synthetic_docx`: three parts, one paragraph, fixed timestamps, the
+  same bytes every time). Its PDF must start with `%PDF-`, or the image is
+  refused (every Word upload would fail its conversion); the receipt's
+  `conversion` records the PDF's size and sha256, never pinned (LibreOffice
+  stamps a creation time in it).
 - **db** is idempotent; an existing container must be ours, on the pinned
   image, loopback-only, `unless-stopped`.
 - **app** (live mode) first checks the Fable coder's credentials
@@ -244,12 +267,18 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   revision's HTTPS stage that this revision does not render for its port
   (`deploy/nginx/` changed) is refused for blue/green: the switch would change
   more than its upstream (see **Reinstalling a new revision**).
-  It migrates with a one-shot container first and refuses, before replacing
-  anything, while the queue holds a stage this revision's worker has no handler
-  for (queued, running, or cancelled as its encounter's latest stage, which a
-  Resume would run again): a worker that claims one ends.
-  **Design v2** (docs/gemini-migration/FINAL-V2.md 6.2 [R:MO-1]; AMENDMENT-1.md
-  9.5): then, still before anything is replaced, it reads the target twice in
+  It migrates with a one-shot container first, then reads (and records as
+  `unrunnable_stages`, never refusing on them) the stages of a kind this
+  revision's worker does not run - every kind of the pipeline before the Fable
+  coding build - that are queued, running, or cancelled as their encounter's
+  latest stage: this worker claims coding jobs only (`studio.jobs.claim_next`),
+  its startup sweep settles every running stage of any kind, and a member's
+  Review again retires a stage of the earlier pipeline left queued
+  (`studio.decisions.retry`), so none can end it, where an earlier worker
+  claiming one ended (refusing here would refuse every install over a site
+  where one stage was ever stopped).
+  **Design v2** (docs/gemini-migration/FINAL-V2.md 6.2 [R:MO-1]): then, still
+  before anything is replaced, it reads the target twice in
   this revision's image. First it **refuses while a design v1 row exists** - an
   `Assessment` whose `engine_version` is exactly `cpt-studio-events@1`, or an
   `EventInventory` whose `interpretation_version` is exactly `gemini-events@1`
@@ -261,33 +290,24 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   row, and a test instance's are read as stored and never deleted here. Then it
   **counts, and never refuses on**, what the owner is told before the switch
   (`INSTALL_COUNTS`, the receipt's `install_counts` with its `report`, and a
-  clause of the summary): the encounters whose current revision has no
-  inventory at the current versions and is over `INTERPRET_MAX_CHARS` or
-  `INTERPRET_MAX_PAGES`, or whose text cannot be framed (with the longest
-  current document beside the bound: an addendum past it is refused before it
-  is recorded); the encounters whose saved details are not their current
-  context's (printed on every install; on the first install over the installed
-  release expected 0, and named when not); the provider refusals recorded before
-  the install that no hold names (Corti and participant runs failed with an
-  authentication, permission, payment or quota status, and Corti token refusals
-  recorded not sent), each with its newest date; the encounters whose current
-  document review is a reconciled unknown outcome while a reading is owed (A21,
-  expected 0); and every standing provider and interpreter hold. A count that
-  cannot be read is recorded as not counted and the phase goes on. An empty
-  text whose extraction failed or has not run is counted apart
-  (`unframed_unextracted`): the installed release refuses a change of its
-  details too, so it is no capability loss; and a participant's refusal never
-  fails an update (it goes on without that check), as a Corti refusal does.
-  The same reads, measured on a fresh restored dump of live before the
-  install, are `ops/rollback_check.py counts` (below, **The D15 rollback
-  test**).
+  clause of the summary): every encounter and those with a coding round, every
+  stage by kind and state (a stage of the earlier pipeline still queued is
+  never run by this worker: its document reads as an earlier review until a
+  member asks for it to be reviewed again; one still running is settled by the
+  startup sweep), every provider run by purpose and state, the provider
+  outcomes still unknown and not reconciled (their encounters named) and the
+  runs left reserved or sending, the rows of the four tables of migration 0016
+  (0 on the first install over a revision before it: more says this is a
+  reinstall or a same-revision run), and the standing holds (each refuses every
+  coding send until an operator releases it). A count that cannot be read is
+  recorded as not counted and the phase goes on.
   **Blue/green** (the site stays served throughout; the receipt's `steps` time
   each step): **S1** the incoming web `cpt-studio-web-next` starts on the idle
   port and must answer `/health/` = `{status ok, service cpt-studio, data_mode
   synthetic-only, database ok, release <revision>}` there and serve its own
   sign-in page and every static file that page names (read-only GETs) - the
   old web still serves everything; **S2** the old worker is parked (`docker
-  stop --time 1800`: its current stage finishes, nothing new is claimed) - the
+  stop --time 3600`: its current stage finishes, nothing new is claimed) - the
   old web still serves, and what members start waits in the queue; **S3** the
   vhost's upstream is switched to the idle port: the live file must be this
   revision's HTTPS stage for the old port, and is replaced atomically by the
@@ -463,15 +483,23 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   closed, or those states cannot be put back, the new pair is left stopped and
   the parked pair parked (the receipt says so): run `rollback-app`, then rename
   the parked pair back. Migrations already applied are not reversed.
-- **Work in flight at the switch** (or the swap) is not frozen: a stage the
-  previous pair queued or left running is finished by the new pair under the
-  new rules, and nothing is sent that no member asked for. In blue/green the old
-  worker stops (S2) before the new web takes traffic (S3) and the new worker
-  starts only once it has exited (S4): no worker of the old code claims a stage
-  the new web queued, and the two workers never run together. What members
-  start between S2 and S4 waits in the queue (the old worker's remaining stage
-  time, about a second when idle, up to 1,800 s), inside the 120 minutes a
-  queued stage waits. Round r3's question stage is a reading stage like
+- **Work in flight at the switch** (or the swap) is not frozen: in blue/green
+  the old worker stops (S2) before the new web takes traffic (S3) and the new
+  worker starts only once it has exited (S4): no worker of the old code claims
+  a stage the new web queued, and the two workers never run together. What
+  members start between S2 and S4 waits in the queue (the old worker's
+  remaining stage time, about a second when idle, up to 3,600 s), inside the
+  120 minutes a queued stage waits. **The Fable coding build's worker runs no
+  stage of the pipeline before it**: it claims coding jobs only
+  (`studio.jobs.claim_next`), so a stage of an earlier kind the previous pair
+  left queued is never run - its document reads as an earlier review until a
+  member asks for it to be reviewed again, which retires that stage
+  (`studio.decisions.retry`) - and its startup sweep settles one left running
+  (cancelled, or unknown when it was sending). `app` reads these stages before
+  the switch and records them (`unrunnable_stages`), never refusing on them;
+  the install counts say how many were queued and running. What follows in
+  this item describes the pipeline before the Fable coding build, kept for the
+  record. Round r3's question stage is a reading stage like
   interpret and appraise: a question round the previous pair queued is
   finished by the new pair, which recomputes it from the stored question runs
   (a request whose identical request this document has a deciding outcome for
@@ -701,12 +729,14 @@ reinstatement: revoke that code's decision on this revision's web first. Then,
 without ever stopping the serving web first: **B2** the
 previous image's web starts as `cpt-studio-web-next` on the idle port and must
 answer `/health/` with ITS revision and serve its pages; **B3** this revision's
-worker is parked; **B4** every stage this revision's pair queued, ran or left
-resumable since it was created, and every open stage of a kind the previous
-worker does not run, is closed (as `rollback-app` closes them; let the queue
-drain first), the switch-back refusing to go on while the close names a
-record, and the list states the previous revision labels otherwise are put
-back - and before that close, the baseline and this revision's records are read
+worker is parked; **B4** every coding job still queued or running is closed
+(failed, its round stopped; one left sending recorded unknown) and every open
+stage of another kind the previous worker does not run is failed (as
+`rollback-app` closes them; let the queue drain first: **Switching back to the
+pipeline before the Fable coding build**, below), the switch-back refusing to
+go on while the close names a record, and the previous image derives the stored
+state of every encounter this revision coded with its own code (the put-back) -
+and before that close, the baseline and this revision's records are read
 again, so nothing is closed for a switch that cannot pass or would refuse;
 **B5** the upstream is switched to the idle port (`/health/` = the previous
 revision; a reload of the switched file that was asked for and then failed is
@@ -715,220 +745,177 @@ again and must be proven to run it before the previous web is drained and
 removed, and both webs are left running otherwise); **B6** this revision's web
 is drained, stopped and parked;
 **B7** the close runs again for what this revision's web started between B4 and
-the end of its drain - which also closes what a member started on the previous
-web during that window (**Known limits**) - what this revision made from event
-inventories is counted again (the receipt's `interpretation`, B4's count kept
-as `interpretation_at_b4`; read before the hold below, so a receipt that stops
-here carries it too), and the previous worker is held
-while it names a record (a member's answer or a chosen modifier named there
-was written since B4's own check found none standing - by this revision's web
-before it stopped taking traffic, or by the previous web after the switch when
-it is a revision since the core repair; the receipt says when, and that a
-revision before the core repair shows it wrongly; `app` again comes back to
-this revision); **B8** the previous worker starts; **B9** this
+the end of its drain (a coding job a member queued there; a stage a member
+started on the previous web in that window is of a kind the previous worker
+runs, and is left to it), what this revision coded and does not carry back is
+counted again (the receipt's `not_carried_back`, B4's count kept as
+`not_carried_back_at_b4`; read before the hold below, so a receipt that stops
+here carries it too), the states are put back again, and the previous worker is
+held while the close names a record (an unknown outcome, or a stage it cannot
+run still open: `app` again comes back to this revision); **B8** the previous
+worker starts; **B9** this
 revision's parked pair is removed (its image is kept). Before B5 any failure
 resumes this revision's pair (its worker started again, its list states
 recomputed with its own derivation, the previous web drained when it took
 traffic and removed); from B5 on the previous web serves and the receipt says
 what is left. A B4 close that was started and gave no answer (a Ctrl-C, or the
-180 s timeout while it reads every encounter after it has committed) may have
+180 s timeout while it recomputes states after it has committed) may have
 closed this revision's open stages: the receipt says so, never that nothing
-was closed - and that it may have set pending saves back
-(`context.rollback_reverted` rows since it started), which were not put back:
-ask those members to check their details. The S4 undo, `rollback-app` (in the
-keep layout and outside it) and the swap say the same of a close of theirs that
-raised or was interrupted (DECISIONS D247, F4); a `rollback-app` whose database
-refused before its close started says the close was not started, and that
-nothing was closed or set back. The availability record runs from B2 to the end.
+was closed, and says that it set no member's details back (this revision's
+close changes none). The S4 undo, `rollback-app` (in the keep layout and
+outside it) and the swap say the same of a close of theirs that raised or was
+interrupted (DECISIONS D247, F4); a `rollback-app` whose database refused
+before its close started says the close was not started, and that nothing was
+closed or set back. The availability record runs from B2 to the end.
 To come back to this revision, run `app` again.
 
-**Design v2: pass 2's stage and the pending updates (FINAL-V2 6.4; AMENDMENT-1
-9.4).** The appraise stage (pass 2) is closed like the interpret stage by
-every undo whose next worker does not run it (the old worker would end on
-`STAGES['appraise']`), and an older revision's `app` refuses while one is
-open. The same close names every encounter that reads an update of its codes
-pending (`update_pending`: saved details its current context does not carry
-yet, a current assessment on an earlier context, or a reconciled unknown
-document review while a reading is owed - A21's update, which no save
-started). This is a stated rollback limit like D59's below, **never a refusal**
-(a rollback is the incident path). When the next worker runs no `appraise` -
-it has no update, as the installed release has none - the close also **reverts
-each pending save's unapplied values**: under each encounter's row lock,
-`Encounter.user_values` is set back to its current context's member values
-for each differing field (every other key kept), one
-`context.rollback_reverted` audit row names the fields, and the close's
-answer (`reverted`) gives each field's saved and restored value; otherwise the
-earlier web's details panel shows the context's value while its save compares
-with `Encounter.user_values`, so a pending value entered again there would be
-"unchanged" and silently not saved. The receipt's note (`interpretation`)
-lists `update_pending`, `reverted` and the reading stages closed
-(`reading_closed`), and says what to do: tell those encounters' members that
-the codes the earlier web shows predate their change, and ask each member
-whose save was reverted to save it again there (the earlier web's own save
-then applies it); an A21 encounter reads on the earlier web as an outcome still
-being confirmed, with nothing pending. When the next worker runs `appraise`
-itself (an earlier design v2 revision), nothing is reverted, and nothing queues
-again a stage the close closed (that revision offers no retry and no resume of
-a reading stage the installer closed). What such an update then reads depends
-on the stage the close left, so the close also reads, as this revision's page
-reads it, what each pending update reads after the close (`update_reads`: its
-phase and the one action its page offers), and the note words each by it -
-for a stage closed before it started: paused with nothing to resume, until its
-member saves a change of a detail, which queues the update again (a reading or
-a document review); failed, where the member's "Try updating again" queues the
-failed stage again (an analysis or an assessment); stopped, where "Resume
-processing" runs it again (a second review) - and promises no action its page
-does not offer (DECISIONS D247, F2 and DQ1). An earlier design v2 revision
-reads an update by the same amendment (7.1 and 7.2).
+### Switching back to the pipeline before the Fable coding build
 
-**When the undo leaves this revision's pair to serve again, the reverted
-saves are put back first.** A switch-back undone before its switch (B4's close
-refused on a record, or B5 failed), an S4 undo or a `rollback-app` in the keep
-layout that leaves this revision's web serving, a failed swap that leaves
-neither pair running for the operator to choose, and a `rollback-app` that
-stopped after its close - a record named after the close ("Start them
-again"), or a removal that failed ("to keep this revision, rerun --phase
-app") - all closed the stages first, so their close may have set pending saves
-back for an earlier web that never served them. Before the message that leaves
-this revision's pair to serve again (DECISIONS D247, F1), the undo puts them
-back in this revision's image (`REAPPLY_REVERTED`; the receipt's `reapplied`),
-each under its row lock and only where nothing changed since the revert (its
-newest `context.rollback_reverted` row names its current context and exactly
-those fields, and its values are still the restored ones); each put back writes
-one `context.rollback_reapplied` audit row, and the encounter reads its update
-pending again, as before the close. In the same step the first reading stage
-that update owes is queued again, as its save queued it (D247 DQ1): a reading
-stage still queued is kept (`reapplied.coalesced`); a reading that failed before
-the close keeps showing that failure; otherwise the owed stage (interpret, or
-pass 2 of the read extraction) is queued for the member whose save it was,
-under the save's own key with the revert's audit row - once for that revert
-(`reapplied.requeued`). While it waits the update reads updating; a worker of
-this revision that claims it within the queue deadline (`jobs.QUEUE_DEADLINE`,
-60 minutes from the put-back) runs it, its doors sending the save's request at
-most once, and one that claims it later expires it without starting it, as it
-does any queued stage past its deadline - the update then reads stopped, with
-Resume. That is what happens where no worker of this revision runs at the
-put-back (the S4 keep layout, a swap with neither pair running, a
-`rollback-app` stopped after its close) and none is started within the
-deadline; a reading stage still queued has its deadline renewed, and the same
-holds for it. Where nothing could be queued
-(`reapplied.not_requeued`: no save of a member found, or a stage this worker
-does not run) the update reads paused, with nothing to resume, and the message
-says so. An encounter that changed since is left as it stands and named
-(`reapplied.not_reapplied`): ask its member to check the details. A put-back
-that fails, or does not say what it did, is said in the message with those
-encounters named: any of them may not have been put back
-(`context.rollback_reapplied` names each one that was), so ask those members to
-check their details; one that could not run at all (rollback-app interrupted
-during its removal) names them as not put back. A put-back that a Ctrl-C
-interrupts is recorded in the receipt (`reapplied.interrupted`, beside the
-close's own `reverted`) and said the same way - any of those encounters may not
-have been put back - and the phase still stops there. The switch-back's note is
-then marked `handed: false` and says no earlier web read the rows - it carries
-none of the instructions for the earlier web's members - unless nginx may have
-routed to the previous web before the undo settled the vhost back (B5 failed
-after the reload was asked for): then the note says that web may have served
-from the switch until the settle (`served`), names the encounters with an
-update pending (`update_pending`) - an A21 encounter among them worded apart,
-since no change of its member was pending - and asks you to tell those members
-and check any decision or export made there in that window (D247, F5). (A way
-back that does reach the earlier web - the switch-back completed, an S4 undo or
-`rollback-app` that switched back, a swap that restored the old pair - keeps the
-revert, and its message or its note says what the close set back; and an undo
-left half way, where nginx may route to either web, puts nothing back: its
-message names those encounters as not put back, so whichever web serves next,
-ask those members to save the change again there.)
+The pair a `switch-back` (or the failure path of `app`) returns to from this
+revision is e426c747c7b7's - the pipeline before the Fable coding build. Its
+worker has no coding stage, its web reads none of migration 0016's four tables,
+and its state derivation knows none of this revision's state names. What the
+undo does about each, in this revision's image unless said otherwise:
 
-**The rollback limit for new-path assessments (DECISIONS D59).** After a
-switch-back the previous revision reads a new-path assessment through the stub
-record this revision stores beside its event coding, which adds no base hold.
-So a reinstatement made THERE, on the previous web, on a new-path assessment
-can leave its diagnostic base code approvable beside the therapeutic code (a
-reinstated 45385 beside 45378, which this revision holds), and its approved
-export would bill both. Before reviewing a new-path encounter on the previous
-web, re-check it there: a context save reads it again with the previous
-reader. The receipt's interpretation note (`interpretation`, also in the
-summary) counts the new-path encounters whose current assessment holds an
-excluded code a reviewer can reinstate - the ones exposed - and names them
-(`reinstatable`).
+- **(a) Coding jobs are closed before the earlier worker starts.** The close
+  (`CLOSE_STAGES`, B4 and again at B7, once this revision's web is drained; the
+  same close in `rollback-app` and the app phase's own undos) takes every job of
+  kind `code` still queued or running - the earlier worker claims a job of any
+  kind and would end on `STAGES['code']` - and closes it as this revision's own
+  worker closes a stage it stopped (`studio.jobs.mark_stale`'s rule): for one
+  that sent nothing the job is **failed** with the installer's note and its
+  round **cancelled**, so the round reads stopped and a Resume continues it
+  (reusing every read it already paid for) whenever this revision serves again;
+  one whose send was in flight has that request recorded **unknown** (sent, when
+  it called a vendor; never sent again), the job unknown and its round failed
+  as unknown; a reservation never sent is recorded not sent, and so is any
+  coding run still in flight whose round has no open job (an orphan its stage
+  left). No coding job is left cancelled as its revision's latest stage (a
+  member's Stop): the earlier revision counts such a job as a stage it cannot
+  run, and its installer's `app` refuses on one, so it is failed with the note
+  too, its round left stopped. The rollback rehearsal below found exactly that
+  one on e426c747c7b7's own code. A stage of another
+  kind the next worker does not run (only when the next worker cannot be asked:
+  every kind but `COMMON_STAGE_KINDS`) is failed with the installer's note, as
+  before. Nothing else is closed: this revision queues no stage but a coding
+  job, so a stage of the earlier pipeline the earlier worker runs is left to it.
+  Read after the close, a stage the next worker cannot run that is still open
+  (a coding job a member queued on this revision's web after B4's close) is a
+  record (`open_stage`) that holds the earlier worker until B7's close has
+  taken it; `app` again comes back to this revision.
+- **(b) The four tables are left exactly as they are.** No row of
+  `CodingRound`, `CodingAnswer`, `CodeDecision` or `ExportArtifact` is written,
+  changed or removed by any undo, and no other row is removed: the close only
+  settles jobs, rounds and provider runs that were still open.
+- **(c) The earlier pair derives the state of every encounter this revision
+  coded, with its own code.** Their stored `Encounter.state` is this revision's
+  derivation (`awaiting_answer`, `needs_review`, `ready` and `failed`, which the
+  earlier code does not know, or `processing`, `stopped`, `reviewed` and
+  `no_codes`, which it knows with another meaning). The close names them in its
+  `relabel` - every encounter with a coding round, and every one whose earlier
+  stage this revision's worker settled - and `put_back_states` runs
+  `PUT_BACK_STATES` for them **in the earlier image**: its own
+  `studio.review.refresh_state` (in an image of this design, `studio.state`).
+  The receipt's `states_put_back` names each encounter whose state changed (as
+  read, as derived). With no image to ask (`rollback-app` with no pair parked)
+  nothing is put back (`put_back: false`): the revision installed next
+  recomputes every stored state in its own `app` (every revision since 057a7d39
+  does; 057a7d39 itself is no rollback this revision supports).
+- **(d) Approvals and answers made in this revision are not carried back - an
+  accepted loss of a rollback, declared before it.** The earlier revision reads
+  none of the four tables, so it shows no code, answer, decision or export of
+  this revision: an encounter of its own that a member had reviewed again here
+  shows its earlier review, and one created here holds no reading the earlier
+  revision made (it shows it by its own derivation and processes it only if the
+  document is uploaded again there). The receipt's `not_carried_back`
+  (`CODING_MADE`, read in this revision's image; also in the summary) counts the
+  encounters coded (`created` here, and of the earlier review coded again), the
+  rounds, the answers, the code decisions by action, the codes approved now and
+  the exports. It never refuses: a count that cannot be read is said so. **The
+  install declaration of a revision of this design must state this loss**
+  (DECISIONS D351-D353 replace the pipeline; class b of the standing
+  authority): after a switch-back the members redo on the earlier web the
+  reviews they made here, and a switch-back that follows real use loses them
+  from view (the rows stay, for this revision's next `app`).
 
-**Provider holds (AMENDMENT-1 7.3, A16 and A20).** Corti, Astra and Fable each
-have an installation-wide hold, set by an authentication, permission, payment
-or quota refusal of that provider; while it stands no request of that provider
-is sent by any encounter (a stored answer is still reused). The app receipt's
-`install_counts.holds` lists every standing one. An operator reads them with
-`manage provider_hold --status` (or no option; nothing is written: a provider
-with none standing reads "no installation-wide hold", and a request that failed
-before is still held against its identical request, which it does not list)
-and ends
-every standing hold of one provider with `manage provider_hold --release
-<corti|astra|fable> --username <operator> --note-file <path>` (or `--note
-"..."`): the operator must hold an operator grant no revocation ended, as for
-`interpreter_hold`; the hold rows stay; the next member act (a Resume, or a
-save that queues the stage) then sends the held request once, and a refusal
-again sets a new hold.
+**The rollback rehearsal (2026-11-20).** On a disposable database migrated to
+0016, synthetic rows of this design - a coded encounter with a code approved,
+one with a question open, one queued, one failed, one a member stopped - were
+closed by this revision's `CLOSE_STAGES` with B4's parameters; then
+e426c747c7b7's own tree (`git archive`, run with the same Python requirements)
+ran this installer's `PUT_BACK_STATES` and `UNRUNNABLE_STAGES` and read each
+encounter as its web reads it. Its `studio.review.refresh_state` derived every
+encounter created here as `processing`, with nothing claimable and no Resume
+offered (it never processes them: (d)); its own stage read first counted the
+stopped coding job as a stage it cannot run - which is why the close now fails
+it - and, once the close did, found none. Synthetic rows only; the database was
+dropped. A rehearsal on a restored copy of live, before an install, is the
+operator's (it needs the earlier image and the live rows' shapes).
 
-**The D15 rollback test (design v2).** `ops/rollback_check.py` runs the
-switch-back's own scripts on a test instance's database (never live) and is
-made on v2 records: it counts, before the switch-back, each record kind
-FINAL-V2 6.4 names (an interpreted and appraised upload; a held, an excluded
-and a reinstated code; an approved code with a modifier and its export; a
-member answer; a second review; an interpreter hold; a queued interpret and a
-queued appraise job; a pass-2 refusal; an unhealthy appraisal; a held code
-whose item is a new fact) - counting the assessments of both engine versions
-and the appraisal runs of every interpreter provider (AMENDMENT-2 8.5), and, of
-a Fable candidate, its new versions' rows too (an inventory of
-`gemini-events@3/appraisal@2`, a `cpt-studio-events@3` assessment, a run of
-its adapter, an interpreter hold with reason `declined`), and, of a candidate
-whose installer knows round r3's question stage, its records (a queued or
-running question job, a question run, a code an established answer released;
-the test instance makes them by replaying frozen Fable streams, D322 (6)) - and
-assertion 6 reads the question stages as it reads the interpret and appraise
-ones - and fails its
-assertion 7 on any missing that a test instance makes through the product's
-own flows (replay, a free live outcome such as a refused key, or the
-scenario's own steps); a kind only a paid or nondeterministic provider outcome
-can make - the `declined` hold, which replay never records and no free live
-outcome is - is counted and reported in the transcript, never required
-(DECISIONS D294 F1); with
-`--declared`'s `update` (`pending_before_analyze`, `pending_after_analyze`,
-`completed`, `a21`, optionally `resave: {encounter, field, value}`) its
-assertion 8 judges AMENDMENT-1's U17 - the pending encounters named, exactly
-the pending-before-analyze ones reverted with one audit row each, the note
-listing them, and the value saved again on the previous web taking effect
-there. The value is saved as a member saves it there: with the row that
-encounter's own details panel offers for the field, through `POST
-/api/encounters/<id>/details` - the save whose comparison with
-`Encounter.user_values` the revert exists for (the previous release's
-`/context` makes a new context whatever they hold, so a save there would pass
-whether or not the revert ran). Build that encounter so that its panel asks
-the field (an open setting or billing question, or the date row); a panel
-without the row fails assertion 8, as does a save answered 200 with nothing
-saved. Its transcript (`d15.json`, `D15-SUMMARY.txt`) is attached to the
-install declaration. `python3 -B cpt-studio/ops/rollback_check.py counts --db
-<restored dump> --candidate <tag> --out <new dir> --db-env-file <0600 file>`
-reads the candidate's `V1_ROWS` and `INSTALL_COUNTS` into `counts.json`: the
-figures the owner is told before the install. Live has none of 0014's and
-0015's tables, and a restored dump is not migrated, so the command never reads
-the dump as it stands and never writes it: it copies it to `<db>_counts`,
-migrates the copy with the candidate's own migrations (as the install's
-migrate phase migrates live before the app phase reads), and reads the copy in
-read-only sessions. A copy that exists, or a name too long for it, refuses
-before anything is written; a migration or a read that fails is written into
-`counts.json` (`failed`) and exits 1, as does a count that was not read. Drop
-the copy once the counts are reported: it holds the dump's rows.
+**What still refuses.** `undo_hazards` (`UNDO_HAZARDS_READ`) names one reason:
+**unknown** - a coding run whose outcome is still unknown and not reconciled.
+The earlier revision reads every unknown run of an encounter as an outcome to
+reconcile on its own console, and its reconcile allows one new attempt by its
+own rules (a paid Corti predict for an encounter of its own with a context),
+for a request it never made; reconcile it on this revision's operator console
+first. A switch-back reads it only on encounters with a record created since
+this revision's pair (`touched_since`, `TOUCHED_SINCE_READ`, the four tables
+included); `rollback-app` reads it everywhere. None of the earlier pipeline's
+reasons (below) can be this revision's record: it writes no assessment,
+proposal, clarification, decision, member's answer, context or event inventory.
+`rollback-app` checks only what this revision recorded: a rollback past
+e426c747c7b7 goes back through it (`switch-back`), whose own `rollback-app`
+reads its records.
 
-**The differential check of "what changed" (AMENDMENT-1 11.3).** The operator
-view (`GET /ops/api/encounters/<id>`) serves the stored rows AMENDMENT-1 6.2
-reads as `what_changed_rows` (schema `cpt-studio-what-changed-rows@1`;
-DECISIONS D247, O22), beside two product values it never derives (`fresh`, and
-each proposal's `other_reason`). `python3 cpt-studio/ops/verification/what_changed.py
---operator OP.json --customer CUST.json` computes "what changed" from those rows,
-written from 6.2 alone, and compares it with the page's (`GET
-/api/encounters/<id>` as a member reads it): exit 0 when they agree, 1 when they
-differ or a part could not be judged, 2 when an input is not usable.
+**Holds.** An authentication, permission, payment or quota refusal of a coding
+send sets an `InterpreterHold` (the build specification, 3.3), released on this
+revision's operator console. The earlier revision's interpreter reads the same
+table: a hold this revision set also pauses its readings, which is right - it
+names the same Anthropic account - and it is released there with `manage
+interpreter_hold`.
+
+### Which image runs each in-image script
+
+Each script runs by `manage shell -c` in a one-shot container (`app_script`),
+or as named. The forward install runs only this revision's image; an undo runs
+this revision's image for everything it reads of this revision's records, and
+the earlier image only for what that pair reads of its own.
+
+| script | image | runs in | what the Fable coding build did |
+|---|---|---|---|
+| `INSTALL_COUNTS` | this revision's (new) | `app`, after migrate, before the switch | rewritten: encounters (and those coded), jobs by kind and state, provider runs by purpose and state, unknown and in-flight runs, the four tables, standing holds; never a refusal |
+| `V1_ROWS` | this revision's | `app`, before the switch | kept (reads legacy rows only; models kept) |
+| `UNRUNNABLE_STAGES` | this revision's, and the next worker's (`stage_kinds_of`) | `app`; every undo | body kept (every revision's `jobs.STAGES`); `app` records it and no longer refuses on it |
+| `RECOMPUTE_STATES` | this revision's | `app` S6 and the swap; an undo that keeps this revision | rewritten: `studio.state.refresh` for encounters with a coding round, every other state left |
+| `UNDO_HAZARDS_READ`, `TOUCHED_SINCE_READ` | this revision's | `switch-back`, `rollback-app`, the app undos | rewritten: `unknown` coding runs only; the four tables among the records touched |
+| `CLOSE_STAGES` | this revision's (the revision undone) | B4 and B7, `rollback-app`, the app undos | rewritten: (a) above; its answer's `relabel` and `hazards` |
+| `CODING_MADE` (was `INTERPRETATION_MADE`) | this revision's | every undo that hands the rows on | new: (d) above |
+| `PUT_BACK_STATES` (was `RECOMPUTE_STATES` with encounters) | the next pair's (e426c747c7b7's) | B4 and B7, `rollback-app`, the app undos | new: (c) above, that image's own `studio.review.refresh_state` (`studio.state` in an image of this design) |
+| `TARGET_MODEL_READS` | the previous pair's | `switch-back` | kept (every revision's `jobs` and `models`) |
+| `CREDENTIALS_CHECK`, `PARTICIPANT_CREDENTIALS_CHECKS`, `INTERPRETER_CREDENTIALS_CHECK` | the previous pair's | `switch-back` with that mode live | kept: Corti, the participants and the interpreter exist only there; never run in this revision's image (`app` starts them disabled) |
+| `CODING_CREDENTIALS_CHECK` | this revision's | `app --coding-mode live` | kept |
+| `CONVERSION_GATE` | the image just built | `image` | new: the conversion gate |
+| `LICENSE_NOTE_FIX`, `OPERATOR_ACCOUNTS`, `OPERATOR_CHECK` | this revision's | `license-note`, `operators` | kept |
+| `INSTALLED_STATES`, `REAPPLY_REVERTED`, `UPDATE_PENDING` | - | - | removed: 057a7d39's derivation and design v2's update put-back need the earlier pipeline's modules, and this revision's close sets nothing back |
+
+The ops tools: `ops/scan_customer.py` (this host; the shared contract and
+denylist reader, which the Django suite's API tests load) was adapted to the
+Fable coding build's routes. The download verifier, the D15 rollback runtime
+test of the Gemini migration, the GI round-4 proof harness and the differential
+"what changed" check read the earlier pipeline's records, exports and code and
+were removed with their tests: the walk (`ops/walk.cjs`) scans every customer
+response, DOM text and download for the denylist and checks the exports.
+`ops/verify_passages.py` runs on the operator's host (no image) and needs pypdf,
+which the build removes from the image's requirements.
 
 ## Reinstalling an older revision
+
+The Fable coding build's own reasons are above (**What still refuses**): an
+unknown coding outcome, and a stage the next worker cannot run still open after
+the close. The reasons below are the earlier pipeline's - what its records
+would make a still older revision do wrongly - which this revision neither
+writes nor reads (its image has none of the modules they need); they are kept
+for the record of the revisions that check them.
 
 An older revision's installer does not close a newer revision's stages, and its
 worker and web read the newer revision's records under their own rules. The
@@ -1264,22 +1251,26 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   values under 8 characters (they would match by chance), nor a value
   transformed (encoded, or partly printed). It reads only the file of the
   holder whose output it scans (in an `app`, the coder's Anthropic file).
-- The worker's stop timeout (1,800 s; round r3, DECISIONS D322 (4)) covers
-  every stage's deadline - a participant phase's whole tool loop (540 s: at
-  most four exchanges; one send's deadline is 330 s), a reading pass's 1,380
-  s, its 1,320 s send included, and the question stage's 1,588 s, a round of
-  question requests sent concurrently, each within 1,408 s (128,000 output
-  tokens at 95 tokens a second, below the slowest measured max-effort rate of
-  101 tokens a second, plus 60 s), one wave of them at the installed figures
-  (DECISIONS D325 (3); a worker asked to stop starts no further wave of a
-  round) - and is above every stale-stage threshold
-  (`STALE_RUNNING_SECONDS`, 600 s; the reading passes' 1,440 s and 1,560 s; the
-  question stage's 1,768 s): a stage still running when the 1,800 s pass is
-  killed with the worker and settled as any stage cut short (the stale-stage
-  sweep, or an undo's close). Parking or removing a worker that is inside a
-  stage waits up to that long, so a stop in `app` or `rollback-app` can take
-  up to 30 minutes: let the queue drain (or Stop the encounters) first to
-  avoid the wait. In blue/green the site stays
+- The worker's stop timeout (3,600 s; the Fable coding build) covers its one
+  stage: the document's preparation (a Word file's conversion, at most 60 s in
+  its bounded child), the reader's send and the checker's, one after the other,
+  each a stream of up to 96,000 output tokens at effort max (about 1,000 s at
+  the slowest rate measured), on each of the worker's
+  `CPT_STUDIO_CONCURRENT_DOCUMENTS` threads at once - a worker asked to stop
+  lets each thread finish its job and claims nothing new. It is the coding
+  job's stale-stage threshold too (`studio.jobs.CODE_STALE_SECONDS`): a stage
+  still running when the 3,600 s pass is killed with the worker and settled as
+  any stage cut short (a send in flight recorded unknown, never sent again; the
+  stale sweep, or an undo's close). Parking or removing a worker that is inside a
+  stage waits up to that long, so a stop in `app`, `switch-back` or
+  `rollback-app` can take
+  up to 60 minutes: let the queue drain (or Stop the encounters) first to
+  avoid the wait. A worker of the pipeline before it (parked on the way in, or
+  started by a `switch-back`) is stopped the same way and exits as soon as its
+  own stage (1,588 s at the longest) ends. Raising the bound from round r3's
+  1,800 s changed nothing else the installer times: the subprocess waiting on
+  `docker stop` waits the bound plus 60 s, the availability record runs for as
+  long as the switch takes, and no phase has a time limit of its own. In blue/green the site stays
   served meanwhile, and that wait is the processing pause: what members start
   is accepted and shown as queued.
 - The coding stage's two figures (the build specification, sections 3.1 and
@@ -1311,7 +1302,7 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
      new API until it is reloaded; the new API's response shapes must stay
      tolerant of it for one release.
   4. Processing pauses for the old worker's remaining stage time (up to
-     1,800 s; about a second when idle) plus the switch; uploads are accepted and
+     3,600 s; about a second when idle) plus the switch; uploads are accepted and
      shown as queued.
   5. `systemctl reload nginx` is host-global. It is graceful, and the switch's
      verification requires co-tenant routing and app.quillmd.com unchanged
@@ -1326,10 +1317,14 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
      `quillmd-cpt` under "must not change".
   7. During the drain the new web lists the stored states as the old revision
      derived them; they are recomputed once the old web has stopped.
-  8. The undo of S3 and S4, and `switch-back`'s second close, close what was
-     started in their window whichever web started it (stages carry no record
-     of the web that queued them): a member's upload in those seconds or
-     minutes is failed with the installer's note and must be started again.
+  8. The undo of S3 and S4, and `switch-back`'s second close, close every
+     coding job still open, whichever web queued it (a job carries no record
+     of the web that queued it): a member's upload on this revision's web in
+     those seconds or minutes is closed with the installer's note - its round
+     reads stopped, and a Resume continues it once this revision serves again.
+     A stage a member started on the earlier web in that window is of a kind
+     the earlier worker runs, and is left to it (before the Fable coding build
+     every stage queued in the window was failed and had to be started again).
      Nothing is sent wrongly; over-closing is the safe side.
   9. An installer older than this one knows only port 9150: its `app` stops the
      web and starts the next one on 9150, and its `verify` expects the 9150

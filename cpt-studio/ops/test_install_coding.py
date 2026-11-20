@@ -9,10 +9,13 @@ The app phase itself (its loader check before migrate, the pair it starts) is te
 
 Run from cpt-studio/:  python3 -B -m unittest discover -s ops -p 'test_*.py' -v
 """
+import base64
 import io
+import json
 import re
 import sys
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -307,6 +310,61 @@ class ImageCheckTests(unittest.TestCase):
                 install.image_anthropic(SMOKE, IMAGE)
             self.assertIn('does not import anthropic 2.11.0', str(caught.exception))
 
+    def gate_answer(self, found):
+        return (install.CONVERSION_ANSWER + json.dumps(found) + '\n').encode()
+
+    def test_the_conversion_gate_converts_a_synthetic_word_file_with_the_workers_own_code_and_constraints(self):
+        found = {'head': '%PDF-', 'bytes': 8123, 'sha256': 'e' * 64}
+        fake, calls = self.docker(b'some import noise\n' + self.gate_answer(found))
+        with mock.patch.object(install, 'docker', fake):
+            self.assertEqual(install.image_conversion(IMAGE), found)
+        (args, kwargs), = calls
+        self.assertEqual(kwargs, {'check': False, 'timeout': 180})
+        source = args[-1]
+        self.assertEqual(args[:-1], ['run', '--rm', '--pull=never', '--network', 'none', '--no-healthcheck',
+                                     *install.hardening(*install.WORKER_LIMITS), '-e',
+                                     'CPT_STUDIO_SECRET_KEY=image-smoke-check-only', IMAGE, 'manage', 'shell', '-c'])
+        # the worker's runtime: its user, a read-only root, /tmp a tmpfs, its memory and pids, and no network
+        for flag in ('--read-only', f'{install.APP_UID}:{install.APP_UID}', '--network', 'none', '1536m'):
+            self.assertIn(flag, args)
+        self.assertTrue(any(arg.startswith('/tmp:rw,noexec') for arg in args))
+        self.assertEqual(install.WORKER_LIMITS, ('1536m', 256, '1g'))  # service_args starts the worker with them
+        self.assertIn('*hardening(*WORKER_LIMITS)', (APP_ROOT / 'ops' / 'install.py').read_text(encoding='utf-8'))
+        # the application's own entry point, the one the worker converts with, on the synthetic document built here
+        self.assertIn('from studio.fable import document', source)
+        self.assertIn('document.convert_docx(base64.b64decode(DOCX))', source)
+        namespace = {}
+        exec(source.split('\n', 2)[0] + '\n' + source.split('\n', 2)[1], namespace)  # DOCX and ANSWER only
+        self.assertEqual(base64.b64decode(namespace['DOCX']), install.synthetic_docx())
+        self.assertEqual(namespace['ANSWER'], install.CONVERSION_ANSWER)
+
+    def test_the_synthetic_word_file_is_a_minimal_docx_holding_one_paragraph_and_always_the_same_bytes(self):
+        data = install.synthetic_docx()
+        self.assertEqual(data, install.synthetic_docx())
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            self.assertEqual(archive.namelist(), ['[Content_Types].xml', '_rels/.rels', 'word/document.xml'])
+            body = archive.read('word/document.xml').decode()
+        self.assertIn(f'<w:t>{install.CONVERSION_TEXT}</w:t>', body)
+        self.assertIn('SYNTHETIC', install.CONVERSION_TEXT)
+        with self.assertRaises(ValueError):
+            install.synthetic_docx('a <tag> & more')
+
+    def test_a_conversion_that_fails_or_answers_no_pdf_refuses_the_image(self):
+        cases = ((b'', 1), (b'Traceback ...\nstudio.fable.document.DocumentError: The Word file could not be opened.\n', 1),
+                 (self.gate_answer({'head': '<html', 'bytes': 900, 'sha256': 'e' * 64}), 0),
+                 (self.gate_answer({'head': '%PDF-', 'bytes': 5, 'sha256': 'e' * 64}), 0),
+                 (self.gate_answer({'head': '%PDF-', 'bytes': 800, 'sha256': 'nope'}), 0),
+                 (self.gate_answer({'head': '%PDF-', 'bytes': 800, 'sha256': 'e' * 64}) * 2, 0),
+                 (install.CONVERSION_ANSWER.encode() + b'not json\n', 0),
+                 (self.gate_answer({'head': '%PDF-', 'bytes': 800, 'sha256': 'e' * 64}), 1))
+        for stdout, code in cases:
+            fake, _ = self.docker(stdout, b'soffice exited with 1\n', code)
+            with self.subTest(stdout=stdout[:40], code=code), mock.patch.object(install, 'docker', fake), \
+                    self.assertRaises(install.InstallError) as caught:
+                install.image_conversion(IMAGE)
+            self.assertIn('cannot convert a Word document to PDF', str(caught.exception))
+            self.assertIn(b'soffice exited with 1', caught.exception.output)
+
     def test_the_image_phase_runs_no_ocr_and_no_pdf_reading(self):
         source = (APP_ROOT / 'ops' / 'install.py').read_text(encoding='utf-8')
         for gone in ('tesseract', 'pdftoppm', 'PDF_GATE', 'pdf_reading', 'extract_document'):
@@ -328,6 +386,55 @@ class ImageCheckTests(unittest.TestCase):
 
 
 # --- arguments ---------------------------------------------------------------------------------------------------------
+
+class StopBoundTests(unittest.TestCase):
+    def test_the_worker_is_given_the_coding_jobs_stale_threshold_to_stop(self):
+        # two max-effort sends and a conversion can outlast round r3's 1,800 s: the worker's bound is the age at which
+        # the stale sweep takes a running coding job for a dead worker's (studio.jobs.CODE_STALE_SECONDS)
+        self.assertEqual(install.STOP_SECONDS, {'web': 30, 'worker': 3600})
+        jobs_source = (APP_ROOT / 'studio' / 'jobs.py').read_text(encoding='utf-8')
+        self.assertIn(f"CODE_STALE_SECONDS = {install.STOP_SECONDS['worker']}\n", jobs_source)
+        argv = install.service_args('worker', IMAGE, REVISION, 'disabled', '')
+        self.assertEqual(argv[argv.index('--stop-timeout') + 1], '3600')
+
+    def test_the_door_ceiling_is_read_as_the_door_reads_it(self):
+        for value, ceiling in (('', 3600), ('abc', 3600), ('0', 3600), ('00', 3600), ('-5', 3600), ('9000', 9000),
+                               ('010', 10), ('\u0669\u0660\u0660\u0660', 3600), (' 9000', 3600)):
+            with self.subTest(value=value):
+                self.assertEqual(install.door_ceiling({'RULED_ACT_MAX_SECS': value}), ceiling)
+        self.assertEqual(install.door_ceiling({}), install.DOOR_CEILING_DEFAULT)
+
+    def test_a_phase_that_stops_a_worker_refuses_a_ceiling_it_could_outrun(self):
+        needed = 2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN
+        self.assertEqual(needed, 9000)
+        for phase in install.WORKER_PHASES:
+            with self.subTest(phase=phase), self.assertRaises(install.InstallError) as caught:
+                install.check_door_ceiling({}, phase)
+            self.assertIn(f'RULED_ACT_MAX_SECS={needed} or more', str(caught.exception))
+            self.assertIn('nothing was changed', str(caught.exception))
+            self.assertEqual(install.check_door_ceiling({'RULED_ACT_MAX_SECS': str(needed)}, phase),
+                             {'ceiling': needed, 'needed': needed})
+        for phase in ('preflight', 'image', 'verify', 'passages'):
+            self.assertEqual(install.check_door_ceiling({}, phase), {'ceiling': 3600, 'needed': 0})
+
+    def test_main_refuses_before_the_phase_runs_and_says_so_in_the_receipt(self):
+        import os
+        import tempfile
+        receipts = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__('shutil').rmtree(receipts, ignore_errors=True))
+        app = mock.Mock(side_effect=AssertionError('the phase ran'))
+        stdout = io.StringIO()
+        with mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': '3600'}), \
+                mock.patch.dict(install.PHASES, {'app': app}), \
+                mock.patch.object(install, 'check_door', return_value={'declaration_commit': 'b' * 40}), \
+                mock.patch.object(install, 'check_tree', side_effect=AssertionError('the tree was read')), \
+                mock.patch('sys.stdout', stdout):
+            code = install.main(['--phase', 'app', '--revision', REVISION, '--receipts', str(receipts),
+                                 '--coding-mode', 'disabled'])
+        self.assertEqual(code, 1)
+        self.assertFalse(app.called)
+        self.assertIn('RULED_ACT_MAX_SECS=9000 or more', stdout.getvalue())
+
 
 class CodingArgumentTests(unittest.TestCase):
     BASE = ['--revision', REVISION, '--receipts', '/tmp/receipts']
