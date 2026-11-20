@@ -133,14 +133,25 @@ def succeeded(msg):
     return fable_client.message_outcome(msg, sent=True, latency_ms=1234.5, request_id='req_synthetic')
 
 
+COUNTED = 4_000  # a FakeCoder's free token count of any request, unless it is given another
+
+
 class FakeCoder:
     """Stands in for the live coder: ``reader`` and ``checker`` are Outcomes, or callables of the request returning
-    one. Records every call as (role, request)."""
+    one. Records every call as (role, request). Like the live coder it counts a request's input tokens before the send
+    (``counted``: the count, None for a count that failed, or an exception the count raises); records every request it
+    counted in ``counts``."""
     mode, endpoint = 'test', fable_client.ENDPOINT
 
-    def __init__(self, reader=None, checker=None):
+    def __init__(self, reader=None, checker=None, counted=COUNTED):
         self.answers = {'reader': reader, 'checker': checker}
-        self.calls = []
+        self.calls, self.counted, self.counts = [], counted, []
+
+    def count_input_tokens(self, request):
+        self.counts.append(request)
+        if isinstance(self.counted, BaseException):
+            raise self.counted
+        return self.counted
 
     def send(self, request):
         role = 'reader' if request.stored['system'] == prompts.READER_SYSTEM else 'checker'

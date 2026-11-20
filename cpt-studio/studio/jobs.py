@@ -6,10 +6,12 @@ the CHECKER send -> combine (studio.fable.result) -> the round done -> the encou
 The worker is one process running CPT_STUDIO_CONCURRENT_DOCUMENTS threads, each claiming queued jobs with
 SELECT ... FOR UPDATE SKIP LOCKED on its own database connection. One chain per encounter: every member action that
 queues a job holds the encounter row lock and refuses while one is queued or running. Every send is checked against
-the document's spending ceiling, takes one of N provider slot locks without waiting (none free: the job is queued again)
-and is reserved in the database before any network I/O; a member's Stop is observed before each send. Nothing is ever
-sent again automatically: a round reuses a read it already paid for, and an outcome that may have reached the vendor is
-recorded unknown, for an operator's reconcile or a human retry.
+the document's spending ceiling - its worst case counts every attempt it may make, its server-side fallback's included,
+from the API's free token count, and with no count nothing is sent -, takes one of N provider slots without waiting
+(none free: the job is queued again) and is reserved in the database before any network I/O; a member's Stop is
+observed before each send. Nothing is ever sent again automatically: a round reuses a read it already paid for; an
+outcome that may have reached the vendor is recorded unknown, and Resume and Retry of its round wait for an operator's
+reconcile; a stage that died is settled as it would have settled itself, never cancelled past a send it made.
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ from types import SimpleNamespace
 
 from django.conf import settings
 from django.db import IntegrityError, close_old_connections, connection, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from . import audit, models, state
@@ -59,6 +62,8 @@ RECONCILE_NOTE_CHARS = 12
 STOPPED_MESSAGE = 'Stopped by a workspace member; nothing more was sent.'
 BUSY_MESSAGE = 'Wait for processing to finish (or stop it) first.'
 RETRY_NOTHING = 'There is no failed coding to try again.'
+# Resume or Retry of a round with a send whose outcome is not known and no operator's reconcile yet (FIX-SPEC 4).
+RECONCILE_FIRST = 'Whether the last coding finished is not known yet. It can run again once it has been checked.'
 FAILURE_TEXT = {
     UNREADABLE: 'The coding result could not be read. Try again.',
     CEILING: 'This document reached its spending limit.',
@@ -68,7 +73,8 @@ FAILURE_TEXT = {
     DOCUMENT: 'This document could not be read.',
     DECLINED: 'This document could not be coded.',
     TOO_LONG: 'The coding result was too long to finish. Try again, or split the document.',
-    UNKNOWN: 'Coding was interrupted, and whether it finished is not known. Try again.',
+    UNKNOWN: 'Coding was interrupted, and whether it finished is not known. It can be tried again once it has been '
+             'checked.',
     FAILED: 'Coding did not finish. Try again.',
     UNAVAILABLE: 'Coding is not available right now.',
     STORAGE: fable_document.STORAGE_TEXT,
@@ -183,15 +189,33 @@ def stop_encounter(encounter, user):
     return stopped
 
 
+def awaiting_reconcile(round_) -> bool:
+    """Whether a send of ``round_`` may have reached the vendor with no outcome known and no operator's reconcile yet: an
+    UNKNOWN run not reconciled, or a run still marked sending whose stage no longer records it. Resume and Retry of the
+    round wait for the reconcile (FIX-SPEC 4), so that read is not sent again, by anyone, before someone has looked."""
+    return Run.objects.filter(purpose__in=PURPOSES, scope__round=str(round_.pk)).filter(
+        Q(state=Run.SENDING) | Q(state=Run.UNKNOWN, reconciled_at__isnull=True)).exists()
+
+
 def resume(encounter, user):
     """Queue the latest round again when it was cancelled (a Stop, an expired queue, a worker that stopped): a fresh
-    job for the same round, which reuses any read the round already has. None when there is nothing to resume."""
+    job for the same round, which reuses any read the round already has. None when there is nothing to resume - and
+    when a send of the round failed though the round was closed as stopped (by an earlier close, say): the round then
+    ends failed with that send's kind, and its read is not sent again. Refused while a send of the round awaits an
+    operator's reconcile (awaiting_reconcile)."""
     with transaction.atomic():
         locked = _locked(encounter)
         if busy(locked):
             raise Refused(BUSY_MESSAGE)
         round_ = latest_round(locked)
         if round_ is None or round_.state not in (Round.CANCELLED, Round.QUEUED):
+            return None
+        if awaiting_reconcile(round_):
+            raise Refused(RECONCILE_FIRST)
+        failed = abandoned_outcome(round_)
+        if failed:
+            _update_round(round_, **_abandoned_fields(round_, failed))
+            state.refresh(locked)
             return None
         clear_stop(locked)
         Round.objects.filter(pk=round_.pk).update(state=Round.QUEUED, error='', failure_kind='', finished_at=None)
@@ -203,7 +227,8 @@ def resume(encounter, user):
 
 
 def retry(encounter, user):
-    """A human retry of a failed round: a new round of the current revision (trigger retry), read afresh."""
+    """A human retry of a failed round: a new round of the current revision (trigger retry), read afresh. Refused while
+    a send of the failed round awaits an operator's reconcile (awaiting_reconcile)."""
     with transaction.atomic():
         locked = _locked(encounter)
         if busy(locked):
@@ -211,12 +236,15 @@ def retry(encounter, user):
         round_ = latest_round(locked)
         if round_ is None or round_.state != Round.FAILED:
             raise Refused(RETRY_NOTHING)
+        if awaiting_reconcile(round_):
+            raise Refused(RECONCILE_FIRST)
         return start_round(locked, locked.current_revision or round_.revision, Round.RETRY, user)
 
 
 def reconcile(encounter, run, user, note):
-    """An operator's reconciliation of an UNKNOWN run: who looked, when and what they found. It queues nothing (a human
-    retry starts a new round). True when recorded, None when ``run`` is not an unreconciled unknown outcome."""
+    """An operator's reconciliation of an UNKNOWN run: who looked, when and what they found. It queues nothing; once it
+    is recorded, a Resume or a human retry of the run's round may send again. True when recorded, None when ``run`` is
+    not an unreconciled unknown outcome."""
     note = (note or '').strip()
     if len(note) < RECONCILE_NOTE_CHARS:
         raise Refused(f'Write a note of at least {RECONCILE_NOTE_CHARS} characters saying what was found.')
@@ -369,7 +397,8 @@ def stage_code(job):
         raise
     except Exception:
         log.exception('the coding stage failed unexpectedly for round %s', round_.pk)
-        _fail(round_, FAILED)
+        # a send of the round may have ended before the error: the round fails as that send would have failed it
+        _fail(round_, abandoned_outcome(round_) or FAILED)
 
 
 def _code(job, round_):
@@ -499,18 +528,19 @@ def _service_date(round_):
 
 
 def _send(job, round_, purpose, request, coder):
-    """One send under the discipline: the Stop, a standing hold and the spend ceiling checked, a provider slot taken
-    without waiting, the run reserved before any network I/O, then sent once and its outcome recorded - an unknown one
-    included - with any hold it sets."""
+    """One send under the discipline: the Stop, a standing hold and the spend ceiling checked - the send's worst case,
+    every attempt it may make, from the API's count of the request (_worst_case) -, a provider slot taken without
+    waiting, the run reserved before any network I/O, then sent once and its outcome recorded - an unknown one included
+    - with any hold it sets, and the slot's lock if the send outlived the database session that held it."""
     encounter = job.encounter
     if _stop_requested(job, encounter):
         raise StageCancelled(STOPPED_MESSAGE)
     slot = _take_slot()
+    held = False
     try:
         if standing_holds().exists():
             _fail(round_, HOLD)
-        counted = _counted_input(coder, request)
-        worst = pricing.worst_case_usd(request.input_bytes, fable_client.MAX_TOKENS, input_tokens=counted)
+        counted, worst = _worst_case(round_, purpose, request, coder)
         spent = spent_usd(round_.revision)
         if spent + worst > ceiling_usd():
             log.info('round %s: %s refused at the ceiling (spent %s, worst case %s)', round_.pk, purpose, spent, worst)
@@ -522,8 +552,8 @@ def _send(job, round_, purpose, request, coder):
             service_date=_service_date(round_), purpose=purpose, endpoint=coder.endpoint,
             requested_model=fable_client.MODEL,
             scope={'round': str(round_.pk), 'mode': coder.mode, 'effort': request.params['output_config']['effort'],
-                   'worst_usd': pricing.usd(worst), 'worst_basis': 'count' if counted else 'bytes',
-                   'input_tokens_counted': counted, 'slot': slot})
+                   'worst_usd': pricing.usd(worst), 'worst_basis': 'count' if counted else 'replay',
+                   'input_tokens_counted': counted, 'attempts': request.attempts, 'slot': slot})
         try:
             if _stop_requested(job, encounter):
                 run.state, run.error, run.finished_at = (Run.CANCELLED, 'Stopped before sending; nothing was sent.',
@@ -545,11 +575,11 @@ def _send(job, round_, purpose, request, coder):
             log.exception('the coder raised while sending coding run %s', run.pk)
             outcome = fable_client.unknown_outcome(exc, sent=bool(coder.endpoint))
     finally:
-        _release_slot(slot)
+        held = _release_slot(slot)
     _fresh_connection()
     try:
         with transaction.atomic():
-            _finish_run(run, outcome)
+            _finish_run(run, outcome, slot_held=held)
             _record_hold(run, outcome)
     except Exception:
         log.exception('the outcome of coding run %s could not be recorded', run.pk)
@@ -561,21 +591,38 @@ def _send(job, round_, purpose, request, coder):
     return run
 
 
+def _worst_case(round_, purpose, request, coder):
+    """The spend check's figures for one send (BUILD-SPEC 3.2, FIX-SPEC 4): (the request's input tokens as the coder's
+    free token count counted them, the send's worst case - every attempt the request may make, its server-side
+    fallback's included). A coder that calls the API must count the request: when the count cannot be had, nothing is
+    sent and the round fails busy, for a human retry; no estimate stands in (a PDF is billed by its pages, which its
+    bytes do not bound). A coder that calls nothing (a replay, endpoint '') bills nothing: (None, 0)."""
+    if not coder.endpoint:
+        return None, Decimal(0)
+    counted = _counted_input(coder, request)
+    if counted is None:
+        log.warning('round %s: the %s request could not be counted; nothing was sent', round_.pk, purpose)
+        audit.record(round_.encounter.workspace, 'provider.count_failed', encounter=round_.encounter,
+                     round=str(round_.pk), purpose=purpose)
+        _fail(round_, BUSY)
+    return counted, pricing.worst_case_usd(counted, request.params['max_tokens'], attempts=request.attempts)
+
+
 def _counted_input(coder, request):
-    """The request's input tokens by the coder's free token count (the live coder's, BUILD-SPEC 3.2), or None - the
-    spend check then estimates from the bytes. A replay or a test coder counts nothing."""
+    """The request's input tokens by the coder's free token count (the live coder's, BUILD-SPEC 3.2), or None when it
+    cannot be had: the coder has no count, the count raised, or it answered no whole positive number."""
     count = getattr(coder, 'count_input_tokens', None)
     if not callable(count):
         return None
     try:
         tokens = count(request)
-    except Exception:  # noqa: BLE001 - logged; the bytes estimate stands in
-        log.exception('the token count of a coding request raised; estimating from its bytes')
+    except Exception:  # noqa: BLE001 - logged; nothing is sent
+        log.exception('the token count of a coding request raised; nothing is sent')
         return None
     return tokens if type(tokens) is int and tokens > 0 else None
 
 
-def _finish_run(run, outcome):
+def _finish_run(run, outcome, *, slot_held=True):
     run.state = {'succeeded': Run.SUCCEEDED, 'failed': Run.FAILED, 'unknown': Run.UNKNOWN,
                  'not_sent': Run.NOT_SENT}[outcome.state]
     run.sent = bool(outcome.sent)
@@ -591,7 +638,8 @@ def _finish_run(run, outcome):
     run.error = outcome.error
     run.scope = {**(run.scope or {}), 'fallback': outcome.fallback, 'stop_reason': outcome.stop_reason,
                  **({'failure_kind': outcome.failure_kind} if outcome.failure_kind else {}),
-                 **({'error_type': outcome.error_type} if outcome.error_type else {})}
+                 **({'error_type': outcome.error_type} if outcome.error_type else {}),
+                 **({} if slot_held else {'slot_lost': True})}
     run.finished_at = timezone.now()
     run.save()
 
@@ -628,23 +676,65 @@ def _settle_unrecorded(run, outcome):
         log.exception('coding run %s could not be settled after its outcome failed to record', run.pk)
 
 
+# This process's sends holding a provider slot (MONEY-4): never more than CONCURRENT_DOCUMENTS, whatever happens to the
+# database sessions that hold the slots' locks.
+_SENDS_LOCK = threading.Lock()
+_sends_in_flight = 0
+
+
 def _take_slot() -> int:
-    """One of the N provider slot locks (PROVIDER_LOCK_KEY + 0 .. N-1), taken without waiting; Requeue when none is
-    free. A session lock of this thread's database connection."""
-    with connection.cursor() as cursor:
-        for index in range(int(settings.CONCURRENT_DOCUMENTS)):
-            cursor.execute('SELECT pg_try_advisory_lock(%s)', [PROVIDER_LOCK_KEY + index])
-            if cursor.fetchone()[0]:
-                return index
+    """One of the N provider slots, taken without waiting; Requeue when none is free. A slot is held twice: in this
+    process's count of its sends in flight, and as a session lock of this thread's database connection
+    (PROVIDER_LOCK_KEY + 0 .. N-1), which keeps another worker process out while the session lives.
+
+    MONEY-4 (fixed within the process, bounded across processes): when a session ends mid-send - a database restart, a
+    terminated backend - its lock goes with it while the send goes on. The count still holds the slot, so no other send
+    of this process takes it until the send ends, and the run records the lost lock (scope.slot_lost). Another process
+    could take the lock meanwhile; one worker process runs (the installer's invariant), and every process's own count
+    keeps its sends at N whatever the locks do."""
+    global _sends_in_flight
+    limit = int(settings.CONCURRENT_DOCUMENTS)
+    with _SENDS_LOCK:
+        if _sends_in_flight >= limit:
+            raise Requeue('every provider slot is in use')
+        _sends_in_flight += 1
+    try:
+        with connection.cursor() as cursor:
+            for index in range(limit):
+                cursor.execute('SELECT pg_try_advisory_lock(%s)', [PROVIDER_LOCK_KEY + index])
+                if cursor.fetchone()[0]:
+                    return index
+    except BaseException:
+        _uncount_send()
+        raise
+    _uncount_send()
     raise Requeue('every provider slot is in use')
 
 
-def _release_slot(index: int):
+def _uncount_send():
+    global _sends_in_flight
+    with _SENDS_LOCK:
+        _sends_in_flight = max(_sends_in_flight - 1, 0)
+
+
+def _release_slot(index: int) -> bool:
+    """Give slot ``index`` back - its session lock, then this process's count - and say whether the lock was still
+    held: False when the database session that held it ended during the send (logged; the run records it)."""
     try:
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY + index])
-    except Exception:  # noqa: BLE001 - a lost session released it already
-        log.exception('provider slot %s could not be released', index)
+            held = bool(cursor.fetchone()[0])
+    except Exception:  # noqa: BLE001 - the session that held the lock ended, and the lock with it
+        log.exception('provider slot %s could not be released: the database session that held it ended during the '
+                      'send', index)
+        held = False
+    else:
+        if not held:
+            log.error('provider slot %s was no longer held when its send ended: the database session that held it '
+                      'ended during the send', index)
+    finally:
+        _uncount_send()
+    return held
 
 
 def _fresh_connection():
@@ -751,13 +841,72 @@ def stale_threshold(kind) -> int:
     return int(getattr(settings, 'STALE_RUNNING_SECONDS_BY_KIND', {}).get(kind, settings.STALE_RUNNING_SECONDS))
 
 
+def _settle_in_flight(runs) -> int:
+    """Settle the sends of ``runs`` whose stage no longer runs: one still sending becomes UNKNOWN (it may have reached
+    the vendor: sent when it called one); a reservation never marked sending - nothing of it was sent, the mark is
+    written before any network I/O - becomes NOT_SENT. Returns how many were sending."""
+    sending = list(runs.filter(state=Run.SENDING))
+    for run in sending:
+        run.state, run.error, run.finished_at = (Run.UNKNOWN, 'The worker stopped while the request was in flight.',
+                                                 timezone.now())
+        run.sent = run.sent or bool(run.endpoint)
+        run.save(update_fields=['state', 'error', 'finished_at', 'sent'])
+    runs.filter(state=Run.RESERVED).update(state=Run.NOT_SENT, error='The worker stopped before sending.',
+                                           finished_at=timezone.now())
+    return len(sending)
+
+
+def abandoned_outcome(round_) -> str:
+    """How ``round_`` ends when its stage ended without settling it (a dead worker, a lost database session, a close):
+    the failure kind the stage itself would have ended it with, or '' when nothing it sent is unsettled (MONEY-2). For
+    each send in turn - the reader, then the checker - one that succeeded is reused by a Resume; otherwise the send's
+    newest run decides: still sending, or unknown with no operator's reconcile, is UNKNOWN (it may have reached the
+    vendor and is never sent again by itself); failed - answered and billed, or refused - is that run's own kind;
+    not sent, cancelled, or an unknown an operator reconciled leaves nothing unsettled. Settle the sends in flight first
+    (_settle_in_flight)."""
+    runs = list(Run.objects.filter(purpose__in=PURPOSES, scope__round=str(round_.pk)).order_by('created_at', 'pk'))
+    for purpose in PURPOSES:
+        sent = [run for run in runs if run.purpose == purpose]
+        if any(run.state == Run.SUCCEEDED for run in sent):
+            continue
+        if not sent:
+            return ''
+        newest = sent[-1]
+        if newest.state == Run.SENDING or (newest.state == Run.UNKNOWN and newest.reconciled_at is None):
+            return UNKNOWN
+        if newest.state == Run.FAILED:
+            return (newest.scope or {}).get('failure_kind') or FAILED
+        return ''
+    return ''
+
+
+def _document_of(revision):
+    """What the API refusal's sentence needs of ``revision``'s document (failure_text): its kind."""
+    if revision.kind == models.SourceRevision.PASTE:
+        return SimpleNamespace(kind='paste')
+    media_type = getattr(revision.source_file, 'media_type', None)
+    return SimpleNamespace(kind={fable_document.PDF: 'pdf', fable_document.DOCX: 'docx',
+                                 fable_document.TEXT: 'txt'}.get(media_type, ''))
+
+
+def _abandoned_fields(round_, kind) -> dict:
+    """``round_``'s columns once its stage ended without settling it: failed with ``kind`` and the sentence the stage
+    would have written, or - no kind - cancelled, for a Resume that reuses its paid reads."""
+    if kind:
+        return {'state': Round.FAILED, 'failure_kind': kind, 'error': failure_text(kind, _document_of(round_.revision)),
+                'finished_at': timezone.now()}
+    return {'state': Round.CANCELLED, 'finished_at': timezone.now()}
+
+
 def mark_stale(*, startup=False):
     """Settle jobs a dead thread or process left 'running'; a send in flight becomes UNKNOWN, never resent.
 
     A job one of this process's threads runs is never swept. ``startup``: the worker's own first sweep, which settles
     every other RUNNING job whatever its age (one worker process runs: the installer stops the old one first);
-    otherwise a job is swept once older than its kind's threshold. A code job that was sending fails its round as
-    unknown; one that was not is cancelled with its round, for a Resume, which reuses the round's paid reads."""
+    otherwise a job is swept once older than its kind's threshold. A code job's round is settled as its stage would
+    have settled it (abandoned_outcome): failed as unknown while a send of it may have reached the vendor with no
+    outcome known, failed with a send's own kind when a send of it failed, and only when nothing it sent is unsettled
+    cancelled, for a Resume, which reuses the round's paid reads."""
     now = timezone.now()
     live = _live_ids()
     for job in Job.objects.filter(state=Job.RUNNING).order_by('started_at', 'pk'):
@@ -772,24 +921,21 @@ def mark_stale(*, startup=False):
                 runs = Run.objects.filter(purpose__in=PURPOSES, scope__round=str(round_.pk))
             else:
                 runs = Run.objects.filter(revision_id=job.revision_id, created_at__gte=job.started_at or now)
-            sending = list(runs.filter(state=Run.SENDING))
-            for run in sending:
-                run.state, run.error, run.finished_at = (Run.UNKNOWN, 'The worker stopped while the request was in '
-                                                         'flight.', timezone.now())
-                run.sent = run.sent or bool(run.endpoint)
-                run.save(update_fields=['state', 'error', 'finished_at', 'sent'])
-            runs.filter(state=Run.RESERVED).update(state=Run.NOT_SENT, error='The worker stopped before sending.',
-                                                   finished_at=timezone.now())
-            if sending:
-                job.state, job.error = Job.UNKNOWN, 'The worker stopped while this stage was sending.'
-                if round_ is not None and round_.state in (Round.QUEUED, Round.RUNNING):
-                    _update_round(round_, state=Round.FAILED, failure_kind=UNKNOWN, error=FAILURE_TEXT[UNKNOWN],
-                                  finished_at=timezone.now())
+            sending = _settle_in_flight(runs)
+            kind = abandoned_outcome(round_) if round_ is not None else (UNKNOWN if sending else '')
+            if kind == UNKNOWN:
+                job.state, job.error = Job.UNKNOWN, (
+                    'The worker stopped while this stage was sending.' if sending else
+                    'The worker stopped after a send of this stage ended with an unknown outcome, before its round was '
+                    'written.')
+            elif kind:
+                job.state, job.error = Job.FAILED, (f'The worker stopped after a send of this stage failed ({kind}), '
+                                                    'before its round was written.')
             else:
                 job.state, job.error = (Job.CANCELLED, 'The worker stopped while this stage was running; resume to run '
                                         'it again.')
-                if round_ is not None and round_.state in (Round.QUEUED, Round.RUNNING):
-                    _update_round(round_, state=Round.CANCELLED, finished_at=timezone.now())
+            if round_ is not None and round_.state in (Round.QUEUED, Round.RUNNING):
+                _update_round(round_, **_abandoned_fields(round_, kind))
             job.finished_at = timezone.now()
             job.save(update_fields=['state', 'error', 'finished_at'])
         state.refresh(job.encounter)
@@ -808,12 +954,17 @@ def mark_stale(*, startup=False):
             if changed:
                 state.refresh(run.encounter)
     # A round left queued or running with no job of its encounter queued or running - its stage ended without settling
-    # it, on a database error say - is cancelled, so a Resume can continue it (never left processing for good).
+    # it, on a database error say - is settled as that stage would have settled it (abandoned_outcome), under the
+    # encounter's lock: failed when a send of it is unsettled, else cancelled so a Resume can continue it (never left
+    # processing for good).
     for round_ in Round.objects.filter(state__in=(Round.QUEUED, Round.RUNNING), created_at__lt=cutoff):
-        if Job.objects.filter(encounter_id=round_.encounter_id, state__in=[Job.QUEUED, Job.RUNNING]).exists():
-            continue
-        if Round.objects.filter(pk=round_.pk, state__in=(Round.QUEUED, Round.RUNNING)).update(
-                state=Round.CANCELLED, finished_at=timezone.now()):
+        with transaction.atomic():
+            if busy(_locked(round_.encounter)):
+                continue
+            _settle_in_flight(Run.objects.filter(purpose__in=PURPOSES, scope__round=str(round_.pk)))
+            changed = Round.objects.filter(pk=round_.pk, state__in=(Round.QUEUED, Round.RUNNING)).update(
+                **_abandoned_fields(round_, abandoned_outcome(round_)))
+        if changed:
             state.refresh(round_.encounter)
 
 

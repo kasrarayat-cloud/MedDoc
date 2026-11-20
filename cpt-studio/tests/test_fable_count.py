@@ -1,7 +1,9 @@
-"""The spend check's input (BUILD-SPEC 3.2): live, a request's input tokens are counted by the API's free token count
-(client.beta.messages.count_tokens, the same model, system, messages, output_config and betas) and the worst case uses
-that count; when counting fails for any reason the worst case is estimated from the bytes, as before. Fake SDK objects
-and fake coders only; nothing reaches the network."""
+"""The spend check's input (BUILD-SPEC 3.2, FIX-SPEC 4): a request's input tokens are counted by the API's free token
+count (client.beta.messages.count_tokens, the same model, system, messages, output_config and betas) and the worst case
+uses that count, for every attempt the send may make (its server-side fallback's included); when the count cannot be
+had nothing is sent and the round fails busy - no estimate from the bytes stands in (a PDF is billed by its pages, which
+its bytes do not bound). A coder that calls nothing (a replay) bills nothing and counts nothing. Fake SDK objects and
+fake coders only; nothing reaches the network."""
 import os
 import tempfile
 from decimal import Decimal
@@ -78,14 +80,26 @@ class CountTests(SimpleTestCase):
         self.assertTrue(all(sdk.closed for sdk in self.made))
         self.assertIsNone(self.count(SimpleNamespace(input_tokens=10), path=Path(self.path.parent) / 'missing.env'))
 
-    def test_the_worst_case_uses_the_count_when_there_is_one(self):
-        self.assertEqual(pricing.worst_case_usd(30_000, 96_000, input_tokens=1_000),
-                         (Decimal(3_000) * 8 + Decimal(96_000) * 40) / 1_000_000)
-        bytes_case = pricing.worst_case_usd(30_000, 96_000)
-        self.assertEqual(bytes_case, (Decimal(12_000) * 8 + Decimal(96_000) * 40) / 1_000_000)
+    def test_the_worst_case_covers_every_attempt_a_send_may_make(self):
+        top, counted = 96_000, 4_000
+        one, two = pricing.worst_case_usd(counted, top), pricing.worst_case_usd(counted, top, attempts=2)
+        # one attempt: the counted input and the margin at the input rate, max_tokens at the output rate
+        self.assertEqual(one, (Decimal(counted + 2_000) * 8 + Decimal(top) * 40) / 1_000_000)
+        # with a fallback, the most two attempts bill, both at claude-fable-5-2's rates (no fallback model costs more):
+        # the requested model's, then the fallback's, which reads the first attempt's partial answer as well
+        most = pricing.cost_usd({'iterations': [
+            {'type': 'message', 'input_tokens': counted + 2_000, 'output_tokens': top},
+            {'type': 'fallback_message', 'input_tokens': counted + 2_000 + top, 'output_tokens': top}]})
+        self.assertEqual(two, most)
+        self.assertGreater(two, 2 * one)
+
+    def test_the_worst_case_needs_a_counted_input(self):
         for unusable in (None, 0, -5, '1000', 1.5, True):
-            with self.subTest(unusable=unusable):
-                self.assertEqual(pricing.worst_case_usd(30_000, 96_000, input_tokens=unusable), bytes_case)
+            with self.subTest(unusable=unusable), self.assertRaises(ValueError):
+                pricing.worst_case_usd(unusable, 96_000)
+        for attempts in (0, -1, 1.5, True, None):
+            with self.subTest(attempts=attempts), self.assertRaises(ValueError):
+                pricing.worst_case_usd(4_000, 96_000, attempts=attempts)
 
 
 class CountingCoder(f.FakeCoder):
@@ -137,34 +151,53 @@ class SpendCheckTests(TestCase):
 
     def test_a_counted_send_is_held_to_its_counted_worst_case(self):
         coder = CountingCoder(20_000, **self.answers())
-        with override_settings(DOCUMENT_CEILING_USD='10'):  # the bytes estimate alone is over 11 dollars a send
+        with override_settings(DOCUMENT_CEILING_USD='10'):  # the 3 MB document's bytes would say more than 11 dollars
             round_ = self.run_round(coder)
         self.assertEqual(round_.state, Round.DONE)
         self.assertEqual(len(coder.counted_requests), 2)
         reader = Run.objects.get(encounter=self.enc, purpose=jobs.READER)
         request = coder.calls[0][1]
         self.assertIs(coder.counted_requests[0], request)
-        expected = pricing.worst_case_usd(request.input_bytes, client.MAX_TOKENS, input_tokens=20_000)
-        self.assertEqual((reader.scope['worst_basis'], reader.scope['input_tokens_counted'], reader.scope['worst_usd']),
-                         ('count', 20_000, pricing.usd(expected)))
+        expected = pricing.worst_case_usd(20_000, client.MAX_TOKENS, attempts=2)  # its fallback's attempt included
+        self.assertEqual((reader.scope['worst_basis'], reader.scope['input_tokens_counted'], reader.scope['attempts'],
+                          reader.scope['worst_usd']), ('count', 20_000, 2, pricing.usd(expected)))
 
-    def test_without_a_count_the_bytes_estimate_decides_as_before(self):
+    def test_a_count_that_fails_sends_nothing_and_the_round_fails_busy(self):
         for counted in (None, RuntimeError('synthetic count failure')):
             with self.subTest(counted=repr(counted)):
-                coder = CountingCoder(counted, **self.answers())
                 enc = f.encounter(self.ws, self.user, title=f'Synthetic {counted!r}')
-                self.enc, self.rev = enc, f.upload(enc, self.user, data=f.PDF_BYTES + b'%' + b'x' * 3_000_000)
-                with override_settings(DOCUMENT_CEILING_USD='10'):
-                    round_ = self.run_round(coder)
-                self.assertEqual((round_.state, round_.failure_kind), (Round.FAILED, 'ceiling'))
+                self.enc, self.rev = enc, f.upload(enc, self.user)  # a small PDF: no estimate would have stopped it
+                coder = CountingCoder(counted, **self.answers())
+                round_ = self.run_round(coder)
+                self.assertEqual((round_.state, round_.failure_kind, round_.error),
+                                 (Round.FAILED, 'busy', jobs.FAILURE_TEXT['busy']))
                 self.assertEqual(coder.calls, [])  # nothing was sent
                 self.assertFalse(Run.objects.filter(encounter=enc).exists())
+                self.assertEqual(list(models.AuditEvent.objects.filter(encounter=enc, event='provider.count_failed')
+                                      .values_list('data__purpose', flat=True)), [jobs.READER])
 
-    def test_a_coder_that_cannot_count_is_estimated_from_its_bytes(self):
+    def test_a_coder_that_calls_the_api_and_cannot_count_sends_nothing(self):
         coder = f.FakeCoder(**self.answers())
+        coder.count_input_tokens = None  # it has an endpoint and no count
+        round_ = self.run_round(coder)
+        self.assertEqual((round_.state, round_.failure_kind), (Round.FAILED, 'busy'))
+        self.assertEqual(coder.calls, [])
+        self.assertFalse(Run.objects.filter(encounter=self.enc).exists())
+
+    def test_a_coder_that_calls_nothing_bills_nothing_and_needs_no_count(self):
+        reader = replayed(f.reader_message(f.reader_result([f.code('45385', 'ready')])))
+        checker = replayed(f.checker_message(f.checker_result([f.review('45385', 'agree')])))
+        coder = f.FakeCoder(reader=reader, checker=checker)
+        coder.endpoint = ''  # a replay: it answers from a recording and calls nothing
         round_ = self.run_round(coder)
         self.assertEqual(round_.state, Round.DONE)
-        reader = Run.objects.get(encounter=self.enc, purpose=jobs.READER)
-        self.assertEqual((reader.scope['worst_basis'], reader.scope['input_tokens_counted']), ('bytes', None))
-        self.assertEqual(reader.scope['worst_usd'],
-                         pricing.usd(pricing.worst_case_usd(coder.calls[0][1].input_bytes, client.MAX_TOKENS)))
+        self.assertEqual(coder.counts, [])
+        run = Run.objects.get(encounter=self.enc, purpose=jobs.READER)
+        self.assertEqual((run.endpoint, run.sent, run.scope['worst_basis'], run.scope['worst_usd']),
+                         ('', False, 'replay', '0.000000'))
+        self.assertEqual(jobs.spent_usd(self.rev), 0)
+
+
+def replayed(message):
+    """A replay's outcome of ``message``: it was not sent."""
+    return client.message_outcome(message, sent=False)
