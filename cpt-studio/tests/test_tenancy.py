@@ -8,8 +8,9 @@ active reviewer, answers what the view answers - so a broken door and a closed o
 request changes nothing.
 
 LINE IDENTITY (FIX-SPEC section 1): a decision names the round shown and the line ({round, line, code, action,
-acknowledgement, note}); tenancy answers 404 before the round or the line is read, so a stale round or an unknown line
-of another workspace's encounter reveals nothing. The assertion that reads the stored line (CodeDecision.line, lane
+acknowledgement, note}), and an export the round shown ({kind, fmt, round}; FIX-SPEC-2 section 5); tenancy answers 404
+before the round or the line is read, so a stale round or an unknown line of another workspace's encounter reveals
+nothing. The assertion that reads the stored line (CodeDecision.line, lane
 F1a's migration 0016) is skipped until that field exists.
 
 Synthetic data only; the coding review is a fake coder (tests.support), nothing reaches the network."""
@@ -43,7 +44,8 @@ class TenancyCase(r.CustomerCase, TestCase):
         reviewer = self.client_for(self.reviewer)
         self.payload = reviewer.get(f'/api/encounters/{self.enc.pk}').json()
         export = reviewer.post(f'/api/encounters/{self.enc.pk}/reports',
-                               data=json.dumps({'kind': 'draft', 'fmt': 'txt'}), content_type='application/json')
+                               data=json.dumps({'kind': 'draft', 'fmt': 'txt', 'round': self.payload['round']['number']}),
+                               content_type='application/json')
         self.assertEqual(export.status_code, 201)
         self.download_url = export.json()['download_url']
 
@@ -61,7 +63,8 @@ class TenancyCase(r.CustomerCase, TestCase):
                                      'text': 'Yes, at a separate site.'}]},
             'decisions': {'round': self.payload['round']['number'], 'line': line, 'code': code, 'action': 'approve',
                           'acknowledgement': decisions.ACKNOWLEDGEMENTS['human'], 'note': 'synthetic tenancy test'},
-            'stop': {}, 'resume': {}, 'retry': {}, 'reports': {'kind': 'draft', 'fmt': 'csv'}}
+            'stop': {}, 'resume': {}, 'retry': {},
+            'reports': {'kind': 'draft', 'fmt': 'csv', 'round': self.payload['round']['number']}}
 
     def read(self, client, name):
         url = {'session': '/api/session', 'list': '/api/encounters', 'encounter': f'/api/encounters/{self.enc.pk}',

@@ -110,7 +110,7 @@
    "reason": "A 4 mm polyp in the ascending colon was removed with cold forceps (page 2). It is a separate lesion from the sigmoid polyp, so 45380 is reported with modifier 59.",
    "second_check": {
     "agrees": false,
-    "reason": "The forceps removal is a separate lesion, but XS describes a separate structure more exactly than 59. Some payers expect XS here."
+    "reason": "The forceps removal is a separate lesion, but XS describes a separate structure more exactly than 59. Some payers expect XS here. Another review by the second check names this line or this code but not both, so this code needs your review."
    },
    "question": null,
    "quotes": [
@@ -129,7 +129,8 @@
  "questions": [],
  "answers": [],
  "notes": [
-  "Bowel preparation quality was not recorded."
+  "Bowel preparation quality was not recorded.",
+  "The second check made a comment that could not be tied to one line: The polyp removed with cold forceps is a separate lesion from the one removed by snare."
  ],
  "readiness": {
   "draft": true,

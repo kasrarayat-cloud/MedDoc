@@ -27,9 +27,9 @@
  * at every phase), and beside it the code statuses, each code's allowed actions by its status and decision, and the
  * context as uploaded; the page against the DOM contract of section 7 (the progress panel and its steps, the questions
  * panel, the code rows - by line, two lines of one code being two rows - with their number, units (a number shown as
- * that number, units not given shown as "not given"), modifiers (each served one, and no other), status badge, reason,
- * second check, quotes and exactly the allowed buttons, the quotes panel - a quote with a page moves the viewer to
- * #page=N - the notes panel, the document viewer and its "Download original" link, the export button); the first
+ * that number, 0 included, units not given shown as "not given"), modifiers (each served one, and no other), status
+ * badge, reason, second check, quotes and exactly the allowed buttons, the quotes panel - a quote with a page moves the
+ * viewer to #page=N - the notes panel, the document viewer and its "Download original" link, the export button); the first
  * question, when there is one, answered through the panel and the new round waited for and checked again; one READY
  * line approved through #reviewDialog as the page draws it (the acknowledgement checkbox #reviewAckBox inside its label
  * #reviewAcknowledgement, which carries the session's acknowledgement; an agent-executed synthetic review), the page's
@@ -511,9 +511,16 @@ function ownWording(text, ctx) {
   return rest;
 }
 
-// The hits of one string on one surface: {id, severity, surface, where, match}.
-function scanText(text, ctx, surface, where = '', hits = []) {
-  let cleaned = ownWording(typeof text === 'string' ? text : String(text ?? ''), ctx);
+// A JSON value that is never a passage of the document: a code line's modifier is part of the code line the coding
+// review returned, so it is scanned whole even when a quote holds the same words (SEC-S4: a modifier "Claude" beside a
+// cited "Dr. Claude Example ..." was set aside as a part of the quote). ops/scan_customer.py reads the same paths.
+const NEVER_QUOTED = /\.modifiers\[\d+\]$/;
+
+// The hits of one string on one surface: {id, severity, surface, where, match}; a string that is not ``quotable``
+// (NEVER_QUOTED) is scanned whole, nothing of it set aside as the document's.
+function scanText(text, ctx, surface, where = '', hits = [], quotable = true) {
+  const raw = typeof text === 'string' ? text : String(text ?? '');
+  let cleaned = quotable ? ownWording(raw, ctx) : collapse(raw);
   if (!cleaned.trim()) return hits;
   for (const allowed of ctx.allowed) cleaned = cleaned.split(allowed).join(' ');
   for (const pattern of ctx.list.patterns) {
@@ -525,9 +532,10 @@ function scanText(text, ctx, surface, where = '', hits = []) {
   return hits;
 }
 
-// A JSON value: every string value and every key (a forbidden key is a hit by itself).
+// A JSON value: every string value and every key (a forbidden key is a hit by itself); a value at a NEVER_QUOTED path is
+// scanned whole.
 function scanJson(value, ctx, where = '$', hits = []) {
-  if (typeof value === 'string') return scanText(value, ctx, 'json', where, hits);
+  if (typeof value === 'string') return scanText(value, ctx, 'json', where, hits, !NEVER_QUOTED.test(where));
   if (Array.isArray(value)) {
     value.forEach((item, index) => scanJson(item, ctx, `${where}[${index}]`, hits));
   } else if (isObject(value)) {
@@ -686,12 +694,13 @@ function showsToken(text, token) {
   return new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:$|[^A-Za-z0-9])`).test(String(text ?? ''));
 }
 
-// The units cell against the units served, which are a positive integer or null (FIX-SPEC section 2): a number is
-// shown as that number, null as "not given"; '' when the cell shows them.
+// The units cell against the units served, which are a whole number as the coding review wrote it (0 included: it
+// writes 0 on a code it does not support; FIX-SPEC-2 section 2, read losslessly) or null: a number is shown as that
+// number, null as "not given"; '' when the cell shows them.
 function unitsProblem(cell, units) {
   if (units === null) return /\bnot given\b/i.test(cell || '') ? '' : `.code-units ${JSON.stringify(cell)} for units not given`;
-  if (Number.isInteger(units) && units > 0) return showsToken(cell, units) ? '' : `.code-units ${JSON.stringify(cell)} for ${units}`;
-  return `units ${JSON.stringify(units)} are neither a positive integer nor null`;
+  if (Number.isInteger(units) && units >= 0) return showsToken(cell, units) ? '' : `.code-units ${JSON.stringify(cell)} for ${units}`;
+  return `units ${JSON.stringify(units)} are neither a whole number nor null`;
 }
 
 // The modifiers cell against the modifiers served: each served one shown as a word, and no other modifier-shaped word
@@ -1579,7 +1588,8 @@ async function main(argv) {
 module.exports = {
   EVIDENCE_SCHEMA, CLIENT_HEADERS, PLAYWRIGHT, REVIEW_DIALOG, UsageError, parseArgs, serviceDateOf, documentsOf,
   readPrivate, loadCredentials, debugMayLog, secretForms, scrubSecret, compileDenylist, denylist, contract, shapeProblems,
-  contractFor, scanContext, addQuotes, ownWording, scanText, scanJson, scanFile, scanHeaders, checkScan, expectedActions,
+  contractFor, scanContext, addQuotes, ownWording, NEVER_QUOTED, scanText, scanJson, scanFile, scanHeaders, checkScan,
+  expectedActions,
   jsonChecks, showsToken, unitsProblem, modifiersProblem, domChecks, readEncounterDom, collectDomStrings, approve,
   servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportTxt,
   exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,

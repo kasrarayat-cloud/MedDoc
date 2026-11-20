@@ -14,6 +14,8 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
+from studio import customer
+
 ROOT = Path(settings.BASE_DIR)
 STATIC = ROOT / 'studio' / 'static' / 'studio'
 TEMPLATES = ROOT / 'studio' / 'templates' / 'studio'
@@ -38,6 +40,10 @@ FORBIDDEN = re.compile(r'(?<![a-z0-9])(?:corti|astra|fable|openai|anthropic|clau
                        r'|\b(?:providers?|models?|tokens?|credits?|vendors?|sha-?256)\b|/ops/', re.IGNORECASE)
 INSURANCE = [('medicare', 'Medicare'), ('medicaid', 'Medicaid'), ('commercial', 'Commercial or other'),
              ('unknown', 'Not sure')]
+# The server's sentences for a line the second check added (studio/customer.py, FIX-SPEC-2 section 3): with the status
+# the second check gave it, or - for a line stored without one - the sentence without a status
+ADDED_SENTENCES = {customer.ADDED_BY_CHECK,
+                   *(customer.ADDED_WITH_STATUS.format(status=words) for words in customer.CHECK_STATUS_WORDS.values())}
 
 
 class _Audit(HTMLParser):
@@ -262,9 +268,9 @@ class CustomerFixtureTests(SimpleTestCase):
                 self.assertEqual(listed, [f'L{n}' for n in range(1, len(listed) + 1)])
                 self.assertEqual(added, [f'M{n}' for n in range(1, len(added) + 1)])
                 for code in doc['codes']:
-                    self.assertEqual(code['line'].startswith('M'),
-                                     code['second_check']['reason'] == 'The second check found this code; it needs your review.')
-                    self.assertTrue(code['units'] is None or (type(code['units']) is int and code['units'] > 0))
+                    self.assertEqual(code['line'].startswith('M'), code['second_check']['reason'] in ADDED_SENTENCES)
+                    # units as the coding review wrote them: a whole number, 0 included, or null (not given)
+                    self.assertTrue(code['units'] is None or (type(code['units']) is int and code['units'] >= 0))
                 codes = [code['code'] for code in doc['codes']]
                 repeated += len(codes) - len(set(codes))
         self.assertGreaterEqual(repeated, 1, 'a fixture lists one code on two lines')

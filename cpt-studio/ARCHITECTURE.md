@@ -136,22 +136,33 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   environment), then sent as a PDF; text and pastes as a text document block. No local PDF parsing.
 - `prompts.py` - the reader's and checker's instructions; the practice's date of service, insurance and earlier answers
   travel in the user text, outside the document; the checker also gets the reader's code list.
-- `result.py` - the final JSON is exactly the last fenced json block (else the widest `{...}` span; never an earlier
-  block); anything unreadable fails the round (`unreadable`), never resent. The shape only is checked: modifiers are a
-  list of strings (an integer item read as its decimal string) or not given, units a positive integer or not given;
-  any other shape is unreadable, never corrected. **Lines**: every code row has one - `L1`..`Ln`, the reader's codes in
-  its order, then `M1`..`Mk`, the checker's additions - and the checker is given each line and names the line of every
-  review. **Combination**, the only glue logic: a reader line keeps the reader's status only when the reviews naming
-  that line and its code all say `agree` (at least one) and no other review names the line or its code; otherwise
-  `needs_review`, both reasons kept. A review that names no line, an unknown line, or a line with another code is kept
-  for the operator and sends every line it names, or whose code it carries, to `needs_review`: the code never picks a
-  line for it. Every code the checker found missing is a line of its own, `needs_review`. The questions are the
-  reader's, then the checker's, then each line's own question not yet asked (case and spacing folded), each naming the
-  lines it affects; a `needs_answer` line no question names gets its agreeing review's question, or CPT Studio's own.
-  The problems are the reader's. **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n> <code>` or
-  `MISSED M<k> <code>` (checker) starts that line's section; a citation after it is filed under the line when the
-  marker's code is that line's code, else under `_document`, and a heading, a code fence or a line that only looks like
-  a marker ends the section.
+- `result.py` - the final JSON is the LAST fenced block of the joined text, whatever its fence (three or more backticks
+  or tildes, any info string or none, any case); when it does not parse as strict JSON, the widest `{...}` span, read
+  only when it reaches that block (never an earlier block); text after the last block that holds a `{` is unreadable
+  too, since the code cannot tell which answer is final. Strict JSON: a repeated key, NaN, Infinity, a number too large
+  to be finite, a NUL character or a lone surrogate make it unparseable. Anything unreadable fails the round
+  (`unreadable`), never resent. The shape only is checked and only lossless conversions are made: modifiers are a list
+  of strings (an integer item read as its decimal string, a blank item - which carries nothing - removed) or not given;
+  units a whole number as written (0 included; a string of digits read as its number) or not given; a reason list
+  joined; a question list one question each; a line label the reader writes on its own items must be its place in the
+  list; any other shape is unreadable, never corrected or guessed. **Lines**: every code row has one - `L1`..`Ln`, the
+  reader's codes in its order, then `M1`..`Mk`, the checker's additions - and the checker is given each line and names
+  the line of every review. **Combination**, the only glue logic: a reader line keeps the reader's status only when the
+  reviews naming that line and its code all say `agree` (at least one) and no other review names the line or its code;
+  otherwise `needs_review`, both reasons kept. A review that names no line, an unknown line, or a line with another code
+  is kept for the operator, shown to the customer as a note on the encounter with its reason, and sends every line it
+  names, or whose code it carries, to `needs_review` - or every line of the round when it reaches none that way: the
+  code never picks a line for it. A verdict that is neither exactly `agree` nor exactly `disagree` is no clear verdict,
+  and the line needs review. Every code the checker found missing is a line of its own, `needs_review`. The questions
+  are the reader's, then the checker's, then each line's own question not yet asked (case and spacing folded), each
+  naming the lines it affects; a `needs_answer` line no question names gets its agreeing review's question, or CPT
+  Studio's own. The problems are the reader's. **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n>
+  <code>` or `MISSED M<k> <code>` (checker) starts that line's section; a citation after it is filed under the line when
+  the marker's code is that line's code, else under `_document`. A section also ends at a line holding exactly `END`
+  (both answers are asked to end their last section with one), at the start of the final answer, at a heading, a
+  thematic break, a code fence or a line that only looks like a marker; a cited block whose own text holds a section
+  change is filed under `_document`. Without `END`, a plain paragraph after the last section stays in it: a known limit,
+  since telling it apart would mean reading its meaning.
 - `pricing.py` - claude-fable-5-2's rates (input $8, cache write $10, cache read $0.20, output $40 per million tokens),
   a run's cost priced from its usage at read time, and a send's worst case over every attempt it may make (two with the
   server-side fallbacks, the second also reading the first's partial answer; a fallback model never costs more).
@@ -174,8 +185,9 @@ CMS reference data, installed by management command and never read by the coding
 PFS RVU and practitioner MUE files (sha256 checked before opening; code-keyed facts only, descriptors never imported) and
 `store.py` answers date-applicable lookups (a source applies only inside its effective window; two covering one date are
 ambiguous and neither is used); `import_passages` loads the bundled, sha256-pinned CMS policy passages
-(`reference/data/`), which `passages.py` reads. `tools.py` is the executor the earlier pipeline's participants called;
-nothing calls it now.
+(`reference/data/`), which `passages.py` reads and stores. The retrieval that read passages for a code, with its
+dormant endoscopy code-family rule set, was deleted (FIX-SPEC-2 section 8): nothing reads a passage for a code, and no
+code-family or code-range rule is kept anywhere (`tests/test_no_rule_engine.py`).
 
 ### 5.6 Encounter state (`studio/state.py`)
 
@@ -187,17 +199,20 @@ no round (a record of the earlier system) reads as an earlier review; Review aga
 
 ### 5.7 Decisions and answers (`studio/decisions.py`)
 
-An owner or reviewer decides one line of the latest done round, naming the round the page shows, the line and its
-code: a round that is not the latest done one, or a line that round does not hold with that code, is refused (409; the
-page reloads). A `ready` or `needs_review` line may be approved or rejected, a `needs_answer` line is answered first, a
-`not_supported` line is never decided, a decided line may only be revoked. An approval carries the review attestation
-for the reviewer's kind, exactly. Answers name the round's own question ids (a page left open on an earlier round is
-refused), are stored as `CodingAnswer` rows, and start a new round with every answer so far in its context. A failed
-round (not one stopped at the ceiling) may be retried as a new round once no send of it awaits a reconcile (5.4).
+An owner or reviewer decides one line of the latest done round, naming the round the page shows, the line and its code:
+a round that is not the latest done one, or a line that round does not hold with that code, is refused (409; the page
+reloads). A `ready` or `needs_review` line may be approved or rejected, a `needs_answer` line is answered first, a
+`not_supported` line is never decided, a decided line may only be revoked - and an undo names the decision it undoes
+(the id the page shows), refused as changed (409) when that is no longer the line's current decision. An approval
+carries the review attestation for the reviewer's kind, exactly. Answers name the round's own question ids (a page left
+open on an earlier round is refused), are stored as `CodingAnswer` rows, and start a new round with every answer so far
+in its context. A failed round (not one stopped at the ceiling) may be retried as a new round once no send of it awaits
+a reconcile (5.4).
 
 ### 5.8 Exports (`studio/exports.py`)
 
-`cpt-studio-customer-export@3`, from the latest round. TXT opens and closes with the SYNTHETIC banner and states the
+`cpt-studio-customer-export@3`, from the latest round, which the request names (the round the page shows; another is
+refused as changed, 409, before readiness is read). TXT opens and closes with the SYNTHETIC banner and states the
 encounter, round, date of service, insurance and who made it when; a draft lists every code with its status, units,
 modifiers, reason, the second check and quotes with pages, then the questions and documentation notes; the approved
 export lists only the lines whose current decision is an approval and whose status is ready or needs_review, with

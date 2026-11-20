@@ -22,7 +22,7 @@ links, retrieval logs and rule ids out of every customer screen, API response an
 
 Every body and header is scanned with ops/verification/customer-denylist.json (the browser walk ops/walk.cjs reads the
 same list, and this module's tests run its vectors) and every payload is held to ops/verification/customer-contract.json
-- the Fable coding build's customer contract (client contract customer-2026-11-21); the Django suite holds the server to
+- the Fable coding build's customer contract (client contract customer-2026-11-22); the Django suite holds the server to
 the same file through this module's readers (tests/test_api_customer.py). A string that is one of the encounter's own
 quotations - the passages of its document its codes cite - is not scanned. --operator-json DIR adds an operator view's
 own identifiers, read by the paths the denylist names (deny_value_paths; files <encounter id>.json and, optionally,
@@ -108,14 +108,22 @@ def _excerpt(text: str, at: int, length: int) -> str:
     return ('…' if start else '') + re.sub(r'\s+', ' ', text[start:end]) + ('…' if end < len(text) else '')
 
 
-def scan_text(text, ctx: ScanContext, surface: str, where: str = '', hits: list | None = None) -> list:
+# A JSON value that is never a passage of the document: a code line's modifier is part of the code line the coding
+# review returned, so it is scanned whole even when a quotation holds the same words (SEC-S4: a modifier 'Claude' beside
+# a cited 'Dr. Claude Example ...' was set aside as a part of the quotation). The walk's scanJson reads the same paths.
+NEVER_QUOTED = re.compile(r'\.modifiers\[\d+\]$')
+
+
+def scan_text(text, ctx: ScanContext, surface: str, where: str = '', hits: list | None = None,
+              quotable: bool = True) -> list:
     """The hits of one string on one surface ({id, severity, surface, where, match}). A string that is a substring of
-    the document text is a quotation of it and is not scanned (bundle text always is)."""
+    the document text is a quotation of it and is not scanned (bundle text always is), unless it is not ``quotable``
+    (NEVER_QUOTED)."""
     hits = [] if hits is None else hits
     raw = text if isinstance(text, str) else ('' if text is None else str(text))
     if not raw.strip():
         return hits
-    if surface != 'bundle' and ctx.document_text and raw in ctx.document_text:
+    if quotable and surface != 'bundle' and ctx.document_text and raw in ctx.document_text:
         return hits
     cleaned = raw
     for allowed in ctx.allowed:
@@ -135,10 +143,11 @@ def scan_text(text, ctx: ScanContext, surface: str, where: str = '', hits: list 
 
 
 def scan_json(value, ctx: ScanContext, where: str = '$', hits: list | None = None, surface: str = 'json') -> list:
-    """Every string value and every key of a JSON value; a forbidden key is a hit by itself."""
+    """Every string value and every key of a JSON value; a forbidden key is a hit by itself; a value at a NEVER_QUOTED
+    path is scanned whole."""
     hits = [] if hits is None else hits
     if isinstance(value, str):
-        return scan_text(value, ctx, surface, where, hits)
+        return scan_text(value, ctx, surface, where, hits, quotable=not NEVER_QUOTED.search(where))
     if isinstance(value, list):
         for index, item in enumerate(value):
             scan_json(item, ctx, f'{where}[{index}]', hits, surface)

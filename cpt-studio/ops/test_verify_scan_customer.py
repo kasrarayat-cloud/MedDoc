@@ -152,6 +152,17 @@ class SharedReaderTests(unittest.TestCase):
         self.assertLessEqual({'model_id', 'provider_name'}, {h['id'] for h in sc.scan_file(leaked, ctx, 'x.csv', 'csv')})
         # a quotation of the document is set aside only while it is one: the same words outside quotes are scanned
         self.assertEqual(sc.scan_file(f'"{QUOTE}"', ctx, 'q.txt', 'txt'), [])
+        # SEC-S4: a modifier is part of the code line, never a quotation - scanned whole even where a quote holds it
+        named = encounter_json()
+        named['codes'][0]['quotes'] = [{'text': 'Dr. Claude Example removed the polyp.', 'page': 1}]
+        named['codes'][0]['modifiers'] = ['Claude']
+        quoted = sc.scan_context(sc.quotations(named))
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_json(named, quoted)],
+                         [('provider_name', '$.codes[0].modifiers[0]')])
+        named['codes'][0]['modifiers'] = ['PT']
+        self.assertEqual(sc.scan_json(named, quoted), [])  # the quote itself stays the document's
+        self.assertTrue(sc.NEVER_QUOTED.search('$.codes[3].modifiers[12]'))
+        self.assertIsNone(sc.NEVER_QUOTED.search('$.codes[0].quotes[0].text'))
         self.assertEqual(sc.csv_rows('a,"b ""c"", d"\r\n1,2\n'), [['a', 'b "c", d'], ['1', '2']])
         self.assertEqual(sc.scan_headers([('Content-Security-Policy', "script-src 'sha256-x'")], ctx, 'GET /'), [])
         self.assertEqual(sorted({h['id'] for h in sc.scan_headers([('X-Content-SHA256', 'ab' * 32)], ctx, 'GET /x')}), ['long_hex', 'sha256'])

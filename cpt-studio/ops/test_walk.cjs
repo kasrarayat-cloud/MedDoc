@@ -102,7 +102,7 @@ function encounter(overrides = {}) {
   };
 }
 
-// The page as it draws ``enc`` (studio/static/studio/app.js): units "1 unit" / "2 units", or "Units not given";
+// The page as it draws ``enc`` (studio/static/studio/app.js): units "0 units" / "1 unit" / "2 units", or "Units not given";
 // modifiers "No modifier" / "Modifier XS" / "Modifiers 25, 59"; each row with its line when served.
 function domOf(enc) {
   const units = value => (value === null ? 'Units not given' : `${value} unit${value === 1 ? '' : 's'}`);
@@ -291,6 +291,21 @@ test('the document\'s own text and its quotes are never scanned, and a quote is 
   assert.deepEqual(walk.scanText('The trace of the reading', pdf, 'dom').map(hit => hit.id), ['trace']);
 });
 
+test('a modifier is scanned whole in the JSON, even where a quote holds the same word (SEC-S4)', () => {
+  // the re-check's case: modifiers ["Claude"] on a line whose cited passage is "Dr. Claude Example removed the polyp"
+  const enc = encounter();
+  enc.codes[0].quotes = [{ text: 'Dr. Claude Example removed the polyp.', page: 1 }];
+  enc.codes[0].modifiers = ['Claude'];
+  const ctx = walk.scanContext({});
+  walk.addQuotes(ctx, enc);
+  assert.deepEqual(walk.scanJson(enc, ctx).map(hit => [hit.id, hit.where]), [['provider_name', '$.codes[0].modifiers[0]']]);
+  // the quote itself stays the document's, and a clean modifier is no hit
+  enc.codes[0].modifiers = ['PT'];
+  assert.deepEqual(walk.scanJson(enc, ctx), []);
+  assert.ok(walk.NEVER_QUOTED.test('$.codes[3].modifiers[12]'));
+  assert.ok(!walk.NEVER_QUOTED.test('$.codes[0].quotes[0].text'));
+});
+
 test('a download is scanned line by line, its quoted lines set aside', () => {
   const ctx = walk.scanContext({});
   walk.addQuotes(ctx, { codes: [{ quotes: [{ text: 'Trace fluid in the pouch.', page: 1 }] }] });
@@ -403,7 +418,7 @@ test('the encounter JSON is held to customer-contract.json: every key it lists, 
 });
 
 test('units: a number is shown as that number and units not given as "not given"', () => {
-  // FG-D: the contract serves units as a positive integer or null; the page draws null as "not given"
+  // FG-D: the contract serves units as a whole number (0 included, as written) or null; the page draws null as "not given"
   const doc = encounter();
   doc.codes[0].units = null;
   doc.codes[1].units = 2;
@@ -417,7 +432,14 @@ test('units: a number is shown as that number and units not given as "not given"
   }
   assert.equal(walk.unitsProblem('2 units', 2), '');
   assert.equal(walk.unitsProblem('Units not given', null), '');
-  assert.match(walk.unitsProblem('', 0), /neither a positive integer nor null/);
+  // 0 is a number the coding review wrote (on a code it does not support): shown as "0 units", never as not given
+  assert.equal(walk.unitsProblem('0 units', 0), '');
+  for (const shown of ['Units not given', '', '10 units']) assert.match(walk.unitsProblem(shown, 0), /\.code-units .* for 0$/, shown);
+  const zero = encounter();
+  zero.codes[1].units = 0;
+  assert.equal(domOf(zero).codes[1].units, '0 units');
+  assert.deepEqual(failed(walk.domChecks(zero, domOf(zero), BASE)), []);
+  for (const units of [-1, 1.5, '2']) assert.match(walk.unitsProblem('', units), /neither a whole number nor null/, String(units));
   // the code number is a whole word too: 45385 is not shown by 453851
   const number = encounter();
   const numberDom = domOf(number);

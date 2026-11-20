@@ -65,7 +65,8 @@ const LINE = /^[LM][1-9][0-9]{0,2}$/;
 // refuse to undo a decision the member never saw. A decision without one the page can send back is shown, never undone.
 const DECISION_ID = /^[A-Za-z0-9-]{1,64}$/;
 // Units or modifiers the coding review did not give (the contract's null): said so - never a number, never nothing, and
-// never "No modifier", which is the coding review saying there is none.
+// never "No modifier", which is the coding review saying there is none. Units are a whole number as the coding review
+// wrote them, 0 included (it writes 0 on a code it does not support), and shown as that number: "0 units".
 const UNITS_NOT_GIVEN = 'Units not given';
 const MODIFIERS_NOT_GIVEN = 'Modifiers not given';
 const REVIEW_COPY = {
@@ -414,7 +415,7 @@ function shownStatus(code) {
 }
 
 function unitsLabel(units) {
-  return Number.isInteger(units) && units > 0 ? plural(units, 'unit', 'units') : UNITS_NOT_GIVEN;
+  return Number.isInteger(units) && units >= 0 ? plural(units, 'unit', 'units') : UNITS_NOT_GIVEN;
 }
 
 // A row's modifiers as served: a list of strings ([] when the coding review says there is none), or null when it gave
@@ -438,8 +439,9 @@ function lineDetail(code) {
   return `${unitsLabel(code?.units)} · ${modifiersLabel(code)}`;
 }
 
-// The second check's verdict on one code, and its reason as written. Without a verdict the server's reason is its own
-// fixed sentence ("The second check did not review this code."), which is then the whole line, shown as given.
+// The second check's verdict on one code, and its reason as written. Without a verdict the server's reason opens with
+// its own sentence ("The second check did not review this code.", or "The second check did not give a clear verdict."
+// before the review's own reason), which is then the whole line, shown as given.
 function secondCheck(code) {
   const check = record(code?.second_check);
   const verdict = check.agrees === true ? 'agrees' : check.agrees === false ? 'disagrees' : 'none';
@@ -878,7 +880,7 @@ function codeRow(code, doc, position = 0) {
   const check = secondCheck(code);
   const question = text(code.question);
   const actions = allowedActions(code, doc);
-  return `<li class="code-row" id="code-${rowKey(rowRef(code, position, doc))}" tabindex="-1" data-code="${escapeHtml(code.code)}" data-line="${escapeHtml(lineOf(code, doc))}" data-status="${escapeHtml(codeStatus(code).key)}"${decision ? ` data-decision="${escapeHtml(decision.action)}"` : ''} data-units="${escapeHtml(Number.isInteger(code.units) && code.units > 0 ? code.units : '')}" data-modifiers="${escapeHtml((modifiersOf(code) || []).join(' '))}">`
+  return `<li class="code-row" id="code-${rowKey(rowRef(code, position, doc))}" tabindex="-1" data-code="${escapeHtml(code.code)}" data-line="${escapeHtml(lineOf(code, doc))}" data-status="${escapeHtml(codeStatus(code).key)}"${decision ? ` data-decision="${escapeHtml(decision.action)}"` : ''} data-units="${escapeHtml(Number.isInteger(code.units) && code.units >= 0 ? code.units : '')}" data-modifiers="${escapeHtml((modifiersOf(code) || []).join(' '))}">`
     + `<div class="code-head"><span class="code-number">${escapeHtml(code.code)}</span><span class="code-units">${escapeHtml(unitsLabel(code.units))}</span><span class="code-modifiers">${escapeHtml(modifiersLabel(code))}</span>${badge(status.tone, status.label, status.icon, ` data-status="${escapeHtml(status.key)}"`)}</div>`
     + `<p class="code-reason">${escapeHtml(text(code.reason) || 'No reason was given for this code.')}</p>`
     + `<p class="code-check" data-check="${check.verdict}">${icon(check.verdict === 'agrees' ? 'circle-check' : 'info')}<span><strong>${escapeHtml(check.label)}</strong>${check.reason ? ` ${escapeHtml(check.reason)}` : ''}</span></p>`
@@ -903,12 +905,13 @@ function codesSection(doc) {
     + `${bar}</section>`;
 }
 
-// Documentation notes: what the coding review noticed about the documentation itself, as written. Shown once a review
-// has finished, so "no notes" is never said of a review still running.
+// Documentation notes: what the coding review noticed about the documentation itself, as written, then each comment of
+// the second check that could not be tied to one line (the server's sentence with its reason as written). Shown once a
+// review has finished, so "no notes" is never said of a review still running.
 function notesPanel(doc) {
   const notes = notesOf(doc);
   if (!notes.length && !(progressPhase(doc) === 'done' && !isBusy(doc))) return '';
-  const body = notes.length ? `<p>What the coding review noticed about the documentation itself.</p><ul class="notes-list">${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : '<p class="notes-empty">The coding review made no notes about the documentation.</p>';
+  const body = notes.length ? `<p>What the coding review noticed about the documentation itself, and any comment of the second check that could not be tied to one line.</p><ul class="notes-list">${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : '<p class="notes-empty">The coding review made no notes about the documentation.</p>';
   return `<section class="notes-panel" id="notesPanel" aria-labelledby="notesTitle"><h2 id="notesTitle">Documentation notes</h2>${body}</section>`;
 }
 

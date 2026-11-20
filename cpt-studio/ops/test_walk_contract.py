@@ -42,6 +42,7 @@ WALK_READER = ("const walk = require(process.argv[1]);"
                "walk.shapeProblems(value, walk.contract()[schema]))));")
 LINES = 'line' in CONTRACT['types']['code']['keys']  # LINE IDENTITY: lane F1a's contract lists each row's line
 QUESTION_LINES = 'lines' in CONTRACT['types']['question']['keys']  # and each question's lines (FIX-SPEC section 3)
+DECISION_IDS = 'id' in CONTRACT['types']['decision']['keys']  # DECISION IDS: a decision shown carries its id (FIX-SPEC-2 5)
 
 
 def code_row(code, status, line, **extra):
@@ -109,8 +110,11 @@ def cases():
         lambda e: e.update(internal_round_id='x'),
         lambda e: e['document'].update(storage_hint='x'),
         lambda e: e['progress'].update(phase_detail='x'),
-        lambda e: e['codes'][0].update(decision={'action': 'approve', 'by': 'R', 'at': '2026-11-20T10:06:00Z',
-                                                 'note': '', 'acknowledgement': 'x'}),
+        lambda e: e['codes'][0].update(decision={**({'id': 'd1'} if DECISION_IDS else {}), 'action': 'approve',
+                                                 'by': 'R', 'at': '2026-11-20T10:06:00Z', 'note': '',
+                                                 'acknowledgement': 'x'}),
+        *([lambda e: e['codes'][0].update(decision={'action': 'approve', 'by': 'R', 'at': '2026-11-20T10:06:00Z',
+                                                    'note': ''})] if DECISION_IDS else []),  # a decision without its id
         lambda e: e['document'].pop('view_media_type'),
         lambda e: e['codes'][1].pop('quotes'),
         lambda e: e['document'].update(kind='txt'),

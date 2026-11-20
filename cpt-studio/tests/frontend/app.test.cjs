@@ -25,9 +25,16 @@ const ENCOUNTERS = fs.readdirSync(FIXTURES).filter(name => /^encounter-.+\.json$
 const clone = value => JSON.parse(JSON.stringify(value));
 const UUID = '0b6f6a2e-3c1d-4f7a-9e2b-5d8c7a6b4e3f';
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-// the second check's own sentences where it gave no verdict (studio/customer.py ADDED_BY_CHECK, NOT_CHECKED)
+// the second check's own sentences where it gave no verdict (studio/customer.py): for a code it added, the status it
+// gave it (ADDED_WITH_STATUS; FIX-SPEC-2 section 3), or ADDED_BY_CHECK for a line stored without one; NOT_CHECKED
+const ADDED_WITH_STATUS = ['ready for approval', 'needing an answer']
+  .map(status => `The second check found this code and listed it as ${status}; it needs your review.`);
 const ADDED_BY_CHECK = 'The second check found this code; it needs your review.';
+const ADDED_SENTENCES = [...ADDED_WITH_STATUS, ADDED_BY_CHECK];
 const NOT_CHECKED = 'The second check did not review this code.';
+// the note on the encounter for a review of the second check that could not be tied to one line (studio/customer.py
+// UNPLACED_NOTE, followed by the review's reason as written)
+const UNPLACED_NOTE = 'The second check made a comment that could not be tied to one line';
 
 function ui(doc, extra = {}) {
   return { open: new Set(), answers: new Map(), ack: null, reconnecting: false, nowMs: Date.parse(doc?.progress?.server_time || '2026-11-20T00:00:00Z'), clock: 0, ...extra };
@@ -432,10 +439,10 @@ test('the page and the fixtures speak the contract\'s vocabulary: states, phases
       // section 6: ready and needs_review take approve and reject; needs_answer and not_supported none; a decision, revoke
       const expected = code.decision ? ['revoke'] : ['ready', 'needs_review'].includes(code.status) ? ['approve', 'reject'] : [];
       assert.deepEqual(code.allowed_actions, expected, `${name} ${code.code}`);
-      // the second check's reason without a verdict is one of the server's two sentences, and a code it gave none is
+      // the second check's reason without a verdict is one of the server's own sentences, and a code it gave none is
       // one that needs review
       if (code.second_check.agrees === null) {
-        assert.ok([ADDED_BY_CHECK, NOT_CHECKED].includes(code.second_check.reason), `${name} ${code.code}`);
+        assert.ok([...ADDED_SENTENCES, NOT_CHECKED].includes(code.second_check.reason), `${name} ${code.code}`);
         assert.equal(code.status, 'needs_review', `${name} ${code.code}`);
       }
     }
@@ -531,7 +538,7 @@ test('every fixture code names its line: L1..Ln for the coding review\'s codes, 
     assert.deepEqual(listed, listed.map((_, index) => `L${index + 1}`), name);
     assert.deepEqual(added, added.map((_, index) => `M${index + 1}`), name);
     // a line the second check added is exactly a row whose second check is its own sentence for an added code
-    doc.codes.forEach(code => assert.equal(code.line.startsWith('M'), code.second_check.reason === ADDED_BY_CHECK, `${name} ${code.line}`));
+    doc.codes.forEach(code => assert.equal(code.line.startsWith('M'), ADDED_SENTENCES.includes(code.second_check.reason), `${name} ${code.line}`));
     const codes = doc.codes.map(code => code.code);
     pairs += codes.length - new Set(codes).size;
     // a question names the lines it affects, and shows those lines' codes
@@ -827,8 +834,15 @@ test('modifiers the coding review did not give read "Modifiers not given", never
 test('units the coding review did not give read "Units not given", never a number or nothing', () => {
   assert.equal(app.unitsLabel(1), '1 unit');
   assert.equal(app.unitsLabel(3), '3 units');
-  // the contract's units are a positive integer or null; anything else is not a count the page can state
-  for (const value of [null, undefined, 0, -1, 1.5, '2', NaN]) assert.equal(app.unitsLabel(value), 'Units not given', String(value));
+  // 0 is a number the coding review wrote (it writes 0 on a code it does not support): shown as written, never as not
+  // given (the server serves it as 0; the exports print "units 0")
+  assert.equal(app.unitsLabel(0), '0 units');
+  const zero = clone(fixture('encounter-ready.json'));
+  zero.codes.find(code => code.line === 'L4').units = 0;
+  const zeroRow = dom(render(zero)).one('li.code-row[data-line="L4"]');
+  assert.deepEqual([zeroRow.one('.code-units').text, zeroRow.attr('data-units')], ['0 units', '0']);
+  // the contract's units are a whole number or null; anything else is not a count the page can state
+  for (const value of [null, undefined, -1, 1.5, '2', NaN]) assert.equal(app.unitsLabel(value), 'Units not given', String(value));
   assert.equal(app.UNITS_NOT_GIVEN, 'Units not given');
   const doc = fixture('encounter-same-code.json');
   const row = dom(render(doc)).one('li.code-row[data-line="M1"]');
@@ -939,7 +953,7 @@ test('the second check without a verdict shows the server\'s own sentence as giv
   const check = code => page.one(`li.code-row[data-code="${code}"] .code-check`);
   assert.deepEqual([check('45385').attr('data-check'), check('45385').text], ['agrees', 'Second check: agrees. Removal by snare is documented on page 2, and the colonoscope reached the cecum.']);
   assert.deepEqual([check('45380').attr('data-check'), check('45380').text, check('45380').one('strong').text], ['none', NOT_CHECKED, NOT_CHECKED]);
-  assert.deepEqual([check('45381').attr('data-check'), check('45381').text], ['none', ADDED_BY_CHECK]);
+  assert.deepEqual([check('45381').attr('data-check'), check('45381').text], ['none', ADDED_WITH_STATUS[0]]);
   assert.deepEqual(app.secondCheck({ second_check: { agrees: null, reason: ` ${ADDED_BY_CHECK} ` } }), { verdict: 'none', label: ADDED_BY_CHECK, reason: '' });
   // a verdict with no reason, or no verdict and no sentence: the verdict alone
   assert.deepEqual(app.secondCheck({ second_check: { agrees: false, reason: null } }), { verdict: 'disagrees', label: 'Second check: disagrees.', reason: '' });
@@ -1150,6 +1164,14 @@ test('documentation notes are listed as written once the review is done, and nev
   const asking = dom(render(fixture('encounter-awaiting-answer.json')));
   assert.equal(asking.one('#notesPanel h2').text, 'Documentation notes');
   assert.deepEqual(asking.all('#notesPanel li').map(item => item.text), fixture('encounter-awaiting-answer.json').notes);
+  // a review of the second check that could not be tied to one line is a note too, with its reason as written, and the
+  // panel's lead says so (FIX-SPEC-2 section 3)
+  const placed = fixture('encounter-needs-review.json');
+  const unplaced = placed.notes.filter(note => note.startsWith(`${UNPLACED_NOTE}: `));
+  assert.equal(unplaced.length, 1);
+  const placedPage = dom(render(placed));
+  assert.deepEqual(placedPage.all('#notesPanel li').map(item => item.text), placed.notes);
+  assert.match(placedPage.one('#notesPanel p').text, /any comment of the second check that could not be tied to one line/);
   const none = clone(fixture('encounter-ready.json'));
   none.notes = [];
   assert.match(dom(render(none)).one('#notesPanel').text, /made no notes/);
