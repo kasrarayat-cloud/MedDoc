@@ -4,9 +4,12 @@
  * scan (every vector of ops/verification/customer-denylist.json, which ops/scan_customer.py
  * runs too, so the readers cannot drift apart), the JSON contract (ops/verification/customer-contract.json, held to
  * scan_customer.py's reader by ops/test_walk_contract.py) and DOM contract checks, the approval of one line on the round
- * shown, and the evidence's shape - synthetic values only; and the review dialog driven through the page itself
- * (ops/dev_preview_server.cjs's mock, in Chromium) where Playwright is installed (CPT_VERIFY_PLAYWRIGHT), skipped where
- * it is not.
+ * shown, the walk's own judge of a chosen quote (DECISIONS D368 round 3: its own search with the rule's R1 overprint
+ * copies, R2 word edges and R3 format characters over synthetic text layers, the notes N1-N4 character for character, a
+ * marked page drawn, no mark inside a character) and the evidence's shape - synthetic values only; and the review dialog
+ * and every quote of the dev preview's documents driven through the page itself (ops/dev_preview_server.cjs's mock, in
+ * Chromium) where Playwright is installed (CPT_VERIFY_PLAYWRIGHT), skipped where it is not. The browser subtests that need
+ * round 3's viewer skip on exactly eb3827d2's app.js (ROUND2_VIEWER_SHA256) and run against any other.
  *
  * LINE IDENTITY (FIX-SPEC section 1): the tests marked so build rows that carry `line`; the base fixture carries it
  * when customer-contract.json lists it (lane F1a), and the browser test checks the posted line once the page's fixtures
@@ -388,105 +391,322 @@ test('the viewer is read by the view address it keeps, whether the page draws th
   assert.deepEqual(failed(walk.domChecks(enc, dom, BASE)), ['dom.viewer']);
 });
 
-// What the viewer showed for one chosen quote (readMarks), as the walk reads it.
-function reading(fields = {}) {
-  return { mode: 'pdf', marked: 'L1#0', status: 'marked', pages: [1], count: 1, note: 'Marked on page 1.', drawn: [1, 2], marks: [], ...fields };
+// --- the walk's own judge of a chosen quote (DECISIONS D368, round 3) ------------------------------------------------
+// Synthetic text layers, as readPdfPage reads them: a string is an item's span, '\n' a <br> (an item the PDF library
+// marks hasEOL), an object an item with its own fields (text, copy: the viewer's overprint flag, box: [left, top, height]).
+function layer(...parts) {
+  return parts.map(part => (part === '\n' ? { kind: 'br' } : { kind: 'item', ...(typeof part === 'string' ? { text: part } : part) }));
 }
 
-test('a chosen quote is judged by its marked words, the pages they are on and the note', () => {
-  const quote = { code: '43239', line: 'L1', text: 'Cold forceps biopsies were taken.', page: 1 };
-  const mark = (page, occurrence, text) => ({ page, occurrence, text });
-  const judge = fields => walk.judgeQuote(quote, reading(fields));
-  // marked once: the marked parts of the occurrence, joined, are the quote's words (white space and NFKC aside)
-  assert.deepEqual(judge({ marks: [mark(1, 0, 'Cold forceps bio'), mark(1, 0, 'psies were taken.')] }), { outcome: 'once', off_page: 0, mismatched: 0, cut: 0, problems: [] });
-  assert.equal(walk.judgeQuote({ ...quote, text: 'The ﬁnding.' }, reading({ marks: [mark(1, 0, 'The finding.')] })).outcome, 'once');
-  // in another case only where the page has no exact-case occurrence (the viewer's own rule); the judge accepts either
-  assert.equal(judge({ marks: [mark(1, 0, 'COLD FORCEPS BIOPSIES WERE TAKEN.')] }).outcome, 'once');
-  // marked more than once, each the quote
-  const twice = judge({ count: 2, note: 'These words appear 2 times on page 1. Each is marked.', marks: [mark(1, 0, quote.text), mark(1, 1, quote.text)] });
-  assert.equal(twice.outcome, 'multi');
-  // from the quote's page onto the next
-  const run = judge({ pages: [1, 2], note: 'Marked on page 1, continuing onto page 2.', marks: [mark(1, 0, 'Cold forceps'), mark(2, 0, 'biopsies were taken.')] });
-  assert.deepEqual([run.outcome, run.off_page], ['once', 0]);
-  // not found: nothing marked and the note says so
-  assert.equal(judge({ status: 'not_found', pages: [], count: 0, note: 'The exact words could not be found on page 1, so nothing is marked. Page 1 is shown.' }).outcome, 'not_found');
-  // the failures: a mark on another page, other words, a count that disagrees, a silent note, marks the viewer denies
-  const off = judge({ marks: [mark(1, 0, quote.text), mark(3, 1, quote.text)], count: 2, pages: [1, 3], note: 'These words appear 2 times on page 1. Each is marked.' });
-  assert.equal(off.outcome, 'unresolved');
-  assert.equal(off.off_page, 2, 'the mark on page 3 and the page the viewer claims');
-  assert.equal(judge({ marks: [mark(2, 0, quote.text)], pages: [2] }).off_page, 2, 'the next page alone is another page');
-  assert.equal(judge({ marks: [mark(1, 0, 'Cold forceps biopsies were')] }).mismatched, 1, 'part of the quote is not the quote');
-  assert.equal(judge({ marks: [mark(1, 0, `${quote.text} And more.`)] }).mismatched, 1, 'more than the quote is not the quote');
-  assert.match(judge({ count: 2, marks: [mark(1, 0, quote.text)] }).problems.join(), /1 occurrence\(s\) marked, the viewer counted 2/);
-  // an occurrence whose marks on a page begin or end inside a character (readMarks' whole: false) is counted once per page,
-  // though its marked text is the quote's: a letter marked without the accent the next item holds
-  const cut = judge({ pages: [1, 2], note: 'Marked on page 1, continuing onto page 2.', marks: [{ ...mark(1, 0, 'Cold forceps'), whole: false },
-    { ...mark(1, 0, 'biopsies'), whole: false }, { ...mark(2, 0, 'were taken.'), whole: true }] });
-  assert.deepEqual([cut.outcome, cut.cut, cut.mismatched], ['unresolved', 1, 0]);
-  assert.match(cut.problems.join(), /1 marked part\(s\) begin or end inside a character/);
-  assert.equal(judge({ marks: [{ ...mark(1, 0, quote.text), whole: true }] }).outcome, 'once');
-  assert.match(judge({ note: 'Marked.', marks: [mark(1, 0, quote.text)] }).problems.join(), /does not name page 1/);
-  assert.match(judge({ status: 'not_found', count: 0, note: '' }).problems.join(), /note does not say/);
-  assert.match(judge({ status: 'not_found', count: 0, note: 'The exact words could not be found on page 1.', marks: [mark(1, 0, 'x')] }).problems.join(), /1 mark\(s\) shown/);
-  assert.equal(judge({ mode: 'frame' }).outcome, 'unavailable');
-  // the problem says why the browser's own viewer is shown, as the viewer keeps it (data-fallback)
-  assert.match(judge({ mode: 'frame', fallback: 'browser' }).problems.join(), /browser's own viewer \(marking needs a newer browser\)/);
-  assert.match(judge({ mode: 'frame', fallback: 'document' }).problems.join(), /\(the document cannot be drawn in the page\)/);
-  assert.match(judge({ mode: 'frame', fallback: 'slow' }).problems.join(), /\(the document took too long to load\)/);
-  assert.match(judge({ mode: 'frame' }).problems.join(), /\(no reason given\)/);
-  assert.match(judge({ mode: 'frame', fallback: 'toString' }).problems.join(), /\(no reason given\)/);
-  assert.equal(walk.judgeQuote(quote, null).outcome, 'unresolved');
-  // a quote with no page may be marked on any page; a text document has no pages
-  assert.equal(walk.judgeQuote({ ...quote, page: null }, reading({ pages: [3], note: 'Marked on page 3.', marks: [mark(3, 0, quote.text)] })).outcome, 'once');
-  assert.equal(walk.judgeQuote({ ...quote, page: null }, reading({ mode: 'text', pages: [], note: 'Marked in the document.', marks: [mark(null, 0, quote.text)] })).outcome, 'once');
+// A page's canvas as readPdfPage measures a drawn one, and a page drawn with that canvas and these marks.
+const DRAWN = { present: true, visible: true, pixels: 1000, opaque: 1, markPixels: 100, markContent: 40 };
+function drawn(number, tokens, marks = [], canvas = DRAWN) {
+  return { number, drawn: true, tokens, marks, canvas };
+}
+
+// The marks of `words` (each [item, its text, occurrence], the n-th time that text is in that item counting from 0 as
+// a fourth element) in a page's tokens, as readPdfPage gives them: the item and the offsets in its string.
+function marked(tokens, ...words) {
+  const items = tokens.filter(token => token.kind === 'item');
+  return words.map(([item, text, occurrence, nth = 0]) => {
+    let start = -1;
+    for (let k = 0; k <= nth; k += 1) start = items[item].text.indexOf(text, start + 1);
+    assert.ok(start >= 0, `${text} in item ${item}`);
+    return { item, occurrence, start, end: start + text.length };
+  });
+}
+
+// What the viewer showed for one chosen quote in a drawn PDF (chooseQuotes' reading): its state and the pages read.
+function pdfReading(pages, fields = {}) {
+  return { mode: 'pdf', fallback: '', marked: 'L1#0', status: 'marked', pages: [1], count: 1, note: 'Marked on page 1.',
+    pageCount: pages.length, drawn: pages.map(item => item.number), pagesRead: new Map(pages.map(item => [item.number, item])), ...fields };
+}
+
+// The walk's own search over synthetic pages (each a list of tokens): its result and the note it requires.
+function search(quote, ...pages) {
+  const models = new Map(pages.map((tokens, index) => [index + 1, walk.pageModel(index + 1, tokens)]));
+  const result = walk.ownSearch(quote, models, pages.length);
+  return { ...result, note: walk.pdfQuoteNote(result) };
+}
+
+test('the walk\'s own search: white space and NFKC ignored, exact case first, every occurrence, the quote\'s page and the next, never another', () => {
+  const page1 = layer('Patchy erythema was seen in the gastric antrum.', '\n', 'Cold forceps biopsies were taken from the gastric antrum.', '\n');
+  const page2 = layer('Colonoscopy: The colonoscope was advanced to the cecum.', '\n', 'Impression: antral erythema.');
+  const one = search({ text: 'Cold  forceps\nbiopsies were taken', page: 1 }, page1, page2);
+  assert.deepEqual([one.status, one.scope, one.caseBlind, one.count, one.pages, one.note], ['marked', 'page', false, 1, [1], 'Marked on page 1.']);
+  assert.equal(search({ text: 'Coldforcepsbiopsies', page: 1 }, page1, page2).count, 1, 'white space ignored entirely');
+  assert.equal(search({ text: 'ﬁ', page: 1 }, layer('the fi glyph')).count, 1, 'NFKC on both sides');
+  const twice = search({ text: 'the gastric antrum.', page: 1 }, page1, page2);
+  assert.deepEqual([twice.count, twice.note], [2, 'These words appear 2 times on page 1. Each is marked.']);
+  const blind = search({ text: 'PATCHY ERYTHEMA WAS SEEN', page: 1 }, page1, page2);
+  assert.deepEqual([blind.status, blind.caseBlind, blind.count], ['marked', true, 1]);
+  // case-blind only where there is no exact-case occurrence: the capitals are not counted beside an exact one
+  assert.deepEqual([search({ text: 'cold snare', page: 1 }, layer('cold snare and COLD SNARE')).count,
+    search({ text: 'cold snare', page: 1 }, layer('cold snare and COLD SNARE')).caseBlind], [1, false]);
+  const run = search({ text: 'taken from the gastric antrum. Colonoscopy: The colonoscope was advanced', page: 1 }, page1, page2);
+  assert.deepEqual([run.scope, run.count, run.pages, run.note], ['continued', 1, [1, 2], 'Marked on page 1, continuing onto page 2.']);
+  const elsewhere = search({ text: 'Impression: antral erythema.', page: 1 }, page1, page2);
+  assert.deepEqual([elsewhere.status, elsewhere.pages, elsewhere.note], ['not_found', [],
+    'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.'], 'never another page');
+  const anywhere = search({ text: 'antral erythema', page: null }, page1, page2);
+  assert.deepEqual([anywhere.scope, anywhere.pages, anywhere.note], ['document', [2], 'Marked on page 2.']);
+  assert.equal(search({ text: 'erythema', page: null }, page1, page2).note, 'These words appear 2 times, on pages 1 and 2. Each is marked.');
+  assert.deepEqual([search({ text: 'x', page: 3 }, page1, page2).status, search({ text: 'x', page: 3 }, page1, page2).note],
+    ['missing_page', 'This passage names page 3, but the document has 2 pages. Nothing is marked.']);
+  assert.equal(search({ text: '  \u200b ', page: 1 }, page1).note, 'This passage has no words to mark.');
+  assert.equal(search({ text: 'x', page: 1 }, page1, page2).status, 'not_found');
 });
 
-test('every quote chosen is counted, and the check fails on any mark off its page or with other words', () => {
-  const quote = { code: '43239', line: 'L1', text: 'Cold forceps biopsies were taken.', page: 1 };
-  const good = { quote, reading: reading({ marks: [{ page: 1, occurrence: 0, text: quote.text }] }) };
-  const missing = { quote, reading: reading({ status: 'not_found', pages: [], count: 0, note: 'The exact words could not be found on page 1, so nothing is marked. Page 1 is shown.' }) };
-  const made = walk.quoteMarkChecks([good, good, missing]);
-  assert.equal(made.status, 'pass');
-  assert.deepEqual(made.data, { quotes: 3, marked_once: 2, marked_multi: 0, not_found: 1, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0, cut: 0 });
-  assert.equal(made.reason, '3 quote(s) chosen: 2 marked once, 0 marked more than once, 1 not found (the note says so), 0 mark(s) off the quote\'s page, 0 marked with other words, 0 beginning or ending inside a character');
-  const off = walk.quoteMarkChecks([good, { quote, reading: reading({ pages: [2], marks: [{ page: 2, occurrence: 0, text: quote.text }] }) }]);
-  assert.equal(off.status, 'fail');
-  assert.equal(off.data.off_page, 2);
-  assert.equal(walk.quoteMarkChecks([{ quote, reading: reading({ mode: 'frame' }) }]).status, 'fail', 'no marking at all is a failure');
-  const halved = walk.quoteMarkChecks([good, { quote, reading: reading({ marks: [{ page: 1, occurrence: 0, text: quote.text, whole: false }] }) }]);
-  assert.deepEqual([halved.status, halved.data.cut, halved.data.marked_once, halved.data.unresolved], ['fail', 1, 1, 1]);
-  assert.equal(walk.quoteMarkChecks([]).status, 'fail');
+test('R1: an overprint copy the viewer flags, where its geometry bears the flag out, is left out of the text and counts once', () => {
+  // fake bold: the same line drawn twice 0.3 pt apart; the second copy flagged by the viewer
+  const bold = layer({ text: 'DIAGNOSIS: TUBULAR ADENOMA.', box: [46.56, 76.2, 10] }, { text: 'DIAGNOSIS: TUBULAR ADENOMA.', copy: true, box: [46.88, 76.2, 10] }, '\n',
+    'The procedure was uneventful.', { text: 'Impression:', box: [46.6, 90, 10] }, { text: 'Impression:', copy: true, box: [46.9, 90, 10] }, ' ', 'two polyps were removed.');
+  assert.equal(walk.unbornFlags(bold), 0);
+  assert.deepEqual([search({ text: 'DIAGNOSIS: TUBULAR ADENOMA.', page: 1 }, bold).count, search({ text: 'DIAGNOSIS: TUBULAR ADENOMA.', page: 1 }, bold).note],
+    [1, 'Marked on page 1.']);
+  assert.equal(search({ text: 'The procedure was uneventful. Impression: two polyps were removed.', page: 1 }, bold).count, 1, 'a passage across the copy');
+  // a flag the geometry does not bear out: other text, too far, or no span among the 8 before it
+  const lie = (copy, before = [{ text: 'Impression:', box: [46.6, 90, 10] }]) => walk.unbornFlags(layer(...before, { copy: true, ...copy }));
+  assert.equal(lie({ text: 'Impression:', box: [46.9, 90, 10] }), 0);
+  assert.equal(lie({ text: 'Impressions', box: [46.9, 90, 10] }), 1, 'other text');
+  assert.equal(lie({ text: 'Impression:', box: [49, 90, 10] }), 1, 'more than max(1.5, 0.2 x height) away');
+  assert.equal(lie({ text: 'Impression:', box: [47.9, 90, 5] }), 0, 'within 1.5 px');
+  assert.equal(lie({ text: 'Impression:', box: [48.4, 90, 10] }), 0, 'beyond 1.5 px, within 0.2 x its height (2 px)');
+  assert.equal(lie({ text: 'Impression:', box: [48.4, 90, 5] }), 1, 'beyond 1.5 px for a 5 px span');
+  assert.equal(lie({ text: '   ', box: [46.6, 90, 10] }, [{ text: '   ', box: [46.6, 90, 10] }]), 1, 'white space only is never a copy');
+  assert.equal(lie({ text: 'Impression:', box: [46.6, 90, 10] }, [{ text: 'Impression:', box: [46.6, 90, 10] }, ...Array(8).fill({ text: 'x', box: [0, 0, 10] })]), 1,
+    'not among the 8 spans before it');
+  assert.equal(lie({ text: 'Impression:' }), 1, 'a flagged span with no box');
+  // in the judge: a flag not borne out fails the quote, whatever the viewer marked
+  const page = layer('Bowel preparation was rated adequate.', { text: 'A 4 mm polyp was removed.', copy: true, box: [10, 10, 10] });
+  const judged = walk.judgeQuote({ code: '45380', line: 'L1', text: 'Bowel preparation was rated adequate.', page: 1 },
+    pdfReading([drawn(1, page, marked(page, [0, 'Bowel preparation was rated adequate.', 0]))]));
+  assert.deepEqual([judged.outcome, judged.flags], ['unresolved', 1]);
+  assert.match(judged.problems.join(), /1 span\(s\) flagged as an overprint copy are not one/);
+});
+
+test('R2: an occurrence is accepted only between word edges, read in the page\'s joined text', () => {
+  const page = layer('The patient was told to bathe ending the preparation at noon.', '\n', 'Findings: the end of the procedure was uneventful.', '\n',
+    'Mild pain was reported; the abdomen was painless on palpation.', '\n', 'A 5 mm polyp was found; polypectomy was performed; no other polyps.');
+  assert.equal(search({ text: 'the end', page: 1 }, page).count, 1, 'not inside "bathe ending"');
+  assert.equal(search({ text: 'pain', page: 1 }, page).count, 1, 'not inside "painless"');
+  assert.equal(search({ text: 'polyp', page: 1 }, page).count, 1, 'not inside "polypectomy" or "polyps"');
+  assert.equal(search({ text: 'not able', page: 1 }, layer('It was notable.')).count, 1, 'white space inside the quote stays ignored: only its ends are edges');
+  assert.equal(search({ text: '5 mm', page: 1 }, layer('A 15 mm polyp; a 5 mm polyp.')).count, 1, 'a digit is not an edge');
+  assert.equal(search({ text: '.', page: 1 }, layer('a. b.')).count, 2, 'a quote that starts and ends with punctuation asks for no edge');
+  // the start and the end of the page are edges; a line break of an item the library marks hasEOL is one, a copy's too
+  assert.equal(search({ text: 'polyp', page: 1 }, layer('polyp')).count, 1);
+  assert.equal(search({ text: 'removed', page: 1 }, layer('one polyp', '\n', 'removed today')).count, 1);
+  assert.equal(search({ text: 'removed', page: 1 }, layer('one polyp', 'removed today')).status, 'not_found', 'no break, no space: one word');
+  const bold = layer({ text: 'polyp', box: [10, 10, 10] }, { text: 'polyp', copy: true, box: [10.3, 10, 10] }, '\n', 'removed');
+  assert.deepEqual([search({ text: 'polyp', page: 1 }, bold).count, search({ text: 'removed', page: 1 }, bold).count], [1, 1],
+    'the copy\'s line break stays when its string is left out');
+  // a letter, a digit or a combining mark just before is no edge (an accent drawn after its letter)
+  assert.equal(search({ text: 'clair', page: 1 }, layer('e\u0301clair')).status, 'not_found');
+  // the continuation's edges are read across the two pages' text
+  assert.equal(search({ text: 'gastric antrum. Colonoscopy', page: 1 }, layer('the gastric antrum.'), layer('Colonoscopy: advanced.')).scope, 'continued');
+  assert.equal(search({ text: 'antrum. Colon', page: 1 }, layer('the gastric antrum.'), layer('Colonoscopy: advanced.')).status, 'not_found');
+  // case-blind keeps the edges too
+  assert.equal(search({ text: 'THE END', page: 1 }, layer('bathe ending; the end.')).count, 1);
+});
+
+test('R3: format characters are dropped from both sides before matching', () => {
+  const page = layer('alphabeta was seen', '\n', 'soft-hyphen');
+  for (const mark of ['\u00ad', '\u200b', '\u200c', '\u200d', '\u2060', '\u200e', '\ufeff']) {
+    assert.equal(search({ text: `alpha${mark}beta`, page: 1 }, page).count, 1, `U+${mark.codePointAt(0).toString(16)}`);
+  }
+  assert.equal(search({ text: 'alphabeta', page: 1 }, layer('alpha\u00adbeta')).count, 1, 'a format character on the page side too');
+  assert.equal(search({ text: '\u00ad', page: 1 }, page).status, 'empty');
+});
+
+test('the notes when nothing is found: N1 where the page has searchable text, N2 where it has none, character for character', () => {
+  const text = layer('Bowel preparation was rated adequate.');
+  assert.equal(search({ text: 'absent words', page: 1 }, text).note,
+    'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.');
+  assert.equal(search({ text: 'absent words', page: null }, text).note,
+    'The exact words were not found in the searchable text of this document, so nothing is marked.');
+  // no searchable character: an empty layer, white space only, or only a flagged copy's text left out (whatever the next page holds)
+  for (const page of [layer(), layer(' ', '\n', ' ')]) {
+    assert.equal(search({ text: 'absent words', page: 1 }, page, text).note,
+      'Page 1 has no text the viewer can search (it may be a scanned image), so nothing is marked. Page 1 is shown.');
+  }
+  assert.equal(search({ text: 'absent words', page: null }, layer(), layer(' ')).note,
+    'This document has no text the viewer can search (it may be a scanned image), so nothing is marked.');
+  assert.equal(search({ text: 'absent words', page: null }, layer(), text).note,
+    'The exact words were not found in the searchable text of this document, so nothing is marked.');
+});
+
+test('a chosen quote is judged by the walk\'s own search: the viewer\'s marks, count, pages and note are held to it, never taken at its word', () => {
+  const page = layer('Patchy erythema was seen in the gastric antrum.', '\n', 'Cold forceps biopsies were taken from the gastric antrum.',
+    '\n', 'COLD FORCEPS BIOPSIES WERE TAKEN.');
+  const quote = { code: '43239', line: 'L1', text: 'Cold forceps biopsies were taken', page: 1 };
+  const right = marked(page, [1, 'Cold forceps biopsies were taken', 0]);
+  const judge = (marks, fields = {}, pages = [drawn(1, page, marks)]) => walk.judgeQuote(quote, pdfReading(pages, fields));
+  assert.deepEqual(judge(right), { outcome: 'once', off_page: 0, mismatched: 0, missed: 0, cut: 0, blank: 0, flags: 0, no_text: false, problems: [] });
+  // the marked text split across items is one occurrence; its parts are read together
+  const split = layer('Cold forceps bio', 'psies were taken from the antrum.');
+  assert.equal(walk.judgeQuote(quote, pdfReading([drawn(1, split, marked(split, [0, 'Cold forceps bio', 0], [1, 'psies were taken', 0]))])).outcome, 'once');
+  // "not found" passes only where the walk finds nothing either (FM-4 M1, RCW-2 a)
+  const silent = judge([], { status: 'not_found', pages: [], count: 0, note: 'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.' });
+  assert.deepEqual([silent.outcome, silent.missed], ['unresolved', 1]);
+  assert.match(silent.problems.join(), /the viewer says not_found, the walk's own search finds 1/);
+  // the case: the capitals marked where an exact-case occurrence exists (FM-4 M2, RCW-2 c)
+  const capitals = judge([...right, ...marked(page, [2, 'COLD FORCEPS BIOPSIES WERE TAKEN', 1])], { count: 2, note: 'These words appear 2 times on page 1. Each is marked.' });
+  assert.deepEqual([capitals.outcome, capitals.mismatched, capitals.missed], ['unresolved', 1, 0]);
+  assert.equal(judge(marked(page, [2, 'COLD FORCEPS BIOPSIES WERE TAKEN', 0])).mismatched, 1, 'the capitals instead of the exact words');
+  // the count: one of two occurrences marked (FM-4 M3, RCW-2 b)
+  const twiceQuote = { ...quote, text: 'the gastric antrum.' };
+  const both = marked(page, [0, 'the gastric antrum.', 0], [1, 'the gastric antrum.', 1]);
+  assert.equal(walk.judgeQuote(twiceQuote, pdfReading([drawn(1, page, both)], { count: 2, note: 'These words appear 2 times on page 1. Each is marked.' })).outcome, 'multi');
+  const first = walk.judgeQuote(twiceQuote, pdfReading([drawn(1, page, both.slice(0, 1))]));
+  assert.deepEqual([first.outcome, first.missed], ['unresolved', 1]);
+  assert.match(first.problems.join(), /the viewer counts 1, the walk's own search 2/);
+  // other words, part of the words, more than the words, another place
+  assert.equal(judge(marked(page, [1, 'Cold forceps biopsies were', 0])).mismatched, 1);
+  assert.equal(judge(marked(page, [1, 'Cold forceps biopsies were taken from', 0])).mismatched, 1);
+  // the pages: a mark on another page, and pages the viewer names that its own search does not
+  const page2 = layer('Cold forceps biopsies were taken twice.');
+  const off = judge([], { pages: [1, 3] }, [drawn(1, page, right), drawn(2, page2, marked(page2, [0, 'Cold forceps biopsies were taken', 1])), drawn(3, layer('x'))]);
+  assert.equal(off.off_page, 2, 'the mark on page 2 starts no occurrence on page 1; page 3 is claimed');
+  // the note, exactly: an N2 note where the page has searchable text, and N1 where it has none
+  assert.match(judge(right, { note: 'Marked.' }).problems.join(), /the note does not say what was done, as written/);
+  const absent = { ...quote, text: 'absent words' };
+  const n2 = 'Page 1 has no text the viewer can search (it may be a scanned image), so nothing is marked. Page 1 is shown.';
+  const n1 = 'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.';
+  assert.equal(walk.judgeQuote(absent, pdfReading([drawn(1, page)], { status: 'not_found', pages: [], count: 0, note: n1 })).outcome, 'not_found');
+  assert.equal(walk.judgeQuote(absent, pdfReading([drawn(1, page)], { status: 'not_found', pages: [], count: 0, note: n2 })).outcome, 'unresolved');
+  const scanned = walk.judgeQuote(absent, pdfReading([drawn(1, layer())], { status: 'not_found', pages: [], count: 0, note: n2 }));
+  assert.deepEqual([scanned.outcome, scanned.no_text], ['not_found', true]);
+  assert.equal(walk.judgeQuote(absent, pdfReading([drawn(1, layer())], { status: 'not_found', pages: [], count: 0, note: n1 })).outcome, 'unresolved');
+  // a page it must search that it could not read leaves the quote unresolved, and the viewer's marks in a copy are refused
+  const unread = walk.judgeQuote(quote, pdfReading([drawn(1, page, right), { number: 2, drawn: false }]));
+  assert.match(unread.problems.join(), /page\(s\) 2 could not be read/);
+  const bold = layer({ text: 'Cold forceps biopsies were taken', box: [10, 10, 10] }, { text: 'Cold forceps biopsies were taken', copy: true, box: [10.3, 10, 10] });
+  const inCopy = walk.judgeQuote(quote, pdfReading([drawn(1, bold, marked(bold, [0, 'Cold forceps biopsies were taken', 0], [1, 'Cold forceps biopsies were taken', 0]))]));
+  assert.match(inCopy.problems.join(), /an overprint copy is marked/);
   // the reason names quotes by their line and page, never by their words
-  assert.ok(!off.reason.includes(quote.text));
+  assert.ok(!silent.problems.join().includes(quote.text));
+});
+
+test('S5: every run of an occurrence\'s marked text is read at both ends, so a cut inside a character is seen', () => {
+  const quote = { code: '43239', line: 'L1', text: 'Jose Garcia', page: 1 };
+  // RCW-3: the accent is an item of its own and left unmarked between two marked parts of one occurrence
+  const page = layer('The patient ', 'Jose', '\u0301', ' ', 'Garcia', ' was seen.');
+  const cut = walk.judgeQuote(quote, pdfReading([drawn(1, page, marked(page, [1, 'Jose', 0], [4, 'Garcia', 0]))]));
+  assert.equal(cut.cut, 1);
+  assert.match(cut.problems.join(), /1 marked part\(s\) begin or end inside a character/);
+  // the accent marked with its letter, in two items, is whole; so is a syllable written as jamo marked whole
+  const accent = { ...quote, text: 'Jose\u0301 Garcia' };
+  const whole = walk.judgeQuote(accent, pdfReading([drawn(1, page, marked(page, [1, 'Jose', 0], [2, '\u0301', 0], [4, 'Garcia', 0]))]));
+  assert.deepEqual([whole.outcome, whole.cut], ['once', 0]);
+  const jamo = layer('\u1100\u1161', '\u11ab', ' and more');
+  assert.equal(walk.judgeQuote({ ...quote, text: '\u1100\u1161\u11ab' }, pdfReading([drawn(1, jamo, marked(jamo, [0, '\u1100\u1161', 0]))])).cut, 1);
+  assert.equal(walk.judgeQuote({ ...quote, text: '\u1100\u1161\u11ab' }, pdfReading([drawn(1, jamo, marked(jamo, [0, '\u1100\u1161', 0], [1, '\u11ab', 0]))])).cut, 0);
+});
+
+test('S3: a marked page must be drawn, its marked words drawn under the marks; a page shown for a quote not found must be painted', () => {
+  const page = layer('Cold forceps biopsies were taken.');
+  const quote = { code: '43239', line: 'L1', text: 'Cold forceps biopsies were taken.', page: 1 };
+  const marks = marked(page, [0, 'Cold forceps biopsies were taken.', 0]);
+  const with_ = canvas => walk.judgeQuote(quote, pdfReading([drawn(1, page, marks, canvas)]));
+  assert.equal(with_(DRAWN).outcome, 'once');
+  // the no-drawing mutant (a canvas never drawn reads transparent), a hidden canvas, none at all, nothing under the marks
+  for (const [canvas, said] of [[{ ...DRAWN, opaque: 0, markContent: 0 }, /its canvas is not drawn/], [{ ...DRAWN, visible: false }, /its canvas is not shown/],
+    [{ present: false }, /it has no canvas/], [{ ...DRAWN, markContent: 4 }, /nothing is drawn under its marks/], [{ ...DRAWN, error: 'SecurityError' }, /could not be read/]]) {
+    const judged = with_(canvas);
+    assert.deepEqual([judged.outcome, judged.blank], ['unresolved', 1], said.source);
+    assert.match(judged.problems.join(), said);
+  }
+  assert.equal(walk.canvasProblem({ ...DRAWN, markContent: 5 }, true), '', `${walk.CANVAS_MARK_CONTENT_MIN} of the pixels under the marks`);
+  // a quote not found: its page shown painted, nothing under any mark asked for (a blank page with no text)
+  const n2 = 'Page 1 has no text the viewer can search (it may be a scanned image), so nothing is marked. Page 1 is shown.';
+  const blankPaper = { ...DRAWN, markPixels: 0, markContent: 0 };
+  assert.equal(walk.judgeQuote(quote, pdfReading([drawn(1, layer(), [], blankPaper)], { status: 'not_found', pages: [], count: 0, note: n2 })).outcome, 'not_found');
+  assert.equal(walk.judgeQuote(quote, pdfReading([drawn(1, layer(), [], { ...blankPaper, opaque: 0 })], { status: 'not_found', pages: [], count: 0, note: n2 })).blank, 1);
+});
+
+test('the browser\'s own viewer: unavailable, the note as N3 and N4 write it, and a frame that really opens the quote\'s page', () => {
+  const quote = { code: '43239', line: 'L1', text: 'Cold forceps biopsies were taken.', page: 2 };
+  const frame = (fields, frameFields = {}) => walk.judgeQuote(quote, { mode: 'frame', fallback: 'library', status: '', pages: [], count: 0,
+    note: 'The marking tool did not work here, so nothing is marked. The quote is on page 2.', frame: { page: 2, previousPage: 1, replaced: true, ...frameFields }, ...fields });
+  const plain = frame({});
+  assert.deepEqual([plain.outcome, plain.problems.length], ['unavailable', 1]);
+  assert.match(plain.problems[0], /browser's own viewer \(the marking tool did not work in the page\)/);
+  for (const [reason, sentence] of Object.entries(walk.FRAME_REASONS)) {
+    assert.equal(frame({ fallback: reason, note: `${sentence} The quote is on page 2.` }).problems.length, 1, reason);
+  }
+  assert.deepEqual(Object.keys(walk.FRAME_REASONS).sort(), ['browser', 'document', 'library', 'slow']);
+  // the note never says what the frame shows; without a page it is the reason alone
+  assert.match(frame({ note: 'The marking tool did not work here, so nothing is marked. Page 2 is shown.' }).problems.join(), /does not say why marking is unavailable, as written/);
+  assert.equal(walk.judgeQuote({ ...quote, page: null }, { mode: 'frame', fallback: 'slow', note: 'The document took too long to load here, so nothing is marked.', frame: {} }).problems.length, 1);
+  // N3: a new frame for a new page (the old element only re-addressed does not move the browser's viewer); none for the same page
+  assert.match(frame({}, { replaced: false }).problems.join(), /keeps the element that showed page 1/);
+  assert.match(frame({}, { previousPage: 2, replaced: true }).problems.join(), /opened again for page 2/);
+  assert.equal(frame({}, { previousPage: 2, replaced: false }).problems.length, 1);
+  assert.match(frame({}, { page: 1 }).problems.join(), /does not open page 2/);
+  assert.match(frame({ fallback: 'toString' }).problems.join(), /\(no reason given\)/);
+});
+
+test('a text document keeps its own rule (findPassages), judged by the walk\'s own copy of it', () => {
+  const source = 'Colonoscopy note (fictional)\nA 12 mm pedunculated polyp in the descending colon was removed.\nA 3 mm polyp in the rectum.';
+  const quote = { code: '45385', line: 'L1', text: 'A 12 mm pedunculated polyp in the\ndescending colon', page: null };
+  const at = source.indexOf('A 12 mm');
+  const end = source.indexOf(' was removed');
+  const text = (marks, fields = {}) => walk.judgeQuote(quote, { mode: 'text', status: 'marked', count: 1, note: 'Marked in the document.', pages: [],
+    text: { source, marks }, ...fields });
+  assert.equal(text([[at, end]]).outcome, 'once');
+  assert.equal(text([[at, end - 1]]).mismatched, 1);
+  assert.equal(text([], { status: 'not_found', count: 0, note: 'The exact words could not be found in the document, so nothing is marked.' }).missed, 1);
+  assert.equal(walk.judgeQuote({ ...quote, text: 'not in it' }, { mode: 'text', status: 'not_found', count: 0, pages: [],
+    note: 'The exact words could not be found in the document, so nothing is marked.', text: { source, marks: [] } }).outcome, 'not_found');
+  assert.deepEqual(walk.findPassagesText('COLD FORCEPS', 'cold  forceps'), [[0, 12]]);
+});
+
+test('every quote chosen is counted, and the check fails on anything the walk\'s own judgement refuses', () => {
+  const page = layer('Cold forceps biopsies were taken.', '\n', 'Bowel preparation was rated adequate.');
+  const quote = { code: '43239', line: 'L1', text: 'Cold forceps biopsies were taken.', page: 1 };
+  const good = { quote, reading: pdfReading([drawn(1, page, marked(page, [0, quote.text, 0]))]) };
+  const absent = { quote: { ...quote, text: 'absent words' }, reading: pdfReading([drawn(1, page)], { status: 'not_found', pages: [], count: 0,
+    note: 'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.' }) };
+  const made = walk.quoteMarkChecks([good, good, absent]);
+  assert.equal(made.status, 'pass', made.reason);
+  assert.deepEqual(made.data, { quotes: 3, marked_once: 2, marked_multi: 0, not_found: 1, no_text: 0, unavailable: 0, unresolved: 0, off_page: 0,
+    mismatched: 0, missed: 0, cut: 0, blank: 0, flags: 0 });
+  assert.equal(made.reason, '3 quote(s) chosen: 2 marked once, 0 marked more than once, 1 not found (the walk\'s own search agrees; 0 on a page with no '
+    + 'searchable text), 0 mark(s) off the quote\'s page, 0 marked other than the walk\'s own, 0 found by the walk and not marked, 0 beginning or '
+    + 'ending inside a character, 0 marked page(s) not drawn, 0 overprint flag(s) not borne out');
+  const lying = walk.quoteMarkChecks([good, { quote, reading: pdfReading([drawn(1, page)], { status: 'not_found', pages: [], count: 0,
+    note: 'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.' }) }]);
+  assert.deepEqual([lying.status, lying.data.missed, lying.data.unresolved], ['fail', 1, 1]);
+  assert.equal(walk.quoteMarkChecks([{ quote, reading: { mode: 'frame', fallback: 'browser', note: '', frame: {} } }]).status, 'fail', 'no marking at all is a failure');
+  assert.equal(walk.quoteMarkChecks([]).status, 'fail');
+  assert.ok(!lying.reason.includes(quote.text), 'the reason names quotes by their line and page, never by their words');
   assert.deepEqual(walk.servedQuotes(encounter()).map(item => [item.code, item.page]), [['43239', 1]]);
   assert.equal(walk.foldMarked(' The ﬁnding\nwas  made. '), 'Thefindingwasmade.');
+  // pages read: every page of a short document; a long one on its searched, claimed and drawn pages
+  assert.deepEqual(walk.pagesToRead({ page: 2 }, { pageCount: 3, pages: [], drawn: [] }), [1, 2, 3]);
+  assert.deepEqual(walk.pagesToRead({ page: 20 }, { pageCount: 40, pages: [20, 21], drawn: [19, 20, 21] }), [19, 20, 21]);
+  assert.deepEqual(walk.pagesToRead({ page: null }, { pageCount: 40, pages: [], drawn: [] }).length, 40);
 });
 
 test('a PDF viewer that marks not one quote fails the check, though a quote not found alone is allowed', () => {
-  // the walk's own documents quote their own words: a viewer that has stopped marking (a matcher that says "could not be
-  // found" every time) must not pass because each note is honest
+  // the walk's own documents quote their own words: a viewer that marks nothing fails even where the walk agrees
+  const page = layer('Cold forceps biopsies were taken.');
   const quote = { code: '43239', line: 'L1', text: 'Cold forceps biopsies were taken.', page: 1 };
-  const good = { quote, reading: reading({ marks: [{ page: 1, occurrence: 0, text: quote.text }] }) };
-  const twice = { quote, reading: reading({ count: 2, note: 'These words appear 2 times on page 1. Each is marked.',
-    marks: [{ page: 1, occurrence: 0, text: quote.text }, { page: 1, occurrence: 1, text: quote.text }] }) };
-  const missing = { quote, reading: reading({ status: 'not_found', pages: [], count: 0, note: 'The exact words could not be found on page 1, so nothing is marked. Page 1 is shown.' }) };
+  const good = { quote, reading: pdfReading([drawn(1, page, marked(page, [0, quote.text, 0]))]) };
+  const missing = { quote: { ...quote, text: 'absent words' }, reading: pdfReading([drawn(1, page)], { status: 'not_found', pages: [], count: 0,
+    note: 'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.' }) };
   const none = walk.quoteMarkChecks([missing, missing, missing]);
   assert.equal(none.status, 'fail');
-  assert.deepEqual(none.data, { quotes: 3, marked_once: 0, marked_multi: 0, not_found: 3, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0, cut: 0 });
+  assert.equal(none.data.not_found, 3);
   assert.match(none.reason, /; 3 quote\(s\) chosen in the PDF viewer and not one marked$/);
   assert.equal(walk.quoteMarkChecks([missing]).status, 'fail', 'one quote, not found: nothing was marked');
-  // one marked, once or more than once, and the rest not found: each not-found quote is allowed
   assert.equal(walk.quoteMarkChecks([missing, good, missing]).status, 'pass');
-  assert.equal(walk.quoteMarkChecks([twice, missing]).status, 'pass');
-  // a mark that fails its own judgement is not a mark that counts
-  const halved = { quote, reading: reading({ marks: [{ page: 1, occurrence: 0, text: quote.text, whole: false }] }) };
-  // ... and the reason says so first, ahead of each quote's own problems
-  assert.match(walk.quoteMarkChecks([halved, missing]).reason, /character; 2 quote\(s\) chosen in the PDF viewer and not one marked; quote L1/);
-  // the text viewer and the frame are not the PDF viewer: the text's not-found quotes keep their own rule, and the frame
-  // already fails as unavailable
-  const textMissing = { quote, reading: reading({ mode: 'text', status: '', marked: '', pages: [], count: 0, note: 'The exact words could not be found in the document, so nothing is marked.' }) };
+  // the text viewer and the frame are not the PDF viewer
+  const textMissing = { quote: { ...quote, text: 'absent words' }, reading: { mode: 'text', status: 'not_found', count: 0, pages: [],
+    note: 'The exact words could not be found in the document, so nothing is marked.', text: { source: 'x', marks: [] } } };
   assert.equal(walk.quoteMarkChecks([textMissing]).status, 'pass');
-  const framed = walk.quoteMarkChecks([{ quote, reading: reading({ mode: 'frame', fallback: 'browser' }) }]);
+  const framed = walk.quoteMarkChecks([{ quote, reading: { mode: 'frame', fallback: 'browser', note: '', frame: {} } }]);
   assert.equal(framed.status, 'fail');
   assert.doesNotMatch(framed.reason, /not one marked/);
 });
@@ -755,14 +975,45 @@ test('the review dialog is driven through the page itself, in a browser', async 
   });
 });
 
-test('every quote is chosen and its marks read back through the page itself, in a browser', async t => {
+// The review page's viewer as eb3827d2 left it (sha256 of studio/static/studio/app.js): it predates round 3's notes
+// (N1-N4) and rules (R1-R3), so the subtests that need them skip on exactly these bytes and run on any other viewer - a
+// newer one is never skipped by mistake.
+const ROUND2_VIEWER_SHA256 = '19afa121e4d706ca2103a6c1e472c6a0580f7216953b68c3fbd079ebdca1f35a';
+const VIEWER_IS_ROUND2 = require('node:crypto').createHash('sha256')
+  .update(fs.readFileSync(path.join(__dirname, '..', 'studio', 'static', 'studio', 'app.js'))).digest('hex') === ROUND2_VIEWER_SHA256;
+const ROUND3_ONLY = VIEWER_IS_ROUND2 && 'this tree\'s viewer is eb3827d2\'s, which predates round 3\'s notes and rules (they run against any other viewer)';
+
+// A one-page synthetic PDF of raw content streams (Helvetica as /F1), for the overprint and no-text pages.
+function rawPdf(streams) {
+  const objects = [];
+  objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objects[2] = `<< /Type /Pages /Kids [${streams.map((_, i) => `${4 + i * 2} 0 R`).join(' ')}] /Count ${streams.length} >>`;
+  objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+  streams.forEach((stream, i) => {
+    objects[4 + i * 2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`;
+    objects[5 + i * 2] = `<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`;
+  });
+  let body = '%PDF-1.4\n';
+  const offsets = [];
+  for (let id = 1; id < objects.length; id += 1) {
+    offsets[id] = Buffer.byteLength(body, 'latin1');
+    body += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+  }
+  const xref = Buffer.byteLength(body, 'latin1');
+  body += `xref\n0 ${objects.length}\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}`;
+  body += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(body, 'latin1');
+}
+
+test('every quote is chosen and judged by the walk\'s own search through the page itself, in a browser', async t => {
   // D368 in a real browser: the dev preview's synthetic PDF and text documents, the shipped page and its PDF viewer, the
-  // walk's own quote check. Skipped where Playwright is not installed (CPT_VERIFY_PLAYWRIGHT).
+  // walk's own judge. Skipped where Playwright is not installed (CPT_VERIFY_PLAYWRIGHT).
   if (!fs.existsSync(path.join(walk.PLAYWRIGHT, 'package.json'))) {
     t.skip(`no Playwright at ${walk.PLAYWRIGHT}`);
     return;
   }
   const { chromium } = require(walk.PLAYWRIGHT);
+  const { syntheticPdf } = require('./dev_preview_server.cjs');
   const port = await freePort();
   const server = childProcess.spawn(process.execPath, [path.join(__dirname, 'dev_preview_server.cjs'), `--port=${port}`],
     { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -790,48 +1041,45 @@ test('every quote is chosen and its marks read back through the page itself, in 
   const ready = 'f5000000-0000-4000-8000-000000000001';  // tests/fixtures/customer/encounter-ready.json: the two-page PDF
   const word = 'f9000000-0000-4000-8000-000000000001';  // encounter-word.json: a Word file viewed as its PDF
   const text = 'f3000000-0000-4000-8000-000000000001';  // encounter-awaiting-answer.json: a text document
+  // the ready fixture with its quotes replaced (the first code carries them) and, when given, another view
+  const crafted = async (quotes, pdf = null) => {
+    const enc = await served(ready);
+    enc.codes[0].quotes = quotes;
+    for (const code of enc.codes.slice(1)) code.quotes = [];
+    const opened = await open(ready, enc, async item => {
+      await item.route(`**/api/encounters/${ready}`, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(enc) }));
+      if (pdf) await item.route(url => url.pathname === `/api/encounters/${ready}/original`, route => route.fulfill({ status: 200, contentType: 'application/pdf', body: pdf }));
+    });
+    return { enc, ...opened };
+  };
   for (const id of [ready, word, text]) {
-    await t.test(`the fixture ${id}: every quote marked once, nothing off its page`, async () => {
+    await t.test(`the fixture ${id}: every quote marked once, as the walk's own search finds it`, async () => {
       const enc = await served(id);
       const { page, context, violations } = await open(id, enc);
       const chosen = await walk.chooseQuotes(page, enc);
       const made = walk.quoteMarkChecks(chosen);
       assert.equal(made.status, 'pass', made.reason);
-      assert.deepEqual([made.data.quotes, made.data.marked_once, made.data.off_page, made.data.mismatched], [walk.servedQuotes(enc).length, walk.servedQuotes(enc).length, 0, 0]);
+      assert.deepEqual([made.data.quotes, made.data.marked_once, made.data.off_page, made.data.mismatched, made.data.missed, made.data.blank],
+        [walk.servedQuotes(enc).length, walk.servedQuotes(enc).length, 0, 0, 0, 0]);
       assert.deepEqual(violations, [], 'no policy violation and no error in the page');
       await context.close();
     });
   }
-  await t.test('crafted quotes: a duplicate, a passage running onto the next page, words not found, words on another page, no page, another case', async () => {
-    const enc = await served(ready);
-    const quotes = [
-      [{ text: 'the gastric antrum.', page: 1 }, { text: 'taken from the gastric antrum. Colonoscopy: The colonoscope was advanced', page: 1 }],
-      [{ text: 'A passage that is in no page of this document.', page: 2 }, { text: 'Bowel preparation quality was not recorded.', page: 1 }],
-      [{ text: 'Impression: antral erythema', page: null }, { text: 'PATCHY ERYTHEMA WAS SEEN', page: 1 }],
-    ];
-    quotes.forEach((list, index) => { enc.codes[index].quotes = list; });
-    for (const code of enc.codes.slice(quotes.length)) code.quotes = [];
-    const { page, context, violations } = await open(ready, enc, async item => {
-      await item.route(`**/api/encounters/${ready}`, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(enc) }));
-    });
+  await t.test('crafted quotes: a duplicate, a passage running onto the next page, no page, another case', async () => {
+    const { enc, page, context, violations } = await crafted([{ text: 'the gastric antrum.', page: 1 },
+      { text: 'taken from the gastric antrum. Colonoscopy: The colonoscope was advanced', page: 1 },
+      { text: 'Impression: antral erythema', page: null }, { text: 'PATCHY ERYTHEMA WAS SEEN', page: 1 }]);
     const chosen = await walk.chooseQuotes(page, enc);
     const made = walk.quoteMarkChecks(chosen);
     assert.equal(made.status, 'pass', made.reason);
-    assert.deepEqual(made.data, { quotes: 6, marked_once: 3, marked_multi: 1, not_found: 2, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0, cut: 0 });
-    assert.ok(chosen.every(item => item.reading.marks.every(mark => mark.whole === true)), 'every mark begins and ends between two characters');
-    const notes = chosen.map(item => item.reading.note);
-    assert.deepEqual(notes, [
-      'These words appear 2 times on page 1. Each is marked.',
-      'Marked on page 1, continuing onto page 2.',
-      'The exact words could not be found on page 2, so nothing is marked. Page 2 is shown.',
-      'The exact words could not be found on page 1, so nothing is marked. Page 1 is shown.',
-      'Marked on page 2.',
-      'Marked on page 1.',
-    ]);
+    assert.deepEqual([made.data.quotes, made.data.marked_once, made.data.marked_multi, made.data.not_found], [4, 3, 1, 0]);
+    assert.deepEqual(chosen.map(item => item.reading.note), ['These words appear 2 times on page 1. Each is marked.',
+      'Marked on page 1, continuing onto page 2.', 'Marked on page 2.', 'Marked on page 1.']);
     assert.deepEqual(chosen[1].reading.pages, [1, 2]);
-    assert.deepEqual(chosen[3].reading.marks, [], 'the words on page 2 are not marked for a quote of page 1');
+    // every page of the document was read for each quote, and every marked page was drawn
+    assert.ok(chosen.every(item => [...item.reading.pagesRead.values()].every(read => read.drawn && read.canvas.opaque === 1)));
     // the selected quote stays selected; the page's own text layer is the document's, never scanned as its wording
-    assert.equal(await page.getAttribute('#quotesPanel .quote.selected', 'data-quote'), chosen[5].key);
+    assert.equal(await page.getAttribute('#quotesPanel .quote.selected', 'data-quote'), chosen[3].key);
     const strings = (await page.evaluate(walk.collectDomStrings)).map(([, value]) => value);
     assert.ok(strings.includes('Marked on page 1.'), 'the note is read');
     assert.ok(!strings.some(value => value.includes('Endoscopy report (fictional)')), 'the text layer is not read');
@@ -842,50 +1090,111 @@ test('every quote is chosen and its marks read back through the page itself, in 
     assert.equal(await page.evaluate(() => typeof window.innerWidth), 'number');
     await context.close();
   });
-  await t.test('readMarks sees a mark that begins or ends inside a character of the page\'s text, apart from the page script', async () => {
+  await t.test('readPdfPage reads a drawn page apart from the page script: its items and line breaks, flags and boxes, marks, and canvas', async () => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    const span = inner => `<span>${inner}</span>`;
+    const span = (inner, extra = '') => `<span${extra}>${inner}</span>`;
     const mark = (occurrence, inner) => `<span class="pdf-mark" data-occurrence="${occurrence}">${inner}</span>`;
-    await page.setContent(`<div id="documentViewer" data-mode="pdf" data-mark-status="marked" data-mark-pages="1 2" data-mark-count="4">
-      <div class="pdf-page" data-page="1"><canvas></canvas><div class="pdf-text">${span(`The patient ${mark(0, 'Jose')}`)}${span('́')}${span(' ')}${span(`${mark(1, 'Garcia')} was seen.`)}</div></div>
-      <div class="pdf-page" data-page="2"><div class="pdf-text">${span(mark(2, '하'))}${span('ᆫ')}${span(' and ')}${span(`Jos${mark(3, 'e')}`)}${span(mark(3, '́'))}${span(' x')}</div></div>
-    </div><p id="viewerMark">Marked.</p>`);
-    const read = await page.evaluate(walk.readMarks);
-    assert.deepEqual(read.marks.map(item => [item.page, item.occurrence, item.whole]), [[1, 0, false], [1, 1, true], [2, 2, false], [2, 3, true], [2, 3, true]],
-      'the letter without its accent and the syllable without its last jamo are cut; the accent marked with its letter is whole');
-    assert.equal(walk.judgeQuote({ code: '43239', line: 'L1', text: 'x', page: null }, read).cut, 2);
+    const at = (left, top) => ` style="position:absolute;left:${left}px;top:${top}px;font-size:10px;line-height:1"`;
+    await page.setContent(`<div id="documentViewer" data-mode="pdf" data-mark-status="marked" data-mark-pages="1" data-mark-count="2">
+      <div class="pdf-page" data-page="1" style="position:relative;width:300px;height:200px"><canvas width="300" height="200" style="position:absolute;inset:0"></canvas>
+      <div class="pdf-text" style="position:absolute;inset:0">${span(`The patient ${mark(0, 'Jose')}`, at(10, 10))}${span('\u0301', at(80, 10))}${span(' ', at(90, 10))}${span(`${mark(0, 'Garcia')} was seen.`, at(100, 10))}<br>`
+      + `${span('Impression:', at(10, 40))}${span('Impression:', `${at(10.3, 40)} data-overprint="1"`)}${span(`${mark(1, 'two')} polyps`, at(70, 40))}</div></div>
+      <div class="pdf-page" data-page="2" style="width:300px;height:200px"></div>
+    </div><p id="viewerMark">These words appear 2 times on page 1. Each is marked.</p>`);
+    // the canvas drawn: white paper with a dark bar under the first line
+    await page.evaluate(() => {
+      const ctx = document.querySelector('canvas').getContext('2d');
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, 300, 200);
+      ctx.fillStyle = 'black';
+      ctx.fillRect(10, 10, 200, 10);
+    });
+    const read = await page.evaluate(walk.readPdfPage, 1);
+    assert.deepEqual(read.tokens.map(token => (token.kind === 'br' ? 'BR' : `${token.text}${token.copy ? ' (copy)' : ''}`)),
+      ['The patient Jose', '\u0301', ' ', 'Garcia was seen.', 'BR', 'Impression:', 'Impression: (copy)', 'two polyps']);
+    assert.deepEqual(read.marks, [{ item: 0, occurrence: 0, start: 12, end: 16 }, { item: 3, occurrence: 0, start: 0, end: 6 }, { item: 6, occurrence: 1, start: 0, end: 3 }]);
+    assert.deepEqual(read.tokens[6].box.map(value => Math.round(value * 10) / 10), [10.3, 40, 10]);
+    assert.equal(walk.unbornFlags(read.tokens), 0, 'the flagged copy lies 0.3 px from the span it copies');
+    assert.deepEqual([read.canvas.present, read.canvas.visible, read.canvas.opaque, read.canvas.markPixels > 0], [true, true, 1, true]);
+    assert.equal((await page.evaluate(walk.readPdfPage, 2)).drawn, false);
+    // S5 apart from the page script: the first occurrence's run 'Jose' ends inside the character the accent completes
+    const reading = { ...(await page.evaluate(walk.readViewer)), pagesRead: new Map([[1, read], [2, { number: 2, drawn: true, tokens: [], marks: [], canvas: read.canvas }]]) };
+    assert.equal(walk.judgeQuote({ code: '43239', line: 'L1', text: 'x', page: null }, reading).cut, 1);
+    // a canvas that was never drawn reads as not painted
+    await page.evaluate(() => { document.querySelector('canvas').replaceWith(Object.assign(document.createElement('canvas'), { width: 300, height: 200 })); });
+    assert.equal((await page.evaluate(walk.readPdfPage, 1)).canvas.opaque, 0);
     await context.close();
   });
-  await t.test('where the PDF library cannot load, the browser\'s own viewer is framed and opens the quoted page, with no mark', async () => {
+  await t.test('where the PDF library cannot load, the browser\'s own viewer is framed: nothing is marked and the check fails', async inner => {
     const enc = await served(word);
-    const { page, context } = await open(word, enc, item => item.route('**/pdf.min.mjs', route => route.abort()));
-    await page.waitForSelector('#documentViewer[data-mode="frame"] iframe.viewer-fallback', { timeout: 15000 });
+    const { page, context } = await open(word, enc, item => item.route(url => /\/pdf\.min\.mjs$/.test(url.pathname), route => route.abort()));
+    await page.waitForSelector('#documentViewer[data-mode="frame"] iframe.viewer-fallback', { timeout: 30000 });
     const chosen = await walk.chooseQuotes(page, enc);
     const made = walk.quoteMarkChecks(chosen);
     assert.equal(made.status, 'fail');
     assert.equal(made.data.unavailable, chosen.length);
     const last = walk.servedQuotes(enc).at(-1);
     assert.match(await page.getAttribute('#documentViewer iframe', 'src'), new RegExp(`#page=${last.page}$`));
-    // the browser cannot run the marking: the note says so, and the walk's reason names it
-    assert.equal(chosen.at(-1).reading.fallback, 'browser');
-    assert.equal(chosen.at(-1).reading.note, `Marking needs a newer browser. Page ${last.page} is shown.`);
-    assert.match(made.reason, /browser's own viewer \(marking needs a newer browser\)/);
+    await inner.test('round 3: the library note (N3), a new frame for each new page', { skip: ROUND3_ONLY }, () => {
+      assert.equal(chosen.at(-1).reading.fallback, 'library');
+      assert.equal(chosen.at(-1).reading.note, `The marking tool did not work here, so nothing is marked. The quote is on page ${last.page}.`);
+      // each quote judged unavailable and nothing else: the note as written and the frame really opening its page
+      for (const item of chosen) assert.deepEqual(walk.judgeQuote(item.quote, item.reading).problems.length, 1, item.reading.note);
+      assert.match(made.reason, /browser's own viewer \(the marking tool did not work in the page\)/);
+    });
     await context.close();
   });
-  await t.test('where the library runs but cannot draw the document, the note says the document cannot be drawn here', async () => {
+  await t.test('where the library runs but cannot draw the document, the browser\'s own viewer is framed and the check fails', async inner => {
     const enc = await served(ready);
     // the view address answers with bytes that are no PDF: the library refuses the document, the browser is not at fault
     const { page, context, violations } = await open(ready, enc, item => item.route(url => url.pathname === `/api/encounters/${ready}/original`,
       route => route.fulfill({ status: 200, contentType: 'application/pdf', body: 'not a PDF at all' })));
-    await page.waitForSelector('#documentViewer[data-mode="frame"] iframe.viewer-fallback', { timeout: 15000 });
+    await page.waitForSelector('#documentViewer[data-mode="frame"] iframe.viewer-fallback', { timeout: 30000 });
     const chosen = await walk.chooseQuotes(page, enc);
     const made = walk.quoteMarkChecks(chosen);
     assert.equal(made.status, 'fail');
-    const last = walk.servedQuotes(enc).at(-1);
     assert.equal(chosen.at(-1).reading.fallback, 'document');
-    assert.equal(chosen.at(-1).reading.note, `This document cannot be drawn here, so nothing is marked. Page ${last.page} is shown.`);
     assert.match(made.reason, /\(the document cannot be drawn in the page\)/);
+    assert.deepEqual(violations, []);
+    await inner.test('round 3: the document note (N3) names the quote\'s page', { skip: ROUND3_ONLY }, () => {
+      const last = walk.servedQuotes(enc).at(-1);
+      assert.equal(chosen.at(-1).reading.note, `This document cannot be drawn here, so nothing is marked. The quote is on page ${last.page}.`);
+      for (const item of chosen) assert.deepEqual(walk.judgeQuote(item.quote, item.reading).problems.length, 1, item.reading.note);
+    });
+    await context.close();
+  });
+  await t.test('round 3: words not found (N1), words of another page, inside a word (R2), a format character (R3), against the new viewer', { skip: ROUND3_ONLY }, async () => {
+    const pdf = syntheticPdf([['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', 'The patient was told to bathe ending the preparation.',
+      'Findings: the end of the procedure was uneventful.', 'Mild pain was reported; the abdomen was painless.'],
+    ['Bowel preparation quality was not recorded.']]);
+    const { enc, page, context, violations } = await crafted([{ text: 'A passage that is in no page of this document.', page: 2 },
+      { text: 'Bowel preparation quality was not recorded.', page: 1 }, { text: 'the end', page: 1 }, { text: 'pain', page: 1 },
+      { text: 'Mild pain was re\u00adported', page: 1 }], pdf);
+    const chosen = await walk.chooseQuotes(page, enc);
+    const made = walk.quoteMarkChecks(chosen);
+    assert.equal(made.status, 'pass', made.reason);
+    assert.deepEqual([made.data.marked_once, made.data.not_found, made.data.no_text], [3, 2, 0]);
+    assert.deepEqual(chosen.map(item => item.reading.note), [
+      'The exact words were not found in the searchable text of page 2, so nothing is marked. Page 2 is shown.',
+      'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.',
+      'Marked on page 1.', 'Marked on page 1.', 'Marked on page 1.']);
+    assert.deepEqual(violations, []);
+    await context.close();
+  });
+  await t.test('round 3: an overprint copy (R1) counts once and is flagged where its geometry bears the flag out; a page with no text (N2)', { skip: ROUND3_ONLY }, async () => {
+    const line = (x, y, words) => `BT /F1 11 Tf ${x} ${y} Td (${words}) Tj ET`;
+    const pdf = rawPdf([[line(56, 700, 'DIAGNOSIS: TUBULAR ADENOMA.'), line(56.3, 700, 'DIAGNOSIS: TUBULAR ADENOMA.'),
+      line(56, 680, 'The procedure was uneventful.')].join('\n'), '0 0 0 rg 56 600 200 50 re f']);
+    const { enc, page, context, violations } = await crafted([{ text: 'DIAGNOSIS: TUBULAR ADENOMA.', page: 1 },
+      { text: 'Any words at all', page: 2 }], pdf);
+    const chosen = await walk.chooseQuotes(page, enc);
+    const made = walk.quoteMarkChecks(chosen);
+    assert.equal(made.status, 'pass', made.reason);
+    assert.deepEqual([made.data.marked_once, made.data.not_found, made.data.no_text, made.data.flags], [1, 1, 1, 0]);
+    assert.equal(chosen[0].reading.note, 'Marked on page 1.');
+    assert.equal(chosen[1].reading.note, 'Page 2 has no text the viewer can search (it may be a scanned image), so nothing is marked. Page 2 is shown.');
+    assert.ok([...chosen[0].reading.pagesRead.get(1).tokens].some(token => token.copy), 'the viewer flags the copy');
     assert.deepEqual(violations, []);
     await context.close();
   });
@@ -903,7 +1212,7 @@ function freePort() {
 }
 
 test('the readers that run in the page are self-contained functions', () => {
-  for (const reader of [walk.readEncounterDom, walk.collectDomStrings, walk.readMarks]) {
+  for (const reader of [walk.readEncounterDom, walk.collectDomStrings, walk.readViewer, walk.readPdfPage, walk.readTextFrame]) {
     const source = reader.toString();
     assert.match(source, /^function /);
     for (const outer of [/\bwalk\./, /\bcollapse\(/, /\bCLIENT_HEADERS\b/, /\brequire\(/, /\bisObject\(/, /\bSTEPS\b/]) {

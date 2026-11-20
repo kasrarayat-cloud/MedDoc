@@ -6,8 +6,10 @@ import hashlib
 import json
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
+import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urljoin
@@ -19,6 +21,7 @@ from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from studio import customer, views
+from studio.access import SecurityHeadersMiddleware
 
 ROOT = Path(settings.BASE_DIR)
 STATIC = ROOT / 'studio' / 'static' / 'studio'
@@ -37,16 +40,29 @@ PDF_LIB_INTEGRITY = 'sha512-vg8Pw1x+AFKy4AMDvhuWl5cOYV8d698UoEANoFFhc79hqXDnZQqn
 COREJS_INTEGRITY = 'sha512-7bDKx/5jm5MxzsXxc93g6Z2+4ZsuT/MddrfRmTDJNAkWsYWHU8EVNEsBiIEWnMAMCHMmRfUEjkuo3jeNBOIHRw=='
 PDF_LIB_SCRIPTS = ('legacy/build/pdf.min.mjs', 'legacy/build/pdf.worker.min.mjs', 'wasm/jbig2_nowasm_fallback.js',
                    'wasm/openjpeg_nowasm_fallback.js')
+# The suite's own pin of the library (DECISIONS D368, round 3): the sha256 of every file under PDF_LIB, MANIFEST.json
+# included, as the lines "<path> <sha256>\n" sorted by path, hashed together. The checks below read their expectations
+# from MANIFEST.json; this one does not, so a changed vendored file - with its manifest entry changed to match - fails
+# until this line is changed too, in the open (library_digest).
+PDF_LIB_DIGEST = '0a2a90ad83c1c80ba19fc4821e27588f50938c7eda06cc0f23beea8c7aeba0e0'
 # core-js's lookup of the global object, as the legacy build bundles it (core-js internals/global-this): the one place
 # either legacy file builds a function from a string. It is reached only where globalThis, window, self, global and the
 # module's own `this` (undefined in a module) are all missing, which never happens in a browser - and the shell's policy
-# has no 'unsafe-eval', so a browser would refuse it anyway. It is allowed by its exact bytes, once per file; any other
-# code built from a string fails the test.
+# has no 'unsafe-eval', so a browser would refuse it anyway. It is allowed by its exact bytes, once per file.
 COREJS_GLOBAL_LOOKUP = ('check("object"==typeof globalThis&&globalThis)||check("object"==typeof window&&window)||'
                         'check("object"==typeof self&&self)||check("object"==typeof global&&global)||'
                         'check("object"==typeof this&&this)||function(){return this}()||Function("return this")()')
-CODE_FROM_STRINGS = re.compile(r'(?<![\w$.])eval\b|\bnew\s+Function\s*\(|(?<![\w$.])Function\s*\(|'
-                               r'\.constructor\s*\(\s*["\'`]|(?<![\w$.])set(?:Timeout|Interval)\s*\(\s*["\'`]')
+# Code built from a string, as CODE_FROM_STRINGS reads it in the library's text: eval named in any way (called, or reached
+# as a property: globalThis.eval, x["eval"]); Function called (Function(...), new Function(...), self.Function(...),
+# x["Function"]), used as a value ((0,Function)(...), Reflect.construct(Function, ...)) or called through call, apply or
+# bind; a constructor called with a string literal (x.constructor("...")); and setTimeout or setInterval called with a
+# string literal, directly or as a property (window.setTimeout("...")). What a text search cannot see is not claimed: a
+# string held in a variable (setTimeout(code), x.constructor(code)) or a constructor reached by a computed name
+# (x[name](...)). Those are refused at run time: neither the page's policy nor the policy the library's own files are
+# served with (studio.access.SecurityHeadersMiddleware.STATIC_CSP, which binds its worker) allows 'unsafe-eval'.
+CODE_FROM_STRINGS = re.compile(r'(?<![\w$])eval\b|\[\s*["\'`](?:eval|Function)["\'`]\s*\]|\bnew\s+Function\s*\('
+                               r'|(?<![\w$])Function\s*(?:\(|[),]|\.\s*(?:call|apply|bind)\b)'
+                               r'|\.constructor\s*\(\s*["\'`]|(?<![\w$])set(?:Timeout|Interval)\s*\(\s*["\'`]')
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 # GET /api/session, /api/encounters and /api/encounters/<id>, exactly as the contract file lists them (the build
 # specification, section 6, with document.view_media_type, document.converted and the state 'earlier')
@@ -112,6 +128,13 @@ def _audit(html):
 
 def _customer(name):
     return json.loads((CUSTOMER_FIXTURES / name).read_text(encoding='utf-8'))
+
+
+def library_digest(root):
+    """PDF_LIB_DIGEST's reading of a library folder: every file's "<path> <sha256>" line, sorted by path, hashed."""
+    lines = sorted(f'{path.relative_to(root).as_posix()} {hashlib.sha256(path.read_bytes()).hexdigest()}\n'
+                   for path in Path(root).rglob('*') if path.is_file())
+    return hashlib.sha256(''.join(lines).encode('utf-8')).hexdigest()
 
 
 def _strings(value):
@@ -358,6 +381,12 @@ class PdfLibraryTests(SimpleTestCase):
                 text = (PDF_LIB / name).read_text(encoding='utf-8')
                 self.assertEqual(re.findall(r'\.versions=\[\]\)\)\.push\(\{version:"([0-9.]+)"', text), ['3.51.0'])
 
+    def test_the_suite_pins_every_library_file_itself(self):
+        # MANIFEST.json is read by the check above; this pin is the suite's own, so a library file changed together with
+        # its manifest entry still fails here until PDF_LIB_DIGEST is changed too (D368 round 3, SEC-2)
+        self.assertEqual(library_digest(PDF_LIB), PDF_LIB_DIGEST)
+        self.assertEqual(len([path for path in PDF_LIB.rglob('*') if path.is_file()]), 14, 'the 13 listed files and the manifest')
+
     def test_the_library_evaluates_no_code_from_strings(self):
         for name in PDF_LIB_SCRIPTS:
             with self.subTest(name):
@@ -371,9 +400,18 @@ class PdfLibraryTests(SimpleTestCase):
         planted = (PDF_LIB / PDF_LIB_SCRIPTS[0]).read_text(encoding='utf-8').replace(
             COREJS_GLOBAL_LOOKUP, COREJS_GLOBAL_LOOKUP + ';Function("return 1")()', 1).replace(COREJS_GLOBAL_LOOKUP, '')
         self.assertEqual([match.group(0) for match in CODE_FROM_STRINGS.finditer(planted)], ['Function('])
-        for unsafe in ('eval("1")', '(0,eval)("1")', 'new Function("a")', 'x.constructor("return this")', 'setTimeout("f()")'):
+        for unsafe in ('eval("1")', '(0,eval)("1")', 'globalThis.eval("1")', 'window["eval"]("1")', 'new Function("a")',
+                       'Function("return 1")()', 'self.Function("return 1")()', "self['Function']('return 1')()",
+                       '(0,Function)("return 1")()', 'Reflect.construct(Function,["return 1"])', 'Function.call(null,"return 1")',
+                       'x.constructor("return this")', 'setTimeout("f()")', 'window.setTimeout("f()")', 'setInterval(`f()`)'):
             with self.subTest(unsafe):
                 self.assertIsNotNone(CODE_FROM_STRINGS.search(unsafe))
+        # and what the library's own text holds that builds no code is not read as it
+        for safe in ('Function.prototype.toString', 'r=e(Function.toString)', '"Function"===e(t)', 'getRaw("Function")',
+                     'parseShadingFunction(e)', 'setTimeout(()=>{t()},0)', 'setTimeout(t.resolve,0)', 'new e.prototype.constructor(t)',
+                     'isEvalSupported:!1'):
+            with self.subTest(safe):
+                self.assertIsNone(CODE_FROM_STRINGS.search(safe))
 
     def test_the_shell_policy_lets_the_library_run_with_no_eval_and_no_webassembly(self):
         csp = dict(part.strip().split(' ', 1) for part in views.INDEX_CSP.split(';'))
@@ -417,6 +455,111 @@ class PdfLibraryTests(SimpleTestCase):
                     else:  # a hashed name: the same bytes as the file it names
                         original = re.sub(r'\.[0-9a-f]{12}(\.mjs)$', r'\1', address.split(f'{PDF_LIB_NAME}/', 1)[1])
                         self.assertEqual(data, (PDF_LIB / original).read_bytes())
+
+
+class StaticHeaderTests(SimpleTestCase):
+    """Every static file - the PDF library's module worker above all, which takes its policy from its own script's
+    response and parses the uploaded document - carries the site's security headers, its policy with base-uri 'none'
+    (studio.access.SecurityHeadersMiddleware.STATIC_CSP, which wraps WhiteNoise), and keeps WhiteNoise's caching; pages and
+    data keep theirs; and the dev preview serves the library with exactly the site's headers (D368 round 3, SEC-1).
+    Through the full middleware stack, after collectstatic with the manifest storage the image builds with."""
+
+    REQUIRED = {'default-src': "'self'", 'script-src': "'self'", 'connect-src': "'self'", 'object-src': "'none'",
+                'base-uri': "'none'"}
+    # what a response's transport adds and its validators (the file's time): not the headers held equal
+    VOLATILE = {'date', 'etag', 'last-modified', 'connection', 'keep-alive', 'transfer-encoding'}
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._root = tempfile.TemporaryDirectory()
+        cls._static = override_settings(STATIC_ROOT=Path(cls._root.name) / 'static')
+        cls._static.enable()
+        call_command('collectstatic', interactive=False, verbosity=0)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._static.disable()
+        cls._root.cleanup()
+        super().tearDownClass()
+
+    def policy(self, response):
+        return dict(part.strip().split(' ', 1) for part in response['Content-Security-Policy'].split(';'))
+
+    def test_the_site_headers_wrap_whitenoise(self):
+        order = settings.MIDDLEWARE
+        self.assertLess(order.index('studio.access.SecurityHeadersMiddleware'), order.index('whitenoise.middleware.WhiteNoiseMiddleware'))
+        self.assertEqual(SecurityHeadersMiddleware.STATIC_CSP,
+                         SecurityHeadersMiddleware.CSP.replace("base-uri 'self'", "base-uri 'none'"))
+
+    def test_static_files_carry_the_site_policy_and_keep_their_caching(self):
+        hashed = {name: staticfiles_storage.url(name) for name in (
+            f'{PDF_LIB_NAME}/legacy/build/pdf.worker.min.mjs', f'{PDF_LIB_NAME}/legacy/build/pdf.min.mjs', 'studio/app.js',
+            'studio/styles.css', 'studio/favicon.svg')}
+        unhashed = [f'/static/{PDF_LIB_NAME}/legacy/build/pdf.worker.min.mjs', f'/static/{PDF_LIB_NAME}/wasm/jbig2_nowasm_fallback.js',
+                    f'/static/{PDF_LIB_NAME}/standard_fonts/FoxitDingbats.pfb']
+        for address in [*hashed.values(), *unhashed]:
+            with self.subTest(address):
+                response = self.client.get(address)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response['Content-Security-Policy'], SecurityHeadersMiddleware.STATIC_CSP)
+                policy = self.policy(response)
+                for directive, value in self.REQUIRED.items():
+                    self.assertEqual(policy[directive], value, directive)
+                self.assertNotIn('eval', response['Content-Security-Policy'])
+                caching = response['Cache-Control']
+                self.assertNotIn('no-store', caching)
+                self.assertEqual(caching, 'max-age=315360000, public, immutable' if address in hashed.values() else 'max-age=60, public')
+                self.assertEqual((response['X-Content-Type-Options'], response['X-Robots-Tag'], response['Cross-Origin-Opener-Policy']),
+                                 ('nosniff', 'noindex, nofollow', 'same-origin'))
+                self.assertNotIn('X-Frame-Options', response)
+        worker = self.client.get(hashed[f'{PDF_LIB_NAME}/legacy/build/pdf.worker.min.mjs'], HTTP_ACCEPT_ENCODING='gzip')
+        self.assertEqual((worker['Content-Encoding'], worker['Content-Security-Policy']), ('gzip', SecurityHeadersMiddleware.STATIC_CSP))
+        # a /static/ address with no file is Django's 404: the static policy, and nothing cached by force
+        with self.assertLogs('django.request', 'WARNING'):
+            missing = self.client.get('/static/studio/no-such-file.js')
+        self.assertEqual((missing.status_code, missing['Content-Security-Policy']), (404, SecurityHeadersMiddleware.STATIC_CSP))
+
+    def test_pages_and_data_keep_their_own_headers(self):
+        for address, status in (('/login/', 200), ('/api/session', 401)):
+            with self.subTest(address):
+                if status == 200:
+                    response = self.client.get(address)
+                else:
+                    with self.assertLogs('django.request', 'WARNING'):
+                        response = self.client.get(address)
+                self.assertEqual(response.status_code, status)
+                self.assertEqual(response['Content-Security-Policy'], SecurityHeadersMiddleware.CSP)
+                self.assertEqual((response['Cache-Control'], response['X-Frame-Options']), ('no-store', 'DENY'))
+
+    def test_the_dev_preview_serves_the_library_with_the_sites_headers(self):
+        node = shutil.which('node')
+        if node is None:
+            self.skipTest('node is not installed; the dev preview needs it')
+        with socket.socket() as probe:
+            probe.bind(('127.0.0.1', 0))
+            port = probe.getsockname()[1]
+        server = subprocess.Popen([node, str(ROOT / 'ops' / 'dev_preview_server.cjs'), f'--port={port}'],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            self.assertIn('CPT Studio dev preview', server.stdout.readline())
+            listed = [item['path'] for item in json.loads((PDF_LIB / 'MANIFEST.json').read_text(encoding='utf-8'))['files']]
+            for name in listed:
+                with self.subTest(name):
+                    address = f'/static/{PDF_LIB_NAME}/{name}'
+                    site = self.client.get(address)
+                    with urllib.request.urlopen(f'http://127.0.0.1:{port}{address}', timeout=30) as answer:
+                        preview = {key.lower(): value for key, value in answer.getheaders()}
+                        body = answer.read()
+                    expected = {key.lower(): value for key, value in site.items()}
+                    self.assertEqual({key: value for key, value in preview.items() if key not in self.VOLATILE},
+                                     {key: value for key, value in expected.items() if key not in self.VOLATILE})
+                    self.assertEqual(body, (PDF_LIB / name).read_bytes())
+        finally:
+            server.terminate()
+            server.wait(timeout=10)
+            server.stdout.close()
+            server.stderr.close()
 
 
 class BrowserLogicTests(SimpleTestCase):

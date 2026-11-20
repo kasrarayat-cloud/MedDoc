@@ -12,8 +12,10 @@ links, retrieval logs and rule ids out of every customer screen, API response an
                                 link rel stylesheet, modulepreload or preload): scanned whole. Not the PDF library the
                                 page imports on demand to draw a PDF (studio/static/studio/lib/pdfjs-<version>/, named on
                                 <body> as data-pdf-module and data-pdf-worker): third-party files byte-identical to their
-                                npm package, pinned by sha256 in its MANIFEST.json and the Django suite, never scanned as
-                                CPT Studio's own wording (DECISIONS D368)
+                                npm package, sealed by sha256 - in its MANIFEST.json, and by the Django suite's own digest
+                                of every file and the manifest (tests/test_frontend.py PDF_LIB_DIGEST), so a changed file
+                                fails the suite until that line changes too - and never scanned as CPT Studio's own
+                                wording (DECISIONS D368; the shared denylist's 'bundle' surface states the exception)
   GET /api/session              against the customer contract's session keys, scanned
   GET /api/encounters           the list, against the contract's list keys, scanned
   for each encounter named (--encounter, repeatable) or listed (--all, at most --limit, newest first):
