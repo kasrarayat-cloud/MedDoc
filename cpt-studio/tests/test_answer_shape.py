@@ -83,7 +83,7 @@ class ModifierTests(SimpleTestCase):
 
     def test_the_checker_is_given_the_modifiers_as_the_line_shows_them(self):
         reader = f.reader_result([{**f.code('99214'), 'modifiers': [25]}])
-        self.assertEqual(result.listing(reader)[0]['modifiers'], ['25'])
+        self.assertEqual(result.listing(reader)['lines'][0]['modifiers'], ['25'])
 
 
 class ReviewIdentityTests(SimpleTestCase):

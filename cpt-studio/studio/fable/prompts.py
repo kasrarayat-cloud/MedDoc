@@ -3,6 +3,12 @@ fable_proof.py), with the description field dropped from both JSON shapes, the p
 section per line and, for the checker, no repeated questions. The practice's own information travels in the user text,
 outside the document.
 
+Questions (D370, D372): each question is written once, in the answer's top-level "questions", with an id - the
+reader's Q1, Q2.., the checker's new ones C1, C2.. - and the lines it concerns in "affects"; a code, a review and a
+missed code name the questions they depend on in "question_ids", in place of a question text of their own. The
+checker's user text gives it the reader's questions with their ids beside the reader's lines, so it refers to a
+question already asked instead of writing it again (studio.fable.result merges by id).
+
 Line identity (FIX-SPEC section 1): the reader's codes are the lines L1..Ln in the order of its JSON list and the
 checker's missed codes the lines M1..Mk in theirs. Each section starts with a marker line that studio.fable.result reads
 to file a citation under its line: `LINE L<n> <code>` (reader), `REVIEW L<n> <code>` and `MISSED M<k> <code>`
@@ -41,14 +47,16 @@ Write your analysis first, citing the document for every fact you rely on. Write
       "status": "ready | needs_answer | not_supported",
       "reason": "one to three plain sentences",
       "evidence": [{"quote": "exact words from the document", "page": 1}],
-      "question": "the question to ask, or null"
+      "question_ids": ["the id of a question this code depends on"]
     }
   ],
   "documentation_problems": ["anything a coder must know: missing date of service, missing signature, contradictions, and so on"],
-  "questions": [{"question": "plain question", "affects": ["code"]}]
+  "questions": [{"id": "Q1", "question": "plain question", "affects": ["L1"]}]
 }
 
-Status meanings. "ready": the document fully supports the code exactly as written, and a human coder can approve it. "needs_answer": the code depends on a fact the document does not settle; the question says what. "not_supported": a code someone might reasonably consider that the document does not support; list only close calls, with the reason. List each code once."""
+Questions. Write every question once, in "questions", with an id: Q1 for the first question, Q2 for the second, and so on. A question that more than one code depends on is written once, and its "affects" names every line it concerns (L1 for the first code of your list, L2 for the second, and so on). Each code gives the ids of the questions it depends on in "question_ids", an empty list when it depends on none. Never repeat a question on a code, and never write two questions that ask the same thing. The ids are for the JSON only: never write one in a question or a reason.
+
+Status meanings. "ready": the document fully supports the code exactly as written, and a human coder can approve it. "needs_answer": the code depends on a fact the document does not settle; the questions its "question_ids" name say what. "not_supported": a code someone might reasonably consider that the document does not support; list only close calls, with the reason. List each code once."""
 
 CHECKER_SYSTEM = """You are a senior coding auditor for physician billing in the United States (CPT codes, HCPCS Level II and CPT modifiers, CPT guidelines, NCCI policy and CMS rules current as of 2026). Another coder has coded the attached clinical document. Check that work independently, so that only correct codes reach the practice for approval.
 
@@ -70,18 +78,20 @@ Write your analysis first, citing the document for every fact you rely on. Write
       "correct_status": "ready | needs_answer | not_supported",
       "reason": "one to three plain sentences",
       "evidence": [{"quote": "exact words from the document", "page": 1}],
-      "question": "the question to ask, or null"
+      "question_ids": ["the id of a question this line depends on"]
     }
   ],
   "missed_codes": [
-    {"code": "CPT code", "units": 1, "modifiers": [], "status": "ready | needs_answer", "reason": "...", "evidence": [{"quote": "...", "page": 1}], "question": "or null"}
+    {"code": "CPT code", "units": 1, "modifiers": [], "status": "ready | needs_answer", "reason": "...", "evidence": [{"quote": "...", "page": 1}], "question_ids": []}
   ],
-  "questions": [{"question": "plain question", "affects": ["code"]}]
-}"""
+  "questions": [{"id": "C1", "question": "plain question", "affects": ["L1"]}]
+}
+
+Questions. The first coder's questions are given with their ids (Q1, Q2, and so on), and each of its lines names the ids of the questions it depends on. Never write again, in any words, a question the coding review already asked; refer to its id instead. Write each new question once, in "questions", with an id: C1 for the first new question, C2 for the second, and so on; its "affects" names every line it concerns (L1, L2 and so on for the first coder's lines, M1, M2 and so on for your missed codes). Each review and each missed code gives the ids of the questions its code depends on in "question_ids", the coding review's or your own, an empty list when it depends on none. The ids are for the JSON only: never write one in a question or a reason."""
 
 INSURANCE_WORDS = {'medicare': 'Medicare', 'medicaid': 'Medicaid', 'commercial': 'commercial or other',
                    'unknown': 'not given'}
-LISTING_KEYS = ('line', 'code', 'units', 'modifiers', 'status', 'question')
+LISTING_KEYS = ('line', 'code', 'units', 'modifiers', 'status', 'question_ids')  # and a question text a line wrote
 
 
 def practice_context(context: dict) -> str:
@@ -107,8 +117,10 @@ def reader_instruction(context: dict) -> str:
     return f'Code this document.\n\n{practice_context(context)}'
 
 
-def checker_instruction(context: dict, listing: list) -> str:
-    """The checker's user text: the reader's lines (line, code, units, modifiers, status, question; result.listing),
-    as in the proof with each line's label, and the same practice context the reader had."""
-    return ("The first coder's list for this document (JSON):\n" + json.dumps(listing, indent=1)
+def checker_instruction(context: dict, listing: dict) -> str:
+    """The checker's user text: the reader's lines (line, code, units, modifiers, status, question_ids, and a question
+    text a line wrote in today's shape; result.listing), as in the proof with each line's label; the reader's questions
+    with their ids, text and affects (D370); and the same practice context the reader had."""
+    return ("The first coder's list for this document (JSON):\n" + json.dumps(listing['lines'], indent=1)
+            + "\n\nThe first coder's questions (JSON):\n" + json.dumps(listing['questions'], indent=1)
             + f'\n\n{practice_context(context)}\n\nCheck it against the document.')

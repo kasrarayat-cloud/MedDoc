@@ -74,8 +74,8 @@ class ModifierTests(SimpleTestCase):
         rows = combined({**f.code('99214'), 'modifiers': ['25', '']}, {**f.code('20610'), 'modifiers': ['RT', ' ']},
                         {**f.code('45385'), 'modifiers': ['']}, {**f.code('45380'), 'modifiers': ['\t', 59]})['codes']
         self.assertEqual([row['modifiers'] for row in rows], [['25'], ['RT'], [], ['59']])
-        self.assertEqual(result.listing(reader_of({**f.code('99214'), 'modifiers': ['25', '']}))[0]['modifiers'],
-                         ['25'])
+        self.assertEqual(result.listing(reader_of({**f.code('99214'), 'modifiers': ['25', '']}))['lines'][0][
+            'modifiers'], ['25'])
 
 
 class UnitsTests(SimpleTestCase):
@@ -85,7 +85,8 @@ class UnitsTests(SimpleTestCase):
             with self.subTest(units=written):
                 (row,) = combined({**f.code('20610'), 'units': written})['codes']
                 self.assertEqual(row['units'], shown)
-                self.assertEqual(result.listing(reader_of({**f.code('20610'), 'units': written}))[0]['units'], shown)
+                self.assertEqual(result.listing(reader_of({**f.code('20610'), 'units': written}))['lines'][0]['units'],
+                                 shown)
         absent = {key: value for key, value in f.code('20610').items() if key != 'units'}
         self.assertIsNone(combined(absent)['codes'][0]['units'])
 
@@ -127,7 +128,7 @@ class QuestionTests(SimpleTestCase):
         self.assertEqual(row['question'], 'Which knee was injected?\nWas ultrasound guidance used?')
         self.assertEqual([(q['text'], q['lines']) for q in out['questions']],
                          [('Which knee was injected?', ['L1']), ('Was ultrasound guidance used?', ['L1'])])
-        listed = result.listing(reader_of({**f.code('20610', 'needs_answer'), 'question': asked}))
+        listed = result.listing(reader_of({**f.code('20610', 'needs_answer'), 'question': asked}))['lines']
         self.assertEqual(listed[0]['question'], 'Which knee was injected?\nWas ultrasound guidance used?')
 
     def test_a_lines_question_object_gives_its_question(self):

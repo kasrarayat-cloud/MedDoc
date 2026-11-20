@@ -71,10 +71,11 @@ class CombineByLineTests(SimpleTestCase):
     def test_the_checker_is_given_each_line_with_its_label(self):
         listed = result.listing(f.reader_result([f.code('20610', modifiers=['RT']), f.code('20610', 'needs_answer',
                                                                                          question='Which knee?')]))
-        self.assertEqual(listed, [
-            {'line': 'L1', 'code': '20610', 'units': 1, 'modifiers': ['RT'], 'status': 'ready', 'question': None},
-            {'line': 'L2', 'code': '20610', 'units': 1, 'modifiers': [], 'status': 'needs_answer',
-             'question': 'Which knee?'}])
+        # each line with the ids of the questions it names (D370) and, in today's shape, the question it wrote
+        self.assertEqual(listed, {'lines': [
+            {'line': 'L1', 'code': '20610', 'units': 1, 'modifiers': ['RT'], 'status': 'ready', 'question_ids': []},
+            {'line': 'L2', 'code': '20610', 'units': 1, 'modifiers': [], 'status': 'needs_answer', 'question_ids': [],
+             'question': 'Which knee?'}], 'questions': []})
 
 
 class LineCase(r.CustomerCase, TestCase):

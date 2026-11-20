@@ -135,7 +135,11 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   converted to PDF by LibreOffice in a bounded child (60 s, a memory cap, a throwaway home and profile, no inherited
   environment), then sent as a PDF; text and pastes as a text document block. No local PDF parsing.
 - `prompts.py` - the reader's and checker's instructions; the practice's date of service, insurance and earlier answers
-  travel in the user text, outside the document; the checker also gets the reader's code list.
+  travel in the user text, outside the document; the checker also gets the reader's code list and the reader's
+  questions with their ids. Each question is written once, in the answer's top-level `questions`, with an id (the
+  reader's `Q1`, `Q2`..., the checker's new ones `C1`, `C2`...) and the lines it concerns in `affects`; a code, a review
+  and a missed code name the questions they depend on in `question_ids` instead of writing a question of their own, and
+  the checker refers to a question the reader already asked instead of writing it again (D370, D372).
 - `result.py` - the final JSON is the LAST fenced block of the joined text, whatever its fence (three or more backticks
   or tildes, any info string or none, any case); when it does not parse as strict JSON, the widest `{...}` span, read
   only when it reaches that block (never an earlier block); text after the last block that holds a `{` is unreadable
@@ -154,9 +158,17 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   names, or whose code it carries, to `needs_review` - or every line of the round when it reaches none that way: the
   code never picks a line for it. A verdict that is neither exactly `agree` nor exactly `disagree` is no clear verdict,
   and the line needs review. Every code the checker found missing is a line of its own, `needs_review`. The questions
-  are the reader's, then the checker's, then each line's own question not yet asked (case and spacing folded), each
-  naming the lines it affects; a `needs_answer` line no question names gets its agreeing review's question, or CPT
-  Studio's own. The problems are the reader's. **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n>
+  are the reader's, then the checker's, then each line's own question text not yet asked (today's shape); two
+  questions are one only when their text is the same with case and spacing folded - nothing reads what a question
+  means, and a repeated id stays two questions. Each question names the lines it affects: its `affects`, every line and
+  missed code whose `question_ids` names its id, and the lines of every review whose `question_ids` does (an id names
+  every question carrying it, case-insensitively, among the questions its author was shown: the reader's for a reader
+  line, the reader's and the checker's for the checker). An id that names no question carries no text and is listed on
+  the operator console; any shape of `question_ids` is read without failing the round. A code row shows the text of the
+  questions it names, one per line. A `needs_answer` line no question names by its affects or its text gets its
+  agreeing reviews' own questions (as before), or - when none, and no id names it either - CPT Studio's own. Answers in
+  the earlier shape (a question text on each line or review, questions without ids) read exactly as before. The
+  problems are the reader's. **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n>
   <code>` or `MISSED M<k> <code>` (checker) starts that line's section; a citation after it is filed under the line when
   the marker's code is that line's code, else under `_document`. A section also ends at a line holding exactly `END`
   (both answers are asked to end their last section with one), at the start of the final answer, at a heading, a
@@ -228,7 +240,9 @@ Server-rendered pages under `/ops/` for users holding an operator grant (from `g
 confers it). Everyone else - signed out, any member, a revoked operator - gets exactly an unknown URL's 404 before the
 method, body, CSRF token or any record is read. Pages: every encounter across workspaces (state, rounds, latest cost),
 and one encounter's rounds, runs (models, served by a fallback, tokens, cost, latency, state), the reader's and checker's
-whole answers, codes and decisions by line, answers, audit events and the original with its sha256. Acts (POST, CSRF):
+whole answers, codes and decisions by line, the reviews tied to no line, the question ids that name no question (read
+from the two stored answers, so every stored round shows them), answers, audit events and the original with its
+sha256. Acts (POST, CSRF):
 reconcile an unknown run (a note of at least 12 characters), retry a failed round (not offered while a send of it awaits
 that reconcile), release the standing holds. Views are audited.
 

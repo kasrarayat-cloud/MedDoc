@@ -27,17 +27,24 @@ lossless ones:
 - a line's or a review's question: a string, a list of strings (one question each, tied to that line), an object with a
   string "question", or null or absent; the line shows its questions one per line of text;
 - the top-level questions: a list, or a single object read as a list of one; an item is a string or an object with a
-  string "question" and an optional "affects" (codes or line labels: a list of strings or integers, or one of them);
+  string "question", an optional "affects" (codes or line labels: a list of strings or integers, or one of them) and an
+  optional "id" (D370: a non-blank string, or an integer read as its decimal string; an id in any other shape is no id -
+  the question is kept and shown, and no reference reaches it);
 - documentation_problems: a list, or a single value read as a list of one; an item that is no string is kept as its
   JSON text, never dropped;
 - every review names its code as a non-empty string;
 any other shape is Unreadable, so nothing Fable wrote is dropped, altered or guessed. A blank question carries nothing.
 A review's other fields (correct_*) and the evidence items are kept where they can be read; the operator console shows
 both answers whole.
+The ids a line, a missed code or a review gives in "question_ids" (D370) are read the same way and never make an answer
+Unreadable (today's answers have no such field, and an Unreadable round costs a paid read): a list of ids, or a single
+id read as a list of one; an integer as its decimal string; a blank or null item names nothing; an item in any other
+shape names no question and is kept as written for the operator console (dangling_references).
 
 Line identity (FIX-SPEC 1). Every final code row carries ``line``: the reader's codes are "L1".."Ln" in the order of its
-JSON list, the checker's missed codes "M1".."Mk" in theirs. The checker is given each reader line with its label
-(listing) and every review names the line it reviews.
+JSON list, the checker's missed codes "M1".."Mk" in theirs. The checker is given each reader line with its label and the
+ids of the questions it names, and the reader's questions with their ids (listing); every review names the line it
+reviews.
 
 Combination (BUILD-SPEC 4.5; FIX-SPEC 1; FIX-SPEC-2 section 3), the only glue logic: a review belongs to a reader line
 when it names that line and the code on that line. A reader line keeps the reader's status only when the reviews that
@@ -49,10 +56,23 @@ unmatched review can only send lines to a human, never make one ready, and the c
 customer reads its reason as a note on the encounter (unmatched_reviews, studio.customer). Every missed code is a line of
 its own, ``needs_review``. The problems are the reader's documentation_problems.
 
-Questions (FIX-SPEC 3): the reader's and then the checker's top-level questions, then each line's own questions when
-their text is not listed yet (compared with case and whitespace folded), each naming the lines it affects; a
-needs_answer line that no question names gets the questions of the reviews that agreed with it or, when there are none,
-CPT Studio's own question about it, so a member can always answer it.
+Questions (FIX-SPEC 3; D370, D372: each question is written once, with an id, and lines refer to it). The round's
+questions are the reader's top-level questions in their order, then the checker's, then each line's own question text
+(today's shape) when its text is not listed yet. Two questions whose text is the same with case and whitespace folded
+are one question - today's merge, the only comparison of wordings - and nothing else makes two questions one: not even
+an id, so a duplicate id stays two questions. Each question names the lines it affects: its own "affects" (line labels,
+or codes: every line carrying the code), every reader line and missed code whose question_ids names its id, and the
+lines of every review whose question_ids names it (the line the review belongs to; for a review that belongs to no line,
+the lines it reaches by naming them or their code - none for one placed nowhere). An id names every question carrying
+it, compared case-insensitively, among the questions its author was shown: a reader line's ids the reader's questions;
+a missed code's or a review's the reader's and the checker's (the checker is given the reader's questions with their
+ids). An id that names no question carries no text; the operator console lists it (dangling_references). A needs_answer
+line that no question names by its affects or by its text (as today) gets the questions the reviews that agreed with it
+wrote on themselves; when there are none and no question names the line at all - by an id either - it gets CPT
+Studio's own question about it, so a member can always answer it. A code row shows as its question its own question
+text and then the text of every question its ids name, one per line of text (a text already shown on it once), and its
+second check the same of the review shown. Each question is stored as {id (q1, q2.. in order), text, lines, codes,
+source}.
 
 Citations (FIX-SPEC 1; FIX-SPEC-2 section 4): the joined text is read line by line. A marker is a whole line holding
 exactly ``LINE L<n> <code>`` (reader), ``REVIEW L<n> <code>`` or ``MISSED M<k> <code>`` (checker), case-sensitive,
@@ -240,11 +260,20 @@ def read_checker(message: object) -> dict:
     return parsed
 
 
-def listing(reader: dict) -> list[dict]:
-    """The reader's lines as the checker is given them (FIX-SPEC 1): line, code, units, modifiers, status, question -
-    each as the customer is shown it."""
-    return [{key: line['listed_status' if key == 'status' else key] for key in LISTING_KEYS}
-            for line in _reader_lines(reader)]
+def listing(reader: dict) -> dict[str, list[dict]]:
+    """What the checker is given of the reader's answer (FIX-SPEC 1; D370): {'lines': each reader line's line, code,
+    units, modifiers and status as the customer is shown them, the ids it names (question_ids, as written) and - only
+    when it wrote one, in today's shape - its own question text; 'questions': the reader's questions, each {'id' (as
+    written, or None), 'question', 'affects'}}."""
+    lines = []
+    for line in _reader_lines(reader):
+        values = {**line, 'status': line['listed_status'], 'question_ids': line['refs'].ids}
+        listed = {key: values[key] for key in LISTING_KEYS}
+        if line['asked']:
+            listed['question'] = _question_text(line['asked'])
+        lines.append(listed)
+    return {'lines': lines, 'questions': [{'id': asked.id, 'question': asked.text, 'affects': asked.affects}
+                                          for asked in _asked(reader, 'reader')]}
 
 
 # --- the combination --------------------------------------------------------------------------------------------------
@@ -257,6 +286,7 @@ def combine(reader: dict, checker: dict) -> dict[str, list]:
     matched: dict[str, list[dict]] = {label: [] for label in by_label}
     reached = dict.fromkeys(by_label, 0)  # the unmatched reviews that reach each reader line by naming it or its code
     unplaced = 0  # the unmatched reviews placed nowhere: each reaches every line
+    about = []  # (each review, the lines a question it names by id is about: its line, or the lines it reaches)
     for item in checker.get('reviews') or ():
         review = _review(item)
         label, hits = _placement(review, by_label, every)
@@ -267,19 +297,26 @@ def combine(reader: dict, checker: dict) -> dict[str, list]:
                 reached[hit] += 1
         else:
             unplaced += 1
-    rows = []
+        about.append((review, [label] if label is not None else [row['line'] for row in every if row['line'] in hits]))
+    rows, shown = [], []
     for line in lines:
         found = matched[line['line']]
         agrees = bool(found) and all(review['verdict'] == AGREE for review in found)
         status = line['listed_status'] if agrees and not reached[line['line']] and not unplaced else NEEDS_REVIEW
+        shown.append(_shown_review(found, agrees))
         rows.append({**_stored(line), 'status': status, 'listed_by': 'reader',
-                     'second_check': {**_second_check(found, agrees), 'reviews': len(found),
+                     'second_check': {**_second_check(shown[-1], agrees), 'reviews': len(found),
                                       'unmatched': reached[line['line']], 'unplaced': unplaced}})
     for line in missed:
         rows.append({**_stored(line), 'status': NEEDS_REVIEW, 'listed_by': 'checker', 'second_check': None})
-    asked = {line['line']: line['asked'] for line in every}
-    return {'codes': rows, 'questions': _questions(reader, checker, rows, asked, matched),
-            'problems': _problems(reader.get('documentation_problems'))}
+        shown.append(None)
+    questions = _questions(reader, checker, rows, every, about, matched)
+    for row, line, review in zip(rows, every, shown):  # what each line shows as its question (module docstring)
+        row['question'] = _question_text(questions.texts(line['asked'], line['refs'], row['listed_by']))
+        if review is not None:
+            row['second_check']['question'] = _question_text(questions.texts(review['asked'], review['refs'],
+                                                                             'checker'))
+    return {'codes': rows, 'questions': questions.out, 'problems': _problems(reader.get('documentation_problems'))}
 
 
 def _placement(review: dict, by_label: dict[str, dict], every: list[dict]) -> tuple[Optional[str], set]:
@@ -314,6 +351,44 @@ def unmatched_reviews(codes: object, checker: object) -> list[dict]:
         if label is None:
             out.append({'number': number, 'review': item, 'reaches': [row['line'] for row in rows if row['line'] in hits],
                         'reason': review['reason']})
+    return out
+
+
+def dangling_references(reader: object, checker: object) -> list[dict]:
+    """The references of a round's two answers (each as stored) that name no question - an id naming no question its
+    author was shown, or an item of question_ids in a shape that names no id (module docstring) - for the operator
+    console: each {'item' (the line: "L2", "M1"; or "review 3", its place in the checker's reviews), 'code' (as
+    written), 'reference' (as written)}, the reader's lines first, then the checker's reviews, then its missed codes.
+    A part that cannot be read (an answer stored before this reading of the shape) is left out: it named nothing."""
+    reader = reader if isinstance(reader, dict) else {}
+    checker = checker if isinstance(checker, dict) else {}
+    known = {}
+    for parsed, author in ((reader, 'reader'), (checker, 'checker')):
+        try:
+            known[author] = {_key(asked.id) for asked in _asked(parsed, author) if asked.id is not None}
+        except Unreadable:
+            known[author] = set()
+    items = []  # (item, code, refs, what its ids may name)
+    try:
+        items += [(line['line'], line['code'], line['refs'], known['reader']) for line in _reader_lines(reader)]
+    except Unreadable:
+        pass
+    reviews = checker.get('reviews')
+    for number, item in enumerate(reviews if isinstance(reviews, list) else (), start=1):
+        try:
+            review = _review(item)
+        except Unreadable:
+            continue
+        items.append((f'review {number}', review['code'], review['refs'], known['reader'] | known['checker']))
+    try:
+        items += [(line['line'], line['code'], line['refs'], known['reader'] | known['checker'])
+                  for line in _missed_lines(checker)]
+    except Unreadable:
+        pass
+    out = []
+    for where, code, refs, names in items:
+        out += [{'item': where, 'code': code, 'reference': ident} for ident in refs.ids if _key(ident) not in names]
+        out += [{'item': where, 'code': code, 'reference': value} for value in refs.unread]
     return out
 
 
@@ -361,8 +436,8 @@ def _missed_lines(checker: dict) -> list[dict]:
 
 
 def _line(item: object, role: str, label: str, statuses: tuple) -> dict:
-    """One code line as shown (module docstring: shape); ``asked`` - its questions, one string each - is the
-    combination's and never stored."""
+    """One code line as shown (module docstring: shape); ``asked`` - its own questions, one string each - and ``refs``
+    - the ids it names (question_ids) - are the combination's and never stored."""
     if not isinstance(item, dict):
         raise Unreadable(f'{role} {label} is not an object')
     code = item.get('code')
@@ -378,11 +453,14 @@ def _line(item: object, role: str, label: str, statuses: tuple) -> dict:
     return {'line': label, 'code': code, 'units': _units(item.get('units'), where),
             'modifiers': _modifiers(item.get('modifiers'), where), 'listed_status': item['status'],
             'reason': _reason(item.get('reason'), where), 'question': _question_text(asked),
-            'evidence': _evidence(item.get('evidence')), 'asked': asked}
+            'evidence': _evidence(item.get('evidence')), 'asked': asked, 'refs': _references(item.get('question_ids'))}
+
+
+_UNSTORED = ('asked', 'refs')  # what a line or a review carries for the combination only
 
 
 def _stored(line: dict) -> dict:
-    return {key: value for key, value in line.items() if key != 'asked'}
+    return {key: value for key, value in line.items() if key not in _UNSTORED}
 
 
 def _line_codes(message: object, role: str) -> dict[str, str]:
@@ -424,27 +502,47 @@ def _review(item: object) -> dict:
             'correct_code': _str(item.get('correct_code')), 'correct_units': _plain_units(item.get('correct_units')),
             'correct_modifiers': _strings(item.get('correct_modifiers')),
             'correct_status': _str(item.get('correct_status')), 'evidence': _evidence(item.get('evidence')),
-            'asked': asked}
+            'asked': asked, 'refs': _references(item.get('question_ids'))}
 
 
-def _second_check(found: list[dict], agrees: bool) -> dict:
-    """The checker's view of a reader line: agrees True or False, or None when no review belongs to it. With more than
-    one review the one shown is the first that disagrees exactly, else the first whose verdict is neither agree nor
-    disagree (no clear verdict), else - when all agree - the first."""
+def _shown_review(found: list[dict], agrees: bool) -> Optional[dict]:
+    """The review the second check of a reader line shows: None when no review belongs to it; with more than one, the
+    first that disagrees exactly, else the first whose verdict is neither agree nor disagree (no clear verdict), else -
+    when all agree - the first."""
     if not found:
+        return None
+    if agrees:
+        return found[0]
+    return next((review for review in found if review['verdict'] == DISAGREE), None) or next(
+        review for review in found if review['verdict'] != AGREE)
+
+
+def _second_check(shown: Optional[dict], agrees: bool) -> dict:
+    """The checker's view of a reader line from the review shown (_shown_review): agrees True or False, or None when no
+    review belongs to it."""
+    if shown is None:
         return {'agrees': None, 'verdict': None, 'reason': None, 'question': None, 'correct_code': None,
                 'correct_units': None, 'correct_modifiers': None, 'correct_status': None, 'evidence': []}
-    if agrees:
-        shown = found[0]
-    else:
-        shown = next((review for review in found if review['verdict'] == DISAGREE), None) or next(
-            review for review in found if review['verdict'] != AGREE)
-    return {'agrees': agrees, **{key: value for key, value in shown.items() if key not in ('line', 'code', 'asked')}}
+    return {'agrees': agrees,
+            **{key: value for key, value in shown.items() if key not in ('line', 'code', *_UNSTORED)}}
 
 
-def _asked(parsed: dict, role: str) -> list[tuple[str, list[str]]]:
-    """[(text, what it affects)] of an answer's top-level questions (module docstring: shape), blank ones left out;
-    Unreadable for any other shape."""
+class _Asked(NamedTuple):
+    """One top-level question as read (module docstring: shape)."""
+    text: str
+    affects: list[str]  # the codes or line labels it names
+    id: Optional[str]  # its id as written (an integer as its decimal string), or None when it has none
+
+
+class _Refs(NamedTuple):
+    """What a line's, a missed code's or a review's question_ids names (module docstring: shape)."""
+    ids: list[str]  # the ids, as written (an integer as its decimal string), in order
+    unread: list  # the items that name no id in a shape that can be read, as written
+
+
+def _asked(parsed: dict, role: str) -> list[_Asked]:
+    """An answer's top-level questions (module docstring: shape), blank ones left out; Unreadable for any other shape
+    (an id never makes one Unreadable: it is read where it can be, else the question has none)."""
     value = parsed.get('questions')
     if value is None:
         return []
@@ -454,14 +552,34 @@ def _asked(parsed: dict, role: str) -> list[tuple[str, list[str]]]:
     out = []
     for item in items:
         if isinstance(item, str):
-            text, affects = item, []
+            text, affects, ident = item, [], None
         elif isinstance(item, dict) and isinstance(item.get('question'), str):
-            text, affects = item['question'], _affects(item.get('affects'), role)
+            text, affects, ident = item['question'], _affects(item.get('affects'), role), _question_id(item.get('id'))
         else:
             raise Unreadable(f'the {role} lists a question that is neither text nor an object with a question')
         if text.strip():
-            out.append((text, affects))
+            out.append(_Asked(text, affects, ident))
     return out
+
+
+def _question_id(value: object) -> Optional[str]:
+    """An id as written: a non-blank string, or an integer as its decimal string; None for anything else."""
+    if isinstance(value, str):
+        return value if value.strip() else None
+    return str(value) if type(value) is int else None
+
+
+def _references(value: object) -> _Refs:
+    """What question_ids names (module docstring: shape): a list of ids, a single id read as a list of one; a blank or
+    null item names nothing; an item in any other shape names no id and is kept as written. Never Unreadable."""
+    ids, unread = [], []
+    for item in value if isinstance(value, list) else [value]:
+        ident = _question_id(item)
+        if ident is not None:
+            ids.append(ident)
+        elif item is not None and not isinstance(item, str):
+            unread.append(item)
+    return _Refs(ids, unread)
 
 
 def _affects(value: object, role: str) -> list[str]:
@@ -482,45 +600,110 @@ def _affects(value: object, role: str) -> list[str]:
     return out
 
 
-def _questions(reader: dict, checker: dict, rows: list[dict], asked: dict[str, list[str]],
-               matched: dict[str, list[dict]]) -> list[dict]:
-    """The round's questions (module docstring), each {'id', 'text', 'lines', 'codes', 'source'}."""
-    order = [row['line'] for row in rows]
-    codes = {row['line']: row['code'] for row in rows}
-    out: list[dict] = []
-    seen: dict[str, dict] = {}
+def _folded(text: str) -> str:
+    """A question's text with case and whitespace folded: two questions whose folded texts are equal are one."""
+    return ' '.join(text.split()).casefold()
 
-    def named(affects) -> list[str]:
+
+class _Questions:
+    """The round's questions as they are built (module docstring: Questions): ``out``, each {'id', 'text', 'lines',
+    'codes', 'source'}, in the order asked."""
+
+    def __init__(self, rows: list[dict]):
+        self.order = [row['line'] for row in rows]
+        self.codes = {row['line']: row['code'] for row in rows}
+        self.out: list[dict] = []
+        self.by_text: dict[str, dict] = {}
+        self.ids: dict[str, dict[str, list[dict]]] = {'reader': {}, 'checker': {}}  # whose list -> id -> questions
+        self.plain: dict[str, set] = {}  # q1.. -> the lines it names by its affects or by its text (today's naming)
+
+    def named(self, affects: list[str]) -> list[str]:
         """The lines a question's ``affects`` names: a line label, or every line carrying a code it names."""
         found = []
         for entry in affects:
             key = _key(entry)
-            found += [key] if key in codes else [label for label in order if _key(codes[label]) == key]
+            found += [key] if key in self.codes else [label for label in self.order if _key(self.codes[label]) == key]
         return found
 
-    def add(text: str, lines: list[str], source: str):
-        folded = ' '.join(text.split()).casefold()
-        entry = seen.get(folded)
+    def add(self, text: str, lines: list[str], source: str) -> dict:
+        """The question with this text (folded), asked now unless it is already, naming ``lines`` too."""
+        entry = self.by_text.get(_folded(text))
         if entry is None:
-            entry = seen[folded] = {'id': f'q{len(out) + 1}', 'text': text, 'lines': [], 'codes': [],
-                                    'source': source}
-            out.append(entry)
-        entry['lines'] = [label for label in order if label in entry['lines'] or label in lines]
-        entry['codes'] = list(dict.fromkeys(codes[label] for label in entry['lines']))
+            entry = self.by_text[_folded(text)] = {'id': f'q{len(self.out) + 1}', 'text': text, 'lines': [],
+                                                   'codes': [], 'source': source}
+            self.out.append(entry)
+            self.plain[entry['id']] = set()
+        self.plain[entry['id']].update(lines)
+        self._extend(entry, lines)
+        return entry
 
+    def _extend(self, entry: dict, lines: list[str]):
+        entry['lines'] = [label for label in self.order if label in entry['lines'] or label in lines]
+        entry['codes'] = list(dict.fromkeys(self.codes[label] for label in entry['lines']))
+
+    def define(self, asked: _Asked, source: str):
+        """A top-level question of ``source``'s list, under its id when it has one."""
+        entry = self.add(asked.text, self.named(asked.affects), source)
+        if asked.id is not None:
+            found = self.ids[source].setdefault(_key(asked.id), [])
+            if all(item is not entry for item in found):
+                found.append(entry)
+
+    def resolve(self, refs: _Refs, source: str) -> list[dict]:
+        """The questions ``refs`` names, among those its author was shown (the reader's for the reader; the reader's
+        and the checker's for the checker), each once, in the order of the ids."""
+        found = []
+        for ident in refs.ids:
+            for author in ('reader',) if source == 'reader' else ('reader', 'checker'):
+                for entry in self.ids[author].get(_key(ident), ()):
+                    if all(item is not entry for item in found):
+                        found.append(entry)
+        return found
+
+    def refer(self, refs: _Refs, lines: list[str], source: str):
+        """Every question ``refs`` names names ``lines`` too."""
+        for entry in self.resolve(refs, source):
+            self._extend(entry, lines)
+
+    def names(self, label: str, *, plain: bool = False) -> bool:
+        """Whether a question names line ``label`` - by its affects or its text only, when ``plain``."""
+        return any(label in (self.plain[entry['id']] if plain else entry['lines']) for entry in self.out)
+
+    def texts(self, own: list[str], refs: _Refs, source: str) -> list[str]:
+        """What a line or a review shows as its questions: its own question texts as written, then the text of every
+        question its ids name that it does not show already."""
+        out, seen = list(own), {_folded(text) for text in own}
+        for entry in self.resolve(refs, source):
+            if _folded(entry['text']) not in seen:
+                seen.add(_folded(entry['text']))
+                out.append(entry['text'])
+        return out
+
+
+def _questions(reader: dict, checker: dict, rows: list[dict], every: list[dict], about: list[tuple[dict, list[str]]],
+               matched: dict[str, list[dict]]) -> _Questions:
+    """The round's questions (module docstring). ``rows`` and ``every``: the stored rows and their lines, in order;
+    ``about``: each review and the lines its ids are about; ``matched``: the reviews belonging to each reader line."""
+    questions = _Questions(rows)
     for parsed, source in ((reader, 'reader'), (checker, 'checker')):
-        for text, affects in _asked(parsed, source):
-            add(text, named(affects), source)
+        for asked in _asked(parsed, source):
+            questions.define(asked, source)
+    for row, line in zip(rows, every):  # the lines and missed codes naming questions by their ids
+        questions.refer(line['refs'], [row['line']], row['listed_by'])
+    for review, lines in about:  # and the reviews
+        questions.refer(review['refs'], lines, 'checker')
+    for row, line in zip(rows, every):  # each line's own question text (today's shape)
+        for text in line['asked']:
+            questions.add(text, [row['line']], row['listed_by'])
     for row in rows:
-        for text in asked.get(row['line'], ()):
-            add(text, [row['line']], row['listed_by'])
-    for row in rows:
-        if row['status'] != NEEDS_ANSWER or any(row['line'] in entry['lines'] for entry in out):
+        if row['status'] != NEEDS_ANSWER or questions.names(row['line'], plain=True):
             continue
         texts = [text for review in matched.get(row['line'], ()) for text in review['asked']]
-        for text in texts or [UNASKED_QUESTION.format(code=row['code'])]:
-            add(text, [row['line']], 'checker' if texts else 'studio')
-    return out
+        for text in texts:  # what the agreeing reviews wrote on themselves is asked as today, whatever an id names
+            questions.add(text, [row['line']], 'checker')
+        if not texts and not questions.names(row['line']):
+            questions.add(UNASKED_QUESTION.format(code=row['code']), [row['line']], 'studio')
+    return questions
 
 
 def _problems(value: object) -> list[str]:

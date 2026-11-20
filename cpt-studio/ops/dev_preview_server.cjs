@@ -77,6 +77,14 @@ const SYNTHETIC_DOCUMENTS = {
       'A 12 mm pedunculated polyp in the descending colon was removed.', 'A 3 mm polyp in the rectum was seen and left in place.',
       'Upper endoscopy was planned but is not recorded as performed.']],
   },
+  // one question for two lines (D370): the title names a biopsy the description does not, and the note's date of
+  // service is not the one entered at upload
+  'synthetic-colonoscopy-biopsy-title.txt': {
+    type: 'text/plain',
+    pages: [['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Procedure: colonoscopy with biopsy (fictional)',
+      'Patient: Avery Synthetic. Date of service: 2026-11-12.', 'The colonoscope was advanced to the cecum and the mucosa was examined on withdrawal.',
+      'The mucosa appeared normal throughout, and the scope was withdrawn.', 'Moderate sedation was given by the endoscopist; no start or stop time is recorded.']],
+  },
   'pasted-cancelled-colonoscopy': {
     type: 'text/plain',
     pages: [['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Procedure note (fictional)',
