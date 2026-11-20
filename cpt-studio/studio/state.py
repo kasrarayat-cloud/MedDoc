@@ -4,10 +4,10 @@ Read from the latest coding round only:
 - processing: it is queued or running;
 - stopped: it was cancelled (a member's Stop, an expired queue, a worker that stopped mid-stage) - Resume continues it;
 - failed: it failed;
-- once it is done, from its final statuses and the current decisions (latest CodeDecision per code, revoke clearing
-  it): awaiting_answer when a code needs an answer; else needs_review when a needs_review code has no current approve
-  or reject; else ready when a ready code has none; else reviewed when the reviewer decided every ready and
-  needs_review code; else no_codes.
+- once it is done, from its final statuses and the current decisions (latest CodeDecision per line, revoke clearing
+  it; FIX-SPEC 1 - two lines with one code are two lines): awaiting_answer when a line needs an answer; else
+  needs_review when a needs_review line has no current approve or reject; else ready when a ready line has none; else
+  reviewed when the reviewer decided every ready and needs_review line; else no_codes.
 An encounter with no coding round (one recorded before this path) keeps the state it has.
 """
 from __future__ import annotations
@@ -38,13 +38,13 @@ def latest_round(encounter) -> Optional[models.CodingRound]:
 
 
 def current_decisions(round_) -> dict[str, models.CodeDecision]:
-    """{code: its current decision} for ``round_``: the latest row per code by sequence; a revoke leaves none."""
+    """{line: its current decision} for ``round_``: the latest row per line by sequence; a revoke leaves none."""
     current: dict[str, models.CodeDecision] = {}
-    for decision in Decision.objects.filter(round_id=round_.pk).order_by('sequence'):
+    for decision in Decision.objects.filter(round_id=round_.pk).select_related('reviewer').order_by('sequence'):
         if decision.action == Decision.REVOKE:
-            current.pop(decision.code, None)
+            current.pop(decision.line, None)
         else:
-            current[decision.code] = decision
+            current[decision.line] = decision
     return current
 
 
@@ -62,9 +62,9 @@ def compute(encounter) -> Optional[str]:
     codes = [code for code in round_.codes or () if isinstance(code, dict)]
     if any(code.get('status') == 'needs_answer' for code in codes):
         return AWAITING_ANSWER
-    decided = {code for code, decision in current_decisions(round_).items() if decision.action in DECIDED}
+    decided = {line for line, decision in current_decisions(round_).items() if decision.action in DECIDED}
     for status, state in (('needs_review', NEEDS_REVIEW), ('ready', READY)):
-        if any(code.get('status') == status and code.get('code') not in decided for code in codes):
+        if any(code.get('status') == status and code.get('line') not in decided for code in codes):
             return state
     if any(code.get('status') in ('needs_review', 'ready') for code in codes):
         return REVIEWED

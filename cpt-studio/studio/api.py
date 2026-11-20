@@ -1,4 +1,4 @@
-"""The customer JSON API (BUILD-SPEC 6; client contract customer-2026-11-20). Session auth; CSRF enforced on every POST by
+"""The customer JSON API (BUILD-SPEC 6; client contract customer-2026-11-21). Session auth; CSRF enforced on every POST by
 the middleware; every response no-store (access.SecurityHeadersMiddleware).
 
 Every handler resolves the caller's ACTIVE membership first and scopes every row through it, so another workspace's
@@ -12,7 +12,8 @@ record - runs, models, usage, hashes, the coding review's whole answers - is a p
     POST /api/encounters                            an upload or a paste (multipart); starts coding round 1
     GET  /api/encounters/<id>                       customer.encounter_json
     POST /api/encounters/<id>/answers               {answers: [{question_id, text}]} -> a new round
-    POST /api/encounters/<id>/decisions             {code, action, acknowledgement, note}
+    POST /api/encounters/<id>/decisions             {round, line, code, action, acknowledgement, note}: one line of
+                                                    the round the page shows (409 when that round changed)
     POST /api/encounters/<id>/stop | resume | retry
     POST /api/encounters/<id>/reports               {kind: draft|approved, fmt: txt|csv}
     GET  /api/encounters/<id>/original[?view=1]     the original (download), or the in-page view (inline)
@@ -222,13 +223,16 @@ def answers(request, encounter_id):
 @require_POST
 @api_view
 def decide(request, encounter_id):
-    """{code, action: approve|reject|revoke, acknowledgement, note} -> 201 {code, action, by, at, note}."""
+    """{round: the round number the page shows, line: "L2", code: "20610", action: approve|reject|revoke,
+    acknowledgement, note} -> 201 {line, code, action, by, at, note} (decisions.record: 409 when the round is not the
+    latest done one, or the line is not in it with that code)."""
     data = _payload(request)
     encounter, membership = scoped_encounter(request.user, encounter_id)
     _require_reviewer(membership)
-    decision = decisions.record(encounter, request.user, membership, code=data.get('code'), action=data.get('action'),
+    decision = decisions.record(encounter, request.user, membership, round_number=data.get('round'),
+                                line=data.get('line'), code=data.get('code'), action=data.get('action'),
                                 acknowledgement=data.get('acknowledgement'), note=data.get('note'))
-    return JsonResponse({'code': decision.code, **customer.decision_json(decision)}, status=201)
+    return JsonResponse({'line': decision.line, 'code': decision.code, **customer.decision_json(decision)}, status=201)
 
 
 @require_POST

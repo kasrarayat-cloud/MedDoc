@@ -1,4 +1,5 @@
-"""studio.state (BUILD-SPEC 5): the encounter state from the latest coding round and the current decisions."""
+"""studio.state (BUILD-SPEC 5; line identity, FIX-SPEC 1): the encounter state from the latest coding round and the
+current decisions, per line."""
 from django.test import TestCase
 
 from studio import models, state
@@ -7,8 +8,14 @@ from tests.support import coding as f
 Round, Decision = models.CodingRound, models.CodeDecision
 
 
-def code(code, status):
-    return {'code': code, 'status': status, 'units': 1, 'modifiers': [], 'listed_by': 'reader'}
+def code(code, status, line=None):
+    row = {'code': code, 'status': status, 'units': 1, 'modifiers': [], 'listed_by': 'reader'}
+    return {'line': line, **row} if line else row
+
+
+def lines(*rows):
+    """Code rows with lines L1.. in order (as fable.result.combine gives the reader's)."""
+    return [{'line': f'L{number}', **row} for number, row in enumerate(rows, start=1)]
 
 
 class StateTests(TestCase):
@@ -23,9 +30,10 @@ class StateTests(TestCase):
         return Round.objects.create(encounter=self.enc, revision=self.rev, number=number, trigger=Round.UPLOAD,
                                     context={}, state=round_state, codes=list(codes))
 
-    def decide(self, round_, code, action):
-        return Decision.objects.create(encounter=self.enc, round=round_, code=code, action=action, reviewer=self.user,
-                                       reviewer_kind='human')
+    def decide(self, round_, line, action):
+        code = next(row['code'] for row in round_.codes if row.get('line') == line)
+        return Decision.objects.create(encounter=self.enc, round=round_, line=line, code=code, action=action,
+                                       reviewer=self.user, reviewer_kind='human')
 
     def test_the_round_states(self):
         for round_state, expected in ((Round.QUEUED, 'processing'), (Round.RUNNING, 'processing'),
@@ -47,24 +55,34 @@ class StateTests(TestCase):
                 self.assertEqual(state.compute(self.enc), expected)
 
     def test_decisions_move_ready_to_reviewed_and_a_revoke_moves_it_back(self):
-        round_ = self.round(codes=[code('45385', 'ready'), code('45378', 'needs_review'), code('45380', 'not_supported')])
+        round_ = self.round(codes=lines(code('45385', 'ready'), code('45378', 'needs_review'),
+                                        code('45380', 'not_supported')))
         self.assertEqual(state.compute(self.enc), 'needs_review')
-        self.decide(round_, '45378', Decision.REJECT)
+        self.decide(round_, 'L2', Decision.REJECT)
         self.assertEqual(state.compute(self.enc), 'ready')
-        self.decide(round_, '45385', Decision.APPROVE)
+        self.decide(round_, 'L1', Decision.APPROVE)
         self.assertEqual(state.compute(self.enc), 'reviewed')
-        self.decide(round_, '45385', Decision.REVOKE)
+        self.decide(round_, 'L1', Decision.REVOKE)
         self.assertEqual(state.compute(self.enc), 'ready')
-        self.decide(round_, '45385', Decision.REJECT)
+        self.decide(round_, 'L1', Decision.REJECT)
         self.assertEqual(state.compute(self.enc), 'reviewed')
         self.assertEqual({key: value.action for key, value in state.current_decisions(round_).items()},
-                         {'45378': 'reject', '45385': 'reject'})
+                         {'L2': 'reject', 'L1': 'reject'})
+
+    def test_two_lines_with_one_code_are_decided_apart(self):
+        round_ = self.round(codes=lines(code('20610', 'ready'), code('20610', 'needs_review')))
+        self.decide(round_, 'L1', Decision.APPROVE)
+        self.assertEqual(state.compute(self.enc), 'needs_review')  # the second 20610 line is still undecided
+        self.decide(round_, 'L2', Decision.REJECT)
+        self.assertEqual(state.compute(self.enc), 'reviewed')
+        self.assertEqual({key: value.action for key, value in state.current_decisions(round_).items()},
+                         {'L1': 'approve', 'L2': 'reject'})
 
     def test_decisions_on_an_earlier_round_do_not_count(self):
-        first = self.round(codes=[code('45385', 'ready')])
-        self.decide(first, '45385', Decision.APPROVE)
+        first = self.round(codes=lines(code('45385', 'ready')))
+        self.decide(first, 'L1', Decision.APPROVE)
         self.assertEqual(state.compute(self.enc), 'reviewed')
-        self.round(codes=[code('45385', 'ready')])
+        self.round(codes=lines(code('45385', 'ready')))
         self.assertEqual(state.compute(self.enc), 'ready')
 
     def test_only_the_latest_round_counts(self):

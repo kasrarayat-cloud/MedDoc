@@ -1,4 +1,4 @@
-"""The customer API (BUILD-SPEC 6; client contract customer-2026-11-20): the contract's keys exactly (held to
+"""The customer API (BUILD-SPEC 6; client contract customer-2026-11-21): the contract's keys exactly (held to
 ops/verification/customer-contract.json by the shipped reader, ops/scan_customer.py, and to the spec's own key lists),
 tenancy (404 outside the membership), the reviewer gate, answers starting a new round with every answer so far, the
 vendor-name scan over every customer JSON response, the in-page view's headers, a Word document's converted view, the
@@ -30,8 +30,9 @@ ENCOUNTER_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_lab
 DOCUMENT_KEYS = {'name', 'media_type', 'size', 'kind', 'original_url', 'view_url', 'view_media_type', 'converted'}
 PROGRESS_KEYS = {'phase', 'busy', 'started_at', 'finished_at', 'server_time', 'message', 'can_stop', 'can_resume',
                  'can_retry', 'error'}
-CODE_KEYS = {'code', 'units', 'modifiers', 'status', 'status_label', 'reason', 'second_check', 'question', 'quotes',
-             'decision', 'allowed_actions'}
+CODE_KEYS = {'line', 'code', 'units', 'modifiers', 'status', 'status_label', 'reason', 'second_check', 'question',
+             'quotes', 'decision', 'allowed_actions'}
+QUESTION_KEYS = {'id', 'text', 'codes', 'lines'}
 DOCX_BYTES = b'PK\x03\x04 synthetic word bytes, never opened by the tests'
 CONVERTED = b'%PDF-1.7\n% the synthetic conversion of a Word file\n%%EOF\n'
 
@@ -85,6 +86,7 @@ class ContractTests(ApiCase):
             self.assert_contract(payload, 'encounter')
         payload = self.get_json(f'/api/encounters/{done.pk}')
         self.assertEqual(set(payload['codes'][0]), CODE_KEYS)
+        self.assertEqual(set(payload['questions'][0]), QUESTION_KEYS)
 
     def test_a_done_round_reads_as_its_codes_questions_quotes_and_notes(self):
         enc = self.done()
@@ -94,7 +96,8 @@ class ContractTests(ApiCase):
         self.assertEqual(payload['round'], {'number': 1, 'trigger': 'upload',
                                             'finished_at': payload['progress']['finished_at']})
         codes = {code['code']: code for code in payload['codes']}
-        self.assertEqual([code['code'] for code in payload['codes']], ['45385', '45380', '43239', '43251', '45378'])
+        self.assertEqual([(code['line'], code['code']) for code in payload['codes']],
+                         [('L1', '45385'), ('L2', '45380'), ('L3', '43239'), ('L4', '43251'), ('M1', '45378')])
         self.assertEqual({code: row['status'] for code, row in codes.items()},
                          {'45385': 'ready', '45380': 'needs_answer', '43239': 'needs_review', '43251': 'not_supported',
                           '45378': 'needs_review'})
@@ -114,7 +117,8 @@ class ContractTests(ApiCase):
                           'Which site was biopsied during the upper endoscopy?'])
         round_ = state.latest_round(enc)
         self.assertEqual(payload['questions'][0]['id'], decisions.question_id(round_, round_.questions[0]))
-        self.assertEqual(payload['questions'][0]['codes'], ['45380'])
+        self.assertEqual((payload['questions'][0]['codes'], payload['questions'][0]['lines']), (['45380'], ['L2']))
+        self.assertEqual((payload['questions'][1]['codes'], payload['questions'][1]['lines']), (['43239'], ['L3']))
         self.assertEqual(payload['notes'], ['The note is not signed.'])
         self.assertEqual(payload['readiness'], {'draft': True, 'approved': False,
                                                 'blockers': ['No code has been approved.']})
@@ -131,7 +135,8 @@ class ContractTests(ApiCase):
         enc = self.encounter()
         r.write_round(enc, codes=[r.row('45385', 'ready', evidence=[{'quote': 'snare', 'page': 3},
                                                                      {'quote': 'snare', 'page': 3}])],
-                      citations={'99999': [{'text': 'elsewhere', 'page': 1, 'source': 'reader'}]})
+                      citations={'L2': [{'text': 'elsewhere', 'page': 1, 'source': 'reader'}],
+                                 '45385': [{'text': 'filed under a code, not a line', 'page': 1, 'source': 'reader'}]})
         payload = self.get_json(f'/api/encounters/{enc.pk}')
         self.assertEqual(payload['codes'][0]['quotes'], [{'text': 'snare', 'page': 3}])
 
@@ -173,10 +178,11 @@ class ContractTests(ApiCase):
                          (409, 'This document reached its spending limit.'))
 
     def test_an_outdated_page_and_a_signed_out_caller_are_refused(self):
-        response = self.client.get('/api/session', HTTP_X_CPT_STUDIO_CLIENT='customer-2026-11-13')
-        self.assertEqual((response.status_code, response.json()), (409, client_contract.OUTDATED))
+        for earlier in ('customer-2026-11-13', 'customer-2026-11-20'):
+            response = self.client.get('/api/session', HTTP_X_CPT_STUDIO_CLIENT=earlier)
+            self.assertEqual((response.status_code, response.json()), (409, client_contract.OUTDATED))
         self.assertEqual(Client().get('/api/session').status_code, 401)
-        self.assertEqual(client_contract.VERSION, 'customer-2026-11-20')
+        self.assertEqual(client_contract.VERSION, 'customer-2026-11-21')
 
 
 class TenancyAndRoleTests(ApiCase):
@@ -214,7 +220,7 @@ class TenancyAndRoleTests(ApiCase):
         self.assertFalse(payload['progress']['can_retry'])
         question = payload['questions'][0]['id']
         bodies = {'answers': {'answers': [{'question_id': question, 'text': 'Yes.'}]},
-                  'decisions': {'code': '45385', 'action': 'approve',
+                  'decisions': {'round': 1, 'line': 'L1', 'code': '45385', 'action': 'approve',
                                 'acknowledgement': decisions.ACKNOWLEDGEMENTS['human']},
                   'stop': {}, 'resume': {}, 'retry': {}}
         for action, body in bodies.items():
@@ -289,8 +295,11 @@ class AnswerTests(ApiCase):
                          ('processing', 'queued', [], []))
         self.assertEqual(payload['answers'], [{'question': first['text'], 'answer': 'Yes, from the rectum.',
                                                'by': self.reviewer.label(), 'at': payload['answers'][0]['at']}])
-        # round 2 asks the second question again; its answer goes into round 3 with the first
-        r2_reader = {**r.READER, 'questions': [{'question': second['text'], 'affects': ['43239']}]}
+        # round 2 asks the second question again (the first was answered: its code is ready now); its answer goes into
+        # round 3 with the first
+        r2_codes = [dict(item, status='ready', question=None) if item['code'] == '45380' else item
+                    for item in r.READER['codes']]
+        r2_reader = {**r.READER, 'codes': r2_codes, 'questions': [{'question': second['text'], 'affects': ['43239']}]}
         self.code_round(enc, reader=r2_reader, checker={**r.CHECKER, 'questions': []})
         payload = self.get_json(f'/api/encounters/{enc.pk}')
         (asked,) = payload['questions']
@@ -351,7 +360,8 @@ class VendorNameScanTests(ApiCase):
                      self.client.get(f'/api/encounters/{enc.pk}')]
         payload = responses[-1].json()
         responses.append(self.post_json(f'/api/encounters/{enc.pk}/decisions', {
-            'code': '45385', 'action': 'approve', 'acknowledgement': decisions.ACKNOWLEDGEMENTS['human']}))
+            'round': 1, 'line': 'L1', 'code': '45385', 'action': 'approve',
+            'acknowledgement': decisions.ACKNOWLEDGEMENTS['human']}))
         responses.append(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'approved', 'fmt': 'txt'}))
         responses.append(self.post_json(f'/api/encounters/{enc.pk}/answers', {'answers': [
             {'question_id': payload['questions'][0]['id'], 'text': 'Yes.'}]}))

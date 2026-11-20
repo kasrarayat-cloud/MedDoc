@@ -29,7 +29,7 @@ class ExportCase(r.CustomerCase, TestCase):
             r.row('43251', 'not_supported', reason='Claude Fable 5.2 found no snare in the upper tract.')],
             questions=[{'id': 'q1', 'text': 'Which site was biopsied?', 'codes': ['43239'], 'source': 'reader'}],
             problems=['Bowel preparation quality was not recorded.'],
-            citations={'45385': [{'text': 'removed with a cold snare', 'page': 2, 'source': 'reader'}]})
+            citations={'L1': [{'text': 'removed with a cold snare', 'page': 2, 'source': 'reader'}]})
         self.client = self.client_for(self.reviewer)
 
     def post(self, path, body, client=None):
@@ -38,10 +38,14 @@ class ExportCase(r.CustomerCase, TestCase):
     def export(self, kind, fmt, client=None):
         return self.post(f'/api/encounters/{self.enc.pk}/reports', {'kind': kind, 'fmt': fmt}, client=client)
 
+    def line_of(self, code):
+        return next(row['line'] for row in self.round.codes if row['code'] == code)
+
     def approve(self, code, user=None, kind='human'):
         client = self.client_for(user) if user else self.client
         response = self.post(f'/api/encounters/{self.enc.pk}/decisions',
-                             {'code': code, 'action': 'approve', 'acknowledgement': ACK[kind]}, client=client)
+                             {'round': self.round.number, 'line': self.line_of(code), 'code': code,
+                              'action': 'approve', 'acknowledgement': ACK[kind]}, client=client)
         self.assertEqual(response.status_code, 201, response.content)
 
     def download(self, row, client=None):
@@ -140,7 +144,8 @@ class ApprovedTests(ExportCase):
                                           'details': {'blockers': ['No code has been approved.']}})
         self.approve('45385')
         self.approve('45380', user=self.agent, kind='agent')
-        reject = self.post(f'/api/encounters/{self.enc.pk}/decisions', {'code': '45380', 'action': 'revoke'},
+        reject = self.post(f'/api/encounters/{self.enc.pk}/decisions',
+                           {'round': 1, 'line': 'L2', 'code': '45380', 'action': 'revoke'},
                            client=self.client_for(self.agent))
         self.assertEqual(reject.status_code, 201)
         self.approve('45380', user=self.agent, kind='agent')

@@ -1,6 +1,8 @@
-"""Review decisions (BUILD-SPEC 6; studio.decisions): approve needs the exact attestation for the reviewer's kind,
-reject and revoke, append-only rows with the latest per code current, the allowed actions per status, an agent's label,
-the audit row and the encounter state each decision leaves. Synthetic data only."""
+"""Review decisions (BUILD-SPEC 6; studio.decisions; line identity, FIX-SPEC 1): approve needs the exact attestation for
+the reviewer's kind, reject and revoke, append-only rows with the latest per line current, the allowed actions per
+status, an agent's label, the audit row and the encounter state each decision leaves. A decision names the round the
+page shows and the line; tests/test_line_identity.py holds the findings' cases (two lines with one code, a stale page).
+Synthetic data only."""
 import json
 
 from django.test import TestCase
@@ -21,8 +23,13 @@ class DecisionCase(r.CustomerCase, TestCase):
             r.row('45380', 'needs_answer', question='Was a biopsy taken?'), r.row('43251', 'not_supported')])
         self.client = self.client_for(self.reviewer)
 
-    def decide(self, code, action, *, acknowledgement=None, note='', client=None):
-        body = {'code': code, 'action': action, 'note': note,
+    def decide(self, code, action, *, acknowledgement=None, note='', client=None, line=None, round_number=None):
+        """POST a decision as the page sends it: the latest round's number and the line holding ``code``."""
+        latest = state.latest_round(self.enc)
+        if line is None:
+            line = next((row['line'] for row in latest.codes if row.get('code') == code), 'L99')
+        body = {'round': latest.number if round_number is None else round_number, 'line': line, 'code': code,
+                'action': action, 'note': note,
                 'acknowledgement': ACK['human'] if acknowledgement is None and action == 'approve' else
                 (acknowledgement or '')}
         return (client or self.client).post(f'/api/encounters/{self.enc.pk}/decisions', data=json.dumps(body),
@@ -44,12 +51,12 @@ class AcknowledgementTests(DecisionCase):
         response = self.decide('45385', 'approve', note='Checked against the whole note.')
         self.assertEqual(response.status_code, 201, response.content)
         body = response.json()
-        self.assertEqual({key: body[key] for key in ('code', 'action', 'by', 'note')},
-                         {'code': '45385', 'action': 'approve', 'by': self.reviewer.label(),
+        self.assertEqual({key: body[key] for key in ('line', 'code', 'action', 'by', 'note')},
+                         {'line': 'L1', 'code': '45385', 'action': 'approve', 'by': self.reviewer.label(),
                           'note': 'Checked against the whole note.'})
         decision = Decision.objects.get()
-        self.assertEqual((decision.round_id, decision.code, decision.reviewer_kind, decision.acknowledgement),
-                         (self.round.pk, '45385', 'human', ACK['human']))
+        self.assertEqual((decision.round_id, decision.line, decision.code, decision.reviewer_kind,
+                          decision.acknowledgement), (self.round.pk, 'L1', '45385', 'human', ACK['human']))
 
     def test_an_agent_approves_with_its_own_attestation_and_is_labelled_as_an_agent(self):
         agent = self.client_for(self.agent)
@@ -101,10 +108,11 @@ class ActionTests(DecisionCase):
         rows = list(Decision.objects.filter(code='43239').order_by('sequence'))
         self.assertEqual([row.action for row in rows], ['reject', 'revoke', 'approve'])
         self.assertEqual([row.sequence for row in rows], sorted(row.sequence for row in rows))
-        self.assertEqual(set(state.current_decisions(self.round)), {'43239', '45385'})
+        self.assertEqual(set(state.current_decisions(self.round)), {'L2', 'L1'})  # 43239 is L2 of this round
         events = models.AuditEvent.objects.filter(encounter=self.enc, event='decision.recorded').order_by('created_at')
-        self.assertEqual([(e.data['code'], e.data['action']) for e in events],
-                         [('43239', 'reject'), ('43239', 'revoke'), ('43239', 'approve'), ('45385', 'approve')])
+        self.assertEqual([(e.data['line'], e.data['code'], e.data['action']) for e in events],
+                         [('L2', '43239', 'reject'), ('L2', '43239', 'revoke'), ('L2', '43239', 'approve'),
+                          ('L1', '45385', 'approve')])
         self.assertEqual(payload['readiness'], {'draft': True, 'approved': True, 'blockers': []})
         texts = [item['text'] for item in payload['activity']]
         label = self.reviewer.label()
@@ -119,7 +127,7 @@ class ActionTests(DecisionCase):
                 ('45380', 'approve', 409, decisions.NOT_DECIDABLE['needs_answer']),
                 ('43251', 'reject', 409, decisions.NOT_DECIDABLE['not_supported']),
                 ('45385', 'revoke', 409, decisions.NOTHING_TO_UNDO),
-                ('99999', 'approve', 404, decisions.NOT_IN_ROUND),
+                ('99999', 'approve', 409, decisions.NOT_IN_ROUND),
                 ('45385', 'confirm', 400, 'Choose approve, reject or undo.'),
                 ('', 'approve', 400, 'Name the code to decide on.')):
             with self.subTest(code=code, action=action):
@@ -141,8 +149,8 @@ class ActionTests(DecisionCase):
     def test_no_decision_is_recorded_on_a_round_that_is_not_the_latest_done_one(self):
         self.assertEqual(self.decide('45385', 'approve').status_code, 201)
         r.write_round(self.enc, state_=models.CodingRound.QUEUED)
-        response = self.decide('45385', 'revoke')
-        self.assertEqual((response.status_code, response.json()['error']), (409, decisions.NOT_DONE))
+        response = self.decide('45385', 'revoke', line='L1', round_number=1)
+        self.assertEqual((response.status_code, response.json()['error']), (409, decisions.ROUND_CHANGED))
         payload, _ = self.codes()
         self.assertEqual((payload['codes'], payload['readiness']['draft']), ([], False))
         self.assertEqual(Decision.objects.count(), 1)

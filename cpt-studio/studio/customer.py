@@ -1,26 +1,31 @@
-"""The customer contract (BUILD-SPEC 6; client contract customer-2026-11-20): every payload the customer page reads, built
-from stored rows on each request.
+"""The customer contract (BUILD-SPEC 6; client contract customer-2026-11-21): every payload the customer page reads,
+built from stored rows on each request.
 
 - session_json: GET /api/session.
 - list_rows: GET /api/encounters.
 - encounter_json: GET /api/encounters/<id> - the document and its in-page view, the practice's context, the progress of
-  the latest coding round, its codes (each with the second check's verdict, its quotes, its current decision and the
-  decisions the member may record), its questions, every answer given, its documentation notes, the export readiness,
-  the exports and the activity.
+  the latest coding round, its code lines (each with its line, the second check's verdict, its quotes, its current
+  decision and the decisions the member may record), its questions (each naming the lines it affects), every answer
+  given, its documentation notes, the export readiness, the exports and the activity.
 - view_content: what GET /api/encounters/<id>/original?view=1 serves - the original PDF or text, a pasted text, or for
   a Word document the PDF the coding review read (CodingRound.view_pdf_*: the converted file, so the pages the quotes
   name are the pages shown).
 
-Only the latest round is shown: while it is queued or running, failed or stopped, it has no codes. Quotes are the
-round's citations - the passages the API itself verified against the document (fable.result.citations), filed under
-each code by the reader's CODE and the checker's REVIEW sections - and only for a code with none, the quotes the answer's
-JSON gave as its evidence. An encounter with no coding round (a record of the earlier system) reads as an earlier
-review, with nothing of the earlier tables shown: Review again (POST retry) codes it with the current version.
+Only the latest round is shown: while it is queued or running, failed or stopped, it has no codes. Every code row is a
+line of its own (FIX-SPEC 1: L1.. the reader's, M1.. the second check's additions), and its decision, quotes and
+allowed actions are that line's - two lines with one code are decided apart. Quotes are the round's citations - the
+passages the API itself verified against the document (fable.result.citations), filed under each line by the line's
+marker section - and only for a line with none, the quotes the answer's JSON gave as its evidence. A question names the
+lines it affects, and the codes it shows are those lines' codes. An encounter with no coding round (a record of the
+earlier system) reads as an earlier review, with nothing of the earlier tables shown: Review again (POST retry) codes it
+with the current version.
 
-Display hygiene (BUILD-SPEC 7.4): the text the coding review wrote - reasons, the second check's reasons, questions and
-documentation notes - passes through shown(), which replaces vendor and model names (the shared denylist's name rules,
-ops/verification/customer-denylist.json; a test pins them) with "the system" and changes nothing else. Codes, statuses
-and quotes of the document are never touched. No payload carries a provider, model, usage, cost, hash, run or request id.
+Display hygiene (BUILD-SPEC 7.4): the text the coding review wrote - reasons, the second check's reasons, questions,
+documentation notes and the evidence quotes its JSON gave - passes through shown(), which replaces vendor and model
+names (the shared denylist's name rules, ops/verification/customer-denylist.json; a test pins them) with "the system"
+and changes nothing else. Codes, modifiers, statuses and the passages the API cited from the document are never touched.
+No payload carries a provider, model, usage, cost, hash, run or request id, and a platform operator's act reads as CPT
+Studio's: the activity names members of the workspace only.
 """
 from __future__ import annotations
 
@@ -48,9 +53,16 @@ CODE_STATUS_LABELS = {'ready': 'Ready for approval', 'needs_answer': 'Needs your
                       'needs_review': 'Needs your review', 'not_supported': 'Not supported'}
 QUEUED, READING, CHECKING, DONE, FAILED, STOPPED = 'queued', 'reading', 'checking', 'done', 'failed', 'stopped'
 BUSY_PHASES = (QUEUED, READING, CHECKING)
-# The second check's reason where it gave no verdict on a code: CPT Studio's own sentence.
+# The second check's reason where it gave no verdict on a line, or where a review could not be placed on it: CPT
+# Studio's own sentences (fable.result.combine counts the reviews behind each).
 ADDED_BY_CHECK = 'The second check found this code; it needs your review.'
 NOT_CHECKED = 'The second check did not review this code.'
+UNMATCHED_CHECK = ('A review by the second check names this line or this code but not both, so this code needs your '
+                   'review.')
+ALSO_UNMATCHED = ('Another review by the second check names this line or this code but not both, so this code needs '
+                  'your review.')
+UNPLACED_CHECK = 'A review by the second check names none of these lines, so this code needs your review.'
+OPERATOR = 'CPT Studio'  # who an act of anyone but a member of the workspace reads as (a platform operator's)
 STOPPING_MESSAGE = 'Stopping. A step that is already running finishes; nothing after it starts.'
 STOPPED_MESSAGE = 'Stopped by a workspace member. Resume to continue the coding review.'
 INTERRUPTED_MESSAGE = 'The coding review was interrupted before it finished. Resume to continue it.'
@@ -287,14 +299,15 @@ def progress_json(encounter, round_, can_review: bool, now) -> dict:
 
 
 def citation_index(round_) -> dict:
-    """{CODE: [(text, page)]} of the round's citations, each code's reader citations then its checker's."""
+    """{line: [(text, page)]} of the round's citations, each line's reader citations then its checker's."""
     index: dict = {}
-    for key, items in (round_.citations or {}).items():
+    citations = round_.citations if isinstance(round_.citations, dict) else {}
+    for key, items in citations.items():
         if not isinstance(key, str) or not isinstance(items, list):
             continue
         for item in items:
             if isinstance(item, dict) and isinstance(item.get('text'), str) and item['text'].strip():
-                index.setdefault(key.strip().upper(), []).append((item['text'], item.get('page')))
+                index.setdefault(key, []).append((item['text'], item.get('page')))
     return index
 
 
@@ -303,11 +316,12 @@ def _page(value) -> Optional[int]:
 
 
 def quotes(row, index) -> list:
-    """A code's quotes: its citations (verified by the API), or only when it has none, its JSON evidence quotes; each
-    passage once."""
-    code = row.get('code') if isinstance(row.get('code'), str) else ''
-    found = index.get(code.strip().upper()) or [
-        (item.get('quote'), item.get('page')) for item in row.get('evidence') or ()
+    """A line's quotes: its citations (the document's own words, verified by the API, shown exactly), or only when it
+    has none, the evidence quotes its JSON gave (written by the coding review, so shown through shown()); each passage
+    once."""
+    line = row.get('line') if isinstance(row.get('line'), str) else None
+    found = (index.get(line) if line is not None else None) or [
+        (shown(item.get('quote')), item.get('page')) for item in row.get('evidence') or ()
         if isinstance(item, dict) and isinstance(item.get('quote'), str) and item['quote'].strip()]
     out, seen = [], set()
     for text, page in found:
@@ -325,42 +339,71 @@ def decision_json(decision) -> Optional[dict]:
             'note': decision.note}
 
 
-def code_json(row, index, decision, can_review: bool) -> dict:
-    status = row.get('status')
+def _count(value) -> int:
+    return value if type(value) is int and value > 0 else 0
+
+
+def check_json(row) -> dict:
+    """The second check as the customer reads it: its verdict on a reader line and its reason as written, or CPT
+    Studio's sentence where it gave none - and where a review could not be placed on a line (fable.result.combine),
+    the sentence that says so, never that the line was not reviewed."""
+    if row.get('listed_by') == 'checker':
+        return {'agrees': None, 'reason': ADDED_BY_CHECK}
     check = row.get('second_check') if isinstance(row.get('second_check'), dict) else {}
     agrees = check.get('agrees') if isinstance(check.get('agrees'), bool) else None
-    if row.get('listed_by') == 'checker':
-        check_reason = ADDED_BY_CHECK
-    elif agrees is None:
-        check_reason = NOT_CHECKED
-    else:
-        check_reason = _shown_or(check.get('reason'))
-    modifiers = row.get('modifiers')
-    return {'code': row.get('code'), 'units': row.get('units') if type(row.get('units')) is int else None,
-            'modifiers': [item for item in modifiers if isinstance(item, str)] if isinstance(modifiers, list) else [],
+    unmatched = _count(check.get('unmatched'))
+    if agrees is None:
+        reason = UNMATCHED_CHECK if unmatched else UNPLACED_CHECK if _count(check.get('unplaced')) else NOT_CHECKED
+        return {'agrees': None, 'reason': reason}
+    reason = _shown_or(check.get('reason'))
+    if unmatched:
+        reason = f'{reason} {ALSO_UNMATCHED}' if reason else ALSO_UNMATCHED
+    return {'agrees': agrees, 'reason': reason}
+
+
+def _modifiers(value) -> Optional[list]:
+    """A line's modifiers as stored (a list of strings), or None when they were not given."""
+    return list(value) if isinstance(value, list) and all(isinstance(item, str) for item in value) else None
+
+
+def code_json(row, index, decision, can_review: bool) -> dict:
+    status = row.get('status')
+    return {'line': row.get('line'), 'code': row.get('code'),
+            'units': row.get('units') if type(row.get('units')) is int and row['units'] > 0 else None,
+            'modifiers': _modifiers(row.get('modifiers')),
             'status': status, 'status_label': CODE_STATUS_LABELS.get(status, 'Not reviewable'),
-            'reason': _shown_or(row.get('reason'), ''),
-            'second_check': {'agrees': agrees, 'reason': check_reason},
+            'reason': _shown_or(row.get('reason'), ''), 'second_check': check_json(row),
             'question': _shown_or(row.get('question')), 'quotes': quotes(row, index),
             'decision': decision_json(decision), 'allowed_actions': decisions.allowed_actions(row, decision, can_review)}
 
 
+def line_rows(round_) -> list:
+    """The code lines of a round as stored, in order: each a dict with a line, a code and a status the page shows."""
+    return [row for row in round_.codes or () if isinstance(row, dict) and isinstance(row.get('line'), str)
+            and isinstance(row.get('code'), str) and row.get('status') in CODE_STATUS_LABELS]
+
+
 def round_rows(round_, current, can_review: bool) -> list:
-    """The code rows of a done round (its stored order), each with its current decision; [] for any other round."""
+    """The code lines of a done round (its stored order), each with its current decision; [] for any other round."""
     if round_ is None or round_.state != Round.DONE:
         return []
     index = citation_index(round_)
-    rows = [row for row in round_.codes or () if isinstance(row, dict) and isinstance(row.get('code'), str)
-            and row.get('status') in CODE_STATUS_LABELS]
-    return [code_json(row, index, current.get(row['code']), can_review) for row in rows]
+    return [code_json(row, index, current.get(row['line']), can_review) for row in line_rows(round_)]
 
 
 def questions_json(round_) -> list:
+    """The round's questions, each naming the lines it affects and showing those lines' codes (never a code it named
+    that is no line's)."""
     if round_ is None or round_.state != Round.DONE:
         return []
-    return [{'id': identifier, 'text': shown(item['text']),
-             'codes': [code for code in item.get('codes') or () if isinstance(code, str)]}
-            for identifier, item in decisions.round_questions(round_)]
+    codes = {row['line']: row['code'] for row in line_rows(round_)}
+    out = []
+    for identifier, item in decisions.round_questions(round_):
+        named = item.get('lines') if isinstance(item.get('lines'), list) else []
+        lines = list(dict.fromkeys(line for line in named if isinstance(line, str) and line in codes))
+        out.append({'id': identifier, 'text': shown(item['text']),
+                    'codes': list(dict.fromkeys(codes[line] for line in lines)), 'lines': lines})
+    return out
 
 
 def answers_json(encounter) -> list:
@@ -384,8 +427,16 @@ def readiness(round_, current) -> dict:
     if round_.state != Round.DONE:
         key = {Round.FAILED: FAILED, Round.CANCELLED: STOPPED}.get(round_.state, 'busy')
         return {'draft': False, 'approved': False, 'blockers': [BLOCKERS[key]]}
-    approved = any(decision.action == models.CodeDecision.APPROVE for decision in current.values())
+    approved = bool(approved_lines(round_, current))
     return {'draft': True, 'approved': approved, 'blockers': [] if approved else [BLOCKERS['none_approved']]}
+
+
+def approved_lines(round_, current) -> list:
+    """The lines of a done round the approved export lists: those whose current decision is approve and whose status
+    is ready or needs_review (FIX-SPEC 1)."""
+    return [row['line'] for row in line_rows(round_) if row.get('status') in decisions.DECIDABLE
+            and current.get(row['line']) is not None
+            and current[row['line']].action == models.CodeDecision.APPROVE]
 
 
 def report_json(export, latest_round_id, last_decision_at=None) -> dict:
@@ -410,20 +461,20 @@ def reports_json(encounter, round_) -> list:
 
 # --- the activity ------------------------------------------------------------------------------------------------------------
 
-def _count(value, one, many) -> str:
+def _plural(value, one, many) -> str:
     return f'{value} {one if value == 1 else many}'
 
 
-def _activity_text(event, numbers) -> str:
+def _activity_text(event, numbers, members) -> str:
     data = event.data if isinstance(event.data, dict) else {}
-    who = event.actor.label() if event.actor is not None else 'CPT Studio'
+    who = event.actor.label() if event.actor_id is not None and event.actor_id in members else OPERATOR
     name = event.event
     if name == 'encounter.created':
         return f'Pasted by {who}.' if data.get('kind') == Revision.PASTE else f'Uploaded by {who}.'
     if name == 'coding.round_queued':
         return f'{who} asked for the coding review again.' if data.get('trigger') == Round.RETRY else ''
     if name == 'answers.recorded' and type(data.get('count')) is int:
-        return f'{who} answered {_count(data["count"], "question", "questions")}.'
+        return f'{who} answered {_plural(data["count"], "question", "questions")}.'
     if name in ('coding.round_done', 'coding.round_failed'):
         number = numbers.get(data.get('round'))
         review = f'Coding review {number}' if number else 'The coding review'
@@ -432,7 +483,7 @@ def _activity_text(event, numbers) -> str:
         if data.get('codes') == 0:
             return f'{review} finished with no codes.'
         if type(data.get('questions')) is int and data['questions'] > 0:
-            return f'{review} finished with {_count(data["questions"], "question", "questions")}.'
+            return f'{review} finished with {_plural(data["questions"], "question", "questions")}.'
         return f'{review} finished.'
     if name == 'decision.recorded' and 'round' in data and isinstance(data.get('code'), str):
         words = {decisions.APPROVE: 'approved', decisions.REJECT: 'rejected',
@@ -448,12 +499,16 @@ def _activity_text(event, numbers) -> str:
 
 
 def activity_json(encounter) -> list:
-    """What happened to the document, oldest first, each in a fixed sentence (never an event's stored data as text)."""
+    """What happened to the document, oldest first, each in a fixed sentence (never an event's stored data as text).
+    An act names its member - anyone holding a membership of the workspace, active or not - and anyone else's act (a
+    platform operator's retry) reads as CPT Studio's: who did it is the operator's record, never the practice's."""
     numbers = {str(pk): number for pk, number in Round.objects.filter(encounter_id=encounter.pk)
                .values_list('pk', 'number')}
+    members = set(models.Membership.objects.filter(workspace_id=encounter.workspace_id)
+                  .values_list('user_id', flat=True))
     out = []
     for event in encounter.audit_events.select_related('actor').order_by('created_at', 'pk'):
-        text = _activity_text(event, numbers)
+        text = _activity_text(event, numbers, members)
         if text:
             out.append({'at': iso(event.created_at), 'text': text})
     return out

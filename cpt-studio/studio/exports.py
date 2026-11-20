@@ -1,14 +1,20 @@
 """Customer exports (BUILD-SPEC 8): cpt-studio-customer-export@3, made from the encounter's latest coding round.
 
-- draft: every code of the round with its status, units, modifiers, reason, the second check's verdict, its question
-  and its quotes with their pages, and any current decision; then the round's questions and documentation notes.
-- approved: the approved codes only, each with who approved it, their kind (human or agent) and when.
+- draft: every code line of the round with its status, units, modifiers, reason, the second check's verdict, its
+  question and its quotes with their pages, and any current decision; then the round's questions and documentation
+  notes.
+- approved: only the lines whose current decision is approve and whose status is ready or needs_review (FIX-SPEC 1;
+  customer.approved_lines), each with who approved it, their kind (human or agent) and when.
+Units or modifiers the coding review did not give read "not given" - never a number or "none" it did not write.
 TXT opens and closes with the SYNTHETIC banner and states the encounter, the round, the date of service, the insurance
 and when and by whom it was made. CSV (RFC 4180: every field quoted, quotes doubled, CRLF records, UTF-8) has the
 columns kind, code, units, modifiers, status, reason, quotes, decision, decided_by, decided_at, a banner row after the
 header (the SYNTHETIC line, and what the export was made from) and one closing the file; every cell a spreadsheet could
-read as a formula is neutralised with a leading apostrophe. In both, control characters in stored text are shown
-escaped, and a line break inside a value continues indented, so no stored text can forge a line of the export.
+read as a formula is neutralised with a leading apostrophe. In both, control characters and the characters that
+reorder or break a displayed line (C0 controls but TAB and LF, DEL, C1 controls, the bidirectional formatting controls,
+the line and paragraph separators) are shown escaped: in the TXT a line break inside a value continues indented, so no
+stored text can forge a line of the export; in the CSV a line break stays a line break inside its quoted cell (a CRLF
+read as LF) and every other such character is escaped.
 
 Readiness: a draft needs the latest round done; the approved export needs a code of it approved (customer.readiness, the
 rule the page shows). Each export is stored once as an ExportArtifact (immutable) with its sha256; a download serves the
@@ -48,8 +54,10 @@ NOTHING_YET = 'There is nothing to export yet.'
 APPROVED_NOT_YET = 'The approved export is not available yet.'
 # Leading characters a spreadsheet may read as a formula (fullwidth forms and line starts included, beyond the minimum).
 FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r', '\n', '＝', '＋', '－', '＠')
-# Control characters a terminal or printer would interpret (ESC sequences, backspace, DEL): shown escaped.
-CONTROL = re.compile('[\x00-\x08\x0e-\x1f\x7f-\x9f]')
+# Shown escaped (\xNN, \uNNNN): what a terminal, printer or spreadsheet acts on (C0 controls but TAB and LF, DEL, C1
+# controls) and what reorders or breaks how the rest of a line is displayed (the bidirectional formatting controls, the
+# line and paragraph separators). The TXT turns the line breaks among them into continuation lines first (_join).
+CONTROL = re.compile('[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]')
 # A line break inside a stored value continues at least this deep: deeper than any structural line of the TXT.
 CONTINUATION = '       '
 
@@ -62,8 +70,19 @@ class NotReady(Exception):
         self.message, self.blockers = message, list(blockers)
 
 
+def _escaped(match) -> str:
+    point = ord(match.group())
+    return f'\\x{point:02x}' if point < 0x100 else f'\\u{point:04x}'
+
+
 def visible(text: str) -> str:
-    return CONTROL.sub(lambda match: f'\\x{ord(match.group()):02x}', text)
+    return CONTROL.sub(_escaped, text)
+
+
+def visible_cell(text: str) -> str:
+    """A CSV cell's text: a CRLF read as LF (a line break inside the quoted cell), every other character CONTROL names
+    escaped."""
+    return visible(text.replace('\r\n', '\n'))
 
 
 def neutralise(value) -> str:
@@ -88,16 +107,14 @@ def _ts(value) -> str:
 # --- the snapshot ---------------------------------------------------------------------------------------------------------
 
 def snapshot(encounter, round_, current, kind, user, now) -> dict:
-    """Everything an export of ``round_`` shows, read from its stored rows."""
+    """Everything an export of ``round_`` shows, read from its stored rows (each line with its own decision)."""
     index = customer.citation_index(round_)
+    approved = set(customer.approved_lines(round_, current))
     items = []
-    for row in round_.codes or ():
-        if not (isinstance(row, dict) and isinstance(row.get('code'), str)
-                and row.get('status') in customer.CODE_STATUS_LABELS):
+    for row in customer.line_rows(round_):
+        if kind == APPROVED and row['line'] not in approved:
             continue
-        decision = current.get(row['code'])
-        if kind == APPROVED and (decision is None or decision.action != models.CodeDecision.APPROVE):
-            continue
+        decision = current.get(row['line'])
         shown = customer.code_json(row, index, decision, can_review=False)
         items.append({**shown, 'decided': decision})
     context = round_.context if isinstance(round_.context, dict) else {}
@@ -111,12 +128,17 @@ def snapshot(encounter, round_, current, kind, user, now) -> dict:
             'notes': customer.notes_json(round_) if kind == DRAFT else []}
 
 
+NOT_GIVEN = 'not given'
+
+
 def _modifiers(item) -> str:
+    if item['modifiers'] is None:
+        return NOT_GIVEN
     return ', '.join(item['modifiers']) if item['modifiers'] else 'none'
 
 
 def _units(item) -> str:
-    return str(item['units']) if item['units'] is not None else 'not given'
+    return str(item['units']) if item['units'] is not None else NOT_GIVEN
 
 
 def _quote_words(quote) -> str:
@@ -185,8 +207,9 @@ def render_csv(snap) -> bytes:
     for item in snap['items']:
         decision = item['decided']
         reason = item['reason'] + (f' {_check_words(item)}' if snap['kind'] == DRAFT else '')
-        rows.append({'kind': snap['kind'], 'code': item['code'], 'units': '' if item['units'] is None else item['units'],
-                     'modifiers': ';'.join(item['modifiers']), 'status': item['status'], 'reason': reason.strip(),
+        rows.append({'kind': snap['kind'], 'code': item['code'], 'units': _units(item),
+                     'modifiers': NOT_GIVEN if item['modifiers'] is None else ';'.join(item['modifiers']),
+                     'status': item['status'], 'reason': reason.strip(),
                      'quotes': '\n'.join(_quote_words(quote) for quote in item['quotes']),
                      'decision': DECISION_WORDS.get(decision.action, '') if decision is not None else '',
                      'decided_by': decision.reviewer.label() if decision is not None else '',
@@ -196,7 +219,7 @@ def render_csv(snap) -> bytes:
     writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator='\r\n')
     writer.writerow([neutralise(column) for column in CSV_COLUMNS])
     for row in rows:
-        writer.writerow([neutralise(visible(cell) if isinstance(cell, str) else cell)
+        writer.writerow([neutralise(visible_cell(cell) if isinstance(cell, str) else cell)
                          for cell in (row[column] for column in CSV_COLUMNS)])
     return buffer.getvalue().encode('utf-8')
 

@@ -896,7 +896,7 @@ class CodingRound(models.Model):
     codes = models.JSONField(default=list)
     questions = models.JSONField(default=list)
     problems = models.JSONField(default=list)
-    citations = models.JSONField(default=dict)  # code -> [{"text", "page", "source"}]; "_document" before any code
+    citations = models.JSONField(default=dict)  # line -> [{"text", "page", "source"}]; "_document": filed under no line
     error = models.TextField(blank=True)  # the customer's sentence for a failed round
     failure_kind = models.CharField(max_length=24, blank=True)  # studio.fable.FAILURE_KINDS
     created_at = models.DateTimeField(auto_now_add=True)
@@ -934,13 +934,14 @@ class CodingAnswer(ImmutableModel):
 
 
 class CodeDecision(ImmutableModel):
-    """A reviewer's decision on one code of one round. Append-only: the current decision for (round, code) is the
-    latest row by sequence, and ``revoke`` clears it."""
+    """A reviewer's decision on one code line of one round (FIX-SPEC 1: the line, L1.. or M1.., and the code it holds).
+    Append-only: the current decision for (round, line) is the latest row by sequence, and ``revoke`` clears it."""
     APPROVE, REJECT, REVOKE = 'approve', 'reject', 'revoke'
     ACTIONS = [(APPROVE, 'Approve'), (REJECT, 'Reject'), (REVOKE, 'Revoke decision')]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='code_decisions')
     round = models.ForeignKey(CodingRound, on_delete=models.PROTECT, related_name='decisions')
+    line = models.CharField(max_length=4)
     code = models.CharField(max_length=8)
     action = models.CharField(max_length=8, choices=ACTIONS)
     reviewer = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')

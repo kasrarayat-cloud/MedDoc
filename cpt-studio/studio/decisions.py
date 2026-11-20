@@ -1,12 +1,15 @@
 """A member's acts on the encounter's latest coding round (BUILD-SPEC 6): review decisions and answers.
 
-Decisions (approve, reject, revoke). An owner or reviewer decides one code of the latest round, once that round is done:
-- a ready or needs_review code may be approved or rejected; a needs_answer code is answered first (that starts a new
-  round) and a not_supported code is never decided;
-- a code with a current decision may only have it revoked, and is then decided again;
+Decisions (approve, reject, revoke). An owner or reviewer decides one code line of the latest round, once that round is
+done (line identity, FIX-SPEC section 1). The request names the round the page showed, the line and its code: a round
+that is not the latest, or a latest round not done, is refused as changed (the page reloads); a line that round does not
+hold, or one holding another code, is refused too - so a decision is never recorded on a line its reviewer did not see.
+- a ready or needs_review line may be approved or rejected; a needs_answer line is answered first (that starts a new
+  round) and a not_supported line is never decided;
+- a line with a current decision may only have it revoked, and is then decided again;
 - an approval carries the review attestation for the reviewer's kind, exactly (ACKNOWLEDGEMENTS, unchanged from the
   earlier review module).
-Every decision is a new CodeDecision row - append-only, ordered by studio_decision_sequence; the latest row per code is
+Every decision is a new CodeDecision row - append-only, ordered by studio_decision_sequence; the latest row per line is
 current and a revoke clears it (state.current_decisions) - audited as decision.recorded, and the encounter state is
 refreshed.
 
@@ -38,6 +41,7 @@ DECIDABLE = ('ready', 'needs_review')
 MAX_NOTE_CHARS = 2000
 MAX_ANSWERS = 50
 CODE_CHARS = 8  # CodeDecision.code holds at most this many characters
+LINE_CHARS = 4  # and CodeDecision.line this many (L1..L999, M1..M999)
 # PostgreSQL text cannot hold NUL, and a lone surrogate cannot be encoded at all.
 UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
 
@@ -54,8 +58,10 @@ ACKNOWLEDGEMENTS = {
               'agent-executed synthetic review is not clinical approval or billing advice.'),
 }
 
-NOT_DONE = 'There are no codes to decide on now. Wait for the coding review to finish.'
-NOT_IN_ROUND = 'That code is not part of the current coding review.'
+ROUND_CHANGED = 'This coding review has changed. Reload to see the latest.'
+NOT_IN_ROUND = 'That code is not part of this coding review. Reload to see the latest.'
+ROUND_REQUIRED = 'Name the coding review the decision was made on.'
+LINE_REQUIRED = 'Name the code line to decide on.'
 DECIDED_ALREADY = 'This code already has a decision. Undo it first.'
 NOTHING_TO_UNDO = 'This code has no decision to undo.'
 NOT_DECIDABLE = {'needs_answer': 'Answer the question about this code first; the coding review then reads it again.',
@@ -80,14 +86,18 @@ def acknowledgement_for(user) -> str:
 
 
 def decidable_code(row) -> str:
-    """The code a decision on ``row`` (a round's code row) is recorded under, or '' when none can be."""
+    """The code a decision on ``row`` (a round's code row) is recorded under, or '' when none can be: its code and its
+    line must both fit a CodeDecision."""
     code = row.get('code') if isinstance(row, dict) else None
+    line = row.get('line') if isinstance(row, dict) else None
+    if not (isinstance(line, str) and line.strip() and len(line) <= LINE_CHARS):
+        return ''
     return code if isinstance(code, str) and code.strip() and len(code) <= CODE_CHARS else ''
 
 
 def allowed_actions(row, decision, can_review: bool) -> list:
     """The decisions a member may record on ``row`` now (BUILD-SPEC 6): none without the reviewer role; revoke while a
-    decision stands; approve and reject for a ready or needs_review code; nothing else."""
+    decision stands; approve and reject for a ready or needs_review line; nothing else."""
     if not can_review or not decidable_code(row):
         return []
     if decision is not None:
@@ -114,23 +124,30 @@ def _locked(encounter):
     return models.Encounter.objects.select_for_update().select_related('workspace').get(pk=encounter.pk)
 
 
-def record(encounter, user, membership, *, code, action, acknowledgement='', note='') -> models.CodeDecision:
-    """Record ``action`` on ``code`` of the encounter's latest round by ``user`` (BUILD-SPEC 6), or Refused."""
+def record(encounter, user, membership, *, round_number, line, code, action, acknowledgement='',
+           note='') -> models.CodeDecision:
+    """Record ``action`` on line ``line`` (holding ``code``) of round ``round_number`` - the round the page showed,
+    which must be the encounter's latest and done - by ``user`` (BUILD-SPEC 6; FIX-SPEC 1), or Refused."""
     if not isinstance(action, str) or action not in ACTIONS:
         raise Refused(400, 'Choose approve, reject or undo.')
     if not isinstance(code, str) or not code:
         raise Refused(400, 'Name the code to decide on.')
+    if not isinstance(line, str) or not line:
+        raise Refused(400, LINE_REQUIRED)
+    if type(round_number) is not int or round_number < 1:
+        raise Refused(400, ROUND_REQUIRED)
     note = _text(note, 'The note')
     acknowledgement = _text(acknowledgement, 'The acknowledgement')
     with transaction.atomic():
         locked = _locked(encounter)
         round_ = state.latest_round(locked)
-        if round_ is None or round_.state != Round.DONE:
-            raise Refused(409, NOT_DONE)
-        row = next((item for item in round_.codes or () if isinstance(item, dict) and item.get('code') == code), None)
-        if row is None:
-            raise Refused(404, NOT_IN_ROUND)
-        current = state.current_decisions(round_).get(code)
+        if round_ is None or round_.state != Round.DONE or round_.number != round_number:
+            raise Refused(409, ROUND_CHANGED)
+        rows = [item for item in round_.codes or () if isinstance(item, dict) and item.get('line') == line]
+        if len(rows) != 1 or rows[0].get('code') != code:
+            raise Refused(409, NOT_IN_ROUND)
+        row = rows[0]
+        current = state.current_decisions(round_).get(line)
         allowed = allowed_actions(row, current, bool(membership.can_review))
         if action not in allowed:
             if current is not None:
@@ -141,10 +158,10 @@ def record(encounter, user, membership, *, code, action, acknowledgement='', not
         if action == APPROVE and (not acknowledgement or acknowledgement != acknowledgement_for(user)):
             raise Refused(400, ATTESTATION_REFUSED)
         decision = Decision.objects.create(
-            encounter=locked, round=round_, code=code, action=action, reviewer=user, reviewer_kind=user.actor_kind,
-            acknowledgement=acknowledgement if action == APPROVE else '', note=note)
+            encounter=locked, round=round_, line=line, code=code, action=action, reviewer=user,
+            reviewer_kind=user.actor_kind, acknowledgement=acknowledgement if action == APPROVE else '', note=note)
         audit.record(locked.workspace, 'decision.recorded', encounter=locked, actor=user, decision=str(decision.pk),
-                     round=str(round_.pk), number=round_.number, action=action, code=code)
+                     round=str(round_.pk), number=round_.number, action=action, line=line, code=code)
         state.refresh(locked)
     decision.refresh_from_db(fields=['sequence', 'created_at'])
     return decision
