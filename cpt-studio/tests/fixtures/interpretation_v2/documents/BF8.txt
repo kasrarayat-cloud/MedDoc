@@ -1,8 +1,0 @@
-SYNTHETIC COLONOSCOPY REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-Findings: The colonoscope was advanced to the cecum.
-A 15 mm polyp was seen at the splenic flexure.
-A tattoo was placed 3 cm distal to the splenic flexure lesion.
-No injection was given in the splenic flexure.

@@ -1,7 +1,0 @@
-SYNTHETIC OFFICE VISIT NOTE
-Date of service: 03/14/2031
-Clinician: Corvin Ashdale, MD (fictional)
-
-The patient was seen in the office today for follow-up of rectal bleeding.
-Earlier today, I performed a flexible sigmoidoscopy to 40 cm, which showed internal hemorrhoids.
-Total time spent on the date of the encounter was 30 minutes.

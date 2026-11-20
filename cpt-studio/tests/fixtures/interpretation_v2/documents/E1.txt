@@ -1,6 +1,0 @@
-SYNTHETIC COLONOSCOPY REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-Findings: The colonoscope was advanced to the cecum.
-CRNA note: Cold snare polypectomy of the 6 mm sigmoid polyp was performed under monitored anesthesia care.

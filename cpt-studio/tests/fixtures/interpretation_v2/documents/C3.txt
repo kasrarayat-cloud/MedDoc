@@ -1,7 +1,0 @@
-SYNTHETIC COLONOSCOPY REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-Findings: The colonoscope was advanced to the cecum.
-A 4 mm angioectasia was seen in the cecum.
-Cautery was applied at this site.

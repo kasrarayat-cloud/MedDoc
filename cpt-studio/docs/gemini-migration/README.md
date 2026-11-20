@@ -1,12 +1,17 @@
-# The Gemini migration's design record
+# The Gemini migration's records
 
-The code under `cpt-studio/studio/interpretation/` and the migration's changes elsewhere cite these by section:
+The Gemini migration (and, from DECISIONS D275, its Claude Fable 5.2 interpreter) was the earlier pipeline's reading
+layer. The owner replaced the whole deterministic layer with the Fable coding step (DECISIONS D351-D353), and lane E
+removed its code, its tests and its design documents (FINAL.md, FINAL-V2.md, ADJUDICATION.md, the amendments, their
+refutation records and the build lists). They remain in git history.
 
-- `FINAL.md` - the design, cited as "FINAL <section>".
-- `ADJUDICATION.md` - the rulings that amend it, cited as "ADJUDICATION <id>" (for example "P-4"). Where the two
-  disagree, ADJUDICATION governs.
-- `DECISIONS.md` - the integration owner's decisions made while building, measuring and refuting the migration, cited
-  as "DECISIONS D<n>". Each states what it changes, why, what it costs and how it was measured.
+What stays here is the record of what happened:
 
-The owner's directive and checklist are in `cpt-studio/HARNESS.md`, "The Gemini interpretation migration". The map of
-every place semantic interpretation decided in the installed release is `cpt-studio/GEMINI-MIGRATION-MAP.md`.
+- `DECISIONS.md` - the integration owner's decisions, cited as "DECISIONS D<n>": what each changed, why, what it cost and
+  how it was measured. This copy ends at D344; D345 onward (D351-D354 among them: the owner's ruling and the Fable
+  coding build) are in the build's working copy and land here when it is synced.
+- `USAGE-LEDGER.md` - the provider spend ledger. Nothing in it is credited back or reset.
+- `acceptance-a1/` - the frozen acceptance set's proof: the pass thresholds the owner fixed before any case existed, and
+  the hashes of the sealed cases and of the development exclusions.
+
+The current design is in `cpt-studio/ARCHITECTURE.md`.

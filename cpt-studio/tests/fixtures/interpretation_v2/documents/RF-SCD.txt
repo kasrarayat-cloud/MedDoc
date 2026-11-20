@@ -1,7 +1,0 @@
-SYNTHETIC COLONOSCOPY REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-Findings: The colonoscope was advanced to the cecum.
-Nursing note: A 5 mm rectal polyp was removed with a cold snare.
-Impression: A 5 mm rectal polyp was removed with a cold snare by me.

@@ -27,12 +27,10 @@ jobs:
   verify:
     name: CPT Studio checks and tests
     runs-on: ubuntu-latest
-    # The Django suite alone took 29 minutes of the 30 on GitHub's runner by refutation round 9 (5,243 tests), and the
-    # job was cut off before the browser-verifier tests and the dependency audit ran (run 41633767311): 45 minutes kept
-    # every step's evidence. main's job took about 41 of the 45 minutes on 2026-11-14 (run 43542274234); the Fable
-    # interpreter branch adds design v2's suite (tests/v2, about 3,000 tests run serially here), and its first run was
-    # cut off at 45 minutes (run 43861500788, cancelled, no test failed): 150 minutes keeps every step's evidence again.
-    timeout-minutes: 150
+    # The earlier pipeline's suites (thousands of tests, tests/v2 among them) needed up to 150 minutes here. With them
+    # removed (lane E of the Fable coding build) the Django suite is about 300 tests and runs in minutes; 45 minutes
+    # keeps every step's evidence with room to spare.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17
@@ -55,7 +53,7 @@ jobs:
       CPT_STUDIO_DB_HOST: 127.0.0.1
       CPT_STUDIO_DB_PORT: '5432'
       CPT_STUDIO_TEST_DB_SUFFIX: ci
-      CPT_STUDIO_PROVIDER_MODE: disabled
+      CPT_STUDIO_CODING_MODE: disabled
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -65,10 +63,6 @@ jobs:
           cache-dependency-path: |
             cpt-studio/requirements.txt
             cpt-studio/requirements-dev.txt
-      # The suite exercises real OCR; without these it would test only the
-      # "OCR unavailable" path, which is not what the image ships.
-      - name: Install OCR tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng poppler-utils
       - name: Install locked Python dependencies (runtime + test tooling)
         run: python -m pip install -r cpt-studio/requirements-dev.txt
       - name: Checks, migrations, tests and dependency audit

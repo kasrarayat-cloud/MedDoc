@@ -941,32 +941,3 @@ def work(should_stop, *, poll_seconds=1.0, threads=None, clock=time.monotonic):
 def drain(should_stop, *, threads=None, poll_seconds=1.0):
     """Process queued jobs with the worker's threads until none is left (``run_worker --once``)."""
     _run_threads(lambda: _worker_thread(should_stop, poll_seconds, drain=True), _thread_count(threads))
-
-
-# --- names the earlier pipeline's modules read when they are imported --------------------------------------------------
-# studio/progress.py and studio/customer_api.py (which lane B replaces and lane E removes) read these at import time, and
-# the URL conf imports them, so without them no system check - and so no test run - could start. Nothing on the coding
-# path reads them; the values are the earlier pipeline's, unchanged. Remove them with those two modules.
-INTERPRET, APPRAISE, QUESTION = 'interpret', 'appraise', 'question'
-DECLINED_MESSAGE = ('This document was sent for reading, and the reading was declined, so nothing was suggested for it. '
-                    'It is not sent again.')
-HOLD_SET_MESSAGE = ('This document was sent for reading, and no usable reading came back; reading documented procedures '
-                    'is now paused on this installation. Resume once it is available again.')
-RETRY_BUSY = 'Wait for processing to finish (or stop it) before asking for the document to be read again.'
-RETRY_READ = 'This document was read; there is no failed reading to try again.'
-RETRY_UNKNOWN = 'An earlier request has an unknown outcome; it is reconciled before anything is tried again.'
-RETRY_PAUSED = ('Reading documented procedures is paused on this installation; resume processing once it is available '
-                'again.')
-RETRY_TOO_LONG = ('This document is too long to be read in one piece, so the same request would be cut off again; it is '
-                  'not sent again. Shorten it or split it, then upload it again.')
-RETRY_CUT_OFF = ('The reading of this document reached its output limit before it was complete, and the same request '
-                 'would most likely stop there again, so it is not sent again. If the document is long, shorten it or '
-                 'split it, then upload it again.')
-RETRY_DECLINED = "This document's reading was declined, so the same request is not sent again."
-RETRY_UNBUILT = 'This document could not be prepared for reading; upload it again.'
-CONTEXT_UNREAD_MESSAGE = ("This document's reading ended without a result and nothing is left to resume, so its context "
-                          'cannot be changed and nothing is sent for it. Ask for it to be read again, or upload it again.')
-CONTEXT_NONE_MESSAGE = ('This document has not been read yet, so it has no context to change. Resume processing to have '
-                        'it read.')
-SECOND_REVIEW_NOT_FINAL = ('The peer reviews of this document have not finished: resume processing to finish them, then '
-                           'ask for a second review.')
