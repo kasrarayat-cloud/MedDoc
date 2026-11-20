@@ -2862,6 +2862,10 @@ test('R2: a quote that begins or ends with a letter or a digit is never counted 
   assert.equal(count('polyp', [['épolyp']]), 0, 'an accented letter before it');
   assert.equal(count('polyp', [['\u{1D49C}polyp']]), 0, 'an astral letter before it (read as one character, not half of one)');
   assert.equal(count('polyp', [['-polyp/']]), 1);
+  // the characters before and after are read as the page writes them, not after NFKC (the walk's judge reads them so too)
+  assert.equal(count('Botox', [['Botox\u2122 was given.']]), 1, 'a trade mark sign after it is an edge, though NFKC writes it "TM"');
+  assert.equal(count('5', [['5\u338f dose']]), 1, 'a unit sign after it is an edge, though NFKC writes it "kg"');
+  assert.equal(count('polyp', [['\u2474polyp']]), 0, 'a parenthesised digit before it is a digit, though NFKC writes it "(1)"');
   assert.equal(count('polyp', [[' polyp ']]), 1, 'other spaces are edges');
   // an overprint copy is not read as the character before: what is read is the page's text, copies left out
   assert.equal(count('polyp', [[item('polyp', 10, 0), item('polyp', 10.3, 0)]]), 1, 'the copy right after it is not read');

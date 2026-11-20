@@ -520,6 +520,25 @@ class StaticHeaderTests(SimpleTestCase):
             missing = self.client.get('/static/studio/no-such-file.js')
         self.assertEqual((missing.status_code, missing['Content-Security-Policy']), (404, SecurityHeadersMiddleware.STATIC_CSP))
 
+    def test_the_librarys_retry_addresses_are_served_alike(self):
+        # the viewer loads the library again at ?attempt=N after a failure or its 20 s limit (D368 round 3, L1): the same
+        # bytes as the file, its type, its immutable caching and the static policy, for the module and its worker alike
+        def body(response):
+            return b''.join(response.streaming_content) if response.streaming else response.content
+        for name in (f'{PDF_LIB_NAME}/legacy/build/pdf.min.mjs', f'{PDF_LIB_NAME}/legacy/build/pdf.worker.min.mjs'):
+            address = staticfiles_storage.url(name)
+            with self.subTest(name):
+                first = self.client.get(address)
+                retry = self.client.get(f'{address}?attempt=2')
+                self.assertEqual((first.status_code, retry.status_code), (200, 200))
+                served, again = body(first), body(retry)  # a streamed body is read once
+                self.assertEqual(served, (PDF_LIB / name.split(f'{PDF_LIB_NAME}/', 1)[1]).read_bytes())
+                self.assertEqual(again, served)
+                for header in ('Content-Type', 'Cache-Control', 'Content-Security-Policy', 'X-Content-Type-Options'):
+                    self.assertEqual(retry[header], first[header], header)
+                self.assertEqual((retry['Content-Security-Policy'], retry['Cache-Control']),
+                                 (SecurityHeadersMiddleware.STATIC_CSP, 'max-age=315360000, public, immutable'))
+
     def test_pages_and_data_keep_their_own_headers(self):
         for address, status in (('/login/', 200), ('/api/session', 401)):
             with self.subTest(address):

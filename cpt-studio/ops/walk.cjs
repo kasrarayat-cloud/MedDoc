@@ -802,8 +802,9 @@ const wordEdge = codePoint => codePoint === null || !JOINS_A_WORD.test(codePoint
 // order, an overprint copy's string left out (R1), a line break where the layer has one (<br>: an item the library marks
 // hasEOL, a copy's included), format characters dropped (R3). {number, items, clean, posOf, units, starts}: posOf maps
 // "<item> <offset in its string>" to the place in `clean`; units are the characters that are not white space, each with
-// its NFKC (`folded`, white space dropped) and the code points just before and after it in the page's text (null at the
-// page's start or end), which R2 reads; starts are the places a character begins (and the text's end).
+// its NFKC (`folded`, white space dropped) and the code points just before and after it in the page's text as the page
+// writes it, not after NFKC (null at the page's start or end), which R2 reads, as the viewer does: "Botox™" is "Botox"
+// and a sign, though NFKC writes the sign "TM"; starts are the places a character begins (and the text's end).
 function pageModel(number, tokens) {
   const items = [];
   const posOf = new Map();
@@ -831,8 +832,8 @@ function pageModel(number, tokens) {
     const folded = character.nfkc.replace(/\s+/gu, '');
     if (!folded) return;
     units.push({ page: number, start: character.start, end: character.end, folded,
-      before: index > 0 ? lastCodePoint(characters[index - 1].nfkc) : null,
-      after: index + 1 < characters.length ? firstCodePoint(characters[index + 1].nfkc) : null });
+      before: index > 0 ? lastCodePoint(clean.slice(characters[index - 1].start, characters[index - 1].end)) : null,
+      after: index + 1 < characters.length ? firstCodePoint(clean.slice(characters[index + 1].start, characters[index + 1].end)) : null });
   });
   const starts = new Set(characters.map(character => character.start));
   starts.add(clean.length);

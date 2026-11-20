@@ -8,8 +8,7 @@
  * copies, R2 word edges and R3 format characters over synthetic text layers, the notes N1-N4 character for character, a
  * marked page drawn, no mark inside a character) and the evidence's shape - synthetic values only; and the review dialog
  * and every quote of the dev preview's documents driven through the page itself (ops/dev_preview_server.cjs's mock, in
- * Chromium) where Playwright is installed (CPT_VERIFY_PLAYWRIGHT), skipped where it is not. The browser subtests that need
- * round 3's viewer skip on exactly eb3827d2's app.js (ROUND2_VIEWER_SHA256) and run against any other.
+ * Chromium) where Playwright is installed (CPT_VERIFY_PLAYWRIGHT), skipped where it is not.
  *
  * LINE IDENTITY (FIX-SPEC section 1): the tests marked so build rows that carry `line`; the base fixture carries it
  * when customer-contract.json lists it (lane F1a), and the browser test checks the posted line once the page's fixtures
@@ -503,6 +502,10 @@ test('R2: an occurrence is accepted only between word edges, read in the page\'s
     'the copy\'s line break stays when its string is left out');
   // a letter, a digit or a combining mark just before is no edge (an accent drawn after its letter)
   assert.equal(search({ text: 'clair', page: 1 }, layer('e\u0301clair')).status, 'not_found');
+  // the characters before and after are read as the page writes them, not after NFKC, as the viewer reads them
+  assert.equal(search({ text: 'Botox', page: 1 }, layer('Botox\u2122 was given.')).count, 1, 'a trade mark sign after it is an edge, though NFKC writes it "TM"');
+  assert.equal(search({ text: '5', page: 1 }, layer('5\u338f dose')).count, 1, 'a unit sign after it is an edge, though NFKC writes it "kg"');
+  assert.equal(search({ text: 'polyp', page: 1 }, layer('\u2474polyp')).status, 'not_found', 'a parenthesised digit before it is a digit, though NFKC writes it "(1)"');
   // the continuation's edges are read across the two pages' text
   assert.equal(search({ text: 'gastric antrum. Colonoscopy', page: 1 }, layer('the gastric antrum.'), layer('Colonoscopy: advanced.')).scope, 'continued');
   assert.equal(search({ text: 'antrum. Colon', page: 1 }, layer('the gastric antrum.'), layer('Colonoscopy: advanced.')).status, 'not_found');
@@ -975,14 +978,6 @@ test('the review dialog is driven through the page itself, in a browser', async 
   });
 });
 
-// The review page's viewer as eb3827d2 left it (sha256 of studio/static/studio/app.js): it predates round 3's notes
-// (N1-N4) and rules (R1-R3), so the subtests that need them skip on exactly these bytes and run on any other viewer - a
-// newer one is never skipped by mistake.
-const ROUND2_VIEWER_SHA256 = '19afa121e4d706ca2103a6c1e472c6a0580f7216953b68c3fbd079ebdca1f35a';
-const VIEWER_IS_ROUND2 = require('node:crypto').createHash('sha256')
-  .update(fs.readFileSync(path.join(__dirname, '..', 'studio', 'static', 'studio', 'app.js'))).digest('hex') === ROUND2_VIEWER_SHA256;
-const ROUND3_ONLY = VIEWER_IS_ROUND2 && 'this tree\'s viewer is eb3827d2\'s, which predates round 3\'s notes and rules (they run against any other viewer)';
-
 // A one-page synthetic PDF of raw content streams (Helvetica as /F1), for the overprint and no-text pages.
 function rawPdf(streams) {
   const objects = [];
@@ -1136,7 +1131,7 @@ test('every quote is chosen and judged by the walk\'s own search through the pag
     assert.equal(made.data.unavailable, chosen.length);
     const last = walk.servedQuotes(enc).at(-1);
     assert.match(await page.getAttribute('#documentViewer iframe', 'src'), new RegExp(`#page=${last.page}$`));
-    await inner.test('round 3: the library note (N3), a new frame for each new page', { skip: ROUND3_ONLY }, () => {
+    await inner.test('round 3: the library note (N3), a new frame for each new page', () => {
       assert.equal(chosen.at(-1).reading.fallback, 'library');
       assert.equal(chosen.at(-1).reading.note, `The marking tool did not work here, so nothing is marked. The quote is on page ${last.page}.`);
       // each quote judged unavailable and nothing else: the note as written and the frame really opening its page
@@ -1157,14 +1152,14 @@ test('every quote is chosen and judged by the walk\'s own search through the pag
     assert.equal(chosen.at(-1).reading.fallback, 'document');
     assert.match(made.reason, /\(the document cannot be drawn in the page\)/);
     assert.deepEqual(violations, []);
-    await inner.test('round 3: the document note (N3) names the quote\'s page', { skip: ROUND3_ONLY }, () => {
+    await inner.test('round 3: the document note (N3) names the quote\'s page', () => {
       const last = walk.servedQuotes(enc).at(-1);
       assert.equal(chosen.at(-1).reading.note, `This document cannot be drawn here, so nothing is marked. The quote is on page ${last.page}.`);
       for (const item of chosen) assert.deepEqual(walk.judgeQuote(item.quote, item.reading).problems.length, 1, item.reading.note);
     });
     await context.close();
   });
-  await t.test('round 3: words not found (N1), words of another page, inside a word (R2), a format character (R3), against the new viewer', { skip: ROUND3_ONLY }, async () => {
+  await t.test('round 3: words not found (N1), words of another page, inside a word (R2), a format character (R3), against the new viewer', async () => {
     const pdf = syntheticPdf([['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', 'The patient was told to bathe ending the preparation.',
       'Findings: the end of the procedure was uneventful.', 'Mild pain was reported; the abdomen was painless.'],
     ['Bowel preparation quality was not recorded.']]);
@@ -1182,7 +1177,7 @@ test('every quote is chosen and judged by the walk\'s own search through the pag
     assert.deepEqual(violations, []);
     await context.close();
   });
-  await t.test('round 3: an overprint copy (R1) counts once and is flagged where its geometry bears the flag out; a page with no text (N2)', { skip: ROUND3_ONLY }, async () => {
+  await t.test('round 3: an overprint copy (R1) counts once and is flagged where its geometry bears the flag out; a page with no text (N2)', async () => {
     const line = (x, y, words) => `BT /F1 11 Tf ${x} ${y} Td (${words}) Tj ET`;
     const pdf = rawPdf([[line(56, 700, 'DIAGNOSIS: TUBULAR ADENOMA.'), line(56.3, 700, 'DIAGNOSIS: TUBULAR ADENOMA.'),
       line(56, 680, 'The procedure was uneventful.')].join('\n'), '0 0 0 rg 56 600 200 50 re f']);

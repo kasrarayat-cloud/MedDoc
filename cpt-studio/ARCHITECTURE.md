@@ -262,7 +262,9 @@ runs with no eval and no WebAssembly - the policy has neither `'unsafe-eval'` no
 `Function("return this")` lookup is never reached in a browser and would be refused - with no document scripting, no
 XFA and no layer of links or form fields, reads only the same-origin view address, and puts a PDF's text in the page as
 text only (its text layer). A browser that lacks what it needs (Chrome and Edge before 119, Firefox before 125, Safari
-before 17.4) is not given it: the browser's own viewer is framed and the note says marking needs a newer browser. Every customer
+before 17.4; measured in Chromium only, the other versions from MDN's browser-compat-data) is not given it: the browser's
+own viewer is framed and the note says marking needs a newer browser; where the library itself fails or does not answer
+within 20 seconds, the note says the marking tool did not work here. Every customer
 query is scoped through the caller's active membership, so another workspace's records answer 404. Text the database
 cannot store (NUL, a lone surrogate) is refused with a 400 rather than altered; only a title or a file name has it
 replaced.
