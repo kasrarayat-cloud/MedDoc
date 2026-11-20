@@ -1,0 +1,147 @@
+{
+ "id": "f4000000-0000-4000-8000-000000000001",
+ "title": "Synthetic EGD and colonoscopy, two polyps",
+ "created_at": "2026-11-20T08:20:00Z",
+ "updated_at": "2026-11-20T08:27:31Z",
+ "state": "needs_review",
+ "state_label": "Needs your review",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "name": "synthetic-egd-colonoscopy.pdf",
+  "media_type": "application/pdf",
+  "size": 1673,
+  "kind": "upload",
+  "original_url": "/api/encounters/f4000000-0000-4000-8000-000000000001/original",
+  "view_url": "/api/encounters/f4000000-0000-4000-8000-000000000001/original?view=1"
+ },
+ "context": {
+  "service_date": "2026-11-02",
+  "insurance": "commercial"
+ },
+ "progress": {
+  "phase": "done",
+  "busy": false,
+  "started_at": "2026-11-20T08:20:02Z",
+  "finished_at": "2026-11-20T08:27:31Z",
+  "server_time": "2026-11-20T08:30:00Z",
+  "message": "",
+  "can_stop": false,
+  "can_resume": false,
+  "can_retry": false,
+  "error": null
+ },
+ "round": {
+  "number": 1,
+  "trigger": "upload",
+  "finished_at": "2026-11-20T08:27:31Z"
+ },
+ "codes": [
+  {
+   "code": "43239",
+   "units": 1,
+   "modifiers": [],
+   "status": "ready",
+   "status_label": "Ready for approval",
+   "reason": "Cold forceps biopsies were taken from the gastric antrum during the upper endoscopy (page 1). An upper endoscopy with biopsy is coded 43239.",
+   "second_check": {
+    "agrees": true,
+    "reason": "The biopsy and the extent of the upper endoscopy are both documented on page 1."
+   },
+   "question": null,
+   "quotes": [
+    {
+     "text": "Cold forceps biopsies were taken from the gastric antrum.",
+     "page": 1
+    },
+    {
+     "text": "EGD: The endoscope was passed to the second part of the duodenum.",
+     "page": 1
+    }
+   ],
+   "decision": null,
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ]
+  },
+  {
+   "code": "45385",
+   "units": 1,
+   "modifiers": [],
+   "status": "ready",
+   "status_label": "Ready for approval",
+   "reason": "A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare (page 2). Colonoscopy with removal by snare is coded 45385.",
+   "second_check": {
+    "agrees": true,
+    "reason": "Removal by snare is documented, and the colonoscope reached the cecum."
+   },
+   "question": null,
+   "quotes": [
+    {
+     "text": "A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.",
+     "page": 2
+    },
+    {
+     "text": "Colonoscopy: The colonoscope was advanced to the cecum.",
+     "page": 2
+    }
+   ],
+   "decision": null,
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ]
+  },
+  {
+   "code": "45380",
+   "units": 1,
+   "modifiers": [
+    "59"
+   ],
+   "status": "needs_review",
+   "status_label": "Needs your review",
+   "reason": "A 4 mm polyp in the ascending colon was removed with cold forceps (page 2). It is a separate lesion from the sigmoid polyp, so 45380 is reported with modifier 59.",
+   "second_check": {
+    "agrees": false,
+    "reason": "The forceps removal is a separate lesion, but XS describes a separate structure more exactly than 59. Some payers expect XS here."
+   },
+   "question": null,
+   "quotes": [
+    {
+     "text": "A 4 mm polyp in the ascending colon was removed with cold forceps.",
+     "page": 2
+    }
+   ],
+   "decision": null,
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ]
+  }
+ ],
+ "questions": [],
+ "answers": [],
+ "notes": [
+  "Bowel preparation quality was not recorded."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": false,
+  "blockers": [
+   "No code has been approved."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "at": "2026-11-20T08:20:00Z",
+   "text": "Uploaded by Reviewer."
+  },
+  {
+   "at": "2026-11-20T08:27:31Z",
+   "text": "Coding review 1 finished."
+  }
+ ]
+}
