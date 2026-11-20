@@ -1,0 +1,30 @@
+{
+ "about": "Every code point JavaScript's String.prototype.trim() removes, per ECMAScript: the WhiteSpace code points (TAB, VT, FF, SP, NBSP, ZWNBSP U+FEFF and every Zs) and the LineTerminator ones (LF, CR, LS U+2028, PS U+2029), as hexadecimal code points in order. The customer page drops a question whose text trim() leaves empty (studio/static/studio/app.js); the server's one blank test, studio.fable.result.blank_question, calls every text made of them blank. tests/test_question_ids.py builds this list from the ECMAScript definition and checks the server against it; tests/frontend/app.test.cjs checks that it is exactly what trim() removes and what the page drops.",
+ "code_points": [
+  "0009",
+  "000A",
+  "000B",
+  "000C",
+  "000D",
+  "0020",
+  "00A0",
+  "1680",
+  "2000",
+  "2001",
+  "2002",
+  "2003",
+  "2004",
+  "2005",
+  "2006",
+  "2007",
+  "2008",
+  "2009",
+  "200A",
+  "2028",
+  "2029",
+  "202F",
+  "205F",
+  "3000",
+  "FEFF"
+ ]
+}

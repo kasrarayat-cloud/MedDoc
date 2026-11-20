@@ -35,6 +35,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import audit, jobs, models, state
+from .fable import result as fable_result
 
 Round, Decision, Answer = models.CodingRound, models.CodeDecision, models.CodingAnswer
 APPROVE, REJECT, REVOKE = Decision.APPROVE, Decision.REJECT, Decision.REVOKE
@@ -182,10 +183,12 @@ def question_id(round_, question) -> str:
 
 
 def round_questions(round_) -> list:
-    """[(question id, question)] of ``round_`` (its combined questions with a text), in the order asked."""
+    """[(question id, question)] of ``round_`` (its combined questions with a text that is not blank: the one test of
+    it, fable.result.blank_question, which the customer page agrees with), in the order asked."""
     out = []
     for item in round_.questions or ():
-        if isinstance(item, dict) and isinstance(item.get('text'), str) and item['text'].strip():
+        text = item.get('text') if isinstance(item, dict) else None
+        if isinstance(text, str) and not fable_result.blank_question(text):
             out.append((question_id(round_, item), item))
     return out
 

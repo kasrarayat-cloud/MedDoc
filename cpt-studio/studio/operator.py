@@ -16,8 +16,9 @@ studio.customer). Vendor and model names, usage, costs, hashes and request ids a
                                              by a fallback, tokens, cost, latency, state, ids), the reader's and the
                                              checker's whole answers, the final codes, every review of the checker that
                                              belongs to no line (in full, with the lines it reaches), every question id
-                                             a line, review or missed code gave that names no question (D370),
-                                             decisions, answers, audit events, and the original with its sha256
+                                             a line, review or missed code gave that names no question (D370), the
+                                             question ids both answers defined, decisions, answers, audit events, and
+                                             the original with its sha256
     GET  /ops/encounters/<id>/original       the original exactly as stored, with its sha256
     POST /ops/encounters/<id>/reconcile      the reconciliation of an unknown run: run, note (at least 12 characters)
     POST /ops/encounters/<id>/retry          a new round of a failed latest round (jobs.retry)
@@ -251,6 +252,12 @@ def round_view(round_) -> dict:
             'dangling': [{**item, 'reference': json.dumps(item['reference'], ensure_ascii=False)}
                          for item in (fable_result.dangling_references(round_.reader_result, round_.checker_result)
                                       if round_.state == models.CodingRound.DONE else ())],
+            # every question id both the reader and the checker defined, case aside (D370 round 2, F3): a reference of
+            # the checker's to it reaches both questions, which the code never chooses between - shown, as written,
+            # beside the ids that name no question, read the same way from the two stored answers
+            'shared_ids': [json.dumps(ident, ensure_ascii=False)
+                           for ident in (fable_result.shared_ids(round_.reader_result, round_.checker_result)
+                                         if round_.state == models.CodingRound.DONE else ())],
             'problems': [item for item in round_.problems or () if isinstance(item, str)],
             'citations': _pretty(round_.citations or {}), 'reader_result': _pretty(round_.reader_result),
             'checker_result': _pretty(round_.checker_result)}

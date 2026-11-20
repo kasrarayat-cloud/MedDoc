@@ -105,10 +105,14 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
   reason opens with "The second check did not give a clear verdict." (never "disagrees") before the review's own. A
   review that names no line, or one that does not exist, sends every line carrying its code to `needs_review` - or
   every line of the round when no line carries it: the code never picks a line for it.
-- `questions[]` asks each question once: a question several codes depend on is one question naming all their lines,
-  and one answer to it covers every line it affects. `lines` are the lines a question affects and `codes` those lines'
-  codes; a `needs_answer` line always has at least one question. `codes[].question` is the text of the questions that
-  line depends on, one per line of text.
+- `questions[]`: the coding review is asked to write each question once, and its code lines refer to a question by its
+  number. The server joins two questions only by that number or by identical text (case and spacing aside), so a
+  question written again in other words is shown again. A question several codes refer to is one question naming all
+  their lines, and one answer to it covers every line it affects. `lines` are the lines a question affects and `codes`
+  those lines' codes; a `needs_answer` line always has at least one question. A question whose text is blank (white
+  space only, a byte-order mark included, which the page would not show) is never served.
+- `codes[].question` is the line's own question text, then the text of the questions the line's own references name,
+  one per line of text. A question that names the line only in `questions[].lines` is not repeated there.
 - `allowed_actions`: `approve` and `reject` for a `ready` or `needs_review` code; none for `needs_answer` (answer first)
   or `not_supported`; `revoke` while a decision stands; none at all for a viewer.
 - `notes` are the coding review's documentation notes, then one note for each review of the second check that could

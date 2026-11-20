@@ -1919,3 +1919,22 @@ test('the overview, the documents list and How it works speak of the coding revi
   assert.match(about, /Every code read from the whole document and checked a second time/);
   assert.doesNotMatch(about, /independent checks and coding validation/);
 });
+
+test('the page drops a question whose text is blank exactly where the server calls it blank', () => {
+  // tests/fixtures/blank-question-characters.json: every code point trim() removes (ECMAScript WhiteSpace and
+  // LineTerminator); the server's one blank test calls every text made of them blank (tests/test_question_ids.py)
+  const listed = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'blank-question-characters.json'), 'utf8'))
+    .code_points.map(point => parseInt(point, 16));
+  const removed = [];
+  for (let point = 0; point <= 0x10FFFF; point += 1) {
+    if ((point < 0xD800 || point > 0xDFFF) && String.fromCodePoint(point).trim() === '') removed.push(point);
+  }
+  assert.deepEqual(removed, listed);
+  const kept = text => app.questionsOf({ questions: [{ id: 'q-1', text, codes: [], lines: [] }] }).length;
+  for (const point of listed) {
+    assert.equal(kept(String.fromCodePoint(point)), 0, `U+${point.toString(16).toUpperCase()} alone is dropped`);
+  }
+  assert.equal(kept(listed.map(point => String.fromCodePoint(point)).join('')), 0);
+  // a question with any other text is shown: U+FEFF before a word, U+200B and U+180E, which trim() keeps
+  for (const text of ['\uFEFFWas a biopsy taken?', '\u200B', '\u180E', '?']) assert.equal(kept(text), 1, JSON.stringify(text));
+});
