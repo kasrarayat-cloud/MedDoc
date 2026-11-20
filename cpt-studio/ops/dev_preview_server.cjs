@@ -3,8 +3,11 @@
 //
 // Serves studio/templates/studio/*.html rendered as plain HTML (only the template tags those files use are supported;
 // anything else fails loudly), the files in studio/static/studio/, and a mock of the customer JSON API (client contract
-// customer-2026-11-20) backed by the hand-made customer fixtures in tests/fixtures/customer/. Binds 127.0.0.1 on the
+// customer-2026-11-21) backed by the hand-made customer fixtures in tests/fixtures/customer/. Binds 127.0.0.1 on the
 // port given as --port=N, else on the first free port in 9170-9179.
+// A decision names the coding review the page shows and a line of it, as the server takes it ({round, line, code,
+// action, acknowledgement, note}): a round that is not the document's latest finished one, a line it does not have, or
+// a code that is not that line's is answered 409 with the server's sentence (decisionAnswer).
 //
 // Request headers understood by the mock: "X-Preview-Session: agent" serves the agent session;
 // "X-Preview-Encounters: empty" serves an empty document list.
@@ -45,6 +48,8 @@ const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-
 const VIEW_CSP = "frame-ancestors 'self'";
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const ACTIONS = new Set(['approve', 'reject', 'revoke']);
+// The server's answer to a decision made on a coding review, or a line, that is no longer what it has.
+const CHANGED = 'This coding review has changed. Reload to see the latest.';
 const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const UPLOAD_TYPES = { pdf: 'application/pdf', txt: 'text/plain', docx: DOCX_TYPE };
 const INSURANCE = new Set(['medicare', 'medicaid', 'commercial', 'unknown']);
@@ -436,6 +441,19 @@ async function handleApi(req, res, url) {
   return apiError(res, 404, 'Not found.');
 }
 
+// [status, payload] of POST decisions on `doc`, as the server answers it: 409 CHANGED unless `round` is the number of the
+// document's latest coding review, that review has finished, `line` is one of its lines and `code` is that line's code;
+// then the line's own allowed actions and the exact approval statement. Nothing here changes a fixture.
+function decisionAnswer(doc, body, session) {
+  const finished = doc.progress?.phase === 'done' && Number.isInteger(doc.round?.number);
+  const line = finished && body.round === doc.round.number ? (doc.codes || []).find(item => item.line === body.line) : null;
+  if (!line || line.code !== body.code) return [409, { error: CHANGED, details: {} }];
+  if (!ACTIONS.has(body.action)) return [400, { error: 'Choose approve, reject or undo.', details: {} }];
+  if (!line.allowed_actions.includes(body.action)) return [409, { error: 'This action is not available for this line right now.', details: {} }];
+  if (body.action === 'approve' && body.acknowledgement !== session.acknowledgement) return [400, { error: 'An approval needs the exact confirmation statement.', details: {} }];
+  return [201, { line: line.line, code: line.code, action: body.action, by: session.user.label, at: iso(Date.now()), note: typeof body.note === 'string' ? body.note : '' }];
+}
+
 function handleChange(res, doc, action, body, session) {
   if (action === 'answers') {
     const answers = Array.isArray(body.answers) ? body.answers : [];
@@ -456,11 +474,8 @@ function handleChange(res, doc, action, body, session) {
     return json(res, 201, { round: { number: (doc.round?.number || 0) + 1, trigger: 'answers', finished_at: null } });
   }
   if (action === 'decisions') {
-    const code = (doc.codes || []).find(item => item.code === body.code);
-    if (!code || !ACTIONS.has(body.action)) return apiError(res, 400, 'That code or action is not part of this document.');
-    if (!code.allowed_actions.includes(body.action)) return apiError(res, 409, 'This action is not available for this code right now.');
-    if (body.action === 'approve' && body.acknowledgement !== session.acknowledgement) return apiError(res, 400, 'An approval needs the exact confirmation statement.');
-    return json(res, 201, { code: code.code, action: body.action, by: session.user.label, at: iso(Date.now()), note: typeof body.note === 'string' ? body.note : '' });
+    const [status, payload] = decisionAnswer(doc, body, session);
+    return json(res, status, payload);
   }
   if (action === 'stop') return doc.progress?.can_stop ? json(res, 200, { stopped: true }) : apiError(res, 409, 'Nothing is running for this document.');
   if (action === 'resume') return doc.progress?.can_resume ? json(res, 201, { resumed: true }) : apiError(res, 409, 'There is nothing to resume for this document.');
@@ -564,4 +579,4 @@ if (require.main === module) {
   listen(asked ? [Number(asked[1])] : PORTS);
 }
 
-module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor };
+module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, CHANGED };
