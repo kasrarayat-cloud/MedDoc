@@ -3798,3 +3798,60 @@ owner is asked before anything goes live.
 (d) His documents are real notes with the names removed and the dates still present. They were handled as patient data
 (private folders, nothing printed or committed). The site stays synthetic-only as it is; he was told that real patient
 documents need a HIPAA business associate agreement and that setting changed, which is his decision and was not taken.
+
+## Owner condition, 2026-11-20 — the fix pass approved, "dont crate the old system engine again"
+
+Given on 2026-11-20 in session 738699b2, approving the fix pass of the Fable coding build after its safety check found
+31 defects in the new glue code (DECISIONS D357-D358), verbatim:
+
+> start it but dont crate the old system engine again dotforget pls
+
+### Session interpretation, 2026-11-20 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D358)
+
+(a) Every fix of the Fable coding build is plumbing only. It may change the identity of code lines, how the shape of
+Fable's answer is parsed (a lossless conversion only; anything that would drop, alter or guess content fails the round as
+unreadable), cost accounting, file safety, vendor-name display hygiene, UI wiring and tests. It never reads the note's
+meaning, adds a word or keyword list, a code-family or code-range rule, or a vocabulary or requirement check, and never
+holds, drops, downgrades, upgrades or rewrites a code Fable returned.
+
+(b) Combining the two Fable reads is the only decision logic. When they disagree, or the code cannot tell which line a
+review is about, the line becomes "needs review": a human decides, the code never picks.
+
+(c) Every fix brief states the condition, and every re-check audits the whole application for anything rule-like. The
+dormant endoscopy code-family rule set left in studio/reference/passages.py was deleted under it (fix pass 2).
+
+## Owner direction, 2026-11-20 — take it all the way to the live install
+
+Given on 2026-11-20 at about 09:25Z in session 738699b2, as he left for the night with fix pass 2 running, verbatim:
+
+> ok gotta sleep make sure everthing run until installation to live i wanna see my new desgin tomarrow
+
+### Session interpretation, 2026-11-20 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D360)
+
+(a) This answers the question D352 (c) left open: the owner authorizes the production install of the Fable coding build
+without being asked again. It does not lower any gate: the install goes through scripts/run-ruled-mutation.sh with a
+committed declaration, RULED_ACT_MAX_SECS=9000, and stop conditions; no production change is improvised.
+
+(b) The session's conditions, recorded with the direction before acting on it: install only if fix pass 2 leaves no
+unresolved critical or high finding, every suite is green, CI is green on the merged commit, the declaration is
+committed before the act, the pre-app rehearsal on a restored copy of live passes, and the health check is not BLOCK; a
+remaining critical or high finding is fixed within D358 and re-checked first, or nothing is installed.
+
+(c) A live walk with the two synthetic walk documents follows the install (about 2 US dollars each). A report waits for
+him either way, saying what was installed, or what stopped and why.
+
+## Owner request, 2026-11-20 — test his share-link PDFs first
+
+Given on 2026-11-20 at about 09:40Z in session 738699b2, verbatim:
+
+> make sure you terst that pdf link share file they are more important
+
+### Session interpretation, 2026-11-20 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D361)
+
+(a) His six de-identified PDFs from his share link, and the earlier live test document, are run end to end through the
+revision's image before the install: on the test server, on a restored copy of live migrated with that image, the coding
+step live with the test-only key, through the customer page (ops/walk.cjs), the codes compared with the proof (D353).
+
+(b) Their files and everything derived stay private (0700/0600) and are reaped at close-out. On the live site the
+post-install walk uses the two synthetic walk documents only: the site is synthetic-only, and a real clinical note is
+never a smoke target (AGENTS.md, production verification). He can upload his documents himself, as he did before.
