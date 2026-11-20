@@ -1,0 +1,58 @@
+{
+ "id": "f2000000-0000-4000-8000-000000000001",
+ "title": "Synthetic upper and lower endoscopy, Nov 19",
+ "created_at": "2026-11-20T09:02:00Z",
+ "updated_at": "2026-11-20T09:04:40Z",
+ "state": "processing",
+ "state_label": "Processing",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "name": "synthetic-egd-colonoscopy.pdf",
+  "media_type": "application/pdf",
+  "size": 1673,
+  "kind": "upload",
+  "original_url": "/api/encounters/f2000000-0000-4000-8000-000000000001/original",
+  "view_url": "/api/encounters/f2000000-0000-4000-8000-000000000001/original?view=1"
+ },
+ "context": {
+  "service_date": "2026-11-19",
+  "insurance": "medicare"
+ },
+ "progress": {
+  "phase": "checking",
+  "busy": true,
+  "started_at": "2026-11-20T09:02:01Z",
+  "finished_at": null,
+  "server_time": "2026-11-20T09:05:31Z",
+  "message": "",
+  "can_stop": true,
+  "can_resume": false,
+  "can_retry": false,
+  "error": null
+ },
+ "round": {
+  "number": 1,
+  "trigger": "upload",
+  "finished_at": null
+ },
+ "codes": [],
+ "questions": [],
+ "answers": [],
+ "notes": [],
+ "readiness": {
+  "draft": false,
+  "approved": false,
+  "blockers": [
+   "The coding review has not finished."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "at": "2026-11-20T09:02:00Z",
+   "text": "Uploaded by Reviewer."
+  }
+ ]
+}

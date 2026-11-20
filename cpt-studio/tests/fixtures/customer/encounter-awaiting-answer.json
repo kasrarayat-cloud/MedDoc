@@ -1,0 +1,127 @@
+{
+ "id": "f3000000-0000-4000-8000-000000000001",
+ "title": "Synthetic colonoscopy note, Jordan",
+ "created_at": "2026-11-20T08:39:51Z",
+ "updated_at": "2026-11-20T08:46:12Z",
+ "state": "awaiting_answer",
+ "state_label": "Questions for you",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "name": "synthetic-colonoscopy-note.txt",
+  "media_type": "text/plain",
+  "size": 376,
+  "kind": "upload",
+  "original_url": "/api/encounters/f3000000-0000-4000-8000-000000000001/original",
+  "view_url": "/api/encounters/f3000000-0000-4000-8000-000000000001/original?view=1"
+ },
+ "context": {
+  "service_date": "2026-11-05",
+  "insurance": "medicaid"
+ },
+ "progress": {
+  "phase": "done",
+  "busy": false,
+  "started_at": "2026-11-20T08:40:00Z",
+  "finished_at": "2026-11-20T08:46:12Z",
+  "server_time": "2026-11-20T08:50:00Z",
+  "message": "",
+  "can_stop": false,
+  "can_resume": false,
+  "can_retry": false,
+  "error": null
+ },
+ "round": {
+  "number": 1,
+  "trigger": "upload",
+  "finished_at": "2026-11-20T08:46:12Z"
+ },
+ "codes": [
+  {
+   "code": "45385",
+   "units": 1,
+   "modifiers": [],
+   "status": "needs_answer",
+   "status_label": "Needs your answer",
+   "reason": "A 12 mm polyp in the descending colon was removed, but the note does not say how. Removal with a snare is coded 45385; removal with forceps is coded 45380.",
+   "second_check": {
+    "agrees": true,
+    "reason": "The removal technique is not documented, so the question is needed before a code can be chosen."
+   },
+   "question": "How was the 12 mm descending colon polyp removed: with a snare, with forceps, or another way?",
+   "quotes": [
+    {
+     "text": "A 12 mm pedunculated polyp in the descending colon was removed.",
+     "page": null
+    },
+    {
+     "text": "The colonoscope was advanced to the cecum.",
+     "page": null
+    }
+   ],
+   "decision": null,
+   "allowed_actions": []
+  },
+  {
+   "code": "43235",
+   "units": 1,
+   "modifiers": [],
+   "status": "needs_answer",
+   "status_label": "Needs your answer",
+   "reason": "The note says an upper endoscopy was planned. It does not record that it was performed, so it cannot be coded yet.",
+   "second_check": {
+    "agrees": true,
+    "reason": "A planned procedure is not a performed one; asking is right."
+   },
+   "question": "Was the upper endoscopy performed? If it was, what was found or done?",
+   "quotes": [
+    {
+     "text": "Upper endoscopy was planned but is not recorded as performed.",
+     "page": null
+    }
+   ],
+   "decision": null,
+   "allowed_actions": []
+  }
+ ],
+ "questions": [
+  {
+   "id": "f3100000-0000-4000-8000-000000000001",
+   "text": "How was the 12 mm descending colon polyp removed: with a snare, with forceps, or another way?",
+   "codes": [
+    "45385"
+   ]
+  },
+  {
+   "id": "f3100000-0000-4000-8000-000000000002",
+   "text": "Was the upper endoscopy performed? If it was, what was found or done?",
+   "codes": [
+    "43235"
+   ]
+  }
+ ],
+ "answers": [],
+ "notes": [
+  "The note does not record the bowel preparation quality.",
+  "A 3 mm rectal polyp was seen and left in place; nothing coded was done to it."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": false,
+  "blockers": [
+   "No code has been approved."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "at": "2026-11-20T08:39:51Z",
+   "text": "Uploaded by Reviewer."
+  },
+  {
+   "at": "2026-11-20T08:46:12Z",
+   "text": "Coding review 1 finished with 2 questions."
+  }
+ ]
+}
