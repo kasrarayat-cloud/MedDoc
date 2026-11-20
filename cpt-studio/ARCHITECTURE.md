@@ -267,6 +267,16 @@ query is scoped through the caller's active membership, so another workspace's r
 cannot store (NUL, a lone surrogate) is refused with a 400 rather than altered; only a title or a file name has it
 replaced.
 
+The site's security headers (`studio.access.SecurityHeadersMiddleware`) wrap WhiteNoise, so every static file carries
+them too (DECISIONS D368, round 3): above all the PDF library's module worker, which parses the uploaded document and
+takes its policy from its own script's response, not from the page that starts it. A static file's policy is the site's
+with `base-uri 'none'` (`STATIC_CSP`: `default-src 'self'`, `script-src 'self'`, `connect-src 'self'`, `object-src
+'none'`, no `'unsafe-eval'`, no `'wasm-unsafe-eval'`), so code built from a string and a fetch to another origin are
+refused inside the worker too (measured in Chromium); its caching stays WhiteNoise's (immutable for the hashed names,
+never `no-store`). The dev preview serves the library with exactly these headers, and `tests/test_frontend.py` holds the
+two equal through the full middleware stack. The suite pins the library itself as well: one digest over every file's
+sha256, the manifest included (`PDF_LIB_DIGEST`), so a changed vendored file fails until that line changes in the open.
+
 ## 7. JSON API
 
 [`API.md`](API.md): session auth, the client contract header, every endpoint and payload.
