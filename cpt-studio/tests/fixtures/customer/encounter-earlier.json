@@ -1,0 +1,56 @@
+{
+ "id": "fb000000-0000-4000-8000-000000000001",
+ "title": "Synthetic colonoscopy report, earlier review",
+ "created_at": "2026-11-12T15:20:00Z",
+ "updated_at": "2026-11-12T15:26:40Z",
+ "state": "earlier",
+ "state_label": "Earlier review",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "name": "synthetic-colonoscopy-report.docx",
+  "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "size": 2484,
+  "kind": "upload",
+  "original_url": "/api/encounters/fb000000-0000-4000-8000-000000000001/original",
+  "view_url": null,
+  "view_media_type": null,
+  "converted": false
+ },
+ "context": {
+  "service_date": "2026-11-09",
+  "insurance": "unknown"
+ },
+ "progress": {
+  "phase": "earlier",
+  "busy": false,
+  "started_at": null,
+  "finished_at": null,
+  "server_time": "2026-11-20T08:10:00Z",
+  "message": "This document was reviewed by an earlier version of CPT Studio. Review it again to code it with the current version.",
+  "can_stop": false,
+  "can_resume": false,
+  "can_retry": true,
+  "error": null
+ },
+ "round": null,
+ "codes": [],
+ "questions": [],
+ "answers": [],
+ "notes": [],
+ "readiness": {
+  "draft": false,
+  "approved": false,
+  "blockers": [
+   "Review this document again to code it with the current version."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "at": "2026-11-12T15:20:00Z",
+   "text": "Uploaded by Reviewer."
+  }
+ ]
+}

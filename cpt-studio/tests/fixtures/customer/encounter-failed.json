@@ -14,7 +14,9 @@
   "size": 1673,
   "kind": "upload",
   "original_url": "/api/encounters/f7000000-0000-4000-8000-000000000001/original",
-  "view_url": "/api/encounters/f7000000-0000-4000-8000-000000000001/original?view=1"
+  "view_url": "/api/encounters/f7000000-0000-4000-8000-000000000001/original?view=1",
+  "view_media_type": "application/pdf",
+  "converted": false
  },
  "context": {
   "service_date": null,

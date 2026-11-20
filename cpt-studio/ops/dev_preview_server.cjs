@@ -8,16 +8,20 @@
 //
 // Request headers understood by the mock: "X-Preview-Session: agent" serves the agent session;
 // "X-Preview-Encounters: empty" serves an empty document list.
-// A new upload answers 201 with the reading fixture's id and plays it forward on each read: reading, then checking,
-// then questions for you; sending answers plays a second coding review forward to ready for approval. The same
-// client_key from the same session answers with the same id and creates nothing. Every other change (decisions, stop,
-// resume, retry, downloads) answers as the real server does on success and never changes a fixture.
-// The original document of every fixture is a synthetic one made here (SYNTHETIC_DOCUMENTS): a two-page PDF or plain
-// text. GET .../original downloads it; GET .../original?view=1 serves it inline, framable by this origin only, for the
-// page's viewer. The fixtures quote these documents exactly, on the pages given (tests/frontend/app.test.cjs).
-// POST /__preview__/reset restarts the uploads; POST /__preview__/outdated makes every API call answer 409
-// {"error_code": "client_outdated"} until the next reset; POST /__preview__/offline makes reads of a document fail
-// (503) until the next reset, which shows the page's reconnecting line.
+// A new upload answers 201 with the reading fixture's id and plays it forward on each read of the document: reading,
+// then checking, then questions for you; sending answers plays a second coding review forward to ready for approval.
+// The same client_key from the same session answers with the same id and creates nothing. A retry the document offers
+// (the failed fixture's Retry, the earlier review's Review again) plays that document forward the same way. Every other
+// change (decisions, stop, resume, downloads) answers as the real server does on success and never changes a fixture.
+// The original document of every fixture is a synthetic one made here (SYNTHETIC_DOCUMENTS): a two-page PDF, plain text
+// or a Word file. GET .../original downloads it; GET .../original?view=1 serves what the page's viewer shows, inline
+// and framable by this origin only: the PDF or the text, and for a Word document the PDF of its pages (as the server
+// serves the PDF the coding review read) - once converted: a Word document of an earlier review, or one uploaded here
+// before its second read, has no view (404). The fixtures quote these documents exactly, on the pages given
+// (tests/frontend/app.test.cjs).
+// POST /__preview__/reset restarts the uploads and the retried documents; POST /__preview__/outdated makes every API
+// call answer 409 {"error_code": "client_outdated"} until the next reset; POST /__preview__/offline makes reads of a
+// document fail (503) until the next reset, which shows the page's reconnecting line.
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -41,7 +45,8 @@ const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-
 const VIEW_CSP = "frame-ancestors 'self'";
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const ACTIONS = new Set(['approve', 'reject', 'revoke']);
-const UPLOAD_TYPES = { pdf: 'application/pdf', txt: 'text/plain', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const UPLOAD_TYPES = { pdf: 'application/pdf', txt: 'text/plain', docx: DOCX_TYPE };
 const INSURANCE = new Set(['medicare', 'medicaid', 'commercial', 'unknown']);
 
 // The synthetic documents the fixtures' quotes come from: invented, no real patient.
@@ -70,6 +75,19 @@ const SYNTHETIC_DOCUMENTS = {
     pages: [['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Procedure note (fictional)',
       'Patient: Casey Synthetic. Date of service: 2026-11-06.', 'The patient arrived for colonoscopy.',
       'The procedure was cancelled before sedation because the patient had eaten that morning.', 'No scope was inserted.']],
+  },
+  // a Word file of two pages; its view is the PDF of the same pages, so the quoted pages are the pages shown
+  'synthetic-colonoscopy-report.docx': {
+    type: DOCX_TYPE,
+    pages: [
+      ['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Colonoscopy report (fictional)',
+        'Patient: Morgan Synthetic. Date of service: 2026-11-09.', 'Indication: surveillance after an earlier polyp removal.',
+        'The colonoscope was advanced to the cecum and the terminal ileum was entered.',
+        'Two biopsies were taken from the cecum with cold forceps.'],
+      ['A 7 mm sessile polyp in the transverse colon was removed with a cold snare.',
+        'The polypectomy site was marked with a submucosal ink injection.', 'The bowel preparation was rated good.',
+        'Impression: one transverse colon polyp removed and its site marked; cecal biopsies taken.'],
+    ],
   },
 };
 
@@ -100,19 +118,98 @@ function syntheticPdf(pages) {
   return Buffer.from(body, 'latin1');
 }
 
-// One synthetic document's bytes and type: a PDF of its pages, or its lines as plain text.
+const CRC_TABLE = Array.from({ length: 256 }, (_, value) => {
+  let crc = value;
+  for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+  return crc >>> 0;
+});
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+// A ZIP archive of [name, bytes] entries, stored without compression (all a Word file needs to open).
+function storedZip(entries) {
+  const parts = [];
+  const directory = [];
+  let offset = 0;
+  for (const [name, data] of entries) {
+    const file = Buffer.from(name, 'utf8');
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x21, 12);  // 1 January 1980
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(file.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x21, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(file.length, 28);
+    central.writeUInt32LE(offset, 42);
+    parts.push(local, file, data);
+    directory.push(central, file);
+    offset += local.length + file.length + data.length;
+  }
+  const listing = Buffer.concat(directory);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(listing.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, listing, end]);
+}
+
+function xmlText(value) {
+  return value.replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+}
+
+// A minimal, valid Word file: one paragraph per line and a page break between pages.
+function syntheticDocx(pages) {
+  const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const paragraph = line => `<w:p><w:r><w:t xml:space="preserve">${xmlText(line)}</w:t></w:r></w:p>`;
+  const body = pages.map(lines => lines.map(paragraph).join('')).join('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
+  return storedZip([
+    ['[Content_Types].xml', Buffer.from(`${head}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`, 'utf8')],
+    ['_rels/.rels', Buffer.from(`${head}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`, 'utf8')],
+    ['word/document.xml', Buffer.from(`${head}<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr></w:body></w:document>`, 'utf8')],
+  ]);
+}
+
+// One synthetic document's bytes and type as uploaded: a PDF of its pages, a Word file of them, or its lines as plain
+// text.
 function documentBytes(name) {
   const source = SYNTHETIC_DOCUMENTS[name] || SYNTHETIC_DOCUMENTS['synthetic-colonoscopy-note.txt'];
   if (source.type === 'application/pdf') return { bytes: syntheticPdf(source.pages), type: source.type };
+  if (source.type === DOCX_TYPE) return { bytes: syntheticDocx(source.pages), type: source.type };
   return { bytes: Buffer.from(`${source.pages.flat().join('\n')}\n`, 'utf8'), type: 'text/plain; charset=utf-8' };
 }
 
-// The synthetic document a fixture's original stands for: by its name, a pasted text by its own key.
+// What the viewer is served of one synthetic document: the PDF or text as uploaded, and for a Word file the PDF of its
+// pages (the server serves the PDF the coding review read: the converted file).
+function viewBytes(name) {
+  if (SYNTHETIC_DOCUMENTS[name]?.type === DOCX_TYPE) return { bytes: syntheticPdf(SYNTHETIC_DOCUMENTS[name].pages), type: 'application/pdf' };
+  return documentBytes(name);
+}
+
+// The synthetic document a fixture's original stands for: by its name, a pasted text by its own key, else by its type.
 function documentFor(doc) {
   const name = doc?.document?.name;
   if (typeof name === 'string' && Object.hasOwn(SYNTHETIC_DOCUMENTS, name)) return name;
   if (doc?.document?.kind === 'paste') return 'pasted-cancelled-colonoscopy';
-  return doc?.document?.media_type === 'application/pdf' ? 'synthetic-egd-colonoscopy.pdf' : 'synthetic-colonoscopy-note.txt';
+  const type = doc?.document?.media_type;
+  if (type === DOCX_TYPE) return 'synthetic-colonoscopy-report.docx';
+  return type === 'application/pdf' ? 'synthetic-egd-colonoscopy.pdf' : 'synthetic-colonoscopy-note.txt';
 }
 
 // The fixtures, read when the server starts (requiring this file for its documents reads nothing). The played
@@ -138,7 +235,9 @@ function loadFixtures() {
 }
 
 const uploads = new Map();  // '<session> <client_key>' -> encounter id
-const plays = new Map();    // encounter id -> {reads, at, answered, title, name, context, answers}
+// encounter id -> {reads, at, started, answered, round, trigger, title, name, kind, mediaType, size, context, answers,
+// converted}: an uploaded or retried document, played forward
+const plays = new Map();
 const reports = new Map();
 const flags = { outdated: false, offline: false };
 
@@ -210,31 +309,48 @@ function formFileName(body) {
 const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const clone = value => JSON.parse(JSON.stringify(value));
 
-// The just-uploaded document, played forward one read at a time, with its times taken from the upload.
-function played(id) {
+// What the viewer shows of a played document, as the server builds it: a PDF or a text as uploaded; a Word file nothing
+// until the coding review has converted it (here from its second read on), then that PDF.
+function playedView(id, play) {
+  const view = `/api/encounters/${id}/original?view=1`;
+  if (play.mediaType !== DOCX_TYPE) {
+    return { view_url: view, view_media_type: play.mediaType === 'application/pdf' ? 'application/pdf' : 'text/plain', converted: false };
+  }
+  play.converted = play.converted || play.reads > 1;
+  return play.converted ? { view_url: view, view_media_type: 'application/pdf', converted: true } : { view_url: null, view_media_type: null, converted: false };
+}
+
+// An uploaded or retried document, one stage further on each read of it (advance), with its times taken from the upload
+// or the retry.
+function played(id, advance) {
   const play = plays.get(id);
-  play.reads += 1;
+  if (advance) play.reads += 1;
   const now = Date.now();
   const { reading, checking, asking, results } = fixtures;
   const stages = play.answered ? [[2, reading], [4, checking], [Infinity, results]] : [[2, reading], [5, checking], [Infinity, asking]];
   const base = clone(stages.find(([limit]) => play.reads <= limit)[1]);
-  const round = play.answered ? 2 : 1;
   const done = !base.progress.busy;
   return {
     ...base, id, title: play.title, created_at: iso(play.at), updated_at: iso(now), context: play.context,
     document: {
       ...base.document, name: play.name, kind: play.kind, media_type: play.mediaType, size: play.size,
-      original_url: play.kind === 'paste' ? null : `/api/encounters/${id}/original`, view_url: `/api/encounters/${id}/original?view=1`,
+      original_url: play.kind === 'paste' ? null : `/api/encounters/${id}/original`, ...playedView(id, play),
     },
     progress: { ...base.progress, started_at: iso(play.started), server_time: iso(now), finished_at: done ? iso(now - 1000) : null },
-    round: { number: round, trigger: play.answered ? 'answers' : 'upload', finished_at: done ? iso(now - 1000) : null },
+    round: { number: play.round + (play.answered ? 1 : 0), trigger: play.answered ? 'answers' : play.trigger, finished_at: done ? iso(now - 1000) : null },
     answers: play.answers,
   };
 }
 
-function encounterFor(id) {
-  if (plays.has(id)) return played(id);
+// A document by id: a played one (only a read of the document itself moves it on), else a fixture.
+function encounterFor(id, advance = false) {
+  if (plays.has(id)) return played(id, advance);
   return fixtures.byId.get(id) || null;
+}
+
+// The play of a document from now on: an upload, or a retry of a fixture that offers one.
+function startPlay(id, from) {
+  plays.set(id, { reads: 0, started: Date.now() + 1000, answered: false, converted: false, ...from });
 }
 
 async function handleApi(req, res, url) {
@@ -268,8 +384,8 @@ async function handleApi(req, res, url) {
     const mediaType = file ? UPLOAD_TYPES[(/\.(pdf|docx|txt)$/i.exec(file) || [])[1]?.toLowerCase()] || 'text/plain' : 'text/plain';
     const shown = documentFor({ document: { name: file, kind: file ? 'upload' : 'paste', media_type: mediaType } });
     uploads.set(`${agent ? 'agent' : 'human'} ${key}`, id);
-    plays.set(id, {
-      reads: 0, at: Date.now(), started: Date.now() + 1000, answered: false, answers: [],
+    startPlay(id, {
+      at: Date.now(), answers: [], round: 1, trigger: 'upload',
       title: file ? file.replace(/\.(pdf|docx|txt)$/i, '') : 'Pasted clinical text', name: file || null, kind: file ? 'upload' : 'paste',
       mediaType, size: documentBytes(shown).bytes.length,
       context: { service_date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null, insurance },
@@ -279,7 +395,7 @@ async function handleApi(req, res, url) {
   let match = new RegExp(`^/api/encounters/(${UUID})$`).exec(route);
   if (match && method === 'GET') {
     if (flags.offline) return apiError(res, 503, 'The service is not available right now.');
-    const doc = encounterFor(match[1]);
+    const doc = encounterFor(match[1], true);
     return doc ? json(res, 200, doc) : apiError(res, 404, 'Not found.');
   }
   match = new RegExp(`^/api/encounters/(${UUID})/original$`).exec(route);
@@ -287,13 +403,19 @@ async function handleApi(req, res, url) {
     const doc = encounterFor(match[1]);
     if (!doc) return apiError(res, 404, 'Not found.');
     const view = url.searchParams.get('view') === '1';
+    if (view && !doc.document.view_url) return apiError(res, 404, 'Not found.');
     if (!view && !doc.document.original_url) return apiError(res, 404, 'This document was pasted, so there is no original file.');
     const name = documentFor(doc);
-    const { bytes, type } = documentBytes(name);
     const filename = doc.document.name || 'pasted-text.txt';
-    if (!view) return send(res, 200, bytes, { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${filename}"` });
+    if (!view) {
+      const { bytes, type } = documentBytes(name);
+      return send(res, 200, bytes, { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${filename}"` });
+    }
+    // a converted Word document is served as the PDF it became, under the Word file's name (studio/customer.py)
+    const { bytes, type } = viewBytes(name);
+    const shownName = doc.document.converted === true ? `${filename.replace(/\.[^.]*$/, '')}.pdf` : filename;
     return send(res, 200, bytes, {
-      'Content-Type': type, 'Content-Disposition': `inline; filename="${filename}"`, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP,
+      'Content-Type': type, 'Content-Disposition': `inline; filename="${shownName}"`, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': VIEW_CSP,
     });
   }
   match = new RegExp(`^/api/encounters/(${UUID})/(answers|decisions|stop|resume|retry|reports)$`).exec(route);
@@ -331,18 +453,27 @@ function handleChange(res, doc, action, body, session) {
       play.started = Date.now() + 1000;
       play.answers = answers.map(answer => ({ question: questions.get(answer.question_id).text, answer: answer.text.trim(), by: session.user.label, at: iso(Date.now()) }));
     }
-    return json(res, 201, { round: (doc.round?.number || 1) + 1 });
+    return json(res, 201, { round: { number: (doc.round?.number || 0) + 1, trigger: 'answers', finished_at: null } });
   }
   if (action === 'decisions') {
     const code = (doc.codes || []).find(item => item.code === body.code);
     if (!code || !ACTIONS.has(body.action)) return apiError(res, 400, 'That code or action is not part of this document.');
     if (!code.allowed_actions.includes(body.action)) return apiError(res, 409, 'This action is not available for this code right now.');
     if (body.action === 'approve' && body.acknowledgement !== session.acknowledgement) return apiError(res, 400, 'An approval needs the exact confirmation statement.');
-    return json(res, 201, { decision: { code: code.code, action: body.action, note: typeof body.note === 'string' ? body.note : '' } });
+    return json(res, 201, { code: code.code, action: body.action, by: session.user.label, at: iso(Date.now()), note: typeof body.note === 'string' ? body.note : '' });
   }
   if (action === 'stop') return doc.progress?.can_stop ? json(res, 200, { stopped: true }) : apiError(res, 409, 'Nothing is running for this document.');
-  if (action === 'resume') return doc.progress?.can_resume ? json(res, 200, { resumed: true }) : apiError(res, 409, 'There is nothing to resume for this document.');
-  if (action === 'retry') return doc.progress?.can_retry ? json(res, 201, { round: (doc.round?.number || 1) + 1 }) : apiError(res, 409, 'This document cannot be retried right now.');
+  if (action === 'resume') return doc.progress?.can_resume ? json(res, 201, { resumed: true }) : apiError(res, 409, 'There is nothing to resume for this document.');
+  if (action === 'retry') {
+    if (!doc.progress?.can_retry) return apiError(res, 409, 'This document cannot be retried right now.');
+    // a new coding review of the document (an earlier review's first): played forward from here, as an upload is
+    const number = (doc.round?.number || 0) + 1;
+    startPlay(doc.id, {
+      at: Date.parse(doc.created_at), answers: doc.answers || [], round: number, trigger: 'retry', title: doc.title,
+      name: doc.document.name, kind: doc.document.kind, mediaType: doc.document.media_type, size: doc.document.size, context: doc.context,
+    });
+    return json(res, 201, { round: { number, trigger: 'retry', finished_at: null } });
+  }
   if (!['draft', 'approved'].includes(body.kind) || !['txt', 'csv'].includes(body.fmt)) return apiError(res, 400, 'Choose a download.');
   if (body.kind === 'approved' && doc.readiness?.approved !== true) {
     return apiError(res, 409, 'The approved download is not available yet.', { blockers: doc.readiness?.blockers || [] });
@@ -433,4 +564,4 @@ if (require.main === module) {
   listen(asked ? [Number(asked[1])] : PORTS);
 }
 
-module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, documentBytes, documentFor };
+module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor };
