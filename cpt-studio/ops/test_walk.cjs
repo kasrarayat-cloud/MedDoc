@@ -462,6 +462,35 @@ test('every quote chosen is counted, and the check fails on any mark off its pag
   assert.equal(walk.foldMarked(' The ﬁnding\nwas  made. '), 'Thefindingwasmade.');
 });
 
+test('a PDF viewer that marks not one quote fails the check, though a quote not found alone is allowed', () => {
+  // the walk's own documents quote their own words: a viewer that has stopped marking (a matcher that says "could not be
+  // found" every time) must not pass because each note is honest
+  const quote = { code: '43239', line: 'L1', text: 'Cold forceps biopsies were taken.', page: 1 };
+  const good = { quote, reading: reading({ marks: [{ page: 1, occurrence: 0, text: quote.text }] }) };
+  const twice = { quote, reading: reading({ count: 2, note: 'These words appear 2 times on page 1. Each is marked.',
+    marks: [{ page: 1, occurrence: 0, text: quote.text }, { page: 1, occurrence: 1, text: quote.text }] }) };
+  const missing = { quote, reading: reading({ status: 'not_found', pages: [], count: 0, note: 'The exact words could not be found on page 1, so nothing is marked. Page 1 is shown.' }) };
+  const none = walk.quoteMarkChecks([missing, missing, missing]);
+  assert.equal(none.status, 'fail');
+  assert.deepEqual(none.data, { quotes: 3, marked_once: 0, marked_multi: 0, not_found: 3, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0, cut: 0 });
+  assert.match(none.reason, /; 3 quote\(s\) chosen in the PDF viewer and not one marked$/);
+  assert.equal(walk.quoteMarkChecks([missing]).status, 'fail', 'one quote, not found: nothing was marked');
+  // one marked, once or more than once, and the rest not found: each not-found quote is allowed
+  assert.equal(walk.quoteMarkChecks([missing, good, missing]).status, 'pass');
+  assert.equal(walk.quoteMarkChecks([twice, missing]).status, 'pass');
+  // a mark that fails its own judgement is not a mark that counts
+  const halved = { quote, reading: reading({ marks: [{ page: 1, occurrence: 0, text: quote.text, whole: false }] }) };
+  // ... and the reason says so first, ahead of each quote's own problems
+  assert.match(walk.quoteMarkChecks([halved, missing]).reason, /character; 2 quote\(s\) chosen in the PDF viewer and not one marked; quote L1/);
+  // the text viewer and the frame are not the PDF viewer: the text's not-found quotes keep their own rule, and the frame
+  // already fails as unavailable
+  const textMissing = { quote, reading: reading({ mode: 'text', status: '', marked: '', pages: [], count: 0, note: 'The exact words could not be found in the document, so nothing is marked.' }) };
+  assert.equal(walk.quoteMarkChecks([textMissing]).status, 'pass');
+  const framed = walk.quoteMarkChecks([{ quote, reading: reading({ mode: 'frame', fallback: 'browser' }) }]);
+  assert.equal(framed.status, 'fail');
+  assert.doesNotMatch(framed.reason, /not one marked/);
+});
+
 test('the encounter JSON is held to customer-contract.json: every key it lists, of its type, and no other, at every depth', () => {
   // FG-E: the walk reads the contract file itself (as ops/scan_customer.py and the Django suite do), not a key list of its own
   assert.equal(walk.contract().schema, CONTRACT.schema);

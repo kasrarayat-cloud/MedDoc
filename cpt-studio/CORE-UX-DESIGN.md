@@ -198,7 +198,8 @@ and the docs elsewhere point here.
 document at desktop width and at 390 px (no horizontal scroll): upload, poll to done, the DOM contract above and the JSON
 contract, every quote chosen and its marks read back (its words on its page, or the note saying they could not be
 found, nothing marked on another page, and no occurrence beginning or ending inside a character of the page's text,
-which the walk reads apart from the page script; counted), an answer when one is asked, one approval through the dialog (the History naming the line with its code), both
+which the walk reads apart from the page script; counted; and where the PDF viewer drew the document, at least one of
+its quotes marked, so a viewer that has stopped marking cannot pass on notes that each say "could not be found"), an answer when one is asked, one approval through the dialog (the History naming the line with its code), both
 exports downloaded twice to equal bytes (each request naming the round shown), the approval undone through the row's
 Undo (naming the decision shown), the denylist scan over every JSON body, the DOM and the downloads, and every `/ops/`
 path refused to the customer.

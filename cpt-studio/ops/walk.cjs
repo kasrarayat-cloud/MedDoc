@@ -771,10 +771,13 @@ function judgeQuote(quote, reading) {
 // The check over every quote chosen ({quote, reading}), counted: how many were marked once, more than once, not found,
 // unavailable, marked off their page, marked with other text and marked from or to inside a character. It passes when
 // every quote was marked as its words, whole characters only, or said not to be found, and nothing was marked on another
-// page.
+// page - and, where the PDF viewer drew the document, when at least one of its quotes was marked: a quote not found is
+// allowed, but a viewer that marks nothing at all (a matcher that has stopped finding anything says "could not be found"
+// every time) does not pass on the walk's own documents, whose quotes are their own words.
 function quoteMarkChecks(chosen) {
   const data = { quotes: chosen.length, marked_once: 0, marked_multi: 0, not_found: 0, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0, cut: 0 };
   const problems = [];
+  const inPdf = { chosen: 0, marked: 0 };
   for (const { quote, reading } of chosen) {
     const judged = judgeQuote(quote, reading);
     data[{ once: 'marked_once', multi: 'marked_multi', not_found: 'not_found', unavailable: 'unavailable' }[judged.outcome] || 'unresolved'] += 1;
@@ -782,7 +785,13 @@ function quoteMarkChecks(chosen) {
     data.mismatched += judged.mismatched;
     data.cut += judged.cut;
     problems.push(...judged.problems);
+    if (reading?.mode === 'pdf') {
+      inPdf.chosen += 1;
+      if (judged.outcome === 'once' || judged.outcome === 'multi') inPdf.marked += 1;
+    }
   }
+  // first among the problems, so the reason always shows it
+  if (inPdf.chosen && !inPdf.marked) problems.unshift(`${inPdf.chosen} quote(s) chosen in the PDF viewer and not one marked`);
   const summary = `${data.quotes} quote(s) chosen: ${data.marked_once} marked once, ${data.marked_multi} marked more than once, `
     + `${data.not_found} not found (the note says so), ${data.off_page} mark(s) off the quote's page, ${data.mismatched} marked with other words, `
     + `${data.cut} beginning or ending inside a character`;
