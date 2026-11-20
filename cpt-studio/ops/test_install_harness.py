@@ -1152,7 +1152,7 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
                                                                                  revision=REVISION), self.tmp))
         self.assertEqual(details['not_carried_back']['note'],
                          'this revision coded no encounter: there is nothing of its own to carry back, and the earlier '
-                         'revision shows its own records only')
+                         f'revision shows its own records only; {install.FOUR_TABLES_KEPT}')
         self.assertEqual(closed['kinds'], list(install.COMMON_STAGE_KINDS))
         self.assertEqual(closed['reason'], 'its web and worker were removed (rollback-app)')
         self.assertEqual(details['stages_closed']['kinds'], ['astra', 'fable'])

@@ -50,7 +50,11 @@ stop), wherever it is. `app`, `switch-back` and `rollback-app` may each wait for
 a worker to stop once or twice (each wait up to 60 minutes since the Fable
 coding build), so they refuse to start, changing nothing, unless the ceiling is
 at least 9,000 s (two stops and a margin; the receipt's `door.ceiling`): run
-them as `RULED_ACT_MAX_SECS=9000 bash scripts/run-ruled-mutation.sh ...`.
+them as `RULED_ACT_MAX_SECS=9000 bash scripts/run-ruled-mutation.sh ...`. The
+installer reads the value exactly as the door does: digits only, in bash's
+signed 64-bit arithmetic, so a value of 2^63 or more is its 64-bit wrap (19
+nines reads as the door's default ceiling, which the door would run at, and is
+refused).
 
 Each phase prints one JSON line `{"phase", "ok", "summary", "receipt"}` and
 writes `<phase>-<UTC>.json` (0600) plus any command logs into the receipts
@@ -803,10 +807,16 @@ undo does about each, in this revision's image unless said otherwise:
   (a coding job a member queued on this revision's web after B4's close) is a
   record (`open_stage`) that holds the earlier worker until B7's close has
   taken it; `app` again comes back to this revision.
-- **(b) The four tables are left exactly as they are.** No row of
-  `CodingRound`, `CodingAnswer`, `CodeDecision` or `ExportArtifact` is written,
-  changed or removed by any undo, and no other row is removed: the close only
-  settles jobs, rounds and provider runs that were still open.
+- **(b) No row of the four new tables is deleted; closed rounds are marked
+  cancelled.** No undo removes a row of `CodingRound`, `CodingAnswer`,
+  `CodeDecision` or `ExportArtifact`, or any other row. The close writes only
+  the rounds it closes - a round that sent nothing is marked cancelled (and its
+  finish time set), one whose request was in flight is marked failed, its
+  outcome unknown, as (a) says and as this revision's own stale sweep marks it -
+  together with the jobs and provider runs that were still open. Answers, code
+  decisions, exports and every finished round are not written. The receipt's
+  `not_carried_back` note says the same, and its close answer counts the rounds
+  closed (`rounds`: cancelled, failed).
 - **(c) The earlier pair derives the state of every encounter this revision
   coded, with its own code.** Their stored `Encounter.state` is this revision's
   derivation (`awaiting_answer`, `needs_review`, `ready` and `failed`, which the
@@ -904,7 +914,12 @@ Fable coding build's routes. The download verifier, the D15 rollback runtime
 test of the Gemini migration, the GI round-4 proof harness and the differential
 "what changed" check read the earlier pipeline's records, exports and code and
 were removed with their tests: the walk (`ops/walk.cjs`) scans every customer
-response, DOM text and download for the denylist and checks the exports.
+response, DOM text and download for the denylist, holds every session, list and
+encounter answer it or the page reads to `ops/verification/customer-contract.json`
+(the same reading as `scan_customer.py`'s, `ops/test_walk_contract.py` holding the
+two to each other), approves one line through the review dialog as the page draws
+it - the page's request naming the round shown and the line - and checks the
+exports.
 `ops/verify_passages.py`, the host tool that re-proved the reference passages
 from the publishers' PDFs through the earlier PDF reader, was removed with that
 reader; the committed passage files and their import are unchanged.

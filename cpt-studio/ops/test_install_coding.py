@@ -13,6 +13,8 @@ import base64
 import io
 import json
 import re
+import shutil
+import subprocess
 import sys
 import unittest
 import zipfile
@@ -403,6 +405,45 @@ class StopBoundTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(install.door_ceiling({'RULED_ACT_MAX_SECS': value}), ceiling)
         self.assertEqual(install.door_ceiling({}), install.DOOR_CEILING_DEFAULT)
+
+    # The door's $((10#$v)) wraps at 64 bits (bash's signed arithmetic) and keeps the result only when it is 1 or more:
+    # a value of 2**63 or more is read as its signed 64-bit wrap, the default when that is 0 or less (install-1).
+    WRAPPED = (('9223372036854775807', 9223372036854775807), ('9223372036854775808', 3600),
+               ('9999999999999999999', 3600), ('10000000000000000000', 3600), ('18446744073709551616', 3600),
+               ('18446744073709551618', 2), ('18446744073709555216', 3600), ('18446744073709560616', 9000),
+               ('99999999999999999999', 7766279631452241919), ('0009223372036854775808', 3600))
+
+    def test_a_ceiling_of_2_63_or_more_is_read_as_the_doors_64_bit_wrap(self):
+        for value, ceiling in self.WRAPPED:
+            with self.subTest(value=value):
+                self.assertEqual(install.door_ceiling({'RULED_ACT_MAX_SECS': value}), ceiling)
+        for value in ('9223372036854775808', '9999999999999999999', '18446744073709551618', '18446744073709555216'):
+            with self.subTest(refused=value), self.assertRaises(install.InstallError):
+                install.check_door_ceiling({'RULED_ACT_MAX_SECS': value}, 'app')
+        self.assertEqual(install.check_door_ceiling({'RULED_ACT_MAX_SECS': '18446744073709560616'}, 'app'),
+                         {'ceiling': 9000, 'needed': 9000})
+        # past CPython's 4,300-digit int() limit the door still reads a number; so does the installer, never raising.
+        # 10**5000 - 1 modulo 2**64, by modular exponentiation, then the signed wrap
+        wrapped = (pow(10, 5000, 2 ** 64) - 1) % 2 ** 64
+        wrapped = wrapped - 2 ** 64 if wrapped >= 2 ** 63 else wrapped
+        self.assertEqual(install.door_ceiling({'RULED_ACT_MAX_SECS': '9' * 5000}),
+                         wrapped if wrapped >= 1 else install.DOOR_CEILING_DEFAULT)
+
+    def test_the_installer_and_the_doors_own_reader_agree_on_every_value(self):
+        # scripts/lib/run-watched.sh's _watch_int itself, run by bash: one reading, two readers that cannot drift
+        script = APP_ROOT.parent / 'scripts' / 'lib' / 'run-watched.sh'
+        bash = shutil.which('bash')
+        if bash is None or not script.is_file():
+            self.skipTest('the door (scripts/lib/run-watched.sh) or bash is not here')
+        values = ['', 'abc', '0', '00', '-5', '1', '8999', '9000', '010', ' 9000', '9000 ', '\u0669\u0660\u0660\u0660',
+                  '9' * 30, '9' * 5000] + [value for value, _ in self.WRAPPED]
+        listed = subprocess.run(
+            [bash, '-c', '. "$1"; shift; for v in "$@"; do printf "%s\\n" "$(_watch_int "$v" 3600)"; done', '_',
+             str(script), *values], capture_output=True, text=True, check=True, timeout=60).stdout.splitlines()
+        self.assertEqual(len(listed), len(values))
+        for value, door in zip(values, listed):
+            with self.subTest(value=value[:40]):
+                self.assertEqual(install.door_ceiling({'RULED_ACT_MAX_SECS': value}), int(door))
 
     def test_a_phase_that_stops_a_worker_refuses_a_ceiling_it_could_outrun(self):
         needed = 2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN

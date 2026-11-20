@@ -21,14 +21,19 @@
  *
  * Per document, through the page: New document -> the file, the service date, the insurance and the synthetic
  * attestation -> Start; then GET /api/encounters/<id> is polled until progress.phase is done, failed or stopped (each
- * wait bounded by --deadline-seconds). On done: the JSON against the contract of section 6 (its keys, the code statuses,
- * each code's allowed actions by its status and decision, the context as uploaded); the page against the DOM contract
- * of section 7 (the progress panel and its steps, the questions panel, the code rows with their number, units,
- * modifiers, status badge, reason, second check, quotes and exactly the allowed buttons, the quotes panel - a quote
- * with a page moves the viewer to #page=N - the notes panel, the document viewer and its "Download original" link, the
- * export button); the first question, when there is
- * one, answered through the panel and the new round waited for and checked again; one READY code approved through
- * #reviewDialog with the session's acknowledgement (an agent-executed synthetic review); the draft and the approved TXT
+ * wait bounded by --deadline-seconds). On done: the JSON against ops/verification/customer-contract.json, the contract
+ * of section 6 that ops/scan_customer.py and the Django suite read too (every key it lists and no other, each value of
+ * its type, at every depth - every customer JSON the page or the walk read on the session, list and encounter routes,
+ * at every phase), and beside it the code statuses, each code's allowed actions by its status and decision, and the
+ * context as uploaded; the page against the DOM contract of section 7 (the progress panel and its steps, the questions
+ * panel, the code rows - by line, two lines of one code being two rows - with their number, units (a number shown as
+ * that number, units not given shown as "not given"), modifiers (each served one, and no other), status badge, reason,
+ * second check, quotes and exactly the allowed buttons, the quotes panel - a quote with a page moves the viewer to
+ * #page=N - the notes panel, the document viewer and its "Download original" link, the export button); the first
+ * question, when there is one, answered through the panel and the new round waited for and checked again; one READY
+ * line approved through #reviewDialog as the page draws it (the acknowledgement checkbox #reviewAckBox inside its label
+ * #reviewAcknowledgement, which carries the session's acknowledgement; an agent-executed synthetic review), the page's
+ * request naming the round shown, the line and its code, and the line - that line only - decided; the draft and the approved TXT
  * exported through the export dialog as real browser downloads, each fetched again from its download_url and compared
  * byte for byte; a 390x844 viewport with no horizontal scroll; every /ops/ path 404 to the customer (GET, and POST with
  * a valid CSRF token for an encounter id that does not exist, so a broken gate changes nothing), never 200 to nobody
@@ -50,7 +55,7 @@ const PLAYWRIGHT = process.env.CPT_VERIFY_PLAYWRIGHT
   || '/opt/meddoc-pro/.worktrees/private-os-isolation/rebuild/.runtime/browser-deps/node_modules/playwright';
 const EVIDENCE_SCHEMA = 'cpt-studio-walk-evidence@1';
 // studio/client_contract.py VERSION, with app.js and ops/verify_login.py (tests/test_cux_client_contract.py pins them).
-const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-20' };
+const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-21' };
 const VIEWPORTS = { desktop: { width: 1440, height: 1000 }, mobile: { width: 390, height: 844 } };
 const UI_TIMEOUT_MS = 30000;
 const POLL_MS = 3000;
@@ -58,16 +63,10 @@ const MAX_POLL_ERRORS = 3;
 const DEFAULT_DEADLINE_SECONDS = 1800;
 const MIN_DEADLINE_SECONDS = 60;
 const SETTLED_PHASES = new Set(['done', 'failed', 'stopped']);
-const PHASES = new Set(['queued', 'reading', 'checking', 'done', 'failed', 'stopped']);
-const CODE_STATUSES = new Set(['ready', 'needs_answer', 'needs_review', 'not_supported']);
 const STEPS = ['reading', 'checking', 'finished'];
 const INSURANCE = ['medicare', 'medicaid', 'commercial', 'unknown'];
 const DOCUMENT_TYPES = { '.txt': 'text/plain', '.pdf': 'application/pdf',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
-const ENCOUNTER_KEYS = ['id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document',
-  'context', 'progress', 'round', 'codes', 'questions', 'answers', 'notes', 'readiness', 'reports', 'activity'];
-const CODE_KEYS = ['code', 'units', 'modifiers', 'status', 'status_label', 'reason', 'second_check', 'question', 'quotes',
-  'decision', 'allowed_actions'];
 const DECISION_WORDS = { approve: 'Approved', reject: 'Rejected' };
 const QUESTIONS_HEADING = 'Questions for you';
 const WALK_ANSWER = 'Not documented in this synthetic note.';
@@ -88,6 +87,14 @@ const UNSCANNED_HEADERS = new Set(['set-cookie', 'date', 'etag', 'last-modified'
 const OPS_GET_PATHS = id => ['/ops/', '/ops/encounters/', `/ops/encounters/${id}`];
 const OPS_POST_PATHS = id => [`/ops/encounters/${id}/retry`, `/ops/encounters/${id}/reconcile`, `/ops/holds/${id}/release`];
 const DENYLIST_FILE = path.join(__dirname, 'verification', 'customer-denylist.json');
+// The customer contract (BUILD-SPEC section 6): read by ops/scan_customer.py, the Django suite and this walk, so a key
+// the server adds, drops or retypes fails all three until the file is consciously changed.
+const CONTRACT_FILE = path.join(__dirname, 'verification', 'customer-contract.json');
+const MAX_SHAPE_PROBLEMS = 60;  // ops/scan_customer.py shape_problems' bound
+// The review dialog as the page draws it (studio/templates/studio/index.html): the acknowledgement is a checkbox inside
+// a label that carries the session's acknowledgement; saving is offered once it is ticked (static/studio/app.js).
+const REVIEW_DIALOG = { dialog: '#reviewDialog', label: '#reviewAcknowledgement', box: '#reviewAckBox',
+  note: '#reviewNote', save: '#saveReview' };
 const USAGE = 'usage: walk.cjs --base-url URL --credentials FILE --operator-credentials FILE --docs DIR_OR_FILE --out DIR '
   + '[--deadline-seconds N] [--allow-live-provider] [--service-date YYYY-MM-DD] '
   + '[--insurance medicare|medicaid|commercial|unknown]';
@@ -349,6 +356,123 @@ function denylist() {
   return DENYLIST_CACHE;
 }
 
+// --- the contract (ops/verification/customer-contract.json) -------------------------------------------------------------
+
+let CONTRACT_CACHE = null;
+function contract() {
+  if (!CONTRACT_CACHE) CONTRACT_CACHE = JSON.parse(fs.readFileSync(CONTRACT_FILE, 'utf8'));
+  return CONTRACT_CACHE;
+}
+
+// json.dumps's rendering of a value (ASCII only, ', ' and ': ' between items), so a sentence reads as
+// ops/scan_customer.py writes it.
+function pyJson(value) {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') return String(value).replace(/e([+-])(\d)$/, 'e$10$2');
+  if (typeof value === 'string') {
+    return JSON.stringify(value).replace(/[\u007f-\uffff]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  }
+  if (Array.isArray(value)) return `[${value.map(pyJson).join(', ')}]`;
+  return `{${Object.entries(value).map(([key, item]) => `${pyJson(key)}: ${pyJson(item)}`).join(', ')}}`;
+}
+
+function kindOf(value) {
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return 'boolean';
+  if (Array.isArray(value)) return 'a list';
+  if (typeof value === 'object') return 'an object';
+  return typeof value === 'number' ? 'number' : typeof value;
+}
+
+function scalarOk(base, value, spec) {
+  switch (base) {
+    case 'string': return typeof value === 'string';
+    case 'integer': return Number.isInteger(value);  // JavaScript's JSON reads 1.0 as 1: the one reading Python's differs on
+    case 'number': return typeof value === 'number';
+    case 'boolean': return typeof value === 'boolean';
+    case 'any': return true;
+    case 'date': return typeof value === 'string' && new RegExp(spec.date_pattern).test(value);
+    case 'iso': return typeof value === 'string' && new RegExp(spec.iso_pattern).test(value);
+    default: return undefined;
+  }
+}
+
+// ops/scan_customer.py shape_problems, read the same way and worded the same (ops/test_walk_contract.py holds the two
+// readers to each other): the differences between a value and a contract node, each '<where>: <what>', at most 60 -
+// a key the node does not list, a key it lists that is missing, a value of another type or outside its words.
+function shapeProblems(value, node, where = '$', out = [], spec = contract()) {
+  if (out.length >= MAX_SHAPE_PROBLEMS) return out;
+  const types = spec.types;
+  if (typeof node === 'string') {
+    const nullable = node.endsWith('?');
+    const base = nullable ? node.slice(0, -1) : node;
+    const ok = scalarOk(base, value, spec);
+    if (ok === undefined) out.push(`${where}: the contract names an unknown type ${base}`);
+    else if (!(value === null && (nullable || base === 'any')) && !ok) out.push(`${where}: ${kindOf(value)} where the contract has ${node}`);
+    return out;
+  }
+  if (!isObject(node)) {
+    out.push(`${where}: the contract node is not understood`);
+    return out;
+  }
+  if ('ref' in node) {
+    if (value === null && node.nullable) return out;
+    if (!Object.prototype.hasOwnProperty.call(types, node.ref)) {
+      out.push(`${where}: the contract names an unknown type ${node.ref}`);
+      return out;
+    }
+    return shapeProblems(value, types[node.ref], where, out, spec);
+  }
+  if (value === null && node.nullable) return out;
+  if ('enum' in node) {
+    if (typeof value === 'boolean' || !node.enum.includes(value)) {
+      out.push(`${where}: ${pyJson(value)} is not one of ${node.enum.map(String).join('|')}`);
+    }
+    return out;
+  }
+  if ('items' in node) {
+    if (!Array.isArray(value)) out.push(`${where}: ${kindOf(value)} where the contract has a list`);
+    else value.forEach((item, index) => shapeProblems(item, node.items, `${where}[${index}]`, out, spec));
+    return out;
+  }
+  if ('map' in node) {
+    if (!isObject(value)) out.push(`${where}: ${kindOf(value)} where the contract has an object`);
+    else for (const [key, item] of Object.entries(value)) shapeProblems(item, node.map, `${where}.${key}`, out, spec);
+    return out;
+  }
+  if (isObject(node.keys)) {
+    if (!isObject(value)) {
+      out.push(`${where}: ${kindOf(value)} where the contract has an object`);
+      return out;
+    }
+    for (const [key, child] of Object.entries(node.keys)) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) out.push(`${where}.${key}: missing (the contract lists it)`);
+      else shapeProblems(value[key], child, `${where}.${key}`, out, spec);
+    }
+    for (const key of Object.keys(value)) {
+      if (!Object.prototype.hasOwnProperty.call(node.keys, key)) out.push(`${where}.${key}: not in the customer contract`);
+    }
+    return out;
+  }
+  out.push(`${where}: the contract node is not understood`);
+  return out;
+}
+
+// The contract a customer JSON read is held to, by its route: GET /api/session, GET /api/encounters and
+// GET /api/encounters/<id> (an answer of the page or of the walk), or null for any other.
+function contractFor(where) {
+  const match = /^GET (\/api\/[^ ?#]*)/.exec(String(where));
+  if (!match) return null;
+  if (match[1] === '/api/session') return 'session';
+  if (match[1] === '/api/encounters') return 'list';
+  return /^\/api\/encounters\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(match[1]) ? 'encounter' : null;
+}
+
+function describeProblems(problems, limit = 10) {
+  return `${problems.slice(0, limit).join('; ')}${problems.length > limit ? `; and ${problems.length - limit} more` : ''}`;
+}
+
 // documentText: the document's own text (a .txt upload); quotes: the document passages the encounter quotes (its codes'
 // quotes, which the coding service cites from the document, never writes); allowed: more strings removed before the
 // scan (the site's own host). A string that is a part of either is the document's, not the product's wording.
@@ -471,16 +595,22 @@ function sameList(a, b) {
 
 function jsonChecks(enc, doc) {
   const out = [];
-  const missing = ENCOUNTER_KEYS.filter(key => !Object.prototype.hasOwnProperty.call(enc || {}, key));
+  const spec = contract();
+  const problems = shapeProblems(enc, spec.encounter);
+  out.push(check('json.contract', problems.length === 0, problems.length
+    ? `${problems.length} difference(s) from customer-contract.json: ${describeProblems(problems)}`
+    : 'every key customer-contract.json lists, of its type, and no other, at every depth'));
+  const missing = Object.keys(spec.encounter.keys).filter(key => !Object.prototype.hasOwnProperty.call(enc || {}, key));
   out.push(check('json.keys', missing.length === 0, missing.length ? `the encounter lacks ${missing.join(', ')}`
     : 'every key of the encounter contract is served'));
   const codes = Array.isArray(enc?.codes) ? enc.codes : [];
-  const shapes = codes.flatMap(code => CODE_KEYS.filter(key => !Object.prototype.hasOwnProperty.call(code || {}, key))
-    .map(key => `${code?.code}: no ${key}`));
+  const shapes = codes.flatMap(code => Object.keys(spec.types.code.keys)
+    .filter(key => !Object.prototype.hasOwnProperty.call(code || {}, key)).map(key => `${code?.code}: no ${key}`));
   out.push(check('json.codes.keys', shapes.length === 0, shapes.length ? shapes.slice(0, 8).join('; ') : `${codes.length} code(s), each in its shape`));
-  const statuses = codes.filter(code => !CODE_STATUSES.has(code?.status)).map(code => `${code?.code}: ${code?.status}`);
+  const known = spec.types.code.keys.status.enum;
+  const statuses = codes.filter(code => !known.includes(code?.status)).map(code => `${code?.code}: ${code?.status}`);
   out.push(check('json.codes.status', statuses.length === 0, statuses.length ? `unknown statuses: ${statuses.join(', ')}`
-    : 'every status is ready, needs_answer, needs_review or not_supported'));
+    : `every status is one of ${known.join(', ')}`));
   const actions = codes.filter(code => !sameList(code?.allowed_actions, expectedActions(code)))
     .map(code => `${code?.code} (${code?.status}${isObject(code?.decision) ? `, ${code.decision.action}` : ''}) offers [${sorted(code?.allowed_actions)}], not [${expectedActions(code)}]`);
   out.push(check('json.codes.actions', actions.length === 0, actions.length ? actions.join('; ')
@@ -488,7 +618,8 @@ function jsonChecks(enc, doc) {
   const context = enc?.context || {};
   out.push(check('json.context', context.service_date === doc.serviceDate && context.insurance === doc.insurance,
     `the encounter's context is ${JSON.stringify(context)}; uploaded ${doc.serviceDate}, ${doc.insurance}`));
-  out.push(check('json.progress.phase', PHASES.has(enc?.progress?.phase), `progress.phase is ${JSON.stringify(enc?.progress?.phase)}`));
+  out.push(check('json.progress.phase', spec.encounter.keys.progress.keys.phase.enum.includes(enc?.progress?.phase),
+    `progress.phase is ${JSON.stringify(enc?.progress?.phase)}`));
   return out;
 }
 
@@ -509,7 +640,7 @@ function readEncounterDom() {
         text: text(row), textarea: Boolean(row.querySelector('textarea')) })) } : null,
     codes: Array.from(document.querySelectorAll('ol#codesList > li.code-row')).map(li => {
       const badge = li.querySelector('.status');
-      return { code: li.getAttribute('data-code'), status: li.getAttribute('data-status'),
+      return { line: li.getAttribute('data-line'), code: li.getAttribute('data-code'), status: li.getAttribute('data-status'),
         number: li.querySelector('.code-number') ? text(li.querySelector('.code-number')) : null,
         units: li.querySelector('.code-units') ? text(li.querySelector('.code-units')) : null,
         modifiers: li.querySelector('.code-modifiers') ? text(li.querySelector('.code-modifiers')) : null,
@@ -544,6 +675,40 @@ function quoteKey(code, page) {
   return `${code}|${page === null || page === undefined ? '' : String(page)}`;
 }
 
+// Whether ``text`` shows ``token`` as a whole word - not inside a longer run of letters and digits: 45385 in
+// "45385", never in "453851"; 2 in "2 units", never in "12 units".
+function showsToken(text, token) {
+  const escaped = String(token).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:$|[^A-Za-z0-9])`).test(String(text ?? ''));
+}
+
+// The units cell against the units served, which are a positive integer or null (FIX-SPEC section 2): a number is
+// shown as that number, null as "not given"; '' when the cell shows them.
+function unitsProblem(cell, units) {
+  if (units === null) return /\bnot given\b/i.test(cell || '') ? '' : `.code-units ${JSON.stringify(cell)} for units not given`;
+  if (Number.isInteger(units) && units > 0) return showsToken(cell, units) ? '' : `.code-units ${JSON.stringify(cell)} for ${units}`;
+  return `units ${JSON.stringify(units)} are neither a positive integer nor null`;
+}
+
+// The modifiers cell against the modifiers served: each served one shown as a word, and no other modifier-shaped word
+// (two capital letters or digits); '' when it shows exactly them.
+function modifiersProblem(cell, modifiers) {
+  const served = (Array.isArray(modifiers) ? modifiers : []).map(String);
+  if (cell === null || cell === undefined) return `no .code-modifiers for ${JSON.stringify(served)}`;
+  const extra = String(cell).match(/(?<![A-Za-z0-9])[A-Z0-9]{2}(?![A-Za-z0-9])/g) || [];
+  for (const modifier of served) {
+    const at = extra.indexOf(modifier);
+    if (at >= 0) extra.splice(at, 1);
+  }
+  const missing = served.filter(modifier => !showsToken(cell, modifier));
+  return missing.length || extra.length ? `.code-modifiers ${JSON.stringify(cell)} for ${JSON.stringify(served)}` : '';
+}
+
+// One code row as the evidence names it: its code, and its line when the round serves lines.
+function rowName(code) {
+  return typeof code?.line === 'string' ? `${code.code} (${code.line})` : String(code?.code);
+}
+
 // The page against the encounter it was served (the DOM contract of section 7), one check per part of the view.
 function domChecks(enc, dom, base) {
   const out = [];
@@ -556,36 +721,41 @@ function domChecks(enc, dom, base) {
   out.push(check('dom.progress.steps', !!dom?.progress && stepProblems.length === 0, stepProblems.length
     ? `no single .progress-step with a data-state for ${stepProblems.join(', ')}` : 'reading, checking and finished each shown with its state'));
   const rows = dom?.codes || [];
-  const order = JSON.stringify(rows.map(row => [row.code, row.status])) === JSON.stringify(codes.map(code => [code.code, code.status]));
-  out.push(check('dom.codes.rows', order, order ? `${rows.length} code row(s), in order, each with its status`
-    : `rows ${JSON.stringify(rows.map(row => [row.code, row.status]))}; served ${JSON.stringify(codes.map(code => [code.code, code.status]))}`));
+  // a round that serves lines (FIX-SPEC section 1) is drawn row by line: two lines of one code are two rows
+  const lined = codes.some(code => typeof code?.line === 'string');
+  const shape = (line, code, status) => (lined ? [line ?? null, code, status] : [code, status]);
+  const drawn = rows.map(row => shape(row.line, row.code, row.status));
+  const served = codes.map(code => shape(code.line, code.code, code.status));
+  const order = JSON.stringify(drawn) === JSON.stringify(served);
+  out.push(check('dom.codes.rows', order, order ? `${rows.length} code row(s), in order, each with its ${lined ? 'line and ' : ''}status`
+    : `rows ${JSON.stringify(drawn)}; served ${JSON.stringify(served)}`));
   const cells = [];
   const badges = [];
   const buttons = [];
   codes.forEach((code, index) => {
     const row = rows[index];
-    if (!row || row.code !== code.code) return;
-    if (!(row.number || '').includes(String(code.code))) cells.push(`${code.code}: .code-number ${JSON.stringify(row.number)}`);
-    if (!(row.units || '').includes(String(code.units))) cells.push(`${code.code}: .code-units ${JSON.stringify(row.units)}`);
-    const modifiers = Array.isArray(code.modifiers) ? code.modifiers : [];
-    if (row.modifiers === null || modifiers.some(modifier => !row.modifiers.includes(String(modifier)))) {
-      cells.push(`${code.code}: .code-modifiers ${JSON.stringify(row.modifiers)} for ${JSON.stringify(modifiers)}`);
-    }
-    if (row.reason === null || (collapse(code.reason) && !row.reason.includes(collapse(code.reason)))) cells.push(`${code.code}: .code-reason`);
+    if (!row || row.code !== code.code || (lined && row.line !== code.line)) return;
+    const name = rowName(code);
+    if (!showsToken(row.number, code.code)) cells.push(`${name}: .code-number ${JSON.stringify(row.number)}`);
+    const units = unitsProblem(row.units, code.units);
+    if (units) cells.push(`${name}: ${units}`);
+    const modifiers = modifiersProblem(row.modifiers, code.modifiers);
+    if (modifiers) cells.push(`${name}: ${modifiers}`);
+    if (row.reason === null || (collapse(code.reason) && !row.reason.includes(collapse(code.reason)))) cells.push(`${name}: .code-reason`);
     const second = collapse(code.second_check?.reason);
-    if (row.check === null || (second && !row.check.includes(second))) cells.push(`${code.code}: .code-check`);
-    if (!row.quotes) cells.push(`${code.code}: no .code-quotes`);
+    if (row.check === null || (second && !row.check.includes(second))) cells.push(`${name}: .code-check`);
+    if (!row.quotes) cells.push(`${name}: no .code-quotes`);
     const decided = isObject(code.decision) ? DECISION_WORDS[code.decision.action] : null;
     if (!row.badge) {
-      badges.push(`${code.code}: no .status badge`);
+      badges.push(`${name}: no .status badge`);
     } else if (decided) {
-      if (!row.badge.text.includes(decided)) badges.push(`${code.code}: the badge reads ${JSON.stringify(row.badge.text)}, not ${decided}`);
+      if (!row.badge.text.includes(decided)) badges.push(`${name}: the badge reads ${JSON.stringify(row.badge.text)}, not ${decided}`);
     } else if (row.badge.status !== code.status || !row.badge.text.includes(collapse(code.status_label))) {
-      badges.push(`${code.code}: the badge is ${JSON.stringify(row.badge)}; served ${code.status} "${code.status_label}"`);
+      badges.push(`${name}: the badge is ${JSON.stringify(row.badge)}; served ${code.status} "${code.status_label}"`);
     }
     const shown = row.buttons.map(button => button.decision);
     if (!sameList(shown, code.allowed_actions) || row.buttons.some(button => button.code !== code.code)) {
-      buttons.push(`${code.code}: buttons [${sorted(shown)}], allowed [${sorted(code.allowed_actions)}]`);
+      buttons.push(`${name}: buttons [${sorted(shown)}], allowed [${sorted(code.allowed_actions)}]`);
     }
   });
   out.push(check('dom.codes.cells', cells.length === 0, cells.length ? cells.slice(0, 10).join('; ')
@@ -594,10 +764,10 @@ function domChecks(enc, dom, base) {
     : 'each badge states the status served, or the decision made'));
   out.push(check('dom.codes.actions', buttons.length === 0, buttons.length ? buttons.slice(0, 10).join('; ')
     : 'each row offers exactly the actions allowed, and no other'));
-  const served = codes.flatMap(code => (Array.isArray(code.quotes) ? code.quotes : []).map(quote => quoteKey(code.code, quote?.page))).sort();
+  const quoted = codes.flatMap(code => (Array.isArray(code.quotes) ? code.quotes : []).map(quote => quoteKey(code.code, quote?.page))).sort();
   const listed = (dom?.quotes || []).map(quote => quoteKey(quote.code, quote.page === '' ? null : quote.page)).sort();
-  out.push(check('dom.quotes', (served.length === 0 || dom?.quotesPanel) && JSON.stringify(served) === JSON.stringify(listed),
-    `#quotesPanel lists ${listed.length} quote(s); the codes carry ${served.length}`));
+  out.push(check('dom.quotes', (quoted.length === 0 || dom?.quotesPanel) && JSON.stringify(quoted) === JSON.stringify(listed),
+    `#quotesPanel lists ${listed.length} quote(s); the codes carry ${quoted.length}`));
   const questions = Array.isArray(enc?.questions) ? enc.questions : [];
   const qrows = dom?.questions?.rows || [];
   let questionsOk;
@@ -637,7 +807,7 @@ function domChecks(enc, dom, base) {
 function summarize(enc) {
   return {
     state: enc?.state ?? null, phase: enc?.progress?.phase ?? null, round: enc?.round ?? null,
-    codes: (enc?.codes || []).map(code => ({ code: code.code, units: code.units, modifiers: code.modifiers, status: code.status,
+    codes: (enc?.codes || []).map(code => ({ line: code.line ?? null, code: code.code, units: code.units, modifiers: code.modifiers, status: code.status,
       quotes: (code.quotes || []).length, decision: code.decision ? code.decision.action : null, allowed_actions: code.allowed_actions })),
     questions: (enc?.questions || []).length, answers: (enc?.answers || []).length, notes: (enc?.notes || []).length,
     readiness: enc?.readiness ?? null, reports: (enc?.reports || []).map(r => ({ kind: r.kind, fmt: r.fmt, current: r.current })),
@@ -772,16 +942,21 @@ async function getJson(page, ctx, where) {
   } catch {
     json = null;
   }
-  remember(ctx, `GET ${where}`, response.headers(), json, body);
+  remember(ctx, `GET ${where}`, response.headers(), json, body, response.status());
   return { status: response.status(), json };
 }
 
-// One customer API answer, scanned: its quotes are the document's (set aside), then its body and headers.
-function remember(ctx, where, headers, json, body) {
+// One customer API answer, scanned: its quotes are the document's (set aside), then its body and headers; an answer
+// of the session, list or encounter route (200) is held to customer-contract.json too, its differences gathered.
+function remember(ctx, where, headers, json, body, status = 200) {
   if (!ctx.scan) return;
   if (json !== null) {
     addQuotes(ctx.scan, json);
     scanJson(json, ctx.scan, where, ctx.hits.json);
+    const schema = status === 200 ? contractFor(where) : null;
+    if (schema && ctx.contract) {
+      for (const problem of shapeProblems(json, contract()[schema])) ctx.contract.add(`${where.replace(/[0-9a-f-]{36}/g, '<id>')} ${problem}`);
+    }
   } else if (body) {
     scanText(body.slice(0, 200000), ctx.scan, 'json', where, ctx.hits.json);
   }
@@ -801,7 +976,7 @@ async function captureResponse(response, ctx) {
   } catch {
     json = null;
   }
-  remember(ctx, `${response.request().method()} ${where} (page)`, response.headers(), json, body);
+  remember(ctx, `${response.request().method()} ${where} (page)`, response.headers(), json, body, response.status());
 }
 
 async function readDom(page, ctx) {
@@ -879,24 +1054,78 @@ async function answerFirstQuestion(page, ctx, enc) {
   return { status: response.status(), question };
 }
 
+// Approves one served code row through the page: its row's Approve button (the row of its line, when the round serves
+// lines), then the review dialog as the page draws it - the acknowledgement checkbox (REVIEW_DIALOG.box) ticked inside
+// its label (REVIEW_DIALOG.label, which shows the acknowledgement), the walk's note, Save. {status, shown, kind, body}:
+// the decision POST's status, the label's text, the box's input type and the JSON the page posted.
 async function approve(page, ctx, enc, code) {
   const selector = value => String(value).replace(/"/g, '\\"');
-  await page.locator(`ol#codesList > li.code-row[data-code="${selector(code.code)}"] button[data-decision="approve"][data-code="${selector(code.code)}"]`).click();
-  await page.locator('#reviewDialog[open]').waitFor({ state: 'visible', timeout: UI_TIMEOUT_MS });
-  const ack = page.locator('#reviewAcknowledgement');
-  const shown = collapse(await ack.evaluate(el => {
-    const label = el.closest('label') || document.querySelector(`label[for="${el.id}"]`);
-    return label ? label.textContent : el.getAttribute('aria-label') || '';
-  }));
-  const kind = await ack.evaluate(el => (el.tagName === 'INPUT' ? el.type : el.tagName.toLowerCase()));
-  if (kind === 'checkbox') await ack.check();
-  else await ack.fill(ctx.session.acknowledgement);
-  await page.fill('#reviewNote', WALK_NOTE);
+  const row = typeof code.line === 'string'
+    ? `ol#codesList > li.code-row[data-line="${selector(code.line)}"]`
+    : `ol#codesList > li.code-row[data-code="${selector(code.code)}"]`;
+  await page.locator(`${row} button[data-decision="approve"][data-code="${selector(code.code)}"]`).click();
+  await page.locator(`${REVIEW_DIALOG.dialog}[open]`).waitFor({ state: 'visible', timeout: UI_TIMEOUT_MS });
+  const box = page.locator(`${REVIEW_DIALOG.dialog} ${REVIEW_DIALOG.box}`);
+  const kind = await box.evaluate(el => (el.tagName === 'INPUT' ? el.type : el.tagName.toLowerCase()));
+  if (kind !== 'checkbox') throw new Error(`${REVIEW_DIALOG.box} is ${kind}, not the acknowledgement checkbox the page draws`);
+  const shown = collapse(await page.locator(`${REVIEW_DIALOG.dialog} ${REVIEW_DIALOG.label}`).textContent());
+  await box.check();
+  await page.fill(REVIEW_DIALOG.note, WALK_NOTE);
   const [response] = await Promise.all([
     page.waitForResponse(r => r.request().method() === 'POST' && pathnameOf(r.url()) === `/api/encounters/${enc.id}/decisions`, { timeout: 60000 }),
-    page.click('#saveReview'),
+    page.click(REVIEW_DIALOG.save),
   ]);
-  return { status: response.status(), shown, kind };
+  let body = null;
+  try {
+    body = response.request().postDataJSON();
+  } catch {
+    body = null;
+  }
+  return { status: response.status(), shown, kind, body };
+}
+
+// The served code row ``wanted`` names in ``codes``: by its line when the round serves lines (FIX-SPEC section 1),
+// else by its code.
+function servedRow(codes, wanted) {
+  const list = Array.isArray(codes) ? codes : [];
+  return typeof wanted?.line === 'string' ? list.find(code => code?.line === wanted.line) : list.find(code => code?.code === wanted?.code);
+}
+
+// What is wrong with the JSON the page posted to approve ``code`` of ``enc`` (FIX-SPEC section 1: the round number
+// shown, the line, its code, the action and the session's acknowledgement exactly); [] when nothing is.
+function decisionRequestProblems(body, enc, code, acknowledgement) {
+  if (!isObject(body)) return ['the page posted no JSON object'];
+  const problems = [];
+  if (body.action !== 'approve') problems.push(`action ${JSON.stringify(body.action)}, not "approve"`);
+  if (body.code !== code?.code) problems.push(`code ${JSON.stringify(body.code)}, not ${JSON.stringify(code?.code)}`);
+  if (typeof code?.line !== 'string') problems.push(`the served row of ${code?.code} names no line`);
+  else if (body.line !== code.line) problems.push(`line ${JSON.stringify(body.line)}, not ${JSON.stringify(code.line)}`);
+  if (!Number.isInteger(enc?.round?.number) || body.round !== enc.round.number) {
+    problems.push(`round ${JSON.stringify(body.round)}, not the round shown (${JSON.stringify(enc?.round?.number ?? null)})`);
+  }
+  if (body.acknowledgement !== acknowledgement) problems.push('the acknowledgement is not the session\'s, exactly');
+  return problems;
+}
+
+// What is wrong after one approval of ``code`` (``before`` and ``after``: the encounter read before and after it): that
+// row decided approve and offering only the undo, on the same round, the approved export offered - and no other row's
+// decision changed (two lines of one code are two decisions); [] when nothing is.
+function approvalProblems(before, after, code) {
+  const problems = [];
+  const decided = servedRow(after?.codes, code);
+  if (decided?.decision?.action !== 'approve') problems.push(`${rowName(code)}: decision ${JSON.stringify(decided?.decision?.action ?? null)}`);
+  if (!sameList(decided?.allowed_actions, ['revoke'])) problems.push(`${rowName(code)}: actions [${sorted(decided?.allowed_actions)}]`);
+  if (after?.round?.number !== before?.round?.number) problems.push(`round ${after?.round?.number} after round ${before?.round?.number}`);
+  if (after?.readiness?.approved !== true) problems.push('the approved export is not offered');
+  const lined = typeof code?.line === 'string';
+  (Array.isArray(before?.codes) ? before.codes : []).forEach((other, index) => {
+    if (lined ? other?.line === code.line : other?.code === code?.code) return;
+    const now = lined ? servedRow(after?.codes, other) : (after?.codes || [])[index];
+    if ((now?.decision?.action ?? null) !== (other?.decision?.action ?? null)) {
+      problems.push(`${rowName(other)}: decision ${JSON.stringify(other?.decision?.action ?? null)} became ${JSON.stringify(now?.decision?.action ?? null)}`);
+    }
+  });
+  return problems;
 }
 
 async function exportTxt(page, ctx, enc, kind, outDir) {
@@ -996,6 +1225,7 @@ async function verifyDocument(page, ctx, sessions, doc) {
   };
   ctx.scan = scanContext({ documentText: doc.text, allowed: [new URL(ctx.base).host] });
   ctx.hits = { json: [], header: [], dom: [], file: [] };
+  ctx.contract = new Set();
   let enc = null;
   try {
     const uploaded = await uploadDocument(page, ctx, doc);
@@ -1062,15 +1292,19 @@ async function verifyDocument(page, ctx, sessions, doc) {
       }
       const made = await approve(page, ctx, enc, ready);
       add(check('approve.acknowledgement', made.shown.includes(collapse(ctx.session.acknowledgement)),
-        `#reviewAcknowledgement (${made.kind}) is labelled with the session's acknowledgement`));
+        `${REVIEW_DIALOG.label} (the label of the ${made.kind} ${REVIEW_DIALOG.box}) shows the session's acknowledgement`));
+      const asked = decisionRequestProblems(made.body, enc, ready, ctx.session.acknowledgement);
+      add(check('approve.request', asked.length === 0, asked.length ? `the page posted ${asked.join('; ')}`
+        : `the page posted round ${enc.round?.number}, line ${ready.line}, ${ready.code}, approve, with the acknowledgement`));
       add(check('approve.saved', made.status === 201, `POST decisions answered ${made.status}`));
+      const before = enc;
       const after = await getJson(page, ctx, `/api/encounters/${encodeURIComponent(enc.id)}`);
       enc = isObject(after.json) ? after.json : enc;
-      const decided = (enc.codes || []).find(code => code.code === ready.code);
-      record.approved = decided?.decision?.action === 'approve' ? ready.code : null;
-      add(check('approve.recorded', decided?.decision?.action === 'approve' && sameList(decided.allowed_actions, ['revoke'])
-        && enc.readiness?.approved === true, `${ready.code}: decision ${JSON.stringify(decided?.decision?.action ?? null)}, `
-        + `actions [${sorted(decided?.allowed_actions)}], approved export ${enc.readiness?.approved}`));
+      const decided = servedRow(enc.codes, ready);
+      record.approved = decided?.decision?.action === 'approve' ? rowName(ready) : null;
+      const wrong = approvalProblems(before, enc, ready);
+      add(check('approve.recorded', wrong.length === 0, wrong.length ? wrong.join('; ')
+        : `${rowName(ready)} approved on round ${enc.round?.number}, only the undo offered, the approved export offered, no other row changed`));
       add(...domChecks(enc, await viewFor(page, ctx, enc), ctx.base).filter(item => item.id.startsWith('dom.codes'))
         .map(item => ({ ...item, id: `approved.${item.id}` })));
     });
@@ -1104,7 +1338,12 @@ async function verifyDocument(page, ctx, sessions, doc) {
   }
   add(...checkScan('scan.json', [...ctx.hits.json, ...ctx.hits.header], 'the customer API bodies and headers'),
     ...checkScan('scan.dom', ctx.hits.dom, 'the page'), ...checkScan('scan.files', ctx.hits.file, 'the downloads'));
+  const unlisted = [...ctx.contract];
+  add(check('contract.reads', unlisted.length === 0, unlisted.length
+    ? `${unlisted.length} difference(s) from customer-contract.json in what the page and the walk read: ${describeProblems(unlisted)}`
+    : 'every session, list and encounter answer read was held to customer-contract.json'));
   ctx.scan = null;
+  ctx.contract = null;
   Object.assign(record, documentResult(record), { finished_at: isoNow() });
   return record;
 }
@@ -1136,6 +1375,7 @@ async function main(argv) {
     if (operator.username === creds.username) throw new UsageError('the operator account must not be the customer account');
     if (fs.existsSync(path.join(opts.out, 'evidence.json'))) throw new UsageError(`${opts.out} already holds evidence.json; use a fresh --out directory`);
     denylist();
+    contract();
   } catch (error) {
     if (!(error instanceof UsageError)) throw error;
     process.stderr.write(`walk: ${error.message}\n${USAGE}\n`);
@@ -1152,7 +1392,7 @@ async function main(argv) {
     options: { deadline_seconds: opts.deadlineSeconds, allow_live_provider: opts.allowLiveProvider, service_date: opts.serviceDate,
       insurance: opts.insurance, docs: path.resolve(opts.docs) },
     environment: { node: process.version, playwright: require(path.join(PLAYWRIGHT, 'package.json')).version, browser: null,
-      denylist: denylist().schema },
+      denylist: denylist().schema, contract: contract().schema },
     credentials: { username: creds.username, file_mode: creds.mode },
     operator_credentials: { username: operator.username, file_mode: operator.mode },
     session: null, run_checks: [], documents: [], summary: null, run_error: null,
@@ -1176,6 +1416,10 @@ async function main(argv) {
     if (problems.length) throw new Error(`refusing to upload: ${problems.join('; ')}`);
     const runScan = scanContext({ allowed: [new URL(opts.baseUrl).host] });
     evidence.run_checks.push(...checkScan('scan.session', scanJson(ctx.session, runScan, 'GET /api/session'), 'the customer session'));
+    const sessionShape = shapeProblems(ctx.session, contract().session);
+    evidence.run_checks.push(check('contract.session', sessionShape.length === 0, sessionShape.length
+      ? `${sessionShape.length} difference(s) from customer-contract.json: ${describeProblems(sessionShape)}`
+      : 'GET /api/session carries every key customer-contract.json lists and nothing else'));
     const operatorPage = await operatorContext.newPage();
     await signIn(operatorPage, opts.baseUrl, operator);
     const control = await operatorContext.request.get(`${opts.baseUrl}/ops/`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
@@ -1213,10 +1457,12 @@ async function main(argv) {
 }
 
 module.exports = {
-  EVIDENCE_SCHEMA, CLIENT_HEADERS, UsageError, parseArgs, serviceDateOf, documentsOf, readPrivate, loadCredentials,
-  debugMayLog, secretForms, scrubSecret, compileDenylist, denylist, scanContext, addQuotes, ownWording, scanText, scanJson,
-  scanFile, scanHeaders, checkScan, expectedActions, jsonChecks, domChecks, readEncounterDom, collectDomStrings, opsChecks,
-  exportChecks, summarize, documentResult, evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
+  EVIDENCE_SCHEMA, CLIENT_HEADERS, PLAYWRIGHT, REVIEW_DIALOG, UsageError, parseArgs, serviceDateOf, documentsOf,
+  readPrivate, loadCredentials, debugMayLog, secretForms, scrubSecret, compileDenylist, denylist, contract, shapeProblems,
+  contractFor, scanContext, addQuotes, ownWording, scanText, scanJson, scanFile, scanHeaders, checkScan, expectedActions,
+  jsonChecks, showsToken, unitsProblem, modifiersProblem, domChecks, readEncounterDom, collectDomStrings, approve,
+  servedRow, decisionRequestProblems, approvalProblems, opsChecks, exportChecks, summarize, documentResult,
+  evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
 };
 
 if (require.main === module) {

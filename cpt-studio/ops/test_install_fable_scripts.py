@@ -7,7 +7,8 @@ skipped, never passed, without one), and the installer's readers of their answer
   RECOMPUTE_STATES   studio.state.refresh for the encounters with a coding round; every other stored state left;
   CLOSE_STAGES       an undo's close: the coding jobs an earlier worker cannot run cancelled (their rounds stopped and
                      resumable), one left sending recorded unknown, nothing finished touched, no row of the four tables
-                     written or removed, and the encounters whose state the next pair derives named ('relabel');
+                     removed and none written but the closed rounds, and the encounters whose state the next pair
+                     derives named ('relabel');
   UNDO_HAZARDS_READ  'unknown': a coding run whose outcome is unknown and not reconciled - and nothing else;
   TOUCHED_SINCE_READ the encounters with a record created since a time, the four tables' included;
   CODING_MADE        the declared note: what this revision coded, and that its answers, decisions and exports are not
@@ -169,6 +170,18 @@ class FableRows(DatabaseTest):
         from studio import models
         return {name: getattr(models, name).objects.count() for name in install.COUNTED_TABLES}
 
+    def table_snapshot(self) -> dict:
+        """Every field of every row of the four tables of migration 0016: {table: {pk: {field: value}}}."""
+        from studio import models
+        snapshot = {}
+        for name in install.COUNTED_TABLES:
+            rows = {}
+            for row in getattr(models, name).objects.order_by('pk').values():
+                rows[str(row['id'])] = {key: bytes(value) if isinstance(value, memoryview) else value
+                                        for key, value in row.items()}
+            snapshot[name] = rows
+        return snapshot
+
 
 class InstallCountsOnTheDatabaseTests(FableRows):
     def read(self):
@@ -263,9 +276,13 @@ class CloseOnTheDatabaseTests(FableRows):
         self.decision(done, done_round, '43239', 'approve')
         models.CodingAnswer.objects.create(encounter=done, round=done_round, question='Was a biopsy taken?',
                                            answer='Yes, two.', answered_by=done.created_by)
+        models.ExportArtifact.objects.create(encounter=done, round=done_round, kind='approved', fmt='txt',
+                                             filename='synthetic.txt', content=b'SYNTHETIC', sha256='f' * 64,
+                                             created_by=done.created_by)
         earlier = self.encounter('earlier')
         extract = self.earlier_job(earlier, 'extract', 'queued')  # the earlier worker runs it: left to it
         before = self.table_rows()
+        snapshot = self.table_snapshot()
         closed = self.close(EARLIER_KINDS)
         self.assertEqual((closed['closed'], closed['stopped'], closed['unknown'], closed['retired'], closed['failed']),
                          (2, 1, 1, 0, 0))
@@ -285,11 +302,22 @@ class CloseOnTheDatabaseTests(FableRows):
         self.assertEqual(sending_job.state, 'unknown')
         failed = models.CodingRound.objects.get(pk=sending_round.pk)
         self.assertEqual((failed.state, failed.failure_kind), ('failed', 'unknown'))
-        # nothing finished, nothing of the earlier pipeline the next worker runs, no row of the four tables
+        # nothing finished, nothing of the earlier pipeline the next worker runs; no row of the four new tables is
+        # deleted (or added), and the closed rounds are the only rows written - in their state, finish time and failure
         self.assertEqual(models.Job.objects.get(pk=done_job.pk).state, 'succeeded')
         self.assertEqual(models.Job.objects.get(pk=extract.pk).state, 'queued')
         self.assertEqual(self.table_rows(), before)
         self.assertEqual(models.CodingRound.objects.get(pk=done_round.pk).state, 'done')
+        after = self.table_snapshot()
+        self.assertEqual({name: sorted(rows) for name, rows in after.items()},
+                         {name: sorted(rows) for name, rows in snapshot.items()})
+        for name in ('CodingAnswer', 'CodeDecision', 'ExportArtifact'):
+            self.assertEqual(after[name], snapshot[name], name)
+        written = {pk: sorted(key for key, value in row.items() if snapshot['CodingRound'][pk][key] != value)
+                   for pk, row in after['CodingRound'].items()}
+        self.assertEqual({pk: keys for pk, keys in written.items() if keys}, {
+            str(queued_round.pk): ['finished_at', 'state'],
+            str(sending_round.pk): ['error', 'failure_kind', 'finished_at', 'state']})
         # what the next pair is handed: every coded encounter to derive; the unknown outcome to reconcile first
         self.assertEqual(closed['relabel'], sorted(str(pk) for pk in (queued.pk, sending.pk, done.pk)))
         self.assertEqual(closed['hazards'], {str(sending.pk): ['unknown']})
@@ -374,6 +402,39 @@ class CloseOnTheDatabaseTests(FableRows):
         self.assertEqual(params['kinds'], ['extract', 'predict'])
         self.assertIn('a Resume continues it', params['code_note'])
         self.assertIn('so this stage will not run', params['note'])
+
+
+KEPT = 'no row of the four new tables is deleted; closed rounds are marked cancelled'
+
+
+class FourTablesWordingTests(unittest.TestCase):
+    """install-2: an undo's close writes the rounds it closes (cancelled; failed as unknown when a request was in
+    flight), so nothing may say the four tables are untouched - INSTALL.md, the installer's own comments and the
+    receipt's declared note say what the close does."""
+
+    def test_install_md_and_the_installer_say_closed_rounds_are_marked_and_no_row_is_deleted(self):
+        guide = ' '.join((Path(install.__file__).resolve().parent / 'INSTALL.md').read_text(encoding='utf-8').split())
+        source = ' '.join(Path(install.__file__).read_text(encoding='utf-8').replace('#', ' ').split())
+        for text, where in ((guide, 'INSTALL.md'), (source, 'install.py')):
+            with self.subTest(where=where):
+                self.assertIn(KEPT, text.lower())  # INSTALL.md's (b) opens a sentence with it
+                for claim in ('The four tables are left exactly as they are', 'is written, changed or removed by any '
+                              'undo', 'the four tables of the Fable coding build are not written', 'stay in them, '
+                              'untouched', 'stay in them untouched', 'which stay as they are'):
+                    self.assertNotIn(claim, text)
+
+    def test_the_receipts_declared_note_says_it_in_every_form(self):
+        counted = {'coding': {'encounters': ['e1'], 'created': ['e1'], 'rounds': 1, 'answers': 0,
+                              'decisions': {'approve': 1, 'reject': 0, 'revoke': 0}, 'approved': 1,
+                              'exports': {'draft': 0, 'approved': 0}}}
+        empty = {'coding': {'encounters': [], 'created': [], 'rounds': 0, 'answers': 0,
+                            'decisions': {'approve': 0, 'reject': 0, 'revoke': 0}, 'approved': 0,
+                            'exports': {'draft': 0, 'approved': 0}}}
+        for answer in (counted, empty, {}):
+            with self.subTest(answer=answer), mock.patch.object(install, 'app_script', return_value=answer):
+                self.assertIn(KEPT, install.coding_note(IMAGE, b'', 'a' * 40)['note'])
+        with mock.patch.object(install, 'app_script', side_effect=install.InstallError('Counting failed (exit 1).')):
+            self.assertIn(KEPT, install.coding_note(IMAGE, b'', 'a' * 40)['note'])
 
 
 class HazardsOnTheDatabaseTests(FableRows):

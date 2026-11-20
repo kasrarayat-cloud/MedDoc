@@ -305,16 +305,17 @@ class SignInTests(Base):
         self.assertIn('login demo-reviewer at http://127.0.0.1', out)
 
     def test_every_request_names_the_fable_coding_builds_customer_page(self):
-        # the client contract of the Fable coding build (customer-2026-11-20; studio/client_contract.py VERSION, pinned
-        # equal by tests/test_cux_client_contract.py): a call naming another build is answered 409 client_outdated
-        self.assertEqual((vl.CLIENT_HEADER, vl.CLIENT_VERSION), ('X-CPT-Studio-Client', 'customer-2026-11-20'))
+        # the client contract of the Fable coding build's line identity (customer-2026-11-21, FIX-SPEC section 1;
+        # studio/client_contract.py VERSION, pinned equal by tests/test_cux_client_contract.py): a call naming another
+        # build is answered 409 client_outdated
+        self.assertEqual((vl.CLIENT_HEADER, vl.CLIENT_VERSION), ('X-CPT-Studio-Client', 'customer-2026-11-21'))
         stub = self.stub()
         code, out, err, evidence, _ = self.run_tool(stub.base)
         self.assertEqual(code, 0, out + err)
         self.assertEqual(len(stub.log), 5)
         for entry in stub.log:
             with self.subTest(request=f'{entry["method"]} {entry["path"]}'):
-                self.assertEqual(entry['headers'].get('X-CPT-Studio-Client'), 'customer-2026-11-20')
+                self.assertEqual(entry['headers'].get('X-CPT-Studio-Client'), 'customer-2026-11-21')
 
     def test_each_hard_check_fails_on_the_broken_server_shape_it_exists_for(self):
         cases = [
