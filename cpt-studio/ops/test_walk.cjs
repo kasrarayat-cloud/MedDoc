@@ -32,6 +32,8 @@ const DENYLIST = JSON.parse(fs.readFileSync(path.join(__dirname, 'verification',
 const CONTRACT = JSON.parse(fs.readFileSync(path.join(__dirname, 'verification', 'customer-contract.json'), 'utf8'));
 // LINE IDENTITY: whether the contract on disk lists each code row's `line` (lane F1a adds it, FIX-SPEC section 1)
 const LINES = Object.prototype.hasOwnProperty.call(CONTRACT.types.code.keys, 'line');
+// and whether it lists each question's `lines`, the lines the question affects (lane F1a, FIX-SPEC section 3)
+const QUESTION_LINES = Object.prototype.hasOwnProperty.call(CONTRACT.types.question.keys, 'lines');
 const ACK = 'I reviewed this code against the document.';
 
 function scratch() {
@@ -80,7 +82,9 @@ function encounter(overrides = {}) {
       message: '', can_stop: false, can_resume: false, can_retry: true, error: null },
     round: { number: 1, trigger: 'upload', finished_at: '2026-11-20T10:05:00Z' },
     codes,
-    questions: [{ id: 'q1', text: 'How long was the anesthesia?', codes: ['00731'] }], answers: [],
+    questions: [{ id: 'q1', text: 'How long was the anesthesia?', codes: ['00731'],
+      ...(QUESTION_LINES ? { lines: ['L2'] } : {}) }],
+    answers: [],
     notes: ['The indication is not stated.'], readiness: { draft: true, approved: false, blockers: ['No code is approved.'] },
     reports: [], activity: [],
     ...overrides,

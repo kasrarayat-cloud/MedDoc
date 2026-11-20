@@ -46,7 +46,8 @@ READER = f.reader_result([f.code('45385', 'ready'),
                           f.code('45380', 'needs_answer', question='Was a biopsy taken from a separate site?')],
                          questions=[{'question': 'Was a biopsy taken from a separate site?', 'affects': ['45380']}],
                          problems=['The note is not signed.'])
-CHECKER = f.checker_result([f.review('45385', 'agree'), f.review('45380', 'agree', status='needs_answer')],
+CHECKER = f.checker_result([f.review('45385', 'agree', line='L1'),
+                            f.review('45380', 'agree', line='L2', status='needs_answer')],
                            missed=[{'code': '45378', 'units': 1, 'modifiers': [], 'status': 'ready',
                                     'reason': 'A diagnostic colonoscopy is documented.', 'evidence': [],
                                     'question': None}])
@@ -144,8 +145,8 @@ class HappyPathTests(CodingCase):
                           ('45378', 'needs_review', 'checker')])
         self.assertEqual([q['text'] for q in round_.questions], ['Was a biopsy taken from a separate site?'])
         self.assertEqual(round_.problems, ['The note is not signed.'])
-        self.assertEqual(set(round_.citations), {'45385', '45380', '45378'})
-        self.assertEqual(round_.citations['45385'][0], {'text': 'removed by cold snare', 'page': 1, 'source': 'reader'})
+        self.assertEqual(set(round_.citations), {'L1', 'L2', 'M1'})  # by line (FIX-SPEC 1)
+        self.assertEqual(round_.citations['L1'][0], {'text': 'removed by cold snare', 'page': 1, 'source': 'reader'})
         self.assertEqual(round_.reader_result, READER)
         self.assertEqual(round_.checker_result, CHECKER)
         self.assertEqual(self.enc.state, 'awaiting_answer')

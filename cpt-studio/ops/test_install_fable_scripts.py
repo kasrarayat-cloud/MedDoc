@@ -6,9 +6,10 @@ skipped, never passed, without one), and the installer's readers of their answer
                      runs, the four tables of migration 0016 and the standing holds - never a refusal;
   RECOMPUTE_STATES   studio.state.refresh for the encounters with a coding round; every other stored state left;
   CLOSE_STAGES       an undo's close: the coding jobs an earlier worker cannot run cancelled (their rounds stopped and
-                     resumable), one left sending recorded unknown, nothing finished touched, no row of the four tables
-                     removed and none written but the closed rounds, and the encounters whose state the next pair
-                     derives named ('relabel');
+                     resumable), one left sending recorded unknown, a round whose send is unknown or failed failed as
+                     its own stage would have (studio.jobs.abandoned_outcome), nothing finished touched, no row of
+                     the four tables removed and none written but the closed rounds, and the encounters whose state
+                     the next pair derives named ('relabel');
   UNDO_HAZARDS_READ  'unknown': a coding run whose outcome is unknown and not reconciled - and nothing else;
   TOUCHED_SINCE_READ the encounters with a record created since a time, the four tables' included;
   CODING_MADE        the declared note: what this revision coded, and that its answers, decisions and exports are not
@@ -38,6 +39,9 @@ from test_install_harness2 import DatabaseTest, run_in_image  # noqa: E402
 
 IMAGE = 'sha256:' + 'c' * 64
 OLDER_IMAGE = 'sha256:' + 'd' * 64
+# the close's notes for a coding job (close_undone_stages writes the real ones): its round reads stopped, or failed
+CODE_NOTE = 'Stopped by the installer: synthetic undo.'
+FAILED_NOTE = 'Stopped by the installer, its round closed as failed: synthetic undo.'
 # the kinds the installed revision e426c747's worker runs (its studio.jobs.STAGES): no coding stage among them
 EARLIER_KINDS = sorted(['extract', 'analyze', 'predict', 'assess', 'review2', 'astra', 'fable', 'astra_peer',
                         'fable_peer', 'interpret', 'appraise', 'question'])
@@ -121,10 +125,12 @@ class FableRows(DatabaseTest):
         return models.Encounter.objects.get(pk=encounter.pk), round_
 
     def round(self, encounter, *, state='done', codes=(), number=1):
+        """A coding round; a code row without a line is given L1.., in order (FIX-SPEC 1: every row has one)."""
         from studio import models
+        rows = [code if 'line' in code else {'line': f'L{place}', **code} for place, code in enumerate(codes, start=1)]
         return models.CodingRound.objects.create(
             encounter=encounter, revision=encounter.current_revision, number=number, trigger='upload',
-            context={'service_date': None, 'insurance': 'unknown', 'answers': []}, state=state, codes=list(codes))
+            context={'service_date': None, 'insurance': 'unknown', 'answers': []}, state=state, codes=rows)
 
     def code_job(self, encounter, round_, state, *, started=None, created=None):
         from django.utils import timezone
@@ -155,16 +161,18 @@ class FableRows(DatabaseTest):
             endpoint=endpoint, scope={'round': str(round_.pk)}, started_at=timezone.now(),
             reconciled_at=timezone.now() if reconciled else None)
 
-    def decision(self, encounter, round_, code, action):
+    def decision(self, encounter, round_, code, action, line=None):
+        """A reviewer's decision on the line of ``round_`` holding ``code`` (or on ``line``): one line each."""
         from studio import models
-        return models.CodeDecision.objects.create(encounter=encounter, round=round_, code=code, action=action,
-                                                  reviewer=encounter.created_by, reviewer_kind='human')
+        line = line or next((row['line'] for row in round_.codes if row.get('code') == code), 'L1')
+        return models.CodeDecision.objects.create(encounter=encounter, round=round_, line=line, code=code,
+                                                  action=action, reviewer=encounter.created_by, reviewer_kind='human')
 
     def close(self, kinds, since=None, note='Closed by the installer: synthetic undo.'):
         from django.utils import timezone
         return run_in_image(install.CLOSE_STAGES, {
-            'since': (since or timezone.now()).isoformat(), 'note': note,
-            'code_note': 'Stopped by the installer: synthetic undo.', 'kinds': kinds})
+            'since': (since or timezone.now()).isoformat(), 'note': note, 'code_note': CODE_NOTE,
+            'failed_note': FAILED_NOTE, 'kinds': kinds})
 
     def table_rows(self) -> dict:
         from studio import models
@@ -325,6 +333,45 @@ class CloseOnTheDatabaseTests(FableRows):
         self.assertFalse(models.Job.objects.filter(state__in=('queued', 'running')).exclude(
             kind__in=EARLIER_KINDS).exists())
 
+    def test_a_round_whose_send_failed_or_stays_unknown_is_closed_failed_as_the_worker_would_never_stopped(self):
+        # MONEY-2 (fix lane F2): the close settles each round as its own stage would have (the stale sweep's rule,
+        # studio.jobs.abandoned_outcome) - a send that failed (answered and billed) fails the round with that send's
+        # kind, a send left unknown that no operator reconciled fails it as unknown - and only a round with nothing
+        # unsettled is cancelled for a Resume; nothing was in flight at the close, so no sending count tells them apart
+        from studio import jobs, models
+        Run = models.ProviderRun
+        failed, failed_round = self.coded('failed-send', state='running', stored='processing')
+        failed_job = self.code_job(failed, failed_round, 'running')
+        self.coding_run(failed, failed_round)  # the reader's read succeeded
+        too_long = self.coding_run(failed, failed_round, purpose='coding_checker', state='failed')
+        Run.objects.filter(pk=too_long.pk).update(scope={'round': str(failed_round.pk), 'failure_kind': jobs.TOO_LONG})
+        unknown, unknown_round = self.coded('unknown-send', state='running', stored='processing')
+        unknown_job = self.code_job(unknown, unknown_round, 'running')
+        self.coding_run(unknown, unknown_round, state='unknown')  # settled unknown before the close; never reconciled
+        looked, looked_round = self.coded('reconciled', state='running', stored='processing')
+        looked_job = self.code_job(looked, looked_round, 'running')
+        self.coding_run(looked, looked_round, state='unknown', reconciled=True)  # an operator looked: nothing unsettled
+        closed = self.close(EARLIER_KINDS)
+        self.assertEqual(closed['rounds'], {'cancelled': 1, 'failed': 2})
+        self.assertEqual((closed['runs_unknown'], closed['runs_not_sent']), (0, 0))  # nothing was in flight
+        self.assertEqual((closed['closed'], closed['stopped'], closed['unknown'], closed.get('code_failed')),
+                         (3, 1, 1, 1))
+        rounds = {row.pk: row for row in models.CodingRound.objects.filter(
+            pk__in=[failed_round.pk, unknown_round.pk, looked_round.pk])}
+        self.assertEqual([(rounds[pk].state, rounds[pk].failure_kind, rounds[pk].error)
+                          for pk in (failed_round.pk, unknown_round.pk, looked_round.pk)],
+                         [('failed', jobs.TOO_LONG, jobs.FAILURE_TEXT[jobs.TOO_LONG]),
+                          ('failed', jobs.UNKNOWN, jobs.FAILURE_TEXT[jobs.UNKNOWN]), ('cancelled', '', '')])
+        for job, job_state, note in ((failed_job, 'failed', FAILED_NOTE), (unknown_job, 'unknown', FAILED_NOTE),
+                                     (looked_job, 'failed', CODE_NOTE)):
+            job.refresh_from_db()
+            self.assertEqual((job.state, job.error), (job_state, note))
+        # what a member is then offered: no Resume of a round whose read must not be sent again by itself
+        self.assertTrue(jobs.awaiting_reconcile(rounds[unknown_round.pk]))
+        self.assertEqual(closed['hazards'], {str(unknown.pk): ['unknown']})
+        self.assertEqual(models.Encounter.objects.get(pk=failed.pk).state, 'failed')
+        self.assertEqual(models.Encounter.objects.get(pk=looked.pk).state, 'stopped')
+
     def test_a_stopped_coding_job_an_earlier_installer_would_refuse_on_is_failed_and_its_round_left_stopped(self):
         from studio import models
         stopped, stopped_round = self.coded('stopped', state='cancelled', stored='stopped')  # a member's Stop
@@ -398,9 +445,11 @@ class CloseOnTheDatabaseTests(FableRows):
                                         'it was switched back', ['extract', 'predict'])
         (image, env, body, params), kwargs = script.call_args
         self.assertEqual((image, body), (IMAGE, install.CLOSE_STAGES))
-        self.assertEqual(sorted(params), ['code_note', 'kinds', 'note', 'since'])
+        self.assertEqual(sorted(params), ['code_note', 'failed_note', 'kinds', 'note', 'since'])
         self.assertEqual(params['kinds'], ['extract', 'predict'])
         self.assertIn('a Resume continues it', params['code_note'])
+        self.assertIn('Its round is closed as failed', params['failed_note'])
+        self.assertNotIn('Resume', params['failed_note'])
         self.assertIn('so this stage will not run', params['note'])
 
 

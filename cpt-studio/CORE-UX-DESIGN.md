@@ -10,7 +10,7 @@ so the numbering is kept; sections that described the removed pipeline say so in
 1. Synthetic data only: every upload carries the synthetic attestation; banners say so; exports say SYNTHETIC at both
    ends.
 2. Plain English for a physician's office.
-3. One page build at a time: the page names its build on every API call (client contract `customer-2026-11-20`) and
+3. One page build at a time: the page names its build on every API call (client contract `customer-2026-11-21`) and
    asks the member to reload when the server is newer.
 4. No inline script, handler or style attribute from server text; one same-origin script; server text is escaped
    (`escapeHtml`) before it reaches the DOM.
@@ -41,7 +41,8 @@ Removed with the earlier pipeline (D351-D352): the coding service reads the orig
 
 ## 4. Review overlay
 
-Removed with the earlier pipeline: a decision is a `CodeDecision` row on one code of one round (`studio/decisions.py`).
+Removed with the earlier pipeline: a decision is a `CodeDecision` row on one code line of one round
+(`studio/decisions.py`).
 The earlier tables, the reviewer's chosen modifier among them, stay as legacy records.
 
 ## 5. Access, the operator console and exports
@@ -65,7 +66,10 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   the server offers them (`progress.can_stop`, `can_resume`, `can_retry`).
 - Questions: answering sends every answer at once and starts a new round, which reads the document again with every
   answer so far.
-- Decisions: Approve opens the review dialog with the attestation; Reject asks for an optional note; Undo revokes.
+- Decisions: Approve opens the review dialog with the attestation; Reject asks for an optional note; Undo revokes. A
+  decision is made on a line and names the round the page shows (`{round, line, code, action, acknowledgement,
+  note}`); when the server answers 409 (the coding review changed), the dialog closes, the page says nothing was
+  recorded and reads the document again - nothing is sent twice.
 
 ## 7. The customer encounter contract
 
@@ -79,8 +83,8 @@ The encounter view has two columns.
 Left, the document:
 - `#documentViewer` - an iframe of `document.view_url` (the PDF, the text, or a Word document's converted PDF), and
   `#downloadOriginal` ("Download original") for an upload.
-- `#quotesPanel` ("Quoted passages") - every quote of every code as `button.quote[data-code][data-page]`; choosing one
-  moves the viewer to that page (`#page=N`).
+- `#quotesPanel` ("Quoted passages") - every quote of every line as `button.quote[data-code][data-line][data-page]`;
+  choosing one moves the viewer to that page (`#page=N`).
 
 Right, top to bottom:
 - `section.progress-panel[data-phase]` - the steps `.progress-step[data-step=reading|checking|finished][data-state]`
@@ -89,17 +93,23 @@ Right, top to bottom:
   finished, The coding review could not finish, The coding review was stopped.
 - `section#questionsPanel` ("Questions for you") - one `.question-row[data-question]` per question with a labelled
   `<textarea>`, and `#sendAnswers`.
-- `ol#codesList > li.code-row[data-code][data-status]` - `.code-number`, `.code-units`, `.code-modifiers`, the status
-  badge `.status`, `.code-reason`, `.code-check` (the second check's verdict and reason), `.code-quotes`, and only the
-  buttons `allowed_actions` names, as `button[data-decision][data-code]` (Approve, Reject, Undo).
-- `section#notesPanel` ("Documentation notes") and the export button, `button[data-action=export]` ("Download").
+- `ol#codesList > li.code-row[data-line][data-code][data-status]` (id `code-<line>`; one row per line, so two lines of
+  one code are two rows) - `.code-number`, `.code-units` ("1 unit", "2 units", or "Units not given" when the coding
+  review gave none), `.code-modifiers` ("No modifier" for none, "Modifier XS", "Modifiers 25, 59", or "Modifiers not
+  given"), the status badge `.status`, `.code-reason`, `.code-check` (the second check's verdict and reason),
+  `.code-quotes`, and only the buttons `allowed_actions` names, as `button[data-decision][data-code][data-line]` (id
+  `act-<line>-<action>`; Approve, Reject, Undo). A row the page cannot name by its line is shown but offers no decision.
+- `section#notesPanel` ("Documentation notes") and the export button, `button[data-action=export]` ("Download"),
+  offered whenever a draft or the approved codes can be made or an earlier download exists.
 
 Status badges: Ready for approval (green), Needs your answer (amber), Needs your review (amber outline), Not supported
 (gray); once decided, Approved (green) or Rejected (gray).
 
-The review dialog: `#reviewDialog` with `#reviewAcknowledgement` (the session's `acknowledgement`, which the member
-confirms), `#reviewNote` and `#saveReview`. The upload dialog: `#uploadDialog` with `#uploadFile`, `#pasteText`,
-`#serviceDate`, `#insurance`, `#syntheticAttestation` and `#startReview`. The export dialog: `#exportDialog`.
+The review dialog: `#reviewDialog` with `#reviewLine` (the line's units and modifiers), `#reviewAcknowledgement` (the
+label holding the checkbox `#reviewAckBox` and the session's `acknowledgement`, which the member confirms by ticking
+it), `#reviewNote` and `#saveReview` (enabled once the box is ticked). The upload dialog: `#uploadDialog` with
+`#uploadFile`, `#pasteText`, `#serviceDate`, `#insurance`, `#syntheticAttestation` and `#startReview`. The export
+dialog: `#exportDialog`.
 
 ## 9. Install and verify
 

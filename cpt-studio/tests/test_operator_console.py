@@ -82,7 +82,7 @@ class PageTests(ConsoleCase):
                      reader.response_id, 'input 12000', 'output 3000', 'I read the whole note.',
                      'The polyp was removed by snare.', 'A diagnostic colonoscopy is documented.',
                      'Was a biopsy taken from a separate site?', 'The note is not signed.', 'Record the reconciliation',
-                     'coding.round_done', 'provider.sending', 'Citations by code'):
+                     'coding.round_done', 'provider.sending', 'Citations by line'):
             with self.subTest(text=text):
                 self.assertIn(text, page)
         self.ops.get(f'/ops/encounters/{self.enc.pk}')
@@ -116,6 +116,27 @@ class PageTests(ConsoleCase):
                       self.ops.get(f'/ops/encounters/{earlier.pk}').content.decode('utf-8'))
         self.assertEqual(self.ops.get('/ops/').status_code, 200)
         self.assertEqual(self.ops.get('/ops/encounters/f1000000-0000-4000-8000-000000000009').status_code, 404)
+
+    def test_codes_decisions_and_citations_are_shown_by_line(self):
+        # FIX-SPEC 1: two lines can hold one code, so the console names the line of every row and every decision, and
+        # files the citations by line; units and modifiers the coding review did not give read "not given"
+        self.assertEqual(self.decide(self.enc, 'L1', '45385', 'approve').status_code, 201)
+        page = self.ops.get(f'/ops/encounters/{self.enc.pk}').content.decode('utf-8')
+        for fragment in ('<th>Line</th><th>Code</th>', '<td class="mono">L1</td><td class="mono">45385</td><td class="num">1</td>',
+                         '<td class="mono">M1</td><td class="mono">45378</td><td class="num">1</td>',
+                         '<td class="mono">L1</td><td class="mono">45385</td><td>approve</td>', 'Citations by line',
+                         'lines L2; codes 45380'):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, page)
+        self.assertNotIn('Citations by code', page)
+        given = self.encounter(title='Synthetic note with nothing given')
+        r.write_round(given, codes=[r.row('64483', 'needs_review', units=None, modifiers=None),
+                                    r.row('64483', 'ready', modifiers=[])])
+        page = self.ops.get(f'/ops/encounters/{given.pk}').content.decode('utf-8')
+        self.assertIn('<td class="mono">L1</td><td class="mono">64483</td><td class="num">not given</td>'
+                      '<td class="mono">not given</td>', page)
+        self.assertIn('<td class="mono">L2</td><td class="mono">64483</td><td class="num">1</td><td class="mono">none</td>',
+                      page)
 
     def test_a_fallback_served_run_is_flagged(self):
         reader = Run.objects.get(encounter=self.enc, purpose=jobs.READER)

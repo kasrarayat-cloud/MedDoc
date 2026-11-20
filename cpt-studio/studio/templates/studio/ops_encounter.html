@@ -29,6 +29,8 @@
   <button type="submit">Retry the failed round (a new round)</button>
   <span class="muted">In live mode a request is sent only for a round requested by an owner or reviewer of the workspace.</span>
 </form>
+{% elif retry_waits %}
+<p class="muted">Retry waits for the reconciliation of this round's unknown outcome (its run below): until then no one may send it again.</p>
 {% endif %}
 
 {% for item in rounds %}
@@ -83,11 +85,11 @@
 <h3>Final codes</h3>
 {% if item.codes %}
 <div class="scroll"><table>
-  <thead><tr><th>Code</th><th class="num">Units</th><th>Modifiers</th><th>Final status</th><th>Listed by</th><th>Listed status</th><th>Reason</th><th>Second check</th><th>Question</th></tr></thead>
+  <thead><tr><th>Line</th><th>Code</th><th class="num">Units</th><th>Modifiers</th><th>Final status</th><th>Listed by</th><th>Listed status</th><th>Reason</th><th>Second check</th><th>Question</th></tr></thead>
   <tbody>
   {% for code in item.codes %}
     <tr>
-      <td class="mono">{{ code.code }}</td><td class="num">{{ code.units|default:"" }}</td><td class="mono">{{ code.modifiers|join:", " }}</td>
+      <td class="mono">{{ code.line|default:"-" }}</td><td class="mono">{{ code.code }}</td><td class="num">{% if code.units %}{{ code.units }}{% else %}not given{% endif %}</td><td class="mono">{% if code.modifiers is None %}not given{% elif code.modifiers %}{{ code.modifiers|join:", " }}{% else %}none{% endif %}</td>
       <td>{{ code.status }}</td><td>{{ code.listed_by }}</td><td>{{ code.listed_status|default:"" }}</td>
       <td>{{ code.reason|default:"" }}</td>
       <td>{% if code.second_check %}{% if code.second_check.agrees is True %}<span class="flag ok">agrees</span>{% elif code.second_check.agrees is False %}<span class="flag bad">{{ code.second_check.verdict|default:"disagrees" }}</span>{% else %}<span class="flag">not reviewed</span>{% endif %} {{ code.second_check.reason|default:"" }}{% if code.second_check.correct_code and code.second_check.correct_code != code.code %} <span class="mono">(would report {{ code.second_check.correct_code }})</span>{% endif %}{% else %}<span class="muted">listed by the checker</span>{% endif %}</td>
@@ -99,9 +101,9 @@
 {% else %}
 <p class="muted">No codes (the round is not done, or found none).</p>
 {% endif %}
-{% if item.questions %}<h3>Questions</h3><ol>{% for question in item.questions %}<li>{{ question.text }} <span class="muted">({{ question.source }}; {{ question.codes|join:", " }})</span></li>{% endfor %}</ol>{% endif %}
+{% if item.questions %}<h3>Questions</h3><ol>{% for question in item.questions %}<li>{{ question.text }} <span class="muted">({{ question.source }}; lines {{ question.lines|join:", "|default:"none" }}; codes {{ question.codes|join:", "|default:"none" }})</span></li>{% endfor %}</ol>{% endif %}
 {% if item.problems %}<h3>Documentation problems</h3><ul>{% for problem in item.problems %}<li>{{ problem }}</li>{% endfor %}</ul>{% endif %}
-<details><summary>Citations by code</summary><pre>{{ item.citations }}</pre></details>
+<details><summary>Citations by line</summary><pre>{{ item.citations }}</pre></details>
 <details><summary>The reader's final JSON</summary><pre>{{ item.reader_result }}</pre></details>
 <details><summary>The checker's final JSON</summary><pre>{{ item.checker_result }}</pre></details>
 {% empty %}
@@ -112,10 +114,10 @@
 <h2>Decisions</h2>
 {% if decisions %}
 <div class="scroll"><table>
-  <thead><tr><th class="num">Sequence</th><th>Round</th><th>Code</th><th>Action</th><th>Reviewer</th><th>Kind</th><th>Note</th><th>Acknowledgement</th><th>At</th></tr></thead>
+  <thead><tr><th class="num">Sequence</th><th>Round</th><th>Line</th><th>Code</th><th>Action</th><th>Reviewer</th><th>Kind</th><th>Note</th><th>Acknowledgement</th><th>At</th></tr></thead>
   <tbody>
   {% for decision in decisions %}
-    <tr><td class="num">{{ decision.sequence }}</td><td>#{{ decision.round.number }}</td><td class="mono">{{ decision.code }}</td><td>{{ decision.action }}</td>
+    <tr><td class="num">{{ decision.sequence }}</td><td>#{{ decision.round.number }}</td><td class="mono">{{ decision.line }}</td><td class="mono">{{ decision.code }}</td><td>{{ decision.action }}</td>
         <td>{{ decision.reviewer.label }}</td><td>{{ decision.reviewer_kind }}</td><td>{{ decision.note }}</td>
         <td>{% if decision.acknowledgement %}<details><summary>shown</summary>{{ decision.acknowledgement }}</details>{% endif %}</td>
         <td>{{ decision.created_at|date:"Y-m-d H:i:s" }}</td></tr>

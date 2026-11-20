@@ -293,7 +293,8 @@ def progress_json(encounter, round_, can_review: bool, now) -> dict:
             'finished_at': iso(round_.finished_at) if round_ is not None else None,
             'server_time': iso(now), 'message': message,
             'can_stop': can_review and busy and not stopping,
-            'can_resume': can_review and current == STOPPED and not running,
+            # a send of the round that awaits an operator's reconcile is never offered again (jobs.resume refuses it)
+            'can_resume': can_review and current == STOPPED and not running and not jobs.awaiting_reconcile(round_),
             'can_retry': can_review and decisions.retry_offered(encounter, round_),
             'error': error}
 

@@ -41,6 +41,7 @@ WALK_READER = ("const walk = require(process.argv[1]);"
                "process.stdout.write(JSON.stringify(cases.map(([schema, value]) => "
                "walk.shapeProblems(value, walk.contract()[schema]))));")
 LINES = 'line' in CONTRACT['types']['code']['keys']  # LINE IDENTITY: lane F1a's contract lists each row's line
+QUESTION_LINES = 'lines' in CONTRACT['types']['question']['keys']  # and each question's lines (FIX-SPEC section 3)
 
 
 def code_row(code, status, line, **extra):
@@ -69,7 +70,8 @@ def encounter():
         'codes': [code_row('45385', 'ready', 'L1'),
                   code_row('45380', 'needs_answer', 'L2', status_label='Needs your answer', allowed_actions=[],
                            question='Was a biopsy taken from a separate site?', units=None)],
-        'questions': [{'id': 'q1', 'text': 'Was a biopsy taken from a separate site?', 'codes': ['45380']}],
+        'questions': [{'id': 'q1', 'text': 'Was a biopsy taken from a separate site?', 'codes': ['45380'],
+                       **({'lines': ['L2']} if QUESTION_LINES else {})}],
         'answers': [{'question': 'Was it?', 'answer': 'Yes.', 'by': 'Coder1', 'at': '2026-11-20T10:03:00Z'}],
         'notes': ['The note is not signed.'],
         'readiness': {'draft': True, 'approved': False, 'blockers': ['No code has been approved.']},

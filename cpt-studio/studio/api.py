@@ -42,7 +42,7 @@ REVIEWER_ONLY = 'Your role in this workspace cannot change documents or decision
 ROLE_REFUSED = 'Your role cannot do that.'
 NOT_SAVED = 'This change could not be saved. Reload the page and try again.'
 # The coding pipeline's refusals a member may read as they are (studio.jobs: fixed sentences); any other is NOT_SAVED.
-JOB_REFUSALS = frozenset({jobs.BUSY_MESSAGE, jobs.RETRY_NOTHING})
+JOB_REFUSALS = frozenset({jobs.BUSY_MESSAGE, jobs.RETRY_NOTHING, jobs.RECONCILE_FIRST})
 VIEW_CSP = "frame-ancestors 'self'"  # the in-page view of the original: framed by CPT Studio's own page only
 
 

@@ -233,7 +233,8 @@ def round_view(round_) -> dict:
     return {'round': round_, 'service_date': context.get('service_date'), 'insurance': context.get('insurance'),
             'answers': context.get('answers') if isinstance(context.get('answers'), list) else [],
             'cost': cost, 'unpriced': unpriced, 'runs': [run_view(run) for run in runs],
-            'codes': [{**code, 'modifiers': code.get('modifiers') if isinstance(code.get('modifiers'), list) else []}
+            # modifiers the coding review did not give stay None (shown "not given", FIX-SPEC 2), never read as none
+            'codes': [{**code, 'modifiers': code.get('modifiers') if isinstance(code.get('modifiers'), list) else None}
                       for code in round_.codes or () if isinstance(code, dict)],
             'questions': [item for item in round_.questions or () if isinstance(item, dict)],
             'problems': [item for item in round_.problems or () if isinstance(item, str)],
@@ -252,11 +253,15 @@ def encounter_view(encounter, **extra) -> dict:
     revision = encounter.current_revision
     events = [{'event': event, 'data': _pretty(event.data)}
               for event in encounter.audit_events.select_related('actor').order_by('created_at', 'pk')]
+    failed = latest is not None and latest.state == models.CodingRound.FAILED
+    # a send of the failed round that may have reached the vendor with no outcome known waits for the reconcile first:
+    # jobs.retry refuses it until then (FIX-SPEC 4), so the retry is not offered
+    waits = failed and jobs.awaiting_reconcile(latest)
     return {'encounter': encounter, 'state_label': state.label(encounter.state) if latest else 'Earlier review',
             'source': source, 'revision': revision,
             'pasted_chars': len(revision.pasted_text or '') if revision is not None and source is None else None,
             'rounds': [round_view(round_) for round_ in rounds],
-            'can_retry': latest is not None and latest.state == models.CodingRound.FAILED and not jobs.busy(encounter),
+            'can_retry': failed and not jobs.busy(encounter) and not waits, 'retry_waits': waits,
             'decisions': list(models.CodeDecision.objects.filter(encounter_id=encounter.pk)
                               .select_related('reviewer', 'round').order_by('sequence')),
             'answers': list(models.CodingAnswer.objects.filter(encounter_id=encounter.pk)

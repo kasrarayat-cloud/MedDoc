@@ -786,13 +786,17 @@ undo does about each, in this revision's image unless said otherwise:
   same close in `rollback-app` and the app phase's own undos) takes every job of
   kind `code` still queued or running - the earlier worker claims a job of any
   kind and would end on `STAGES['code']` - and closes it as this revision's own
-  worker closes a stage it stopped (`studio.jobs.mark_stale`'s rule): for one
-  that sent nothing the job is **failed** with the installer's note and its
-  round **cancelled**, so the round reads stopped and a Resume continues it
-  (reusing every read it already paid for) whenever this revision serves again;
-  one whose send was in flight has that request recorded **unknown** (sent, when
-  it called a vendor; never sent again), the job unknown and its round failed
-  as unknown; a reservation never sent is recorded not sent, and so is any
+  worker closes a stage it stopped (`studio.jobs.mark_stale`'s rule,
+  `studio.jobs.abandoned_outcome`): for one with nothing it sent unsettled the
+  job is **failed** with the installer's note and its round **cancelled**, so
+  the round reads stopped and a Resume continues it (reusing every read it
+  already paid for) whenever this revision serves again; one whose send was in
+  flight has that request recorded **unknown** (sent, when it called a vendor;
+  never sent again), the job unknown and its round failed as unknown, and so
+  does one with a send left unknown earlier that no operator reconciled (its
+  Resume and retry wait for the reconcile); one with a send that failed has its
+  round failed with that send's own kind; a reservation never sent is recorded
+  not sent, and so is any
   coding run still in flight whose round has no open job (an orphan its stage
   left). No coding job is left cancelled as its revision's latest stage (a
   member's Stop): the earlier revision counts such a job as a stage it cannot
@@ -810,10 +814,12 @@ undo does about each, in this revision's image unless said otherwise:
 - **(b) No row of the four new tables is deleted; closed rounds are marked
   cancelled.** No undo removes a row of `CodingRound`, `CodingAnswer`,
   `CodeDecision` or `ExportArtifact`, or any other row. The close writes only
-  the rounds it closes - a round that sent nothing is marked cancelled (and its
-  finish time set), one whose request was in flight is marked failed, its
-  outcome unknown, as (a) says and as this revision's own stale sweep marks it -
-  together with the jobs and provider runs that were still open. Answers, code
+  the rounds it closes - a round with nothing it sent unsettled is marked
+  cancelled (and its finish time set), one whose request was in flight or whose
+  send is unknown is marked failed, its outcome unknown, and one whose send
+  failed is marked failed with that send's kind, as (a) says and as this
+  revision's own stale sweep marks it - together with the jobs and provider
+  runs that were still open. Answers, code
   decisions, exports and every finished round are not written. The receipt's
   `not_carried_back` note says the same, and its close answer counts the rounds
   closed (`rounds`: cancelled, failed).

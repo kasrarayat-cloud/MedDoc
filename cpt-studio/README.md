@@ -5,7 +5,8 @@ original clinical document (PDF, DOCX or pasted text) with the practice's date o
 reads the original file twice through the Anthropic API - once as the coding **reader**, once as an independent
 **checker** - and the page shows each code with its units, modifiers, status, reason, the second check's verdict and the
 quoted passages. The member answers any questions (which starts a new coding round), approves or rejects the codes, and
-downloads a draft or an approved export. Every decision is recorded against the exact round it was made on.
+downloads a draft or an approved export. Every decision is recorded against the exact round and code line it was made
+on (two lines of one code are decided apart).
 
 Fable's decision is final apart from the human: no code holds, drops, upgrades or downgrades a code it returned
 (owner decisions D351-D352).
@@ -23,8 +24,11 @@ Fable's decision is final apart from the human: no code holds, drops, upgrades o
   constant.
 - Show CPT descriptors: no CPT edition is licensed, so the page shows the code, units, modifiers and the coding review's
   reason.
-- Resend a paid request automatically: an outcome that may have reached the vendor is recorded unknown, for an operator's
-  reconcile or a member's retry.
+- Resend a paid request automatically: an outcome that may have reached the vendor is recorded unknown, and its round
+  is not resumed or retried, by anyone, until an operator has reconciled it.
+- Spend past a document's limit: before each send, what the revision has already cost plus the send's worst case -
+  every attempt it may make, from the API's own count of its input tokens - must fit
+  `CPT_STUDIO_DOCUMENT_CEILING_USD`; when the count fails, nothing is sent.
 - Claim accuracy, or approve anything by itself: a human (or a labelled review agent) approves each code.
 
 ## Develop

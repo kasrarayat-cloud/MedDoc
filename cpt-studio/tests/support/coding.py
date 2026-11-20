@@ -100,10 +100,13 @@ def code(code='45385', status='ready', *, units=1, modifiers=(), reason='The not
             'evidence': [{'quote': 'removed by cold snare', 'page': 1}], 'question': question}
 
 
-def review(code='45385', verdict='agree', *, reason='Supported as listed.', status='ready', question=None):
-    return {'code': code, 'verdict': verdict, 'correct_code': code, 'correct_units': 1, 'correct_modifiers': [],
-            'correct_status': status, 'reason': reason, 'evidence': [{'quote': 'cold snare', 'page': 1}],
-            'question': question}
+def review(code='45385', verdict='agree', *, line=None, reason='Supported as listed.', status='ready', question=None):
+    """A checker review; ``line`` names the reader line it reviews (FIX-SPEC 1: "L1".., the reader's codes in order).
+    Without ``line`` the review names none, so it belongs to no line (studio.fable.result.combine: unmatched)."""
+    out = {'code': code, 'verdict': verdict, 'correct_code': code, 'correct_units': 1, 'correct_modifiers': [],
+           'correct_status': status, 'reason': reason, 'evidence': [{'quote': 'cold snare', 'page': 1}],
+           'question': question}
+    return {'line': line, **out} if line is not None else out
 
 
 def checker_result(reviews, *, missed=(), questions=()):
@@ -111,19 +114,26 @@ def checker_result(reviews, *, missed=(), questions=()):
 
 
 def reader_message(result, *, used=None, stop='end_turn'):
-    """A reader answer with one CODE section per code, each cited, and the final JSON."""
+    """A reader answer with one section per code under its marker (FIX-SPEC 1: a whole line ``LINE L<n> <code>``, in
+    the list's order), each cited, and the final JSON (tests.support.rounds.reader_message writes the same)."""
     blocks = [text_block('I read the whole note.\n')]
-    for item in result.get('codes', []):
-        blocks.append(text_block(f"CODE {item['code']}\n"))
+    for number, item in enumerate(result.get('codes', []), start=1):
+        blocks.append(text_block(f"\nLINE L{number} {item['code']}\n"))
         blocks.append(text_block('The polyp was removed by snare.', [page_cite('removed by cold snare', 1)]))
     blocks.append(text_block(fenced(result)))
     return message(blocks, used=used, stop=stop)
 
 
 def checker_message(result, *, used=None, stop='end_turn'):
+    """A checker answer with one section per review (``REVIEW <its line> <code>``; a review naming no line is marked
+    L0, which is no line) and per missed code (``MISSED M<k> <code>``), each cited, and the final JSON."""
     blocks = [text_block('I read the whole note first.\n')]
-    for item in result.get('reviews', []) + result.get('missed_codes', []):
-        blocks.append(text_block(f"REVIEW {item['code']}\n"))
+    for item in result.get('reviews', []):
+        line = item.get('line') if isinstance(item.get('line'), str) else 'L0'
+        blocks.append(text_block(f"\nREVIEW {line} {item['code']}\n"))
+        blocks.append(text_block('The snare removal is documented.', [page_cite('cold snare', 2)]))
+    for number, item in enumerate(result.get('missed_codes', []), start=1):
+        blocks.append(text_block(f"\nMISSED M{number} {item['code']}\n"))
         blocks.append(text_block('The snare removal is documented.', [page_cite('cold snare', 2)]))
     blocks.append(text_block(fenced(result)))
     return message(blocks, used=used, stop=stop)

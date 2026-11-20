@@ -147,7 +147,7 @@ class SpendCheckTests(TestCase):
 
     def answers(self):
         return {'reader': f.succeeded(f.reader_message(f.reader_result([f.code('45385', 'ready')]))),
-                'checker': f.succeeded(f.checker_message(f.checker_result([f.review('45385', 'agree')])))}
+                'checker': f.succeeded(f.checker_message(f.checker_result([f.review('45385', 'agree', line='L1')])))}
 
     def test_a_counted_send_is_held_to_its_counted_worst_case(self):
         coder = CountingCoder(20_000, **self.answers())
@@ -186,7 +186,7 @@ class SpendCheckTests(TestCase):
 
     def test_a_coder_that_calls_nothing_bills_nothing_and_needs_no_count(self):
         reader = replayed(f.reader_message(f.reader_result([f.code('45385', 'ready')])))
-        checker = replayed(f.checker_message(f.checker_result([f.review('45385', 'agree')])))
+        checker = replayed(f.checker_message(f.checker_result([f.review('45385', 'agree', line='L1')])))
         coder = f.FakeCoder(reader=reader, checker=checker)
         coder.endpoint = ''  # a replay: it answers from a recording and calls nothing
         round_ = self.run_round(coder)

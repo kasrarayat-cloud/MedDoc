@@ -215,12 +215,13 @@ def _blocking_jobs(encounter) -> bool:
 
 def retry_offered(encounter, round_) -> bool:
     """Whether a member may ask for the document to be coded again now: its latest round failed (not at the spending
-    ceiling, which a new round of the same document would meet again) and nothing runs; or it has no round at all (an
-    earlier review) and a revision to code."""
+    ceiling, which a new round of the same document would meet again), nothing runs and no send of the round awaits an
+    operator's reconcile (jobs.awaiting_reconcile: jobs.retry refuses it until then, FIX-SPEC 4); or it has no round at
+    all (an earlier review) and a revision to code."""
     if round_ is None:
         return encounter.current_revision_id is not None and not _blocking_jobs(encounter)
     return (round_.state == Round.FAILED and round_.failure_kind != jobs.CEILING
-            and not jobs.busy(encounter))
+            and not jobs.busy(encounter) and not jobs.awaiting_reconcile(round_))
 
 
 SUPERSEDED_JOB = 'Not run: the document is coded again with the current version of CPT Studio.'

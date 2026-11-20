@@ -1,14 +1,14 @@
 # CPT Studio customer API
 
-Client contract `customer-2026-11-20` (`studio/client_contract.py`). Handlers: `studio/api.py`; every payload is built
-by `studio/customer.py` from stored rows on each request. `ops/verification/customer-contract.json` lists the keys and
-`ops/verification/customer-denylist.json` what a customer response may never carry; the browser walk
-(`ops/walk.cjs`) holds the deployed site to both.
+Client contract `customer-2026-11-21` (`studio/client_contract.py`; the fix pass's line identity). Handlers:
+`studio/api.py`; every payload is built by `studio/customer.py` from stored rows on each request.
+`ops/verification/customer-contract.json` lists the keys and `ops/verification/customer-denylist.json` what a customer
+response may never carry; the browser walk (`ops/walk.cjs`) holds the deployed site to both.
 
 ## Conventions
 
 - **Session authentication** (`/login/`). A call without a session answers `401 {"error": "Sign in to continue."}`.
-- **The client header.** The page sends `X-CPT-Studio-Client: customer-2026-11-20` on every API call. A call without it,
+- **The client header.** The page sends `X-CPT-Studio-Client: customer-2026-11-21` on every API call. A call without it,
   or naming another build (a tab left open across an install), answers `409 {"error": "CPT Studio was updated. Reload
   this page to continue.", "error_code": "client_outdated"}` before the view runs. Downloads and the in-page view of the
   original are browser navigations and are outside the contract.
@@ -37,6 +37,8 @@ by `studio/customer.py` from stored rows on each request. `ops/verification/cust
   (Needs your review), `not_supported` (Not supported).
 - `insurance`: `medicare`, `medicaid`, `commercial` (commercial or other), `unknown` (not sure).
 - Round `trigger`: `upload`, `answers`, `retry`.
+- Code `line`: `L1`..`Ln` for the coding review's codes in the order it listed them, then `M1`..`Mk` for the codes the
+  second check added. A line, not a code, is what is decided, quoted and exported: two lines may hold one code.
 
 ## Endpoints
 
@@ -74,11 +76,11 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
  progress: {phase, busy, started_at, finished_at, server_time, message, can_stop, can_resume, can_retry,
             error: {text} | null},
  round: {number, trigger, finished_at} | null,
- codes: [{code, units, modifiers[], status, status_label, reason,
+ codes: [{line, code, units | null, modifiers[] | null, status, status_label, reason,
           second_check: {agrees: true|false|null, reason},
           question | null, quotes: [{text, page}],
           decision: {action, by, at, note} | null, allowed_actions[]}],
- questions: [{id, text, codes[]}],
+ questions: [{id, text, codes[], lines[]}],
  answers: [{question, answer, by, at}],
  notes: [string],
  readiness: {draft, approved, blockers[]},
@@ -89,9 +91,15 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
 - Only the latest round is shown; while it is queued, running, failed or stopped it has no codes, questions or notes.
 - `document`: `original_url` is an upload's download (null for a paste); `view_url` is the in-page view (`?view=1`);
   for a Word document the view is the PDF the coding review read (`converted: true`, once a round has converted it).
-- `codes[].quotes` are the passages the coding service itself cited from the document under that code (pages for a
-  PDF); only for a code with none, the quotes its answer gave. `second_check.agrees` is null for a code the second
-  check added or did not review, with CPT Studio's own sentence as the reason.
+- `codes[]` is one row per line: its `decision`, `quotes` and `allowed_actions` are that line's. `units` is null and
+  `modifiers` null when the coding review gave none (the page shows "not given"; `modifiers: []` is the coding review
+  saying there is none).
+- `codes[].quotes` are the passages the coding service itself cited from the document under that line (pages for a
+  PDF); only for a line with none, the quotes its answer gave. `second_check.agrees` is null for a code the second
+  check added or did not review, or when a review of the second check names the line or its code but not both, with
+  CPT Studio's own sentence as the reason.
+- `questions[].lines` are the lines a question affects and `codes` those lines' codes; a `needs_answer` line always has
+  at least one question.
 - `allowed_actions`: `approve` and `reject` for a `ready` or `needs_review` code; none for `needs_answer` (answer first)
   or `not_supported`; `revoke` while a decision stands; none at all for a viewer.
 - Reasons, questions and notes are the coding review's own words, with any vendor or model name replaced by "the
@@ -110,10 +118,13 @@ refused (reload).
 
 ### `POST /api/encounters/<id>/decisions` (owner or reviewer)
 
-`{"code": "45385", "action": "approve|reject|revoke", "acknowledgement": "...", "note": "..."}`. An approval needs
+`{"round": 2, "line": "L2", "code": "20610", "action": "approve|reject|revoke", "acknowledgement": "...",
+"note": "..."}` - `round` is the round number the page shows, `line` and `code` the row decided. An approval needs
 `acknowledgement` equal to the session's text exactly; a note is optional (at most 2,000 characters). Answers
-`201 {code, action, by, at, note}`. Refused: the round is not done (409), the code is not in it (404), the code already
-has a decision (409: revoke it first), a `needs_answer` or `not_supported` code (409).
+`201 {line, code, action, by, at, note}`. Refused: no round, line or code named (400); `round` is not the latest round's
+number, or the latest round is not done (409 "This coding review has changed. Reload to see the latest."); the line is
+not in that round, or holds another code (409 "That code is not part of this coding review. Reload to see the
+latest."); the line already has a decision (409: revoke it first); a `needs_answer` or `not_supported` line (409).
 
 ### `POST /api/encounters/<id>/stop` | `/resume` | `/retry` (owner or reviewer)
 
@@ -123,14 +134,18 @@ has a decision (409: revoke it first), a `needs_answer` or `not_supported` code 
   no stopped round.
 - `retry`: `201 {"round": {...}}` - a new round (trigger `retry`) of a failed latest round, or of an earlier review.
   Not offered for a round that failed at its spending limit (the same document would meet it again).
+- Neither is offered, and both answer `409 "Whether the last coding finished is not known yet. It can run again once
+  it has been checked."`, while a request of the round may have reached the coding service with its outcome unknown
+  and no platform operator has reconciled it.
 
 ### `POST /api/encounters/<id>/reports` (any member)
 
 `{"kind": "draft|approved", "fmt": "txt|csv"}` -> `201 {id, kind, fmt, filename, generated_at, download_url, current}`.
 `409` with `details.blockers` when the export is not available yet. Format `cpt-studio-customer-export@3`: TXT between
 SYNTHETIC banners; CSV (RFC 4180) with the columns kind, code, units, modifiers, status, reason, quotes, decision,
-decided_by, decided_at, banner rows, formula cells neutralised. The approved export lists approved codes only, each with
-who approved it, their kind and when.
+decided_by, decided_at, banner rows, formula cells neutralised, control characters shown escaped. The approved export
+lists only the lines whose current decision is an approval and whose status is `ready` or `needs_review`, each with who
+approved it, their kind and when. Units or modifiers the coding review did not give read "not given".
 
 ### `GET /api/encounters/<id>/original` and `?view=1`
 

@@ -23,8 +23,8 @@ claims.
 1. **Fable's decision is final apart from the human.** No code holds, drops, downgrades or upgrades a code the coding
    step returned. The only glue logic is the combination of the two reads (5.3) and display hygiene (5.10).
 2. **No automatic resend of a paid request, ever.** The SDK client retries nothing (`max_retries=0`); a round reuses a
-   read it already paid for; an outcome that may have reached the vendor is `unknown` and needs an operator's reconcile
-   or a member's retry.
+   read it already paid for; an outcome that may have reached the vendor is `unknown`, and no one may resume or retry
+   its round until an operator has reconciled it (5.4).
 3. **Never fabricate.** No descriptor text (none is licensed), confidence figure or source that the system does not
    hold. A field of the wrong shape is dropped from display, never corrected.
 4. **Credentials are read from the file settings names, by path**, at send time; never printed, logged, stored in a row
@@ -78,9 +78,10 @@ The coding path (migration 0016, additive):
   `codes`, `questions`, `problems` and `citations`, `failure_kind` and the customer's `error` sentence, and for a Word
   document the PDF it was converted to (`view_pdf_storage_name`, `view_pdf_sha256`).
 - `CodingAnswer` (immutable) - a member's answer to a question a round asked (at most 2,000 characters).
-- `CodeDecision` (immutable, append-only) - `approve`, `reject` or `revoke` on one code of one round, by a reviewer of a
-  kind, with the attestation an approval carries; ordered by the shared `studio_decision_sequence`. The current decision
-  for (round, code) is the latest row; `revoke` clears it.
+- `CodeDecision` (immutable, append-only) - `approve`, `reject` or `revoke` on one code line of one round (its `line`,
+  `L1`.. or `M1`.., and the `code` it holds), by a reviewer of a kind, with the attestation an approval carries; ordered
+  by the shared `studio_decision_sequence`. The current decision for (round, line) is the latest row; `revoke` clears
+  it. Two lines may hold one code and are decided apart.
 - `ExportArtifact` (immutable) - one export (`draft` or `approved`, `txt` or `csv`) stored as generated, with its sha256.
 
 The runner and its record: `Job` (kind `code`, keyed `code:<round>`; a Resume adds a fresh job for the same round),
@@ -110,11 +111,14 @@ upload, answers or retry -> `jobs.start_round` (round n+1, queued, with the cont
 The worker (`run_worker`) is one process running `CPT_STUDIO_CONCURRENT_DOCUMENTS` threads (default 4), each claiming
 queued jobs with `SELECT ... FOR UPDATE SKIP LOCKED` on its own connection. One chain per encounter: every action that
 queues a job holds the encounter row lock and refuses while one is queued or running. Each send takes one of N provider
-slot locks without waiting (none free: the job is queued again after 2 s), checks a member's Stop, a standing hold and
-the spending ceiling, and is reserved in the database before any network I/O. A round reuses a run it already paid for
-after a crash between sends. A job that cannot start within 120 minutes expires (resumable). The stale sweep settles
-what a dead thread left running: a send in flight becomes `unknown` and fails its round; anything else is cancelled for a
-Resume. The worker beats every 30 s; a beat older than 120 s reads as processing paused on the page.
+slot locks without waiting (none free: the job is queued again after 2 s; the process also counts its own sends in
+flight, so a send whose database session ended keeps the other threads out), checks a member's Stop, a standing hold
+and the spending ceiling (5.4), and is reserved in the database before any network I/O. A round reuses a run it already
+paid for after a crash between sends. A job that cannot start within 120 minutes expires (resumable). The stale sweep
+settles what a dead thread left running as its stage would have settled it (`jobs.abandoned_outcome`): a send in
+flight becomes `unknown` and fails its round, as does an earlier `unknown` no operator reconciled; a send that failed
+fails the round with its own kind; only a round with nothing it sent unsettled is cancelled, for a Resume. The worker
+beats every 30 s; a beat older than 120 s reads as processing paused on the page.
 
 ### 5.3 The coding step (`studio/fable/`)
 
@@ -132,23 +136,37 @@ Resume. The worker beats every 30 s; a beat older than 120 s reads as processing
   environment), then sent as a PDF; text and pastes as a text document block. No local PDF parsing.
 - `prompts.py` - the reader's and checker's instructions; the practice's date of service, insurance and earlier answers
   travel in the user text, outside the document; the checker also gets the reader's code list.
-- `result.py` - the final JSON is the last fenced json block (else the widest `{...}` span); anything unreadable fails
-  the round (`unreadable`), never resent. **Combination**, the only glue logic: a reader code keeps the reader's status
-  when the checker agrees, else `needs_review` with both reasons; every code the checker found missing is added as
-  `needs_review`; the questions are the reader's then the checker's (an exact duplicate shown once); the problems are the
-  reader's. **Citations**: a `CODE <code>` (reader) or `REVIEW <code>` (checker) line starts that code's section, and
-  every citation after it is filed under the code.
+- `result.py` - the final JSON is exactly the last fenced json block (else the widest `{...}` span; never an earlier
+  block); anything unreadable fails the round (`unreadable`), never resent. The shape only is checked: modifiers are a
+  list of strings (an integer item read as its decimal string) or not given, units a positive integer or not given;
+  any other shape is unreadable, never corrected. **Lines**: every code row has one - `L1`..`Ln`, the reader's codes in
+  its order, then `M1`..`Mk`, the checker's additions - and the checker is given each line and names the line of every
+  review. **Combination**, the only glue logic: a reader line keeps the reader's status only when the reviews naming
+  that line and its code all say `agree` (at least one) and no other review names the line or its code; otherwise
+  `needs_review`, both reasons kept. A review that names no line, an unknown line, or a line with another code is kept
+  for the operator and sends every line it names, or whose code it carries, to `needs_review`: the code never picks a
+  line for it. Every code the checker found missing is a line of its own, `needs_review`. The questions are the
+  reader's, then the checker's, then each line's own question not yet asked (case and spacing folded), each naming the
+  lines it affects; a `needs_answer` line no question names gets its agreeing review's question, or CPT Studio's own.
+  The problems are the reader's. **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n> <code>` or
+  `MISSED M<k> <code>` (checker) starts that line's section; a citation after it is filed under the line when the
+  marker's code is that line's code, else under `_document`, and a heading, a code fence or a line that only looks like
+  a marker ends the section.
 - `pricing.py` - claude-fable-5-2's rates (input $8, cache write $10, cache read $0.20, output $40 per million tokens),
-  a run's cost priced from its usage at read time, a send's worst case.
+  a run's cost priced from its usage at read time, and a send's worst case over every attempt it may make (two with the
+  server-side fallbacks, the second also reading the first's partial answer; a fallback model never costs more).
 
 ### 5.4 Spend, holds and unknown outcomes
 
-Spend: before each send, the priced cost of every run already on the revision plus this send's worst case must stay
-within `CPT_STUDIO_DOCUMENT_CEILING_USD` (default 25), or the round fails `ceiling` and is not offered again. Holds: an
-authentication, permission, billing or quota refusal records an `InterpreterHold`; while one stands nothing is sent and
-rounds fail fast (`hold`) until an operator releases it. A rate limit or overload fails the round `busy`, for a member's
-retry. An `unknown` run fails its round and counts against the ceiling at its reserved worst case; an operator records
-a reconcile (who looked, what they found), and a member may retry.
+Spend: before each send, the priced cost of every run already on the revision (the checker's and billed failures
+included) plus this send's worst case - from the API's own count of its input tokens - must stay within
+`CPT_STUDIO_DOCUMENT_CEILING_USD` (default 25), or the round fails `ceiling` and is not offered again. When the count
+fails nothing is sent and the round fails `busy`; there is no byte estimate. Holds: an authentication, permission,
+billing or quota refusal records an `InterpreterHold`; while one stands nothing is sent and rounds fail fast (`hold`)
+until an operator releases it. A rate limit or overload fails the round `busy`, for a member's retry. An `unknown` run
+fails its round and counts against the ceiling at its reserved worst case; Resume and retry of its round wait for an
+operator's reconcile (who looked, what they found): until it is recorded the page offers neither, the API refuses both
+(`jobs.RECONCILE_FIRST`) and the console offers no retry.
 
 ### 5.5 Reference sources (`studio/reference/`)
 
@@ -162,25 +180,30 @@ nothing calls it now.
 ### 5.6 Encounter state (`studio/state.py`)
 
 Written to `Encounter.state` after every job, decision and answer, from the latest round: `processing` (queued or
-running), `stopped` (cancelled), `failed`, and once done `awaiting_answer` (a code needs an answer), `needs_review`,
-`ready` (a ready code undecided), `reviewed` (every ready and needs_review code decided) or `no_codes`. An encounter with
+running), `stopped` (cancelled), `failed`, and once done `awaiting_answer` (a line needs an answer), `needs_review` (a
+needs_review line undecided), `ready` (a ready line undecided), `reviewed` (every ready and needs_review line decided)
+or `no_codes`. Decisions count per line. An encounter with
 no round (a record of the earlier system) reads as an earlier review; Review again codes it.
 
 ### 5.7 Decisions and answers (`studio/decisions.py`)
 
-An owner or reviewer decides one code of the latest done round: a `ready` or `needs_review` code may be approved or
-rejected, a `needs_answer` code is answered first, a `not_supported` code is never decided, a decided code may only be
-revoked. An approval carries the review attestation for the reviewer's kind, exactly. Answers name the round's own
-question ids (a page left open on an earlier round is refused), are stored as `CodingAnswer` rows, and start a new round
-with every answer so far in its context. A failed round (not one stopped at the ceiling) may be retried as a new round.
+An owner or reviewer decides one line of the latest done round, naming the round the page shows, the line and its
+code: a round that is not the latest done one, or a line that round does not hold with that code, is refused (409; the
+page reloads). A `ready` or `needs_review` line may be approved or rejected, a `needs_answer` line is answered first, a
+`not_supported` line is never decided, a decided line may only be revoked. An approval carries the review attestation
+for the reviewer's kind, exactly. Answers name the round's own question ids (a page left open on an earlier round is
+refused), are stored as `CodingAnswer` rows, and start a new round with every answer so far in its context. A failed
+round (not one stopped at the ceiling) may be retried as a new round once no send of it awaits a reconcile (5.4).
 
 ### 5.8 Exports (`studio/exports.py`)
 
 `cpt-studio-customer-export@3`, from the latest round. TXT opens and closes with the SYNTHETIC banner and states the
 encounter, round, date of service, insurance and who made it when; a draft lists every code with its status, units,
 modifiers, reason, the second check and quotes with pages, then the questions and documentation notes; the approved
-export lists the approved codes with approver, kind and time. CSV (RFC 4180) has the columns kind, code, units,
-modifiers, status, reason, quotes, decision, decided_by, decided_at, banner rows, and formula cells neutralised. Each
+export lists only the lines whose current decision is an approval and whose status is ready or needs_review, with
+approver, kind and time. Units or modifiers not given read "not given". CSV (RFC 4180) has the columns kind, code,
+units, modifiers, status, reason, quotes, decision, decided_by, decided_at, banner rows, and formula cells neutralised;
+in both formats control, bidirectional and line-separator characters are shown escaped. Each
 export is stored once as an `ExportArtifact`; a download serves the stored bytes; one made from an earlier round stays
 listed, marked earlier.
 
@@ -190,15 +213,17 @@ Server-rendered pages under `/ops/` for users holding an operator grant (from `g
 confers it). Everyone else - signed out, any member, a revoked operator - gets exactly an unknown URL's 404 before the
 method, body, CSRF token or any record is read. Pages: every encounter across workspaces (state, rounds, latest cost),
 and one encounter's rounds, runs (models, served by a fallback, tokens, cost, latency, state), the reader's and checker's
-whole answers, codes, decisions, answers, audit events and the original with its sha256. Acts (POST, CSRF): reconcile an
-unknown run (a note of at least 12 characters), retry a failed round, release the standing holds. Views are audited.
+whole answers, codes and decisions by line, answers, audit events and the original with its sha256. Acts (POST, CSRF):
+reconcile an unknown run (a note of at least 12 characters), retry a failed round (not offered while a send of it awaits
+that reconcile), release the standing holds. Views are audited.
 
 ### 5.10 Display hygiene
 
-Text the coding review wrote (reasons, questions, notes) is escaped and shown as written; a server-side filter
-(`customer.shown`) replaces vendor and model names - the shared denylist's name rules,
-`ops/verification/customer-denylist.json` - with "the system" and changes nothing else. Codes, statuses and quotes of
-the document are never touched.
+Text the coding review wrote (reasons, questions, notes, and the evidence quotes its answer gave for a line the API
+cited nothing for) is escaped and shown as written; a server-side filter (`customer.shown`) replaces vendor and model
+names - the shared denylist's name rules, `ops/verification/customer-denylist.json` - with "the system" and changes
+nothing else. Codes, modifiers, statuses and the document's own cited passages are never touched. A platform
+operator's act reads as "CPT Studio" in the customer's activity.
 
 ### 5.11 Legacy records
 

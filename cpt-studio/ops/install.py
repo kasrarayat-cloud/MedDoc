@@ -2370,12 +2370,15 @@ print(ANSWER + json.dumps({'reads': reads}))
 #   - every coding job (CODE_KIND) still queued or running is closed when the next worker does not run that kind
 #     (P['kinds'] are the kinds it runs: an earlier revision's worker has no coding stage and would end on one), or,
 #     when it does (a worker of this design), each one this pair queued or started since P['since']. Its round is closed
-#     as this revision's worker closes a stage it stopped (studio.jobs.mark_stale's rule): one that sent nothing is
-#     cancelled, so it reads stopped and a Resume continues it - reusing every read the round already paid for -
-#     whenever this revision serves again, and the job is FAILED with P['code_note']; one left sending has its request
-#     recorded UNKNOWN (sent when it called a vendor), the job UNKNOWN and the round failed as unknown, never sent again
-#     (a member's retry starts a new round, once an operator has reconciled it); a reservation never sent is recorded not
-#     sent. A job row closed is never left cancelled: a cancelled coding job that is its revision's latest stage (a
+#     as this revision's worker closes a stage it stopped (mark_stale's rule: studio.jobs.abandoned_outcome): a send
+#     left sending has its request recorded UNKNOWN (sent when it called a vendor) and a reservation never sent
+#     is recorded not sent; then a round with a send that may have reached the vendor with no outcome known and no
+#     operator's reconcile (in flight now, or left unknown before) is failed as unknown and its job UNKNOWN, never sent
+#     again (a member's retry or Resume waits for an operator's reconcile); a round with a send that failed (answered
+#     and billed, or refused) is failed with that send's own kind and its job FAILED with P['failed_note']; and only a
+#     round with nothing it sent unsettled is cancelled, so it reads stopped and a Resume continues it - reusing every
+#     read the round already paid for - whenever this revision serves again, its job FAILED with P['code_note']. A job
+#     row closed is never left cancelled: a cancelled coding job that is its revision's latest stage (a
 #     member's Stop) is failed with the note too, its round left stopped, since an earlier revision counts such a job as
 #     a stage it cannot run (its UNRUNNABLE_STAGES), and its installer's app refuses on one (the rollback rehearsal on
 #     e426c747c7b7's own code, ops/INSTALL.md);
@@ -2388,7 +2391,7 @@ print(ANSWER + json.dumps({'reads': reads}))
 #     else is touched: this revision queues no stage but a coding job, so a stage of the earlier pipeline the next
 #     worker runs is that pipeline's own, and it is left to it.
 # Nothing finished is touched and no row is removed: no row of the four new tables is deleted; closed rounds are marked
-# cancelled (failed as unknown when a request was in flight, as above) - the only rows of those tables written. Then
+# cancelled (failed, as above, when a send of it is unknown or failed) - the only rows of those tables written. Then
 # each encounter it closed a stage of has its stored state recomputed with this revision's derivation (studio.state),
 # and the answer names, after the close: 'relabel', every encounter whose stored state this revision derived (each one
 # with a coding round) or whose earlier stage this revision's worker settled since P['since'] - put_back_states gives
@@ -2406,6 +2409,7 @@ CODE = jobs.CODE
 since, now = datetime.datetime.fromisoformat(P['since']), timezone.now()
 kept = set(P.get('kinds') or COMMON_STAGE_KINDS)
 code_note = P.get('code_note') or P['note']
+failed_note = P.get('failed_note') or code_note  # a coding job whose round the close fails rather than cancels
 
 
 def job_round(job):  # the round a coding job names ('code:<round>' and an optional ':resume:<uuid>')
@@ -2434,6 +2438,7 @@ def latest_stage(job):  # its revision's newest stage, of its encounter's curren
 
 closed, kinds, encounters, counted = 0, set(), set(), {'unknown': 0, 'not_sent': 0}
 stopped, failed, unknown_jobs, retired, rounds = 0, 0, 0, 0, {'cancelled': 0, 'failed': 0}
+code_failed = 0  # coding jobs whose round a send of it failed: the round failed with that send's kind
 with transaction.atomic():
     coding = Job.objects.select_for_update().filter(kind=CODE, state__in=(Job.QUEUED, Job.RUNNING))
     if CODE in kept:  # the next worker runs coding jobs: only this pair's own are closed
@@ -2448,19 +2453,24 @@ with transaction.atomic():
         sent, unsent = settle(runs)
         counted['unknown'] += sent
         counted['not_sent'] += unsent
-        if sent:
-            job.state, job.error = Job.UNKNOWN, code_note + ' A request was in flight; its outcome is unknown.'
+        # how the round ends is how its own stage would have ended it (studio.jobs.abandoned_outcome, the stale sweep's
+        # rule, MONEY-2): unknown while a send of it may have reached the vendor with no outcome known and no
+        # operator's reconcile - in flight now, or left unknown before; failed with a send's own kind when a send of it
+        # failed; cancelled, for a Resume that reuses its paid reads, only when nothing it sent is unsettled
+        kind = jobs.abandoned_outcome(round_) if round_ is not None else (jobs.UNKNOWN if sent else '')
+        if kind == jobs.UNKNOWN:
+            job.state, job.error = Job.UNKNOWN, failed_note + (' A request was in flight; its outcome is unknown.'
+                                                               if sent else '')
             unknown_jobs += 1
-            if round_ is not None and round_.state in (Round.QUEUED, Round.RUNNING):
-                Round.objects.filter(pk=round_.pk).update(state=Round.FAILED, failure_kind=jobs.UNKNOWN,
-                                                          error=jobs.FAILURE_TEXT[jobs.UNKNOWN], finished_at=now)
-                rounds['failed'] += 1
+        elif kind:
+            job.state, job.error = Job.FAILED, failed_note
+            code_failed += 1
         else:
             job.state, job.error = Job.FAILED, code_note
             stopped += 1
-            if round_ is not None and round_.state in (Round.QUEUED, Round.RUNNING):
-                Round.objects.filter(pk=round_.pk).update(state=Round.CANCELLED, finished_at=now)
-                rounds['cancelled'] += 1
+        if round_ is not None and round_.state in (Round.QUEUED, Round.RUNNING):
+            Round.objects.filter(pk=round_.pk).update(**{**jobs._abandoned_fields(round_, kind), 'finished_at': now})
+            rounds['failed' if kind else 'cancelled'] += 1
         job.finished_at = now
         job.save(update_fields=['state', 'error', 'finished_at'])
         closed, encounters = closed + 1, encounters | {str(job.encounter_id)}
@@ -2515,7 +2525,8 @@ for pk in (Job.objects.filter(state__in=(Job.QUEUED, Job.RUNNING)).exclude(kind_
     hazards[str(pk)] = sorted(set(hazards.get(str(pk), [])) | {'open_stage'})
 print(ANSWER + json.dumps({'closed': closed, 'kinds': sorted(kinds), 'encounters': len(encounters),
                            'runs_unknown': counted['unknown'], 'runs_not_sent': counted['not_sent'],
-                           'stopped': stopped, 'unknown': unknown_jobs, 'retired': retired, 'failed': failed,
+                           'stopped': stopped, 'unknown': unknown_jobs, 'code_failed': code_failed,
+                           'retired': retired, 'failed': failed,
                            'rounds': rounds,
                            'hazards': dict(sorted(hazards.items())), 'relabel': sorted(coded | swept)}))
 '''
@@ -2907,16 +2918,22 @@ def close_undone_stages(image_id, env_bytes, since, revision, reason, kinds) -> 
     stage (``kinds`` are the kinds it runs: an earlier revision's worker would end on one), or, when it does, each one
     this pair queued or started since ``since`` - failed with the installer's note and its round cancelled, so it reads
     stopped and a Resume continues it whenever this revision serves again; one left sending is recorded unknown, never
-    sent again; a coding job a member stopped that is its revision's latest stage is failed too (an earlier revision's
-    installer refuses on one) - and every open stage of another kind the next worker does not run is closed as failed
-    with the revision named; the provider runs they left unsettled are settled. The answer's 'hazards' name what the next pair would still act on wrongly
-    (UNDO_HAZARDS), and its 'relabel' the encounters whose stored state that pair is to derive (put_back_states)."""
+    sent again, and a round with a send unknown (not reconciled) or failed is failed as its own stage would have failed
+    it (studio.jobs.abandoned_outcome); a coding job a member stopped that is its revision's latest stage is failed too
+    (an earlier revision's installer refuses on one) - and every open stage of another kind the next worker does not
+    run is closed as failed with the revision named; the provider runs they left unsettled are settled. The answer's
+    'hazards' name what the next pair would still act on wrongly (UNDO_HAZARDS), and its 'relabel' the encounters whose
+    stored state that pair is to derive (put_back_states)."""
     note = (f'Closed by the installer: {reason} (revision {revision[:12]}), so this stage will not run. Upload the '
             'document again to process it.')
     code_note = (f'Stopped by the installer: {reason} (revision {revision[:12]}). Its round reads stopped; a Resume '
                  f'continues it, reusing every read already paid for, whenever revision {revision[:12]} serves again.')
+    failed_note = (f'Stopped by the installer: {reason} (revision {revision[:12]}). Its round is closed as failed, as '
+                   'the worker would have closed it: a request of it had failed, or may have reached the vendor with '
+                   'its outcome unknown - an operator reconciles that one before anyone sends the round again.')
     return app_script(image_id, env_bytes, CLOSE_STAGES, {'since': since.isoformat(), 'note': note,
-                                                          'code_note': code_note, 'kinds': sorted(kinds)},
+                                                          'code_note': code_note, 'failed_note': failed_note,
+                                                          'kinds': sorted(kinds)},
                       what=f'Closing the stages revision {revision[:12]} left open')
 
 
@@ -2942,8 +2959,8 @@ def undo_hazards(image_id, env_bytes, revision) -> dict:
 # What an undo does to the four tables of migration 0016, as the receipt's declared note says it (install-2): the close
 # (CLOSE_STAGES) removes no row and writes only the rounds it closes.
 FOUR_TABLES_KEPT = ('no row of the four new tables is deleted; closed rounds are marked cancelled (a round whose '
-                    'request was in flight is marked failed, its outcome unknown, as the worker\'s own stale sweep '
-                    'marks it); answers, code decisions, exports and finished rounds are not written')
+                    'request was in flight, or whose send is unknown or failed, is marked failed, as the worker\'s own '
+                    'stale sweep marks it); answers, code decisions, exports and finished rounds are not written')
 
 
 def coding_note(image_id, env_bytes, revision) -> dict:
