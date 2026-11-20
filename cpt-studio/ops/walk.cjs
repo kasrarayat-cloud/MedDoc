@@ -706,13 +706,18 @@ function foldMarked(text) {
   return String(text ?? '').normalize('NFKC').replace(/\s+/gu, '');
 }
 
+// Why the page framed the browser's own viewer instead of drawing the PDF (the viewer element's data-fallback).
+const FALLBACK_WHY = { browser: 'marking needs a newer browser', document: 'the document cannot be drawn in the page',
+  slow: 'the document took too long to load' };
+
 // One chosen quote judged against what the viewer showed (readMarks): {outcome, off_page, mismatched, cut, problems}.
 // outcome: 'once' or 'multi' (marked, the marked text of every occurrence being the quote's words, white space ignored -
 // in its case, or in another where the page has no exact-case occurrence - and no occurrence beginning or ending inside a
 // character), 'not_found' (nothing marked, and the note says the words could not be found), 'unavailable' (the browser's
-// own viewer is shown: no marking) or 'unresolved'. A mark on a page that is neither the quote's nor, for an occurrence
-// that starts on it, the next is off_page; an occurrence's marks on one page that begin or end inside a character (a
-// letter marked without the accent the next item holds: readMarks' `whole`) count once each in cut.
+// own viewer is shown: no marking; the problem says why, as the viewer keeps it: readMarks' `fallback`) or 'unresolved'.
+// A mark on a page that is neither the quote's nor, for an occurrence that starts on it, the next is off_page; an
+// occurrence's marks on one page that begin or end inside a character (a letter marked without the accent the next item
+// holds: readMarks' `whole`) count once each in cut.
 function judgeQuote(quote, reading) {
   const out = { outcome: 'unresolved', off_page: 0, mismatched: 0, cut: 0, problems: [] };
   const name = `quote ${quote?.line || quote?.code || '?'}${quote?.page ? ` (page ${quote.page})` : ''}`;
@@ -722,7 +727,8 @@ function judgeQuote(quote, reading) {
   }
   if (reading.mode === 'frame') {
     out.outcome = 'unavailable';
-    out.problems.push(`${name}: the PDF is shown by the browser's own viewer, so nothing could be marked`);
+    const why = Object.prototype.hasOwnProperty.call(FALLBACK_WHY, reading.fallback) ? FALLBACK_WHY[reading.fallback] : 'no reason given';
+    out.problems.push(`${name}: the PDF is shown by the browser's own viewer (${why}), so nothing could be marked`);
     return out;
   }
   const marks = Array.isArray(reading.marks) ? reading.marks : [];
@@ -795,6 +801,7 @@ function readMarks() {
   if (!viewer) return null;
   const note = document.querySelector('#viewerMark');
   const out = { mode: viewer.tagName === 'IFRAME' ? 'text' : viewer.getAttribute('data-mode') || 'loading',
+    fallback: viewer.getAttribute('data-fallback') || '',
     marked: viewer.getAttribute('data-marked') || '', status: viewer.getAttribute('data-mark-status') || '',
     pages: (viewer.getAttribute('data-mark-pages') || '').split(' ').filter(Boolean).map(Number),
     count: Number(viewer.getAttribute('data-mark-count') || 0), note: note ? note.textContent : '', drawn: [], marks: [] };

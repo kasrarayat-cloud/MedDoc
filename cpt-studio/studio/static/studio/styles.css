@@ -447,11 +447,12 @@
    page and the library set). The chosen quote's words are marked in the page's lime beneath the drawing, which is
    multiplied over them like a highlighter, so the glyphs keep their own colour; the drawing lets the pointer through to
    the text, which stays selectable. The note under the viewer says what was marked. Elements the approved design did not
-   have, in its own colours. */
+   have, in its own colours: the status line and the page label in its teal, 5.5:1 on the viewer's ground and 6.1:1 on its
+   toolbar (its muted grey read 3.7:1 and 4.1:1 there, under the 4.5:1 that text this small needs). */
 .viewer-frame.pdf-viewer{position:relative;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:#eeefe8;padding:12px}
 .pdf-viewer:focus-visible{outline:3px solid #83b6a3;outline-offset:-3px}
 .pdf-viewer[data-mode="frame"]{padding:0;overflow:hidden}
-.pdf-status{margin:12px 4px;font-size:12px;color:var(--muted)}
+.pdf-status{margin:12px 4px;font-size:12px;color:var(--teal)}
 .pdf-pages{display:grid;gap:12px;justify-items:center;min-width:0}
 .pdf-page{position:relative;background:#fff;box-shadow:0 1px 3px #17352b26;overflow:hidden;isolation:isolate}
 .pdf-page>canvas{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%;mix-blend-mode:multiply;pointer-events:none}
@@ -464,7 +465,7 @@
 .pdf-text ::selection{background:color-mix(in srgb,var(--teal) 30%,transparent);color:transparent}
 .pdf-text .pdf-mark{position:static;background:var(--lime);box-shadow:inset 0 -2px 0 var(--teal);border-radius:2px}
 .viewer-fallback{display:block;width:100%;height:100%;border:0;background:#fff}
-.viewer-page{font-size:11px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.viewer-page{font-size:11px;color:var(--teal);white-space:nowrap;font-variant-numeric:tabular-nums}
 .viewer-page:empty{display:none}
 .viewer-mark{margin:0;padding:9px 18px;font-size:11px;line-height:1.6;color:#40592f;background:#f0f5e7;border-top:1px solid #dfe5d6;overflow-wrap:anywhere}
 .viewer-mark:empty{padding:0;border:0}

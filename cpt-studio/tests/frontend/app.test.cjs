@@ -992,7 +992,7 @@ function pdfPage(strings, reads) {
   return { getTextContent: async () => { reads.push(strings); return { items: strings.map(str => ({ str, hasEOL: false })) }; } };
 }
 
-test('where the PDF library cannot run, the browser\'s own viewer is framed and opens a quoted page, saying it cannot mark', async () => {
+test('where the PDF library cannot run, the browser\'s own viewer is framed and opens a quoted page, saying marking needs a newer browser', async () => {
   const word = fixture('encounter-word.json');
   const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
   const saved = { viewer: app.state.viewer, pdfLibrary: app.state.pdfLibrary };
@@ -1007,6 +1007,7 @@ test('where the PDF library cannot run, the browser\'s own viewer is framed and 
       const viewer = app.state.viewer;
       assert.equal(viewer.mode, 'frame');
       assert.equal(element.dataset.mode, 'frame');
+      assert.deepEqual([viewer.fallback, element.dataset.fallback], ['browser', 'browser'], 'the browser is why');
       assert.deepEqual(element.children, [viewer.frame], 'the frame alone, in the viewer\'s place');
       assert.equal(viewer.frame.src, word.document.view_url);
       assert.equal(viewer.frame.className, 'viewer-fallback');
@@ -1015,7 +1016,7 @@ test('where the PDF library cannot run, the browser\'s own viewer is framed and 
       app.showQuote('L2#0');
       assert.equal(viewer.frame.src, `${word.document.view_url}#page=1`);
       assert.equal(app.state.selectedQuote, 'L2#0');
-      assert.equal(find('#viewerMark').textContent, 'Marking is not available for this document. Page 1 is shown.');
+      assert.equal(find('#viewerMark').textContent, 'Marking needs a newer browser. Page 1 is shown.');
       assert.ok(find('#viewerMark').classList.contains('is-missing'));
       assert.equal(element.dataset.marked, '', 'nothing marked');
       app.showQuote('M1#0');
@@ -1028,6 +1029,45 @@ test('where the PDF library cannot run, the browser\'s own viewer is framed and 
       assert.equal(app.state.viewer, null);
       assert.equal(viewer.mode, 'closed');
     });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('the browser\'s own viewer says why it is shown: the browser, a document the library cannot draw, a stalled download', async () => {
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const cases = [['browser', 'browser', 'Marking needs a newer browser.'],
+    ['document', 'document', 'This document cannot be drawn here, so nothing is marked.'],
+    ['slow', 'slow', 'The document took too long to load here, so nothing is marked.'],
+    // a reason the page does not name is read as the document's, never as the browser's
+    ['toString', 'document', 'This document cannot be drawn here, so nothing is marked.'],
+    [undefined, 'document', 'This document cannot be drawn here, so nothing is marked.']];
+  try {
+    for (const [reason, kept, said] of cases) {
+      const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+      await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+        Object.assign(app.state, { doc: word, route: null });
+        // a quote was chosen while the document was still opening
+        const viewer = { element, view: word.document.view_url, name: 'x', mode: 'loading', pages: [], texts: new Map(), mark: null,
+          pending: { quote: { text: 'A 7 mm sessile polyp', page: 2 }, key: 'M1#0' }, markSerial: 0, reveal: 0, frame: null, fallback: '',
+          task: null, worker: null };
+        app.state.viewer = viewer;
+        app.fallbackViewer(viewer, reason);
+        assert.deepEqual([viewer.mode, viewer.fallback, element.dataset.mode, element.dataset.fallback], ['frame', kept, 'frame', kept], String(reason));
+        assert.equal(viewer.frame.src, `${word.document.view_url}#page=2`, 'the page of the quote that was waiting');
+        assert.equal(find('#viewerMark').textContent, `${said} Page 2 is shown.`);
+        assert.ok(find('#viewerMark').classList.contains('is-missing'));
+        // a quote chosen in the frame says the same of its own page
+        app.showQuote('L2#0');
+        assert.equal(viewer.frame.src, `${word.document.view_url}#page=1`);
+        assert.equal(find('#viewerMark').textContent, `${said} Page 1 is shown.`);
+        // once framed, the reason stays: a second failure does not change what the note says
+        app.fallbackViewer(viewer, 'browser');
+        assert.equal(viewer.fallback, kept);
+        app.closeViewer();
+      });
+    }
   } finally {
     Object.assign(app.state, saved);
   }
@@ -2234,6 +2274,11 @@ test('the matcher agrees with the rule stated by brute force on pages of accents
   assert.ok(marked > 1500, `the trials mark often enough to mean something (${marked})`);
 });
 
+// What a page has that a bare script realm does not: the observers and structuredClone (the rest the viewer needs is the
+// language's own, as in a browser).
+const PAGE_APIS = 'globalThis.IntersectionObserver = function () {}; globalThis.ResizeObserver = function () {};'
+  + ' globalThis.structuredClone = function () {};';
+
 test('without Intl.Segmenter the matcher still cuts characters from the page\'s whole text, and the viewer is not offered', () => {
   const context = vm.createContext({ module: { exports: {} } });
   vm.runInContext('delete Intl.Segmenter;', context);
@@ -2245,11 +2290,45 @@ test('without Intl.Segmenter the matcher still cuts characters from the page\'s 
   assert.equal(bare.locateQuote({ text: '하', page: 1 }, [['ㅎㅏ']]).count, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(bare.characterSpans('éx'))), [[0, 2], [2, 3]]);
   // everything else the viewer needs is there; without Intl.Segmenter the browser's own viewer is framed instead
-  vm.runInContext('globalThis.IntersectionObserver = function () {}; globalThis.ResizeObserver = function () {};'
-    + ' Map.prototype.getOrInsertComputed = Map.prototype.getOrInsertComputed || function () {};', context);
+  vm.runInContext(PAGE_APIS, context);
   assert.equal(bare.pdfCapable(), false);
   vm.runInContext('Intl.Segmenter = function () {};', context);
   assert.equal(bare.pdfCapable(), true);
+});
+
+test('the viewer is offered only where every built-in it and the legacy library need natively is there, and no other is asked for', () => {
+  const context = vm.createContext({ module: { exports: {} } });
+  vm.runInContext(fs.readFileSync(BUNDLE, 'utf8'), context, { filename: BUNDLE });
+  const bare = context.module.exports;
+  assert.equal(bare.pdfCapable(), false, 'no observers in a bare realm');
+  vm.runInContext(PAGE_APIS, context);
+  assert.equal(bare.pdfCapable(), true);
+  const without = (holder, key, check) => {
+    vm.runInContext(`globalThis.__kept = ${holder}[${JSON.stringify(key)}]; delete ${holder}[${JSON.stringify(key)}];`, context);
+    assert.equal(vm.runInContext(`typeof ${holder}[${JSON.stringify(key)}]`, context), 'undefined', `${holder}.${key} deleted`);
+    check(bare.pdfCapable(), `${holder}.${key}`);
+    vm.runInContext(`${holder}[${JSON.stringify(key)}] = globalThis.__kept;`, context);
+    assert.equal(bare.pdfCapable(), true);
+  };
+  // asked for: our own code's (the observers, the matcher's Intl.Segmenter), what the measurement found the legacy
+  // library cannot run without (Promise.withResolvers, ArrayBuffer.prototype.transferToFixedLength, Array.prototype.at)
+  // and what it calls with no stand-in on paths the viewer can take (structuredClone, Object.hasOwn)
+  for (const [holder, key] of [['globalThis', 'IntersectionObserver'], ['globalThis', 'ResizeObserver'], ['Intl', 'Segmenter'],
+    ['Promise', 'withResolvers'], ['ArrayBuffer.prototype', 'transferToFixedLength'], ['Array.prototype', 'at'],
+    ['globalThis', 'structuredClone'], ['Object', 'hasOwn']]) {
+    without(holder, key, (capable, name) => assert.equal(capable, false, name));
+  }
+  // not asked for: what the legacy build brings its own stand-ins for (the modern build needed several natively - Map
+  // getOrInsertComputed from Chrome 145, Math.sumPrecise from Chrome 147), what it uses only where it exists, and what the
+  // page script no longer calls (Array.prototype.findLast)
+  for (const [holder, key] of [['Map.prototype', 'getOrInsertComputed'], ['Map.prototype', 'getOrInsert'], ['WeakMap.prototype', 'getOrInsertComputed'],
+    ['Math', 'sumPrecise'], ['Promise', 'try'], ['Uint8Array', 'fromBase64'], ['Uint8Array.prototype', 'toBase64'], ['Uint8Array.prototype', 'toHex'],
+    ['Set.prototype', 'union'], ['Set.prototype', 'intersection'], ['globalThis', 'Iterator'], ['globalThis', 'Float16Array'],
+    ['Array.prototype', 'findLast']]) {
+    // one this node does not have is given a stand-in first, so that its going is a real deletion
+    vm.runInContext(`if (typeof ${holder}[${JSON.stringify(key)}] === 'undefined') ${holder}[${JSON.stringify(key)}] = function () {};`, context);
+    without(holder, key, (capable, name) => assert.equal(capable, true, name));
+  }
 });
 
 test('the matcher is exact-case first, case-blind only where no exact-case occurrence exists, and counts every one', () => {
@@ -2333,8 +2412,15 @@ test('the matcher refuses empty and odd input, and names a page the document doe
   assert.deepEqual(app.locateQuote({ text: 'Some', page: 1 }, [['', null, 7, 'Some']]).marks, { 1: [{ item: 3, start: 0, end: 4, occurrence: 0 }] });
   assert.equal(app.locateQuote({ text: 'x', page: 1 }, [null]).status, 'not_found');
   assert.equal(app.markNote(null), 'The exact words could not be found in this document, so nothing is marked.');
-  assert.equal(app.frameNote(3), 'Marking is not available for this document. Page 3 is shown.');
-  assert.equal(app.frameNote(null), 'Marking is not available for this document.');
+  // the frame's note says why the PDF is not drawn and marked in the page: the browser, the document, or a stalled download
+  assert.equal(app.frameNote(3, 'browser'), 'Marking needs a newer browser. Page 3 is shown.');
+  assert.equal(app.frameNote(null, 'browser'), 'Marking needs a newer browser.');
+  assert.equal(app.frameNote(3, 'document'), 'This document cannot be drawn here, so nothing is marked. Page 3 is shown.');
+  assert.equal(app.frameNote(null, 'document'), 'This document cannot be drawn here, so nothing is marked.');
+  assert.equal(app.frameNote(2, 'slow'), 'The document took too long to load here, so nothing is marked. Page 2 is shown.');
+  for (const odd of [undefined, '', 'toString', '__proto__', 7]) {
+    assert.equal(app.frameNote(1, odd), 'This document cannot be drawn here, so nothing is marked. Page 1 is shown.', String(odd));
+  }
 });
 
 test('a drawn page\'s marks split exactly the matched characters out of the text layer\'s spans, as text only', async () => {
@@ -2395,8 +2481,8 @@ test('the PDF library is named on the page as same-origin static modules, and no
   const saved = global.document;
   try {
     const page = data => { global.document = { body: { dataset: data } }; return app.pdfAssets(); };
-    const module = '/static/studio/lib/pdfjs-6.5.438/build/pdf.min.0123456789ab.mjs';
-    const worker = '/static/studio/lib/pdfjs-6.5.438/build/pdf.worker.min.0123456789ab.mjs';
+    const module = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.min.0123456789ab.mjs';
+    const worker = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.worker.min.0123456789ab.mjs';
     assert.deepEqual(page({ pdfModule: module, pdfWorker: worker }), { module, worker });
     for (const bad of ['https://cdn.example/pdf.mjs', '//cdn.example/pdf.mjs', '/static/x.js', 'data:text/javascript,1', '/api/x.mjs', '/static/a b.mjs', 7, null]) {
       assert.deepEqual(page({ pdfModule: bad, pdfWorker: bad }), { module: '', worker: '' }, String(bad));
@@ -2407,9 +2493,15 @@ test('the PDF library is named on the page as same-origin static modules, and no
   }
   // the shell names the pinned copy; the page script names no address of its own
   const template = fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8');
-  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/build\/pdf\.worker\.min\.mjs' %\}">/);
+  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}">/);
   const bundle = fs.readFileSync(BUNDLE, 'utf8');
-  assert.ok(!bundle.includes('pdfjs-6.5.438/build'), 'the bundle reads the addresses from the page');
+  assert.ok(!/pdf(\.worker)?\.min\.mjs/.test(bundle), 'the bundle reads the addresses from the page');
+  // the image decoders and standard fonts are the package's own folders, two up from the legacy worker
+  assert.match(bundle, /wasmUrl: new URL\('\.\.\/\.\.\/wasm\/', worker\)\.href, standardFontDataUrl: new URL\('\.\.\/\.\.\/standard_fonts\/', worker\)\.href,/);
+  // the worker is started first and given to the document, so a worker that cannot start is told apart from a document
+  // the library refuses (the note says which)
+  assert.match(bundle, /viewer\.worker = new library\.PDFWorker\(\{ verbosity: library\.VerbosityLevel\.ERRORS \}\);\n\s+await viewer\.worker\.promise;/);
+  assert.match(bundle, /\n\s+worker: viewer\.worker,\n/);
   // the library is opened with no eval, no WebAssembly, no XFA and the page drawn on the main thread, from the view address
   assert.match(bundle, /library\.getDocument\(\{\n\s+url: viewer\.view, withCredentials: false, isEvalSupported: false, enableXfa: false, useWasm: false,/);
   assert.match(bundle, /disableWorkerRendering: true/);

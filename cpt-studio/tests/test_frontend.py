@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urljoin
 
 from django.conf import settings
 from django.contrib.staticfiles.storage import staticfiles_storage
@@ -27,11 +28,25 @@ CUSTOMER_FIXTURES = ROOT / 'tests' / 'fixtures' / 'customer'
 APPROVED_CSS_LENGTH = 32785
 APPROVED_CSS_SHA256 = '4d68468c74e7b47d80472b9c95c6947189051089349b1559863ded7bd7b047e8'
 PLAIN_STATIC = {**settings.STORAGES, 'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}}
-# The pinned PDF library the review page draws a PDF with (DECISIONS D368): the files its manifest lists, each byte-identical
-# to the npm tarball pdfjs-dist-6.5.438.tgz (sha512 integrity below), and nothing else.
+# The pinned PDF library the review page draws a PDF with (DECISIONS D368): the legacy build of pdfjs-dist 6.5.438 and the
+# files it uses, each byte-identical to the npm tarball pdfjs-dist-6.5.438.tgz (sha512 integrity below), and the licence of
+# the core-js its legacy build bundles (from core-js-3.51.0.tgz), and nothing else.
 PDF_LIB = STATIC / 'lib' / 'pdfjs-6.5.438'
 PDF_LIB_NAME = 'studio/lib/pdfjs-6.5.438'
 PDF_LIB_INTEGRITY = 'sha512-vg8Pw1x+AFKy4AMDvhuWl5cOYV8d698UoEANoFFhc79hqXDnZQqnOXoxw3HG907WHOg1JYOvLhP756boddFxpA=='
+COREJS_INTEGRITY = 'sha512-7bDKx/5jm5MxzsXxc93g6Z2+4ZsuT/MddrfRmTDJNAkWsYWHU8EVNEsBiIEWnMAMCHMmRfUEjkuo3jeNBOIHRw=='
+PDF_LIB_SCRIPTS = ('legacy/build/pdf.min.mjs', 'legacy/build/pdf.worker.min.mjs', 'wasm/jbig2_nowasm_fallback.js',
+                   'wasm/openjpeg_nowasm_fallback.js')
+# core-js's lookup of the global object, as the legacy build bundles it (core-js internals/global-this): the one place
+# either legacy file builds a function from a string. It is reached only where globalThis, window, self, global and the
+# module's own `this` (undefined in a module) are all missing, which never happens in a browser - and the shell's policy
+# has no 'unsafe-eval', so a browser would refuse it anyway. It is allowed by its exact bytes, once per file; any other
+# code built from a string fails the test.
+COREJS_GLOBAL_LOOKUP = ('check("object"==typeof globalThis&&globalThis)||check("object"==typeof window&&window)||'
+                        'check("object"==typeof self&&self)||check("object"==typeof global&&global)||'
+                        'check("object"==typeof this&&this)||function(){return this}()||Function("return this")()')
+CODE_FROM_STRINGS = re.compile(r'(?<![\w$.])eval\b|\bnew\s+Function\s*\(|(?<![\w$.])Function\s*\(|'
+                               r'\.constructor\s*\(\s*["\'`]|(?<![\w$.])set(?:Timeout|Interval)\s*\(\s*["\'`]')
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 # GET /api/session, /api/encounters and /api/encounters/<id>, exactly as the contract file lists them (the build
 # specification, section 6, with document.view_media_type, document.converted and the state 'earlier')
@@ -127,8 +142,8 @@ class ShellTemplateTests(SimpleTestCase):
         html = self.render_index()
         body = re.search(r'<body ([^>]*)>', html).group(1)
         self.assertEqual(dict(re.findall(r'(data-pdf-module|data-pdf-worker)="([^"]*)"', body)), {
-            'data-pdf-module': f'/static/{PDF_LIB_NAME}/build/pdf.min.mjs',
-            'data-pdf-worker': f'/static/{PDF_LIB_NAME}/build/pdf.worker.min.mjs'})
+            'data-pdf-module': f'/static/{PDF_LIB_NAME}/legacy/build/pdf.min.mjs',
+            'data-pdf-worker': f'/static/{PDF_LIB_NAME}/legacy/build/pdf.worker.min.mjs'})
         self.assertNotIn('modulepreload', html, 'the library is loaded only when a PDF is viewed')
 
     def test_index_obeys_the_content_security_policy(self):
@@ -311,8 +326,11 @@ class PdfLibraryTests(SimpleTestCase):
 
     def test_every_pinned_file_is_listed_with_its_checksum_and_nothing_else_is_there(self):
         manifest = self.manifest()
-        self.assertEqual((manifest['name'], manifest['version'], manifest['license']), ('pdfjs-dist', '6.5.438', 'Apache-2.0'))
+        self.assertEqual((manifest['schema'], manifest['name'], manifest['version'], manifest['build'], manifest['license']),
+                         ('cpt-studio-third-party@2', 'pdfjs-dist', '6.5.438', 'legacy', 'Apache-2.0'))
         self.assertEqual(manifest['npm_integrity'], PDF_LIB_INTEGRITY)
+        self.assertEqual([(item['name'], item['version'], item['license'], item['npm_integrity'], item['in']) for item in manifest['bundled']],
+                         [('core-js', '3.51.0', 'MIT', COREJS_INTEGRITY, list(PDF_LIB_SCRIPTS[:2]))])
         listed = {item['path']: item for item in manifest['files']}
         present = {path.relative_to(PDF_LIB).as_posix() for path in PDF_LIB.rglob('*') if path.is_file()}
         self.assertEqual(present, set(listed) | {'MANIFEST.json'})
@@ -321,19 +339,41 @@ class PdfLibraryTests(SimpleTestCase):
                 data = (PDF_LIB / name).read_bytes()
                 self.assertEqual((len(data), hashlib.sha256(data).hexdigest()), (item['bytes'], item['sha256']))
                 self.assertTrue(item['why'])
+                # each file keeps its path in its package (the core-js licence is that package's own LICENSE)
+                expected = ('core-js@3.51.0', 'package/LICENSE') if name == 'core-js-3.51.0/LICENSE' else ('pdfjs-dist@6.5.438', f'package/{name}')
+                self.assertEqual((item['package'], item['npm_path']), expected)
         self.assertTrue((PDF_LIB / 'LICENSE').read_text(encoding='utf-8').startswith('\n                                 Apache License'))
-        # the minified builds, the worker, the two image decoders without WebAssembly and two standard fonts: no source maps,
-        # no scripting sandbox, no WebAssembly, no renderer worker
+        corejs = (PDF_LIB / 'core-js-3.51.0' / 'LICENSE').read_text(encoding='utf-8')
+        self.assertTrue(corejs.startswith('Copyright (c) 2013–2025 Denis Pushkarev (zloirock.ru)\n'))
+        self.assertIn('Permission is hereby granted, free of charge, to any person obtaining a copy', corejs)
+        # the legacy build's two files (no modern build/), the two image decoders without WebAssembly and two standard
+        # fonts: no source maps, no scripting sandbox, no WebAssembly, no renderer worker
         self.assertEqual(sorted(name for name in listed if not name.split('/')[-1].startswith('LICENSE')), [
-            'build/pdf.min.mjs', 'build/pdf.worker.min.mjs', 'standard_fonts/FoxitDingbats.pfb', 'standard_fonts/FoxitSymbol.pfb',
-            'wasm/jbig2_nowasm_fallback.js', 'wasm/openjpeg_nowasm_fallback.js'])
-
-    def test_the_library_evaluates_no_code_from_strings(self):
-        for name in ('build/pdf.min.mjs', 'build/pdf.worker.min.mjs', 'wasm/jbig2_nowasm_fallback.js', 'wasm/openjpeg_nowasm_fallback.js'):
+            'legacy/build/pdf.min.mjs', 'legacy/build/pdf.worker.min.mjs', 'standard_fonts/FoxitDingbats.pfb',
+            'standard_fonts/FoxitSymbol.pfb', 'wasm/jbig2_nowasm_fallback.js', 'wasm/openjpeg_nowasm_fallback.js'])
+        self.assertFalse((PDF_LIB / 'build').exists())
+        # the licence is of the core-js version the legacy build carries: each file's core-js record names it
+        for name in PDF_LIB_SCRIPTS[:2]:
             with self.subTest(name):
                 text = (PDF_LIB / name).read_text(encoding='utf-8')
-                self.assertIsNone(re.search(r'(?<![\w$.])eval\s*\(|\bnew\s+Function\s*\(|(?<![\w$.])Function\s*\(', text))
+                self.assertEqual(re.findall(r'\.versions=\[\]\)\)\.push\(\{version:"([0-9.]+)"', text), ['3.51.0'])
+
+    def test_the_library_evaluates_no_code_from_strings(self):
+        for name in PDF_LIB_SCRIPTS:
+            with self.subTest(name):
+                text = (PDF_LIB / name).read_text(encoding='utf-8')
+                # core-js's global lookup, once in each legacy file and nowhere else (see COREJS_GLOBAL_LOOKUP)
+                self.assertEqual(text.count(COREJS_GLOBAL_LOOKUP), 1 if name.startswith('legacy/') else 0)
+                rest = text.replace(COREJS_GLOBAL_LOOKUP, '')
+                self.assertEqual([match.group(0) for match in CODE_FROM_STRINGS.finditer(rest)], [])
                 self.assertNotIn('sourceMappingURL', text)
+        # the allowance is that occurrence alone: the same text with one more call built from a string fails
+        planted = (PDF_LIB / PDF_LIB_SCRIPTS[0]).read_text(encoding='utf-8').replace(
+            COREJS_GLOBAL_LOOKUP, COREJS_GLOBAL_LOOKUP + ';Function("return 1")()', 1).replace(COREJS_GLOBAL_LOOKUP, '')
+        self.assertEqual([match.group(0) for match in CODE_FROM_STRINGS.finditer(planted)], ['Function('])
+        for unsafe in ('eval("1")', '(0,eval)("1")', 'new Function("a")', 'x.constructor("return this")', 'setTimeout("f()")'):
+            with self.subTest(unsafe):
+                self.assertIsNotNone(CODE_FROM_STRINGS.search(unsafe))
 
     def test_the_shell_policy_lets_the_library_run_with_no_eval_and_no_webassembly(self):
         csp = dict(part.strip().split(' ', 1) for part in views.INDEX_CSP.split(';'))
@@ -351,14 +391,17 @@ class PdfLibraryTests(SimpleTestCase):
             html = render_to_string('studio/index.html', {'release': 'test-release'}, request=RequestFactory().get('/'))
             body = re.search(r'<body ([^>]*)>', html).group(1)
             named = dict(re.findall(r'data-pdf-(module|worker)="([^"]*)"', body))
-            self.assertEqual(named, {'module': staticfiles_storage.url(f'{PDF_LIB_NAME}/build/pdf.min.mjs'),
-                                     'worker': staticfiles_storage.url(f'{PDF_LIB_NAME}/build/pdf.worker.min.mjs')})
+            self.assertEqual(named, {'module': staticfiles_storage.url(f'{PDF_LIB_NAME}/legacy/build/pdf.min.mjs'),
+                                     'worker': staticfiles_storage.url(f'{PDF_LIB_NAME}/legacy/build/pdf.worker.min.mjs')})
             for kind, address in named.items():
                 with self.subTest(kind):
-                    self.assertRegex(address, rf'^/static/{re.escape(PDF_LIB_NAME)}/build/pdf(\.worker)?\.min\.[0-9a-f]{{12}}\.mjs$')
-            # what the worker asks for by name, next to it: the image decoders without WebAssembly and the standard fonts
+                    self.assertRegex(address, rf'^/static/{re.escape(PDF_LIB_NAME)}/legacy/build/pdf(\.worker)?\.min\.[0-9a-f]{{12}}\.mjs$')
+            # what the worker asks for by name, two folders up from it (the page derives wasmUrl and standardFontDataUrl as
+            # ../../wasm/ and ../../standard_fonts/ of the worker): the image decoders without WebAssembly and the fonts
             fallback = f'/static/{PDF_LIB_NAME}/wasm/openjpeg_nowasm_fallback.js'
             font = f'/static/{PDF_LIB_NAME}/standard_fonts/FoxitDingbats.pfb'
+            self.assertEqual((urljoin(named['worker'], '../../wasm/openjpeg_nowasm_fallback.js'),
+                              urljoin(named['worker'], '../../standard_fonts/FoxitDingbats.pfb')), (fallback, font))
             for address, kind in ((named['module'], 'text/javascript'), (named['worker'], 'text/javascript'),
                                   (fallback, 'text/javascript'), (font, '')):
                 with self.subTest(address):

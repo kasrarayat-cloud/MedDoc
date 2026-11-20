@@ -254,12 +254,15 @@ minutes); CSRF on every POST; `Cache-Control: no-store` on everything but static
 `script-src 'self'` and no inline script (the page shell adds `frame-src 'self'` for the text viewer and for the
 browser's own PDF viewer, framed where the page cannot draw a PDF itself, and only the in-page view of an original may
 be framed, by CPT Studio's own pages); `X-Frame-Options: DENY` elsewhere. The PDF library the review page draws a PDF
-with (pdfjs-dist 6.5.438, the files `studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json` lists with their sha256 and
-the npm integrity of the tarball, its licence beside them; nothing from a CDN) loads as same-origin modules and a
-same-origin module worker under `script-src 'self'` (`worker-src` falls back to it), served as JavaScript by WhiteNoise
-under `nosniff`. It runs with no eval and no WebAssembly - the policy has neither `'unsafe-eval'` nor
-`'wasm-unsafe-eval'` - with no document scripting, no XFA and no layer of links or form fields, reads only the
-same-origin view address, and puts a PDF's text in the page as text only (its text layer). Every customer
+with (the legacy build of pdfjs-dist 6.5.438, which bundles core-js 3.51.0 for the built-ins older browsers lack; the
+files `studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json` lists with their npm path and sha256 and the npm integrity
+of both tarballs, the licences beside them; nothing from a CDN) loads as same-origin modules and a same-origin module
+worker under `script-src 'self'` (`worker-src` falls back to it), served as JavaScript by WhiteNoise under `nosniff`. It
+runs with no eval and no WebAssembly - the policy has neither `'unsafe-eval'` nor `'wasm-unsafe-eval'`; core-js's one
+`Function("return this")` lookup is never reached in a browser and would be refused - with no document scripting, no
+XFA and no layer of links or form fields, reads only the same-origin view address, and puts a PDF's text in the page as
+text only (its text layer). A browser that lacks what it needs (Chrome and Edge before 119, Firefox before 125, Safari
+before 17.4) is not given it: the browser's own viewer is framed and the note says marking needs a newer browser. Every customer
 query is scoped through the caller's active membership, so another workspace's records answer 404. Text the database
 cannot store (NUL, a lone surrogate) is refused with a 400 rather than altered; only a title or a file name has it
 replaced.

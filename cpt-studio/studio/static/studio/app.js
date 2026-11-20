@@ -122,8 +122,10 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"'`]/g, ch => HTML_ESCAPES[ch]);
 }
 
+// (Object.prototype.hasOwnProperty, not Object.hasOwn, which Safari before 15.4 lacks: the page itself works in a browser
+// the PDF viewer is not offered to, pdfCapable)
 function lookup(map, key, fallback) {
-  return typeof key === 'string' && Object.hasOwn(map, key) ? map[key] : fallback;
+  return typeof key === 'string' && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : fallback;
 }
 
 function text(value) {
@@ -545,9 +547,19 @@ function markNote(result) {
     : 'The exact words could not be found in this document, so nothing is marked.';
 }
 
-// The note when the PDF is shown by the browser's own viewer, which can open a page but not mark words on it.
-function frameNote(page) {
-  return page ? `Marking is not available for this document. Page ${page} is shown.` : 'Marking is not available for this document.';
+// The note when the PDF is shown by the browser's own viewer, which can open a page but not mark words on it, saying why
+// (fallbackViewer): 'browser' - this browser lacks what marking needs (pdfCapable), or the PDF library or its worker does
+// not load in it; 'document' - the library runs but cannot draw this document (it refuses it, or a page or its text
+// fails); 'slow' - the document stopped arriving before it could be drawn.
+const FRAME_REASONS = {
+  browser: 'Marking needs a newer browser.',
+  document: 'This document cannot be drawn here, so nothing is marked.',
+  slow: 'The document took too long to load here, so nothing is marked.',
+};
+
+function frameNote(page, reason) {
+  const said = lookup(FRAME_REASONS, reason, FRAME_REASONS.document);
+  return page ? `${said} Page ${page} is shown.` : said;
 }
 
 // The note for a passage of a text document, found by the text rule (findPassages).
@@ -1773,13 +1785,15 @@ function scrollBehavior() {
 }
 
 // --- the PDF viewer: the original's pages drawn in the page, near the visible area only, fitted to its width --------
-// The PDF library (pdf.js; a pinned copy this site serves, listed with its licence and a checksum of every file in
-// studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json) is loaded only when a document is viewed as a PDF; the page shell
-// names its module and worker (data-pdf-module and data-pdf-worker on <body>). It reads only the same-origin view address,
-// runs with no WebAssembly, no document scripting, no XFA and no layer of links or form fields (form fields' appearances
-// are drawn on the page), and the PDF's text reaches the page as text only, in its text layer. Where it cannot run - the
-// module or the worker does not load, this browser lacks what it needs, the document is refused - the browser's own viewer
-// is framed instead, as before, and a quote opens its page there (#page=N) without a mark.
+// The PDF library (pdf.js; a pinned copy of its legacy build this site serves, listed with its licences and a checksum of
+// every file in studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json) is loaded only when a document is viewed as a PDF;
+// the page shell names its module and worker (data-pdf-module and data-pdf-worker on <body>, in legacy/build/; the image
+// decoders and standard fonts it fetches are the package's own wasm/ and standard_fonts/, two folders up). It reads only
+// the same-origin view address, runs with no WebAssembly, no document scripting, no XFA and no layer of links or form
+// fields (form fields' appearances are drawn on the page), and the PDF's text reaches the page as text only, in its text
+// layer. Where it cannot run or cannot draw the document - this browser lacks what marking needs, the module or the worker
+// does not load, the document is refused, its download stalls - the browser's own viewer is framed instead, as before, a
+// quote opens its page there (#page=N) without a mark, and the note says why (frameNote).
 
 const PDF_VIEW = { gap: 12, near: '100% 0px', resizeMs: 150, stallMs: 20000, maxCanvasPixels: 16777216 };
 
@@ -1789,12 +1803,30 @@ function pdfAssets() {
   return { module: asset(data.pdfModule), worker: asset(data.pdfWorker) };
 }
 
-// What the viewer, its matcher (characters as a person sees them: Intl.Segmenter) and the library call with no fallback
-// of their own; a browser without them gets the frame.
+// What this browser must have natively for the viewer to draw a PDF and mark its words. A browser without any of it is
+// not offered the viewer (the library is not even downloaded): the browser's own viewer is framed and the note says
+// marking needs a newer browser. Measured (DECISIONS D368, fix round 2) in Chromium: each candidate deleted in the page
+// and in the library's worker before the library loaded (typeof read before and after, so a deletion that did not apply
+// could not pass), then the preview's PDFs and the walk's gi-02 opened and every quote chosen. Asked for here: what our
+// own code calls, what broke the drawing or the marking when deleted, and what the library calls with no stand-in on a
+// path the viewer can take that those documents did not (read in the library). Not asked for, because the legacy build
+// brings its own stand-ins (core-js, and three of the library's own), and with each deleted the documents drew and marked
+// exactly as before: Map and WeakMap getOrInsert and getOrInsertComputed, Math.sumPrecise, Promise.try, Uint8Array's
+// base64 and hex, the iterator helpers, the new Set methods, URL.parse, Response and Blob bytes(); nor what the library
+// uses only where it exists (Float16Array, OffscreenCanvas, ImageDecoder, CompressionStream, DecompressionStream) or only
+// on paths the viewer never takes (Array.prototype.findLast: a file name read from an address). Dynamic import() is this
+// script's own syntax, so a browser running the script has it; the library's own syntax (class static blocks: Chrome 94,
+// Firefox 93, Safari 16.4) is older than the newest built-in asked for here. A worker has its page's built-ins, so the
+// page answers for the worker.
 function pdfCapable() {
-  return typeof IntersectionObserver === 'function' && typeof ResizeObserver === 'function'
-    && typeof Promise.withResolvers === 'function' && typeof Map.prototype.getOrInsertComputed === 'function'
-    && typeof Intl === 'object' && typeof Intl.Segmenter === 'function';
+  return typeof IntersectionObserver === 'function'  // our code: pages are drawn only near the visible area
+    && typeof ResizeObserver === 'function'  // our code: pages are refitted when the panel's width changes
+    && typeof Intl === 'object' && typeof Intl.Segmenter === 'function'  // our code: the matcher's characters
+    && typeof Promise.withResolvers === 'function'  // measured: the library cannot start its worker, nor the worker read a PDF
+    && typeof ArrayBuffer.prototype.transferToFixedLength === 'function'  // measured: the worker sends no font; pages draw blank
+    && typeof Array.prototype.at === 'function'  // measured: the library's worker does not start
+    && typeof structuredClone === 'function'  // read: an image shared by pages; the library's stand-in for its worker
+    && typeof Object.hasOwn === 'function';  // read: the library's cleanup of a closed document (its fonts, its download)
 }
 
 function loadPdfLibrary() {
@@ -1818,9 +1850,9 @@ function mountViewer(doc) {
   const view = safeViewUrl(element?.dataset?.viewUrl);
   if (!element || !view || viewerKind(doc?.document) !== 'pdf') return;
   const viewer = {
-    element, view, name: documentName(record(doc?.document)), mode: 'loading', library: null, task: null, pages: [],
-    texts: new Map(), mark: null, pending: null, markSerial: 0, reveal: 0, frame: null, watch: null, resize: null,
-    onScroll: null, width: 0, ratio: 1, stallTimer: 0, resizeTimer: 0, labelFrame: 0,
+    element, view, name: documentName(record(doc?.document)), mode: 'loading', library: null, worker: null, task: null,
+    pages: [], texts: new Map(), mark: null, pending: null, markSerial: 0, reveal: 0, frame: null, fallback: '', watch: null,
+    resize: null, onScroll: null, width: 0, ratio: 1, stallTimer: 0, resizeTimer: 0, labelFrame: 0,
   };
   state.viewer = viewer;
   openPdf(viewer);
@@ -1835,20 +1867,32 @@ function closeViewer() {
 }
 
 async function openPdf(viewer) {
+  // the library and its worker first: where either cannot start (the worker nor its stand-in on this page), marking is
+  // beyond this browser, whatever the document
   try {
     const library = await loadPdfLibrary();
     if (state.viewer !== viewer) return;
-    const worker = new URL(library.GlobalWorkerOptions.workerSrc, location.href);
     viewer.library = library;
+    viewer.worker = new library.PDFWorker({ verbosity: library.VerbosityLevel.ERRORS });
+    await viewer.worker.promise;
+  } catch {
+    fallbackViewer(viewer, 'browser');
+    return;
+  }
+  if (state.viewer !== viewer || viewer.mode !== 'loading') return;
+  const { library } = viewer;
+  try {
+    const worker = new URL(library.GlobalWorkerOptions.workerSrc, location.href);
     viewer.task = library.getDocument({
       url: viewer.view, withCredentials: false, isEvalSupported: false, enableXfa: false, useWasm: false,
-      wasmUrl: new URL('../wasm/', worker).href, standardFontDataUrl: new URL('../standard_fonts/', worker).href,
+      wasmUrl: new URL('../../wasm/', worker).href, standardFontDataUrl: new URL('../../standard_fonts/', worker).href,
       useSystemFonts: true, disableWorkerRendering: true, stopAtErrors: false, verbosity: library.VerbosityLevel.ERRORS,
+      worker: viewer.worker,
     });
     // a download that stops moving for this long is given up, and the frame shown instead
     const stalled = () => {
       clearTimeout(viewer.stallTimer);
-      viewer.stallTimer = setTimeout(() => fallbackViewer(viewer), PDF_VIEW.stallMs);
+      viewer.stallTimer = setTimeout(() => fallbackViewer(viewer, 'slow'), PDF_VIEW.stallMs);
     };
     viewer.task.onProgress = stalled;
     stalled();
@@ -1859,7 +1903,7 @@ async function openPdf(viewer) {
     buildPages(viewer, proxies);
   } catch {
     clearTimeout(viewer.stallTimer);
-    fallbackViewer(viewer);
+    fallbackViewer(viewer, 'document');
   }
 }
 
@@ -1928,11 +1972,18 @@ function relayoutPages(viewer) {
   if (Math.abs(viewerWidth(viewer.element) - viewer.width) < 1 && (window.devicePixelRatio || 1) === viewer.ratio) return;
   // the page at the top of the view stays there, at the same place in it
   const top = viewer.element.scrollTop;
-  const anchor = viewer.pages.findLast(page => page.element.offsetTop <= top) || viewer.pages[0];
+  const anchor = pageAtOffset(viewer, top);
   const within = anchor ? (top - anchor.element.offsetTop) / Math.max(1, anchor.element.offsetHeight) : 0;
   layoutPages(viewer);
   if (anchor) viewer.element.scrollTop = anchor.element.offsetTop + within * anchor.element.offsetHeight;
   for (const page of viewer.pages) if (page.near) drawPage(viewer, page);
+}
+
+// The last page whose top is at or above `offset` in the viewer, else the first page.
+function pageAtOffset(viewer, offset) {
+  let found = viewer.pages[0];
+  for (const page of viewer.pages) if (page.element.offsetTop <= offset) found = page;
+  return found;
 }
 
 function nearPages(viewer, entries) {
@@ -1996,7 +2047,7 @@ async function drawPage(viewer, page) {
     }
   } catch (error) {
     if (!live() || ['RenderingCancelledException', 'AbortException'].includes(error?.name)) return;
-    fallbackViewer(viewer);
+    fallbackViewer(viewer, 'document');
   }
 }
 
@@ -2064,7 +2115,7 @@ function showPageLabel(viewer) {
   const label = $('#viewerPage');
   if (!label || viewer.mode !== 'pdf' || !viewer.pages.length) return;
   const middle = viewer.element.scrollTop + viewer.element.clientHeight / 2;
-  const current = viewer.pages.findLast(page => page.element.offsetTop <= middle) || viewer.pages[0];
+  const current = pageAtOffset(viewer, middle);
   label.textContent = `Page ${current.number} of ${viewer.pages.length}`;
 }
 
@@ -2087,7 +2138,7 @@ async function showPdfQuote(viewer, quote, key) {
       texts[wanted[index] - 1] = list(content?.items).filter(item => typeof item?.str === 'string').map(item => item.str);
     });
   } catch {
-    fallbackViewer(viewer);
+    fallbackViewer(viewer, 'document');
     return undefined;
   }
   if (state.viewer !== viewer || viewer.mode !== 'pdf' || viewer.markSerial !== serial) return undefined;
@@ -2104,23 +2155,25 @@ async function showPdfQuote(viewer, quote, key) {
   return result;
 }
 
-// The frame (the browser's own viewer) opens a quote's page; it cannot mark the words, and the note says so.
+// The frame (the browser's own viewer) opens a quote's page; it cannot mark the words, and the note says so and why.
 function frameQuote(viewer, quote) {
   const page = quotePage(quote);
   if (page && viewer.frame) viewer.frame.src = viewerUrl(viewer.view, page);
   setMarkState(viewer.element, '', null);
-  setMarkNote(frameNote(page), true);
+  setMarkNote(frameNote(page, viewer.fallback), true);
   return undefined;
 }
 
-// Where the library cannot run, the browser's own viewer is framed in its place (today's viewer), at the page of the
-// quote being shown, if any.
-function fallbackViewer(viewer) {
+// Where the library cannot run or cannot draw the document, the browser's own viewer is framed in its place (today's
+// viewer), at the page of the quote being shown, if any. `reason` is why, as frameNote says it: 'browser', 'document'
+// or 'slow'; the viewer element keeps it (data-fallback) for the walk.
+function fallbackViewer(viewer, reason) {
   if (state.viewer !== viewer || viewer.mode === 'frame' || viewer.mode === 'closed') return;
   stopPdf(viewer);
   const chosen = viewer.pending?.quote || viewer.mark?.quote || null;
   const page = quotePage(chosen);
   viewer.mode = 'frame';
+  viewer.fallback = lookup(FRAME_REASONS, reason, null) ? reason : 'document';
   viewer.pending = null;
   viewer.mark = null;
   const frame = document.createElement('iframe');
@@ -2130,11 +2183,12 @@ function fallbackViewer(viewer) {
   frame.src = viewerUrl(viewer.view, page);
   viewer.element.replaceChildren(frame);
   viewer.element.dataset.mode = 'frame';
+  viewer.element.dataset.fallback = viewer.fallback;
   viewer.frame = frame;
   const label = $('#viewerPage');
   if (label) label.textContent = '';
   setMarkState(viewer.element, '', null);
-  if (chosen) setMarkNote(frameNote(page), true);
+  if (chosen) setMarkNote(frameNote(page, viewer.fallback), true);
 }
 
 function stopPdf(viewer) {
@@ -2148,8 +2202,10 @@ function stopPdf(viewer) {
     cancelPage(page);
     page.layer?.cancel();
   }
-  viewer.task?.destroy()?.catch?.(() => {});
-  Object.assign(viewer, { watch: null, resize: null, onScroll: null, task: null, pages: [], texts: new Map(), labelFrame: 0 });
+  // the worker is the viewer's own (getDocument was given it), so it goes once the document's task has let go of it
+  const { task, worker } = viewer;
+  Promise.resolve(task?.destroy()).catch(() => {}).finally(() => worker?.destroy());
+  Object.assign(viewer, { watch: null, resize: null, onScroll: null, task: null, worker: null, pages: [], texts: new Map(), labelFrame: 0 });
 }
 
 // --- a passage of a text document, marked inside its frame (the text rule: findPassages) ---------------------------

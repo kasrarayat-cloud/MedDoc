@@ -34,8 +34,9 @@ answer its questions (a new round) -> approve or reject each code -> download a 
 `studio/templates/studio/index.html` (the shell and its dialogs), `studio/static/studio/app.js` (the page),
 `studio/static/studio/styles.css` (the owner-approved stylesheet: its first 32,785 bytes are pinned and stay
 byte-identical; additions define no new tokens), `studio/static/studio/lib/pdfjs-6.5.438/` (the PDF library the viewer
-draws a PDF with: pdfjs-dist 6.5.438, only the files its `MANIFEST.json` lists with their sha256, its licence beside
-them). `tests/test_frontend.py` and `tests/frontend/app.test.cjs` hold them to this contract; `ops/walk.cjs` checks it on
+draws a PDF with: the legacy build of pdfjs-dist 6.5.438, which carries core-js 3.51.0 stand-ins for the newest built-ins
+it calls; only the files its `MANIFEST.json` lists with their npm path and sha256, the licences of pdf.js, its decoders
+and fonts, and core-js beside them). `tests/test_frontend.py` and `tests/frontend/app.test.cjs` hold them to this contract; `ops/walk.cjs` checks it on
 the deployed site.
 
 ## 3. Readers
@@ -158,8 +159,19 @@ and the docs elsewhere point here.
   passage chosen); it is painted again whenever its page is drawn again (a new width, scrolled back into view), and a
   read of the document that only changes the codes never reloads the viewer. Scrolling to it respects
   `prefers-reduced-motion`.
-- In the browser's own viewer (where the library cannot run) a quote opens its page (`#page=N`) and the note says
-  "Marking is not available for this document. Page N is shown."
+- Where the PDF is not drawn in the page, the browser's own viewer is framed instead: a quote opens its page (`#page=N`)
+  and the note says why, plainly. "Marking needs a newer browser. Page N is shown." where this browser lacks what
+  marking needs (`pdfCapable`) or the library or its worker does not load in it; "This document cannot be drawn here, so
+  nothing is marked. Page N is shown." where the library runs but refuses the document, or a page or its text fails;
+  "The document took too long to load here, so nothing is marked. Page N is shown." where the download stops moving for
+  20 seconds. The viewer keeps the reason on `#documentViewer` (`data-fallback`: `browser`, `document` or `slow`).
+- Browsers that mark (measured in Chromium with each candidate built-in deleted in the page and in the library's worker,
+  versions from MDN's browser-compat-data): Chrome and Edge 119+, Firefox 125+ (so ESR 128 and 140, not 115), Safari
+  17.4+ on macOS, iOS and iPadOS, Samsung Internet 25+. The floor is set by what the legacy library calls with no stand-in
+  (`Promise.withResolvers`, `ArrayBuffer.prototype.transferToFixedLength`, `Array.prototype.at`; `structuredClone` and
+  `Object.hasOwn` on paths the test documents did not take) and by the matcher's `Intl.Segmenter` (Firefox 125); it brings
+  its own stand-ins for the rest (the modern build would have needed Chrome and Edge 147, Firefox 144, Safari 26.2).
+  Older browsers get the browser's own viewer and the newer-browser note, without downloading the library.
 - A text document keeps its own rule (`findPassages`, as `findPassage`: runs of white space count as one space, exact
   case before case-blind): every occurrence is marked inside the text's frame and the note says how many, or that the
   exact words could not be found.
@@ -169,7 +181,16 @@ and the docs elsewhere point here.
 - The library runs with no eval, no WebAssembly (so the policy needs neither `'unsafe-eval'` nor `'wasm-unsafe-eval'`:
   JPEG 2000 and JBIG2 images use its plain-JavaScript decoders, colour profiles fall back to the device colour spaces),
   no document scripting, no XFA and no layer of links or form fields (form fields' appearances are drawn on the page); it
-  reads only the same-origin view address.
+  reads only the same-origin view address. The one place each legacy file could build a function from a string is
+  core-js's lookup of the global object, `Function("return this")`, reached only where `globalThis`, `window`, `self`
+  and `global` are all missing (never in a browser), and the policy would refuse it anyway; `tests/test_frontend.py`
+  allows that occurrence by its exact bytes and nothing else.
+- The text layer is placed by the page's own CSS: `position:absolute; inset:0` over the page, and each span's font size
+  and transform computed (`calc()`, `var()`) from the custom properties and percentage offsets the library writes inline.
+  The library's CSS `round()` sizes for the layer, which Chrome and Edge before 125 ignore, are not needed (measured: the
+  marks do not move without them). What a browser at the floor may lack only changes looks, never a mark:
+  `scrollbar-gutter` (Safari before 18.2), `overscroll-behavior`, `color-mix()` in the selection colour,
+  `forced-color-adjust`.
 
 ## 9. Install and verify
 

@@ -429,6 +429,12 @@ test('a chosen quote is judged by its marked words, the pages they are on and th
   assert.match(judge({ status: 'not_found', count: 0, note: '' }).problems.join(), /note does not say/);
   assert.match(judge({ status: 'not_found', count: 0, note: 'The exact words could not be found on page 1.', marks: [mark(1, 0, 'x')] }).problems.join(), /1 mark\(s\) shown/);
   assert.equal(judge({ mode: 'frame' }).outcome, 'unavailable');
+  // the problem says why the browser's own viewer is shown, as the viewer keeps it (data-fallback)
+  assert.match(judge({ mode: 'frame', fallback: 'browser' }).problems.join(), /browser's own viewer \(marking needs a newer browser\)/);
+  assert.match(judge({ mode: 'frame', fallback: 'document' }).problems.join(), /\(the document cannot be drawn in the page\)/);
+  assert.match(judge({ mode: 'frame', fallback: 'slow' }).problems.join(), /\(the document took too long to load\)/);
+  assert.match(judge({ mode: 'frame' }).problems.join(), /\(no reason given\)/);
+  assert.match(judge({ mode: 'frame', fallback: 'toString' }).problems.join(), /\(no reason given\)/);
   assert.equal(walk.judgeQuote(quote, null).outcome, 'unresolved');
   // a quote with no page may be marked on any page; a text document has no pages
   assert.equal(walk.judgeQuote({ ...quote, page: null }, reading({ pages: [3], note: 'Marked on page 3.', marks: [mark(3, 0, quote.text)] })).outcome, 'once');
@@ -832,7 +838,26 @@ test('every quote is chosen and its marks read back through the page itself, in 
     assert.equal(made.data.unavailable, chosen.length);
     const last = walk.servedQuotes(enc).at(-1);
     assert.match(await page.getAttribute('#documentViewer iframe', 'src'), new RegExp(`#page=${last.page}$`));
-    assert.equal(chosen.at(-1).reading.note, `Marking is not available for this document. Page ${last.page} is shown.`);
+    // the browser cannot run the marking: the note says so, and the walk's reason names it
+    assert.equal(chosen.at(-1).reading.fallback, 'browser');
+    assert.equal(chosen.at(-1).reading.note, `Marking needs a newer browser. Page ${last.page} is shown.`);
+    assert.match(made.reason, /browser's own viewer \(marking needs a newer browser\)/);
+    await context.close();
+  });
+  await t.test('where the library runs but cannot draw the document, the note says the document cannot be drawn here', async () => {
+    const enc = await served(ready);
+    // the view address answers with bytes that are no PDF: the library refuses the document, the browser is not at fault
+    const { page, context, violations } = await open(ready, enc, item => item.route(url => url.pathname === `/api/encounters/${ready}/original`,
+      route => route.fulfill({ status: 200, contentType: 'application/pdf', body: 'not a PDF at all' })));
+    await page.waitForSelector('#documentViewer[data-mode="frame"] iframe.viewer-fallback', { timeout: 15000 });
+    const chosen = await walk.chooseQuotes(page, enc);
+    const made = walk.quoteMarkChecks(chosen);
+    assert.equal(made.status, 'fail');
+    const last = walk.servedQuotes(enc).at(-1);
+    assert.equal(chosen.at(-1).reading.fallback, 'document');
+    assert.equal(chosen.at(-1).reading.note, `This document cannot be drawn here, so nothing is marked. Page ${last.page} is shown.`);
+    assert.match(made.reason, /\(the document cannot be drawn in the page\)/);
+    assert.deepEqual(violations, []);
     await context.close();
   });
 });
