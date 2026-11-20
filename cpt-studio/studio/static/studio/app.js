@@ -386,10 +386,10 @@ function characterSpans(value) {
 }
 
 // The items of one page that are overprint copies, as a Set of their indexes: an item whose string, after NFKC, is the
-// string of one of the eight items before it, holds a character that is not white space, and has its origin
-// (transform[4], transform[5]) within max(1, 0.2 x its font height, hypot(transform[2], transform[3])) PDF units of that
-// item's origin - the same words drawn again a fraction of a point away, to look bold. An item without that geometry (a
-// bare string) is never one.
+// string (after NFKC) of one of the eight items before it, holds a character that is not white space, and has its origin
+// (transform[4], transform[5]) at most max(1, 0.2 x h) PDF units, in a straight line, from that item's origin, h being its
+// own font height, hypot(transform[2], transform[3]) - the same words drawn again a fraction of a point away, to look
+// bold. An item without that geometry (a bare string) is never one.
 function overprintCopies(items) {
   const entries = list(items);
   const origin = item => {
