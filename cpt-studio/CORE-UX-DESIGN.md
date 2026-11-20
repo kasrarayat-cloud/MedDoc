@@ -196,13 +196,28 @@ and the docs elsewhere point here.
 
 `ops/install.py` installs a revision (`ops/INSTALL.md`). `ops/walk.cjs` then drives the real page with a synthetic
 document at desktop width and at 390 px (no horizontal scroll): upload, poll to done, the DOM contract above and the JSON
-contract, every quote chosen and its marks read back (its words on its page, or the note saying they could not be
-found, nothing marked on another page, and no occurrence beginning or ending inside a character of the page's text,
-which the walk reads apart from the page script; counted; and where the PDF viewer drew the document, at least one of
-its quotes marked, so a viewer that has stopped marking cannot pass on notes that each say "could not be found"), an answer when one is asked, one approval through the dialog (the History naming the line with its code), both
-exports downloaded twice to equal bytes (each request naming the round shown), the approval undone through the row's
-Undo (naming the decision shown), the denylist scan over every JSON body, the DOM and the downloads, and every `/ops/`
-path refused to the customer.
+contract, every quote chosen and judged by the walk's own search, an answer when one is asked, one approval through the
+dialog (the History naming the line with its code), both exports downloaded twice to equal bytes (each request naming
+the round shown), the approval undone through the row's Undo (naming the decision shown), the denylist scan over every
+JSON body, the DOM and the downloads, and every `/ops/` path refused to the customer.
+
+The walk never takes the viewer's word for a quote (DECISIONS D368, round 3). For each quote chosen in a drawn PDF it
+reads every page it must search from the viewer's own text layer - the items in order, a line break where the layer has
+one, an item the viewer flags as an overprint copy (`data-overprint="1"`) left out only when its text equals one of the 8
+items before it and its box lies within max(1.5 CSS px, 0.2 of its height) of that item's (any other flag fails, so no
+text can be hidden by flagging it) - and runs the rule of section 8 itself. It then requires: the viewer marked exactly
+its own occurrences (count, place and case, so a case-blind match beside an exact one, a dropped occurrence or a
+"could not be found" over words that are there all fail); the viewer's count and pages agree; the note is the rule's
+sentence, character for character ("The exact words were not found in the searchable text of page N, so nothing is
+marked. Page N is shown." only where its own search finds nothing, "Page N has no text the viewer can search (it may be
+a scanned image), so nothing is marked. Page N is shown." only where that page has no searchable character); nothing is
+marked on another page; no run of an occurrence's marked text begins or ends inside a character; and every marked page
+is drawn - its canvas painted and its marked words drawn under the marks, read with `getImageData` in the page (the
+share of drawn pixels under the marks was 0.350 to 0.461 on the fixtures and gi-02, and at least 0.05 is required). In
+the browser's own viewer it requires the reason sentence the viewer gives and " The quote is on page N.", and a new frame
+whenever the quote's page differs from the frame's. A text document is judged by the walk's own copy of its rule
+(`findPassages`). Counted; and where the PDF viewer drew the document, at least one of its quotes must be marked, since
+the walk's documents quote their own words.
 
 ## 10. Read-bind rules; 11. Read-hold registers
 

@@ -295,11 +295,24 @@ page). It is display only: it reads no meaning and never holds or changes a code
   decisions, answers, exports, the operator console, the page's templates and node tests, and the reference data.
   Synthetic text only; nothing is sent.
 - CI (`scripts/ci/verify-cpt-studio.sh`): checks, migration drift, the Django suite, the ops unit suites, the browser
-  walk's own tests (`ops/test_walk.cjs`; where Playwright is installed they choose every quote of the dev preview's
-  synthetic documents in Chromium and read the marks back) and a dependency audit.
+  walk's own tests (`ops/test_walk.cjs`) and a dependency audit. CI installs no Playwright, so it runs none of the
+  browser tests: the walk's browser subtests (every quote of the dev preview's synthetic documents chosen in Chromium and
+  judged, the fallback frame, the review dialog) report as skipped there, and the PDF drawing, the text layer and the
+  library's worker are exercised in CI only through `tests/frontend/app.test.cjs`'s stand-ins. The release proof runs
+  the browser tests locally, where Playwright is installed (`CPT_VERIFY_PLAYWRIGHT`), and records the counts.
 - After an install, `ops/walk.cjs` drives the real page with a synthetic document: upload, poll, the DOM and JSON
-  contract, an answer, an approval through the dialog, both exports re-downloaded byte for byte, the denylist scan, a
-  390 px viewport, and every `/ops/` path refused to the customer.
+  contract, every quote chosen and judged by the walk's own search (below), an answer, an approval through the dialog,
+  both exports re-downloaded byte for byte, the denylist scan, a 390 px viewport, and every `/ops/` path refused to the
+  customer.
+- The walk judges the viewer instead of taking its word (DECISIONS D368, round 3): it reads the text of the pages it
+  searches from the viewer's own text layer (an overprint copy left out only where its geometry bears out the viewer's
+  `data-overprint` flag; a flag it does not bear out fails), runs the matching rule itself (CORE-UX-DESIGN.md section 8:
+  white space and format characters dropped, NFKC, whole characters between word edges, exact case first, the quote's
+  page and the next, never another) and holds the viewer to it: the occurrences marked - count, place and case - its
+  count, pages and note character for character, a "not found" only where its own search finds none (and "no text the
+  viewer can search" only on a page with no searchable character), no mark on another page, no marked run beginning or
+  ending inside a character, and every marked page drawn (the canvas painted, and its marked words drawn under the
+  marks, read with `getImageData` in the page). The page's text stays out of the evidence, which keeps counts.
 
 ## 10. What was removed
 

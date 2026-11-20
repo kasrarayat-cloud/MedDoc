@@ -30,8 +30,12 @@
  * that number, 0 included, units not given shown as "not given"), modifiers (each served one, and no other), status
  * badge, reason, second check, quotes and exactly the allowed buttons, the quotes panel, the notes panel, the document
  * viewer - its view address - and its "Download original" link, the export button); every quote chosen through the quotes
- * panel, its marked words read back from the viewer: equal to the quote's (white space ignored) on its page, or from it
- * onto the next, or the note saying they could not be found, and nothing marked on another page - counted; the first
+ * panel and judged by the walk's own search, apart from the page script (DECISIONS D368): the text of the pages it
+ * searches read from the viewer's own text layer (an overprint copy left out only where its geometry bears the viewer's
+ * flag out), the matching rule run on it (CORE-UX-DESIGN.md section 8), and the viewer's marks, count, pages and note
+ * held to that - its occurrences exactly (count, place and case), a "not found" only where the walk finds none either,
+ * nothing marked on another page or inside a character, every marked page drawn (its canvas holds drawn pixels) - counted;
+ * the first
  * question, when there is one, answered through the panel and the new round waited for and checked again; one READY
  * line approved through #reviewDialog as the page draws it (the acknowledgement checkbox #reviewAckBox inside its label
  * #reviewAcknowledgement, which carries the session's acknowledgement; an agent-executed synthetic review), the page's
@@ -693,6 +697,13 @@ function quoteKey(code, page) {
 }
 
 // --- the quoted words marked in the viewer (DECISIONS D368) -------------------------------------------------------------
+// The walk is the viewer's independent judge (round 3). It reads the text of every page it searches from the viewer's
+// own text layer, runs its own search with the matching rule (CORE-UX-DESIGN.md section 8, "Marking a quoted passage":
+// R1 overprint copies, R2 word edges, R3 format characters, and the rule's white space, NFKC, whole characters, exact
+// case first and pages), and holds the viewer's marks, count, pages and note to its own result: it never takes the
+// viewer's word. It also requires every marked page to be drawn (its canvas holds drawn pixels) and no mark to begin or
+// end inside a character. The page's text is read into the walk's memory to be searched and is never written to the
+// evidence: the evidence keeps counts, page numbers and reasons that name a quote by its line and page, never its words.
 
 // The quotes the page lists, in its order: {code, line, text, page} of every quote of every code that has words.
 function servedQuotes(enc) {
@@ -706,84 +717,521 @@ function foldMarked(text) {
   return String(text ?? '').normalize('NFKC').replace(/\s+/gu, '');
 }
 
-// Why the page framed the browser's own viewer instead of drawing the PDF (the viewer element's data-fallback).
-const FALLBACK_WHY = { browser: 'marking needs a newer browser', document: 'the document cannot be drawn in the page',
-  slow: 'the document took too long to load' };
+// Why the page framed the browser's own viewer instead of drawing the PDF (the viewer element's data-fallback), as the
+// walk's reason names it, and the note's reason sentence for each (ROUND3 N3, character for character).
+const FALLBACK_WHY = { browser: 'marking needs a newer browser', library: 'the marking tool did not work in the page',
+  document: 'the document cannot be drawn in the page', slow: 'the document took too long to load' };
+const FRAME_REASONS = { browser: 'Marking needs a newer browser.',
+  library: 'The marking tool did not work here, so nothing is marked.',
+  document: 'This document cannot be drawn here, so nothing is marked.',
+  slow: 'The document took too long to load here, so nothing is marked.' };
+// Overprint copies (R1): the walk reads the viewer's flag (data-overprint="1" on the copy's span) and holds it to the
+// span's geometry - its text equals that of one of the OVERPRINT_WINDOW spans before it, and its box's origin lies within
+// max(OVERPRINT_MIN_PX, OVERPRINT_SHARE x its height) of that span's - so the viewer cannot hide text by flagging it.
+const OVERPRINT_WINDOW = 8;
+const OVERPRINT_MIN_PX = 1.5;
+const OVERPRINT_SHARE = 0.2;
+// A marked page is drawn (S3) when its canvas is shown, at least CANVAS_OPAQUE_MIN of its pixels are painted, and at
+// least CANVAS_MARK_CONTENT_MIN of the pixels under its marks differ from the page's paper (its most common colour) by
+// two steps of 16 in a channel: the marked words are drawn where they are marked. Measured (D368 round 3) on the dev
+// preview's PDF fixtures and the walk's gi-02 in Chromium at 1440x1000: every drawn page was fully painted (1.0), and the
+// share under the marks was 0.350 to 0.461 over 33 marked pages; the threshold is about a seventh of the lowest, and a
+// canvas that was never drawn is 0 painted. A page shown for a quote that was not found must be painted and shown (a
+// blank page with no text has nothing under any mark).
+const CANVAS_OPAQUE_MIN = 0.99;
+const CANVAS_MARK_CONTENT_MIN = 0.05;
+// A document of at most this many pages is read whole for every quote, so a mark on any page is seen; a longer one is
+// read on the searched pages, the pages the viewer says it marked and the pages it has drawn.
+const FULL_READ_PAGES = 12;
 
-// One chosen quote judged against what the viewer showed (readMarks): {outcome, off_page, mismatched, cut, problems}.
-// outcome: 'once' or 'multi' (marked, the marked text of every occurrence being the quote's words, white space ignored -
-// in its case, or in another where the page has no exact-case occurrence - and no occurrence beginning or ending inside a
-// character), 'not_found' (nothing marked, and the note says the words could not be found), 'unavailable' (the browser's
-// own viewer is shown: no marking; the problem says why, as the viewer keeps it: readMarks' `fallback`) or 'unresolved'.
-// A mark on a page that is neither the quote's nor, for an occurrence that starts on it, the next is off_page; an
-// occurrence's marks on one page that begin or end inside a character (a letter marked without the accent the next item
-// holds: readMarks' `whole`) count once each in cut.
+const FORMAT_CHARACTER = /\p{Cf}/u;
+const WORD_START = /^[\p{L}\p{N}]/u;
+const JOINS_A_WORD = /[\p{L}\p{N}\p{M}]/u;
+
+let graphemeCutter;
+// Where each character of a text begins and ends, as [start, end] offsets covering the whole text: its extended grapheme
+// clusters (Intl.Segmenter), else a character with the marks that follow it.
+function graphemeSpans(value) {
+  if (graphemeCutter === undefined) {
+    graphemeCutter = typeof Intl === 'object' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+  }
+  if (graphemeCutter) return Array.from(graphemeCutter.segment(value), ({ index, segment }) => [index, index + segment.length]);
+  return Array.from(value.matchAll(/\P{M}\p{M}*|\p{M}+/gu), match => [match.index, match.index + match[0].length]);
+}
+
+// The characters of a text, as the rule cuts them: its grapheme clusters, joined again wherever NFKC combines two of them
+// (so NFKC of the text is exactly its characters' NFKC, in order). Each is {start, end, nfkc}; together they cover the text.
+function cutCharacters(value) {
+  const nfkc = text => text.normalize('NFKC');
+  const cuts = [];
+  for (const span of graphemeSpans(value)) {
+    const last = cuts[cuts.length - 1];
+    if (last && value.codePointAt(span[0]) >= 0x300) {
+      const before = value.slice(last[0], last[1]);
+      const after = value.slice(span[0], span[1]);
+      if (nfkc(before + after) !== nfkc(before) + nfkc(after)) {
+        last[1] = span[1];
+        continue;
+      }
+    }
+    cuts.push([span[0], span[1]]);
+  }
+  const whole = nfkc(value);
+  const parts = cuts.map(([start, end]) => nfkc(value.slice(start, end)));
+  while (cuts.length > 1 && parts.join('') !== whole) {
+    let at = 0;
+    let index = 0;
+    while (index < parts.length - 1 && whole.startsWith(parts[index], at)) {
+      at += parts[index].length;
+      index += 1;
+    }
+    const from = Math.max(0, index - 1);
+    const to = Math.min(cuts.length - 1, index + 1);
+    cuts.splice(from, to - from + 1, [cuts[from][0], cuts[to][1]]);
+    parts.splice(from, to - from + 1, nfkc(value.slice(cuts[from][0], cuts[from][1])));
+  }
+  return cuts.map(([start, end], index) => ({ start, end, nfkc: parts[index] }));
+}
+
+const firstCodePoint = text => (text ? String.fromCodePoint(text.codePointAt(0)) : null);
+const lastCodePoint = text => (text ? Array.from(text).pop() : null);
+// R2: the start or end of the page, or a character that is not a letter, a digit or a combining mark, is a word edge.
+const wordEdge = codePoint => codePoint === null || !JOINS_A_WORD.test(codePoint);
+
+// One page's text as the rule reads it, from the text layer the walk read (readPdfPage's tokens): the item strings in
+// order, an overprint copy's string left out (R1), a line break where the layer has one (<br>: an item the library marks
+// hasEOL, a copy's included), format characters dropped (R3). {number, items, clean, posOf, units, starts}: posOf maps
+// "<item> <offset in its string>" to the place in `clean`; units are the characters that are not white space, each with
+// its NFKC (`folded`, white space dropped) and the code points just before and after it in the page's text (null at the
+// page's start or end), which R2 reads; starts are the places a character begins (and the text's end).
+function pageModel(number, tokens) {
+  const items = [];
+  const posOf = new Map();
+  let clean = '';
+  for (const token of Array.isArray(tokens) ? tokens : []) {
+    if (token?.kind === 'br') {
+      clean += '\n';
+      continue;
+    }
+    const item = items.length;
+    items.push(token || {});
+    if (token?.copy) continue;
+    let offset = 0;
+    for (const ch of typeof token?.text === 'string' ? token.text : '') {
+      if (!FORMAT_CHARACTER.test(ch)) {
+        for (let k = 0; k < ch.length; k += 1) posOf.set(`${item} ${offset + k}`, clean.length + k);
+        clean += ch;
+      }
+      offset += ch.length;
+    }
+  }
+  const characters = cutCharacters(clean);
+  const units = [];
+  characters.forEach((character, index) => {
+    const folded = character.nfkc.replace(/\s+/gu, '');
+    if (!folded) return;
+    units.push({ page: number, start: character.start, end: character.end, folded,
+      before: index > 0 ? lastCodePoint(characters[index - 1].nfkc) : null,
+      after: index + 1 < characters.length ? firstCodePoint(characters[index + 1].nfkc) : null });
+  });
+  const starts = new Set(characters.map(character => character.start));
+  starts.add(clean.length);
+  return { number, items, clean, posOf, units, starts };
+}
+
+// A quote as the rule reads it: format characters dropped, cut into characters, NFKC, white space dropped; exact and
+// lower-cased (each character on its own, as the page's are); whether its first and its last character are a letter or a
+// digit (R2: only then is a word edge asked for at that end).
+function foldQuote(text) {
+  const clean = String(text ?? '').replace(/\p{Cf}/gu, '');
+  const units = cutCharacters(clean).map(character => character.nfkc.replace(/\s+/gu, '')).filter(Boolean);
+  return { exact: units.join(''), blind: units.map(unit => unit.toLowerCase()).join(''),
+    start: units.length > 0 && WORD_START.test(units[0]), end: units.length > 0 && WORD_START.test(units[units.length - 1]) };
+}
+
+// Every occurrence of a folded quote in the joined text of `numbers` pages (left to right, without overlap, whole
+// characters only, word edges as R2 asks), exact case first and case-blind only where there is none; `keep` then filters
+// them, as the viewer's rule does (the quote's page and the next: a passage that starts on the one and ends on the other).
+// {units, found: [[first unit, last unit]], caseBlind}, or null.
+function searchPages(models, numbers, wanted, keep) {
+  const units = numbers.flatMap(number => models.get(number).units);
+  for (const caseBlind of [false, true]) {
+    let hay = '';
+    const owner = [];
+    units.forEach((unit, index) => {
+      const value = caseBlind ? unit.folded.toLowerCase() : unit.folded;
+      hay += value;
+      for (let k = 0; k < value.length; k += 1) owner.push(index);
+    });
+    const needle = caseBlind ? wanted.blind : wanted.exact;
+    const found = [];
+    let from = 0;
+    for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, from)) {
+      const end = at + needle.length;
+      const whole = (at === 0 || owner[at - 1] !== owner[at]) && (end === hay.length || owner[end - 1] !== owner[end]);
+      const edges = whole && (!wanted.start || wordEdge(units[owner[at]].before)) && (!wanted.end || wordEdge(units[owner[end - 1]].after));
+      if (edges) {
+        found.push([owner[at], owner[end - 1]]);
+        from = end;
+      } else {
+        from = at + 1;
+      }
+    }
+    const kept = found.filter(([first, last]) => keep(units[first], units[last]));
+    if (kept.length) return { units, found: kept, caseBlind };
+  }
+  return null;
+}
+
+// The places (`<page>:<place in its clean text>`, white space aside) a run of units covers.
+function unitPlaces(models, units, first, last) {
+  const keys = [];
+  for (let index = first; index <= last; index += 1) {
+    const unit = units[index];
+    const { clean } = models.get(unit.page);
+    for (let at = unit.start; at < unit.end; at += 1) if (!/\s/u.test(clean[at])) keys.push(`${unit.page}:${at}`);
+  }
+  return keys;
+}
+
+// The walk's own search for one quote over the pages it read (models: page number -> pageModel) of a document of
+// pageCount pages: {page, pageCount, status, scope, caseBlind, count, pages, occurrences, empty, unread}. status:
+// 'marked', 'not_found', 'missing_page', 'empty' (nothing to look for) or 'unread' (a page it must search was not read);
+// occurrences: each {keys (its places, joined), pages}; empty: the quote's page (or, with no page, every page) has no
+// searchable character (N2).
+function ownSearch(quote, models, pageCount) {
+  const page = Number.isInteger(quote?.page) && quote.page > 0 ? quote.page : null;
+  const result = { page, pageCount, status: 'not_found', scope: page ? 'page' : 'document', caseBlind: false, count: 0,
+    pages: [], occurrences: [], empty: false, unread: [] };
+  const wanted = foldQuote(quote?.text);
+  if (!wanted.exact) return { ...result, status: 'empty' };
+  if (page && page > pageCount) return { ...result, status: 'missing_page' };
+  const every = Array.from({ length: pageCount }, (_, index) => index + 1);
+  const numbers = page ? [page, page + 1].filter(number => number <= pageCount) : every;
+  const unread = numbers.filter(number => !models.has(number));
+  if (unread.length) return { ...result, status: 'unread', unread };
+  let hit;
+  if (!page) {
+    hit = searchPages(models, every, wanted, () => true);
+  } else {
+    hit = searchPages(models, [page], wanted, () => true);
+    if (!hit && page < pageCount) {
+      hit = searchPages(models, [page, page + 1], wanted, (first, last) => first.page === page && last.page === page + 1);
+      if (hit) result.scope = 'continued';
+    }
+  }
+  if (!hit) {
+    result.empty = (page ? [page] : every).every(number => models.get(number).units.length === 0);
+    return result;
+  }
+  const occurrences = hit.found.map(([first, last]) => {
+    const keys = unitPlaces(models, hit.units, first, last);
+    return { keys: keys.join(' '), pages: [...new Set(keys.map(key => Number(key.split(':')[0])))] };
+  });
+  const pages = [...new Set(occurrences.flatMap(item => item.pages))].sort((a, b) => a - b);
+  return { ...result, status: 'marked', caseBlind: hit.caseBlind, count: occurrences.length, pages, occurrences };
+}
+
+function joinWords(items) {
+  return items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+// The note the viewer must show for one quote chosen in a drawn PDF, from the walk's own result, character for character
+// (ROUND3's notes: the marked sentences unchanged, N1 and N2 when nothing is found).
+function pdfQuoteNote(result) {
+  const { page, status, scope, count, pages, pageCount, empty } = result;
+  const named = list => (list.length === 1 ? `page ${list[0]}` : `pages ${joinWords(list.map(String))}`);
+  if (status === 'marked') {
+    if (scope === 'continued') {
+      return count === 1 ? `Marked on page ${page}, continuing onto page ${page + 1}.`
+        : `These words appear ${count} times, starting on page ${page} and continuing onto page ${page + 1}. Each is marked.`;
+    }
+    if (scope === 'page') return count === 1 ? `Marked on page ${page}.` : `These words appear ${count} times on page ${page}. Each is marked.`;
+    return count === 1 ? `Marked on ${named(pages)}.` : `These words appear ${count} times, on ${named(pages)}. Each is marked.`;
+  }
+  if (status === 'missing_page') return `This passage names page ${page}, but the document has ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}. Nothing is marked.`;
+  if (status === 'empty') return 'This passage has no words to mark.';
+  if (page) {
+    return empty ? `Page ${page} has no text the viewer can search (it may be a scanned image), so nothing is marked. Page ${page} is shown.`
+      : `The exact words were not found in the searchable text of page ${page}, so nothing is marked. Page ${page} is shown.`;
+  }
+  return empty ? 'This document has no text the viewer can search (it may be a scanned image), so nothing is marked.'
+    : 'The exact words were not found in the searchable text of this document, so nothing is marked.';
+}
+
+// The overprint flags of one page the walk read that its geometry does not bear out (R1, S4): a span flagged
+// data-overprint whose text (NFKC, holding a character that is not white space) equals none of the OVERPRINT_WINDOW spans
+// before it whose box origin lies within max(OVERPRINT_MIN_PX, OVERPRINT_SHARE x the flagged span's height) of its own.
+function unbornFlags(tokens) {
+  const items = (Array.isArray(tokens) ? tokens : []).filter(token => token?.kind !== 'br');
+  let count = 0;
+  items.forEach((token, index) => {
+    if (!token?.copy) return;
+    const text = String(token.text ?? '').normalize('NFKC');
+    const box = Array.isArray(token.box) ? token.box : null;
+    const borne = box && /\S/u.test(text) && items.slice(Math.max(0, index - OVERPRINT_WINDOW), index).some(earlier => {
+      const other = Array.isArray(earlier?.box) ? earlier.box : null;
+      return other && String(earlier.text ?? '').normalize('NFKC') === text
+        && Math.hypot(box[0] - other[0], box[1] - other[1]) <= Math.max(OVERPRINT_MIN_PX, OVERPRINT_SHARE * box[2]);
+    });
+    if (!borne) count += 1;
+  });
+  return count;
+}
+
+// What the viewer marked on the pages the walk read, each occurrence as its places in the walk's own text (white space and
+// format characters aside): {occurrences: Map(occurrence -> {keys, pages}), inCopies (marked characters of an overprint
+// copy), cut (an occurrence's marked run on a page that begins or ends inside a character, S5: every run of adjacent
+// marked text is read at both ends, so a letter marked without the accent beside it is seen)}.
+function viewerMarks(models, pagesRead) {
+  const occurrences = new Map();
+  let inCopies = 0;
+  let cut = 0;
+  for (const [number, read] of pagesRead) {
+    const model = models.get(number);
+    if (!model) continue;
+    const runs = new Map();
+    for (const mark of Array.isArray(read?.marks) ? read.marks : []) {
+      const occurrence = String(mark.occurrence);
+      if (!occurrences.has(occurrence)) occurrences.set(occurrence, { keys: [], pages: new Set() });
+      const entry = occurrences.get(occurrence);
+      entry.pages.add(number);
+      if (!runs.has(occurrence)) runs.set(occurrence, new Set());
+      for (let offset = mark.start; offset < mark.end; offset += 1) {
+        const at = model.posOf.get(`${mark.item} ${offset}`);
+        if (at === undefined) {
+          if (model.items[mark.item]?.copy) inCopies += 1;
+          continue;
+        }
+        runs.get(occurrence).add(at);
+        if (!/\s/u.test(model.clean[at])) entry.keys.push(`${number}:${at}`);
+      }
+    }
+    for (const places of runs.values()) {
+      const sorted = [...places].sort((a, b) => a - b);
+      let cutHere = false;
+      sorted.forEach((at, index) => {
+        if (index === 0 || sorted[index - 1] !== at - 1) cutHere ||= !model.starts.has(at);
+        if (index === sorted.length - 1 || sorted[index + 1] !== at + 1) cutHere ||= !model.starts.has(at + 1);
+      });
+      if (cutHere) cut += 1;
+    }
+  }
+  for (const entry of occurrences.values()) {
+    entry.keys = [...new Set(entry.keys)].sort((a, b) => {
+      const [pa, xa] = a.split(':').map(Number);
+      const [pb, xb] = b.split(':').map(Number);
+      return pa - pb || xa - xb;
+    }).join(' ');
+  }
+  return { occurrences, inCopies, cut };
+}
+
+// Whether a page's canvas, as readPdfPage measured it in the page, is drawn: shown and painted, and - for a page the
+// viewer marked - with its marked words drawn under the marks (S3); '' when it is, else why not.
+function canvasProblem(canvas, underMarks) {
+  if (!canvas || !canvas.present) return 'it has no canvas';
+  if (canvas.error) return `its canvas could not be read (${canvas.error})`;
+  if (!canvas.visible) return 'its canvas is not shown';
+  if (!(canvas.opaque >= CANVAS_OPAQUE_MIN)) return 'its canvas is not drawn';
+  if (underMarks && !(canvas.markPixels > 0 && canvas.markContent / canvas.markPixels >= CANVAS_MARK_CONTENT_MIN)) {
+    return 'nothing is drawn under its marks';
+  }
+  return '';
+}
+
+// The text rule of a text document (the page's findPassages, kept: runs of white space count as one space, exact case
+// before case-blind), the walk's own copy: every place the passage occurs, as [start, end] in the text's own offsets.
+function collapseSpaceText(source) {
+  const chars = [];
+  const map = [];
+  let space = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const ch = source[index];
+    if (/\s/.test(ch)) {
+      if (!space && chars.length) {
+        chars.push(' ');
+        map.push(index);
+      }
+      space = true;
+    } else {
+      chars.push(ch);
+      map.push(index);
+      space = false;
+    }
+  }
+  return { flat: chars.join(''), map };
+}
+
+function lowerUnitsText(value) {
+  return value.replace(/[\s\S]/g, unit => {
+    const lower = unit.toLowerCase();
+    return lower.length === 1 ? lower : unit;
+  });
+}
+
+function findPassagesText(source, passage) {
+  const hay = collapseSpaceText(String(source ?? ''));
+  const want = collapseSpaceText(String(passage ?? '')).flat.trim();
+  if (!want) return [];
+  const places = (flat, needle) => {
+    const found = [];
+    for (let at = flat.indexOf(needle); at >= 0; at = flat.indexOf(needle, at + needle.length)) found.push(at);
+    return found;
+  };
+  let found = places(hay.flat, want);
+  if (!found.length) found = places(lowerUnitsText(hay.flat), lowerUnitsText(want));
+  return found.map(at => [hay.map[at], hay.map[at + want.length - 1] + 1]);
+}
+
+function textNote(count) {
+  if (!count) return 'The exact words could not be found in the document, so nothing is marked.';
+  return count === 1 ? 'Marked in the document.' : `These words appear ${count} times in the document. Each is marked.`;
+}
+
+// One chosen quote judged against what the viewer showed (chooseQuotes' reading), by the walk's own search:
+// {outcome, off_page, mismatched, missed, cut, blank, flags, no_text, problems}. outcome: 'once' or 'multi' (the viewer
+// marked exactly the walk's own occurrences - their count, places and case - and said so), 'not_found' (the walk's own
+// search finds nothing either, and the note says so exactly: N1, N2 when the page has no searchable text, the missing
+// page or the empty passage), 'unavailable' (the browser's own viewer is shown: no marking; the problem says why, as the
+// viewer keeps it in data-fallback) or 'unresolved'. off_page counts marks on a page that is neither the quote's nor,
+// for an occurrence that starts on it, the next; mismatched the viewer's occurrences that are not the walk's; missed the
+// walk's occurrences the viewer did not mark; cut the occurrences' marked runs that begin or end inside a character
+// (S5); blank the marked pages not drawn (S3); flags the overprint flags their geometry does not bear out (R1).
 function judgeQuote(quote, reading) {
-  const out = { outcome: 'unresolved', off_page: 0, mismatched: 0, cut: 0, problems: [] };
+  const out = { outcome: 'unresolved', off_page: 0, mismatched: 0, missed: 0, cut: 0, blank: 0, flags: 0, no_text: false, problems: [] };
   const name = `quote ${quote?.line || quote?.code || '?'}${quote?.page ? ` (page ${quote.page})` : ''}`;
+  const problem = text => out.problems.push(`${name}: ${text}`);
   if (!quote || !reading) {
-    out.problems.push(`${name}: the viewer did not answer`);
+    problem('the viewer did not answer');
     return out;
   }
+  const note = String(reading.note ?? '').trim();
+  const page = Number.isInteger(quote.page) && quote.page > 0 ? quote.page : null;
   if (reading.mode === 'frame') {
     out.outcome = 'unavailable';
-    const why = Object.prototype.hasOwnProperty.call(FALLBACK_WHY, reading.fallback) ? FALLBACK_WHY[reading.fallback] : 'no reason given';
-    out.problems.push(`${name}: the PDF is shown by the browser's own viewer (${why}), so nothing could be marked`);
+    const own = map => (Object.prototype.hasOwnProperty.call(map, reading.fallback) ? map[reading.fallback] : null);
+    problem(`the PDF is shown by the browser's own viewer (${own(FALLBACK_WHY) || 'no reason given'}), so nothing could be marked`);
+    const reason = own(FRAME_REASONS);
+    if (!reason || note !== (page ? `${reason} The quote is on page ${page}.` : reason)) problem('the note does not say why marking is unavailable, as written');
+    const frame = reading.frame || {};
+    if (page && frame.page !== page) problem(`the frame does not open page ${page}`);
+    if (page && frame.previousPage !== null && frame.previousPage !== undefined && frame.replaced !== null && frame.replaced !== undefined) {
+      if (frame.previousPage !== page && !frame.replaced) problem(`the frame keeps the element that showed page ${frame.previousPage}, so the browser's viewer does not move to page ${page}`);
+      if (frame.previousPage === page && frame.replaced) problem(`the frame was opened again for page ${page}, which it already showed`);
+    }
     return out;
   }
-  const marks = Array.isArray(reading.marks) ? reading.marks : [];
-  const page = quote.page;
-  const occurrences = new Map();
-  for (const mark of marks) {
-    if (!occurrences.has(mark.occurrence)) occurrences.set(mark.occurrence, []);
-    occurrences.get(mark.occurrence).push(mark);
-  }
-  if (reading.mode === 'pdf' && page) {
-    for (const parts of occurrences.values()) {
-      const starts = parts.some(part => part.page === page);
-      for (const part of parts) if (!(part.page === page || (starts && part.page === page + 1))) out.off_page += 1;
+  if (reading.mode === 'text') {
+    const text = reading.text || {};
+    if (typeof text.source !== 'string') {
+      problem('the text could not be read');
+      return out;
     }
-    // the pages the viewer says it marked: the quote's, and the next only beside it
+    const expected = findPassagesText(text.source, quote.text).map(([start, end]) => `${start}-${end}`);
+    const shown = (Array.isArray(text.marks) ? text.marks : []).map(([start, end]) => `${start}-${end}`);
+    const left = [...expected];
+    for (const item of shown) {
+      const at = left.indexOf(item);
+      if (at >= 0) left.splice(at, 1);
+      else out.mismatched += 1;
+    }
+    out.missed = left.length;
+    if (out.mismatched) problem(`${out.mismatched} marked passage(s) are not the walk's own`);
+    if (out.missed) problem(`${out.missed} passage(s) the walk found are not marked`);
+    if ((reading.status === 'marked') !== (expected.length > 0)) problem(`the viewer says ${reading.status || 'nothing'}, the walk's own search finds ${expected.length}`);
+    if (Number(reading.count || 0) !== expected.length) problem(`the viewer counts ${Number(reading.count || 0)}, the walk's own search ${expected.length}`);
+    if (note !== textNote(expected.length)) problem('the note does not say what was marked, as written');
+    if (!out.problems.length) out.outcome = expected.length === 0 ? 'not_found' : expected.length === 1 ? 'once' : 'multi';
+    return out;
+  }
+  if (reading.mode !== 'pdf') {
+    problem(`the viewer is ${reading.mode || 'not shown'}`);
+    return out;
+  }
+  const pagesRead = reading.pagesRead instanceof Map ? reading.pagesRead : new Map();
+  const models = new Map();
+  for (const [number, read] of pagesRead) {
+    if (!read?.drawn) continue;
+    models.set(number, pageModel(number, read.tokens));
+    out.flags += unbornFlags(read.tokens);
+  }
+  if (out.flags) problem(`${out.flags} span(s) flagged as an overprint copy are not one (their text or place differs from every span before them)`);
+  const result = ownSearch(quote, models, Number(reading.pageCount) || 0);
+  if (result.status === 'unread') {
+    problem(`page(s) ${result.unread.join(', ')} could not be read`);
+    return out;
+  }
+  const shown = viewerMarks(models, pagesRead);
+  out.cut = shown.cut;
+  if (out.cut) problem(`${out.cut} marked part(s) begin or end inside a character`);
+  if (shown.inCopies) problem('an overprint copy is marked');
+  // the pages: a mark (or a page the viewer says it marked) that is neither the quote's page nor the next beside it
+  if (page) {
+    for (const entry of shown.occurrences.values()) {
+      const starts = entry.pages.has(page);
+      for (const number of entry.pages) if (!(number === page || (starts && number === page + 1))) out.off_page += 1;
+    }
     const claimed = Array.isArray(reading.pages) ? reading.pages : [];
     out.off_page += claimed.filter(number => number !== page && !(number === page + 1 && claimed.includes(page))).length;
-    if (out.off_page) out.problems.push(`${name}: ${out.off_page} mark(s) on another page`);
+    if (out.off_page) problem(`${out.off_page} mark(s) on another page`);
   }
-  if (reading.status !== 'marked') {
-    if (marks.length) out.problems.push(`${name}: ${marks.length} mark(s) shown, but the viewer says ${reading.status || 'nothing'}`);
-    else if (/could not be found|does not have|has \d+ pages?/.test(reading.note || '')) out.outcome = 'not_found';
-    else out.problems.push(`${name}: nothing marked, and the note does not say the words could not be found`);
-    return out;
+  // the occurrences: the viewer's against the walk's own, by their places (so by count, place and case)
+  const expected = new Map();
+  for (const item of result.occurrences) expected.set(item.keys, (expected.get(item.keys) || 0) + 1);
+  for (const entry of shown.occurrences.values()) {
+    if (expected.get(entry.keys)) expected.set(entry.keys, expected.get(entry.keys) - 1);
+    else out.mismatched += 1;
   }
-  const wanted = foldMarked(quote.text);
-  for (const parts of occurrences.values()) {
-    const shown = foldMarked(parts.map(part => part.text).join(''));
-    if (shown !== wanted && shown.toLowerCase() !== wanted.toLowerCase()) out.mismatched += 1;
+  out.missed = [...expected.values()].reduce((sum, value) => sum + value, 0);
+  if (out.mismatched) problem(`${out.mismatched} marked occurrence(s) are not the walk's own (other words, another case or another place)`);
+  if (out.missed) problem(`${out.missed} occurrence(s) the walk found are not marked`);
+  const marked = result.status === 'marked';
+  if (marked !== (reading.status === 'marked')) problem(`the viewer says ${reading.status || 'nothing'}, the walk's own search ${marked ? `finds ${result.count}` : 'finds none'}`);
+  if (Number(reading.count || 0) !== result.count) problem(`the viewer counts ${Number(reading.count || 0)}, the walk's own search ${result.count}`);
+  const claimed = (Array.isArray(reading.pages) ? reading.pages : []).join(' ');
+  if (claimed !== result.pages.join(' ')) problem(`the viewer names page(s) [${claimed}], the walk's own search [${result.pages.join(' ')}]`);
+  if (note !== pdfQuoteNote(result)) problem('the note does not say what was done, as written');
+  // drawn (S3): every page holding a mark (the words under the viewer's marks drawn), and the page shown for a quote
+  // not found
+  const viewerPages = new Set([...shown.occurrences.values()].flatMap(entry => [...entry.pages]));
+  const markedPages = new Set([...result.pages, ...viewerPages]);
+  for (const number of markedPages) {
+    const why = canvasProblem(pagesRead.get(number)?.canvas, viewerPages.has(number));
+    if (why) {
+      out.blank += 1;
+      problem(`page ${number} is marked, but ${why}`);
+    }
   }
-  if (out.mismatched) out.problems.push(`${name}: ${out.mismatched} marked occurrence(s) are not the quote's words`);
-  out.cut = new Set(marks.filter(mark => mark.whole === false).map(mark => `${mark.page} ${mark.occurrence}`)).size;
-  if (out.cut) out.problems.push(`${name}: ${out.cut} marked part(s) begin or end inside a character`);
-  if (occurrences.size !== reading.count) out.problems.push(`${name}: ${occurrences.size} occurrence(s) marked, the viewer counted ${reading.count}`);
-  if (page && reading.mode === 'pdf' && !(reading.note || '').includes(`page ${page}`)) out.problems.push(`${name}: the note does not name page ${page}`);
-  if (!out.problems.length) out.outcome = reading.count === 1 ? 'once' : 'multi';
+  if (!marked && page && pagesRead.has(page)) {
+    const why = canvasProblem(pagesRead.get(page)?.canvas, false);
+    if (why) {
+      out.blank += 1;
+      problem(`page ${page} is shown, but ${why}`);
+    }
+  }
+  out.no_text = !marked && result.empty;
+  if (!out.problems.length) out.outcome = marked ? (result.count === 1 ? 'once' : 'multi') : 'not_found';
   return out;
 }
 
-// The check over every quote chosen ({quote, reading}), counted: how many were marked once, more than once, not found,
-// unavailable, marked off their page, marked with other text and marked from or to inside a character. It passes when
-// every quote was marked as its words, whole characters only, or said not to be found, and nothing was marked on another
-// page - and, where the PDF viewer drew the document, when at least one of its quotes was marked: a quote not found is
-// allowed, but a viewer that marks nothing at all (a matcher that has stopped finding anything says "could not be found"
-// every time) does not pass on the walk's own documents, whose quotes are their own words.
+// The check over every quote chosen ({quote, reading}), counted: how many were marked once, more than once, not found
+// (the walk's own search agreeing; and of them, on a page with no searchable text), unavailable, marked off their page,
+// marked as other than the walk's occurrences, not marked where the walk found them, cut inside a character, marked on a
+// page not drawn, and the overprint flags not borne out. It passes when every quote was judged as the walk's own search
+// says and nothing was marked on another page - and, where the PDF viewer drew the document, when at least one of its
+// quotes was marked: a quote not found is allowed, but a viewer that marks nothing at all does not pass on the walk's
+// own documents, whose quotes are their own words.
 function quoteMarkChecks(chosen) {
-  const data = { quotes: chosen.length, marked_once: 0, marked_multi: 0, not_found: 0, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0, cut: 0 };
+  const data = { quotes: chosen.length, marked_once: 0, marked_multi: 0, not_found: 0, no_text: 0, unavailable: 0, unresolved: 0,
+    off_page: 0, mismatched: 0, missed: 0, cut: 0, blank: 0, flags: 0 };
   const problems = [];
   const inPdf = { chosen: 0, marked: 0 };
   for (const { quote, reading } of chosen) {
     const judged = judgeQuote(quote, reading);
     data[{ once: 'marked_once', multi: 'marked_multi', not_found: 'not_found', unavailable: 'unavailable' }[judged.outcome] || 'unresolved'] += 1;
-    data.off_page += judged.off_page;
-    data.mismatched += judged.mismatched;
-    data.cut += judged.cut;
+    if (judged.outcome === 'not_found' && judged.no_text) data.no_text += 1;
+    for (const key of ['off_page', 'mismatched', 'missed', 'cut', 'blank', 'flags']) data[key] += judged[key];
     problems.push(...judged.problems);
     if (reading?.mode === 'pdf') {
       inPdf.chosen += 1;
@@ -793,80 +1241,204 @@ function quoteMarkChecks(chosen) {
   // first among the problems, so the reason always shows it
   if (inPdf.chosen && !inPdf.marked) problems.unshift(`${inPdf.chosen} quote(s) chosen in the PDF viewer and not one marked`);
   const summary = `${data.quotes} quote(s) chosen: ${data.marked_once} marked once, ${data.marked_multi} marked more than once, `
-    + `${data.not_found} not found (the note says so), ${data.off_page} mark(s) off the quote's page, ${data.mismatched} marked with other words, `
-    + `${data.cut} beginning or ending inside a character`;
+    + `${data.not_found} not found (the walk's own search agrees; ${data.no_text} on a page with no searchable text), `
+    + `${data.off_page} mark(s) off the quote's page, ${data.mismatched} marked other than the walk's own, `
+    + `${data.missed} found by the walk and not marked, ${data.cut} beginning or ending inside a character, `
+    + `${data.blank} marked page(s) not drawn, ${data.flags} overprint flag(s) not borne out`;
   return check('quotes.marks', chosen.length > 0 && problems.length === 0 && data.off_page === 0, problems.length ? `${summary}; ${problems.slice(0, 8).join('; ')}` : summary, data);
 }
 
-// Runs in the page: what the viewer shows of the quote chosen last - its mode, what it says it marked (the data-mark-*
-// state the page keeps on #documentViewer), the note, the pages drawn and every mark on them (page, occurrence, text,
-// whole); for a text document, the marks inside its frame. A mark is `whole` when its occurrence's marks on that page
-// begin and end between two characters of the page's text (the strings of its text layer, joined in order): between two
-// of the characters a person sees (Intl.Segmenter), where NFKC of the page's text is cut cleanly. Read apart from the
-// page script's own matcher, so a letter marked without the accent the next item holds is seen. The page's text stays
-// in the page.
-function readMarks() {
+// Runs in the page: what the viewer shows of the quote chosen last - its mode, why it framed the browser's own viewer,
+// what it says it marked (the data-mark-* state it keeps on #documentViewer), the note, how many pages it has and which
+// are drawn.
+function readViewer() {
   const viewer = document.querySelector('#documentViewer');
   if (!viewer) return null;
   const note = document.querySelector('#viewerMark');
-  const out = { mode: viewer.tagName === 'IFRAME' ? 'text' : viewer.getAttribute('data-mode') || 'loading',
+  return { mode: viewer.tagName === 'IFRAME' ? 'text' : viewer.getAttribute('data-mode') || 'loading',
     fallback: viewer.getAttribute('data-fallback') || '',
     marked: viewer.getAttribute('data-marked') || '', status: viewer.getAttribute('data-mark-status') || '',
     pages: (viewer.getAttribute('data-mark-pages') || '').split(' ').filter(Boolean).map(Number),
-    count: Number(viewer.getAttribute('data-mark-count') || 0), note: note ? note.textContent : '', drawn: [], marks: [] };
-  if (out.mode === 'text') {
-    try {
-      out.marks = Array.from(viewer.contentDocument.querySelectorAll('mark[data-quote-mark]'))
-        .map((mark, index) => ({ page: null, occurrence: index, text: mark.textContent }));
-    } catch {
-      out.marks = [];
-    }
-    return out;
-  }
-  out.drawn = Array.from(viewer.querySelectorAll('.pdf-page')).filter(item => item.querySelector('.pdf-text'))
-    .map(item => Number(item.getAttribute('data-page')));
-  const nfkc = value => value.normalize('NFKC');
-  const cutter = typeof Intl === 'object' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
-  out.marks = [];
-  for (const item of viewer.querySelectorAll('.pdf-page')) {
-    const layer = item.querySelector('.pdf-text');
-    const marks = layer ? Array.from(layer.querySelectorAll('.pdf-mark')) : [];
-    if (!marks.length) continue;
-    const page = Number(item.getAttribute('data-page'));
-    // the page's text, and where each mark lies in it
-    let value = '';
-    const placed = new Map();
-    const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const mark = node.parentElement ? node.parentElement.closest('.pdf-mark') : null;
-      if (mark && layer.contains(mark)) {
-        const at = placed.get(mark) || { start: value.length, end: value.length };
-        at.end = value.length + node.data.length;
-        placed.set(mark, at);
-      }
-      value += node.data;
-    }
-    const whole = nfkc(value);
-    const bounds = cutter ? new Set(Array.from(cutter.segment(value), segment => segment.index)) : new Set();
-    const clean = at => at === 0 || at === value.length || (bounds.has(at) && nfkc(value.slice(0, at)) + nfkc(value.slice(at)) === whole);
-    const spans = new Map();
-    for (const mark of marks) {
-      const occurrence = Number(mark.getAttribute('data-occurrence'));
-      const at = placed.get(mark) || { start: 0, end: 0 };
-      const span = spans.get(occurrence) || { start: at.start, end: at.end };
-      spans.set(occurrence, { start: Math.min(span.start, at.start), end: Math.max(span.end, at.end) });
-    }
-    const verdicts = new Map(Array.from(spans, ([occurrence, span]) => [occurrence, clean(span.start) && clean(span.end)]));
-    for (const mark of marks) {
-      const occurrence = Number(mark.getAttribute('data-occurrence'));
-      out.marks.push({ page, occurrence, text: mark.textContent, whole: verdicts.get(occurrence) });
-    }
-  }
-  return out;
+    count: Number(viewer.getAttribute('data-mark-count') || 0), note: note ? note.textContent : '',
+    pageCount: viewer.querySelectorAll('.pdf-page').length,
+    drawn: Array.from(viewer.querySelectorAll('.pdf-page')).filter(item => item.querySelector('.pdf-text')).map(item => Number(item.getAttribute('data-page'))) };
 }
 
-// Chooses every quote in the quotes panel, in order, and reads what the viewer marked for each ({quote, reading}): a page
-// the viewer says it marked but has not drawn yet (it draws the pages near the visible area only) is scrolled to first.
+// Runs in the page: one drawn page of the PDF viewer as the walk judges it - its text layer in order (each item's span:
+// its text, whether the viewer flags it as an overprint copy, its box [left, top, height] in CSS px from the page's
+// corner; and each <br>), every mark (.pdf-mark, or a mark element, with data-occurrence) as the item and the offsets in
+// that item's string it covers, and the page's canvas measured where it is drawn: whether it is shown, the share of its
+// pixels painted and the share that differ from its dominant colour. Pixels never leave the page.
+function readPdfPage(number) {
+  const item = document.querySelector(`#documentViewer .pdf-page[data-page="${number}"]`);
+  const layer = item ? item.querySelector('.pdf-text') : null;
+  if (!item || !layer) return { number, drawn: false };
+  const origin = item.getBoundingClientRect();
+  const tokens = [];
+  const marks = [];
+  let items = 0;
+  const visit = parent => {
+    for (const node of Array.from(parent.childNodes)) {
+      if (node.nodeType === 1 && node.tagName === 'BR') {
+        tokens.push({ kind: 'br' });
+        continue;
+      }
+      if (node.nodeType === 1 && node.classList.contains('markedContent')) {
+        visit(node);
+        continue;
+      }
+      if (node.nodeType !== 1 && node.nodeType !== 3) continue;
+      const index = items;
+      items += 1;
+      const token = { kind: 'item', text: node.textContent, copy: node.nodeType === 1 && node.getAttribute('data-overprint') === '1', box: null };
+      if (node.nodeType === 1) {
+        const box = node.getBoundingClientRect();
+        token.box = [box.left - origin.left, box.top - origin.top, box.height];
+        let offset = 0;
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+          const mark = text.parentElement ? text.parentElement.closest('.pdf-mark, mark') : null;
+          if (mark && mark !== node && node.contains(mark)) {
+            marks.push({ item: index, occurrence: mark.getAttribute('data-occurrence'), start: offset, end: offset + text.data.length });
+          }
+          offset += text.data.length;
+        }
+      }
+      tokens.push(token);
+    }
+  };
+  visit(layer);
+  for (const mark of marks) mark.occurrence = /^\d+$/.test(String(mark.occurrence)) ? Number(mark.occurrence) : `?${mark.occurrence}`;
+  const canvas = item.querySelector('canvas');
+  const measured = { present: Boolean(canvas) };
+  if (canvas) {
+    const style = getComputedStyle(canvas);
+    const shown = getComputedStyle(item);
+    const box = canvas.getBoundingClientRect();
+    measured.visible = style.display !== 'none' && style.visibility === 'visible' && Number(style.opacity) > 0
+      && shown.visibility === 'visible' && Number(shown.opacity) > 0 && box.width >= origin.width * 0.5 && box.height >= origin.height * 0.5;
+    try {
+      const { width, height } = canvas;
+      const { data } = canvas.getContext('2d').getImageData(0, 0, width, height);
+      // the paper: the most common colour among the painted pixels, in steps of 16 per channel
+      const bins = new Uint32Array(4096);
+      let opaque = 0;
+      for (let at = 0; at < data.length; at += 4) {
+        if (data[at + 3] !== 255) continue;
+        opaque += 1;
+        bins[((data[at] >> 4) << 8) | ((data[at + 1] >> 4) << 4) | (data[at + 2] >> 4)] += 1;
+      }
+      let paper = 0;
+      for (let bin = 1; bin < bins.length; bin += 1) if (bins[bin] > bins[paper]) paper = bin;
+      const drawnAt = at => data[at + 3] === 255 && Math.max(Math.abs((data[at] >> 4) - (paper >> 8)),
+        Math.abs((data[at + 1] >> 4) - ((paper >> 4) & 15)), Math.abs((data[at + 2] >> 4) - (paper & 15))) >= 2;
+      // what is drawn under the marks: each mark's box, in the canvas's pixels
+      const scaleX = width / Math.max(1, box.width);
+      const scaleY = height / Math.max(1, box.height);
+      let markPixels = 0;
+      let markContent = 0;
+      for (const mark of item.querySelectorAll('.pdf-text .pdf-mark, .pdf-text mark')) {
+        const area = mark.getBoundingClientRect();
+        const x0 = Math.max(0, Math.floor((area.left - box.left) * scaleX));
+        const x1 = Math.min(width, Math.ceil((area.right - box.left) * scaleX));
+        const y0 = Math.max(0, Math.floor((area.top - box.top) * scaleY));
+        const y1 = Math.min(height, Math.ceil((area.bottom - box.top) * scaleY));
+        for (let y = y0; y < y1; y += 1) {
+          for (let x = x0; x < x1; x += 1) {
+            markPixels += 1;
+            if (drawnAt((y * width + x) * 4)) markContent += 1;
+          }
+        }
+      }
+      const total = Math.max(1, width * height);
+      Object.assign(measured, { pixels: total, opaque: opaque / total, markPixels, markContent });
+    } catch (error) {
+      measured.error = String(error && error.name || error);
+    }
+  }
+  return { number, drawn: true, tokens, marks, canvas: measured };
+}
+
+// Runs in the page: a text document's frame - its text (every text node of its body, joined in order, as the page reads
+// it to mark it) and every mark (mark[data-quote-mark]) as [start, end] in that text.
+function readTextFrame() {
+  const viewer = document.querySelector('#documentViewer');
+  try {
+    const page = viewer.contentDocument;
+    const walker = page.createTreeWalker(page.body, 4);
+    let source = '';
+    const marks = new Map();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const mark = node.parentElement ? node.parentElement.closest('mark[data-quote-mark]') : null;
+      if (mark) {
+        const at = marks.get(mark) || [source.length, source.length];
+        at[1] = source.length + node.nodeValue.length;
+        marks.set(mark, at);
+      }
+      source += node.nodeValue;
+    }
+    return { source, marks: [...marks.values()] };
+  } catch {
+    return { source: null, marks: [] };
+  }
+}
+
+// The pages to read for one quote in a drawn PDF: every page of a short document, else the searched pages (the quote's
+// and the next; every page for a quote with no page), the pages the viewer says it marked and the pages it has drawn.
+function pagesToRead(quote, reading) {
+  const count = Number(reading?.pageCount) || 0;
+  const every = Array.from({ length: count }, (_, index) => index + 1);
+  if (count <= FULL_READ_PAGES) return every;
+  const page = Number.isInteger(quote?.page) && quote.page > 0 ? quote.page : null;
+  const wanted = new Set(page ? [page, page + 1] : every);
+  for (const number of [...(reading?.pages || []), ...(reading?.drawn || [])]) wanted.add(number);
+  return [...wanted].filter(number => number >= 1 && number <= count).sort((a, b) => a - b);
+}
+
+// Waits in the page until the viewer has stopped scrolling (a smooth scroll to the quote), at most 3 s.
+async function settleViewer(page) {
+  await page.evaluate(() => new Promise(resolve => {
+    const viewer = document.querySelector('#documentViewer');
+    const until = performance.now() + 3000;
+    let last = -1;
+    let still = 0;
+    const step = () => {
+      const top = viewer ? viewer.scrollTop : 0;
+      still = top === last ? still + 1 : 0;
+      last = top;
+      if (still >= 3 || performance.now() > until) resolve();
+      else requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  })).catch(() => null);
+}
+
+// One page of the PDF viewer read (readPdfPage) once it is drawn: scrolled to when it is not (the viewer draws the pages
+// near the visible area only), its text layer waited for, then two frames so the library has filled it and the viewer
+// painted its marks.
+async function readDrawnPage(page, number) {
+  await page.evaluate(wanted => {
+    const target = document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"]`);
+    if (target && !target.querySelector('.pdf-text')) target.scrollIntoView({ block: 'center' });
+  }, number);
+  await page.waitForFunction(wanted => Boolean(document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"] .pdf-text`)),
+    number, { timeout: UI_TIMEOUT_MS }).catch(() => null);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 50)))));
+  return page.evaluate(readPdfPage, number);
+}
+
+// The browser's own viewer as framed now: its element (a handle, so the walk can tell a new frame from the old one
+// without changing the page) and the page its address opens (#page=N).
+async function frameState(page) {
+  const handle = await page.$('#documentViewer[data-mode="frame"] iframe');
+  if (!handle) return null;
+  const match = /#page=(\d+)$/.exec((await handle.getAttribute('src')) || '');
+  return { handle, page: match ? Number(match[1]) : null };
+}
+
+// Chooses every quote in the quotes panel, in order, and reads what the viewer did for each ({quote, key, reading}): in
+// a drawn PDF, every page to judge it by (pagesToRead), each scrolled to and read once drawn; in the browser's own viewer,
+// the page its frame opens and whether that frame is a new one; in a text document, its text and marks.
 async function chooseQuotes(page, enc) {
   const served = servedQuotes(enc);
   const buttons = page.locator('#quotesPanel .quote');
@@ -875,31 +1447,29 @@ async function chooseQuotes(page, enc) {
   for (let index = 0; index < total; index += 1) {
     const button = buttons.nth(index);
     const key = await button.getAttribute('data-quote');
+    const quote = served[index] || null;
+    const before = await frameState(page);
     await button.click();
     const ready = await page.waitForFunction(wanted => {
       const viewer = document.querySelector('#documentViewer');
       return Boolean(viewer) && (viewer.getAttribute('data-marked') === wanted || viewer.getAttribute('data-mode') === 'frame');
     }, key, { timeout: UI_TIMEOUT_MS }).then(() => true).catch(() => false);
-    let reading = ready ? await page.evaluate(readMarks) : null;
+    let reading = ready ? await page.evaluate(readViewer) : null;
     if (reading && reading.mode === 'pdf') {
-      // every page drawn at any read, with the marks it showed then: the pages said to be marked are drawn in turn
-      const shown = new Map();
-      const take = now => {
-        for (const number of now?.drawn || []) shown.set(number, now.marks.filter(mark => mark.page === number));
-      };
-      take(reading);
-      for (const number of reading.status === 'marked' ? reading.pages : []) {
-        await page.evaluate(wanted => {
-          const target = document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"]`);
-          if (target && !target.querySelector('.pdf-mark')) target.scrollIntoView({ block: 'center' });
-        }, number);
-        await page.waitForFunction(wanted => Boolean(document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"] .pdf-mark`)),
-          number, { timeout: UI_TIMEOUT_MS }).catch(() => null);
-        take(await page.evaluate(readMarks));
-      }
-      reading = { ...reading, marks: [...shown.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, marks]) => marks) };
+      await settleViewer(page);
+      reading = await page.evaluate(readViewer);
+      reading.pagesRead = new Map();
+      for (const number of pagesToRead(quote, reading)) reading.pagesRead.set(number, await readDrawnPage(page, number));
+    } else if (reading && reading.mode === 'frame') {
+      const after = await frameState(page);
+      const replaced = before && after ? !(await page.evaluate(([a, b]) => a === b, [before.handle, after.handle])) : null;
+      reading.frame = { page: after ? after.page : null, previousPage: before ? before.page : null, replaced };
+      await after?.handle.dispose();
+    } else if (reading && reading.mode === 'text') {
+      reading.text = await page.evaluate(readTextFrame);
     }
-    chosen.push({ quote: served[index] || null, key, reading });
+    await before?.handle.dispose();
+    chosen.push({ quote, key, reading });
   }
   return chosen;
 }
@@ -1806,7 +2376,10 @@ module.exports = {
   contractFor, scanContext, addQuotes, ownWording, NEVER_QUOTED, scanText, scanJson, scanFile, scanHeaders, checkScan,
   expectedActions,
   jsonChecks, showsToken, unitsProblem, modifiersProblem, domChecks, readEncounterDom, collectDomStrings, approve,
-  servedQuotes, foldMarked, judgeQuote, quoteMarkChecks, readMarks, chooseQuotes,
+  servedQuotes, foldMarked, FALLBACK_WHY, FRAME_REASONS, OVERPRINT_WINDOW, OVERPRINT_MIN_PX, OVERPRINT_SHARE,
+  CANVAS_OPAQUE_MIN, CANVAS_MARK_CONTENT_MIN, FULL_READ_PAGES, cutCharacters, pageModel, foldQuote, ownSearch, pdfQuoteNote,
+  unbornFlags, viewerMarks, canvasProblem, findPassagesText, textNote, judgeQuote, quoteMarkChecks, readViewer,
+  readPdfPage, readTextFrame, pagesToRead, chooseQuotes,
   servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportTxt,
   exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,
   evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
