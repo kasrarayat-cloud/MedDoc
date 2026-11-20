@@ -616,6 +616,15 @@ class BlankQuestionTests(SimpleTestCase):
         self.assertIsNone(result._question_text(['\ufeff\u00a0']))
 
 
+    def test_an_id_blank_to_the_one_test_is_no_id(self):
+        # an id is read with the same test: U+FEFF alone names nothing, and a question carrying it as its id has none
+        reader = f.reader_result([q.coded('20610', ids=['\ufeff', ' \ufeff '])], questions=[q.asked('\ufeff', 'Which knee?')])
+        checker = f.checker_result([q.reviewed('L1', '20610', ids=['\ufeff'])])
+        self.assertEqual(asked(combine(reader, checker)), [('Which knee?', [], [], 'reader')])
+        self.assertEqual(result.dangling_references(reader, checker), [])
+        self.assertEqual(result.listing(reader)['questions'], [{'id': None, 'question': 'Which knee?', 'affects': []}])
+
+
 class BlankQuestionPageTests(r.CustomerCase, TestCase):
     def test_a_needs_answer_line_whose_only_question_is_blank_gets_the_fallback_a_member_can_answer(self):
         # the server side of the page check: U+FEFF alone is blank to the page, so it is blank to the server too
