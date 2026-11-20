@@ -18801,3 +18801,154 @@ four refutation lenses (false READY, design, reproduction, generality: 40 findin
       the question stage's established path could answer it.
   - Next (D344): commit int10 on 8adce6fb and push; CI; C1, C2, D1-D4 and D15 on int10's image; the paid pair (E) on
     int10. The focused refutation (refute7: L10-release, L10-regress) and check:final8 run beside it.
+
+- **D347 OWNER DECISION (session 738699b2, answered between 18:52:45Z and 18:59:56Z on 2026-11-19): the paid test starts
+  now, beside round 7's checks, over the preflight's load line.** Asked because the preflight BLOCKed on load (10.28-22.6,
+  1-minute; the line is 10) while the final check's and the refutation lanes' tests.v2 modules ran (AGENTS.md: a BLOCK
+  is reported and the owner asked). The question as put: the limit was set when the server had 14 cores; it now has 40,
+  with 23 GB of memory free and the live site healthy; waiting could add up to about an hour. His answer, verbatim:
+  "Start now (Recommended)" (that option read: build the test image, run the paid test now beside round 7's checks,
+  and watch memory and the live site throughout).
+  - Scope: this pair's steps (C1, C2, E0's suite and database modules, the plan, the send, the keying, E5) start without
+    waiting for the load. Memory, swap and the co-tenant probe are read before each heavy step and the send; a memory
+    BLOCK (available under 1 GB), an OOM kill or a co-tenant change still stops it. D1-D4 and D15 keep the load gate
+    unless they would hold the install. The preflight reports record the load and this decision.
+- **D348 The confirmation pair (batch pair-05 on int10, cpt-studio-test:394f1c1e3148): STOP by score (ii) = 6 (the lead,
+  session 738699b2, 2026-11-19T19:35:42Z). Pre-registration install-r3/confirm-pair-preregistration.json (0ed8ec31..., 19:04:43Z).**
+  - The send: 19:05:07Z-19:26:57Z, exit 0, stopped null, freeze ec26ec68..., manifest 3795a86c...; 5 sends, $6.714087
+    (B-fb13: pass 1 $1.213520 / 157.7 s, pass 2 $0.695256 / 130.6 s, no question request; L05: pass 1 $1.768639 /
+    352.3 s, pass 2 $1.168856 / 209.4 s, one question request q1-1 $1.867816 / 448.5 s of its 1,408 s deadline, 8,907
+    input, 44,914 output of which 44,336 thinking, reserved $5.304024 of the 25 USD ceiling). Test spend after
+    36.233259 of 120. No refusal, no unknown cost, no interruption, no HOLD.json, no TOO_LONG, no deadline cut.
+  - The key (sealed before any answer was read): B-fb13 END with no request; L05 one round, 3 items; CHECK PASSED
+    19:29:09Z; key_compare L05 AGREES, 6 claims, 0 differences; the calibration item contradicts (no breach).
+  - The proposed codes (score_v2): 10 rows, 9 correct, 1 unnecessary hold; wrong READY 0, wrong exclusion 0, G-GUARD
+    passes. B-fb13: 43262 and 43264 READY; 43260 (base included), 43265 (not documented) and 74328 (unprofiled) held, as
+    expected. L05: 43239 READY (released by K3, the scope reached the duodenum: proof quotes S55 and S56, read
+    first-hand, not hollow); 43235 (base included), 43248 (technique: the Savary dilation is the 2021 history) and 43255
+    (no hemostasis) held, as expected; 43249 HELD on coding_rule:competing_codes beside 43248 (expected READY): the
+    unnecessary hold, judged by the pre-registered rule (a) - reported, not a stop. K5's proof (S121 beside S85) read
+    first-hand, not hollow.
+  - The replays: recorded 2 of 2 reproduced; release-none and release-all exit 0.
+  - SCORE (ii) = 6 (install-r3/confirm-pair-e5/ii-2.json; adjudications b142b20e..., the lead's first-hand reading):
+    six CANDIDATE codes, each proposed alone, are held without the answers and READY with them, released by K3's true
+    answer (the scope reached the duodenum) and, for the dilation codes, K5's: 43198 (transnasal esophagoscopy with
+    biopsy), 43202 (esophagoscopy with biopsy), 43213 (esophagoscopy, retrograde dilation), 43214 (esophagoscopy, balloon
+    30 mm or larger), 43220 (esophagoscopy, transendoscopic balloon under 30 mm) and 43233 (EGD, balloon 30 mm or
+    larger). Each is wrong on L05 (an EGD that reached the duodenum, a through-the-scope balloon to 18 mm). Fable's
+    answers are right (the key agrees); the defect is the engine's: the esophagoscopy rows (43197-43229) carry only
+    R6:extent ("a reached point"), so a reach into the duodenum satisfies them; and no row reads the balloon's size
+    (43214/43233 against 43220/43249), the transnasal route (43197/43198) or a retrograde dilation (43213).
+  - Under the pre-registered pass rule and E-COMMANDS section 6 this is a STOP: the install does not proceed on int10;
+    the class is fixed per D276 by principle in a new round and re-checked free by replay (the recorded answers through
+    the fixed tree); the documents are never sent again. The owner is told the results now (D344) and asked whether to
+    fix first (the rule) or to override it.
+- **D349 OWNER DIRECTIVE (session 738699b2, answered at about 20:08Z on 2026-11-19, to the question "fix first, or
+  install now and fix later?" about D348's score (ii) = 6), verbatim: "Bro i dont want to have rule to block our fable
+  decesion since he is the best stop patching and rules delete the rules and anythign is block our things let fable
+  completly judge for codes through me to the live aasp".** Read as:
+  - (1) Go live as soon as possible ("through me to the live aasp": put me on the live site ASAP), on int10 as built.
+    D348's stop is overridden by the owner (class a: he accepts the recorded gap - a wrongly PROPOSED esophagoscopy code
+    on an EGD note, or a 30 mm-plus balloon code for a smaller balloon, can show READY - until the next change).
+  - (2) No more patch rounds ("stop patching and rules"): the refutation and final-check findings on int10 are recorded,
+    not built.
+  - (3) The product's direction: Fable judges the codes completely; the deterministic rules that hold or overrule
+    Fable's judgment are removed ("delete the rules and anything is block our things let fable completly judge for
+    codes"). That is a rebuild of the decision layer, not a setting; it is the next change after go-live, and its
+    scope is confirmed with the owner before it is built. Nothing about it is installed tonight.
+  - What it does not change: the repository's mechanisms (the pre-push hook, merge-pr.sh, the declaration gate of
+    run-ruled-mutation.sh) still apply to the install; they are steps, not reviews.
+  - Round 7's focused refutation and final check (wf_2bbc4c01-546, completed): check:final8 READY TO COMMIT. Recorded,
+    not built (D349 (2)): L10R-1 (verified, low; also on int9): an UNAPPRAISED through naming a non-stoma entry or no
+    entry lets the arm take another established stoma (44389/44407 READY in 100 census cases, 0 with the through
+    supported); the final check's finding 2 (low; also on int9): SUBTYPE_MADE_PLACES gives every upper subtype the pouch
+    as its own made place, so a hepaticojejunal or esophagogastric join filed with organ 'pouch' releases lower codes in
+    a contrived merged filing; L10R-2, L10R-3 and the lanes' other lows as their reports state them; the census notes
+    (OUTSIDE_OWN, hand-picked BASES) and v1's wall-clock subtests at load ~27. None is a regression from int9.
+- **D350 A decision recorded under the install declaration (docs/foundation/mutations/20261119-cpt-studio-fable-interpreter-install.md,
+  landed as 32338135): the pre-app comparison's restore is migrated with the candidate before cmp_ctx.py reads it (the
+  lead, session 738699b2, 2026-11-19T22:02:22Z).** The act ran preflight (22:00:04Z) and image (22:00:41Z), both judged as declared.
+  pre_app_f.sh (a draft, never run before) took the pre-app dump (pre-app-e426c747c7b7-20261119T220129Z.dump, sha256
+  edd389e6499ec9f8, 39 TABLE DATA entries) and then stopped: "PRE-APP STOP: COMPARISON". Its error file
+  (install-r3/cmp-err-preapp-20261119T220129Z.txt) reads "column studio_encountercontext.event_inventory_id does not
+  exist": the script ran the act checkout's code (migrations up to 0015) against the RAW restore, still at 0013.
+  Checklist D4, whose outcome the declaration cites ("35 gi-context@4 contexts (31 current), differing under @5:
+  current 0, not current 0; CONTROL ok"), measured on a copy migrated by the candidate (the counts copy
+  cptg_r3i10_counts). Nothing live changed: pre-app is read-only, and the test restore was dropped.
+  - Ruled: a tooling defect, not a finding. pre_app_f.sh gains one step: after the restore, migrate it on the TEST
+    server with the installed candidate image (testinst/manage.sh cpt-studio:e426c747c7b7 <restore> gemini=disabled --
+    migrate, every provider disabled, the live port refused). Then the comparison runs, as D4 measured it. Its files
+    volume is removed with the restore. Everything else is unchanged, including the declared stop on any differing
+    encounter or an undetected control.
+  - The script is run again with TAG=migrated. Its log, install-r3/pre-app-f-e426c747c7b7-migrated.log, is the
+    PRE_APP_LOG app reads. The first dump stays where it is (0600), as the declaration keeps every pre-app dump.
+
+- **D351 OWNER DIRECTIVE (session 738699b2, 2026-11-20 about 00:20Z, after the document E diagnosis), verbatim: "ok So i
+  dont want to have any old codes i mean 0 line from old code also fable should be take too old code palce completely
+  idont wanna see any single old code that cause us a patching or fixing remove it and then for pdf break what ai agent
+  or ai sulotion do you usgesst? i dont want you to build a system by code i want you to use agent in order to use api
+  report me what is your plan before procced".
+  - Status: PLAN REQUESTED, NOTHING STARTED. The plan put to the owner: Fable 5.2 reads the original file through the
+    Messages API (native PDF: page text + page image; Word converted to PDF), with API citations for quoted proof; it
+    codes and judges directly, with an optional independent second Fable read; the deterministic layer is removed
+    (studio/interpretation 69,176 lines, studio/gi 28,872, studio/validation 10,518, the ingest joining/segmenting/OCR,
+    the question stage, and their tests); the platform stays (site, accounts, upload, storage, database, the review
+    and approve screen rebuilt for Fable's answer, audit, export, the cost meter and the $25 ceiling, install and
+    rollback). Managed Agents is not proposed: beta, session history kept, not eligible for HIPAA BAA or zero retention.
+    Step 1 is a proof on document E plus the walk documents gi-01 and gi-02 before any removal. Owner decisions asked: the
+    second read, the Corti/Astra/Fable 5.1 participants, and the go for step 1.
+
+- **D352 OWNER APPROVAL (session 738699b2, 2026-11-20, answering D351's plan), verbatim: "i approve all of your decison
+  here is the lsit of real pdf doc with out name so you can test it up on new design tho [a download link]
+  downlaod it fro mthis link also old codes i dotn want my site again my engine my agents again block by old engine
+  everything should run smoothly by agenbts ai you ask me about corti and astra and fable 5.1 my question is do we need
+  it? or its better to let one agent handle everyhting like make several subagents liek parrel agents to do our task
+  what do you think?"
+  - Ruled with it: (1) the second, independent Fable read is in; (2) Corti, Astra and the Fable 5.1 participants are
+    dropped (the lead's answer to his question: one Fable reader plus one Fable checker per note; parallelism is across
+    documents, not inside one note, because coding needs the whole note in one view); (3) step 1, the proof, runs on
+    the owner's de-identified real PDFs from the link, then the build (step 2) removes the deterministic layer entirely.
+  - The PDFs are real clinical documents with the names removed: handled as PHI (0700 directory, 0600 files, nothing
+    printed, reaped at close-out).
+
+- **D353 Step 1 (the proof) RESULT, 2026-11-20 00:39Z-01:01Z.** Fable 5.2 reader + independent Fable 5.2 checker on the
+  original files (PDF document blocks with citations, effort max, server-side fallback "default" - never used), 9
+  documents: the owner's 6 de-identified PDFs, document E, gi-01 (Word, as pandoc text) and gi-02. All parsed, all end_turn.
+  - Codes (final): document E 43239 ready, 45380 needs_answer (payer modifier PT/33; cold vs hot forceps); document A 45380
+    needs_answer (screening vs diagnostic, payer); document B 43239 ready (+99152 needs_review: reader asked about
+    sedation, checker not supported); document C 43239, 45385, 45380-59 ready; document D 43239 ready; document F 43235-53 or
+    43239-53 needs_answer (biopsy only in the title and template line); document G 45378 or 45380 needs_answer/needs_review
+    (same contradiction); gi-01 99214 ready, G2211 needs_answer, the planned EGD not coded; gi-02 43239 ready.
+  - Checked against the lead's own reading of every file and seven blind coder subagents: the same codes on all 7 real
+    documents; 0 wrong code reached ready. Two blind readings (document C, document F) were FABRICATED on their first run (the
+    Read tool cannot render PDFs here: pdftoppm missing) and were replaced by second runs that match the text; memory
+    feedback_agent_file_reading_can_be_fabricated.
+  - Cost US$19.0894 for 9 (about $2.12 per document, both reads); 4-12 minutes per document, 4 at once.
+  - Build inputs learned: (1) give Fable the practice-entered date of service and payer (every copy had DATE OF
+    SURGERY blanked, so every real document asked for it); (2) the checker lists only questions the reader did not
+    ask (duplicates in the merged list); (3) citations come back as page_location and work.
+  - Evidence: proof-d352/out/<doc>/{reader,checker}-{raw,text}.json and result.json, summary-*.json; blind/*.json.
+
+- **D354 Step 2 (the build) STARTED, 2026-11-20 ~01:45Z, under the owner's "you have my full permission to run the new
+  design" (D352 follow-up).** Spec: build-fable-judge/BUILD-SPEC.md (architecture, data model 0016 additive, job
+  pipeline with 4 documents at once via N provider slot locks, the Fable package with the official SDK
+  anthropic==2.11.0 / httpx2 and max_retries=0, prompts from the proof plus practice context (service date, insurance)
+  and per-code citation sections, combine as the only glue logic, the customer contract customer-2026-11-20, the new
+  review UI and operator console, exports @3, removal list, installer/image/walk changes, tests, lanes A-E).
+  - Product choices recorded under standing authority: an Insurance select at upload (Medicare / Medicaid / Commercial
+    or other / Not sure) passed to Fable with the service date; Word files converted to PDF by LibreOffice in the image;
+    no local PDF parsing (pypdf, tesseract and poppler leave the image; the API's refusal of an unreadable PDF is shown
+    plainly); CPT descriptors stay withheld; synthetic-only stays exactly as it is (the owner was told his real PDFs
+    conflict with it and that real patient data needs a HIPAA BAA and the setting changed - his decision, not taken).
+  - Lanes: A core (worktree cpt-fable-judge-20261120, the feature branch), C frontend (cpt-fable-judge-laneC), D
+    installer/image/walk (cpt-fable-judge-laneD) running; B (API, exports, operator) after A; E (removal, docs) last.
+    Test env: build-fable-judge/venv + test-env.sh (synthetic values, the throwaway Postgres :55461, one suffix per lane).
+
+- **D355 The approval attestation text, 2026-11-20 (lead, standing authority; the meaning is unchanged).** The text a
+  reviewer must accept to approve a code keeps the earlier attestation's meaning (read the whole document, not only the
+  quotes; it supports the code as performed at this encounter; synthetic review, not clinical approval or billing
+  advice). Its middle sentence, "The documentation checks can miss wording they do not recognise.", named checks that no
+  longer exist and now reads "The coding review can be wrong." ("cited passages" became "quoted passages"). Human and
+  agent texts in studio/decisions.py, pinned by tests/test_decisions.py.
+  - Merged on feat/cpt-studio-fable-judge-20261120: lane A 26613b1f4, lane B 6e2737a9a, lane C 15dbb116d, lane D
+    50e8180c5; merge commits e2bd055a1, 48ac915d7. No conflicts.
