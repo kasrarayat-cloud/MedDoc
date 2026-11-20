@@ -3855,3 +3855,28 @@ step live with the test-only key, through the customer page (ops/walk.cjs), the 
 (b) Their files and everything derived stay private (0700/0600) and are reaped at close-out. On the live site the
 post-install walk uses the two synthetic walk documents only: the site is synthetic-only, and a real clinical note is
 never a smoke target (AGENTS.md, production verification). He can upload his documents himself, as he did before.
+
+## Owner direction, 2026-11-20 — mark the quoted words in the PDF viewer
+
+Given on 2026-11-20 at about 15:00Z in session 738699b2, in answer to the install report's closing question (the PDF
+highlight, the four medium fixes, or the dormant reference lookup), verbatim:
+
+> ok do highlight
+
+### Session interpretation, 2026-11-20 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D368)
+
+(a) Of the three items offered he chose the highlight. The four medium fixes (ANS-1..4) and the dormant
+studio/reference/store.py cleanup stay queued for a later update.
+
+(b) The highlight: when a member chooses a quoted passage of a PDF (or of the PDF a Word document was converted to), the
+viewer opens the quoted page and marks the quoted words on it. It locates the quote's own characters only - white space
+ignored, Unicode NFKC on both sides, exact case before case-blind - on the quote's page, or continuing onto the next
+page; every occurrence on that page is marked and counted; a passage that cannot be found is not marked and the page
+says so; nothing is ever marked on another page, and nothing partial or nearest is marked. It is display plumbing under
+D358: it reads no meaning, adds no word list or code rule, and never holds or changes a code.
+
+(c) It is built and proven to the same standard as the Fable build - a refutation pass on the finished diff, every suite
+and CI green, his share-link PDFs measured offline with real API citations, a rehearsal on a restored copy of live - and
+installed through scripts/run-ruled-mutation.sh with a declaration committed before the act (a code-only release, no
+migration), checked on the live site without changing anything but the check's own sign-in, and reported. Paid calls
+are limited to citation samples with a small model on his PDFs (cents); no paid coding round is run without need.
