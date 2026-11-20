@@ -13,7 +13,7 @@
  "can_review": true,
  "acknowledgement": "I am an automated agent. I read the whole source document, not only the quoted passages, and it supports this code as a service performed at this encounter. The coding review can be wrong. This agent-executed synthetic review is not clinical approval or billing advice.",
  "counts": {
-  "documents": 10,
-  "queue": 4
+  "documents": 11,
+  "queue": 5
  }
 }

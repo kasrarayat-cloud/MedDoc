@@ -1,6 +1,8 @@
 'use strict';
-// Unit tests for the customer page, studio/static/studio/app.js, over the customer contract customer-2026-11-20 (the
-// build specification, sections 6 and 7) and its fixtures in tests/fixtures/customer. Run: node --test tests/frontend/
+// Unit tests for the customer page, studio/static/studio/app.js, over the customer contract customer-2026-11-21 (the
+// build specification, sections 6 and 7, with the fix pass's line identity: every code row is named by its line, and a
+// decision names the line and the coding review the page shows) and its fixtures in tests/fixtures/customer.
+// Run: node --test tests/frontend/
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -331,7 +333,7 @@ test('every upload attempt carries a version-4 client key', () => {
 });
 
 test('the page names its build, and a 409 client_outdated is the update notice while other answers are plain sentences', () => {
-  assert.equal(app.CLIENT_VERSION, 'customer-2026-11-20');
+  assert.equal(app.CLIENT_VERSION, 'customer-2026-11-21');
   assert.equal(app.CLIENT_HEADER, 'X-CPT-Studio-Client');
   assert.equal(app.isClientOutdated(409, { error_code: 'client_outdated' }), true);
   assert.equal(app.isClientOutdated(409, { error: 'x' }), false);
@@ -446,7 +448,8 @@ test('the fixtures cover every state the page draws, and the list matches them, 
     'encounter-earlier.json': ['earlier', 'earlier'], 'encounter-failed.json': ['failed', 'failed'],
     'encounter-needs-review.json': ['needs_review', 'done'], 'encounter-no-codes.json': ['no_codes', 'done'],
     'encounter-reading.json': ['processing', 'reading'], 'encounter-ready.json': ['ready', 'done'],
-    'encounter-reviewed.json': ['reviewed', 'done'], 'encounter-word.json': ['needs_review', 'done'],
+    'encounter-reviewed.json': ['reviewed', 'done'], 'encounter-same-code.json': ['needs_review', 'done'],
+    'encounter-word.json': ['needs_review', 'done'],
   });
   // every document's view as the server builds it: a PDF or a text as uploaded, a pasted text as text, a Word file as
   // the PDF it was converted to - or, never converted (an earlier review), no view
@@ -495,7 +498,42 @@ test('every quote in the fixtures is the synthetic document\'s own text, on the 
     }
     assert.match(doc.title, /^Synthetic /, name);
   }
-  assert.ok(checked >= 19, checked);
+  assert.ok(checked >= 23, checked);
+});
+
+// The line ids the server gives the rows of a coding review (the fix pass, section 1): "L1".."Ln" for the codes the
+// coding review listed, in its order, then "M1".."Mk" for the codes the second check added, in theirs.
+const LINE_ID = /^[LM][1-9][0-9]{0,2}$/;
+
+test('every fixture code names its line: L1..Ln for the coding review\'s codes, then M1..Mk for those the second check added', () => {
+  let pairs = 0;
+  for (const name of ENCOUNTERS) {
+    const doc = fixture(name);
+    const lines = doc.codes.map(code => code.line);
+    for (const line of lines) assert.match(String(line), LINE_ID, `${name}: ${line}`);
+    const listed = lines.filter(line => line.startsWith('L'));
+    const added = lines.filter(line => line.startsWith('M'));
+    assert.deepEqual(lines, [...listed, ...added], `${name}: the second check's lines come after the coding review's`);
+    assert.deepEqual(listed, listed.map((_, index) => `L${index + 1}`), name);
+    assert.deepEqual(added, added.map((_, index) => `M${index + 1}`), name);
+    // a line the second check added is exactly a row whose second check is its own sentence for an added code
+    doc.codes.forEach(code => assert.equal(code.line.startsWith('M'), code.second_check.reason === ADDED_BY_CHECK, `${name} ${code.line}`));
+    const codes = doc.codes.map(code => code.code);
+    pairs += codes.length - new Set(codes).size;
+    // a question names the lines it affects, and shows those lines' codes
+    for (const question of doc.questions) {
+      assert.ok(Array.isArray(question.lines) && question.lines.length > 0 && question.lines.every(line => lines.includes(line)), `${name} ${question.id}`);
+      assert.deepEqual(question.codes, [...new Set(question.lines.map(line => doc.codes.find(code => code.line === line).code))], `${name} ${question.id}`);
+    }
+    // a line that needs an answer has a question the member can answer
+    for (const code of doc.codes.filter(item => item.status === 'needs_answer')) {
+      assert.ok(doc.questions.some(question => question.lines.includes(code.line)), `${name} ${code.line}`);
+    }
+  }
+  // and one coding review lists one code on two lines, so the page is proven to tell them apart
+  assert.ok(pairs >= 1, 'a fixture with one code on two lines');
+  const twice = fixture('encounter-same-code.json').codes.filter(code => code.code === '45380');
+  assert.deepEqual(twice.map(code => [code.line, code.modifiers, code.status]), [['L3', [], 'needs_review'], ['M1', ['XS'], 'needs_review']]);
 });
 
 // The entries of a ZIP archive of stored (uncompressed) files, read from its central directory: name -> bytes.
@@ -635,10 +673,13 @@ test('every fixture draws the DOM contract: viewer, quotes, progress, questions,
     const download = page.one('#downloadOriginal');
     if (doc.document.original_url) assert.deepEqual([download.attr('href'), download.text, download.attr('download')], [doc.document.original_url, 'Download original', ''], name);
     else assert.equal(download, null, name);
-    // every quote, once, in the quotes panel
-    const quotes = page.all('#quotesPanel .quote[data-code][data-page]');
-    assert.deepEqual(quotes.map(quote => [quote.attr('data-code'), quote.attr('data-page')]),
-      doc.codes.flatMap(code => code.quotes.map(quote => [code.code, quote.page === null ? '' : String(quote.page)])), name);
+    // every quote, once, in the quotes panel, named by its code and its line
+    const quotes = page.all('#quotesPanel .quote[data-code][data-line][data-page]');
+    assert.deepEqual(quotes.map(quote => [quote.attr('data-code'), quote.attr('data-line'), quote.attr('data-page')]),
+      doc.codes.flatMap(code => code.quotes.map(quote => [code.code, code.line, quote.page === null ? '' : String(quote.page)])), name);
+    // no element id is drawn twice, whatever the codes repeat
+    const ids = page.all('[id]').map(element => element.attr('id'));
+    assert.deepEqual(ids.filter((id, index) => ids.indexOf(id) !== index), [], `${name}: repeated ids`);
     assert.equal(page.all('.quote').length, quotes.length, `${name}: .quote is the quotes panel's only`);
     // progress: the phase and the three steps (an earlier review has none)
     const panel = page.one('section.progress-panel[data-phase]');
@@ -659,16 +700,18 @@ test('every fixture draws the DOM contract: viewer, quotes, progress, questions,
       }
       assert.ok(page.one('#sendAnswers'), name);
     }
-    // the codes, in the served order, with the hooks the walk reads
-    const rows = page.all('ol#codesList > li.code-row[data-code][data-status]');
-    assert.deepEqual(rows.map(row => [row.attr('data-code'), row.attr('data-status')]), doc.codes.map(code => [code.code, code.status]), name);
+    // the codes, in the served order, each named by its line, with the hooks the walk reads
+    const rows = page.all('ol#codesList > li.code-row[data-code][data-line][data-status]');
+    assert.deepEqual(rows.map(row => [row.attr('data-code'), row.attr('data-line'), row.attr('data-status')]),
+      doc.codes.map(code => [code.code, code.line, code.status]), name);
     rows.forEach((row, index) => {
       const code = doc.codes[index];
+      assert.equal(row.attr('id'), `code-${code.line}`, `${name} ${code.line}`);
       for (const hook of ['.code-number', '.code-units', '.code-modifiers', '.status[data-status]', '.code-reason', '.code-check', '.code-quotes']) {
-        assert.ok(row.one(hook), `${name} ${code.code} ${hook}`);
+        assert.ok(row.one(hook), `${name} ${code.line} ${hook}`);
       }
       assert.equal(row.one('.code-number').text, code.code);
-      assert.equal(row.one('.code-units').text, code.units === 1 ? '1 unit' : `${code.units} units`);
+      assert.equal(row.one('.code-units').text, code.units === null ? 'Units not given' : code.units === 1 ? '1 unit' : `${code.units} units`);
       assert.equal(row.one('.code-reason').text, code.reason);
       // the verdict and its reason; without a verdict, the server's own sentence alone, as given
       const check = row.one('.code-check').text;
@@ -682,20 +725,21 @@ test('every fixture draws the DOM contract: viewer, quotes, progress, questions,
     assert.equal(Boolean(page.one('section#notesPanel')), doc.progress.phase === 'done' || doc.notes.length > 0, name);
     assert.deepEqual(page.all('#notesPanel .notes-list li').map(item => item.text), doc.notes, name);
     assert.deepEqual(page.all('#answersPanel .answer-item .answer-text').map(item => item.text), doc.answers.map(item => item.answer), name);
-    // the export button
-    assert.equal(page.all('[data-action="export"]').length > 0, doc.codes.length > 0 || doc.reports.length > 0, name);
+    // the export button: whenever the server allows a download, or there are earlier downloads to list
+    assert.equal(page.all('[data-action="export"]').length > 0, doc.readiness.draft === true || doc.readiness.approved === true || doc.reports.length > 0, name);
   }
 });
 
-test('only the actions in allowed_actions are drawn, as button[data-decision][data-code], and only for a reviewer', () => {
+test('only the actions in allowed_actions are drawn, as button[data-decision][data-code][data-line], and only for a reviewer', () => {
   let drawn = 0;
   for (const name of ENCOUNTERS) {
     const doc = fixture(name);
     const page = dom(render(doc));
     for (const code of doc.codes) {
-      const row = page.one(`li.code-row[data-code="${code.code}"]`);
-      const buttons = row.all('button[data-decision][data-code]');
-      assert.deepEqual(buttons.map(button => [button.attr('data-decision'), button.attr('data-code')]), code.allowed_actions.map(action => [action, code.code]), `${name} ${code.code}`);
+      const row = page.one(`li.code-row[data-line="${code.line}"]`);
+      const buttons = row.all('button[data-decision][data-code][data-line]');
+      assert.deepEqual(buttons.map(button => [button.attr('data-decision'), button.attr('data-code'), button.attr('data-line'), button.attr('id')]),
+        code.allowed_actions.map(action => [action, code.code, code.line, `act-${code.line}-${action}`]), `${name} ${code.line}`);
       drawn += buttons.length;
       for (const button of buttons) assert.equal(button.text.trim(), { approve: 'Approve', reject: 'Reject', revoke: 'Undo' }[button.attr('data-decision')]);
     }
@@ -704,11 +748,21 @@ test('only the actions in allowed_actions are drawn, as button[data-decision][da
     viewer.permissions.can_review = false;
     assert.equal(dom(render(viewer)).all('button[data-decision]').length, 0, name);
   }
-  assert.ok(drawn >= 15, drawn);
+  assert.ok(drawn >= 18, drawn);
   // an action the page does not know is never drawn, and the order is fixed
-  const code = { code: '45385', status: 'ready', allowed_actions: ['confirm', 'reject', 'approve', 'reinstate'] };
-  assert.deepEqual(app.allowedActions(code, { permissions: { can_review: true } }), ['approve', 'reject']);
-  assert.deepEqual(app.allowedActions(code, { permissions: {} }), []);
+  const code = { line: 'L1', code: '45385', status: 'ready', allowed_actions: ['confirm', 'reject', 'approve', 'reinstate'] };
+  const reviewer = (item, extra = {}) => ({ permissions: { can_review: true }, round: { number: 1, trigger: 'upload', finished_at: null }, codes: [item], ...extra });
+  assert.deepEqual(app.allowedActions(code, reviewer(code)), ['approve', 'reject']);
+  assert.deepEqual(app.allowedActions(code, reviewer(code, { permissions: {} })), []);
+  // a decision names a line of the coding review the page shows: without either, the page offers none
+  for (const line of [undefined, null, '', 'X1', 'L0', 'l1', 'L1 ', 'L1000', 7]) {
+    const item = { ...code, line };
+    assert.deepEqual(app.allowedActions(item, reviewer(item)), [], String(line));
+  }
+  for (const round of [null, { number: 0 }, { number: '1' }, {}]) assert.deepEqual(app.allowedActions(code, reviewer(code, { round })), [], JSON.stringify(round));
+  // and a line the document names on two rows, or not at all, is not one the page can decide
+  assert.deepEqual(app.allowedActions(code, reviewer(code, { codes: [code, { ...code, code: '45380' }] })), []);
+  assert.deepEqual(app.allowedActions(code, reviewer(code, { codes: [] })), []);
 });
 
 test('the badge says Approved or Rejected once a decision stands, with who and when, and Undo offered', () => {
@@ -733,8 +787,40 @@ test('the badge says Approved or Rejected once a decision stands, with who and w
   assert.equal(review.one('li.code-row[data-code="43239"] .code-modifiers').text, 'No modifier');
   assert.equal(app.modifiersLabel({ modifiers: ['59', 'XS'] }), 'Modifiers 59, XS');
   assert.equal(app.unitsLabel(2), '2 units');
-  assert.equal(app.unitsLabel(0), '');
   assert.equal(app.secondCheck({ second_check: { agrees: null, reason: '' } }).label, 'Second check: no verdict.');
+});
+
+test('modifiers the coding review did not give read "Modifiers not given", never "No modifier"', async () => {
+  assert.equal(app.modifiersLabel({ modifiers: [] }), 'No modifier', 'an empty list is the server saying there is none');
+  assert.equal(app.modifiersLabel({ modifiers: ['XS'] }), 'Modifier XS');
+  assert.equal(app.modifiersLabel({ modifiers: ['59', 'XS'] }), 'Modifiers 59, XS');
+  // the contract's null, or anything that is not a list of modifiers, is not a statement that there is none
+  for (const modifiers of [null, undefined, '25', [25], ['25', 7], [''], [null], {}]) {
+    assert.equal(app.modifiersLabel({ modifiers }), 'Modifiers not given', JSON.stringify(modifiers));
+  }
+  assert.equal(app.MODIFIERS_NOT_GIVEN, 'Modifiers not given');
+  const doc = clone(fixture('encounter-same-code.json'));
+  doc.codes[1].modifiers = null;
+  const row = dom(render(doc)).one('li.code-row[data-line="L2"]');
+  assert.deepEqual([row.one('.code-modifiers').text, row.attr('data-modifiers')], ['Modifiers not given', '']);
+  await withPage({}, async ({ element }) => {
+    Object.assign(app.state, { session: fixture('session.json'), doc, route: null });
+    await app.handleDecision('approve', 'L2', fakeElement());
+    assert.equal(element('#reviewLine').textContent, '1 unit · Modifiers not given');
+  });
+});
+
+test('units the coding review did not give read "Units not given", never a number or nothing', () => {
+  assert.equal(app.unitsLabel(1), '1 unit');
+  assert.equal(app.unitsLabel(3), '3 units');
+  // the contract's units are a positive integer or null; anything else is not a count the page can state
+  for (const value of [null, undefined, 0, -1, 1.5, '2', NaN]) assert.equal(app.unitsLabel(value), 'Units not given', String(value));
+  assert.equal(app.UNITS_NOT_GIVEN, 'Units not given');
+  const doc = fixture('encounter-same-code.json');
+  const row = dom(render(doc)).one('li.code-row[data-line="M1"]');
+  assert.equal(doc.codes.find(code => code.line === 'M1').units, null);
+  assert.deepEqual([row.one('.code-units').text, row.attr('data-units')], ['Units not given', '']);
+  assert.equal(dom(render(doc)).one('li.code-row[data-line="L3"] .code-units').text, '1 unit');
 });
 
 test('quote page links: a page opens the viewer at view_url#page=N; a text quote has no page', () => {
@@ -752,7 +838,7 @@ test('quote page links: a page opens the viewer at view_url#page=N; a text quote
   const panel = page.all('#quotesPanel .quote').map(quote => quote.attr('data-quote'));
   const rows = page.all('li.code-row .code-quote').map(quote => quote.attr('data-quote'));
   assert.deepEqual(panel, rows);
-  assert.deepEqual(panel.slice(0, 3), ['43239#0', '43239#1', '45385#0']);
+  assert.deepEqual(panel.slice(0, 3), ['L1#0', 'L1#1', 'L2#0']);
   assert.deepEqual(page.all('li.code-row .code-quote').map(quote => quote.attr('data-view-page')), ['1', '1', '2', '2', '2']);
   assert.equal(page.one('#quotesPanel .quote').one('.quote-page').text, 'Page 1');
   assert.match(page.one('#quotesPanel .quotes-lead').text, /open its page/);
@@ -853,22 +939,23 @@ test('a quote opens its page in the PDF viewer; in the text viewer the passage i
   const word = fixture('encounter-word.json');
   await withPage({ elements: { documentViewer: frame() } }, async ({ element }) => {
     Object.assign(app.state, { doc: word, route: null });
-    app.showQuote('45380#0');
+    app.showQuote('L2#0');
     assert.equal(element('#documentViewer').src, `${word.document.view_url}#page=1`);
-    assert.equal(app.state.selectedQuote, '45380#0');
-    app.showQuote('45381#0');
+    assert.equal(app.state.selectedQuote, 'L2#0');
+    app.showQuote('M1#0');
     assert.equal(element('#documentViewer').src, `${word.document.view_url}#page=2`);
-    app.showQuote('99999#0');
-    assert.equal(app.state.selectedQuote, '45381#0', 'a quote the page does not hold changes nothing');
+    app.showQuote('L9#0');
+    app.showQuote('45381#0');
+    assert.equal(app.state.selectedQuote, 'M1#0', 'a quote the page does not hold changes nothing');
   });
   // a text has no pages: even a quote that names one is looked for in the text, and the viewer is not moved
   const text = clone(fixture('encounter-awaiting-answer.json'));
   text.codes[0].quotes[0].page = 1;
   await withPage({ elements: { documentViewer: frame() } }, async ({ element }) => {
     Object.assign(app.state, { doc: text, route: null });
-    app.showQuote('45385#0');
+    app.showQuote('L1#0');
     assert.equal(element('#documentViewer').src, 'unchanged');
-    assert.equal(app.state.selectedQuote, '45385#0');
+    assert.equal(app.state.selectedQuote, 'L1#0');
   });
 });
 
@@ -1073,7 +1160,9 @@ test('the tally and the export dialog never claim an approval the server did not
   assert.equal(app.tallyText(fixture('encounter-ready.json')), '3 ready for approval · 1 not supported');
   assert.equal(app.tallyText(fixture('encounter-reviewed.json')), '2 approved · 1 rejected');
   assert.equal(app.tallyText(fixture('encounter-needs-review.json')), '2 ready for approval · 1 needs your review');
-  assert.equal(app.tallyText(fixture('encounter-no-codes.json')), 'No codes yet');
+  assert.equal(app.tallyText(fixture('encounter-same-code.json')), '1 rejected · 2 ready for approval · 1 needs your review');
+  assert.equal(app.tallyText(fixture('encounter-no-codes.json')), 'No codes found', 'a finished review with no codes says so');
+  assert.equal(app.tallyText(fixture('encounter-reading.json')), 'No codes yet');
   const options = doc => dom(app.exportOptions(doc)).all('.export-option').map(option => [option.attr('data-export-kind'), option.attr('data-export-fmt'), option.attr('disabled') === null]);
   assert.deepEqual(options(fixture('encounter-ready.json')), [['draft', 'txt', true], ['draft', 'csv', true], ['approved', 'txt', false], ['approved', 'csv', false]]);
   assert.deepEqual(options(fixture('encounter-reviewed.json')), [['draft', 'txt', true], ['draft', 'csv', true], ['approved', 'txt', true], ['approved', 'csv', true]]);
@@ -1098,6 +1187,28 @@ test('the tally and the export dialog never claim an approval the server did not
   assert.equal(dom(app.reportItem({ filename: 'x.txt', download_url: 'javascript:alert(1)', current: true })).one('a'), null);
 });
 
+test('the page offers a download whenever the server allows one: a finished review with no codes can still be downloaded as a draft', () => {
+  const doc = fixture('encounter-no-codes.json');
+  assert.deepEqual([doc.codes.length, doc.reports.length, doc.readiness.draft, doc.readiness.approved], [0, 0, true, false]);
+  const page = dom(render(doc));
+  assert.ok(page.all('[data-action="export"]').length > 0, 'the export dialog can be opened');
+  assert.deepEqual(page.all('[data-action="export"]').map(button => button.text.trim()), ['Download', 'Review and download']);
+  assert.equal(page.one('.review-tally').text, 'No codes found');
+  assert.equal(page.one('.review-readiness').text, 'You can download the codes as a draft. Approve codes to download them as approved.');
+  assert.equal(page.one('.results-empty').text, 'The coding review found no CPT code to report for this document.');
+  // the dialog it opens offers the draft, and the approved download stays closed until a code is approved
+  assert.deepEqual(dom(app.exportOptions(doc)).all('.export-option').map(option => [option.attr('data-export-kind'), option.attr('data-export-fmt'), option.attr('disabled') === null]),
+    [['draft', 'txt', true], ['draft', 'csv', true], ['approved', 'txt', false], ['approved', 'csv', false]]);
+  // nothing the server allows and nothing made earlier: no button
+  for (const name of ['encounter-reading.json', 'encounter-checking.json', 'encounter-failed.json', 'encounter-earlier.json']) {
+    assert.equal(dom(render(fixture(name))).all('[data-action="export"]').length, 0, name);
+  }
+  // downloads made earlier are listed even while nothing new can be made
+  const listed = clone(fixture('encounter-failed.json'));
+  listed.reports = clone(fixture('encounter-reviewed.json').reports).map(report => ({ ...report, current: false }));
+  assert.ok(dom(render(listed)).all('[data-action="export"]').length > 0);
+});
+
 test('list rows show the state, the kind, the insurance and the date; the queue lists what waits on the member', () => {
   const rows = fixture('encounters.json').encounters;
   const page = dom(app.listBody('documents', rows));
@@ -1108,8 +1219,8 @@ test('list rows show the state, the kind, the insurance and the date; the queue 
   assert.match(pasted.text, /Pasted textNo codes foundNot entered/);
   const queue = dom(app.listBody('queue', rows)).all('a.document-row').map(row => row.attr('href'));
   assert.deepEqual(queue, ['#doc/f3000000-0000-4000-8000-000000000001', '#doc/f4000000-0000-4000-8000-000000000001', '#doc/f5000000-0000-4000-8000-000000000001',
-    '#doc/f9000000-0000-4000-8000-000000000001']);
-  assert.match(app.listDescription('queue', rows), /^4 documents wait on you: questions to answer, or codes to review or approve\.$/);
+    '#doc/f9000000-0000-4000-8000-000000000001', '#doc/fc000000-0000-4000-8000-000000000001']);
+  assert.match(app.listDescription('queue', rows), /^5 documents wait on you: questions to answer, or codes to review or approve\.$/);
   const earlier = page.all('a.document-row').find(row => row.attr('href') === '#doc/fb000000-0000-4000-8000-000000000001');
   assert.match(earlier.text, /Synthetic colonoscopy report, earlier reviewUploaded fileEarlier review9 Nov 2026/);
   assert.equal(app.listDescription('queue', []), 'No document waits on you for an answer or a decision.');
@@ -1129,8 +1240,8 @@ test('model-written text (reasons, questions, notes, quotes) is escaped wherever
   for (const name of ENCOUNTERS) {
     const plain = fixture(name);
     const doc = poison(plain);
-    // keep the structure the page needs to draw everything: statuses, actions, phase and the addresses
-    doc.codes.forEach((code, index) => Object.assign(code, { status: plain.codes[index].status, allowed_actions: plain.codes[index].allowed_actions, decision: code.decision && { ...code.decision, action: plain.codes[index].decision.action } }));
+    // keep the structure the page needs to draw everything: lines, statuses, actions, phase and the addresses
+    doc.codes.forEach((code, index) => Object.assign(code, { line: plain.codes[index].line, status: plain.codes[index].status, allowed_actions: plain.codes[index].allowed_actions, decision: code.decision && { ...code.decision, action: plain.codes[index].decision.action } }));
     Object.assign(doc.progress, { phase: plain.progress.phase });
     Object.assign(doc.document, { view_url: plain.document.view_url, original_url: plain.document.original_url, media_type: plain.document.media_type, kind: plain.document.kind, view_media_type: plain.document.view_media_type });
     const html = [markup(doc), app.listBody('documents', [poison(fixture('encounters.json').encounters[0])]), app.inviteMarkup([poison(fixture('encounters.json').encounters[0])])].join('\n');
@@ -1141,8 +1252,9 @@ test('model-written text (reasons, questions, notes, quotes) is escaped wherever
     // the model's own words are shown as written, once decoded
     const page = dom(render(doc));
     for (const code of doc.codes) {
-      const row = page.all('li.code-row').find(item => item.attr('data-code') === code.code);
-      assert.ok(row, `${name} ${code.code}`);
+      const row = page.all('li.code-row').find(item => item.attr('data-line') === code.line);
+      assert.ok(row, `${name} ${code.line}`);
+      assert.equal(row.attr('data-code'), code.code);
       assert.equal(row.one('.code-reason').text, code.reason.trim());
       assert.deepEqual(row.all('.code-quote .quote-text').map(item => item.text), code.quotes.map(quote => quote.text.trim()));
     }
@@ -1199,23 +1311,27 @@ test('the review dialog: #reviewAcknowledgement holds exactly the session\'s sta
   assert.deepEqual(label.children.map(child => (typeof child === 'string' ? 'text' : `${child.tag}#${child.attr('id')}`)), ['input#reviewAckBox', 'span#reviewAckText'],
     'nothing but the checkbox and the statement, so the label reads as the statement alone');
   assert.equal(page.one('#reviewAckBox').attr('type'), 'checkbox');
+  // the line being decided is stated under its status: its units and modifiers, then its own reason
+  assert.deepEqual(page.one('dialog#reviewDialog .review-summary div').children.map(child => child.attr('id')), ['reviewStatus', 'reviewLine', 'reviewSummary']);
+  assert.ok(page.one('dialog#reviewDialog small#reviewLine.review-line'));
   assert.ok(page.one('dialog#reviewDialog textarea#reviewNote'));
   assert.ok(page.one('dialog#reviewDialog button#saveReview[type="submit"]'));
   for (const id of ['uploadDialog', 'reviewDialog', 'exportDialog', 'aboutDialog']) assert.ok(page.one(`dialog#${id}`), id);
   assert.equal(page.all('dialog').length, 4);
 });
 
-test('Approve opens the dialog with the session\'s statement; the approval posts {code, action, acknowledgement, note}', async () => {
+test('Approve opens the dialog with the session\'s statement; the approval posts {round, line, code, action, acknowledgement, note}', async () => {
   const session = fixture('session.json');
   const doc = fixture('encounter-ready.json');
   await withPage({}, async ({ calls, element }) => {
     Object.assign(app.state, { session, doc, route: null });
-    await app.handleDecision('approve', '45385', fakeElement());
+    await app.handleDecision('approve', 'L2', fakeElement());
     assert.equal(element('#reviewAckText').textContent, session.acknowledgement);
     assert.equal(element('#reviewAcknowledgement').hidden, false);
     assert.equal(element('#reviewAckBox').checked, false);
     assert.equal(element('#saveReview').disabled, true, 'no approval until the statement is confirmed');
     assert.equal(element('#reviewCode').textContent, '45385');
+    assert.equal(element('#reviewLine').textContent, '1 unit · No modifier');
     assert.equal(element('#reviewSummary').textContent, doc.codes[1].reason);
     assert.equal(element('#reviewDialog').open, true);
     // unconfirmed: nothing is sent
@@ -1227,10 +1343,11 @@ test('Approve opens the dialog with the session\'s statement; the approval posts
     element('#reviewNote').value = '  Read page 2.  ';
     await app.submitReview({ preventDefault() {} });
     const [sent] = posted(calls);
-    assert.deepEqual(sent, { url: `/api/encounters/${doc.id}/decisions`, body: { code: '45385', action: 'approve', acknowledgement: session.acknowledgement, note: 'Read page 2.' } });
+    assert.deepEqual(sent, { url: `/api/encounters/${doc.id}/decisions`, body: { round: 1, line: 'L2', code: '45385', action: 'approve', acknowledgement: session.acknowledgement, note: 'Read page 2.' } });
+    assert.deepEqual(Object.keys(sent.body), ['round', 'line', 'code', 'action', 'acknowledgement', 'note']);
     const call = calls.find(item => item.method === 'POST');
     assert.deepEqual([call.headers['X-CSRFToken'], call.headers['X-CPT-Studio-Client'], call.headers['Content-Type'], call.credentials, call.cache],
-      ['token123', 'customer-2026-11-20', 'application/json', 'same-origin', 'no-store']);
+      ['token123', 'customer-2026-11-21', 'application/json', 'same-origin', 'no-store']);
     assert.equal(element('#reviewDialog').open, false);
   });
 });
@@ -1239,29 +1356,194 @@ test('Reject asks only for an optional note; Undo posts revoke; an action the se
   const session = fixture('session-agent.json');
   await withPage({}, async ({ calls, element }) => {
     Object.assign(app.state, { session, doc: fixture('encounter-needs-review.json'), route: null });
-    await app.handleDecision('reject', '45380', fakeElement());
+    await app.handleDecision('reject', 'L3', fakeElement());
     assert.equal(element('#reviewAcknowledgement').hidden, true);
     assert.equal(element('#reviewAckText').textContent, '');
     assert.equal(element('#saveReview').disabled, false);
+    assert.equal(element('#reviewLine').textContent, '1 unit · Modifier 59');
     await app.submitReview({ preventDefault() {} });
-    assert.deepEqual(posted(calls).pop().body, { code: '45380', action: 'reject', acknowledgement: '', note: '' });
+    assert.deepEqual(posted(calls).pop().body, { round: 1, line: 'L3', code: '45380', action: 'reject', acknowledgement: '', note: '' });
+    // the round named is the one the page shows (the reviewed document is on its second coding review)
     Object.assign(app.state, { doc: fixture('encounter-reviewed.json') });
-    await app.handleDecision('revoke', '43239', fakeElement());
-    assert.deepEqual(posted(calls).pop().body, { code: '43239', action: 'revoke', acknowledgement: '', note: '' });
+    await app.handleDecision('revoke', 'L1', fakeElement());
+    assert.deepEqual(posted(calls).pop().body, { round: 2, line: 'L1', code: '43239', action: 'revoke', acknowledgement: '', note: '' });
     const before = calls.length;
     element('#reviewDialog').open = false;
-    await app.handleDecision('approve', '43239', fakeElement());
-    await app.handleDecision('revoke', '99999', fakeElement());
-    assert.equal(calls.length, before);
+    await app.handleDecision('approve', 'L1', fakeElement());
+    await app.handleDecision('revoke', 'L9', fakeElement());
+    await app.handleDecision('revoke', '43239', fakeElement());
+    assert.equal(calls.length, before, 'a code is never a line: nothing is sent');
     assert.equal(element('#reviewDialog').open, false);
   });
   // the agent's approval dialog says it is an agent-executed review, with the agent's own statement
   await withPage({}, async ({ element }) => {
     Object.assign(app.state, { session, doc: fixture('encounter-ready.json'), route: null });
-    await app.handleDecision('approve', '43239', fakeElement());
+    await app.handleDecision('approve', 'L1', fakeElement());
     assert.equal(element('#reviewAckText').textContent, session.acknowledgement);
     assert.match(element('#reviewCopy').textContent, /agent-executed synthetic review/);
   });
+});
+
+test('one code on two lines: each row is drawn, quoted, reviewed and decided as its own line', async () => {
+  const session = fixture('session.json');
+  const doc = fixture('encounter-same-code.json');
+  const [rejected, added] = ['L3', 'M1'].map(line => doc.codes.find(code => code.line === line));
+  assert.deepEqual([rejected.code, added.code], ['45380', '45380']);
+  const page = dom(render(doc));
+  // two rows of 45380, each with its own id, its own buttons and its own quotes
+  const rows = page.all('li.code-row[data-code="45380"]');
+  assert.deepEqual(rows.map(row => [row.attr('id'), row.attr('data-line'), row.attr('data-decision'), row.one('.code-modifiers').text]),
+    [['code-L3', 'L3', 'reject', 'No modifier'], ['code-M1', 'M1', null, 'Modifier XS']]);
+  assert.deepEqual(rows.map(row => row.all('button[data-decision]').map(button => [button.attr('id'), button.attr('data-line')])),
+    [[['act-L3-revoke', 'L3']], [['act-M1-approve', 'M1'], ['act-M1-reject', 'M1']]]);
+  assert.deepEqual(rows.map(row => row.all('.code-quote').map(quote => quote.attr('data-quote'))), [['L3#0'], ['M1#0']]);
+  assert.deepEqual(page.all('#quotesPanel .quote[data-code="45380"]').map(quote => [quote.attr('data-line'), quote.attr('data-quote')]), [['L3', 'L3#0'], ['M1', 'M1#0']]);
+  // choosing one line's quote selects that line's passage only
+  await withPage({ elements: { documentViewer: fakeElement({ src: '', scrollIntoView() {} }) } }, async () => {
+    Object.assign(app.state, { doc, route: null });
+    app.showQuote('M1#0');
+    assert.equal(app.state.selectedQuote, 'M1#0');
+  });
+  await withPage({}, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc, route: null });
+    // the decided line offers only Undo: approving it does nothing, and never reaches the other line
+    await app.handleDecision('approve', 'L3', fakeElement());
+    assert.equal(element('#reviewDialog').open, false);
+    // the added line's dialog shows that line: its code, units and modifier, its status and its own reason
+    await app.handleDecision('approve', 'M1', fakeElement());
+    assert.equal(element('#reviewDialog').open, true);
+    assert.deepEqual([element('#reviewCode').textContent, element('#reviewLine').textContent, element('#reviewStatus').textContent, element('#reviewSummary').textContent],
+      ['45380', 'Units not given · Modifier XS', 'Needs your review', added.reason]);
+    assert.notEqual(element('#reviewSummary').textContent, rejected.reason);
+    element('#reviewAckBox').checked = true;
+    await app.submitReview({ preventDefault() {} });
+    assert.deepEqual(posted(calls).pop().body, { round: 2, line: 'M1', code: '45380', action: 'approve', acknowledgement: session.acknowledgement, note: '' });
+    // Undo on the rejected line names that line
+    await app.handleDecision('revoke', 'L3', fakeElement());
+    assert.deepEqual(posted(calls).pop().body, { round: 2, line: 'L3', code: '45380', action: 'revoke', acknowledgement: '', note: '' });
+    assert.equal(posted(calls).length, 2);
+  });
+  // the page's clicks carry the line: the button's data-line reaches the decision
+  await withPage({}, async ({ calls }) => {
+    Object.assign(app.state, { session, doc, route: null });
+    const button = page.one('#act-L3-revoke');
+    const clicked = fakeElement({ dataset: { decision: button.attr('data-decision'), code: button.attr('data-code'), line: button.attr('data-line') } });
+    app.onClick({ target: { closest: selector => (selector === '[data-decision]' ? clicked : null) } });
+    for (let turn = 0; turn < 20 && !posted(calls).length; turn += 1) await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(posted(calls).map(call => call.body.line), ['L3']);
+  });
+});
+
+test('a row without a line, or a page without its round number, is shown but never decided', async () => {
+  const doc = clone(fixture('encounter-same-code.json'));
+  delete doc.codes[3].line;
+  const page = dom(render(doc));
+  const rows = page.all('li.code-row');
+  assert.equal(rows.length, 4, 'every code is drawn');
+  assert.deepEqual([rows[3].attr('data-code'), rows[3].attr('data-line'), rows[3].all('button[data-decision]').length], ['45380', '', 0]);
+  assert.deepEqual(rows.map(row => row.attr('id')), ['code-L1', 'code-L2', 'code-L3', 'code-row_4']);
+  const ids = page.all('[id]').map(element => element.attr('id'));
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(page.all('#quotesPanel .quote').map(quote => quote.attr('data-quote')), ['L1#0', 'L2#0', 'L3#0', 'row-4#0']);
+  const roundless = clone(fixture('encounter-same-code.json'));
+  roundless.round = null;
+  assert.equal(dom(render(roundless)).all('button[data-decision]').length, 0);
+  // one line named on two rows: the page cannot tell which row a decision is about, so it decides neither
+  const twice = clone(fixture('encounter-same-code.json'));
+  twice.codes[3].line = 'L2';
+  const doubled = dom(render(twice));
+  assert.deepEqual(doubled.all('li.code-row').map(row => [row.attr('id'), row.attr('data-line'), row.all('button[data-decision]').length]),
+    [['code-L1', 'L1', 2], ['code-row_2', '', 0], ['code-L3', 'L3', 1], ['code-row_4', '', 0]]);
+  const doubledIds = doubled.all('[id]').map(element => element.attr('id'));
+  assert.equal(new Set(doubledIds).size, doubledIds.length);
+  assert.equal(app.findLine(twice, 'L2'), null);
+  for (const [name, broken] of [['roundless', roundless], ['twice', twice]]) {
+    await withPage({}, async ({ calls, element }) => {
+      Object.assign(app.state, { session: fixture('session.json'), doc: broken, route: null });
+      await app.handleDecision('approve', name === 'twice' ? 'L2' : 'M1', fakeElement());
+      await app.handleDecision('revoke', name === 'twice' ? 'L2' : 'L3', fakeElement());
+      assert.deepEqual([posted(calls), element('#reviewDialog').open], [[], false], name);
+    });
+  }
+});
+
+test('a decision refused because the coding review changed (409) reloads the document and says so; nothing is sent again', async () => {
+  const session = fixture('session.json');
+  const doc = fixture('encounter-ready.json');
+  const address = `/api/encounters/${doc.id}`;
+  // the coding review the server has now: a second one, after answers, with another line under L2
+  const newer = clone(doc);
+  newer.round = { number: 2, trigger: 'answers', finished_at: '2026-11-20T08:40:00Z' };
+  newer.codes[1] = { ...newer.codes[1], modifiers: ['PT'], reason: 'A different line of a later coding review.' };
+  const changed = { error: 'This coding review has changed. Reload to see the latest.', details: {} };
+  const answers = () => [
+    { match: (method, url) => method === 'POST' && url === `${address}/decisions`, status: 409, body: changed },
+    { match: (method, url) => method === 'GET' && url === address, status: 200, body: newer },
+  ];
+  await withPage({ answers: answers() }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc, route: { name: 'doc', id: doc.id }, routeSerial: 3, docKey: '', viewerKey: app.viewerKey(doc), selectedQuote: 'L2#0' });
+    await app.handleDecision('approve', 'L2', fakeElement());
+    element('#reviewAckBox').checked = true;
+    await app.submitReview({ preventDefault() {} });
+    assert.deepEqual(posted(calls), [{ url: `${address}/decisions`, body: { round: 1, line: 'L2', code: '45385', action: 'approve', acknowledgement: session.acknowledgement, note: '' } }]);
+    const read = calls.findIndex(call => call.method === 'GET' && call.url === address);
+    assert.ok(read > calls.findIndex(call => call.method === 'POST'), 'the document is read again after the refusal');
+    assert.equal(app.state.doc.round.number, 2, 'the page now shows the latest coding review');
+    // the same original: its viewer is kept, and the heading and the codes are redrawn
+    assert.match(element('#reviewHead').innerHTML, /Coding review 2, after your answers/);
+    assert.match(element('#reviewColumn').innerHTML, /Modifier PT/);
+    assert.equal(element('#main').innerHTML, undefined, 'the viewer is not reloaded');
+    assert.equal(app.state.selectedQuote, '', 'a passage chosen on the earlier coding review is not carried to the new one');
+    assert.equal(element('#reviewDialog').open, false, 'the dialog of a line that may no longer exist is closed');
+    assert.equal(element('#toast').textContent, app.CHANGED_TEXT);
+    assert.equal(app.CHANGED_TEXT, 'This coding review has changed, so nothing was recorded. The page now shows the latest.');
+    assert.deepEqual([element('#reviewError').hidden, element('#reviewError').textContent], [true, ''], 'the refusal is not shown as a form error');
+  });
+  // Undo refused the same way: read again and said
+  const reviewed = fixture('encounter-reviewed.json');
+  const reviewedAt = `/api/encounters/${reviewed.id}`;
+  await withPage({ answers: [
+    { match: (method, url) => method === 'POST' && url === `${reviewedAt}/decisions`, status: 409, body: changed },
+    { match: (method, url) => method === 'GET' && url === reviewedAt, status: 200, body: reviewed },
+  ] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 4, docKey: '', viewerKey: '' });
+    await app.handleDecision('revoke', 'L2', fakeElement());
+    assert.deepEqual(posted(calls).map(call => call.body), [{ round: 2, line: 'L2', code: '45385', action: 'revoke', acknowledgement: '', note: '' }]);
+    assert.equal(calls.filter(call => call.method === 'GET' && call.url === reviewedAt).length, 1);
+    assert.equal(element('#toast').textContent, app.CHANGED_TEXT);
+  });
+  // any other refusal stays in the dialog and reads nothing again; a stale build is the update notice, not a reload
+  for (const [status, body, outdated] of [[400, { error: 'The acknowledgement is not the current review attestation. Reload the page and approve again.', details: {} }, false],
+    [409, { error: 'CPT Studio was updated. Reload this page to continue.', error_code: 'client_outdated' }, true]]) {
+    await withPage({ answers: [{ match: (method, url) => method === 'POST' && url === `${address}/decisions`, status, body }] }, async ({ calls, element }) => {
+      Object.assign(app.state, { session, doc, route: { name: 'doc', id: doc.id }, routeSerial: 5, outdated: false });
+      await app.handleDecision('approve', 'L2', fakeElement());
+      element('#reviewAckBox').checked = true;
+      await app.submitReview({ preventDefault() {} });
+      assert.equal(calls.filter(call => call.method === 'GET' && call.url === address).length, 0, String(status));
+      assert.equal(app.state.outdated, outdated);
+      assert.equal(element('#reviewError').textContent, outdated ? app.OUTDATED_TEXT : body.error);
+      assert.notEqual(element('#toast').textContent, app.CHANGED_TEXT);
+    });
+  }
+});
+
+test('the preview server answers decisions as the server does: by round and line, 409 when the coding review changed', () => {
+  const session = fixture('session.json');
+  const doc = fixture('encounter-same-code.json');
+  const body = extra => ({ round: 2, line: 'M1', code: '45380', action: 'approve', acknowledgement: session.acknowledgement, note: '', ...extra });
+  const [status, answer] = preview.decisionAnswer(doc, body(), session);
+  assert.equal(status, 201);
+  assert.deepEqual([answer.line, answer.code, answer.action, answer.by], ['M1', '45380', 'approve', 'Reviewer']);
+  for (const stale of [{ round: 1 }, { round: '2' }, { round: undefined }, { line: 'M2' }, { line: undefined }, { code: '45385' }]) {
+    assert.deepEqual(preview.decisionAnswer(doc, body(stale), session), [409, { error: preview.CHANGED, details: {} }], JSON.stringify(stale));
+  }
+  assert.equal(preview.CHANGED, 'This coding review has changed. Reload to see the latest.');
+  assert.equal(preview.decisionAnswer(doc, body({ line: 'L3' }), session)[0], 409, 'a decided line takes only Undo');
+  assert.equal(preview.decisionAnswer(doc, body({ line: 'L3', action: 'revoke', acknowledgement: '' }), session)[0], 201);
+  assert.equal(preview.decisionAnswer(doc, body({ acknowledgement: 'yes' }), session)[0], 400);
+  const running = fixture('encounter-reading.json');
+  assert.equal(preview.decisionAnswer(running, body({ round: 1 }), session)[0], 409, 'nothing is decided while a review runs');
 });
 
 test('Send answers posts the typed answers once, to /answers, and forgets only what was sent', async () => {

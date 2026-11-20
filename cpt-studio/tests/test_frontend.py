@@ -1,6 +1,7 @@
 """Frontend shell: templates render under the CSP, the approved stylesheet is intact, the customer page's synthetic
-fixtures carry the customer contract (client contract customer-2026-11-20, the build specification's section 6, as
-ops/verification/customer-contract.json holds it), and the browser logic's own tests pass (node)."""
+fixtures carry the customer contract (client contract customer-2026-11-21, the build specification's section 6 with the
+fix pass's line identity, as ops/verification/customer-contract.json holds it), and the browser logic's own tests pass
+(node)."""
 import hashlib
 import json
 import re
@@ -148,8 +149,10 @@ class ShellTemplateTests(SimpleTestCase):
         self.assertEqual(missing, [])
         # the coding review page (2026-11-20): the review dialog's statement is the label #reviewAcknowledgement, its
         # checkbox #reviewAckBox; the addendum dialog and the modifier choice are gone with the old page
+        # the fix pass (2026-11-21): the review dialog states the line it decides - its units and modifiers - as #reviewLine
         self.assertTrue({'uploadDialog', 'insurance', 'reviewDialog', 'reviewAcknowledgement', 'reviewAckBox', 'reviewAckText',
-                         'reviewNote', 'saveReview', 'exportDialog', 'aboutDialog', 'updateNotice', 'toast'} <= index_ids)
+                         'reviewLine', 'reviewNote', 'saveReview', 'exportDialog', 'aboutDialog', 'updateNotice',
+                         'toast'} <= index_ids)
         self.assertFalse({'addendumDialog', 'reviewModifier', 'reviewModifierField'} & index_ids)
         # the review page's own hooks (section 7) are drawn by the script
         self.assertTrue({'documentViewer', 'quotesPanel', 'questionsPanel', 'sendAnswers', 'codesList', 'notesPanel'} <= rendered_ids)
@@ -203,7 +206,7 @@ class StaticAssetTests(SimpleTestCase):
 
     def test_the_page_sends_the_client_version_of_this_contract(self):
         script = (STATIC / 'app.js').read_text(encoding='utf-8')
-        self.assertIn("const CLIENT_VERSION = 'customer-2026-11-20';", script)
+        self.assertIn("const CLIENT_VERSION = 'customer-2026-11-21';", script)
         self.assertRegex(script, r'\[CLIENT_HEADER\]: CLIENT_VERSION')
 
 
@@ -216,7 +219,7 @@ class CustomerFixtureTests(SimpleTestCase):
 
     def test_every_encounter_fixture_has_exactly_the_contract_keys(self):
         docs = self.encounters()
-        self.assertEqual(len(docs), 10)
+        self.assertEqual(len(docs), 11)
         self.assertEqual(DOCUMENT_KEYS, {'name', 'media_type', 'size', 'kind', 'original_url', 'view_url',
                                          'view_media_type', 'converted'})
         for name, doc in docs.items():
@@ -245,6 +248,29 @@ class CustomerFixtureTests(SimpleTestCase):
         self.assertEqual({row['id'] for row in rows}, {doc['id'] for doc in self.encounters().values()})
         for row in rows:
             self.assertEqual(set(row), ROW_KEYS, row['id'])
+
+    def test_every_code_row_names_its_line(self):
+        # the fix pass, section 1: the coding review's codes are lines L1..Ln in its order, the codes the second check
+        # added are M1..Mk after them; a decision names its line, so one code may stand on two lines
+        repeated = 0
+        for name, doc in self.encounters().items():
+            with self.subTest(name):
+                lines = [code['line'] for code in doc['codes']]
+                listed = [line for line in lines if line.startswith('L')]
+                added = [line for line in lines if line.startswith('M')]
+                self.assertEqual(lines, listed + added)
+                self.assertEqual(listed, [f'L{n}' for n in range(1, len(listed) + 1)])
+                self.assertEqual(added, [f'M{n}' for n in range(1, len(added) + 1)])
+                for code in doc['codes']:
+                    self.assertEqual(code['line'].startswith('M'),
+                                     code['second_check']['reason'] == 'The second check found this code; it needs your review.')
+                    self.assertTrue(code['units'] is None or (type(code['units']) is int and code['units'] > 0))
+                codes = [code['code'] for code in doc['codes']]
+                repeated += len(codes) - len(set(codes))
+        self.assertGreaterEqual(repeated, 1, 'a fixture lists one code on two lines')
+        same = _customer('encounter-same-code.json')
+        self.assertEqual([(code['line'], code['code'], code['modifiers'], code['units']) for code in same['codes']
+                          if code['code'] == '45380'], [('L3', '45380', [], 1), ('M1', '45380', ['XS'], None)])
 
     def test_the_fixtures_name_no_vendor_model_or_machinery(self):
         for path in sorted(CUSTOMER_FIXTURES.glob('*.json')):

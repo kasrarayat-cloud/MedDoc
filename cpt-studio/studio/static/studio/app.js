@@ -1,9 +1,12 @@
 'use strict';
-// CPT Studio customer page, drawn from the customer encounter contract (client contract customer-2026-11-20: the build
-// specification, sections 6 and 7). Rendering builds markup strings; every value that comes from the server passes
-// through escapeHtml. Text the coding review wrote (reasons, questions, documentation notes, quoted passages) is shown
-// as written and escaped like every other value. Everything above "browser wiring" is pure and unit-tested under node
-// (tests/frontend/app.test.cjs).
+// CPT Studio customer page, drawn from the customer encounter contract (client contract customer-2026-11-21: the build
+// specification, sections 6 and 7, with the fix pass's line identity). Every code row is named by its line ("L1".."Ln",
+// "M1".."Mk"), never by its code alone: one code may stand on two lines. The review dialog, the reason it shows, the
+// buttons and every decision use the row's line and the number of the coding review the page shows, and a decision the
+// server refuses because that coding review changed reads the document again. Rendering builds markup strings; every
+// value that comes from the server passes through escapeHtml. Text the coding review wrote (reasons, questions,
+// documentation notes, quoted passages) is shown as written and escaped like every other value. Everything above
+// "browser wiring" is pure and unit-tested under node (tests/frontend/app.test.cjs).
 
 const POLL_BASE_MS = 2500;
 const POLL_MAX_MS = 15000;
@@ -22,8 +25,11 @@ const VIEW_URL = new RegExp(`^/api/encounters/${UUID_PART}/original\\?(?:[\\w.-]
 // The page tells the server which build of this page is asking. A server that no longer serves this build refuses the
 // call with a conflict status and {"error_code": "client_outdated"}, and the page asks the member to reload.
 const CLIENT_HEADER = 'X-CPT-Studio-Client';
-const CLIENT_VERSION = 'customer-2026-11-20';
+const CLIENT_VERSION = 'customer-2026-11-21';
 const OUTDATED_TEXT = 'CPT Studio was updated — reload the page to continue.';
+// What the page says when the server refuses a decision with a conflict status (the coding review the page shows, or a
+// line of it, is no longer the latest): nothing was recorded, and the page has read the document again.
+const CHANGED_TEXT = 'This coding review has changed, so nothing was recorded. The page now shows the latest.';
 const OFFLINE_TEXT = 'The server could not be reached. Check the connection and try again.';
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;', '`': '&#x60;' };
@@ -49,6 +55,13 @@ const CODE_STATUSES = {
 const DECISIONS = { approve: ['approved', 'Approved', 'green', 'check'], reject: ['rejected', 'Rejected', 'gray', 'close'] };
 // [action, button kind, label, icon]: the only decision buttons the page draws, each only when the server allows it.
 const ACTION_BUTTONS = [['approve', 'primary', 'Approve', 'check'], ['reject', 'secondary', 'Reject', ''], ['revoke', 'secondary', 'Undo', '']];
+// A line of a coding review: "L1".."Ln" for the codes it listed, in its order, then "M1".."Mk" for the codes the second
+// check added. A decision names one; a row without one is shown and never decided.
+const LINE = /^[LM][1-9][0-9]{0,2}$/;
+// Units or modifiers the coding review did not give (the contract's null): said so - never a number, never nothing, and
+// never "No modifier", which is the coding review saying there is none.
+const UNITS_NOT_GIVEN = 'Units not given';
+const MODIFIERS_NOT_GIVEN = 'Modifiers not given';
 const REVIEW_COPY = {
   approve: { eyebrow: 'APPROVE', title: 'Make the decision visible.', button: 'Approve code' },
   reject: { eyebrow: 'REJECT', title: 'Leave a clear record.', button: 'Reject code' },
@@ -307,9 +320,36 @@ function stateLabel(stateName, label) {
   return lookup(STATE_LABELS, stateName, text(label) || 'Unknown');
 }
 
-// Every code the page can show: a code is named by its CPT code, one row per code.
+// Every code the page can show, one row per line of the coding review, in the served order.
 function codesOf(doc) {
   return objects(doc?.codes).filter(code => text(code.code));
+}
+
+// The line a code row stands on, or '' when the server named none the page can use. Given the document, also '' when
+// the same line is named on two of its rows: the page cannot tell which one a decision is about, so it decides neither.
+function lineOf(code, doc) {
+  const line = typeof code?.line === 'string' && LINE.test(code.line) ? code.line : '';
+  if (!line || doc === undefined) return line;
+  return codesOf(doc).filter(item => item.line === line).length === 1 ? line : '';
+}
+
+// The number of the coding review the page shows: what every decision names, so the server can refuse one made on a
+// coding review that is no longer the latest.
+function roundNumber(doc) {
+  const number = doc?.round?.number;
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+// What names a row on the page (its ids, its quotes): its line; only a row without one falls back to its place.
+function rowRef(code, position, doc) {
+  return lineOf(code, doc) || `row-${position + 1}`;
+}
+
+// The one row on `line` of the coding review the page shows, or null (no row, or more than one).
+function findLine(doc, line) {
+  const wanted = typeof line === 'string' && LINE.test(line) ? line : '';
+  const rows = wanted ? codesOf(doc).filter(code => lineOf(code) === wanted) : [];
+  return rows.length === 1 ? rows[0] : null;
 }
 
 function questionsOf(doc) {
@@ -362,17 +402,28 @@ function shownStatus(code) {
 }
 
 function unitsLabel(units) {
-  return Number.isInteger(units) && units > 0 ? plural(units, 'unit', 'units') : '';
+  return Number.isInteger(units) && units > 0 ? plural(units, 'unit', 'units') : UNITS_NOT_GIVEN;
 }
 
+// A row's modifiers as served: a list of strings ([] when the coding review says there is none), or null when it gave
+// none the page can state - the contract's null, or anything that is not a list of modifiers, which is shown as not
+// given and never read as "none".
 function modifiersOf(code) {
-  return strings(code?.modifiers);
+  const modifiers = code?.modifiers;
+  if (!Array.isArray(modifiers) || modifiers.some(item => typeof item !== 'string' || !item.trim())) return null;
+  return modifiers.map(item => item.trim());
 }
 
 function modifiersLabel(code) {
   const modifiers = modifiersOf(code);
+  if (modifiers === null) return MODIFIERS_NOT_GIVEN;
   if (!modifiers.length) return 'No modifier';
   return `${modifiers.length === 1 ? 'Modifier' : 'Modifiers'} ${modifiers.join(', ')}`;
+}
+
+// The line as the review dialog states it: its units and its modifiers, so two lines of one code read apart.
+function lineDetail(code) {
+  return `${unitsLabel(code?.units)} · ${modifiersLabel(code)}`;
 }
 
 // The second check's verdict on one code, and its reason as written. Without a verdict the server's reason is its own
@@ -394,8 +445,9 @@ function quotesOf(code) {
   return objects(code?.quotes).filter(quote => text(quote.text)).map(quote => ({ text: text(quote.text), page: quotePage(quote) }));
 }
 
-function quoteKey(code, index) {
-  return `${text(code?.code)}#${index}`;
+// One quoted passage of one row: the row's line (its place, for a row without one) and the passage's place in it.
+function quoteKey(code, index, position, doc) {
+  return `${rowRef(code, position, doc)}#${index}`;
 }
 
 // The viewer's address for one page of the original (a PDF opens at #page=N), or the plain view address.
@@ -414,16 +466,24 @@ function viewerKind(documentPart) {
   return lookup(VIEW_KINDS, part.view_media_type, 'none');
 }
 
-// The decision buttons one code gets: those the server allows, for a member who may review, in a fixed order.
+// The decision buttons one row gets: those the server allows, for a member who may review, in a fixed order - and none
+// for a row the page cannot name by its line, or on a page that does not know which coding review it shows.
 function allowedActions(code, doc) {
-  if (!canReview(doc)) return [];
+  if (!canReview(doc) || !lineOf(code, doc) || roundNumber(doc) === null) return [];
   const allowed = list(code?.allowed_actions);
   return ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => name);
 }
 
-function decisionBody(code, action, acknowledgement = '', note = '') {
+// What a decision on one row names: the coding review the page shows, the row's line and its code as served.
+function decisionTarget(code, doc) {
+  return { round: roundNumber(doc), line: lineOf(code, doc), code: typeof code?.code === 'string' ? code.code : '' };
+}
+
+// The body of POST decisions: {round, line, code, action, acknowledgement, note}.
+function decisionBody(target, action, acknowledgement = '', note = '') {
+  const named = record(target);
   return {
-    code: String(code ?? ''), action,
+    round: named.round, line: named.line, code: named.code, action,
     acknowledgement: action === 'approve' && typeof acknowledgement === 'string' ? acknowledgement : '',
     note: action === 'revoke' ? '' : text(note),
   };
@@ -460,7 +520,15 @@ function tallyText(doc) {
     counts.set(key, (counts.get(key) || 0) + 1);
   }
   const parts = TALLY.filter(([key]) => counts.get(key)).map(([key, one, many]) => `${counts.get(key)} ${counts.get(key) === 1 ? one : many}`);
-  return parts.length ? parts.join(' · ') : 'No codes yet';
+  if (parts.length) return parts.join(' · ');
+  return progressPhase(doc) === 'done' && !isBusy(doc) ? 'No codes found' : 'No codes yet';
+}
+
+// Whether the page offers the export dialog: whenever the server allows a download (a draft once the coding review has
+// finished, codes or none; the approved download once a code is approved), or there are downloads made earlier to list.
+function exportOffered(doc) {
+  const readiness = record(doc?.readiness);
+  return readiness.draft === true || readiness.approved === true || objects(doc?.reports).length > 0;
 }
 
 function readinessText(doc) {
@@ -487,8 +555,9 @@ function emptyCodesText(doc) {
   return 'The coding review found no CPT code to report for this document.';
 }
 
-function rowKey(code) {
-  return String(code ?? '').replace(/[^A-Za-z0-9]/g, '_');
+// A row's name as the part of an element id: letters and digits only.
+function rowKey(value) {
+  return String(value ?? '').replace(/[^A-Za-z0-9]/g, '_');
 }
 
 // --- rendering (pure string builders) ----------------------------------------------
@@ -596,7 +665,7 @@ function reviewMeta(doc) {
 }
 
 function reviewHeading(doc) {
-  const download = codesOf(doc).length || objects(doc?.reports).length ? `<button type="button" class="button secondary" data-action="export">${icon('download')}<span>Download</span></button>` : '';
+  const download = exportOffered(doc) ? `<button type="button" class="button secondary" data-action="export">${icon('download')}<span>Download</span></button>` : '';
   return `<div class="heading-row review-heading"><div><span class="eyebrow">CODING REVIEW · GASTROENTEROLOGY</span><h1>${escapeHtml(text(doc?.title) || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}<span>New document</span></button>${download}</div></div>`;
 }
 
@@ -638,8 +707,8 @@ function quoteTitle(doc) {
 }
 
 function quotesPanel(doc) {
-  const entries = codesOf(doc).flatMap(code => quotesOf(code).map((quote, index) => ({ code, quote, index })));
-  const items = entries.map(({ code, quote, index }) => `<li><button type="button" class="quote" data-code="${escapeHtml(code.code)}" data-page="${quote.page ?? ''}" data-quote="${escapeHtml(quoteKey(code, index))}"${quoteTitle(doc)}><span class="quote-code">${escapeHtml(code.code)}</span>${quoteBody(quote)}</button></li>`).join('');
+  const entries = codesOf(doc).flatMap((code, position) => quotesOf(code).map((quote, index) => ({ code, quote, index, position })));
+  const items = entries.map(({ code, quote, index, position }) => `<li><button type="button" class="quote" data-code="${escapeHtml(code.code)}" data-line="${escapeHtml(lineOf(code, doc))}" data-page="${quote.page ?? ''}" data-quote="${escapeHtml(quoteKey(code, index, position, doc))}"${quoteTitle(doc)}><span class="quote-code">${escapeHtml(code.code)}</span>${quoteBody(quote)}</button></li>`).join('');
   const empty = isBusy(doc) ? 'Quoted passages appear here when the coding review finishes.'
     : progressPhase(doc) === 'earlier' ? 'Quoted passages appear here once the document is reviewed again.' : 'No passage of the document is quoted.';
   return `<section class="quotes-panel" id="quotesPanel" aria-labelledby="quotesTitle"><div class="quotes-head"><h2 id="quotesTitle">Quoted passages</h2>${entries.length ? `<span class="small-badge">${entries.length}</span>` : ''}</div>`
@@ -754,15 +823,16 @@ function answersPanel(doc) {
 
 // --- the codes ---
 
-function decisionButton(action, code) {
+// One decision button of one row: named by the row's line (its id and data-line), with the code it decides.
+function decisionButton(action, code, position, doc) {
   const [, kind, label, iconName] = ACTION_BUTTONS.find(([name]) => name === action);
-  return `<button type="button" class="button ${kind}" id="act-${rowKey(code.code)}-${action}" data-decision="${action}" data-code="${escapeHtml(code.code)}">${label}${iconName ? ` ${icon(iconName)}` : ''}</button>`;
+  return `<button type="button" class="button ${kind}" id="act-${rowKey(rowRef(code, position, doc))}-${action}" data-decision="${action}" data-code="${escapeHtml(code.code)}" data-line="${escapeHtml(lineOf(code, doc))}">${label}${iconName ? ` ${icon(iconName)}` : ''}</button>`;
 }
 
-function codeQuotes(code, doc) {
+function codeQuotes(code, doc, position) {
   const quotes = quotesOf(code);
   if (!quotes.length) return '<p class="code-quotes code-quotes-empty">No passage of the document is quoted for this code.</p>';
-  return `<ul class="code-quotes" aria-label="${escapeHtml(`Passages quoted for ${code.code}`)}">${quotes.map((quote, index) => `<li><button type="button" class="code-quote" data-quote="${escapeHtml(quoteKey(code, index))}" data-view-page="${quote.page ?? ''}"${quoteTitle(doc)}>${quoteBody(quote)}</button></li>`).join('')}</ul>`;
+  return `<ul class="code-quotes" aria-label="${escapeHtml(`Passages quoted for ${code.code}`)}">${quotes.map((quote, index) => `<li><button type="button" class="code-quote" data-quote="${escapeHtml(quoteKey(code, index, position, doc))}" data-view-page="${quote.page ?? ''}"${quoteTitle(doc)}>${quoteBody(quote)}</button></li>`).join('')}</ul>`;
 }
 
 function decisionLine(code) {
@@ -782,21 +852,23 @@ function codeHint(code) {
   return '';
 }
 
-function codeRow(code, doc) {
+// One row: one line of the coding review (`position` is its place in the served list, which names only a row the server
+// gave no line).
+function codeRow(code, doc, position = 0) {
   const status = shownStatus(code);
   const decision = currentDecision(code);
   const check = secondCheck(code);
   const question = text(code.question);
   const actions = allowedActions(code, doc);
-  return `<li class="code-row" id="code-${rowKey(code.code)}" tabindex="-1" data-code="${escapeHtml(code.code)}" data-status="${escapeHtml(codeStatus(code).key)}"${decision ? ` data-decision="${escapeHtml(decision.action)}"` : ''} data-units="${escapeHtml(Number.isInteger(code.units) ? code.units : '')}" data-modifiers="${escapeHtml(modifiersOf(code).join(' '))}">`
+  return `<li class="code-row" id="code-${rowKey(rowRef(code, position, doc))}" tabindex="-1" data-code="${escapeHtml(code.code)}" data-line="${escapeHtml(lineOf(code, doc))}" data-status="${escapeHtml(codeStatus(code).key)}"${decision ? ` data-decision="${escapeHtml(decision.action)}"` : ''} data-units="${escapeHtml(Number.isInteger(code.units) && code.units > 0 ? code.units : '')}" data-modifiers="${escapeHtml((modifiersOf(code) || []).join(' '))}">`
     + `<div class="code-head"><span class="code-number">${escapeHtml(code.code)}</span><span class="code-units">${escapeHtml(unitsLabel(code.units))}</span><span class="code-modifiers">${escapeHtml(modifiersLabel(code))}</span>${badge(status.tone, status.label, status.icon, ` data-status="${escapeHtml(status.key)}"`)}</div>`
     + `<p class="code-reason">${escapeHtml(text(code.reason) || 'No reason was given for this code.')}</p>`
     + `<p class="code-check" data-check="${check.verdict}">${icon(check.verdict === 'agrees' ? 'circle-check' : 'info')}<span><strong>${escapeHtml(check.label)}</strong>${check.reason ? ` ${escapeHtml(check.reason)}` : ''}</span></p>`
     + (question ? `<p class="code-question">${icon('help')}<span>${escapeHtml(question)}</span></p>` : '')
-    + codeQuotes(code, doc)
+    + codeQuotes(code, doc, position)
     + decisionLine(code)
     + codeHint(code)
-    + (actions.length ? `<div class="code-actions">${actions.map(action => decisionButton(action, code)).join('')}</div>` : '')
+    + (actions.length ? `<div class="code-actions">${actions.map(action => decisionButton(action, code, position, doc)).join('')}</div>` : '')
     + '</li>';
 }
 
@@ -806,9 +878,9 @@ function reviewBar(doc) {
 
 function codesSection(doc) {
   const codes = codesOf(doc);
-  const bar = codes.length || objects(doc?.reports).length ? reviewBar(doc) : '';
+  const bar = codes.length || exportOffered(doc) ? reviewBar(doc) : '';
   return `<section class="codes-section" aria-labelledby="codesTitle"><div class="results-topline"><h2 id="codesTitle">CPT codes</h2>${codes.length ? `<span class="small-badge">${codes.length}</span>` : ''}</div>`
-    + `<ol id="codesList" class="codes-list" aria-label="CPT codes"${codes.length ? '' : ' hidden'}>${codes.map(code => codeRow(code, doc)).join('')}</ol>`
+    + `<ol id="codesList" class="codes-list" aria-label="CPT codes"${codes.length ? '' : ' hidden'}>${codes.map((code, position) => codeRow(code, doc, position)).join('')}</ol>`
     + (codes.length ? '' : `<p class="results-empty">${escapeHtml(emptyCodesText(doc))}</p>`)
     + `${bar}</section>`;
 }
@@ -903,8 +975,15 @@ class ApiError extends Error {
   constructor(message, status = 0, data = null) {
     super(message);
     this.status = status;
+    this.code = data && typeof data === 'object' && typeof data.error_code === 'string' ? data.error_code : '';
     this.details = data && typeof data === 'object' && data.details && typeof data.details === 'object' ? data.details : null;
   }
+}
+
+// A decision the server refused because what the page shows is no longer the latest: a conflict status that is not the
+// stale-build notice (which asks for a reload of the whole page instead).
+function changedUnderPage(error) {
+  return error instanceof ApiError && error.status === 409 && error.code !== 'client_outdated';
 }
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -1202,21 +1281,25 @@ function refreshIfWaiting() {
   if (state.route?.name === 'doc' && shouldPoll(state.doc) && !document.hidden) refreshDocument();
 }
 
-// Where the focus was, so a redraw can put it back: the element's id, the code row it sits in, and the caret of an
-// answer being typed.
+// Where the focus was, so a redraw can put it back: the element's id, the code row it sits in (its line and its code),
+// and the caret of an answer being typed.
 function focusTarget() {
   const element = document.activeElement;
   if (!element || !$('#main').contains(element)) return null;
-  const target = { id: element.id || '', code: element.closest?.('.code-row')?.dataset.code || '' };
+  const row = element.closest?.('.code-row');
+  const target = { id: element.id || '', line: row?.dataset.line || '', code: row?.dataset.code || '' };
   if (element.tagName === 'TEXTAREA' && typeof element.selectionStart === 'number') target.selection = [element.selectionStart, element.selectionEnd];
-  return target.id || target.code ? target : null;
+  return target.id || target.line ? target : null;
 }
 
+// Focus goes back to the same element, or to its row; never onto another code that a new coding review put on that line.
 function restoreFocus(target) {
   if (!target) return;
   let element = target.id ? document.getElementById(target.id) : null;
-  if (!element && target.code) element = document.getElementById(`code-${rowKey(target.code)}`);
+  if (!element && target.line) element = document.getElementById(`code-${rowKey(target.line)}`);
   if (!element) return;
+  const row = element.closest?.('.code-row');
+  if (target.code && row && row.dataset.code !== target.code) return;
   element.focus({ preventScroll: true });
   if (target.selection && element.tagName === 'TEXTAREA') {
     try {
@@ -1250,6 +1333,8 @@ function renderDocument(doc, fresh, force = false) {
   const keep = fresh ? null : { window: window.scrollY, focus: focusTarget() };
   const frame = viewerKey(doc);
   const partial = !fresh && frame === state.viewerKey && $('#reviewHead') && $('#reviewColumn') && $('#quotesBox');
+  // a passage chosen on one coding review names a line of it: another coding review's same line is another passage
+  if (roundNumber(doc) !== roundNumber(state.doc)) state.selectedQuote = '';
   state.doc = doc;
   state.docKey = key;
   const ui = uiState({ entrance: fresh });
@@ -1284,9 +1369,10 @@ function tick() {
 // --- quoted passages: open the page, or find the passage in a text document ---
 
 function findQuote(key) {
-  for (const code of codesOf(state.doc)) {
-    const quotes = quotesOf(code);
-    for (let index = 0; index < quotes.length; index += 1) if (quoteKey(code, index) === key) return { code, quote: quotes[index] };
+  const codes = codesOf(state.doc);
+  for (let position = 0; position < codes.length; position += 1) {
+    const quotes = quotesOf(codes[position]);
+    for (let index = 0; index < quotes.length; index += 1) if (quoteKey(codes[position], index, position, state.doc) === key) return { code: codes[position], quote: quotes[index] };
   }
   return null;
 }
@@ -1352,22 +1438,21 @@ function showQuote(key) {
   frame.scrollIntoView({ behavior: reducedMotion() ? 'instant' : 'smooth', block: 'nearest' });
 }
 
-// --- decisions ---
-
-function findCode(value) {
-  return codesOf(state.doc).find(code => code.code === value) || null;
-}
+// --- decisions: each names the row's line and the coding review the page shows ---
 
 function reviewCopyText(action, agent) {
   if (action === 'reject') return 'A rejected code is left out of the approved download. Add a note so the next reviewer knows why.';
   return agent
-    ? 'This approval is recorded as an agent-executed synthetic review, with the agent\'s name and the time. It applies to these codes only; a new coding review starts without it.'
-    : 'Your approval is recorded with your name and the time. It applies to these codes only; a new coding review starts without it.';
+    ? 'This approval is recorded as an agent-executed synthetic review, with the agent\'s name and the time. It applies to this code in this coding review only; a new coding review starts without it.'
+    : 'Your approval is recorded with your name and the time. It applies to this code in this coding review only; a new coding review starts without it.';
 }
 
-async function openReview(value, action) {
-  const code = findCode(value);
+// The review dialog of one line: what the decision will name (the coding review shown, the line, its code) is fixed when
+// the dialog opens, so a redraw while it is open never moves the decision to another row.
+async function openReview(line, action) {
+  const code = findLine(state.doc, line);
   if (!code || !REVIEW_COPY[action] || !allowedActions(code, state.doc).includes(action)) return;
+  const target = decisionTarget(code, state.doc);
   if (!state.session && !(await loadSession())) {
     toast('Your identity could not be confirmed, so no decision can be recorded. Reload the page and try again.');
     return;
@@ -1378,11 +1463,12 @@ async function openReview(value, action) {
     return;
   }
   const copy = REVIEW_COPY[action];
-  state.review = { code: code.code, action };
+  state.review = { ...target, action };
   $('#reviewEyebrow').textContent = copy.eyebrow;
   $('#reviewTitle').textContent = copy.title;
   $('#reviewCopy').textContent = reviewCopyText(action, isAgent());
   $('#reviewCode').textContent = code.code;
+  $('#reviewLine').textContent = lineDetail(code);
   $('#reviewStatus').textContent = codeStatus(code).label;
   $('#reviewSummary').textContent = text(code.reason);
   $('#reviewAcknowledgement').hidden = action !== 'approve';
@@ -1416,6 +1502,14 @@ async function afterChange(message) {
   await refreshDocument();
 }
 
+// A decision refused because the coding review changed under the page: nothing was recorded, so the page says so and
+// reads the document again. Nothing is sent again; the member decides on what the page now shows.
+async function afterConflict() {
+  toast(CHANGED_TEXT);
+  loadSession();
+  await refreshDocument();
+}
+
 function submitReview(event) {
   event.preventDefault();
   const review = state.review;
@@ -1429,37 +1523,45 @@ function submitReview(event) {
     const button = $('#saveReview');
     setBusy(button, true);
     hideError('reviewError');
-    const body = decisionBody(review.code, review.action, approve ? state.session?.acknowledgement : '', $('#reviewNote').value);
+    const body = decisionBody(review, review.action, approve ? state.session?.acknowledgement : '', $('#reviewNote').value);
     try {
       await postDecision(body);
       closeDialog('reviewDialog');
       await afterChange(approve ? `Approval recorded for ${review.code}.` : `Rejection recorded for ${review.code}.`);
     } catch (error) {
-      showError('reviewError', error.message);
+      if (changedUnderPage(error)) {
+        closeDialog('reviewDialog');
+        await afterConflict();
+      } else {
+        showError('reviewError', error.message);
+      }
     } finally {
       setBusy(button, approve && !$('#reviewAckBox').checked);
     }
   });
 }
 
-function revokeDecision(value, button) {
-  return guarded(`revoke:${value}`, async () => {
+function revokeDecision(code, button) {
+  const target = decisionTarget(code, state.doc);
+  return guarded(`revoke:${target.line}`, async () => {
     setBusy(button, true);
     try {
-      await postDecision(decisionBody(value, 'revoke'));
-      await afterChange(`Decision undone for ${value}.`);
+      await postDecision(decisionBody(target, 'revoke'));
+      await afterChange(`Decision undone for ${target.code}.`);
     } catch (error) {
-      toast(error.message);
       setBusy(button, false);
+      if (changedUnderPage(error)) await afterConflict();
+      else toast(error.message);
     }
   });
 }
 
-function handleDecision(action, value, button) {
-  const code = findCode(value);
+// A decision button's click: the row is found by the button's line, never by its code.
+function handleDecision(action, line, button) {
+  const code = findLine(state.doc, line);
   if (!code || !allowedActions(code, state.doc).includes(action)) return undefined;
-  if (action === 'revoke') return revokeDecision(code.code, button);
-  return openReview(code.code, action);
+  if (action === 'revoke') return revokeDecision(code, button);
+  return openReview(lineOf(code, state.doc), action);
 }
 
 // --- answers: typed on the page, sent together ---
@@ -1675,7 +1777,7 @@ function onClick(event) {
   }
   const decision = target.closest('[data-decision]');
   if (decision) {
-    handleDecision(decision.dataset.decision, decision.dataset.code, decision);
+    handleDecision(decision.dataset.decision, decision.dataset.line, decision);
     return;
   }
   const report = target.closest('[data-export-kind]');
@@ -1782,16 +1884,17 @@ if (typeof module === 'object' && module.exports) {
   module.exports = {
     escapeHtml, lookup, parseIsoDate, formatDate, formatTimestamp, readCookie, safeDownloadUrl, safeOriginalUrl, safeViewUrl,
     pollDelay, parseRoute, isClientOutdated, errorText, newClientKey, durationText, clockOffset, elapsedText, findPassage,
-    canReview, stateLabel, codesOf, questionsOf, answersOf, notesOf, progressPhase, isBusy, shouldPoll, codeStatus,
-    currentDecision, shownStatus, unitsLabel, modifiersLabel, secondCheck, quotesOf, quoteKey, viewerUrl, viewerKind,
-    allowedActions, decisionBody, answersPayload, insuranceLabel, insuranceText, tallyText, readinessText, exportStatusText,
-    emptyCodesText, documentRow, inQueue, listBody, listDescription, inviteMarkup, overviewView, documentsView, howItWorksView,
-    messageView, uploadAck, ackView, reviewMeta, reviewHeading, viewerPanel, quotesPanel, progressSteps, progressPanel,
-    questionsPanel, answersPanel, codeRow, codesSection, notesPanel, activityLog, reviewColumn, reviewView, reportItem,
-    exportOptions, uploadForm, renderKey, viewerKey, api, sendAnswers, submitReview, handleDecision, progressAction, onClick,
-    onInput, showQuote, state, STATE_LABELS, CODE_STATUSES, DECISIONS, ACTION_BUTTONS, PHASES, PHASE_TITLES, STEP_KEYS,
-    STEP_LABELS, PROGRESS_ACTIONS, INSURANCE_CHOICES, QUEUE_STATES, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION,
-    MAX_ANSWER_CHARS, CONVERTED_NOTE, REVIEW_AGAIN,
+    canReview, stateLabel, codesOf, lineOf, roundNumber, findLine, questionsOf, answersOf, notesOf, progressPhase, isBusy,
+    shouldPoll, codeStatus, currentDecision, shownStatus, unitsLabel, modifiersLabel, lineDetail, secondCheck, quotesOf,
+    quoteKey, viewerUrl, viewerKind, allowedActions, decisionTarget, decisionBody, answersPayload, insuranceLabel,
+    insuranceText, tallyText, exportOffered, readinessText, exportStatusText, emptyCodesText, documentRow, inQueue, listBody,
+    listDescription, inviteMarkup, overviewView, documentsView, howItWorksView, messageView, uploadAck, ackView, reviewMeta,
+    reviewHeading, viewerPanel, quotesPanel, progressSteps, progressPanel, questionsPanel, answersPanel, codeRow,
+    codesSection, notesPanel, activityLog, reviewColumn, reviewView, reportItem, exportOptions, uploadForm, renderKey,
+    viewerKey, api, sendAnswers, submitReview, handleDecision, progressAction, onClick, onInput, showQuote, state,
+    STATE_LABELS, CODE_STATUSES, DECISIONS, ACTION_BUTTONS, PHASES, PHASE_TITLES, STEP_KEYS, STEP_LABELS, PROGRESS_ACTIONS,
+    INSURANCE_CHOICES, QUEUE_STATES, OUTDATED_TEXT, CHANGED_TEXT, UNITS_NOT_GIVEN, MODIFIERS_NOT_GIVEN, CLIENT_HEADER,
+    CLIENT_VERSION, MAX_ANSWER_CHARS, CONVERTED_NOTE, REVIEW_AGAIN,
   };
 }
 if (typeof document !== 'undefined') boot();

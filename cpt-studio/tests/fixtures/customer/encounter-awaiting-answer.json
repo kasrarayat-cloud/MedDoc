@@ -41,6 +41,7 @@
  },
  "codes": [
   {
+   "line": "L1",
    "code": "45385",
    "units": 1,
    "modifiers": [],
@@ -66,6 +67,7 @@
    "allowed_actions": []
   },
   {
+   "line": "L2",
    "code": "43235",
    "units": 1,
    "modifiers": [],
@@ -93,6 +95,9 @@
    "text": "How was the 12 mm descending colon polyp removed: with a snare, with forceps, or another way?",
    "codes": [
     "45385"
+   ],
+   "lines": [
+    "L1"
    ]
   },
   {
@@ -100,6 +105,9 @@
    "text": "Was the upper endoscopy performed? If it was, what was found or done?",
    "codes": [
     "43235"
+   ],
+   "lines": [
+    "L2"
    ]
   }
  ],
