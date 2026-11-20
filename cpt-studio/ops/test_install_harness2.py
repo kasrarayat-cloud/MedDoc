@@ -379,6 +379,9 @@ class PeerStagesOnUndoTests(TemporaryDirectoryTest):
 
 # --- migration 0008 in the image phase's receipt ----------------------------------------------------------------------
 
+CONVERTED = {'head': '%PDF-', 'bytes': 8123, 'sha256': 'e' * 64}  # what the image's conversion gate answers here
+
+
 class MigrationReceiptTests(TemporaryDirectoryTest):
     def archive(self):
         """git archive of a revision whose migrations are the committed ones, as the image phase reads it."""
@@ -412,6 +415,9 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                 return SimpleNamespace(returncode=0, stdout=b'LibreOffice 7.4.7.2 40(Build:2)\n', stderr=b'')
             if install.ANTHROPIC_SDK_SCRIPT in args:
                 return SimpleNamespace(returncode=0, stdout=install.ANTHROPIC_SDK_VERSION.encode() + b'\n', stderr=b'')
+            if args[-3:-1] == ('shell', '-c') and install.CONVERSION_GATE in args[-1]:  # the conversion gate
+                return SimpleNamespace(returncode=0, stdout=(install.CONVERSION_ANSWER + json.dumps(CONVERTED)
+                                                             + '\n').encode(), stderr=b'')
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
         receipts = self.tmp / 'receipts'
         stdout = io.StringIO()
@@ -447,7 +453,7 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                                                                 '0012_cux_worker_beat',
                                                                 '0013_completion_answer_binding',
                                                                 '0014_event_inventory',
-                                                                '0015_inventory_appraisal'])
+                                                                '0015_inventory_appraisal', '0016_fable_coding'])
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
         self.assertEqual(migrations['after_baseline']['0013_completion_answer_binding'],
                          {'safe': True, 'why': ['memberanswer.question: NOT NULL with a database default (db_default)',
@@ -469,6 +475,15 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                                                 'encountercontext.earlier_assessment: nullable',
                                                 'ProviderHold: a new table no older revision reads',
                                                 'ProviderHoldRelease: a new table no older revision reads']})
+        # the Fable coding build (BUILD-SPEC 2): 0016 creates its four tables - CodingRound's two nullable columns of the
+        # converted Word view among its own columns - and a constraint on one of them, read safe
+        self.assertEqual(migrations['after_baseline']['0016_fable_coding'],
+                         {'safe': True, 'why': ['CodingRound: a new table no older revision reads',
+                                                'CodingAnswer: a new table no older revision reads',
+                                                'CodeDecision: a new table no older revision reads',
+                                                'ExportArtifact: a new table no older revision reads',
+                                                'codinground: a constraint on a table this migration creates']})
+        self.assertEqual(record['details']['conversion'], CONVERTED)  # the conversion gate ran on the built image
         self.assertTrue(all(verdict['safe'] for verdict in migrations['after_baseline'].values()))
 
     def test_0008_adds_no_column_to_an_existing_table(self):
@@ -793,88 +808,76 @@ class PeerStagesOnTheDatabaseTests(DatabaseTest):
 
 
 class SentRunsOnTheDatabaseTests(DatabaseTest):
-    """CLOSE_STAGES on real rows (refutation round 3, sends-3 and sends-4): every provider run the undone pair left
-    sending is settled unknown - and sent when an exchange of it that may have reached the vendor (any but not_sent) is
-    recorded, by the stale sweep's own rule (jobs.may_have_reached_vendor) - when the run called a vendor at all: its
-    reservation names the endpoint its adapter calls, and a replay calls none. The close had left sent as it was, so a
-    run whose answered exchange is on record was recorded as never sent."""
+    """CLOSE_STAGES on real rows: every coding run the undone pair left reserved or sending whose round has no open job
+    - an orphan its stage left, as studio.jobs.mark_stale's own sweep finds one - is settled before the next pair runs:
+    sending becomes unknown, and sent when the run called a vendor (studio.jobs.may_have_reached_vendor: its reservation
+    names an endpoint; a replay names none), reserved becomes not sent. A run of a coding job a next worker of this
+    design keeps is that job's own and is left; and the earlier pipeline's runs are that pipeline's, never touched."""
 
     NOTE = 'Closed by the installer: undone (revision aaaaaaaaaaaa), so this stage will not run.'
-    ENDPOINT = 'https://api.openai.com/v1/responses'
+    ENDPOINT = 'https://api.anthropic.com/v1/messages'
     maxDiff = None
 
-    def provider_run(self, encounter, *exchanges, endpoint=ENDPOINT, provider='astra', purpose='independent',
-                     state='sending'):
-        """A run of ``encounter`` with one recorded exchange per state in ``exchanges`` (turn 1..n). Synthetic."""
+    def round_(self, encounter, number=1, state='failed'):
         from studio import models
-        run = models.ProviderRun.objects.create(
-            encounter=encounter, revision=encounter.current_revision, provider=provider, adapter_version='synthetic@1',
-            request_sha256='e' * 64, request_body={}, contexts=[], state=state, purpose=purpose, endpoint=endpoint,
-            scope={'mode': 'live' if endpoint else 'replay'} if purpose == 'independent' else {})
-        for turn, exchange in enumerate(exchanges, start=1):
-            models.ProviderExchange.objects.create(
-                run=run, turn=turn, request_body={}, request_sha256='f' * 64, state=exchange,
-                http_status={'succeeded': 200, 'failed': 529}.get(exchange))
-        return run
+        return models.CodingRound.objects.create(
+            encounter=encounter, revision=encounter.current_revision, number=number, trigger='upload',
+            context={'service_date': None, 'insurance': 'unknown', 'answers': []}, state=state)
 
-    def scenario(self):
-        """{tag: run}: the runs a close since now settles, and one sending since before it, which it leaves alone."""
+    def coding_run(self, encounter, round_, *, state='sending', endpoint=ENDPOINT, purpose='coding_reader'):
+        from studio import models
+        return models.ProviderRun.objects.create(
+            encounter=encounter, revision=encounter.current_revision, provider='anthropic',
+            adapter_version='cptstudio-fable-coder@1', request_sha256='e' * 64, request_body={}, contexts=[],
+            state=state, purpose=purpose, endpoint=endpoint, scope={'round': str(round_.pk)})
+
+    def close(self, kinds):
         from django.utils import timezone
-        encounter = self.encounter('sent')
-        earlier = self.provider_run(encounter, 'succeeded')
-        self.since = timezone.now()
-        return {
-            'answered': self.provider_run(encounter, 'succeeded'),
-            'answered_529': self.provider_run(encounter, 'failed'),
-            'unknown': self.provider_run(encounter, 'unknown'),
-            'answered_then_not_sent': self.provider_run(encounter, 'succeeded', 'not_sent'),
-            'not_sent_only': self.provider_run(encounter, 'not_sent'),
-            'nothing_recorded': self.provider_run(encounter),
-            'replayed': self.provider_run(encounter, 'succeeded', endpoint=''),
-            'replayed_peer_review': self.provider_run(encounter, 'succeeded', 'succeeded', endpoint='',
-                                                      purpose='peer_review'),
-            'corti': self.provider_run(encounter, endpoint='https://api.us.corti.app/v2/tools/coding/',
-                                       provider='corti', purpose='primary'),
-            'reserved': self.provider_run(encounter, state='reserved'),
-            'earlier': earlier}
-
-    def close(self):
-        return run_in_image(install.CLOSE_STAGES, {'since': self.since.isoformat(), 'note': self.NOTE,
-                                                   'kinds': list(install.COMMON_STAGE_KINDS)})
+        return run_in_image(install.CLOSE_STAGES, {'since': timezone.now().isoformat(), 'note': self.NOTE,
+                                                   'kinds': kinds})
 
     def settled(self, runs):
         from studio import models
         return {tag: tuple(models.ProviderRun.objects.filter(pk=run.pk).values_list('state', 'sent', 'error').get())
                 for tag, run in runs.items()}
 
-    def test_a_run_left_sending_is_sent_when_a_recorded_exchange_may_have_reached_the_vendor(self):
-        runs = self.scenario()
-        answer = self.close()
-        self.assertEqual((answer['runs_unknown'], answer['runs_not_sent']), (9, 1))
+    def test_an_orphaned_coding_run_is_settled_and_sent_only_when_it_called_a_vendor(self):
+        from django.utils import timezone
+        from studio import models
+        encounter = self.encounter('orphans')
+        round_ = self.round_(encounter)  # its stage ended (failed) without recording its runs
+        runs = {'live': self.coding_run(encounter, round_),
+                'replayed': self.coding_run(encounter, round_, endpoint='', purpose='coding_checker'),
+                'reserved': self.coding_run(encounter, round_, state='reserved')}
+        earlier = models.ProviderRun.objects.create(  # the earlier pipeline's own run in flight: its own to settle
+            encounter=encounter, revision=encounter.current_revision, provider='corti', adapter_version='synthetic@1',
+            request_sha256='a' * 64, request_body={}, contexts=[], state='sending', purpose='primary',
+            started_at=timezone.now())
+        answer = self.close(list(install.COMMON_STAGE_KINDS))
+        self.assertEqual((answer['runs_unknown'], answer['runs_not_sent'], answer['closed']), (2, 1, 0))
         unknown = 'The worker stopped while the request was in flight.'
         self.assertEqual(self.settled(runs), {
-            'answered': ('unknown', True, unknown), 'answered_529': ('unknown', True, unknown),
-            'unknown': ('unknown', True, unknown), 'answered_then_not_sent': ('unknown', True, unknown),
-            'not_sent_only': ('unknown', False, unknown), 'nothing_recorded': ('unknown', False, unknown),
-            'replayed': ('unknown', False, unknown), 'replayed_peer_review': ('unknown', False, unknown),
-            'corti': ('unknown', False, unknown),
-            'reserved': ('not_sent', False, 'The worker stopped before sending.'),
-            'earlier': ('sending', False, '')})  # outside the window: the close never touches it
+            'live': ('unknown', True, unknown), 'replayed': ('unknown', False, unknown),
+            'reserved': ('not_sent', False, 'The worker stopped before sending.')})
+        self.assertEqual(models.ProviderRun.objects.get(pk=earlier.pk).state, 'sending')
+        # the unknown outcome is what the next pair would act on: named, so the undo holds until it is reconciled
+        self.assertEqual(answer['hazards'], {str(encounter.pk): ['unknown']})
 
-    def test_an_image_with_no_such_rule_settles_its_runs_as_before(self):
-        # an older revision's image (before harness@2's exchanges) has no jobs.may_have_reached_vendor and records no
-        # exchange: the close runs there as it did, sent left as it was, rather than failing the undo
-        from studio import jobs
-        runs = self.scenario()
-        rule = jobs.may_have_reached_vendor
-        del jobs.may_have_reached_vendor
-        try:
-            answer = self.close()
-        finally:
-            jobs.may_have_reached_vendor = rule
-        self.assertEqual((answer['runs_unknown'], answer['runs_not_sent']), (9, 1))
-        self.assertEqual({tag: sent for tag, (_, sent, _) in self.settled(runs).items()},
-                         dict.fromkeys(runs, False))
+    def test_the_runs_of_a_coding_job_a_next_worker_of_this_design_keeps_are_left_to_it(self):
+        from django.utils import timezone
+        from studio import models
+        encounter = self.encounter('kept')
+        round_ = self.round_(encounter, state='running')
+        job = models.Job.objects.create(
+            encounter=encounter, revision=encounter.current_revision, kind='code', state='running',
+            idempotency_key=f'code:{round_.pk}', deadline_at=timezone.now() + dt.timedelta(minutes=120),
+            started_at=timezone.now() - dt.timedelta(hours=3))
+        models.Job.objects.filter(pk=job.pk).update(created_at=timezone.now() - dt.timedelta(hours=3))
+        run = self.coding_run(encounter, round_)
+        answer = self.close(sorted(['code']))  # this pair began after that job: the next worker settles it itself
+        self.assertEqual((answer['closed'], answer['runs_unknown']), (0, 0))
+        self.assertEqual(models.ProviderRun.objects.get(pk=run.pk).state, 'sending')
+        self.assertEqual(models.Job.objects.get(pk=job.pk).state, 'running')
 
 
 if __name__ == '__main__':

@@ -67,8 +67,12 @@ _HOST_GUARDS = []
 
 
 def guard_host():
+    # and the door's wall-clock ceiling a phase that stops a worker needs (install.check_door_ceiling), as an operator
+    # gives it to the door (RULED_ACT_MAX_SECS); its own tests set it themselves
     patches = [mock.patch.object(subprocess, 'run', _guarded_run),
-               mock.patch.object(socket, 'create_connection', _guarded_connect)]
+               mock.patch.object(socket, 'create_connection', _guarded_connect),
+               mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': str(
+                   2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN)})]
     for patcher in patches:
         patcher.start()
     _HOST_GUARDS.append(patches)
@@ -91,9 +95,45 @@ def tearDownModule():
     release_host()
 
 
-# Design v2 (FINAL-V2 6.2 [R:MO-1]; amendment 1, 9.5; step 6b): the two reads the app phase makes after migrate and before
-# the switch, as a target with no design v1 row and nothing to count answers them - the stand-ins every app-phase world
-# of these suites gives (ops/test_install_v2.py runs both scripts on real rows and judges every other answer).
+# The revision a switch-back returns to - the one the Fable coding build replaces (e426c747c7b7, installed 2026-11-19).
+# Corti, the harness participants and the interpreter exist only in ITS tree and image, so what the installer names for
+# them (CORTI, PARTICIPANTS, INTERPRETER and their loader checks) is held to that tree's files, read from git: this tree
+# no longer has them (BUILD-SPEC section 10). A clone without that commit (a shallow CI checkout) skips such a test -
+# skipped, never passed - and a full clone proves it.
+EARLIER_REVISION = 'e426c747c7b73996d7f9fb4d598517aa0bc4d89a'
+REPO_ROOT = Path(__file__).resolve().parents[2]  # git reads the earlier tree's paths from the repository's root
+
+
+def _earlier(*argv) -> bytes:
+    done = _REAL_SUBPROCESS_RUN(['git', '-C', str(REPO_ROOT), *argv], capture_output=True, check=False)
+    if done.returncode:
+        raise unittest.SkipTest(f'the earlier revision {EARLIER_REVISION[:12]} is not in this clone')
+    return done.stdout
+
+
+def earlier_text(path: str) -> str:
+    """cpt-studio/``path`` as the earlier revision has it."""
+    return _earlier('show', f'{EARLIER_REVISION}:cpt-studio/{path}').decode('utf-8')
+
+
+def earlier_files(path: str) -> list:
+    """Every file under cpt-studio/``path`` in the earlier revision, relative to cpt-studio/."""
+    listed = _earlier('ls-tree', '-r', '--name-only', EARLIER_REVISION, '--', f'cpt-studio/{path}').decode('utf-8')
+    return sorted(line[len('cpt-studio/'):] for line in listed.splitlines() if line.strip())
+
+
+def earlier_literal(path: str, name: str):
+    """A module-level literal of the earlier revision's ``path``, read from its source (no import)."""
+    import ast
+    for node in ast.parse(earlier_text(path)).body:
+        if isinstance(node, ast.Assign) and any(getattr(target, 'id', None) == name for target in node.targets):
+            return ast.literal_eval(node.value)
+    raise LookupError(f'{name} is not a literal of {path} at {EARLIER_REVISION[:12]}')
+
+
+# The two reads the app phase makes after migrate and before the switch, as a target with no design v1 row and nothing to
+# count answers them - the stand-ins every app-phase world of these suites gives (ops/test_install_fable_scripts.py runs
+# INSTALL_COUNTS on real rows and judges every other answer; ops/test_install_v2.py runs V1_ROWS).
 def clean_v1_rows() -> dict:
     """V1_ROWS' answer on a target that holds no design v1 row."""
     return {'engine_version': install.V1_ENGINE_VERSION, 'interpretation_version': install.V1_INTERPRETATION_VERSION,
@@ -102,13 +142,9 @@ def clean_v1_rows() -> dict:
 
 def clean_counts() -> dict:
     """INSTALL_COUNTS' answer on a target with nothing to count and no hold standing."""
-    return {'size': {'bound_chars': 20000, 'bound_pages': 40, 'longest_chars': 0, 'without_inventory': 0,
-                     'over_chars': 0, 'over_pages': 0, 'unframed': 0, 'unframed_empty': 0, 'unframed_unextracted': 0,
-                     'encounters': {'over_chars': [], 'over_pages': [], 'unframed': []}},
-            'values': {'count': 0, 'first_install': True, 'encounters': []},
-            'refused': {name: {'count': 0, 'newest': None} for name in ('corti_sent', 'participant_sent', 'corti_token')},
-            'a21': {'count': 0, 'encounters': []},
-            'holds': {'provider': {'corti': [], 'astra': [], 'fable': []}, 'interpreter': []}}
+    return {'encounters': {'count': 0, 'coded': 0}, 'jobs': {}, 'runs': {},
+            'unknown': {'count': 0, 'encounter_count': 0, 'encounters': [], 'in_flight': {'reserved': 0, 'sending': 0}},
+            'tables': {name: 0 for name in install.COUNTED_TABLES}, 'holds': {'standing': 0}}
 
 
 def pre_switch_answer(body):
@@ -716,7 +752,7 @@ class DockerArgumentTests(unittest.TestCase):
         # above every stage's deadline (the question stage's 1,588 s the longest, a reading pass's 1,380 s; a
         # participant phase's tool loop 540 s) and every stale-stage threshold (600 s; the reading passes' 1,440 s and
         # 1,560 s, the question stage's 1,768 s): test_install_harness pins them against settings.py
-        self.assertEqual(self.flags(live, '--stop-timeout'), ['1800'])  # round r3 (D322 (4)); 1500 by AMENDMENT-2 1.12
+        self.assertEqual(self.flags(live, '--stop-timeout'), ['3600'])  # the Fable coding build (1800 since round r3)
         self.assertEqual(self.flags(live, '-p'), [])
         disabled = install.service_args('worker', self.IMAGE, REVISION, 'disabled', '')
         self.assertNotIn('corti', ' '.join(disabled).lower())

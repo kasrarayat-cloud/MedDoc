@@ -40,7 +40,7 @@ trap 'rm -f "$log"' EXIT
 "$python" manage.py test tests --noinput 2>&1 | tee "$log"
 require_ran "$log" 'CPT Studio Django tests'
 
-# Installer, download-verifier, verification-generator and browser-verifier unit
+# Installer, customer-scanner, verification-generator and browser-walk unit
 # tests: no Docker or sudo. Every suite must show that it ran: a count floor per
 # runner, and at least one PASSING test in each named ops module (a module whose
 # tests are all skipped prints its test lines too, ending '... skipped').
@@ -54,20 +54,20 @@ require_module_passed() {  # <log> <module> <label>
 }
 "$python" -B -m unittest discover -s ops -p 'test_*.py' -v 2>&1 | tee "$log"
 require_ran "$log" 'ops unit tests'
-for module in test_install test_verify_downloads; do
+for module in test_install test_verify_scan_customer; do
   require_module_passed "$log" "$module" "The ops suite $module"
 done
 "$python" -B -m unittest discover -s ops/verification -p 'test_*.py' -v 2>&1 | tee "$log"
 require_ran "$log" 'verification generator tests'
 require_module_passed "$log" test_generate 'The verification generator suite test_generate'
 # node counts a test FILE that registers no tests as one passing test, so a count alone proves nothing:
-# require the TAP summary, a pass floor near the committed count, and a named test that guards truth rule 5.
-node --test --test-reporter=tap ops/verification/test_verify_browser.cjs 2>&1 | tee "$log"
+# require the TAP summary, a pass floor near the committed count, and a named test that guards the operator gate.
+node --test --test-reporter=tap ops/test_walk.cjs 2>&1 | tee "$log"
 node_pass=$(sed -nE 's/^# pass ([0-9]+)$/\1/p' "$log" | tail -n 1)
 node_failed=$(sed -nE 's/^# fail ([0-9]+)$/\1/p' "$log" | tail -n 1)
-if [[ -z "$node_pass" || "$node_pass" -lt 20 || "$node_failed" != 0 ]] \
-    || ! grep -qE '^ok [0-9]+ - checkIncomplete refuses a dropped or silently completed incomplete service$' "$log"; then
-  echo "Browser-verifier tests: passed ${node_pass:-none}, failed ${node_failed:-unknown}, or the named test did not run." >&2
+if [[ -z "$node_pass" || "$node_pass" -lt 15 || "$node_failed" != 0 ]] \
+    || ! grep -qE '^ok [0-9]+ - every /ops/ path is 404 to the customer and never 200 to nobody, and the operator reads the encounter$' "$log"; then
+  echo "Browser-walk tests: passed ${node_pass:-none}, failed ${node_failed:-unknown}, or the named test did not run." >&2
   exit 1
 fi
 

@@ -3,8 +3,8 @@
 /*
  * The browser walk of the Fable coding build (DECISIONS D351-D353; the build specification, sections 6, 7 and 11): a
  * running CPT Studio (the deployed site or a local one) driven through the CUSTOMER page with synthetic documents, with
- * a separate PLATFORM-OPERATOR session beside it as the positive control of the operator gate. It replaces
- * ops/verify_browser.cjs, which was bound to the earlier customer contract.
+ * a separate PLATFORM-OPERATOR session beside it as the positive control of the operator gate. It replaces the
+ * earlier browser verifier, which was bound to the earlier customer contract.
  *
  *   node ops/walk.cjs --base-url https://cpt.quillmd.com --credentials agent.json --operator-credentials ops-agent.json \
  *     --docs DIR_OR_FILE --out EVIDENCE_DIR [--deadline-seconds 1800] [--allow-live-provider] \

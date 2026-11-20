@@ -71,6 +71,14 @@ def flags(argv, flag):
     return [argv[i + 1] for i, part in enumerate(argv) if part == flag]
 
 
+def coded(encounters=(), created=(), rounds=0, answers=0, approve=0, reject=0, revoke=0, approved=0, draft=0,
+          final=0) -> dict:
+    """CODING_MADE's answer: what this revision coded, which no earlier pair is handed (the declared note)."""
+    return {'coding': {'encounters': sorted(encounters), 'created': sorted(created), 'rounds': rounds,
+                       'answers': answers, 'decisions': {'approve': approve, 'reject': reject, 'revoke': revoke},
+                       'approved': approved, 'exports': {'draft': draft, 'approved': final}}}
+
+
 class Interrupted(Exception):
     pass
 
@@ -99,12 +107,9 @@ class BlueGreenWorld:
         self.availability = None    # the recorder's model: every invariant point it saw, served or not
         self.runs = {}              # container name -> the docker run arguments it was last started with
         self.oneshots = []          # (image, command, keyword arguments) of every one-shot, in order
-        # ADJUDICATION P-1: what INTERPRETATION_MADE answers in this revision's image (an exception: it raises that)
-        self.interpretation_answer = {'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}
-        # design v2 (refutation 6b-r1 P2): what REAPPLY_REVERTED answers (None: every encounter asked is put back, and
-        # the first reading stage each update owes is queued again - refutation 6b-r2 DQ1, DECISIONS D247; an
-        # exception: it raises that), and every P['reverted'] it was given, in order
-        self.reapply_answer, self.reapplies = None, []
+        # what CODING_MADE answers in this revision's image - the declared note's count of what is not carried back
+        # (an exception: it raises that)
+        self.coding_answer = coded()
         # DECISIONS D51: what the previous image's models read (TARGET_MODEL_READS: an old revision reads neither), and
         # the encounters this revision wrote a record for since its pair was created (TOUCHED_SINCE_READ: every one the
         # tests name, so the time filter drops nothing unless a test says so)
@@ -369,20 +374,11 @@ class BlueGreenWorld:
                 return self.done({'touched': sorted(pk for pk, times in self.record_times.items()
                                                     if any(moment >= since for moment in times))})
             return self.done({'touched': sorted(self.touched_answer)})
-        if body == install.INTERPRETATION_MADE:
-            self.act('interpretation', image_id)
-            if isinstance(self.interpretation_answer, BaseException):
-                raise self.interpretation_answer
-            return self.done(json.loads(json.dumps(self.interpretation_answer)))
-        if body == install.REAPPLY_REVERTED:  # design v2 (refutation 6b-r1 P2): an undo that kept this web serving
-            self.act('reapply', image_id)
-            self.reapplies.append(json.loads(json.dumps(params['reverted'])))
-            if isinstance(self.reapply_answer, BaseException):
-                raise self.reapply_answer
-            return self.done(json.loads(json.dumps(self.reapply_answer)) if self.reapply_answer is not None else {
-                'reapplied': {pk: sorted(fields) for pk, fields in params['reverted'].items()}, 'not_reapplied': {},
-                'requeued': {pk: {'kind': 'interpret', 'job': f'job-{pk}'} for pk in params['reverted']},
-                'coalesced': {}, 'not_requeued': {}})
+        if body == install.CODING_MADE:
+            self.act('coding', image_id)
+            if isinstance(self.coding_answer, BaseException):
+                raise self.coding_answer
+            return self.done(json.loads(json.dumps(self.coding_answer)))
         raise AssertionError('unexpected in-image script')
 
     def oneshot(self, image_id, command, env_bytes, **kwargs):
@@ -573,7 +569,7 @@ class SuccessPathTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(*ACTS), [
             ('recorder', 'start'),
             ('run', 'web', NEXT, 9151, IMAGE), ('wait', 'web', NEXT, 9151), ('smoke', 9151),          # S1
-            ('stop', WORKER, '1800'), ('rename', WORKER, WORKER + '-previous'),                           # S2
+            ('stop', WORKER, '3600'), ('rename', WORKER, WORKER + '-previous'),                           # S2
             ('vhost', 'replace', 9151), ('reload', 9151), ('https', 9151, REVISION),                     # S3
             ('run', 'worker', WORKER, None, IMAGE), ('wait', 'worker', WORKER, None),                    # S4
             ('drain', 9150), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # S5
@@ -705,7 +701,7 @@ class FailureArmTests(TemporaryDirectoryTest):
         message, details = self.failed(world)
         self.assert_old_pair_serves(world)
         self.assertIn('/login/ answered 500', message)
-        self.assertNotIn(('stop', WORKER, '1800'), world.events)
+        self.assertNotIn(('stop', WORKER, '3600'), world.events)
 
     def test_s2_a_worker_rename_that_fails_restarts_the_old_worker(self):
         world = BlueGreenWorld(self.tmp)
@@ -788,7 +784,7 @@ class FailureArmTests(TemporaryDirectoryTest):
         self.assert_old_pair_serves(world)
         self.assertEqual(world.acts('reload'), [('reload', 9151), ('reload', 9150)])
         order = [world.events.index(event) for event in (
-            ('stop', WORKER, '1800'), ('close', IMAGE, tuple(KINDS_OLD)), ('put_back', OLD_IMAGE), ('reload', 9150),
+            ('stop', WORKER, '3600'), ('close', IMAGE, tuple(KINDS_OLD)), ('put_back', OLD_IMAGE), ('reload', 9150),
             ('https', 9150, OLD), ('drain', 9151), ('stop', NEXT, '30'), ('rename', WORKER + '-previous', WORKER),
             ('start', WORKER))]
         self.assertEqual(order, sorted(order))
@@ -940,7 +936,7 @@ class StopTimeoutBlueGreenTests(TemporaryDirectoryTest):
             for event in world.acts('stop'):
                 name, seconds = event[1], event[2]
                 if name.startswith(WORKER):
-                    self.assertEqual(seconds, '1800', event)  # round r3 (D322 (4)); 1500 by AMENDMENT-2 1.12
+                    self.assertEqual(seconds, '3600', event)  # the Fable coding build; 1800 since round r3 (D322 (4))
                 else:
                     self.assertEqual(seconds, '30', event)
 
@@ -1390,7 +1386,7 @@ class SwitchBackTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(*ACTS), [
             ('recorder', 'start'),
             ('run', 'web', NEXT, 9150, OLD_IMAGE), ('wait', 'web', NEXT, 9150), ('smoke', 9150),        # B2
-            ('stop', WORKER, '1800'), ('rename', WORKER, WORKER + '-previous'),                            # B3
+            ('stop', WORKER, '3600'), ('rename', WORKER, WORKER + '-previous'),                            # B3
             ('close', IMAGE, tuple(KINDS_OLD)), ('put_back', OLD_IMAGE),                                  # B4
             ('vhost', 'replace', 9150), ('reload', 9150), ('https', 9150, OLD),                           # B5
             ('drain', 9151), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # B6
@@ -1408,7 +1404,7 @@ class SwitchBackTests(TemporaryDirectoryTest):
         self.assertIn('switched back to bbbbbbbbbbbb', details['summary'])
         # rollback-app's check, first, and again right before B4's close (refute-r2 L6-4)
         self.assertEqual(world.acts('hazards'), [('hazards', IMAGE), ('hazards', IMAGE)])
-        self.assertLess(world.events.index(('hazards', IMAGE), world.events.index(('stop', WORKER, '1800'))),
+        self.assertLess(world.events.index(('hazards', IMAGE), world.events.index(('stop', WORKER, '3600'))),
                         world.events.index(('close', IMAGE, tuple(KINDS_OLD))))
 
     def test_it_refuses_before_starting_anything(self):
@@ -1829,12 +1825,12 @@ class InstallDocTests(unittest.TestCase):
         for phrase in ('`cpt-studio-web-next` starts on the idle port', "**S3** the vhost's upstream is switched",
                        '**S5** the old web is drained', 'at least 130 s', '10 consecutive one-second samples',
                        'never longer than 600 s', 'every 0.5 s', '`availability`', 'never stops the serving web',
-                       '`docker stop --time 1800`', 'graceful, 30 s', 'the two differ in their `proxy_pass` line alone'):
+                       '`docker stop --time 3600`', 'graceful, 30 s', 'the two differ in their `proxy_pass` line alone'):
             self.says(phrase, app)
         self.assertEqual((install.DRAIN_MIN_SECONDS, install.DRAIN_QUIET_SECONDS, install.DRAIN_MAX_SECONDS),
                          (130, 10, 600))
         self.assertEqual((install.AVAILABILITY_INTERVAL_SECONDS, install.STOP_SECONDS),
-                         (0.5, {'web': 30, 'worker': 1800}))  # round r3: the worker's outlasts a question round
+                         (0.5, {'web': 30, 'worker': 3600}))  # the worker's outlasts a round's two sends
         for step in ('S1', 'S2', 'S3', 'S4', 'S5'):
             self.says(f'- {step} (', app)  # one row of the failure matrix each
 
@@ -1856,18 +1852,26 @@ class InstallDocTests(unittest.TestCase):
                        'An installer killed outright inside S3', 'the TLS renewal deploy hook'):
             self.says(phrase, recovery)
 
-    def test_d59_switching_back_states_its_since_the_approved_reinstatement_and_the_rollback_limit(self):
+    def test_d59_switching_back_states_its_since_and_what_the_fable_coding_build_hands_back(self):
         switch = self.between('## Switching back', '## Reinstalling an older revision')
         for phrase in ('`switch-back` to that pair, whatever it replaced and however it ended (DECISIONS D59, D65, '
                        'D82, D95 and D110)', "Never the current containers' creation", "the receipt's `touched_since`",
-                       'stays named once the reinstated code is approved',
-                       'counted again (the receipt\'s `interpretation`, B4\'s count kept as '
-                       '`interpretation_at_b4`; read before the hold below',
-                       '**The rollback limit for new-path assessments (DECISIONS D59).**',
-                       'adds no base hold', 'can leave its diagnostic base code approvable beside the therapeutic code',
-                       'a context save reads it again with the previous reader',
-                       'excluded code a reviewer can reinstate - the ones exposed - and names them (`reinstatable`)'):
+                       "counted again (the receipt's `not_carried_back`, B4's count kept as `not_carried_back_at_b4`; "
+                       'read before the hold below',
+                       '### Switching back to the pipeline before the Fable coding build',
+                       '**(a) Coding jobs are closed before the earlier worker starts.**',
+                       '**(b) The four tables are left exactly as they are.**',
+                       '**(c) The earlier pair derives the state of every encounter this revision coded, with its own '
+                       'code.**',
+                       '**(d) Approvals and answers made in this revision are not carried back - an accepted loss of a '
+                       'rollback, declared before it.**',
+                       '**The install declaration of a revision of this design must state this loss**',
+                       '### Which image runs each in-image script'):
             self.says(phrase, switch)
+        for script in ('INSTALL_COUNTS', 'RECOMPUTE_STATES', 'CLOSE_STAGES', 'CODING_MADE', 'PUT_BACK_STATES',
+                       'UNDO_HAZARDS_READ', 'TOUCHED_SINCE_READ', 'TARGET_MODEL_READS', 'UNRUNNABLE_STAGES',
+                       'CONVERSION_GATE', 'V1_ROWS'):
+            self.says(f'`{script}`', switch)
 
     def test_the_known_limits_state_every_residual_of_the_design(self):
         limits = self.said.split('## Known limits', 1)[1]
@@ -1885,11 +1889,13 @@ class InstallDocTests(unittest.TestCase):
 KEY = install.INTERPRETER
 KEY_MOUNT = f'type=bind,src={KEY["target"]},dst={KEY["mounted"]},readonly'
 INSTALLED_COPY = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'}
-NOTE_3 = '3 assessments were made from event inventories; the earlier image reads them fail-closed'
-# the review of S14, finding 1: an encounter stopped between analyze and assess, named by its current gemini context
-NOTE_3_1 = (f'{NOTE_3}; 1 encounter holds a context derived from an event inventory and no assessment made from '
-            'one: the earlier image reads that context as current, keeping its holds, and an explicit act reads '
-            'the document again with the earlier reader')
+# the declared note of a switch-back after this revision coded 3 encounters (coding_note, from CODING_MADE's answer)
+NOT_CARRIED_3 = ('this revision coded 3 encounters in 4 rounds (1 created here, 2 of the earlier review coded again); 2 '
+                 'answers, 5 code decisions (3 codes approved now) and 1 export made here are not carried back: the '
+                 'earlier revision reads none of these tables, which stay as they are, so it shows no code, answer or '
+                 'decision of this revision - an accepted loss of a rollback, declared before it; the 1 encounter '
+                 'created here holds no reading the earlier revision made: it shows each by its own derivation '
+                 '(states_put_back) and processes none of them unless the document is uploaded again there')
 
 
 def holding_the_key(world):
@@ -1937,7 +1943,7 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(*ACTS), [  # the switch is exactly the one without the interpreter
             ('recorder', 'start'),
             ('run', 'web', NEXT, 9151, IMAGE), ('wait', 'web', NEXT, 9151), ('smoke', 9151),          # S1
-            ('stop', WORKER, '1800'), ('rename', WORKER, WORKER + '-previous'),                           # S2
+            ('stop', WORKER, '3600'), ('rename', WORKER, WORKER + '-previous'),                           # S2
             ('vhost', 'replace', 9151), ('reload', 9151), ('https', 9151, REVISION),                     # S3
             ('run', 'worker', WORKER, None, IMAGE), ('wait', 'worker', WORKER, None),                    # S4
             ('drain', 9150), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # S5
@@ -2029,19 +2035,18 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
                          'worker': {'id': 'worker-old', 'image': OLD_IMAGE, 'revision': OLD}}}})
         return world
 
-    def test_the_switch_back_proceeds_and_declares_what_was_made_from_event_inventories(self):
+    def test_the_switch_back_proceeds_and_declares_what_is_not_carried_back(self):
         world = self.switched_in()
-        world.interpretation_answer = {'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'],
-                                                          'context_only': ['e3']}}
+        world.coding_answer = coded(['e1', 'e2', 'e3'], ['e3'], rounds=4, answers=2, approve=4, revoke=1, approved=3,
+                                    final=1)
         details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
         self.assertIsNone(error, error and str(error))
         self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
-        self.assertEqual(details['interpretation'], {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'],
-                                                     'context_only': ['e3'], 'note': NOTE_3_1})
-        self.assertTrue(details['summary'].endswith('; ' + NOTE_3_1), details['summary'])
+        self.assertEqual(details['not_carried_back'], {**world.coding_answer['coding'], 'note': NOT_CARRIED_3})
+        self.assertTrue(details['summary'].endswith('; ' + NOT_CARRIED_3), details['summary'])
         self.assertEqual(details['interpreter_mode'], 'disabled')
         # counted with this revision's image once its worker is parked and its stages closed, before the switch (B4)
-        read = world.events.index(('interpretation', IMAGE))
+        read = world.events.index(('coding', IMAGE))
         self.assertLess(world.events.index(('rename', WORKER, WORKER + '-previous')), read)
         self.assertLess(world.events.index(('put_back', OLD_IMAGE)), read)
         self.assertLess(read, world.events.index(('vhost', 'replace', 9150)))
@@ -2055,17 +2060,17 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
 
     def test_a_note_that_cannot_be_read_never_stops_the_switch_back(self):
         world = self.switched_in()
-        world.interpretation_answer = install.InstallError('Counting the assessments failed (exit 1).')
+        world.coding_answer = install.InstallError('Counting what was coded failed (exit 1).')
         details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
         self.assertIsNone(error, error and str(error))
         self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
-        self.assertEqual((details['interpretation']['assessments'], details['interpretation']['encounters'],
-                          details['interpretation']['context_only']), (None, None, None))
-        self.assertIn('were not counted (Counting the assessments failed (exit 1).)', details['summary'])
+        self.assertEqual((details['not_carried_back']['encounters'], details['not_carried_back']['approved']),
+                         (None, None))
+        self.assertIn('was not counted (Counting what was coded failed (exit 1).)', details['summary'])
 
     def test_a_ctrl_c_while_counting_resumes_this_revision_with_nothing_switched(self):
         world = self.switched_in()
-        world.interpretation_answer = KeyboardInterrupt()
+        world.coding_answer = KeyboardInterrupt()
         details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
         self.assertIsInstance(error, install.InstallError)
         self.assertIn('nothing was switched', str(error))
@@ -2155,12 +2160,6 @@ def at(clock):
     """'HH:MM:SS' on the world's day, as an aware datetime."""
     hours, minutes, seconds = (int(part) for part in clock.split(':'))
     return DAY.replace(hour=hours, minute=minutes, second=seconds)
-
-
-EXPOSED_1 = ('1 encounter holds an excluded code a reviewer can reinstate: the earlier image reads a new-path '
-             'assessment through a stub that adds no base hold, so a reinstatement made there can leave the diagnostic '
-             'base code approvable beside the therapeutic code - re-check each new-path encounter on the earlier web '
-             '(a context save reads it again with the earlier reader) before reviewing it there')
 
 
 def replaced_old(tmp, **record):
@@ -2355,50 +2354,50 @@ class SwitchBackSinceTests(TemporaryDirectoryTest):
 
 
 class DrainCountWorld(BlueGreenWorld):
-    """INTERPRETATION_MADE answers ``before`` until this revision's web has been drained, then ``after``: a context save
-    on that web while it drained made a new-path context after B4's count (the S17 refutation, finding 14)."""
+    """CODING_MADE answers ``before`` until this revision's web has been drained, then ``after``: a member coded a
+    document on that web while it drained, after B4's count (the S17 refutation, finding 14's shape)."""
     before = after = None
 
     def app_script(self, image_id, env_bytes, body, params, **kwargs):
-        if body == install.INTERPRETATION_MADE:
+        if body == install.CODING_MADE:
             drained = any(event[0] == 'drain' for event in self.events)
-            self.interpretation_answer = self.after if drained else self.before
+            self.coding_answer = self.after if drained else self.before
         return super().app_script(image_id, env_bytes, body, params, **kwargs)
 
 
 class SwitchBackCountTests(TemporaryDirectoryTest):
-    """DECISIONS D59 (findings 14 and 13): B7 counts again what this revision made from event inventories before its
-    close may refuse - so a receipt that stops there, with the previous web serving those rows and its worker held,
-    carries B7's count beside B4's - and the note states the rollback limit with how many encounters it reaches
-    (INTERPRETATION_MADE's 'reinstatable'), never refusing."""
+    """DECISIONS D59 (finding 14): B7 counts again what this revision coded and does not carry back before its close may
+    refuse - so a receipt that stops there, with the previous web serving those rows and its worker held, carries B7's
+    count beside B4's - never refusing on it."""
 
     def world(self, cls=BlueGreenWorld):
         world = cls(self.tmp, live=9151, serving=(REVISION, IMAGE))
-        world.stage_kinds[IMAGE] = KINDS_OLD + ['interpret']
+        world.stage_kinds[IMAGE] = KINDS_OLD + ['code']
         replaced_old(self.tmp)
         return world
 
     def counted(self, b7_hazards):
         world = self.world(DrainCountWorld)
-        world.before = {'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}
-        world.after = {'interpretation': {'assessments': 0, 'encounters': ['e9'], 'context_only': ['e9']}}
+        world.before = coded()
+        world.after = coded(['e9'], ['e9'], rounds=1)
         answers = iter([{'closed': 0, 'kinds': [], 'hazards': {}, 'relabel': []},
-                        {'closed': 1, 'kinds': [], 'hazards': b7_hazards, 'relabel': []}])
+                        {'closed': 1, 'kinds': ['code'], 'hazards': b7_hazards, 'relabel': ['e9']}])
         world.close = lambda *args: (world.act('close', args[0], tuple(args[5])), world.closes.append(args),
                                      world.done(next(answers)))[2]
         details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
         return world, details, error
 
     def test_d59_a_b7_refusal_carries_b7s_count_with_b4s_beside_it(self):
-        world, details, error = self.counted({'e1': ['unknown']})
+        world, details, error = self.counted({'e1': ['open_stage']})  # a coding job still open after B7's close
         self.assertIsInstance(error, install.InstallError)
         self.assertIn("the previous revision's worker was not started", str(error))
         record = error.details
         self.assertEqual(record['failed_at'], 'B7')
-        self.assertEqual((record['interpretation']['context_only'], record['interpretation_at_b4']['context_only']),
+        self.assertEqual((record['not_carried_back']['created'], record['not_carried_back_at_b4']['created']),
                          (['e9'], []))
-        self.assertIn('1 encounter holds a context derived from an event inventory', record['interpretation']['note'])
-        reads = [index for index, event in enumerate(world.events) if event == ('interpretation', IMAGE)]
+        self.assertIn('this revision coded 1 encounter in 1 round', record['not_carried_back']['note'])
+        self.assertIn('coded no encounter', record['not_carried_back_at_b4']['note'])
+        reads = [index for index, event in enumerate(world.events) if event == ('coding', IMAGE)]
         self.assertEqual(len(reads), 2)
         self.assertLess(world.events.index(('drain', 9151)), reads[1])  # once this revision's web was drained
         self.assertEqual(world.names()[WEB], (OLD_IMAGE, 9150, True))  # the previous web serves, its worker held
@@ -2406,48 +2405,8 @@ class SwitchBackCountTests(TemporaryDirectoryTest):
         # control: with nothing named at B7 the switch-back finishes, and its record says the same
         world, details, error = self.counted({})
         self.assertIsNone(error, error and str(error))
-        self.assertEqual((details['interpretation']['context_only'], details['interpretation_at_b4']['context_only']),
+        self.assertEqual((details['not_carried_back']['created'], details['not_carried_back_at_b4']['created']),
                          (['e9'], []))
-
-    def test_d59_the_note_states_the_rollback_limit_with_the_encounters_it_reaches_and_never_refuses(self):
-        world = self.world()
-        world.interpretation_answer = {'interpretation': {'assessments': 1, 'encounters': ['e1'], 'context_only': [],
-                                                          'reinstatable': ['e1']}}
-        details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
-        self.assertIsNone(error, error and str(error))
-        self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
-        self.assertEqual(details['interpretation']['reinstatable'], ['e1'])
-        self.assertTrue(details['summary'].endswith(
-            '; 1 assessment was made from event inventories; the earlier image reads them fail-closed; ' + EXPOSED_1),
-            details['summary'])
-
-
-class ExposedNoteTests(unittest.TestCase):
-    """DECISIONS D59 (finding 13): interpretation_note reads INTERPRETATION_MADE's 'reinstatable' as strictly as the
-    rest of its answer, and says how many encounters an earlier image's missing base hold reaches; an answer naming
-    none is the note as it was."""
-
-    def note(self, made):
-        with mock.patch.object(install, 'app_script', return_value={'interpretation': made}):
-            return install.interpretation_note(IMAGE, b'', REVISION)
-
-    def test_d59_the_count_of_the_exposed_encounters_and_what_to_do_first(self):
-        made = {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'], 'context_only': ['e3']}
-        self.assertEqual(self.note({**made, 'reinstatable': ['e2']}),
-                         {**made, 'reinstatable': ['e2'], 'note': f'{NOTE_3_1}; {EXPOSED_1}'})
-        two = self.note({'assessments': 2, 'encounters': ['e1', 'e2'], 'context_only': [],
-                         'reinstatable': ['e2', 'e1']})
-        self.assertIn('; 2 encounters hold an excluded code a reviewer can reinstate: the earlier image', two['note'])
-        self.assertEqual(self.note(made), {**made, 'note': NOTE_3_1})  # control: none named, the note as it was
-        self.assertNotIn('not counted', self.note({**made, 'reinstatable': ['e1']})['note'])  # D15's note check
-
-    def test_d59_a_list_that_does_not_say_what_it_read_is_not_counted(self):
-        made = {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'], 'context_only': ['e3']}
-        for exposed in ('e1', None, {'e1': 1}, [1], ['e1', 'e1'], ['e3'], ['e9']):  # e3 is context-only, e9 unnamed
-            with self.subTest(exposed=exposed):
-                found = self.note({**made, 'reinstatable': exposed})
-                self.assertEqual((found['assessments'], found['encounters'], found['context_only']), (None, None, None))
-                self.assertIn('were not counted (the count did not say what it read)', found['note'])
 
 
 # --- DECISIONS D82, D83 and D84 (refutation round 3, findings 13, 14 and 15): the switch-back's since never reaches
