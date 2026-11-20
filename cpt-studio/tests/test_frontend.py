@@ -1,6 +1,6 @@
 """Frontend shell: templates render under the CSP, the approved stylesheet is intact, the customer page's synthetic
-fixtures carry the customer contract (client contract customer-2026-11-20, the build specification's section 6), and
-the browser logic's own tests pass (node)."""
+fixtures carry the customer contract (client contract customer-2026-11-20, the build specification's section 6, as
+ops/verification/customer-contract.json holds it), and the browser logic's own tests pass (node)."""
 import hashlib
 import json
 import re
@@ -22,14 +22,15 @@ APPROVED_CSS_LENGTH = 32785
 APPROVED_CSS_SHA256 = '4d68468c74e7b47d80472b9c95c6947189051089349b1559863ded7bd7b047e8'
 PLAIN_STATIC = {**settings.STORAGES, 'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}}
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-# GET /api/encounters/<id>, exactly (the build specification, section 6)
-ENCOUNTER_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document', 'context',
-                  'progress', 'round', 'codes', 'questions', 'answers', 'notes', 'readiness', 'reports', 'activity'}
-CODE_KEYS = {'code', 'units', 'modifiers', 'status', 'status_label', 'reason', 'second_check', 'question', 'quotes',
-             'decision', 'allowed_actions'}
-SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'acknowledgement', 'counts'}
-ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind'}
-STATES = {'processing', 'stopped', 'failed', 'awaiting_answer', 'needs_review', 'ready', 'reviewed', 'no_codes'}
+# GET /api/session, /api/encounters and /api/encounters/<id>, exactly as the contract file lists them (the build
+# specification, section 6, with document.view_media_type, document.converted and the state 'earlier')
+CONTRACT = json.loads((ROOT / 'ops' / 'verification' / 'customer-contract.json').read_text(encoding='utf-8'))
+ENCOUNTER_KEYS = set(CONTRACT['encounter']['keys'])
+DOCUMENT_KEYS = set(CONTRACT['encounter']['keys']['document']['keys'])
+CODE_KEYS = set(CONTRACT['types']['code']['keys'])
+SESSION_KEYS = set(CONTRACT['session']['keys'])
+ROW_KEYS = set(CONTRACT['types']['list_row']['keys'])
+STATES = set(CONTRACT['types']['state']['enum'])
 # What a customer surface never names (the build specification, section 0): vendor and model names, and the words the
 # customer copy never uses.
 FORBIDDEN = re.compile(r'(?<![a-z0-9])(?:corti|astra|fable|openai|anthropic|claude|gemini|google)(?![a-z0-9])'
@@ -215,16 +216,26 @@ class CustomerFixtureTests(SimpleTestCase):
 
     def test_every_encounter_fixture_has_exactly_the_contract_keys(self):
         docs = self.encounters()
-        self.assertEqual(len(docs), 8)
+        self.assertEqual(len(docs), 10)
+        self.assertEqual(DOCUMENT_KEYS, {'name', 'media_type', 'size', 'kind', 'original_url', 'view_url',
+                                         'view_media_type', 'converted'})
         for name, doc in docs.items():
             with self.subTest(name):
                 self.assertEqual(set(doc), ENCOUNTER_KEYS)
+                self.assertEqual(set(doc['document']), DOCUMENT_KEYS)
+                self.assertIn(doc['document']['view_media_type'], ('application/pdf', 'text/plain', None))
+                self.assertIs(type(doc['document']['converted']), bool)
+                self.assertEqual(doc['document']['view_url'] is None, doc['document']['view_media_type'] is None)
                 self.assertRegex(doc['id'], UUID)
                 self.assertIn(doc['state'], STATES)
                 self.assertTrue(doc['title'].startswith('Synthetic '))
                 for code in doc['codes']:
                     self.assertEqual(set(code), CODE_KEYS)
         self.assertEqual({doc['state'] for doc in docs.values()}, STATES - {'stopped'})
+        # a Word document viewed as the PDF it was converted to, and the earlier review of one never converted
+        self.assertEqual([(doc['document']['view_media_type'], doc['document']['converted'])
+                          for doc in (docs['encounter-word.json'], docs['encounter-earlier.json'])],
+                         [('application/pdf', True), (None, False)])
 
     def test_session_and_list_fixtures_have_exactly_the_contract_keys(self):
         for name in ('session.json', 'session-agent.json'):

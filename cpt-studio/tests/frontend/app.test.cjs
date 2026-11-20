@@ -5,6 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const zlib = require('node:zlib');
 
 const app = require('../../studio/static/studio/app.js');
 const preview = require('../../ops/dev_preview_server.cjs');
@@ -15,10 +16,15 @@ const BUNDLE = path.join(ROOT, 'studio', 'static', 'studio', 'app.js');
 const STYLES = path.join(ROOT, 'studio', 'static', 'studio', 'styles.css');
 const TEMPLATES = path.join(ROOT, 'studio', 'templates', 'studio');
 const DENYLIST = path.join(ROOT, 'ops', 'verification', 'customer-denylist.json');
+const CONTRACT = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops', 'verification', 'customer-contract.json'), 'utf8'));
 const fixture = name => JSON.parse(fs.readFileSync(path.join(FIXTURES, name), 'utf8'));
 const ENCOUNTERS = fs.readdirSync(FIXTURES).filter(name => /^encounter-.+\.json$/.test(name)).sort();
 const clone = value => JSON.parse(JSON.stringify(value));
 const UUID = '0b6f6a2e-3c1d-4f7a-9e2b-5d8c7a6b4e3f';
+const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+// the second check's own sentences where it gave no verdict (studio/customer.py ADDED_BY_CHECK, NOT_CHECKED)
+const ADDED_BY_CHECK = 'The second check found this code; it needs your review.';
+const NOT_CHECKED = 'The second check did not review this code.';
 
 function ui(doc, extra = {}) {
   return { open: new Set(), answers: new Map(), ack: null, reconnecting: false, nowMs: Date.parse(doc?.progress?.server_time || '2026-11-20T00:00:00Z'), clock: 0, ...extra };
@@ -214,9 +220,10 @@ function response({ status = 200, body = {}, type = 'application/json', redirect
 // Runs fn with a page of fake elements (any #id answers one, made on first use), a recording fetch and a location that
 // records where the page sends the member. The fetch answers each call with the first of `answers` whose match accepts
 // it (an answer without one takes any call but the session read the page makes after every change), the session read
-// with the session fixture, and anything else with 201 {}. Work the page leaves running finishes before the page goes.
+// with the session fixture, and anything else with 201 {}. Work the page leaves running finishes before the page goes,
+// and a poll it scheduled is cancelled.
 async function withPage({ elements = {}, answers = [] } = {}, fn) {
-  const saved = { document: global.document, fetch: global.fetch, location: global.location };
+  const saved = { document: global.document, fetch: global.fetch, location: global.location, window: global.window };
   const byId = new Map(Object.entries(elements));
   const calls = [];
   const element = selector => {
@@ -235,14 +242,18 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
     return response(session ? { status: 200, body: fixture('session.json') } : { status: 201, body: {} });
   };
   global.location = { hash: '', assign(url) { calls.push({ assign: url }); } };
-  const before = { doc: app.state.doc, session: app.state.session, route: app.state.route, review: app.state.review, answers: app.state.answers, leaving: app.state.leaving, outdated: app.state.outdated };
+  global.window = { scrollY: 0, scrollTo() {}, matchMedia: () => ({ matches: false }) };
+  const kept = ['doc', 'session', 'route', 'routeSerial', 'review', 'answers', 'leaving', 'outdated', 'docKey', 'viewerKey', 'selectedQuote', 'clock', 'reconnecting', 'ack'];
+  const before = Object.fromEntries(kept.map(key => [key, app.state[key]]));
   try {
     await fn({ calls, element });
   } finally {
     await new Promise(resolve => setImmediate(resolve));
     clearTimeout(app.state.toastTimer);
+    clearTimeout(app.state.poll.timer);
+    clearTimeout(app.state.tickTimer);
     Object.assign(global, saved);
-    Object.assign(app.state, before, { pending: new Set() });
+    Object.assign(app.state, before, { pending: new Set(), poll: { timer: 0, count: 0, errors: 0 } });
   }
 }
 
@@ -340,81 +351,126 @@ test('elapsed and duration text: seconds, minutes and hours, never negative', ()
 
 // --- the fixtures are the contract ------------------------------------------------------------------------------------
 
-const KEYS = {
-  encounter: ['id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document', 'context', 'progress', 'round', 'codes', 'questions', 'answers', 'notes', 'readiness', 'reports', 'activity'],
-  permissions: ['can_review'],
-  document: ['name', 'media_type', 'size', 'kind', 'original_url', 'view_url'],
-  context: ['service_date', 'insurance'],
-  progress: ['phase', 'busy', 'started_at', 'finished_at', 'server_time', 'message', 'can_stop', 'can_resume', 'can_retry', 'error'],
-  error: ['text'],
-  round: ['number', 'trigger', 'finished_at'],
-  code: ['code', 'units', 'modifiers', 'status', 'status_label', 'reason', 'second_check', 'question', 'quotes', 'decision', 'allowed_actions'],
-  second_check: ['agrees', 'reason'],
-  quote: ['text', 'page'],
-  decision: ['action', 'by', 'at', 'note'],
-  question: ['id', 'text', 'codes'],
-  answer: ['question', 'answer', 'by', 'at'],
-  readiness: ['draft', 'approved', 'blockers'],
-  report: ['id', 'kind', 'fmt', 'filename', 'generated_at', 'download_url', 'current'],
-  activity: ['at', 'text'],
-  session: ['user', 'workspace', 'role', 'can_review', 'acknowledgement', 'counts'],
-  row: ['id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind'],
-};
-const keysOf = value => Object.keys(value).sort();
-const same = (value, name, where) => assert.deepEqual(keysOf(value), [...KEYS[name]].sort(), `${where}: ${name}`);
+const CONTRACT_ISO = new RegExp(CONTRACT.iso_pattern);
+const CONTRACT_DATE = new RegExp(CONTRACT.date_pattern);
 
-test('every customer fixture has exactly the keys of the customer contract (section 6)', () => {
+// Every place `value` departs from one node of ops/verification/customer-contract.json (its "about" says how a node
+// reads): a type name with an optional '?', {ref}, {enum}, {items}, {map} or {keys} - exactly these keys, at every
+// level - each nullable where it says so.
+function contractProblems(value, node, where) {
+  if (typeof node === 'string') {
+    const nullable = node.endsWith('?');
+    const type = nullable ? node.slice(0, -1) : node;
+    if (value === null) return nullable || type === 'any' ? [] : [`${where}: null`];
+    const ok = {
+      string: typeof value === 'string', integer: Number.isInteger(value), number: typeof value === 'number', boolean: typeof value === 'boolean',
+      any: true, date: typeof value === 'string' && CONTRACT_DATE.test(value), iso: typeof value === 'string' && CONTRACT_ISO.test(value),
+    }[type];
+    if (ok === undefined) return [`${where}: the contract names an unknown type ${type}`];
+    return ok ? [] : [`${where}: not ${type}: ${JSON.stringify(value)}`];
+  }
+  if (node.ref) return value === null && node.nullable ? [] : contractProblems(value, CONTRACT.types[node.ref], where);
+  if (value === null) return node.nullable ? [] : [`${where}: null`];
+  if (node.enum) return node.enum.includes(value) ? [] : [`${where}: ${JSON.stringify(value)} is not one of ${node.enum.join(', ')}`];
+  if (node.items) return Array.isArray(value) ? value.flatMap((item, index) => contractProblems(item, node.items, `${where}[${index}]`)) : [`${where}: not a list`];
+  const isObject = value && typeof value === 'object' && !Array.isArray(value);
+  if (node.map) return isObject ? Object.entries(value).flatMap(([key, item]) => contractProblems(item, node.map, `${where}.${key}`)) : [`${where}: not an object`];
+  if (!node.keys) return [`${where}: the contract node is not understood`];
+  if (!isObject) return [`${where}: not an object`];
+  const want = Object.keys(node.keys).sort();
+  const have = Object.keys(value).sort();
+  const keys = JSON.stringify(have) === JSON.stringify(want) ? [] : [`${where}: keys ${have.join(',')} are not ${want.join(',')}`];
+  return [...keys, ...want.filter(key => Object.hasOwn(value, key)).flatMap(key => contractProblems(value[key], node.keys[key], `${where}.${key}`))];
+}
+
+test('every customer fixture matches ops/verification/customer-contract.json exactly: its keys at every level and their types', () => {
+  for (const name of ENCOUNTERS) assert.deepEqual(contractProblems(fixture(name), CONTRACT.encounter, name), [], name);
+  for (const name of ['session.json', 'session-agent.json']) assert.deepEqual(contractProblems(fixture(name), CONTRACT.session, name), [], name);
+  for (const name of ['encounters.json', 'encounters-empty.json']) assert.deepEqual(contractProblems(fixture(name), CONTRACT.list, name), [], name);
+  // the check finds a key too many, a key missing, a wrong type and a value outside its vocabulary, so a clean result
+  // means something
+  const planted = clone(fixture('encounter-word.json'));
+  planted.document.preview_type = 'pdf';
+  delete planted.document.converted;
+  planted.codes[0].second_check.agrees = 'yes';
+  planted.progress.phase = 'finished';
+  const found = contractProblems(planted, CONTRACT.encounter, 'planted');
+  assert.deepEqual(found.sort(), [
+    'planted.codes[0].second_check.agrees: not boolean: "yes"',
+    'planted.document: keys kind,media_type,name,original_url,preview_type,size,view_media_type,view_url are not converted,kind,media_type,name,original_url,size,view_media_type,view_url',
+    'planted.progress.phase: "finished" is not one of queued, reading, checking, done, failed, stopped, earlier',
+  ]);
+});
+
+test('the page and the fixtures speak the contract\'s vocabulary: states, phases, code statuses and insurance', () => {
+  const vocabulary = CONTRACT.vocabulary;
+  assert.deepEqual(app.STATE_LABELS, vocabulary.states);
+  assert.deepEqual(app.PHASES, vocabulary.phases);
+  assert.deepEqual(Object.fromEntries(Object.entries(app.CODE_STATUSES).map(([key, [label]]) => [key, label])), vocabulary.code_statuses);
+  assert.deepEqual(Object.fromEntries(app.INSURANCE_CHOICES), vocabulary.insurance);
   for (const name of ENCOUNTERS) {
     const doc = fixture(name);
-    same(doc, 'encounter', name);
-    same(doc.permissions, 'permissions', name);
-    same(doc.document, 'document', name);
-    same(doc.context, 'context', name);
-    same(doc.progress, 'progress', name);
-    assert.ok(app.PHASES.includes(doc.progress.phase), name);
-    if (doc.progress.error !== null) same(doc.progress.error, 'error', name);
-    if (doc.round !== null) same(doc.round, 'round', name);
-    same(doc.readiness, 'readiness', name);
-    assert.equal(doc.state_label, app.STATE_LABELS[doc.state], name);
-    assert.ok(['medicare', 'medicaid', 'commercial', 'unknown'].includes(doc.context.insurance), name);
+    assert.equal(doc.state_label, vocabulary.states[doc.state], name);
     for (const code of doc.codes) {
-      same(code, 'code', `${name} ${code.code}`);
-      same(code.second_check, 'second_check', `${name} ${code.code}`);
-      assert.ok(Object.hasOwn(app.CODE_STATUSES, code.status), `${name} ${code.code}`);
-      assert.equal(code.status_label, app.CODE_STATUSES[code.status][0], `${name} ${code.code}`);
-      for (const quote of code.quotes) same(quote, 'quote', `${name} ${code.code}`);
-      if (code.decision !== null) same(code.decision, 'decision', `${name} ${code.code}`);
+      assert.equal(code.status_label, vocabulary.code_statuses[code.status], `${name} ${code.code}`);
       // section 6: ready and needs_review take approve and reject; needs_answer and not_supported none; a decision, revoke
       const expected = code.decision ? ['revoke'] : ['ready', 'needs_review'].includes(code.status) ? ['approve', 'reject'] : [];
       assert.deepEqual(code.allowed_actions, expected, `${name} ${code.code}`);
+      // the second check's reason without a verdict is one of the server's two sentences, and a code it gave none is
+      // one that needs review
+      if (code.second_check.agrees === null) {
+        assert.ok([ADDED_BY_CHECK, NOT_CHECKED].includes(code.second_check.reason), `${name} ${code.code}`);
+        assert.equal(code.status, 'needs_review', `${name} ${code.code}`);
+      }
     }
-    for (const question of doc.questions) same(question, 'question', name);
-    for (const answer of doc.answers) same(answer, 'answer', name);
-    for (const report of doc.reports) same(report, 'report', name);
-    for (const item of doc.activity) same(item, 'activity', name);
-    assert.ok(doc.notes.every(note => typeof note === 'string'), name);
+    if (doc.state === 'earlier') {
+      assert.equal(doc.progress.message, vocabulary.earlier_message, name);
+      assert.deepEqual([doc.progress.phase, doc.round, doc.codes, doc.questions, doc.notes], ['earlier', null, [], [], []], name);
+    }
+    if (doc.readiness.draft && !doc.readiness.approved) assert.deepEqual(doc.readiness.blockers, [vocabulary.none_approved_blocker], name);
   }
-  for (const name of ['session.json', 'session-agent.json']) same(fixture(name), 'session', name);
-  for (const row of fixture('encounters.json').encounters) same(row, 'row', row.id);
+  for (const row of fixture('encounters.json').encounters) assert.equal(row.state_label, vocabulary.states[row.state], row.id);
 });
 
-test('the fixtures cover every state the page draws, and the list matches them', () => {
+// What studio/customer.py document_json gives each kind of document: the view type and the converted flag.
+function expectedView(part) {
+  if (part.kind === 'paste') return ['text/plain', false];
+  if (part.media_type === DOCX) return part.view_url ? ['application/pdf', true] : [null, false];
+  return [part.media_type, false];
+}
+
+test('the fixtures cover every state the page draws, and the list matches them, newest first', () => {
   const states = Object.fromEntries(ENCOUNTERS.map(name => [name, [fixture(name).state, fixture(name).progress.phase]]));
   assert.deepEqual(states, {
     'encounter-awaiting-answer.json': ['awaiting_answer', 'done'], 'encounter-checking.json': ['processing', 'checking'],
-    'encounter-failed.json': ['failed', 'failed'], 'encounter-needs-review.json': ['needs_review', 'done'],
-    'encounter-no-codes.json': ['no_codes', 'done'], 'encounter-reading.json': ['processing', 'reading'],
-    'encounter-ready.json': ['ready', 'done'], 'encounter-reviewed.json': ['reviewed', 'done'],
+    'encounter-earlier.json': ['earlier', 'earlier'], 'encounter-failed.json': ['failed', 'failed'],
+    'encounter-needs-review.json': ['needs_review', 'done'], 'encounter-no-codes.json': ['no_codes', 'done'],
+    'encounter-reading.json': ['processing', 'reading'], 'encounter-ready.json': ['ready', 'done'],
+    'encounter-reviewed.json': ['reviewed', 'done'], 'encounter-word.json': ['needs_review', 'done'],
   });
+  // every document's view as the server builds it: a PDF or a text as uploaded, a pasted text as text, a Word file as
+  // the PDF it was converted to - or, never converted (an earlier review), no view
+  const views = Object.fromEntries(ENCOUNTERS.map(name => {
+    const part = fixture(name).document;
+    assert.deepEqual([part.view_media_type, part.converted], expectedView(part), name);
+    assert.equal(part.view_url, part.view_media_type ? `/api/encounters/${fixture(name).id}/original?view=1` : null, name);
+    return [name, part.view_media_type];
+  }));
+  assert.deepEqual([views['encounter-word.json'], views['encounter-earlier.json'], views['encounter-awaiting-answer.json'], views['encounter-no-codes.json']],
+    ['application/pdf', null, 'text/plain', 'text/plain']);
   const rows = fixture('encounters.json').encounters;
   assert.equal(rows.length, ENCOUNTERS.length);
   for (const row of rows) {
     const doc = ENCOUNTERS.map(fixture).find(item => item.id === row.id);
     assert.ok(doc, row.id);
-    assert.deepEqual([row.title, row.state, row.state_label, row.service_date, row.insurance, row.kind],
-      [doc.title, doc.state, doc.state_label, doc.context.service_date, doc.context.insurance, doc.document.kind]);
+    assert.deepEqual([row.title, row.state, row.state_label, row.service_date, row.insurance, row.kind, row.created_at],
+      [doc.title, doc.state, doc.state_label, doc.context.service_date, doc.context.insurance, doc.document.kind, doc.created_at]);
   }
-  assert.equal(fixture('session.json').counts.queue, rows.filter(app.inQueue).length);
+  const created = rows.map(row => row.created_at);
+  assert.deepEqual(created, [...created].sort().reverse(), 'GET /api/encounters lists the newest first');
+  for (const name of ['session.json', 'session-agent.json']) {
+    assert.deepEqual(fixture(name).counts, { documents: rows.length, queue: rows.filter(app.inQueue).length }, name);
+  }
   assert.deepEqual(fixture('encounters-empty.json'), { encounters: [] });
 });
 
@@ -422,24 +478,49 @@ test('every quote in the fixtures is the synthetic document\'s own text, on the 
   let checked = 0;
   for (const name of ENCOUNTERS) {
     const doc = fixture(name);
-    const source = preview.SYNTHETIC_DOCUMENTS[preview.documentFor(doc)];
+    const key = preview.documentFor(doc);
+    const source = preview.SYNTHETIC_DOCUMENTS[key];
     assert.ok(source, name);
     assert.match(source.pages[0][0], /^SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT/, name);
-    const pdf = source.type === 'application/pdf';
     assert.equal(doc.document.media_type, source.type, name);
+    assert.equal(doc.document.size, preview.documentBytes(key).bytes.length, `${name}: the size of the original the preview serves`);
+    // a PDF view has pages (a Word file's is the PDF it was converted to, of the same pages); a text has none
+    const paged = doc.document.view_media_type === 'application/pdf';
     for (const code of doc.codes) {
       for (const quote of code.quotes) {
-        if (pdf) assert.ok(source.pages[quote.page - 1]?.includes(quote.text), `${name} ${code.code}: ${quote.text}`);
+        if (paged) assert.ok(source.pages[quote.page - 1]?.includes(quote.text), `${name} ${code.code}: ${quote.text}`);
         else assert.ok(quote.page === null && source.pages.flat().includes(quote.text), `${name} ${code.code}: ${quote.text}`);
         checked += 1;
       }
     }
     assert.match(doc.title, /^Synthetic /, name);
   }
-  assert.ok(checked >= 15, checked);
+  assert.ok(checked >= 19, checked);
 });
 
-test('the preview server\'s synthetic originals are a real two-page PDF and plain text', () => {
+// The entries of a ZIP archive of stored (uncompressed) files, read from its central directory: name -> bytes.
+function storedEntries(bytes) {
+  const end = bytes.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  assert.ok(end > 0, 'an end of central directory record');
+  const count = bytes.readUInt16LE(end + 10);
+  let at = bytes.readUInt32LE(end + 16);
+  const out = new Map();
+  for (let index = 0; index < count; index += 1) {
+    assert.equal(bytes.readUInt32LE(at), 0x02014b50, `central directory entry ${index}`);
+    const [method, crc, size, nameLength, local] = [bytes.readUInt16LE(at + 10), bytes.readUInt32LE(at + 16), bytes.readUInt32LE(at + 20), bytes.readUInt16LE(at + 28), bytes.readUInt32LE(at + 42)];
+    const name = bytes.toString('utf8', at + 46, at + 46 + nameLength);
+    assert.equal(method, 0, `${name} is stored`);
+    assert.equal(bytes.readUInt32LE(local), 0x04034b50, `${name}: its local header`);
+    const start = local + 30 + bytes.readUInt16LE(local + 26) + bytes.readUInt16LE(local + 28);
+    const data = bytes.subarray(start, start + size);
+    if (typeof zlib.crc32 === 'function') assert.equal(zlib.crc32(data), crc, `${name}: its checksum`);
+    out.set(name, data);
+    at += 46 + nameLength + bytes.readUInt16LE(at + 30) + bytes.readUInt16LE(at + 32);
+  }
+  return out;
+}
+
+test('the preview server\'s synthetic originals are a real two-page PDF, plain text and a Word file viewed as its PDF', () => {
   const pdf = preview.documentBytes('synthetic-egd-colonoscopy.pdf');
   assert.equal(pdf.type, 'application/pdf');
   const body = pdf.bytes.toString('latin1');
@@ -451,9 +532,28 @@ test('the preview server\'s synthetic originals are a real two-page PDF and plai
   const offsets = [...body.slice(xref).matchAll(/^(\d{10}) 00000 n $/gm)].map(match => Number(match[1]));
   offsets.forEach((offset, index) => assert.ok(body.slice(offset).startsWith(`${index + 1} 0 obj\n`), `object ${index + 1}`));
   assert.equal(fixture('encounter-ready.json').document.size, pdf.bytes.length);
+  assert.deepEqual(preview.viewBytes('synthetic-egd-colonoscopy.pdf'), pdf, 'a PDF is viewed as it is');
   const note = preview.documentBytes('synthetic-colonoscopy-note.txt');
   assert.match(note.type, /^text\/plain/);
   assert.match(note.bytes.toString('utf8'), /descending colon was removed\./);
+  // the Word file: a package of the three parts a Word file needs, one paragraph per line and a page break between the
+  // pages; its view is the two-page PDF of the same pages
+  const name = 'synthetic-colonoscopy-report.docx';
+  const word = preview.documentBytes(name);
+  assert.equal(word.type, DOCX);
+  assert.equal(word.bytes.readUInt32LE(0), 0x04034b50);
+  const parts = storedEntries(word.bytes);
+  assert.deepEqual([...parts.keys()], ['[Content_Types].xml', '_rels/.rels', 'word/document.xml']);
+  assert.match(parts.get('[Content_Types].xml').toString('utf8'), /PartName="\/word\/document\.xml" ContentType="application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document\.main\+xml"/);
+  assert.match(parts.get('_rels/.rels').toString('utf8'), /Target="word\/document\.xml"/);
+  const xml = parts.get('word/document.xml').toString('utf8');
+  const pages = xml.split('<w:br w:type="page"/>').map(page => [...page.matchAll(/<w:t xml:space="preserve">([^<]*)<\/w:t>/g)].map(match => match[1]));
+  assert.deepEqual(pages, preview.SYNTHETIC_DOCUMENTS[name].pages);
+  assert.equal(fixture('encounter-word.json').document.size, word.bytes.length);
+  const view = preview.viewBytes(name);
+  assert.equal(view.type, 'application/pdf');
+  assert.deepEqual(view.bytes, preview.syntheticPdf(preview.SYNTHETIC_DOCUMENTS[name].pages));
+  assert.equal((view.bytes.toString('latin1').match(/\/Type \/Page /g) || []).length, 2);
 });
 
 // --- labels -----------------------------------------------------------------------------------------------------------
@@ -472,7 +572,7 @@ test('status labels: the four statuses and the two decisions keep their fixed la
   assert.equal(app.codeStatus({ status: 'held', status_label: 'Held' }).label, 'Held');
   assert.deepEqual(app.STATE_LABELS, {
     processing: 'Processing', stopped: 'Stopped', failed: 'Could not finish', awaiting_answer: 'Questions for you', needs_review: 'Needs your review',
-    ready: 'Ready for approval', reviewed: 'Reviewed', no_codes: 'No codes found',
+    ready: 'Ready for approval', reviewed: 'Reviewed', no_codes: 'No codes found', earlier: 'Earlier review',
   });
   assert.equal(app.stateLabel('constructor', ''), 'Unknown');
 });
@@ -520,11 +620,18 @@ test('every fixture draws the DOM contract: viewer, quotes, progress, questions,
   for (const name of ENCOUNTERS) {
     const doc = fixture(name);
     const page = dom(render(doc));
-    // the original: an iframe of view_url, and the download of the original when there is one
+    // the original: an iframe of view_url when the server names a view type, else no viewer at all; the note under a
+    // converted Word document's PDF; the download of the original when there is one
     const viewer = page.one('#documentViewer');
-    assert.ok(viewer && viewer.tag === 'iframe', name);
-    assert.equal(viewer.attr('src'), doc.document.view_url, name);
-    assert.ok(viewer.attr('title'), name);
+    if (doc.document.view_media_type) {
+      assert.ok(viewer && viewer.tag === 'iframe', name);
+      assert.equal(viewer.attr('src'), doc.document.view_url, name);
+      assert.ok(viewer.attr('title'), name);
+    } else {
+      assert.equal(viewer, null, name);
+      assert.equal(page.all('iframe').length, 0, name);
+    }
+    assert.deepEqual(page.all('.viewer-panel .viewer-note').map(note => note.text), doc.document.converted ? [app.CONVERTED_NOTE] : [], name);
     const download = page.one('#downloadOriginal');
     if (doc.document.original_url) assert.deepEqual([download.attr('href'), download.text, download.attr('download')], [doc.document.original_url, 'Download original', ''], name);
     else assert.equal(download, null, name);
@@ -533,10 +640,12 @@ test('every fixture draws the DOM contract: viewer, quotes, progress, questions,
     assert.deepEqual(quotes.map(quote => [quote.attr('data-code'), quote.attr('data-page')]),
       doc.codes.flatMap(code => code.quotes.map(quote => [code.code, quote.page === null ? '' : String(quote.page)])), name);
     assert.equal(page.all('.quote').length, quotes.length, `${name}: .quote is the quotes panel's only`);
-    // progress: the phase and the three steps
+    // progress: the phase and the three steps (an earlier review has none)
     const panel = page.one('section.progress-panel[data-phase]');
     assert.equal(panel.attr('data-phase'), doc.progress.phase, name);
-    assert.deepEqual(panel.all('.progress-step[data-step][data-state]').map(step => step.attr('data-step')), ['reading', 'checking', 'finished'], name);
+    assert.deepEqual(panel.all('.progress-step[data-step][data-state]').map(step => step.attr('data-step')),
+      doc.progress.phase === 'earlier' ? [] : ['reading', 'checking', 'finished'], name);
+    assert.equal(panel.all('ol.progress-steps').length, doc.progress.phase === 'earlier' ? 0 : 1, name);
     // questions, when asked, with a labelled answer field each
     const questions = page.one('section#questionsPanel');
     assert.equal(Boolean(questions), doc.questions.length > 0, name);
@@ -561,8 +670,13 @@ test('every fixture draws the DOM contract: viewer, quotes, progress, questions,
       assert.equal(row.one('.code-number').text, code.code);
       assert.equal(row.one('.code-units').text, code.units === 1 ? '1 unit' : `${code.units} units`);
       assert.equal(row.one('.code-reason').text, code.reason);
-      assert.match(row.one('.code-check').text, code.second_check.agrees ? /^Second check: agrees\./ : /^Second check: disagrees\./);
-      assert.ok(row.one('.code-check').text.endsWith(code.second_check.reason));
+      // the verdict and its reason; without a verdict, the server's own sentence alone, as given
+      const check = row.one('.code-check').text;
+      if (code.second_check.agrees === null) assert.equal(check, code.second_check.reason, `${name} ${code.code}`);
+      else {
+        assert.match(check, code.second_check.agrees ? /^Second check: agrees\./ : /^Second check: disagrees\./);
+        assert.ok(check.endsWith(code.second_check.reason));
+      }
     });
     // documentation notes once the review is done; earlier answers under the questions
     assert.equal(Boolean(page.one('section#notesPanel')), doc.progress.phase === 'done' || doc.notes.length > 0, name);
@@ -648,30 +762,114 @@ test('quote page links: a page opens the viewer at view_url#page=N; a text quote
   assert.match(text.one('#quotesPanel .quotes-lead').text, /find it in the document/);
 });
 
-test('the viewer shows a PDF or a text in the page, never a Word file, and a missing view says so', () => {
-  const base = { view_url: `/api/encounters/${UUID}/original?view=1`, original_url: `/api/encounters/${UUID}/original`, kind: 'upload' };
-  assert.equal(app.viewerKind({ ...base, media_type: 'application/pdf' }), 'pdf');
-  assert.equal(app.viewerKind({ ...base, media_type: 'text/plain; charset=utf-8' }), 'text');
-  assert.equal(app.viewerKind({ ...base, media_type: '', name: 'x.pdf' }), 'pdf');
-  assert.equal(app.viewerKind({ ...base, media_type: null, kind: 'paste' }), 'text');
-  assert.equal(app.viewerKind({ ...base, media_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', name: 'x.docx' }), 'other');
-  assert.equal(app.viewerKind({ ...base, view_url: null, media_type: 'application/pdf' }), 'none');
-  const word = clone(fixture('encounter-ready.json'));
-  word.document = { ...word.document, name: 'synthetic.docx', media_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
-  const page = dom(render(word));
-  assert.equal(page.one('iframe'), null);
-  assert.match(page.one('.viewer-empty').text, /cannot be shown on this page\. Download the original/);
-  assert.equal(page.one('#downloadOriginal').attr('href'), word.document.original_url);
-  const gone = clone(word);
-  gone.document.view_url = 'https://evil.test/x';
+test('the viewer follows document.view_media_type, never media_type: a PDF or a text in the page, else only the download', () => {
+  const base = { view_url: `/api/encounters/${UUID}/original?view=1`, original_url: `/api/encounters/${UUID}/original`, kind: 'upload', converted: false };
+  assert.equal(app.viewerKind({ ...base, media_type: 'application/pdf', view_media_type: 'application/pdf' }), 'pdf');
+  assert.equal(app.viewerKind({ ...base, media_type: 'text/plain', view_media_type: 'text/plain' }), 'text');
+  assert.equal(app.viewerKind({ ...base, kind: 'paste', media_type: 'text/plain', view_media_type: 'text/plain' }), 'text');
+  assert.equal(app.viewerKind({ ...base, media_type: DOCX, view_media_type: 'application/pdf', converted: true }), 'pdf', 'a Word file viewed as its PDF');
+  // the type of the original decides nothing: no view type is no viewer, whatever was uploaded
+  for (const media of ['application/pdf', 'text/plain', DOCX]) {
+    assert.equal(app.viewerKind({ ...base, media_type: media, view_media_type: null }), 'none', media);
+    assert.equal(app.viewerKind({ ...base, media_type: media }), 'none', `${media} without view_media_type`);
+  }
+  for (const other of ['image/png', 'text/plain; charset=utf-8', 'APPLICATION/PDF', DOCX, 'constructor', 7]) {
+    assert.equal(app.viewerKind({ ...base, view_media_type: other }), 'none', String(other));
+  }
+  assert.equal(app.viewerKind({ ...base, view_url: null, view_media_type: 'application/pdf' }), 'none');
+  assert.equal(app.viewerKind({ ...base, view_url: 'https://evil.test/x', view_media_type: 'application/pdf' }), 'none');
+  // a PDF uploaded and no view type served: no viewer at all, only the download of the original
+  const unviewable = clone(fixture('encounter-ready.json'));
+  unviewable.document.view_media_type = null;
+  const page = dom(render(unviewable));
+  assert.equal(page.all('iframe').length, 0);
+  assert.equal(page.one('#documentViewer'), null);
+  assert.equal(page.one('.viewer-empty'), null, 'nothing drawn where the viewer would be');
+  assert.equal(page.one('section.viewer-panel').attr('class'), 'viewer-panel no-view');
+  assert.deepEqual([page.one('#downloadOriginal').attr('href'), page.one('#downloadOriginal').text], [unviewable.document.original_url, 'Download original']);
+  const gone = clone(unviewable);
   gone.document.original_url = 'javascript:alert(1)';
-  const empty = dom(render(gone));
-  assert.equal(empty.one('iframe'), null);
-  assert.equal(empty.one('#downloadOriginal'), null);
+  assert.equal(dom(render(gone)).one('#downloadOriginal'), null);
   // a passage promises to be shown only where a viewer can show it
   assert.equal(page.one('#quotesPanel .quote').attr('title'), null);
   assert.equal(page.one('.code-quote').attr('title'), null);
-  assert.equal(dom(render(fixture('encounter-ready.json'))).one('#quotesPanel .quote').attr('title'), 'Show this passage in the document');
+  assert.match(page.one('#quotesPanel .quotes-lead').text, /^Each code rests on these passages of the original document\.$/);
+  const viewed = dom(render(fixture('encounter-ready.json')));
+  assert.equal(viewed.one('#quotesPanel .quote').attr('title'), 'Show this passage in the document');
+  assert.equal(viewed.one('section.viewer-panel').attr('class'), 'viewer-panel');
+  // the earlier review of a Word file the earlier version never converted: no viewer, the download only
+  const earlier = dom(render(fixture('encounter-earlier.json')));
+  assert.equal(earlier.all('iframe').length, 0);
+  assert.equal(earlier.one('#downloadOriginal').attr('href'), fixture('encounter-earlier.json').document.original_url);
+});
+
+test('a Word document is viewed as the PDF the coding review read, with the note saying so under the viewer', () => {
+  const doc = fixture('encounter-word.json');
+  assert.equal(app.CONVERTED_NOTE, 'Shown as the PDF the coding review read (converted from the Word file).');
+  const panel = dom(app.viewerPanel(doc)).one('section.viewer-panel');
+  const children = panel.children.filter(child => typeof child !== 'string').map(child => child.attr('class') || child.attr('id'));
+  assert.deepEqual(children, ['viewer-toolbar', 'viewer-frame', 'viewer-note', 'viewer-bottom'], 'the note sits under the viewer');
+  assert.equal(panel.one('iframe#documentViewer').attr('src'), doc.document.view_url);
+  assert.equal(panel.one('.viewer-note').text, app.CONVERTED_NOTE);
+  assert.equal(panel.one('.viewer-name').text, 'synthetic-colonoscopy-report.docx');
+  assert.equal(panel.one('#downloadOriginal').attr('href'), doc.document.original_url, 'the download is the Word file itself');
+  // its quotes open their pages: the PDF's pages are the pages the quotes name
+  const page = dom(render(doc));
+  assert.match(page.one('#quotesPanel .quotes-lead').text, /open its page/);
+  assert.deepEqual(page.all('#quotesPanel .quote').map(quote => quote.attr('data-page')), ['2', '1', '1', '2']);
+  // the note only for a converted PDF: not for a PDF or a text uploaded as such, not without a view
+  for (const name of ['encounter-ready.json', 'encounter-awaiting-answer.json', 'encounter-no-codes.json', 'encounter-earlier.json']) {
+    assert.equal(dom(render(fixture(name))).one('.viewer-note'), null, name);
+  }
+  const unviewed = clone(doc);
+  Object.assign(unviewed.document, { view_url: null, view_media_type: null });
+  assert.equal(dom(render(unviewed)).one('.viewer-note'), null, 'no note where nothing is shown');
+  const flagged = clone(fixture('encounter-awaiting-answer.json'));
+  flagged.document.converted = true;
+  assert.equal(dom(render(flagged)).one('.viewer-note'), null, 'a text view is never called a converted PDF');
+  // a change of the converted flag redraws the viewer
+  const plain = clone(doc);
+  plain.document.converted = false;
+  assert.notEqual(app.viewerKey(plain), app.viewerKey(doc));
+});
+
+test('the second check without a verdict shows the server\'s own sentence as given', () => {
+  const doc = fixture('encounter-word.json');
+  const page = dom(render(doc));
+  const check = code => page.one(`li.code-row[data-code="${code}"] .code-check`);
+  assert.deepEqual([check('45385').attr('data-check'), check('45385').text], ['agrees', 'Second check: agrees. Removal by snare is documented on page 2, and the colonoscope reached the cecum.']);
+  assert.deepEqual([check('45380').attr('data-check'), check('45380').text, check('45380').one('strong').text], ['none', NOT_CHECKED, NOT_CHECKED]);
+  assert.deepEqual([check('45381').attr('data-check'), check('45381').text], ['none', ADDED_BY_CHECK]);
+  assert.deepEqual(app.secondCheck({ second_check: { agrees: null, reason: ` ${ADDED_BY_CHECK} ` } }), { verdict: 'none', label: ADDED_BY_CHECK, reason: '' });
+  // a verdict with no reason, or no verdict and no sentence: the verdict alone
+  assert.deepEqual(app.secondCheck({ second_check: { agrees: false, reason: null } }), { verdict: 'disagrees', label: 'Second check: disagrees.', reason: '' });
+  assert.deepEqual(app.secondCheck({ second_check: { agrees: null, reason: null } }), { verdict: 'none', label: 'Second check: no verdict.', reason: '' });
+  assert.deepEqual(app.secondCheck({}), { verdict: 'none', label: 'Second check: no verdict.', reason: '' });
+  assert.equal(app.tallyText(doc), '1 ready for approval · 2 need your review');
+});
+
+test('a quote opens its page in the PDF viewer; in the text viewer the passage is found instead', async () => {
+  const frame = () => fakeElement({ src: 'unchanged', scrollIntoView() {} });
+  const word = fixture('encounter-word.json');
+  await withPage({ elements: { documentViewer: frame() } }, async ({ element }) => {
+    Object.assign(app.state, { doc: word, route: null });
+    app.showQuote('45380#0');
+    assert.equal(element('#documentViewer').src, `${word.document.view_url}#page=1`);
+    assert.equal(app.state.selectedQuote, '45380#0');
+    app.showQuote('45381#0');
+    assert.equal(element('#documentViewer').src, `${word.document.view_url}#page=2`);
+    app.showQuote('99999#0');
+    assert.equal(app.state.selectedQuote, '45381#0', 'a quote the page does not hold changes nothing');
+  });
+  // a text has no pages: even a quote that names one is looked for in the text, and the viewer is not moved
+  const text = clone(fixture('encounter-awaiting-answer.json'));
+  text.codes[0].quotes[0].page = 1;
+  await withPage({ elements: { documentViewer: frame() } }, async ({ element }) => {
+    Object.assign(app.state, { doc: text, route: null });
+    app.showQuote('45385#0');
+    assert.equal(element('#documentViewer').src, 'unchanged');
+    assert.equal(app.state.selectedQuote, '45385#0');
+  });
 });
 
 test('the progress panel: three steps per phase, Stop, Resume and Retry only when offered to a reviewer', () => {
@@ -712,10 +910,94 @@ test('the progress panel: three steps per phase, Stop, Resume and Retry only whe
   assert.deepEqual(done.all('.progress-step').map(step => step.attr('data-state')), ['done', 'done', 'done']);
 });
 
+test('an earlier review: the server\'s message, no steps, never done, and Review again only when the server offers it', () => {
+  const doc = fixture('encounter-earlier.json');
+  assert.equal(app.progressPhase(doc), 'earlier');
+  assert.equal(app.progressPhase({ state: 'earlier' }), 'earlier', 'read from the state when the phase is missing');
+  assert.equal(app.isBusy(doc), false);
+  assert.equal(app.shouldPoll(doc), false, 'nothing runs, so nothing is polled');
+  assert.deepEqual(app.progressSteps('earlier'), []);
+  const panel = dom(app.progressPanel(doc, ui(doc))).one('section.progress-panel');
+  assert.deepEqual([panel.attr('data-phase'), panel.attr('class'), panel.one('h2').text], ['earlier', 'progress-panel', 'Earlier review']);
+  assert.equal(panel.one('.progress-message').text, doc.progress.message, 'the server\'s message, as given');
+  for (const absent of ['ol.progress-steps', '.progress-step', '.progress-time', '.leave-note', '.progress-error', '.progress-summary']) {
+    assert.equal(panel.one(absent), null, absent);
+  }
+  const buttons = item => dom(app.progressPanel(item, ui(item))).all('button[data-action]').map(button => [button.attr('data-action'), button.attr('class'), button.text.trim()]);
+  assert.deepEqual(buttons(doc), [['retry', 'button primary', 'Review again']]);
+  assert.equal(app.REVIEW_AGAIN, 'Review again');
+  // only when offered, and only to a member who may review
+  const unoffered = clone(doc);
+  unoffered.progress.can_retry = false;
+  assert.deepEqual(buttons(unoffered), []);
+  const viewer = clone(doc);
+  viewer.permissions.can_review = false;
+  assert.deepEqual(buttons(viewer), []);
+  const flagged = clone(doc);
+  Object.assign(flagged.progress, { can_stop: true, can_resume: true });
+  assert.deepEqual(buttons(flagged).map(([action]) => action), ['resume', 'retry'], 'Stop never once nothing runs');
+  // a failed review's retry keeps its own label
+  assert.deepEqual(buttons(fixture('encounter-failed.json')), [['retry', 'button primary', 'Retry']]);
+  // never drawn as a finished review: no codes said to be found, no notes panel, nothing to download
+  const page = dom(render(doc));
+  assert.equal(page.one('.results-empty').text, 'Codes appear here once the document is reviewed again with the current version.');
+  assert.equal(app.emptyCodesText(doc), 'Codes appear here once the document is reviewed again with the current version.');
+  assert.equal(page.one('#quotesPanel .quotes-empty').text, 'Quoted passages appear here once the document is reviewed again.');
+  assert.equal(page.one('#notesPanel'), null);
+  assert.equal(page.one('.progress-compact'), null);
+  assert.equal(page.all('[data-action="export"]').length, 0);
+  assert.deepEqual(page.all('.review-meta > span').map(item => item.text), ['Earlier review', 'Date of service 9 Nov 2026', 'Insurance not given']);
+  // listed with its label, and never in the queue
+  const row = fixture('encounters.json').encounters.find(item => item.state === 'earlier');
+  assert.match(dom(app.documentRow(row)).text, /Earlier review/);
+  assert.equal(app.inQueue(row), false);
+  assert.equal(app.stateLabel('earlier', ''), 'Earlier review');
+});
+
+test('Review again posts retry, then reads the document again and polls while the new coding review runs', async () => {
+  const doc = fixture('encounter-earlier.json');
+  const queued = clone(doc);
+  Object.assign(queued, { state: 'processing', state_label: 'Processing', round: { number: 1, trigger: 'retry', finished_at: null } });
+  Object.assign(queued.progress, { phase: 'queued', busy: true, message: '', can_stop: true, can_retry: false });
+  queued.readiness.blockers = ['The coding review has not finished.'];
+  const address = `/api/encounters/${doc.id}`;
+  const answers = [
+    { match: (method, url) => method === 'POST' && url === `${address}/retry`, status: 201, body: { round: queued.round } },
+    { match: (method, url) => method === 'GET' && url === address, status: 200, body: queued },
+  ];
+  await withPage({ answers }, async ({ calls, element }) => {
+    Object.assign(app.state, { doc, route: { name: 'doc', id: doc.id }, routeSerial: 7, docKey: '', viewerKey: '' });
+    const button = dom(app.progressPanel(doc, ui(doc))).one('button[data-action="retry"]');
+    assert.equal(button.text.trim(), 'Review again');
+    // the click, as the page's one click handler receives it
+    const clicked = fakeElement({ dataset: { action: button.attr('data-action') } });
+    app.onClick({ target: { closest: selector => (selector === '[data-action]' ? clicked : null) } });
+    for (let turn = 0; turn < 20 && !app.state.poll.timer; turn += 1) await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(posted(calls), [{ url: `${address}/retry`, body: {} }]);
+    const reads = calls.filter(call => call.method === 'GET' && call.url === address);
+    assert.equal(reads.length, 1, 'the document is read again once the retry is accepted');
+    assert.ok(calls.indexOf(reads[0]) > calls.findIndex(call => call.method === 'POST'), 'after the retry, not before');
+    assert.equal(app.state.doc.progress.phase, 'queued');
+    assert.ok(app.state.poll.timer, 'and polled while it runs');
+    assert.equal(element('#toast').textContent, 'The coding review starts again.');
+    assert.match(element('#main').innerHTML, /data-phase="queued"/);
+  });
+  // a refusal is said in the server's words, and nothing is read again
+  await withPage({ answers: [{ status: 409, body: { error: 'This document cannot be coded again right now.' } }] }, async ({ calls, element }) => {
+    Object.assign(app.state, { doc, route: { name: 'doc', id: doc.id }, routeSerial: 7 });
+    await app.progressAction('retry', fakeElement());
+    assert.equal(element('#toast').textContent, 'This document cannot be coded again right now.');
+    assert.equal(calls.filter(call => call.method === 'GET' && call.url === address).length, 0);
+    assert.equal(app.state.poll.timer, 0);
+  });
+});
+
 test('polling follows the review: queued, reading and checking poll; finished, failed and stopped do not', () => {
   assert.equal(app.shouldPoll(fixture('encounter-reading.json')), true);
   assert.equal(app.shouldPoll(fixture('encounter-checking.json')), true);
-  for (const name of ['encounter-ready.json', 'encounter-failed.json', 'encounter-no-codes.json', 'encounter-awaiting-answer.json']) assert.equal(app.shouldPoll(fixture(name)), false, name);
+  for (const name of ['encounter-ready.json', 'encounter-failed.json', 'encounter-no-codes.json', 'encounter-awaiting-answer.json', 'encounter-earlier.json', 'encounter-word.json']) {
+    assert.equal(app.shouldPoll(fixture(name)), false, name);
+  }
   assert.equal(app.shouldPoll({ state: 'processing' }), true, 'a document said to be processing is polled even without its progress');
   assert.equal(app.shouldPoll({ progress: { phase: 'done', busy: true } }), true, 'the server\'s busy flag wins');
   assert.equal(app.shouldPoll(null), false);
@@ -770,13 +1052,16 @@ test('documentation notes are listed as written once the review is done, and nev
   const none = clone(fixture('encounter-ready.json'));
   none.notes = [];
   assert.match(dom(render(none)).one('#notesPanel').text, /made no notes/);
+  assert.match(dom(render(fixture('encounter-word.json'))).one('#notesPanel').text, /made no notes/);
   assert.equal(dom(render(fixture('encounter-reading.json'))).one('#notesPanel'), null);
+  assert.equal(dom(render(fixture('encounter-earlier.json'))).one('#notesPanel'), null, 'an earlier review has no coding review to have made notes');
 });
 
 test('empty code lists say why, in the review\'s own state', () => {
   assert.equal(app.emptyCodesText(fixture('encounter-reading.json')), 'Codes appear here when the coding review finishes.');
   assert.equal(app.emptyCodesText(fixture('encounter-failed.json')), 'No codes: the coding review could not finish.');
   assert.equal(app.emptyCodesText(fixture('encounter-no-codes.json')), 'The coding review found no CPT code to report for this document.');
+  assert.equal(app.emptyCodesText(fixture('encounter-earlier.json')), 'Codes appear here once the document is reviewed again with the current version.');
   const page = dom(render(fixture('encounter-no-codes.json')));
   assert.equal(page.one('ol#codesList').attr('hidden'), '');
   assert.equal(page.all('ol#codesList > li').length, 0);
@@ -798,11 +1083,18 @@ test('the tally and the export dialog never claim an approval the server did not
     const doc = fixture(name);
     if (doc.readiness.approved !== true) assert.doesNotMatch(app.exportStatusText(doc), /is approved/, name);
   }
-  // an export from an earlier coding review is still linked, and says so
+  // the downloads in the order served, newest first; one from an earlier coding review is still linked, and says so
+  const served = fixture('encounter-reviewed.json').reports;
+  assert.deepEqual(served.map(report => report.generated_at), ['2026-11-20T07:55:00Z', '2026-11-20T07:24:00Z'], 'the fixture is newest first, as the server sends it');
   const reports = dom(app.exportOptions(fixture('encounter-reviewed.json'))).all('.report-item');
   assert.deepEqual(reports.map(item => [item.attr('class'), item.one('a').attr('href')]), [
-    ['report-item earlier', '/api/reports/f6100000-0000-4000-8000-000000000001/download'], ['report-item', '/api/reports/f6100000-0000-4000-8000-000000000002/download']]);
-  assert.match(reports[0].one('small').text, /Earlier: made from an earlier coding review/);
+    ['report-item', '/api/reports/f6100000-0000-4000-8000-000000000002/download'], ['report-item earlier', '/api/reports/f6100000-0000-4000-8000-000000000001/download']]);
+  assert.match(reports[0].one('small').text, /^Approved codes · 20 Nov 2026, 07:55 UTC$/);
+  assert.match(reports[1].one('small').text, /Earlier: made from an earlier coding review/);
+  // whatever order the server sends is the order shown: nothing is re-sorted on the page
+  const reversed = clone(fixture('encounter-reviewed.json'));
+  reversed.reports.reverse();
+  assert.deepEqual(dom(app.exportOptions(reversed)).all('.report-item a').map(link => link.attr('href')), reversed.reports.map(report => report.download_url));
   assert.equal(dom(app.reportItem({ filename: 'x.txt', download_url: 'javascript:alert(1)', current: true })).one('a'), null);
 });
 
@@ -815,8 +1107,11 @@ test('list rows show the state, the kind, the insurance and the date; the queue 
   const pasted = page.all('a.document-row').find(row => row.attr('href') === '#doc/f8000000-0000-4000-8000-000000000001');
   assert.match(pasted.text, /Pasted textNo codes foundNot entered/);
   const queue = dom(app.listBody('queue', rows)).all('a.document-row').map(row => row.attr('href'));
-  assert.deepEqual(queue, ['#doc/f3000000-0000-4000-8000-000000000001', '#doc/f4000000-0000-4000-8000-000000000001', '#doc/f5000000-0000-4000-8000-000000000001']);
-  assert.match(app.listDescription('queue', rows), /^3 documents wait on you: questions to answer, or codes to review or approve\.$/);
+  assert.deepEqual(queue, ['#doc/f3000000-0000-4000-8000-000000000001', '#doc/f4000000-0000-4000-8000-000000000001', '#doc/f5000000-0000-4000-8000-000000000001',
+    '#doc/f9000000-0000-4000-8000-000000000001']);
+  assert.match(app.listDescription('queue', rows), /^4 documents wait on you: questions to answer, or codes to review or approve\.$/);
+  const earlier = page.all('a.document-row').find(row => row.attr('href') === '#doc/fb000000-0000-4000-8000-000000000001');
+  assert.match(earlier.text, /Synthetic colonoscopy report, earlier reviewUploaded fileEarlier review9 Nov 2026/);
   assert.equal(app.listDescription('queue', []), 'No document waits on you for an answer or a decision.');
   assert.match(dom(app.listBody('queue', [])).text, /Nothing is waiting for you/);
   assert.equal(dom(app.listBody('workspace', rows)).all('a.document-row').length, 5);
@@ -837,7 +1132,7 @@ test('model-written text (reasons, questions, notes, quotes) is escaped wherever
     // keep the structure the page needs to draw everything: statuses, actions, phase and the addresses
     doc.codes.forEach((code, index) => Object.assign(code, { status: plain.codes[index].status, allowed_actions: plain.codes[index].allowed_actions, decision: code.decision && { ...code.decision, action: plain.codes[index].decision.action } }));
     Object.assign(doc.progress, { phase: plain.progress.phase });
-    Object.assign(doc.document, { view_url: plain.document.view_url, original_url: plain.document.original_url, media_type: plain.document.media_type, kind: plain.document.kind });
+    Object.assign(doc.document, { view_url: plain.document.view_url, original_url: plain.document.original_url, media_type: plain.document.media_type, kind: plain.document.kind, view_media_type: plain.document.view_media_type });
     const html = [markup(doc), app.listBody('documents', [poison(fixture('encounters.json').encounters[0])]), app.inviteMarkup([poison(fixture('encounters.json').encounters[0])])].join('\n');
     assert.doesNotMatch(html, /<img/i, name);
     assert.doesNotMatch(html, /\son\w+="/i, `${name}: no handler attribute`);

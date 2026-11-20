@@ -28,10 +28,12 @@ const OFFLINE_TEXT = 'The server could not be reached. Check the connection and 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;', '`': '&#x60;' };
 
-// The encounter states and their fixed labels (the build specification, section 5).
+// The encounter states and their fixed labels (the build specification, section 5), and 'earlier': a document an
+// earlier version of CPT Studio reviewed, with no coding review of this version and so no codes.
 const STATE_LABELS = {
   processing: 'Processing', stopped: 'Stopped', failed: 'Could not finish', awaiting_answer: 'Questions for you',
   needs_review: 'Needs your review', ready: 'Ready for approval', reviewed: 'Reviewed', no_codes: 'No codes found',
+  earlier: 'Earlier review',
 };
 const STATE_TONES = { ready: 'green', reviewed: 'green', awaiting_answer: 'amber', needs_review: 'amber', failed: 'amber' };
 // The states that wait on a member: questions to answer, codes to review or to approve.
@@ -56,21 +58,23 @@ const TALLY = [
   ['needs_review', 'needs your review', 'need your review'], ['needs_answer', 'needs your answer', 'need your answer'],
   ['not_supported', 'not supported', 'not supported'],
 ];
-const PHASES = ['queued', 'reading', 'checking', 'done', 'failed', 'stopped'];
+const PHASES = ['queued', 'reading', 'checking', 'done', 'failed', 'stopped', 'earlier'];
 const BUSY_PHASES = new Set(['queued', 'reading', 'checking']);
 const PHASE_TITLES = {
   queued: 'Waiting to start', reading: 'Reading your document', checking: 'Checking the codes a second time',
   done: 'Coding review finished', failed: 'The coding review could not finish', stopped: 'The coding review was stopped',
+  earlier: 'Earlier review',
 };
 const STEP_KEYS = ['reading', 'checking', 'finished'];
 const STEP_LABELS = { reading: 'Reading', checking: 'Checking', finished: 'Finished' };
 const STEP_STATES = { done: 'Done', active: 'In progress', waiting: 'Waiting', failed: 'Did not finish', stopped: 'Stopped', unknown: '' };
 const STEP_ICONS = { done: 'check', active: 'clock', failed: 'close', stopped: 'stop' };
 // phase -> the state of each step. A review that failed or was stopped does not say how far it got, so the earlier
-// steps claim nothing.
+// steps claim nothing. An earlier review has no coding review of this version, so it has no steps at all.
 const PHASE_STEPS = {
   queued: ['waiting', 'waiting', 'waiting'], reading: ['active', 'waiting', 'waiting'], checking: ['done', 'active', 'waiting'],
   done: ['done', 'done', 'done'], failed: ['unknown', 'unknown', 'failed'], stopped: ['unknown', 'unknown', 'stopped'],
+  earlier: [],
 };
 const LEAVE_NOTE = 'You can leave this page. The coding review keeps running, and the document stays in Documents.';
 // [action, progress flag, address, button kind, label, icon, what the page says once the server accepts it]
@@ -79,6 +83,11 @@ const PROGRESS_ACTIONS = [
   ['resume', 'can_resume', 'resume', 'primary', 'Resume', 'arrow', 'Resumed. The coding review continues.'],
   ['retry', 'can_retry', 'retry', 'primary', 'Retry', 'arrow', 'The coding review starts again.'],
 ];
+// An earlier review's retry: the same act (POST retry), which codes the document with the current version.
+const REVIEW_AGAIN = 'Review again';
+// document.view_media_type -> the in-page viewer: the PDF (opened at a quoted page) or the text; anything else, none.
+const VIEW_KINDS = { 'application/pdf': 'pdf', 'text/plain': 'text' };
+const CONVERTED_NOTE = 'Shown as the PDF the coding review read (converted from the Word file).';
 const INSURANCE_CHOICES = [['medicare', 'Medicare'], ['medicaid', 'Medicaid'], ['commercial', 'Commercial or other'], ['unknown', 'Not sure']];
 const INSURANCE_VALUES = new Set(INSURANCE_CHOICES.map(([value]) => value));
 const INSURANCE_SHOWN = { medicare: 'Medicare', medicaid: 'Medicaid', commercial: 'Commercial or other' };
@@ -315,11 +324,11 @@ function notesOf(doc) {
   return strings(doc?.notes);
 }
 
-// The progress phase: the server's, else read from the state.
+// The progress phase: the server's, else read from the state. 'earlier' is never 'done': it has no codes to show.
 function progressPhase(doc) {
   const phase = doc?.progress?.phase;
   if (PHASES.includes(phase)) return phase;
-  return lookup({ processing: 'queued', failed: 'failed', stopped: 'stopped' }, doc?.state, 'done');
+  return lookup({ processing: 'queued', failed: 'failed', stopped: 'stopped', earlier: 'earlier' }, doc?.state, 'done');
 }
 
 function isBusy(doc) {
@@ -366,12 +375,15 @@ function modifiersLabel(code) {
   return `${modifiers.length === 1 ? 'Modifier' : 'Modifiers'} ${modifiers.join(', ')}`;
 }
 
-// The second check's verdict on one code, and its reason as written.
+// The second check's verdict on one code, and its reason as written. Without a verdict the server's reason is its own
+// fixed sentence ("The second check did not review this code."), which is then the whole line, shown as given.
 function secondCheck(code) {
   const check = record(code?.second_check);
   const verdict = check.agrees === true ? 'agrees' : check.agrees === false ? 'disagrees' : 'none';
+  const reason = text(check.reason);
+  if (verdict === 'none' && reason) return { verdict, label: reason, reason: '' };
   const label = { agrees: 'Second check: agrees.', disagrees: 'Second check: disagrees.', none: 'Second check: no verdict.' }[verdict];
-  return { verdict, label, reason: text(check.reason) };
+  return { verdict, label, reason };
 }
 
 function quotePage(quote) {
@@ -393,16 +405,13 @@ function viewerUrl(viewUrl, page) {
   return Number.isInteger(page) && page > 0 ? `${base}#page=${page}` : base;
 }
 
-// What the in-page viewer can show: 'pdf', 'text', 'other' (a Word file: a browser cannot show it in the page, and an
-// attempt would start a download instead) or 'none' (no view address).
+// What the in-page viewer shows, as the server says in document.view_media_type (never read from media_type, the type
+// of the original): 'pdf' (an iframe of view_url, opened at #page=N for a quoted page; for a Word document the PDF the
+// coding review read), 'text' (the text, where a quoted passage is found) or 'none' (no viewer, only the download).
 function viewerKind(documentPart) {
   const part = record(documentPart);
   if (!safeViewUrl(part.view_url)) return 'none';
-  const type = text(part.media_type).toLowerCase().split(';')[0].trim();
-  const name = text(part.name).toLowerCase();
-  if (type === 'application/pdf' || (!type && name.endsWith('.pdf'))) return 'pdf';
-  if (type === 'text/plain' || (!type && (name.endsWith('.txt') || part.kind === 'paste'))) return 'text';
-  return 'other';
+  return lookup(VIEW_KINDS, part.view_media_type, 'none');
 }
 
 // The decision buttons one code gets: those the server allows, for a member who may review, in a fixed order.
@@ -474,6 +483,7 @@ function emptyCodesText(doc) {
   const phase = progressPhase(doc);
   if (phase === 'failed') return 'No codes: the coding review could not finish.';
   if (phase === 'stopped') return 'No codes: the coding review was stopped before it finished.';
+  if (phase === 'earlier') return 'Codes appear here once the document is reviewed again with the current version.';
   return 'The coding review found no CPT code to report for this document.';
 }
 
@@ -596,17 +606,19 @@ function documentName(part) {
   return text(part.name) || (part.kind === 'paste' ? 'Pasted text' : 'Original document');
 }
 
+// The viewer of the original: an iframe of view_url for a PDF or a text, with a note under it when the PDF is the one a
+// Word document was converted to; with no view, no viewer at all and only the "Download original" link.
 function viewerPanel(doc) {
   const part = record(doc?.document);
   const kind = viewerKind(part);
   const name = documentName(part);
   const original = safeOriginalUrl(part.original_url);
-  const frame = kind === 'pdf' || kind === 'text'
-    ? `<iframe id="documentViewer" class="viewer-frame" src="${escapeHtml(viewerUrl(part.view_url, null))}" title="${escapeHtml(`Original document: ${name}`)}" referrerpolicy="same-origin"></iframe>`
-    : `<p class="viewer-empty">${icon('info')}<span>${escapeHtml(kind === 'other' ? 'This file type cannot be shown on this page. Download the original to read it.' : 'The original document cannot be shown on this page.')}</span></p>`;
+  const frame = kind === 'none' ? ''
+    : `<iframe id="documentViewer" class="viewer-frame" src="${escapeHtml(viewerUrl(part.view_url, null))}" title="${escapeHtml(`Original document: ${name}`)}" referrerpolicy="same-origin"></iframe>`;
+  const note = kind === 'pdf' && part.converted === true ? `<p class="viewer-note">${icon('info')}<span>${escapeHtml(CONVERTED_NOTE)}</span></p>` : '';
   const meta = [lookup(KIND_LABELS, part.kind, ''), Number.isInteger(part.size) && part.size > 0 ? formatSize(part.size) : ''].filter(Boolean).join(' · ');
   const download = original ? `<a class="viewer-download" id="downloadOriginal" href="${escapeHtml(original)}" download>${icon('download')}Download original</a>` : '';
-  return `<section class="viewer-panel" aria-labelledby="viewerTitle"><div class="viewer-toolbar">${icon('file')}<h2 id="viewerTitle">Original document</h2><span class="viewer-name">${escapeHtml(name)}</span></div>${frame}<div class="viewer-bottom"><span>${escapeHtml(meta || 'Original as received')}</span>${download}</div></section>`;
+  return `<section class="viewer-panel${kind === 'none' ? ' no-view' : ''}" aria-labelledby="viewerTitle"><div class="viewer-toolbar">${icon('file')}<h2 id="viewerTitle">Original document</h2><span class="viewer-name">${escapeHtml(name)}</span></div>${frame}${note}<div class="viewer-bottom"><span>${escapeHtml(meta || 'Original as received')}</span>${download}</div></section>`;
 }
 
 function quoteBody(quote) {
@@ -628,7 +640,8 @@ function quoteTitle(doc) {
 function quotesPanel(doc) {
   const entries = codesOf(doc).flatMap(code => quotesOf(code).map((quote, index) => ({ code, quote, index })));
   const items = entries.map(({ code, quote, index }) => `<li><button type="button" class="quote" data-code="${escapeHtml(code.code)}" data-page="${quote.page ?? ''}" data-quote="${escapeHtml(quoteKey(code, index))}"${quoteTitle(doc)}><span class="quote-code">${escapeHtml(code.code)}</span>${quoteBody(quote)}</button></li>`).join('');
-  const empty = isBusy(doc) ? 'Quoted passages appear here when the coding review finishes.' : 'No passage of the document is quoted.';
+  const empty = isBusy(doc) ? 'Quoted passages appear here when the coding review finishes.'
+    : progressPhase(doc) === 'earlier' ? 'Quoted passages appear here once the document is reviewed again.' : 'No passage of the document is quoted.';
   return `<section class="quotes-panel" id="quotesPanel" aria-labelledby="quotesTitle"><div class="quotes-head"><h2 id="quotesTitle">Quoted passages</h2>${entries.length ? `<span class="small-badge">${entries.length}</span>` : ''}</div>`
     + (entries.length ? `<p class="quotes-lead">${escapeHtml(quotesLead(doc))}</p><ol class="quote-list">${items}</ol>` : `<p class="quotes-empty">${escapeHtml(empty)}</p>`)
     + '</section>';
@@ -638,7 +651,7 @@ function quotesPanel(doc) {
 
 function progressSteps(phase) {
   const states = lookup(PHASE_STEPS, phase, PHASE_STEPS.queued);
-  return STEP_KEYS.map((key, index) => ({ key, label: STEP_LABELS[key], state: states[index] }));
+  return states.map((stepState, index) => ({ key: STEP_KEYS[index], label: STEP_LABELS[STEP_KEYS[index]], state: stepState }));
 }
 
 function progressStep(step, animate) {
@@ -661,12 +674,15 @@ function progressTime(progress, phase, busy, ui) {
 }
 
 // Stop, Resume and Retry, each only when the server offers it and the member may review: Stop while the review runs,
-// the other two once it does not.
-function progressButtons(doc, busy) {
+// the other two once it does not. An earlier review's retry is "Review again".
+function progressButtons(doc, busy, phase) {
   if (!canReview(doc)) return '';
   const progress = record(doc?.progress);
   return PROGRESS_ACTIONS.filter(([action, flag]) => progress[flag] === true && (action === 'stop' ? busy : !busy))
-    .map(([action, , , kind, label, iconName]) => `<button type="button" class="button ${kind}" data-action="${action}">${action === 'stop' ? `${icon(iconName)}${label}` : `${label} ${icon(iconName)}`}</button>`).join('');
+    .map(([action, , , kind, label, iconName]) => {
+      const shown = action === 'retry' && phase === 'earlier' ? REVIEW_AGAIN : label;
+      return `<button type="button" class="button ${kind}" data-action="${action}">${action === 'stop' ? `${icon(iconName)}${shown}` : `${shown} ${icon(iconName)}`}</button>`;
+    }).join('');
 }
 
 function progressPanel(doc, ui = {}) {
@@ -682,14 +698,14 @@ function progressPanel(doc, ui = {}) {
     const took = time ? ` · ${time[0].toLowerCase()} ${time[1]}` : '';
     return `<section class="progress-panel progress-compact" data-phase="done" aria-labelledby="progressTitle"><div class="progress-head">${icon('circle-check')}<div class="progress-status"><p class="progress-summary"><strong id="progressTitle">${escapeHtml(PHASE_TITLES.done)}</strong>${took}</p>${message ? `<p class="progress-message">${escapeHtml(message)}</p>` : ''}</div></div><ol class="progress-steps">${steps}</ol></section>`;
   }
-  const headIcon = phase === 'failed' ? 'close' : phase === 'stopped' ? 'stop' : 'clock';
+  const headIcon = lookup({ failed: 'close', stopped: 'stop', earlier: 'info' }, phase, 'clock');
   const showAck = ui.ack && ui.ack.id === doc?.id && busy;
   const said = message && message !== failure ? message : '';
-  const buttons = progressButtons(doc, busy);
+  const buttons = progressButtons(doc, busy, phase);
   return `<section class="progress-panel${busy ? ' progress-card' : ''}" data-phase="${phase}" aria-labelledby="progressTitle">`
     + `<div class="progress-head"><span class="progress-icon${animate ? ' is-animated' : ''}">${icon(headIcon)}</span><div class="progress-status" aria-live="polite"><h2 id="progressTitle">${escapeHtml(PHASE_TITLES[phase])}</h2>${said ? `<p class="progress-message">${escapeHtml(said)}</p>` : ''}</div></div>`
     + (showAck ? uploadAck(ui.ack) : '')
-    + `<ol class="progress-steps">${steps}</ol>`
+    + (steps ? `<ol class="progress-steps">${steps}</ol>` : '')
     + (time ? `<p class="progress-time">${time[0]} ${time[1]}</p>` : '')
     + `<p class="progress-reconnecting" role="status"${ui.reconnecting && busy ? '' : ' hidden'}>Reconnecting…</p>`
     + (failure ? `<div class="progress-error" role="alert">${icon('info')}<div><p>${escapeHtml(failure)}</p></div></div>` : '')
@@ -1222,7 +1238,7 @@ function renderKey(doc) {
 // What the viewer shows: the page redraws it only when this changes, so a poll never reloads the original.
 function viewerKey(doc) {
   const part = record(doc?.document);
-  return `${doc?.id || ''} ${viewerKind(part)} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
+  return `${doc?.id || ''} ${viewerKind(part)} ${part.converted === true} ${safeViewUrl(part.view_url)} ${safeOriginalUrl(part.original_url)} ${documentName(part)}`;
 }
 
 function renderDocument(doc, fresh, force = false) {
@@ -1319,6 +1335,7 @@ function revealInFrame(frame, passage) {
   }
 }
 
+// The PDF viewer opens the quoted page (#page=N); the text viewer finds the passage, since a text has no pages.
 function showQuote(key) {
   const found = findQuote(key);
   if (!found) return;
@@ -1326,7 +1343,7 @@ function showQuote(key) {
   markSelectedQuote();
   const frame = $('#documentViewer');
   if (!frame) return;
-  if (found.quote.page) {
+  if (found.quote.page && viewerKind(state.doc?.document) === 'pdf') {
     const url = viewerUrl(state.doc?.document?.view_url, found.quote.page);
     if (url) frame.src = url;
   } else {
@@ -1772,8 +1789,9 @@ if (typeof module === 'object' && module.exports) {
     messageView, uploadAck, ackView, reviewMeta, reviewHeading, viewerPanel, quotesPanel, progressSteps, progressPanel,
     questionsPanel, answersPanel, codeRow, codesSection, notesPanel, activityLog, reviewColumn, reviewView, reportItem,
     exportOptions, uploadForm, renderKey, viewerKey, api, sendAnswers, submitReview, handleDecision, progressAction, onClick,
-    onInput, state, STATE_LABELS, CODE_STATUSES, DECISIONS, ACTION_BUTTONS, PHASES, PHASE_TITLES, STEP_KEYS, STEP_LABELS,
-    PROGRESS_ACTIONS, INSURANCE_CHOICES, QUEUE_STATES, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, MAX_ANSWER_CHARS,
+    onInput, showQuote, state, STATE_LABELS, CODE_STATUSES, DECISIONS, ACTION_BUTTONS, PHASES, PHASE_TITLES, STEP_KEYS,
+    STEP_LABELS, PROGRESS_ACTIONS, INSURANCE_CHOICES, QUEUE_STATES, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION,
+    MAX_ANSWER_CHARS, CONVERTED_NOTE, REVIEW_AGAIN,
   };
 }
 if (typeof document !== 'undefined') boot();

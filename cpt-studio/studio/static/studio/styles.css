@@ -428,3 +428,12 @@
 .code-head .status{margin-left:0}
 .viewer-name{display:none}
 }
+
+/* The note under the viewer when it shows the PDF a Word document was converted to, and a document with no view (only
+   the "Download original" link) drawn as a compact card. */
+.viewer-note{display:flex;gap:7px;align-items:flex-start;margin:0;padding:9px 18px 0;font-size:11px;line-height:1.6;color:#5f6f55;background:#fafbf6;border-top:1px solid #dfe5d6;overflow-wrap:anywhere}
+.viewer-note>svg{width:13px;height:13px;margin-top:2px;flex-shrink:0;color:#88957d}
+.viewer-note+.viewer-bottom,.viewer-panel.no-view .viewer-bottom{border-top:0}
+@media(min-width:1001px){.viewer-column>.viewer-panel.no-view{flex:0 0 auto}
+.viewer-column>.viewer-panel.no-view+#quotesBox{max-height:none}
+}

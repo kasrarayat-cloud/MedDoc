@@ -14,7 +14,9 @@
   "size": 297,
   "kind": "paste",
   "original_url": null,
-  "view_url": "/api/encounters/f8000000-0000-4000-8000-000000000001/original?view=1"
+  "view_url": "/api/encounters/f8000000-0000-4000-8000-000000000001/original?view=1",
+  "view_media_type": "text/plain",
+  "converted": false
  },
  "context": {
   "service_date": null,
