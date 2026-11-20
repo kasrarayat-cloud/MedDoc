@@ -212,8 +212,18 @@ class RequestTests(SimpleTestCase):
         self.assertNotIn('JVBERi0xLjc=', json.dumps(req.stored))
         self.assertEqual(req.sha256, request().sha256)  # deterministic
         self.assertNotEqual(req.sha256, request('high').sha256)
-        self.assertEqual(req.input_bytes, 8 + len(prompts.READER_SYSTEM.encode()) + len(b'Code this document.'))
         self.assertEqual(req.stored['messages'][0]['content'][1], {'type': 'text', 'text': 'Code this document.'})
+
+    def test_a_request_may_make_the_requested_models_attempt_and_its_fallbacks(self):
+        # FIX-SPEC 4: the default fallbacks retry a declined request once, on the model recommended for its refusal
+        # category, so a send may bill two attempts; a list of models may try each in turn
+        self.assertEqual(request().attempts, 2)
+        self.assertEqual(client.fallback_attempts('default'), 1)
+        self.assertEqual(client.fallback_attempts([{'model': 'claude-opus-4-8'}, {'model': 'claude-opus-5'}]), 2)
+        self.assertEqual(client.fallback_attempts(None), 0)
+        for unknown in ('all', 3, {'model': 'claude-opus-4-8'}):
+            with self.subTest(fallbacks=unknown), self.assertRaises(ValueError):
+                client.fallback_attempts(unknown)
 
 
 class ReplayTests(SimpleTestCase):

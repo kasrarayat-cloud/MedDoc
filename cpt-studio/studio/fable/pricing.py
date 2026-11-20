@@ -23,9 +23,12 @@ REQUIRED = ('input', 'output')
 USAGE_BASIS = 'as reported in the final message usage'  # ProviderRun.usage_basis (60 characters at most)
 BASIS = ('estimated from published claude-fable-5-2 rates as of 2026-11-03 (fallback attempts priced at the same '
          'rates, an upper bound); not reconciled to an invoice')
-# The worst case of one send (3.2): its input tokens - counted by the API's free token count when the count answered,
-# else its input bytes / 3 - plus a 2,000-token margin at the input rate, and its whole max_tokens at the output rate.
-BYTES_PER_TOKEN = 3
+# The worst case of one send (3.2, FIX-SPEC 4): every attempt it may make - the requested model's own and, with
+# server-side fallbacks, each fallback's (studio.fable.client.Request.attempts) - priced at claude-fable-5-2's rates,
+# which no fallback model passes. Each attempt reads the request's input tokens as the API's free token count counted
+# them, plus a 2,000-token margin, and - after the first - the partial answer of every attempt before it, which a
+# streamed fallback continues from (at most max_tokens each); each attempt writes at most max_tokens. There is no
+# estimate without the count: a PDF is billed by its pages, which its bytes do not bound.
 MARGIN_TOKENS = 2_000
 _MILLION = Decimal(1_000_000)
 _PRECISION = Decimal('0.000001')
@@ -56,15 +59,16 @@ def cost_usd(usage: object) -> Optional[Decimal]:
     return total / _MILLION
 
 
-def worst_case_usd(input_bytes: int, max_tokens: int, input_tokens: Optional[int] = None) -> Decimal:
-    """The most one send can cost: its input tokens plus the margin at the input rate, and ``max_tokens`` at the output
-    rate. The input tokens are ``input_tokens`` (the API's count of the request) when it is a whole positive number,
-    else ``input_bytes`` / 3."""
-    if type(input_tokens) is int and input_tokens > 0:
-        tokens = Decimal(input_tokens) + MARGIN_TOKENS
-    else:
-        tokens = Decimal(input_bytes) / BYTES_PER_TOKEN + MARGIN_TOKENS
-    return (tokens * RATES['input'] + Decimal(max_tokens) * RATES['output']) / _MILLION
+def worst_case_usd(input_tokens: int, max_tokens: int, *, attempts: int = 1) -> Decimal:
+    """The most one send can cost (see above): ``attempts`` attempts of a request whose input the API counted at
+    ``input_tokens`` tokens, each writing at most ``max_tokens``. ValueError when a figure is not a whole positive
+    number - with no count there is no worst case, and the send is not made."""
+    for name, value in (('input_tokens', input_tokens), ('max_tokens', max_tokens), ('attempts', attempts)):
+        if type(value) is not int or value < 1:
+            raise ValueError(f'the worst case of a send needs {name} as a whole positive number')
+    read = attempts * (input_tokens + MARGIN_TOKENS) + max_tokens * (attempts * (attempts - 1) // 2)
+    written = attempts * max_tokens
+    return (Decimal(read) * RATES['input'] + Decimal(written) * RATES['output']) / _MILLION
 
 
 def usd(amount: Optional[Decimal]) -> Optional[str]:

@@ -19,10 +19,13 @@ Modes (settings.CODING_MODE): ``live`` calls the API with the key read from sett
 time (never logged, stored or put in a message); ``replay`` reads a recorded final message from
 settings.CODING_REPLAY_DIR/<request sha256>.json and calls nothing; ``disabled`` (the default) has no coder.
 
-The spend check's input (BUILD-SPEC 3.2): live, a request's input tokens are counted before it is sent by the API's free
-token count (``client.beta.messages.count_tokens`` with the same model, system, messages, output_config and betas;
-nothing is generated or billed, and the SDK client retries nothing), LiveCoder.count_input_tokens; when the count fails
-for any reason it is None and the spend check estimates from the bytes, as before.
+The spend check's input (BUILD-SPEC 3.2, FIX-SPEC 4): live, a request's input tokens are counted before it is sent by
+the API's free token count (``client.beta.messages.count_tokens`` with the same model, system, messages, output_config
+and betas; nothing is generated or billed, and the SDK client retries nothing), LiveCoder.count_input_tokens; when the
+count fails for any reason it is None and nothing is sent (studio.jobs fails the round busy, for a human retry). A
+request may bill every attempt it makes: the requested model's and, with server-side fallbacks, each fallback's
+(Request.attempts; the ``default`` form retries a declined request once, on the model recommended for its refusal
+category), and the spend check counts them all.
 """
 from __future__ import annotations
 
@@ -75,7 +78,21 @@ class Request:
     params: dict  # the keyword arguments of client.beta.messages.stream, the document's data included
     stored: dict  # the same with the document's base64 replaced (ProviderRun.request_body)
     sha256: str  # of canonical(stored): the request's identity, and its replay key
-    input_bytes: int  # the document's bytes, the system text and the instruction (the spend check's worst case)
+    attempts: int  # the attempts one send of it may bill: the requested model's and each fallback's (FIX-SPEC 4)
+
+
+def fallback_attempts(fallbacks) -> int:
+    """How many attempts the server-side ``fallbacks`` parameter may add after the requested model's own: the
+    ``default`` form retries a declined request once, on the model recommended for its refusal category
+    (refusals-and-fallback: "for categories with no recommended fallback, the refusal stands"); a list tries each model
+    it names in turn; none adds none. ValueError for anything else, so a new form is counted before it is sent."""
+    if fallbacks is None:
+        return 0
+    if fallbacks == 'default':
+        return 1
+    if isinstance(fallbacks, (list, tuple)):
+        return len(fallbacks)
+    raise ValueError(f'{fallbacks!r} is not a fallbacks value the spend check can count')
 
 
 def build_request(*, system: str, document, instruction: str, effort: str) -> Request:
@@ -86,7 +103,7 @@ def build_request(*, system: str, document, instruction: str, effort: str) -> Re
                 'output_config': {'effort': effort}, 'betas': list(BETAS), 'fallbacks': FALLBACKS}
     stored = body(document.stored_block)
     return Request(params=body(document.block), stored=stored, sha256=hashlib.sha256(canonical(stored)).hexdigest(),
-                   input_bytes=document.size + len(system.encode('utf-8')) + len(instruction.encode('utf-8')))
+                   attempts=1 + fallback_attempts(FALLBACKS))
 
 
 def count_params(request: Request) -> dict:
@@ -215,19 +232,19 @@ class LiveCoder:
     def count_input_tokens(self, request: Request) -> Optional[int]:
         """The input tokens of ``request`` by the API's free token count (POST /v1/messages/count_tokens), or None when
         it cannot be counted - the credentials refused, an error of any kind, an answer that is not a whole positive
-        number - in which case the spend check estimates from the bytes. Never raises; logs only the error's type."""
+        number - in which case nothing is sent (FIX-SPEC 4). Never raises; logs only the error's type."""
         try:
             sdk = self.client()
-        except Exception:  # noqa: BLE001 - the credentials file refused or the client not made: the send will say so
+        except Exception as exc:  # noqa: BLE001 - the credentials file refused or the client not made: nothing is sent
+            log.warning('the token count of a coding request was not made (%s); nothing is sent', type(exc).__name__)
             return None
         try:
             counted = sdk.beta.messages.count_tokens(
                 **count_params(request),
                 timeout=anthropic.Timeout(connect=CONNECT_SECONDS, read=COUNT_READ_SECONDS, write=WRITE_SECONDS,
                                           pool=POOL_SECONDS))
-        except Exception as exc:  # noqa: BLE001 - a count that failed bills nothing; the bytes estimate stands in
-            log.warning('the token count of a coding request failed (%s); estimating from its bytes',
-                        type(exc).__name__)
+        except Exception as exc:  # noqa: BLE001 - a count that failed bills nothing; the send is not made
+            log.warning('the token count of a coding request failed (%s); nothing is sent', type(exc).__name__)
             return None
         finally:
             closing = getattr(sdk, 'close', None)
@@ -237,7 +254,10 @@ class LiveCoder:
                 except Exception:  # noqa: BLE001 - the count is already in hand
                     log.warning('the SDK client could not be closed')
         tokens = getattr(counted, 'input_tokens', None)
-        return tokens if type(tokens) is int and tokens > 0 else None
+        if type(tokens) is int and tokens > 0:
+            return tokens
+        log.warning('the token count of a coding request answered no whole number of tokens; nothing is sent')
+        return None
 
     def send(self, request: Request) -> Outcome:
         try:
