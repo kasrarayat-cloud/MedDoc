@@ -49,6 +49,8 @@ f = _Factories
 class GrantTests(TestCase):
     def setUp(self):
         self.ws = f.workspace()
+        # A runner's STATE_DIR (CI's included) need not exist yet: nothing before this test creates it.
+        Path(settings.STATE_DIR).mkdir(mode=0o700, parents=True, exist_ok=True)
         self.tmp = Path(tempfile.mkdtemp(dir=settings.STATE_DIR))
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.reason = self.tmp / 'reason.txt'

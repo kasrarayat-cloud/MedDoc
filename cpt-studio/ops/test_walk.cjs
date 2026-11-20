@@ -2,13 +2,22 @@
 /*
  * Unit tests for ops/walk.cjs's pure helpers: argument parsing, the documents and credentials it reads, the denylist
  * scan (every vector of ops/verification/customer-denylist.json, which ops/scan_customer.py
- * runs too, so the readers cannot drift apart), the JSON and DOM contract checks, and the evidence's shape. No browser,
- * network or server: synthetic values only.
+ * runs too, so the readers cannot drift apart), the JSON contract (ops/verification/customer-contract.json, held to
+ * scan_customer.py's reader by ops/test_walk_contract.py) and DOM contract checks, the approval of one line on the round
+ * shown, and the evidence's shape - synthetic values only; and the review dialog driven through the page itself
+ * (ops/dev_preview_server.cjs's mock, in Chromium) where Playwright is installed (CPT_VERIFY_PLAYWRIGHT), skipped where
+ * it is not.
+ *
+ * LINE IDENTITY (FIX-SPEC section 1): the tests marked so build rows that carry `line`; the base fixture carries it
+ * when customer-contract.json lists it (lane F1a), and the browser test checks the posted line once the page's fixtures
+ * serve one (lane F1b).
  *
  *   node ops/test_walk.cjs            (or: node --test --test-reporter=tap ops/test_walk.cjs)
  */
 const assert = require('node:assert/strict');
+const childProcess = require('node:child_process');
 const fs = require('node:fs');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -20,6 +29,10 @@ const PASSWORD = 'Synthetic-walk pass&+%<>"\'é/=?-2026';
 const REQUIRED = ['--base-url', BASE, '--credentials', 'c.json', '--operator-credentials', 'o.json', '--docs', 'docs',
   '--out', 'out'];
 const DENYLIST = JSON.parse(fs.readFileSync(path.join(__dirname, 'verification', 'customer-denylist.json'), 'utf8'));
+const CONTRACT = JSON.parse(fs.readFileSync(path.join(__dirname, 'verification', 'customer-contract.json'), 'utf8'));
+// LINE IDENTITY: whether the contract on disk lists each code row's `line` (lane F1a adds it, FIX-SPEC section 1)
+const LINES = Object.prototype.hasOwnProperty.call(CONTRACT.types.code.keys, 'line');
+const ACK = 'I reviewed this code against the document.';
 
 function scratch() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cpt-walk-test-'));
@@ -34,13 +47,23 @@ function privateFile(dir, name, data, mode = 0o600) {
   return file;
 }
 
+// One code row as the server serves it; with ``line``, the row carries its line (LINE IDENTITY, FIX-SPEC section 1).
+function row(code, status, extra = {}) {
+  const labels = { ready: 'Ready for approval', needs_answer: 'Needs your answer', needs_review: 'Needs your review',
+    not_supported: 'Not supported' };
+  return { code, units: 1, modifiers: [], status, status_label: labels[status], reason: `${code} is documented.`,
+    second_check: { agrees: true, reason: 'Agreed.' }, question: null, quotes: [], decision: null,
+    allowed_actions: ['ready', 'needs_review'].includes(status) ? ['approve', 'reject'] : [], ...extra };
+}
+
 function encounter(overrides = {}) {
+  const line = index => (LINES ? { line: `L${index}` } : {});
   const codes = overrides.codes || [
-    { code: '43239', units: 1, modifiers: [], status: 'ready', status_label: 'Ready for approval',
+    { ...line(1), code: '43239', units: 1, modifiers: [], status: 'ready', status_label: 'Ready for approval',
       reason: 'EGD with biopsy is documented.', second_check: { agrees: true, reason: 'The report states the biopsy.' },
       question: null, quotes: [{ text: 'Cold forceps biopsies were taken from the antrum.', page: 1 }], decision: null,
       allowed_actions: ['approve', 'reject'] },
-    { code: '00731', units: 1, modifiers: ['P2'], status: 'needs_answer', status_label: 'Needs your answer',
+    { ...line(2), code: '00731', units: 1, modifiers: ['P2'], status: 'needs_answer', status_label: 'Needs your answer',
       reason: 'Anesthesia time is not stated.', second_check: { agrees: null, reason: '' },
       question: 'How long was the anesthesia?', quotes: [], decision: null, allowed_actions: [] },
   ];
@@ -48,12 +71,13 @@ function encounter(overrides = {}) {
     id: 'e5c1d3a2-1111-4222-8333-944455556666', title: 'gi-02', created_at: '2026-11-20T10:00:00Z',
     updated_at: '2026-11-20T10:05:00Z', state: 'awaiting_answer', state_label: 'Questions for you',
     permissions: { can_review: true },
-    document: { name: 'gi-02.txt', media_type: 'text/plain', size: 10, kind: 'txt',
+    document: { name: 'gi-02.txt', media_type: 'text/plain', size: 10, kind: 'upload',
       original_url: '/api/encounters/e5c1d3a2-1111-4222-8333-944455556666/original',
-      view_url: '/api/encounters/e5c1d3a2-1111-4222-8333-944455556666/original?view=1' },
+      view_url: '/api/encounters/e5c1d3a2-1111-4222-8333-944455556666/original?view=1', view_media_type: 'text/plain',
+      converted: false },
     context: { service_date: '2026-10-14', insurance: 'medicare' },
-    progress: { phase: 'done', busy: false, started_at: null, finished_at: null, server_time: null, message: '', can_stop: false,
-      can_resume: false, can_retry: true, error: null },
+    progress: { phase: 'done', busy: false, started_at: null, finished_at: null, server_time: '2026-11-20T10:05:30Z',
+      message: '', can_stop: false, can_resume: false, can_retry: true, error: null },
     round: { number: 1, trigger: 'upload', finished_at: '2026-11-20T10:05:00Z' },
     codes,
     questions: [{ id: 'q1', text: 'How long was the anesthesia?', codes: ['00731'] }], answers: [],
@@ -63,13 +87,18 @@ function encounter(overrides = {}) {
   };
 }
 
+// The page as it draws ``enc`` (studio/static/studio/app.js): units "1 unit" / "2 units", or "Units not given";
+// modifiers "No modifier" / "Modifier XS" / "Modifiers 25, 59"; each row with its line when served.
 function domOf(enc) {
+  const units = value => (value === null ? 'Units not given' : `${value} unit${value === 1 ? '' : 's'}`);
+  const modifiers = list => (list.length ? `${list.length === 1 ? 'Modifier' : 'Modifiers'} ${list.join(', ')}` : 'No modifier');
   return {
     progress: { phase: enc.progress.phase, steps: ['reading', 'checking', 'finished'].map(step => ({ step, state: 'done' })) },
     questions: enc.questions.length ? { heading: 'Questions for you', send: true,
       rows: enc.questions.map(q => ({ id: q.id, text: `${q.text} Your answer`, textarea: true })) } : null,
-    codes: enc.codes.map(code => ({ code: code.code, status: code.status, number: code.code, units: `× ${code.units}`,
-      modifiers: code.modifiers.join(' '), badge: { status: code.status, text: code.decision ? 'Approved' : code.status_label },
+    codes: enc.codes.map(code => ({ line: code.line ?? null, code: code.code, status: code.status, number: code.code,
+      units: units(code.units), modifiers: modifiers(code.modifiers),
+      badge: { status: code.status, text: code.decision ? 'Approved' : code.status_label },
       reason: code.reason, check: `Second check: ${code.second_check.reason}`, quotes: true,
       buttons: code.allowed_actions.map(decision => ({ decision, code: code.code })) })),
     quotesPanel: true,
@@ -276,12 +305,12 @@ test('the encounter JSON is held to the contract: its keys, statuses, actions an
   assert.deepEqual(failed(walk.jsonChecks(offered, doc)), ['json.codes.actions']);
   const { activity, ...missing } = encounter();
   assert.ok(Array.isArray(activity));
-  assert.deepEqual(failed(walk.jsonChecks(missing, doc)), ['json.keys']);
+  assert.deepEqual(failed(walk.jsonChecks(missing, doc)), ['json.contract', 'json.keys']);
   assert.deepEqual(failed(walk.jsonChecks(encounter(), { serviceDate: '2026-10-15', insurance: 'medicare' })), ['json.context']);
   const unknown = encounter();
   unknown.codes[0].status = 'held';
   unknown.codes[0].allowed_actions = [];
-  assert.deepEqual(failed(walk.jsonChecks(unknown, doc)), ['json.codes.status']);
+  assert.deepEqual(failed(walk.jsonChecks(unknown, doc)), ['json.contract', 'json.codes.status']);
 });
 
 test('the page is held to the JSON it was served, part by part', () => {
@@ -319,6 +348,196 @@ test('the page is held to the JSON it was served, part by part', () => {
   quietDom.questions = { heading: 'Questions for you', send: true, rows: [{ id: 'q9', text: 'x', textarea: true }] };
   assert.deepEqual(failed(walk.domChecks(quiet, quietDom, BASE)), ['dom.questions']);
 });
+
+test('the encounter JSON is held to customer-contract.json: every key it lists, of its type, and no other, at every depth', () => {
+  // FG-E: the walk reads the contract file itself (as ops/scan_customer.py and the Django suite do), not a key list of its own
+  assert.equal(walk.contract().schema, CONTRACT.schema);
+  const doc = { serviceDate: '2026-10-14', insurance: 'medicare' };
+  assert.deepEqual(walk.shapeProblems(encounter(), CONTRACT.encounter), []);
+  assert.deepEqual(failed(walk.jsonChecks(encounter(), doc)), []);
+  const decided = encounter();
+  decided.codes[0] = { ...decided.codes[0], decision: { action: 'approve', by: 'Review agent', at: '2026-11-20T10:06:00Z', note: '' },
+    allowed_actions: ['revoke'] };
+  assert.deepEqual(walk.shapeProblems(decided, CONTRACT.encounter), []);
+  const mutations = [
+    [enc => { enc.internal_round_id = 'x'; }, '$.internal_round_id: not in the customer contract'],
+    [enc => { enc.document.storage_hint = 'x'; }, '$.document.storage_hint: not in the customer contract'],
+    [enc => { enc.progress.phase_detail = 'x'; }, '$.progress.phase_detail: not in the customer contract'],
+    [enc => { enc.codes[0].decision = { action: 'approve', by: 'R', at: '2026-11-20T10:06:00Z', note: '', acknowledgement: 'x' };
+      enc.codes[0].allowed_actions = ['revoke']; }, '$.codes[0].decision.acknowledgement: not in the customer contract'],
+    [enc => { delete enc.document.view_media_type; }, '$.document.view_media_type: missing (the contract lists it)'],
+    [enc => { enc.document.kind = 'txt'; }, '$.document.kind: "txt" is not one of upload|paste'],
+    [enc => { enc.progress.server_time = null; }, '$.progress.server_time: null where the contract has iso'],
+    [enc => { enc.codes[0].quotes[0].page = 'one'; }, '$.codes[0].quotes[0].page: string where the contract has integer?'],
+    [enc => { enc.codes[0].second_check = 'agrees'; }, '$.codes[0].second_check: string where the contract has an object'],
+    [enc => { enc.readiness.draft = 'yes'; }, '$.readiness.draft: string where the contract has boolean'],
+    [enc => { enc.codes[1].units = 1.5; }, '$.codes[1].units: number where the contract has integer?'],
+  ];
+  for (const [mutate, said] of mutations) {
+    const enc = encounter();
+    mutate(enc);
+    assert.deepEqual(walk.shapeProblems(enc, CONTRACT.encounter), [said], said);
+    assert.ok(failed(walk.jsonChecks(enc, doc)).includes('json.contract'), said);
+  }
+  // the session and the list are held to theirs; a read is matched to its contract by its route
+  assert.deepEqual(walk.shapeProblems({ encounters: [] }, CONTRACT.list), []);
+  assert.deepEqual(walk.shapeProblems({ encounters: [{ id: 'x' }] }, CONTRACT.list).length, 7);
+  assert.deepEqual(['GET /api/session', 'GET /api/encounters (page)', 'GET /api/encounters/e5c1d3a2-1111-4222-8333-944455556666',
+    'GET /api/encounters/e5c1d3a2-1111-4222-8333-944455556666/original', 'POST /api/encounters (page)'].map(walk.contractFor),
+  ['session', 'list', 'encounter', null, null]);
+});
+
+test('units: a number is shown as that number and units not given as "not given"', () => {
+  // FG-D: the contract serves units as a positive integer or null; the page draws null as "not given"
+  const doc = encounter();
+  doc.codes[0].units = null;
+  doc.codes[1].units = 2;
+  const dom = domOf(doc);
+  assert.equal(dom.codes[0].units, 'Units not given');
+  assert.deepEqual(failed(walk.domChecks(doc, dom, BASE)), []);
+  for (const [index, shown] of [[0, ''], [0, 'null'], [1, '12 units'], [1, '22 units'], [1, '1 unit']]) {
+    const wrong = domOf(doc);
+    wrong.codes[index].units = shown;
+    assert.deepEqual(failed(walk.domChecks(doc, wrong, BASE)), ['dom.codes.cells'], `${index}: ${shown}`);
+  }
+  assert.equal(walk.unitsProblem('2 units', 2), '');
+  assert.equal(walk.unitsProblem('Units not given', null), '');
+  assert.match(walk.unitsProblem('', 0), /neither a positive integer nor null/);
+  // the code number is a whole word too: 45385 is not shown by 453851
+  const number = encounter();
+  const numberDom = domOf(number);
+  numberDom.codes[0].number = `${number.codes[0].code}1`;
+  assert.deepEqual(failed(walk.domChecks(number, numberDom, BASE)), ['dom.codes.cells']);
+});
+
+test('modifiers: each served modifier is shown, and no other', () => {
+  assert.equal(walk.modifiersProblem('No modifier', []), '');
+  assert.equal(walk.modifiersProblem('Modifiers 25, 59', ['25', '59']), '');
+  assert.notEqual(walk.modifiersProblem('Modifier XS', []), '');  // a row showing another row's modifier
+  assert.notEqual(walk.modifiersProblem('Modifier 59', ['25']), '');
+  assert.notEqual(walk.modifiersProblem('Modifiers 25, 59', ['25']), '');
+  assert.notEqual(walk.modifiersProblem(null, []), '');
+});
+
+test('LINE IDENTITY: rows are drawn by line, two lines of one code being two rows', () => {
+  const twice = encounter({ codes: [row('20610', 'ready', { line: 'L1', modifiers: ['RT'] }),
+    row('20610', 'needs_review', { line: 'L2', modifiers: ['LT'] })], questions: [] });
+  assert.deepEqual(failed(walk.domChecks(twice, domOf(twice), BASE)), []);
+  const swapped = domOf(twice);
+  [swapped.codes[0].line, swapped.codes[1].line] = ['L2', 'L1'];
+  assert.deepEqual(failed(walk.domChecks(twice, swapped, BASE)), ['dom.codes.rows']);
+  const crossed = domOf(twice);  // the L2 row drawn with the L1 row's modifier
+  crossed.codes[1].modifiers = 'Modifier RT';
+  assert.deepEqual(failed(walk.domChecks(twice, crossed, BASE)), ['dom.codes.cells']);
+  const unlined = domOf(twice);
+  unlined.codes.forEach(item => { item.line = null; });
+  assert.deepEqual(failed(walk.domChecks(twice, unlined, BASE)), ['dom.codes.rows']);
+  assert.equal(walk.servedRow(twice.codes, { line: 'L2', code: '20610' }), twice.codes[1]);
+  assert.equal(walk.servedRow(encounter({ codes: [row('45385', 'ready')] }).codes, { code: '45385' }).code, '45385');
+});
+
+test('LINE IDENTITY: an approval posts the round shown, the line, its code and the acknowledgement exactly', () => {
+  const enc = encounter({ codes: [row('20610', 'ready', { line: 'L1' }), row('20610', 'ready', { line: 'L2', modifiers: ['LT'] })] });
+  const code = enc.codes[1];
+  const body = { round: 1, line: 'L2', code: '20610', action: 'approve', acknowledgement: ACK, note: 'x' };
+  assert.deepEqual(walk.decisionRequestProblems(body, enc, code, ACK), []);
+  const wrong = [
+    [{ ...body, line: 'L1' }, /line "L1", not "L2"/],
+    [{ ...body, line: undefined }, /line undefined, not "L2"/],
+    [{ ...body, round: 2 }, /round 2, not the round shown \(1\)/],
+    [{ ...body, round: undefined }, /round undefined/],
+    [{ ...body, code: '20611' }, /code "20611"/],
+    [{ ...body, acknowledgement: `${ACK} ` }, /acknowledgement/],
+    [{ ...body, action: 'reject' }, /action "reject"/],
+  ];
+  for (const [posted, said] of wrong) assert.match(walk.decisionRequestProblems(posted, enc, code, ACK).join('; '), said);
+  assert.deepEqual(walk.decisionRequestProblems(null, enc, code, ACK), ['the page posted no JSON object']);
+  // a round whose rows carry no line cannot be approved by line
+  const unlined = encounter({ codes: [row('45385', 'ready')] });
+  assert.match(walk.decisionRequestProblems({ ...body, code: '45385' }, unlined, unlined.codes[0], ACK).join(), /names no line/);
+});
+
+test('LINE IDENTITY: one approval decides one line, on the round it was made on', () => {
+  const before = encounter({ codes: [row('20610', 'ready', { line: 'L1' }), row('20610', 'ready', { line: 'L2', modifiers: ['LT'] })] });
+  const approved = { action: 'approve', by: 'Review agent', at: '2026-11-20T10:06:00Z', note: '' };
+  const after = structuredClone(before);
+  after.codes[1] = { ...after.codes[1], decision: approved, allowed_actions: ['revoke'] };
+  after.readiness = { ...after.readiness, approved: true };
+  assert.deepEqual(walk.approvalProblems(before, after, before.codes[1]), []);
+  const both = structuredClone(after);  // one approval written on every row of the code
+  both.codes[0] = { ...both.codes[0], decision: approved, allowed_actions: ['revoke'] };
+  assert.match(walk.approvalProblems(before, both, before.codes[1]).join(), /20610 \(L1\): decision null became "approve"/);
+  const moved = structuredClone(after);
+  moved.round = { ...moved.round, number: 2 };
+  assert.match(walk.approvalProblems(before, moved, before.codes[1]).join(), /round 2 after round 1/);
+  assert.match(walk.approvalProblems(before, before, before.codes[1]).join(), /20610 \(L2\): decision null/);
+});
+
+test('the review dialog is driven as the page draws it', () => {
+  // FG-A: studio/templates/studio/index.html draws the acknowledgement as a checkbox inside the label that carries it
+  const html = fs.readFileSync(path.join(__dirname, '..', 'studio', 'templates', 'studio', 'index.html'), 'utf8');
+  const dialog = /<dialog id="reviewDialog"[\s\S]*?<\/dialog>/.exec(html)[0];
+  const id = selector => selector.replace(/^#/, '');
+  const label = new RegExp(`<label[^>]*\\bid="${id(walk.REVIEW_DIALOG.label)}"[^>]*>([\\s\\S]*?)</label>`).exec(dialog);
+  assert.ok(label, `${walk.REVIEW_DIALOG.label} is a label of the review dialog`);
+  assert.match(label[1], new RegExp(`<input[^>]*\\bid="${id(walk.REVIEW_DIALOG.box)}"[^>]*\\btype="checkbox"`));
+  assert.match(dialog, new RegExp(`<textarea[^>]*\\bid="${id(walk.REVIEW_DIALOG.note)}"`));
+  assert.match(html, new RegExp(`<button[^>]*\\bid="${id(walk.REVIEW_DIALOG.save)}"`));
+  const app = fs.readFileSync(path.join(__dirname, '..', 'studio', 'static', 'studio', 'app.js'), 'utf8');
+  assert.ok(app.includes(`$('${walk.REVIEW_DIALOG.box}').addEventListener('change'`), 'saving is offered once the box is ticked');
+});
+
+test('the review dialog is driven through the page itself, in a browser', async t => {
+  // FG-A in a real browser: ops/dev_preview_server.cjs's mock serves the shipped page and fixtures; walk.approve() ticks
+  // the box the page draws and saves. Skipped where Playwright is not installed (CPT_VERIFY_PLAYWRIGHT).
+  if (!fs.existsSync(path.join(walk.PLAYWRIGHT, 'package.json'))) {
+    t.skip(`no Playwright at ${walk.PLAYWRIGHT}`);
+    return;
+  }
+  const { chromium } = require(walk.PLAYWRIGHT);
+  const port = await freePort();
+  const server = childProcess.spawn(process.execPath, [path.join(__dirname, 'dev_preview_server.cjs'), `--port=${port}`],
+    { stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => server.kill('SIGTERM'));
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('the preview server did not start')), 15000);
+    server.stdout.on('data', chunk => { if (String(chunk).includes('CPT Studio dev preview')) { clearTimeout(timer); resolve(); } });
+    server.once('exit', code => reject(new Error(`the preview server exited ${code}`)));
+  });
+  const base = `http://127.0.0.1:${port}`;
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await (await browser.newContext()).newPage();
+  const session = await (await page.request.get(`${base}/api/session`, { headers: walk.CLIENT_HEADERS })).json();
+  const id = 'f5000000-0000-4000-8000-000000000001';  // tests/fixtures/customer/encounter-ready.json
+  const enc = await (await page.request.get(`${base}/api/encounters/${id}`, { headers: walk.CLIENT_HEADERS })).json();
+  const code = enc.codes.find(item => item.status === 'ready' && !item.decision && item.allowed_actions.includes('approve'));
+  assert.ok(code, 'the ready fixture offers a code to approve');
+  await page.goto(`${base}/#doc/${id}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(count => document.querySelectorAll('ol#codesList > li.code-row').length === count,
+    enc.codes.length, { timeout: 15000 });
+  const made = await walk.approve(page, { base, session }, enc, code);
+  assert.equal(made.kind, 'checkbox');
+  assert.equal(made.status, 201);
+  assert.ok(made.shown.includes(session.acknowledgement.replace(/\s+/g, ' ').trim()), made.shown);
+  assert.equal(made.body.acknowledgement, session.acknowledgement);
+  await t.test('LINE IDENTITY: the page posts the round shown and the line', {
+    skip: typeof code.line !== 'string' && 'the page\'s fixtures serve no line yet (FIX-SPEC section 1, lane F1b)',
+  }, () => {
+    assert.deepEqual(walk.decisionRequestProblems(made.body, enc, code, session.acknowledgement), []);
+  });
+});
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
 
 test('the readers that run in the page are self-contained functions', () => {
   for (const reader of [walk.readEncounterDom, walk.collectDomStrings]) {
@@ -381,9 +600,9 @@ test('the evidence says per document pass or fail with the reasons of every fail
 });
 
 test('the walk names the current customer build and refuses to upload unless paid requests are accepted', () => {
-  assert.deepEqual(walk.CLIENT_HEADERS, { 'X-CPT-Studio-Client': 'customer-2026-11-20' });
+  assert.deepEqual(walk.CLIENT_HEADERS, { 'X-CPT-Studio-Client': 'customer-2026-11-21' });
   const source = fs.readFileSync(path.join(__dirname, 'walk.cjs'), 'utf8');
-  assert.ok(source.includes("const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-20' };"));
+  assert.ok(source.includes("const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-21' };"));
   assert.ok(source.includes('chromium.launch({ headless: true })'));
   const session = { can_review: true, acknowledgement: 'I reviewed this code against the document.' };
   assert.deepEqual(walk.sessionProblems(session, { allowLiveProvider: true }), []);

@@ -1,8 +1,13 @@
 """Core repair (2026-11-03), decision (l): the customer page's client contract (studio/client_contract.py). A customer API
 call that does not name the current page build - a tab left open on the previous release - is answered 409
 client_outdated before the view runs; a download (a browser navigation) and the operator console are outside it; every
-copy of the value (the server's, the page's app.js, ops/verify_login.py's and the walk's, ops/walk.cjs) is the same
-one."""
+copy of the value (the server's, the page's app.js, ops/verify_login.py's and the walk's, ops/walk.cjs, and the contract
+file the tools read, ops/verification/customer-contract.json) is the same one.
+
+The fix pass's line identity (FIX-SPEC section 1) is a new page build, customer-2026-11-21: a page of the build
+before it posts decisions without the round and the line. Its copies land in three lanes - the server's and the
+contract file's (F1a), the page's (F1b), the tools' (F3) - so in a tree holding only some of them OneValueTests fails,
+naming the copy that differs, until all are merged."""
 from __future__ import annotations
 
 import importlib.util
@@ -16,6 +21,8 @@ from studio import client_contract
 from tests.support import coding as f
 
 ROOT = Path(__file__).resolve().parents[1]
+# FIX-SPEC section 1: decisions name the round shown and the line - the build every copy names
+CURRENT_BUILD = 'customer-2026-11-21'
 
 
 def without_contract(client):
@@ -62,6 +69,9 @@ class ContractTests(TestCase):
 
 
 class OneValueTests(SimpleTestCase):
+    def test_the_build_is_the_line_identity_build(self):
+        self.assertEqual(client_contract.VERSION, CURRENT_BUILD)
+
     def test_the_test_package_acts_as_the_current_page(self):
         self.assertEqual(Client().defaults[client_contract.WSGI_KEY], client_contract.VERSION)
         self.assertEqual(RequestFactory().defaults[client_contract.WSGI_KEY], client_contract.VERSION)
@@ -78,6 +88,8 @@ class OneValueTests(SimpleTestCase):
         self.assertEqual((login.CLIENT_HEADER, login.CLIENT_VERSION), (client_contract.HEADER, client_contract.VERSION))
         walk = (ROOT / 'ops' / 'walk.cjs').read_text(encoding='utf-8')
         self.assertIn(f"const CLIENT_HEADERS = {{ '{client_contract.HEADER}': '{client_contract.VERSION}' }};", walk)
+        contract = (ROOT / 'ops' / 'verification' / 'customer-contract.json').read_text(encoding='utf-8')
+        self.assertIn(client_contract.VERSION, contract)  # the contract the scanner and the walk read names its build
         # every direct customer API call the walk makes names it: its JSON reader (getJson, which every polled read goes
         # through) and each call written with an /api/ path (downloads and the page's own assets excepted)
         reader = re.search(r'async function getJson\(page, ctx, where\) \{\n[^\n]*request\.get\([^\n]*', walk)

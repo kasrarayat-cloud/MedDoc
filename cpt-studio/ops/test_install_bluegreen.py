@@ -1860,7 +1860,7 @@ class InstallDocTests(unittest.TestCase):
                        'read before the hold below',
                        '### Switching back to the pipeline before the Fable coding build',
                        '**(a) Coding jobs are closed before the earlier worker starts.**',
-                       '**(b) The four tables are left exactly as they are.**',
+                       '**(b) No row of the four new tables is deleted; closed rounds are marked cancelled.**',
                        '**(c) The earlier pair derives the state of every encounter this revision coded, with its own '
                        'code.**',
                        '**(d) Approvals and answers made in this revision are not carried back - an accepted loss of a '
@@ -1892,10 +1892,10 @@ INSTALLED_COPY = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid':
 # the declared note of a switch-back after this revision coded 3 encounters (coding_note, from CODING_MADE's answer)
 NOT_CARRIED_3 = ('this revision coded 3 encounters in 4 rounds (1 created here, 2 of the earlier review coded again); 2 '
                  'answers, 5 code decisions (3 codes approved now) and 1 export made here are not carried back: the '
-                 'earlier revision reads none of these tables, which stay as they are, so it shows no code, answer or '
-                 'decision of this revision - an accepted loss of a rollback, declared before it; the 1 encounter '
-                 'created here holds no reading the earlier revision made: it shows each by its own derivation '
-                 '(states_put_back) and processes none of them unless the document is uploaded again there')
+                 f'earlier revision reads none of these tables ({install.FOUR_TABLES_KEPT}), so it shows no code, '
+                 'answer or decision of this revision - an accepted loss of a rollback, declared before it; the 1 '
+                 'encounter created here holds no reading the earlier revision made: it shows each by its own '
+                 'derivation (states_put_back) and processes none of them unless the document is uploaded again there')
 
 
 def holding_the_key(world):

@@ -361,8 +361,9 @@ def check_door(environ, revision) -> dict:
 
 
 # The door's wall-clock ceiling (scripts/lib/run-watched.sh: RULED_ACT_MAX_SECS, DOOR_CEILING_DEFAULT when it is not set;
-# a value that is not a positive base-10 integer reads as the default, and the ceiling can be raised, never switched
-# off). At it the door kills the command it runs, wherever it is - mid-switch included. A phase that stops a worker may
+# a value that is not a positive base-10 integer - read in bash's signed 64-bit arithmetic, which wraps - reads as the
+# default, and the ceiling can be raised, never switched off). At it the door kills the command it runs, wherever it is
+# - mid-switch included. A phase that stops a worker may
 # wait STOP_SECONDS['worker'] for each one it stops - the old one parked on the way in and, on an undo, the new one
 # stopped - and drains a web or two besides, so it refuses to start, changing nothing, unless the ceiling allows two
 # such stops and WORKER_PHASE_MARGIN more (9,000 s at this revision's bound). The door's default fitted the bound before
@@ -373,11 +374,20 @@ WORKER_PHASES = ('app', 'switch-back', 'rollback-app')
 
 
 def door_ceiling(environ) -> int:
-    """The door's wall-clock ceiling as the door reads RULED_ACT_MAX_SECS (run-watched.sh _watch_int)."""
+    """The door's wall-clock ceiling as the door reads RULED_ACT_MAX_SECS (run-watched.sh _watch_int): a value of
+    anything but the bytes 0-9 is the default; the digits are read as bash's $((10#$v)) reads them - in signed 64-bit
+    arithmetic, which wraps (2**63 reads as -2**63, 2**64 + 2 as 2) - and the result is kept only when it is 1 or more,
+    else the default (install-1: Python's unbounded int read a value of 2**63 or more as itself, so a 19-nines ceiling
+    the door runs at its default passed the check of WORKER_PHASES). Read digit by digit, so no length raises."""
     value = environ.get('RULED_ACT_MAX_SECS', '')
-    if not (value and value.isascii() and value.isdigit() and int(value, 10) >= 1):
+    if not value or any(char not in '0123456789' for char in value):
         return DOOR_CEILING_DEFAULT
-    return int(value, 10)
+    wrapped = 0
+    for char in value:
+        wrapped = (wrapped * 10 + ord(char) - ord('0')) % 2 ** 64
+    if wrapped >= 2 ** 63:
+        wrapped -= 2 ** 64
+    return wrapped if wrapped >= 1 else DOOR_CEILING_DEFAULT
 
 
 def check_door_ceiling(environ, phase) -> dict:
@@ -2295,8 +2305,9 @@ READING_STAGE_KINDS = ('interpret', APPRAISE_KIND, QUESTION_KIND)
 # clarification, a decision, a member's answer, a context or an event inventory, so none of the earlier pipeline's own
 # reasons (a second review, a participant, a member's answer, a modifier, a reinstatement, a request it would send
 # again, a member date conflict) can be this revision's record. Its own records - coding rounds, answers, code decisions
-# and exports - are in tables no earlier revision reads (they stay as they are: CODING_MADE's declared note says what
-# is not carried back), and the earlier revision recomputes the stored state of every encounter this revision coded
+# and exports - are in tables no earlier revision reads (no row of the four new tables is deleted; closed rounds are
+# marked cancelled - failed as unknown when a request was in flight - and CODING_MADE's declared note says what is not
+# carried back), and the earlier revision recomputes the stored state of every encounter this revision coded
 # with its own derivation (PUT_BACK_STATES). CLOSE_STAGES adds one more reason to its own answer, read after it closed:
 #   open_stage - a stage the next worker cannot run is still queued or running (a coding job made after the close's
 #             transaction by this revision's web, still serving before a switch-back's B6). It is closed again by the
@@ -2376,7 +2387,8 @@ print(ANSWER + json.dumps({'reads': reads}))
 #     runs it left unsettled are settled as the stale sweep settles them (sending: unknown, reserved: not sent). Nothing
 #     else is touched: this revision queues no stage but a coding job, so a stage of the earlier pipeline the next
 #     worker runs is that pipeline's own, and it is left to it.
-# Nothing finished is touched and no row is removed; the four tables of the Fable coding build are not written. Then
+# Nothing finished is touched and no row is removed: no row of the four new tables is deleted; closed rounds are marked
+# cancelled (failed as unknown when a request was in flight, as above) - the only rows of those tables written. Then
 # each encounter it closed a stage of has its stored state recomputed with this revision's derivation (studio.state),
 # and the answer names, after the close: 'relabel', every encounter whose stored state this revision derived (each one
 # with a coding round) or whose earlier stage this revision's worker settled since P['since'] - put_back_states gives
@@ -2577,8 +2589,9 @@ print(ANSWER + json.dumps({'encounters': rows.count(), 'changed': changed, 'deri
 # The declared note of an undo (coding_note), read in this revision's image: what this revision coded, and what of it an
 # earlier revision is not handed. An earlier revision reads none of the Fable coding build's four tables, so the coding
 # rounds, the members' answers, the reviewers' code decisions (approvals, rejections and revocations) and the exports
-# made here stay in them, untouched, and are NOT carried back: the earlier web shows no code, answer or decision of this
-# revision. That is the accepted loss of a rollback (declared before the act), never a refusing reason. Counted:
+# made here stay in them - no row of the four new tables is deleted; closed rounds are marked cancelled (CLOSE_STAGES)
+# - and are NOT carried back: the earlier web shows no code, answer or decision of this revision. That is the accepted
+# loss of a rollback (declared before the act), never a refusing reason. Counted:
 # 'encounters' (each with a coding round), of them 'created' (none of the earlier pipeline's records: no stage of
 # another kind, no context, no assessment - the earlier revision holds no reading of it), 'rounds', 'answers',
 # 'decisions' (rows by action), 'approved' (codes whose current decision on their encounter's latest round is an
@@ -2926,12 +2939,20 @@ def undo_hazards(image_id, env_bytes, revision) -> dict:
                       what=f'Reading what an older revision would act on wrongly (revision {revision[:12]})')['hazards']
 
 
+# What an undo does to the four tables of migration 0016, as the receipt's declared note says it (install-2): the close
+# (CLOSE_STAGES) removes no row and writes only the rounds it closes.
+FOUR_TABLES_KEPT = ('no row of the four new tables is deleted; closed rounds are marked cancelled (a round whose '
+                    'request was in flight is marked failed, its outcome unknown, as the worker\'s own stale sweep '
+                    'marks it); answers, code decisions, exports and finished rounds are not written')
+
+
 def coding_note(image_id, env_bytes, revision) -> dict:
     """The declared, NON-REFUSING note every undo that hands the rows to an earlier pair writes in its receipt
     ('not_carried_back'): what ``revision`` coded and what of it the earlier revision is not handed (CODING_MADE, read
     with ``image_id``, this revision's own image). The earlier revision reads none of the four tables of the Fable coding
     build, so the coding rounds, the members' answers, the reviewers' code decisions and the exports made here stay in
-    them untouched and are not carried back - the accepted loss of a rollback, declared before the act. {'encounters',
+    them (FOUR_TABLES_KEPT: no row is deleted; the close marks the rounds it closes) and are not carried back - the
+    accepted loss of a rollback, declared before the act. {'encounters',
     'created', 'rounds', 'answers', 'decisions', 'approved', 'exports', 'note'}. It never stops an undo: a read that
     fails, or an answer that does not say what it read, is recorded as not counted (an interrupt is never swallowed)."""
     def uncounted(why):
@@ -2939,7 +2960,8 @@ def coding_note(image_id, env_bytes, revision) -> dict:
                 'approved': None, 'exports': None,
                 'note': f'what this revision coded was not counted ({why}): its coding rounds, answers, code decisions '
                         'and exports are in tables no earlier revision reads, so none of them is carried back - an '
-                        'accepted loss of a rollback - and the earlier revision shows its own records only'}
+                        'accepted loss of a rollback - and the earlier revision shows its own records only; '
+                        f'{FOUR_TABLES_KEPT}'}
     try:
         answer = app_script(image_id, env_bytes, CODING_MADE, {},
                             what=f'Counting what revision {revision[:12]} coded, which is not carried back')
@@ -2963,14 +2985,14 @@ def coding_note(image_id, env_bytes, revision) -> dict:
     decided, exported = sum(made['decisions'].values()), sum(made['exports'].values())
     if not coded:
         note = ('this revision coded no encounter: there is nothing of its own to carry back, and the earlier revision '
-                'shows its own records only')
+                f'shows its own records only; {FOUR_TABLES_KEPT}')
     else:
         note = (f'this revision coded {coded} {"encounter" if coded == 1 else "encounters"} in {made["rounds"]} '
                 f'round{"" if made["rounds"] == 1 else "s"} ({created} created here, {coded - created} of the earlier '
                 f'review coded again); {made["answers"]} answer{"" if made["answers"] == 1 else "s"}, {decided} code '
                 f'decision{"" if decided == 1 else "s"} ({made["approved"]} code{"" if made["approved"] == 1 else "s"} '
                 f'approved now) and {exported} export{"" if exported == 1 else "s"} made here are not carried back: the '
-                'earlier revision reads none of these tables, which stay as they are, so it shows no code, answer or '
+                f'earlier revision reads none of these tables ({FOUR_TABLES_KEPT}), so it shows no code, answer or '
                 'decision of this revision - an accepted loss of a rollback, declared before it')
         if created:
             note += (f'; the {created} {"encounter" if created == 1 else "encounters"} created here '
