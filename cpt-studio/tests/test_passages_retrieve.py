@@ -13,8 +13,7 @@ from django.test import SimpleTestCase
 
 from studio.reference.passages import (CODE_THEN_DESCRIPTION, NO_DATE_NOTE, NOT_CONNECTED, passage_sha256,
                                        retrieve)
-from studio.reference.store import UNKNOWN_DATE_NOTE, InMemoryReferenceLookup
-from studio.types import CodeReference, ReferenceSourceInfo
+from studio.reference.store import UNKNOWN_DATE_NOTE, CodeReference, InMemoryReferenceLookup, ReferenceSourceInfo
 from tests.test_passages import CLAIMS, NCCI, PFS_DOC, file_passages
 
 PFS_KEY, MUE_KEY = 'cms-pfs-rvu26d', 'cms-mue-practitioner-2026q4'

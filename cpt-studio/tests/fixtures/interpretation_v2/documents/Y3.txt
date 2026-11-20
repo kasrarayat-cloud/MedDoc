@@ -1,9 +1,0 @@
-SYNTHETIC ERCP REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-Findings: The duodenoscope was advanced to the major papilla.
-Deep biliary cannulation was achieved with a sphincterotome.
-Cholangiogram showed a mildly dilated bile duct without filling defects.
-A biliary sphincterotomy was performed.
-The bile duct was swept several times with an extraction balloon.

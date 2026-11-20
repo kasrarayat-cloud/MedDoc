@@ -73,8 +73,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from studio.models import PassageSource, ReferencePassage
-from studio.reference.store import MUE, PFS, applied_sources, source_applies
-from studio.types import CodeReference, ReferenceLookup, ReferenceSourceInfo
+from studio.reference.store import (MUE, PFS, CodeReference, ReferenceLookup, ReferenceSourceInfo, applied_sources,
+                                    source_applies)
 
 PFS_DOCUMENTATION = 'cms-pfs-documentation'
 NCCI_MANUAL = 'cms-ncci-policy-manual'

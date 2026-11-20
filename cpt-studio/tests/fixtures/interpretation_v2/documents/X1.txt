@@ -1,9 +1,0 @@
-SYNTHETIC ERCP REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-Procedure: ERCP with biliary stent exchange.
-Findings: The duodenoscope was advanced to the major papilla.
-Deep biliary cannulation was achieved with a sphincterotome.
-The existing biliary stent was left in place.
-A 10 Fr x 9 cm plastic biliary stent was placed into the common bile duct.

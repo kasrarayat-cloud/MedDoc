@@ -1,7 +1,0 @@
-SYNTHETIC ENTEROSCOPY REPORT
-Date of service: 03/14/2031
-Endoscopist: Corvin Ashdale, MD (fictional)
-
-History: The patient has an ileal J-pouch and a small gastric pouch after a Roux-en-Y gastric bypass.
-Findings: The enteroscope was advanced through the gastric pouch and the Roux limb into the proximal ileum.
-Biopsies of the proximal ileum were taken with cold forceps.

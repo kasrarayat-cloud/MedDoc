@@ -16,8 +16,7 @@ from studio.reference import importers
 from studio.reference.importers import (LICENSE_NOTE, ReferenceImportError, import_cms_mue_practitioner,
                                         import_cms_pfs, parse_mue, parse_pfs, source_key)
 from studio.reference.store import (UNKNOWN_DATE_NOTE, DbReferenceLookup, InMemoryReferenceLookup,
-                                    source_applies)
-from studio.types import ReferenceSourceInfo
+                                    ReferenceSourceInfo, source_applies)
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures' / 'reference'
 PFS_MEMBER = 'PPRRVU2026_Oct_nonQPP.csv'
