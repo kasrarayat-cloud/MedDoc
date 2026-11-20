@@ -8,7 +8,12 @@ The owner directive of 2026-11-03 (section 2) keeps provider and model identitie
 links, retrieval logs and rule ids out of every customer screen, API response and download, enforced on the server
 (cpt-studio/CORE-UX-DESIGN.md sections 5 and 7). This tool signs a CUSTOMER account in and makes only GET requests:
 
-  GET /                         the customer page, and each same-origin script and stylesheet it loads: scanned whole
+  GET /                         the customer page, and each same-origin script and stylesheet its HTML names (script src,
+                                link rel stylesheet, modulepreload or preload): scanned whole. Not the PDF library the
+                                page imports on demand to draw a PDF (studio/static/studio/lib/pdfjs-<version>/, named on
+                                <body> as data-pdf-module and data-pdf-worker): third-party files byte-identical to their
+                                npm package, pinned by sha256 in its MANIFEST.json and the Django suite, never scanned as
+                                CPT Studio's own wording (DECISIONS D368)
   GET /api/session              against the customer contract's session keys, scanned
   GET /api/encounters           the list, against the contract's list keys, scanned
   for each encounter named (--encounter, repeatable) or listed (--all, at most --limit, newest first):

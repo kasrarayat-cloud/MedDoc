@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const zlib = require('node:zlib');
 
 const app = require('../../studio/static/studio/app.js');
@@ -2114,6 +2115,141 @@ test('the matcher marks the quote\'s own characters: white space ignored entirel
   // offsets are the item's own UTF-16 units, astral characters included
   const astral = [['\u{1F600} cecum reached']];
   assert.deepEqual(app.locateQuote({ text: 'cecum', page: 1 }, astral).marks, { 1: [{ item: 0, start: 3, end: 8, occurrence: 0 }] });
+});
+
+test('a character is cut from the page\'s whole text: an accent the PDF draws as an item of its own belongs to the letter before it', () => {
+  // the PDF library starts a new item where the font changes, so an accent drawn in another font is an item of its own
+  const split = [['The patient Jose', '́', ' ', 'Garcia was seen today.']];
+  const bare = app.locateQuote({ text: 'The patient Jose', page: 1 }, split);
+  assert.deepEqual([bare.status, bare.count, bare.marks], ['not_found', 0, {}], 'never a letter without its accent');
+  for (const text of ['The patient José Garcia was seen today.', 'The patient José Garcia was seen today.']) {
+    const whole = app.locateQuote({ text, page: 1 }, split);
+    assert.deepEqual([whole.status, whole.count], ['marked', 1], 'the accented quote is on the page, composed or not');
+    assert.deepEqual(whole.marks, { 1: [{ item: 0, start: 0, end: 16, occurrence: 0 }, { item: 1, start: 0, end: 1, occurrence: 0 },
+      { item: 3, start: 0, end: 22, occurrence: 0 }] }, 'the letter and its accent are marked together, in both items');
+  }
+  // so a plain "Jose" elsewhere on the page is counted once, not twice
+  const count = app.locateQuote({ text: 'Jose', page: 1 }, [['Jose', '́', ' and Jose was seen.']]);
+  assert.deepEqual([count.count, count.marks], [1, { 1: [{ item: 2, start: 5, end: 9, occurrence: 0 }] }]);
+  // an accent that follows white space stands on its own: the letter before the space is whole
+  assert.deepEqual(app.locateQuote({ text: 'Jose', page: 1 }, [['Jose ', '́']]).marks, { 1: [{ item: 0, start: 0, end: 4, occurrence: 0 }] });
+  // a mark NFKC has no composed letter for is still part of its letter
+  assert.equal(app.locateQuote({ text: 'q', page: 1 }, [['q', '́']]).status, 'not_found');
+  // two marks in another order, the second in the next item: NFKC orders them and composes the letter with one
+  assert.equal(app.locateQuote({ text: 'a̖', page: 1 }, [['a̖', '̀']]).status, 'not_found');
+  assert.equal(app.locateQuote({ text: 'à̖', page: 1 }, [['a̖', '̀']]).count, 1);
+  // Hangul: a syllable written as conjoining jamo is one character, in one item or two
+  assert.equal(app.locateQuote({ text: '하', page: 1 }, [['한']]).status, 'not_found');
+  assert.equal(app.locateQuote({ text: '하', page: 1 }, [['하', 'ᆫ']]).status, 'not_found');
+  assert.deepEqual(app.locateQuote({ text: '한', page: 1 }, [['하', 'ᆫ']]).marks,
+    { 1: [{ item: 0, start: 0, end: 2, occurrence: 0 }, { item: 1, start: 0, end: 1, occurrence: 0 }] });
+  // NFKC combines across what a reader sees as two characters: compatibility jamo, a half-width kana and its voiced mark
+  assert.equal(app.locateQuote({ text: '하', page: 1 }, [['ㅎㅏ']]).count, 1);
+  assert.equal(app.locateQuote({ text: 'ㅎ', page: 1 }, [['ㅎㅏ']]).status, 'not_found');
+  assert.equal(app.locateQuote({ text: 'ガ', page: 1 }, [['ｶ', 'ﾞ']]).count, 1);
+  assert.equal(app.locateQuote({ text: 'カ', page: 1 }, [['ｶ', 'ﾞ']]).status, 'not_found');
+  // an emoji sequence is one character
+  assert.equal(app.locateQuote({ text: '\u{1F469}', page: 1 }, [['\u{1F469}‍\u{1F4BB} ok']]).status, 'not_found');
+  assert.equal(app.locateQuote({ text: '\u{1F469}‍\u{1F4BB} ok', page: 1 }, [['\u{1F469}‍\u{1F4BB} ok']]).count, 1);
+  // a character never spans two pages: an accent at the top of the next page is not the last letter's
+  const pages = [['the end of page one'], ['́ page two']];
+  assert.deepEqual(app.locateQuote({ text: 'the end of page one', page: 1 }, pages).pages, [1]);
+  // the page's characters fold to NFKC of its whole text, white space dropped, and each lists the pieces it is made of
+  assert.deepEqual(app.pageCharacters(['Jose', '́', ' x']).map(({ pieces, folded }) => [folded, pieces]), [
+    ['J', [{ item: 0, start: 0, end: 1 }]], ['o', [{ item: 0, start: 1, end: 2 }]], ['s', [{ item: 0, start: 2, end: 3 }]],
+    ['é', [{ item: 0, start: 3, end: 4 }, { item: 1, start: 0, end: 1 }]], ['x', [{ item: 2, start: 1, end: 2 }]]]);
+  assert.deepEqual(app.characterSpans('é\u{1F469}‍\u{1F4BB}한'), [[0, 2], [2, 7], [7, 10]]);
+});
+
+// The rule stated again by brute force, apart from the matcher: an occurrence is a stretch of the page's text (its items
+// joined) that begins and ends where one character ends and the next begins and NFKC of the whole text is cut cleanly,
+// begins with a character that is not only white space, and whose NFKC, white space dropped, is the quote's; the first such
+// stretch is the shortest, and they are taken left to right without overlap, exact-case first.
+function bruteOccurrences(text, quote) {
+  const nfkc = value => value.normalize('NFKC');
+  const fold = value => nfkc(value).replace(/\s+/gu, '');
+  const want = fold(quote);
+  const whole = nfkc(text);
+  const bounds = [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(text)].map(segment => segment.index)
+    .concat(text.length).filter(at => nfkc(text.slice(0, at)) + nfkc(text.slice(at)) === whole);
+  const scan = same => {
+    const found = [];
+    let from = 0;
+    bounds.forEach((start, index) => {
+      if (!want || start < from || index === bounds.length - 1 || !fold(text.slice(start, bounds[index + 1]))) return;
+      for (let next = index + 1; next < bounds.length; next += 1) {
+        if (same(fold(text.slice(start, bounds[next])))) {
+          found.push([start, bounds[next]]);
+          from = bounds[next];
+          return;
+        }
+      }
+    });
+    return found;
+  };
+  const exact = scan(value => value === want);
+  return exact.length ? { found: exact, caseBlind: false } : { found: scan(value => value.toLowerCase() === want.toLowerCase()), caseBlind: true };
+}
+
+test('the matcher agrees with the rule stated by brute force on pages of accents, jamo, kana, ligatures and emoji split into items', () => {
+  const alphabet = ['a', 'e', 'E', 'q', ' ', '\n', '́', '̖', '̀', 'é', 'É', 'ﬁ', 'f', 'i', 'I', 'İ',
+    'ᄒ', 'ᅡ', 'ᆫ', '하', '한', 'ㅎ', 'ㅏ', 'ㄳ', 'ｶ', 'ﾞ', 'カ', 'ガ', '\u{1F469}',
+    '‍', '\u{1F4BB}', '\u{1F1FA}', '\u{1F1F8}', '¨', 'ß', 'S', 'k', 'K', 'क', '्', 'ष', 'େ',
+    'ା', '½', '1', '⁄', '2', ' ', '　', '゛', 'か'];
+  let seed = 20261120;
+  const random = bound => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return (seed >>> 8) % bound;
+  };
+  let marked = 0;
+  for (let trial = 0; trial < 4000; trial += 1) {
+    const items = Array.from({ length: 1 + random(4) }, () => Array.from({ length: random(6) }, () => alphabet[random(alphabet.length)]).join(''));
+    const text = items.join('');
+    let quote;
+    if (text && random(3)) {
+      const points = [...text];
+      const from = random(points.length);
+      quote = points.slice(from, from + 1 + random(Math.min(6, points.length - from))).join('');
+      if (random(4) === 0) quote = quote.toUpperCase();
+    } else {
+      quote = Array.from({ length: 1 + random(4) }, () => alphabet[random(alphabet.length)]).join('');
+    }
+    const label = JSON.stringify({ items, quote });
+    assert.equal(app.pageCharacters(items).map(character => character.folded).join(''), text.normalize('NFKC').replace(/\s+/gu, ''), label);
+    const result = app.locateQuote({ text: quote, page: 1 }, [items]);
+    const starts = items.map((_, index) => items.slice(0, index).join('').length);
+    const spans = new Map();
+    for (const part of result.marks[1] || []) {
+      const span = spans.get(part.occurrence) || [Infinity, -Infinity];
+      spans.set(part.occurrence, [Math.min(span[0], starts[part.item] + part.start), Math.max(span[1], starts[part.item] + part.end)]);
+    }
+    const expected = bruteOccurrences(text, quote);
+    assert.deepEqual([...spans.keys()].sort((a, b) => a - b).map(key => spans.get(key)), expected.found, label);
+    assert.equal(result.count, expected.found.length, label);
+    if (expected.found.length) {
+      assert.equal(result.caseBlind, expected.caseBlind, label);
+      marked += 1;
+    }
+  }
+  assert.ok(marked > 1500, `the trials mark often enough to mean something (${marked})`);
+});
+
+test('without Intl.Segmenter the matcher still cuts characters from the page\'s whole text, and the viewer is not offered', () => {
+  const context = vm.createContext({ module: { exports: {} } });
+  vm.runInContext('delete Intl.Segmenter;', context);
+  vm.runInContext(fs.readFileSync(BUNDLE, 'utf8'), context, { filename: BUNDLE });
+  const bare = context.module.exports;
+  const split = [['The patient Jose', '́', ' ', 'Garcia was seen today.']];
+  assert.equal(bare.locateQuote({ text: 'The patient Jose', page: 1 }, split).status, 'not_found');
+  assert.equal(bare.locateQuote({ text: 'The patient José Garcia', page: 1 }, split).count, 1);
+  assert.equal(bare.locateQuote({ text: '하', page: 1 }, [['ㅎㅏ']]).count, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(bare.characterSpans('éx'))), [[0, 2], [2, 3]]);
+  // everything else the viewer needs is there; without Intl.Segmenter the browser's own viewer is framed instead
+  vm.runInContext('globalThis.IntersectionObserver = function () {}; globalThis.ResizeObserver = function () {};'
+    + ' Map.prototype.getOrInsertComputed = Map.prototype.getOrInsertComputed || function () {};', context);
+  assert.equal(bare.pdfCapable(), false);
+  vm.runInContext('Intl.Segmenter = function () {};', context);
+  assert.equal(bare.pdfCapable(), true);
 });
 
 test('the matcher is exact-case first, case-blind only where no exact-case occurrence exists, and counts every one', () => {

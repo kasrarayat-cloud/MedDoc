@@ -706,13 +706,15 @@ function foldMarked(text) {
   return String(text ?? '').normalize('NFKC').replace(/\s+/gu, '');
 }
 
-// One chosen quote judged against what the viewer showed (readMarks): {outcome, off_page, mismatched, problems}. outcome:
-// 'once' or 'multi' (marked, the marked text of every occurrence being the quote's words, white space ignored - in its
-// case, or in another where the page has no exact-case occurrence), 'not_found' (nothing marked, and the note says the
-// words could not be found), 'unavailable' (the browser's own viewer is shown: no marking) or 'unresolved'. A mark on a
-// page that is neither the quote's nor, for an occurrence that starts on it, the next is off_page.
+// One chosen quote judged against what the viewer showed (readMarks): {outcome, off_page, mismatched, cut, problems}.
+// outcome: 'once' or 'multi' (marked, the marked text of every occurrence being the quote's words, white space ignored -
+// in its case, or in another where the page has no exact-case occurrence - and no occurrence beginning or ending inside a
+// character), 'not_found' (nothing marked, and the note says the words could not be found), 'unavailable' (the browser's
+// own viewer is shown: no marking) or 'unresolved'. A mark on a page that is neither the quote's nor, for an occurrence
+// that starts on it, the next is off_page; an occurrence's marks on one page that begin or end inside a character (a
+// letter marked without the accent the next item holds: readMarks' `whole`) count once each in cut.
 function judgeQuote(quote, reading) {
-  const out = { outcome: 'unresolved', off_page: 0, mismatched: 0, problems: [] };
+  const out = { outcome: 'unresolved', off_page: 0, mismatched: 0, cut: 0, problems: [] };
   const name = `quote ${quote?.line || quote?.code || '?'}${quote?.page ? ` (page ${quote.page})` : ''}`;
   if (!quote || !reading) {
     out.problems.push(`${name}: the viewer did not answer`);
@@ -752,6 +754,8 @@ function judgeQuote(quote, reading) {
     if (shown !== wanted && shown.toLowerCase() !== wanted.toLowerCase()) out.mismatched += 1;
   }
   if (out.mismatched) out.problems.push(`${name}: ${out.mismatched} marked occurrence(s) are not the quote's words`);
+  out.cut = new Set(marks.filter(mark => mark.whole === false).map(mark => `${mark.page} ${mark.occurrence}`)).size;
+  if (out.cut) out.problems.push(`${name}: ${out.cut} marked part(s) begin or end inside a character`);
   if (occurrences.size !== reading.count) out.problems.push(`${name}: ${occurrences.size} occurrence(s) marked, the viewer counted ${reading.count}`);
   if (page && reading.mode === 'pdf' && !(reading.note || '').includes(`page ${page}`)) out.problems.push(`${name}: the note does not name page ${page}`);
   if (!out.problems.length) out.outcome = reading.count === 1 ? 'once' : 'multi';
@@ -759,26 +763,33 @@ function judgeQuote(quote, reading) {
 }
 
 // The check over every quote chosen ({quote, reading}), counted: how many were marked once, more than once, not found,
-// unavailable, marked off their page and marked with other text. It passes when every quote was marked as its words or
-// said not to be found, and nothing was marked on another page.
+// unavailable, marked off their page, marked with other text and marked from or to inside a character. It passes when
+// every quote was marked as its words, whole characters only, or said not to be found, and nothing was marked on another
+// page.
 function quoteMarkChecks(chosen) {
-  const data = { quotes: chosen.length, marked_once: 0, marked_multi: 0, not_found: 0, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0 };
+  const data = { quotes: chosen.length, marked_once: 0, marked_multi: 0, not_found: 0, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0, cut: 0 };
   const problems = [];
   for (const { quote, reading } of chosen) {
     const judged = judgeQuote(quote, reading);
     data[{ once: 'marked_once', multi: 'marked_multi', not_found: 'not_found', unavailable: 'unavailable' }[judged.outcome] || 'unresolved'] += 1;
     data.off_page += judged.off_page;
     data.mismatched += judged.mismatched;
+    data.cut += judged.cut;
     problems.push(...judged.problems);
   }
   const summary = `${data.quotes} quote(s) chosen: ${data.marked_once} marked once, ${data.marked_multi} marked more than once, `
-    + `${data.not_found} not found (the note says so), ${data.off_page} mark(s) off the quote's page, ${data.mismatched} marked with other words`;
+    + `${data.not_found} not found (the note says so), ${data.off_page} mark(s) off the quote's page, ${data.mismatched} marked with other words, `
+    + `${data.cut} beginning or ending inside a character`;
   return check('quotes.marks', chosen.length > 0 && problems.length === 0 && data.off_page === 0, problems.length ? `${summary}; ${problems.slice(0, 8).join('; ')}` : summary, data);
 }
 
 // Runs in the page: what the viewer shows of the quote chosen last - its mode, what it says it marked (the data-mark-*
-// state the page keeps on #documentViewer), the note, the pages drawn and every mark on them (page, occurrence, text);
-// for a text document, the marks inside its frame.
+// state the page keeps on #documentViewer), the note, the pages drawn and every mark on them (page, occurrence, text,
+// whole); for a text document, the marks inside its frame. A mark is `whole` when its occurrence's marks on that page
+// begin and end between two characters of the page's text (the strings of its text layer, joined in order): between two
+// of the characters a person sees (Intl.Segmenter), where NFKC of the page's text is cut cleanly. Read apart from the
+// page script's own matcher, so a letter marked without the accent the next item holds is seen. The page's text stays
+// in the page.
 function readMarks() {
   const viewer = document.querySelector('#documentViewer');
   if (!viewer) return null;
@@ -798,9 +809,43 @@ function readMarks() {
   }
   out.drawn = Array.from(viewer.querySelectorAll('.pdf-page')).filter(item => item.querySelector('.pdf-text'))
     .map(item => Number(item.getAttribute('data-page')));
-  out.marks = Array.from(viewer.querySelectorAll('.pdf-page .pdf-mark')).map(mark => ({
-    page: Number(mark.closest('.pdf-page').getAttribute('data-page')), occurrence: Number(mark.getAttribute('data-occurrence')),
-    text: mark.textContent }));
+  const nfkc = value => value.normalize('NFKC');
+  const cutter = typeof Intl === 'object' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+  out.marks = [];
+  for (const item of viewer.querySelectorAll('.pdf-page')) {
+    const layer = item.querySelector('.pdf-text');
+    const marks = layer ? Array.from(layer.querySelectorAll('.pdf-mark')) : [];
+    if (!marks.length) continue;
+    const page = Number(item.getAttribute('data-page'));
+    // the page's text, and where each mark lies in it
+    let value = '';
+    const placed = new Map();
+    const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const mark = node.parentElement ? node.parentElement.closest('.pdf-mark') : null;
+      if (mark && layer.contains(mark)) {
+        const at = placed.get(mark) || { start: value.length, end: value.length };
+        at.end = value.length + node.data.length;
+        placed.set(mark, at);
+      }
+      value += node.data;
+    }
+    const whole = nfkc(value);
+    const bounds = cutter ? new Set(Array.from(cutter.segment(value), segment => segment.index)) : new Set();
+    const clean = at => at === 0 || at === value.length || (bounds.has(at) && nfkc(value.slice(0, at)) + nfkc(value.slice(at)) === whole);
+    const spans = new Map();
+    for (const mark of marks) {
+      const occurrence = Number(mark.getAttribute('data-occurrence'));
+      const at = placed.get(mark) || { start: 0, end: 0 };
+      const span = spans.get(occurrence) || { start: at.start, end: at.end };
+      spans.set(occurrence, { start: Math.min(span.start, at.start), end: Math.max(span.end, at.end) });
+    }
+    const verdicts = new Map(Array.from(spans, ([occurrence, span]) => [occurrence, clean(span.start) && clean(span.end)]));
+    for (const mark of marks) {
+      const occurrence = Number(mark.getAttribute('data-occurrence'));
+      out.marks.push({ page, occurrence, text: mark.textContent, whole: verdicts.get(occurrence) });
+    }
+  }
   return out;
 }
 

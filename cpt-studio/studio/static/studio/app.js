@@ -337,20 +337,102 @@ function findPassages(source, passage) {
 }
 
 // --- the quoted words, marked on a page of a PDF (the owner's direction of 2026-11-20, DECISIONS D368) --------------
-// A page's text is the strings of its text items, in order, as the PDF library reads them. Quoted words are located by
-// their own characters only: white space is ignored entirely and Unicode NFKC applies to both sides; a match is exact-case
-// first, case-blind only where there is no exact-case one, and always of whole characters (never half of a ligature, never
-// a letter without its accent). They are looked for on the quote's page; only where they are not there, on that page and
-// the next joined, keeping a passage that starts on the quote's page and runs onto the next. Nothing is ever marked on
-// another page, and nothing partial or nearest is marked. A quote with no page is looked for on every page. Every
-// occurrence found is marked and counted. Nothing here reads what the words mean.
+// A page's text is the strings of its text items joined in order, as the PDF library reads them. Quoted words are located
+// by their own characters only: white space is ignored entirely and Unicode NFKC applies to both sides; a match is
+// exact-case first, case-blind only where there is no exact-case one, and always of whole characters. The characters are
+// cut from the page's whole text, across its items (pageCharacters): a letter keeps its accent where the PDF draws the
+// accent as an item of its own, and no half of a ligature, of a Hangul syllable or of an emoji sequence is ever a match.
+// They are looked for on the quote's page; only where they are not there, on that page and the next joined, keeping a
+// passage that starts on the quote's page and runs onto the next (a character never spans two pages). Nothing is ever
+// marked on another page, and nothing partial or nearest is marked. A quote with no page is looked for on every page.
+// Every occurrence found is marked and counted. Nothing here reads what the words mean.
 
-// One character with the marks that follow it (or marks with nothing before them): the unit NFKC is applied to.
+// One character with the marks that follow it (or marks with nothing before them): how a text is cut into characters
+// where the browser cannot cut it into the characters a person sees (Intl.Segmenter). The PDF viewer never runs there
+// (pdfCapable).
 const TEXT_UNIT = /\P{M}\p{M}*|\p{M}+/gu;
+let characterCutter;
 
-// The folded text of [page, strings] runs: each unit of each string through NFKC, its white space dropped, as written
-// (`exact`) and lower-cased (`blind`), with the unit every UTF-16 position of either came from. units[i] is
-// {page, item, start, end}: the item's place in its page's strings, and the unit's offsets in that item's own string.
+// Where each character of a text begins and ends, as [start, end] offsets covering the whole text: its extended grapheme
+// clusters (a letter with its accents, a Hangul syllable written as jamo, an emoji sequence, a flag).
+function characterSpans(value) {
+  if (characterCutter === undefined) {
+    characterCutter = typeof Intl === 'object' && typeof Intl.Segmenter === 'function'
+      ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+  }
+  const spans = [];
+  if (characterCutter) {
+    for (const { index, segment } of characterCutter.segment(value)) spans.push([index, index + segment.length]);
+  } else {
+    for (const match of value.matchAll(TEXT_UNIT)) spans.push([match.index, match.index + match[0].length]);
+  }
+  return spans;
+}
+
+// One page's characters: the strings of its text items joined in order (an item that is not a string counts as none), cut
+// into characters (characterSpans) and joined again wherever NFKC would combine two of them, so that NFKC of the page's
+// text is exactly its characters' NFKC, in order. Each is {pieces, folded}: the pieces of the item strings it is made of,
+// {item, start, end} in each item's own offsets (an accent the PDF draws in another font is an item of its own and a piece
+// of the letter before it), and its NFKC with the white space dropped. A character that is only white space is left out.
+function pageCharacters(strings) {
+  const items = list(strings).map(value => (typeof value === 'string' ? value : ''));
+  const starts = [];
+  let joined = '';
+  for (const value of items) {
+    starts.push(joined.length);
+    joined += value;
+  }
+  const nfkc = value => value.normalize('NFKC');
+  const cuts = [];
+  for (const span of characterSpans(joined)) {
+    const last = cuts[cuts.length - 1];
+    // nothing below U+0300 is combined by NFKC with what comes before it
+    if (last && joined.codePointAt(span[0]) >= 0x300) {
+      const before = joined.slice(last[0], last[1]);
+      const after = joined.slice(span[0], span[1]);
+      if (nfkc(before + after) !== nfkc(before) + nfkc(after)) {
+        last[1] = span[1];
+        continue;
+      }
+    }
+    cuts.push([span[0], span[1]]);
+  }
+  // Until NFKC of the characters, in order, is NFKC of the whole text, the characters around the first place they differ
+  // are joined into one; the text as one character always agrees.
+  const whole = nfkc(joined);
+  const parts = cuts.map(([start, end]) => nfkc(joined.slice(start, end)));
+  while (cuts.length > 1 && parts.join('') !== whole) {
+    let at = 0;
+    let index = 0;
+    while (index < parts.length - 1 && whole.startsWith(parts[index], at)) {
+      at += parts[index].length;
+      index += 1;
+    }
+    const from = Math.max(0, index - 1);
+    const to = Math.min(cuts.length - 1, index + 1);
+    cuts.splice(from, to - from + 1, [cuts[from][0], cuts[to][1]]);
+    parts.splice(from, to - from + 1, nfkc(joined.slice(cuts[from][0], cuts[from][1])));
+  }
+  const characters = [];
+  let item = 0;
+  cuts.forEach(([start, end], index) => {
+    const folded = parts[index].replace(/\s+/gu, '');
+    if (!folded) return;
+    while (item < items.length && starts[item] + items[item].length <= start) item += 1;
+    const pieces = [];
+    for (let at = item; at < items.length && starts[at] < end; at += 1) {
+      const from = Math.max(start, starts[at]) - starts[at];
+      const to = Math.min(end, starts[at] + items[at].length) - starts[at];
+      if (to > from) pieces.push({ item: at, start: from, end: to });
+    }
+    characters.push({ pieces, folded });
+  });
+  return characters;
+}
+
+// The folded text of [page, strings] runs: each page's characters (pageCharacters), as written (`exact`) and lower-cased
+// (`blind`), with the character every UTF-16 position of either came from. units[i] is {page, pieces}: the character's
+// page, and the pieces of that page's item strings it is made of.
 function foldText(runs) {
   const units = [];
   const exact = { text: '', owner: [] };
@@ -360,16 +442,11 @@ function foldText(runs) {
     for (let index = 0; index < value.length; index += 1) into.owner.push(unit);
   };
   for (const [page, strings] of runs) {
-    list(strings).forEach((value, item) => {
-      if (typeof value !== 'string') return;
-      for (const match of value.matchAll(TEXT_UNIT)) {
-        const folded = match[0].normalize('NFKC').replace(/\s+/gu, '');
-        if (!folded) continue;
-        units.push({ page, item, start: match.index, end: match.index + match[0].length });
-        append(exact, folded, units.length - 1);
-        append(blind, folded.toLowerCase(), units.length - 1);
-      }
-    });
+    for (const { pieces, folded } of pageCharacters(strings)) {
+      units.push({ page, pieces });
+      append(exact, folded, units.length - 1);
+      append(blind, folded.toLowerCase(), units.length - 1);
+    }
   }
   return { units, exact, blind };
 }
@@ -431,12 +508,14 @@ function locateQuote(quote, texts) {
   hit.found.forEach(([first, last], occurrence) => {
     let open = null;
     for (let index = first; index <= last; index += 1) {
-      const unit = hit.folded.units[index];
-      if (open && open.page === unit.page && open.item === unit.item) {
-        open.end = unit.end;
-      } else {
-        open = { page: unit.page, item: unit.item, start: unit.start, end: unit.end, occurrence };
-        (marks[unit.page] ||= []).push(open);
+      const { page: number, pieces } = hit.folded.units[index];
+      for (const piece of pieces) {
+        if (open && open.page === number && open.item === piece.item) {
+          open.end = piece.end;
+        } else {
+          open = { page: number, item: piece.item, start: piece.start, end: piece.end, occurrence };
+          (marks[number] ||= []).push(open);
+        }
       }
     }
   });
@@ -1710,10 +1789,12 @@ function pdfAssets() {
   return { module: asset(data.pdfModule), worker: asset(data.pdfWorker) };
 }
 
-// What the viewer and the library call with no fallback of their own; a browser without them gets the frame.
+// What the viewer, its matcher (characters as a person sees them: Intl.Segmenter) and the library call with no fallback
+// of their own; a browser without them gets the frame.
 function pdfCapable() {
   return typeof IntersectionObserver === 'function' && typeof ResizeObserver === 'function'
-    && typeof Promise.withResolvers === 'function' && typeof Map.prototype.getOrInsertComputed === 'function';
+    && typeof Promise.withResolvers === 'function' && typeof Map.prototype.getOrInsertComputed === 'function'
+    && typeof Intl === 'object' && typeof Intl.Segmenter === 'function';
 }
 
 function loadPdfLibrary() {
@@ -2624,7 +2705,8 @@ if (typeof module === 'object' && module.exports) {
     STATE_LABELS, CODE_STATUSES, DECISIONS, ACTION_BUTTONS, PHASES, PHASE_TITLES, STEP_KEYS, STEP_LABELS, PROGRESS_ACTIONS,
     INSURANCE_CHOICES, QUEUE_STATES, OUTDATED_TEXT, CHANGED_TEXT, UNITS_NOT_GIVEN, MODIFIERS_NOT_GIVEN, CLIENT_HEADER,
     CLIENT_VERSION, MAX_ANSWER_CHARS, CONVERTED_NOTE, REVIEW_AGAIN,
-    findPassages, foldText, foldedOccurrences, locateQuote, markNote, frameNote, textMarkNote, pdfAssets, pdfCapable,
+    findPassages, characterSpans, pageCharacters, foldText, foldedOccurrences, locateQuote, markNote, frameNote,
+    textMarkNote, pdfAssets, pdfCapable,
     mountViewer, closeViewer, showPdfQuote, frameQuote, fallbackViewer, clearViewerMark, paintPage, renderDocument, PDF_VIEW,
   };
 }

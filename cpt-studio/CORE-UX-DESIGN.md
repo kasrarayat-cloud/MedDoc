@@ -136,9 +136,15 @@ The one statement of the rule; the code is `locateQuote` (PDF) and `findPassages
 and the docs elsewhere point here.
 
 - A PDF quote is located by its own characters only, in the text of its page as the PDF library reads it (the page's text
-  items, in order): white space is ignored entirely, Unicode NFKC applies to both sides, and a match is exact-case first,
-  case-blind only where there is no exact-case occurrence, and always of whole characters (never half of a ligature,
-  never a letter without its accent). No fuzzy or nearest match, no word list.
+  items, joined in order): white space is ignored entirely, Unicode NFKC applies to both sides, and a match is exact-case
+  first, case-blind only where there is no exact-case occurrence, and always of whole characters. No fuzzy or nearest
+  match, no word list.
+- The characters are cut from the page's whole text, across its items: the characters a person sees (Unicode extended
+  grapheme clusters, `Intl.Segmenter`), joined again wherever NFKC combines two of them, so that NFKC of the page's text
+  is exactly its characters' NFKC, in order (`pageCharacters`). So a letter is never marked without its accent, even
+  where the PDF draws the accent as a text item of its own (the library starts a new item where the font changes), and
+  no half of a ligature, of a Hangul syllable written as jamo or of an emoji sequence is ever a match. White space is
+  dropped after the cut (an accent that follows a space stands on its own), and a character never spans two pages.
 - It is looked for on the quote's page. Only where it is not there, on that page and the next joined, keeping only a
   passage that starts on the quote's page and runs onto the next (the marked part on each page is shown). Nothing is
   ever marked on another page; a quote found only on another page is not marked. A quote with no page is looked for on
@@ -170,7 +176,8 @@ and the docs elsewhere point here.
 `ops/install.py` installs a revision (`ops/INSTALL.md`). `ops/walk.cjs` then drives the real page with a synthetic
 document at desktop width and at 390 px (no horizontal scroll): upload, poll to done, the DOM contract above and the JSON
 contract, every quote chosen and its marks read back (its words on its page, or the note saying they could not be
-found, and nothing marked on another page; counted), an answer when one is asked, one approval through the dialog (the History naming the line with its code), both
+found, nothing marked on another page, and no occurrence beginning or ending inside a character of the page's text,
+which the walk reads apart from the page script; counted), an answer when one is asked, one approval through the dialog (the History naming the line with its code), both
 exports downloaded twice to equal bytes (each request naming the round shown), the approval undone through the row's
 Undo (naming the decision shown), the denylist scan over every JSON body, the DOM and the downloads, and every `/ops/`
 path refused to the customer.

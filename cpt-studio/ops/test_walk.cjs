@@ -398,7 +398,7 @@ test('a chosen quote is judged by its marked words, the pages they are on and th
   const mark = (page, occurrence, text) => ({ page, occurrence, text });
   const judge = fields => walk.judgeQuote(quote, reading(fields));
   // marked once: the marked parts of the occurrence, joined, are the quote's words (white space and NFKC aside)
-  assert.deepEqual(judge({ marks: [mark(1, 0, 'Cold forceps bio'), mark(1, 0, 'psies were taken.')] }), { outcome: 'once', off_page: 0, mismatched: 0, problems: [] });
+  assert.deepEqual(judge({ marks: [mark(1, 0, 'Cold forceps bio'), mark(1, 0, 'psies were taken.')] }), { outcome: 'once', off_page: 0, mismatched: 0, cut: 0, problems: [] });
   assert.equal(walk.judgeQuote({ ...quote, text: 'The ﬁnding.' }, reading({ marks: [mark(1, 0, 'The finding.')] })).outcome, 'once');
   // in another case only where the page has no exact-case occurrence (the viewer's own rule); the judge accepts either
   assert.equal(judge({ marks: [mark(1, 0, 'COLD FORCEPS BIOPSIES WERE TAKEN.')] }).outcome, 'once');
@@ -418,6 +418,13 @@ test('a chosen quote is judged by its marked words, the pages they are on and th
   assert.equal(judge({ marks: [mark(1, 0, 'Cold forceps biopsies were')] }).mismatched, 1, 'part of the quote is not the quote');
   assert.equal(judge({ marks: [mark(1, 0, `${quote.text} And more.`)] }).mismatched, 1, 'more than the quote is not the quote');
   assert.match(judge({ count: 2, marks: [mark(1, 0, quote.text)] }).problems.join(), /1 occurrence\(s\) marked, the viewer counted 2/);
+  // an occurrence whose marks on a page begin or end inside a character (readMarks' whole: false) is counted once per page,
+  // though its marked text is the quote's: a letter marked without the accent the next item holds
+  const cut = judge({ pages: [1, 2], note: 'Marked on page 1, continuing onto page 2.', marks: [{ ...mark(1, 0, 'Cold forceps'), whole: false },
+    { ...mark(1, 0, 'biopsies'), whole: false }, { ...mark(2, 0, 'were taken.'), whole: true }] });
+  assert.deepEqual([cut.outcome, cut.cut, cut.mismatched], ['unresolved', 1, 0]);
+  assert.match(cut.problems.join(), /1 marked part\(s\) begin or end inside a character/);
+  assert.equal(judge({ marks: [{ ...mark(1, 0, quote.text), whole: true }] }).outcome, 'once');
   assert.match(judge({ note: 'Marked.', marks: [mark(1, 0, quote.text)] }).problems.join(), /does not name page 1/);
   assert.match(judge({ status: 'not_found', count: 0, note: '' }).problems.join(), /note does not say/);
   assert.match(judge({ status: 'not_found', count: 0, note: 'The exact words could not be found on page 1.', marks: [mark(1, 0, 'x')] }).problems.join(), /1 mark\(s\) shown/);
@@ -434,12 +441,14 @@ test('every quote chosen is counted, and the check fails on any mark off its pag
   const missing = { quote, reading: reading({ status: 'not_found', pages: [], count: 0, note: 'The exact words could not be found on page 1, so nothing is marked. Page 1 is shown.' }) };
   const made = walk.quoteMarkChecks([good, good, missing]);
   assert.equal(made.status, 'pass');
-  assert.deepEqual(made.data, { quotes: 3, marked_once: 2, marked_multi: 0, not_found: 1, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0 });
-  assert.equal(made.reason, '3 quote(s) chosen: 2 marked once, 0 marked more than once, 1 not found (the note says so), 0 mark(s) off the quote\'s page, 0 marked with other words');
+  assert.deepEqual(made.data, { quotes: 3, marked_once: 2, marked_multi: 0, not_found: 1, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0, cut: 0 });
+  assert.equal(made.reason, '3 quote(s) chosen: 2 marked once, 0 marked more than once, 1 not found (the note says so), 0 mark(s) off the quote\'s page, 0 marked with other words, 0 beginning or ending inside a character');
   const off = walk.quoteMarkChecks([good, { quote, reading: reading({ pages: [2], marks: [{ page: 2, occurrence: 0, text: quote.text }] }) }]);
   assert.equal(off.status, 'fail');
   assert.equal(off.data.off_page, 2);
   assert.equal(walk.quoteMarkChecks([{ quote, reading: reading({ mode: 'frame' }) }]).status, 'fail', 'no marking at all is a failure');
+  const halved = walk.quoteMarkChecks([good, { quote, reading: reading({ marks: [{ page: 1, occurrence: 0, text: quote.text, whole: false }] }) }]);
+  assert.deepEqual([halved.status, halved.data.cut, halved.data.marked_once, halved.data.unresolved], ['fail', 1, 1, 1]);
   assert.equal(walk.quoteMarkChecks([]).status, 'fail');
   // the reason names quotes by their line and page, never by their words
   assert.ok(!off.reason.includes(quote.text));
@@ -773,7 +782,8 @@ test('every quote is chosen and its marks read back through the page itself, in 
     const chosen = await walk.chooseQuotes(page, enc);
     const made = walk.quoteMarkChecks(chosen);
     assert.equal(made.status, 'pass', made.reason);
-    assert.deepEqual(made.data, { quotes: 6, marked_once: 3, marked_multi: 1, not_found: 2, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0 });
+    assert.deepEqual(made.data, { quotes: 6, marked_once: 3, marked_multi: 1, not_found: 2, unavailable: 0, unresolved: 0, off_page: 0, mismatched: 0, cut: 0 });
+    assert.ok(chosen.every(item => item.reading.marks.every(mark => mark.whole === true)), 'every mark begins and ends between two characters');
     const notes = chosen.map(item => item.reading.note);
     assert.deepEqual(notes, [
       'These words appear 2 times on page 1. Each is marked.',
@@ -795,6 +805,21 @@ test('every quote is chosen and its marks read back through the page itself, in 
     assert.deepEqual(violations, []);
     // the page script leaves window's own properties alone (the walk's viewport check reads window.innerWidth)
     assert.equal(await page.evaluate(() => typeof window.innerWidth), 'number');
+    await context.close();
+  });
+  await t.test('readMarks sees a mark that begins or ends inside a character of the page\'s text, apart from the page script', async () => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const span = inner => `<span>${inner}</span>`;
+    const mark = (occurrence, inner) => `<span class="pdf-mark" data-occurrence="${occurrence}">${inner}</span>`;
+    await page.setContent(`<div id="documentViewer" data-mode="pdf" data-mark-status="marked" data-mark-pages="1 2" data-mark-count="4">
+      <div class="pdf-page" data-page="1"><canvas></canvas><div class="pdf-text">${span(`The patient ${mark(0, 'Jose')}`)}${span('́')}${span(' ')}${span(`${mark(1, 'Garcia')} was seen.`)}</div></div>
+      <div class="pdf-page" data-page="2"><div class="pdf-text">${span(mark(2, '하'))}${span('ᆫ')}${span(' and ')}${span(`Jos${mark(3, 'e')}`)}${span(mark(3, '́'))}${span(' x')}</div></div>
+    </div><p id="viewerMark">Marked.</p>`);
+    const read = await page.evaluate(walk.readMarks);
+    assert.deepEqual(read.marks.map(item => [item.page, item.occurrence, item.whole]), [[1, 0, false], [1, 1, true], [2, 2, false], [2, 3, true], [2, 3, true]],
+      'the letter without its accent and the syllable without its last jamo are cut; the accent marked with its letter is whole');
+    assert.equal(walk.judgeQuote({ code: '43239', line: 'L1', text: 'x', page: null }, read).cut, 2);
     await context.close();
   });
   await t.test('where the PDF library cannot load, the browser\'s own viewer is framed and opens the quoted page, with no mark', async () => {
