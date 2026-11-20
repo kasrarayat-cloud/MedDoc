@@ -473,3 +473,27 @@
 .viewer-mark:not(:empty)+.viewer-note{border-top:0}
 @media(max-width:760px){.viewer-frame.pdf-viewer{padding:8px}
 }
+
+/* The PDF viewer, round 3 (DECISIONS D368). In the desktop column the drawn pages never set the viewer's share of the
+   column: it starts from nothing and takes what the quoted passages leave them (their approved share, at most 36%), as
+   the frame it replaced did, however long the document. In forced colours the drawn page keeps its own white ground, so
+   its drawing stays legible and the mark visible; the note and the page label around it keep the forced colours. The
+   marks are <mark> elements, in the same look. The zoom, 75% to 300% of the page fitted to the viewer's width: a page
+   wider than the viewer scrolls across inside it; the buttons sit in the toolbar, which wraps where it is narrow, in the
+   page's teal with a focus ring in it. */
+@media(min-width:1001px){.viewer-column .viewer-frame.pdf-viewer{height:0}
+}
+.pdf-page{forced-color-adjust:none}
+.pdf-text mark.pdf-mark{color:transparent}
+.pdf-pages{width:max-content;min-width:100%}
+.viewer-toolbar{flex-wrap:wrap;row-gap:8px}
+.viewer-name{flex:1 1 0;text-align:right}
+.viewer-zoom{display:inline-flex;align-items:center;gap:4px}
+.viewer-zoom[hidden]{display:none}
+.zoom-button{min-width:32px;min-height:32px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--teal);font:inherit;font-size:12px;font-weight:500;line-height:1;cursor:pointer}
+.zoom-button:hover{background:#f0f5e7}
+.zoom-button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.zoom-button[aria-disabled="true"]{color:var(--muted);background:#fafbf6;cursor:default}
+.zoom-level{min-width:4.5ch;text-align:center;font-size:11px;color:var(--teal);font-variant-numeric:tabular-nums}
+@media(max-width:760px){.zoom-button{min-width:44px;min-height:44px}
+}

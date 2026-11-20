@@ -122,8 +122,8 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"'`]/g, ch => HTML_ESCAPES[ch]);
 }
 
-// (Object.prototype.hasOwnProperty, not Object.hasOwn, which Safari before 15.4 lacks: the page itself works in a browser
-// the PDF viewer is not offered to, pdfCapable)
+// (Object.prototype.hasOwnProperty: the page script asks no more of a browser than it needs; the PDF viewer's own needs
+// are pdfCapable's)
 function lookup(map, key, fallback) {
   return typeof key === 'string' && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : fallback;
 }
@@ -339,20 +339,34 @@ function findPassages(source, passage) {
 }
 
 // --- the quoted words, marked on a page of a PDF (the owner's direction of 2026-11-20, DECISIONS D368) --------------
-// A page's text is the strings of its text items joined in order, as the PDF library reads them. Quoted words are located
-// by their own characters only: white space is ignored entirely and Unicode NFKC applies to both sides; a match is
-// exact-case first, case-blind only where there is no exact-case one, and always of whole characters. The characters are
-// cut from the page's whole text, across its items (pageCharacters): a letter keeps its accent where the PDF draws the
-// accent as an item of its own, and no half of a ligature, of a Hangul syllable or of an emoji sequence is ever a match.
-// They are looked for on the quote's page; only where they are not there, on that page and the next joined, keeping a
-// passage that starts on the quote's page and runs onto the next (a character never spans two pages). Nothing is ever
-// marked on another page, and nothing partial or nearest is marked. A quote with no page is looked for on every page.
-// Every occurrence found is marked and counted. Nothing here reads what the words mean.
+// A page's text is its text items joined in order, as the PDF library reads them (pageText), with three steps of its own:
+// an item drawn a second time over itself to look bold (an overprint copy: overprintCopies) is left out and never marked;
+// a line break follows every item the library ends a line with; and Unicode format characters (\p{Cf}) are dropped, as
+// the library drops them. Quoted words are located by their own characters only: white space is ignored entirely,
+// format characters are dropped and Unicode NFKC applies, on both sides; a match is exact-case first, case-blind only
+// where there is no exact-case one, and always of whole characters of that text; and where the quote begins with a letter
+// or a digit, the page's character just before a match may not be a letter, a digit or a mark (nor, where it ends with
+// one, the character just after it), so a quote is never counted inside a longer word. Whole characters of the text as
+// the library reads it are not always the text as drawn: two letters the PDF declares for one drawn ligature are two
+// characters (only the word-edge rule keeps a mark from beginning or ending between them), and a spacing accent drawn
+// over a letter is a character of its own (the letter can be marked without it). The words are looked for on the quote's
+// page; only where they are not there, on that page and the next joined, keeping a passage that starts on the quote's
+// page and runs onto the next (a character never spans two pages). Nothing is ever marked on another page, and nothing
+// partial or nearest is marked. A quote with no page is looked for on every page. Every occurrence found is marked and
+// counted. Nothing here reads what the words mean.
 
 // One character with the marks that follow it (or marks with nothing before them): how a text is cut into characters
 // where the browser cannot cut it into the characters a person sees (Intl.Segmenter). The PDF viewer never runs there
 // (pdfCapable).
 const TEXT_UNIT = /\P{M}\p{M}*|\p{M}+/gu;
+// What a folded text never holds: white space and format characters.
+const UNFOLDED = /[\s\p{Cf}]+/gu;
+const FORMAT_CHARACTER = /\p{Cf}/u;
+// A character that belongs to a word (a letter, a digit or a combining mark), and one a quote's word edge is kept for.
+const WORD_PART = /^[\p{L}\p{N}\p{M}]$/u;
+const WORD_EDGE = /^[\p{L}\p{N}]/u;
+// An overprint copy is looked for among this many items before it.
+const OVERPRINT_REACH = 8;
 let characterCutter;
 
 // Where each character of a text begins and ends, as [start, end] offsets covering the whole text: its extended grapheme
@@ -371,19 +385,73 @@ function characterSpans(value) {
   return spans;
 }
 
-// One page's characters: the strings of its text items joined in order (an item that is not a string counts as none), cut
-// into characters (characterSpans) and joined again wherever NFKC would combine two of them, so that NFKC of the page's
-// text is exactly its characters' NFKC, in order. Each is {pieces, folded}: the pieces of the item strings it is made of,
-// {item, start, end} in each item's own offsets (an accent the PDF draws in another font is an item of its own and a piece
-// of the letter before it), and its NFKC with the white space dropped. A character that is only white space is left out.
-function pageCharacters(strings) {
-  const items = list(strings).map(value => (typeof value === 'string' ? value : ''));
-  const starts = [];
-  let joined = '';
-  for (const value of items) {
-    starts.push(joined.length);
-    joined += value;
-  }
+// The items of one page that are overprint copies, as a Set of their indexes: an item whose string, after NFKC, is the
+// string of one of the eight items before it, holds a character that is not white space, and has its origin
+// (transform[4], transform[5]) within max(1, 0.2 x its font height, hypot(transform[2], transform[3])) PDF units of that
+// item's origin - the same words drawn again a fraction of a point away, to look bold. An item without that geometry (a
+// bare string) is never one.
+function overprintCopies(items) {
+  const entries = list(items);
+  const origin = item => {
+    const t = item && typeof item === 'object' && Array.isArray(item.transform) ? item.transform : null;
+    return t && [t[2], t[3], t[4], t[5]].every(Number.isFinite) ? t : null;
+  };
+  const strings = entries.map(item => (item && typeof item === 'object' && typeof item.str === 'string' ? item.str.normalize('NFKC') : ''));
+  const copies = new Set();
+  entries.forEach((item, index) => {
+    const own = origin(item);
+    if (!own || !/\S/u.test(strings[index])) return;
+    const reach = Math.max(1, 0.2 * Math.hypot(own[2], own[3]));
+    for (let before = Math.max(0, index - OVERPRINT_REACH); before < index; before += 1) {
+      const other = origin(entries[before]);
+      if (other && strings[before] === strings[index] && Math.hypot(own[4] - other[4], own[5] - other[5]) <= reach) {
+        copies.add(index);
+        return;
+      }
+    }
+  });
+  return copies;
+}
+
+// One page's text, made ready to search. `items` are its text items in order: {str, transform, hasEOL} as the library
+// reads them, or bare strings (an item that is neither counts as none). `joined` is their strings in order, overprint
+// copies left out and format characters dropped, with a line break after every item marked hasEOL; for each UTF-16 unit
+// of it, `itemOf` and `offsetOf` name the item and the offset in that item's own string it came from (-1 for a line
+// break). It is cut into characters (characterSpans) and joined again wherever NFKC would combine two of them, so that
+// NFKC of the text is exactly its characters' NFKC, in order; a character that folds to nothing (white space) is left
+// out. `starts` and `ends` are each character's place in `joined`; `exact` and `blind` are the characters' folded text
+// (NFKC, white space and format characters dropped) as written and lower-cased, character by character, each with the
+// character every UTF-16 unit of it came from (`owner`); `copies` lists the overprint copies' item indexes.
+function pageText(items) {
+  const entries = list(items);
+  const copies = overprintCopies(entries);
+  const parts = [];
+  const itemOf = [];
+  const offsetOf = [];
+  const take = (value, item, offset) => {
+    parts.push(value);
+    for (let unit = 0; unit < value.length; unit += 1) {
+      itemOf.push(item);
+      offsetOf.push(offset + unit);
+    }
+  };
+  entries.forEach((entry, index) => {
+    const value = typeof entry === 'string' ? entry : entry && typeof entry.str === 'string' ? entry.str : '';
+    if (value && !copies.has(index)) {
+      if (!FORMAT_CHARACTER.test(value)) {
+        take(value, index, 0);
+      } else {
+        for (let at = 0; at < value.length;) {
+          const size = value.codePointAt(at) > 0xffff ? 2 : 1;
+          const point = value.slice(at, at + size);
+          if (!FORMAT_CHARACTER.test(point)) take(point, index, at);
+          at += size;
+        }
+      }
+    }
+    if (entry && typeof entry === 'object' && entry.hasEOL === true) take('\n', -1, -1);
+  });
+  const joined = parts.join('');
   const nfkc = value => value.normalize('NFKC');
   const cuts = [];
   for (const span of characterSpans(joined)) {
@@ -402,68 +470,133 @@ function pageCharacters(strings) {
   // Until NFKC of the characters, in order, is NFKC of the whole text, the characters around the first place they differ
   // are joined into one; the text as one character always agrees.
   const whole = nfkc(joined);
-  const parts = cuts.map(([start, end]) => nfkc(joined.slice(start, end)));
-  while (cuts.length > 1 && parts.join('') !== whole) {
+  const folded = cuts.map(([start, end]) => nfkc(joined.slice(start, end)));
+  while (cuts.length > 1 && folded.join('') !== whole) {
     let at = 0;
     let index = 0;
-    while (index < parts.length - 1 && whole.startsWith(parts[index], at)) {
-      at += parts[index].length;
+    while (index < folded.length - 1 && whole.startsWith(folded[index], at)) {
+      at += folded[index].length;
       index += 1;
     }
     const from = Math.max(0, index - 1);
     const to = Math.min(cuts.length - 1, index + 1);
     cuts.splice(from, to - from + 1, [cuts[from][0], cuts[to][1]]);
-    parts.splice(from, to - from + 1, nfkc(joined.slice(cuts[from][0], cuts[from][1])));
+    folded.splice(from, to - from + 1, nfkc(joined.slice(cuts[from][0], cuts[from][1])));
   }
-  const characters = [];
-  let item = 0;
+  const starts = [];
+  const ends = [];
+  const exact = [];
+  const blind = [];
   cuts.forEach(([start, end], index) => {
-    const folded = parts[index].replace(/\s+/gu, '');
-    if (!folded) return;
-    while (item < items.length && starts[item] + items[item].length <= start) item += 1;
-    const pieces = [];
-    for (let at = item; at < items.length && starts[at] < end; at += 1) {
-      const from = Math.max(start, starts[at]) - starts[at];
-      const to = Math.min(end, starts[at] + items[at].length) - starts[at];
-      if (to > from) pieces.push({ item: at, start: from, end: to });
-    }
-    characters.push({ pieces, folded });
+    const value = folded[index].replace(UNFOLDED, '');
+    if (!value) return;
+    starts.push(start);
+    ends.push(end);
+    exact.push(value);
+    blind.push(value.toLowerCase());
   });
-  return characters;
-}
-
-// The folded text of [page, strings] runs: each page's characters (pageCharacters), as written (`exact`) and lower-cased
-// (`blind`), with the character every UTF-16 position of either came from. units[i] is {page, pieces}: the character's
-// page, and the pieces of that page's item strings it is made of.
-function foldText(runs) {
-  const units = [];
-  const exact = { text: '', owner: [] };
-  const blind = { text: '', owner: [] };
-  const append = (into, value, unit) => {
-    into.text += value;
-    for (let index = 0; index < value.length; index += 1) into.owner.push(unit);
+  const owned = values => {
+    const text = values.join('');
+    const owner = new Int32Array(text.length);
+    let at = 0;
+    values.forEach((value, index) => {
+      owner.fill(index, at, at + value.length);
+      at += value.length;
+    });
+    return { text, owner };
   };
-  for (const [page, strings] of runs) {
-    for (const { pieces, folded } of pageCharacters(strings)) {
-      units.push({ page, pieces });
-      append(exact, folded, units.length - 1);
-      append(blind, folded.toLowerCase(), units.length - 1);
-    }
-  }
-  return { units, exact, blind };
+  return { joined, itemOf: Int32Array.from(itemOf), offsetOf: Int32Array.from(offsetOf), starts: Int32Array.from(starts),
+    ends: Int32Array.from(ends), exact: owned(exact), blind: owned(blind), copies: [...copies].sort((a, b) => a - b) };
 }
 
-// Where `needle` occurs in one folded text, left to right without overlap, as [first unit, last unit]. A place that would
-// begin or end inside a unit is no occurrence.
-function foldedOccurrences(folded, needle) {
+// The pieces of the items' strings that character `index` of a page's text (pageText) is made of: [{item, start, end}]
+// in each item's own offsets (an accent the PDF draws in another font is an item of its own, and a piece of the letter
+// before it).
+function characterPieces(text, index) {
+  const pieces = [];
+  for (let unit = text.starts[index]; unit < text.ends[index]; unit += 1) {
+    const item = text.itemOf[unit];
+    if (item < 0) continue;
+    const last = pieces[pieces.length - 1];
+    if (last && last.item === item) last.end = text.offsetOf[unit] + 1;
+    else pieces.push({ item, start: text.offsetOf[unit], end: text.offsetOf[unit] + 1 });
+  }
+  return pieces;
+}
+
+// One page's characters, one by one: {pieces, folded} (pageText, characterPieces).
+function pageCharacters(items) {
+  const text = pageText(items);
+  const folded = Array.from(text.starts, () => '');
+  for (let at = 0; at < text.exact.text.length; at += 1) folded[text.exact.owner[at]] += text.exact.text[at];
+  return folded.map((value, index) => ({ pieces: characterPieces(text, index), folded: value }));
+}
+
+// Whether the page's character just before character `index` of its text (side 'before'), or just after it ('after'),
+// belongs to a word: a letter, a digit or a mark, read in the page's joined text. The page's start and end are edges.
+function joinsWord(text, index, side) {
+  const { joined } = text;
+  let point;
+  if (side === 'before') {
+    const at = text.starts[index];
+    if (at <= 0) return false;
+    const unit = joined.charCodeAt(at - 1);
+    const high = at >= 2 ? joined.charCodeAt(at - 2) : 0;
+    point = unit >= 0xdc00 && unit <= 0xdfff && high >= 0xd800 && high <= 0xdbff ? joined.codePointAt(at - 2) : unit;
+  } else {
+    const at = text.ends[index];
+    if (at >= joined.length) return false;
+    point = joined.codePointAt(at);
+  }
+  return WORD_PART.test(String.fromCodePoint(point));
+}
+
+// Which ends of a quote keep to a word's edge: the start where the quote's first character (as its text is cut,
+// pageText) begins with a letter or a digit, the end where its last character does.
+function quoteEdges(wanted) {
+  const { text, owner } = wanted.exact;
+  if (!text) return { start: false, end: false };
+  let last = text.length - 1;
+  while (last > 0 && owner[last - 1] === owner[text.length - 1]) last -= 1;
+  const edge = at => WORD_EDGE.test(String.fromCodePoint(text.codePointAt(at)));
+  return { start: edge(0), end: edge(last) };
+}
+
+// Where `needle` occurs in the folded text of runs of pages ([{number, text}], their texts joined in order), left to
+// right without overlap, as [{first, last}], each [run, character]. A place that would begin or end inside a character is
+// none; so is one whose quote keeps to a word's edge (`edges`, quoteEdges) where the page's character before or after it
+// belongs to a word (joinsWord). Past a place that is none, the search goes on from its next unit.
+function foldedOccurrences(runs, needle, caseBlind, edges) {
   const found = [];
-  if (!needle) return found;
-  const { text: hay, owner } = folded;
+  if (!needle || !runs.length) return found;
+  const parts = runs.map(run => (caseBlind ? run.text.blind : run.text.exact));
+  const hay = parts.map(part => part.text).join('');
+  const offsets = [];
+  let total = 0;
+  for (const part of parts) {
+    offsets.push(total);
+    total += part.text.length;
+  }
+  const ownerAt = at => {
+    let low = 0;
+    let high = offsets.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if (offsets[middle] <= at) low = middle;
+      else high = middle - 1;
+    }
+    return [low, parts[low].owner[at - offsets[low]]];
+  };
+  const same = (a, b) => a[0] === b[0] && a[1] === b[1];
   let from = 0;
   for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, from)) {
     const end = at + needle.length;
-    if ((at === 0 || owner[at - 1] !== owner[at]) && (end === hay.length || owner[end - 1] !== owner[end])) {
-      found.push([owner[at], owner[end - 1]]);
+    const first = ownerAt(at);
+    const last = ownerAt(end - 1);
+    const whole = (at === 0 || !same(ownerAt(at - 1), first)) && (end === hay.length || !same(ownerAt(end), last));
+    if (whole && !(edges?.start && joinsWord(runs[first[0]].text, first[1], 'before'))
+      && !(edges?.end && joinsWord(runs[last[0]].text, last[1], 'after'))) {
+      found.push({ first, last });
       from = end;
     } else {
       from = at + 1;
@@ -472,26 +605,39 @@ function foldedOccurrences(folded, needle) {
   return found;
 }
 
-// Where one quote is marked: {page, pageCount, status, scope, caseBlind, count, pages, marks}. `texts` holds the item
-// strings of every page (texts[p - 1] for page p; null for a page not read) and its length is the document's page count.
-// status: 'marked', 'not_found', 'missing_page' (the quote names a page the document does not have) or 'empty' (no
-// character to look for); scope: 'page', 'continued' (from the quote's page onto the next) or 'document' (a quote with no
-// page). marks[p] lists, in reading order, {item, start, end, occurrence}: what of item `item`'s own string is marked on
-// page p, and which occurrence (0, 1, ...) it is part of; pages lists the pages that hold a mark.
-function locateQuote(quote, texts) {
+// Where one quote is marked: {page, pageCount, status, scope, caseBlind, count, pages, marks, textless}. `texts` holds the
+// text items of every page (texts[p - 1] for page p, as pageText takes them; null for a page not read), and its length is
+// the document's page count; `prepared`, a Map from page number to pageText, keeps each page's prepared text for the next
+// quote (one per document). status: 'marked', 'not_found', 'missing_page' (the quote names a page the document does not
+// have) or 'empty' (no character to look for); scope: 'page', 'continued' (from the quote's page onto the next) or
+// 'document' (a quote with no page); textless (not found only): the quote's page - for a quote with no page, every page -
+// was read and has no character to search (a scanned page). marks[p] lists, in reading order, {item, start, end,
+// occurrence}: what of item `item`'s own string is marked on page p, and which occurrence (0, 1, ...) it is part of;
+// pages lists the pages that hold a mark.
+function locateQuote(quote, texts, prepared = null) {
   const pages = list(texts);
   const page = quotePage(quote);
   const result = { page, pageCount: pages.length, status: 'not_found', scope: page ? 'page' : 'document', caseBlind: false,
-    count: 0, pages: [], marks: {} };
-  const wanted = foldText([[0, [typeof quote?.text === 'string' ? quote.text : '']]]);
+    count: 0, pages: [], marks: {}, textless: false };
+  const wanted = pageText([typeof quote?.text === 'string' ? quote.text : '']);
   if (!wanted.exact.text) return { ...result, status: 'empty' };
   if (page && page > pages.length) return { ...result, status: 'missing_page' };
+  const kept = prepared instanceof Map ? prepared : new Map();
+  const read = number => {
+    if (!kept.has(number)) {
+      const items = pages[number - 1];
+      if (!Array.isArray(items)) return null;
+      kept.set(number, pageText(items));
+    }
+    return kept.get(number);
+  };
+  const edges = quoteEdges(wanted);
   const search = (numbers, keep) => {
-    const folded = foldText(numbers.map(number => [number, pages[number - 1]]));
+    const runs = numbers.map(number => ({ number, text: read(number) })).filter(run => run.text);
     for (const caseBlind of [false, true]) {
-      const found = foldedOccurrences(caseBlind ? folded.blind : folded.exact, caseBlind ? wanted.blind.text : wanted.exact.text)
-        .filter(([first, last]) => keep(folded.units[first], folded.units[last]));
-      if (found.length) return { folded, found, caseBlind };
+      const found = foldedOccurrences(runs, caseBlind ? wanted.blind.text : wanted.exact.text, caseBlind, edges)
+        .filter(({ first, last }) => keep(runs[first[0]].number, runs[last[0]].number));
+      if (found.length) return { runs, found, caseBlind };
     }
     return null;
   };
@@ -501,22 +647,28 @@ function locateQuote(quote, texts) {
   } else {
     hit = search([page], () => true);
     if (!hit && page < pages.length) {
-      hit = search([page, page + 1], (first, last) => first.page === page && last.page === page + 1);
+      hit = search([page, page + 1], (first, last) => first === page && last === page + 1);
       if (hit) result.scope = 'continued';
     }
   }
-  if (!hit) return result;
+  if (!hit) {
+    const searched = (page ? [page] : pages.map((_, index) => index + 1)).map(read);
+    return { ...result, textless: searched.length > 0 && searched.every(text => text !== null && !text.exact.text) };
+  }
   const marks = {};
-  hit.found.forEach(([first, last], occurrence) => {
+  hit.found.forEach(({ first, last }, occurrence) => {
     let open = null;
-    for (let index = first; index <= last; index += 1) {
-      const { page: number, pieces } = hit.folded.units[index];
-      for (const piece of pieces) {
-        if (open && open.page === number && open.item === piece.item) {
-          open.end = piece.end;
-        } else {
-          open = { page: number, item: piece.item, start: piece.start, end: piece.end, occurrence };
-          (marks[number] ||= []).push(open);
+    for (let run = first[0]; run <= last[0]; run += 1) {
+      const { number, text } = hit.runs[run];
+      const to = run === last[0] ? last[1] : text.starts.length - 1;
+      for (let index = run === first[0] ? first[1] : 0; index <= to; index += 1) {
+        for (const piece of characterPieces(text, index)) {
+          if (open && open.page === number && open.item === piece.item) {
+            open.end = piece.end;
+          } else {
+            open = { page: number, item: piece.item, start: piece.start, end: piece.end, occurrence };
+            (marks[number] ||= []).push(open);
+          }
         }
       }
     }
@@ -530,9 +682,10 @@ function pagesText(numbers) {
   return numbers.length === 1 ? `page ${numbers[0]}` : `pages ${joinWords(numbers.map(String))}`;
 }
 
-// What the note under the viewer says of one quote chosen in a PDF.
+// What the note under the viewer says of one quote chosen in a PDF. Where nothing is found, it says what was searched:
+// the searchable text of the page (or the document), or - where the page has none - that it has none.
 function markNote(result) {
-  const { page, status, scope, count, pages } = record(result);
+  const { page, status, scope, count, pages, textless } = record(result);
   if (status === 'marked') {
     if (scope === 'continued') {
       return count === 1 ? `Marked on page ${page}, continuing onto page ${page + 1}.`
@@ -543,23 +696,29 @@ function markNote(result) {
   }
   if (status === 'missing_page') return `This passage names page ${page}, but the document has ${plural(record(result).pageCount, 'page', 'pages')}. Nothing is marked.`;
   if (status === 'empty') return 'This passage has no words to mark.';
-  return page ? `The exact words could not be found on page ${page}, so nothing is marked. Page ${page} is shown.`
-    : 'The exact words could not be found in this document, so nothing is marked.';
+  if (textless === true) {
+    return page ? `Page ${page} has no text the viewer can search (it may be a scanned image), so nothing is marked. Page ${page} is shown.`
+      : 'This document has no text the viewer can search (it may be a scanned image), so nothing is marked.';
+  }
+  return page ? `The exact words were not found in the searchable text of page ${page}, so nothing is marked. Page ${page} is shown.`
+    : 'The exact words were not found in the searchable text of this document, so nothing is marked.';
 }
 
-// The note when the PDF is shown by the browser's own viewer, which can open a page but not mark words on it, saying why
-// (fallbackViewer): 'browser' - this browser lacks what marking needs (pdfCapable), or the PDF library or its worker does
-// not load in it; 'document' - the library runs but cannot draw this document (it refuses it, or a page or its text
-// fails); 'slow' - the document stopped arriving before it could be drawn.
+// The note when the PDF is shown by the browser's own viewer, which can open a page but not mark words on it: why, then
+// the quote's page (never what the frame shows). 'browser' - this browser lacks what marking needs (pdfCapable);
+// 'library' - the PDF library or its worker did not load, or not within the time limit, or, once the document had
+// opened, a page's drawing or its text did not settle within it; 'document' - the library refuses the document, finds no
+// page in it, or fails on a page's drawing or text; 'slow' - the download stopped moving before the document opened.
 const FRAME_REASONS = {
   browser: 'Marking needs a newer browser.',
+  library: 'The marking tool did not work here, so nothing is marked.',
   document: 'This document cannot be drawn here, so nothing is marked.',
   slow: 'The document took too long to load here, so nothing is marked.',
 };
 
 function frameNote(page, reason) {
   const said = lookup(FRAME_REASONS, reason, FRAME_REASONS.document);
-  return page ? `${said} Page ${page} is shown.` : said;
+  return page ? `${said} The quote is on page ${page}.` : said;
 }
 
 // The note for a passage of a text document, found by the text rule (findPassages).
@@ -840,9 +999,9 @@ const state = {
   poll: { timer: 0, count: 0, errors: 0 }, tickTimer: 0, clock: 0, reconnecting: false, outdated: false,
   upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, exporting: null,
   open: new Set(), answers: new Map(), pending: new Set(), toastTimer: 0, leaving: false,
-  // the PDF viewer of the document shown (browser wiring), the PDF library once it is asked for, and the passage of a
-  // text document being marked
-  viewer: null, pdfLibrary: null, framePassage: null,
+  // the PDF viewer of the document shown (browser wiring), the PDF library once it is asked for and how many times it has
+  // been asked for (a failed load is tried again at fresh addresses), and the passage of a text document being marked
+  viewer: null, pdfLibrary: null, pdfAttempt: 0, framePassage: null,
 };
 
 function uiState(overrides = {}) {
@@ -953,7 +1112,8 @@ function documentName(part) {
 
 // The viewer of the original, #documentViewer, which keeps the view address in data-view-url: for a PDF (or the PDF a Word
 // document was converted to) a scrolling region the page draws the PDF's pages in (the browser wiring below; where that
-// cannot run, the browser's own viewer in a frame), with the page shown in the toolbar; for a text an iframe of the text.
+// cannot run, the browser's own viewer in a frame), with the page shown in the toolbar and the zoom beside it (shown once
+// the pages are drawn); for a text an iframe of the text.
 // Under it, the note that says what choosing a quote marked (a polite live region), then the note when the PDF is the one
 // a Word document was converted to. With no view, no viewer at all and only the "Download original" link.
 function viewerPanel(doc) {
@@ -971,10 +1131,15 @@ function viewerPanel(doc) {
   }
   const marked = kind === 'none' ? '' : '<p class="viewer-mark" id="viewerMark" role="status" aria-live="polite"></p>';
   const page = kind === 'pdf' ? '<span class="viewer-page" id="viewerPage"></span>' : '';
+  const zoom = kind === 'pdf' ? '<span class="viewer-zoom" id="viewerZoom" role="group" aria-label="Zoom" hidden>'
+    + '<button type="button" class="zoom-button" data-zoom="out" aria-label="Zoom out" title="Zoom out">−</button>'
+    + '<span class="zoom-level" id="zoomLevel" aria-live="polite">100%</span>'
+    + '<button type="button" class="zoom-button" data-zoom="in" aria-label="Zoom in" title="Zoom in">+</button>'
+    + '<button type="button" class="zoom-button zoom-fit" data-zoom="fit">Fit width</button></span>' : '';
   const note = kind === 'pdf' && part.converted === true ? `<p class="viewer-note">${icon('info')}<span>${escapeHtml(CONVERTED_NOTE)}</span></p>` : '';
   const meta = [lookup(KIND_LABELS, part.kind, ''), Number.isInteger(part.size) && part.size > 0 ? formatSize(part.size) : ''].filter(Boolean).join(' · ');
   const download = original ? `<a class="viewer-download" id="downloadOriginal" href="${escapeHtml(original)}" download>${icon('download')}Download original</a>` : '';
-  return `<section class="viewer-panel${kind === 'none' ? ' no-view' : ''}" aria-labelledby="viewerTitle"><div class="viewer-toolbar">${icon('file')}<h2 id="viewerTitle">Original document</h2><span class="viewer-name">${escapeHtml(name)}</span>${page}</div>${frame}${marked}${note}<div class="viewer-bottom"><span>${escapeHtml(meta || 'Original as received')}</span>${download}</div></section>`;
+  return `<section class="viewer-panel${kind === 'none' ? ' no-view' : ''}" aria-labelledby="viewerTitle"><div class="viewer-toolbar">${icon('file')}<h2 id="viewerTitle">Original document</h2><span class="viewer-name">${escapeHtml(name)}</span>${page}${zoom}</div>${frame}${marked}${note}<div class="viewer-bottom"><span>${escapeHtml(meta || 'Original as received')}</span>${download}</div></section>`;
 }
 
 function quoteBody(quote) {
@@ -1750,6 +1915,7 @@ function clearViewerMark() {
   if (viewer) {
     viewer.mark = null;
     viewer.pending = null;
+    viewer.chosen = null;
     viewer.reveal = 0;
     viewer.markSerial += 1;
     for (const page of viewer.pages) paintPage(viewer, page);
@@ -1791,11 +1957,65 @@ function scrollBehavior() {
 // decoders and standard fonts it fetches are the package's own wasm/ and standard_fonts/, two folders up). It reads only
 // the same-origin view address, runs with no WebAssembly, no document scripting, no XFA and no layer of links or form
 // fields (form fields' appearances are drawn on the page), and the PDF's text reaches the page as text only, in its text
-// layer. Where it cannot run or cannot draw the document - this browser lacks what marking needs, the module or the worker
-// does not load, the document is refused, its download stalls - the browser's own viewer is framed instead, as before, a
-// quote opens its page there (#page=N) without a mark, and the note says why (frameNote).
+// layer. Where it cannot run or cannot draw the document, the browser's own viewer is framed instead, as before: a quote
+// opens its page there (a new frame at #page=N, since that viewer opens the page only as its frame loads), nothing is
+// marked, and the note says why and names the quote's page (frameNote). No wait on the library is endless: loading it
+// and starting its worker, and once the document has opened each page drawn and each page's text read, have a time limit
+// (withinLimit); the download has one while it stops moving.
 
-const PDF_VIEW = { gap: 12, near: '100% 0px', resizeMs: 150, stallMs: 20000, maxCanvasPixels: 16777216 };
+const PDF_VIEW = { gap: 12, near: '100% 0px', resizeMs: 150, stallMs: 20000, limitMs: 20000, sliceMs: 40, maxCanvasPixels: 16777216 };
+// The zoom steps, relative to the page fitted to the viewer's width (ZOOM_FIT: 100%).
+const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 2, 3];
+const ZOOM_FIT = 1;
+// How the page loads the library's module (a test stands in for it).
+const PDF_IMPORT = { load: specifier => import(specifier) };
+
+// A wait on the library that went past its time limit (withinLimit).
+class TimeLimit extends Error {}
+
+// Settles as `promise` does, or rejects with TimeLimit once it has waited `ms` of the time the page was visible: a hidden
+// tab draws nothing (the browser stops the animation frames the library draws in), so its time does not count.
+function withinLimit(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const page = typeof document === 'object' && document ? document : null;
+    const hidden = () => page?.hidden === true;
+    let left = ms;
+    let since = 0;
+    let timer = 0;
+    const run = () => {
+      since = Date.now();
+      timer = setTimeout(() => {
+        stop();
+        reject(new TimeLimit('The PDF library did not answer in time.'));
+      }, Math.max(0, left));
+    };
+    const watch = () => {
+      if (hidden()) {
+        if (timer) {
+          clearTimeout(timer);
+          timer = 0;
+          left -= Date.now() - since;
+        }
+      } else if (!timer) {
+        run();
+      }
+    };
+    const stop = () => {
+      clearTimeout(timer);
+      timer = 0;
+      if (typeof page?.removeEventListener === 'function') page.removeEventListener('visibilitychange', watch);
+    };
+    if (typeof page?.addEventListener === 'function') page.addEventListener('visibilitychange', watch);
+    if (!hidden()) run();
+    Promise.resolve(promise).then(value => {
+      stop();
+      resolve(value);
+    }, error => {
+      stop();
+      reject(error);
+    });
+  });
+}
 
 function pdfAssets() {
   const data = (typeof document === 'object' && document.body?.dataset) || {};
@@ -1805,19 +2025,22 @@ function pdfAssets() {
 
 // What this browser must have natively for the viewer to draw a PDF and mark its words. A browser without any of it is
 // not offered the viewer (the library is not even downloaded): the browser's own viewer is framed and the note says
-// marking needs a newer browser. Measured (DECISIONS D368, fix round 2) in Chromium: each candidate deleted in the page
-// and in the library's worker before the library loaded (typeof read before and after, so a deletion that did not apply
-// could not pass), then the preview's PDFs and the walk's gi-02 opened and every quote chosen. Asked for here: what our
-// own code calls, what broke the drawing or the marking when deleted, and what the library calls with no stand-in on a
-// path the viewer can take that those documents did not (read in the library). Not asked for, because the legacy build
-// brings its own stand-ins (core-js, and three of the library's own), and with each deleted the documents drew and marked
-// exactly as before: Map and WeakMap getOrInsert and getOrInsertComputed, Math.sumPrecise, Promise.try, Uint8Array's
-// base64 and hex, the iterator helpers, the new Set methods, URL.parse, Response and Blob bytes(); nor what the library
-// uses only where it exists (Float16Array, OffscreenCanvas, ImageDecoder, CompressionStream, DecompressionStream) or only
-// on paths the viewer never takes (Array.prototype.findLast: a file name read from an address). Dynamic import() is this
-// script's own syntax, so a browser running the script has it; the library's own syntax (class static blocks: Chrome 94,
-// Firefox 93, Safari 16.4) is older than the newest built-in asked for here. A worker has its page's built-ins, so the
-// page answers for the worker.
+// marking needs a newer browser. Measured (DECISIONS D368, fix round 2) in Chromium only - Firefox and Safari were not
+// run; their versions are MDN's browser-compat-data for what is asked for here: each candidate deleted in the page and in
+// the library's worker before the library loaded (typeof read before and after, so a deletion that did not apply could
+// not pass), then the preview's PDFs and the walk's gi-02 opened and every quote chosen. Asked for here: what our own code
+// calls, what broke the drawing or the marking when deleted, and what the library calls with no stand-in on a path the
+// viewer can take that those documents did not (read in the library). Not asked for: what the legacy build puts back
+// itself when it is missing (each was seen present again once the library had run, and with each deleted the documents
+// drew and marked exactly as before) - Map and WeakMap getOrInsert and getOrInsertComputed, Math.sumPrecise, Promise.try,
+// Uint8Array fromBase64, toBase64, toHex, setFromBase64 and setFromHex, Iterator with its map, filter, toArray, flatMap,
+// forEach, some, every and find (take and drop in the page only), the seven new Set methods, URL.parse, and Response and
+// Blob bytes(); nor what it does not put back and the documents never needed: Uint8Array.fromHex, Iterator.from,
+// Iterator.prototype.reduce and Array.prototype.findLast and findLastIndex (the library calls none of them on a path the
+// viewer takes) and Float16Array (used only where it exists). The same goes for OffscreenCanvas, ImageDecoder,
+// CompressionStream and DecompressionStream, used only where they exist. Dynamic import() is this script's own syntax, so a
+// browser running the script has it; the library's own syntax (class static blocks: Chrome 94, Firefox 93, Safari 16.4)
+// is older than the newest built-in asked for here. A worker has its page's built-ins, so the page answers for the worker.
 function pdfCapable() {
   return typeof IntersectionObserver === 'function'  // our code: pages are drawn only near the visible area
     && typeof ResizeObserver === 'function'  // our code: pages are refitted when the panel's width changes
@@ -1829,18 +2052,29 @@ function pdfCapable() {
     && typeof Object.hasOwn === 'function';  // read: the library's cleanup of a closed document (its fonts, its download)
 }
 
+// The library's module, with its worker's address set: one load for every document while it works. A load that fails or
+// is given up (forgetPdfLibrary) is not kept, and the next document tries again at fresh addresses (?attempt=2, 3, ...):
+// the browser remembers a module that failed to load for the life of the page, by its address.
 function loadPdfLibrary() {
   if (!state.pdfLibrary) {
     const { module, worker } = pdfAssets();
-    state.pdfLibrary = module && worker && pdfCapable()
-      ? import(module).then(library => {
-        library.GlobalWorkerOptions.workerSrc = worker;
+    state.pdfAttempt += 1;
+    const attempt = state.pdfAttempt;
+    const address = value => (attempt > 1 ? `${value}?attempt=${attempt}` : value);
+    const loading = module && worker
+      ? Promise.resolve().then(() => PDF_IMPORT.load(address(module))).then(library => {
+        library.GlobalWorkerOptions.workerSrc = address(worker);
         return library;
       })
-      : Promise.reject(new Error('The PDF library cannot run in this browser.'));
-    state.pdfLibrary.catch(() => {});
+      : Promise.reject(new Error('The page names no PDF library.'));
+    state.pdfLibrary = loading;
+    loading.catch(() => {});  // forgotten by the viewer that waits on it (openPdf), on a failure or past its time limit
   }
   return state.pdfLibrary;
+}
+
+function forgetPdfLibrary(loading) {
+  if (state.pdfLibrary === loading) state.pdfLibrary = null;
 }
 
 // Draws the PDF of a document viewed as one into #documentViewer (after a full redraw of the review page).
@@ -1851,8 +2085,9 @@ function mountViewer(doc) {
   if (!element || !view || viewerKind(doc?.document) !== 'pdf') return;
   const viewer = {
     element, view, name: documentName(record(doc?.document)), mode: 'loading', library: null, worker: null, task: null,
-    pages: [], texts: new Map(), mark: null, pending: null, markSerial: 0, reveal: 0, frame: null, fallback: '', watch: null,
-    resize: null, onScroll: null, width: 0, ratio: 1, stallTimer: 0, resizeTimer: 0, labelFrame: 0,
+    pages: [], texts: new Map(), prepared: new Map(), mark: null, pending: null, chosen: null, markSerial: 0, reveal: 0,
+    frame: null, framePage: null, fallback: '', zoom: ZOOM_FIT, watch: null, resize: null, onScroll: null, unwatchRatio: null,
+    width: 0, ratio: 1, stallTimer: 0, resizeTimer: 0, labelFrame: 0,
   };
   state.viewer = viewer;
   openPdf(viewer);
@@ -1867,20 +2102,31 @@ function closeViewer() {
 }
 
 async function openPdf(viewer) {
-  // the library and its worker first: where either cannot start (the worker nor its stand-in on this page), marking is
-  // beyond this browser, whatever the document
-  try {
-    const library = await loadPdfLibrary();
-    if (state.viewer !== viewer) return;
-    viewer.library = library;
-    viewer.worker = new library.PDFWorker({ verbosity: library.VerbosityLevel.ERRORS });
-    await viewer.worker.promise;
-  } catch {
+  const opening = () => state.viewer === viewer && viewer.mode === 'loading';
+  // a browser without what marking needs is not given the library at all
+  if (!pdfCapable()) {
     fallbackViewer(viewer, 'browser');
     return;
   }
-  if (state.viewer !== viewer || viewer.mode !== 'loading') return;
+  // the library and its worker first, within the time limit: where either does not start, marking did not work here,
+  // whatever the document, and the next document tries the library again
+  const loading = loadPdfLibrary();
+  try {
+    await withinLimit((async () => {
+      const library = await loading;
+      if (!opening()) return;
+      viewer.library = library;
+      viewer.worker = new library.PDFWorker({ verbosity: library.VerbosityLevel.ERRORS });
+      await viewer.worker.promise;
+    })(), PDF_VIEW.limitMs);
+  } catch {
+    forgetPdfLibrary(loading);
+    fallbackViewer(viewer, 'library');
+    return;
+  }
+  if (!opening()) return;
   const { library } = viewer;
+  let pdf;
   try {
     const worker = new URL(library.GlobalWorkerOptions.workerSrc, location.href);
     viewer.task = library.getDocument({
@@ -1889,26 +2135,48 @@ async function openPdf(viewer) {
       useSystemFonts: true, disableWorkerRendering: true, stopAtErrors: false, verbosity: library.VerbosityLevel.ERRORS,
       worker: viewer.worker,
     });
-    // a download that stops moving for this long is given up, and the frame shown instead
+    // a download that stops moving for this long, before the document has opened, is given up and the frame shown
     const stalled = () => {
       clearTimeout(viewer.stallTimer);
-      viewer.stallTimer = setTimeout(() => fallbackViewer(viewer, 'slow'), PDF_VIEW.stallMs);
+      viewer.stallTimer = setTimeout(() => {
+        if (viewer.mode === 'loading') fallbackViewer(viewer, 'slow');
+      }, PDF_VIEW.stallMs);
     };
     viewer.task.onProgress = stalled;
     stalled();
-    const pdf = await viewer.task.promise;
-    clearTimeout(viewer.stallTimer);
-    const proxies = await Promise.all(Array.from({ length: pdf.numPages }, (_, index) => pdf.getPage(index + 1)));
-    if (state.viewer !== viewer || viewer.mode !== 'loading') return;
-    buildPages(viewer, proxies);
+    pdf = await viewer.task.promise;
   } catch {
-    clearTimeout(viewer.stallTimer);
+    stopStall(viewer);
     fallbackViewer(viewer, 'document');
+    return;
   }
+  // once the document has opened, the download's timer stops (the library may go on fetching in the background); a
+  // page's drawing or text has its own limit from here
+  stopStall(viewer);
+  if (!opening()) return;
+  if (!(Number.isInteger(pdf?.numPages) && pdf.numPages >= 1)) {
+    fallbackViewer(viewer, 'document');
+    return;
+  }
+  let proxies;
+  try {
+    proxies = await withinLimit(Promise.all(Array.from({ length: pdf.numPages }, (_, index) => pdf.getPage(index + 1))), PDF_VIEW.limitMs);
+  } catch (error) {
+    fallbackViewer(viewer, error instanceof TimeLimit ? 'library' : 'document');
+    return;
+  }
+  if (!opening()) return;
+  buildPages(viewer, proxies);
+}
+
+function stopStall(viewer) {
+  clearTimeout(viewer.stallTimer);
+  viewer.stallTimer = 0;
+  if (viewer.task) viewer.task.onProgress = null;
 }
 
 // Every page as a placeholder of its size; pages near the visible area are drawn (IntersectionObserver), the others
-// released, and a new width re-fits and redraws them (ResizeObserver, debounced).
+// released, and a new width (ResizeObserver, debounced) or pixel ratio (watchRatio) re-fits and redraws them.
 function buildPages(viewer, proxies) {
   const holder = document.createElement('div');
   holder.className = 'pdf-pages';
@@ -1933,16 +2201,37 @@ function buildPages(viewer, proxies) {
     viewer.resizeTimer = setTimeout(() => relayoutPages(viewer), PDF_VIEW.resizeMs);
   });
   viewer.resize.observe(viewer.element);
+  watchRatio(viewer);
   viewer.onScroll = () => {
     if (!viewer.labelFrame) viewer.labelFrame = requestAnimationFrame(() => { viewer.labelFrame = 0; showPageLabel(viewer); });
   };
   viewer.element.addEventListener('scroll', viewer.onScroll, { passive: true });
   showPageLabel(viewer);
+  showZoom(viewer);
   if (viewer.pending) {
     const { quote, key } = viewer.pending;
     viewer.pending = null;
     showPdfQuote(viewer, quote, key);
   }
+}
+
+// A change of the screen's pixel ratio with no change of size (the window moved to another screen) redraws the pages:
+// a query for the ratio now, asked again after every change.
+function watchRatio(viewer) {
+  viewer.unwatchRatio?.();
+  if (typeof window.matchMedia !== 'function') return;
+  const query = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  const changed = () => {
+    viewer.unwatchRatio?.();
+    if (state.viewer !== viewer || viewer.mode !== 'pdf') return;
+    relayoutPages(viewer);
+    watchRatio(viewer);
+  };
+  query.addEventListener?.('change', changed);
+  viewer.unwatchRatio = () => {
+    query.removeEventListener?.('change', changed);
+    viewer.unwatchRatio = null;
+  };
 }
 
 // (not named innerWidth: a function declared here is a property of window, and window.innerWidth is read)
@@ -1951,13 +2240,15 @@ function viewerWidth(element) {
   return Math.max(1, element.clientWidth - parseFloat(style.paddingLeft || '0') - parseFloat(style.paddingRight || '0'));
 }
 
-// Each page fitted to the viewer's width: its placeholder takes the page's size, and the text layer its scale.
+// Each page fitted to the viewer's width at the zoom chosen: its placeholder takes the page's size, and the text layer its
+// scale.
 function layoutPages(viewer) {
   viewer.width = viewerWidth(viewer.element);
   viewer.ratio = window.devicePixelRatio || 1;
+  const zoom = ZOOM_STEPS[viewer.zoom] || 1;
   for (const page of viewer.pages) {
     const natural = page.proxy.getViewport({ scale: 1 });
-    page.viewport = page.proxy.getViewport({ scale: viewer.width / natural.width });
+    page.viewport = page.proxy.getViewport({ scale: (viewer.width / natural.width) * zoom });
     const { style } = page.element;
     style.width = `${Math.floor(page.viewport.width)}px`;
     style.height = `${Math.floor(page.viewport.height)}px`;
@@ -1967,16 +2258,48 @@ function layoutPages(viewer) {
   }
 }
 
-function relayoutPages(viewer) {
+// After a new width, pixel ratio or zoom (`zoomed`): the pages laid out again, the page at the top of the view kept there
+// at the same place in it (and the middle of what shows across kept in the middle), and the pages near the view redrawn.
+function relayoutPages(viewer, zoomed = false) {
   if (state.viewer !== viewer || viewer.mode !== 'pdf') return;
-  if (Math.abs(viewerWidth(viewer.element) - viewer.width) < 1 && (window.devicePixelRatio || 1) === viewer.ratio) return;
-  // the page at the top of the view stays there, at the same place in it
-  const top = viewer.element.scrollTop;
+  if (!zoomed && Math.abs(viewerWidth(viewer.element) - viewer.width) < 1 && (window.devicePixelRatio || 1) === viewer.ratio) return;
+  const { element } = viewer;
+  const top = element.scrollTop;
   const anchor = pageAtOffset(viewer, top);
   const within = anchor ? (top - anchor.element.offsetTop) / Math.max(1, anchor.element.offsetHeight) : 0;
+  const across = (element.scrollLeft + element.clientWidth / 2) / Math.max(1, element.scrollWidth);
   layoutPages(viewer);
-  if (anchor) viewer.element.scrollTop = anchor.element.offsetTop + within * anchor.element.offsetHeight;
+  if (anchor) element.scrollTop = anchor.element.offsetTop + within * anchor.element.offsetHeight;
+  element.scrollLeft = Math.max(0, across * element.scrollWidth - element.clientWidth / 2);
   for (const page of viewer.pages) if (page.near) drawPage(viewer, page);
+}
+
+// The toolbar's zoom: "Zoom out", "Zoom in" (one step of ZOOM_STEPS) and "Fit width" (100%).
+function zoomViewer(action) {
+  const viewer = state.viewer;
+  if (!viewer || viewer.mode !== 'pdf') return;
+  const step = { in: 1, out: -1 }[action] || 0;
+  const next = action === 'fit' ? ZOOM_FIT : Math.min(ZOOM_STEPS.length - 1, Math.max(0, viewer.zoom + step));
+  if (next === viewer.zoom) return;
+  viewer.zoom = next;
+  relayoutPages(viewer, true);
+  showZoom(viewer);
+}
+
+// The zoom controls, shown with the drawn pages only: the level, and a button that can do nothing is said to be off
+// (aria-disabled, so it keeps the focus).
+function showZoom(viewer) {
+  const group = $('#viewerZoom');
+  if (!group) return;
+  const drawn = Boolean(viewer) && viewer.mode === 'pdf';
+  group.hidden = !drawn;
+  if (!drawn) return;
+  const level = $('#zoomLevel');
+  if (level) level.textContent = `${Math.round(ZOOM_STEPS[viewer.zoom] * 100)}%`;
+  for (const [action, off] of [['out', viewer.zoom === 0], ['in', viewer.zoom === ZOOM_STEPS.length - 1], ['fit', viewer.zoom === ZOOM_FIT]]) {
+    const button = $(`#viewerZoom [data-zoom="${action}"]`);
+    if (button) button.setAttribute('aria-disabled', String(off));
+  }
 }
 
 // The last page whose top is at or above `offset` in the viewer, else the first page.
@@ -2008,9 +2331,16 @@ function pageContent(viewer, number) {
   return viewer.texts.get(number);
 }
 
+// A page's text, prepared to be searched (pageText), once per document: the quotes chosen and the pages drawn share it.
+function preparedPage(viewer, number, content) {
+  if (!viewer.prepared.has(number)) viewer.prepared.set(number, pageText(list(content?.items).filter(item => typeof item?.str === 'string')));
+  return viewer.prepared.get(number);
+}
+
 // Draws one page: its canvas (annotation appearances drawn on it), then its text layer from the same text content the
-// quotes are located in, then the marks of the chosen quote on that page. A page redrawn keeps its old drawing until the
-// new one is ready.
+// quotes are located in (an overprint copy's span says so, data-overprint), then the marks of the chosen quote on that
+// page. A page redrawn keeps its old drawing until the new one is ready. A drawing or a text read that does not settle
+// within the time limit gives the frame, as the library not working; one that fails, as a document it cannot draw.
 async function drawPage(viewer, page) {
   const key = `${page.viewport.scale} ${viewer.ratio}`;
   if (page.drawn === key || page.drawing === key) return;
@@ -2027,8 +2357,8 @@ async function drawPage(viewer, page) {
   try {
     page.render = page.proxy.render({ canvas, viewport, annotationMode: library.AnnotationMode.ENABLE,
       transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0] });
-    await page.render.promise;
-    const content = await pageContent(viewer, page.number);
+    await withinLimit(page.render.promise, PDF_VIEW.limitMs);
+    const content = await withinLimit(pageContent(viewer, page.number), PDF_VIEW.limitMs);
     if (!live()) return;
     const text = document.createElement('div');
     text.className = 'pdf-text';
@@ -2036,8 +2366,9 @@ async function drawPage(viewer, page) {
     page.element.replaceChildren(canvas, text);
     page.layer = new library.TextLayer({ textContentSource: content, container: text, viewport });
     page.painted = [];
-    await page.layer.render();
+    await withinLimit(page.layer.render(), PDF_VIEW.limitMs);
     if (!live()) return;
+    for (const item of preparedPage(viewer, page.number, content).copies) page.layer.textDivs[item]?.setAttribute('data-overprint', '1');
     page.drawn = key;
     page.drawing = '';
     paintPage(viewer, page);
@@ -2047,7 +2378,7 @@ async function drawPage(viewer, page) {
     }
   } catch (error) {
     if (!live() || ['RenderingCancelledException', 'AbortException'].includes(error?.name)) return;
-    fallbackViewer(viewer, 'document');
+    fallbackViewer(viewer, error instanceof TimeLimit ? 'library' : 'document');
   }
 }
 
@@ -2058,6 +2389,8 @@ function cancelPage(page) {
   page.render = null;
 }
 
+// A page away from the view goes back to its placeholder, and the library lets go of what it decoded to draw it (its
+// images); drawn again, it is decoded again.
 function releasePage(page) {
   cancelPage(page);
   page.layer?.cancel();
@@ -2065,10 +2398,11 @@ function releasePage(page) {
   page.painted = [];
   page.drawn = '';
   page.element.replaceChildren();
+  page.proxy?.cleanup?.();
 }
 
 // The chosen quote's marks on one drawn page: the text layer's spans of the marked items, each split into its unmarked
-// text and span.pdf-mark[data-occurrence] around exactly the marked characters. Text only, never markup.
+// text and mark.pdf-mark[data-occurrence] around exactly the marked characters. Text only, never markup.
 function paintPage(viewer, page) {
   if (!page.layer || !page.drawn) return;
   const divs = page.layer.textDivs;
@@ -2088,11 +2422,11 @@ function paintPage(viewer, page) {
     let at = 0;
     for (const part of parts) {
       if (part.start > at) div.append(value.slice(at, part.start));
-      const span = document.createElement('span');
-      span.className = 'pdf-mark';
-      span.dataset.occurrence = String(part.occurrence);
-      span.textContent = value.slice(part.start, part.end);
-      div.append(span);
+      const mark = document.createElement('mark');
+      mark.className = 'pdf-mark';
+      mark.dataset.occurrence = String(part.occurrence);
+      mark.textContent = value.slice(part.start, part.end);
+      div.append(mark);
       at = part.end;
     }
     if (at < value.length) div.append(value.slice(at));
@@ -2119,30 +2453,47 @@ function showPageLabel(viewer) {
   label.textContent = `Page ${current.number} of ${viewer.pages.length}`;
 }
 
-// One quote chosen in a PDF: the text of its page (and the next) or of every page is read, the quote located
-// (locateQuote), its marks painted on every drawn page, the note set and the page scrolled to.
+// Lets the page's own work run between slices of a long one.
+function nextTask() {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+// One quote chosen in a PDF: the text of its page (and the next) or of every page is read, one page at a time, each read
+// within the time limit, and prepared once per document (preparedPage), in slices that let the page breathe; then the
+// quote is located (locateQuote), its marks painted on every drawn page, the note set and the page scrolled to. The quote
+// being chosen is kept (viewer.chosen), so a frame shown meanwhile names its page.
 async function showPdfQuote(viewer, quote, key) {
   if (viewer.mode === 'frame') return frameQuote(viewer, quote);
+  viewer.chosen = { quote, key };
   if (viewer.mode !== 'pdf') {
     viewer.pending = { quote, key };
     return undefined;
   }
   const serial = ++viewer.markSerial;
+  const live = () => state.viewer === viewer && viewer.mode === 'pdf' && viewer.markSerial === serial;
   const count = viewer.pages.length;
   const page = quotePage(quote);
   const wanted = page ? [page, page + 1].filter(number => number <= count) : viewer.pages.map(item => item.number);
-  const texts = Array.from({ length: count }, () => null);
+  let slice = Date.now();
   try {
-    const contents = await Promise.all(wanted.map(number => pageContent(viewer, number)));
-    contents.forEach((content, index) => {
-      texts[wanted[index] - 1] = list(content?.items).filter(item => typeof item?.str === 'string').map(item => item.str);
-    });
-  } catch {
-    fallbackViewer(viewer, 'document');
+    for (const number of wanted) {
+      if (viewer.prepared.has(number)) continue;
+      const content = await withinLimit(pageContent(viewer, number), PDF_VIEW.limitMs);
+      if (!live()) return undefined;
+      preparedPage(viewer, number, content);
+      if (Date.now() - slice > PDF_VIEW.sliceMs) {
+        await nextTask();
+        if (!live()) return undefined;
+        slice = Date.now();
+      }
+    }
+  } catch (error) {
+    if (!live()) return undefined;
+    viewer.pending = { quote, key };
+    fallbackViewer(viewer, error instanceof TimeLimit ? 'library' : 'document');
     return undefined;
   }
-  if (state.viewer !== viewer || viewer.mode !== 'pdf' || viewer.markSerial !== serial) return undefined;
-  const result = locateQuote(quote, texts);
+  const result = locateQuote(quote, Array.from({ length: count }, () => null), viewer.prepared);
   viewer.mark = { key, quote, result };
   for (const item of viewer.pages) paintPage(viewer, item);
   setMarkState(viewer.element, key, result);
@@ -2155,38 +2506,47 @@ async function showPdfQuote(viewer, quote, key) {
   return result;
 }
 
-// The frame (the browser's own viewer) opens a quote's page; it cannot mark the words, and the note says so and why.
+// The frame (the browser's own viewer) and a quote chosen in it: a quote on another page than the frame was opened at
+// gets a new frame at its page (the browser's viewer opens #page=N only as its frame loads; changing the address of a
+// loaded frame moves nothing); its own page, or no page, leaves the frame as it is. Nothing is marked, and the note says
+// why and names the quote's page.
 function frameQuote(viewer, quote) {
   const page = quotePage(quote);
-  if (page && viewer.frame) viewer.frame.src = viewerUrl(viewer.view, page);
+  if (page && page !== viewer.framePage) showFrame(viewer, page);
   setMarkState(viewer.element, '', null);
   setMarkNote(frameNote(page, viewer.fallback), true);
   return undefined;
 }
 
-// Where the library cannot run or cannot draw the document, the browser's own viewer is framed in its place (today's
-// viewer), at the page of the quote being shown, if any. `reason` is why, as frameNote says it: 'browser', 'document'
-// or 'slow'; the viewer element keeps it (data-fallback) for the walk.
-function fallbackViewer(viewer, reason) {
-  if (state.viewer !== viewer || viewer.mode === 'frame' || viewer.mode === 'closed') return;
-  stopPdf(viewer);
-  const chosen = viewer.pending?.quote || viewer.mark?.quote || null;
-  const page = quotePage(chosen);
-  viewer.mode = 'frame';
-  viewer.fallback = lookup(FRAME_REASONS, reason, null) ? reason : 'document';
-  viewer.pending = null;
-  viewer.mark = null;
+function showFrame(viewer, page) {
   const frame = document.createElement('iframe');
   frame.className = 'viewer-fallback';
   frame.title = `Original document: ${viewer.name}`;
   frame.setAttribute('referrerpolicy', 'same-origin');
   frame.src = viewerUrl(viewer.view, page);
   viewer.element.replaceChildren(frame);
+  viewer.frame = frame;
+  viewer.framePage = page || null;
+}
+
+// Where the library cannot run or cannot draw the document, the browser's own viewer is framed in its place (today's
+// viewer), at the page of the quote being chosen, if any. `reason` is why, as frameNote says it: 'browser', 'library',
+// 'document' or 'slow'; the viewer element keeps it (data-fallback) for the walk.
+function fallbackViewer(viewer, reason) {
+  if (state.viewer !== viewer || viewer.mode === 'frame' || viewer.mode === 'closed') return;
+  stopPdf(viewer);
+  const chosen = viewer.pending?.quote || viewer.chosen?.quote || null;
+  const page = quotePage(chosen);
+  viewer.mode = 'frame';
+  viewer.fallback = lookup(FRAME_REASONS, reason, null) ? reason : 'document';
+  viewer.pending = null;
+  viewer.mark = null;
+  showFrame(viewer, page);
   viewer.element.dataset.mode = 'frame';
   viewer.element.dataset.fallback = viewer.fallback;
-  viewer.frame = frame;
   const label = $('#viewerPage');
   if (label) label.textContent = '';
+  showZoom(viewer);
   setMarkState(viewer.element, '', null);
   if (chosen) setMarkNote(frameNote(page, viewer.fallback), true);
 }
@@ -2197,6 +2557,7 @@ function stopPdf(viewer) {
   if (viewer.labelFrame) cancelAnimationFrame(viewer.labelFrame);
   viewer.watch?.disconnect();
   viewer.resize?.disconnect();
+  viewer.unwatchRatio?.();
   if (viewer.onScroll) viewer.element.removeEventListener('scroll', viewer.onScroll);
   for (const page of viewer.pages) {
     cancelPage(page);
@@ -2205,7 +2566,8 @@ function stopPdf(viewer) {
   // the worker is the viewer's own (getDocument was given it), so it goes once the document's task has let go of it
   const { task, worker } = viewer;
   Promise.resolve(task?.destroy()).catch(() => {}).finally(() => worker?.destroy());
-  Object.assign(viewer, { watch: null, resize: null, onScroll: null, task: null, worker: null, pages: [], texts: new Map(), labelFrame: 0 });
+  Object.assign(viewer, { watch: null, resize: null, onScroll: null, unwatchRatio: null, task: null, worker: null, pages: [],
+    texts: new Map(), prepared: new Map(), labelFrame: 0, stallTimer: 0 });
 }
 
 // --- a passage of a text document, marked inside its frame (the text rule: findPassages) ---------------------------
@@ -2636,6 +2998,11 @@ function onClick(event) {
     location.hash = `doc/${open.dataset.open}`;
     return;
   }
+  const zoom = target.closest('[data-zoom]');
+  if (zoom) {
+    zoomViewer(zoom.dataset.zoom);
+    return;
+  }
   const quote = target.closest('[data-quote]');
   if (quote) {
     showQuote(quote.dataset.quote);
@@ -2761,9 +3128,10 @@ if (typeof module === 'object' && module.exports) {
     STATE_LABELS, CODE_STATUSES, DECISIONS, ACTION_BUTTONS, PHASES, PHASE_TITLES, STEP_KEYS, STEP_LABELS, PROGRESS_ACTIONS,
     INSURANCE_CHOICES, QUEUE_STATES, OUTDATED_TEXT, CHANGED_TEXT, UNITS_NOT_GIVEN, MODIFIERS_NOT_GIVEN, CLIENT_HEADER,
     CLIENT_VERSION, MAX_ANSWER_CHARS, CONVERTED_NOTE, REVIEW_AGAIN,
-    findPassages, characterSpans, pageCharacters, foldText, foldedOccurrences, locateQuote, markNote, frameNote,
-    textMarkNote, pdfAssets, pdfCapable,
-    mountViewer, closeViewer, showPdfQuote, frameQuote, fallbackViewer, clearViewerMark, paintPage, renderDocument, PDF_VIEW,
+    findPassages, characterSpans, pageCharacters, pageText, overprintCopies, characterPieces, quoteEdges, foldedOccurrences,
+    locateQuote, markNote, frameNote, textMarkNote, FRAME_REASONS, pdfAssets, pdfCapable, loadPdfLibrary, withinLimit, TimeLimit,
+    PDF_IMPORT, mountViewer, closeViewer, showPdfQuote, frameQuote, fallbackViewer, clearViewerMark, drawPage, releasePage,
+    paintPage, layoutPages, zoomViewer, renderDocument, PDF_VIEW, ZOOM_STEPS, ZOOM_FIT,
   };
 }
 if (typeof document !== 'undefined') boot();
