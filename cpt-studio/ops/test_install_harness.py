@@ -1,6 +1,10 @@
 """Unit tests for the harness additions to ops/install.py (cpt-studio/HARNESS.md): the participants' optional
-credentials, their modes and mounts, the opt-in access check, the passages phase, the migration-safety check, the
-worker's stop timeout, and what a rollback does with participant stages and codes. No Docker, sudo, network or database.
+credentials, their modes and mounts, the passages phase, the migration-safety check, the worker's stop timeout, and what
+a rollback does with participant stages and codes. No Docker, sudo, network or database.
+
+The Fable coding build (DECISIONS D351-D353) left the participants' modes to a switch-back's previous pair and removed
+the access check; the app phase here is the coding build's (AppPhaseCodingTests: the coder's copy and loader check, the
+pair started with every earlier provider disabled), on the same AppWorld.
 
 Run from cpt-studio/:  python3 -B -m unittest discover -s ops -p 'test_*.py' -v
 
@@ -88,38 +92,42 @@ class ParticipantArgumentTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 2)
         return stderr.getvalue()
 
-    def test_participants_are_disabled_unless_named_live(self):
-        args = self.parse('--phase', 'app', '--provider-mode', 'disabled')
-        self.assertEqual((args.astra_mode, args.fable_mode, args.access_check), ('disabled', 'disabled', None))
-        args = self.parse('--phase', 'app', '--provider-mode', 'disabled', '--astra-mode', 'live',
+    def test_participants_are_a_switch_backs_and_disabled_unless_named_live(self):
+        # the Fable coding build has no participant (DECISIONS D351): only a switch-back names one, for the previous pair
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled')
+        self.assertEqual((args.astra_mode, args.fable_mode), ('disabled', 'disabled'))
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'live',
                           '--authorization-ref', RULING)
         self.assertEqual((args.astra_mode, args.fable_mode), ('live', 'disabled'))
-        args = self.parse('--phase', 'app', '--provider-mode', 'live', '--astra-mode', 'live', '--fable-mode', 'live',
-                          '--authorization-ref', RULING, '--access-check')
-        self.assertEqual((args.astra_mode, args.fable_mode, args.access_check), ('live', 'live', True))
+        args = self.parse('--phase', 'switch-back', '--provider-mode', 'live', '--astra-mode', 'live', '--fable-mode',
+                          'live', '--authorization-ref', RULING)
+        self.assertEqual((args.astra_mode, args.fable_mode), ('live', 'live'))
         self.assertEqual(self.parse('--phase', 'passages').phase, 'passages')
-        # Corti is a participant the access check reaches when the provider is live (checklist 1.3)
-        self.assertTrue(self.parse('--phase', 'app', '--provider-mode', 'live', '--authorization-ref', RULING,
-                                   '--access-check').access_check)
+        # an app phase names none: its pair runs them disabled
+        args = self.parse('--phase', 'app', '--coding-mode', 'disabled')
+        self.assertEqual((args.astra_mode, args.fable_mode, args.provider_mode), ('disabled', 'disabled', None))
 
     def test_refusals(self):
         # live needs the recorded authority, as Corti's live mode does
         self.assertIn('--astra-mode live needs --authorization-ref',
-                      self.refused('--phase', 'app', '--provider-mode', 'disabled', '--astra-mode', 'live'))
+                      self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'live'))
         self.assertIn('--fable-mode live needs --authorization-ref',
-                      self.refused('--phase', 'app', '--provider-mode', 'disabled', '--fable-mode', 'live'))
+                      self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--fable-mode', 'live'))
         # replay is for tests and development only (HARNESS.md 8): the installer offers disabled and live
-        self.refused('--phase', 'app', '--provider-mode', 'disabled', '--astra-mode', 'replay')
-        # the access check sends a real request, so it needs a live participant to send it
-        self.assertIn('--access-check checks each live participant',
-                      self.refused('--phase', 'app', '--provider-mode', 'disabled', '--access-check'))
+        self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'replay')
         self.assertIn('only applies to',
-                      self.refused('--phase', 'app', '--provider-mode', 'disabled', '--astra-mode', 'disabled',
+                      self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--astra-mode', 'disabled',
                                    '--authorization-ref', RULING))
-        for phase in ('preflight', 'secrets', 'passages', 'verify', 'rollback-app'):
-            for extra in (('--astra-mode', 'disabled'), ('--fable-mode', 'live'), ('--access-check',)):
+        # the access check is gone with the participants (no phase takes it), and so is an app phase's participant
+        self.assertIn('unrecognized arguments: --access-check',
+                      self.refused('--phase', 'app', '--coding-mode', 'live', '--authorization-ref', RULING,
+                                   '--access-check'))
+        for phase in ('preflight', 'secrets', 'passages', 'verify', 'rollback-app', 'app'):
+            for extra in (('--astra-mode', 'disabled'), ('--fable-mode', 'live'), ('--provider-mode', 'live')):
                 with self.subTest(phase=phase, extra=extra):
-                    self.refused('--phase', phase, *extra)
+                    said = self.refused('--phase', phase, *(('--coding-mode', 'disabled') if phase == 'app' else ()),
+                                        *extra)
+                    self.assertIn(f'{extra[0]} is not used by --phase {phase}', said)
 
 
 # --- docker arguments -----------------------------------------------------------------
@@ -220,8 +228,8 @@ class StopTimeoutTests(unittest.TestCase):
         self.assertGreater(install.STOP_SECONDS['worker'], corti)
         self.assertEqual(flags(install.service_args('worker', IMAGE, REVISION, 'disabled', ''), '--stop-timeout'),
                          [str(install.STOP_SECONDS['worker'])])
-        # the access check sends once and must not be cut off before the send deadline
-        self.assertGreater(install.ACCESS_CHECK_SECONDS, participant)
+        # the access check, which sent once and had its own bound, went with the participants (DECISIONS D351)
+        self.assertFalse(hasattr(install, 'ACCESS_CHECK_SECONDS'))
         # AMENDMENT-2 1.12 (DECISIONS D289's G2-01): each of the interpreter's reading stages - its 1,320 s send, the
         # 15 s recording and 45 s of its own work: 1,380 s - ends before the worker is stopped (D49's 510/560 s are the
         # dormant Gemini adapter's alone now)
@@ -328,7 +336,9 @@ class ServiceMountTests(unittest.TestCase):
 # --- the participants' credentials: the secrets phase -----------------------------------
 
 class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
-    """H_PARTICIPANT_SECRETS executed in-process; participant_secrets() builds its parameters and mounts for real."""
+    """H_PARTICIPANT_SECRETS executed in-process; copied_credentials() builds its parameters and mounts for real. The
+    helper is read here over both participants' specs, as earlier secrets phases ran it; the Fable coding build's
+    secrets phase runs it over the coder's Anthropic file alone (coding_secrets, the last tests below)."""
 
     def setUp(self):
         super().setUp()
@@ -364,7 +374,7 @@ class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
         folder = folder or {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}
         with mock.patch.object(install, 'helper_stat', return_value={install.PROVIDER_SOURCES: folder}), \
                 mock.patch.object(install, 'run_helper', self.helper):
-            return install.participant_secrets()
+            return install.copied_credentials(install.PARTICIPANTS, 'participant')
 
     def refused(self, folder=None):
         before = sorted(path.name for path in self.target.iterdir())
@@ -480,7 +490,7 @@ class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
             with self.subTest(folder=folder), \
                     mock.patch.object(install, 'helper_stat', return_value={install.PROVIDER_SOURCES: folder}), \
                     mock.patch.object(install, 'run_helper') as helper, self.assertRaises(install.InstallError):
-                install.participant_secrets()
+                install.coding_secrets()
             helper.assert_not_called()
 
     def test_an_installed_copy_must_equal_its_source_with_its_owner_and_mode(self):
@@ -493,18 +503,19 @@ class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
         os.chmod(self.target / 'openai-credentials.env', 0o440)
         self.assertIn('is not the 10150:10150 0400 regular file', self.refused())
 
-    def test_phase_secrets_runs_the_participant_step_only_after_the_three_file_set(self):
+    def test_phase_secrets_copies_the_coders_file_alone_only_after_the_two_file_set(self):
         order, copied = [], []
 
         def helper(body, params, **kwargs):
-            order.append(body)
+            order.append((body, kwargs.get('mounts')))
             if body is install.H_ETC_DIR:
                 return {'etc_dir': 'present'}
             if body is install.H_SECRETS:
+                self.assertEqual(params, {'app_keys': list(install.APP_ENV_KEYS), 'db_keys': list(install.DB_ENV_KEYS)})
                 return {'state': 'present', 'files': {}}
-            names = [entry['name'] for entry in params['participants']]
-            copied.append(names)
-            return {'participants': {'astra': {'state': 'created'}, 'fable': {'state': 'not provided'}}}
+            copied.append([(entry['name'], entry['source'], entry['target']) for entry in params['participants']])
+            return {'participants': {'anthropic': {'state': 'created', 'source': 'present',
+                                                   'key_names': ['ANTHROPIC_API_KEY']}}}
         folder = {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}
         for legacy, said in (({'exists': False}, 'absent'),
                              ({'exists': True, 'kind': 'file', 'uid': 10150, 'gid': 10150, 'mode': '0o400'}, 'present')):
@@ -514,41 +525,56 @@ class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
             with self.subTest(legacy=said), mock.patch.object(install, 'run_helper', helper), \
                     mock.patch.object(install, 'helper_stat', side_effect=lambda paths: {p: stat[p] for p in paths}):
                 result = install.phase_secrets(SimpleNamespace())
-                # AMENDMENT-2 1.11: one copy run - the participants', which copies the Fable participant's file, the
-                # interpreter's too - and no run of the interpreter's own
-                self.assertEqual(order, [install.H_ETC_DIR, install.H_SECRETS, install.H_PARTICIPANT_SECRETS])
-                self.assertEqual(copied, [['astra', 'fable']])  # the participants' set exactly as it was
-                self.assertIn('participant credentials: astra created, fable not provided', result['summary'])
-                self.assertIn("interpreter credentials: anthropic not provided (the fable participant's file)",
-                              result['summary'])
-                self.assertEqual(result['interpreter_credentials'],
-                                 {'anthropic': {'state': 'not provided', 'shared_with': 'fable'}})
+                self.assertEqual([body for body, _ in order],
+                                 [install.H_ETC_DIR, install.H_SECRETS, install.H_PARTICIPANT_SECRETS])
+                # Corti's source is no longer mounted: the two-file set reads nothing but /etc/cpt-studio
+                self.assertEqual(order[1][1], [f'type=bind,src={install.ETC_DIR},dst=/target'])
+                # one copy run, of the coder's Anthropic file alone (no Astra source is read)
+                self.assertEqual(copied, [[('anthropic', 'anthropic.env', 'anthropic-credentials.env')]])
+                self.assertIn('coding credentials: anthropic created', result['summary'])
+                self.assertEqual(result['coding_credentials'], {'anthropic': {
+                    'state': 'created', 'source': 'present', 'key_names': ['ANTHROPIC_API_KEY']}})
+                for gone in ('participant_credentials', 'interpreter_credentials', 'corti_key_names_present'):
+                    self.assertNotIn(gone, result)
                 # the earlier interpreter's key copy is reported, never written, read or removed
                 self.assertEqual(result['legacy_interpreter_copy']['state'], said)
                 self.assertEqual(install.LEGACY_COPY_NOTE in result['summary'], said == 'present')
 
         def refusing(body, params, **kwargs):
-            order.append(body)
+            order.append((body, kwargs.get('mounts')))
             if body is install.H_SECRETS:
                 raise install.InstallError('Root helper refused: partial secrets present')
             return {'etc_dir': 'present'}
         order.clear()
         with mock.patch.object(install, 'run_helper', refusing), self.assertRaises(install.InstallError):
             install.phase_secrets(SimpleNamespace())
-        self.assertNotIn(install.H_PARTICIPANT_SECRETS, order)
+        self.assertNotIn(install.H_PARTICIPANT_SECRETS, [body for body, _ in order])
 
-    def test_preflight_names_a_source_that_is_not_root_only_and_accepts_one_that_is_absent(self):
-        paths = {install.PROVIDER_SOURCES: {'exists': False}, ASTRA['source']: {'exists': False},
-                 FABLE['source']: {'exists': False}}
-        self.assertEqual(install.participant_source_problems(paths), [])
+    def test_an_answer_that_does_not_say_what_was_done_with_the_coders_file_refuses(self):
+        folder = {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}
+        for answer in ({'participants': {}}, {'participants': {'anthropic': {}}},
+                       {'participants': {'anthropic': {'state': None}}}):
+            with self.subTest(answer=answer), \
+                    mock.patch.object(install, 'helper_stat', return_value={install.PROVIDER_SOURCES: folder}), \
+                    mock.patch.object(install, 'run_helper', return_value=answer), \
+                    self.assertRaisesRegex(install.InstallError, 'did not say what it did with the Anthropic file'):
+                install.coding_secrets()
+
+    def test_preflight_names_a_coder_source_that_is_not_root_only_and_accepts_one_that_is_absent(self):
+        coder = install.CODER['source']
+        paths = {install.PROVIDER_SOURCES: {'exists': False}, coder: {'exists': False}}
+        self.assertEqual(install.coding_source_problems(paths), [])
         paths[install.PROVIDER_SOURCES] = {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}
-        paths[ASTRA['source']] = {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o600'}
-        self.assertEqual(install.participant_source_problems(paths), [])
-        paths[FABLE['source']] = {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o644'}
+        paths[coder] = {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o600'}
+        self.assertEqual(install.coding_source_problems(paths), [])
+        # an Astra source is no longer read: nothing is said of it, whatever its mode
+        self.assertEqual(install.coding_source_problems({**paths, ASTRA['source']: {
+            'exists': True, 'kind': 'file', 'uid': 1000, 'gid': 0, 'mode': '0o644'}}), [])
+        paths[coder] = {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o644'}
         paths[install.PROVIDER_SOURCES] = {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o755'}
-        self.assertEqual(install.participant_source_problems(paths),
+        self.assertEqual(install.coding_source_problems(paths),
                          [f'{install.PROVIDER_SOURCES} is not a root-owned 0700 directory',
-                          f'{FABLE["source"]} is not a root-owned 0600 regular file'])
+                          f'{coder} is not a root-owned 0600 regular file'])
 
 
 class CredentialScanTests(TemporaryDirectoryTest):
@@ -588,11 +614,11 @@ class CredentialScanTests(TemporaryDirectoryTest):
         self.assertTrue(install.credential_free([b'anything'], []))
 
 
-# --- the app phase: live participants and the access check ----------------------------------
+# --- the app phase: the Fable coder's mode and credential (DECISIONS D351-D353) -----------------
 
 class AppWorld:
     """phase_app's surroundings with Docker, the database and the in-image scripts replaced: ``timeline`` records every
-    call that acts or reads, in order; ``answers`` overrides a container's answer by (kind, participant)."""
+    call that acts or reads, in order; ``answers`` overrides a container's answer by (kind, holder)."""
 
     def __init__(self, tmp):
         self.tmp, self.timeline, self.answers = tmp, [], {}
@@ -601,13 +627,17 @@ class AppWorld:
         (self.scan_dir / 'astra').write_bytes(OPENAI_FILE)
         (self.scan_dir / 'fable').write_bytes(ANTHROPIC_FILE)
         (self.scan_dir / 'corti').write_bytes(CORTI_FILE)
-        # the interpreter's credential is the Fable participant's file (AMENDMENT-2 1.11), scanned under its own name
-        (self.scan_dir / INTERPRETER['name']).write_bytes(ANTHROPIC_FILE)
+        # the coder's credential is the Fable participant's file (install.CODER), scanned under its own name
+        (self.scan_dir / install.CODER['name']).write_bytes(ANTHROPIC_FILE)
         self.stat = {ASTRA['target']: INSTALLED, FABLE['target']: INSTALLED, install.CORTI_TARGET: INSTALLED,
-                     INTERPRETER['target']: INSTALLED}
+                     INTERPRETER['target']: INSTALLED, install.CODER['target']: INSTALLED}
         self.interpreter = None  # the interpreter mode replace_services was named with (None: not named)
+        self.coding = None  # the coding mode replace_services was named with (None: not named)
 
     def respond(self, command, kwargs):
+        if command[:2] == ['manage', 'shell'] and command[-1] == install.CODING_CREDENTIALS_CHECK:
+            return self.answers.get(('parse', 'coding')) or SimpleNamespace(
+                returncode=0, stdout=b'coding-credentials-parse-ok\n', stderr=b'')
         if command[:2] == ['manage', 'shell'] and command[-1] == install.CREDENTIALS_CHECK:
             return SimpleNamespace(returncode=0, stdout=b'corti-credentials-parse-ok\n', stderr=b'')
         if command[:2] == ['manage', 'shell'] and command[-1] == install.INTERPRETER_CREDENTIALS_CHECK:
@@ -617,11 +647,6 @@ class AppWorld:
             name = next(name for name, body in install.PARTICIPANT_CREDENTIALS_CHECKS.items() if body == command[-1])
             return self.answers.get(('parse', name)) or SimpleNamespace(
                 returncode=0, stdout=f'{name}-credentials-parse-ok\n'.encode(), stderr=b'')
-        if command[:2] == ['manage', 'participant_access_check']:
-            name = command[-1]
-            return self.answers.get(('access', name)) or SimpleNamespace(
-                returncode=0, stderr=b'', stdout=json.dumps({'participant': name, 'ok': True,
-                                                             'request_id': 'req_synthetic'}).encode() + b'\n')
         return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
 
     def oneshot(self, image_id, command, env_bytes, **kwargs):
@@ -640,6 +665,7 @@ class AppWorld:
     def replace(self, ctx, image_id, env_bytes, mode, reference, participants=None, **named):
         self.timeline.append(('replace', mode, reference, participants))
         self.interpreter = named.pop('interpreter', None)
+        self.coding = named.pop('coding', None)
         assert not named, named  # replace_services takes nothing else by name
         return {'started': {}, 'replaced': {}, 'worker_started_at': '2026-11-09T10:00:00.000Z'}
 
@@ -663,16 +689,18 @@ class AppWorld:
                 mock.patch.object(install, 'run_helper', self.helper)]
 
 
-def app_args(tmp, *, provider='disabled', astra='live', fable='live', access=None, interpreter=None):
-    reference = RULING if 'live' in (provider, astra, fable, interpreter) else ''
-    named = {} if interpreter is None else {'interpreter_mode': interpreter}  # as the earlier tests built args
-    return SimpleNamespace(phase='app', revision=REVISION, receipts=str(tmp), provider_mode=provider,
-                           authorization_ref=reference, astra_mode=astra, fable_mode=fable, access_check=access,
-                           **named)
+def app_args(tmp, *, coding='live', **legacy):
+    """An app phase's arguments (the Fable coding build: --coding-mode and --authorization-ref). ``legacy`` sets an
+    earlier revision's mode attributes (provider_mode, astra_mode, ...) on it as such args objects carried them: the
+    app phase reads none of them."""
+    reference = RULING if coding == 'live' else ''
+    return SimpleNamespace(phase='app', revision=REVISION, receipts=str(tmp), coding_mode=coding,
+                           authorization_ref=reference, **legacy)
 
 
-class AppPhaseParticipantTests(TemporaryDirectoryTest):
-    """The REAL phase_app (participant_access_check and credential_free included) in an AppWorld."""
+class AppPhaseCodingTests(TemporaryDirectoryTest):
+    """The REAL phase_app (credential_free included) in an AppWorld: the coder's copy and loader check before anything
+    changes, the pair started with the coder in its mode and every earlier provider disabled, and no access check."""
 
     def setUp(self):
         super().setUp()
@@ -689,201 +717,99 @@ class AppPhaseParticipantTests(TemporaryDirectoryTest):
                 patcher.stop()
 
     def acted(self):
-        """What changed anything or sent anything: a migrate, the replacement, an access check."""
+        """What changed anything: a migrate or the replacement."""
         return [event for event in self.world.timeline if event[0] == 'replace'
-                or (event[0] == 'oneshot' and event[1] in (('migrate',), ('manage', 'participant_access_check')))]
+                or (event[0] == 'oneshot' and event[1] == ('migrate',))]
 
-    def test_a_live_participant_without_its_installed_file_refuses_before_anything_changes(self):
+    def test_live_without_the_installed_copy_refuses_before_anything_changes(self):
         for state in ({'exists': False}, {**INSTALLED, 'mode': '0o440'}, {**INSTALLED, 'uid': 0, 'gid': 0},
                       {**INSTALLED, 'kind': 'link'}):
             self.world.timeline.clear()
-            self.world.stat[FABLE['target']] = state
+            self.world.stat[install.CODER['target']] = state
             with self.subTest(state=state), self.assertRaises(install.InstallError) as caught:
                 self.app(app_args(self.tmp))
-            self.assertIn('--fable-mode live', str(caught.exception))
-            self.assertIn(FABLE['source'], str(caught.exception))
+            self.assertIn('--coding-mode live', str(caught.exception))
+            self.assertIn(install.CODER['source'], str(caught.exception))
             self.assertFalse([event for event in self.world.timeline if event[0] in ('oneshot', 'replace', 'script')])
 
-    def test_a_file_its_loader_refuses_stops_before_migrating_and_its_error_is_kept_only_when_clean(self):
-        for stderr, kept in ((b'CredentialsError: OPENAI_API_KEY is missing from the OpenAI credentials file.', True),
-                             (b'CredentialsError: bad value ' + OPENAI_VALUE.encode(), False)):
+    def test_a_copy_its_loader_refuses_stops_before_migrating_and_its_error_is_kept_only_when_clean(self):
+        for stderr, kept in ((b'CredentialsError: ANTHROPIC_API_KEY is missing from the credentials file.', True),
+                             (b'CredentialsError: bad value ' + ANTHROPIC_VALUE.encode(), False)):
             self.world.timeline.clear()
-            self.world.answers[('parse', 'astra')] = SimpleNamespace(returncode=1, stdout=b'', stderr=stderr)
+            self.world.answers[('parse', 'coding')] = SimpleNamespace(returncode=1, stdout=b'', stderr=stderr)
             with self.subTest(kept=kept), self.assertRaises(install.InstallError) as caught:
                 self.app(app_args(self.tmp))
-            self.assertIn('cannot load /etc/cpt-studio/openai-credentials.env', str(caught.exception))
+            self.assertIn('cannot load /etc/cpt-studio/anthropic-credentials.env', str(caught.exception))
+            self.assertIn('--coding-mode live', str(caught.exception))
             self.assertEqual(caught.exception.output, stderr if kept else b'')
-            self.assertEqual(self.acted(), [])  # no migrate, no replacement, no access check
-            self.assertNotIn(OPENAI_VALUE, str(caught.exception))
+            self.assertEqual(self.acted(), [])  # no migrate, no replacement
+            self.assertNotIn(ANTHROPIC_VALUE, str(caught.exception))
 
-    def test_the_parse_checks_run_offline_in_the_workers_layout_before_migrate(self):
-        self.app(app_args(self.tmp, provider='live'))
+    def test_the_loader_check_runs_offline_in_the_workers_layout_before_migrate(self):
+        self.app(app_args(self.tmp))
         commands = [event for event in self.world.timeline if event[0] == 'oneshot']
-        self.assertEqual([event[1] for event in commands],
-                         [('manage', 'shell')] * 3 + [('migrate',)])  # Corti's, Astra's, Fable's, then migrate
-        corti, astra, fable = (event[3] for event in commands[:3])
-        self.assertEqual(corti, {'network': 'none', 'credentials': True, 'timeout': 120})
-        self.assertEqual(astra, {'network': 'none', 'participant_files': ('astra',), 'timeout': 120})
-        self.assertEqual(fable, {'network': 'none', 'participant_files': ('fable',), 'timeout': 120})
+        self.assertEqual([event[1] for event in commands], [('manage', 'shell'), ('migrate',)])
+        self.assertEqual(commands[0][2][-1], install.CODING_CREDENTIALS_CHECK)
+        self.assertEqual(commands[0][3], {'network': 'none', 'coding_file': True, 'timeout': 120})
+        # the loader is the coder's own, moved from the participants (the build specification, section 4.1)
+        self.assertEqual(install.CODING_CREDENTIALS_CHECK,
+                         'from django.conf import settings\n'
+                         'from studio.fable.credentials import load_anthropic_credentials\n'
+                         'load_anthropic_credentials(settings.ANTHROPIC_CREDENTIALS_FILE)\n'
+                         "print('coding-credentials-parse-ok')\n")
 
-    def test_live_participants_are_installed_with_their_modes_and_no_access_check_without_the_flag(self):
-        details = self.app(app_args(self.tmp, astra='live', fable='disabled'))
-        self.assertIn(('replace', 'disabled', RULING, {'astra': 'live', 'fable': 'disabled'}), self.world.timeline)
-        self.assertEqual(details['participants'], {'astra': 'live', 'fable': 'disabled'})
-        self.assertEqual(details['participant_credentials_loaded'], ['astra'])
-        self.assertEqual(details['access_checks'], 'not run (no --access-check)')
-        self.assertFalse([event for event in self.world.timeline if event[0] == 'oneshot'
-                          and event[1] == ('manage', 'participant_access_check')])
-        self.assertFalse([event for event in self.world.timeline if event[0] == 'helper'])  # nothing scanned either
-        self.assertIn('astra live, fable disabled', details['summary'])
+    def test_live_starts_the_coder_live_and_every_earlier_provider_disabled(self):
+        details = self.app(app_args(self.tmp))
+        self.assertIn(('replace', 'disabled', RULING, None), self.world.timeline)
+        self.assertEqual((self.world.coding, self.world.interpreter), ('live', None))
+        self.assertEqual(details['coding'], {'mode': 'live', 'effort': 'max', 'credentials_loaded': True,
+                                             'figures': install.coding_figures()})
+        self.assertEqual(details['authorization_ref'], RULING)
+        for gone in ('provider_mode', 'participants', 'participant_credentials_loaded', 'access_checks', 'interpreter'):
+            self.assertNotIn(gone, details)
+        self.assertIn('(coding live, effort max)', details['summary'])
+        # nothing was sent, so nothing was scanned: the only container the coder's file reached was the loader check
+        self.assertFalse([event for event in self.world.timeline if event[0] == 'helper'])
 
-    def test_without_participant_arguments_the_phase_is_as_it_was(self):
-        # An args object naming no participant (the shape the earlier phase_app tests build) installs both disabled.
-        args = SimpleNamespace(phase='app', revision=REVISION, receipts=str(self.tmp), provider_mode='disabled',
-                               authorization_ref='')
-        details = self.app(args)
+    def test_disabled_needs_no_copy_and_no_check_and_names_no_mode(self):
+        self.world.stat[install.CODER['target']] = {'exists': False}
+        details = self.app(app_args(self.tmp, coding='disabled'))
         self.assertEqual([event[1] for event in self.world.timeline if event[0] == 'oneshot'], [('migrate',)])
-        self.assertIn(('replace', 'disabled', '', {'astra': 'disabled', 'fable': 'disabled'}), self.world.timeline)
-        self.assertEqual(details['participants'], {'astra': 'disabled', 'fable': 'disabled'})
+        self.assertIn(('replace', 'disabled', '', None), self.world.timeline)
+        self.assertIsNone(self.world.coding)  # not named: replace_services' default, as a stand-in always took it
+        self.assertEqual((details['coding']['mode'], details['coding']['credentials_loaded']), ('disabled', False))
+        self.assertIn('(coding disabled, effort max)', details['summary'])
 
-    def test_the_access_check_runs_once_the_pair_runs_with_the_workers_mount_and_network(self):
-        details = self.app(app_args(self.tmp, access=True))
-        timeline = self.world.timeline
-        recompute = timeline.index(('script', install.RECOMPUTE_STATES))
-        checks = [(index, event) for index, event in enumerate(timeline)
-                  if event[0] == 'oneshot' and event[1] == ('manage', 'participant_access_check')]
-        self.assertEqual([event[2] for _, event in checks],
-                         [['manage', 'participant_access_check', '--wait-for-lock', '--participant', 'astra'],
-                          ['manage', 'participant_access_check', '--wait-for-lock', '--participant', 'fable']])
-        self.assertTrue(all(index > recompute for index, _ in checks))
-        for (_, event), name in zip(checks, ('astra', 'fable')):
-            kwargs, spec = event[3], install.PARTICIPANTS[name]
-            other = install.PARTICIPANTS['fable' if name == 'astra' else 'astra']
-            self.assertEqual(kwargs['network'], install.NETWORK)
-            self.assertEqual(kwargs['participant_files'], (name,))
-            self.assertEqual(kwargs['timeout'], install.ACCESS_CHECK_SECONDS)
-            env = flags(kwargs['environment'], '-e')
-            for expected in (f'{spec["mode_env"]}=live', f'{other["mode_env"]}=disabled',
-                             'CPT_STUDIO_PROVIDER_MODE=disabled', f'CPT_STUDIO_AUTHORIZATION_REF={RULING}',
-                             f'{spec["file_env"]}={spec["mounted"]}'):
-                self.assertIn(expected, env)
-            self.assertFalse([item for item in env if item.startswith(other['file_env'])])
-            check = details['access_checks'][name]
-            self.assertEqual((check['ok'], check['exit'], check['recorded']), (True, 0, True))
-            self.assertEqual(check['receipt'], {'participant': name, 'ok': True, 'request_id': 'req_synthetic'})
-            self.assertTrue(Path(check['log']).exists())
-        scans = [event for event in timeline if event[0] == 'helper']
-        self.assertEqual([event[1] for event in scans],
-                         [[f'type=bind,src={ASTRA["target"]},dst=/scan/astra,readonly'],
-                          [f'type=bind,src={FABLE["target"]},dst=/scan/fable,readonly']])
-        self.assertIn('access checked: astra, fable', details['summary'])
+    def test_an_earlier_revisions_modes_on_the_args_are_never_read(self):
+        # (d): the app phase neither requires nor mounts Corti's or Astra's file, whatever an args object carries
+        for path in (install.CORTI_TARGET, ASTRA['target']):
+            self.world.stat[path] = {'exists': False}
+        legacy = dict(provider_mode='live', astra_mode='live', fable_mode='live', interpreter_mode='live',
+                      access_check=True)
+        details = self.app(app_args(self.tmp, **legacy))
+        checks = [event[2][-1] for event in self.world.timeline if event[0] == 'oneshot' and event[1] == ('manage', 'shell')]
+        self.assertEqual(checks, [install.CODING_CREDENTIALS_CHECK])
+        self.assertIn(('replace', 'disabled', RULING, None), self.world.timeline)
+        self.assertEqual((self.world.coding, self.world.interpreter), ('live', None))
+        self.assertEqual(details['coding']['mode'], 'live')
 
-    def test_a_live_corti_is_access_checked_first_with_its_own_mount_and_nothing_else(self):
-        details = self.app(app_args(self.tmp, provider='live', access=True))
-        checks = [event for event in self.world.timeline
-                  if event[0] == 'oneshot' and event[1] == ('manage', 'participant_access_check')]
-        self.assertEqual([event[2][-1] for event in checks], ['corti', 'astra', 'fable'])
-        corti = checks[0][3]
-        self.assertTrue(corti['credentials'])
-        self.assertNotIn('participant_files', corti)
-        self.assertEqual((corti['network'], corti['timeout']), (install.NETWORK, install.ACCESS_CHECK_SECONDS))
-        env = flags(corti['environment'], '-e')
-        for expected in ('CPT_STUDIO_PROVIDER_MODE=live', 'CPT_STUDIO_ASTRA_MODE=disabled',
-                         'CPT_STUDIO_FABLE_MODE=disabled', f'CPT_STUDIO_AUTHORIZATION_REF={RULING}',
-                         f'CPT_STUDIO_CORTI_CREDENTIALS_FILE={install.CREDENTIALS_IN_CONTAINER}'):
-            self.assertIn(expected, env)
-        self.assertFalse([item for item in env if 'OPENAI' in item or 'ANTHROPIC' in item])
-        # Astra's and Fable's checks run with Corti disabled and no Corti file
-        for event in checks[1:]:
-            self.assertNotIn('credentials', event[3])
-            self.assertIn('CPT_STUDIO_PROVIDER_MODE=disabled', flags(event[3]['environment'], '-e'))
-        scans = [event[1] for event in self.world.timeline if event[0] == 'helper']
-        self.assertEqual(scans[0], [f'type=bind,src={install.CORTI_TARGET},dst=/scan/corti,readonly'])
-        self.assertEqual(sorted(details['access_checks']), ['astra', 'corti', 'fable'])
-        self.assertIn('access checked: corti, astra, fable', details['summary'])
-
-    def test_a_corti_check_whose_output_carries_its_secret_is_not_recorded(self):
-        self.world.answers[('access', 'corti')] = SimpleNamespace(
-            returncode=0, stdout=json.dumps({'ok': True, 'error': f'401 for {CORTI_VALUE}'}).encode(), stderr=b'')
-        with self.assertRaises(install.InstallError) as caught:
-            self.app(app_args(self.tmp, provider='live', access=True))
-        check = caught.exception.details['access_checks']['corti']
-        self.assertEqual((check['ok'], check['recorded']), (False, False))
-        self.assertNotIn(CORTI_VALUE, str(caught.exception) + json.dumps(caught.exception.details))
-        # the two-letter environment ('eu', in every Corti endpoint) is below the scan's length and never matches
-        self.world.answers[('access', 'corti')] = SimpleNamespace(
-            returncode=0, stdout=b'{"endpoint": "https://api.eu.corti.app/v2/tools/coding/"}', stderr=b'')
-        details = self.app(app_args(self.tmp, provider='live', access=True))
-        self.assertTrue(details['access_checks']['corti']['ok'])
-
-    def test_a_failed_access_check_fails_the_phase_and_says_the_pair_is_installed(self):
-        self.world.answers[('access', 'fable')] = SimpleNamespace(
-            returncode=3, stderr=b'', stdout=b'{"participant": "fable", "ok": false, "http_status": 401}\n')
-        with self.assertRaises(install.InstallError) as caught:
-            self.app(app_args(self.tmp, access=True))
-        message = str(caught.exception)
-        self.assertIn('web and worker running', message)
-        # Moved by refutation round 5 (R5-SENDS, sends-1) to what the phase now says: a non-zero exit is reported with
-        # what its output says (its receipt's error, else the last line of text on its stderr), never as "it exited 3."
-        # alone; this receipt gives no error and its stderr holds no text, so that is said. No cause is added
-        # (test_install_r5_sends pins the access check's real receipts and the remedy).
-        self.assertIn('the access check did not pass for fable (it exited 3, and there is no text on its stderr.)',
-                      message)
-        self.assertIn('The pair stays installed', message)
-        self.assertNotIn('fix the credentials or the vendor account', message)
-        checks = caught.exception.details['access_checks']
-        self.assertTrue(checks['astra']['ok'])
-        self.assertEqual(checks['fable']['receipt'], {'participant': 'fable', 'ok': False, 'http_status': 401})
-
-    def test_an_access_check_whose_output_carries_a_credential_value_is_not_recorded(self):
-        self.world.answers[('access', 'astra')] = SimpleNamespace(
-            returncode=0, stdout=json.dumps({'ok': True, 'header': f'Bearer {OPENAI_VALUE}'}).encode(), stderr=b'')
-        with self.assertRaises(install.InstallError) as caught:
-            self.app(app_args(self.tmp, access=True))
-        check = caught.exception.details['access_checks']['astra']
-        self.assertEqual((check['ok'], check['recorded']), (False, False))
-        self.assertNotIn('receipt', check)
-        self.assertNotIn(OPENAI_VALUE, str(caught.exception) + json.dumps(caught.exception.details))
-        self.assertFalse(list(self.tmp.glob('app-*-access-check-astra.log')))  # no log of it either
-        self.assertTrue(caught.exception.details['access_checks']['fable']['ok'])
-
-    def test_an_access_check_that_does_not_finish_or_answers_no_receipt_fails(self):
-        answered = self.world.oneshot
-
-        def timing_out(image_id, command, env_bytes, **kwargs):
-            if command[-1] == 'astra' and 'participant_access_check' in command:
-                raise install.InstallError('docker run cpt-studio-oneshot did not finish within 420 s.')
-            return answered(image_id, command, env_bytes, **kwargs)
-        self.world.oneshot = timing_out
-        self.world.answers[('access', 'fable')] = SimpleNamespace(returncode=0, stdout=b'checked\n', stderr=b'')
-        with self.assertRaises(install.InstallError) as caught:
-            self.app(app_args(self.tmp, access=True))
-        checks = caught.exception.details['access_checks']
-        self.assertIn('Whether its request reached the vendor is not known', checks['astra']['problem'])
-        self.assertEqual(checks['fable']['problem'], 'its output was not one JSON receipt.')
-
-    def test_an_interrupted_access_check_says_the_pair_stays_installed(self):
-        def interrupted(image_id, command, env_bytes, **kwargs):
-            if 'participant_access_check' in command:
-                raise KeyboardInterrupt()
-            return AppWorld.oneshot(self.world, image_id, command, env_bytes, **kwargs)
-        self.world.oneshot = interrupted
-        with self.assertRaises(install.InstallError) as caught:
-            self.app(app_args(self.tmp, access=True))
-        self.assertIn('the access check stopped (KeyboardInterrupt) after none: the pair stays installed',
-                      str(caught.exception))
+    def test_an_args_object_that_names_no_coding_mode_installs_it_disabled(self):
+        args = SimpleNamespace(phase='app', revision=REVISION, receipts=str(self.tmp), authorization_ref='')
+        details = self.app(args)
+        self.assertEqual(details['coding']['mode'], 'disabled')
+        self.assertIn(('replace', 'disabled', '', None), self.world.timeline)
 
 
 class NoCredentialValueLeavesTheInstallerTests(TemporaryDirectoryTest):
-    """End to end through main(): whatever the participants' containers write, no credential value reaches the
-    installer's stdout, its stderr, the receipt or any log beside it."""
+    """End to end through main(): whatever the coder's loader check writes, no credential value reaches the installer's
+    stdout, its stderr, the receipt or any log beside it."""
 
     def run_main(self, answers):
         world = AppWorld(self.tmp)
         world.answers = answers
         # One receipts directory per run (refutation round 5, R5-SENDS): main keeps the directory's lock for the rest of
         # the process, so every run after the first on a shared one was refused ("another phase is running on these
-        # receipts") and its subtest read the first run's receipt - three of the four leaks below were never run.
+        # receipts") and its subtest read the first run's receipt.
         receipts = self.tmp / f'receipts-{len(list(self.tmp.glob("receipts-*")))}'
         stdout, stderr = io.StringIO(), io.StringIO()
         umask = os.umask(0o077)
@@ -896,8 +822,7 @@ class NoCredentialValueLeavesTheInstallerTests(TemporaryDirectoryTest):
             patcher.start()
         try:
             code = install.main(['--phase', 'app', '--revision', REVISION, '--receipts', str(receipts),
-                                 '--provider-mode', 'disabled', '--astra-mode', 'live', '--fable-mode', 'live',
-                                 '--authorization-ref', RULING, '--access-check'])
+                                 '--coding-mode', 'live', '--authorization-ref', RULING])
         finally:
             for patcher in reversed(patches):
                 patcher.stop()
@@ -909,23 +834,19 @@ class NoCredentialValueLeavesTheInstallerTests(TemporaryDirectoryTest):
 
     def test_no_value_reaches_stdout_stderr_a_receipt_or_a_log(self):
         leaks = {
-            'access check stdout': {('access', 'astra'): SimpleNamespace(
-                returncode=0, stdout=f'{{"key": "{OPENAI_VALUE}"}}'.encode(), stderr=b'')},
-            'access check stderr': {('access', 'fable'): SimpleNamespace(
-                returncode=1, stdout=b'{"ok": false}', stderr=f'401 for x-api-key {ANTHROPIC_VALUE}'.encode())},
-            'parse check stderr': {('parse', 'astra'): SimpleNamespace(
-                returncode=1, stdout=b'', stderr=f'Traceback: value {OPENAI_VALUE} refused'.encode())},
-            'project id in a receipt': {('access', 'astra'): SimpleNamespace(
-                returncode=0, stdout=b'{"project": "proj_synthetic0123"}', stderr=b'')},
+            'loader check stderr': {('parse', 'coding'): SimpleNamespace(
+                returncode=1, stdout=b'', stderr=f'Traceback: value {ANTHROPIC_VALUE} refused'.encode())},
+            'loader check stdout and stderr': {('parse', 'coding'): SimpleNamespace(
+                returncode=1, stdout=f'ANTHROPIC_API_KEY={ANTHROPIC_VALUE}\n'.encode(),
+                stderr=f'401 for x-api-key {ANTHROPIC_VALUE}'.encode())},
         }
         for label, answers in leaks.items():
             with self.subTest(label):
                 code, stdout, stderr, written, receipts = self.run_main(answers)
                 self.assertEqual(code, 1)
-                for value in (OPENAI_VALUE, ANTHROPIC_VALUE, 'proj_synthetic0123'):
-                    self.assertNotIn(value, stdout)
-                    self.assertNotIn(value, stderr)
-                    self.assertNotIn(value.encode(), written)
+                self.assertNotIn(ANTHROPIC_VALUE, stdout)
+                self.assertNotIn(ANTHROPIC_VALUE, stderr)
+                self.assertNotIn(ANTHROPIC_VALUE.encode(), written)
                 record = json.loads(sorted(receipts.glob('app-*.json'))[-1].read_text())
                 self.assertFalse(record['ok'])
 
@@ -933,8 +854,8 @@ class NoCredentialValueLeavesTheInstallerTests(TemporaryDirectoryTest):
         code, stdout, _, written, receipts = self.run_main({})
         self.assertEqual(code, 0, stdout)
         record = json.loads(sorted(receipts.glob('app-*.json'))[-1].read_text())
-        self.assertEqual(sorted(record['details']['access_checks']), ['astra', 'fable'])
-        self.assertIn(b'req_synthetic', written)
+        self.assertEqual(record['details']['coding']['mode'], 'live')
+        self.assertIn(b'"credentials_loaded": true', written)
 
 
 # --- the passages phase ------------------------------------------------------------------

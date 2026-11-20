@@ -672,7 +672,7 @@ class KeepBaselineEndToEndTests(TemporaryDirectoryTest):
             if kind == 'image' and name in (install.HELPER_IMAGE, install.POSTGRES_IMAGE):
                 return {'Id': name}
             return world_inspect(kind, name)
-        present = {install.CORTI_SOURCE, install.ETC_DIR, *install.LE_DIRS, install.ACME_CHALLENGE_DIR}
+        present = {install.ETC_DIR, *install.LE_DIRS, install.ACME_CHALLENGE_DIR}
 
         def helper_stat(paths):
             return {path: ({'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o755'} if path in present
@@ -712,9 +712,13 @@ class KeepBaselineEndToEndTests(TemporaryDirectoryTest):
             path.unlink()
         code, line, receipt = self.run_phase(world, 'preflight')
         self.assertEqual((code, receipt['ok']), (0, True), line)
+        # the Fable coding build's preflight requires no Corti source and reads the coder's alone (DECISIONS D351)
+        self.assertEqual(receipt['details']['coding_source'], 'absent')
+        for gone in ('participant_sources', 'interpreter_source'):
+            self.assertNotIn(gone, receipt['details'])
         world.unhealthy.add(WORKER)
         world.close_answer = told({'e1': ['member_answer']}, {'e1': ['member_answer']})
-        code, line, receipt = self.run_phase(world, 'app', '--provider-mode', 'disabled')
+        code, line, receipt = self.run_phase(world, 'app', '--coding-mode', 'disabled')
         self.assertEqual(code, 1)
         self.assertIn('the new web keeps serving on 9151', line['summary'])
         # the named record is cleared on this revision's web

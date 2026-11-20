@@ -66,8 +66,8 @@ class AmendmentKeysTests(unittest.TestCase):
         version = literal(APP / 'studio' / 'client_contract.py', 'VERSION')
         login = (OPS / 'verify_login.py').read_text(encoding='utf-8')
         self.assertIn(f"CLIENT_HEADER, CLIENT_VERSION = 'X-CPT-Studio-Client', '{version}'", login)
-        browser = (OPS / 'verify_browser.cjs').read_text(encoding='utf-8')
-        self.assertIn(f"const CLIENT_HEADERS = {{ 'X-CPT-Studio-Client': '{version}' }};", browser)
+        walk = (OPS / 'walk.cjs').read_text(encoding='utf-8')  # the Fable coding build's walk (ops/verify_browser.cjs's)
+        self.assertIn(f"const CLIENT_HEADERS = {{ 'X-CPT-Studio-Client': '{version}' }};", walk)
 
     def test_the_differential_checks_output_is_a_what_changed_the_contract_accepts(self):
         rows = {'schema': wc.ROWS_SCHEMA, 'fresh': True, 'current_assessment': 'N', 'current_context': 'C2',

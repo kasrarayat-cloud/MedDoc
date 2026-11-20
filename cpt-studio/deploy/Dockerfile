@@ -12,13 +12,15 @@
 # rebuild, and rerun the suite inside the image.
 FROM python:3.12-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70
 
-# OCR only: tesseract with English data, and poppler for pdftoppm.
+# Word documents only: LibreOffice Writer converts an uploaded DOCX to PDF in a bounded child
+# (`soffice --headless --convert-to pdf`), and the PDF is what the coding step sends; DejaVu is the one font
+# family it renders with. No OCR and no local PDF reading: the original file is read by the coding service.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng poppler-utils \
+    && apt-get install -y --no-install-recommends libreoffice-writer-nogui fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # uid/gid 10150, not the common 10001: on this host 10001 already runs a
-# co-tenant's containers, and RLIMIT_NPROC (which the extraction sandbox sets
+# co-tenant's containers, and RLIMIT_NPROC (which a bounded child process may set
 # from this container's own task count) is accounted per host uid. ops/install.py
 # pins the same value and refuses when another workload uses it.
 # The state directory is created here so a new named volume mounted on it

@@ -15,12 +15,11 @@ run the next. Nothing here was executed by the session that wrote it.
 | image | `cpt-studio:<sha12>`, built from `git archive <revision> cpt-studio/`, label `org.opencontainers.image.revision=<revision>` |
 | database | container `cpt-studio-db` (postgres 17.11, pinned by digest), uid 70, all capabilities dropped, `127.0.0.1:55451`, volume `cpt-studio-pg` |
 | web | container `cpt-studio-web`, gunicorn, read-only root, uid 10150, `127.0.0.1:9150` or `127.0.0.1:9151` → 8000: a fresh host starts on 9150, and each install after it starts the incoming web `cpt-studio-web-next` on the other port and switches to it (blue/green, **app**), so the port alternates |
-| worker | container `cpt-studio-worker`, read-only root, stop timeout 1,800 s (round r3, DECISIONS D322 (4): above every stage's deadline - the question stage's 1,588 s, a round of question requests sent concurrently within their 1,408 s deadline - one wave of at most `QUESTION_ROUND_CONCURRENCY` requests at the installed figures, DECISIONS D325 (3) - the longest; the reading passes' 1,380 s - and every stale-stage threshold, 600 s, the reading passes' 1,440 s and 1,560 s and the question stage's 1,768 s; a deploy may wait up to 30 minutes for it; AMENDMENT-2 1.12's 1,500 s before round r3), the only holder of the Corti credentials (live mode only), of each harness participant's (that participant live only) and of the interpreter's, which is the Fable participant's file, bound once when either is live |
+| worker | container `cpt-studio-worker`, read-only root, stop timeout 1,800 s (round r3, DECISIONS D322 (4): above every stage's deadline - the question stage's 1,588 s, a round of question requests sent concurrently within their 1,408 s deadline - one wave of at most `QUESTION_ROUND_CONCURRENCY` requests at the installed figures, DECISIONS D325 (3) - the longest; the reading passes' 1,380 s - and every stale-stage threshold, 600 s, the reading passes' 1,440 s and 1,560 s and the question stage's 1,768 s; a deploy may wait up to 30 minutes for it; AMENDMENT-2 1.12's 1,500 s before round r3), the only holder of a credentials file: the Fable coder's Anthropic file, read-only, when `--coding-mode live` (an earlier revision's pair a `switch-back` starts holds what its own `app` gave it: Corti's, a live participant's, the interpreter's) |
 | network | `cpt-studio-net` (bridge). Web and worker reach the database as `cpt-studio-db:5432` |
 | files | volume `cpt-studio-files` at `/var/lib/cpt-studio` (originals, reference copies) |
-| secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `corti-credentials.env` (10150:10150 0400), `initial-credentials.json` (root 0600), `operator-credentials.json` (root 0600, the human platform operator's login, **operators**) |
-| participant credentials (optional) | `/etc/cpt-studio/openai-credentials.env` (Astra) and `anthropic-credentials.env` (Fable), 10150:10150 0400, each copied from `/etc/cpt-studio-provider-sources/{openai,anthropic}.env` (root 0600 in a root 0700 directory) when the owner placed it; never part of the three-file set above |
-| interpreter credential | AMENDMENT-2 1.11 (the interpreter is Claude Fable 5.2, DECISIONS D275): CPT Studio's existing Anthropic credential, the Fable participant's `/etc/cpt-studio/anthropic-credentials.env` (copied with the participants' from `/etc/cpt-studio-provider-sources/anthropic.env`, `ANTHROPIC_API_KEY` and an optional `ANTHROPIC_WORKSPACE_ID`); mounted read-only into the WORKER alone, once, whenever the Fable participant or the interpreter is live (the web is given the mode and the path, never the file); no access check of its own. An earlier `/etc/cpt-studio/gemini.env` is no longer copied or mounted: it is left untouched and reported (`preflight`, `secrets`), deleting it being the owner's decision |
+| secrets | `/etc/cpt-studio/` root 0700: `app.env`, `db.env` (root 0600), `initial-credentials.json` (root 0600), `operator-credentials.json` (root 0600, the human platform operator's login, **operators**). The Fable coding build (DECISIONS D351-D353) neither reads Corti's source nor writes Corti's copy: a `corti-credentials.env` an earlier install wrote is left as it is, and only a `switch-back` to an earlier pair given `--provider-mode live` mounts it |
+| coding credential | the Fable coder's (Claude Fable 5.2; CPT Studio's existing Anthropic credential): `/etc/cpt-studio/anthropic-credentials.env`, 10150:10150 0400, copied from `/etc/cpt-studio-provider-sources/anthropic.env` (root 0600 in a root 0700 directory, `ANTHROPIC_API_KEY` and an optional `ANTHROPIC_WORKSPACE_ID`) when the owner placed it; never part of the two-file set above. The only credentials file an `app` requires (`--coding-mode live`) or mounts: read-only into the WORKER alone at `/run/cpt-studio/anthropic-credentials.env` (the web is given the mode and the path, never the file); no access check. Astra's `openai.env` is no longer read or copied; an `openai-credentials.env` an earlier install wrote is left as it is, for a `switch-back` to an earlier pair that runs Astra. An earlier `/etc/cpt-studio/gemini.env` is no longer copied or mounted: it is left untouched and reported (`preflight`, `secrets`), deleting it being the owner's decision |
 | passages | the CMS passage files the revision commits under `studio/reference/data/`, imported into `PassageSource`/`ReferencePassage` |
 | agent login | `/home/claude/.cpt-studio/agent-credentials.json` (0600, agent account only) |
 | operator accounts | `ops-agent` (automated agent) and `platform-operator` (human): no workspace membership, an operator grant (`manage grant_operator`); the agent's login `/home/claude/.cpt-studio/ops-agent-credentials.json` (0600, top-level `username` and `password`) |
@@ -54,16 +53,15 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | # | phase | extra arguments | changes |
 |---|---|---|---|
 | 1 | `preflight` | — | nothing (one ACME probe file written and removed) |
-| 2 | `secrets` | — | creates `/etc/cpt-studio/` and its three files, once; copies each participant credentials source the owner placed, once - the interpreter's is the Fable participant's file, copied with it; an earlier `gemini.env` is reported, never touched |
+| 2 | `secrets` | — | creates `/etc/cpt-studio/` and its two files, once; copies the coder's Anthropic credentials source when the owner placed it, once; an earlier `gemini.env` is reported, never touched |
 | 3 | `image` | — | builds `cpt-studio:<sha12>` |
 | 4 | `db` | — | network, two volumes, database container |
-| 5 | `app` | `--provider-mode live --interpreter-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--provider-mode disabled`); `--interpreter-mode` is the interpreter's (Claude Fable 5.2: `live`, `replay` - nothing sent, answered only from a recording in the image, which ships no Fable recording (no `anthropic/` folder under `tests/fixtures/interpretation/`, whose `gemini/` holds the v1 FRESH recordings the Fable interpreter never reads), so every reading fails unsent - or `disabled`: when it is not given the interpreter is installed disabled, every reading pauses, and `verify` reports it; live needs `--authorization-ref` and `/etc/cpt-studio/anthropic-credentials.env`, the Fable participant's file, mounted read-only into the worker alone, once); optional `--astra-mode live`, `--fable-mode live` (each `disabled` when not given; live needs `--authorization-ref`) and `--access-check` | migrations; web and worker containers - on a served site blue/green: the incoming web on the idle port, the worker handed over, the vhost's upstream switched (`nginx -t`, a graceful reload: the two `sudo -n` commands), the old web drained and stopped, an availability record of the public `/health/` in the receipt; with `--access-check`, one access check per live participant: one real coding request for Corti (after the OAuth token request its adapter sends first), one run of the tool loop (one request per exchange, at most `PARTICIPANT_MAX_EXCHANGES`, 4) for Astra and for Fable |
+| 5 | `app` | `--coding-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--coding-mode disabled`): the Fable coder's mode, always explicit (`CPT_STUDIO_CODING_MODE`; live needs `--authorization-ref` and `/etc/cpt-studio/anthropic-credentials.env`, mounted read-only into the worker alone); Corti, the participants and the interpreter are started disabled, and their arguments are a `switch-back`'s alone | migrations; web and worker containers - on a served site blue/green: the incoming web on the idle port, the worker handed over, the vhost's upstream switched (`nginx -t`, a graceful reload: the two `sudo -n` commands), the old web drained and stopped, an availability record of the public `/health/` in the receipt |
 | 6 | `reference` | `--pfs-zip <abs> --pfs-retrieved-at <ISO> --mue-zip <abs> --mue-retrieved-at <ISO>` | reference copies in the files volume; two `ReferenceSource` imports |
 | 7 | `passages` | — | each committed `studio/reference/data/` file imported (`PassageSource`, `ReferencePassage`); idempotent |
 | 8 | `license-note` | — | CPT Studio's own licence note on each imported reference source (`ReferenceSource.license_note`): exactly the old text replaced by the corrected one, nothing else; idempotent |
 | 9 | `provision` | `--owner-username <name>` (optional `--agent-username`, display names, `--reset-passwords`) | GI workspace, owner and agent accounts; credentials files |
 | 9a | `operators` | optional `--reset-passwords` | the two platform-operator accounts (no membership), their grants and credentials files |
-| 9b | `reassess` | `--encounter <id>` (1 to 20), optional `--dry-run` | each named encounter re-assessed from its retained responses (`manage reassess_retained`; nothing is sent) |
 | 10 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload |
 | 11 | `cert` | — | lineage `cpt.quillmd.com` |
 | 12 | `https-vhost` | — | `quillmd-cpt` replaced by the HTTPS stage; nginx reload |
@@ -121,36 +119,36 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   live HTTPS stage proxies to, else 9150) held by `cpt-studio-web` alone, the
   other free for the next incoming web, and no `cpt-studio-web-next` left from an
   interrupted `app` - and 55451, DNS (A `147.189.172.8` only, no AAAA), the pinned helper and postgres
-  images, the Corti credentials source, Let's Encrypt state by path (live
+  images, Let's Encrypt state by path (live
   names, renewal-config hashes, account ids — key material is never opened)
-  and that the ACME webroot is writable. It also records whether each harness
-  participant's credentials source is there: one that is absent is not a
-  problem (that participant stays disabled), but a sources directory that is
-  not root 0700, or a source that is not a root 0600 regular file, is.
-  Any problem fails the phase.
+  and that the ACME webroot is writable. It also records whether the coder's
+  Anthropic credentials source is there (`coding_source`): one that is absent
+  is not a problem (the coder can then only be installed disabled), but a
+  sources directory that is not root 0700, or a source that is not a root 0600
+  regular file, is. Corti's source is no longer required, and no other source
+  is read. Any problem fails the phase.
 - **secrets** generates the Django key and database password inside the root
-  helper; the values never leave it. The Corti file is copied byte-for-byte and
-  only its four key NAMES are checked. A partial or altered set is refused, not
-  repaired. Then, separately from that set (adding to it would read every
-  existing install as partial), each harness participant's credentials source
-  the owner placed is copied once, unread, byte for byte, through the root
-  helper: `/etc/cpt-studio-provider-sources/openai.env` to
-  `/etc/cpt-studio/openai-credentials.env` (Astra) and `anthropic.env` to
-  `anthropic-credentials.env` (Fable), 10150:10150 0400, then read back. The
-  sources directory is mounted (read-only) only once it is seen to be a root
-  0700 directory, and each source is opened without following a link and must
-  be a root 0600 regular file of at most 32,000 bytes. Only key NAMES are
-  checked: `OPENAI_API_KEY` (and optionally `OPENAI_PROJECT`), or
-  `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_WORKSPACE_ID`), each once and
-  nothing else. Only those expected names are ever reported: a line setting any
-  other key is counted, never echoed, since a key pasted without its name would
-  otherwise be printed as one. Every check runs before anything is written, and
-  any problem writes nothing for either participant. A copy already there must
-  be the 10150:10150 0400 file and equal its source; one whose source was since
-  removed is reported `present` with its source `absent`. A missing source is
-  `not provided`: that participant can only be installed disabled. The receipt
-  names each participant's state, whether its source is there and the expected
-  key names found; no value leaves the helper.
+  helper; the values never leave it. The set is `app.env` and `db.env`: Corti's
+  source is no longer read and Corti's copy no longer written or checked (one
+  an earlier install wrote stays as it is). A partial or altered set is
+  refused, not repaired. Then, separately from that set, the coder's Anthropic
+  credentials source, when the owner placed it, is copied once, unread, byte for
+  byte, through the root helper:
+  `/etc/cpt-studio-provider-sources/anthropic.env` to
+  `/etc/cpt-studio/anthropic-credentials.env`, 10150:10150 0400, then read
+  back. The sources directory is mounted (read-only) only once it is seen to be
+  a root 0700 directory, and the source is opened without following a link and
+  must be a root 0600 regular file of at most 32,000 bytes. Only key NAMES are
+  checked: `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_WORKSPACE_ID`), each
+  once and nothing else. Only those expected names are ever reported: a line
+  setting any other key is counted, never echoed, since a key pasted without its
+  name would otherwise be printed as one. Every check runs before anything is
+  written. A copy already there must be the 10150:10150 0400 file and equal its
+  source; one whose source was since removed is reported `present` with its
+  source `absent`. A missing source is `not provided`: the coder can then only
+  be installed disabled. The receipt's `coding_credentials` names its state,
+  whether its source is there and the expected key names found; no value leaves
+  the helper. Astra's `openai.env` is no longer read.
 - **image** first reads the revision's migrations (with `ast`; nothing is
   imported or run) and refuses, before building anything, any migration after
   0005 that is not additive for a pair that does not know it. 0005 is the leaf
@@ -190,39 +188,43 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   pair's write. So the previous pair keeps
   inserting valid rows between `migrate` and the swap, and a restored or older
   pair runs on the migrated schema. The phase then builds, and requires the
-  revision label, user 10150, the baked release, English OCR data, a working
-  `pdftoppm`, `manage check`, and that the WSGI application loads as the
-  image's own user on a read-only root (this is what catches unreadable static
-  files, which `manage check` does not). The same way, the image reads one
-  synthetic guard PDF (`tests/support/pypdf_guards.py`, "a /BaseEncoding
-  array") through its own extraction child, and its reading must be installed
-  pypdf 6.21.2's (`PDF_GATE_*` in `ops/install.py`): a pypdf the compatibility
-  layer (`studio/ingest/pypdf_compat.py`) refuses would fail every PDF upload,
-  and nothing else in the image phase starts the child. The refusal's reason
-  is in the error (the result's `engine['pypdf_compat']`).
+  revision label, user 10150, the baked release, `manage check`, and that the
+  WSGI application loads as the image's own user on a read-only root (this is
+  what catches unreadable static files, which `manage check` does not). The
+  same way (as the image's own user, read-only root, no network), two checks
+  replace the earlier OCR and PDF-reader gates - the image reads no PDF and
+  runs no OCR now, the coder sends the original file:
+  `soffice --version` must run and name LibreOffice (it converts an uploaded
+  Word file to PDF; its version line is reported in the receipt's `soffice`,
+  never pinned), and `python -c "import anthropic; print(anthropic.__version__)"`
+  must print exactly anthropic 2.11.0, the SDK release the coder sends through
+  (the receipt's `anthropic`). Either failing refuses the image, with what the
+  command printed in the failure log.
 - **db** is idempotent; an existing container must be ours, on the pinned
   image, loopback-only, `unless-stopped`.
-- **app** (live mode) first loads the Corti credentials with the
-  application's own loader, in the worker's mount layout, with no network:
-  a file the worker could not use stops the phase before anything changes.
-  Each harness participant given `live` (`--astra-mode live`,
-  `--fable-mode live`; both need `--authorization-ref`, as Corti's live mode
-  does) is checked the same way before anything changes: its copy in
-  `/etc/cpt-studio/` must be the 10150:10150 0400 file the secrets phase writes
-  (a missing source leaves none, and the participant can then only be installed
-  disabled), and the application's own loader
-  (`studio.participants.credentials.load_openai_credentials` or
-  `load_anthropic_credentials`) must read it in the worker's mount layout with
-  no network and the participant itself disabled. A refusal's error output is
-  kept in the receipt directory only once a root helper has found no value
-  from that file in it. The new web and worker are both given
-  `CPT_STUDIO_ASTRA_MODE` and `CPT_STUDIO_FABLE_MODE` (`disabled` unless given
-  `live`) and, for a live participant, `CPT_STUDIO_OPENAI_CREDENTIALS_FILE=/run/cpt-studio/openai-credentials.env`
-  or `CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE=/run/cpt-studio/anthropic-credentials.env`;
-  only the worker mounts the file there, read-only, and only for a live
-  participant (the web builds requests, which needs no credentials, as with
-  Corti). Every one-shot runs with Corti and both participants disabled, but
-  the opt-in access check below.
+- **app** (live mode) first checks the Fable coder's credentials
+  (`--coding-mode live`) before anything changes: its copy in `/etc/cpt-studio/` must be
+  the 10150:10150 0400 file the secrets phase writes (a missing source leaves
+  none, and the coder can then only be installed disabled), and the
+  application's own loader (`studio.fable.credentials.load_anthropic_credentials`)
+  must read it in the worker's mount layout with no network and the coder itself
+  disabled. A refusal's error output is kept in the receipt directory only once
+  a root helper has found no value from that file in it. Corti's and Astra's
+  files are neither required nor mounted. The new web and worker are both given
+  `CPT_STUDIO_CODING_MODE` (the mode given), `CPT_STUDIO_CODING_EFFORT` (`max`,
+  the owner's setting) and the two owner figures `CPT_STUDIO_DOCUMENT_CEILING_USD`
+  and `CPT_STUDIO_CONCURRENT_DOCUMENTS` at the defaults the revision's
+  `cptstudio/settings.py` gives them (read without running it; each must be
+  given exactly once, as one `_env('<name>', '<value>')` call, and be valid - a
+  non-negative amount of US dollars, a whole number of documents of at least 1 -
+  or nothing is started); every one-shot is given them too. They replace the
+  question stage's `CPT_STUDIO_QUESTION_*` figures, which no container is given
+  now. Corti (`CPT_STUDIO_PROVIDER_MODE`), the participants and the interpreter
+  are named disabled. Live, both are given
+  `CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE=/run/cpt-studio/anthropic-credentials.env`;
+  only the worker mounts the file there, read-only (the web builds nothing that
+  needs it). Every one-shot runs with the coder disabled. No access check runs:
+  the install sends nothing to the vendor.
   After migrating (as before), and right before anything is started or
   stopped, it reads how the site is served and so how the pair is replaced
   (containers first, the vhost only where it decides), refusing - starting and
@@ -339,45 +341,6 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   which recomputes them; if they were, only the parked pair is left to remove.
   An installer killed outright writes no receipt: rerun `app` (see **Recovery
   notes**).
-  With `--access-check` (opt-in: it needs a live participant, and never runs
-  without the flag, because it sends a real request), once the new pair runs,
-  its states are recomputed and the parked pair is removed, each live
-  participant in turn - Corti first when `--provider-mode live`, then Astra and
-  Fable - is checked once by
-  `manage participant_access_check --participant <corti|astra|fable>`: one
-  coding request for Corti (after the OAuth token request its adapter sends
-  first), and for Astra or Fable one run of the pipeline's tool loop,
-  one request per exchange and at most `PARTICIPANT_MAX_EXCHANGES` (4), whose
-  receipt counts its exchanges. Each runs in a
-  one-shot with the worker's mount and network for that participant: its
-  credentials file read-only at the worker's path, `cpt-studio-net`, that
-  participant live under the same `--authorization-ref`, every other one
-  disabled, bounded at 1,900 s. The command takes the installation-wide
-  provider lock and sends nothing while another request holds it: the installer
-  runs it with `--wait-for-lock` (AMENDMENT-2 1.11), so it waits out a reading
-  in flight - up to the interpreter's send deadline plus 60 s, 1,380 s; a round
-  of question requests holds the lock for up to their own deadline, 1,408 s,
-  a wave (one wave at the installed figures: DECISIONS D325 (3)), which the
-  wait covers (1,468 s) once the command reads that row too (round r3)
-  - and fails the check only after that; the bound is that wait, the
-  participant send deadline (330 s) and the container's start. It writes nothing to the
-  database. What the container wrote is recorded - its JSON receipt in this
-  phase's receipt (`access_checks`), its stdout and the last 8 KiB of its
-  stderr in a log - only once a root helper has found no value from that
-  participant's credentials file in it (key names only come back from that
-  helper); otherwise nothing it wrote is kept and the check fails. A check that
-  exits non-zero, does not finish (whether its request reached the vendor is
-  then not known) or writes no JSON receipt fails the phase. For a non-zero
-  exit the phase repeats what the check's output says: the error its JSON
-  receipt gives, else the last non-empty line of its stderr, each only whole
-  and only up to 300 characters, and otherwise names it, never cut; with
-  neither, it says there is no text on its stderr, and no JSON receipt when
-  there is none. The installer adds no cause of its own. The phase then says
-  that the pair stays installed with those participants live, that this phase's
-  receipt records each check under `access_checks` (its JSON receipt, if it
-  wrote one, and the path of its log, where what it wrote was recorded), and to
-  run `app` again with `--access-check` once the cause is known, or install
-  that participant disabled.
   **A blue/green step that fails, or is interrupted (Ctrl-C), never stops the
   serving web**; the receipt says what is left (`failed_at`, `left`: the port
   the vhost names and every CPT Studio container's state, port and image):
@@ -494,7 +457,7 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   the parked pair renamed back. Its web is started. Its worker is started too
   unless the close names records it would act on wrongly (listed under
   **Reinstalling an older revision**); then the worker is left stopped - it
-  alone holds the Corti credentials, so nothing can be sent - and the receipt
+  alone holds the credentials files, so nothing can be sent - and the receipt
   names the encounters: install this revision again once its failure is fixed
   (its worker reads those records under its own rules). If the stages cannot be
   closed, or those states cannot be put back, the new pair is left stopped and
@@ -615,17 +578,6 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   refuse unless `--reset-passwords`, which rotates both. A grant that fails
   leaves the accounts and their files in place: rerun with `--reset-passwords`
   once it is fixed.
-- **reassess** (after `app`) re-assesses each named encounter from what is
-  already recorded: one one-shot per encounter (provider and participants
-  disabled) runs the application's `manage reassess_retained --encounter <id>
-  --tag <revision>`, which queues the re-assessment of the retained responses
-  and never sends; `--dry-run` is passed through and queues nothing. It refuses
-  unless this revision's migrations are applied and every named encounter
-  exists. Each encounter's jobs are read before and after, so the receipt names
-  the jobs that appeared (as measured, not as the command said), its states
-  before and after, the command's JSON answer and its log; a dry run after
-  which a job appeared fails the phase, and a command that fails stops the
-  phase, naming the encounters it ran for before.
 - **http-vhost / https-vhost / rollback-vhost** validate with
   `sudo -n /usr/sbin/nginx -t`, refuse any new nginx warning, reload with
   `sudo -n /usr/bin/systemctl reload nginx`, then probe with bounded retries
@@ -684,20 +636,29 @@ co-tenant - and `switch-back` refuses, starting and stopping nothing, while they
 no longer answer as it recorded.
 
 `--phase switch-back --provider-mode <mode> [--astra-mode …] [--fable-mode …]
-[--authorization-ref …]` runs under this revision's declaration and installer
+[--interpreter-mode …] [--coding-mode …] [--authorization-ref …]` runs under this
+revision's declaration and installer
 (an older installer cannot switch: `check_tree` binds a phase to its own
 revision) and returns to the pair this revision's last successful `app`
 replaced - its receipt's `replaced`, whose image is still present - with the
 modes given (the previous pair's, as its own `app` was given them; the
-credentials files are checked with the previous image's own loaders). When that
-`app` replaced this same revision - a same-revision re-run: a provider-mode
-switch, an access check run again, or the re-run a failed `app`'s receipt asks
+credentials files are checked with the previous image's own loaders). Corti
+(`--provider-mode`, required), the participants and the interpreter exist only
+in a pair before the Fable coding build (DECISIONS D351-D353), which these
+arguments start as its own `app` started it: `--interpreter-mode` is `live`,
+`replay` - nothing sent, answered only from a recording in the image, which
+ships no Fable recording, so every reading fails unsent - or `disabled` (the
+default); `--coding-mode` (`live` or `disabled`, the default) is for a previous
+pair of the Fable coding build - a pair before it reads no coding mode, and its
+image fails the coder's loader check live. When that
+`app` replaced this same revision - a same-revision re-run: a coding-mode
+switch, or the re-run a failed `app`'s receipt asks
 for once its parked pair is removed - the pair is read instead from the newest
 `app` receipt of this revision written since its last successful `switch-back`
 that names another revision whose image is still present (DECISIONS D83): a
 successful one, or one that failed once its switch had finished (only such a
-receipt records the web it replaced: its recompute, the removal of the parked
-pair or its access check failed after the old web was parked). With none, there
+receipt records the web it replaced: its recompute or the removal of the parked
+pair failed after the old web was parked). With none, there
 is nothing to switch back to: an `app` whose receipt records no replaced web
 (the S4 keep layout, an S5 failure, an undo) leaves none, so after the S4 keep
 layout's recovery the way back is `rollback-app`. It refuses, starting
@@ -1248,18 +1209,14 @@ recomputes every state.
   (no account uses their passwords unless the receipt says the accounts were
   created) and rerun.
 - Rotating the two passwords: `--phase provision --owner-username … --reset-passwords`.
-- Rotating a harness participant's key: the owner replaces its source; remove
-  `/etc/cpt-studio/openai-credentials.env` (or `anthropic-credentials.env`) by
-  hand (root), run `secrets`, which copies the new source, then `app` with the
-  same modes: the running worker's mount holds the file it was started with.
-  `secrets` refuses a copy that differs from its source rather than replace it.
-- A staged `.openai-credentials.env.new` / `.anthropic-credentials.env.new` in
-  `/etc/cpt-studio/` from an interrupted `secrets`: delete it by hand and rerun;
-  `secrets` refuses while one exists.
-- An `app` whose access check failed left the pair installed and running with
-  those participants live (the receipt says so; what it could record of each
-  check is under `access_checks`): rerun `app` with `--access-check` once the
-  cause is known, or with that participant disabled.
+- Rotating the coder's key: the owner replaces its source; remove
+  `/etc/cpt-studio/anthropic-credentials.env` by hand (root), run `secrets`,
+  which copies the new source, then `app` with the same `--coding-mode`: the
+  running worker's mount holds the file it was started with. `secrets` refuses a
+  copy that differs from its source rather than replace it.
+- A staged `.anthropic-credentials.env.new` in `/etc/cpt-studio/` from an
+  interrupted `secrets`: delete it by hand and rerun; `secrets` refuses while one
+  exists.
 
 ## Local build and tests (no host change)
 
@@ -1280,10 +1237,9 @@ ctx=$(mktemp -d) && git archive HEAD cpt-studio | tar -x -C "$ctx" \
 
 The Django suite inside the image needs a disposable PostgreSQL:
 `docker run --rm --network host --read-only --tmpfs /tmp:rw,exec,nosuid,nodev,size=1g --env-file <0600 file with CPT_STUDIO_SECRET_KEY and CPT_STUDIO_DB_PASSWORD> -e CPT_STUDIO_DB_HOST=127.0.0.1 -e CPT_STUDIO_DB_PORT=<port> -e CPT_STUDIO_TEST_DB_SUFFIX=<unique> -e CPT_STUDIO_STATE_DIR=/tmp/state cpt-studio:dev-build manage test tests --noinput`.
-`exec` on `/tmp` is for the tests only: the OCR plumbing tests run stand-in
-`tesseract`/`pdftoppm` scripts from a temporary directory. The installed
-containers keep `/tmp` `noexec`; real OCR runs the tools from `/usr/bin` and was
-verified inside the image under that setting.
+`exec` on `/tmp` is for the tests only (a test may run a stand-in executable
+from a temporary directory). The installed containers keep `/tmp` `noexec`;
+LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
 
 ## Known limits
 
@@ -1294,21 +1250,20 @@ verified inside the image under that setting.
 - The worker has no Docker health check; `app` and `verify` check that it is
   running and not restarting.
 - The application uid is 10150, not 10001: 10001 already runs a co-tenant's
-  containers here, and RLIMIT_NPROC (set by the extraction sandbox from its
-  container's own task count) is accounted per host uid. `preflight` and
+  containers here, and RLIMIT_NPROC (which a bounded child process may set from
+  its container's own task count) is accounted per host uid. `preflight` and
   `verify` refuse if any task outside CPT Studio runs as 10150.
-- The installer reads a participant's credentials by key NAME only; whether a
-  key works is known only from the opt-in access check (for each live
-  participant: one real, paid coding request for Corti, and for Astra and for
-  Fable one run of the tool loop, one real, paid request per exchange and at
-  most `PARTICIPANT_MAX_EXCHANGES` (4)), or from the first live send. A check
-  that fails leaves the pair installed: retrying it means running `app` again,
-  which switches to a new pair beside the running one.
+- The installer reads the coder's credentials by key NAME only (`secrets`) and
+  through the application's own loader, offline (`app`); whether the key works
+  is known only from the first live send - there is no access check. A refused
+  key shows as the first document's coding failing; an authentication,
+  permission, billing or quota refusal holds the coding stage until an operator
+  releases it.
 - The scan that keeps credential values out of receipts and logs matches each
   value as written, unquoted and without an inline comment, and does not match
   values under 8 characters (they would match by chance), nor a value
-  transformed (encoded, or partly printed). It reads only the checked
-  participant's file.
+  transformed (encoded, or partly printed). It reads only the file of the
+  holder whose output it scans (in an `app`, the coder's Anthropic file).
 - The worker's stop timeout (1,800 s; round r3, DECISIONS D322 (4)) covers
   every stage's deadline - a participant phase's whole tool loop (540 s: at
   most four exchanges; one send's deadline is 330 s), a reading pass's 1,380
@@ -1327,85 +1282,19 @@ verified inside the image under that setting.
   avoid the wait. In blue/green the site stays
   served meanwhile, and that wait is the processing pause: what members start
   is accepted and shown as queued.
-- The question stage (round r3; DECISIONS D320, D322). After the reading's two
-  passes, Fable is asked the engine's reading doubts at effort max, one job per
-  round: the round's requests are sent CONCURRENTLY, one thread each and at
-  most `QUESTION_ROUND_CONCURRENCY` at once (limit 6), under the
-  installation-wide provider lock held once for the round, so the stage takes
-  as long as its slowest request (r3-probe-2's three requests: 1,049 s, 921 s
-  and 691 s), never their sum; the one worker still runs one job at a time.
-  What it costs and how long it takes: about $3 and 10 minutes for a short note,
-  about $12 and 25-55 minutes for a long one (D320's figures; the owner
-  approved the cost per document at effort max: D321). Its limits:
-  1. A document queued behind a long note waits for it: a job that cannot start
-     within the queue window (`jobs.QUEUE_DEADLINE`, 120 minutes: a job queued
-     behind two long notes still starts) expires and its document reads
-     stopped, with Resume - nothing is lost and nothing is charged. Several
-     long notes uploaded together will meet it.
-  2. Each question request fails alone: a refused, failed, cut-off, declined
-     or unreadable request leaves its questions unresolved and their holds stay
-     with the coder; nothing is sent again for it (no automatic retry).
-     Anthropic's per-minute limits apply to the round's concurrent streams (at
-     most `QUESTION_ROUND_CONCURRENCY` at once: limit 6): a
-     429 that names `rate_limit_error` fails that request alone; any other 429,
-     like a 402, a 401 or a 403, sets the installation-wide hold (D39), and the
-     whole site's reading pauses until an operator releases it. Such a hold
-     decides no question request (the repair pass of round r3's pipe lane,
-     PIPE-R1): the document's question stage pauses (the paused phase, with
-     Resume), the round's other answers are kept, and after the release a
-     member's Resume sends each request still owed once - as `interpreter_hold
-     --release` says of every hold that is not request-bound. A request that
-     never left this server - its credentials could not be read, the network
-     failed, or its deadline passed before the send - decides nothing either
-     (DECISIONS D324 (10)): the document's question stage stops with Resume,
-     nothing is queued, and a member's Resume sends each such request once more.
-  3. A worker that dies mid-round leaves each request in flight an unknown
-     outcome (one reconciliation each); a Resume never sends a request whose
-     identical request has a deciding outcome, and a reconciliation releases
-     one new attempt of that one request - on the revision that request was
-     made for while it is the current one, else the current revision's reading
-     from its first stage (PIPE-R2: an addendum made meanwhile is read).
-  4. A question request's output rate below 110 tokens a second is recorded on
-     its run and in the operator report as a measure, never a hold (D310 (9):
-     effort max measured 101-104).
-  5. A spending threshold for the question requests can be configured
-     (`CPT_STUDIO_QUESTION_PROVIDER_CAP_USD` with the site reserve and the
-     account's other spend): a round whose worst cases together pass it by
-     themselves sends nothing, its questions unresolved; a round this month's
-     spend or the other spend pushes over it sends nothing and stays owed - the
-     document stops with Resume, and a member's Resume sends it once the month
-     allows it (DECISIONS D324 (10)). Every run of the month counts at its
-     estimate or its own worst case, a Fable participant run with an unknown
-     outcome included. None is configured by this installer (the account's own
-     limit is the only bound, as before round r3); setting one is the owner's
-     figure (class d). The per-document ceiling (limit 6) is checked first, and
-     is always configured.
-  6. Two figures bound the question stage, and this installer sets both in
-     every container it starts (DECISIONS D325 (3); class d, the owner's
-     figures - settings, never constants of the code).
-     `CPT_STUDIO_QUESTION_DOCUMENT_CEILING_USD` (25 US dollars, about twice the
-     accepted long note) bounds the worst case the stage reserves for one
-     document over every round - each request counted at its worst case, its
-     whole 128,000 output tokens and its input, at least $5.128 - so a
-     document's questions can never cost more. A round that would pass it,
-     with what the document already holds reserved, is refused about itself
-     and never sent: its questions stay unresolved, their codes are held for
-     the coder, and no Resume sends it later. A reservation stops counting
-     only when its request provably cost nothing (nothing was sent, a reuse,
-     or an error answer with no usage), so a request sent again after an
-     outcome that decided nothing counts once.
-     `CPT_STUDIO_QUESTION_ROUND_CONCURRENCY` (4) bounds the question requests
-     in flight at once: the rest of a round wait their turn in the same job,
-     under the same lock and the same reservation. The installer writes the
-     values the revision's `cptstudio/settings.py` gives them, so a figure
-     moves by a change of that file in a release. At these figures a round
-     holds at most 4 requests, one wave, so the stage's 1,588 s deadline and
-     1,768 s stale-stage threshold stand. Figures that allow more waves add 1,483 s to each per wave
-     (`QUESTION_ROUND_WAVES`), and figures whose stage would outlast the
-     120-minute queue window refuse to load. A worker asked to stop starts no
-     further wave of a round (the later requests stay owed, for the next
-     worker), and a participant check (`--access-check`) that meets a later
-     wave in flight fails when its wait for the lock ends, sending nothing.
+- The coding stage's two figures (the build specification, sections 3.1 and
+  3.2; DECISIONS D325 (3)'s rule: class d, the owner's figures - settings, never
+  constants of the code). `CPT_STUDIO_DOCUMENT_CEILING_USD` bounds what one
+  document's revision may cost over every round: a send whose worst case would
+  pass it fails its round, never sent. `CPT_STUDIO_CONCURRENT_DOCUMENTS` is the
+  number of documents the one worker codes at once (its threads, each holding
+  one provider slot). The installer writes, into every container it starts, the
+  defaults the revision's `cptstudio/settings.py` gives them (the
+  specification's: 25 US dollars and 4), so a figure moves by a change of that
+  file in a release; it writes `CPT_STUDIO_CODING_EFFORT` as `max`, the owner's
+  setting. The question stage's figures (`CPT_STUDIO_QUESTION_*`) are no longer
+  written: an earlier revision's pair that a `switch-back` starts reads its own
+  defaults for them, the values installers before the Fable coding build wrote.
 - Blue/green residuals (the declaration states them):
   1. A request an old nginx worker accepted before the reload but proxies only
      after the drain has ended - in practice a large upload it is still

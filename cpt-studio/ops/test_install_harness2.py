@@ -408,15 +408,10 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
 
         def docker(*args, **kwargs):
             built.append(args[0] if args[0] == 'build' else args[-1])
-            if '--list-langs' in args:
-                return SimpleNamespace(returncode=0, stdout=b'List of available languages (2):\neng\nosd\n', stderr=b'')
-            if '--version' in args:
-                return SimpleNamespace(returncode=0, stdout=b'tesseract 5.3.4\n', stderr=b'')
-            if 'pdftoppm' in args:
-                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'pdftoppm version 24.02.0\n')
-            if install.PDF_GATE_SCRIPT in args:  # the image reads the guard PDF as installed pypdf 6.21.2 reads it
-                return SimpleNamespace(returncode=0, stderr=b'', stdout=json.dumps(
-                    {'pdf_sha256': install.PDF_GATE_PDF_SHA256, **install.PDF_GATE_READING}).encode())
+            if 'soffice' in args and '--version' in args:  # the Fable coding build's image checks (ops/install.py)
+                return SimpleNamespace(returncode=0, stdout=b'LibreOffice 7.4.7.2 40(Build:2)\n', stderr=b'')
+            if install.ANTHROPIC_SDK_SCRIPT in args:
+                return SimpleNamespace(returncode=0, stdout=install.ANTHROPIC_SDK_VERSION.encode() + b'\n', stderr=b'')
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
         receipts = self.tmp / 'receipts'
         stdout = io.StringIO()
@@ -435,7 +430,8 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         self.assertEqual(code, 0, stdout.getvalue())
         self.assertEqual(built[0], 'build')  # the gate passed: the build ran
         record = json.loads(Path(json.loads(stdout.getvalue())['receipt']).read_text())
-        self.assertEqual(record['details']['pdf_reading']['status'], 'ok')  # the image's PDF reading gate ran
+        self.assertEqual((record['details']['soffice'], record['details']['anthropic']),
+                         ('LibreOffice 7.4.7.2 40(Build:2)', install.ANTHROPIC_SDK_VERSION))  # the image checks ran
         migrations = record['details']['migrations']
         self.assertEqual(migrations['baseline'], '0005')
         # the core repair's three additive migrations (2026-11-03: decision modifiers, operator grants and report
