@@ -107,7 +107,7 @@ def _decision_words(decision) -> str:
 def _modifier_words(modifiers) -> str:
     if modifiers is None:
         return 'Modifiers: not given'
-    return 'Modifiers: ' + (', '.join(modifiers) if modifiers else 'none')
+    return 'Modifiers: ' + (', '.join(said(str(item)) for item in modifiers) if modifiers else 'none')  # model-written
 
 
 def _row_state(item) -> str:
@@ -159,7 +159,7 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
     kind = snap['kind']
     ref = _encounter_ref(encounter)
     number = snap['round']
-    title = snap['title'] or 'Untitled document'
+    title = snap['title'] if pdf.clean_text(snap['title']).strip() else 'Untitled document'  # nothing printable: none
     index = customer.citation_index(round_)
     text_source = _text_source(encounter)
     items = snap['items']
@@ -216,13 +216,12 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
     else:
         undecided = [item for item in items if item['status'] in decisions.DECIDABLE and item['decided'] is None]
         questions = customer.questions_json(round_)
-        asked = {line for question in questions for line in question['lines']}
-        asked_texts = {' '.join(str(question['text']).split()).casefold() for question in questions}
-        unasked = [item for item in items if item['status'] == 'needs_answer' and item['line'] not in asked
-                   and ' '.join(str(item['question'] or '').split()).casefold() not in asked_texts]
-        # What still needs the practice, one entry per open item: every question of the round (answering one makes a
-        # new coding review, whatever the decisions on its lines), every decidable line without a saved decision, and
-        # a line awaiting an answer that no question names. The count and the status are read from this list.
+        # What still needs the practice, one entry per open item, as the page offers it: every question of the round
+        # (answering one makes a new coding review, whatever the decisions on its lines) and every decidable line
+        # without a saved decision. A line awaiting an answer is finished by answering the round's questions (the page
+        # says so on the line), so it is an entry of its own only when the round has no question to answer. The count
+        # and the status are read from this list.
+        unasked = [] if questions else [item for item in items if item['status'] == 'needs_answer']
         open_entries = [f'Question: {said(question["text"])}' for question in questions]
         open_entries += [f'{item["code"]} ({item["line"]}) needs your answer'
                          + (f': {said(item["question"])}' if item['question'] else '.') for item in unasked]
@@ -252,7 +251,9 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
                         'Synthetic data, not for billing or claims.')
         empty = 'The coding review found no CPT code to report for this document.'
     if agent_approvals:
-        mixed = len(agent_approvals) < len(approvals)
+        # qualified unless the agent made every current decision: a human's approval or rejection beside its own
+        # approvals makes the review a mixed one, whose agent approvals are marked on each code
+        mixed = any(d.reviewer_kind != models.User.AGENT for d in decided)
         record.append(pdf.LabelledValue(
             'Review type', f'{AGENT_LINE} — {len(agent_approvals)} of {len(approvals)} approvals, marked on each code'
             if mixed else AGENT_LINE))

@@ -104,11 +104,13 @@ class RefutedCase(r.CustomerCase, TestCase):
              'source': 'reader'}]})
         text = flat(text_of(self.pdf(enc, 'draft')))
         self.assertNotIn('\x00', text)
-        self.assertIn('midazolam 5 mg IV', text)  # the compatibility form of the squared milligram sign
-        self.assertIn('a sessile Polyp removed', text)  # mathematical letters print as their letters, searchable
-        self.assertIn('Sedation � midazolam', text)  # no form to fall back on: shown, not a blank box
+        # shown as U+FFFD, never as a blank box and never as another character (refutation round 2: a compatibility form
+        # changed numbers and spelled names), and searchable as that
+        self.assertIn('midazolam 5 � IV', text)
+        self.assertIn('a sessile ����� removed', text)
+        self.assertIn('Sedation � midazolam', text)
         self.assertIn('Synthetic note � �', text)
-        self.assertIn('Some cannot be drawn in this PDF and are shown in a plain form or as �', text)
+        self.assertIn('Some cannot be drawn in this PDF and are shown as �', text)
 
     def test_right_to_left_text_is_said_to_be_in_stored_order(self):
         enc = self.encounter()
@@ -293,12 +295,12 @@ class StructureTests(SimpleTestCase):
         self.assertEqual((block[0].style.allowWidows, block[0].style.allowOrphans), (0, 0))
 
     def test_the_notes_heading_travels_with_the_first_note(self):
+        # since refutation round 2 by a page break that leaves room for two lines of the first note, rather than one
+        # unsplittable group that moved a long first note to a new page (test_physician_report_refuted_r2)
         report = physician_pdf.PhysicianReport(
             kind=physician_pdf.DRAFT, status_line='', identity_line='', report_ref='', footer_note='', eyebrow='',
             title='', subtitle='', strip=(), metrics=(), codes_heading='', codes_side_note='', rows=(),
             empty_rows_text='', notes_title='Documentation notes', notes=('First.', 'Second.'))
         flow = physician_pdf._notes_flow(report, self.s)
-        self.assertIsInstance(flow[0], physician_pdf.KeepTogether)
-        texts = [getattr(item, 'text', '') for item in flow[0]._content]
-        self.assertIn('First.', texts)
-        self.assertEqual(getattr(flow[1], 'text', ''), 'Second.')
+        self.assertIsInstance(flow[0], physician_pdf.CondPageBreak)
+        self.assertEqual([getattr(item, 'text', '') for item in flow[3:]], ['First.', 'Second.'])

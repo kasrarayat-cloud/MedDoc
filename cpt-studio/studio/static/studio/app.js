@@ -1137,9 +1137,10 @@ const state = {
   poll: { timer: 0, count: 0, errors: 0 }, tickTimer: 0, clock: 0, reconnecting: false, outdated: false,
   // exporting: what the export dialog was opened on (the document, its coding review and that read of it); making: the
   // file being made ({encounter, kind, fmt}) while its request runs; made: the file just made, whose option waits a moment
-  // (madeTimer); rereading: the document the page reads again after a download of it was refused because it changed
+  // (madeTimer), and madeRead the read that releases it; rereading: the document the page reads again after a download
+  // of it was refused because it changed, and rereadAfter the number of the last read asked before that refusal
   upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, exporting: null, making: null,
-  made: null, madeTimer: 0, rereading: null,
+  made: null, madeTimer: 0, madeRead: null, rereading: null, rereadAfter: 0,
   // the reads of the document, numbered in the order the page asked for them, and the number of the latest one shown
   reads: { asked: 0, applied: 0 },
   open: new Set(), answers: new Map(), pending: new Set(), toastTimer: 0, leaving: false,
@@ -1601,7 +1602,7 @@ function readyText(fmt, filename) {
 const ANOTHER_FILE = 'Another download is still being prepared. Wait a moment, then choose again.';
 // What an export dialog says, offering nothing, while the page reads the document again after a download was refused
 // because its coding review changed.
-const LOADING_LATEST_TEXT = 'This coding review has changed. The page is loading the latest; the downloads are offered again once it has.';
+const LOADING_LATEST_TEXT = 'This coding review has changed. The page is loading the latest; what it allows can be downloaded once it has.';
 
 // The multipart body of one upload attempt, or the sentence that says what is missing.
 function uploadForm(fields, key) {
@@ -1930,6 +1931,10 @@ async function loadDocument(id, serial, silent) {
   state.clock = clockOffset(doc.progress?.server_time, Date.now());
   if (state.ack?.id === doc.id && !isBusy(doc)) state.ack = null;
   renderDocument(doc, !silent);
+  // any read asked after a refused download (or after a file was made) shows what the server had since: the dialog
+  // waiting for the latest, or the option waiting for the page's read, waits no longer for its own read, which may stall
+  if (state.rereading === doc.id && read > state.rereadAfter) state.rereading = null;
+  if (state.madeRead && read > state.madeRead.after) state.madeRead.done();
   redrawExportDialog();
   schedulePoll(serial);
 }
@@ -3616,25 +3621,35 @@ function redrawExportDialog() {
 }
 
 // One gesture makes one file: the option of a file just made waits until MADE_HOLD_MS have passed and the page has read
-// the document again (the dialog drawn from that read), then is offered again, the focus going back to it when nothing
-// else holds it. A later file makes its own option wait instead.
+// the document again - its own read, or any read asked after it, whichever is shown first (the dialog drawn from that
+// read) - then is offered again, the focus going back to it when nothing else holds it. A later file makes its own option
+// wait instead.
 function holdMade(made) {
   state.made = made;
   clearTimeout(state.madeTimer);
   let waiting = 2;
+  let read = false;
   const release = () => {
     waiting -= 1;
     if (waiting > 0 || state.made !== made) return;
     state.made = null;
+    state.madeRead = null;
     drawExportOptions([made.kind, made.fmt]);
   };
+  const done = () => {
+    if (read) return;
+    read = true;
+    release();
+  };
+  state.madeRead = { after: state.reads.asked, done };
   state.madeTimer = setTimeout(release, MADE_HOLD_MS);
-  refreshDocument().then(release, release);
+  refreshDocument().then(done, done);
 }
 
 // After a download refused because its coding review changed, the page reads the document again (afterConflict), with
 // the download's guard already released, so no other choice is held up meanwhile; an export dialog opened on the
-// document in the meantime says the page is loading the latest until the read has ended.
+// document in the meantime says the page is loading the latest until that read has ended, or until any read asked after
+// the refusal is shown (loadDocument), whichever comes first.
 async function rereadAfterRefusal(encounter) {
   try {
     await afterConflict();
@@ -3691,6 +3706,7 @@ function generateReport(kind, fmt) {
         if (state.exporting === exporting) state.exporting = null;
         if (onThis) closeDialog('exportDialog');
         state.rereading = exporting.encounter;
+        state.rereadAfter = state.reads.asked;
         refused = true;
         return;
       }

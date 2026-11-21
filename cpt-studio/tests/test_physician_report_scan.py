@@ -4,9 +4,10 @@ by tests.support.rounds.scan_customer) against the shared denylist (ops/verifica
 encounter's own quotations set aside as the scanner sets them aside on the deployed site. Covered: a draft and an approved
 PDF of a round whose reasons, questions and notes name vendors and models; a line the second check added, in its own
 words; a round made after answers, or after a retry, naming its trigger; an earlier round's PDF, still listed once a
-later round replaced it, whose modifier names a vendor outside the quotation (refutation L3-2); a phrase the page break
-cuts in two (L6-3); and a viewer's PDF, which holds what a reviewer's does. Synthetic data only; nothing reaches the
-network."""
+later round replaced it, whose modifier prints a machinery word outside the quotation (refutation L3-2); a phrase the
+page break cuts in two (L6-3); a viewer's PDF, which holds what a reviewer's does; and refutation round 2's quotations
+printed with U+FFFD, cut inside a long token or holding a character the report deletes, a token cut mid-word, and a PDF
+holding an entry the scan does not read. Synthetic data only; nothing reaches the network."""
 import io
 import json
 import re
@@ -143,14 +144,16 @@ class TriggerTests(PhysicianReportScanCase):
 
 
 class EarlierRoundTests(PhysicianReportScanCase):
-    def test_an_earlier_rounds_pdf_naming_a_vendor_in_a_modifier_fails_the_scan_once_a_later_round_replaces_it(self):
+    def test_an_earlier_rounds_pdf_printing_machinery_in_a_modifier_fails_the_scan_once_a_later_round_replaces_it(self):
         """Refutation L3-2: once a later round replaces the one a PDF was made from, the PDF stays listed and the JSON no
-        longer holds its words, so the PDF path is its only reader. A modifier "Claude" (part of the code line, never
-        filtered) printed outside the quotation - wrapped onto a line of its own beside the cited "Dr. Claude Example
-        ..." - is the product's wording, and the scan finds it."""
+        longer holds its words, so the PDF path is its only reader. A modifier "tokens" (part of the code line; the
+        display filter replaces vendor names, and since refutation round 2 reads modifiers too, but not machinery
+        words) printed outside the quotation - beside a cited passage that holds the same word - is the product's
+        wording, and the scan finds it."""
+        quote = 'Dr. Example counted the tokens and removed the polyp with a cold snare'
         enc = self.encounter()
-        modifiers = ['59', 'XS', 'XU', 'PT', 'KX', 'GA', 'RT', 'Claude']
-        citations = {'L1': [{'text': QUOTE, 'page': 2, 'source': 'reader'}]}
+        modifiers = ['59', 'XS', 'XU', 'PT', 'KX', 'GA', 'RT', 'tokens']
+        citations = {'L1': [{'text': quote, 'page': 2, 'source': 'reader'}]}
         r.write_round(enc, codes=[r.row('45385', 'ready', modifiers=modifiers, reason='A polyp was removed by cold snare.')],
                       citations=citations)
         earlier, _, report = self.made(enc, 'draft')
@@ -159,16 +162,16 @@ class EarlierRoundTests(PhysicianReportScanCase):
         payload = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()
         self.assertEqual([(item['id'], item['current']) for item in payload['reports']], [(report['id'], False)])
         ctx = self.sc.scan_context(self.sc.quotations(payload))
-        self.assertEqual(self.sc.scan_json(payload, ctx), [])  # the JSON shows round 2: no modifier "Claude"
+        self.assertEqual(self.sc.scan_json(payload, ctx), [])  # the JSON shows round 2: no modifier "tokens"
         reading = self.sc.read_pdf(earlier)
         lines = [(page, index, line.strip()) for page, text in enumerate(reading.pages, start=1)
                  for index, line in enumerate(text.split('\n'), start=1)]
-        printed = [(page, index) for page, index, line in lines if line.endswith('Claude') and 'Example' not in line]
+        printed = [(page, index) for page, index, line in lines if line.endswith('tokens') and 'Example' not in line]
         self.assertEqual(len(printed), 1, lines)  # the modifier, printed outside every quotation
-        self.assertIn(f'“{QUOTE}”', flat(earlier))  # and the quotation, with the same name, exactly
+        self.assertIn(f'“{quote}”', flat(earlier))  # and the quotation, with the same word, exactly
         hits = self.sc.scan_pdf(reading, ctx, 'draft.pdf')
         self.assertEqual([(hit['id'], hit['where']) for hit in hits],
-                         [('provider_name', f'draft.pdf page {printed[0][0]} line {printed[0][1]}')])
+                         [('token', f'draft.pdf page {printed[0][0]} line {printed[0][1]}')])
 
 
 class PageBreakTests(PhysicianReportScanCase):
@@ -235,3 +238,76 @@ class ViewerTests(PhysicianReportScanCase):
                                                                         prepared.format(self.viewer.label())))
                 self.assertEqual(PdfReader(io.BytesIO(viewers)).metadata, PdfReader(io.BytesIO(reviewers)).metadata)
                 self.assertTrue(report['filename'].endswith('.pdf'))
+
+
+class RoundTwoScanTests(PhysicianReportScanCase):
+    """Refutation round 2 against the scanner's PDF path: a quotation of the document is set aside although the report
+    printed U+FFFD for a character its fonts lack, or the layout cut a long token without a space, or the document holds
+    a character the report deletes (U+FFFC); a token the layout cut mid-word in the product's own wording is still read
+    whole; and a PDF holding an entry the scan does not read (optional content, a page's own XMP stream, article threads)
+    fails the scan. Characters are built with chr()."""
+
+    def scanned_quote(self, text):
+        enc = self.encounter()
+        r.write_round(enc, codes=[r.row('45385', 'ready', reason='A polyp was removed by cold snare.')],
+                      citations={'L1': [{'text': text, 'page': 2, 'source': 'reader'}]})
+        data, response, _ = self.made(enc, 'draft')
+        return flat(data), self.scanned(enc, data, response, 'draft.pdf')[1]
+
+    def test_a_quotation_printed_with_the_replacement_character_is_still_the_documents(self):
+        for lacking in (chr(0xF0B7), chr(0x4E2D), chr(0x338E)):
+            with self.subTest(lacking=hex(ord(lacking))):
+                text, hits = self.scanned_quote(
+                    f'Trace blood was seen after the preparation was judged adequate {lacking} {QUOTE}, and the '
+                    f'terminal ileum was intubated without difficulty; findings: a 6 mm sessile polyp {lacking} '
+                    f'in the sigmoid colon.')
+                self.assertIn(chr(0xFFFD), text)
+                self.assertEqual(hits, [])
+
+    def test_a_quotation_the_layout_cut_inside_a_long_token_is_still_the_documents(self):
+        for tail in ('https://example.org/reports/' + 'a1b2c3d4e5' * 12 + ' for details',
+                     'Signature: ' + '_' * 140 + ' (attending)'):
+            with self.subTest(tail=tail[:30]):
+                self.assertEqual(self.scanned_quote(f'{QUOTE}. Report at {tail}')[1], [])
+
+    def test_a_quotation_holding_a_character_the_report_deletes_is_still_the_documents(self):
+        hidden = chr(0xFFFC)
+        text, hits = self.scanned_quote(f'Dr. Claude Exa{hidden}mple removed the polyp with a cold snare')
+        self.assertIn('Dr. Claude Example removed the polyp', text)
+        self.assertEqual(hits, [])
+
+    def test_a_token_cut_mid_word_in_the_products_wording_is_read_whole(self):
+        ctx = self.sc.scan_context()
+        for first, second, rule in (('links https://records.example.org/f93376b0dac', '38912f93376b0dac38912f93376b0/view',
+                                     'long_hex'),
+                                    ('the call req_011C', 'UmKq2XyzAbCdEf was retried', 'vendor_id')):
+            with self.subTest(rule=rule):
+                hits = []
+                self.sc._scan_joint(first, second, ctx, 'draft.pdf page 1 lines 4-5', hits)
+                self.assertIn(rule, [hit['id'] for hit in hits])
+                self.assertEqual(len(hits), len({hit['id'] for hit in hits}))  # each rule once
+
+    def test_a_pdf_holding_an_entry_the_scan_does_not_read_fails_it(self):
+        from pypdf import PdfReader, PdfWriter
+        from pypdf.generic import ArrayObject, DictionaryObject, NameObject, TextStringObject
+        enc = self.encounter()
+        r.write_round(enc, codes=[r.row('45385', 'ready')])
+        data, _, _ = self.made(enc, 'draft')
+        self.sc.read_pdf(data)  # the export itself is read
+
+        def with_entry(where, key, value):
+            writer = PdfWriter(clone_from=PdfReader(io.BytesIO(data)))
+            target = writer._root_object if where == 'catalog' else writer.pages[0]
+            target[NameObject(key)] = value
+            out = io.BytesIO()
+            writer.write(out)
+            return out.getvalue()
+
+        layer = DictionaryObject({NameObject('/OCGs'): ArrayObject([DictionaryObject({
+            NameObject('/Type'): NameObject('/OCG'), NameObject('/Name'): TextStringObject('Synthetic layer')})])})
+        for where, key, value in (('catalog', '/OCProperties', layer), ('page', '/Metadata', DictionaryObject()),
+                                  ('catalog', '/Threads', ArrayObject()), ('catalog', '/Lang', TextStringObject('en'))):
+            with self.subTest(key=key):
+                with self.assertRaises(self.sc.Unreadable) as raised:
+                    self.sc.read_pdf(with_entry(where, key, value))
+                self.assertIn(key, str(raised.exception))

@@ -257,8 +257,9 @@ RENDERERS = {Export.TXT: render_txt, Export.CSV: render_csv}
 def render_pdf(snap, encounter, round_) -> bytes:
     """The physician PDF of ``snap``; NotMade when it cannot be made (only the error's type is logged: never its
     text, which could carry document words). physician_report and ReportLab are imported with this module, and the
-    report fonts load at that import, so a broken library or a missing font stops the app from starting (the
-    installer's WSGI-import gate) instead of failing a doctor's download."""
+    report fonts load at that import, so a broken library or a missing font fails the image phase's system check
+    (manage.py check, whose URL check imports the API and so this module) and every request of an app started anyway,
+    instead of only a doctor's download."""
     try:
         content = physician_report.render(snap, encounter=encounter, round_=round_)
     except Exception as exc:  # noqa: BLE001 - any failure refuses the export; nothing is stored

@@ -157,13 +157,33 @@ _registered = False
 
 
 def register_fonts() -> None:
-    global _registered
+    global _registered, _DRAWN_INVISIBLE
     if _registered:
         return
     for name, filename in _FONT_FILES.items():
         pdfmetrics.registerFont(TTFont(name, str(FONT_DIR / filename)))
     pdfmetrics.registerFontFamily(BODY, normal=BODY, bold=BODY_SEMI, italic=BODY, boldItalic=BODY_SEMI)
+    _DRAWN_INVISIBLE = _measure_invisible()
     _registered = True
+
+
+def _blank(face, point: int) -> bool:
+    glyph = face.charToGlyph.get(point)
+    return (bool(glyph) and face.glyphPos[glyph] == face.glyphPos[glyph + 1]
+            and face.charWidths.get(point, face.defaultWidth) == 0)
+
+
+def _measure_invisible() -> frozenset:
+    """Every character some report font draws with no outline and no advance, wherever it is printed: in a report
+    font that has a glyph for it, or in the fallback font for one that does not."""
+    fallback = pdfmetrics.getFont(FALLBACK).face
+    found = set()
+    for name in (DISPLAY, BODY, BODY_SEMI, MONO, MONO_REGULAR):
+        face = pdfmetrics.getFont(name).face
+        for point in set(face.charToGlyph) | set(fallback.charToGlyph):
+            if _blank(face if _has(face.charToGlyph, point) else fallback, point):
+                found.add(point)
+    return frozenset(found)
 
 
 # What never prints. Every control character is a separator in the stored text (a vertical tab, a form feed, the
@@ -179,37 +199,46 @@ REPLACEMENT = '�'
 RTL_CLASSES = ('R', 'AL')
 
 
+# What the report's own fonts draw as nothing (no outline and no advance), measured from them when they load
+# (register_fonts): U+FFFC, the object replacement character, and the interlinear annotation marks among them.
+_DRAWN_INVISIBLE: frozenset = frozenset()
+
+
 def clean_text(value) -> str:
-    """Printable form of a saved string: every control character (line breaks and tabs included) becomes a space and
-    invisible format characters go; nothing else changes."""
-    text = '' if value is None else str(value)
-    return _INVISIBLE.sub('', _CONTROLS.sub(' ', text.replace('\r\n', '\n')))
+    """Printable form of a saved string: every control character (line breaks and tabs included) becomes a space;
+    invisible format characters go, and so does every character the report's fonts draw as nothing (_DRAWN_INVISIBLE),
+    so the display filter reads a name as the reader sees it; nothing else changes."""
+    register_fonts()
+    text = _INVISIBLE.sub('', _CONTROLS.sub(' ', ('' if value is None else str(value)).replace('\r\n', '\n')))
+    if text.isascii():
+        return text
+    return ''.join(ch for ch in text if ord(ch) not in _DRAWN_INVISIBLE)
 
 
 def _covered(font_name: str) -> dict:
     return getattr(pdfmetrics.getFont(font_name), 'face').charToGlyph
 
 
+def _has(face: dict, point: int) -> bool:
+    """``face`` (a font's character map) has a glyph of its own for ``point``: glyph 0 is .notdef, the blank box a font
+    shows for a character it lacks (every report font maps U+FFFF to it)."""
+    return bool(face.get(point))
+
+
 def _drawable(ch: str, primary: dict) -> bool:
-    """The report can draw ``ch`` as itself: one of its fonts has it and it lies in the Basic Multilingual Plane
-    (ReportLab's text layer cannot carry a character above U+FFFF, so search and copy would lose it)."""
+    """The report can draw ``ch`` as itself: one of its fonts has a glyph for it and it lies in the Basic Multilingual
+    Plane (ReportLab's text layer cannot carry a character above U+FFFF, so search and copy would lose it)."""
     point = ord(ch)
-    return point <= 0xFFFF and (point in primary or point in _covered(FALLBACK))
+    return point <= 0xFFFF and (_has(primary, point) or _has(_covered(FALLBACK), point))
 
 
 def displayable(text: str, font: str = BODY) -> str:
-    """``text`` with every character the report cannot draw replaced - by its compatibility form when that can be drawn
-    (NFKC: a squared milligram sign prints 'mg', a mathematical letter its letter), otherwise by U+FFFD - never a blank
-    box that would also vanish from the text layer. Nothing else changes; render_report says so on the report."""
+    """``text`` with every character the report cannot draw replaced by U+FFFD - never a blank box that would also vanish
+    from the text layer, and never another character: a compatibility form can change what the text says (circled 11
+    and 12 would read 1112), can grow a field past its room (one ligature is eighteen letters) and can spell a name the
+    display filter has already read. Nothing else changes; render_report says so on the report."""
     primary = _covered(font)
-    out = []
-    for ch in text:
-        if ch == ' ' or _drawable(ch, primary):
-            out.append(ch)
-            continue
-        plain = unicodedata.normalize('NFKC', ch)
-        out.append(plain if plain != ch and all(c == ' ' or _drawable(c, primary) for c in plain) else REPLACEMENT)
-    return ''.join(out)
+    return ''.join(ch if ch == ' ' or _drawable(ch, primary) else REPLACEMENT for ch in text)
 
 
 def markup(value, font: str = BODY) -> str:
@@ -231,7 +260,7 @@ def markup(value, font: str = BODY) -> str:
         run.clear()
 
     for ch in text:
-        needs_fallback = ord(ch) not in primary and ch != ' '
+        needs_fallback = ch != ' ' and not _has(primary, ord(ch))
         if needs_fallback != run_fallback:
             flush()
             run_fallback = needs_fallback
@@ -360,8 +389,9 @@ class _Pages:
         if report.header_title:
             suffix = f' · {report.header_suffix}' if report.header_suffix else ''
             budget = CONTENT_WIDTH * 0.62 - _text_width(suffix, BODY, 7.5)
-            _draw_text(canv, right, PAGE_HEIGHT - 72, _fit(report.header_title, BODY, 7.5, budget) + suffix, BODY,
-                       7.5, SECONDARY, align='right')
+            fitted = _fit(report.header_title, BODY, 7.5, budget)
+            line = fitted + suffix if fitted.strip() else report.header_suffix  # no title left: no dangling separator
+            _draw_text(canv, right, PAGE_HEIGHT - 72, line, BODY, 7.5, SECONDARY, align='right')
         else:
             _draw_text(canv, right, PAGE_HEIGHT - 72, report.identity_line, BODY, 7.5, SECONDARY, align='right',
                        max_width=CONTENT_WIDTH * 0.62)
@@ -382,7 +412,7 @@ def _runs(text: str, font: str) -> list:
     primary = _covered(font)
     runs: list = []
     for ch in text:
-        face = font if ch == ' ' or ord(ch) in primary else FALLBACK
+        face = font if ch == ' ' or _has(primary, ord(ch)) else FALLBACK
         if runs and runs[-1][0] == face:
             runs[-1][1].append(ch)
         else:
@@ -611,6 +641,7 @@ def _evidence_flow(report: PhysicianReport, s: dict) -> list:
               _p(markup(report.evidence_title, DISPLAY), s['evidence_title']),
               _p(markup(report.evidence_identity), s['identity'])]
     header_height = sum(item.wrap(CONTENT_WIDTH, FRAME_HEIGHT)[1] + 20 for item in header)
+    long_start = s['quote_long'].spaceBefore + 20 + 3 * s['quote_long'].leading  # spacing, its border, three lines
     for index, row in enumerate(report.rows, start=1):
         # A heading is never left alone at the foot of a page. An unsplittable evidence box travels with it whole;
         # a long quotation (a paragraph, which can split) starts under it, and the page break before the heading
@@ -625,6 +656,10 @@ def _evidence_flow(report: PhysicianReport, s: dict) -> list:
         else:
             flow += [CondPageBreak(130), KeepTogether([*lead, heading, *first])]
         for block in blocks[1:]:
+            if any(isinstance(f, Paragraph) for f in block):
+                # a long quotation starts only where its locator and two of its lines fit, so the locator never ends a
+                # page with a single line under it
+                flow.append(CondPageBreak(long_start))
             flow += block
         if _present(row.note):
             flow.append(_p(markup(row.note), s['note']))
@@ -637,8 +672,13 @@ def _notes_flow(report: PhysicianReport, s: dict) -> list:
     if not report.notes:
         return []
     items = [Paragraph(markup(note), s['note_item'], bulletText='–') for note in report.notes]
-    return [KeepTogether([_p(markup((report.notes_title or 'Notes').upper(), BODY_SEMI), s['notes_title']),
-                          HorizontalRule(space_before=0, space_after=6), items[0]]), *items[1:]]
+    title = _p(markup((report.notes_title or 'Notes').upper(), BODY_SEMI), s['notes_title'])
+    rule = HorizontalRule(space_before=0, space_after=6)
+    # The heading never ends a page alone: it starts only where it, its rule and the first two lines of the first note
+    # fit, and the note then flows on (a long first note does not move the whole section to a new page).
+    room = (s['notes_title'].spaceBefore + title.wrap(CONTENT_WIDTH, FRAME_HEIGHT)[1] + s['notes_title'].spaceAfter
+            + rule.wrap(CONTENT_WIDTH, FRAME_HEIGHT)[1] + s['note_item'].spaceBefore + 2 * s['note_item'].leading)
+    return [CondPageBreak(room), title, rule, *items]
 
 
 def _scope_and_closing(report: PhysicianReport, s: dict) -> list:
@@ -736,14 +776,16 @@ def _strings(value):
 
 
 def notices(report: PhysicianReport) -> tuple:
-    """Review-scope rows the printing itself requires: characters the report fonts cannot draw, and right-to-left text,
-    which is printed in its stored order (the TXT and CSV keep both exactly)."""
+    """Review-scope rows the printing itself requires: characters the report fonts cannot draw, and right-to-left text
+    that is printed (in its stored order; a right-to-left letter no font draws prints as U+FFFD, so it is not one). The
+    TXT and CSV keep both exactly."""
     rows = []
     texts = [clean_text(text) for text in _strings(report)]
-    if any(displayable(text) != text for text in texts):
-        rows.append(('Characters', 'Some cannot be drawn in this PDF and are shown in a plain form or as \ufffd; the TXT '
-                                   'and CSV keep every character', True))
-    if any(unicodedata.bidirectional(ch) in RTL_CLASSES for text in texts for ch in text):
+    printed = [displayable(text) for text in texts]
+    if printed != texts:
+        rows.append(('Characters', 'Some cannot be drawn in this PDF and are shown as \ufffd; the TXT and CSV keep '
+                                   'every character', True))
+    if any(unicodedata.bidirectional(ch) in RTL_CLASSES for text in printed for ch in text):
         rows.append(('Right-to-left text', 'Shown in its stored order, left to right; the TXT and CSV keep it exactly',
                      True))
     return tuple(rows)
@@ -762,4 +804,4 @@ def render_report(report: PhysicianReport) -> bytes:
     return data
 
 
-register_fonts()  # at import: a missing font or a broken ReportLab fails the app's start, not a doctor's download
+register_fonts()  # at import: a missing font or a broken ReportLab fails the image's system check, not a download

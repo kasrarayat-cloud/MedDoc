@@ -259,7 +259,7 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
   global.location = { hash: '', assign(url) { calls.push({ assign: url }); } };
   global.window = { scrollY: 0, scrollTo() {}, matchMedia: () => ({ matches: false }) };
   const kept = ['doc', 'session', 'route', 'routeSerial', 'review', 'answers', 'leaving', 'outdated', 'docKey', 'viewerKey', 'selectedQuote', 'clock', 'reconnecting', 'ack',
-    'exporting', 'making', 'made', 'rereading'];
+    'exporting', 'making', 'made', 'madeRead', 'rereading', 'rereadAfter'];
   const before = Object.fromEntries(kept.map(key => [key, app.state[key]]));
   try {
     await fn({ calls, element });
@@ -3434,6 +3434,72 @@ test('L5-1: one gesture makes one download - a double click\'s second click is i
     assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(6).fill(false), 'offered again once drawn from the new read');
     assert.equal(posted(calls).length, 1);
   });
+});
+
+test('R2-4-2: the option of a file just made is offered again once the hold has passed and any later read is shown, though its own read stalls', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const session = fixture('session.json');
+  const reviewed = fixture('encounter-reviewed.json');
+  const address = `/api/encounters/${reviewed.id}`;
+  const made = { id: 'f6100000-0000-4000-8000-00000000d0a0', kind: 'draft', fmt: 'txt', filename: 'CPT-Studio-draft-r2-20261121T090010.txt',
+    generated_at: '2026-11-21T09:00:10Z', download_url: '/api/reports/f6100000-0000-4000-8000-00000000d0a0/download', current: true };
+  const listed = { ...clone(reviewed), reports: [made, ...clone(reviewed.reports)] };
+  const reads = (method, url) => method === 'GET' && url === address;
+  const states = element => controlsOf(element('#exportOptions').innerHTML).map(([kind, fmt, disabled]) => [`${kind} ${fmt}`, disabled]);
+  await withPage({ answers: [{ match: (method, url) => method === 'POST' && url === `${address}/reports`, status: 201, body: made },
+    { match: reads, status: 200, body: listed }, { match: reads, status: 200, body: listed }] }, async ({ calls, element }) => {
+    const holds = holdReads(address);  // the hold's own read of the document stalls
+    Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 181, docKey: '', viewerKey: app.viewerKey(reviewed) });
+    click('[data-action]', { action: 'export' });
+    press('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' }, 1);
+    await settle(() => holds.length === 1);
+    assert.deepEqual(states(element)[2], ['draft txt', true]);
+    // another read, asked after the file was made (an act's read, or a poll), is shown; the hold then passes
+    await app.refreshDocument();
+    t.mock.timers.tick(app.MADE_HOLD_MS);
+    await settle(() => !states(element)[2][1]);
+    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(6).fill(false), 'the option waited on for a read that stalled');
+    // the stalled read, answering last, is older than what the page shows and changes nothing
+    holds[0]();
+    await settle(() => false);
+    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(6).fill(false));
+    assert.equal(posted(calls).length, 1);
+  });
+});
+
+test('R2-4-1: a dialog waiting for the latest after a refused download is drawn from any later read the page shows, though its own read stalls', async () => {
+  const session = fixture('session.json');
+  const ready = fixture('encounter-ready.json');
+  const later = { ...clone(ready), round: { number: 2, trigger: 'answers', finished_at: '2026-11-20T08:40:00Z' } };
+  const address = `/api/encounters/${ready.id}`;
+  const changed = { error: 'This coding review has changed. Reload to see the latest.', details: {} };
+  const reads = (method, url) => method === 'GET' && url === address;
+  await withPage({ answers: [{ match: (method, url) => method === 'POST' && url === `${address}/reports`, status: 409, body: changed },
+    { match: reads, status: 200, body: later }, { match: reads, status: 200, body: later }] }, async ({ calls, element }) => {
+    const holds = holdReads(address);  // the read after the refusal stalls
+    Object.assign(app.state, { session, doc: ready, route: { name: 'doc', id: ready.id }, routeSerial: 182, docKey: '', viewerKey: app.viewerKey(ready) });
+    click('[data-action]', { action: 'export' });
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    await settle(() => holds.length === 1);
+    click('[data-action]', { action: 'export' });
+    assert.equal(element('#exportStatus').textContent, app.LOADING_LATEST_TEXT);
+    // another read, asked after the refusal, is shown: the dialog waits no longer, and is drawn from it
+    await app.refreshDocument();
+    await settle(() => app.state.exporting?.round === 2);
+    assert.equal(app.state.rereading, null);
+    assert.equal(element('#exportStatus').textContent, app.exportStatusText(later));
+    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled]) => disabled), [false, false, false, true, true, true]);
+    // the stalled read, answering last, is older than what the page shows and changes nothing
+    holds[0]();
+    await settle(() => false);
+    assert.equal(app.state.doc.round.number, 2);
+    assert.equal(posted(calls).length, 1);
+  });
+});
+
+test('R2-4-5: the dialog waiting for the latest promises only what the latest allows', () => {
+  assert.equal(app.LOADING_LATEST_TEXT, 'This coding review has changed. The page is loading the latest; what it allows can be downloaded once it has.');
+  assert.doesNotMatch(app.LOADING_LATEST_TEXT, /offered again/);
 });
 
 test('L5-2: an open export dialog follows each read of its document - an approval or a finished review shows at once; a file being made is left as it is', async t => {

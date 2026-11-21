@@ -247,14 +247,22 @@ UNREAD_IN_CATALOG = {'/Outlines': 'bookmarks', '/AcroForm': 'a form', '/Names': 
                      'destinations)', '/OpenAction': 'an open action', '/AA': 'document actions',
                      '/Metadata': 'an XMP metadata stream', '/PageLabels': 'page labels'}
 UNREAD_ON_PAGE = {'/Annots': 'annotations', '/AA': 'page actions'}
+# The entries this scan knows a CPT Studio export holds - what ReportLab writes for it - and reads past: any other entry
+# of the trailer, the catalog, a page or a page's resources (optional content, a page's own XMP stream, article threads,
+# encryption ...) is something the scan does not read, so the PDF fails it (a list of what is unread can never be whole).
+READ_IN_TRAILER = frozenset({'/Size', '/Root', '/Info', '/ID'})
+READ_IN_CATALOG = frozenset({'/Type', '/Pages', '/PageMode'})
+READ_ON_PAGE = frozenset({'/Type', '/Parent', '/Resources', '/MediaBox', '/Contents', '/Rotate', '/Trans'})
+READ_IN_RESOURCES = frozenset({'/Font', '/ProcSet'})
 # What a reader never sees as itself, so the PDF's text is read without it (a name with an invisible character inside
 # it, "Cl<U+200E>aude", reads "Claude"): Unicode's default-ignorable code points - zero-width spaces and joiners, the
 # bidirectional marks, embeddings and isolates, the invisible operators, variation selectors, the soft hyphen, the
-# Hangul fillers, tags - and every other format character (category Cf) are deleted; a C0 or C1 control character is
+# Hangul fillers, tags, the object replacement character (which the report's fonts draw as nothing, so the report
+# deletes it) - and every other format character (category Cf) are deleted; a C0 or C1 control character is
 # read as a space, as the report prints one (studio/physician_pdf.py clean_text). pypdf gives U+0000 for a character the
 # PDF's font has no glyph for (a .notdef box), so that reads as a space too.
 _INVISIBLE = re.compile('[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e'
-                        '\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufff8\U0001bca0-\U0001bca3'
+                        '\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufffc\U0001bca0-\U0001bca3'
                         '\U0001d173-\U0001d17a\U000e0000-\U000e0fff]')
 _CONTROL = re.compile('[\x00-\x1f\x7f-\x9f]')
 
@@ -303,11 +311,19 @@ def read_pdf(body: bytes) -> PdfReading:
         reader = PdfReader(io.BytesIO(body), strict=True)
         catalog = _resolved(reader.trailer['/Root'])
         unread = [what for key, what in UNREAD_IN_CATALOG.items() if key in catalog]
+        unread += [f'the entry {key} of the trailer' for key in sorted(set(reader.trailer) - READ_IN_TRAILER)]
+        unread += [f'the entry {key} of the catalog'
+                   for key in sorted(set(catalog) - READ_IN_CATALOG - set(UNREAD_IN_CATALOG))]
         pages = []
         for number, page in enumerate(reader.pages, start=1):
             unread += [f'{what} on page {number}' for key, what in UNREAD_ON_PAGE.items() if key in page]
-            if _resolved((_resolved(page.get('/Resources')) or {}).get('/XObject')):
+            unread += [f'the entry {key} of page {number}'
+                       for key in sorted(set(page) - READ_ON_PAGE - set(UNREAD_ON_PAGE))]
+            resources = _resolved(page.get('/Resources')) or {}
+            if _resolved(resources.get('/XObject')):
                 unread.append(f'an image or form object on page {number}')
+            unread += [f'the resource {key} of page {number}'
+                       for key in sorted(set(resources) - READ_IN_RESOURCES - {'/XObject'})]
             pages.append(page.extract_text() or '')
         info = reader.metadata or {}
         metadata = {str(key).lstrip('/'): str(info[key]) for key in info}
@@ -326,6 +342,25 @@ def read_pdf(body: bytes) -> PdfReading:
 
 def _squeezed(text: str) -> str:
     return ' '.join(text.split())
+
+
+def _bare(text: str) -> str:
+    return ''.join(text.split())
+
+
+REPLACEMENT = chr(0xFFFD)  # what the report prints for a character none of its fonts draws (studio/physician_pdf.py)
+
+
+def _of_document(printed: str, document: str) -> bool:
+    """``printed`` (a quotation's text as the PDF gives it, white space removed) is a part of ``document`` (likewise):
+    compared with no white space at all, because the layout breaks a line inside a long token (a URL, a run of
+    underscores) without a hyphen or a space, and with each U+FFFD standing for exactly one character, because the
+    report prints U+FFFD for a character its fonts cannot draw."""
+    if not printed:
+        return False
+    if REPLACEMENT not in printed:
+        return printed in document
+    return re.search('.'.join(re.escape(part) for part in printed.split(REPLACEMENT)), document, re.DOTALL) is not None
 
 
 def _running_count(pages: list) -> int:
@@ -348,10 +383,10 @@ def _running_count(pages: list) -> int:
 
 def _quotations_aside(stream: str, document: str) -> list:
     """The spans of ``stream`` (a run of PDF lines joined by line breaks) that are printed quotations of the document,
-    marks included: each opens with a curly opening mark and closes with a curly closing mark, and its text, white space
-    squeezed, is a part of ``document`` (squeezed). A quotation whose own text holds a closing mark is followed to the
-    last closing mark up to which its text is still the document's. A mark that opens no quotation of the document is
-    the product's own wording, as is everything outside the spans."""
+    marks included: each opens with a curly opening mark and closes with a curly closing mark, and its text is a part of
+    ``document``, which is given with no white space (_of_document). A quotation whose own text holds a closing mark is
+    followed to the last closing mark up to which its text is still the document's. A mark that opens no quotation of
+    the document is the product's own wording, as is everything outside the spans."""
     spans, at = [], 0
     while True:
         start = stream.find(OPEN_QUOTE, at)
@@ -359,8 +394,7 @@ def _quotations_aside(stream: str, document: str) -> list:
             return spans
         end, close = None, stream.find(CLOSE_QUOTE, start + 1)
         while close >= 0:
-            inner = _squeezed(stream[start + 1:close])
-            if not (inner and inner in document):
+            if not _of_document(_bare(stream[start + 1:close]), document):
                 break
             end, close = close, stream.find(CLOSE_QUOTE, close + 1)
         if end is None:
@@ -405,21 +439,26 @@ def _scan_stream(lines: list, document: str, ctx: ScanContext, name: str, hits: 
 
 def _scan_joint(first: str, second: str, ctx: ScanContext, where: str, hits: list) -> None:
     """What spans the break between two neighbouring lines of product wording in a PDF (each line was scanned alone):
-    the two read joined by a space, each with the allowed strings removed first as scan_text removes them, and only a
-    match that starts in the first line and ends in the second reported."""
+    the two read joined by a space and joined with nothing between them (the layout cuts a token too long for a line
+    mid-word, with no hyphen), each with the allowed strings removed first as scan_text removes them, and only a match
+    that starts in the first line and ends in the second reported, once."""
     cleaned = []
     for line in (first, second):
         for allowed in ctx.allowed:
             line = line.replace(allowed, ' ')
         cleaned.append(line)
-    joined, joint = f'{cleaned[0]} {cleaned[1]}', len(cleaned[0])
-    for pattern_id, severity, surfaces, regex in PATTERNS:
-        if 'file' not in surfaces:
-            continue
-        for match in regex.finditer(joined):
-            if match.start() < joint and match.end() > joint + 1:
-                hits.append({'id': pattern_id, 'severity': severity, 'surface': 'file', 'where': where,
-                             'match': _excerpt(joined, match.start(), len(match.group()))})
+    joint, found = len(cleaned[0]), set()
+    for between in (' ', ''):
+        joined = f'{cleaned[0]}{between}{cleaned[1]}'
+        for pattern_id, severity, surfaces, regex in PATTERNS:
+            if 'file' not in surfaces or pattern_id in found:
+                continue
+            for match in regex.finditer(joined):
+                if match.start() < joint and match.end() > joint + len(between):
+                    found.add(pattern_id)
+                    hits.append({'id': pattern_id, 'severity': severity, 'surface': 'file', 'where': where,
+                                 'match': _excerpt(joined, match.start(), len(match.group()))})
+                    break
 
 
 def scan_pdf(reading: PdfReading, ctx: ScanContext, name: str, hits: list | None = None) -> list:
@@ -427,14 +466,14 @@ def scan_pdf(reading: PdfReading, ctx: ScanContext, name: str, hits: list | None
     that lead every page alike (_running_count) are scanned on each page as lines of their own, joined only to each
     other. The rest - the body of every page - is one stream (_scan_stream): only the text inside a printed quotation
     (between the curly marks the report prints a quotation between, over however many lines and pages it runs) is set
-    aside, and only while it is the document's own words, white space compared squeezed; every other line is the
+    aside, and only while it is the document's own words (_of_document); every other line is the
     product's wording and is scanned whole, even a line whose words a quotation also holds (a code line's modifier
     "Claude" wrapped onto a line of its own beside a cited "Dr. Claude Example ..."). Neighbouring lines of product
     wording are also read joined, for a phrase the layout cut in two ("tool" / "calls"), over a line break, a page break
     or a quotation set aside. Then every document information value, read as a reader sees it and scanned whole: never
     a quotation."""
     hits = [] if hits is None else hits
-    document = _squeezed(visible(ctx.document_text))
+    document = _bare(visible(ctx.document_text))
     pages = [[visible(line) for line in re.split(r'\r?\n', text)] for text in reading.pages]
     running = _running_count(pages)
     body = []
