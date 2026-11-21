@@ -958,7 +958,11 @@ class CodeDecision(ImmutableModel):
 
 
 class ExportArtifact(ImmutableModel):
-    """An export of one round (draft or approved, txt or csv), stored as generated; downloads serve these bytes."""
+    """An export of one round (draft or approved; pdf, csv or txt), stored as generated; downloads serve these bytes.
+
+    fmt also holds 'pdf' (exports.PDF, the physician report of 2026-11-21). The choices below are the column's original
+    declaration and are not a database constraint; widening them would be a field migration the installer refuses, so
+    exports.FORMATS is what a request may name."""
     DRAFT, APPROVED = 'draft', 'approved'
     TXT, CSV = 'txt', 'csv'
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

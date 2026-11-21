@@ -5,15 +5,13 @@ problem that is no string as its JSON text - and a blank modifier item, which ca
 shape makes the answer unreadable, so nothing Fable wrote is dropped, altered or guessed. A code is a string of the code
 shape, a status one of the allowed values, and a line label the reader writes on its own items must be its place in
 the list. Synthetic answers only; nothing reaches the network."""
-import csv
-import io
-
 from django.test import SimpleTestCase, TestCase
 
 from studio import models, state
 from studio.fable import result
 from tests.support import coding as f
 from tests.support import rounds as r
+from tests.test_line_identity import code_row
 
 
 def reader_of(*codes, questions=(), problems=()):
@@ -200,7 +198,7 @@ class FieldPipelineTests(r.CustomerCase, TestCase):
         return self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()
 
     def test_a_blank_modifier_item_never_reaches_the_page_or_the_exports(self):
-        # PARSE-3 through the stage, the API, an approval and both exports
+        # PARSE-3 through the stage, the API, an approval and the approved report
         enc = self.started()
         self.code_round(enc, reader=reader_of({**f.code('99214', reason='Separately identifiable E/M.'),
                                                'modifiers': ['25', '']}),
@@ -208,19 +206,20 @@ class FieldPipelineTests(r.CustomerCase, TestCase):
         (code,) = self.payload(enc)['codes']
         self.assertEqual((code['modifiers'], code['status']), (['25'], 'ready'))
         self.assertEqual(self.decide(enc, 'L1', '99214', 'approve').status_code, 201)
-        text = self.export_text(enc, 'approved')
-        self.assertIn('1. 99214 — units 1 — modifiers: 25\n', text)
-        rows = list(csv.reader(io.StringIO(self.export_text(enc, 'approved', 'csv'), newline='')))
-        self.assertEqual(rows[2][1:4], ['99214', '1', '25'])
+        # the line's row: its modifiers end at 25 (never "25, "), then its units
+        self.assertIn('Line L1 · Modifiers: 25 UNITS 1', code_row(self.report_text(enc, 'approved'), 1, '99214'))
 
     def test_a_stored_blank_modifier_item_is_shown_the_same_on_the_page_and_in_the_exports(self):
         enc = self.encounter()
         r.write_round(enc, codes=[r.row('99214', 'ready', modifiers=['25', '']), r.row('45385', 'ready',
                                                                                        modifiers=[' '])])
         self.assertEqual([code['modifiers'] for code in self.payload(enc)['codes']], [['25'], []])
-        text = self.export_text(enc, 'draft')
-        self.assertIn('1. 99214 — Ready for approval — units 1 — modifiers: 25\n', text)
-        self.assertIn('2. 45385 — Ready for approval — units 1 — modifiers: none\n', text)
+        text = self.report_text(enc, 'draft')
+        first, second = code_row(text, 1, '99214'), code_row(text, 2, '45385')
+        self.assertIn('Ready for approval', first)
+        self.assertIn('Line L1 · Modifiers: 25 UNITS 1', first)
+        self.assertIn('Ready for approval', second)
+        self.assertIn('Line L2 · Modifiers: none UNITS 1', second)
 
     def test_units_as_digits_and_a_question_object_reach_the_checker_the_page_and_the_export(self):
         # PARSE-4 (J): the checker was told units null, the question vanished and the export read "units not given"
@@ -240,7 +239,7 @@ class FieldPipelineTests(r.CustomerCase, TestCase):
         self.assertEqual([(q['text'], q['lines']) for q in payload['questions']],
                          [('Was ultrasound guidance used for the injection?', ['L1'])])
         self.assertEqual(self.decide(enc, 'L1', '20610', 'approve').status_code, 201)
-        self.assertIn('1. 20610 — units 2 — modifiers: RT', self.export_text(enc, 'approved'))
+        self.assertIn('Line L1 · Modifiers: RT UNITS 2', code_row(self.report_text(enc, 'approved'), 1, '20610'))
 
     def test_both_questions_of_a_needs_answer_line_are_asked_and_answerable(self):
         # PARSE-4 (F): the line's two questions were replaced by CPT Studio's own generic question
@@ -269,7 +268,9 @@ class FieldPipelineTests(r.CustomerCase, TestCase):
         payload = self.payload(enc)
         self.assertEqual([(code['line'], code['units'], code['status']) for code in payload['codes']],
                          [('L1', 1, 'ready'), ('L2', 0, 'not_supported')])
-        self.assertIn('2. 45384 — Not supported — units 0 — modifiers: none', self.export_text(enc, 'draft'))
+        # its status label (the row's last column says "Not supported" again), then its line, modifiers and units
+        self.assertIn('Not supported Line L2 · Modifiers: none UNITS 0',
+                      code_row(self.report_text(enc, 'draft'), 2, '45384'))
 
     def test_a_field_in_a_shape_that_cannot_be_read_fails_the_round_before_the_checker_is_sent(self):
         enc = self.started()

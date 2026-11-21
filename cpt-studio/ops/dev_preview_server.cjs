@@ -10,7 +10,8 @@
 // action, acknowledgement, note}, and for an Undo the decision it undoes: {..., decision}): a round that is not the
 // document's latest finished one, a line it does not have, a code that is not that line's, or an Undo naming another
 // decision than the line's current one is answered 409 with the server's sentence (decisionAnswer). A download names
-// the coding review the page shows ({kind, fmt, round}): another round is answered 409 the same way (reportAnswer).
+// the coding review the page shows ({kind, fmt, round}, fmt pdf - the only report made): another round is answered 409 the same
+// way (reportAnswer). A PDF download is a one-page synthetic PDF made here, not the server's physician report.
 //
 // Request headers understood by the mock: "X-Preview-Session: agent" serves the agent session;
 // "X-Preview-Encounters: empty" serves an empty document list.
@@ -500,12 +501,16 @@ function decisionAnswer(doc, body, session) {
   return [201, { line: line.line, code: line.code, id: crypto.randomUUID(), action: body.action, by: session.user.label, at: iso(Date.now()), note: typeof body.note === 'string' ? body.note : '' }];
 }
 
-// [status, payload] of POST reports on `doc`, as the server answers it: 400 for a kind or format it does not make; 409
-// CHANGED unless `round` is the number of the document's latest coding review and that review has finished; 409 with
-// the readiness blockers when the download asked for is not available; else 201 with the report as the page lists it.
-// The download is a mock (registered in `reports`); nothing here changes a fixture.
+// [status, payload] of POST reports on `doc`, as the server answers it: 400 (the server's sentence) for a kind or format
+// it does not make (any but the PDF, owner direction 2026-11-21); 409 CHANGED unless `round` is the number of the document's latest coding review and that review has
+// finished; 409 with the readiness blockers when the download asked for is not available; else 201 with the report as
+// the page lists it. The download is a mock (registered in `reports`): for a PDF a one-page PDF made here
+// (syntheticPdf), served as application/pdf, never the server's physician report; nothing here changes a fixture.
+const FORMAT_REQUIRED = 'Choose a draft or an approved PDF report.';
+const REPORT_TYPES = { pdf: 'application/pdf' };
+
 function reportAnswer(doc, body) {
-  if (!['draft', 'approved'].includes(body.kind) || !['txt', 'csv'].includes(body.fmt)) return [400, { error: 'Choose a download.', details: {} }];
+  if (!['draft', 'approved'].includes(body.kind) || !Object.hasOwn(REPORT_TYPES, body.fmt)) return [400, { error: FORMAT_REQUIRED, details: {} }];
   if (!latestFinished(doc, body.round)) return [409, { error: CHANGED, details: {} }];
   if (body.kind === 'approved' && doc.readiness?.approved !== true) {
     return [409, { error: 'The approved download is not available yet.', details: { blockers: doc.readiness?.blockers || [] } }];
@@ -513,11 +518,15 @@ function reportAnswer(doc, body) {
   if (body.kind === 'draft' && doc.readiness?.draft !== true) return [409, { error: 'Nothing can be downloaded yet.', details: { blockers: doc.readiness?.blockers || [] } }];
   const id = crypto.randomUUID();
   const filename = `cpt-studio-preview-${body.kind}.${body.fmt}`;
-  const content = body.fmt === 'csv'
-    ? 'notice,kind\r\n"SYNTHETIC — NOT FOR BILLING","preview mock"\r\n'
-    : `SYNTHETIC — NOT FOR BILLING\nCPT Studio preview mock download (${body.kind}).\nThe real download is built by the server from the saved decisions.\n`;
-  reports.set(id, { content, filename, type: body.fmt === 'csv' ? 'text/csv; charset=utf-8' : 'text/plain; charset=utf-8' });
+  const lines = ['SYNTHETIC - NOT FOR BILLING', `CPT Studio preview mock download (${body.kind}).`, 'The real download is built by the server from the saved decisions.'];
+  const content = syntheticPdf([lines]);
+  reports.set(id, { content, filename, type: REPORT_TYPES[body.fmt] });
   return [201, { id, kind: body.kind, fmt: body.fmt, filename, generated_at: iso(Date.now()), download_url: `/api/reports/${id}/download`, current: true }];
+}
+
+// A download the preview registered: {content, filename, type}, or null.
+function reportFile(id) {
+  return reports.get(id) || null;
 }
 
 function handleChange(res, doc, action, body, session) {
@@ -636,4 +645,4 @@ if (require.main === module) {
   listen(asked ? [Number(asked[1])] : PORTS);
 }
 
-module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, CHANGED, STATIC_CSP };
+module.exports = { SYNTHETIC_DOCUMENTS, syntheticPdf, syntheticDocx, documentBytes, viewBytes, documentFor, decisionAnswer, reportAnswer, reportFile, CHANGED, FORMAT_REQUIRED, STATIC_CSP };

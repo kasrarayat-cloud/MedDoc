@@ -8,7 +8,7 @@ the checker gave it, and the operator console lists every review that belongs to
 only; nothing reaches the network."""
 from django.test import SimpleTestCase, TestCase
 
-from studio import customer, exports
+from studio import customer, physician_report
 from studio.fable import result
 from tests.support import coding as f
 from tests.support import operator as ops
@@ -105,7 +105,9 @@ class VerdictWordsTests(SimpleTestCase):
                 row, check = self.check(verdict)
                 self.assertEqual(row['status'], 'needs_review')
                 self.assertEqual(check, {'agrees': None, 'reason': f'{UNCLEAR} Supported as listed.'})
-                self.assertEqual(exports._check_words({'second_check': check}),
+                # the report's words for the line's second check (a line with no reason and no question of its own)
+                self.assertEqual(physician_report._note({'reason': None, 'second_check': check, 'question': None},
+                                                        physician_report.DRAFT),
                                  f'Second check: no verdict. {UNCLEAR} Supported as listed.')
         self.assertEqual(self.check(None, None)[1], {'agrees': None, 'reason': UNCLEAR})
 
@@ -143,7 +145,7 @@ class UnplacedPipelineTests(r.CustomerCase, TestCase):
         return self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()
 
     def test_a_review_the_code_cannot_place_holds_every_line_and_the_customer_reads_its_reason(self):
-        # LINES-1 through the stage, the API, the draft export and an approval
+        # LINES-1 through the stage, the API, the draft report and an approval
         enc = self.started()
         self.code_round(enc, reader=f.reader_result([f.code('45385'), f.code('45380')]),
                         checker=f.checker_result([r.review('L1', '45385'), r.review('L2', '45380'), unplaced_review()]))
@@ -154,8 +156,8 @@ class UnplacedPipelineTests(r.CustomerCase, TestCase):
         for code in payload['codes']:
             self.assertIn('names none of these lines', code['second_check']['reason'])
         self.assertEqual(payload['notes'], [f'{NOTE}: {UNPLACED_REASON}'])
-        draft = self.export_text(enc, 'draft')
-        self.assertIn(f'- {NOTE}: {UNPLACED_REASON}', draft)
+        draft = self.report_text(enc, 'draft')
+        self.assertIn(f'– {NOTE}: {UNPLACED_REASON}', draft.partition('DOCUMENTATION NOTES')[2])  # a listed note
         self.assertEqual(self.decide(enc, 'L2', '45380', 'approve').status_code, 201)  # a human decides it
 
     def test_every_unmatched_review_is_a_note_with_its_reason_or_without_one(self):
@@ -168,17 +170,16 @@ class UnplacedPipelineTests(r.CustomerCase, TestCase):
         self.assertEqual(self.payload(enc)['notes'], ['No signature.', f'{NOTE}: No separate biopsy.', f'{NOTE}.'])
 
     def test_an_unclear_verdict_is_never_shown_or_exported_as_a_disagreement(self):
-        # LINES-4 through the stage, the API and the draft export
+        # LINES-4 through the stage, the API and the draft report
         enc = self.started()
         item = {**r.review('L1', '45385'), 'verdict': 'Agree', 'reason': 'Supported as listed.'}
         self.code_round(enc, reader=f.reader_result([f.code('45385')]), checker=f.checker_result([item]))
         (code,) = self.payload(enc)['codes']
         self.assertEqual((code['status'], code['second_check']),
                          ('needs_review', {'agrees': None, 'reason': f'{UNCLEAR} Supported as listed.'}))
-        draft = self.export_text(enc, 'draft')
-        self.assertIn(f'   Second check: no verdict. {UNCLEAR} Supported as listed.', draft)
+        draft = self.report_text(enc, 'draft')
+        self.assertIn(f'Second check: no verdict. {UNCLEAR} Supported as listed.', draft.partition('01 45385 / ')[2])
         self.assertNotIn('disagrees', draft)
-        self.assertNotIn('disagrees', self.export_text(enc, 'draft', 'csv'))
 
     def test_a_checker_added_line_shows_its_status_on_the_page_and_in_the_draft(self):
         # LINES-7 through the stage
@@ -190,7 +191,8 @@ class UnplacedPipelineTests(r.CustomerCase, TestCase):
         self.assertEqual((added['line'], added['status'], added['second_check']['reason']),
                          ('M1', 'needs_review', 'The second check found this code and listed it as needing an '
                                                 'answer; it needs your review.'))
-        self.assertIn('listed it as needing an answer', self.export_text(enc, 'draft'))
+        draft = self.report_text(enc, 'draft')
+        self.assertIn('listed it as needing an answer', draft.partition('02 45380 / ')[2])  # the M1 line's reasons
 
 
 class OperatorListTests(r.CustomerCase, TestCase):

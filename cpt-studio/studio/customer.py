@@ -100,14 +100,30 @@ def iso(value) -> Optional[str]:
 # --- display hygiene (BUILD-SPEC 7.4) --------------------------------------------------------------------------------------
 # The shared denylist's name rules (ops/verification/customer-denylist.json: provider_name, provider_name_joined,
 # model_id, interpreter_model), read here as replacements. The ops directory is not in the image, so the names are
-# repeated; tests/test_api_customer.py pins them to the file's patterns and vectors.
+# repeated; tests/test_api_customer.py pins them to the file's patterns and vectors. A model family's name (Opus, Sonnet,
+# Haiku) is a name only where it continues a vendor's ("Claude 3 Opus" and "Claude Sonnet 4.5" read "the system"):
+# alone it is an ordinary or a clinical word (the OPUS trial, a MED-EL SONNET 2 processor, a haiku), as another
+# company's product named in a note is ("the patient asked ChatGPT"). A bare "GPT" or "GPT 45" is not a name either,
+# because GPT is also the liver enzyme ALT ("GPT 45 U/L", "SGPT"): only "gpt-<x>" is a model id.
 
 NAMES = 'corti|astra|fable|openai|anthropic|claude|gemini|google'
 JOINED_NAMES = 'Corti|Astra|Fable|Openai|OpenAI|Anthropic|Claude|Gemini|Google'
-_MODEL_ID = re.compile(r'\b(?:gpt|claude|gemini)-[a-z0-9]+(?:[.-][a-z0-9]+)*', re.ASCII | re.IGNORECASE)
-# a name, any names joined to it ("Claude Fable"), and a version after them ("5.2"); bounded by letters and digits only,
-# so "fable_unknown" is a hit and "affable" or "corticosteroid" is not
-_NAME_RUN = re.compile(rf'(?<![a-z0-9])(?:{NAMES})(?:[ _-]+(?:{NAMES}))*(?:[ _-]+v?\d+(?:\.\d+)*)?(?![a-z0-9])',
+ANTHROPIC = 'anthropic|claude'  # the names a model family continues
+FAMILIES = 'opus|sonnet|haiku'
+VERSION = r'v?\d+(?:[._-]\d+)*'
+# What stands between the parts of one name run: anything a reader sees as a gap or as nothing - white space of any kind,
+# control and invisible format characters, dashes and underscores - so "Claude" and "Opus" on either side of a line
+# break, a non-breaking space or a zero-width space are one run (refutation round 3); never other punctuation.
+GAP = r'[\s_\-\x00-\x1f\x7f-\x9f\u00a0\u00ad\u034f\u061c\u115f\u1160\u1680\u17b4\u17b5\u180b-\u180f\u2000-\u2015\u2028-\u202f\u205f-\u206f\u2212\u3000\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffc]+'
+_MODEL_ID = re.compile(rf'\b(?:gpt|claude|gemini)-[a-z0-9]+(?:[.-][a-z0-9]+)*(?:{GAP}(?:{FAMILIES})(?![a-z0-9]))?',
+                       re.ASCII | re.IGNORECASE)
+# a name with its version ("Gemini 2.5"), then any names after it, each with its own version ("Claude Fable 5.2"), and
+# after Anthropic's names its model families too ("Claude 3 Opus", "Claude Sonnet 4.5"); bounded by letters and digits
+# only, as the denylist bounds a name, so "fable_unknown" is replaced and "affable", "corticosteroid", "corti2", a
+# family's name alone or one after another name ("organ of Corti - OPUS 2") is not
+_RUN_VERSION = rf'(?:{GAP}{VERSION})?'
+_NAME_RUN = re.compile(rf'(?<![a-z0-9])(?:(?:{ANTHROPIC}){_RUN_VERSION}(?:{GAP}(?:{NAMES}|{FAMILIES}){_RUN_VERSION})*'
+                       rf'|(?:{NAMES}){_RUN_VERSION}(?:{GAP}(?:{NAMES}){_RUN_VERSION})*)(?![a-z0-9])',
                        re.ASCII | re.IGNORECASE)
 # a capitalized name joined to a word by its case alone ("GeminiTimeout", "readingGemini"), as written
 _JOINED = re.compile(rf'(?:{JOINED_NAMES})(?=[A-Z])|(?<=[a-z])(?:{JOINED_NAMES})', re.ASCII)

@@ -1,8 +1,6 @@
 """The shape of the final answer (FIX-SPEC section 2; findings INT-5, INT-6, INT-8): the last ```json block or nothing,
 modifiers that are never dropped or turned into "no modifier", and a review that names no code making the answer
 unreadable. Synthetic answers only; nothing reaches the network."""
-import csv
-import io
 import json
 
 from django.test import SimpleTestCase, TestCase
@@ -11,6 +9,7 @@ from studio import models, state
 from studio.fable import result
 from tests.support import coding as f
 from tests.support import rounds as r
+from tests.test_line_identity import code_row
 
 Round = models.CodingRound
 DRAFT = {'codes': [{'code': '99213', 'units': 1, 'modifiers': [], 'status': 'ready', 'reason': 'Draft: low MDM.',
@@ -97,7 +96,7 @@ class ReviewIdentityTests(SimpleTestCase):
 
 
 class PipelineShapeTests(r.CustomerCase, TestCase):
-    """The same rules through the real coding stage, the customer API and the exports."""
+    """The same rules through the real coding stage, the customer API and the PDF report."""
 
     def test_a_broken_final_reader_block_fails_the_round_and_no_checker_is_sent(self):
         enc = self.started()
@@ -124,19 +123,18 @@ class PipelineShapeTests(r.CustomerCase, TestCase):
         payload = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()
         self.assertEqual(payload['codes'][0]['modifiers'], ['25'])
         self.assertEqual(self.decide(enc, 'L1', '99214', 'approve').status_code, 201)
-        text = self.export_text(enc, 'approved')
-        self.assertIn('1. 99214 — units 1 — modifiers: 25', text)
-        self.assertNotIn('modifiers: none', text)
+        text = self.report_text(enc, 'approved')
+        self.assertIn('Line L1 · Modifiers: 25 UNITS 1', code_row(text, 1, '99214'))
+        self.assertNotIn('Modifiers: none', text)
 
-    def test_modifiers_not_given_read_not_given_on_the_page_and_in_both_exports(self):
+    def test_modifiers_not_given_read_not_given_on_the_page_and_in_the_report(self):
         enc = self.encounter()
         r.write_round(enc, codes=[r.row('99214', 'ready', modifiers=None), r.row('45385', 'ready', units=None)])
         codes = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()['codes']
         self.assertEqual([(code['modifiers'], code['units']) for code in codes], [(None, 1), ([], None)])
-        text = self.export_text(enc, 'draft')
-        self.assertIn('1. 99214 — Ready for approval — units 1 — modifiers: not given', text)
-        self.assertIn('2. 45385 — Ready for approval — units not given — modifiers: none', text)
-        rows = list(csv.reader(io.StringIO(self.export_text(enc, 'draft', 'csv'), newline='')))
-        body = {line[1]: dict(zip(rows[0], line)) for line in rows[2:-1]}
-        self.assertEqual((body['99214']['modifiers'], body['99214']['units']), ('not given', '1'))
-        self.assertEqual((body['45385']['modifiers'], body['45385']['units']), ('', 'not given'))
+        text = self.report_text(enc, 'draft')
+        first, second = code_row(text, 1, '99214'), code_row(text, 2, '45385')
+        self.assertIn('Ready for approval', first)
+        self.assertIn('Line L1 · Modifiers: not given UNITS 1', first)
+        self.assertIn('Ready for approval', second)
+        self.assertIn('Line L2 · Modifiers: none UNITS Not given', second)

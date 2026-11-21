@@ -42,8 +42,8 @@
  * line approved through #reviewDialog as the page draws it (the acknowledgement checkbox #reviewAckBox inside its label
  * #reviewAcknowledgement, which carries the session's acknowledgement; an agent-executed synthetic review), the page's
  * request naming the round shown, the line and its code, the line - that line only - decided, and the History naming the
- * line with its code ("L2 45380"); the draft and the approved TXT
- * exported through the export dialog as real browser downloads, the page's request naming the round shown ({kind, fmt,
+ * line with its code ("L2 45380"); the draft and the approved PDF reports
+ * downloaded through the export dialog as real browser downloads and read with the walk's PDF reading, the page's request naming the round shown ({kind, fmt,
  * round}), each fetched again from its download_url and compared byte for byte; that approval then undone through the
  * row's Undo, the page's request naming the round shown, the line, its code and the id of the decision it undoes (the
  * one the page showed), and the line - that line only - open again; a 390x844 viewport with no horizontal scroll; every
@@ -2784,7 +2784,7 @@ function undoProblems(before, after, code) {
 
 // What is wrong with the JSON the page posted for a download of ``kind`` (FIX-SPEC-2 section 5: {kind, fmt, round}, the
 // round the page shows - so the server can refuse one made from a coding review the member never saw); [] when nothing is.
-function exportRequestProblems(body, enc, kind, fmt = 'txt') {
+function exportRequestProblems(body, enc, kind, fmt = 'pdf') {
   if (!isObject(body)) return ['the page posted no JSON object'];
   const problems = [];
   if (body.kind !== kind) problems.push(`kind ${JSON.stringify(body.kind)}, not ${JSON.stringify(kind)}`);
@@ -2803,10 +2803,33 @@ function activityNaming(enc, code) {
     .filter(item => typeof item?.text === 'string' && showsToken(item.text, named)).map(item => item.text);
 }
 
-async function exportTxt(page, ctx, enc, kind, outDir) {
+// Each page of a PDF the walk read (readDocument) as its lines: the items pdf.js gives, joined, a line ending where an
+// item ends one.
+function pdfPageLines(reading) {
+  return (Array.isArray(reading?.pages) ? reading.pages : []).map(pdfPage => {
+    const out = [];
+    let line = '';
+    for (const item of pdfPage.items || []) {
+      line += item.str;
+      if (item.hasEOL) {
+        out.push(line);
+        line = '';
+      } else {
+        line += ' ';
+      }
+    }
+    if (line.trim()) out.push(line);
+    return out;
+  });
+}
+
+// The report of ``kind`` downloaded through the export dialog, as a member downloads it: its PDF button (the only report
+// CPT Studio makes, owner direction 2026-11-21), the request the page posted, the file saved and read by the walk's own
+// PDF reading, page by page, and the stored copy fetched again.
+async function exportPdf(page, ctx, enc, kind, outDir) {
   await page.locator('[data-action="export"]').first().click();
   await page.locator('#exportDialog[open]').waitFor({ state: 'visible', timeout: UI_TIMEOUT_MS });
-  const option = page.locator(`#exportOptions .export-option[data-export-kind="${kind}"][data-export-fmt="txt"]`);
+  const option = page.locator(`#exportOptions .export-pdf[data-export-kind="${kind}"][data-export-fmt="pdf"]`);
   if (await option.isDisabled()) {
     await page.keyboard.press('Escape');
     return { kind, error: 'the export option is disabled' };
@@ -2823,13 +2846,15 @@ async function exportTxt(page, ctx, enc, kind, outDir) {
   } catch {
     body = null;
   }
-  const file = path.join(outDir, `${safeName(enc.id)}-${kind}.txt`);
+  const file = path.join(outDir, `${safeName(enc.id)}-${kind}.pdf`);
   await download.saveAs(file);
   const bytes = fs.readFileSync(file);
   await page.keyboard.press('Escape');
-  const result = { kind, fmt: 'txt', status: response.status(), filename: report?.filename ?? null, body,
+  const reading = await readDocument(bytes);
+  const pages = reading.error ? [] : pdfPageLines(reading).map(lines => lines.join('\n'));
+  const result = { kind, fmt: 'pdf', status: response.status(), filename: report?.filename ?? null, body,
     suggested: download.suggestedFilename(), path: path.relative(ctx.out, file), sha256: sha256(bytes), size: bytes.length,
-    text: bytes.toString('utf8') };
+    pages, text: pages.join('\n'), read_error: reading.error || null };
   if (typeof report?.download_url === 'string') {
     const again = await page.request.get(new URL(report.download_url, ctx.base).href, { headers: { ...CLIENT_HEADERS }, timeout: UI_TIMEOUT_MS });
     const second = await again.body();
@@ -2868,23 +2893,29 @@ function opsChecks(found) {
   ];
 }
 
+// What a downloaded report shows of itself: made (201), a .pdf, posted for the round shown, the same bytes when fetched
+// again, read by the walk's PDF reading, every page marked synthetic and not for billing with its status (DRAFT · REVIEW
+// REQUIRED, or APPROVED CODES), and every code it must name (the draft: every code; the approved report: the approved).
+const REPORT_STATUS = { draft: 'DRAFT · REVIEW REQUIRED', approved: 'APPROVED CODES' };
+
 function exportChecks(item, enc, label) {
   if (item.error) return [check(`export.${label}`, false, item.error)];
-  const lines = item.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const pages = Array.isArray(item.pages) ? item.pages : [];
   const asked = exportRequestProblems(item.body, enc, label);
   const out = [
-    check(`export.${label}`, item.status === 201 && item.size > 0 && /\.txt$/i.test(item.filename || item.suggested || ''),
+    check(`export.${label}`, item.status === 201 && item.size > 0 && /\.pdf$/i.test(item.filename || item.suggested || ''),
       `POST answered ${item.status}; ${item.size} bytes saved as ${item.suggested}`),
     check(`export.${label}.request`, asked.length === 0, asked.length ? `the page posted ${asked.join('; ')}`
-      : `the page posted ${label}, txt, round ${enc?.round?.number}`),
+      : `the page posted ${label}, pdf, round ${enc?.round?.number}`),
     check(`export.${label}.same_bytes`, item.refetch?.status === 200 && item.refetch.sha256 === item.sha256,
       item.refetch ? `the second download answered ${item.refetch.status}, ${item.refetch.size} bytes, ${item.refetch.sha256 === item.sha256 ? 'the same bytes' : 'other bytes'}`
         : 'the report named no download_url to fetch again'),
-    check(`export.${label}.synthetic`, lines.length > 1 && /SYNTHETIC/.test(lines[0]) && /SYNTHETIC/.test(lines[lines.length - 1]),
-      'the SYNTHETIC banner opens and closes the file'),
+    check(`export.${label}.read`, !item.read_error && pages.length > 0, item.read_error || `${pages.length} page(s) read`),
+    check(`export.${label}.synthetic`, pages.length > 0 && pages.every(text => text.includes('Synthetic data · Not for billing or claims')
+      && text.includes(REPORT_STATUS[label])), `every page is marked synthetic, not for billing, and ${REPORT_STATUS[label]}`),
   ];
   const codes = label === 'approved' ? (enc.codes || []).filter(code => code.decision?.action === 'approve') : enc.codes || [];
-  const absent = codes.filter(code => !item.text.includes(String(code.code))).map(code => code.code);
+  const absent = codes.filter(code => !(item.text || '').includes(String(code.code))).map(code => code.code);
   out.push(check(`export.${label}.codes`, absent.length === 0, absent.length ? `missing ${absent.join(', ')}` : `names its ${codes.length} code(s)`));
   return out;
 }
@@ -3002,10 +3033,10 @@ async function verifyDocument(page, ctx, sessions, doc) {
           add(skip(`export.${kind}`, kind === 'draft' ? 'no draft can be made' : 'no code was approved'));
           return;
         }
-        const made = await exportTxt(page, ctx, enc, kind, ctx.docDir);
-        record.downloads.push({ ...made, text: undefined });
+        const made = await exportPdf(page, ctx, enc, kind, ctx.docDir);
+        record.downloads.push({ ...made, text: undefined, pages: undefined });
         add(...exportChecks(made, enc, kind));
-        if (made.text) scanFile(made.text, ctx.scan, `${kind}.txt`, ctx.hits.file);
+        if (made.text) scanFile(made.text, ctx.scan, `${kind}.pdf`, ctx.hits.file);
       });
     }
     await step('undo', async () => {
@@ -3176,7 +3207,7 @@ module.exports = {
   canvasProblem, seenMeasures, seenProblem, requiredPages, findPassagesText, textNote, judgeQuote, quoteMarkChecks,
   readViewer, readPdfPage, canvasBlocks, seenGeometry, scrollViewerTo, fetchView, pageScale, readTextFrame, decodePng,
   pngBlocks, measureSeen, pagesToRead, readPdfPages, documentReading, redrawChecks, chooseQuotes,
-  servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportTxt,
+  servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportPdf, pdfPageLines, REPORT_STATUS,
   exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,
   evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
 };

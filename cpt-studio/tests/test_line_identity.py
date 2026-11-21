@@ -2,8 +2,6 @@
 names the line it reviews, and decisions, the encounter state and the exports key by line - so two rows with one code
 are decided apart, a review the code cannot place only ever sends lines to a human, and a decision is refused when the
 page that sent it shows another round. Synthetic data only; nothing reaches the network."""
-import csv
-import io
 import json
 import re
 
@@ -16,6 +14,19 @@ from tests.support import rounds as r
 
 Decision = models.CodeDecision
 CHANGED = 'This coding review has changed. Reload to see the latest.'  # FIX-SPEC 1, the 409 a stale page reads
+# Each line a PDF report lists, as report_text reads its codes table: (its line, the first word of its modifiers)
+LISTED = re.compile(r'Line (\w+) · Modifiers: (\S+)')
+
+
+def code_row(text, index, code):
+    """Row ``index`` (01, 02 ...) of a PDF report's codes table, which must be ``code``'s: its text as report_text reads
+    it, from the row's number and code up to its evidence reference - so a check on it is scoped to that one line (every
+    row these tests make has quotes; a row without fails here, never reads another row)."""
+    start = text.find(f'{index:02d} {code} ')
+    end = text.find(f'Evidence {index:02d}', start) if start != -1 else -1
+    if end == -1:
+        raise AssertionError(f'the report has no code row {index:02d} {code}: {text}')
+    return text[start:end]
 
 
 def bilateral(status_lt='ready', question=None):
@@ -100,9 +111,10 @@ class DecisionByLineTests(LineCase):
         self.assertEqual(self.rows(enc), [('L1', '20610', ['RT'], 'ready', 'approve', ['revoke']),
                                           ('M1', '20610', ['LT'], 'needs_review', None, ['approve', 'reject'])])
         self.assertEqual(self.payload(enc)['state'], 'needs_review')
-        text = self.export_text(enc, 'approved')
-        self.assertIn('1. 20610 — units 1 — modifiers: RT', text)
-        self.assertNotIn('LT', text)
+        text = self.report_text(enc, 'approved')
+        self.assertEqual(LISTED.findall(text), [('L1', 'RT')])  # the one line listed
+        self.assertIn('Line L1 · Modifiers: RT UNITS 1', code_row(text, 1, '20610'))
+        self.assertNotRegex(text, r'\bLT\b')  # the M1 line's modifier (the identity strip's SPECIALTY is no LT)
         self.assertEqual(self.decide(enc, 'M1', '20610', 'reject').status_code, 201)
         self.assertEqual(self.payload(enc)['state'], 'reviewed')
         self.assertEqual(list(Decision.objects.order_by('sequence').values_list('line', 'code', 'action')),
@@ -115,8 +127,11 @@ class DecisionByLineTests(LineCase):
         self.assertEqual(self.decide(enc, 'L1', '20610', 'approve').status_code, 201)
         self.assertEqual(self.rows(enc), [('L1', '20610', ['RT'], 'ready', 'approve', ['revoke']),
                                           ('L2', '20610', ['LT'], 'needs_answer', None, [])])
-        rows = list(csv.reader(io.StringIO(self.export_text(enc, 'approved', 'csv'), newline='')))
-        self.assertEqual([(line[1], line[3], line[4]) for line in rows[2:-1]], [('20610', 'RT', 'ready')])
+        # the approved report lists the ready twin alone (it prints no coding status: the page above says L1 is ready)
+        text = self.report_text(enc, 'approved')
+        self.assertEqual(LISTED.findall(text), [('L1', 'RT')])
+        self.assertIn('Line L1 · Modifiers: RT', code_row(text, 1, '20610'))
+        self.assertNotRegex(text, r'\bLT\b')
 
     def test_the_ready_twin_listed_second_can_be_approved(self):
         enc = self.started()
@@ -136,8 +151,9 @@ class DecisionByLineTests(LineCase):
         self.assertEqual(self.rows(enc), [('L1', '45385', [], 'ready', None, ['approve', 'reject']),
                                           ('L2', '45380', [], 'needs_review', None, ['approve', 'reject']),
                                           ('M1', '45380', ['XS'], 'needs_review', 'approve', ['revoke'])])
-        text = self.export_text(enc, 'approved')
-        self.assertEqual(re.findall(r'(?m)^\d+\. .*$', text), ['1. 45380 — units 1 — modifiers: XS'])
+        text = self.report_text(enc, 'approved')
+        self.assertEqual(LISTED.findall(text), [('M1', 'XS')])  # the one line listed
+        self.assertIn('Line M1 · Modifiers: XS UNITS 1', code_row(text, 1, '45380'))
         self.assertNotIn('No biopsy is documented.', text)
 
     def test_an_approved_export_lists_only_approved_lines_that_are_ready_or_need_review(self):
@@ -149,8 +165,9 @@ class DecisionByLineTests(LineCase):
             Decision.objects.create(encounter=enc, round=round_, code=code, action=Decision.APPROVE,
                                     reviewer=self.reviewer, reviewer_kind='human', acknowledgement='x',
                                     **({'line': line} if 'line' in fields else {}))
-        text = self.export_text(enc, 'approved')
-        self.assertIn('1. 45385', text)
+        text = self.report_text(enc, 'approved')
+        self.assertEqual(LISTED.findall(text), [('L1', 'none')])
+        self.assertIn('Line L1', code_row(text, 1, '45385'))  # row 01 is 45385, its own line L1
         self.assertNotIn('45380', text)
         self.assertNotIn('43251', text)
 

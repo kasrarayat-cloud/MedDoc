@@ -44,7 +44,7 @@ class TenancyCase(r.CustomerCase, TestCase):
         reviewer = self.client_for(self.reviewer)
         self.payload = reviewer.get(f'/api/encounters/{self.enc.pk}').json()
         export = reviewer.post(f'/api/encounters/{self.enc.pk}/reports',
-                               data=json.dumps({'kind': 'draft', 'fmt': 'txt', 'round': self.payload['round']['number']}),
+                               data=json.dumps({'kind': 'draft', 'fmt': 'pdf', 'round': self.payload['round']['number']}),
                                content_type='application/json')
         self.assertEqual(export.status_code, 201)
         self.download_url = export.json()['download_url']
@@ -64,7 +64,7 @@ class TenancyCase(r.CustomerCase, TestCase):
             'decisions': {'round': self.payload['round']['number'], 'line': line, 'code': code, 'action': 'approve',
                           'acknowledgement': decisions.ACKNOWLEDGEMENTS['human'], 'note': 'synthetic tenancy test'},
             'stop': {}, 'resume': {}, 'retry': {},
-            'reports': {'kind': 'draft', 'fmt': 'csv', 'round': self.payload['round']['number']}}
+            'reports': {'kind': 'draft', 'fmt': 'pdf', 'round': self.payload['round']['number']}}
 
     def read(self, client, name):
         url = {'session': '/api/session', 'list': '/api/encounters', 'encounter': f'/api/encounters/{self.enc.pk}',

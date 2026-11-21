@@ -29,6 +29,14 @@ run the next. Nothing here was executed by the session that wrote it.
 Every Docker object carries `org.quillmd.cpt-studio=1` and a role label; the
 installer refuses to touch a same-named object without them.
 
+The physician PDF report (2026-11-21) adds no host object. The image installs
+ReportLab, with pillow and charset-normalizer, from `requirements.txt`; the
+report's fonts ship in the code tree under `studio/report_fonts/` (their
+licences and `PROVENANCE.md` beside them) and are read from there, not
+collected as static files. `ops/scan_customer.py` reads a PDF export with pypdf
+(`requirements-dev.txt`): run it with a Python that has pypdf, or every PDF
+export fails the scan.
+
 ## Invocation
 
 ```bash
