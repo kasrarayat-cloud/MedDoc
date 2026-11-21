@@ -114,7 +114,7 @@
 {% endif %}
 {% if item.shared_ids %}
 <h3>Question ids both the reader and the checker defined</h3>
-<p class="muted">Each reference the checker made to one of these ids reaches both questions, the reader's and its own; a reader line's reaches the reader's only.</p>
+<p class="muted">Each reference the checker made to one of these ids reaches every question that carries it in either answer, which is one question where their texts are the same; a reader line's reference reaches the reader's only.</p>
 <ol>{% for ident in item.shared_ids %}<li><span class="mono">{{ ident }}</span></li>{% endfor %}</ol>
 {% endif %}
 {% if item.problems %}<h3>Documentation problems</h3><ul>{% for problem in item.problems %}<li>{{ problem }}</li>{% endfor %}</ul>{% endif %}

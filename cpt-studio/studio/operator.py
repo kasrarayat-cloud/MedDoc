@@ -253,8 +253,9 @@ def round_view(round_) -> dict:
                          for item in (fable_result.dangling_references(round_.reader_result, round_.checker_result)
                                       if round_.state == models.CodingRound.DONE else ())],
             # every question id both the reader and the checker defined, case aside (D370 round 2, F3): a reference of
-            # the checker's to it reaches both questions, which the code never chooses between - shown, as written,
-            # beside the ids that name no question, read the same way from the two stored answers
+            # the checker's to it reaches every question carrying it in either answer - one question where their texts
+            # are the same (round 3, G1) - and the code never chooses among them; shown, as written, beside the ids
+            # that name no question, read the same way from the two stored answers
             'shared_ids': [json.dumps(ident, ensure_ascii=False)
                            for ident in (fable_result.shared_ids(round_.reader_result, round_.checker_result)
                                          if round_.state == models.CodingRound.DONE else ())],

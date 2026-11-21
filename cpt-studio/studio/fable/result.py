@@ -62,30 +62,31 @@ customer reads its reason as a note on the encounter (unmatched_reviews, studio.
 its own, ``needs_review``. The problems are the reader's documentation_problems.
 
 Questions (FIX-SPEC 3; D370, D372: each question is written once, with an id, and lines refer to it). The round's
-questions are the reader's top-level questions in their order, then the checker's, then each line's own questions -
-its "question" (today's shape) and the question objects in its question_ids - when the text is not listed yet, then
-the questions the reviews define on themselves (below), then those of the fallback (below). Two questions whose text
-is the same with case and whitespace folded are one question - today's merge, the only comparison of wordings - and
-nothing else makes two questions one: not even an id, so a duplicate id stays two questions. A question object an item
-writes on itself (in its "question" or its question_ids) that carries an id also defines that id among its author's
-questions, after the author's top-level ones (the reader's for a reader line; the checker's for a missed code or a
-review), and its id is one of the ids the item names. A review's own questions are shown on its second check and asked
-only by the fallback, as today, except one that carries an id: it is one of the checker's questions, so it is asked,
-naming the lines the review is about. Each question names the lines it affects: its own "affects" (line labels, or
-codes: every line carrying the code), the line it is written on, every reader line and missed code whose ids name it,
-and the lines of every review whose ids name it or that defines it (the line the review belongs to; for a review that
-belongs to no line, the lines it reaches by naming them or their code - none for one placed nowhere). An id names every
-question carrying it, compared case-insensitively, among the questions its author was shown: a reader line's ids the
-reader's questions; a missed code's or a review's the reader's and the checker's (the checker is given the reader's
-questions with their ids, those its lines define among them). An id that names no question carries no text; the
-operator console lists it (dangling_references), and the ids both answers define (shared_ids): a reference of the
-checker's to one reaches both questions, never fewer. A needs_answer line that no question names by its affects or by
-its "question" text (today's naming) gets the questions the reviews that agreed with it wrote on themselves; when
-there are none and no question names the line at all - by an id or a question object either - it gets CPT Studio's
-own question about it, so a member can always answer it. A code row shows as its question its own question texts and
-then the text of every question its ids name, one per line of text (a text already shown on it once); a question that
-names the line only by its affects, or by another item's id, is not repeated there. Its second check shows the same of
-the review shown. Each question is stored as {id (q1, q2.. in order), text, lines, codes, source}. The merge costs in
+questions are the reader's top-level questions in their order, then the checker's, then each line's own questions - its
+"question" (today's shape) and the question objects in its question_ids - when the text is not listed yet (the reader's
+lines in order, then the missed codes), then the questions the reviews define on themselves (below), then those of the
+fallback (below). Two questions whose text is the same with case and whitespace folded are one question - today's
+merge, the only comparison of wordings - and nothing else makes two questions one: not even an id, so a duplicate id
+stays two questions. A question object an item writes on itself (in its "question" or its question_ids) that carries an
+id also defines that id among its author's questions, after the author's top-level ones (the reader's for a reader
+line; the checker's for a missed code or a review), and its id is one of the ids the item names. A review's own
+questions are shown on its second check and asked only by the fallback, as today, except one that carries an id: it is
+one of the checker's questions, so it is asked, naming the lines the review is about. Each question names the lines it
+affects: its own "affects" (line labels, or codes: every line carrying the code), the line it is written on, every
+reader line and missed code whose ids name it, and the lines of every review whose ids name it or that defines it (the
+line the review belongs to; for a review that belongs to no line, the lines it reaches by naming them or their code -
+none for one placed nowhere). An id names every question carrying it, compared case-insensitively, among the questions
+its author was shown: a reader line's ids the reader's questions; a missed code's or a review's the reader's and the
+checker's (the checker is given the reader's questions with their ids, those its lines define among them). An id that
+names no question carries no text; the operator console lists it (dangling_references), and the ids both answers define
+(shared_ids): a reference of the checker's to one reaches every question carrying it in either answer, which is one
+question where their texts are the same, never fewer. A needs_answer line that no question names by its affects or by
+its "question" text (today's naming) gets the questions the reviews that agreed with it wrote on themselves; when there
+are none and no question names the line at all - by an id or a question object either - it gets CPT Studio's own
+question about it, so a member can always answer it. A code row shows as its question its own question texts and then
+the text of every question its ids name, one per line of text (a text already shown on it once); a question that names
+the line only by its affects, or by another item's id, is not repeated there. Its second check shows the same of the
+review shown. Each question is stored as {id (q1, q2.. in order), text, lines, codes, source}. The merge costs in
 proportion to what it reads: no step rescans what an earlier one built.
 
 Citations (FIX-SPEC 1; FIX-SPEC-2 section 4): the joined text is read line by line. A marker is a whole line holding
@@ -409,8 +410,11 @@ def dangling_references(reader: object, checker: object) -> list[dict]:
 def shared_ids(reader: object, checker: object) -> list:
     """The question ids both answers of a round (each as stored) define, compared case-insensitively, for the operator
     console (F3 of the D370 round 2): each as the reader first wrote it (an integer stays an integer), in the reader's
-    order. A reference of the checker's to such an id reaches both questions, the reader's and the checker's; a reader
-    line's reaches the reader's only (module docstring: Questions). A part that cannot be read defines nothing."""
+    order. A reference of the checker's to such an id reaches every question that carries it in either answer, which
+    is one question where their texts are the same (today's merge: a checker restating the reader's question, its id
+    and all, adds no question); a reader line's reference reaches the reader's only (module docstring: Questions). An
+    id is listed even when its two definitions merged into one question (G1 of round 3): another question carrying it
+    in either answer can still give a reference more than one. A part that cannot be read defines nothing."""
     reader = reader if isinstance(reader, dict) else {}
     checker = checker if isinstance(checker, dict) else {}
     theirs = _definitions(checker, 'checker')

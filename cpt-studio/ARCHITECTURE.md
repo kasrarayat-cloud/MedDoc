@@ -157,25 +157,34 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   is kept for the operator, shown to the customer as a note on the encounter with its reason, and sends every line it
   names, or whose code it carries, to `needs_review` - or every line of the round when it reaches none that way: the
   code never picks a line for it. A verdict that is neither exactly `agree` nor exactly `disagree` is no clear verdict,
-  and the line needs review. Every code the checker found missing is a line of its own, `needs_review`. The questions
-  are the reader's, then the checker's, then each line's own questions not yet asked (its question text, today's
-  shape, and any question object written in its `question_ids`), then the questions reviews define on themselves; two
-  questions are one only when their text is the same with case and spacing folded - nothing reads what a question
-  means, so a question written again in other words is asked again, and a repeated id stays two questions. A question
-  object (`{"id", "question"}`) a line, review or missed code writes on itself is question text, never dropped; with
-  an id it also defines that id among its author's questions (a review's is then asked, naming the review's lines).
-  Each question names the lines it affects: its `affects`, the line it is written on, every line and missed code whose
-  ids name it, and the lines of every review whose ids do (an id names every question carrying it, case-insensitively,
-  among the questions its author was shown: the reader's for a reader line, the reader's and the checker's for the
-  checker). An id that names no question carries no text and is listed on the operator console, as are the ids both
-  answers defined (a checker reference to one reaches both questions; the code never picks one); any shape of
-  `question_ids` is read without failing the round. A code row shows its own question text, then the text of the
-  questions its own ids name, one per line; a question naming the line only by its `affects` is not repeated there. A
-  question whose text is blank - nothing left once U+FEFF and spaces are removed, the test the page applies too - is no
-  question. A `needs_answer` line no question names by its affects or its question text gets its agreeing reviews' own
-  questions (as before), or - when none, and nothing names it either - CPT Studio's own. Answers in the earlier shape (a
-  question text on each line or review, questions without ids) read exactly as before. The merge costs in proportion
-  to what it reads (sets of question numbers, each reference list resolved once). The problems are the reader's.
+  and the line needs review. Every code the checker found missing is a line of its own, `needs_review`. The round's
+  questions come in this order: the reader's, the checker's, each line's own questions not yet asked (its question text,
+  today's shape, and any question object written in its `question_ids`; the reader's lines in order, then the missed
+  codes), the questions reviews define on themselves with an id, and last those of the fallback (below). Two questions
+  are one only when their text is the same with case and spacing folded - nothing reads what a question means, so a
+  question written again in other words is asked again, and a repeated id stays two questions. A question object
+  (`{"id", "question"}`) a line or a missed code writes on itself is asked and shown on its row. One a review writes
+  without an id is shown on its line's second check (when it is the review shown there) and asked only by the fallback,
+  as the same text in the review's `question` field is today; with an id, it is asked as one of the checker's questions,
+  naming the review's lines - a question added, never one lost. Any question object with an id also defines that id
+  among its author's questions, and the id is one of those its item names. Each question names the lines it affects: its
+  `affects`, the line it is written on, every line and missed code whose ids name it, and the lines of every review
+  whose ids do (an id names every question carrying it, case-insensitively, among the questions its author was shown:
+  the reader's for a reader line, the reader's and the checker's for the checker). An id that names no question carries
+  no text and is listed on the operator console, as are the ids both answers defined (a checker reference to one reaches
+  every question carrying it in either answer, which is one question where their texts are the same; the code never
+  picks one); any shape of `question_ids` is read without failing the round. A code row shows its own question text,
+  then the text of the questions its own ids name, one per line; a question naming the line only by its `affects` is not
+  repeated there. A question whose text is blank - nothing left once U+FEFF and spaces are removed, the test the page
+  applies too - is no question, and an id blank by the same test is no id. A `needs_answer` line no question names by
+  its affects or its question text gets its agreeing reviews' own questions (as before; a question object in its
+  `question_ids` names it without silencing them), or - when none, and nothing names it either - CPT Studio's own.
+  Answers in the earlier shape (a question text on each line or review, questions without ids) read exactly as before,
+  with one exception: a question whose whole text is U+FEFF and white space is now blank and carries nothing, and a
+  `needs_answer` line then gets the fallback when nothing else names it. The merge costs in proportion to what it reads
+  (sets of question numbers, each reference list resolved once). A known limit: because a reference reaches every
+  question carrying its id and a row shows every question its ids name, an absurd answer with many distinct questions
+  sharing one id and many lines naming it multiplies the size of the stored round. The problems are the reader's.
   **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n> <code>` or `MISSED M<k> <code>` (checker)
   starts that line's section; a citation after it is filed under the line when
   the marker's code is that line's code, else under `_document`. A section also ends at a line holding exactly `END`

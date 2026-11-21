@@ -438,6 +438,11 @@ SPECIMEN = 'Did a specimen from the gastric antrum go to pathology?'
 SNARE = 'Was the second polyp removed with a snare or with forceps?'
 SITE = 'Which part of the colon was the polyp in?'
 TISSUE = 'Was any tissue sampled during the scope?'
+# the console's sentence under the ids both answers defined (G1 of round 3: true whether their definitions stayed two
+# questions or merged into one)
+SHARED_SENTENCE = ("Each reference the checker made to one of these ids reaches every question that carries it in "
+                   "either answer, which is one question where their texts are the same; a reader line's reference "
+                   "reaches the reader's only.")
 
 
 class QuestionObjectTests(SimpleTestCase):
@@ -660,10 +665,15 @@ class BlankQuestionPageTests(r.CustomerCase, TestCase):
 
 
 class InstructionPinTests(SimpleTestCase):
-    """F4: the instructions are origin/main d7c6a77dc's (tests/fixtures/instructions-d7c6a77dc.json, taken with git
-    show from its studio/fable/prompts.py) with only the question parts changed: the sentences removed and added are
-    exactly the pinned ones, and every other sentence is identical and in the same order. The prompt values the change
-    must not touch are pinned the same way."""
+    """F4 and G3: the instructions are origin/main d7c6a77dc's (tests/fixtures/instructions-d7c6a77dc.json, taken with
+    git show from its studio/fable/prompts.py) with only the question parts changed. The sentence checks (F4) make a
+    readable failure: the sentences removed and added are exactly the pinned ones, and every other sentence is
+    identical and in the same order. The whole-text check (G3 of the D370 round 3) is exact: the fixture's text rebuilt
+    - each removed sentence replaced in its own place, between its own separators, by its pinned replacement (or by
+    nothing), and each pinned new paragraph inserted at its pinned place - equals the module's text, so a pinned line
+    or sentence moved among the unchanged ones, or a paragraph break or a space changed anywhere, fails it. The prompt
+    values the change must not touch are pinned too."""
+    maxDiff = None  # a failing whole-text check shows the whole difference
     ORIGIN = json.loads((Path(settings.BASE_DIR) / 'tests' / 'fixtures' / 'instructions-d7c6a77dc.json')
                         .read_text(encoding='utf-8'))
     READER_REMOVED = [
@@ -704,14 +714,62 @@ class InstructionPinTests(SimpleTestCase):
         'Each review and each missed code gives the ids of the questions its code depends on in "question_ids", the '
         'coding review\'s or your own, an empty list when it depends on none.',
         'The ids are for the JSON only: never write one in a question or a reason.']
+    # G3: what the whole-text check rebuilds the fixture with. Each removed sentence with what replaces it in its own
+    # place (None: nothing); each new paragraph - its sentences, joined by one space - with the opening words of the
+    # fixture's paragraph it goes before (None: after the last one).
+    READER_REPLACED = [(READER_REMOVED[0], READER_ADDED[0]), (READER_REMOVED[1], READER_ADDED[1]),
+                       (READER_REMOVED[2], READER_ADDED[-1])]
+    READER_INSERTED = [(READER_ADDED[2:-1], 'Status meanings.')]
+    CHECKER_REPLACED = list(zip(CHECKER_REMOVED, CHECKER_ADDED[:3]))
+    CHECKER_INSERTED = [(CHECKER_ADDED[3:], None)]
+    SEPARATOR = re.compile(r'(\n|(?<=[.?!]) +)')
 
-    @staticmethod
-    def sentences(text):
-        """The pin's one splitter: an instruction cut into sentences - at every line break, then after every '.', '?'
-        or '!' that one or more spaces follow (those spaces belong to neither sentence). A line of the JSON shape holds
-        no such sentence end, so each of its lines is one sentence; a blank line (a paragraph break) is none. Every
-        sentence keeps its text exactly, its indentation included."""
-        return [part for line in text.split('\n') for part in re.split(r'(?<=[.?!]) +', line) if part.strip()]
+    @classmethod
+    def pieces(cls, text):
+        """The pin's one splitter, lossless: an instruction cut at every line break, and after every '.', '?' or '!'
+        that one or more spaces follow - its sentences at the even places, the separators between them (a line break,
+        or those spaces) at the odd places - so that the pieces joined are the text. A line of the JSON shape holds no
+        such sentence end, so each of its lines is one sentence; a blank line (a paragraph break) is an empty piece."""
+        return cls.SEPARATOR.split(text)
+
+    @classmethod
+    def sentences(cls, text):
+        """The sentences of an instruction: its pieces without the separators and the empty ones. Every sentence keeps
+        its text exactly, its indentation included."""
+        return [part for part in cls.pieces(text)[::2] if part.strip()]
+
+    def rebuilt(self, text, replaced, inserted):
+        """``text`` rebuilt (G3): each removed sentence replaced, in its own place and between its own separators, by
+        its pinned replacement - or, for None, taken out with the spaces before it (with the separator after it when it
+        opens its line) - then each new paragraph, its sentences joined by one space, inserted before the paragraph that
+        opens with the pinned words, or after the last one (None). A removed sentence that is not in the text exactly
+        once, or pinned words no one paragraph opens with, fails the test. (A whole paragraph taken out is not one
+        sentence: it would need a pin of its own.)"""
+        pieces = self.pieces(text)
+        for old, new in replaced:
+            places = [index for index in range(0, len(pieces), 2) if pieces[index] == old]
+            self.assertEqual(len(places), 1, f'a removed sentence is not in the text exactly once: {old!r}')
+            index = places[0]
+            if new is not None:
+                pieces[index] = new
+            elif index + 1 < len(pieces) and (index == 0 or pieces[index - 1] == '\n'):
+                del pieces[index:index + 2]
+            else:
+                del pieces[max(index - 1, 0):index + 1]
+        paragraphs = ''.join(pieces).split('\n\n')
+        for sentences, before in inserted:
+            places = [len(paragraphs)] if before is None else [
+                index for index, paragraph in enumerate(paragraphs) if paragraph.startswith(before)]
+            self.assertEqual(len(places), 1, f'no one paragraph opens with {before!r}')
+            paragraphs.insert(places[0], ' '.join(sentences))
+        return '\n\n'.join(paragraphs)
+
+    def assert_rebuilt(self, name, removed, added, replaced, inserted):
+        # the rebuild uses exactly the pinned sentences: every removed one once, every added one once
+        self.assertEqual([old for old, _ in replaced], removed)
+        self.assertCountEqual([new for _, new in replaced if new is not None]
+                              + [sentence for sentences, _ in inserted for sentence in sentences], added)
+        self.assertEqual(self.rebuilt(self.ORIGIN[name], replaced, inserted), getattr(prompts, name))
 
     def assert_only_question_parts_changed(self, name, removed, added):
         old, new = self.sentences(self.ORIGIN[name]), self.sentences(getattr(prompts, name))
@@ -727,11 +785,39 @@ class InstructionPinTests(SimpleTestCase):
     def test_the_checkers_instruction_changes_only_in_its_question_parts(self):
         self.assert_only_question_parts_changed('CHECKER_SYSTEM', self.CHECKER_REMOVED, self.CHECKER_ADDED)
 
+    def test_the_readers_instruction_is_the_fixture_rebuilt_with_its_question_parts(self):
+        self.assert_rebuilt('READER_SYSTEM', self.READER_REMOVED, self.READER_ADDED, self.READER_REPLACED,
+                            self.READER_INSERTED)
+
+    def test_the_checkers_instruction_is_the_fixture_rebuilt_with_its_question_parts(self):
+        self.assert_rebuilt('CHECKER_SYSTEM', self.CHECKER_REMOVED, self.CHECKER_ADDED, self.CHECKER_REPLACED,
+                            self.CHECKER_INSERTED)
+
+    def test_the_rebuild_keeps_every_separator_where_it_was(self):
+        # on a synthetic text: a replacement keeps the separators around it; a sentence taken out goes with the spaces
+        # before it, or - when it opens its line - with the separator after it; a new paragraph goes before the one
+        # opening with its pinned words, or after the last one
+        text = 'One. Two.  Three?\n  "shape": 1,\n  "line": 2\n\nLast one! End.'
+        self.assertEqual(self.rebuilt(text, [('Two.', 'Deux.'), ('  "shape": 1,', None), ('End.', None)],
+                                      [(['New.', 'Again.'], 'Last one!'), (['Tail.'], None)]),
+                         'One. Deux.  Three?\n  "line": 2\n\nNew. Again.\n\nLast one!\n\nTail.')
+        self.assertEqual(self.rebuilt(text, [('One.', None), ('  "line": 2', None)], []),
+                         'Two.  Three?\n  "shape": 1,\n\nLast one! End.')
+        with self.assertRaises(self.failureException):  # a removed sentence must be in the text exactly once
+            self.rebuilt(text + ' One.', [('One.', 'Uno.')], [])
+        with self.assertRaises(self.failureException):  # and a new paragraph's place must be one paragraph
+            self.rebuilt(text, [], [(['New.'], 'Nowhere.')])
+
     def test_the_splitter_keeps_every_sentence_of_the_text(self):
         for name in ('READER_SYSTEM', 'CHECKER_SYSTEM'):
             for text in (self.ORIGIN[name], getattr(prompts, name)):
                 with self.subTest(name=name):
+                    pieces = self.pieces(text)
+                    self.assertEqual(''.join(pieces), text)  # lossless: every separator is kept, in its place
+                    self.assertTrue(all(part == '\n' or (part and not part.strip(' ')) for part in pieces[1::2]))
                     kept = self.sentences(text)
+                    self.assertEqual(kept, [part for line in text.split('\n')  # the F4 splitter's cut, unchanged
+                                            for part in re.split(r'(?<=[.?!]) +', line) if part.strip()])
                     self.assertEqual(''.join(kept), re.sub(r'(?<=[.?!]) +|\n', '', text))
                     self.assertGreater(len(kept), 35)
 
@@ -756,7 +842,8 @@ class InstructionPinTests(SimpleTestCase):
 
 class SharedIdTests(SimpleTestCase):
     """F3: the question ids both answers define - top-level or on a line or review - compared case-insensitively, for
-    the operator console; each reference of the checker's to one reaches both questions (never fewer)."""
+    the operator console; each reference of the checker's to one reaches every question carrying it in either answer
+    (never fewer), which is one question where their texts are the same (G1 of round 3: SharedIdWordingTests)."""
 
     def test_the_ids_both_answers_define_are_listed_as_the_reader_wrote_them(self):
         reader = f.reader_result([q.coded('45380', ids=[{'id': 'Q2', 'question': 'Was a biopsy taken?'}])],
@@ -799,8 +886,7 @@ class OperatorConsoleRoundTwoTests(r.CustomerCase, TestCase):
         page = ops.client(f.user('platform-operator')).get(f'/ops/encounters/{enc.pk}').content.decode('utf-8')
         self.assertIn('<li>L1 <span class="mono">20610</span> names <span class="mono">7</span></li>', page)
         self.assertIn('<h3>Question ids both the reader and the checker defined</h3>', page)
-        self.assertIn("Each reference the checker made to one of these ids reaches both questions, the reader's and its "
-                      "own; a reader line's reaches the reader's only.", page)
+        self.assertIn(SHARED_SENTENCE, page)
         self.assertIn('<li><span class="mono">&quot;Q1&quot;</span></li>', page)
         clean = self.started(title='Synthetic note whose ids are its own')
         self.code_round(clean, reader=q.READER, checker=q.CHECKER)
@@ -833,3 +919,50 @@ class MergeCostTests(SimpleTestCase):
         self.assertTrue(all(row['question'].count('\n') == 1499 and row['second_check']['question'] == row['question']
                             for row in out['codes']))
         self.assertEqual((len(listed['questions']), dangling, shared), (1500, [], []))
+
+
+# --- round 3 (the lead's decisions on the refutation of round 2) ------------------------------------------------------
+
+KNEE = 'Which knee received the injection?'  # the Q2R-1 checker's synthetic input
+GUIDANCE = 'Was the needle placed under ultrasound guidance?'
+
+
+class SharedIdWordingTests(r.CustomerCase, TestCase):
+    """G1: the ids both answers define are listed whether their definitions stayed two questions or merged into one (a
+    partial merge can still give a reference more than one), under a sentence that is true in either case."""
+
+    @staticmethod
+    def reader_and_checker(reader_questions):
+        # the Q2R-1 input: the checker restates the reader's Q1 - id, text and all - to add its own missed code to it
+        reader = f.reader_result([q.coded('20610', 'needs_answer', ids=['Q1'])], questions=reader_questions)
+        checker = f.checker_result([q.reviewed('L1', '20610', ids=['Q1'], status='needs_answer')],
+                                   missed=[q.added('J1030', 'needs_answer', ids=['Q1'])],
+                                   questions=[q.asked('Q1', KNEE, ['L1', 'M1'])])
+        return reader, checker
+
+    def test_a_checker_restating_the_readers_question_adds_none_and_the_console_says_so_truly(self):
+        enc = self.started()
+        reader, checker = self.reader_and_checker([q.asked('Q1', KNEE, ['L1'])])
+        round_ = self.code_round(enc, reader=reader, checker=checker)
+        self.assertEqual([(item['text'], item['lines'], item['codes'], item['source']) for item in round_.questions],
+                         [(KNEE, ['L1', 'M1'], ['20610', 'J1030'], 'reader')])
+        self.assertEqual(result.shared_ids(round_.reader_result, round_.checker_result), ['Q1'])
+        page = ops.client(f.user('platform-operator')).get(f'/ops/encounters/{enc.pk}').content.decode('utf-8')
+        # the console's questions: one, naming both lines
+        self.assertEqual(page.split('<h3>Questions</h3><ol>', 1)[1].split('</ol>', 1)[0],
+                         f'<li>{KNEE} <span class="muted">(reader; lines L1, M1; codes 20610, J1030)</span></li>')
+        # the id is still listed, under a sentence as true of one question as of two
+        self.assertIn('<h3>Question ids both the reader and the checker defined</h3>', page)
+        self.assertIn(f'<p class="muted">{SHARED_SENTENCE}</p>', page)
+        self.assertIn('<li><span class="mono">&quot;Q1&quot;</span></li>', page)
+        self.assertNotIn('reaches both questions', page)
+
+    def test_an_id_whose_definitions_merged_is_still_listed_as_a_partial_merge_reaches_two_questions(self):
+        # the reader wrote Q1 twice and the checker restates one of them: the checker's references reach both
+        reader, checker = self.reader_and_checker([q.asked('Q1', KNEE, ['L1']), q.asked('Q1', GUIDANCE)])
+        out = combine(reader, checker)
+        self.assertEqual(asked(out), [(KNEE, ['L1', 'M1'], ['20610', 'J1030'], 'reader'),
+                                      (GUIDANCE, ['L1', 'M1'], ['20610', 'J1030'], 'reader')])
+        self.assertEqual(shown(out), {'L1': (f'{KNEE}\n{GUIDANCE}', f'{KNEE}\n{GUIDANCE}'),
+                                      'M1': (f'{KNEE}\n{GUIDANCE}', None)})
+        self.assertEqual(result.shared_ids(reader, checker), ['Q1'])
