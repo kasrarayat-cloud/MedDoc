@@ -475,7 +475,8 @@ function documentOf(...pages) {
 }
 
 // Where the library's text layer puts an item's span on a page box `size` CSS px wide (its centre a half of the item's
-// width along the item and (ascent - 0.5) x its height across it, the ascent 0.8), as readPdfPage reads its box.
+// width along the item and (ascent - 0.5) x its height square to that, up the glyphs; the ascent 0.8), as readPdfPage
+// reads its box.
 function boxOf(item, page, size = [612, 792], ascent = 0.8) {
   const t = item.transform;
   const quarter = page.rotate % 180 === 90;
@@ -487,7 +488,7 @@ function boxOf(item, page, size = [612, 792], ascent = 0.8) {
   const height = Math.hypot(t[2], t[3]);
   const [ox, oy] = point(t[4], t[5]);
   const d = vector(t[0], t[1]);
-  const u = vector(t[2], t[3]);
+  const u = [d[1], -d[0]];
   const [dl, ul] = [Math.hypot(...d), Math.hypot(...u)];
   const along = (item.width / 2) * unit;
   const across = height * (ascent - 0.5) * unit;
@@ -921,6 +922,9 @@ test('B4: every marked span lies where its item is drawn: shifted 8 pt or 22 px 
     assert.ok(walk.placedRight(place), JSON.stringify(place));
     assert.ok(!walk.placedRight(walk.spanPlacement(item, boxOf({ ...item, transform: [11, 0, 0, 11, 90, 292] }, page, size), page, size, 0.8)), `8 pt off on ${page.rotate}`);
   }
+  // a slanted font (the transform sheared, as a made-up italic): the text layer turns the span by the direction alone
+  const italic = { str: 'Cold forceps biopsies were taken.', transform: [11, 0, 2.3, 11, 90, 300], width: 170, hasEOL: false };
+  assert.ok(walk.placedRight(walk.spanPlacement(italic, boxOf(italic, document.pages[0]), document.pages[0], [612, 792], 0.8)));
   // a vertical font, or an item with no height, is not placed (and not counted)
   assert.equal(walk.spanPlacement(at('x', 0, 1, 1, 1), [0, 0, 1, 1], document.pages[0], [612, 792], 0.8), null);
   assert.equal(walk.spanPlacement({ ...at('x', 10, 1, 1, 5), fontName: 'v' }, [0, 0, 1, 1], { ...document.pages[0], styles: { v: { vertical: true } } }, [612, 792], 0.8), null);

@@ -1311,10 +1311,11 @@ function viewportTransform(view, rotate, userUnit, scale) {
 }
 
 // Where a span of the text layer lies against its item (B4): its box's centre, from the item's origin, along the item's
-// direction and across it (up the glyphs), in PDF units, with what the library's text layer gives across (the font's
-// ascent less half the span's height: TextLayer#appendText puts a span at the origin less the ascent, turned by the
-// item's angle) - {along, across, expected, height, width}, or null for an item that cannot be placed (no geometry, no
-// height, a vertical font). The page's scale is its box's CSS width over its width at scale 1; its rotation, box and user
+// direction and across it (up, square to that direction, as the library's text layer turns a span: by the angle of the
+// item's direction alone), in PDF units, with what the library's text layer gives across (the font's ascent less half the
+// span's height: TextLayer#appendText puts a span at the origin less the ascent, turned by the item's angle; the height
+// is the length of the transform's second column) - {along, across, expected, height, width}, or null for an item that
+// cannot be placed (no geometry, no height, a vertical font). The page's scale is its box's CSS width over its width at scale 1; its rotation, box and user
 // unit are the walk's own reading's; the ascent is the share of the height the page measured for the span's font family
 // (as TextLayer measures it), else the font's own (style.ascent, 1 + style.descent), else 0.8, as TextLayer falls back.
 function spanPlacement(item, box, page, size, measured) {
@@ -1332,7 +1333,7 @@ function spanPlacement(item, box, page, size, measured) {
   const unit = scale * (page.userUnit || 1);
   const origin = [m[0] * t[4] + m[2] * t[5] + m[4], m[1] * t[4] + m[3] * t[5] + m[5]];
   const direction = [m[0] * t[0] + m[2] * t[1], m[1] * t[0] + m[3] * t[1]];
-  const up = [m[0] * t[2] + m[2] * t[3], m[1] * t[2] + m[3] * t[3]];
+  const up = [direction[1], -direction[0]];
   const centre = [box[0] + box[2] / 2 - origin[0], box[1] + box[3] / 2 - origin[1]];
   let ratio = Number.isFinite(measured) && measured > 0 ? measured : 0;
   if (!ratio) ratio = Number(style.ascent) || (Number.isFinite(style.descent) && style.descent ? 1 + Number(style.descent) : 0.8);
