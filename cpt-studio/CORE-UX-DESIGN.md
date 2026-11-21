@@ -258,8 +258,11 @@ apart from the page script.
   `findLastIndex` or `Float16Array`, which the documents never needed (the library does not call them on the viewer's
   paths, or tests for them first). Older browsers get the browser's own viewer and the newer-browser note, without
   downloading the library.
-- **Drawing.** Pages away from the view are released and the library lets go of what it decoded to draw them (a
-  40-page 300 dpi scan scrolled to the end and back stays near 300 MB, against 1.5 GB before); a change of the screen's
+- **Drawing.** The pages near the view are drawn one at a time, the page a quote waits to be shown on first, and none is
+  started while the view scrolls: the library's worker decodes one page's images at a time and answers as each page is
+  done, a page only passed by a scroll is never decoded, and a page asked for at a new size while it is drawn finishes
+  and is then drawn again from what was decoded. Pages away from the view are released and the library lets go of what
+  it decoded to draw them (a 40-page 300 dpi scan scrolled to the end and back stays near 300 MB, against 1.5 GB before); a change of the screen's
   pixel ratio with no change of size redraws the canvases at the new ratio; in forced colours (Windows contrast themes)
   the drawn page keeps its own white ground, so it stays legible and the mark visible, while the note and the page label
   keep the forced colours; in the desktop layout the quoted passages keep their approved share of the column (at most
