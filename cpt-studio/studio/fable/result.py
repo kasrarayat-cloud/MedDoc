@@ -35,8 +35,9 @@ lossless ones:
   JSON text, never dropped;
 - every review names its code as a non-empty string;
 any other shape is Unreadable, so nothing Fable wrote is dropped, altered or guessed. A question is blank when nothing
-is left of its text once U+FEFF and white space are removed (blank_question: the one test of it, which agrees with the
-customer page's), and a blank question carries nothing.
+is left of its text once U+FEFF and white space are removed (blank_question, the one test of it: every text the customer
+page's trim() empties is blank to it, and it also calls blank U+001C to U+001F and U+0085, which the page keeps), and a
+blank question carries nothing.
 A review's other fields (correct_*) and the evidence items are kept where they can be read; the operator console shows
 both answers whole.
 What a line, a missed code or a review gives in "question_ids" (D370) never makes an answer Unreadable (today's answers
@@ -44,7 +45,9 @@ have no such field, and an Unreadable round costs a paid read): a list of items,
 An item is an id (a string that is not blank, or an integer read as its decimal string), or an object with a string
 "question" that is not blank - question text written on the item, read as the same object in its "question" is, with
 its optional "id"; a blank or null item names nothing; an item in any other shape, an object without such a "question"
-among them, names no question and is kept as written for the operator console (dangling_references).
+among them, names no question and is kept as written for the operator console (dangling_references). A string item is
+always an id, so question text written there as a plain string names no question and reaches only the operator console:
+a known limit (D378), since telling such text from a malformed id such as "Q1, Q2" would mean guessing.
 
 Line identity (FIX-SPEC 1). Every final code row carries ``line``: the reader's codes are "L1".."Ln" in the order of its
 JSON list, the checker's missed codes "M1".."Mk" in theirs. The checker is given each reader line with its label and the
@@ -702,7 +705,8 @@ def blank_question(text: str) -> bool:
     of a blank question (the shape, the round's questions, studio.decisions and studio.customer use it). The customer
     page drops a question whose text JavaScript's trim() empties. Every code point trim() removes is white space to
     Python's str.strip() too, except U+FEFF (tests.test_question_ids enumerates them), so a text blank to the page is
-    blank here, and a question the server keeps is one the page shows."""
+    blank here, and a question the server keeps is one the page shows. The converse does not hold: str.strip() also
+    removes U+001C to U+001F and U+0085, which trim() keeps (tests.test_question_ids pins those five)."""
     return not text.replace('\ufeff', '').strip()
 
 

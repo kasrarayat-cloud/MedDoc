@@ -1920,7 +1920,7 @@ test('the overview, the documents list and How it works speak of the coding revi
   assert.doesNotMatch(about, /independent checks and coding validation/);
 });
 
-test('the page drops a question whose text is blank exactly where the server calls it blank', () => {
+test('the page drops a question only where the server also calls it blank', () => {
   // tests/fixtures/blank-question-characters.json: every code point trim() removes (ECMAScript WhiteSpace and
   // LineTerminator); the server's one blank test calls every text made of them blank (tests/test_question_ids.py)
   const listed = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'blank-question-characters.json'), 'utf8'))

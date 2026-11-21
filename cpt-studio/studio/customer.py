@@ -139,7 +139,7 @@ def _shown_or(text, default=None):
 
 def _shown_question(text):
     """A code row's question as the customer reads it (shown), or None when it is no text or a blank one (the one test
-    of a blank question, fable.result.blank_question, which the page agrees with)."""
+    of a blank question, fable.result.blank_question, under which every text the page drops is blank)."""
     value = shown(text)
     return value if isinstance(value, str) and not fable_result.blank_question(value) else None
 

@@ -184,7 +184,7 @@ def question_id(round_, question) -> str:
 
 def round_questions(round_) -> list:
     """[(question id, question)] of ``round_`` (its combined questions with a text that is not blank: the one test of
-    it, fable.result.blank_question, which the customer page agrees with), in the order asked."""
+    it, fable.result.blank_question, under which every text the customer page drops is blank), in the order asked."""
     out = []
     for item in round_.questions or ():
         text = item.get('text') if isinstance(item, dict) else None

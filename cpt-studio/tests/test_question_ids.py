@@ -584,7 +584,7 @@ class QuestionObjectTests(SimpleTestCase):
 
 
 class BlankQuestionTests(SimpleTestCase):
-    """F2: one test of a blank question, which agrees with the customer page (its JavaScript trim())."""
+    """F2: one test of a blank question; every text the customer page's JavaScript trim() empties is blank to it."""
     POINTS = json.loads((Path(settings.BASE_DIR) / 'tests' / 'fixtures' / 'blank-question-characters.json')
                         .read_text(encoding='utf-8'))['code_points']
 
@@ -607,6 +607,15 @@ class BlankQuestionTests(SimpleTestCase):
         for text in ('\ufeffWas a biopsy taken?', '?', '\u200b', '\u180e', 'x\ufeff'):
             with self.subTest(text=text):
                 self.assertFalse(result.blank_question(text))
+
+    def test_the_server_also_calls_blank_five_code_points_the_page_keeps(self):
+        # the converse does not hold (D378): str.strip() also removes U+001C..U+001F and U+0085, which trim() keeps, so
+        # a question made only of them is blank here and shown by the page, as API.md and ARCHITECTURE.md say
+        page = {int(point, 16) for point in self.POINTS}
+        server = {point for point in range(sys.maxunicode + 1)
+                  if not 0xD800 <= point <= 0xDFFF and result.blank_question(chr(point))}
+        self.assertLessEqual(page, server)
+        self.assertEqual(sorted(server - page), [0x1C, 0x1D, 0x1E, 0x1F, 0x85])
 
     def test_a_question_made_only_of_them_is_no_question_wherever_it_is_written(self):
         unasked = (result.UNASKED_QUESTION.format(code='20610'), ['L1'], ['20610'], 'studio')

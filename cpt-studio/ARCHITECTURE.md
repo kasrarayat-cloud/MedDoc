@@ -173,10 +173,14 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   the reader's for a reader line, the reader's and the checker's for the checker). An id that names no question carries
   no text and is listed on the operator console, as are the ids both answers defined (a checker reference to one reaches
   every question carrying it in either answer, which is one question where their texts are the same; the code never
-  picks one); any shape of `question_ids` is read without failing the round. A code row shows its own question text,
-  then the text of the questions its own ids name, one per line; a question naming the line only by its `affects` is not
-  repeated there. A question whose text is blank - nothing left once U+FEFF and spaces are removed, the test the page
-  applies too - is no question, and an id blank by the same test is no id. A `needs_answer` line no question names by
+  picks one); any shape of `question_ids` is read without failing the round. A string in `question_ids` is always an
+  id, so question text written there as a plain string names no question and reaches only the operator console - a
+  known limit (D378): it takes two departures from the instructions, since the question also belongs in `questions`,
+  and telling such text from a malformed id such as `Q1, Q2` would mean guessing. A code row shows its own question
+  text, then the text of the questions its own ids name, one per line; a question naming the line only by its `affects`
+  is not repeated there. A question whose text is blank - nothing left once U+FEFF and white space are removed; every
+  text the page's trim() empties is blank by this test, which also counts U+001C to U+001F and U+0085, characters the
+  page keeps - is no question, and an id blank by the same test is no id. A `needs_answer` line no question names by
   its affects or its question text gets its agreeing reviews' own questions (as before; a question object in its
   `question_ids` names it without silencing them), or - when none, and nothing names it either - CPT Studio's own.
   Answers in the earlier shape (a question text on each line or review, questions without ids) read exactly as before,
