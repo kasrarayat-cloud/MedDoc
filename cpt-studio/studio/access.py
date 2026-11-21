@@ -36,21 +36,31 @@ def scoped_encounter(user, encounter_id, *, for_update=False):
 
 
 class SecurityHeadersMiddleware:
-    """Headers the approved design relied on, plus no-index and no-store for data."""
+    """Headers the approved design relied on, plus no-index and no-store for data.
+
+    It wraps WhiteNoise (cptstudio/settings.py MIDDLEWARE), so every response the site sends carries them, static files
+    included: a static file gets STATIC_CSP - the site's policy with base-uri 'none' - because the PDF library's module
+    worker, which parses the uploaded document, takes its policy from its own script's response and not from the page
+    that starts it (DECISIONS D368, round 3). A static file keeps WhiteNoise's caching headers (immutable for the hashed
+    names); everything else is no-store. A response that already names a policy (the page shell, the in-page view of an
+    original) keeps its own.
+    """
 
     CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
            "script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; "
            "object-src 'none'; base-uri 'self'; form-action 'self'")
+    STATIC_CSP = CSP.replace("base-uri 'self'", "base-uri 'none'")
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         response = self.get_response(request)
-        response.headers.setdefault('Content-Security-Policy', self.CSP)
+        static = request.path.startswith('/static/')
+        response.headers.setdefault('Content-Security-Policy', self.STATIC_CSP if static else self.CSP)
         response.headers.setdefault('X-Robots-Tag', 'noindex, nofollow')
         response.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
         response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
-        if not request.path.startswith('/static/'):
+        if not static:
             response.headers['Cache-Control'] = 'no-store'
         return response

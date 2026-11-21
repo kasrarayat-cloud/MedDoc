@@ -46,15 +46,18 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'studio',
 ]
+# The site's own security headers wrap WhiteNoise, so static files get them too (DECISIONS D368, round 3): above all the
+# PDF library's module worker, which takes its policy from its own script's response, not from the page that starts it.
+# The middleware leaves a static file's caching headers to WhiteNoise.
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'studio.access.SecurityHeadersMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'studio.access.SecurityHeadersMiddleware',
 ]
 ROOT_URLCONF = 'cptstudio.urls'
 TEMPLATES = [{

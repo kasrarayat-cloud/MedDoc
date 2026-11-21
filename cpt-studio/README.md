@@ -4,8 +4,14 @@ A standalone, login-protected, **synthetic-only** CPT coding workspace for `cpt.
 original clinical document (PDF, DOCX or pasted text) with the practice's date of service and insurance. Claude Fable 5.2
 reads the original file twice through the Anthropic API - once as the coding **reader**, once as an independent
 **checker** - and the page shows each code with its units, modifiers, status, reason, the second check's verdict and the
-quoted passages. The member answers any questions (which starts a new coding round), approves or rejects the codes, and
-downloads a draft or an approved export. Every decision is recorded against the exact round and code line it was made
+quoted passages; the original is shown beside them, and choosing a quoted passage of a PDF opens its page with its words
+marked - only as whole words and whole numbers, an overprinted copy once, with a zoom from 75% to 300% (CORE-UX-DESIGN.md
+section 8; the PDF is drawn by a pinned copy of pdf.js's legacy build this site serves, `studio/static/studio/lib/pdfjs-6.5.438/`,
+with its licences and `MANIFEST.json`; the page downloads the document and starts the library's worker itself; it marks
+in Chrome and Edge 119+, Firefox 125+ and Safari 17.4+ - measured in Chromium only, the others from browser-compat data -
+and where it cannot, the browser's own PDF viewer opens the quote's page with a note saying why). The member answers any
+questions (which
+starts a new coding round), approves or rejects the codes, and downloads a draft or an approved export. Every decision is recorded against the exact round and code line it was made
 on (two lines of one code are decided apart).
 
 Fable's decision is final apart from the human: no code holds, drops, upgrades or downgrades a code it returned

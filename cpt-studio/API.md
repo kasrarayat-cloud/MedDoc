@@ -92,6 +92,8 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
 - Only the latest round is shown; while it is queued, running, failed or stopped it has no codes, questions or notes.
 - `document`: `original_url` is an upload's download (null for a paste); `view_url` is the in-page view (`?view=1`);
   for a Word document the view is the PDF the coding review read (`converted: true`, once a round has converted it).
+  `size` is the upload's exact number of bytes, or for a paste the bytes of its text in UTF-8, so for a text it is the
+  exact size of the view (the review page checks its frame of the view against it).
 - `codes[]` is one row per line: its `decision`, `quotes` and `allowed_actions` are that line's; `decision.id` is what
   an undo names. `units` is the whole number the coding review wrote (0 included: it writes 0 on a code it does not
   support), or null when it gave none; `modifiers` are its modifiers as written (a blank item, which carries nothing,
@@ -176,7 +178,16 @@ approved it, their kind and when. Units or modifiers the coding review did not g
 Without `view`: the uploaded original as an attachment, exactly as stored (`404` for a paste). With `view=1`: what the
 in-page viewer shows (the PDF or text, the pasted text, or a Word document's converted PDF), `Content-Disposition:
 inline`, `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: frame-ancestors 'self'`. A stored file that no longer
-matches its sha256 answers `409`.
+matches its sha256 answers `409`. The review page fetches a PDF view itself (same origin, the session's cookie) and
+draws it with its pinned PDF library, marking a chosen quote's words on its page; where the browser cannot run that
+library, the library does not work or answer in time, it cannot draw the document, or the download fails or stalls, the
+page frames this address instead, a new frame at `#page=N` for a quote on another page, and says why. A text view is
+shown in a frame of this address and its passages marked there; a frame that does not hold the view (an answer other
+than `200`, a body whose positive size is not `document.size`, or an answer the frame refuses to show) is never
+searched, and the page says the document could not be downloaded; a frame whose load never ends (stopped, or its body
+broken off) is waited for, and nothing new is said (a note from an earlier choice stays until the next one). The rule is
+[`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8, "Marking a quoted passage"; this endpoint and the contract are
+unchanged by it.
 
 ### `GET /api/reports/<id>/download`
 

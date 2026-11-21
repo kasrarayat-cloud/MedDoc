@@ -286,11 +286,36 @@ switched back to. Nothing writes them.
 
 Session authentication with Argon2 password hashes and a sign-in throttle (8 failures per username, 24 per client, in 15
 minutes); CSRF on every POST; `Cache-Control: no-store` on everything but static files; a Content-Security-Policy with
-`script-src 'self'` and no inline script (the page shell adds `frame-src 'self'` for the document viewer, and only the
-in-page view of an original may be framed, by CPT Studio's own pages); `X-Frame-Options: DENY` elsewhere. Every customer
+`script-src 'self'` and no inline script (the page shell adds `frame-src 'self'` for the text viewer and for the
+browser's own PDF viewer, framed where the page cannot draw a PDF itself, and only the in-page view of an original may
+be framed, by CPT Studio's own pages); `X-Frame-Options: DENY` elsewhere. The PDF library the review page draws a PDF
+with (the legacy build of pdfjs-dist 6.5.438, which bundles core-js 3.51.0 for the built-ins older browsers lack; the
+files `studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json` lists with their npm path and sha256 and the npm integrity
+of both tarballs, the licences beside them; nothing from a CDN) loads as same-origin modules and a same-origin module
+worker under `script-src 'self'` (`worker-src` falls back to it), served as JavaScript by WhiteNoise under `nosniff`; the
+viewer starts that worker itself and hands it to the library, so the library never parses a document on the page's own
+thread (DECISIONS D368, round 5). It runs with no eval and no WebAssembly - the policy has neither `'unsafe-eval'` nor
+`'wasm-unsafe-eval'`; core-js's one `Function("return this")` lookup is never reached in a browser and would be refused -
+with no document scripting, no XFA and no layer of links or form fields, is given only the bytes the viewer downloaded
+itself from the same-origin view address, and puts a PDF's text in the page as text only (its text layer). A browser that
+lacks what it needs (Chrome and Edge before 119, Firefox before 125, Safari before 17.4; measured in Chromium only, the
+other versions from MDN's browser-compat-data) is not given it: the browser's own viewer is framed and the note says
+marking needs a newer browser; where the library itself fails, or has not answered for 20 seconds while the viewer waits
+on it, the note says the marking tool did not work here, and where the download fails, that it could not be
+downloaded. Every customer
 query is scoped through the caller's active membership, so another workspace's records answer 404. Text the database
 cannot store (NUL, a lone surrogate) is refused with a 400 rather than altered; only a title or a file name has it
 replaced.
+
+The site's security headers (`studio.access.SecurityHeadersMiddleware`) wrap WhiteNoise, so every static file carries
+them too (DECISIONS D368, round 3): above all the PDF library's module worker, which parses the uploaded document and
+takes its policy from its own script's response, not from the page that starts it. A static file's policy is the site's
+with `base-uri 'none'` (`STATIC_CSP`: `default-src 'self'`, `script-src 'self'`, `connect-src 'self'`, `object-src
+'none'`, no `'unsafe-eval'`, no `'wasm-unsafe-eval'`), so code built from a string and a fetch to another origin are
+refused inside the worker too (measured in Chromium); its caching stays WhiteNoise's (immutable for the hashed names,
+never `no-store`). The dev preview serves the library with exactly these headers, and `tests/test_frontend.py` holds the
+two equal through the full middleware stack. The suite pins the library itself as well: one digest over every file's
+sha256, the manifest included (`PDF_LIB_DIGEST`), so a changed vendored file fails until that line changes in the open.
 
 ## 7. JSON API
 
@@ -298,7 +323,15 @@ replaced.
 
 ## 8. The customer page
 
-[`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8: the DOM and copy contract the browser walk checks.
+[`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8: the DOM and copy contract the browser walk checks, and the one
+statement of how a chosen quote's words are marked in the document viewer ("Marking a quoted passage", DECISIONS D368:
+its own characters on its page, white space ignored, NFKC and format characters dropped on both sides, exact case first,
+never inside a longer word or number as the text reads (within the known limits) - two drawings that do not visibly
+continue each other meet at a word edge, a Han ideograph or a hiragana character is a word of its own, a number's own
+decimal point or thousands separator keeps it one word -, an overprinted copy counted once, every occurrence counted, never another page; the notes, the zoom, the
+viewer's own worker and download, its watchdog on the library and the fallback to the browser's own viewer with its
+reasons; the known limits). It is display only: it reads Unicode character classes, NFKC and the text's geometry, reads
+no meaning and never holds or changes a code.
 
 ## 9. Verification
 
@@ -307,10 +340,32 @@ replaced.
   decisions, answers, exports, the operator console, the page's templates and node tests, and the reference data.
   Synthetic text only; nothing is sent.
 - CI (`scripts/ci/verify-cpt-studio.sh`): checks, migration drift, the Django suite, the ops unit suites, the browser
-  walk's own tests (`ops/test_walk.cjs`) and a dependency audit.
+  walk's own tests (`ops/test_walk.cjs`) and a dependency audit. CI installs no Playwright, so it runs none of the
+  browser tests: the walk's browser subtests (every quote of the dev preview's synthetic documents chosen in Chromium and
+  judged, the fallback frame, the review dialog) report as skipped there, and the PDF drawing, the text layer and the
+  library's worker are exercised in CI only through `tests/frontend/app.test.cjs`'s stand-ins; the walk's own reading of
+  PDFs with the library in Node, and its judge over that reading, run in CI. The release proof runs the browser tests
+  locally, where Playwright is installed (`CPT_VERIFY_PLAYWRIGHT`), and records the counts.
 - After an install, `ops/walk.cjs` drives the real page with a synthetic document: upload, poll, the DOM and JSON
-  contract, an answer, an approval through the dialog, both exports re-downloaded byte for byte, the denylist scan, a
-  390 px viewport, and every `/ops/` path refused to the customer.
+  contract, every quote chosen and judged by the walk's own search (below), an answer, an approval through the dialog,
+  both exports re-downloaded byte for byte, the denylist scan, a 390 px viewport, and every `/ops/` path refused to the
+  customer.
+- The walk judges the viewer instead of taking its word (DECISIONS D368, rounds 3 and 5). It reads every PDF it judges
+  itself, in Node, with the pinned library the page draws with (its own upload's bytes, else the view address fetched in
+  the page with its own session), and runs the matching rule on that reading (CORE-UX-DESIGN.md section 8: R1 overprint
+  copies, R2 word edges with R2a numbers, R2b separate drawings and R2c Han and hiragana, R3 format characters, NFKC,
+  white space dropped, whole characters, exact case first, the quote's page and the next, never another): it runs R1
+  itself, so a viewer that flags no copy, or flags one the rule does not make, fails (the round-4 verifier's gap 2), and
+  the same words at another size are no copy on either side (its gap 1). It holds the viewer to that reading: the page
+  count, each drawn page's text layer span for span, the overprint flags both ways, the occurrences marked - count, place
+  and case - each marked span where its item is drawn (from the item's transform and the page's viewport), the count,
+  pages and note character for character, a "not found" only where its own search finds none, no mark on another page
+  or inside a character; every page it requires drawn is painted and seen as drawn (brought back into view and read
+  again first, as the viewer lets far pages go; screenshots of the page against its canvas, block by block outside the
+  marks), shows ink where its reading has text and ink under its marks (a pixel darker
+  than the paper by a share of the page's own contrast, so faint scanned ink counts); and the last quote marked is judged
+  again after Zoom in and Fit width. The tolerances are measured and stated in CORE-UX-DESIGN.md section 9. The page's
+  text stays out of the evidence, which keeps counts.
 
 ## 10. What was removed
 

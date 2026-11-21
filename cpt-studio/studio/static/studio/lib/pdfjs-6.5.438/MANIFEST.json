@@ -1,0 +1,143 @@
+{
+  "schema": "cpt-studio-third-party@2",
+  "name": "pdfjs-dist",
+  "version": "6.5.438",
+  "build": "legacy",
+  "license": "Apache-2.0",
+  "source": "the npm registry tarball pdfjs-dist-6.5.438.tgz, unpacked; every file below is byte-identical to the file at its npm_path in its package's tarball, and keeps that path under the package/ directory",
+  "npm_integrity": "sha512-vg8Pw1x+AFKy4AMDvhuWl5cOYV8d698UoEANoFFhc79hqXDnZQqnOXoxw3HG907WHOg1JYOvLhP756boddFxpA==",
+  "npm_shasum": "e7f8986ec4ea04057b5d9d2f0e5b63ea94d2303f",
+  "bundled": [
+    {
+      "name": "core-js",
+      "version": "3.51.0",
+      "license": "MIT",
+      "in": [
+        "legacy/build/pdf.min.mjs",
+        "legacy/build/pdf.worker.min.mjs"
+      ],
+      "evidence": "the core-js shared-store record in each legacy build file: version \"3.51.0\", mode \"global\"",
+      "npm_integrity": "sha512-7bDKx/5jm5MxzsXxc93g6Z2+4ZsuT/MddrfRmTDJNAkWsYWHU8EVNEsBiIEWnMAMCHMmRfUEjkuo3jeNBOIHRw==",
+      "npm_shasum": "9a7b197159ab83173b50efbe0c4846bec94b3abb",
+      "source": "the npm registry tarball core-js-3.51.0.tgz, checked against its dist.integrity; only package/LICENSE is taken",
+      "eval_note": "each legacy file holds exactly one core-js global lookup, Function(\"return this\")(), reached only where globalThis, window, self, global and this are all missing (never in a browser); the page policy has no 'unsafe-eval', so it would be refused anyway (tests/test_frontend.py allows that occurrence alone)"
+    }
+  ],
+  "files": [
+    {
+      "path": "LICENSE",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/LICENSE",
+      "bytes": 10174,
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "why": "the library licence (Apache-2.0)"
+    },
+    {
+      "path": "core-js-3.51.0/LICENSE",
+      "package": "core-js@3.51.0",
+      "npm_path": "package/LICENSE",
+      "bytes": 1134,
+      "sha256": "b87653fff2d44426ab5cd4723cee3b1364dc8d35a0acdf098c54689543123bf8",
+      "why": "licence (MIT) of core-js 3.51.0, the polyfills both legacy build files bundle (each names that version in its core-js shared-store record); only the licence is taken from that package"
+    },
+    {
+      "path": "legacy/build/pdf.min.mjs",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/legacy/build/pdf.min.mjs",
+      "bytes": 537769,
+      "sha256": "522ad2c83bc8a0010e7f0cc60d0892b77c8d2bf2c9702dc12288311d94270f42",
+      "why": "the library, legacy build (display layer): loaded by the review page with import() when a document is viewed as a PDF; the legacy build carries core-js polyfills for the newest built-ins it calls, so it draws in older browsers than the modern build/ would"
+    },
+    {
+      "path": "legacy/build/pdf.worker.min.mjs",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/legacy/build/pdf.worker.min.mjs",
+      "bytes": 1327591,
+      "sha256": "b4c8353ded0d88d2e2009574a29eb4e0c3ff7e942ecdf51ef5f71566a9667f31",
+      "why": "the library worker, legacy build (parsing, text content): started by pdf.min.mjs as a same-origin module worker"
+    },
+    {
+      "path": "standard_fonts/FoxitDingbats.pfb",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/standard_fonts/FoxitDingbats.pfb",
+      "bytes": 29513,
+      "sha256": "845c752392b6c914fb989c75a08b7792b88f542d2499042ef2889f8c814a16ed",
+      "why": "the ZapfDingbats standard font, likewise (check marks of form fields drawn on the page)"
+    },
+    {
+      "path": "standard_fonts/FoxitSymbol.pfb",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/standard_fonts/FoxitSymbol.pfb",
+      "bytes": 16729,
+      "sha256": "47967d055530e7357088a08403115425643ec2cdfd6201ba8af0fbd7116c1539",
+      "why": "the Symbol standard font, which the library fetches when a document uses it without embedding it (system fonts stand in for the other standard fonts); the package has one standard_fonts/ folder, which the legacy build uses too"
+    },
+    {
+      "path": "standard_fonts/LICENSE_FOXIT",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/standard_fonts/LICENSE_FOXIT",
+      "bytes": 1553,
+      "sha256": "b578cdd2345840ada550bd12519533812320d5f1d21cf4c1c7e1b1b0a31c98b7",
+      "why": "licence of the two standard fonts (BSD-3-Clause)"
+    },
+    {
+      "path": "wasm/LICENSE_JBIG2",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/wasm/LICENSE_JBIG2",
+      "bytes": 12862,
+      "sha256": "9e66b7f1b934a28b37f3bc4dac97915de1674271e79a0a88182a18ed9731b4d1",
+      "why": "licence of the JBIG2 decoder (BSD-3-Clause)"
+    },
+    {
+      "path": "wasm/LICENSE_OPENJPEG",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/wasm/LICENSE_OPENJPEG",
+      "bytes": 2112,
+      "sha256": "a6af136f3e15038a666b61f376612a07d9a4e48cb7c01adbf3e33b3f14ab49b6",
+      "why": "licence of the JPEG 2000 decoder (BSD-2-Clause)"
+    },
+    {
+      "path": "wasm/LICENSE_PDFJS_JBIG2",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/wasm/LICENSE_PDFJS_JBIG2",
+      "bytes": 555,
+      "sha256": "aad3cce09842e00e9e11ad5e8fef8cc02fbc3a3768fe2f007443b9cee37aaee5",
+      "why": "licence of the library wrapper of that decoder (Apache-2.0)"
+    },
+    {
+      "path": "wasm/LICENSE_PDFJS_OPENJPEG",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/wasm/LICENSE_PDFJS_OPENJPEG",
+      "bytes": 1285,
+      "sha256": "717fc62da03292dbb4dd0c8280bd4ce7bb8550dcf31d772bc93455fb50313425",
+      "why": "licence of the library wrapper of that decoder (BSD-2-Clause)"
+    },
+    {
+      "path": "wasm/jbig2_nowasm_fallback.js",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/wasm/jbig2_nowasm_fallback.js",
+      "bytes": 132439,
+      "sha256": "70150223396487e1ccfef7eac61fc780074ad7fcc9e843b702a8a3bc23107494",
+      "why": "JBIG2 image decoder in plain JavaScript, imported by the worker for the same reason"
+    },
+    {
+      "path": "wasm/openjpeg_nowasm_fallback.js",
+      "package": "pdfjs-dist@6.5.438",
+      "npm_path": "package/wasm/openjpeg_nowasm_fallback.js",
+      "bytes": 338458,
+      "sha256": "2855f1590e7fd7abbbf204cd13a5c09d30c92fe2c9313fb72b64aa763fe8b4f3",
+      "why": "JPEG 2000 image decoder in plain JavaScript, imported by the worker because the viewer runs with useWasm false (no WebAssembly, so no wasm-unsafe-eval in the policy); the package has one wasm/ folder, which the legacy build uses too"
+    }
+  ],
+  "not_included": [
+    "build/ (the modern build): it calls built-ins only the newest browsers have (Map and WeakMap getOrInsertComputed, Math.sumPrecise) with no polyfill; the legacy build polyfills them",
+    "legacy/build/pdf.mjs, legacy/build/pdf.worker.mjs and their source maps: the minified files are the same code",
+    "legacy/build/pdf.sandbox*.mjs and wasm/quickjs-eval.*: document scripting is never run",
+    "legacy/build/pdf.renderer*.mjs: pages are drawn on the main thread (disableWorkerRendering)",
+    "wasm/*.wasm and iccs/: no WebAssembly is used (useWasm false), so colour profiles fall back to the device colour spaces",
+    "cmaps/: predefined CJK character maps, which documents in English do not need",
+    "standard_fonts/ other than Symbol and ZapfDingbats: with useSystemFonts the library never fetches the other Type 1 fonts, and the four Liberation Sans files (GPL-2.0 with a font exception) are only its last url() source after the local() system fonts it names for the Helvetica family, so a computer with none of those draws such text in its generic sans-serif",
+    "web/, legacy/web/ (the full viewer and its stylesheet), image_decoders/, legacy/image_decoders/ and types/",
+    "core-js beyond its licence: its code is the part of the two legacy build files that the shared-store record names"
+  ]
+}
