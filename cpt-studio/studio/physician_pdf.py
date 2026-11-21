@@ -370,18 +370,24 @@ def _draw_text(canv, x, y, text, font, size, color, align='left', max_width=None
         start += pdfmetrics.stringWidth(piece, face, size) + char_space * len(piece)
 
 
+_STRIP_COLUMNS = (120, 96, 112, 118, 94)  # document, date of service, insurance, specialty, encounter: 540 pt
+
+
 def _strip(report: PhysicianReport, s: dict) -> Flowable:
     if not report.strip:
         return Spacer(1, 1)
     labels = [_p(markup(item.label.upper(), BODY_SEMI), s['strip_label']) for item in report.strip]
     values = [_p(_value_or_absent(item.value, report), s['strip_value']) for item in report.strip]
     columns = len(report.strip)
-    table = Table([labels, values], colWidths=[CONTENT_WIDTH / columns] * columns)
+    # Five fields get widths measured for their usual values ("Gastroenterology" is 93.5 pt at 11 pt), so a word is
+    # not broken mid-word; any other count shares the width equally.
+    widths = list(_STRIP_COLUMNS) if columns == len(_STRIP_COLUMNS) else [CONTENT_WIDTH / columns] * columns
+    table = Table([labels, values], colWidths=widths)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), IVORY),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
         ('TOPPADDING', (0, 0), (-1, 0), 13),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 3),
         ('TOPPADDING', (0, 1), (-1, 1), 3),

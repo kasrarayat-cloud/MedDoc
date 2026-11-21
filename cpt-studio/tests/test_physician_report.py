@@ -223,6 +223,14 @@ class PhysicianReportCase(r.CustomerCase, TestCase):
             self.assertIn('Synthetic note ∆ ✓ Ж', ' '.join(page.split()))
             self.assertNotIn('\x00', page)
 
+    def test_a_usual_specialty_is_never_broken_mid_word(self):
+        models.Category.objects.filter(pk=self.ws.category_id).update(name='Gastroenterology')
+        enc = self.encounter(insurance='commercial')
+        r.write_round(enc, codes=[r.row('45385', 'ready')])
+        text = flat(text_of(self.pdf(enc, 'draft', name='draft-specialty')[0]))
+        self.assertIn('Gastroenterology', text)
+        self.assertIn('Commercial or other', text)
+
     # --- safety ----------------------------------------------------------------------------------------------------------
 
     def test_markup_in_saved_text_is_printed_and_never_followed(self):
