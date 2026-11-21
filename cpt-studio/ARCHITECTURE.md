@@ -279,19 +279,23 @@ quotations, modifiers) passes `customer.shown`, the filter every customer surfac
 Sonnet, Haiku) is replaced only where it continues a vendor's name ("Claude 3 Opus"); alone it is an ordinary or a
 clinical word (the OPUS trial, a MED-EL SONNET 2 processor).
 
-Known limits of the physician PDF (recorded, not defects): text the coding review wrote is filtered as on the page, so
-what the shared filter cannot read is printed as on the page - a vendor name in look-alike letters (Cyrillic or Greek,
-or enclosed letters a report font draws), with its version joined to it ("Claude3.5": the denylist bounds a name by
-digits too), a family name alone ("Opus 4.5"), another company's product ("ChatGPT", "GPT4o"), and machinery words
-(a token count, a request id), which the customer scanner flags except inside a line's own quotation (the page serves it
-as a quote, and the scanner reads every quote as the document's words); a word the filter cannot tell from a vendor's
-name is replaced as on the page (the organ of Corti). The scanner reads the latest round's quotations as the document's
-words, so an earlier round's PDF quoting a passage the latest round no longer cites fails the scan (a false failure, for
-a person to read). A value too tall for one row (dozens of long modifiers, twenty reviewers with long names) flows as
-paragraphs, and its first heading can end a page apart from its first fact. A page of this release left open across a
-switch-back still offers the PDF and shows the earlier server's refusal (that server also offers TXT and CSV again); a
-page of the earlier release left open across the install still offers TXT and CSV, and the server refuses them with its
-sentence until the page is reloaded.
+Known limits of the physician PDF (recorded, not defects; refutation rounds 1-4, 2026-11-21): text the coding review
+wrote is filtered as on the page, so what the shared filter cannot read is printed as on the page - a vendor name in
+look-alike letters (Cyrillic or Greek, enclosed letters a report font draws, Hebrew points or a ligature inside it), with
+its version joined to it ("Claude3.5": the denylist bounds a name by digits too), a model family alone ("Opus 4.5"), in
+parentheses or split by an invisible character after its vendor name, other model tiers ("Gemini 2.5 Flash"), another
+company's product ("ChatGPT", "GPT4o"), and machinery words (a token count, a request id), which the customer scanner
+flags except inside a line's own quotation (the page serves it as a quote, and the scanner reads every quote as the
+document's words). A word the filter cannot tell from a vendor's name is replaced as on the page (the organ of Corti, a
+doctor named Claude), and a one- or two-digit number right after it is read as its version ("Dr. Claude 2 polyps" reads
+"Dr. The system polyps", as on main); a longer or dash-joined number is left (a CPT code, a date, a range). The scanner
+reads the latest round's quotations as the document's words, so an earlier round's PDF quoting a passage the latest
+round no longer cites fails the scan (a false failure, for a person to read), and a token the layout cuts mid-word is
+read as two. A value too tall for one row (dozens of long modifiers, twenty reviewers with long names) flows as
+paragraphs, and its first heading can end a page apart from its first fact; a code's evidence note can leave its last
+line at the top of the next page. A page of this release left open across a switch-back still offers the PDF and shows
+the earlier server's refusal (that server also offers TXT and CSV again); a page of the earlier release left open across
+the install still offers TXT and CSV, and the server refuses them with its sentence until the page is reloaded.
 
 ### 5.9 The operator console (`studio/operator.py`)
 

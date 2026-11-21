@@ -48,8 +48,10 @@ class RoundThreeCase(r.CustomerCase, TestCase):
             'Claude' + chr(0xA0) + 'Opus' + chr(0xA0) + '4.5 read the snare.': 'The system read the snare.',
             'Claude' + chr(0x2011) + '3.5 Sonnet agrees.': 'The system agrees.',
             'Claude-3.5 Sonnet read the snare.': 'The system read the snare.',
-            'Read by claude_3_5_sonnet_20241022.': 'Read by the system.',
-            'Claude Opus 4-5 agreed.': 'The system agreed.',
+            # versions are one- or two-digit numbers joined by dots or underscores (round 4): a dash-joined or longer
+            # number after a name is a code, a date or a range, left as written
+            'Read by claude_3_5_sonnet_20241022.': 'Read by the system_20241022.',
+            'Claude Opus 4-5 agreed.': 'The system-5 agreed.',
         }
         for text, expected in cases.items():
             with self.subTest(text=text):
@@ -101,16 +103,18 @@ class RoundThreeCase(r.CustomerCase, TestCase):
 
     # --- R3-1-6: a question that prints nothing ----------------------------------------------------------------------------
 
-    def test_a_question_of_invisible_text_does_not_hide_the_lines_awaiting_an_answer(self):
+    def test_a_question_of_invisible_text_is_counted_as_the_page_counts_it_and_said_to_be_unreadable(self):
+        # since round 4 (R4-2-3): the page offers the question (fable.result.blank_question keeps it), so the report counts
+        # it too, and says it has no readable text rather than printing an empty "Question:"; the lines awaiting an
+        # answer are finished by answering it, as the page says on each line
         enc = self.encounter()
         r.write_round(enc, codes=[r.row('45378', 'needs_answer', question='Was the cecum reached?'),
                                   r.row('45385', 'needs_answer', question='Was the polyp removed whole?')],
                       questions=[{'id': 'q1', 'text': chr(0x200B), 'codes': [], 'source': 'reader'}])
         text = flat(text_of(self.pdf(enc)))
-        self.assertIn('45378 (L1) needs your answer: Was the cecum reached?', text)
-        self.assertIn('45385 (L2) needs your answer: Was the polyp removed whole?', text)
+        self.assertIn('02 01 Pending', text)
+        self.assertIn('Question: no readable text', text)
         self.assertNotIn('Question: ·', text)
-        self.assertIn('02 02 Pending', text)
 
     # --- R3-2-1, R3-4-2: a space no font draws ----------------------------------------------------------------------------
 

@@ -2894,13 +2894,18 @@ function opsChecks(found) {
 }
 
 // What a downloaded report shows of itself: made (201), a .pdf, posted for the round shown, the same bytes when fetched
-// again, read by the walk's PDF reading, every page marked synthetic and not for billing with its status (DRAFT · REVIEW
-// REQUIRED, or APPROVED CODES), and every code it must name (the draft: every code; the approved report: the approved).
+// again, read by the walk's PDF reading, every page's running header and footer (the first lines pdf.js reads of a page,
+// since the report draws them before the body) marking it synthetic and not for billing with its status (DRAFT · REVIEW
+// REQUIRED, or APPROVED CODES - a heading in the body that holds the same words does not count), and every code it must
+// name (the draft: every code; the approved report: the approved).
 const REPORT_STATUS = { draft: 'DRAFT · REVIEW REQUIRED', approved: 'APPROVED CODES' };
+// the running block: the brand, CPT STUDIO, the status, the identity line, and the footer note with the page number
+const RUNNING_LINES = 5;
 
 function exportChecks(item, enc, label) {
   if (item.error) return [check(`export.${label}`, false, item.error)];
   const pages = Array.isArray(item.pages) ? item.pages : [];
+  const heads = pages.map(text => String(text).split('\n').slice(0, RUNNING_LINES).map(line => line.trim()));
   const asked = exportRequestProblems(item.body, enc, label);
   const out = [
     check(`export.${label}`, item.status === 201 && item.size > 0 && /\.pdf$/i.test(item.filename || item.suggested || ''),
@@ -2911,8 +2916,9 @@ function exportChecks(item, enc, label) {
       item.refetch ? `the second download answered ${item.refetch.status}, ${item.refetch.size} bytes, ${item.refetch.sha256 === item.sha256 ? 'the same bytes' : 'other bytes'}`
         : 'the report named no download_url to fetch again'),
     check(`export.${label}.read`, !item.read_error && pages.length > 0, item.read_error || `${pages.length} page(s) read`),
-    check(`export.${label}.synthetic`, pages.length > 0 && pages.every(text => text.includes('Synthetic data · Not for billing or claims')
-      && text.includes(REPORT_STATUS[label])), `every page is marked synthetic, not for billing, and ${REPORT_STATUS[label]}`),
+    check(`export.${label}.synthetic`, heads.length > 0
+      && heads.every(lines => lines.some(line => line.startsWith('Synthetic data · Not for billing or claims')) && lines.includes(REPORT_STATUS[label])),
+    `every page's running header and footer mark it synthetic, not for billing, and ${REPORT_STATUS[label]}`),
   ];
   const codes = label === 'approved' ? (enc.codes || []).filter(code => code.decision?.action === 'approve') : enc.codes || [];
   const absent = codes.filter(code => !(item.text || '').includes(String(code.code))).map(code => code.code);
@@ -3036,7 +3042,10 @@ async function verifyDocument(page, ctx, sessions, doc) {
         const made = await exportPdf(page, ctx, enc, kind, ctx.docDir);
         record.downloads.push({ ...made, text: undefined, pages: undefined });
         add(...exportChecks(made, enc, kind));
-        if (made.text) scanFile(made.text, ctx.scan, `${kind}.pdf`, ctx.hits.file);
+        // The report's wording is scanned by ops/scan_customer.py (scan_pdf), which reads it as the report prints it: a
+        // phrase a line break cuts in two, read joined, and only the printed quotations of the document set aside. The
+        // walk's line-by-line scan cannot (refutation round 4), so it scans the PDF it saved no further (record.downloads
+        // names the file).
       });
     }
     await step('undo', async () => {
@@ -3207,7 +3216,7 @@ module.exports = {
   canvasProblem, seenMeasures, seenProblem, requiredPages, findPassagesText, textNote, judgeQuote, quoteMarkChecks,
   readViewer, readPdfPage, canvasBlocks, seenGeometry, scrollViewerTo, fetchView, pageScale, readTextFrame, decodePng,
   pngBlocks, measureSeen, pagesToRead, readPdfPages, documentReading, redrawChecks, chooseQuotes,
-  servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportPdf, pdfPageLines, REPORT_STATUS,
+  servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportPdf, pdfPageLines, REPORT_STATUS, RUNNING_LINES,
   exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,
   evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
 };

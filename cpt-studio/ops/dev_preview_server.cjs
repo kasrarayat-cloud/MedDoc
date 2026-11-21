@@ -510,7 +510,7 @@ const FORMAT_REQUIRED = 'Choose a draft or an approved PDF report.';
 const REPORT_TYPES = { pdf: 'application/pdf' };
 
 function reportAnswer(doc, body) {
-  if (!['draft', 'approved'].includes(body.kind) || !Object.hasOwn(REPORT_TYPES, body.fmt)) return [400, { error: FORMAT_REQUIRED, details: {} }];
+  if (!['draft', 'approved'].includes(body.kind) || typeof body.fmt !== 'string' || !Object.hasOwn(REPORT_TYPES, body.fmt)) return [400, { error: FORMAT_REQUIRED, details: {} }];
   if (!latestFinished(doc, body.round)) return [409, { error: CHANGED, details: {} }];
   if (body.kind === 'approved' && doc.readiness?.approved !== true) {
     return [409, { error: 'The approved download is not available yet.', details: { blockers: doc.readiness?.blockers || [] } }];

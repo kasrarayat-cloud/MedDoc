@@ -361,7 +361,28 @@ def _of_document(printed: str, document: str) -> bool:
         return False
     if REPLACEMENT not in printed:
         return printed in document
-    return re.search('.?'.join(re.escape(part) for part in printed.split(REPLACEMENT)), document, re.DOTALL) is not None
+    # The literal pieces between runs of U+FFFD, a run of k standing for 0 to k characters. A run at either end can stand
+    # for nothing, so only the pieces from the first literal to the last are placed: by the set of document positions
+    # each placement can end at, in time linear in the document for each piece (a pattern of k optional wildcards
+    # backtracks exponentially on a run of undrawable characters, refutation round 4).
+    parts = re.split('(' + re.escape(REPLACEMENT) + '+)', printed)
+    literals, gaps = parts[0::2], [len(run) for run in parts[1::2]]
+    if literals[0] == '':
+        literals, gaps = literals[1:], gaps[1:]
+    if literals and literals[-1] == '':
+        literals, gaps = literals[:-1], gaps[:-1]
+    if not literals:
+        return True  # nothing but undrawn characters: no word of it can be read, so none can be scanned
+    ends, at = set(), document.find(literals[0])
+    while at >= 0:
+        ends.add(at + len(literals[0]))
+        at = document.find(literals[0], at + 1)
+    for gap, literal in zip(gaps, literals[1:]):
+        ends = {end + skip + len(literal) for end in ends for skip in range(gap + 1)
+                if document.startswith(literal, end + skip)}
+        if not ends:
+            return False
+    return bool(ends)
 
 
 def _running_count(pages: list) -> int:

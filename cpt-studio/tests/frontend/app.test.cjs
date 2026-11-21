@@ -3886,7 +3886,9 @@ test('the preview server answers downloads as the server does: by the round show
   }
   // as is any other format
   assert.equal(preview.FORMAT_REQUIRED, FORMAT_REQUIRED);
-  for (const fmt of ['csv', 'txt', 'docx', 'PDF', undefined, 'constructor']) {
+  // a format that is not a string - ['pdf'] reads as the key 'pdf' to a plain lookup - is refused too, as the server
+  // refuses it (refutation round 4, R4-1-4)
+  for (const fmt of ['csv', 'txt', 'docx', 'PDF', undefined, 'constructor', ['pdf'], { toString: () => 'pdf' }]) {
     assert.deepEqual(preview.reportAnswer(ready, { kind: 'draft', fmt, round: 1 }), [400, { error: FORMAT_REQUIRED, details: {} }], String(fmt));
   }
   assert.equal(preview.reportFile('f6100000-0000-4000-8000-000000000000'), null);

@@ -84,12 +84,15 @@ class ControlCharacterTests(r.CustomerCase, TestCase):
             with self.subTest(kind=kind):
                 raw = self.raw_report_text(enc, kind)
                 self.assertEqual({repr(char): raw.count(char) for char in CONTROLS + (NO_GLYPH,) if char in raw}, {})
+                # nor drawn as a box: every character of this input is printable or deleted, so no U+FFFD is printed
+                # (refutation round 4: pypdf reads an undeleted direction mark the fonts lack as U+FFFD, not NUL)
+                self.assertNotIn(chr(0xFFFD), raw)
                 text = ' '.join(raw.split())
                 self.assertIn('Line L1 · Modifiers: P T', text)
                 self.assertIn('Reason: Snare removal documented DETCELES TON. x y z', text)
                 self.assertIn('“cold snare removed” Page 1', text)
                 if kind == 'draft':
-                    self.assertIn('Second check: agrees. Agreed', text)
+                    self.assertIn('Second check: agrees. Agreed .iso', text)  # the marks gone, the words in order
 
 
 class DecidedContractTests(r.CustomerCase, TestCase):

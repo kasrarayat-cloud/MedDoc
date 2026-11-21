@@ -66,12 +66,25 @@ def service_day(value) -> str | None:
 
 
 def said(text):
-    """Text the coding review wrote, as the PDF prints it: cleaned of what is never printed (pdf.clean_text: controls
-    become spaces, invisible format characters go) and THEN through customer.shown(), so an invisible character inside a
-    vendor or model name cannot carry it past the name filter and be joined up again by the printing."""
+    """Text the coding review wrote, as the PDF prints it: through customer.shown() as written (an invisible character
+    between a name and its version or family is a gap there, so the run is replaced whole), then cleaned of what is
+    never printed (pdf.clean_text: controls become spaces, invisible format characters go) and through customer.shown()
+    again, so an invisible character inside a vendor or model name cannot carry it past the name filter and be joined
+    up again by the printing."""
     if not isinstance(text, str):
         return text
-    return customer.shown(pdf.clean_text(text))
+    return customer.shown(pdf.clean_text(customer.shown(text)))
+
+
+def present(text) -> bool:
+    """``text`` (the coding review's) prints something a reader can see: not nothing, and not only invisible or blank."""
+    return isinstance(text, str) and not pdf.blank(said(text))
+
+
+def _label(user) -> str:
+    """A member as the report names them; a display name that prints no ink is not a name (refutation round 4)."""
+    label = user.label()
+    return 'Unnamed member' if pdf.blank(label) else label
 
 
 def _plural(count: int, one: str, many: str) -> str:
@@ -100,7 +113,7 @@ def _decision_words(decision) -> str:
     if decision is None:
         return NO_DECISION
     word = DECISION_WORDS.get(decision.action, decision.action)
-    return f'{word} by {decision.reviewer.label()} · {when(decision.created_at)}'
+    return f'{word} by {_label(decision.reviewer)} · {when(decision.created_at)}'
 
 
 def _modifier_words(modifiers) -> str:
@@ -138,19 +151,19 @@ def _evidence(item, verified: bool, text_source: bool) -> tuple:
 
 def _note(item, kind) -> str | None:
     parts = []
-    if item['reason']:
+    if present(item['reason']):
         parts.append(f'Reason: {said(item["reason"])}')
     if kind == DRAFT:
         check = item['second_check']
         verdict = {True: 'agrees', False: 'disagrees'}.get(check['agrees'], 'no verdict')
-        parts.append(f'Second check: {verdict}.' + (f' {said(check["reason"])}' if check['reason'] else ''))
-        if item['question']:
+        parts.append(f'Second check: {verdict}.' + (f' {said(check["reason"])}' if present(check['reason']) else ''))
+        if present(item['question']):
             parts.append(f'Question: {said(item["question"])}')
     return ' '.join(parts) or None
 
 
 def _reviewers(decided) -> str | None:
-    labels = list(dict.fromkeys(decision.reviewer.label() for decision in decided))
+    labels = list(dict.fromkeys(_label(decision.reviewer) for decision in decided))
     return ', '.join(labels) if labels else None
 
 
@@ -171,7 +184,7 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
             details = [when(decision.created_at), f'Line {item["line"]} · {_modifier_words(item["modifiers"])}']
             if decision.reviewer_kind == models.User.AGENT:
                 details.append(AGENT_LINE)
-            row = pdf.CodeRow(code=item['code'], caption='Approved code', label=f'Approved by {decision.reviewer.label()}',
+            row = pdf.CodeRow(code=item['code'], caption='Approved code', label=f'Approved by {_label(decision.reviewer)}',
                               details=tuple(details), status='Approved')
         else:
             details = [f'Line {item["line"]} · {_modifier_words(item["modifiers"])}']
@@ -215,17 +228,20 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
         empty = 'No code of this coding review has a current approval.'
     else:
         undecided = [item for item in items if item['status'] in decisions.DECIDABLE and item['decided'] is None]
-        # a question that prints nothing (invisible text) is no question the doctor can read: as if not asked
-        questions = [question for question in customer.questions_json(round_) if not pdf.blank(said(question['text']))]
+        questions = customer.questions_json(round_)
         # What still needs the practice, one entry per open item, as the page offers it: every question of the round
         # (answering one makes a new coding review, whatever the decisions on its lines) and every decidable line
         # without a saved decision. A line awaiting an answer is finished by answering the round's questions (the page
         # says so on the line), so it is an entry of its own only when the round has no question to answer. The count
         # and the status are read from this list.
         unasked = [] if questions else [item for item in items if item['status'] == 'needs_answer']
-        open_entries = [f'Question: {said(question["text"])}' for question in questions]
+        # a question the page offers whose text prints nothing (invisible text) is still a question to answer, counted
+        # as the page counts it, and said to be unreadable rather than printed empty (refutation round 4)
+        open_entries = [f'Question: {said(question["text"])}' if present(question['text']) else
+                        f'Question{" about " + ", ".join(question["codes"]) if question["codes"] else ""}: no readable '
+                        'text' for question in questions]
         open_entries += [f'{item["code"]} ({item["line"]}) needs your answer'
-                         + (f': {said(item["question"])}' if item['question'] else '.') for item in unasked]
+                         + (f': {said(item["question"])}' if present(item['question']) else '.') for item in unasked]
         open_count = len(open_entries) + len(undecided)
         approved_count = sum(1 for d in decided if d.action == models.CodeDecision.APPROVE)
         rejected_count = sum(1 for d in decided if d.action == models.CodeDecision.REJECT)
@@ -239,7 +255,7 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
                          f'{codes}.')
         if lines:
             review_title, review_items = 'What still needs your decision', tuple(lines)
-        notes = tuple(said(note) for note in snap['notes'])
+        notes = tuple(said(note) for note in snap['notes'] if present(note))  # a note that prints nothing is none
         record = [pdf.LabelledValue('Reviewer', _reviewers(decided) or 'Not yet reviewed'),
                   pdf.LabelledValue('Approval record',
                                     f'{approved_count} approved · {rejected_count} rejected' if decided

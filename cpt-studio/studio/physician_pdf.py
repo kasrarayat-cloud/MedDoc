@@ -190,8 +190,10 @@ def _measure_invisible() -> tuple:
 
 
 def blank(value) -> bool:
-    """``value`` prints no ink: nothing, or only white space and characters the report's fonts draw with no outline."""
-    return all(ch.isspace() or ord(ch) in _DRAWN_BLANK for ch in clean_text(value))
+    """``value`` prints no ink: nothing, or only characters the report's fonts draw with no outline (a space; the blank
+    Braille cell) once printed - judged on what is printed (displayable), so a space mark a font draws with ink (U+1680)
+    is ink, and a space no font draws prints as a space."""
+    return all(ch == ' ' or ord(ch) in _DRAWN_BLANK for ch in displayable(clean_text(value)))
 
 
 # What never prints. Every control character is a separator in the stored text (a vertical tab, a form feed, the
@@ -687,10 +689,14 @@ def _notes_flow(report: PhysicianReport, s: dict) -> list:
     items = [Paragraph(markup(note), s['note_item'], bulletText='–') for note in report.notes]
     title = _p(markup((report.notes_title or 'Notes').upper(), BODY_SEMI), s['notes_title'])
     rule = HorizontalRule(space_before=0, space_after=6)
-    # The heading never ends a page alone: it starts only where it, its rule and the first two lines of the first note
-    # fit, and the note then flows on (a long first note does not move the whole section to a new page).
+    # The heading never ends a page alone: it starts only where it, its rule and the start of the first note fit, and the
+    # note then flows on (a long first note does not move the whole section to a new page). A note splits only with two
+    # lines on each side (no widow, no orphan), so a first note of three lines or fewer must fit whole, and a longer one
+    # needs two of its lines (refutation round 4).
+    first_height = items[0].wrap(CONTENT_WIDTH, FRAME_HEIGHT)[1]
+    start = first_height if first_height <= 3.5 * s['note_item'].leading else 2 * s['note_item'].leading
     room = (s['notes_title'].spaceBefore + title.wrap(CONTENT_WIDTH, FRAME_HEIGHT)[1] + s['notes_title'].spaceAfter
-            + rule.wrap(CONTENT_WIDTH, FRAME_HEIGHT)[1] + s['note_item'].spaceBefore + 2 * s['note_item'].leading)
+            + rule.wrap(CONTENT_WIDTH, FRAME_HEIGHT)[1] + s['note_item'].spaceBefore + start)
     return [CondPageBreak(room), title, rule, *items]
 
 
@@ -790,17 +796,18 @@ def _strings(value):
 
 def notices(report: PhysicianReport) -> tuple:
     """Review-scope rows the printing itself requires: characters the report fonts cannot draw, and right-to-left text
-    that is printed (in its stored order; a right-to-left letter no font draws prints as U+FFFD, so it is not one). The
-    document's page in CPT Studio shows both exactly as saved."""
+    that is printed (in its stored order; a right-to-left letter no font draws prints as U+FFFD, so it is not one).
+    CPT Studio's saved record keeps both exactly (a PDF of an earlier coding review stays listed, while the page shows
+    only the latest one, so the notes name the record, not the page)."""
     rows = []
     texts = [clean_text(text) for text in _strings(report)]
     printed = [displayable(text) for text in texts]
     if any(shown.count(REPLACEMENT) > text.count(REPLACEMENT) for shown, text in zip(printed, texts)):
-        rows.append(('Characters', 'Some cannot be drawn in this PDF and are shown as \ufffd; the document page in '
-                                   'CPT Studio shows every character as saved', True))
+        rows.append(('Characters', 'Some cannot be drawn in this PDF and are shown as \ufffd; CPT Studio\'s saved '
+                                   'record keeps every character', True))
     if any(unicodedata.bidirectional(ch) in RTL_CLASSES for text in printed for ch in text):
-        rows.append(('Right-to-left text', 'Shown in its stored order, left to right; the document page in CPT Studio '
-                                           'shows it as saved', True))
+        rows.append(('Right-to-left text', 'Shown in its stored order, left to right; CPT Studio\'s saved record keeps it '
+                                           'as written', True))
     return tuple(rows)
 
 

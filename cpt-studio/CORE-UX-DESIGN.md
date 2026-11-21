@@ -422,7 +422,8 @@ contract, every quote chosen and judged by the walk's own search, an answer when
 dialog (the History naming the line with its code), both reports downloaded as PDFs, read by the walk's own PDF reading
 (every page marked synthetic with its status, every code named) and fetched twice to equal bytes (each request naming
 the round shown), the approval undone through the row's Undo (naming the decision shown), the denylist scan over every
-JSON body, the DOM and the downloads, and every `/ops/` path refused to the customer.
+JSON body and the DOM (the PDF reports' wording is scanned by `ops/scan_customer.py`, which reads a phrase a line
+break cuts as one and sets aside only the printed quotations of the document), and every `/ops/` path refused to the customer.
 
 The walk never takes the viewer's word for a quote (DECISIONS D368, rounds 3 and 5). It reads every PDF it judges
 itself, in Node, with the pinned library the page draws with (`studio/static/studio/lib/pdfjs-6.5.438`, its legacy build,

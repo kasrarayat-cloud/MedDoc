@@ -1981,6 +1981,12 @@ test('an export is a .pdf read page by page, every page marked synthetic with it
   const mixed = [APPROVED_PAGES[0], APPROVED_PAGES[1].replace('APPROVED CODES', 'DRAFT · REVIEW REQUIRED')];
   assert.deepEqual(failed(walk.exportChecks({ ...item, pages: mixed, text: mixed.join('\n') }, enc, 'approved')),
     ['export.approved.synthetic']);
+  // the status is read in each page's running block, never in its body: page 1's codes heading 'APPROVED CODES' does not
+  // stand in for a running header that says otherwise (refutation round 4, R4-1-3)
+  const firstWrong = [APPROVED_PAGES[0].replace('APPROVED CODES', 'DRAFT · REVIEW REQUIRED'), APPROVED_PAGES[1]];
+  assert.ok(firstWrong[0].includes('APPROVED CODES   Only codes with a current saved approval'));
+  assert.deepEqual(failed(walk.exportChecks({ ...item, pages: firstWrong, text: firstWrong.join('\n') }, enc, 'approved')),
+    ['export.approved.synthetic']);
   // the draft names every code
   const short = DRAFT_PAGES.map(text => text.split('\n').filter(line => !line.includes('00731')).join('\n'));
   assert.deepEqual(failed(walk.exportChecks(downloaded('draft', short), enc, 'draft')), ['export.draft.codes']);
