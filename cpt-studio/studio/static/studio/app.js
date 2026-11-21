@@ -2401,13 +2401,13 @@ function mountViewer(doc) {
   if (!element || !view || viewerKind(doc?.document) !== 'pdf') return;
   // thread: the viewer's own worker; worker: the library's handle on it; download: the download's abort; watchdog: the
   // waits on the library (libraryWatchdog); quoteScroll: the quote's page while the scroll to it is under way; inputs: the
-  // listeners that see the member scroll the viewer
+  // listeners that see the member scroll the viewer; queue and busy: the pages asked to be drawn, and the one drawing
   const viewer = {
     element, view, name: documentName(record(doc?.document)), mode: 'loading', library: null, thread: null, worker: null, task: null,
     download: null, watchdog: null, pages: [], texts: new Map(), prepared: new Map(), mark: null, pending: null, chosen: null,
     markSerial: 0, reveal: 0, quoteScroll: null, frame: null, framePage: null, fallback: '', zoom: ZOOM_FIT, watch: null,
     resize: null, onScroll: null, inputs: [], unwatchRatio: null, width: 0, ratio: 1, stallTimer: 0, resizeTimer: 0,
-    settleTimer: 0, labelFrame: 0,
+    settleTimer: 0, labelFrame: 0, queue: [], busy: null,
   };
   state.viewer = viewer;
   openPdf(viewer);
@@ -2686,16 +2686,44 @@ function preparedPage(viewer, number, content) {
   return viewer.prepared.get(number);
 }
 
+// Asks for one page to be drawn at the current size (`drawPage`). The pages are drawn one at a time, in the order asked,
+// the page a quote is waiting to be shown on first (viewer.reveal): the library's worker decodes one page's images at a
+// time and answers as each is done, so a busy scan keeps answering the watchdog (several pages asked for at once have
+// their images decoded as one batch before any is sent), and a page that leaves the view before its turn is never
+// decoded at all.
+function drawPage(viewer, page) {
+  const key = `${page.viewport.scale} ${viewer.ratio}`;
+  if (page.drawn === key || page.drawing === key) return;
+  cancelPage(page);
+  page.drawing = key;
+  if (!Array.isArray(viewer.queue)) viewer.queue = [];
+  if (!viewer.queue.includes(page)) viewer.queue.push(page);
+  drawNext(viewer);
+}
+
+// Starts the next page asked for, once the page being drawn is done (or given up).
+function drawNext(viewer) {
+  if (viewer.busy || state.viewer !== viewer || viewer.mode !== 'pdf' || !Array.isArray(viewer.queue)) return;
+  while (viewer.queue.length) {
+    const first = viewer.queue.findIndex(item => item.number === viewer.reveal);
+    const [page] = viewer.queue.splice(Math.max(0, first), 1);
+    if (!page.drawing) continue;  // released while it waited
+    viewer.busy = page;
+    renderPage(viewer, page).catch(() => {}).finally(() => {
+      if (viewer.busy === page) viewer.busy = null;
+      drawNext(viewer);
+    });
+    return;
+  }
+}
+
 // Draws one page: its canvas (annotation appearances drawn on it), then its text layer from the same text content the
 // quotes are located in (an overprint copy's span says so, data-overprint), then the marks of the chosen quote on that
 // page. A page redrawn keeps its old drawing until the new one is ready. Each wait is the watchdog's (watched): one given
 // up because the library has not answered gives the frame, as the library not working; one that fails, as a document it
 // cannot draw.
-async function drawPage(viewer, page) {
+async function renderPage(viewer, page) {
   const key = `${page.viewport.scale} ${viewer.ratio}`;
-  if (page.drawn === key || page.drawing === key) return;
-  cancelPage(page);
-  page.drawing = key;
   const { serial, viewport } = page;
   const { library } = viewer;
   const live = () => state.viewer === viewer && viewer.mode === 'pdf' && page.serial === serial;
@@ -2988,7 +3016,7 @@ function stopPdf(viewer) {
   });
   Object.assign(viewer, { watch: null, resize: null, onScroll: null, inputs: [], unwatchRatio: null, task: null, worker: null,
     thread: null, download: null, watchdog: null, pages: [], texts: new Map(), prepared: new Map(), labelFrame: 0, stallTimer: 0,
-    settleTimer: 0, quoteScroll: null });
+    settleTimer: 0, quoteScroll: null, queue: [], busy: null });
 }
 
 // --- a passage of a text document, marked inside its frame (the text rule: findPassages) ---------------------------

@@ -1803,6 +1803,53 @@ test('A3: the watchdog gives up waits on the library only when it has not answer
   }
 });
 
+test('A3: the pages are drawn one at a time, the quote\'s page first, and a page that leaves the view before its turn is never drawn', async () => {
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  try {
+    await withPage({ elements: { documentViewer: element } }, async () => {
+      Object.assign(app.state, { doc: word, route: null });
+      const started = [];
+      const finish = new Map();
+      const viewer = pdfViewer(word, element, [['a'], ['b'], ['c'], ['d']], [], { ratio: 1, library: { AnnotationMode: { ENABLE: 2 },
+        TextLayer: class { constructor() { this.textDivs = []; this.textContentItemsStr = []; } render() { return Promise.resolve(); } cancel() {} } } });
+      for (const page of viewer.pages) {
+        page.viewport = { width: 612, height: 792, scale: 1 };
+        page.proxy = { getTextContent: async () => ({ items: [] }), cleanup() {}, render: () => {
+          started.push(page.number);
+          let settle;
+          const promise = new Promise((resolve, reject) => { settle = { resolve, reject }; });
+          finish.set(page.number, settle);
+          return { promise, cancel: () => settle.reject(Object.assign(new Error('cancelled'), { name: 'RenderingCancelledException' })) };
+        } };
+      }
+      app.state.viewer = viewer;
+      for (const page of viewer.pages) app.drawPage(viewer, page);
+      assert.deepEqual(started, [1], 'one page at a time');
+      // the quote is waiting for page 4; page 2 leaves the view before its turn
+      viewer.reveal = 4;
+      app.releasePage(viewer.pages[1]);
+      finish.get(1).resolve();
+      await settle(() => started.length === 2);
+      assert.deepEqual(started, [1, 4], 'the quote\'s page next');
+      assert.equal(viewer.pages[0].drawn, '1 1', 'page 1 drawn');
+      finish.get(4).resolve();
+      await settle(() => started.length === 3);
+      assert.deepEqual(started, [1, 4, 3], 'then the others still asked for, in order; page 2 never');
+      // a page released while it is drawn lets the next one start at once
+      app.releasePage(viewer.pages[2]);
+      await settle(() => viewer.busy === null);
+      assert.equal(viewer.busy, null);
+      assert.deepEqual(viewer.queue, []);
+      assert.equal(viewer.mode, 'pdf', 'nothing given up is a failure');
+      app.closeViewer();
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
 test('A5: the viewer downloads the document itself - a failed download is said so, a stalled one too, a refused one is the document\'s, and closing stops it', async t => {
   const word = fixture('encounter-word.json');
   const failing = [['a 503', () => Promise.resolve(viewResponse({ status: 503, chunks: [] }))], ['a 502', () => Promise.resolve(viewResponse({ status: 502, chunks: [] }))],
