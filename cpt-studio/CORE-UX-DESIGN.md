@@ -262,23 +262,69 @@ dialog (the History naming the line with its code), both exports downloaded twic
 the round shown), the approval undone through the row's Undo (naming the decision shown), the denylist scan over every
 JSON body, the DOM and the downloads, and every `/ops/` path refused to the customer.
 
-The walk never takes the viewer's word for a quote (DECISIONS D368, round 3). For each quote chosen in a drawn PDF it
-reads every page it must search from the viewer's own text layer - the items in order, a line break where the layer has
-one, an item the viewer flags as an overprint copy (`data-overprint="1"`) left out only when its text equals one of the 8
-items before it and its box lies within max(1.5 CSS px, 0.2 of its height) of that item's (any other flag fails, so no
-text can be hidden by flagging it) - and runs the rule of section 8 itself. It then requires: the viewer marked exactly
-its own occurrences (count, place and case, so a case-blind match beside an exact one, a dropped occurrence or a
-"could not be found" over words that are there all fail); the viewer's count and pages agree; the note is the rule's
-sentence, character for character ("The exact words were not found in the searchable text of page N, so nothing is
-marked. Page N is shown." only where its own search finds nothing, "Page N has no text the viewer can search (it may be
-a scanned image), so nothing is marked. Page N is shown." only where that page has no searchable character); nothing is
-marked on another page; no run of an occurrence's marked text begins or ends inside a character; and every marked page
-is drawn - its canvas painted and its marked words drawn under the marks, read with `getImageData` in the page (the
-share of drawn pixels under the marks was 0.350 to 0.461 on the fixtures and gi-02, and at least 0.05 is required). In
-the browser's own viewer it requires the reason sentence the viewer gives and " The quote is on page N.", and a new frame
-whenever the quote's page differs from the frame's. A text document is judged by the walk's own copy of its rule
-(`findPassages`). Counted; and where the PDF viewer drew the document, at least one of its quotes must be marked, since
-the walk's documents quote their own words.
+The walk never takes the viewer's word for a quote (DECISIONS D368, rounds 3 and 5). It reads every PDF it judges
+itself, in Node, with the pinned library the page draws with (`studio/static/studio/lib/pdfjs-6.5.438`, its legacy build,
+with the page's options: no eval, no XFA, no WebAssembly; in Node the library always runs its worker as its stand-in in
+the walk's own process): the bytes it uploaded, or - for a Word file, whose view is the PDF it was converted to, and for
+an encounter it did not upload - the view address, fetched in the page with its own signed-in session (a GET of the same
+origin). From that reading (the page count, each page's box, rotation and user unit, and each page's text items exactly
+as `getTextContent()` gives them to the page; equal, item for item, to what the library reads in the page, on every
+fixture) it makes its own text of every page - R1's overprint copies left out, format characters dropped, a line break
+after every item marked `hasEOL` - and runs the rule of section 8 itself, R2 with R2a, R2b and R2c. Nothing of its text
+comes from the viewer's text layer.
+
+It then holds the viewer to its own reading:
+- the viewer's pages (`.pdf-page`) are the document's page count;
+- each drawn page's text layer is the document's text: its spans, in order, are the items the library's text layer puts
+  in the page (one span per item whose string is not '', a `<br>` after each item marked `hasEOL`), so a layer read from
+  another page, or with a span dropped or changed, fails;
+- the overprint flags (`data-overprint="1"`) are exactly the walk's own R1 copies, both ways: a flag on a span that is not
+  a copy (which would hide its words) and a copy without its flag (whose words would count twice) both fail;
+- the marks are exactly its own occurrences (count, place and case, so a case-blind match beside an exact one, a dropped
+  occurrence or a "not found" over words that are there all fail), its count and pages agree, and the note is the rule's
+  sentence, character for character; nothing is marked on another page or inside a character;
+- every marked span lies where its item is drawn: computed from the item's transform at the viewer's scale (the page
+  box's CSS width over the page's width at scale 1) with the page's rotation, box and user unit from the walk's own
+  reading, its centre lies along the item's run (within 0.5 of the font's height of its origin and its origin plus its
+  width) and within 0.25 of the height of where the library's text layer puts it across the run (the origin less the
+  font's ascent, measured as the text layer measures it, plus half the span's height). Measured in Chromium on every
+  fixture of round 5 (upright, turned 90, 180 and 270, turned text at 90 and 45 degrees, a CropBox with its own origin,
+  /UserUnit 2, Times and Courier, faint scans): 0 outside the run, -0.09 to +0.05 of the height across; the text layer
+  moved 8 pt or 22 px down, a line up or scaled 6% larger lies 0.26 to 2.3 heights away.
+
+Every page a quote requires drawn (a page with a mark or one of the walk's occurrences, or the page shown for a quote not
+found) must be painted (its canvas opaque), and is checked as the member sees it (B5): screenshots of the page's box (the
+viewer scrolled over it as needed, its scroll put back) are compared with its canvas pixels, both reduced to 4 x 4 CSS px
+blocks, outside the marks. Over the blocks where the canvas draws no ink the screen may differ by at most 2 luminance
+levels on average (measured 0 on drawn vector pages and 0.03 on scans; a page shown through an ancestor at opacity 0.03,
+or a scan whose paper the screen turns white, 0.8 to 16.7); over the blocks where it draws ink (8 levels darker than its
+paper or more), where there are four or more, the screen must show at least 0.6 of that ink (measured 1.000 to 1.001; the
+canvas at opacity 0.04 or 0.02, screened, lightened, filtered to opacity 0, under an opaque text layer or an ancestor at
+opacity 0.03 shows 0 to 0.36). A page whose own reading has text must show ink - at least 0.0002 of its canvas's pixels
+(a white canvas shows none) - and a marked page ink under its marks, at least 0.05 of the pixels there (B6: measured 0.26
+to 0.47 on every fixture and on faint scans, ink 190 on paper 240 at 150, 200 and 300 dpi, serif and sans; a mark over
+blank paper shows 0). A pixel is ink when its luminance is at most the paper's (the canvas's most common luminance) less
+max(8, 0.35 x (the paper less the page's 2nd-percentile luminance)): darker than the paper by a share of the page's own
+contrast, so faint scanned ink counts and a clean scan's noise does not.
+
+After every quote is chosen, the last one the walk judged marked is chosen again where another is now marked, and judged
+again on its page drawn again at the new scale after Zoom in (`#viewerZoom [data-zoom="in"]`) and after Fit width
+(`[data-zoom="fit"]`): marks, alignment, drawn and seen, as above. In the browser's own viewer it requires the reason
+sentence the viewer gives - 'browser', 'library', 'document', 'slow' or 'download' ("The document could not be downloaded
+for marking, so nothing is marked.") - and " The quote is on page N.", and a new frame whenever the quote's page differs
+from the frame's. A text document is judged by the walk's own copy of its rule (`findPassages`). Counted; and where the
+PDF viewer drew the document, at least one of its quotes must be marked, since the walk's documents quote their own
+words.
+
+A caller with the document's bytes passes them: `chooseQuotes(page, enc, { bytes })`; without them the walk fetches the
+view address in the page. `judgeQuote(quote, reading)` and `quoteMarkChecks(chosen)` need nothing more than what
+`chooseQuotes` returns (each reading carries the walk's own reading of the document, `reading.document`, and the redraws
+ride on the array as `chosen.redraws`).
+
+Known limits of the walk: a page whose only ink lies under its marks is seen through its paper only; a page whose text is
+all invisible (drawn in render mode 3 over nothing) has text and no ink, and is failed (on the safe side); a span of a
+vertical font is not placed, and is counted out of the alignment check; the screenshot comparison covers the parts of
+the page the viewer can scroll into view.
 
 ## 10. Read-bind rules; 11. Read-hold registers
 

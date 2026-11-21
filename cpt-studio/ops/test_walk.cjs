@@ -850,6 +850,13 @@ test('B4: the viewer\'s page count, each drawn page\'s text layer and its overpr
     assert.deepEqual([judged.outcome, judged.pages], ['unresolved', 1]);
     assert.match(judged.problems.join(), new RegExp(`the viewer shows ${count} page\\(s\\); the document has 2`));
   }
+  // and the walk's search, its pages and its notes go by its own count (B3): a viewer one page short that says the
+  // quote's page is missing is told the words are on that page
+  const second = { ...quote, text: 'A second page of the fictional report.', page: 2 };
+  const short = walk.judgeQuote(second, pdfReading(document, [drawn(1, tokens)], { pageCount: 1, status: 'missing_page', pages: [], count: 0,
+    note: 'This passage names page 2, but the document has 1 page. Nothing is marked.' }));
+  assert.match(short.problems.join(), /the viewer says missing_page, the walk's own search finds 1/);
+  assert.match(short.problems.join(), /the note does not say what was done, as written/);
   // the text layer: each span the next item with text, in order - read from the next page, a span dropped, one changed
   const layer = edit => walk.judgeQuote(quote, pdfReading(document, [drawn(1, edit(structuredClone(tokens)), right), pages[1]]));
   for (const [what, edit] of [['the next page\'s text', () => layerOf(document, 2)], ['a span dropped', list => list.slice(1)],

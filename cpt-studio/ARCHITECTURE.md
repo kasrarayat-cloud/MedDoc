@@ -302,21 +302,28 @@ display only: it reads no meaning and never holds or changes a code.
   walk's own tests (`ops/test_walk.cjs`) and a dependency audit. CI installs no Playwright, so it runs none of the
   browser tests: the walk's browser subtests (every quote of the dev preview's synthetic documents chosen in Chromium and
   judged, the fallback frame, the review dialog) report as skipped there, and the PDF drawing, the text layer and the
-  library's worker are exercised in CI only through `tests/frontend/app.test.cjs`'s stand-ins. The release proof runs
-  the browser tests locally, where Playwright is installed (`CPT_VERIFY_PLAYWRIGHT`), and records the counts.
+  library's worker are exercised in CI only through `tests/frontend/app.test.cjs`'s stand-ins; the walk's own reading of
+  PDFs with the library in Node, and its judge over that reading, run in CI. The release proof runs the browser tests
+  locally, where Playwright is installed (`CPT_VERIFY_PLAYWRIGHT`), and records the counts.
 - After an install, `ops/walk.cjs` drives the real page with a synthetic document: upload, poll, the DOM and JSON
   contract, every quote chosen and judged by the walk's own search (below), an answer, an approval through the dialog,
   both exports re-downloaded byte for byte, the denylist scan, a 390 px viewport, and every `/ops/` path refused to the
   customer.
-- The walk judges the viewer instead of taking its word (DECISIONS D368, round 3): it reads the text of the pages it
-  searches from the viewer's own text layer (an overprint copy left out only where its geometry bears out the viewer's
-  `data-overprint` flag; a flag it does not bear out fails), runs the matching rule itself (CORE-UX-DESIGN.md section 8:
-  white space and format characters dropped, NFKC, whole characters between word edges, exact case first, the quote's
-  page and the next, never another) and holds the viewer to it: the occurrences marked - count, place and case - its
-  count, pages and note character for character, a "not found" only where its own search finds none (and "no text the
-  viewer can search" only on a page with no searchable character), no mark on another page, no marked run beginning or
-  ending inside a character, and every marked page drawn (the canvas painted, and its marked words drawn under the
-  marks, read with `getImageData` in the page). The page's text stays out of the evidence, which keeps counts.
+- The walk judges the viewer instead of taking its word (DECISIONS D368, rounds 3 and 5). It reads every PDF it judges
+  itself, in Node, with the pinned library the page draws with (its own upload's bytes, else the view address fetched in
+  the page with its own session), and runs the matching rule on that reading (CORE-UX-DESIGN.md section 8: R1 overprint
+  copies, R2 word edges with R2a numbers, R2b separate drawings and R2c Han and hiragana, R3 format characters, NFKC,
+  white space dropped, whole characters, exact case first, the quote's page and the next, never another): it runs R1
+  itself, so a viewer that flags no copy, or flags one the rule does not make, fails (the round-4 verifier's gap 2), and
+  the same words at another size are no copy on either side (its gap 1). It holds the viewer to that reading: the page
+  count, each drawn page's text layer span for span, the overprint flags both ways, the occurrences marked - count, place
+  and case - each marked span where its item is drawn (from the item's transform and the page's viewport), the count,
+  pages and note character for character, a "not found" only where its own search finds none, no mark on another page
+  or inside a character; every page it requires drawn is painted and seen as drawn (screenshots of the page against its
+  canvas, block by block outside the marks), shows ink where its reading has text and ink under its marks (a pixel darker
+  than the paper by a share of the page's own contrast, so faint scanned ink counts); and the last quote marked is judged
+  again after Zoom in and Fit width. The tolerances are measured and stated in CORE-UX-DESIGN.md section 9. The page's
+  text stays out of the evidence, which keeps counts.
 
 ## 10. What was removed
 
