@@ -98,8 +98,10 @@ Left, the document:
   the zoom or the screen's pixel ratio changes, each with its canvas and a transparent, selectable text layer
   (`.pdf-text`; an overprint copy's span is `span[data-overprint="1"]`). The toolbar holds `#viewerPage` ("Page N of M")
   and, once the pages are drawn, the zoom `#viewerZoom` (`button[data-zoom=out|in|fit]`, "Zoom out", "Zoom in", "Fit
-  width", and the level `#zoomLevel`, "100%"). Where the library cannot run or cannot draw the document, the browser's
-  own viewer is framed in the region instead (`[data-mode=frame]`, `data-fallback` saying why). For a text it is an
+  width", and the level `#zoomLevel`, "100%"), then the file name (`.viewer-name`, its full text also its `title`): at
+  least 12 characters wide (all of it where it is shorter), and where the toolbar cannot hold it beside the page and the
+  zoom it takes a row of its own. Where the library cannot run or cannot draw the document, the browser's own viewer is
+  framed in the region instead (`[data-mode=frame]`, `data-fallback` saying why). For a text it is an
   iframe of the text. Under it, `#viewerMark` (`role=status`, polite) says what choosing a quote marked; under that, the
   note that a PDF is a Word document's converted PDF; then `#downloadOriginal` ("Download original") for an upload.
 - `#quotesPanel` ("Quoted passages") - every quote of every line as `button.quote[data-code][data-line][data-page]`;
@@ -139,24 +141,46 @@ The one statement of the rule; the code is `locateQuote` and `pageText` (PDF) an
 `studio/static/studio/app.js`, and the docs elsewhere point here. The walk's own judge (section 9) states the same rule
 apart from the page script.
 
-- **A page's text** is its text items as the PDF library reads them, joined in order, with three steps: an item drawn a
-  second time over itself to look bold is an overprint copy and is left out (its string, after NFKC, is the string of one
-  of the eight items before it, holds a character that is not white space, and its origin lies within max(1, 0.2 x its
-  font height) PDF units of that item's origin); a line break follows every item the library ends a line with
-  (`hasEOL`); and Unicode format characters (`\p{Cf}`) are dropped, as the library already drops them. An overprint copy
-  is never marked, and its span in the text layer says so (`data-overprint="1"`).
+- **A page's text** is its text items as the PDF library reads them, joined in order, with three steps: an item drawn
+  again over an earlier one to look bold is an overprint copy and is left out (R1: its string, after NFKC, holds a
+  character that is not white space and is the string of an earlier item of the page - any earlier item; the two items'
+  font heights, `hypot(transform[2], transform[3])`, agree within 1%; and its origin lies within max(1, 0.2 x its font
+  height) PDF units of that item's origin, in a straight line); a line break follows every item the library ends a line
+  with (`hasEOL`); and Unicode format characters (`\p{Cf}`) are dropped, as the library already drops them. An overprint
+  copy is never marked, and its span in the text layer says so (`data-overprint="1"`). Finding the copies costs time in
+  proportion to the page's items (a page of 20,000 items is prepared in about 0.2 seconds).
 - **A quote is located by its own characters only** in that text: white space is ignored entirely, format characters are
   dropped and Unicode NFKC applies, on both sides, and a match is exact-case first, case-blind only where there is no
   exact-case occurrence, and always of whole characters (`Intl.Segmenter` grapheme clusters, joined again wherever NFKC
   combines two of them, so that NFKC of the page's text is exactly its characters' NFKC). No fuzzy or nearest match, no
   word list.
-- **Word edges.** Where the quote's first character is a letter or a digit (`\p{L}`, `\p{N}`), the page's character just
-  before a match must not be a letter, a digit or a combining mark (`\p{L}`, `\p{N}`, `\p{M}`), and the same holds for
-  the quote's last character and the character just after the match; the start and the end of a page are edges. So
-  "pain" is not counted inside "painless", nor "polyp" inside "polypectomy". The edges are read in the page's text above
-  (copies left out, line breaks in); white space inside the quote stays ignored, so a quote whose words the page runs
-  together into one whole word ("not able" for "notable") is still found. A place turned away is passed over by one
-  character only, so a word right after it is still found.
+- **Word edges.** At each end of a match a word edge is asked for, in this order, read in the page's text above (copies
+  left out, line breaks in) as the page writes it, not after NFKC:
+  1. *Separate drawings* (R2b). Where the match's end lies between the last character of one item and the first
+     character of the next item that gives a character, with nothing between them, that end is an edge - unless the next
+     item visibly continues the first: both have a finite transform and a width above 0, their font heights agree within
+     5%, and the next one's origin lies at the first one's end (along the first one's text direction within 0.25 x its
+     font height of its width, across it within 0.1 x its height; the library gives the width as the advance along the
+     text, rotated or not). So a footnote marker raised or smaller and glued to a word, the jump back of fake bold and an
+     overstrike glued after a line's end are edges, while a word drawn in two fonts ("pain" then a bold "less") stays one
+     word. An item with no such geometry meets an edge on each side.
+  2. *Letters and digits* (R2, R2c). Otherwise, where the quote's character at that end is a letter or a digit
+     (`\p{L}`, `\p{N}`), the page's code point beside the match must not be a letter, a digit or a combining mark
+     (`\p{L}`, `\p{N}`, `\p{M}`); the start and the end of a page are edges. A Han ideograph (`\p{Ideographic}`) or a
+     hiragana character is a word of its own, as Unicode's default word boundaries (UAX #29) have it: it never joins a
+     word on the page and never asks for an edge in the quote; katakana stays a word part. So "pain" is not counted inside
+     "painless", nor "polyp" inside "polypectomy", while "糖尿病" is found in running Chinese text.
+  3. *Numbers* (R2a). Then a number's own separator keeps its digits in one word (UAX #29 WB11, WB12): the 21 code points
+     Unicode 16.0 calls MidNum, MidNumLet or Single_Quote (U+0027 U+002C U+002E U+003B U+037E U+0589 U+060C U+060D U+066C
+     U+07F8 U+2018 U+2019 U+2024 U+2044 U+FE50 U+FE52 U+FE54 U+FF07 U+FF0C U+FF0E U+FF1B) between two digits (`\p{Nd}`). A
+     match is turned away where the quote begins with a digit and the page has a separator and a digit before it, where
+     the quote begins with a separator and a digit and the page has a digit before it, and the same at the end. So "1 cm"
+     is not counted inside "2.1 cm", "500 mL" inside "1,500 mL", "Hemoglobin 12" inside "12.5", nor "2." inside "2.5 mg",
+     while the list number "1." is found and "1990" in "1990's". The quote's characters are asked as folded (NFKC), the
+     page's as written; reading stops at an edge of step 1.
+  White space inside the quote stays ignored, so a quote whose words the page runs together into one whole word ("not
+  able" for "notable") is still found. A place turned away is passed over by one character only, so a word right after
+  it is still found.
 - **Pages.** It is looked for on the quote's page. Only where it is not there, on that page and the next joined, keeping
   only a passage that starts on the quote's page and runs onto the next (the marked part on each page is shown; the edges
   are read on each page). Nothing is ever marked on another page; a quote found only on another page is not marked. A
@@ -178,8 +202,15 @@ apart from the page script.
   scanned image), so nothing is marked."). Never a partial match.
 - The mark stays until another quote is chosen or the document changes (a newer coding review clears it with the
   passage chosen); it is painted again whenever its page is drawn again (a new width or zoom, scrolled back into view),
-  and a read of the document that only changes the codes never reloads the viewer. Scrolling to it respects
-  `prefers-reduced-motion`.
+  and a read of the document that only changes the codes never reloads the viewer. When another quote is chosen, what was
+  shown of the one before goes at once, before anything is waited on - its marks on every drawn page, the viewer's mark
+  state and the note - and nothing of it is painted on a page drawn while the new quote's pages are read; a quote whose
+  pages are already read is shown in the same moment. Scrolling to it respects `prefers-reduced-motion`; where the pages
+  are wider than the viewer (a zoom above fit width), the first mark is brought into view across too (by the least
+  distance that shows all of it with a 12 px gap, or with its start 12 px from the viewer's start where it is wider than
+  the viewer). A zoom, a new width or a new pixel ratio while the view is still moving to a quote, or before its page is
+  drawn, keeps the quote: the view is sent to it again. The member's own scrolling (a wheel, a touch, a scroll key, a
+  pointer on the viewer) ends that, so nothing moves the view later unasked.
 - **Zoom.** "Zoom out", "Zoom in" and "Fit width" step through 75%, 100% (the page fitted to the viewer's width), 125%,
   150%, 200% and 300%; a page wider than the viewer scrolls across inside it, the page at the top of the view stays at
   the top, and the text layer and the marks follow at every step. A new width keeps the zoom (relative to the new fitted
@@ -189,16 +220,30 @@ apart from the page script.
   browser's viewer opens the page only as its frame loads); the same page, or no page, keeps the frame. Nothing is
   marked, and the note says why, then the quote's page, never what the frame shows: "Marking needs a newer browser. The
   quote is on page N." where this browser lacks what marking needs (`pdfCapable`); "The marking tool did not work here,
-  so nothing is marked. The quote is on page N." where the library or its worker does not load, or has not loaded within
-  20 seconds, or, once the document has opened, a page's drawing or text has not settled within 20 seconds; "This
-  document cannot be drawn here, so nothing is marked. The quote is on page N." where the library refuses the document,
-  finds no page in it, or fails on a page's drawing or text; "The document took too long to load here, so nothing is
-  marked. The quote is on page N." where the download stops moving for 20 seconds before the document opens (that timer
-  stops once it has opened). With no page, the reason sentence alone. The viewer keeps the reason on `#documentViewer`
-  (`data-fallback`: `browser`, `library`, `document` or `slow`), and the note names the page of the quote being chosen.
-  The time limits count only the time the page is visible (a hidden tab draws nothing). A library that failed or timed
-  out is tried again for the next document opened, at fresh addresses (`?attempt=2`, `3`, ...: the browser remembers a
-  module that failed to load, by its address, for the life of the page); the document that failed stays framed.
+  so nothing is marked. The quote is on page N." where the library or its worker does not load or start, or has not
+  within 20 seconds, or its worker fails once started, or, once the document has opened, the library has not answered
+  for 20 seconds while the viewer waits on it; "This document cannot be drawn here, so nothing is marked. The quote is on
+  page N." where the library refuses the document, finds no page in it, or fails on a page's drawing or text; "The
+  document took too long to load here, so nothing is marked. The quote is on page N." where the download stops moving
+  for 20 seconds before the document opens (that timer stops once it has opened); "The document could not be downloaded
+  for marking, so nothing is marked. The quote is on page N." where the download fails (an answer that is not 2xx, a
+  fetch that fails, a body that breaks off). With no page, the reason sentence alone. The viewer keeps the reason on
+  `#documentViewer` (`data-fallback`: `browser`, `library`, `document`, `slow` or `download`), and the note names the
+  page of the quote being chosen. The time limits count only the time the page is visible (a hidden tab draws nothing).
+  A library that failed or timed out, or whose worker failed, is tried again for the next document opened, at fresh
+  addresses (`?attempt=2`, `3`, ..., for the module and its worker: the browser remembers a module that failed to load, by
+  its address, for the life of the page); the document that failed stays framed.
+- **The viewer's own worker, download and watchdog.** The viewer starts the library's worker itself (a module worker at
+  the worker's address), waits for the worker to say it is ready, and only then hands it to the library as its port, so
+  the library never starts a worker of its own or its stand-in on the page's thread; closing the document ends the
+  worker. The viewer downloads the view address itself (same origin, the browser's default credentials), chunk by chunk,
+  and gives the library the bytes. Once the document has opened, one watchdog per viewer watches every wait on the
+  library (the pages fetched, a page drawn, a page's text read, a text layer rendered): a wait is given up only when the
+  library has not answered for 20 seconds of visible time, counted from the later of its last answer and the start of the
+  wait, where an answer is any message from the viewer's worker or any of these waits settling. So a scan whose pages
+  take long to decode (JPEG 2000 above all), with the worker busy on other pages, is waited for and marked, while a
+  worker that has stopped still gives the library's note about 20 seconds later. A page released from the view is no
+  longer waited on.
 - **Browsers that mark** (measured in Chromium only, with each candidate built-in deleted in the page and in the
   library's worker; Firefox and Safari were not run, and their versions are MDN's browser-compat-data for what the
   measurement found needed): Chrome and Edge 119+, Firefox 125+ (so ESR 128 and 140, not 115), Safari 17.4+ on macOS, iOS
@@ -228,7 +273,8 @@ apart from the page script.
 - The library runs with no eval, no WebAssembly (so the policy needs neither `'unsafe-eval'` nor `'wasm-unsafe-eval'`:
   JPEG 2000 and JBIG2 images use its plain-JavaScript decoders, colour profiles fall back to the device colour spaces),
   no document scripting, no XFA and no layer of links or form fields (form fields' appearances are drawn on the page); it
-  reads only the same-origin view address. The one place each legacy file could build a function from a string is
+  is given only the bytes the viewer downloaded from the same-origin view address, and parses them in the viewer's own
+  worker. The one place each legacy file could build a function from a string is
   core-js's lookup of the global object, `Function("return this")`, reached only where `globalThis`, `window`, `self`
   and `global` are all missing (never in a browser), and the policy would refuse it anyway; `tests/test_frontend.py`
   allows that occurrence by its exact bytes.
@@ -241,7 +287,17 @@ apart from the page script.
 
 **Known limits** (recorded, not defects):
 - Only pages near the visible area are drawn, so only their text is in the page: a screen reader reads the text of the
-  pages near the view, not of the whole document at once (the marked words are role mark on the drawn page).
+  pages near the view, not of the whole document at once (the marked words are role mark on the drawn page), and the
+  browser's find in page (Ctrl+F) sees only the drawn pages' text, so its "no match" says nothing of the other pages;
+  "Download original" opens the whole document where its own viewer searches every page.
+- A copy the library joins to the text beside it is no item of its own, so it is not found as an overprint copy: fake
+  bold drawn inside a line in the line's own font, or a line-printer overstrike where only the bold part is drawn again.
+  Those words then read twice: a quote of just those words is counted at two places in one spot, and a passage that runs
+  across them is not found. The same holds for a copy the library splits into items otherwise than its original.
+- Thai, Lao, Khmer and Myanmar are written without spaces between words, and their letters are word parts, so a run of
+  them reads as one word and a quote inside such a run is not found.
+- A single page whose images take more than 20 seconds to decode, with no other answer from the library meanwhile, is
+  taken as the marking tool not working.
 - On a dark fill the highlight is faint: the drawing is multiplied over the mark like a highlighter, so a dark band
   darkens the lime with it (white text on a dark band shows the mark mainly as a tint of the glyphs).
 - Words the page shows as an image (a scanned page) or drawn by a form field's appearance are not in the searchable

@@ -257,14 +257,17 @@ be framed, by CPT Studio's own pages); `X-Frame-Options: DENY` elsewhere. The PD
 with (the legacy build of pdfjs-dist 6.5.438, which bundles core-js 3.51.0 for the built-ins older browsers lack; the
 files `studio/static/studio/lib/pdfjs-6.5.438/MANIFEST.json` lists with their npm path and sha256 and the npm integrity
 of both tarballs, the licences beside them; nothing from a CDN) loads as same-origin modules and a same-origin module
-worker under `script-src 'self'` (`worker-src` falls back to it), served as JavaScript by WhiteNoise under `nosniff`. It
-runs with no eval and no WebAssembly - the policy has neither `'unsafe-eval'` nor `'wasm-unsafe-eval'`; core-js's one
-`Function("return this")` lookup is never reached in a browser and would be refused - with no document scripting, no
-XFA and no layer of links or form fields, reads only the same-origin view address, and puts a PDF's text in the page as
-text only (its text layer). A browser that lacks what it needs (Chrome and Edge before 119, Firefox before 125, Safari
-before 17.4; measured in Chromium only, the other versions from MDN's browser-compat-data) is not given it: the browser's
-own viewer is framed and the note says marking needs a newer browser; where the library itself fails or does not answer
-within 20 seconds, the note says the marking tool did not work here. Every customer
+worker under `script-src 'self'` (`worker-src` falls back to it), served as JavaScript by WhiteNoise under `nosniff`; the
+viewer starts that worker itself and hands it to the library, so the library never parses a document on the page's own
+thread (DECISIONS D368, round 5). It runs with no eval and no WebAssembly - the policy has neither `'unsafe-eval'` nor
+`'wasm-unsafe-eval'`; core-js's one `Function("return this")` lookup is never reached in a browser and would be refused -
+with no document scripting, no XFA and no layer of links or form fields, is given only the bytes the viewer downloaded
+itself from the same-origin view address, and puts a PDF's text in the page as text only (its text layer). A browser that
+lacks what it needs (Chrome and Edge before 119, Firefox before 125, Safari before 17.4; measured in Chromium only, the
+other versions from MDN's browser-compat-data) is not given it: the browser's own viewer is framed and the note says
+marking needs a newer browser; where the library itself fails, or has not answered for 20 seconds while the viewer waits
+on it, the note says the marking tool did not work here, and where the download fails, that it could not be
+downloaded. Every customer
 query is scoped through the caller's active membership, so another workspace's records answer 404. Text the database
 cannot store (NUL, a lone surrogate) is refused with a 400 rather than altered; only a title or a file name has it
 replaced.
@@ -288,9 +291,12 @@ sha256, the manifest included (`PDF_LIB_DIGEST`), so a changed vendored file fai
 [`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8: the DOM and copy contract the browser walk checks, and the one
 statement of how a chosen quote's words are marked in the document viewer ("Marking a quoted passage", DECISIONS D368:
 its own characters on its page, white space ignored, NFKC and format characters dropped on both sides, exact case first,
-never inside a longer word, an overprinted copy counted once, every occurrence counted, never another page; the notes,
-the zoom, the time limits and the fallback to the browser's own viewer with its reasons; the known limits). It is
-display only: it reads no meaning and never holds or changes a code.
+never inside a longer word or number - two drawings that do not visibly continue each other meet at a word edge, a Han
+ideograph or a hiragana character is a word of its own, a number's own decimal point or thousands separator keeps it
+one word -, an overprinted copy counted once, every occurrence counted, never another page; the notes, the zoom, the
+viewer's own worker and download, its watchdog on the library and the fallback to the browser's own viewer with its
+reasons; the known limits). It is display only: it reads Unicode character classes, NFKC and the text's geometry, reads
+no meaning and never holds or changes a code.
 
 ## 9. Verification
 
