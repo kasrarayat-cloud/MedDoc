@@ -30,12 +30,14 @@
  * that number, 0 included, units not given shown as "not given"), modifiers (each served one, and no other), status
  * badge, reason, second check, quotes and exactly the allowed buttons, the quotes panel, the notes panel, the document
  * viewer - its view address - and its "Download original" link, the export button); every quote chosen through the quotes
- * panel and judged by the walk's own search, apart from the page script (DECISIONS D368): the text of the pages it
- * searches read from the viewer's own text layer (an overprint copy left out only where its geometry bears the viewer's
- * flag out), the matching rule run on it (CORE-UX-DESIGN.md section 8), and the viewer's marks, count, pages and note
- * held to that - its occurrences exactly (count, place and case), a "not found" only where the walk finds none either,
- * nothing marked on another page or inside a character, every marked page drawn (its canvas holds drawn pixels) - counted;
- * the first
+ * panel and judged by the walk's own search, apart from the page script (DECISIONS D368): the PDF read by the walk itself
+ * in Node with the pinned library the page uses (its own upload's bytes, else the view address fetched in the page), the
+ * matching rule run on that reading (CORE-UX-DESIGN.md section 8), and the viewer held to it - its page count, each drawn
+ * page's text layer span for span, its overprint flags both ways, its occurrences exactly (count, place and case), each
+ * marked span where its words are drawn, a "not found" only where the walk finds none either, nothing marked on another
+ * page or inside a character, every page it must show drawn as the member sees it (a screenshot against its canvas, ink
+ * where the page has text, ink under the marks), and the last quote marked judged again after Zoom in and Fit width -
+ * counted; the first
  * question, when there is one, answered through the panel and the new round waited for and checked again; one READY
  * line approved through #reviewDialog as the page draws it (the acknowledgement checkbox #reviewAckBox inside its label
  * #reviewAcknowledgement, which carries the session's acknowledgement; an agent-executed synthetic review), the page's
@@ -60,6 +62,8 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const zlib = require('node:zlib');
 
 const PLAYWRIGHT = process.env.CPT_VERIFY_PLAYWRIGHT
   || '/opt/meddoc-pro/.worktrees/private-os-isolation/rebuild/.runtime/browser-deps/node_modules/playwright';
@@ -697,12 +701,17 @@ function quoteKey(code, page) {
 }
 
 // --- the quoted words marked in the viewer (DECISIONS D368) -------------------------------------------------------------
-// The walk is the viewer's independent judge (round 3). It reads the text of every page it searches from the viewer's
-// own text layer, runs its own search with the matching rule (CORE-UX-DESIGN.md section 8, "Marking a quoted passage":
-// R1 overprint copies, R2 word edges, R3 format characters, and the rule's white space, NFKC, whole characters, exact
-// case first and pages), and holds the viewer's marks, count, pages and note to its own result: it never takes the
-// viewer's word. It also requires every marked page to be drawn (its canvas holds drawn pixels) and no mark to begin or
-// end inside a character. The page's text is read into the walk's memory to be searched and is never written to the
+// The walk is the viewer's independent judge (rounds 3 and 5). It reads every PDF it judges itself, in Node, with the
+// pinned library the page draws with (readDocument): the page count, each page's box, rotation and user unit, and each
+// page's text items exactly as the library gives them to the page. Its own search runs the matching rule of
+// CORE-UX-DESIGN.md section 8 ("Marking a quoted passage": R1 overprint copies, R2 word edges with R2a numbers, R2b
+// separate drawings and R2c Han and hiragana, R3 format characters, and the rule's white space, NFKC, whole characters,
+// exact case first and pages) over that reading, never over the viewer's text layer. It then holds the viewer's page to
+// its reading - the page count, each drawn page's text layer span for span, the overprint flags both ways, the marks
+// (count, place and case), each marked span where its item is drawn - and the viewer's count, pages and note to its own
+// result. Every page it requires drawn is checked as the member sees it (a screenshot of the page against its canvas),
+// with ink on a page that has text and drawn ink under the marks; and the last quote marked is judged again after Zoom
+// in and after Fit width. The document's text is read into the walk's memory to be searched and is never written to the
 // evidence: the evidence keeps counts, page numbers and reasons that name a quote by its line and page, never its words.
 
 // The quotes the page lists, in its order: {code, line, text, page} of every quote of every code that has words.
@@ -718,26 +727,58 @@ function foldMarked(text) {
 }
 
 // Why the page framed the browser's own viewer instead of drawing the PDF (the viewer element's data-fallback), as the
-// walk's reason names it, and the note's reason sentence for each (ROUND3 N3, character for character).
+// walk's reason names it, and the note's reason sentence for each (ROUND3 N3 and round 5's 'download', character for
+// character).
 const FALLBACK_WHY = { browser: 'marking needs a newer browser', library: 'the marking tool did not work in the page',
-  document: 'the document cannot be drawn in the page', slow: 'the document took too long to load' };
+  document: 'the document cannot be drawn in the page', slow: 'the document took too long to load',
+  download: 'the document could not be downloaded in the page' };
 const FRAME_REASONS = { browser: 'Marking needs a newer browser.',
   library: 'The marking tool did not work here, so nothing is marked.',
   document: 'This document cannot be drawn here, so nothing is marked.',
-  slow: 'The document took too long to load here, so nothing is marked.' };
-// Overprint copies (R1): the walk reads the viewer's flag (data-overprint="1" on the copy's span) and holds it to the
-// span's geometry - its text equals that of one of the OVERPRINT_WINDOW spans before it, and its box's origin lies within
-// max(OVERPRINT_MIN_PX, OVERPRINT_SHARE x its height) of that span's - so the viewer cannot hide text by flagging it.
-const OVERPRINT_WINDOW = 8;
-const OVERPRINT_MIN_PX = 1.5;
-const OVERPRINT_SHARE = 0.2;
-// A marked page is drawn (S3) when its canvas is shown, at least CANVAS_OPAQUE_MIN of its pixels are painted, and at
-// least CANVAS_MARK_CONTENT_MIN of the pixels under its marks differ from the page's paper (its most common colour) by
-// two steps of 16 in a channel: the marked words are drawn where they are marked. Measured (D368 round 3) on the dev
-// preview's PDF fixtures and the walk's gi-02 in Chromium at 1440x1000: every drawn page was fully painted (1.0), and the
-// share under the marks was 0.350 to 0.461 over 33 marked pages; the threshold is about a seventh of the lowest, and a
-// canvas that was never drawn is 0 painted. A page shown for a quote that was not found must be painted and shown (a
-// blank page with no text has nothing under any mark).
+  slow: 'The document took too long to load here, so nothing is marked.',
+  download: 'The document could not be downloaded for marking, so nothing is marked.' };
+// The pinned library the page draws a PDF with; the walk reads each PDF it judges with the same files, in Node, where
+// the library always runs its worker in the walk's own process (its stand-in for a worker thread).
+const PDF_LIBRARY = path.join(__dirname, '..', 'studio', 'static', 'studio', 'lib', 'pdfjs-6.5.438');
+// R1: an overprint copy's font height (the length of its transform's second column) agrees with the earlier item's
+// within OVERPRINT_HEIGHT_SHARE of the larger, and its origin lies within max(OVERPRINT_REACH_MIN, OVERPRINT_REACH_SHARE
+// x its own height) PDF units of that item's origin, in a straight line.
+const OVERPRINT_HEIGHT_SHARE = 0.01;
+const OVERPRINT_REACH_MIN = 1;
+const OVERPRINT_REACH_SHARE = 0.2;
+// R2b: an item continues the one before it when both have usable geometry, their heights agree within
+// SEAM_HEIGHT_SHARE, and its origin lies within SEAM_ALONG_SHARE x the first's height of the first's end along the
+// first's text direction and within SEAM_ACROSS_SHARE x that height across it.
+const SEAM_HEIGHT_SHARE = 0.05;
+const SEAM_ALONG_SHARE = 0.25;
+const SEAM_ACROSS_SHARE = 0.1;
+// R2a: the code points that keep two digits in one word (UAX #29 WB11 and WB12: MidNum, MidNumLet and Single_Quote in
+// Unicode 16.0); Node 22's ICU 77.1 gives exactly these when asked which join two digits only between two digits.
+const NUMBER_SEPARATORS = new Set([0x0027, 0x002C, 0x002E, 0x003B, 0x037E, 0x0589, 0x060C, 0x060D, 0x066C, 0x07F8, 0x2018,
+  0x2019, 0x2024, 0x2044, 0xFE50, 0xFE52, 0xFE54, 0xFF07, 0xFF0C, 0xFF0E, 0xFF1B]);
+// B4: a marked span lies where its item is drawn when its centre is within ALIGN_ALONG x the item's font height of the
+// item's run (its origin to its origin plus its width, along its direction), and within ALIGN_ACROSS x that height of
+// where the library's text layer puts the span's centre across the run (the origin less the font's ascent, plus half the
+// span's height). Calibrated in Chromium on every fixture of round 5 (CORE-UX-DESIGN.md section 9).
+const ALIGN_ALONG = 0.5;
+const ALIGN_ACROSS = 0.25;
+// B5: a page is seen as drawn when a screenshot of it, reduced to SEEN_BLOCK x SEEN_BLOCK CSS px blocks outside its
+// marks, is its canvas reduced alike: over the blocks the canvas draws no ink in, the screen differs from the canvas by at
+// most SEEN_PAPER_MAX luminance levels on average, and over the blocks it draws ink in (darker than its paper by at least
+// INK_RULE.step), where there are SEEN_INK_BLOCKS of them or more, the screen shows at least SEEN_INK_SHARE of that ink
+// (how much darker than the paper the blocks are, summed). Calibrated in Chromium on every fixture of round 5
+// (CORE-UX-DESIGN.md section 9).
+const SEEN_BLOCK = 4;
+const SEEN_PAPER_MAX = 2;
+const SEEN_INK_SHARE = 0.6;
+const SEEN_INK_BLOCKS = 4;
+// B6: a pixel of a canvas is drawn ink when its luminance is at most the paper's (the canvas's most common luminance)
+// less max(INK_RULE.step, INK_RULE.share x (the paper less the page's INK_RULE.percentile luminance)): darker than the
+// paper by a share of the page's own contrast, so faint scanned ink counts. A page whose own reading has text must show
+// at least INK_SHARE_MIN of its pixels as ink (a blank white canvas shows none), and a marked page at least
+// CANVAS_MARK_CONTENT_MIN of the pixels under its marks; its canvas must be painted (CANVAS_OPAQUE_MIN of it opaque).
+const INK_RULE = { step: 8, share: 0.35, percentile: 0.02 };
+const INK_SHARE_MIN = 0.0002;
 const CANVAS_OPAQUE_MIN = 0.99;
 const CANVAS_MARK_CONTENT_MIN = 0.05;
 // A document of at most this many pages is read whole for every quote, so a mark on any page is seen; a longer one is
@@ -746,7 +787,11 @@ const FULL_READ_PAGES = 12;
 
 const FORMAT_CHARACTER = /\p{Cf}/u;
 const WORD_START = /^[\p{L}\p{N}]/u;
-const JOINS_A_WORD = /[\p{L}\p{N}\p{M}]/u;
+const JOINS_A_WORD = /^[\p{L}\p{N}\p{M}]/u;
+// R2c: a Han ideograph or a hiragana character is a word of its own, as Unicode's default word boundaries have it: never
+// a word part on the page and never asking for an edge in the quote. Katakana stays a word part.
+const OWN_WORD = /^[\p{Ideographic}\p{Script=Hiragana}]/u;
+const DIGIT = /^\p{Nd}/u;
 
 let graphemeCutter;
 // Where each character of a text begins and ends, as [start, end] offsets covering the whole text: its extended grapheme
@@ -762,7 +807,17 @@ function graphemeSpans(value) {
 // The characters of a text, as the rule cuts them: its grapheme clusters, joined again wherever NFKC combines two of them
 // (so NFKC of the text is exactly its characters' NFKC, in order). Each is {start, end, nfkc}; together they cover the text.
 function cutCharacters(value) {
-  const nfkc = text => text.normalize('NFKC');
+  const nfkc = text => (/[^\x00-\x7f]/.test(text) ? text.normalize('NFKC') : text);
+  if (!/[^\x00-\x7f]/.test(value)) {
+    // ASCII: every character is a cluster of its own but CR LF, and NFKC changes nothing
+    const ascii = [];
+    for (let at = 0; at < value.length; at += 1) {
+      const end = value[at] === '\r' && value[at + 1] === '\n' ? at + 2 : at + 1;
+      ascii.push({ start: at, end, nfkc: value.slice(at, end) });
+      at = end - 1;
+    }
+    return ascii;
+  }
   const cuts = [];
   for (const span of graphemeSpans(value)) {
     const last = cuts[cuts.length - 1];
@@ -794,66 +849,217 @@ function cutCharacters(value) {
 }
 
 const firstCodePoint = text => (text ? String.fromCodePoint(text.codePointAt(0)) : null);
-const lastCodePoint = text => (text ? Array.from(text).pop() : null);
-// R2: the start or end of the page, or a character that is not a letter, a digit or a combining mark, is a word edge.
-const wordEdge = codePoint => codePoint === null || !JOINS_A_WORD.test(codePoint);
+// The code point of `text` that ends at `at`, or begins at it; null at the text's start or end.
+function codePointBefore(text, at) {
+  if (at <= 0) return null;
+  const low = text.charCodeAt(at - 1);
+  if (low >= 0xdc00 && low <= 0xdfff && at >= 2) {
+    const high = text.charCodeAt(at - 2);
+    if (high >= 0xd800 && high <= 0xdbff) return text.slice(at - 2, at);
+  }
+  return text.slice(at - 1, at);
+}
+function codePointAt(text, at) {
+  return at >= 0 && at < text.length ? String.fromCodePoint(text.codePointAt(at)) : null;
+}
+// R2 with R2c: whether a quote's end asks for a word edge (its character is a letter or a digit, not Han or hiragana),
+// and whether a code point of the page is a word part (a letter, a digit or a mark, not Han or hiragana).
+const asksForEdge = codePoint => typeof codePoint === 'string' && WORD_START.test(codePoint) && !OWN_WORD.test(codePoint);
+const wordPart = codePoint => typeof codePoint === 'string' && JOINS_A_WORD.test(codePoint) && !OWN_WORD.test(codePoint);
+// R2a: a digit (\p{Nd}) and a number separator, asked of a character's first code point.
+const isDigit = codePoint => typeof codePoint === 'string' && DIGIT.test(codePoint);
+const isSeparator = codePoint => typeof codePoint === 'string' && codePoint !== '' && NUMBER_SEPARATORS.has(codePoint.codePointAt(0));
 
-// One page's text as the rule reads it, from the text layer the walk read (readPdfPage's tokens): the item strings in
-// order, an overprint copy's string left out (R1), a line break where the layer has one (<br>: an item the library marks
-// hasEOL, a copy's included), format characters dropped (R3). {number, items, clean, posOf, units, starts}: posOf maps
-// "<item> <offset in its string>" to the place in `clean`; units are the characters that are not white space, each with
-// its NFKC (`folded`, white space dropped) and the code points just before and after it in the page's text as the page
-// writes it, not after NFKC (null at the page's start or end), which R2 reads, as the viewer does: "Botox™" is "Botox"
-// and a sign, though NFKC writes the sign "TM"; starts are the places a character begins (and the text's end).
-function pageModel(number, tokens) {
-  const items = [];
-  const posOf = new Map();
-  let clean = '';
-  for (const token of Array.isArray(tokens) ? tokens : []) {
-    if (token?.kind === 'br') {
-      clean += '\n';
-      continue;
-    }
-    const item = items.length;
-    items.push(token || {});
-    if (token?.copy) continue;
-    let offset = 0;
-    for (const ch of typeof token?.text === 'string' ? token.text : '') {
-      if (!FORMAT_CHARACTER.test(ch)) {
-        for (let k = 0; k < ch.length; k += 1) posOf.set(`${item} ${offset + k}`, clean.length + k);
-        clean += ch;
+// R1: the items of one page that are overprint copies, as a Set of their indexes - an item whose string (after NFKC)
+// holds a character that is not white space and equals the string (after NFKC) of an earlier item on the page, whose font
+// height agrees with that item's within OVERPRINT_HEIGHT_SHARE, and whose origin lies within max(OVERPRINT_REACH_MIN,
+// OVERPRINT_REACH_SHARE x its own height) PDF units of that item's origin. An item without that geometry (a bare string)
+// is never one. Linear in the items: the earlier items are kept in a grid keyed by their string, a band of their height
+// (the bands a hair wider than OVERPRINT_HEIGHT_SHARE, so two heights that agree fall in bands at most one apart) and
+// their origin quantised by the largest reach of the bands around it, so an earlier item within reach lies in one of the
+// nine cells around the later one's origin, in one of three bands; an exact repeat of an item kept (the same origin and
+// height) is not kept again. The grid only finds candidates: each is held to the rule itself.
+const BAND_STEP = -Math.log(1 - OVERPRINT_HEIGHT_SHARE) * (1 + 1e-9);
+const heightBand = height => (height > 0 ? Math.floor(Math.log(height) / BAND_STEP) : -Infinity);
+const bandCell = band => (Number.isFinite(band)
+  ? Math.max(OVERPRINT_REACH_MIN, OVERPRINT_REACH_SHARE * Math.exp((band + 2) * BAND_STEP)) : OVERPRINT_REACH_MIN);
+const cellKey = (x, y) => x * 1048576 + y;
+function overprintCopies(items) {
+  const list = Array.isArray(items) ? items : [];
+  const copies = new Set();
+  const grid = new Map();
+  list.forEach((item, index) => {
+    const t = item !== null && typeof item === 'object' && Array.isArray(item.transform) ? item.transform : null;
+    if (!t || typeof item.str !== 'string' || ![t[2], t[3], t[4], t[5]].every(Number.isFinite)) return;
+    const text = item.str.normalize('NFKC');
+    const height = Math.hypot(t[2], t[3]);
+    if (!/\S/u.test(text) || !Number.isFinite(height)) return;
+    const reach = Math.max(OVERPRINT_REACH_MIN, OVERPRINT_REACH_SHARE * height);
+    const own = heightBand(height);
+    if (!grid.has(text)) grid.set(text, new Map());
+    const bands = grid.get(text);
+    let match = null;
+    look: for (const band of Number.isFinite(own) ? [own - 1, own, own + 1] : [own]) {
+      const cells = bands.get(band);
+      if (!cells) continue;
+      const size = bandCell(band);
+      const cx = Math.floor(t[4] / size);
+      const cy = Math.floor(t[5] / size);
+      for (let x = cx - 1; x <= cx + 1; x += 1) {
+        for (let y = cy - 1; y <= cy + 1; y += 1) {
+          for (const other of cells.get(cellKey(x, y)) || []) {
+            if (Math.abs(height - other.height) <= OVERPRINT_HEIGHT_SHARE * Math.max(height, other.height)
+                && Math.hypot(t[4] - other.x, t[5] - other.y) <= reach) {
+              match = other;
+              break look;
+            }
+          }
+        }
       }
-      offset += ch.length;
     }
+    if (match) copies.add(index);
+    if (match && match.x === t[4] && match.y === t[5] && match.height === height) return;
+    if (!bands.has(own)) bands.set(own, new Map());
+    const cells = bands.get(own);
+    const size = bandCell(own);
+    const key = cellKey(Math.floor(t[4] / size), Math.floor(t[5] / size));
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push({ x: t[4], y: t[5], height });
+  });
+  return copies;
+}
+
+// R2b: an item's transform when it is usable geometry - six finite numbers, with a finite width above 0 - else null.
+function seamGeometry(item) {
+  const t = item !== null && typeof item === 'object' && Array.isArray(item.transform) ? item.transform : null;
+  if (!t || t.length < 6 || !t.slice(0, 6).every(Number.isFinite)) return null;
+  return Number.isFinite(item.width) && item.width > 0 ? t : null;
+}
+
+// R2b: whether `next` visibly continues `first`, so the place between them in the page's text is no word edge: both
+// have usable geometry, their heights agree within SEAM_HEIGHT_SHARE, and next's origin, measured from first's, lies
+// within SEAM_ALONG_SHARE x first's height of first's end along first's direction (t[0], t[1]) and within
+// SEAM_ACROSS_SHARE x that height across it (t[2], t[3]). A direction of no length answers no.
+function continues(first, next) {
+  const a = seamGeometry(first);
+  const b = seamGeometry(next);
+  if (!a || !b) return false;
+  const height = Math.hypot(a[2], a[3]);
+  const other = Math.hypot(b[2], b[3]);
+  if (!(Math.abs(height - other) <= SEAM_HEIGHT_SHARE * Math.max(height, other))) return false;
+  const dx = b[4] - a[4];
+  const dy = b[5] - a[5];
+  const along = (dx * a[0] + dy * a[1]) / Math.hypot(a[0], a[1]);
+  const across = (dx * a[2] + dy * a[3]) / height;
+  return Math.abs(along - first.width) <= SEAM_ALONG_SHARE * height && Math.abs(across) <= SEAM_ACROSS_SHARE * height;
+}
+
+// One page's text as the rule reads it, from the walk's own reading of the page (readDocument's items: {str, transform,
+// width, hasEOL}, or bare strings, which have no geometry): the item strings in order, an overprint copy's string left
+// out (R1), a line break after every item the library marks hasEOL (a copy's included), format characters dropped (R3).
+// {number, items, copies, spans, clean, placeOf, units, starts, seams}: spans are the items the library's text layer
+// puts in the page, in order (those whose string is not ''); placeOf(item, offset in its string) is that character's
+// place in `clean` (undefined where it is left out); seams are the places between the last character of one item and the first of the next kept item with nothing
+// between them, each true where R2b makes it a word edge; units are the characters that are not white space, each with
+// its NFKC (`folded`, white space dropped), the code points just before and after it in the page's text as the page writes
+// it, not after NFKC (null at the page's start or end), the code points beyond those (null past an edge R2b makes), and
+// whether a seam lies at its start or end (true: an edge, false: a continuation, null: none); starts are the places a
+// character begins (and the text's end).
+function pageModel(number, items) {
+  const list = Array.isArray(items) ? items : [];
+  const copies = overprintCopies(list);
+  const places = new Map();
+  const kept = [];
+  const spans = [];
+  let clean = '';
+  list.forEach((entry, index) => {
+    const value = typeof entry === 'string' ? entry : typeof entry?.str === 'string' ? entry.str : '';
+    if (value) spans.push(index);
+    if (value && !copies.has(index)) {
+      const start = clean.length;
+      const at = new Int32Array(value.length).fill(-1);
+      if (!FORMAT_CHARACTER.test(value)) {
+        for (let k = 0; k < value.length; k += 1) at[k] = start + k;
+        clean += value;
+      } else {
+        let offset = 0;
+        for (const ch of value) {
+          if (!FORMAT_CHARACTER.test(ch)) {
+            for (let k = 0; k < ch.length; k += 1) at[offset + k] = clean.length + k;
+            clean += ch;
+          }
+          offset += ch.length;
+        }
+      }
+      places.set(index, at);
+      if (clean.length > start) kept.push({ index, start, end: clean.length });
+    }
+    if (entry !== null && typeof entry === 'object' && entry.hasEOL === true) clean += '\n';
+  });
+  const seams = new Map();
+  for (let k = 1; k < kept.length; k += 1) {
+    if (kept[k - 1].end === kept[k].start) seams.set(kept[k].start, !continues(list[kept[k - 1].index], list[kept[k].index]));
   }
   const characters = cutCharacters(clean);
   const units = [];
-  characters.forEach((character, index) => {
+  for (const character of characters) {
     const folded = character.nfkc.replace(/\s+/gu, '');
-    if (!folded) return;
-    units.push({ page: number, start: character.start, end: character.end, folded,
-      before: index > 0 ? lastCodePoint(clean.slice(characters[index - 1].start, characters[index - 1].end)) : null,
-      after: index + 1 < characters.length ? firstCodePoint(clean.slice(characters[index + 1].start, characters[index + 1].end)) : null });
-  });
+    if (!folded) continue;
+    const before = codePointBefore(clean, character.start);
+    const after = codePointAt(clean, character.end);
+    const back = before === null ? null : character.start - before.length;
+    const ahead = after === null ? null : character.end + after.length;
+    units.push({ page: number, start: character.start, end: character.end, folded, before, after,
+      before2: back === null || seams.get(back) === true ? null : codePointBefore(clean, back),
+      after2: ahead === null || seams.get(ahead) === true ? null : codePointAt(clean, ahead),
+      startSeam: seams.has(character.start) ? seams.get(character.start) : null,
+      endSeam: seams.has(character.end) ? seams.get(character.end) : null });
+  }
   const starts = new Set(characters.map(character => character.start));
   starts.add(clean.length);
-  return { number, items, clean, posOf, units, starts };
+  const placeOf = (item, offset) => {
+    const place = places.get(item)?.[offset];
+    return place === undefined || place < 0 ? undefined : place;
+  };
+  return { number, items: list, copies, spans, clean, placeOf, units, starts, seams };
 }
 
 // A quote as the rule reads it: format characters dropped, cut into characters, NFKC, white space dropped; exact and
-// lower-cased (each character on its own, as the page's are); whether its first and its last character are a letter or a
-// digit (R2: only then is a word edge asked for at that end).
+// lower-cased (each character on its own, as the page's are); whether its first and last characters ask for a word edge
+// (R2 with R2c: a letter or a digit, not Han or hiragana); and what R2a asks of its ends (a first or last character that
+// is a digit; a first character that is a separator with a digit after it, a last one with a digit before it).
 function foldQuote(text) {
   const clean = String(text ?? '').replace(/\p{Cf}/gu, '');
   const units = cutCharacters(clean).map(character => character.nfkc.replace(/\s+/gu, '')).filter(Boolean);
-  return { exact: units.join(''), blind: units.map(unit => unit.toLowerCase()).join(''),
-    start: units.length > 0 && WORD_START.test(units[0]), end: units.length > 0 && WORD_START.test(units[units.length - 1]) };
+  const point = index => (index >= 0 && index < units.length ? firstCodePoint(units[index]) : null);
+  const [first, second, last, beforeLast] = [point(0), point(1), point(units.length - 1), point(units.length - 2)];
+  return { exact: units.join(''), blind: units.map(unit => unit.toLowerCase()).join(''), start: asksForEdge(first),
+    end: asksForEdge(last), startDigit: isDigit(first), startSeparator: isSeparator(first) && isDigit(second),
+    endDigit: isDigit(last), endSeparator: isSeparator(last) && isDigit(beforeLast) };
+}
+
+// The word edges at an occurrence's start (its first unit) and end (its last unit), in this order: R2b decides first (a
+// seam that is an edge accepts); otherwise R2, with R2c, turns the occurrence away where the quote's end asks for an
+// edge and the page's code point beside it is a word part; otherwise R2a turns it away inside a number - a digit after
+// a separator that follows a digit, or a separator quoted with its digit beside a digit (and the same at the end).
+function startAccepted(unit, wanted) {
+  if (unit.startSeam === true) return true;
+  if (wanted.start && wordPart(unit.before)) return false;
+  if (wanted.startDigit && isSeparator(unit.before) && isDigit(unit.before2)) return false;
+  return !(wanted.startSeparator && isDigit(unit.before));
+}
+function endAccepted(unit, wanted) {
+  if (unit.endSeam === true) return true;
+  if (wanted.end && wordPart(unit.after)) return false;
+  if (wanted.endDigit && isSeparator(unit.after) && isDigit(unit.after2)) return false;
+  return !(wanted.endSeparator && isDigit(unit.after));
 }
 
 // Every occurrence of a folded quote in the joined text of `numbers` pages (left to right, without overlap, whole
-// characters only, word edges as R2 asks), exact case first and case-blind only where there is none; `keep` then filters
-// them, as the viewer's rule does (the quote's page and the next: a passage that starts on the one and ends on the other).
-// {units, found: [[first unit, last unit]], caseBlind}, or null.
+// characters only, word edges as R2 asks; past a place turned away the search goes on from its next unit), exact case
+// first and case-blind only where there is none; `keep` then filters them, as the viewer's rule does (the quote's page
+// and the next: a passage that starts on the one and ends on the other). {units, found: [[first unit, last unit]],
+// caseBlind}, or null.
 function searchPages(models, numbers, wanted, keep) {
   const units = numbers.flatMap(number => models.get(number).units);
   for (const caseBlind of [false, true]) {
@@ -870,8 +1076,7 @@ function searchPages(models, numbers, wanted, keep) {
     for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, from)) {
       const end = at + needle.length;
       const whole = (at === 0 || owner[at - 1] !== owner[at]) && (end === hay.length || owner[end - 1] !== owner[end]);
-      const edges = whole && (!wanted.start || wordEdge(units[owner[at]].before)) && (!wanted.end || wordEdge(units[owner[end - 1]].after));
-      if (edges) {
+      if (whole && startAccepted(units[owner[at]], wanted) && endAccepted(units[owner[end - 1]], wanted)) {
         found.push([owner[at], owner[end - 1]]);
         from = end;
       } else {
@@ -895,9 +1100,9 @@ function unitPlaces(models, units, first, last) {
   return keys;
 }
 
-// The walk's own search for one quote over the pages it read (models: page number -> pageModel) of a document of
-// pageCount pages: {page, pageCount, status, scope, caseBlind, count, pages, occurrences, empty, unread}. status:
-// 'marked', 'not_found', 'missing_page', 'empty' (nothing to look for) or 'unread' (a page it must search was not read);
+// The walk's own search for one quote over its own page models (page number -> pageModel) of a document of pageCount
+// pages: {page, pageCount, status, scope, caseBlind, count, pages, occurrences, empty, unread}. status: 'marked',
+// 'not_found', 'missing_page', 'empty' (nothing to look for) or 'unread' (a page it must search is not in its reading);
 // occurrences: each {keys (its places, joined), pages}; empty: the quote's page (or, with no page, every page) has no
 // searchable character (N2).
 function ownSearch(quote, models, pageCount) {
@@ -960,48 +1165,112 @@ function pdfQuoteNote(result) {
     : 'The exact words were not found in the searchable text of this document, so nothing is marked.';
 }
 
-// The overprint flags of one page the walk read that its geometry does not bear out (R1, S4): a span flagged
-// data-overprint whose text (NFKC, holding a character that is not white space) equals none of the OVERPRINT_WINDOW spans
-// before it whose box origin lies within max(OVERPRINT_MIN_PX, OVERPRINT_SHARE x the flagged span's height) of its own.
-function unbornFlags(tokens) {
-  const items = (Array.isArray(tokens) ? tokens : []).filter(token => token?.kind !== 'br');
-  let count = 0;
-  items.forEach((token, index) => {
-    if (!token?.copy) return;
-    const text = String(token.text ?? '').normalize('NFKC');
-    const box = Array.isArray(token.box) ? token.box : null;
-    const borne = box && /\S/u.test(text) && items.slice(Math.max(0, index - OVERPRINT_WINDOW), index).some(earlier => {
-      const other = Array.isArray(earlier?.box) ? earlier.box : null;
-      return other && String(earlier.text ?? '').normalize('NFKC') === text
-        && Math.hypot(box[0] - other[0], box[1] - other[1]) <= Math.max(OVERPRINT_MIN_PX, OVERPRINT_SHARE * box[2]);
+// --- the walk's own reading of a PDF (B2) ---------------------------------------------------------------------------
+
+let pdfLibraryLoad = null;
+// The pinned library, loaded once into the walk's process (a failed load is not kept).
+function pdfLibrary() {
+  if (!pdfLibraryLoad) {
+    const build = path.join(PDF_LIBRARY, 'legacy', 'build');
+    pdfLibraryLoad = import(pathToFileURL(path.join(build, 'pdf.min.mjs')).href).then(library => {
+      library.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(build, 'pdf.worker.min.mjs')).href;
+      return library;
     });
-    if (!borne) count += 1;
-  });
-  return count;
+    pdfLibraryLoad.catch(() => { pdfLibraryLoad = null; });
+  }
+  return pdfLibraryLoad;
 }
 
-// What the viewer marked on the pages the walk read, each occurrence as its places in the walk's own text (white space and
-// format characters aside): {occurrences: Map(occurrence -> {keys, pages}), inCopies (marked characters of an overprint
-// copy), cut (an occurrence's marked run on a page that begins or ends inside a character, S5: every run of adjacent
-// marked text is read at both ends, so a letter marked without the accent beside it is seen)}.
-function viewerMarks(models, pagesRead) {
+// The walk's own reading of a PDF's bytes, with the pinned library in Node and the options the page gives it (no eval,
+// no XFA, no WebAssembly, the system's fonts for the standard ones, past errors): {pageCount, pages: [{number, view,
+// rotate, userUnit, items, styles}]}, each page's items exactly as getTextContent() gives them with its default options,
+// as the viewer calls it ({str, transform, width, height, hasEOL, fontName, dir}), or {error} where the library refuses
+// the document. The bytes are copied (the library takes ownership of what it is given).
+async function readDocument(bytes) {
+  let library;
+  try {
+    library = await pdfLibrary();
+  } catch (error) {
+    return { error: `the PDF library did not load in the walk (${String(error && error.message || error).split('\n')[0]})` };
+  }
+  const folder = name => pathToFileURL(path.join(PDF_LIBRARY, name) + path.sep).href;
+  const task = library.getDocument({ data: new Uint8Array(bytes || []), isEvalSupported: false, enableXfa: false, useWasm: false,
+    wasmUrl: folder('wasm'), standardFontDataUrl: folder('standard_fonts'), useSystemFonts: true, stopAtErrors: false,
+    verbosity: library.VerbosityLevel.ERRORS });
+  try {
+    const pdf = await task.promise;
+    const pages = [];
+    for (let number = 1; number <= pdf.numPages; number += 1) {
+      const proxy = await pdf.getPage(number);
+      const content = await proxy.getTextContent();
+      pages.push({ number, view: Array.from(proxy.view), rotate: proxy.rotate, userUnit: proxy.userUnit,
+        items: content.items.filter(item => typeof item.str === 'string').map(item => ({ str: item.str, transform: Array.from(item.transform),
+          width: item.width, height: item.height, hasEOL: item.hasEOL === true, fontName: item.fontName, dir: item.dir })),
+        styles: Object.fromEntries(Object.entries(content.styles || {}).map(([name, style]) => [name, { ...style }])) });
+      proxy.cleanup();
+    }
+    return { pageCount: pdf.numPages, pages };
+  } catch (error) {
+    return { error: `the PDF library refused it (${String(error && error.name || error)})` };
+  } finally {
+    await task.destroy().catch(() => {});
+  }
+}
+
+// The page models of one reading of a document, made once per reading.
+const MODELS = new WeakMap();
+function documentModels(reading) {
+  if (!MODELS.has(reading)) MODELS.set(reading, new Map((reading.pages || []).map(page => [page.number, pageModel(page.number, page.items)])));
+  return MODELS.get(reading);
+}
+
+// --- the viewer's page against the walk's reading (B4-B6) -----------------------------------------------------------
+
+// Whether a drawn page's text layer, read by readPdfPage, is the document's: its spans in order, each the string of the
+// next item the library's text layer puts in the page (the items whose string is not '', marked content aside) -
+// {same, flagsExtra, flagsMissing}: the spans the viewer flags as overprint copies that are not the walk's own copies,
+// and the walk's copies the viewer does not flag (counted only where the layer is the document's).
+function layerCheck(model, read) {
+  const spans = (Array.isArray(read?.tokens) ? read.tokens : []).filter(token => token?.kind !== 'br');
+  const text = item => (typeof item === 'string' ? item : item.str);
+  const same = spans.length === model.spans.length && spans.every((token, k) => String(token?.text ?? '') === text(model.items[model.spans[k]]));
+  if (!same) return { same, flagsExtra: 0, flagsMissing: 0 };
+  let flagsExtra = 0;
+  let flagsMissing = 0;
+  spans.forEach((token, k) => {
+    const copy = model.copies.has(model.spans[k]);
+    if (token?.copy && !copy) flagsExtra += 1;
+    if (!token?.copy && copy) flagsMissing += 1;
+  });
+  return { same, flagsExtra, flagsMissing };
+}
+
+// What the viewer marked on the pages the walk read whose text layer is the document's, each occurrence as its places in
+// the walk's own text (white space and format characters aside): {occurrences: Map(occurrence -> {keys, pages}), spans
+// (Map page -> Set of the marked spans), inCopies (marked characters of an overprint copy), cut (an occurrence's marked
+// run on a page that begins or ends inside a character, S5: every run of adjacent marked text is read at both ends)}.
+function viewerMarks(models, pagesRead, layers) {
   const occurrences = new Map();
+  const spans = new Map();
   let inCopies = 0;
   let cut = 0;
   for (const [number, read] of pagesRead) {
     const model = models.get(number);
-    if (!model) continue;
+    if (!model || !layers.get(number)?.same) continue;
     const runs = new Map();
     for (const mark of Array.isArray(read?.marks) ? read.marks : []) {
       const occurrence = String(mark.occurrence);
       if (!occurrences.has(occurrence)) occurrences.set(occurrence, { keys: [], pages: new Set() });
       const entry = occurrences.get(occurrence);
       entry.pages.add(number);
+      if (!spans.has(number)) spans.set(number, new Set());
+      spans.get(number).add(mark.item);
       if (!runs.has(occurrence)) runs.set(occurrence, new Set());
+      const item = model.spans[mark.item];
       for (let offset = mark.start; offset < mark.end; offset += 1) {
-        const at = model.posOf.get(`${mark.item} ${offset}`);
+        const at = model.placeOf(item, offset);
         if (at === undefined) {
-          if (model.items[mark.item]?.copy) inCopies += 1;
+          if (model.copies.has(item)) inCopies += 1;
           continue;
         }
         runs.get(occurrence).add(at);
@@ -1025,20 +1294,121 @@ function viewerMarks(models, pagesRead) {
       return pa - pb || xa - xb;
     }).join(' ');
   }
-  return { occurrences, inCopies, cut };
+  return { occurrences, spans, inCopies, cut };
 }
 
-// Whether a page's canvas, as readPdfPage measured it in the page, is drawn: shown and painted, and - for a page the
-// viewer marked - with its marked words drawn under the marks (S3); '' when it is, else why not.
-function canvasProblem(canvas, underMarks) {
+// The library's viewport transform of a page at a scale (PageViewport): PDF user space to CSS px of the page's box, with
+// its rotation, its box's origin and its user unit.
+function viewportTransform(view, rotate, userUnit, scale) {
+  const s = scale * (userUnit || 1);
+  const [x0, y0, x1, y1] = view;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const [a, b, c, d] = { 0: [1, 0, 0, -1], 90: [0, 1, 1, 0], 180: [-1, 0, 0, 1], 270: [0, -1, -1, 0] }[((rotate % 360) + 360) % 360] || [1, 0, 0, -1];
+  const ox = (a === 0 ? Math.abs(cy - y0) : Math.abs(cx - x0)) * s;
+  const oy = (a === 0 ? Math.abs(cx - x0) : Math.abs(cy - y0)) * s;
+  return [a * s, b * s, c * s, d * s, ox - a * s * cx - c * s * cy, oy - b * s * cx - d * s * cy];
+}
+
+// Where a span of the text layer lies against its item (B4): its box's centre, from the item's origin, along the item's
+// direction and across it (up the glyphs), in PDF units, with what the library's text layer gives across (the font's
+// ascent less half the span's height: TextLayer#appendText puts a span at the origin less the ascent, turned by the
+// item's angle) - {along, across, expected, height, width}, or null for an item that cannot be placed (no geometry, no
+// height, a vertical font). The page's scale is its box's CSS width over its width at scale 1; its rotation, box and user
+// unit are the walk's own reading's; the ascent is the share of the height the page measured for the span's font family
+// (as TextLayer measures it), else the font's own (style.ascent, 1 + style.descent), else 0.8, as TextLayer falls back.
+function spanPlacement(item, box, page, size, measured) {
+  const t = item !== null && typeof item === 'object' && Array.isArray(item.transform) ? item.transform : null;
+  if (!t || !t.slice(0, 6).every(Number.isFinite) || !Array.isArray(box) || !box.slice(0, 4).every(Number.isFinite)) return null;
+  const style = page?.styles?.[item.fontName] || {};
+  const height = Math.hypot(t[2], t[3]);
+  const across1 = Math.hypot(t[0], t[1]);
+  if (style.vertical || !(height > 0) || !(across1 > 0)) return null;
+  const view = page.view;
+  const quarter = ((page.rotate % 180) + 180) % 180 === 90;
+  const width1 = (quarter ? view[3] - view[1] : view[2] - view[0]) * (page.userUnit || 1);
+  const scale = size[0] / width1;
+  const m = viewportTransform(view, page.rotate, page.userUnit, scale);
+  const unit = scale * (page.userUnit || 1);
+  const origin = [m[0] * t[4] + m[2] * t[5] + m[4], m[1] * t[4] + m[3] * t[5] + m[5]];
+  const direction = [m[0] * t[0] + m[2] * t[1], m[1] * t[0] + m[3] * t[1]];
+  const up = [m[0] * t[2] + m[2] * t[3], m[1] * t[2] + m[3] * t[3]];
+  const centre = [box[0] + box[2] / 2 - origin[0], box[1] + box[3] / 2 - origin[1]];
+  let ratio = Number.isFinite(measured) && measured > 0 ? measured : 0;
+  if (!ratio) ratio = Number(style.ascent) || (Number.isFinite(style.descent) && style.descent ? 1 + Number(style.descent) : 0.8);
+  return { along: (centre[0] * direction[0] + centre[1] * direction[1]) / Math.hypot(...direction) / unit,
+    across: (centre[0] * up[0] + centre[1] * up[1]) / Math.hypot(...up) / unit, expected: height * (ratio - 0.5), height, width: item.width };
+}
+
+// Whether a placement lies where its item is drawn (ALIGN_ALONG, ALIGN_ACROSS).
+function placedRight(place) {
+  return place.along >= -ALIGN_ALONG * place.height && place.along <= place.width + ALIGN_ALONG * place.height
+    && Math.abs(place.across - place.expected) <= ALIGN_ACROSS * place.height;
+}
+
+// The marked spans of one drawn page placed against their items: {checked, misaligned, places}.
+function alignmentCheck(model, read, page, markedSpans) {
+  const tokens = (Array.isArray(read?.tokens) ? read.tokens : []).filter(token => token?.kind !== 'br');
+  const out = { checked: 0, misaligned: 0, places: [] };
+  for (const k of markedSpans || []) {
+    const token = tokens[k];
+    const item = model.items[model.spans[k]];
+    const place = token && Array.isArray(read?.size) ? spanPlacement(item, token.box, page, read.size, read.ascent?.[token.family]) : null;
+    if (!place) continue;
+    out.checked += 1;
+    out.places.push(place);
+    if (!placedRight(place)) out.misaligned += 1;
+  }
+  return out;
+}
+
+// Whether a page's canvas, as readPdfPage measured it in the page, is drawn: shown and painted; with ink where the walk's
+// own reading of the page has text (B5); and - for a page the viewer marked - with drawn ink under its marks (S3, B6);
+// '' when it is, else why not.
+function canvasProblem(canvas, underMarks, hasText = false) {
   if (!canvas || !canvas.present) return 'it has no canvas';
   if (canvas.error) return `its canvas could not be read (${canvas.error})`;
   if (!canvas.visible) return 'its canvas is not shown';
   if (!(canvas.opaque >= CANVAS_OPAQUE_MIN)) return 'its canvas is not drawn';
+  if (hasText && !(canvas.ink / Math.max(1, canvas.pixels) >= INK_SHARE_MIN)) return 'its canvas shows no ink, though the page has text';
   if (underMarks && !(canvas.markPixels > 0 && canvas.markContent / canvas.markPixels >= CANVAS_MARK_CONTENT_MIN)) {
     return 'nothing is drawn under its marks';
   }
   return '';
+}
+
+// What the member saw of a page against its canvas (measureSeen, block by block outside the marks): {paper, ink} - the
+// mean luminance difference over the blocks without ink, and the share of the canvas's ink the screen shows over the
+// blocks with ink (null where there are fewer than SEEN_INK_BLOCKS of them).
+function seenMeasures(seen) {
+  return { paper: seen?.paperBlocks > 0 ? seen.paperDifference / seen.paperBlocks : 0,
+    ink: seen?.inkBlocks >= SEEN_INK_BLOCKS && seen.inkCanvas > 0 ? seen.inkScreen / seen.inkCanvas : null };
+}
+
+// Whether a page was seen as it is drawn (B5); '' when it was, else why not.
+function seenProblem(seen) {
+  if (!seen || seen.error) return `it could not be seen (${seen?.error || 'it was not looked at'})`;
+  if (!(seen.blocks > 0)) return 'none of it was in view to be seen';
+  const { paper, ink } = seenMeasures(seen);
+  return paper <= SEEN_PAPER_MAX && (ink === null || ink >= SEEN_INK_SHARE) ? '' : 'what the member sees of it is not its drawing';
+}
+
+// The pages a quote requires drawn and seen: every page with an occurrence the walk found or a mark the viewer made, and
+// for a quote not found, its page (the page the viewer shows).
+function requiredPages(quote, reading, result, viewerPages) {
+  const page = Number.isInteger(quote?.page) && quote.page > 0 ? quote.page : null;
+  const pages = new Set([...(result?.status === 'marked' ? result.pages : []), ...(viewerPages || [])]);
+  if (result && result.status !== 'marked' && page && page <= result.pageCount) pages.add(page);
+  return [...pages].sort((a, b) => a - b);
+}
+
+// The pages holding the viewer's marks, as read, and those it says it marked.
+function viewerPagesOf(reading) {
+  const pages = new Set(Array.isArray(reading?.pages) ? reading.pages : []);
+  for (const [number, read] of reading?.pagesRead instanceof Map ? reading.pagesRead : []) {
+    if (Array.isArray(read?.marks) && read.marks.length) pages.add(number);
+  }
+  return [...pages];
 }
 
 // The text rule of a text document (the page's findPassages, kept: runs of white space count as one space, exact case
@@ -1090,17 +1460,22 @@ function textNote(count) {
   return count === 1 ? 'Marked in the document.' : `These words appear ${count} times in the document. Each is marked.`;
 }
 
-// One chosen quote judged against what the viewer showed (chooseQuotes' reading), by the walk's own search:
-// {outcome, off_page, mismatched, missed, cut, blank, flags, no_text, problems}. outcome: 'once' or 'multi' (the viewer
-// marked exactly the walk's own occurrences - their count, places and case - and said so), 'not_found' (the walk's own
-// search finds nothing either, and the note says so exactly: N1, N2 when the page has no searchable text, the missing
-// page or the empty passage), 'unavailable' (the browser's own viewer is shown: no marking; the problem says why, as the
-// viewer keeps it in data-fallback) or 'unresolved'. off_page counts marks on a page that is neither the quote's nor,
-// for an occurrence that starts on it, the next; mismatched the viewer's occurrences that are not the walk's; missed the
-// walk's occurrences the viewer did not mark; cut the occurrences' marked runs that begin or end inside a character
-// (S5); blank the marked pages not drawn (S3); flags the overprint flags their geometry does not bear out (R1).
+// One chosen quote judged against what the viewer showed (chooseQuotes' reading), by the walk's own reading and search:
+// {outcome, off_page, mismatched, missed, cut, blank, flags, no_text, pages, layers, misaligned, unseen, problems}.
+// outcome: 'once' or 'multi' (the viewer marked exactly the walk's own occurrences - their count, places and case - and
+// said so), 'not_found' (the walk's own search finds nothing either, and the note says so exactly: N1, N2 when the page
+// has no searchable text, the missing page or the empty passage), 'unavailable' (the browser's own viewer is shown: no
+// marking; the problem says why, as the viewer keeps it in data-fallback) or 'unresolved'. off_page counts marks on a page
+// that is neither the quote's nor, for an occurrence that starts on it, the next; mismatched the viewer's occurrences
+// that are not the walk's; missed the walk's occurrences the viewer did not mark; cut the occurrences' marked runs that
+// begin or end inside a character (S5); blank the required pages whose canvas is not drawn, shows no ink though the page
+// has text, or has nothing drawn under its marks (S3, B5, B6); flags the overprint flags that differ from the walk's own
+// copies, both ways (R1); pages 1 where the viewer's page count is not the document's; layers the drawn pages whose text
+// layer is not the document's text; misaligned the marked spans that do not lie where their items are drawn (B4); unseen
+// the required pages the member does not see as drawn (B5).
 function judgeQuote(quote, reading) {
-  const out = { outcome: 'unresolved', off_page: 0, mismatched: 0, missed: 0, cut: 0, blank: 0, flags: 0, no_text: false, problems: [] };
+  const out = { outcome: 'unresolved', off_page: 0, mismatched: 0, missed: 0, cut: 0, blank: 0, flags: 0, no_text: false, pages: 0,
+    layers: 0, misaligned: 0, unseen: 0, problems: [] };
   const name = `quote ${quote?.line || quote?.code || '?'}${quote?.page ? ` (page ${quote.page})` : ''}`;
   const problem = text => out.problems.push(`${name}: ${text}`);
   if (!quote || !reading) {
@@ -1150,20 +1525,39 @@ function judgeQuote(quote, reading) {
     problem(`the viewer is ${reading.mode || 'not shown'}`);
     return out;
   }
-  const pagesRead = reading.pagesRead instanceof Map ? reading.pagesRead : new Map();
-  const models = new Map();
-  for (const [number, read] of pagesRead) {
-    if (!read?.drawn) continue;
-    models.set(number, pageModel(number, read.tokens));
-    out.flags += unbornFlags(read.tokens);
-  }
-  if (out.flags) problem(`${out.flags} span(s) flagged as an overprint copy are not one (their text or place differs from every span before them)`);
-  const result = ownSearch(quote, models, Number(reading.pageCount) || 0);
-  if (result.status === 'unread') {
-    problem(`page(s) ${result.unread.join(', ')} could not be read`);
+  // the walk's own reading of the document (B2, B3): its page models, R1 copies and search are its own
+  const doc = reading.document;
+  if (!doc || doc.error || !Array.isArray(doc.pages) || !Number.isInteger(doc.pageCount)) {
+    problem(`the walk could not read the PDF itself (${doc?.error || 'it was given no reading of it'})`);
     return out;
   }
-  const shown = viewerMarks(models, pagesRead);
+  const models = documentModels(doc);
+  const pageInfo = new Map(doc.pages.map(item => [item.number, item]));
+  if (Number(reading.pageCount) !== doc.pageCount) {
+    out.pages = 1;
+    problem(`the viewer shows ${Number(reading.pageCount) || 0} page(s); the document has ${doc.pageCount}`);
+  }
+  const result = ownSearch(quote, models, doc.pageCount);
+  if (result.status === 'unread') {
+    problem(`page(s) ${result.unread.join(', ')} are not in the walk's own reading`);
+    return out;
+  }
+  // each page read in the viewer: its text layer the document's text, its overprint flags the walk's own copies (B4)
+  const pagesRead = reading.pagesRead instanceof Map ? reading.pagesRead : new Map();
+  const layers = new Map();
+  for (const [number, read] of pagesRead) {
+    if (!read?.drawn || !models.has(number)) continue;
+    const layer = layerCheck(models.get(number), read);
+    layers.set(number, layer);
+    if (!layer.same) {
+      out.layers += 1;
+      problem(`the text layer of page ${number} is not the document's text`);
+    }
+    out.flags += layer.flagsExtra + layer.flagsMissing;
+    if (layer.flagsExtra) problem(`${layer.flagsExtra} span(s) of page ${number} are flagged as an overprint copy and are not one`);
+    if (layer.flagsMissing) problem(`${layer.flagsMissing} overprint cop(ies) of page ${number} are not flagged`);
+  }
+  const shown = viewerMarks(models, pagesRead, layers);
   out.cut = shown.cut;
   if (out.cut) problem(`${out.cut} marked part(s) begin or end inside a character`);
   if (shown.inCopies) problem('an overprint copy is marked');
@@ -1193,22 +1587,27 @@ function judgeQuote(quote, reading) {
   const claimed = (Array.isArray(reading.pages) ? reading.pages : []).join(' ');
   if (claimed !== result.pages.join(' ')) problem(`the viewer names page(s) [${claimed}], the walk's own search [${result.pages.join(' ')}]`);
   if (note !== pdfQuoteNote(result)) problem('the note does not say what was done, as written');
-  // drawn (S3): every page holding a mark (the words under the viewer's marks drawn), and the page shown for a quote
-  // not found
-  const viewerPages = new Set([...shown.occurrences.values()].flatMap(entry => [...entry.pages]));
-  const markedPages = new Set([...result.pages, ...viewerPages]);
-  for (const number of markedPages) {
-    const why = canvasProblem(pagesRead.get(number)?.canvas, viewerPages.has(number));
-    if (why) {
-      out.blank += 1;
-      problem(`page ${number} is marked, but ${why}`);
-    }
+  // alignment (B4): every marked span lies where its item is drawn
+  for (const [number, marks] of shown.spans) {
+    const aligned = alignmentCheck(models.get(number), pagesRead.get(number), pageInfo.get(number), marks);
+    out.misaligned += aligned.misaligned;
+    if (aligned.misaligned) problem(`${aligned.misaligned} marked span(s) of page ${number} do not lie where their words are drawn`);
   }
-  if (!marked && page && pagesRead.has(page)) {
-    const why = canvasProblem(pagesRead.get(page)?.canvas, false);
+  // drawn and seen (S3, B5, B6): every page holding an occurrence or a mark, and the page shown for a quote not found
+  const viewerPages = [...new Set([...shown.spans.keys(), ...viewerPagesOf(reading)])];
+  const seen = reading.seen instanceof Map ? reading.seen : new Map();
+  for (const number of requiredPages(quote, reading, result, viewerPages)) {
+    const said = result.pages.includes(number) || viewerPages.includes(number) ? 'marked' : 'shown';
+    const read = pagesRead.get(number);
+    const why = read?.drawn ? canvasProblem(read.canvas, shown.spans.has(number), (models.get(number)?.units.length || 0) > 0) : 'it is not drawn';
     if (why) {
       out.blank += 1;
-      problem(`page ${page} is shown, but ${why}`);
+      problem(`page ${number} is ${said}, but ${why}`);
+    }
+    const unseen = seenProblem(seen.get(number));
+    if (unseen) {
+      out.unseen += 1;
+      problem(`page ${number} is ${said}, but ${unseen}`);
     }
   }
   out.no_text = !marked && result.empty;
@@ -1219,24 +1618,43 @@ function judgeQuote(quote, reading) {
 // The check over every quote chosen ({quote, reading}), counted: how many were marked once, more than once, not found
 // (the walk's own search agreeing; and of them, on a page with no searchable text), unavailable, marked off their page,
 // marked as other than the walk's occurrences, not marked where the walk found them, cut inside a character, marked on a
-// page not drawn, and the overprint flags not borne out. It passes when every quote was judged as the walk's own search
-// says and nothing was marked on another page - and, where the PDF viewer drew the document, when at least one of its
-// quotes was marked: a quote not found is allowed, but a viewer that marks nothing at all does not pass on the walk's
-// own documents, whose quotes are their own words.
+// page not drawn, with overprint flags other than the walk's copies, on a viewer whose page count or text layer is not the
+// document's, misaligned, not seen as drawn - and the last quote marked judged again after each redraw (chosen.redraws:
+// Zoom in, then Fit width; B7). It passes when every quote was judged as the walk's own reading says and nothing was
+// marked on another page - and, where the PDF viewer drew the document, when at least one of its quotes was marked: a
+// quote not found is allowed, but a viewer that marks nothing at all does not pass on the walk's own documents, whose
+// quotes are their own words.
 function quoteMarkChecks(chosen) {
   const data = { quotes: chosen.length, marked_once: 0, marked_multi: 0, not_found: 0, no_text: 0, unavailable: 0, unresolved: 0,
-    off_page: 0, mismatched: 0, missed: 0, cut: 0, blank: 0, flags: 0 };
+    off_page: 0, mismatched: 0, missed: 0, cut: 0, blank: 0, flags: 0, pages: 0, layers: 0, misaligned: 0, unseen: 0, redraws: 0, redraw_failed: 0 };
+  const counted = ['off_page', 'mismatched', 'missed', 'cut', 'blank', 'flags', 'pages', 'layers', 'misaligned', 'unseen'];
   const problems = [];
   const inPdf = { chosen: 0, marked: 0 };
   for (const { quote, reading } of chosen) {
     const judged = judgeQuote(quote, reading);
     data[{ once: 'marked_once', multi: 'marked_multi', not_found: 'not_found', unavailable: 'unavailable' }[judged.outcome] || 'unresolved'] += 1;
     if (judged.outcome === 'not_found' && judged.no_text) data.no_text += 1;
-    for (const key of ['off_page', 'mismatched', 'missed', 'cut', 'blank', 'flags']) data[key] += judged[key];
+    for (const key of counted) data[key] += judged[key];
     problems.push(...judged.problems);
     if (reading?.mode === 'pdf') {
       inPdf.chosen += 1;
       if (judged.outcome === 'once' || judged.outcome === 'multi') inPdf.marked += 1;
+    }
+  }
+  data.pages = Math.min(data.pages, 1);
+  // the redraws (B7): the last quote marked, judged again on its page drawn again at the new scale
+  for (const step of Array.isArray(chosen.redraws) ? chosen.redraws : []) {
+    data.redraws += 1;
+    const said = `after ${step.step}`;
+    if (step.error || !step.redrawn) {
+      data.redraw_failed += 1;
+      problems.push(`${said}: ${step.error || `page ${step.page} was not drawn again at the new scale`}`);
+      continue;
+    }
+    const judged = judgeQuote(step.quote, step.reading);
+    if (judged.problems.length) {
+      data.redraw_failed += 1;
+      problems.push(...judged.problems.map(text => `${said}, ${text}`));
     }
   }
   // first among the problems, so the reason always shows it
@@ -1245,7 +1663,10 @@ function quoteMarkChecks(chosen) {
     + `${data.not_found} not found (the walk's own search agrees; ${data.no_text} on a page with no searchable text), `
     + `${data.off_page} mark(s) off the quote's page, ${data.mismatched} marked other than the walk's own, `
     + `${data.missed} found by the walk and not marked, ${data.cut} beginning or ending inside a character, `
-    + `${data.blank} marked page(s) not drawn, ${data.flags} overprint flag(s) not borne out`;
+    + `${data.blank} required page(s) not drawn, ${data.unseen} not seen as drawn, ${data.misaligned} marked span(s) out of place, `
+    + `${data.flags} overprint flag(s) other than the walk's copies, ${data.layers} text layer(s) not the document's, `
+    + `${data.pages ? 'the page count not the document\'s' : 'the page count the document\'s'}, `
+    + `${data.redraws - data.redraw_failed} of ${data.redraws} redraw(s) judged as before`;
   return check('quotes.marks', chosen.length > 0 && problems.length === 0 && data.off_page === 0, problems.length ? `${summary}; ${problems.slice(0, 8).join('; ')}` : summary, data);
 }
 
@@ -1265,18 +1686,26 @@ function readViewer() {
     drawn: Array.from(viewer.querySelectorAll('.pdf-page')).filter(item => item.querySelector('.pdf-text')).map(item => Number(item.getAttribute('data-page'))) };
 }
 
-// Runs in the page: one drawn page of the PDF viewer as the walk judges it - its text layer in order (each item's span:
-// its text, whether the viewer flags it as an overprint copy, its box [left, top, height] in CSS px from the page's
-// corner; and each <br>), every mark (.pdf-mark, or a mark element, with data-occurrence) as the item and the offsets in
-// that item's string it covers, and the page's canvas measured where it is drawn: whether it is shown, the share of its
-// pixels painted and the share that differ from its dominant colour. Pixels never leave the page.
-function readPdfPage(number) {
+// Runs in the page: one drawn page of the PDF viewer as the walk judges it ({number, ink: INK_RULE}) - its box's size,
+// its text layer in order (each span: its text, whether the viewer flags it as an overprint copy, its box [left, top,
+// width, height] in CSS px from the page's corner and its font family; and each <br>), every mark (.pdf-mark, or a mark
+// element, with data-occurrence) as the span and the offsets in its text it covers, the share of the font's height above
+// its baseline for each family (as the library's text layer measures it: the font's bounding box at 30 px), and the
+// canvas measured where it is drawn: whether it is shown (displayed, visible, its box the page's), the share of its pixels
+// painted, its paper (most common luminance), its INK_RULE.percentile luminance and the ink threshold they give (B6),
+// how many of its pixels are ink, and how many of the pixels under the marks. Pixels never leave the page.
+function readPdfPage(request) {
+  const { number, ink: rule } = typeof request === 'object' && request !== null ? request : { number: request };
+  const step = rule && Number.isFinite(rule.step) ? rule.step : 8;
+  const share = rule && Number.isFinite(rule.share) ? rule.share : 0.35;
+  const percentile = rule && Number.isFinite(rule.percentile) ? rule.percentile : 0.02;
   const item = document.querySelector(`#documentViewer .pdf-page[data-page="${number}"]`);
   const layer = item ? item.querySelector('.pdf-text') : null;
   if (!item || !layer) return { number, drawn: false };
   const origin = item.getBoundingClientRect();
   const tokens = [];
   const marks = [];
+  const families = new Set();
   let items = 0;
   const visit = parent => {
     for (const node of Array.from(parent.childNodes)) {
@@ -1291,10 +1720,12 @@ function readPdfPage(number) {
       if (node.nodeType !== 1 && node.nodeType !== 3) continue;
       const index = items;
       items += 1;
-      const token = { kind: 'item', text: node.textContent, copy: node.nodeType === 1 && node.getAttribute('data-overprint') === '1', box: null };
+      const token = { kind: 'item', text: node.textContent, copy: node.nodeType === 1 && node.getAttribute('data-overprint') === '1', box: null, family: '' };
       if (node.nodeType === 1) {
         const box = node.getBoundingClientRect();
-        token.box = [box.left - origin.left, box.top - origin.top, box.height];
+        token.box = [box.left - origin.left, box.top - origin.top, box.width, box.height];
+        token.family = node.style.fontFamily || '';
+        if (token.family) families.add(token.family);
         let offset = 0;
         const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
         for (let text = walker.nextNode(); text; text = walker.nextNode()) {
@@ -1310,30 +1741,50 @@ function readPdfPage(number) {
   };
   visit(layer);
   for (const mark of marks) mark.occurrence = /^\d+$/.test(String(mark.occurrence)) ? Number(mark.occurrence) : `?${mark.occurrence}`;
+  const ascent = {};
+  const probe = document.createElement('canvas').getContext('2d');
+  for (const family of families) {
+    probe.font = `30px ${family}`;
+    const metrics = probe.measureText('');
+    const up = metrics.fontBoundingBoxAscent;
+    const down = Math.abs(metrics.fontBoundingBoxDescent);
+    ascent[family] = up ? up / (up + down) : null;
+  }
   const canvas = item.querySelector('canvas');
   const measured = { present: Boolean(canvas) };
   if (canvas) {
     const style = getComputedStyle(canvas);
     const shown = getComputedStyle(item);
     const box = canvas.getBoundingClientRect();
-    measured.visible = style.display !== 'none' && style.visibility === 'visible' && Number(style.opacity) > 0
-      && shown.visibility === 'visible' && Number(shown.opacity) > 0 && box.width >= origin.width * 0.5 && box.height >= origin.height * 0.5;
+    measured.visible = style.display !== 'none' && style.visibility === 'visible' && shown.visibility === 'visible'
+      && box.width >= origin.width * 0.5 && box.height >= origin.height * 0.5;
     try {
       const { width, height } = canvas;
       const { data } = canvas.getContext('2d').getImageData(0, 0, width, height);
-      // the paper: the most common colour among the painted pixels, in steps of 16 per channel
-      const bins = new Uint32Array(4096);
+      const total = Math.max(1, width * height);
+      const light = new Uint8Array(total);
+      const histogram = new Uint32Array(256);
       let opaque = 0;
-      for (let at = 0; at < data.length; at += 4) {
-        if (data[at + 3] !== 255) continue;
-        opaque += 1;
-        bins[((data[at] >> 4) << 8) | ((data[at + 1] >> 4) << 4) | (data[at + 2] >> 4)] += 1;
+      for (let at = 0, pixel = 0; at < data.length; at += 4, pixel += 1) {
+        const alpha = data[at + 3] / 255;
+        if (data[at + 3] === 255) opaque += 1;
+        const value = Math.round(alpha * (0.2126 * data[at] + 0.7152 * data[at + 1] + 0.0722 * data[at + 2]) + (1 - alpha) * 255);
+        light[pixel] = value;
+        histogram[value] += 1;
       }
       let paper = 0;
-      for (let bin = 1; bin < bins.length; bin += 1) if (bins[bin] > bins[paper]) paper = bin;
-      const drawnAt = at => data[at + 3] === 255 && Math.max(Math.abs((data[at] >> 4) - (paper >> 8)),
-        Math.abs((data[at + 1] >> 4) - ((paper >> 4) & 15)), Math.abs((data[at + 2] >> 4) - (paper & 15))) >= 2;
-      // what is drawn under the marks: each mark's box, in the canvas's pixels
+      for (let value = 1; value < 256; value += 1) if (histogram[value] > histogram[paper]) paper = value;
+      let low = 255;
+      for (let value = 0, seen = 0; value < 256; value += 1) {
+        seen += histogram[value];
+        if (seen >= percentile * total) {
+          low = value;
+          break;
+        }
+      }
+      const threshold = paper - Math.max(step, share * (paper - low));
+      let inked = 0;
+      for (let pixel = 0; pixel < total; pixel += 1) if (light[pixel] <= threshold) inked += 1;
       const scaleX = width / Math.max(1, box.width);
       const scaleY = height / Math.max(1, box.height);
       let markPixels = 0;
@@ -1347,17 +1798,233 @@ function readPdfPage(number) {
         for (let y = y0; y < y1; y += 1) {
           for (let x = x0; x < x1; x += 1) {
             markPixels += 1;
-            if (drawnAt((y * width + x) * 4)) markContent += 1;
+            if (light[y * width + x] <= threshold) markContent += 1;
           }
         }
       }
-      const total = Math.max(1, width * height);
-      Object.assign(measured, { pixels: total, opaque: opaque / total, markPixels, markContent });
+      Object.assign(measured, { pixels: total, opaque: opaque / total, paper, low, threshold, ink: inked, markPixels, markContent });
     } catch (error) {
       measured.error = String(error && error.name || error);
     }
   }
-  return { number, drawn: true, tokens, marks, canvas: measured };
+  return { number, drawn: true, size: [origin.width, origin.height], tokens, marks, ascent, canvas: measured };
+}
+
+// Runs in the page: the mean luminance of a drawn page's canvas over each block x block CSS px block of a clip of the
+// screen ({number, clip: {x, y, width, height} in viewport CSS px, block}), sampled at each canvas pixel's centre and
+// composited over white as the page shows it, and which blocks a mark (with 2 px around it) touches; with the page's box
+// as it is now, so a page that moved is noticed. Pixels never leave the page.
+function canvasBlocks(request) {
+  const { number, clip, block } = request;
+  const item = document.querySelector(`#documentViewer .pdf-page[data-page="${number}"]`);
+  const canvas = item ? item.querySelector('canvas') : null;
+  if (!item || !canvas || !item.querySelector('.pdf-text')) return null;
+  const page = item.getBoundingClientRect();
+  const box = canvas.getBoundingClientRect();
+  const cols = Math.ceil(clip.width / block);
+  const rows = Math.ceil(clip.height / block);
+  const sx = canvas.width / Math.max(1, box.width);
+  const sy = canvas.height / Math.max(1, box.height);
+  const left = Math.max(0, Math.floor((clip.x - box.left) * sx));
+  const top = Math.max(0, Math.floor((clip.y - box.top) * sy));
+  const right = Math.min(canvas.width, Math.ceil((clip.x + clip.width - box.left) * sx));
+  const bottom = Math.min(canvas.height, Math.ceil((clip.y + clip.height - box.top) * sy));
+  const sums = new Float64Array(cols * rows);
+  const counts = new Uint32Array(cols * rows);
+  if (right > left && bottom > top) {
+    const { data } = canvas.getContext('2d').getImageData(left, top, right - left, bottom - top);
+    for (let y = top; y < bottom; y += 1) {
+      const row = Math.floor(((y + 0.5) / sy + box.top - clip.y) / block);
+      if (row < 0 || row >= rows) continue;
+      for (let x = left; x < right; x += 1) {
+        const col = Math.floor(((x + 0.5) / sx + box.left - clip.x) / block);
+        if (col < 0 || col >= cols) continue;
+        const at = ((y - top) * (right - left) + (x - left)) * 4;
+        const alpha = data[at + 3] / 255;
+        sums[row * cols + col] += alpha * (0.2126 * data[at] + 0.7152 * data[at + 1] + 0.0722 * data[at + 2]) + (1 - alpha) * 255;
+        counts[row * cols + col] += 1;
+      }
+    }
+  }
+  const means = Array.from(sums, (sum, index) => (counts[index] ? Math.round((sum / counts[index]) * 10) / 10 : -1));
+  const masked = new Array(cols * rows).fill(0);
+  for (const mark of item.querySelectorAll('.pdf-text .pdf-mark, .pdf-text mark')) {
+    const area = mark.getBoundingClientRect();
+    const c0 = Math.max(0, Math.floor((area.left - 2 - clip.x) / block));
+    const c1 = Math.min(cols - 1, Math.floor((area.right + 2 - clip.x) / block));
+    const r0 = Math.max(0, Math.floor((area.top - 2 - clip.y) / block));
+    const r1 = Math.min(rows - 1, Math.floor((area.bottom + 2 - clip.y) / block));
+    for (let row = r0; row <= r1; row += 1) for (let col = c0; col <= c1; col += 1) masked[row * cols + col] = 1;
+  }
+  return { page: [page.left, page.top, page.width, page.height], cols, rows, means, masked };
+}
+
+// Runs in the page: where a drawn page is on the screen - its box, the viewer's visible content box (its scrollbars
+// aside), the viewer's scroll position and the window's size, all in viewport CSS px.
+function seenGeometry(number) {
+  const viewer = document.querySelector('#documentViewer');
+  const item = document.querySelector(`#documentViewer .pdf-page[data-page="${number}"]`);
+  if (!viewer || !item) return null;
+  const page = item.getBoundingClientRect();
+  const outer = viewer.getBoundingClientRect();
+  return { page: [page.left, page.top, page.width, page.height],
+    view: [outer.left + viewer.clientLeft, outer.top + viewer.clientTop, viewer.clientWidth, viewer.clientHeight],
+    scroll: [viewer.scrollLeft, viewer.scrollTop], window: [window.innerWidth, window.innerHeight],
+    drawn: Boolean(item.querySelector('.pdf-text') && item.querySelector('canvas')) };
+}
+
+// Runs in the page: the viewer scrolled to [left, top] at once.
+function scrollViewerTo(position) {
+  const viewer = document.querySelector('#documentViewer');
+  if (viewer) {
+    viewer.scrollLeft = position[0];
+    viewer.scrollTop = position[1];
+  }
+}
+
+// Runs in the page: the view address's bytes, fetched in the page itself with the member's session (GET, the same origin,
+// through whatever the page's own requests go through), as base64.
+function fetchView(address) {
+  return fetch(address, { credentials: 'same-origin' }).then(async response => {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = '';
+    for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(at, at + 0x8000));
+    return { status: response.status, type: response.headers.get('content-type') || '', data: btoa(binary) };
+  }, error => ({ status: 0, type: '', data: '', error: String(error && error.name || error) }));
+}
+
+// Runs in the page: a drawn page's box width and its canvas's pixel width, and whether its canvas is drawn at its box's
+// width now (one canvas pixel per CSS px and screen pixel, or capped by the canvas size limit).
+function pageScale(number) {
+  const item = document.querySelector(`#documentViewer .pdf-page[data-page="${number}"]`);
+  const canvas = item ? item.querySelector('canvas') : null;
+  if (!item) return null;
+  const width = item.getBoundingClientRect().width;
+  const ratio = window.devicePixelRatio || 1;
+  return { width, canvas: canvas ? canvas.width : 0, text: Boolean(item.querySelector('.pdf-text')),
+    atScale: Boolean(canvas) && (Math.abs(canvas.width - Math.floor(width * ratio)) <= 2 || canvas.width * canvas.height >= 16000000) };
+}
+
+// A PNG screenshot's pixels (8-bit gray, gray and alpha, RGB or RGBA, not interlaced: what Chromium writes), as
+// {width, height, channels, data}; it throws on any other PNG.
+function decodePng(buffer) {
+  const png = Buffer.from(buffer);
+  if (png.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error('not a PNG');
+  let at = 8;
+  let header = null;
+  const parts = [];
+  while (at + 8 <= png.length) {
+    const length = png.readUInt32BE(at);
+    const type = png.toString('latin1', at + 4, at + 8);
+    const body = png.subarray(at + 8, at + 8 + length);
+    if (type === 'IHDR') header = { width: body.readUInt32BE(0), height: body.readUInt32BE(4), depth: body[8], color: body[9], interlace: body[12] };
+    else if (type === 'IDAT') parts.push(body);
+    else if (type === 'IEND') break;
+    at += 12 + length;
+  }
+  const channels = { 0: 1, 4: 2, 2: 3, 6: 4 }[header?.color];
+  if (!header || header.depth !== 8 || !channels || header.interlace !== 0) throw new Error('a PNG this reader does not read');
+  const raw = zlib.inflateSync(Buffer.concat(parts));
+  const stride = header.width * channels;
+  const data = Buffer.alloc(stride * header.height);
+  for (let y = 0; y < header.height; y += 1) {
+    const filter = raw[y * (stride + 1)];
+    const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    for (let x = 0; x < stride; x += 1) {
+      const a = x >= channels ? data[y * stride + x - channels] : 0;
+      const b = y > 0 ? data[(y - 1) * stride + x] : 0;
+      const c = x >= channels && y > 0 ? data[(y - 1) * stride + x - channels] : 0;
+      let predicted = 0;
+      if (filter === 1) predicted = a;
+      else if (filter === 2) predicted = b;
+      else if (filter === 3) predicted = (a + b) >> 1;
+      else if (filter === 4) {
+        const p = a + b - c;
+        const [pa, pb, pc] = [Math.abs(p - a), Math.abs(p - b), Math.abs(p - c)];
+        predicted = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      } else if (filter !== 0) throw new Error(`a PNG filter ${filter} this reader does not know`);
+      data[y * stride + x] = (line[x] + predicted) & 0xff;
+    }
+  }
+  return { width: header.width, height: header.height, channels, data };
+}
+
+// The mean luminance of each block x block block of a decoded screenshot, row by row.
+function pngBlocks(image, block) {
+  const cols = Math.ceil(image.width / block);
+  const rows = Math.ceil(image.height / block);
+  const sums = new Float64Array(cols * rows);
+  const counts = new Uint32Array(cols * rows);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const at = (y * image.width + x) * image.channels;
+      const value = image.channels >= 3 ? 0.2126 * image.data[at] + 0.7152 * image.data[at + 1] + 0.0722 * image.data[at + 2] : image.data[at];
+      const index = Math.floor(y / block) * cols + Math.floor(x / block);
+      sums[index] += value;
+      counts[index] += 1;
+    }
+  }
+  return { cols, rows, means: Array.from(sums, (sum, index) => (counts[index] ? sum / counts[index] : -1)) };
+}
+
+// What the member sees of a drawn page against its canvas (B5): the page's box covered by tiles as large as the viewer's
+// visible content (the viewer scrolled to each at once, its scroll position put back afterwards); each tile a screenshot
+// in CSS px and the canvas's block means over the same clip, compared block by block outside the marks: {blocks, tiles,
+// paperBlocks and paperDifference (the blocks where the canvas is within INK_RULE.step of its paper, and the sum of
+// |screen - canvas| over them), inkBlocks, inkCanvas and inkScreen (the other blocks, and the sums of how much darker than
+// the paper the canvas and the screen are over them)}, or {error}.
+async function measureSeen(page, number, read) {
+  if (!read?.drawn || !Number.isFinite(read.canvas?.paper)) return { error: 'the page is not drawn' };
+  const start = await page.evaluate(seenGeometry, number);
+  if (!start?.drawn) return { error: 'the page is not drawn' };
+  const [pageW, pageH] = [start.page[2], start.page[3]];
+  const [viewW, viewH] = [start.view[2], start.view[3]];
+  if (!(viewW >= SEEN_BLOCK && viewH >= SEEN_BLOCK && pageW > 0 && pageH > 0)) return { error: 'the viewer shows none of it' };
+  const offsets =(size, view) => (size <= view ? [0] : [...new Set([...Array.from({ length: Math.ceil(size / view) }, (_, k) => Math.min(k * view, size - view)), size - view])]);
+  const out = { blocks: 0, tiles: 0, paperBlocks: 0, paperDifference: 0, inkBlocks: 0, inkCanvas: 0, inkScreen: 0 };
+  const paper = read.canvas.paper;
+  try {
+    for (const oy of offsets(pageH, viewH)) {
+      for (const ox of offsets(pageW, viewW)) {
+        const now = await page.evaluate(seenGeometry, number);
+        if (!now?.drawn) return { error: 'the page was let go while it was looked at' };
+        const left = pageW <= viewW ? now.scroll[0] : now.scroll[0] + (now.page[0] + ox - now.view[0]);
+        const top = pageH <= viewH ? now.scroll[1] + (now.page[1] - now.view[1]) : now.scroll[1] + (now.page[1] + oy - now.view[1]);
+        await page.evaluate(scrollViewerTo, [left, top]);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 30)))));
+        const there = await page.evaluate(seenGeometry, number);
+        if (!there?.drawn) return { error: 'the page was let go while it was looked at' };
+        const x0 = Math.ceil(Math.max(there.page[0], there.view[0], 0));
+        const y0 = Math.ceil(Math.max(there.page[1], there.view[1], 0));
+        const x1 = Math.floor(Math.min(there.page[0] + there.page[2], there.view[0] + there.view[2], there.window[0]));
+        const y1 = Math.floor(Math.min(there.page[1] + there.page[3], there.view[1] + there.view[3], there.window[1]));
+        if (x1 - x0 < SEEN_BLOCK || y1 - y0 < SEEN_BLOCK) continue;
+        const clip = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+        const shot = pngBlocks(decodePng(await page.screenshot({ clip, scale: 'css' })), SEEN_BLOCK);
+        const canvas = await page.evaluate(canvasBlocks, { number, clip, block: SEEN_BLOCK });
+        if (!canvas || canvas.cols !== shot.cols || canvas.rows !== shot.rows
+            || canvas.page.some((value, k) => Math.abs(value - there.page[k]) > 0.5)) {
+          return { error: 'the page moved while it was looked at' };
+        }
+        out.tiles += 1;
+        canvas.means.forEach((value, index) => {
+          if (value < 0 || canvas.masked[index] || shot.means[index] < 0) return;
+          out.blocks += 1;
+          if (paper - value >= INK_RULE.step) {
+            out.inkBlocks += 1;
+            out.inkCanvas += paper - value;
+            out.inkScreen += Math.max(0, paper - shot.means[index]);
+          } else {
+            out.paperBlocks += 1;
+            out.paperDifference += Math.abs(shot.means[index] - value);
+          }
+        });
+      }
+    }
+  } finally {
+    await page.evaluate(scrollViewerTo, start.scroll).catch(() => null);
+  }
+  return out;
 }
 
 // Runs in the page: a text document's frame - its text (every text node of its body, joined in order, as the page reads
@@ -1384,15 +2051,16 @@ function readTextFrame() {
   }
 }
 
-// The pages to read for one quote in a drawn PDF: every page of a short document, else the searched pages (the quote's
-// and the next; every page for a quote with no page), the pages the viewer says it marked and the pages it has drawn.
-function pagesToRead(quote, reading) {
-  const count = Number(reading?.pageCount) || 0;
+// The pages to read for one quote in a drawn PDF: every page of a short document (by the walk's own page count), else the
+// searched pages (the quote's and the next; every page for a quote with no page), the pages of the walk's own occurrences
+// (`result`), the pages the viewer says it marked and the pages it has drawn.
+function pagesToRead(quote, reading, result = null) {
+  const count = Number(reading?.document?.pageCount) || Number(reading?.pageCount) || 0;
   const every = Array.from({ length: count }, (_, index) => index + 1);
   if (count <= FULL_READ_PAGES) return every;
   const page = Number.isInteger(quote?.page) && quote.page > 0 ? quote.page : null;
   const wanted = new Set(page ? [page, page + 1] : every);
-  for (const number of [...(reading?.pages || []), ...(reading?.drawn || [])]) wanted.add(number);
+  for (const number of [...(result?.pages || []), ...(reading?.pages || []), ...(reading?.drawn || [])]) wanted.add(number);
   return [...wanted].filter(number => number >= 1 && number <= count).sort((a, b) => a - b);
 }
 
@@ -1425,7 +2093,40 @@ async function readDrawnPage(page, number) {
   await page.waitForFunction(wanted => Boolean(document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"] .pdf-text`)),
     number, { timeout: UI_TIMEOUT_MS }).catch(() => null);
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 50)))));
-  return page.evaluate(readPdfPage, number);
+  return page.evaluate(readPdfPage, { number, ink: INK_RULE });
+}
+
+// What the walk reads of the viewer for one quote in a drawn PDF: every page to judge it by (pagesToRead), each scrolled
+// to and read once drawn, and every page the quote requires drawn (requiredPages) seen as the member sees it.
+async function readPdfPages(page, quote, reading) {
+  const doc = reading.document;
+  const result = doc && !doc.error && Array.isArray(doc.pages) ? ownSearch(quote, documentModels(doc), doc.pageCount) : null;
+  reading.pagesRead = new Map();
+  for (const number of pagesToRead(quote, reading, result)) reading.pagesRead.set(number, await readDrawnPage(page, number));
+  reading.seen = new Map();
+  for (const number of requiredPages(quote, reading, result, viewerPagesOf(reading))) {
+    let read = reading.pagesRead.get(number);
+    if (!read?.drawn) {
+      read = await readDrawnPage(page, number);
+      reading.pagesRead.set(number, read);
+    }
+    reading.seen.set(number, await measureSeen(page, number, read));
+  }
+  return reading;
+}
+
+// The PDF the viewer was given, as the walk reads it itself (readDocument): `bytes` when the caller has them (the walk's
+// own upload), else the view address fetched in the page with the member's session (GET only).
+async function documentReading(page, enc, bytes) {
+  let data = bytes;
+  if (!data) {
+    const view = enc?.document?.view_url;
+    if (typeof view !== 'string' || !view) return { error: 'the encounter names no view address' };
+    const got = await page.evaluate(fetchView, new URL(view, page.url()).href).catch(error => ({ status: 0, error: String(error && error.message || error) }));
+    if (got.status !== 200) return { error: `the view address answered ${got.status || got.error}` };
+    data = Buffer.from(got.data, 'base64');
+  }
+  return readDocument(data);
 }
 
 // The browser's own viewer as framed now: its element (a handle, so the walk can tell a new frame from the old one
@@ -1437,14 +2138,79 @@ async function frameState(page) {
   return { handle, page: match ? Number(match[1]) : null };
 }
 
+// Waits until page `number` is drawn again after a zoom: its box's width changed from before's, its canvas is a new one
+// drawn at that width, and its text layer is there; scrolled to when it has none (released away from the view). Then two
+// frames, so the viewer has painted its marks. true when it was.
+async function redrawnPage(page, number, before) {
+  const drawn = () => page.waitForFunction(([wanted, width, canvas]) => {
+    const item = document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"]`);
+    const drawing = item ? item.querySelector('canvas') : null;
+    if (!item || !drawing || !item.querySelector('.pdf-text')) return false;
+    const shown = item.getBoundingClientRect().width;
+    const ratio = window.devicePixelRatio || 1;
+    return Math.abs(shown - width) >= 2 && Math.abs(drawing.width - canvas) >= 2
+      && (Math.abs(drawing.width - Math.floor(shown * ratio)) <= 2 || drawing.width * drawing.height >= 16000000);
+  }, [number, before.width, before.canvas], { timeout: 8000 }).then(() => true, () => false);
+  let ok = await drawn();
+  if (!ok) {
+    await page.evaluate(wanted => document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"]`)?.scrollIntoView({ block: 'center' }), number);
+    ok = await drawn();
+  }
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 100)))));
+  return ok;
+}
+
+// B7: the last quote the walk judged marked, judged again on its page drawn again - after Zoom in, then after Fit width
+// (the viewer's toolbar, #viewerZoom [data-zoom]) - [{step, quote, key, page, redrawn, reading}], or [{step, error}] where
+// it cannot be done. Nothing when no quote was marked.
+async function redrawChecks(page, chosen) {
+  const last = [...chosen].reverse().find(item => item.reading?.mode === 'pdf'
+    && ['once', 'multi'].includes(judgeQuote(item.quote, item.reading).outcome));
+  if (!last) return [];
+  const doc = last.reading.document;
+  const target = ownSearch(last.quote, documentModels(doc), doc.pageCount).pages[0];
+  const steps = [];
+  const marked = await page.evaluate(() => document.querySelector('#documentViewer')?.getAttribute('data-marked') || '');
+  if (marked !== last.key) {
+    await page.locator(`#quotesPanel .quote[data-quote="${String(last.key).replace(/"/g, '\\"')}"]`).click();
+    await page.waitForFunction(key => document.querySelector('#documentViewer')?.getAttribute('data-marked') === key, last.key,
+      { timeout: UI_TIMEOUT_MS }).catch(() => null);
+    await settleViewer(page);
+  }
+  for (const [action, step] of [['in', 'Zoom in'], ['fit', 'Fit width']]) {
+    await readDrawnPage(page, target);
+    const before = await page.evaluate(pageScale, target);
+    const button = page.locator(`#viewerZoom [data-zoom="${action}"]`);
+    try {
+      await button.click({ timeout: UI_TIMEOUT_MS });
+    } catch (error) {
+      steps.push({ step, quote: last.quote, key: last.key, page: target, error: `the viewer's ${step} could not be pressed` });
+      break;
+    }
+    const redrawn = before ? await redrawnPage(page, target, before) : false;
+    const reading = await page.evaluate(readViewer);
+    if (reading) {
+      reading.document = doc;
+      await readPdfPages(page, last.quote, reading);
+    }
+    steps.push({ step, quote: last.quote, key: last.key, page: target, redrawn, reading });
+  }
+  return steps;
+}
+
 // Chooses every quote in the quotes panel, in order, and reads what the viewer did for each ({quote, key, reading}): in
-// a drawn PDF, every page to judge it by (pagesToRead), each scrolled to and read once drawn; in the browser's own viewer,
-// the page its frame opens and whether that frame is a new one; in a text document, its text and marks.
-async function chooseQuotes(page, enc) {
+// a drawn PDF, the walk's own reading of the document (once: `options.bytes` where the caller has the PDF, else the view
+// address fetched in the page), every page to judge the quote by and every page it requires drawn, seen as the member
+// sees it; in the browser's own viewer, the page its frame opens and whether that frame is a new one; in a text document,
+// its text and marks. In a drawn PDF the last quote marked is then judged again after Zoom in and after Fit width
+// (chosen.redraws, which quoteMarkChecks judges). A caller that has the document's bytes passes them as options.bytes;
+// judgeQuote and quoteMarkChecks need nothing more than what this returns.
+async function chooseQuotes(page, enc, options = {}) {
   const served = servedQuotes(enc);
   const buttons = page.locator('#quotesPanel .quote');
   const total = await buttons.count();
   const chosen = [];
+  let doc = null;
   for (let index = 0; index < total; index += 1) {
     const button = buttons.nth(index);
     const key = await button.getAttribute('data-quote');
@@ -1459,8 +2225,9 @@ async function chooseQuotes(page, enc) {
     if (reading && reading.mode === 'pdf') {
       await settleViewer(page);
       reading = await page.evaluate(readViewer);
-      reading.pagesRead = new Map();
-      for (const number of pagesToRead(quote, reading)) reading.pagesRead.set(number, await readDrawnPage(page, number));
+      if (!doc) doc = await documentReading(page, enc, options.bytes || null);
+      reading.document = doc;
+      await readPdfPages(page, quote, reading);
     } else if (reading && reading.mode === 'frame') {
       const after = await frameState(page);
       const replaced = before && after ? !(await page.evaluate(([a, b]) => a === b, [before.handle, after.handle])) : null;
@@ -1472,6 +2239,7 @@ async function chooseQuotes(page, enc) {
     await before?.handle.dispose();
     chosen.push({ quote, key, reading });
   }
+  chosen.redraws = doc ? await redrawChecks(page, chosen) : [];
   return chosen;
 }
 
@@ -2151,7 +2919,9 @@ async function verifyDocument(page, ctx, sessions, doc) {
         return;
       }
       await viewFor(page, ctx, enc);
-      const chosen = await chooseQuotes(page, enc);
+      // the walk reads the PDF itself (D368 round 5): its own upload's bytes where it uploaded the PDF, else (a Word file's
+      // view is the PDF it was converted to) the view address, fetched in the page with its own session
+      const chosen = await chooseQuotes(page, enc, { bytes: doc.ext === '.pdf' ? doc.data : null });
       const made = quoteMarkChecks(chosen);
       record.quote_marks = made.data;
       add(made);
@@ -2377,10 +3147,14 @@ module.exports = {
   contractFor, scanContext, addQuotes, ownWording, NEVER_QUOTED, scanText, scanJson, scanFile, scanHeaders, checkScan,
   expectedActions,
   jsonChecks, showsToken, unitsProblem, modifiersProblem, domChecks, readEncounterDom, collectDomStrings, approve,
-  servedQuotes, foldMarked, FALLBACK_WHY, FRAME_REASONS, OVERPRINT_WINDOW, OVERPRINT_MIN_PX, OVERPRINT_SHARE,
-  CANVAS_OPAQUE_MIN, CANVAS_MARK_CONTENT_MIN, FULL_READ_PAGES, cutCharacters, pageModel, foldQuote, ownSearch, pdfQuoteNote,
-  unbornFlags, viewerMarks, canvasProblem, findPassagesText, textNote, judgeQuote, quoteMarkChecks, readViewer,
-  readPdfPage, readTextFrame, pagesToRead, chooseQuotes,
+  servedQuotes, foldMarked, FALLBACK_WHY, FRAME_REASONS, PDF_LIBRARY, OVERPRINT_HEIGHT_SHARE, OVERPRINT_REACH_MIN,
+  OVERPRINT_REACH_SHARE, SEAM_HEIGHT_SHARE, SEAM_ALONG_SHARE, SEAM_ACROSS_SHARE, NUMBER_SEPARATORS, ALIGN_ALONG, ALIGN_ACROSS,
+  SEEN_BLOCK, SEEN_PAPER_MAX, SEEN_INK_SHARE, SEEN_INK_BLOCKS, INK_RULE, INK_SHARE_MIN, CANVAS_OPAQUE_MIN, CANVAS_MARK_CONTENT_MIN,
+  FULL_READ_PAGES, cutCharacters, overprintCopies, continues, pageModel, foldQuote, searchPages, ownSearch, pdfQuoteNote,
+  readDocument, documentModels, layerCheck, viewerMarks, viewportTransform, spanPlacement, placedRight, alignmentCheck,
+  canvasProblem, seenMeasures, seenProblem, requiredPages, findPassagesText, textNote, judgeQuote, quoteMarkChecks,
+  readViewer, readPdfPage, canvasBlocks, seenGeometry, scrollViewerTo, fetchView, pageScale, readTextFrame, decodePng,
+  pngBlocks, measureSeen, pagesToRead, readPdfPages, documentReading, redrawChecks, chooseQuotes,
   servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportTxt,
   exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,
   evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
