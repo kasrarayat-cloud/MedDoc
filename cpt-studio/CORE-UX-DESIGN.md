@@ -64,7 +64,8 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   dialog's primary download; TXT and CSV, with the SYNTHETIC banner at both ends, stay as data files. A download names
   the round the page shows (`{kind, fmt, round}`, `fmt` pdf, csv or txt) and is refused as changed when that is not the
   latest; a PDF that cannot be made is refused (503, nothing stored). A download serves the stored bytes; an export from
-  an earlier round is marked earlier.
+  an earlier round, or made before a decision recorded after it on the same round, is marked earlier (`current: false`;
+  the page says "made before a later decision or coding review").
 
 ## 6. Flow
 
@@ -82,7 +83,10 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   when the dialog opens, and leaving the document closes it. When the server answers 409 (the coding review or the
   decision changed), the dialog closes, the page says nothing was recorded and reads the document again - nothing is
   sent twice. A download refused the same way (409 with no blockers) closes the export dialog and reads the document
-  again; a refusal with blockers stays in the dialog.
+  again; a refusal with blockers stays in the dialog. The export dialog opened again while that read runs says "This
+  coding review has changed. The page is loading the latest; the downloads are offered again once it has." and offers
+  nothing; once the read has ended it is drawn as opened on the read the page then has, so its download names the latest
+  round. The refused download's own guard is released first, so no other choice waits on that read.
 - Downloads: while the server makes the file, every option of the export dialog waits (disabled), the chosen one says
   so ("Preparing PDF…" on a PDF button, with `aria-busy`) and `#exportStatus` says the file is being prepared. Only the
   server's 201 makes the page say the file is ready ("Your PDF is ready. Downloading <filename>.") and start the
@@ -91,6 +95,15 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   Nothing was saved. Try again."), shows the server's sentence in `#exportError` and gives the options back for a
   retry (a notice instead when the dialog was closed meanwhile); nothing is said to be ready and nothing is downloaded.
   The dialog opened again while a file is being made says so and its options wait until it is made.
+- One gesture makes one file: the second click of a double click (`event.detail` > 1) is not a choice, and once a file
+  is made its option waits (disabled) for at least a second and until the dialog has been drawn from the document read
+  again; then it is offered again, with the focus back on it when nothing else holds the focus.
+- An open export dialog follows every read of its document (the poll, the read after an act or a download) while the
+  read is of the round it was opened on: an approval recorded or the round finishing changes its options and its status
+  at once. A read that lands while a file is being made leaves the dialog as it is until the file is made; a status that
+  says a file was just made keeps saying it; a read that changes nothing in the dialog writes nothing to it. Reads are
+  applied in the order the page asked for them: one that answers after a later read was shown changes nothing, and its
+  failure says nothing.
 
 ## 7. The customer encounter contract
 
@@ -148,11 +161,15 @@ dialog: `#exportDialog`, its copy presenting the PDF as the report for the docto
 `#exportStatus` (`role=status`: what can be downloaded, then the file being prepared and made); `#exportOptions` with
 one `.export-group` per kind - "Codes — not approved" (the draft) and "Approved codes" - each leading with its PDF,
 `button.button.primary.export-pdf[data-export-kind][data-export-fmt=pdf]` ("Download PDF", full width; "Preparing
-PDF…" with `aria-busy` while it is made), described by the `p.export-pdf-note` under it (draft: every code with its
-status, evidence and what still needs a decision; approved: only approved codes, with who approved them and when);
+PDF…" with `aria-busy` while it is made; named "Download PDF (draft report)" or "Download PDF (approved report)" by
+`aria-label`, the words shown first, so the two are told apart by name), described by the `p.export-pdf-note` under it
+(draft: every code with its status, any saved decision, the evidence and what still needs a decision; approved: only
+approved codes, with who approved them and when);
 for the approved group, why it waits (`.export-blockers`); then "Other formats" (`.export-other`): the CSV and the TXT
 as `.export-option[data-export-kind][data-export-fmt=csv|txt]`, spreadsheet first. A group's options are enabled by
-the readiness (`readiness.draft`, `readiness.approved`). Downloads made earlier are listed under "Earlier downloads"
+the readiness (`readiness.draft`, `readiness.approved`); each `.export-group` is a `role=group` named by its label
+(`aria-labelledby`). The draft data files' lines say what they hold, saved decisions included (a draft holds the
+decisions saved so far, approvals among them). Downloads made earlier are listed under "Earlier downloads"
 (`.report-list .report-item`: the file's link, then its kind, format - PDF, CSV or TXT, when the server names one - and
 time); `#exportError` (`role=alert`) holds the server's sentence when a download is refused.
 

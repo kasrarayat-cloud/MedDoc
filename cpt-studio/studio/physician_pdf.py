@@ -19,9 +19,11 @@ evidence-page treatment for continuation pages; longer cases flow onto more page
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -147,6 +149,8 @@ class PhysicianReport:
     notes_title: str = ''
     notes: tuple[str, ...] = ()                 # documentation notes (drafts)
     as_of: datetime | None = None               # the saved timestamp the PDF metadata carries (UTC)
+    header_title: str = ''                      # the header's identity: the title (shortened to fit) ...
+    header_suffix: str = ''                     # ... then this, always whole (encounter reference, coding review)
 
 
 _registered = False
@@ -162,25 +166,56 @@ def register_fonts() -> None:
     _registered = True
 
 
-# Characters that carry no visible meaning in a printed quotation; everything else is kept exactly.
-_CONTROL = re.compile('[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f​-‍⁠﻿]')
-_LINE_BREAKS = re.compile(r'\r\n|\r|\n|\t| | ')
+# What never prints. Every control character is a separator in the stored text (a vertical tab, a form feed, the
+# information separators and NEL break lines as str.splitlines reads them), so it becomes a space: deleting one would
+# join the words or numbers on either side ("2\v3" must not print "23"). Invisible format characters - Unicode's
+# default-ignorable code points: zero-width spaces and joiners, bidirectional marks, embeddings and isolates, variation
+# selectors, the soft hyphen, tags - draw nothing and are deleted.
+_CONTROLS = re.compile('[\x00-\x1f\x7f-\x9f\u2028\u2029]')
+_INVISIBLE = re.compile('[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e'
+                        '\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\U0001bca0-\U0001bca3\U0001d173-\U0001d17a'
+                        '\U000e0000-\U000e0fff]')
+REPLACEMENT = '�'
+RTL_CLASSES = ('R', 'AL')
 
 
 def clean_text(value) -> str:
-    """Printable form of a saved string: line breaks and tabs become spaces, invisible control characters go."""
+    """Printable form of a saved string: every control character (line breaks and tabs included) becomes a space and
+    invisible format characters go; nothing else changes."""
     text = '' if value is None else str(value)
-    return _CONTROL.sub('', _LINE_BREAKS.sub(' ', text))
+    return _INVISIBLE.sub('', _CONTROLS.sub(' ', text.replace('\r\n', '\n')))
 
 
 def _covered(font_name: str) -> dict:
     return getattr(pdfmetrics.getFont(font_name), 'face').charToGlyph
 
 
+def _drawable(ch: str, primary: dict) -> bool:
+    """The report can draw ``ch`` as itself: one of its fonts has it and it lies in the Basic Multilingual Plane
+    (ReportLab's text layer cannot carry a character above U+FFFF, so search and copy would lose it)."""
+    point = ord(ch)
+    return point <= 0xFFFF and (point in primary or point in _covered(FALLBACK))
+
+
+def displayable(text: str, font: str = BODY) -> str:
+    """``text`` with every character the report cannot draw replaced - by its compatibility form when that can be drawn
+    (NFKC: a squared milligram sign prints 'mg', a mathematical letter its letter), otherwise by U+FFFD - never a blank
+    box that would also vanish from the text layer. Nothing else changes; render_report says so on the report."""
+    primary = _covered(font)
+    out = []
+    for ch in text:
+        if ch == ' ' or _drawable(ch, primary):
+            out.append(ch)
+            continue
+        plain = unicodedata.normalize('NFKC', ch)
+        out.append(plain if plain != ch and all(c == ' ' or _drawable(c, primary) for c in plain) else REPLACEMENT)
+    return ''.join(out)
+
+
 def markup(value, font: str = BODY) -> str:
     """Escape a saved string for paragraph markup; runs the font cannot draw use the fallback font."""
     register_fonts()
-    text = clean_text(value)
+    text = displayable(clean_text(value), font)
     if not text:
         return ''
     primary = _covered(font)
@@ -231,7 +266,8 @@ def _styles() -> dict:
         'units_missing': _style('units_missing', BODY, 8.5, 11.5, SECONDARY, spaceBefore=3),
         'notes_title': _style('notes_title', BODY_SEMI, 8, 11, SECONDARY, spaceBefore=16, spaceAfter=4,
                               keepWithNext=1),
-        'note_item': _style('note_item', BODY, 10.5, 15, INK, leftIndent=12, bulletIndent=0, spaceAfter=4),
+        'note_item': _style('note_item', BODY, 10.5, 15, INK, leftIndent=12, bulletIndent=0, spaceAfter=4,
+                            bulletFontName=BODY),
         'status_review': _style('status_review', BODY_SEMI, 10, 13, REVIEW_INK),
         'status_ok': _style('status_ok', BODY_SEMI, 10, 13, FOREST),
         'evidence_ref': _style('evidence_ref', BODY, 8.5, 11.5, SECONDARY),
@@ -244,10 +280,10 @@ def _styles() -> dict:
         'identity': _style('identity', BODY, 9.5, 13.5, SECONDARY, spaceAfter=14),
         'code_heading': _style('code_heading', BODY_SEMI, 15, 19, FOREST),
         'quote': _style('quote', BODY, 12, 18, INK),
-        'locator': _style('locator', MONO_REGULAR, 8, 11, SECONDARY),
+        'locator': _style('locator', MONO_REGULAR, 8, 11, SECONDARY, spaceBefore=9),
         'quote_long': _style('quote_long', BODY, 12, 18, INK, backColor=IVORY, borderColor=RULE, borderWidth=0.75,
                              borderPadding=(10, 14, 10, 14), spaceBefore=12, spaceAfter=12, leftIndent=14,
-                             rightIndent=14),
+                             rightIndent=14, allowWidows=0, allowOrphans=0),
         'note': _style('note', BODY, 10, 14, SECONDARY, spaceBefore=6, spaceAfter=8),
         'scope_label': _style('scope_label', BODY_SEMI, 10, 13.5, INK),
         'scope_value': _style('scope_value', BODY, 10, 13.5, SECONDARY, alignment=TA_RIGHT),
@@ -290,7 +326,8 @@ def _value_or_absent(value: str | None, report: PhysicianReport) -> str:
 
 def _plain_table(rows, widths, extra=()) -> Table:
     table = Table(rows, colWidths=list(widths))
-    table.setStyle(TableStyle([
+    table.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), BODY),  # never ReportLab's default Helvetica
+        
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
@@ -320,8 +357,14 @@ class _Pages:
         # Status and identity, repeated on every page.
         _draw_text(canv, right, PAGE_HEIGHT - 59, report.status_line, BODY_SEMI, 8,
                    REVIEW_INK if report.kind == DRAFT else FOREST, align='right')
-        _draw_text(canv, right, PAGE_HEIGHT - 72, report.identity_line, BODY, 7.5, SECONDARY, align='right',
-                   max_width=CONTENT_WIDTH * 0.62)
+        if report.header_title:
+            suffix = f' · {report.header_suffix}' if report.header_suffix else ''
+            budget = CONTENT_WIDTH * 0.62 - _text_width(suffix, BODY, 7.5)
+            _draw_text(canv, right, PAGE_HEIGHT - 72, _fit(report.header_title, BODY, 7.5, budget) + suffix, BODY,
+                       7.5, SECONDARY, align='right')
+        else:
+            _draw_text(canv, right, PAGE_HEIGHT - 72, report.identity_line, BODY, 7.5, SECONDARY, align='right',
+                       max_width=CONTENT_WIDTH * 0.62)
         canv.setStrokeColor(RULE)
         canv.setLineWidth(0.75)
         canv.line(MARGIN_X, HEADER_RULE_Y, right, HEADER_RULE_Y)
@@ -351,11 +394,25 @@ def _runs_width(runs, size) -> float:
     return sum(pdfmetrics.stringWidth(text, face, size) for face, text in runs)
 
 
+def _text_width(text, font, size) -> float:
+    return _runs_width(_runs(displayable(clean_text(text), font), font), size)
+
+
+def _fit(text, font, size, max_width) -> str:
+    """``text`` as printed, shortened with an ellipsis only when it is wider than ``max_width``."""
+    text = displayable(clean_text(text), font)
+    if _runs_width(_runs(text, font), size) <= max_width:
+        return text
+    while text and _runs_width(_runs(text + '…', font), size) > max_width:
+        text = text[:-1]
+    return text.rstrip() + '…'
+
+
 def _draw_text(canv, x, y, text, font, size, color, align='left', max_width=None, char_space=0):
     """One canvas line with the fallback font for what ``font`` lacks; shortened with an ellipsis only when it cannot fit
     ``max_width`` (the header's identity line, which carries the document title the member typed)."""
     register_fonts()
-    text = clean_text(text)
+    text = displayable(clean_text(text), font)
     runs = _runs(text, font)
     if max_width is not None and _runs_width(runs, size) > max_width:
         while text and _runs_width(_runs(text + '…', font), size) > max_width:
@@ -383,7 +440,8 @@ def _strip(report: PhysicianReport, s: dict) -> Flowable:
     # not broken mid-word; any other count shares the width equally.
     widths = list(_STRIP_COLUMNS) if columns == len(_STRIP_COLUMNS) else [CONTENT_WIDTH / columns] * columns
     table = Table([labels, values], colWidths=widths)
-    table.setStyle(TableStyle([
+    table.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), BODY),  # never ReportLab's default Helvetica
+        
         ('BACKGROUND', (0, 0), (-1, -1), IVORY),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 10),
@@ -416,21 +474,30 @@ def _section_heading(left: str, right: str, s: dict) -> Table:
 _ROW_COLUMNS = (36, 104, 244, 54, 102)  # index, code, label, units, status: 540 pt
 
 
-def _code_row(index: int, row: CodeRow, report: PhysicianReport, s: dict) -> Table:
+def _code_row(index: int, row: CodeRow, report: PhysicianReport, s: dict) -> list:
+    """One code line as a single unsplittable row (never cut across pages). Units too long for their column (more than
+    five characters) are printed in the line's details instead of being broken; a line taller than a page - stored values
+    no layout can hold in one row - is printed as flowing paragraphs, the same facts in the same order."""
+    units = clean_text(row.units).strip() if _present(row.units) else None
+    long_units = units is not None and len(units) > 5
+    details = [detail for detail in row.details if _present(detail)] + ([f'Units: {units}'] if long_units else [])
     code_cell = [_p(markup(row.code, MONO), s['code']), _p(markup(row.caption), s['caption'])]
     label_cell = [_p(_value_or_absent(row.label, report), s['row_label'])]
-    label_cell += [_p(markup(detail), s['row_detail']) for detail in row.details if _present(detail)]
-    if _present(row.units):
-        units_cell = [_p('UNITS', s['units_label']), _p(markup(row.units, MONO), s['units_value'])]
-    else:
+    label_cell += [_p(markup(detail), s['row_detail']) for detail in details]
+    if units is None:
         units_cell = [_p('UNITS', s['units_label']), _p(markup(report.units_missing), s['units_missing'])]
+    elif long_units:
+        units_cell = [_p('UNITS', s['units_label']), _p(markup('In the line'), s['units_missing'])]
+    else:
+        units_cell = [_p('UNITS', s['units_label']), _p(markup(units, MONO), s['units_value'])]
     status_style = s['status_ok'] if report.kind == APPROVED else s['status_review']
     status_cell = [_p(markup(row.status, BODY_SEMI), status_style)]
     if row.evidence_ref:
         status_cell.append(_p(markup(row.evidence_ref), s['evidence_ref']))
     table = Table([[_p(markup(f'{index:02d}', MONO_REGULAR), s['index']), code_cell, label_cell, units_cell,
                     status_cell]], colWidths=list(_ROW_COLUMNS))
-    table.setStyle(TableStyle([
+    table.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), BODY),  # never ReportLab's default Helvetica
+        
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 10),
@@ -439,7 +506,19 @@ def _code_row(index: int, row: CodeRow, report: PhysicianReport, s: dict) -> Tab
         ('BOTTOMPADDING', (0, 0), (-1, -1), 16),
         ('LINEBELOW', (0, 0), (-1, -1), 0.75, RULE),
     ]))
-    return table
+    _, height = table.wrap(CONTENT_WIDTH, FRAME_HEIGHT)
+    if height <= FRAME_HEIGHT * 0.9:
+        return [table]
+    head = (f'<font face="{MONO_REGULAR}" size="9" color="#53645E">{index:02d}</font>&nbsp;&nbsp;&nbsp;'
+            f'<font face="{MONO}" size="16" color="#173F35">{markup(row.code, MONO)}</font>&nbsp;&nbsp;&nbsp;'
+            f'{markup(row.caption)}')
+    tail = ' · '.join(part for part in (f'Units: {units}' if units is not None and not long_units else
+                                        ('' if long_units else f'Units: {report.units_missing}'),
+                                        row.status, row.evidence_ref) if part)
+    flow = [Spacer(1, 14), _p(head, s['row_label']), _p(_value_or_absent(row.label, report), s['row_label'])]
+    flow += [_p(markup(detail), s['row_detail']) for detail in details]
+    flow += [_p(markup(tail), s['row_detail']), HorizontalRule(space_before=12, space_after=0)]
+    return flow
 
 
 def _review_flow(report: PhysicianReport, s: dict) -> list:
@@ -449,7 +528,8 @@ def _review_flow(report: PhysicianReport, s: dict) -> list:
     content = [_p(markup(report.review_title, BODY_SEMI), s['review_title'])]
     content += [_p(markup(item), s['review_body']) for item in report.review_items]
     box = Table([[content]], colWidths=[CONTENT_WIDTH])
-    box.setStyle(TableStyle([
+    box.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), BODY),  # never ReportLab's default Helvetica
+        
         ('BACKGROUND', (0, 0), (-1, -1), REVIEW_SURFACE),
         ('LEFTPADDING', (0, 0), (-1, -1), 16),
         ('RIGHTPADDING', (0, 0), (-1, -1), 16),
@@ -475,33 +555,41 @@ def _record(report: PhysicianReport, s: dict) -> list:
     columns = len(report.record)
     table = _plain_table([labels, values], [CONTENT_WIDTH / columns] * columns,
                          [('RIGHTPADDING', (0, 0), (-1, -1), 12), ('BOTTOMPADDING', (0, 0), (-1, 0), 4)])
-    return [KeepTogether([Spacer(1, 22), table])]
+    _, height = table.wrap(CONTENT_WIDTH, FRAME_HEIGHT)
+    if height <= FRAME_HEIGHT * 0.5:
+        return [KeepTogether([Spacer(1, 22), table])]
+    flow: list = [Spacer(1, 22)]  # e.g. very many reviewers with long names: the same pairs, flowing
+    for label, value in zip(labels, values):
+        flow += [label, value, Spacer(1, 6)]
+    return flow
 
 
 def _quote_block(item: EvidenceItem, s: dict) -> list:
-    """An exact quotation in an ivory box with its locator; a quotation too long for one box flows across pages."""
+    """An exact quotation and its locator in one ivory box that is never cut, so the locator (and the not-checked
+    caveat where it applies) always sits with its quotation. A quotation too long for one box flows across pages with
+    its locator FIRST, and no line of it is left alone at either end of a page."""
     quote = '“' + markup(item.quote) + '”'
     has_locator = _present(item.locator)
-    rows = [[_p(quote, s['quote'])]]
+    cell = [_p(quote, s['quote'])]
     if has_locator:
-        rows.append([_p(markup(item.locator, MONO_REGULAR), s['locator'])])
-    box = Table(rows, colWidths=[CONTENT_WIDTH])
-    box.setStyle(TableStyle([
+        cell.append(_p(markup(item.locator, MONO_REGULAR), s['locator']))
+    box = Table([[cell]], colWidths=[CONTENT_WIDTH])
+    box.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), BODY),  # never ReportLab's default Helvetica
+        
         ('BACKGROUND', (0, 0), (-1, -1), IVORY),
         ('BOX', (0, 0), (-1, -1), 0.75, RULE),
         ('LEFTPADDING', (0, 0), (-1, -1), 19),
         ('RIGHTPADDING', (0, 0), (-1, -1), 19),
-        ('TOPPADDING', (0, 0), (-1, 0), 17),
-        ('BOTTOMPADDING', (0, -1), (-1, -1), 17),
-        ('TOPPADDING', (0, 1), (-1, 1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 0 if has_locator else 17),
+        ('TOPPADDING', (0, 0), (-1, -1), 17),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 17),
     ]))
     _, height = box.wrap(CONTENT_WIDTH, PAGE_HEIGHT)
     if height <= FRAME_HEIGHT * 0.45:
         return [Spacer(1, 10), box]
     text = quote
     if has_locator:
-        text += f'<br/><font face="{MONO_REGULAR}" size="8" color="#53645E">{markup(item.locator, MONO_REGULAR)}</font>'
+        text = (f'<font face="{MONO_REGULAR}" size="8" color="#53645E">{markup(item.locator, MONO_REGULAR)}</font>'
+                f'<br/>{quote}')
     return [_p(text, s['quote_long'])]
 
 
@@ -518,10 +606,11 @@ def _code_heading(index: int, row: CodeRow, s: dict) -> Table:
 def _evidence_flow(report: PhysicianReport, s: dict) -> list:
     # The evidence continues on a new page (the design's appendix page) unless more than half a page is left, so a
     # short case does not leave a page nearly empty.
-    flow: list = [CondPageBreak(FRAME_HEIGHT * 0.5), Spacer(1, 22),
-                  _p(markup(report.evidence_eyebrow.upper(), BODY_SEMI), s['eyebrow']),
-                  _p(markup(report.evidence_title, DISPLAY), s['evidence_title']),
-                  _p(markup(report.evidence_identity), s['identity'])]
+    flow: list = [CondPageBreak(FRAME_HEIGHT * 0.5), Spacer(1, 22)]
+    header = [_p(markup(report.evidence_eyebrow.upper(), BODY_SEMI), s['eyebrow']),
+              _p(markup(report.evidence_title, DISPLAY), s['evidence_title']),
+              _p(markup(report.evidence_identity), s['identity'])]
+    header_height = sum(item.wrap(CONTENT_WIDTH, FRAME_HEIGHT)[1] + 20 for item in header)
     for index, row in enumerate(report.rows, start=1):
         # A heading is never left alone at the foot of a page. An unsplittable evidence box travels with it whole;
         # a long quotation (a paragraph, which can split) starts under it, and the page break before the heading
@@ -530,10 +619,11 @@ def _evidence_flow(report: PhysicianReport, s: dict) -> list:
         _, heading_height = heading.wrap(CONTENT_WIDTH, FRAME_HEIGHT)
         blocks = [_quote_block(item, s) for item in row.evidence] or [[_p(markup(report.no_evidence_text), s['empty'])]]
         first = blocks[0]
+        lead = header if index == 1 else []  # the section's title never stands alone above an empty page end
         if any(isinstance(f, Paragraph) for f in first):
-            flow += [CondPageBreak(heading_height + 90), heading, *first]
+            flow += [CondPageBreak(heading_height + 90 + (header_height if lead else 0)), *lead, heading, *first]
         else:
-            flow += [CondPageBreak(130), KeepTogether([heading, *first])]
+            flow += [CondPageBreak(130), KeepTogether([*lead, heading, *first])]
         for block in blocks[1:]:
             flow += block
         if _present(row.note):
@@ -546,10 +636,9 @@ def _evidence_flow(report: PhysicianReport, s: dict) -> list:
 def _notes_flow(report: PhysicianReport, s: dict) -> list:
     if not report.notes:
         return []
-    flow: list = [_p(markup((report.notes_title or 'Notes').upper(), BODY_SEMI), s['notes_title']),
-                  HorizontalRule(space_before=0, space_after=6)]
-    flow += [Paragraph(markup(note), s['note_item'], bulletText='–') for note in report.notes]
-    return flow
+    items = [Paragraph(markup(note), s['note_item'], bulletText='–') for note in report.notes]
+    return [KeepTogether([_p(markup((report.notes_title or 'Notes').upper(), BODY_SEMI), s['notes_title']),
+                          HorizontalRule(space_before=0, space_after=6), items[0]]), *items[1:]]
 
 
 def _scope_and_closing(report: PhysicianReport, s: dict) -> list:
@@ -578,12 +667,17 @@ def _story(report: PhysicianReport) -> list:
         Spacer(1, 22),
         _metrics(report, s),
         Spacer(1, 22),
-        _section_heading(report.codes_heading, report.codes_side_note, s),
     ]
+    heading = _section_heading(report.codes_heading, report.codes_side_note, s)
     if report.rows:
-        story += [_code_row(i, row, report, s) for i, row in enumerate(report.rows, start=1)]
+        rows = [_code_row(i, row, report, s) for i, row in enumerate(report.rows, start=1)]
+        story.append(KeepTogether([heading, *rows[0]]) if len(rows[0]) == 1 else heading)
+        story += rows[0][1:] if len(rows[0]) == 1 else rows[0]
+        for flow in rows[1:]:
+            story += flow
     else:
-        story += [HorizontalRule(space_before=6, space_after=6), _p(markup(report.empty_rows_text), s['empty'])]
+        story += [heading, HorizontalRule(space_before=6, space_after=6),
+                  _p(markup(report.empty_rows_text), s['empty'])]
     story += _review_flow(report, s)
     story += _record(report, s)
     if report.rows:
@@ -621,6 +715,7 @@ def _build(report: PhysicianReport, total: int | None) -> tuple[bytes, int]:
         topMargin=PAGE_HEIGHT - FRAME_TOP, bottomMargin=FRAME_BOTTOM,
         title=clean_text(report.document_title), author='QuillMD CPT Studio', subject='CPT coding summary',
         creator='QuillMD CPT Studio', producer='QuillMD CPT Studio', keywords='', invariant=1, pageCompression=1,
+        initialFontName=BODY,
     )
     frame = Frame(MARGIN_X, FRAME_BOTTOM, CONTENT_WIDTH, FRAME_HEIGHT, id='body',
                   leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
@@ -629,10 +724,42 @@ def _build(report: PhysicianReport, total: int | None) -> tuple[bytes, int]:
     return buffer.getvalue(), doc.page
 
 
+def _strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _strings(item)
+    elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+        for item in dataclasses.fields(value):
+            yield from _strings(getattr(value, item.name))
+
+
+def notices(report: PhysicianReport) -> tuple:
+    """Review-scope rows the printing itself requires: characters the report fonts cannot draw, and right-to-left text,
+    which is printed in its stored order (the TXT and CSV keep both exactly)."""
+    rows = []
+    texts = [clean_text(text) for text in _strings(report)]
+    if any(displayable(text) != text for text in texts):
+        rows.append(('Characters', 'Some cannot be drawn in this PDF and are shown in a plain form or as \ufffd; the TXT '
+                                   'and CSV keep every character', True))
+    if any(unicodedata.bidirectional(ch) in RTL_CLASSES for text in texts for ch in text):
+        rows.append(('Right-to-left text', 'Shown in its stored order, left to right; the TXT and CSV keep it exactly',
+                     True))
+    return tuple(rows)
+
+
 def render_report(report: PhysicianReport) -> bytes:
     """The report as PDF bytes. Two passes: the first counts pages so every footer can say 'n of total'."""
+    register_fonts()
+    extra = notices(report)
+    if extra:
+        report = dataclasses.replace(report, scope=tuple(report.scope) + extra)
     _, total = _build(report, None)
     data, pages = _build(report, total)
     if pages != total:  # footers are drawn outside the frame, so the flow cannot move between passes
         raise RuntimeError('page count changed between passes')
     return data
+
+
+register_fonts()  # at import: a missing font or a broken ReportLab fails the app's start, not a doctor's download

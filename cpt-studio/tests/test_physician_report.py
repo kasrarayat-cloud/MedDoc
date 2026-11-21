@@ -170,7 +170,9 @@ class PhysicianReportCase(r.CustomerCase, TestCase):
             r.row('45385', 'ready', evidence=[{'quote': 'the polyp was snared', 'page': None}])])
         text = flat(text_of(self.pdf(enc, 'draft', name='draft-missing')[0]))
         self.assertIn('Not recorded', text)  # the date of service
-        self.assertIn('Not sure', text)  # insurance 'unknown' is the member's saved answer, as the page shows it
+        # insurance 'unknown' is stored for "Not sure" and for no answer alike: it reads as the TXT and the page say it
+        self.assertIn('Not recorded Not given Synthetic coding', text)
+        self.assertNotIn('Not sure', text)
         self.assertIn('Not given', text)  # units
         self.assertIn('Modifiers: not given', text)
         self.assertIn('No excerpt', text)

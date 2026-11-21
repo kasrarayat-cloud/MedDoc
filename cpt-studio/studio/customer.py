@@ -100,11 +100,14 @@ def iso(value) -> Optional[str]:
 # --- display hygiene (BUILD-SPEC 7.4) --------------------------------------------------------------------------------------
 # The shared denylist's name rules (ops/verification/customer-denylist.json: provider_name, provider_name_joined,
 # model_id, interpreter_model), read here as replacements. The ops directory is not in the image, so the names are
-# repeated; tests/test_api_customer.py pins them to the file's patterns and vectors.
+# repeated; tests/test_api_customer.py pins them to the file's patterns and vectors. The model family names (Opus,
+# Sonnet, Haiku, ChatGPT) are names like the vendors' ("Claude Opus 4.5" reads "the system"); a bare "GPT" or "GPT 45"
+# is not, because GPT is also the liver enzyme ALT ("GPT 45 U/L", "SGPT"): only "gpt-<x>" and "chatgpt-<x>" are model
+# ids.
 
-NAMES = 'corti|astra|fable|openai|anthropic|claude|gemini|google'
-JOINED_NAMES = 'Corti|Astra|Fable|Openai|OpenAI|Anthropic|Claude|Gemini|Google'
-_MODEL_ID = re.compile(r'\b(?:gpt|claude|gemini)-[a-z0-9]+(?:[.-][a-z0-9]+)*', re.ASCII | re.IGNORECASE)
+NAMES = 'corti|astra|fable|openai|anthropic|claude|gemini|google|opus|sonnet|haiku|chatgpt'
+JOINED_NAMES = 'Corti|Astra|Fable|Openai|OpenAI|Anthropic|Claude|Gemini|Google|Opus|Sonnet|Haiku|Chatgpt|ChatGPT'
+_MODEL_ID = re.compile(r'\b(?:gpt|chatgpt|claude|gemini)-[a-z0-9]+(?:[.-][a-z0-9]+)*', re.ASCII | re.IGNORECASE)
 # a name, any names joined to it ("Claude Fable"), and a version after them ("5.2"); bounded by letters and digits only,
 # so "fable_unknown" is a hit and "affable" or "corticosteroid" is not
 _NAME_RUN = re.compile(rf'(?<![a-z0-9])(?:{NAMES})(?:[ _-]+(?:{NAMES}))*(?:[ _-]+v?\d+(?:\.\d+)*)?(?![a-z0-9])',

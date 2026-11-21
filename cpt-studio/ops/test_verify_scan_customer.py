@@ -126,6 +126,39 @@ PDF_INFO = {'title': 'CPT Studio approved codes F6000000 r1', 'author': 'QuillMD
             'keywords': ''}
 
 
+REPORT_FONT = HERE.parent / 'studio' / 'report_fonts' / 'DejaVuSans.ttf'  # the report's own fallback font
+
+
+def ttf_pdf_bytes(*pages) -> bytes:
+    """As pdf_bytes, drawn in the report's bundled TrueType font (DejaVu Sans, embedded as a subset with its own
+    ToUnicode map), so a character Helvetica's encoding cannot carry - an invisible format character - reaches the text
+    layer as itself, as it would from the report's renderer."""
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.pdfgen import canvas
+    if 'ScanTestSans' not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont('ScanTestSans', str(REPORT_FONT)))
+    buffer = io.BytesIO()
+    drawing = canvas.Canvas(buffer, invariant=1)
+    for lines in pages:
+        drawing.setFont('ScanTestSans', 11)
+        for number, line in enumerate(lines):
+            drawing.drawString(72, 720 - 16 * number, line)
+        drawing.showPage()
+    drawing.save()
+    return buffer.getvalue()
+
+
+def report_pages(*bodies, identity='Synthetic EGD with biopsy · F6000000 · Coding review 1') -> list:
+    """Pages as the physician report draws them (studio/physician_pdf.py): its running header and footer first on every
+    page - the brand, the status line, the identity line, the footer note, the reference with "<page> of <pages>" -
+    then the page's own lines ``bodies[n]``."""
+    total = len(bodies)
+    return [['QuillMD', 'CPT STUDIO', 'DRAFT · REVIEW REQUIRED', identity, 'Synthetic data · Not for billing or claims',
+             f'CPT-F6000000 · r1   /   {number:02d} of {total:02d}', *body]
+            for number, body in enumerate(bodies, start=1)]
+
+
 @functools.lru_cache(maxsize=None)
 def approved_pdf(leak: str = '') -> bytes:
     """The stand-in's approved PDF; ``leak`` 'text' adds a model name and its usage to its evidence page, 'metadata'
@@ -282,9 +315,122 @@ class PdfReaderTests(unittest.TestCase):
         one_line = sc.read_pdf(pdf_bytes(['Reason: its own tool calls retrieved 4 passages.']))
         self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(one_line, sc.scan_context(), 'x.pdf')],
                          [('tool_call', 'x.pdf page 1 line 1')])
-        # lines a quotation of the document separates are not one phrase: nothing is joined over the quotation
+        # L6-3: a quotation set aside does not cut the product's wording apart - the lines on either side of it are
+        # neighbours, as on one line the words around a quotation are
         apart = sc.read_pdf(pdf_bytes(['Reason: its own tool', '“the polyp was', 'removed”', 'calls retrieved 4 passages.']))
-        self.assertEqual(sc.scan_pdf(apart, sc.scan_context('the polyp was removed'), 'x.pdf'), [])
+        self.assertEqual([(hit['id'], hit['where']) for hit in
+                          sc.scan_pdf(apart, sc.scan_context('the polyp was removed'), 'x.pdf')],
+                         [('tool_call', 'x.pdf page 1 lines 1-4')])
+        inline = sc.read_pdf(pdf_bytes(['Reason: its own tool “the polyp was removed” calls retrieved 4 passages.']))
+        self.assertEqual([(hit['id'], hit['where']) for hit in
+                          sc.scan_pdf(inline, sc.scan_context('the polyp was removed'), 'x.pdf')],
+                         [('tool_call', 'x.pdf page 1 line 1')])
+
+    def test_only_the_text_inside_a_printed_quotation_is_set_aside(self):
+        """L3-2: a code line's modifier "Claude", wrapped onto a line of its own, is the product's wording even though a
+        quotation of the document holds the same word - it is scanned; the quotation itself, wrapped over two lines,
+        is not."""
+        document = 'Dr. Claude Example removed the polyp with a cold snare'
+        lines = ['01   45385   Ready for approval   UNITS 1   Decision needed',
+                 'Line L1 · Modifiers: 59, XS, XU, PT, KX, GA, RT,', 'Claude', 'Evidence 01',
+                 'THE REASONS, IN THE RECORD', '01   45385  /  Ready for approval',
+                 '“Dr. Claude Example removed the polyp with a', 'cold snare”', 'Page 2',
+                 'Reason: A polyp was removed by cold snare.']
+        reading = sc.read_pdf(pdf_bytes(lines))
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(reading, sc.scan_context(document), 'x.pdf')],
+                         [('provider_name', 'x.pdf page 1 line 3')])
+        # the control: the modifier dropped, nothing is found - the quotation's "Dr. Claude Example" stays set aside
+        clean = sc.read_pdf(pdf_bytes([line for line in lines if line != 'Claude']))
+        self.assertEqual(sc.scan_pdf(clean, sc.scan_context(document), 'x.pdf'), [])
+        # the same-page case of L6-3: a reason's last word wrapped onto a line whose words a quotation also holds
+        # ("calls." beside the quotation "The nurse calls.") is the reason's, read joined to the line before it
+        nurse = sc.read_pdf(pdf_bytes(['“The nurse calls.”', 'Page 2', 'Reason: synthetic synthetic synthetic tool',
+                                       'calls.']))
+        self.assertEqual([(hit['id'], hit['where']) for hit in
+                          sc.scan_pdf(nurse, sc.scan_context('The nurse calls.'), 'x.pdf')],
+                         [('tool_call', 'x.pdf page 1 lines 3-4')])
+        # an opening mark that starts no quotation of the document is the product's: the words after it are scanned,
+        # and a later quotation is still set aside
+        stray = sc.read_pdf(pdf_bytes(['Reason: the note says “read by Claude', '“Dr. Claude Example removed the polyp',
+                                       'with a cold snare”', 'Page 2']))
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(stray, sc.scan_context(document), 'x.pdf')],
+                         [('provider_name', 'x.pdf page 1 line 1')])
+        # a quotation whose own words hold a closing mark is followed to its end, not cut at that mark
+        quoted = sc.read_pdf(pdf_bytes(['“He said “fine” and Dr. Claude', 'Example removed the polyp”', 'Page 2']))
+        self.assertEqual(sc.scan_pdf(quoted, sc.scan_context('He said “fine” and Dr. Claude Example removed the polyp'),
+                                     'x.pdf'), [])
+
+    def test_a_phrase_cut_by_a_page_break_is_read_as_one_over_the_running_header_and_footer(self):
+        """L6-3: the running header and footer every page repeats are read as lines of their own; the body is one
+        stream over the pages, so the last line of product wording on a page is joined to the first of the next, and a
+        quotation continued over a page break is set aside whole."""
+        filler = ' '.join(f'w{n:03d}' for n in range(498, 518))
+        pages = report_pages(['THE ENCOUNTER, AT A GLANCE', 'CPT coding summary'],
+                             ['THE REASONS, IN THE RECORD', 'Reason: The coding review notes', f'{filler} tool'],
+                             ['calls w521 w522 w523.', 'DOCUMENTATION NOTES'])
+        reading = sc.read_pdf(pdf_bytes(*pages))
+        self.assertEqual(reading.pages[1].split('\n')[:6], pages[1][:6])  # the running lines lead the page
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(reading, sc.scan_context(), 'x.pdf')],
+                         [('tool_call', 'x.pdf page 2 line 9 to page 3 line 7')])
+        self.assertEqual(sc._running_count([page.split('\n') for page in reading.pages]), 6)
+        # the control: the same words on one page, as a reader would read them
+        joined = sc.read_pdf(pdf_bytes(['Reason: The coding review notes', f'{filler} tool calls w521 w522 w523.']))
+        self.assertEqual([hit['id'] for hit in sc.scan_pdf(joined, sc.scan_context(), 'x.pdf')], ['tool_call'])
+        # a quotation the page break cuts is set aside whole, and the reason after it is still read
+        document = 'Dr. Claude Example removed the polyp with a cold snare'
+        cut = report_pages(['THE REASONS, IN THE RECORD', '01   45385  /  Ready for approval',
+                            '“Dr. Claude Example removed the polyp'], ['with a cold snare”', 'Page 2',
+                                                                         'Reason: read by Claude.'])
+        reading = sc.read_pdf(pdf_bytes(*cut))
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(reading, sc.scan_context(document), 'x.pdf')],
+                         [('provider_name', 'x.pdf page 2 line 9')])
+        # the running lines are still scanned, on every page: an identity line naming a vendor is found on each
+        named = sc.read_pdf(pdf_bytes(*report_pages(['Approved CPT codes'], ['Every approved code has a source.'],
+                                                    identity='Claude review · F6000000 · Coding review 1')))
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(named, sc.scan_context(), 'x.pdf')],
+                         [('provider_name', 'x.pdf page 1 line 4'), ('provider_name', 'x.pdf page 2 line 4')])
+        # a page whose own number differs is still the same running footer; a line that differs ends the running lines
+        self.assertEqual(sc._running_count([['A', 'r1 / 01 of 02', 'x'], ['A', 'r1 / 02 of 02', 'y']]), 2)
+        self.assertEqual(sc._running_count([['A ', 'r1   /   01 of 02', 'x'], ['A', 'r1 / 02  of 02 ', 'y']]), 2)
+        self.assertEqual(sc._running_count([['A', 'r1 / 02 of 02', 'x'], ['A', 'r1 / 02 of 02', 'y']]), 1)
+        self.assertEqual(sc._running_count([['A', 'B']]), 0)  # one page: nothing repeats
+
+    def test_an_invisible_character_inside_a_name_is_read_as_the_reader_sees_it(self):
+        """L3-1: a format character the report draws with no ink, inside a vendor name, does not hide it - the PDF's
+        text is read with every default-ignorable or format character deleted and every control character as a space."""
+        reading = sc.read_pdf(ttf_pdf_bytes(['Reason: Cl\u200eaude read the snare.']))
+        self.assertIn('Cl\u200eaude', reading.pages[0])  # the mark is in the text layer, as the renderer drew it
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(reading, sc.scan_context(), 'x.pdf')],
+                         [('provider_name', 'x.pdf page 1 line 1')])
+        # each mark the report's font draws as nothing, through a real PDF
+        drawn = ('\u200f', '\u202a', '\u202b', '\u202c', '\u202d', '\u202e', '\u034f', '\u2061', '\u2062', '\u2063',
+                 '\u2064', '\ufe00', '\ufe0f', '\u200b', '\u200c', '\u200d', '\u2060', '\ufeff', '\u00ad')
+        for mark in drawn:
+            with self.subTest(mark=f'U+{ord(mark):04X}'):
+                reading = sc.read_pdf(ttf_pdf_bytes([f'Reason: Gem{mark}ini read the snare.']))
+                self.assertEqual([hit['id'] for hit in sc.scan_pdf(reading, sc.scan_context(), 'x.pdf')],
+                                 ['provider_name'])
+        # and every one the finding names, as pypdf would read it from a font that has it (the isolates and the Arabic
+        # letter mark included)
+        for mark in drawn + ('\u200e', '\u2066', '\u2067', '\u2068', '\u2069', '\u061c', '\U000e0041'):
+            with self.subTest(text_mark=f'U+{ord(mark):04X}'):
+                self.assertEqual([hit['id'] for hit in sc.scan_pdf(sc.PdfReading([f'Op{mark}enAI saw it.'], {}),
+                                                                   sc.scan_context(), 'x.pdf')], ['provider_name'])
+        # a C0 or C1 control character is read as a space: it separates words, it never joins them
+        self.assertEqual(sc.visible('Cl\x01aude\x85read\x9fit\tnow'), 'Cl aude read it now')
+        controls = sc.PdfReading(['Reason: its own tool\x01calls returned.'], {})
+        self.assertEqual([hit['id'] for hit in sc.scan_pdf(controls, sc.scan_context(), 'x.pdf')], ['tool_call'])
+        # the document information is read the same way
+        meta = sc.PdfReading(['Approved CPT codes'], {'Author': 'Cl\u200baude'})
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(meta, sc.scan_context(), 'x.pdf')],
+                         [('provider_name', 'x.pdf metadata Author')])
+        # a quotation of the document is still recognised when the document holds an invisible character the
+        # report does not print
+        self.assertEqual(sc.scan_pdf(sc.PdfReading(['“Dr. Claude Example”'], {}),
+                                     sc.scan_context('Dr. Cl\u200baude Example'), 'x.pdf'), [])
+        # a page whose only text is invisible gives no text a reader can see: not read, never a pass
+        with self.assertRaisesRegex(sc.Unreadable, 'no text could be read from page 1'):
+            sc.read_pdf(ttf_pdf_bytes(['\u200b\u200d\u2060']))
 
     def test_the_trailer_id_is_never_read_so_its_hex_never_trips_long_hex(self):
         data = approved_pdf()
@@ -342,8 +488,11 @@ class PdfReaderTests(unittest.TestCase):
             drawing.endForm()
             drawing.doForm('mark')
 
+        def page_labels(drawing):  # L3-7: a viewer shows "Claude Fable 1" in its page box; no page holds the words
+            drawing.addPageLabel(0, prefix='Claude Fable ')
+
         for add, what in ((link, 'annotations on page 1'), (bookmark, 'bookmarks'),
-                          (form, 'an image or form object on page 1')):
+                          (form, 'an image or form object on page 1'), (page_labels, 'page labels')):
             with self.subTest(what=what):
                 with self.assertRaisesRegex(sc.Unreadable, re.escape(what)):
                     sc.read_pdf(drawn(add))

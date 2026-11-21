@@ -37,10 +37,10 @@ DECISION_WORDS = {models.CodeDecision.APPROVE: 'Approved', models.CodeDecision.R
 NO_DECISION = 'No saved decision'
 REVIEW_QUOTE = "The coding review's quotation, not checked against the document"
 TEXT_LOCATOR = 'Text document · no page numbers'
-# The insurance a member chose, in the page's own words (app.js INSURANCE_CHOICES); 'unknown' is the saved answer
-# "Not sure", not a missing value. Anything else is not recorded.
+# The insurance as saved. 'unknown' is stored both for the member's "Not sure" and for no answer at all, so it reads as
+# the TXT export, the coding review's prompt and the review page say it: not given. Anything else is not recorded.
 INSURANCE_WORDS = {'medicare': 'Medicare', 'medicaid': 'Medicaid', 'commercial': 'Commercial or other',
-                   'unknown': 'Not sure'}
+                   'unknown': 'Not given'}
 NO_PAGE = 'Page not given'
 
 
@@ -64,6 +64,15 @@ def service_day(value) -> str | None:
         return _day(date.fromisoformat(value))
     except ValueError:
         return value
+
+
+def said(text):
+    """Text the coding review wrote, as the PDF prints it: cleaned of what is never printed (pdf.clean_text: controls
+    become spaces, invisible format characters go) and THEN through customer.shown(), so an invisible character inside a
+    vendor or model name cannot carry it past the name filter and be joined up again by the printing."""
+    if not isinstance(text, str):
+        return text
+    return customer.shown(pdf.clean_text(text))
 
 
 def _plural(count: int, one: str, many: str) -> str:
@@ -112,11 +121,6 @@ def _row_state(item) -> str:
     return 'Not supported'
 
 
-def _open(item) -> bool:
-    """A line that still needs the practice: a question to answer, or a decidable line with no saved decision."""
-    return item['status'] == 'needs_answer' or (item['status'] in decisions.DECIDABLE and item['decided'] is None)
-
-
 def _evidence(item, verified: bool, text_source: bool) -> tuple:
     out = []
     for quote in item['quotes']:
@@ -127,20 +131,21 @@ def _evidence(item, verified: bool, text_source: bool) -> tuple:
             locator = TEXT_LOCATOR if text_source else NO_PAGE
         if not verified:
             locator = f'{REVIEW_QUOTE} · {locator}'
-        out.append(pdf.EvidenceItem(quote=quote['text'], locator=locator))
+        # a citation is the document's own words, printed as cleaned; the fallback quotation is the coding review's
+        out.append(pdf.EvidenceItem(quote=quote['text'] if verified else said(quote['text']), locator=locator))
     return tuple(out)
 
 
 def _note(item, kind) -> str | None:
     parts = []
     if item['reason']:
-        parts.append(f'Reason: {item["reason"]}')
+        parts.append(f'Reason: {said(item["reason"])}')
     if kind == DRAFT:
         check = item['second_check']
         verdict = {True: 'agrees', False: 'disagrees'}.get(check['agrees'], 'no verdict')
-        parts.append(f'Second check: {verdict}.' + (f' {check["reason"]}' if check['reason'] else ''))
+        parts.append(f'Second check: {verdict}.' + (f' {said(check["reason"])}' if check['reason'] else ''))
         if item['question']:
-            parts.append(f'Question: {item["question"]}')
+            parts.append(f'Question: {said(item["question"])}')
     return ' '.join(parts) or None
 
 
@@ -185,7 +190,8 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
 
     decided = [item['decided'] for item in items if item['decided'] is not None]
     context = round_.context if isinstance(round_.context, dict) else {}
-    agent_decided = any(decision.reviewer_kind == models.User.AGENT for decision in decided)
+    approvals = [d for d in decided if d.action == models.CodeDecision.APPROVE]
+    agent_approvals = [d for d in approvals if d.reviewer_kind == models.User.AGENT]
     strip = (pdf.LabelledValue('Document', title),
              pdf.LabelledValue('Date of service', service_day(snap['service_date'])),
              pdf.LabelledValue('Insurance', INSURANCE_WORDS.get(context.get('insurance'))),
@@ -208,21 +214,32 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
                         'It is not a submitted claim. Synthetic data, not for billing or claims.')
         empty = 'No code of this coding review has a current approval.'
     else:
-        open_items = [item for item in items if _open(item)]
         undecided = [item for item in items if item['status'] in decisions.DECIDABLE and item['decided'] is None]
+        questions = customer.questions_json(round_)
+        asked = {line for question in questions for line in question['lines']}
+        asked_texts = {' '.join(str(question['text']).split()).casefold() for question in questions}
+        unasked = [item for item in items if item['status'] == 'needs_answer' and item['line'] not in asked
+                   and ' '.join(str(item['question'] or '').split()).casefold() not in asked_texts]
+        # What still needs the practice, one entry per open item: every question of the round (answering one makes a
+        # new coding review, whatever the decisions on its lines), every decidable line without a saved decision, and
+        # a line awaiting an answer that no question names. The count and the status are read from this list.
+        open_entries = [f'Question: {said(question["text"])}' for question in questions]
+        open_entries += [f'{item["code"]} ({item["line"]}) needs your answer'
+                         + (f': {said(item["question"])}' if item['question'] else '.') for item in unasked]
+        open_count = len(open_entries) + len(undecided)
         approved_count = sum(1 for d in decided if d.action == models.CodeDecision.APPROVE)
         rejected_count = sum(1 for d in decided if d.action == models.CodeDecision.REJECT)
         metrics = ((f'{len(items):02d}', _plural(len(items), 'Suggested code', 'Suggested codes')),
-                   (f'{len(open_items):02d}', _plural(len(open_items), 'Open review item', 'Open review items')),
-                   ('Pending' if open_items else 'Complete', 'Review status'))
-        lines = [f'Question: {text}' for text in snap['questions']]
+                   (f'{open_count:02d}', _plural(open_count, 'Open review item', 'Open review items')),
+                   ('Pending' if open_count else 'Complete', 'Review status'))
+        lines = list(open_entries)
         if undecided:
             codes = ', '.join(f'{item["code"]} ({item["line"]})' for item in undecided)
             lines.append(f'{len(undecided)} code {_plural(len(undecided), "line has", "lines have")} no saved decision: '
                          f'{codes}.')
         if lines:
             review_title, review_items = 'What still needs your decision', tuple(lines)
-        notes = tuple(snap['notes'])
+        notes = tuple(said(note) for note in snap['notes'])
         record = [pdf.LabelledValue('Reviewer', _reviewers(decided) or 'Not yet reviewed'),
                   pdf.LabelledValue('Approval record',
                                     f'{approved_count} approved · {rejected_count} rejected' if decided
@@ -234,11 +251,14 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
                         'coding determination and not a claim: a qualified reviewer must assess each code before use. '
                         'Synthetic data, not for billing or claims.')
         empty = 'The coding review found no CPT code to report for this document.'
-    if agent_decided:
-        record.append(pdf.LabelledValue('Review type', AGENT_LINE))
+    if agent_approvals:
+        mixed = len(agent_approvals) < len(approvals)
+        record.append(pdf.LabelledValue(
+            'Review type', f'{AGENT_LINE} — {len(agent_approvals)} of {len(approvals)} approvals, marked on each code'
+            if mixed else AGENT_LINE))
     quoted = [item for item in items if item['quotes']]
-    every_quoted = all(item['quotes'] for item in items)
-    if every_quoted and items:
+    every_cited = all(item['quotes'] and index.get(item['line']) for item in items)
+    if every_cited and items:
         evidence_title = 'Every suggestion has a source.' if kind == DRAFT else 'Every approved code has a source.'
     else:
         evidence_title = 'The evidence for each code.'
@@ -250,17 +270,22 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
              ('Prepared', f'{when(as_of) or "Not recorded"} by {snap["generated_by"]}', False),
              ('Report format', f'PDF · {FORMAT_VERSION}', False))
     identity = f'{title} · {ref} · Coding review {number}'
+    agent_closing = ''
+    if kind == APPROVED and agent_approvals:
+        agent_closing = (f' {AGENT_LINE}.' if len(agent_approvals) == len(approvals) else
+                         ' Approvals marked as agent-executed are synthetic reviews, not clinical approval.')
     return pdf.PhysicianReport(
         kind=pdf.APPROVED if kind == APPROVED else pdf.DRAFT,
         status_line='APPROVED CODES' if kind == APPROVED else 'DRAFT · REVIEW REQUIRED',
-        identity_line=identity, report_ref=f'CPT-{ref} · r{number}', footer_note=SYNTHETIC_FOOTER,
+        identity_line=identity, header_title=title, header_suffix=f'{ref} · Coding review {number}',
+        report_ref=f'CPT-{ref} · r{number}', footer_note=SYNTHETIC_FOOTER,
         eyebrow='The encounter, at a glance', title='Approved CPT codes' if kind == APPROVED else 'CPT coding summary',
         subtitle=subtitle, strip=strip, metrics=metrics, codes_heading=codes_heading, codes_side_note=side,
         rows=tuple(rows), empty_rows_text=empty, review_title=review_title, review_items=review_items,
         record=tuple(record), evidence_eyebrow='The reasons, in the record', evidence_title=evidence_title,
         evidence_identity=identity, no_evidence_text='No excerpt from the document was saved for this code.',
         scope=scope, closing_title=closing_title,
-        closing_text=closing_text + (f' {AGENT_LINE}.' if kind == APPROVED and agent_decided else ''),
+        closing_text=closing_text + agent_closing,
         document_title=f'CPT Studio {"approved codes" if kind == APPROVED else "draft codes"} {ref} r{number}',
         notes_title='Documentation notes', notes=notes, as_of=as_of)
 
@@ -271,7 +296,10 @@ def _excerpt_scope(items, quoted, index) -> tuple:
         return ('Source excerpts', 'No code was found, so none is shown', False)
     if not quoted:
         return ('Source excerpts', 'None was saved for these codes', True)
-    if not all(index.get(item['line']) for item in quoted):
+    cited = [item for item in quoted if index.get(item['line'])]
+    if not cited:
+        return ('Source excerpts', "The coding review's own quotations, not checked against the document", True)
+    if len(cited) < len(quoted):
         return ('Source excerpts', "Exact words from the document; marked ones are the coding review's own quotation", True)
     paged = all(quote.get('page') for item in quoted for quote in item['quotes'])
     return ('Source excerpts', 'Exact words from the document' + (', with their pages' if paged else ''), False)

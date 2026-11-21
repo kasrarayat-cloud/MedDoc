@@ -3,10 +3,13 @@ makes it, downloaded, and read by the customer scanner's own PDF path (ops/scan_
 by tests.support.rounds.scan_customer) against the shared denylist (ops/verification/customer-denylist.json), with the
 encounter's own quotations set aside as the scanner sets them aside on the deployed site. Covered: a draft and an approved
 PDF of a round whose reasons, questions and notes name vendors and models; a line the second check added, in its own
-words; a round made after answers, or after a retry, naming its trigger; and a viewer's PDF, which holds what a
-reviewer's does. Synthetic data only; nothing reaches the network."""
+words; a round made after answers, or after a retry, naming its trigger; an earlier round's PDF, still listed once a
+later round replaced it, whose modifier names a vendor outside the quotation (refutation L3-2); a phrase the page break
+cuts in two (L6-3); and a viewer's PDF, which holds what a reviewer's does. Synthetic data only; nothing reaches the
+network."""
 import io
 import json
+import re
 from datetime import datetime, timezone as dt_timezone
 from unittest import mock
 
@@ -137,6 +140,75 @@ class TriggerTests(PhysicianReportScanCase):
         self.assertIn('-r3-', report['filename'])
         self.assertIn('Review 3, after a retry, finished', flat(data))
         self.assertEqual(self.scanned(enc, data, response, 'draft.pdf')[1], [])
+
+
+class EarlierRoundTests(PhysicianReportScanCase):
+    def test_an_earlier_rounds_pdf_naming_a_vendor_in_a_modifier_fails_the_scan_once_a_later_round_replaces_it(self):
+        """Refutation L3-2: once a later round replaces the one a PDF was made from, the PDF stays listed and the JSON no
+        longer holds its words, so the PDF path is its only reader. A modifier "Claude" (part of the code line, never
+        filtered) printed outside the quotation - wrapped onto a line of its own beside the cited "Dr. Claude Example
+        ..." - is the product's wording, and the scan finds it."""
+        enc = self.encounter()
+        modifiers = ['59', 'XS', 'XU', 'PT', 'KX', 'GA', 'RT', 'Claude']
+        citations = {'L1': [{'text': QUOTE, 'page': 2, 'source': 'reader'}]}
+        r.write_round(enc, codes=[r.row('45385', 'ready', modifiers=modifiers, reason='A polyp was removed by cold snare.')],
+                      citations=citations)
+        earlier, _, report = self.made(enc, 'draft')
+        r.write_round(enc, codes=[r.row('45385', 'ready', modifiers=['59'], reason='A polyp was removed by cold snare.')],
+                      citations=citations, trigger=Round.ANSWERS)
+        payload = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()
+        self.assertEqual([(item['id'], item['current']) for item in payload['reports']], [(report['id'], False)])
+        ctx = self.sc.scan_context(self.sc.quotations(payload))
+        self.assertEqual(self.sc.scan_json(payload, ctx), [])  # the JSON shows round 2: no modifier "Claude"
+        reading = self.sc.read_pdf(earlier)
+        lines = [(page, index, line.strip()) for page, text in enumerate(reading.pages, start=1)
+                 for index, line in enumerate(text.split('\n'), start=1)]
+        printed = [(page, index) for page, index, line in lines if line.endswith('Claude') and 'Example' not in line]
+        self.assertEqual(len(printed), 1, lines)  # the modifier, printed outside every quotation
+        self.assertIn(f'“{QUOTE}”', flat(earlier))  # and the quotation, with the same name, exactly
+        hits = self.sc.scan_pdf(reading, ctx, 'draft.pdf')
+        self.assertEqual([(hit['id'], hit['where']) for hit in hits],
+                         [('provider_name', f'draft.pdf page {printed[0][0]} line {printed[0][1]}')])
+
+
+class PageBreakTests(PhysicianReportScanCase):
+    """Refutation L6-3: a phrase the page break cuts in two - "tool" the last word of a page, "calls" the first of the
+    next, the running header and footer between them in the text - is read as one."""
+    FILLER = 600
+
+    def render(self, plant=None):
+        words = [f'w{number:03d}' for number in range(self.FILLER)]
+        if plant is not None:
+            words[plant], words[plant + 1] = 'tool', 'calls'
+        enc = self.encounter()
+        r.write_round(enc, codes=[r.row('45385', 'ready', reason='The coding review notes ' + ' '.join(words) + '.',
+                                        check_reason='Agreed.')],
+                      citations={'L1': [{'text': 'removed with a cold snare', 'page': 2, 'source': 'reader'}]})
+        data, _, _ = self.made(enc, 'draft')
+        return enc, self.sc.read_pdf(data)
+
+    @staticmethod
+    def words(text):
+        return re.findall(r'\bw\d{3}\b|\btool\b|\bcalls\b', text)
+
+    def test_a_phrase_the_page_break_cuts_in_two_is_found(self):
+        _, reading = self.render()
+        breaks = [(number, self.words(page)[-1]) for number, page in enumerate(reading.pages[:-1])
+                  if self.words(page) and self.words(reading.pages[number + 1])]
+        self.assertTrue(breaks, 'the reason did not flow over a page break')
+        page, last = breaks[0]
+        found = None
+        for shift in (0, -1, 1, -2, 2, -3, 3):  # "tool calls" is about as wide as the two tokens it replaces
+            enc, reading = self.render(int(last[1:]) + shift)
+            if self.words(reading.pages[page])[-1:] == ['tool'] and self.words(reading.pages[page + 1])[:1] == ['calls']:
+                found = (enc, reading)
+                break
+        self.assertIsNotNone(found, 'no plant put "tool" at the foot of a page and "calls" at the head of the next')
+        enc, reading = found
+        payload = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()
+        hits = self.sc.scan_pdf(reading, self.sc.scan_context(self.sc.quotations(payload)), 'draft.pdf')
+        self.assertEqual([hit['id'] for hit in hits], ['tool_call'])
+        self.assertRegex(hits[0]['where'], rf'^draft\.pdf page {page + 1} line \d+ to page {page + 2} line \d+$')
 
 
 class ViewerTests(PhysicianReportScanCase):

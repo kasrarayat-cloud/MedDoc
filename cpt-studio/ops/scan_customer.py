@@ -24,10 +24,15 @@ links, retrieval logs and rule ids out of every customer screen, API response an
     GET <document.view_url>              likewise (the original, or the PDF a Word file was converted to)
     GET <reports[].download_url>         every customer export, scanned whole, with no X-Content-SHA256 header: a TXT
                                          or CSV as its text; a PDF (served as application/pdf, opening with %PDF- or
-                                         listed as pdf) as the text pypdf extracts from each page, read line by line
-                                         under the TXT rules, and its document information values - never its raw
-                                         bytes (its trailer /ID is 32 hex characters; its streams are compressed). A
-                                         PDF that cannot be read fails the scan; it never passes unread
+                                         listed as pdf) as the text pypdf extracts from each page, as a reader sees it
+                                         (invisible format characters deleted, control characters read as spaces):
+                                         its running header and footer line by line, its body as one stream over
+                                         every page with only the text inside a printed quotation of the document set
+                                         aside, neighbouring lines also read joined (over a line break, a page break
+                                         or a quotation) - and its document information values; never its raw bytes
+                                         (its trailer /ID is 32 hex characters; its streams are compressed). A PDF that
+                                         cannot be read, or that holds what the scan does not read (bookmarks, a form,
+                                         page labels, annotations, an image ...), fails the scan; it never passes
     GET every /ops/ URL of it            each must answer 404 to this session (the operator console's pages)
     GET every removed URL of it          each must answer 404 (the earlier trace and operator API, for everyone)
   POST /logout/ and GET /api/session     the session must then be refused (verify_login.py's sign-out proof)
@@ -60,6 +65,7 @@ import platform
 import re
 import secrets
 import sys
+import unicodedata
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
@@ -231,15 +237,26 @@ def scan_file(text: str, ctx: ScanContext, name: str, fmt: str, hits: list | Non
 # --- a PDF export: the text it shows, never its bytes ------------------------------------------------------------------
 
 PDF_TYPE = 'application/pdf'
-# A quoted passage on one line: the TXT export's straight quotation marks, or the curly ones the PDF export prints a
-# quotation between (studio/physician_pdf.py).
-QUOTED = re.compile('"[^"]*"|“[^“”]*”')
+# The curly quotation marks the PDF export prints every quotation between (studio/physician_pdf.py): a quotation may
+# wrap over several lines and continue over a page break. Only what lies between them can be the document's own words.
+OPEN_QUOTE, CLOSE_QUOTE = '“', '”'
 # What a PDF can show beside its pages' text and its document information, which this scan does not read: a PDF that
-# holds any of them is a scan problem, never a pass (a CPT Studio export holds none).
+# holds any of them is a scan problem, never a pass (a CPT Studio export holds none). Page labels are the names a viewer
+# shows for the pages in its page box ("Claude Fable 1"), not text on any page.
 UNREAD_IN_CATALOG = {'/Outlines': 'bookmarks', '/AcroForm': 'a form', '/Names': 'a names tree (attachments, scripts or '
                      'destinations)', '/OpenAction': 'an open action', '/AA': 'document actions',
-                     '/Metadata': 'an XMP metadata stream'}
+                     '/Metadata': 'an XMP metadata stream', '/PageLabels': 'page labels'}
 UNREAD_ON_PAGE = {'/Annots': 'annotations', '/AA': 'page actions'}
+# What a reader never sees as itself, so the PDF's text is read without it (a name with an invisible character inside
+# it, "Cl<U+200E>aude", reads "Claude"): Unicode's default-ignorable code points - zero-width spaces and joiners, the
+# bidirectional marks, embeddings and isolates, the invisible operators, variation selectors, the soft hyphen, the
+# Hangul fillers, tags - and every other format character (category Cf) are deleted; a C0 or C1 control character is
+# read as a space, as the report prints one (studio/physician_pdf.py clean_text). pypdf gives U+0000 for a character the
+# PDF's font has no glyph for (a .notdef box), so that reads as a space too.
+_INVISIBLE = re.compile('[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e'
+                        '\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufff8\U0001bca0-\U0001bca3'
+                        '\U0001d173-\U0001d17a\U000e0000-\U000e0fff]')
+_CONTROL = re.compile('[\x00-\x1f\x7f-\x9f]')
 
 
 class Unreadable(Exception):
@@ -251,6 +268,16 @@ class Unreadable(Exception):
 class PdfReading:
     pages: list     # the text pypdf extracts from each page, in order
     metadata: dict  # each entry of the document information dictionary: its name (without '/') -> its value as text
+
+
+def visible(text: str) -> str:
+    """One line of a PDF's text as a reader sees it: every default-ignorable or other format character deleted, every
+    C0 or C1 control character a space (_INVISIBLE, _CONTROL). A line break is a control character too, so this reads
+    a line, never a page."""
+    text = _CONTROL.sub(' ', text)
+    if text.isascii():
+        return text
+    return ''.join(ch for ch in _INVISIBLE.sub('', text) if unicodedata.category(ch) != 'Cf')
 
 
 def is_pdf(body: bytes, content_type: str = '') -> bool:
@@ -265,8 +292,9 @@ def _resolved(value):
 def read_pdf(body: bytes) -> PdfReading:
     """The text of each page of a PDF and its document information values, read by pypdf in its strict mode (a file it
     would have to repair is not read). Unreadable when pypdf is missing, when it cannot read the body, when the PDF has
-    no page or a page gives no text, or when it holds what this scan does not read (UNREAD_IN_CATALOG, UNREAD_ON_PAGE,
-    an image or form object)."""
+    no page or a page gives no visible text (visible), or when it holds what this scan does not read
+    (UNREAD_IN_CATALOG - page labels among them -, UNREAD_ON_PAGE, an image or form object). The pages are returned as
+    pypdf extracted them; scan_pdf reads them as a reader sees them."""
     try:
         from pypdf import PdfReader  # imported only here: the rest of this tool is stdlib only
     except ImportError:
@@ -289,7 +317,8 @@ def read_pdf(body: bytes) -> PdfReading:
         raise Unreadable(f'it holds {", ".join(unread)}, which this scan does not read')
     if not pages:
         raise Unreadable('it has no page')
-    empty = [str(number) for number, text in enumerate(pages, start=1) if not text.strip()]
+    empty = [str(number) for number, text in enumerate(pages, start=1)
+             if not any(visible(line).strip() for line in re.split(r'\r?\n', text))]
     if empty:
         raise Unreadable(f'no text could be read from page {", ".join(empty)}')
     return PdfReading(pages, metadata)
@@ -299,10 +328,85 @@ def _squeezed(text: str) -> str:
     return ' '.join(text.split())
 
 
+def _running_count(pages: list) -> int:
+    """How many lines lead every page alike: the report's running header and footer (the brand, the status line, the
+    identity line, the footer note and the "CPT-<ref> · r<n> / <page> of <pages>" line), which studio/physician_pdf.py
+    draws first on each page, so pypdf reads them first. A line is the same on every page once its white space is
+    squeezed and its own "<page> of <pages>" is set aside. A one-page PDF has none: nothing repeats."""
+    if len(pages) < 2:
+        return 0
+    total = len(pages)
+    keyed = [[re.sub(rf'(?<!\d)0*{number} of 0*{total}$', '# of #', _squeezed(line)) for line in lines]
+             for number, lines in enumerate(pages, start=1)]
+    count = 0
+    for column in zip(*keyed):
+        if len(set(column)) != 1:
+            break
+        count += 1
+    return count
+
+
+def _quotations_aside(stream: str, document: str) -> list:
+    """The spans of ``stream`` (a run of PDF lines joined by line breaks) that are printed quotations of the document,
+    marks included: each opens with a curly opening mark and closes with a curly closing mark, and its text, white space
+    squeezed, is a part of ``document`` (squeezed). A quotation whose own text holds a closing mark is followed to the
+    last closing mark up to which its text is still the document's. A mark that opens no quotation of the document is
+    the product's own wording, as is everything outside the spans."""
+    spans, at = [], 0
+    while True:
+        start = stream.find(OPEN_QUOTE, at)
+        if start < 0:
+            return spans
+        end, close = None, stream.find(CLOSE_QUOTE, start + 1)
+        while close >= 0:
+            inner = _squeezed(stream[start + 1:close])
+            if not (inner and inner in document):
+                break
+            end, close = close, stream.find(CLOSE_QUOTE, close + 1)
+        if end is None:
+            at = start + 1
+        else:
+            spans.append((start, end + 1))
+            at = end + 1
+
+
+def _where(name: str, place: tuple) -> str:
+    return f'{name} page {place[0]} line {place[1]}'
+
+
+def _where_joined(name: str, first: tuple, second: tuple) -> str:
+    if first[0] == second[0]:
+        return f'{name} page {first[0]} lines {first[1]}-{second[1]}'
+    return f'{name} page {first[0]} line {first[1]} to page {second[0]} line {second[1]}'
+
+
+def _scan_stream(lines: list, document: str, ctx: ScanContext, name: str, hits: list) -> None:
+    """``lines`` ((page, line) place, text), in reading order, as one stream: every printed quotation of the document
+    set aside (_quotations_aside, however many lines and pages it runs over), then each line's remaining text - the
+    product's own wording, white space squeezed - scanned whole (never as a quotation, whatever words the document
+    shares with it), and each joined to the line of product wording before it, wherever that is: over a page break and
+    over a quotation set aside, so a phrase cut in two by either is read as one."""
+    stream = '\n'.join(text for _, text in lines)
+    blanked = list(stream)
+    for start, end in _quotations_aside(stream, document):
+        for index in range(start, end):
+            if blanked[index] != '\n':
+                blanked[index] = ' '
+    previous = None
+    for (place, _), text in zip(lines, ''.join(blanked).split('\n')):
+        own = _squeezed(text)
+        if not own:
+            continue
+        scan_text(own, ctx, 'file', _where(name, place), hits, quotable=False)
+        if previous is not None:
+            _scan_joint(previous[1], own, ctx, _where_joined(name, previous[0], place), hits)
+        previous = (place, own)
+
+
 def _scan_joint(first: str, second: str, ctx: ScanContext, where: str, hits: list) -> None:
-    """What spans the line break between two neighbouring lines of a PDF page (each line was scanned alone): the two
-    read joined by a space, each with the allowed strings removed first as scan_text removes them, and only a match
-    that starts in the first line and ends in the second reported."""
+    """What spans the break between two neighbouring lines of product wording in a PDF (each line was scanned alone):
+    the two read joined by a space, each with the allowed strings removed first as scan_text removes them, and only a
+    match that starts in the first line and ends in the second reported."""
     cleaned = []
     for line in (first, second):
         for allowed in ctx.allowed:
@@ -319,38 +423,28 @@ def _scan_joint(first: str, second: str, ctx: ScanContext, where: str, hits: lis
 
 
 def scan_pdf(reading: PdfReading, ctx: ScanContext, name: str, hits: list | None = None) -> list:
-    """A PDF export as read_pdf read it. Each page's text line by line under scan_file's TXT rules - a quoted passage
-    that is the document's own text set aside, a line that is wholly the document's text not scanned - with white space
-    compared squeezed (a PDF breaks its lines where its layout wraps them), its curly quotation marks, and a quotation
-    the layout wrapped over several lines set aside line by line. Two neighbouring lines of a page are also read joined,
-    for a phrase the layout's line break cut in two ("tool" / "calls"); lines are not joined over a blank line, a line
-    set aside or a page break. Then every document information value, scanned whole: never a quotation."""
+    """A PDF export as read_pdf read it, every line read as a reader sees it (visible). The running header and footer
+    that lead every page alike (_running_count) are scanned on each page as lines of their own, joined only to each
+    other. The rest - the body of every page - is one stream (_scan_stream): only the text inside a printed quotation
+    (between the curly marks the report prints a quotation between, over however many lines and pages it runs) is set
+    aside, and only while it is the document's own words, white space compared squeezed; every other line is the
+    product's wording and is scanned whole, even a line whose words a quotation also holds (a code line's modifier
+    "Claude" wrapped onto a line of its own beside a cited "Dr. Claude Example ..."). Neighbouring lines of product
+    wording are also read joined, for a phrase the layout cut in two ("tool" / "calls"), over a line break, a page break
+    or a quotation set aside. Then every document information value, read as a reader sees it and scanned whole: never
+    a quotation."""
     hits = [] if hits is None else hits
-    document = _squeezed(ctx.document_text)
-
-    def documents(text: str) -> bool:
-        squeezed = _squeezed(text)
-        return bool(squeezed) and squeezed in document
-
-    for page_number, text in enumerate(reading.pages, start=1):
-        previous = None  # (number, text scanned) of the line before, while it was scanned
-        for index, line in enumerate(re.split(r'\r?\n', text), start=1):
-            rest = line
-            for passage in QUOTED.findall(line):
-                if documents(passage[1:-1]):
-                    rest = rest.replace(passage, passage[0] + passage[-1], 1)
-            core = _squeezed(rest)
-            core = core[1:] if core.startswith('“') else core  # the first line of a wrapped quotation
-            core = core[:-1] if core.endswith('”') else core  # and its last
-            if not rest.strip() or documents(core):
-                previous = None
-                continue
-            scan_text(rest, ctx, 'file', f'{name} page {page_number} line {index}', hits)
-            if previous is not None:
-                _scan_joint(previous[1], rest, ctx, f'{name} page {page_number} lines {previous[0]}-{index}', hits)
-            previous = (index, rest)
+    document = _squeezed(visible(ctx.document_text))
+    pages = [[visible(line) for line in re.split(r'\r?\n', text)] for text in reading.pages]
+    running = _running_count(pages)
+    body = []
+    for page_number, lines in enumerate(pages, start=1):
+        places = [((page_number, index), line) for index, line in enumerate(lines, start=1)]
+        _scan_stream(places[:running], document, ctx, name, hits)
+        body += places[running:]
+    _scan_stream(body, document, ctx, name, hits)
     for key, value in reading.metadata.items():
-        scan_text(value, ctx, 'file', f'{name} metadata {key}', hits, quotable=False)
+        scan_text(_squeezed(visible(value)), ctx, 'file', f'{name} metadata {key}', hits, quotable=False)
     return hits
 
 

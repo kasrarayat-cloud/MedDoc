@@ -447,7 +447,8 @@ class DisplayHygieneTests(TestCase):
         self.assertEqual(patterns['provider_name'], rf'(?<![a-z0-9])(?:{names})(?![a-z0-9])')
         joined = customer.JOINED_NAMES
         self.assertEqual(patterns['provider_name_joined'], rf'(?:{joined})(?=[A-Z])|(?<=[a-z])(?:{joined})')
-        self.assertEqual(patterns['model_id'], r'\b(?:gpt|claude|gemini)-[a-z0-9]')
+        self.assertEqual(patterns['model_id'], r'\b(?:gpt|chatgpt|claude|gemini)-[a-z0-9]')
+        self.assertTrue(customer._MODEL_ID.pattern.startswith(r'\b(?:gpt|chatgpt|claude|gemini)-[a-z0-9]'))
         self.assertEqual(patterns['interpreter_model'], r'\b(?:gemini-4-(?:argon|carbon)|claude-fable-5-2)\b')
         name_rules = {'provider_name', 'provider_name_joined', 'model_id', 'interpreter_model'}
         for vector in r.denylist()['vectors']:

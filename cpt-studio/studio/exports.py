@@ -42,7 +42,7 @@ from datetime import timezone as dt_timezone
 from django.db import transaction
 from django.utils import timezone
 
-from . import audit, customer, decisions, models, state
+from . import audit, customer, decisions, models, physician_report, state
 
 Round, Export = models.CodingRound, models.ExportArtifact
 DRAFT, APPROVED = Export.DRAFT, Export.APPROVED
@@ -256,8 +256,9 @@ RENDERERS = {Export.TXT: render_txt, Export.CSV: render_csv}
 
 def render_pdf(snap, encounter, round_) -> bytes:
     """The physician PDF of ``snap``; NotMade when it cannot be made (only the error's type is logged: never its
-    text, which could carry document words)."""
-    from . import physician_report  # ReportLab loads only when a PDF is made
+    text, which could carry document words). physician_report and ReportLab are imported with this module, and the
+    report fonts load at that import, so a broken library or a missing font stops the app from starting (the
+    installer's WSGI-import gate) instead of failing a doctor's download."""
     try:
         content = physician_report.render(snap, encounter=encounter, round_=round_)
     except Exception as exc:  # noqa: BLE001 - any failure refuses the export; nothing is stored
