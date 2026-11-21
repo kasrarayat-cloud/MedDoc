@@ -50,9 +50,11 @@
  * /ops/ path 404 to the customer (GET, and POST with
  * a valid CSRF token for an encounter id that does not exist, so a broken gate changes nothing), never 200 to nobody
  * signed in, and 200 to the operator (the positive control: a broken instrument and a closed door read the same). Every
- * customer API body and header the page or the walk received, every DOM text node and wording attribute, and every
- * download are scanned with ops/verification/customer-denylist.json (vendor and model names, tokens, credits, sha256,
- * request ids, /ops/ links ...); a string that is the document's own text or one of its quotes is not scanned.
+ * customer API body and header the page or the walk received and every DOM text node and wording attribute are scanned
+ * with ops/verification/customer-denylist.json (vendor and model names, tokens, credits, sha256, request ids, /ops/
+ * links ...); a string that is the document's own text or one of its quotes is not scanned. The downloads are PDF
+ * reports, whose wording ops/scan_customer.py scans (scan_pdf: read joined over line breaks, only the printed quotations
+ * of the document set aside); the walk records scan.files as skipped, never as passed, and names the files.
  *
  * Nothing is retried. A failure is recorded and the walk goes on with the next document. A file named STOP in the
  * evidence directory stops the walk before the next upload. Everything is written to EVIDENCE_DIR/evidence.json (schema
@@ -3083,7 +3085,8 @@ async function verifyDocument(page, ctx, sessions, doc) {
     record.encounter = summarize(enc);
   }
   add(...checkScan('scan.json', [...ctx.hits.json, ...ctx.hits.header], 'the customer API bodies and headers'),
-    ...checkScan('scan.dom', ctx.hits.dom, 'the page'), ...checkScan('scan.files', ctx.hits.file, 'the downloads'));
+    ...checkScan('scan.dom', ctx.hits.dom, 'the page'),
+    skip('scan.files', 'the downloads are PDF reports; ops/scan_customer.py scans their wording (the walk does not)'));
   const unlisted = [...ctx.contract];
   add(check('contract.reads', unlisted.length === 0, unlisted.length
     ? `${unlisted.length} difference(s) from customer-contract.json in what the page and the walk read: ${describeProblems(unlisted)}`

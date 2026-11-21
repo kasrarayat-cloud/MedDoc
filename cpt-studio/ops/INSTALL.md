@@ -935,7 +935,8 @@ Fable coding build's routes. The download verifier, the D15 rollback runtime
 test of the Gemini migration, the GI round-4 proof harness and the differential
 "what changed" check read the earlier pipeline's records, exports and code and
 were removed with their tests: the walk (`ops/walk.cjs`) scans every customer
-response, DOM text and download for the denylist, holds every session, list and
+response and DOM text for the denylist (the PDF downloads' wording is
+`scan_customer.py`'s, which reads it as the report prints it), holds every session, list and
 encounter answer it or the page reads to `ops/verification/customer-contract.json`
 (the same reading as `scan_customer.py`'s, `ops/test_walk_contract.py` holding the
 two to each other), approves one line through the review dialog as the page draws

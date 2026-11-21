@@ -81,10 +81,28 @@ def present(text) -> bool:
     return isinstance(text, str) and not pdf.blank(said(text))
 
 
+AGENT_SUFFIX = ' (automated agent)'  # models.User.label for an agent member
+
+
+def _named(label) -> str:
+    """A member's label as the report prints it: a name that prints no ink is not a name (refutation rounds 4 and 5),
+    and an agent's stays marked as one."""
+    label = '' if label is None else str(label)
+    base, suffix = (label[:-len(AGENT_SUFFIX)], AGENT_SUFFIX) if label.endswith(AGENT_SUFFIX) else (label, '')
+    return ('Unnamed member' if pdf.blank(base) else base) + suffix
+
+
 def _label(user) -> str:
-    """A member as the report names them; a display name that prints no ink is not a name (refutation round 4)."""
-    label = user.label()
-    return 'Unnamed member' if pdf.blank(label) else label
+    return _named(user.label())
+
+
+def _unplaced(note):
+    """A note of a second-check comment tied to no line (customer.UNPLACED_NOTE, then its reason) whose reason prints
+    nothing reads as one with no reason: the note's own words and a full stop, never a dangling colon."""
+    head = customer.UNPLACED_NOTE + ':'
+    if isinstance(note, str) and note.startswith(head) and not present(note[len(head):]):
+        return customer.UNPLACED_NOTE + '.'
+    return note
 
 
 def _plural(count: int, one: str, many: str) -> str:
@@ -120,7 +138,8 @@ def _modifier_words(modifiers) -> str:
     if modifiers is None:
         return 'Modifiers: not given'
     # model-written, so filtered - as one list, so a name replaced mid-list reads 'the system', as in a sentence
-    return 'Modifiers: ' + (said(', '.join(str(item) for item in modifiers)) if modifiers else 'none')
+    items = [str(item) for item in modifiers if present(str(item))]  # an item that prints nothing is none
+    return 'Modifiers: ' + (said(', '.join(items)) if items else 'none')
 
 
 def _row_state(item) -> str:
@@ -163,8 +182,9 @@ def _note(item, kind) -> str | None:
 
 
 def _reviewers(decided) -> str | None:
-    labels = list(dict.fromkeys(_label(decision.reviewer) for decision in decided))
-    return ', '.join(labels) if labels else None
+    # one entry per member, so two members whose names print no ink are two "Unnamed member" entries, not one
+    members = dict.fromkeys((decision.reviewer_id, _label(decision.reviewer)) for decision in decided)
+    return ', '.join(label for _, label in members) if members else None
 
 
 def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianReport:
@@ -255,7 +275,7 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
                          f'{codes}.')
         if lines:
             review_title, review_items = 'What still needs your decision', tuple(lines)
-        notes = tuple(said(note) for note in snap['notes'] if present(note))  # a note that prints nothing is none
+        notes = tuple(said(_unplaced(note)) for note in snap['notes'] if present(note))  # a note printing nothing: none
         record = [pdf.LabelledValue('Reviewer', _reviewers(decided) or 'Not yet reviewed'),
                   pdf.LabelledValue('Approval record',
                                     f'{approved_count} approved · {rejected_count} rejected' if decided
@@ -285,7 +305,7 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
     scope = (('Source document', _source_words(encounter, round_), False),
              ('Coding review', f'Review {number}{snap["trigger"]}, finished {when_text(snap["finished_at"])}', False),
              _excerpt_scope(items, quoted, index),
-             ('Prepared', f'{when(as_of) or "Not recorded"} by {snap["generated_by"]}', False),
+             ('Prepared', f'{when(as_of) or "Not recorded"} by {_named(snap["generated_by"])}', False),
              ('Report format', f'PDF · {FORMAT_VERSION}', False))
     identity = f'{title} · {ref} · Coding review {number}'
     agent_closing = ''

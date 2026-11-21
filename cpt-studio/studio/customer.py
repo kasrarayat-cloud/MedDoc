@@ -110,16 +110,22 @@ NAMES = 'corti|astra|fable|openai|anthropic|claude|gemini|google'
 JOINED_NAMES = 'Corti|Astra|Fable|Openai|OpenAI|Anthropic|Claude|Gemini|Google'
 ANTHROPIC = 'anthropic|claude'  # the names a model family continues
 FAMILIES = 'opus|sonnet|haiku'
-# a model's version: numbers of one or two digits joined by dots or underscores ("3.5", "3_5", "2"), never a longer
-# number or one joined by a dash, which in a note is a CPT code, a date, a range or a modifier ("45385-59", "2026-11-02")
-VERSION = r'v?\d{1,2}(?:[._]\d{1,2})*'
+# a model's version: numbers of one or two digits joined by dots, dashes or underscores ("3.5", "3-5", "3_5", "2"),
+# never a longer number, which in a note is a CPT code or a date ("45385-59", "2026-11-02"); a range of small numbers
+# after a word taken for a name is read as a version (a recorded limit, as on main for one number)
+VERSION = r'v?\d{1,2}(?:[._-]\d{1,2})*'
 # What stands between the parts of one name run: anything a reader sees as a gap or as nothing - white space of any kind,
 # control and invisible format characters (Unicode's default-ignorables, those above the BMP too), the blank Braille
 # cell, every dash (Unicode category Pd) and the underscore - so "Claude" and "Opus" on either side of a line break, a
 # non-breaking space or a zero-width space are one run (refutation rounds 3 and 4); never other punctuation.
 GAP = r'[\s_\-\x00-\x1f\x7f-\x9f\u00a0\u00ad\u034f\u058a\u05be\u061c\u115f-\u1160\u1400\u1680\u17b4-\u17b5\u1806\u180b-\u180f\u2000-\u200f\u2010\u2011\u2012\u2013\u2014\u2015\u2028-\u202f\u205f-\u206f\u2212\u2800\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d\u3000\u301c\u3030\u30a0\u3164\ufe00-\ufe0f\ufe31\ufe32\ufe58\ufe63\ufeff\uff0d\uffa0\ufff9-\ufffc\U00010ead\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]+'
-_MODEL_ID = re.compile(rf'\b(?:gpt|claude|gemini)-[a-z0-9]+(?:[.-][a-z0-9]+)*(?:{GAP}(?:{FAMILIES})(?:{GAP}{VERSION})?(?![a-z0-9]))?',
-                       re.ASCII | re.IGNORECASE)
+_MODEL_ID = re.compile(r'\b(?:gpt|claude|gemini)-[a-z0-9]+(?:[.-][a-z0-9]+)*', re.ASCII | re.IGNORECASE)
+# a Claude model id with the model family that continues it ("claude-3.5 Sonnet 4"): families continue Anthropic's names
+# only, so a device after another vendor's id stays ("gpt-4o - OPUS 2 processor")
+# (the id is an atomic group: a whole id such as claude-3-5-sonnet-20241022 never gives back its own family to this
+# pattern, so _MODEL_ID replaces it whole)
+_CLAUDE_ID_FAMILY = re.compile(rf'\bclaude-(?>[a-z0-9]+(?:[.-][a-z0-9]+)*){GAP}(?:{FAMILIES})(?:{GAP}{VERSION})?(?![a-z0-9])',
+                               re.ASCII | re.IGNORECASE)
 # One part of a name run: one of Anthropic's names with its version and the model families that follow it, each with its
 # own version ("Claude 3 Opus", "Claude Sonnet 4.5"), or another name with its version ("Gemini 2.5"). A run is parts
 # joined by gaps ("Gemini Claude Opus 4.5", "Claude Fable 5.2"), bounded by letters and digits only, as the denylist
@@ -148,7 +154,7 @@ def shown(text):
     system", nothing else changed. Anything that is not a string is returned as it is."""
     if not isinstance(text, str) or not text:
         return text
-    for pattern in (_MODEL_ID, _NAME_RUN, _JOINED):
+    for pattern in (_CLAUDE_ID_FAMILY, _MODEL_ID, _NAME_RUN, _JOINED):
         text = pattern.sub(_the_system, text)
     return text
 

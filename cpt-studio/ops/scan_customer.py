@@ -365,6 +365,12 @@ def _of_document(printed: str, document: str) -> bool:
     # for nothing, so only the pieces from the first literal to the last are placed: by the set of document positions
     # each placement can end at, in time linear in the document for each piece (a pattern of k optional wildcards
     # backtracks exponentially on a run of undrawable characters, refutation round 4).
+    # The usual case first: each U+FFFD one character of the document, a fixed-width pattern with no optional part, which
+    # stops at its first placement; only a quotation that fails it (an undrawn white space or format character the
+    # reading removed) is placed piece by piece below (refutation round 5: keeping every placement of a clean quotation
+    # cost the document's length times the quotation's).
+    if re.search('.'.join(re.escape(part) for part in printed.split(REPLACEMENT)), document, re.DOTALL):
+        return True
     parts = re.split('(' + re.escape(REPLACEMENT) + '+)', printed)
     literals, gaps = parts[0::2], [len(run) for run in parts[1::2]]
     if literals[0] == '':

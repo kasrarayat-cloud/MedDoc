@@ -48,10 +48,10 @@ class RoundThreeCase(r.CustomerCase, TestCase):
             'Claude' + chr(0xA0) + 'Opus' + chr(0xA0) + '4.5 read the snare.': 'The system read the snare.',
             'Claude' + chr(0x2011) + '3.5 Sonnet agrees.': 'The system agrees.',
             'Claude-3.5 Sonnet read the snare.': 'The system read the snare.',
-            # versions are one- or two-digit numbers joined by dots or underscores (round 4): a dash-joined or longer
-            # number after a name is a code, a date or a range, left as written
+            # versions are numbers of one or two digits joined by dots, dashes or underscores (rounds 4 and 5): a longer
+            # number after a name is a code or a date, left as written
             'Read by claude_3_5_sonnet_20241022.': 'Read by the system_20241022.',
-            'Claude Opus 4-5 agreed.': 'The system-5 agreed.',
+            'Claude Opus 4-5 agreed.': 'The system agreed.',
         }
         for text, expected in cases.items():
             with self.subTest(text=text):

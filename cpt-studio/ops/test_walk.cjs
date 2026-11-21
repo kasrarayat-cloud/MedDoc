@@ -314,7 +314,7 @@ test('a modifier is scanned whole in the JSON, even where a quote holds the same
   assert.ok(!walk.NEVER_QUOTED.test('$.codes[0].quotes[0].text'));
 });
 
-test('a download is scanned line by line, its quoted lines set aside', () => {
+test('scanFile reads a text line by line, its quoted lines set aside (a PDF report is scanned by ops/scan_customer.py)', () => {
   const ctx = walk.scanContext({});
   walk.addQuotes(ctx, { codes: [{ quotes: [{ text: 'Trace fluid in the pouch.', page: 1 },
     { text: 'Cold forceps biopsies were taken from the antrum, where trace fluid was seen.', page: 1 }] }] });

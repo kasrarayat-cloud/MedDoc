@@ -58,7 +58,7 @@ class RoundFourCase(r.CustomerCase, TestCase):
             with self.subTest(text=text):
                 self.assertEqual(customer.shown(text), expected)
 
-    def test_a_code_a_date_or_a_range_after_a_name_is_left_as_written(self):
+    def test_a_code_or_a_date_after_a_name_is_left_as_written(self):
         cases = {
             'Per Fable 45385-59 is supported.': 'Per the system 45385-59 is supported.',
             'Seen by Dr. Claude 2026-11-02 at 14:00.': 'Seen by Dr. The system 2026-11-02 at 14:00.',
