@@ -4,6 +4,7 @@ fix passes' line identity, decision ids and download rounds, as ops/verification
 the browser logic's own tests pass (node)."""
 import hashlib
 import json
+import os
 import re
 import shutil
 import socket
@@ -52,17 +53,24 @@ PDF_LIB_DIGEST = '0a2a90ad83c1c80ba19fc4821e27588f50938c7eda06cc0f23beea8c7aeba0
 COREJS_GLOBAL_LOOKUP = ('check("object"==typeof globalThis&&globalThis)||check("object"==typeof window&&window)||'
                         'check("object"==typeof self&&self)||check("object"==typeof global&&global)||'
                         'check("object"==typeof this&&this)||function(){return this}()||Function("return this")()')
-# Code built from a string, as CODE_FROM_STRINGS reads it in the library's text: eval named in any way (called, or reached
-# as a property: globalThis.eval, x["eval"]); Function called (Function(...), new Function(...), self.Function(...),
-# x["Function"]), used as a value ((0,Function)(...), Reflect.construct(Function, ...)) or called through call, apply or
-# bind; a constructor called with a string literal (x.constructor("...")); and setTimeout or setInterval called with a
-# string literal, directly or as a property (window.setTimeout("...")). What a text search cannot see is not claimed: a
-# string held in a variable (setTimeout(code), x.constructor(code)) or a constructor reached by a computed name
-# (x[name](...)). Those are refused at run time: neither the page's policy nor the policy the library's own files are
-# served with (studio.access.SecurityHeadersMiddleware.STATIC_CSP, which binds its worker) allows 'unsafe-eval'.
-CODE_FROM_STRINGS = re.compile(r'(?<![\w$])eval\b|\[\s*["\'`](?:eval|Function)["\'`]\s*\]|\bnew\s+Function\s*\('
-                               r'|(?<![\w$])Function\s*(?:\(|[),]|\.\s*(?:call|apply|bind)\b)'
-                               r'|\.constructor\s*\(\s*["\'`]|(?<![\w$])set(?:Timeout|Interval)\s*\(\s*["\'`]')
+# Code built from a string, as CODE_FROM_STRINGS reads it in the library's text (D368 rounds 3 and 5, D2): eval named in
+# any way (called, or reached as a property: globalThis.eval, x["eval"]); Function called - Function(...), new
+# Function(...), self.Function(...), x["Function"](...), Function?.(...) - or used as a tag (Function`...`, new
+# Function`...`), passed straight into a call as a value ((0,Function)(...), Reflect.construct(Function, ...)), or called
+# through call, apply or bind (Function.call(...), Function?.call(...)); a constructor called with a string literal or used
+# as a tag (x.constructor("..."), x.constructor?.("..."), x["constructor"]("..."), x.constructor`...`); and setTimeout or
+# setInterval called with a string literal or used as a tag, directly or as a property (setTimeout("..."),
+# setTimeout?.("..."), window.setTimeout("..."), window["setTimeout"]("..."), setTimeout`...`). What a text search
+# cannot see is not claimed: a value held under another name and called by it (var F = Function; F("..."), or
+# [Function][0]("...") and {f: Function}.f("...")), a string held in a variable (setTimeout(code), x.constructor(code)),
+# or a name reached by computation (x[name](...)). Those are refused at run time: neither the page's policy nor the
+# policy the library's own files are served with (studio.access.SecurityHeadersMiddleware.STATIC_CSP, which binds its
+# worker) allows 'unsafe-eval'.
+CODE_FROM_STRINGS = re.compile(r'(?<![\w$])eval\b|\[\s*["\'`](?:eval|Function)["\'`]\s*\]'
+                               r'|\[\s*["\'`](?:constructor|setTimeout|setInterval)["\'`]\s*\]\s*(?:\?\.\s*)?[(`]'
+                               r'|(?<![\w$])Function\s*(?:(?:\?\.\s*)?[(`]|[),]|\??\.\s*(?:call|apply|bind)\b)'
+                               r'|\.constructor\s*(?:\?\.\s*)?(?:\(\s*["\'`]|`)'
+                               r'|(?<![\w$])set(?:Timeout|Interval)\s*(?:\?\.\s*)?(?:\(\s*["\'`]|`)')
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 # GET /api/session, /api/encounters and /api/encounters/<id>, exactly as the contract file lists them (the build
 # specification, section 6, with document.view_media_type, document.converted and the state 'earlier')
@@ -406,6 +414,26 @@ class PdfLibraryTests(SimpleTestCase):
                        'x.constructor("return this")', 'setTimeout("f()")', 'window.setTimeout("f()")', 'setInterval(`f()`)'):
             with self.subTest(unsafe):
                 self.assertIsNotNone(CODE_FROM_STRINGS.search(unsafe))
+        # round 5 (R3CS-7): the seven forms the round-4 refutation found missed - a tagged template, an optional call, a
+        # name in brackets as a string literal - and the same-class forms its checker found, minified as the library is
+        missed = ('Function`return this`', 'Function?.("return 1")', 'new Function`a`', 'x["constructor"]("return this")()',
+                  'window["setTimeout"]("f()")', 'setTimeout`f()`', 'setTimeout?.("f()")')
+        for unsafe in (*missed, 'Function?.call(null,"return this")()', 't.constructor?.("return this")()', 't.constructor`return this`()',
+                       'var g=globalThis.Function?.("return this")();', 'o=new Function`return 1`;', "x['Function']('return 1')()",
+                       'g=t["constructor"]("return this")();', 'self["setTimeout"]("t()",0);', "self['setInterval']('t()',9);",
+                       'setTimeout?.("t()",0);', 'setInterval`t()`;', 'x[ "constructor" ] ?.( "return this" )'):
+            with self.subTest(unsafe):
+                self.assertIsNotNone(CODE_FROM_STRINGS.search(unsafe))
+        # each planted in the worker's own text fails the assertion above
+        worker = (PDF_LIB / PDF_LIB_SCRIPTS[1]).read_text(encoding='utf-8').replace(COREJS_GLOBAL_LOOKUP, '')
+        for unsafe in missed:
+            with self.subTest(planted=unsafe):
+                self.assertNotEqual([match.group(0) for match in CODE_FROM_STRINGS.finditer(f'{worker};{unsafe}')], [])
+        # what the comment names as unseen stays unseen: a value held under another name and called by it
+        for unseen in ('var F=Function;F("return this")()', '[Function][0]("return this")()', '({f:Function}).f("return this")()',
+                       'setTimeout(code)', 'x[name]("return this")'):
+            with self.subTest(unseen=unseen):
+                self.assertIsNone(CODE_FROM_STRINGS.search(unseen))
         # and what the library's own text holds that builds no code is not read as it
         for safe in ('Function.prototype.toString', 'r=e(Function.toString)', '"Function"===e(t)', 'getRaw("Function")',
                      'parseShadingFunction(e)', 'setTimeout(()=>{t()},0)', 'setTimeout(t.resolve,0)', 'new e.prototype.constructor(t)',
@@ -555,9 +583,12 @@ class StaticHeaderTests(SimpleTestCase):
         node = shutil.which('node')
         if node is None:
             self.skipTest('node is not installed; the dev preview needs it')
-        with socket.socket() as probe:
-            probe.bind(('127.0.0.1', 0))
-            port = probe.getsockname()[1]
+        # CPT_STUDIO_PREVIEW_PORT keeps a run to the port it was given; else one the system gives
+        port = int(os.environ.get('CPT_STUDIO_PREVIEW_PORT') or 0)
+        if not port:
+            with socket.socket() as probe:
+                probe.bind(('127.0.0.1', 0))
+                port = probe.getsockname()[1]
         server = subprocess.Popen([node, str(ROOT / 'ops' / 'dev_preview_server.cjs'), f'--port={port}'],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
