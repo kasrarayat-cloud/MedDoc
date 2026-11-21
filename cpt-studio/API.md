@@ -174,8 +174,9 @@ draws it with its pinned PDF library, marking a chosen quote's words on its page
 library, the library does not work or answer in time, it cannot draw the document, or the download fails or stalls, the
 page frames this address instead, a new frame at `#page=N` for a quote on another page, and says why. A text view is
 shown in a frame of this address and its passages marked there; a frame that does not hold the view (an answer other
-than `200`, a body whose size is not `document.size`, or an answer the frame refuses to show) is never searched, and the
-page says the document could not be downloaded. The rule is
+than `200`, a body whose positive size is not `document.size`, or an answer the frame refuses to show) is never
+searched, and the page says the document could not be downloaded; a frame whose load never ends (stopped, or its body
+broken off) is waited for, and nothing is said. The rule is
 [`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8, "Marking a quoted passage"; this endpoint and the contract are
 unchanged by it.
 

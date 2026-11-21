@@ -271,12 +271,14 @@ apart from the page script.
 - A text document keeps its own rule (`findPassages`, as `findPassage`: runs of white space count as one space, exact
   case before case-blind, no word edges): every occurrence is marked inside the text's frame (marked, not selected: the
   marks stay while a selection would not) and the note says how many, or that the exact words could not be found. The
-  frame is searched only when it holds the document (`frameHolds`): once it has loaded, what it holds must be readable,
-  answered 200 where the browser tells the answer, and the document's exact size (`document.size`) where the browser
-  tells the body's size. Otherwise - the edge's own "temporarily unavailable" page while the app restarts, which the
-  frame shows, or an answer the frame refuses to show - nothing is searched, `data-mark-status` is `unavailable` with
-  `data-fallback="download"`, and the note is the 'download' sentence ("The document could not be downloaded for
-  marking, so nothing is marked."). The walk fails such a reading, since its documents are always there to be shown.
+  frame is searched only when it holds the document (`frameHolds`): its current document must have had its own load,
+  be readable, answered 200 where the browser tells the answer, and of the document's exact size (`document.size`)
+  where the browser tells a positive body size. Each load of the frame paints the chosen quote again, so the marks and
+  the note follow what the frame holds (a reload from the frame's own menu included), and a quote chosen while the
+  frame loads clears the earlier note until that load. Otherwise - the edge's own "temporarily unavailable" page while
+  the app restarts, which the frame shows, or an answer the frame refuses to show - nothing is searched,
+  `data-mark-status` is `unavailable` with `data-fallback="download"`, and the note is the 'download' sentence ("The
+  document could not be downloaded for marking, so nothing is marked."). The walk fails such a reading.
 - It reads no meaning, adds no word list or code rule, and never holds or changes a code (owner condition D358). The
   viewer keeps what it marked on `#documentViewer` (`data-marked`, `data-mark-status`, `data-mark-pages`,
   `data-mark-count`) for the walk.
@@ -368,6 +370,10 @@ sentence can bring about is repaired; the rest is recorded here):
 - Text documents: a text whose accented letters are stored decomposed (a letter then a combining accent, as some copies
   out of PDFs give it) is searched as stored, while the coding review read it composed, so a quote with such a letter is
   not found and the note says the exact words could not be found, though the frame shows them.
+- Text documents (round 7, D382): a frame load the browser stops (Esc, the Stop button) or whose body breaks off never
+  brings its load, so the viewer waits: it marks nothing and says nothing until the page is opened again, and the
+  frame shows what arrived. A body of size 0 is read as a size the browser did not tell (no view the app serves is
+  empty).
 
 ## 9. Install and verify
 
@@ -432,8 +438,8 @@ again on its page drawn again at the new scale after Zoom in (`#viewerZoom [data
 sentence the viewer gives - 'browser', 'library', 'document', 'slow' or 'download' ("The document could not be downloaded
 for marking, so nothing is marked.") - and " The quote is on page N.", and a new frame whenever the quote's page differs
 from the frame's. A text document is judged by the walk's own copy of its rule (`findPassages`). Counted; and where the
-PDF viewer drew the document, at least one of its quotes must be marked, since the walk's documents quote their own
-words.
+PDF viewer drew the document or the text viewer showed it, at least one of its quotes must be marked, since the walk's
+documents quote their own words (so a text viewer whose frame holds something else fails, whatever that frame says).
 
 A caller with the document's bytes passes them: `chooseQuotes(page, enc, { bytes })`; without them the walk fetches the
 view address in the page. `judgeQuote(quote, reading)` and `quoteMarkChecks(chosen)` need nothing more than what

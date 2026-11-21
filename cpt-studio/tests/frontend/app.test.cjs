@@ -2163,7 +2163,7 @@ test('a text has no pages: a quote is marked in the text frame, never by moving 
       assert.equal(frame.src, 'unchanged');
       assert.equal(app.state.selectedQuote, 'L1#0');
       // the frame's text is not loaded here: the passage waits for it
-      assert.deepEqual(app.state.framePassage, { passage: text.codes[0].quotes[0].text, key: 'L1#0' });
+      assert.deepEqual(app.state.framePassage, { passage: text.codes[0].quotes[0].text, key: 'L1#0', frame });
     });
   } finally {
     Object.assign(app.state, saved);
@@ -2173,46 +2173,60 @@ test('a text has no pages: a quote is marked in the text frame, never by moving 
 test('a text frame that does not hold the document is never searched: the note says it could not be downloaded', async () => {
   const size = 376;
   const view = 'http://studio.test/api/encounters/x/original?view=1';
-  // a frame as the page sees it: its document (null when this page cannot read it), and its navigation entry
-  const frameOf = ({ page = { URL: view, readyState: 'complete', body: {} }, entry = { responseStatus: 200, decodedBodySize: size }, throws = false } = {}) => {
-    const frame = fakeElement({ tagName: 'IFRAME', scrollIntoView() {} });
-    Object.defineProperty(frame, 'contentDocument', { get() { if (throws) throw new Error('blocked'); return page; } });
-    frame.contentWindow = { performance: { getEntriesByType: type => (type === 'navigation' && entry ? [entry] : []) } };
+  const pageOf = (fields = {}) => ({ URL: view, readyState: 'complete', body: {}, ...fields });
+  // a frame as the page sees it: its current document (null when this page cannot read it) and its navigation entry,
+  // both changeable, as a reload changes them
+  const frameOf = ({ page = pageOf(), entry = { responseStatus: 200, decodedBodySize: size }, throws = false } = {}) => {
+    const frame = fakeElement({ tagName: 'IFRAME', id: 'documentViewer', scrollIntoView() {} });
+    Object.assign(frame, { page, entry });
+    Object.defineProperty(frame, 'contentDocument', { get() { if (throws) throw new Error('blocked'); return this.page; } });
+    frame.contentWindow = { performance: { getEntriesByType: type => (type === 'navigation' && frame.entry ? [frame.entry] : []) } };
     return frame;
   };
-  assert.equal(app.frameHolds(frameOf(), size), 'document');
+  const loaded = frame => {
+    app.noteFrameLoad({ target: frame });
+    return frame;
+  };
+  // only a document whose own load has come is the frame's: one still loading, or a load the browser stopped mid-body
+  // (complete, with no load event), is waited for and never searched
+  assert.equal(app.frameHolds(frameOf(), size), 'waiting');
+  assert.equal(app.frameHolds(loaded(frameOf()), size), 'document');
   // the edge's own page while the app restarts: readable, its own size and status
-  assert.equal(app.frameHolds(frameOf({ entry: { responseStatus: 503, decodedBodySize: 39 } }), size), 'failed');
-  assert.equal(app.frameHolds(frameOf({ entry: { decodedBodySize: 39 } }), size), 'failed', 'a body that is not the document\'s size, the status unknown');
-  assert.equal(app.frameHolds(frameOf({ entry: { responseStatus: 503, decodedBodySize: size } }), size), 'failed', 'an answer other than 200');
-  // what the browser does not tell is not held against the frame
-  assert.equal(app.frameHolds(frameOf({ entry: null }), size), 'document');
-  assert.equal(app.frameHolds(frameOf({ entry: { responseStatus: 0, decodedBodySize: 0 } }), size), 'document');
-  assert.equal(app.frameHolds(frameOf({ entry: { decodedBodySize: 39 } }), null), 'document', 'no size to compare with');
-  const noTiming = frameOf();
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { responseStatus: 503, decodedBodySize: 39 } })), size), 'failed');
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { decodedBodySize: 39 } })), size), 'failed', 'a positive size that is not the document\'s');
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { responseStatus: 503, decodedBodySize: size } })), size), 'failed', 'an answer other than 200');
+  // what the browser does not tell (no entry, a status of 0, a size of 0) is not held against the frame
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: null })), size), 'document');
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { responseStatus: 0, decodedBodySize: 0 } })), size), 'document');
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { decodedBodySize: 39 } })), null), 'document', 'no size to compare with');
+  const noTiming = loaded(frameOf());
   noTiming.contentWindow = { get performance() { throw new Error('no timing'); } };
   assert.equal(app.frameHolds(noTiming, size), 'document');
-  // before its load the frame is waited for; a frame this page cannot read, once loaded, does not hold the document
+  // a frame this page cannot read: waited for until its load, then it does not hold the document
   for (const unreadable of [frameOf({ page: null }), frameOf({ throws: true })]) {
     assert.equal(app.frameHolds(unreadable, size), 'waiting');
     app.noteFrameLoad({ target: unreadable });
     assert.equal(app.frameHolds(unreadable, size), 'failed');
   }
-  // the frame's first, empty document is not its load; its own document still loading is waited for
-  const blank = frameOf({ page: { URL: 'about:blank', readyState: 'complete', body: {} } });
-  app.noteFrameLoad({ target: blank });
+  // the frame's first, empty document is not its load
+  const blank = loaded(frameOf({ page: pageOf({ URL: 'about:blank' }) }));
   assert.equal(app.frameHolds(blank, size), 'waiting');
-  const reloading = frameOf({ page: { URL: view, readyState: 'interactive', body: {} } });
-  app.noteFrameLoad({ target: reloading });
-  assert.equal(app.frameHolds(reloading, size), 'waiting');
+  // a reload from the frame's menu: the new document is waited for, loading or stopped, until its own load
+  const reloaded = loaded(frameOf());
+  reloaded.page = pageOf({ readyState: 'loading' });
+  assert.equal(app.frameHolds(reloaded, size), 'waiting');
+  reloaded.page = pageOf();
+  assert.equal(app.frameHolds(reloaded, size), 'waiting', 'complete with no load of its own: stopped');
+  reloaded.entry = { responseStatus: 503, decodedBodySize: 39 };
+  assert.equal(app.frameHolds(loaded(reloaded), size), 'failed');
   app.noteFrameLoad({ target: fakeElement({ tagName: 'IMG' }) });
 
   const text = clone(fixture('encounter-awaiting-answer.json'));
   assert.equal(text.document.size, size);
-  const failed = frameOf({ entry: { responseStatus: 503, decodedBodySize: 39 } });
   const note = fakeElement();
   const saved = { framePassage: app.state.framePassage, doc: app.state.doc, route: app.state.route };
   try {
+    const failed = loaded(frameOf({ entry: { responseStatus: 503, decodedBodySize: 39 } }));
     await withPage({ elements: { documentViewer: failed, viewerMark: note } }, async () => {
       Object.assign(app.state, { doc: text, route: null });
       app.showQuote('L1#0');
@@ -2222,6 +2236,26 @@ test('a text frame that does not hold the document is never searched: the note s
       app.clearViewerMark();
       assert.equal(note.textContent, '');
       assert.deepEqual({ ...failed.dataset }, { fallback: 'download', marked: '', markStatus: '', markCount: '' });
+    });
+    // a choice made while the frame waits clears what an earlier one said, and the frame's load paints it
+    const waiting = frameOf({ page: pageOf({ readyState: 'loading' }) });
+    await withPage({ elements: { documentViewer: waiting, viewerMark: note } }, async () => {
+      Object.assign(app.state, { doc: text, route: null });
+      note.textContent = 'Marked in the document.';
+      waiting.dataset.markStatus = 'marked';
+      app.showQuote('L1#1');
+      assert.equal(note.textContent, '');
+      assert.deepEqual({ ...waiting.dataset }, { marked: 'L1#1', markStatus: '', markCount: '' });
+      // the load brings the edge's page: the note follows it
+      Object.assign(waiting, { page: pageOf(), entry: { responseStatus: 503, decodedBodySize: 39 } });
+      app.noteFrameLoad({ target: waiting });
+      assert.equal(note.textContent, app.FRAME_REASONS.download);
+      assert.deepEqual({ ...waiting.dataset }, { fallback: 'download', marked: 'L1#1', markStatus: 'unavailable', markCount: '0' });
+      // a load of another frame paints nothing
+      const other = frameOf({ page: pageOf(), entry: { responseStatus: 503, decodedBodySize: 39 } });
+      note.textContent = 'unchanged';
+      app.noteFrameLoad({ target: other });
+      assert.equal(note.textContent, 'unchanged');
     });
   } finally {
     Object.assign(app.state, saved);

@@ -1632,15 +1632,16 @@ function judgeQuote(quote, reading) {
 // page not drawn, with overprint flags other than the walk's copies, on a viewer whose page count or text layer is not the
 // document's, misaligned, not seen as drawn - and the last quote marked judged again after each redraw (chosen.redraws:
 // Zoom in, then Fit width; B7). It passes when every quote was judged as the walk's own reading says and nothing was
-// marked on another page - and, where the PDF viewer drew the document, when at least one of its quotes was marked: a
-// quote not found is allowed, but a viewer that marks nothing at all does not pass on the walk's own documents, whose
-// quotes are their own words.
+// marked on another page - and, where the PDF viewer drew the document or the text viewer showed it, when at least one
+// of its quotes was marked: a quote not found is allowed, but a viewer that marks nothing at all does not pass on the
+// walk's own documents, whose quotes are their own words.
 function quoteMarkChecks(chosen) {
   const data = { quotes: chosen.length, marked_once: 0, marked_multi: 0, not_found: 0, no_text: 0, unavailable: 0, unresolved: 0,
     off_page: 0, mismatched: 0, missed: 0, cut: 0, blank: 0, flags: 0, pages: 0, layers: 0, misaligned: 0, unseen: 0, redraws: 0, redraw_failed: 0 };
   const counted = ['off_page', 'mismatched', 'missed', 'cut', 'blank', 'flags', 'pages', 'layers', 'misaligned', 'unseen'];
   const problems = [];
   const inPdf = { chosen: 0, marked: 0 };
+  const inText = { chosen: 0, marked: 0 };
   for (const { quote, reading } of chosen) {
     const judged = judgeQuote(quote, reading);
     data[{ once: 'marked_once', multi: 'marked_multi', not_found: 'not_found', unavailable: 'unavailable' }[judged.outcome] || 'unresolved'] += 1;
@@ -1650,6 +1651,10 @@ function quoteMarkChecks(chosen) {
     if (reading?.mode === 'pdf') {
       inPdf.chosen += 1;
       if (judged.outcome === 'once' || judged.outcome === 'multi') inPdf.marked += 1;
+    }
+    if (reading?.mode === 'text') {
+      inText.chosen += 1;
+      if (judged.outcome === 'once' || judged.outcome === 'multi') inText.marked += 1;
     }
   }
   data.pages = Math.min(data.pages, 1);
@@ -1670,6 +1675,9 @@ function quoteMarkChecks(chosen) {
   }
   // first among the problems, so the reason always shows it
   if (inPdf.chosen && !inPdf.marked) problems.unshift(`${inPdf.chosen} quote(s) chosen in the PDF viewer and not one marked`);
+  // the same for a text document: the walk's documents quote their own words, so a text viewer that marks none of them
+  // (its frame holding something else, say) fails, whatever its own frame says
+  if (inText.chosen && !inText.marked) problems.unshift(`${inText.chosen} quote(s) chosen in the text viewer and not one marked`);
   const summary = `${data.quotes} quote(s) chosen: ${data.marked_once} marked once, ${data.marked_multi} marked more than once, `
     + `${data.not_found} not found (the walk's own search agrees; ${data.no_text} on a page with no searchable text), `
     + `${data.off_page} mark(s) off the quote's page, ${data.mismatched} marked other than the walk's own, `

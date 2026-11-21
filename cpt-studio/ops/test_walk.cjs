@@ -1047,6 +1047,17 @@ test('a text document keeps its own rule (findPassages), judged by the walk\'s o
   assert.match(absent({ fallback: 'toString' }).problems.join(), /\(no reason given\).*does not say why/);
   const checked = walk.quoteMarkChecks([{ quote, reading: { mode: 'text', status: 'unavailable', fallback: 'download', count: 0, pages: [], note: walk.FRAME_REASONS.download, text: { source: '', marks: [] } } }]);
   assert.deepEqual([checked.status, checked.data.unavailable], ['fail', 1]);
+  // the walk's documents quote their own words: a text viewer that marks none of them fails, even when its frame (the
+  // edge's page, say) agrees that nothing is there - the walk does not take the frame's word for the document
+  const notThere = 'The exact words could not be found in the document, so nothing is marked.';
+  const edge = { mode: 'text', status: 'not_found', count: 0, pages: [], note: notThere, text: { source: 'CPT Studio is temporarily unavailable.\n', marks: [] } };
+  assert.equal(walk.judgeQuote(quote, edge).outcome, 'not_found');
+  const none = walk.quoteMarkChecks([{ quote, reading: edge }, { quote, reading: edge }]);
+  assert.deepEqual([none.status, none.data.not_found], ['fail', 2]);
+  assert.match(none.reason, /2 quote\(s\) chosen in the text viewer and not one marked/);
+  const some = walk.quoteMarkChecks([{ quote, reading: { mode: 'text', status: 'marked', count: 1, note: 'Marked in the document.', pages: [], text: { source, marks: [[start, end]] } } },
+    { quote: { ...quote, text: 'not in it' }, reading: { mode: 'text', status: 'not_found', count: 0, pages: [], note: notThere, text: { source, marks: [] } } }]);
+  assert.equal(some.status, 'pass', some.reason);
 });
 
 test('every quote chosen is counted, the last one marked judged again after each redraw, and the check fails on anything refused', () => {

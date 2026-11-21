@@ -3036,10 +3036,11 @@ function stopPdf(viewer) {
 
 // --- a passage of a text document, marked inside its frame (the text rule: findPassages) ---------------------------
 
-const waitingFrames = new WeakSet();
-// Frames whose own load has come, whatever it brought (noteFrameLoad, from boot): a frame that loaded before any quote
-// was chosen is then known to have loaded, even when this page cannot read what it holds.
-const loadedFrames = new WeakSet();
+// The document each frame's own load last brought (noteFrameLoad, from boot), or UNREADABLE when this page could not
+// read what it brought. A document whose own load has not come (still loading, or a load the browser stopped or that
+// broke off: no load event ever comes for those) is not taken as loaded.
+const loadedPages = new WeakMap();
+const UNREADABLE = {};
 
 function frameDocument(frame) {
   try {
@@ -3050,25 +3051,29 @@ function frameDocument(frame) {
   }
 }
 
-// A frame's load, heard on the way down to it (boot listens in the capture phase, since load does not bubble). The
-// first, empty document of a frame (about:blank, still readable) is not its load.
+// A frame's load, heard on the way down to it (boot listens in the capture phase, since load does not bubble). Each
+// load of the text viewer's frame paints the quote chosen in it again, so the marks and the note follow what the frame
+// now holds (a reload from the frame's own menu, or a first load after a choice). A frame's first, empty document
+// (about:blank) is recorded like any other and is never taken as the document (frameDocument).
 function noteFrameLoad(event) {
   const frame = event?.target;
   if (frame?.tagName !== 'IFRAME') return;
-  let blank = false;
+  let page = null;
   try {
-    blank = frame.contentDocument?.URL === 'about:blank';
+    page = frame.contentDocument;
   } catch {
-    blank = false;
+    page = null;
   }
-  if (!blank) loadedFrames.add(frame);
+  loadedPages.set(frame, page || UNREADABLE);
+  if (state.framePassage?.frame === frame) paintFrame(frame);
 }
 
-// Whether the text frame holds the document this page asked for: 'waiting' until it has loaded; 'failed' when what it
-// loaded is not the document - something this page cannot read (an answer the frame refused to show), an answer other
-// than 200, or a body whose size is not the document's (`size`, document.size: the view's exact bytes; the edge's own
-// "temporarily unavailable" page, sent while the app restarts, is shown in the frame and readable); else 'document'.
-// Where the browser does not tell the answer or the size, the frame is taken as the document.
+// Whether the text frame holds the document this page asked for: 'waiting' until the frame's current document has had
+// its own load; 'failed' when what loaded is not the document - something this page cannot read (an answer the frame
+// refused to show), an answer other than 200, or a body whose positive size is not the document's (`size`,
+// document.size: the view's exact bytes; the edge's own "temporarily unavailable" page, sent while the app restarts, is
+// shown in the frame and readable); else 'document'. Where the browser does not tell the answer or a positive size, the
+// frame is taken as the document.
 function frameHolds(frame, size) {
   let page = null;
   try {
@@ -3076,9 +3081,9 @@ function frameHolds(frame, size) {
   } catch {
     page = null;
   }
-  // its own document, still loading (the frame reloaded from its menu, say) is waited for like a first load
-  if (page && page.URL !== 'about:blank' && page.readyState !== 'complete') return 'waiting';
-  if (!frameDocument(frame)) return loadedFrames.has(frame) ? 'failed' : 'waiting';
+  const loaded = loadedPages.get(frame);
+  if (!page) return loaded === UNREADABLE ? 'failed' : 'waiting';
+  if (loaded !== page || !frameDocument(frame)) return 'waiting';
   let entry = null;
   try {
     entry = frame.contentWindow.performance.getEntriesByType('navigation')[0] || null;
@@ -3096,29 +3101,28 @@ function documentSize() {
   return record(state.doc?.document).size;
 }
 
-// Marks every occurrence of the passage in the text frame, once its text has loaded.
+// Marks every occurrence of the passage in the text frame; a frame still waiting for its load is painted by that load.
 function markInFrame(frame, passage, key) {
-  state.framePassage = { passage, key };
-  if (frameHolds(frame, documentSize()) !== 'waiting') {
-    paintFrame(frame);
-    return;
-  }
-  if (waitingFrames.has(frame)) return;
-  waitingFrames.add(frame);
-  frame.addEventListener('load', () => {
-    waitingFrames.delete(frame);
-    paintFrame(frame);
-  }, { once: true });
+  state.framePassage = { passage, key, frame };
+  paintFrame(frame);
 }
 
 // The marks of the passage chosen (state.framePassage) in the text frame: mark[data-quote-mark] elements around each
-// occurrence, in the page's lime, and the note. A frame that does not hold the document (frameHolds) is never searched:
-// nothing is marked and the note says the document could not be downloaded, as a PDF's does. A frame whose text cannot
-// be marked falls back to selecting the passage, as before.
+// occurrence, in the page's lime, and the note. A frame still waiting for its load shows nothing of an earlier choice
+// meanwhile. A frame that does not hold the document (frameHolds) is never searched: nothing is marked and the note
+// says the document could not be downloaded, as a PDF's does. A frame whose text cannot be marked falls back to
+// selecting the passage, as before.
 function paintFrame(frame) {
   const chosen = state.framePassage;
   const held = frameHolds(frame, documentSize());
-  if (held === 'waiting') return;
+  if (held === 'waiting') {
+    delete frame.dataset.fallback;
+    frame.dataset.marked = chosen ? chosen.key || '' : '';
+    frame.dataset.markStatus = '';
+    frame.dataset.markCount = '';
+    setMarkNote('');
+    return;
+  }
   if (held === 'failed') {
     frame.dataset.fallback = 'download';
     frame.dataset.marked = chosen ? chosen.key || '' : '';
@@ -3171,6 +3175,10 @@ function paintFrame(frame) {
     // only the frame's own window scrolls (scrollIntoView would move the review page too)
     if (first) frame.contentWindow.scrollBy({ top: first.getBoundingClientRect().top - frame.contentWindow.innerHeight / 3, behavior: scrollBehavior() });
   } catch {
+    // nothing is claimed of a frame whose text could not be marked
+    frame.dataset.markStatus = '';
+    frame.dataset.markCount = '';
+    setMarkNote('');
     revealInFrame(frame, chosen?.passage || '');
   }
 }
