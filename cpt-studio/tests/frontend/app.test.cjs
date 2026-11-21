@@ -3384,6 +3384,9 @@ test('R1: text drawn again over an earlier drawing of the same words and font he
   assert.deepEqual(copies([item('Polyp', 50, 700), { str: 'Polyp', transform: [0, 10, -10, 0, 51.9, 700], hasEOL: false }]), [1]);
   assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 10.1 })]), [1], '10 and 10.1: within 1%');
   assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 10.11 })]), [], '10 and 10.11: beyond');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 10.103 })]), [], '10 and 10.103: just beyond 1%, though close in size');
+  assert.deepEqual(copies([item('Polyp', 50, 700, { size: 10.103 }), item('Polyp', 50, 700)]), [], 'in either order');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 10.1009 })]), [1], '10 and 10.1009: within');
   assert.deepEqual(copies([item('Polyp', 50, 700, { size: 10.1 }), item('Polyp', 50, 700)]), [1], 'the later one smaller, within 1%');
   assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 24 })]), [], '10 and 24 at one place: two drawings');
   assert.deepEqual(copies([item('Polyp', 50, 700, { size: 0 }), item('Polyp', 50.5, 700, { size: 0 })]), [1], 'two heights of 0 agree, reach 1');
