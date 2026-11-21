@@ -288,13 +288,16 @@ It then holds the viewer to its own reading:
   reading, its centre lies along the item's run (within 0.5 of the font's height of its origin and its origin plus its
   width) and within 0.25 of the height of where the library's text layer puts it across the run (the origin less the
   font's ascent, measured as the text layer measures it, plus half the span's height). Measured in Chromium on every
-  fixture of round 5 (upright, turned 90, 180 and 270, turned text at 90 and 45 degrees, a CropBox with its own origin,
-  /UserUnit 2, Times and Courier, faint scans): 0 outside the run, -0.09 to +0.05 of the height across; the text layer
-  moved 8 pt or 22 px down, a line up or scaled 6% larger lies 0.26 to 2.3 heights away.
+  fixture of round 5 (upright, turned 90, 180 and 270, turned text at 90 and 45 degrees, slanted and mirrored text, a
+  CropBox with its own origin, /UserUnit 2, Times and Courier, four pages, faint scans): 0 outside the run, -0.09 to +0.06
+  of the height across; the text layer moved 8 pt or 22 px down, a line up or scaled 6% larger lies 0.26 to 2.3 heights
+  away.
 
 Every page a quote requires drawn (a page with a mark or one of the walk's occurrences, or the page shown for a quote not
-found) must be painted (its canvas opaque), and is checked as the member sees it (B5): screenshots of the page's box (the
-viewer scrolled over it as needed, its scroll put back) are compared with its canvas pixels, both reduced to 4 x 4 CSS px
+found) must be painted (its canvas opaque), and is checked as the member sees it (B5). The viewer draws only the pages
+near what it shows and lets the others go, so each such page is brought back into view and read again, drawn, right
+before it is looked at; that reading is the one judged. Screenshots of the page's box (the viewer scrolled over it as
+needed, its scroll put back) are compared with its canvas pixels, both reduced to 4 x 4 CSS px
 blocks, outside the marks. Over the blocks where the canvas draws no ink the screen may differ by at most 2 luminance
 levels on average (measured 0 on drawn vector pages and 0.03 on scans; a page shown through an ancestor at opacity 0.03,
 or a scan whose paper the screen turns white, 0.8 to 16.7); over the blocks where it draws ink (8 levels darker than its

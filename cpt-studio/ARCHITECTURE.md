@@ -319,8 +319,9 @@ display only: it reads no meaning and never holds or changes a code.
   count, each drawn page's text layer span for span, the overprint flags both ways, the occurrences marked - count, place
   and case - each marked span where its item is drawn (from the item's transform and the page's viewport), the count,
   pages and note character for character, a "not found" only where its own search finds none, no mark on another page
-  or inside a character; every page it requires drawn is painted and seen as drawn (screenshots of the page against its
-  canvas, block by block outside the marks), shows ink where its reading has text and ink under its marks (a pixel darker
+  or inside a character; every page it requires drawn is painted and seen as drawn (brought back into view and read
+  again first, as the viewer lets far pages go; screenshots of the page against its canvas, block by block outside the
+  marks), shows ink where its reading has text and ink under its marks (a pixel darker
   than the paper by a share of the page's own contrast, so faint scanned ink counts); and the last quote marked is judged
   again after Zoom in and Fit width. The tolerances are measured and stated in CORE-UX-DESIGN.md section 9. The page's
   text stays out of the evidence, which keeps counts.
