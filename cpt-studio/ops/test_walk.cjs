@@ -8,12 +8,13 @@
  * rounds 3 and 5: its own search with the rule's R1 overprint copies, R2 word edges with R2a numbers, R2b separate
  * drawings and R2c Han and hiragana, R3 format characters, the 22 shared examples of round 5, the notes N1-N4 character
  * for character; the viewer held to its reading - its page count, text layer, overprint flags both ways, marks in place,
- * pages drawn and seen, the last quote judged again after each redraw) and the evidence's shape - synthetic values
- * only; and the review dialog and every quote of the dev preview's documents and of synthetic PDFs of every page shape
- * driven through the page itself (ops/dev_preview_server.cjs's mock, in Chromium) where Playwright is installed
- * (CPT_VERIFY_PLAYWRIGHT), skipped where it is not. CPT_WALK_TEST_PORTS ('first-last') keeps the preview's ports to a
- * range. The browser test named "round 5 against the new viewer" needs the round-5 viewer (Builder A's) and fails on the
- * round-3 one by design.
+ * pages drawn and seen, the last quote judged again after each redraw), the downloaded report (the physician PDF, the
+ * only report made since 2026-11-21: read page by page, every page held to its synthetic line and status) and the
+ * evidence's shape - synthetic values only; and the review dialog and every quote of the dev preview's documents and of
+ * synthetic PDFs of every page shape driven through the page itself (ops/dev_preview_server.cjs's mock, in Chromium)
+ * where Playwright is installed (CPT_VERIFY_PLAYWRIGHT), skipped where it is not. CPT_WALK_TEST_PORTS ('first-last')
+ * keeps the preview's ports to a range. The browser test named "round 5 against the new viewer" needs the round-5 viewer
+ * (Builder A's) and fails on the round-3 one by design.
  *
  * LINE IDENTITY (FIX-SPEC section 1): the tests marked so build rows that carry `line`; the base fixture carries it
  * when customer-contract.json lists it (lane F1a), and the browser test checks the posted line once the page's fixtures
@@ -315,11 +316,19 @@ test('a modifier is scanned whole in the JSON, even where a quote holds the same
 
 test('a download is scanned line by line, its quoted lines set aside', () => {
   const ctx = walk.scanContext({});
-  walk.addQuotes(ctx, { codes: [{ quotes: [{ text: 'Trace fluid in the pouch.', page: 1 }] }] });
-  const text = 'SYNTHETIC - NOT FOR BILLING\n43239 Ready for approval\n  - "Trace fluid in the pouch." (page 1)\n'
-    + 'Reason: read by the model gpt-6\nSYNTHETIC - NOT FOR BILLING\n';
-  const hits = walk.scanFile(text, ctx, 'draft.txt');
-  assert.deepEqual(hits.map(hit => [hit.id, hit.where]), [['model_id', 'draft.txt line 4']]);
+  walk.addQuotes(ctx, { codes: [{ quotes: [{ text: 'Trace fluid in the pouch.', page: 1 },
+    { text: 'Cold forceps biopsies were taken from the antrum, where trace fluid was seen.', page: 1 }] }] });
+  // the draft PDF report as exportPdf hands it to the scan (each page's lines as the walk's own reading gives them, the
+  // pages joined): a quotation on a line of its own, or wrapped over two, its page on the line under it
+  const text = ['QuillMD', 'C P T   S T U D I O', 'DRAFT · REVIEW REQUIRED', 'gi-02 · E5C1D3A2 · Coding review 1',
+    'Synthetic data · Not for billing or claims   CPT-E5C1D3A2 · r1   /   01 of 01', '01   43239 / Ready for approval',
+    '“Trace fluid in the pouch.”', 'Page 1', 'Reason: read by the model gpt-6', '02   00731 / Needs your answer',
+    '“Cold forceps biopsies were taken from the antrum, where', 'trace fluid was seen.”', 'Page 1'].join('\n');
+  const hits = walk.scanFile(text, ctx, 'draft.pdf');
+  assert.deepEqual(hits.map(hit => [hit.id, hit.where]), [['model_id', 'draft.pdf line 9']]);
+  // the control: the same lines, the quotations not the document's, are hits - so it is the setting aside that clears them
+  assert.deepEqual(walk.scanFile(text, walk.scanContext({}), 'draft.pdf').map(hit => [hit.id, hit.where]),
+    [['trace', 'draft.pdf line 7'], ['model_id', 'draft.pdf line 9'], ['trace', 'draft.pdf line 12']]);
   const checks = walk.checkScan('scan.files', [...hits, { id: 'provider_word', severity: 'soft', where: 'x', match: 'provider' }], 'the downloads');
   assert.deepEqual(checks.map(item => [item.id, item.status]), [['scan.files', 'fail'], ['scan.files.wording', 'warn']]);
   assert.deepEqual(walk.checkScan('scan.dom', [], 'the page').map(item => item.status), ['pass']);
@@ -1385,15 +1394,16 @@ test('the review dialog is driven through the page itself, in a browser', async 
   }, () => {
     assert.deepEqual(walk.decisionRequestProblems(made.body, enc, code, session.acknowledgement), []);
   });
-  // the draft download through the export dialog, as the walk makes it: the page's request names the round shown
+  // the draft PDF report through the export dialog, as the walk downloads it: the page's request names the round shown
   await t.test('the page\'s download names the round shown', async () => {
     await page.goto(`${base}/#doc/${id}`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(count => document.querySelectorAll('ol#codesList > li.code-row').length === count, enc.codes.length, { timeout: 15000 });
     const out = scratch();
-    const download = await walk.exportTxt(page, { base, out }, enc, 'draft', out);
+    const download = await walk.exportPdf(page, { base, out }, enc, 'draft', out);
     assert.equal(download.status, 201);
     assert.deepEqual(walk.exportRequestProblems(download.body, enc, 'draft'), []);
-    // the preview's file is a mock (no banner at its end, no codes): only what the page and the download did is held here
+    // the preview's file is a one-page mock PDF (not the server's report: no synthetic line, no status, no codes): only
+    // what the page and the download did is held here
     const checks = Object.fromEntries(walk.exportChecks(download, enc, 'draft').map(item => [item.id, item.status]));
     assert.deepEqual([checks['export.draft'], checks['export.draft.request'], checks['export.draft.same_bytes']], ['pass', 'pass', 'pass']);
   });
@@ -1901,27 +1911,104 @@ test('every /ops/ path is 404 to the customer and never 200 to nobody, and the o
   assert.deepEqual(failed(walk.opsChecks({ probes, operator: { status: 404, names: false } })), ['ops.operator_view']);
 });
 
-test('an export is a .txt between SYNTHETIC banners, the same bytes twice, naming its codes', () => {
+// The physician PDF report - the only report CPT Studio makes (owner direction 2026-11-21) - as exportPdf reads it
+// (readDocument, then pdfPageLines, each page's lines joined): every page opens with the running header the server's
+// report draws, its status and the synthetic line, then the page's own lines. The pages and their wording are the
+// server's: this file's encounter (its first line approved) made through the API as a draft and an approved report and
+// read by the walk's own reading - abridged, trailing spaces aside.
+const REPORT_HEADS = { draft: 'DRAFT · REVIEW REQUIRED', approved: 'APPROVED CODES' };
+function reportPages(kind, bodies) {
+  return bodies.map((body, index) => ['QuillMD', 'C P T   S T U D I O', REPORT_HEADS[kind], 'gi-02 · E5C1D3A2 · Coding review 1',
+    `Synthetic data · Not for billing or claims   CPT-E5C1D3A2 · r1   /   0${index + 1} of 0${bodies.length}`, ...body].join('\n'));
+}
+const DRAFT_PAGES = reportPages('draft', [
+  ['CPT coding summary', 'CPT SUGGESTIONS   Status and saved decision of each line', '01   43239', 'CPT suggestion',
+    'Ready for approval', 'Line L1 · Modifiers: none', 'Approved by Coder1 · 20 Nov 2026, 10:06 UTC', 'UNITS', '1   Approved',
+    'Evidence 01', '02   00731', 'CPT suggestion', 'Needs your answer', 'Line L2 · Modifiers: P2', 'UNITS', '1   Answer needed',
+    'No excerpt', 'What still needs your decision', 'Question: How long was the anesthesia?', 'REVIEWER   APPROVAL RECORD',
+    'Coder1   1 approved · 0 rejected'],
+  ['THE REASONS, IN THE RECORD', 'The evidence for each code.', '01   43239 / Ready for approval',
+    '“Cold forceps biopsies were taken from the antrum.”', 'Page 1',
+    'Reason: EGD with biopsy is documented. Second check: agrees. The report states the biopsy.', '02   00731 / Needs your answer',
+    'No excerpt from the document was saved for this code.',
+    'Reason: Anesthesia time is not stated. Second check: no verdict. The second check did not review this code.',
+    'Question: How long was the anesthesia?', 'DOCUMENTATION NOTES', '–   The indication is not stated.'],
+  ['REVIEW SCOPE', 'Report format   PDF · cpt-studio-customer-export@3', 'Prepared for a professional decision.']]);
+const APPROVED_PAGES = reportPages('approved', [
+  ['Approved CPT codes', 'APPROVED CODES   Only codes with a current saved approval', '01   43239', 'Approved code',
+    'Approved by Coder1', '20 Nov 2026, 10:06 UTC', 'Line L1 · Modifiers: none', 'UNITS', '1   Approved', 'Evidence 01',
+    'APPROVED BY   APPROVAL RECORD', 'Coder1   1 code approved · latest 20 Nov 2026, 10:06 UTC'],
+  ['THE REASONS, IN THE RECORD', 'Every approved code has a source.', '01   43239 / Approved by Coder1',
+    '“Cold forceps biopsies were taken from the antrum.”', 'Page 1', 'Reason: EGD with biopsy is documented.', 'REVIEW SCOPE',
+    'Report format   PDF · cpt-studio-customer-export@3', 'A record of saved approvals.']]);
+
+// A report of ``kind`` as exportPdf gives it: made (201), saved as a .pdf, posted for round 1, the same bytes fetched
+// again, and read as ``pages``.
+function downloaded(kind, pages) {
+  const filename = `CPT-Studio-${kind}-r1-20261120T100600.pdf`;
+  return { kind, fmt: 'pdf', status: 201, filename, suggested: filename, size: 57686, sha256: 'a'.repeat(64),
+    refetch: { status: 200, sha256: 'a'.repeat(64), size: 57686 }, body: { kind, fmt: 'pdf', round: 1 },
+    pages, text: pages.join('\n'), read_error: null };
+}
+
+test('an export is a .pdf read page by page, every page marked synthetic with its status, the same bytes twice, naming its codes', () => {
   const enc = encounter();
   enc.codes[0].decision = { action: 'approve' };
-  const text = 'SYNTHETIC - NOT FOR BILLING\nApproved codes\n43239 approved by Review agent\nSYNTHETIC - NOT FOR BILLING\n';
-  const item = { kind: 'approved', status: 201, filename: 'gi-02-approved.txt', suggested: 'gi-02-approved.txt', size: text.length,
-    sha256: 'a'.repeat(64), text, refetch: { status: 200, sha256: 'a'.repeat(64), size: text.length },
-    body: { kind: 'approved', fmt: 'txt', round: 1 } };
+  const item = downloaded('approved', APPROVED_PAGES);
   assert.deepEqual(failed(walk.exportChecks(item, enc, 'approved')), []);
-  // the page's request names the kind, the format and the round shown (FIX-SPEC-2 section 5)
-  for (const body of [{ kind: 'approved', fmt: 'txt' }, { kind: 'approved', fmt: 'txt', round: 2 }, { kind: 'approved', fmt: 'txt', round: '1' },
-    { kind: 'draft', fmt: 'txt', round: 1 }, { kind: 'approved', fmt: 'csv', round: 1 }, null]) {
+  assert.deepEqual(failed(walk.exportChecks(downloaded('draft', DRAFT_PAGES), enc, 'draft')), []);
+  // the page's request names the kind, the format - the PDF, the only one made - and the round shown (FIX-SPEC-2 section 5)
+  for (const body of [{ kind: 'approved', fmt: 'pdf' }, { kind: 'approved', fmt: 'pdf', round: 2 }, { kind: 'approved', fmt: 'pdf', round: '1' },
+    { kind: 'draft', fmt: 'pdf', round: 1 }, { kind: 'approved', fmt: 'txt', round: 1 }, { kind: 'approved', fmt: 'csv', round: 1 }, null]) {
     assert.deepEqual(failed(walk.exportChecks({ ...item, body }, enc, 'approved')), ['export.approved.request'], JSON.stringify(body));
   }
-  assert.match(walk.exportRequestProblems({ kind: 'approved', fmt: 'txt', round: 2 }, enc, 'approved').join(), /round 2, not the round shown \(1\)/);
+  assert.match(walk.exportRequestProblems({ kind: 'approved', fmt: 'pdf', round: 2 }, enc, 'approved').join(), /round 2, not the round shown \(1\)/);
+  assert.deepEqual(walk.exportRequestProblems({ kind: 'approved', fmt: 'txt', round: 1 }, enc, 'approved'), ['fmt "txt", not "pdf"']);
   assert.deepEqual(walk.exportRequestProblems(null, enc, 'draft'), ['the page posted no JSON object']);
+  // made, and a .pdf: a refusal, an empty file or a download that is not a PDF fails the export itself
+  for (const change of [{ status: 400 }, { size: 0 }, { filename: 'gi-02-approved.txt', suggested: 'gi-02-approved.txt' }]) {
+    assert.deepEqual(failed(walk.exportChecks({ ...item, ...change }, enc, 'approved')), ['export.approved'], JSON.stringify(change));
+  }
   assert.deepEqual(failed(walk.exportChecks({ ...item, refetch: { ...item.refetch, sha256: 'b'.repeat(64) } }, enc, 'approved')),
     ['export.approved.same_bytes']);
-  assert.deepEqual(failed(walk.exportChecks({ ...item, text: text.replace(/SYNTHETIC - NOT FOR BILLING\n$/, '') }, enc, 'approved')),
+  // a file the walk's PDF reading refused: no page read, so nothing the report must show is shown
+  assert.deepEqual(failed(walk.exportChecks({ ...item, pages: [], text: '', read_error: 'the PDF library refused it' }, enc, 'approved')),
+    ['export.approved.read', 'export.approved.synthetic', 'export.approved.codes']);
+  // every page - the last as well as the first - is marked synthetic and not for billing, with the report's own status
+  const unmarked = [APPROVED_PAGES[0], APPROVED_PAGES[1].replace('Synthetic data · Not for billing or claims', '')];
+  assert.deepEqual(failed(walk.exportChecks({ ...item, pages: unmarked, text: unmarked.join('\n') }, enc, 'approved')),
     ['export.approved.synthetic']);
-  assert.deepEqual(failed(walk.exportChecks({ ...item, body: { ...item.body, kind: 'draft' } }, enc, 'draft')), ['export.draft.codes']);  // the draft names every code
+  const mixed = [APPROVED_PAGES[0], APPROVED_PAGES[1].replace('APPROVED CODES', 'DRAFT · REVIEW REQUIRED')];
+  assert.deepEqual(failed(walk.exportChecks({ ...item, pages: mixed, text: mixed.join('\n') }, enc, 'approved')),
+    ['export.approved.synthetic']);
+  // the draft names every code
+  const short = DRAFT_PAGES.map(text => text.split('\n').filter(line => !line.includes('00731')).join('\n'));
+  assert.deepEqual(failed(walk.exportChecks(downloaded('draft', short), enc, 'draft')), ['export.draft.codes']);
   assert.deepEqual(failed(walk.exportChecks({ kind: 'draft', error: 'the export option is disabled' }, enc, 'draft')), ['export.draft']);
+});
+
+test('a downloaded PDF is read as each page\'s lines, held to the status and synthetic words the server\'s report draws', async () => {
+  // pdfPageLines: an item the library marks as ending its line ends it, any other is joined to the next by a space; a
+  // last line is kept unless it is blank; a reading with no pages (one the library refused) has no lines
+  const reading = { pages: [
+    { items: [{ str: 'QuillMD', hasEOL: false }, { str: '', hasEOL: true }, { str: '01', hasEOL: false }, { str: '43239', hasEOL: true },
+      { str: 'Page 1', hasEOL: false }] },
+    { items: [{ str: 'Reason: EGD with biopsy is documented.', hasEOL: true }, { str: ' ', hasEOL: false }] },
+    { items: [] }] };
+  assert.deepEqual(walk.pdfPageLines(reading), [['QuillMD ', '01 43239', 'Page 1 '], ['Reason: EGD with biopsy is documented.'], []]);
+  assert.deepEqual(walk.pdfPageLines({ error: 'the PDF library refused it' }), []);
+  assert.deepEqual(walk.pdfPageLines(null), []);
+  // with the pinned library, in Node: the dev preview's one-page mock download, line by line; what it refuses, no lines
+  const { syntheticPdf } = require('./dev_preview_server.cjs');
+  const mock = ['SYNTHETIC - NOT FOR BILLING', 'CPT Studio preview mock download (draft).', 'The real download is built by the server from the saved decisions.'];
+  assert.deepEqual(walk.pdfPageLines(await walk.readDocument(syntheticPdf([mock]))).map(page => page.map(text => text.trim())), [mock]);
+  assert.deepEqual(walk.pdfPageLines(await walk.readDocument(Buffer.from('not a PDF at all'))), []);
+  // the words every page of a downloaded report is held to are the ones the server's report draws (studio/physician_report.py)
+  assert.deepEqual(walk.REPORT_STATUS, REPORT_HEADS);
+  const report = fs.readFileSync(path.join(__dirname, '..', 'studio', 'physician_report.py'), 'utf8');
+  for (const words of [...Object.values(walk.REPORT_STATUS), 'Synthetic data · Not for billing or claims']) {
+    assert.ok(report.includes(`'${words}'`), `studio/physician_report.py draws ${words}`);
+  }
 });
 
 // --- the evidence --------------------------------------------------------------------------------------------------------

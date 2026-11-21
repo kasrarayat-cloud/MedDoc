@@ -354,13 +354,14 @@ REPLACEMENT = chr(0xFFFD)  # what the report prints for a character none of its 
 def _of_document(printed: str, document: str) -> bool:
     """``printed`` (a quotation's text as the PDF gives it, white space removed) is a part of ``document`` (likewise):
     compared with no white space at all, because the layout breaks a line inside a long token (a URL, a run of
-    underscores) without a hyphen or a space, and with each U+FFFD standing for exactly one character, because the
-    report prints U+FFFD for a character its fonts cannot draw."""
+    underscores) without a hyphen or a space, and with each U+FFFD standing for one character or none, because the report
+    prints U+FFFD for a character its fonts cannot draw - which can be one this reading deletes from the document (a
+    format character) or removes with the white space."""
     if not printed:
         return False
     if REPLACEMENT not in printed:
         return printed in document
-    return re.search('.'.join(re.escape(part) for part in printed.split(REPLACEMENT)), document, re.DOTALL) is not None
+    return re.search('.?'.join(re.escape(part) for part in printed.split(REPLACEMENT)), document, re.DOTALL) is not None
 
 
 def _running_count(pages: list) -> int:
@@ -439,26 +440,23 @@ def _scan_stream(lines: list, document: str, ctx: ScanContext, name: str, hits: 
 
 def _scan_joint(first: str, second: str, ctx: ScanContext, where: str, hits: list) -> None:
     """What spans the break between two neighbouring lines of product wording in a PDF (each line was scanned alone):
-    the two read joined by a space and joined with nothing between them (the layout cuts a token too long for a line
-    mid-word, with no hyphen), each with the allowed strings removed first as scan_text removes them, and only a match
-    that starts in the first line and ends in the second reported, once."""
+    the two read joined by a space, each with the allowed strings removed first as scan_text removes them, and only a
+    match that starts in the first line and ends in the second reported. Never joined with nothing between them: most
+    line ends fall between words, and two words read as one fail clean reports (refutation round 3), so a token the
+    layout cuts mid-word is read as two (a known limit; the page JSON holds it whole while its round is current)."""
     cleaned = []
     for line in (first, second):
         for allowed in ctx.allowed:
             line = line.replace(allowed, ' ')
         cleaned.append(line)
-    joint, found = len(cleaned[0]), set()
-    for between in (' ', ''):
-        joined = f'{cleaned[0]}{between}{cleaned[1]}'
-        for pattern_id, severity, surfaces, regex in PATTERNS:
-            if 'file' not in surfaces or pattern_id in found:
-                continue
-            for match in regex.finditer(joined):
-                if match.start() < joint and match.end() > joint + len(between):
-                    found.add(pattern_id)
-                    hits.append({'id': pattern_id, 'severity': severity, 'surface': 'file', 'where': where,
-                                 'match': _excerpt(joined, match.start(), len(match.group()))})
-                    break
+    joined, joint = f'{cleaned[0]} {cleaned[1]}', len(cleaned[0])
+    for pattern_id, severity, surfaces, regex in PATTERNS:
+        if 'file' not in surfaces:
+            continue
+        for match in regex.finditer(joined):
+            if match.start() < joint and match.end() > joint + 1:
+                hits.append({'id': pattern_id, 'severity': severity, 'surface': 'file', 'where': where,
+                             'match': _excerpt(joined, match.start(), len(match.group()))})
 
 
 def scan_pdf(reading: PdfReading, ctx: ScanContext, name: str, hits: list | None = None) -> list:

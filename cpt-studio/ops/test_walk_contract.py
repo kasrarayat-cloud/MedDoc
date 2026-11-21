@@ -76,7 +76,12 @@ def encounter():
         'answers': [{'question': 'Was it?', 'answer': 'Yes.', 'by': 'Coder1', 'at': '2026-11-20T10:03:00Z'}],
         'notes': ['The note is not signed.'],
         'readiness': {'draft': True, 'approved': False, 'blockers': ['No code has been approved.']},
-        'reports': [{'id': 'r1', 'kind': 'draft', 'fmt': 'txt', 'filename': 'x.txt',
+        # the PDF report, the only one made since 2026-11-21, listed newest first beside a TXT made before that: an
+        # earlier export stays listed as made (the contract's fmt keeps txt and csv for those)
+        'reports': [{'id': 'r2', 'kind': 'draft', 'fmt': 'pdf', 'filename': 'CPT-Studio-draft-r1-20261121T100700.pdf',
+                     'generated_at': '2026-11-21T10:07:00Z', 'download_url': '/api/reports/r2/download',
+                     'current': True},
+                    {'id': 'r1', 'kind': 'draft', 'fmt': 'txt', 'filename': 'x.txt',
                      'generated_at': '2026-11-20T10:06:00Z', 'download_url': '/api/reports/r1/download',
                      'current': True}],
         'activity': [{'at': '2026-11-20T10:00:00Z', 'text': 'Uploaded.'}],
@@ -144,6 +149,7 @@ def cases():
         lambda e: e.update(activity=[{'at': 'yesterday', 'text': 'x'}]),
         lambda e: e['context'].update(service_date='14/10/2026'),
         lambda e: e['readiness'].update(draft='yes'),
+        lambda e: e['reports'][0].update(fmt='docx'),  # a format outside the contract's
         lambda e: e.update(**{f'extra_{index:02d}': index for index in range(70)}),  # past the bound of 60
         lambda e: e.update(naïve='x'),
     ]

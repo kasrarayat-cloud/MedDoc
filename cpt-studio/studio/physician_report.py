@@ -1,16 +1,15 @@
 """The physician PDF report's content: which saved facts reach the doctor-facing PDF, and in what words.
 
-Owner directive of 2026-11-21 (the approved design handoff): the PDF is the primary doctor-facing export; CSV and TXT
-stay. This module only chooses words; studio.physician_pdf draws them.
+Owner directions of 2026-11-21 (the approved design handoff, then: no more TXT or CSV): the PDF is the doctor-facing
+report, and the only one. This module only chooses words; studio.physician_pdf draws them.
 
-It reads the same snapshot as the TXT and CSV exports (exports.snapshot: the encounter's latest done coding round, each
-line with its own current decision), so the PDF can never list a code, a decision or a quotation those exports would
-not:
+It reads exports.snapshot (the encounter's latest done coding round, each line with its own current decision), the
+snapshot every customer export has been made from, the TXT and CSV of earlier releases included:
 - a draft lists every code line of the round, in stored order, with its status and its current decision if it has one,
   then what still needs a decision (the round's questions and the lines without a saved decision) and its notes;
 - an approved report lists only the lines whose current decision is approve (customer.approved_lines), each with who
   approved it and when, and says how many lines of the round it leaves out. An approval made by an automated agent
-  carries exports.AGENT_LINE, exactly as the other exports do.
+  carries exports.AGENT_LINE, as the TXT and CSV of earlier releases did.
 Nothing is inferred. The record has no patient identifier and no plain-language service label, so neither is printed; a
 field the record does not hold prints as not recorded or not given, never a guess. A quotation is printed as stored: a
 line's citations are the document's own words (pages where the document has pages); a line without citations falls back
@@ -18,8 +17,8 @@ to the coding review's own quotation, and the PDF says so. Text the coding revie
 already (the snapshot's), so no vendor or model name reaches the PDF; no provider, run, usage or log field is read here.
 Timestamps are UTC, in the page's convention ("21 Nov 2026, 14:02 UTC").
 
-Making a report reads saved rows only; it writes nothing (exports.create stores the result as an ExportArtifact, like
-the TXT and CSV, and records export.created).
+Making a report reads saved rows only; it writes nothing (exports.create stores the result as an ExportArtifact and
+records export.created).
 """
 from __future__ import annotations
 
@@ -38,7 +37,7 @@ NO_DECISION = 'No saved decision'
 REVIEW_QUOTE = "The coding review's quotation, not checked against the document"
 TEXT_LOCATOR = 'Text document · no page numbers'
 # The insurance as saved. 'unknown' is stored both for the member's "Not sure" and for no answer at all, so it reads as
-# the TXT export, the coding review's prompt and the review page say it: not given. Anything else is not recorded.
+# the coding review's prompt and the review page say it: not given. Anything else is not recorded.
 INSURANCE_WORDS = {'medicare': 'Medicare', 'medicaid': 'Medicaid', 'commercial': 'Commercial or other',
                    'unknown': 'Not given'}
 NO_PAGE = 'Page not given'
@@ -107,7 +106,8 @@ def _decision_words(decision) -> str:
 def _modifier_words(modifiers) -> str:
     if modifiers is None:
         return 'Modifiers: not given'
-    return 'Modifiers: ' + (', '.join(said(str(item)) for item in modifiers) if modifiers else 'none')  # model-written
+    # model-written, so filtered - as one list, so a name replaced mid-list reads 'the system', as in a sentence
+    return 'Modifiers: ' + (said(', '.join(str(item) for item in modifiers)) if modifiers else 'none')
 
 
 def _row_state(item) -> str:
@@ -159,7 +159,7 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
     kind = snap['kind']
     ref = _encounter_ref(encounter)
     number = snap['round']
-    title = snap['title'] if pdf.clean_text(snap['title']).strip() else 'Untitled document'  # nothing printable: none
+    title = 'Untitled document' if pdf.blank(snap['title']) else snap['title']  # a title that prints no ink: none
     index = customer.citation_index(round_)
     text_source = _text_source(encounter)
     items = snap['items']
@@ -215,7 +215,8 @@ def build(snap: dict, *, encounter, round_, all_lines: int) -> pdf.PhysicianRepo
         empty = 'No code of this coding review has a current approval.'
     else:
         undecided = [item for item in items if item['status'] in decisions.DECIDABLE and item['decided'] is None]
-        questions = customer.questions_json(round_)
+        # a question that prints nothing (invisible text) is no question the doctor can read: as if not asked
+        questions = [question for question in customer.questions_json(round_) if not pdf.blank(said(question['text']))]
         # What still needs the practice, one entry per open item, as the page offers it: every question of the round
         # (answering one makes a new coding review, whatever the decisions on its lines) and every decidable line
         # without a saved decision. A line awaiting an answer is finished by answering the round's questions (the page

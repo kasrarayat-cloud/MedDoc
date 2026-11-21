@@ -255,7 +255,9 @@ class RoundTwoScanTests(PhysicianReportScanCase):
         return flat(data), self.scanned(enc, data, response, 'draft.pdf')[1]
 
     def test_a_quotation_printed_with_the_replacement_character_is_still_the_documents(self):
-        for lacking in (chr(0xF0B7), chr(0x4E2D), chr(0x338E)):
+        # U+06DD and U+0600 are format characters the scanner deletes from the document while the report prints U+FFFD
+        # for them (refutation round 3, R3-2-3): U+FFFD stands for one character or none
+        for lacking in (chr(0xF0B7), chr(0x4E2D), chr(0x338E), chr(0x06DD), chr(0x0600)):
             with self.subTest(lacking=hex(ord(lacking))):
                 text, hits = self.scanned_quote(
                     f'Trace blood was seen after the preparation was judged adequate {lacking} {QUOTE}, and the '
@@ -276,16 +278,30 @@ class RoundTwoScanTests(PhysicianReportScanCase):
         self.assertIn('Dr. Claude Example removed the polyp', text)
         self.assertEqual(hits, [])
 
-    def test_a_token_cut_mid_word_in_the_products_wording_is_read_whole(self):
+    def test_an_ordinary_line_wrap_never_reads_two_words_as_one(self):
+        # refutation round 3 (R3-1-2, R3-4-1): joining every wrap with nothing failed clean reports ("evidence.Second" is
+        # a rule id's shape); a phrase a wrap cuts in two is still read joined by a space, and found once
         ctx = self.sc.scan_context()
-        for first, second, rule in (('links https://records.example.org/f93376b0dac', '38912f93376b0dac38912f93376b0/view',
-                                     'long_hex'),
-                                    ('the call req_011C', 'UmKq2XyzAbCdEf was retried', 'vendor_id')):
-            with self.subTest(rule=rule):
+        for first, second in (('which is supported by the evidence.', 'Second check: agrees. Agreed.'),
+                              ('and is reported with this CPT.', 'Second-look findings were normal.'),
+                              ('the specimen was handed to', 'Ken Adams for pathology'),
+                              ('labels 1234567890123456', '6543210987654321 were scanned')):
+            with self.subTest(first=first):
                 hits = []
                 self.sc._scan_joint(first, second, ctx, 'draft.pdf page 1 lines 4-5', hits)
-                self.assertIn(rule, [hit['id'] for hit in hits])
-                self.assertEqual(len(hits), len({hit['id'] for hit in hits}))  # each rule once
+                self.assertEqual(hits, [])
+        hits = []
+        self.sc._scan_joint('the coding review made several tool', 'calls before it answered', ctx, 'w', hits)
+        self.assertEqual([hit['id'] for hit in hits], ['tool_call'])
+
+    def test_a_reason_ending_a_line_on_a_sentence_end_passes_the_scan(self):
+        enc = self.encounter()
+        r.write_round(enc, codes=[r.row('45385', 'ready', check_reason='Agreed.', reason=(
+            'A 2 mm sessile polyp in the sigmoid colon was removed by cold snare, which is supported by the evidence.'))],
+            citations={'L1': [{'text': 'A 2 mm sessile polyp in the sigmoid colon was removed with a cold snare.',
+                               'page': 2, 'source': 'reader'}]})
+        data, response, _ = self.made(enc, 'draft')
+        self.assertEqual(self.scanned(enc, data, response, 'draft.pdf')[1], [])
 
     def test_a_pdf_holding_an_entry_the_scan_does_not_read_fails_it(self):
         from pypdf import PdfReader, PdfWriter

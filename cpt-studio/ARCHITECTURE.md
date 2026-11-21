@@ -248,18 +248,15 @@ a reconcile (5.4).
 ### 5.8 Exports (`studio/exports.py`)
 
 `cpt-studio-customer-export@3`, from the latest round, which the request names (the round the page shows; another is
-refused as changed, 409, before readiness is read). TXT opens and closes with the SYNTHETIC banner and states the
-encounter, round, date of service, insurance and who made it when; a draft lists every code with its status, units,
-modifiers, reason, the second check and quotes with pages, then the questions and documentation notes; the approved
-export lists only the lines whose current decision is an approval and whose status is ready or needs_review, with
-approver, kind and time. Units or modifiers not given read "not given". CSV (RFC 4180) has the columns kind, code,
-units, modifiers, status, reason, quotes, decision, decided_by, decided_at, banner rows, and formula cells neutralised;
-in both formats control, bidirectional and line-separator characters are shown escaped. Each
-export is stored once as an `ExportArtifact`; a download serves the stored bytes; one made from an earlier round stays
-listed, marked earlier.
+refused as changed, 409, before readiness is read). A draft lists every code with its status, units, modifiers, reason,
+the second check and quotes with pages, then the questions and documentation notes; the approved report lists only the
+lines whose current decision is an approval and whose status is ready or needs_review, with approver, kind and time.
+Units or modifiers not given read "not given". Each export is stored once as an `ExportArtifact`; a download serves the
+stored bytes; one made from an earlier round stays listed, marked earlier. The report is a PDF and nothing else (owner
+directions 2026-11-21: the doctor-facing report, then the only one); the TXT and CSV exports made before that stay
+stored, listed and downloadable as records, and none is made again (`exports.FORMATS`).
 
-The physician PDF (owner directive 2026-11-21) is the doctor-facing export; CSV and TXT stay. It is made from the same
-snapshot (`exports.snapshot`), so it can list no code, decision or quotation the other two would not:
+The physician PDF is made from the snapshot every customer export has been made from (`exports.snapshot`):
 `studio/physician_report.py` chooses its words from that snapshot (a draft: every line with its status, decision and
 evidence, then the questions, the lines with no saved decision and the notes; an approved report: only the lines with a
 current approval, each with who approved it and when), and `studio/physician_pdf.py` draws them with ReportLab - a
@@ -271,6 +268,30 @@ the other two - one `ExportArtifact`, fmt `pdf` - and served as stored. Making i
 decision, round or state, calls no provider, and gives the same output for the same saved state, but for the Prepared
 line (when, and by whom, it was made) and the PDF's own date. A PDF that cannot be made is refused (`exports.NotMade`,
 503) before anything is stored.
+
+How the PDF prints text (refutation rounds 1 and 2, 2026-11-21): control characters print as spaces; invisible format
+characters, and whatever the report's own fonts draw as nothing (measured from the fonts when they load), are deleted
+before the display filter reads the text, so the filter reads what the reader sees; a character none of the fonts draws
+prints as U+FFFD - never as a look-alike or a compatibility form, which could change a number in a quotation or spell a
+name the filter has already read - and the report's review scope says so; right-to-left text is printed in its stored
+order, also said there. Every field the coding review wrote (reasons, second checks, questions, notes, its own
+quotations, modifiers) passes `customer.shown`, the filter every customer surface uses. A model family's name (Opus,
+Sonnet, Haiku) is replaced only where it continues a vendor's name ("Claude 3 Opus"); alone it is an ordinary or a
+clinical word (the OPUS trial, a MED-EL SONNET 2 processor).
+
+Known limits of the physician PDF (recorded, not defects): text the coding review wrote is filtered as on the page, so
+what the shared filter cannot read is printed as on the page - a vendor name in look-alike letters (Cyrillic or Greek,
+or enclosed letters a report font draws), with its version joined to it ("Claude3.5": the denylist bounds a name by
+digits too), a family name alone ("Opus 4.5"), another company's product ("ChatGPT", "GPT4o"), and machinery words
+(a token count, a request id), which the customer scanner flags except inside a line's own quotation (the page serves it
+as a quote, and the scanner reads every quote as the document's words); a word the filter cannot tell from a vendor's
+name is replaced as on the page (the organ of Corti). The scanner reads the latest round's quotations as the document's
+words, so an earlier round's PDF quoting a passage the latest round no longer cites fails the scan (a false failure, for
+a person to read). A value too tall for one row (dozens of long modifiers, twenty reviewers with long names) flows as
+paragraphs, and its first heading can end a page apart from its first fact. A page of this release left open across a
+switch-back still offers the PDF and shows the earlier server's refusal (that server also offers TXT and CSV again); a
+page of the earlier release left open across the install still offers TXT and CSV, and the server refuses them with its
+sentence until the page is reloaded.
 
 ### 5.9 The operator console (`studio/operator.py`)
 

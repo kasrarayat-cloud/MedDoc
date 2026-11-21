@@ -201,7 +201,7 @@ function leaks(html) {
 // Every piece of markup the page can draw for a document, in one string.
 function markup(doc) {
   return [render(doc), render(doc, { open: new Set(['activity']) }), app.exportOptions(doc),
-    app.exportOptions(doc, { kind: 'draft', fmt: 'pdf' }), app.exportOptions(doc, { kind: 'approved', fmt: 'csv' }),
+    app.exportOptions(doc, { kind: 'draft', fmt: 'pdf' }), app.exportOptions(doc, { kind: 'approved', fmt: 'pdf' }),
     app.progressPanel(doc, ui(doc, { reconnecting: true, ack: { id: doc.id, at: Date.parse('2026-11-20T10:00:00Z') } })),
     `<p>${app.escapeHtml(app.exportStatusText(doc))}</p>`].join('\n');
 }
@@ -2478,9 +2478,9 @@ test('the tally and the export dialog never claim an approval the server did not
   assert.equal(app.tallyText(fixture('encounter-no-codes.json')), 'No codes found', 'a finished review with no codes says so');
   assert.equal(app.tallyText(fixture('encounter-reading.json')), 'No codes yet');
   const options = doc => dom(app.exportOptions(doc)).all('[data-export-kind]').map(option => [option.attr('data-export-kind'), option.attr('data-export-fmt'), option.attr('disabled') === null]);
-  assert.deepEqual(options(fixture('encounter-ready.json')), [['draft', 'pdf', true], ['draft', 'csv', true], ['draft', 'txt', true], ['approved', 'pdf', false], ['approved', 'csv', false], ['approved', 'txt', false]]);
-  assert.deepEqual(options(fixture('encounter-reviewed.json')), [['draft', 'pdf', true], ['draft', 'csv', true], ['draft', 'txt', true], ['approved', 'pdf', true], ['approved', 'csv', true], ['approved', 'txt', true]]);
-  assert.deepEqual(options(fixture('encounter-reading.json')).map(option => option[2]), [false, false, false, false, false, false]);
+  assert.deepEqual(options(fixture('encounter-ready.json')), [['draft', 'pdf', true], ['approved', 'pdf', false]]);
+  assert.deepEqual(options(fixture('encounter-reviewed.json')), [['draft', 'pdf', true], ['approved', 'pdf', true]]);
+  assert.deepEqual(options(fixture('encounter-reading.json')).map(option => option[2]), [false, false]);
   assert.deepEqual(dom(app.exportOptions(fixture('encounter-ready.json'))).all('.export-blockers li').map(item => item.text), ['No code has been approved.']);
   for (const name of ENCOUNTERS) {
     const doc = fixture(name);
@@ -2512,7 +2512,7 @@ test('the page offers a download whenever the server allows one: a finished revi
   assert.equal(page.one('.results-empty').text, 'The coding review found no CPT code to report for this document.');
   // the dialog it opens offers the draft, and the approved download stays closed until a code is approved
   assert.deepEqual(dom(app.exportOptions(doc)).all('[data-export-kind]').map(option => [option.attr('data-export-kind'), option.attr('data-export-fmt'), option.attr('disabled') === null]),
-    [['draft', 'pdf', true], ['draft', 'csv', true], ['draft', 'txt', true], ['approved', 'pdf', false], ['approved', 'csv', false], ['approved', 'txt', false]]);
+    [['draft', 'pdf', true], ['approved', 'pdf', false]]);
   // nothing the server allows and nothing made earlier: no button
   for (const name of ['encounter-reading.json', 'encounter-checking.json', 'encounter-failed.json', 'encounter-earlier.json']) {
     assert.equal(dom(render(fixture(name))).all('[data-action="export"]').length, 0, name);
@@ -2538,70 +2538,54 @@ const PDF_NOTES = {
 const controlsOf = html => dom(html).all('[data-export-kind]').map(item => [item.attr('data-export-kind'), item.attr('data-export-fmt'),
   item.attr('disabled') !== null, item.attr('aria-busy') === 'true', (item.one('small') || item).text.trim()]);
 
-test('the export dialog leads each group with its PDF, the report for the doctor, as the primary button; CSV then TXT follow under "Other formats"', () => {
+test('the export dialog offers each group its PDF, the report for the doctor and the only one made, as the primary button; no data file follows', () => {
   assert.equal(PDF_NOT_MADE, 'The PDF could not be made. Nothing was saved. Try again.');
-  assert.equal(FORMAT_REQUIRED, 'Choose a draft or an approved export as PDF, CSV or TXT.');
+  assert.equal(FORMAT_REQUIRED, 'Choose a draft or an approved PDF report.');
   const page = dom(app.exportOptions(fixture('encounter-ready.json')));
   const groups = page.all('.export-group');
-  assert.deepEqual(groups.map(group => group.one('.evidence-label').text), ['Codes — not approved', 'Approved codes']);
-  const titles = {
-    draft: ['Codes as a spreadsheet (CSV, draft)', 'Codes as text (TXT, draft)'],
-    approved: ['Approved codes as a spreadsheet (CSV)', 'Approved codes as text (TXT)'],
-  };
+  assert.deepEqual(groups.map(group => group.one('.evidence-label').text), ['Draft report', 'Approved report']);
   for (const [group, kind] of [[groups[0], 'draft'], [groups[1], 'approved']]) {
-    // the group's first control is its PDF, a primary button; then the data files, spreadsheet first
+    // the group's one control is its PDF, a primary button (owner direction 2026-11-21: no TXT or CSV is made)
     const controls = group.all('[data-export-kind]');
     assert.deepEqual(controls.map(item => [item.tag, item.attr('type'), item.attr('class'), item.attr('data-export-kind'), item.attr('data-export-fmt')]), [
-      ['button', 'button', 'button primary export-pdf', kind, 'pdf'], ['button', 'button', 'export-option', kind, 'csv'], ['button', 'button', 'export-option', kind, 'txt']]);
+      ['button', 'button', 'button primary export-pdf', kind, 'pdf']]);
     assert.equal(controls[0].text.trim(), 'Download PDF');
     // the line under it says what that PDF holds, and is the button's description
     const note = group.one(`p#${controls[0].attr('aria-describedby')}`);
     assert.equal(note?.attr('class'), 'export-pdf-note', kind);
     assert.equal(note.text, PDF_NOTES[kind]);
-    // "Other formats" holds the data files and nothing else
-    const other = group.one('.export-other');
-    assert.equal(other.one('.export-other-label').text, 'Other formats');
-    assert.deepEqual(other.all('[data-export-kind]').map(item => [item.attr('data-export-fmt'), item.one('.export-format').text, item.one('strong').text]),
-      [['csv', 'CSV', titles[kind][0]], ['txt', 'TXT', titles[kind][1]]]);
-    assert.equal(group.all('.export-other .export-pdf').length, 0);
+    // no "Other formats": nothing beside the PDF offers the codes as a data file
+    assert.deepEqual([group.all('.export-other').length, group.all('.export-option').length, group.all('.export-format').length], [0, 0, 0], kind);
+    assert.doesNotMatch(group.text, /Other formats|CSV|TXT|spreadsheet|plain text/, kind);
   }
+  assert.deepEqual(page.all('[data-export-fmt]').map(item => item.attr('data-export-fmt')), ['pdf', 'pdf'], 'the dialog offers no format but the PDF');
   assert.notEqual(groups[0].one('.export-pdf').attr('aria-describedby'), groups[1].one('.export-pdf').attr('aria-describedby'));
-  // in order: the label, the PDF, its line, why the approved report waits (when it does), then the data files
+  // in order: the label, the PDF, its line, then why the approved report waits (when it does), and nothing after
   const order = group => group.children.filter(child => typeof child !== 'string').map(child => child.attr('class'));
-  assert.deepEqual(order(groups[0]), ['evidence-label', 'button primary export-pdf', 'export-pdf-note', 'export-other']);
-  assert.deepEqual(order(groups[1]), ['evidence-label', 'button primary export-pdf', 'export-pdf-note', 'export-blockers', 'export-other']);
+  assert.deepEqual(order(groups[0]), ['evidence-label', 'button primary export-pdf', 'export-pdf-note']);
+  assert.deepEqual(order(groups[1]), ['evidence-label', 'button primary export-pdf', 'export-pdf-note', 'export-blockers']);
   // the enable rules are the readiness's: the draft PDF now, the approved PDF once a code is approved
   assert.deepEqual(controlsOf(app.exportOptions(fixture('encounter-ready.json'))).map(([kind, fmt, disabled]) => [kind, fmt, disabled]), [
-    ['draft', 'pdf', false], ['draft', 'csv', false], ['draft', 'txt', false], ['approved', 'pdf', true], ['approved', 'csv', true], ['approved', 'txt', true]]);
+    ['draft', 'pdf', false], ['approved', 'pdf', true]]);
   assert.deepEqual(order(dom(app.exportOptions(fixture('encounter-reviewed.json'))).all('.export-group')[1]),
-    ['evidence-label', 'button primary export-pdf', 'export-pdf-note', 'export-other'], 'nothing waits once a code is approved');
-  // the walk's hook stays: each data file is an .export-option of #exportOptions, by its kind and format
+    ['evidence-label', 'button primary export-pdf', 'export-pdf-note'], 'nothing waits once a code is approved');
+  // the walk's hook (ops/walk.cjs exportPdf): each report is an .export-pdf of #exportOptions, by its kind and the format pdf
   for (const kind of ['draft', 'approved']) {
-    for (const fmt of ['csv', 'txt']) assert.equal(page.all(`.export-option[data-export-kind="${kind}"][data-export-fmt="${fmt}"]`).length, 1, `${kind} ${fmt}`);
+    assert.equal(page.all(`.export-pdf[data-export-kind="${kind}"][data-export-fmt="pdf"]`).length, 1, kind);
   }
 });
 
 test('while a file is made every option waits, and the one chosen says it is being prepared', () => {
   const doc = fixture('encounter-reviewed.json');
   const pdf = (kind, busy) => [kind, 'pdf', true, busy, busy ? 'Preparing PDF…' : 'Download PDF'];
-  const data = (kind, fmt, busy, words) => [kind, fmt, true, busy, words];
-  const lines = {
-    draft: ['One row per code: status, units, modifiers, reason, quoted passages and any saved decision.', 'The same codes as plain text, with any saved decision.'],
-    approved: ['One row per approved code, with who approved it and when.', 'The approved codes as plain text, with who approved them and when.'],
-  };
   // the draft PDF: every option disabled, that one busy and saying so
-  assert.deepEqual(controlsOf(app.exportOptions(doc, { kind: 'draft', fmt: 'pdf' })), [
-    pdf('draft', true), data('draft', 'csv', false, lines.draft[0]), data('draft', 'txt', false, lines.draft[1]),
-    pdf('approved', false), data('approved', 'csv', false, lines.approved[0]), data('approved', 'txt', false, lines.approved[1])]);
-  // a data file: its line says so
-  assert.deepEqual(controlsOf(app.exportOptions(doc, { kind: 'approved', fmt: 'csv' })), [
-    pdf('draft', false), data('draft', 'csv', false, lines.draft[0]), data('draft', 'txt', false, lines.draft[1]),
-    pdf('approved', false), data('approved', 'csv', true, 'Preparing the CSV file…'), data('approved', 'txt', false, lines.approved[1])]);
-  assert.equal(controlsOf(app.exportOptions(doc, { kind: 'draft', fmt: 'txt' }))[2][4], 'Preparing the text file…');
+  assert.deepEqual(controlsOf(app.exportOptions(doc, { kind: 'draft', fmt: 'pdf' })), [pdf('draft', true), pdf('approved', false)]);
+  // the approved PDF: every option disabled, that one busy and saying so
+  assert.deepEqual(controlsOf(app.exportOptions(doc, { kind: 'approved', fmt: 'pdf' })), [pdf('draft', false), pdf('approved', true)]);
   // another document's file: everything waits and nothing here is named
-  assert.deepEqual(controlsOf(app.exportOptions(doc, { kind: null, fmt: null })).map(([, , disabled, busy]) => [disabled, busy]), Array(6).fill([true, false]));
+  assert.deepEqual(controlsOf(app.exportOptions(doc, { kind: null, fmt: null })).map(([, , disabled, busy]) => [disabled, busy]), Array(2).fill([true, false]));
   // nothing being made: as the readiness allows
-  assert.deepEqual(controlsOf(app.exportOptions(doc)).map(([, , disabled, busy]) => [disabled, busy]), Array(6).fill([false, false]));
+  assert.deepEqual(controlsOf(app.exportOptions(doc)).map(([, , disabled, busy]) => [disabled, busy]), Array(2).fill([false, false]));
   // the earlier downloads stay links while a file is made
   assert.equal(dom(app.exportOptions(doc, { kind: 'draft', fmt: 'pdf' })).all('.report-item a[download]').length, doc.reports.length);
 });
@@ -2629,11 +2613,14 @@ test('an earlier download names its format beside its kind and time; one served 
     ['/api/reports/f6100000-0000-4000-8000-000000000001/download', 'Codes (draft) · TXT']]);
 });
 
-test('the export dialog\'s copy presents the PDF as the doctor\'s report and CSV and TXT as data files; its status is announced', () => {
+test('the export dialog\'s copy presents the PDF as the doctor\'s report, the only one made; its status is announced', () => {
   const dialog = dom(fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8')).one('dialog#exportDialog');
   const copy = dialog.one('p.dialog-copy').text;
   assert.match(copy, /^The PDF is the report for the doctor, made on the server from the saved codes and decisions/);
-  assert.match(copy, /CSV and TXT carry the same codes as data files\./);
+  // it promises no data file beside the PDF (owner direction 2026-11-21: no TXT or CSV is made), and says every report is
+  // marked synthetic
+  assert.doesNotMatch(copy, /CSV|TXT|data files?/);
+  assert.match(copy, /Every report is marked as synthetic data, not for billing\.$/);
   assert.deepEqual([dialog.one('#exportStatus').attr('role'), dialog.one('#exportError').attr('role')], ['status', 'alert']);
   assert.ok(dialog.one('div#exportOptions'));
   // the review bar and the dialog's status say "report"
@@ -3098,16 +3085,16 @@ test('a download names the coding review its dialog was opened on; one refused b
   const session = fixture('session.json');
   const reviewed = fixture('encounter-reviewed.json');
   const address = `/api/encounters/${reviewed.id}`;
-  const report = { id: 'f6100000-0000-4000-8000-0000000000a1', kind: 'approved', fmt: 'txt', filename: 'CPT-Studio-approved-r2-20261120T090000.txt',
+  const report = { id: 'f6100000-0000-4000-8000-0000000000a1', kind: 'approved', fmt: 'pdf', filename: 'CPT-Studio-approved-r2-20261120T090000.pdf',
     generated_at: '2026-11-20T09:00:00Z', download_url: '/api/reports/f6100000-0000-4000-8000-0000000000a1/download', current: true };
   // the option posts {kind, fmt, round}: the number of the coding review the page shows; then the download starts
   await withPage({ answers: [{ match: (method, url) => method === 'POST' && url === `${address}/reports`, status: 201, body: report }] }, async ({ calls, element }) => {
     Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 14, docKey: '', viewerKey: app.viewerKey(reviewed) });
     click('[data-action]', { action: 'export' });
     assert.equal(element('#exportDialog').open, true);
-    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'txt' });
+    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'pdf' });
     await settle(() => calls.some(call => call.download));
-    assert.deepEqual(posted(calls), [{ url: `${address}/reports`, body: { kind: 'approved', fmt: 'txt', round: 2 } }]);
+    assert.deepEqual(posted(calls), [{ url: `${address}/reports`, body: { kind: 'approved', fmt: 'pdf', round: 2 } }]);
     assert.deepEqual(calls.filter(call => call.download).map(call => [call.download, call.filename]), [[report.download_url, report.filename]]);
   });
   // the dialog was opened on round 1; the page has moved on to round 2 under it: the option still names round 1, the
@@ -3122,9 +3109,9 @@ test('a download names the coding review its dialog was opened on; one refused b
     Object.assign(app.state, { session, doc: ready, route: { name: 'doc', id: ready.id }, routeSerial: 15, docKey: '', viewerKey: app.viewerKey(ready) });
     click('[data-action]', { action: 'export' });
     app.state.doc = later;
-    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => element('#toast').textContent === app.CHANGED_TEXT && app.state.doc.round.number === 2 && calls.some(call => call.method === 'GET'));
-    assert.deepEqual(posted(calls).map(call => call.body), [{ kind: 'draft', fmt: 'txt', round: 1 }]);
+    assert.deepEqual(posted(calls).map(call => call.body), [{ kind: 'draft', fmt: 'pdf', round: 1 }]);
     assert.equal(element('#exportDialog').open, false, 'the dialog of a coding review that changed is closed');
     assert.equal(element('#toast').textContent, app.CHANGED_TEXT);
     assert.equal(calls.filter(call => call.method === 'GET' && call.url === `/api/encounters/${ready.id}`).length, 1, 'the document is read again');
@@ -3135,7 +3122,7 @@ test('a download names the coding review its dialog was opened on; one refused b
   await withPage({ answers: [{ match: (method, url) => method === 'POST' && url === `${address}/reports`, status: 409, body: blocked }] }, async ({ calls, element }) => {
     Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 16, docKey: '', viewerKey: app.viewerKey(reviewed) });
     click('[data-action]', { action: 'export' });
-    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'csv' });
+    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'pdf' });
     await settle(() => element('#exportError').textContent !== '');
     assert.equal(element('#exportError').textContent, 'The approved export is not available yet. No code has been approved.');
     assert.equal(element('#exportDialog').open, true);
@@ -3147,7 +3134,7 @@ test('a download names the coding review its dialog was opened on; one refused b
   await withPage({}, async ({ calls }) => {
     Object.assign(app.state, { session, doc: roundless, route: null });
     click('[data-action]', { action: 'export' });
-    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => false);
     assert.deepEqual(posted(calls), []);
   });
@@ -3174,10 +3161,10 @@ test('Download PDF posts {kind, fmt: "pdf", round}; it is said to be prepared un
     assert.deepEqual(calls.filter(call => call.download), []);
     assert.equal(element('#exportStatus').textContent, 'Your PDF is being prepared. The download starts when it is ready.');
     const waiting = controlsOf(element('#exportOptions').innerHTML);
-    assert.deepEqual(waiting.map(([, , disabled]) => disabled), Array(6).fill(true), 'every option waits');
+    assert.deepEqual(waiting.map(([, , disabled]) => disabled), Array(2).fill(true), 'every option waits');
     assert.deepEqual(waiting.filter(([, , , busy]) => busy), [['draft', 'pdf', true, true, 'Preparing PDF…']]);
     // another choice meanwhile sends nothing
-    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'csv' });
+    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'pdf' });
     assert.equal(posted(calls).length, 1);
     // the 201: downloaded, and said so
     await settle(() => calls.some(call => call.download));
@@ -3187,7 +3174,7 @@ test('Download PDF posts {kind, fmt: "pdf", round}; it is said to be prepared un
     // but the PDF just made, which waits a moment so one gesture makes one file (L5-1)
     await settle(() => (element('#exportOptions').innerHTML || '').includes(report.filename));
     const page = dom(element('#exportOptions').innerHTML);
-    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]), [[true, false], ...Array(5).fill([false, false])]);
+    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]), [[true, false], [false, false]]);
     const first = page.one('.report-item');
     assert.deepEqual([first.one('a').attr('href'), first.one('a').text, first.one('small').text], [report.download_url, report.filename, 'Codes (draft) · PDF · 21 Nov 2026, 09:00 UTC']);
     assert.equal(page.all('.report-item').length, 3);
@@ -3198,7 +3185,7 @@ test('Download PDF posts {kind, fmt: "pdf", round}; it is said to be prepared un
     assert.equal(app.state.making, null);
     t.mock.timers.tick(app.MADE_HOLD_MS);
     await settle(() => false);
-    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]), Array(6).fill([false, false]), 'then it is offered again');
+    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]), Array(2).fill([false, false]), 'then it is offered again');
   });
 });
 
@@ -3219,8 +3206,8 @@ test('a PDF the server could not make: its sentence shows in the dialog, nothing
     assert.equal(element('#exportDialog').open, true, 'the dialog stays open');
     assert.deepEqual(calls.filter(call => call.download), [], 'nothing is downloaded');
     assert.equal(element('#exportStatus').textContent, app.exportStatusText(reviewed), 'nothing is said to be prepared or ready');
-    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]), Array(6).fill([false, false]), 'the options are back');
-    assert.equal(controlsOf(element('#exportOptions').innerHTML)[3][4], 'Download PDF');
+    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]), Array(2).fill([false, false]), 'the options are back');
+    assert.equal(controlsOf(element('#exportOptions').innerHTML)[1][4], 'Download PDF');
     // the retry posts again; its 201 downloads the file and clears the sentence
     click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'pdf' });
     assert.equal(element('#exportError').hidden, true);
@@ -3229,27 +3216,27 @@ test('a PDF the server could not make: its sentence shows in the dialog, nothing
     assert.deepEqual(calls.filter(call => call.download).map(call => call.filename), [report.filename]);
     assert.equal(element('#exportStatus').textContent, `Your PDF is ready. Downloading ${report.filename}.`);
   });
-  // a refusal that says what is missing (409 with the blockers) is shown the same way and gives the options back; a CSV
-  // or TXT is said to be prepared and ready in its own words
+  // a refusal that says what is missing (409 with the blockers) is shown the same way and gives the options back; the
+  // draft PDF chosen next is said to be prepared and ready
   const ready = fixture('encounter-ready.json');
   const blocked = { error: 'The approved export is not available yet.', details: { blockers: ['No code has been approved.'] } };
-  const csv = { id: 'f6100000-0000-4000-8000-0000000000b3', kind: 'draft', fmt: 'csv', filename: 'CPT-Studio-draft-r1-20261121T092000.csv',
+  const draft = { id: 'f6100000-0000-4000-8000-0000000000b3', kind: 'draft', fmt: 'pdf', filename: 'CPT-Studio-draft-r1-20261121T092000.pdf',
     generated_at: '2026-11-21T09:20:00Z', download_url: '/api/reports/f6100000-0000-4000-8000-0000000000b3/download', current: true };
   const posts = (method, url) => method === 'POST' && url === `/api/encounters/${ready.id}/reports`;
-  await withPage({ answers: [{ match: posts, status: 409, body: blocked }, { match: posts, status: 201, body: csv }] }, async ({ calls, element }) => {
+  await withPage({ answers: [{ match: posts, status: 409, body: blocked }, { match: posts, status: 201, body: draft }] }, async ({ calls, element }) => {
     Object.assign(app.state, { session, doc: ready, route: null });
     click('[data-action]', { action: 'export' });
     click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'pdf' });
     await settle(() => element('#exportError').textContent !== '');
     assert.equal(element('#exportError').textContent, 'The approved export is not available yet. No code has been approved.');
     assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([kind, fmt, disabled]) => [kind, fmt, disabled]), [
-      ['draft', 'pdf', false], ['draft', 'csv', false], ['draft', 'txt', false], ['approved', 'pdf', true], ['approved', 'csv', true], ['approved', 'txt', true]]);
-    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'csv' });
-    assert.equal(element('#exportStatus').textContent, 'Your CSV file is being prepared. The download starts when it is ready.');
-    assert.equal(controlsOf(element('#exportOptions').innerHTML)[1][4], 'Preparing the CSV file…');
+      ['draft', 'pdf', false], ['approved', 'pdf', true]]);
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
+    assert.equal(element('#exportStatus').textContent, 'Your PDF is being prepared. The download starts when it is ready.');
+    assert.equal(controlsOf(element('#exportOptions').innerHTML)[0][4], 'Preparing PDF…');
     await settle(() => calls.some(call => call.download));
-    assert.equal(element('#exportStatus').textContent, `Your CSV file is ready. Downloading ${csv.filename}.`);
-    assert.deepEqual(posted(calls).map(call => call.body), [{ kind: 'approved', fmt: 'pdf', round: 1 }, { kind: 'draft', fmt: 'csv', round: 1 }]);
+    assert.equal(element('#exportStatus').textContent, `Your PDF is ready. Downloading ${draft.filename}.`);
+    assert.deepEqual(posted(calls).map(call => call.body), [{ kind: 'approved', fmt: 'pdf', round: 1 }, { kind: 'draft', fmt: 'pdf', round: 1 }]);
   });
 });
 
@@ -3276,7 +3263,7 @@ test('the export dialog opened again while a file is made says so and waits; on 
       if (elsewhere) app.state.doc = ready;
       click('[data-action]', { action: 'export' });
       const waiting = controlsOf(element('#exportOptions').innerHTML);
-      assert.deepEqual(waiting.map(([, , disabled]) => disabled), Array(6).fill(true), 'every option waits');
+      assert.deepEqual(waiting.map(([, , disabled]) => disabled), Array(2).fill(true), 'every option waits');
       if (elsewhere) {
         assert.equal(element('#exportStatus').textContent, 'Another download is still being prepared. Wait a moment, then choose again.');
         assert.deepEqual(waiting.filter(([, , , busy]) => busy), [], 'no option here is said to be prepared');
@@ -3291,12 +3278,12 @@ test('the export dialog opened again while a file is made says so and waits; on 
       await settle(() => controlsOf(element('#exportOptions').innerHTML).every(([, , , busy]) => !busy) && app.state.making === null);
       const back = controlsOf(element('#exportOptions').innerHTML).map(([kind, fmt, disabled]) => [kind, fmt, disabled]);
       // on its own document the PDF just made waits a moment (L5-1); the other document's options are its own
-      assert.deepEqual(back.map(([, , disabled]) => disabled), elsewhere ? [false, false, false, true, true, true] : [true, false, false, false, false, false]);
+      assert.deepEqual(back.map(([, , disabled]) => disabled), elsewhere ? [false, true] : [true, false]);
       assert.equal(element('#exportStatus').textContent, elsewhere ? app.exportStatusText(ready) : `Your PDF is ready. Downloading ${report.filename}.`);
       assert.equal(posted(calls).length, 1);
       t.mock.timers.tick(app.MADE_HOLD_MS);
       await settle(() => false);
-      assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled]) => disabled), elsewhere ? [false, false, false, true, true, true] : Array(6).fill(false));
+      assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled]) => disabled), elsewhere ? [false, true] : Array(2).fill(false));
     });
   }
 });
@@ -3348,7 +3335,7 @@ test('a refusal that comes after the dialog was closed is a notice; one for a do
         // the other document's dialog is drawn again for its own document, its options as its readiness allows
         assert.equal(element('#exportStatus').textContent, app.exportStatusText(ready));
         assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]),
-          [[false, false], [false, false], [false, false], [true, false], [true, false], [true, false]]);
+          [[false, false], [true, false]]);
       }
     });
   }
@@ -3380,10 +3367,10 @@ test('L5-1: one gesture makes one download - a double click\'s second click is i
   const session = fixture('session.json');
   const reviewed = fixture('encounter-reviewed.json');
   const address = `/api/encounters/${reviewed.id}`;
-  const made = (n, fmt = 'txt') => ({ id: `f6100000-0000-4000-8000-00000000d0${n}0`, kind: 'draft', fmt, filename: `CPT-Studio-draft-r2-20261121T09000${n}.${fmt}`,
+  const made = n => ({ id: `f6100000-0000-4000-8000-00000000d0${n}0`, kind: 'draft', fmt: 'pdf', filename: `CPT-Studio-draft-r2-20261121T09000${n}.pdf`,
     generated_at: `2026-11-21T09:00:0${n}Z`, download_url: `/api/reports/f6100000-0000-4000-8000-00000000d0${n}0/download`, current: true });
   const reports = (method, url) => method === 'POST' && url === `${address}/reports`;
-  const option = { exportKind: 'draft', exportFmt: 'txt' };
+  const option = { exportKind: 'draft', exportFmt: 'pdf' };
   const states = element => controlsOf(element('#exportOptions').innerHTML).map(([kind, fmt, disabled, busy]) => [`${kind} ${fmt}`, disabled, busy]);
   await withPage({ answers: [{ match: reports, status: 201, body: made(1) }, { match: reports, status: 201, body: made(2) }] }, async ({ calls, element }) => {
     Object.assign(app.state, { session, doc: reviewed, route: null });
@@ -3403,22 +3390,21 @@ test('L5-1: one gesture makes one download - a double click\'s second click is i
     await settle(() => false);
     assert.equal(posted(calls).length, 1, 'one gesture made more than one file');
     assert.deepEqual(calls.filter(call => call.download).map(call => call.filename), [made(1).filename]);
-    assert.deepEqual(states(element), [['draft pdf', false, false], ['draft csv', false, false], ['draft txt', true, false],
-      ['approved pdf', false, false], ['approved csv', false, false], ['approved txt', false, false]]);
-    assert.equal(element('#exportStatus').textContent, `Your text file is ready. Downloading ${made(1).filename}.`);
+    assert.deepEqual(states(element), [['draft pdf', true, false], ['approved pdf', false, false]]);
+    assert.equal(element('#exportStatus').textContent, `Your PDF is ready. Downloading ${made(1).filename}.`);
     // a moment later it is offered again, and a deliberate second download (here by a key: detail 0) is made
     t.mock.timers.tick(app.MADE_HOLD_MS);
     await settle(() => false);
-    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(6).fill(false));
+    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(2).fill(false));
     press('[data-export-kind]', option, 0);
     await settle(() => calls.filter(call => call.download).length === 2);
-    assert.deepEqual(posted(calls).map(call => call.body), [{ kind: 'draft', fmt: 'txt', round: 2 }, { kind: 'draft', fmt: 'txt', round: 2 }]);
-    assert.equal(element('#exportStatus').textContent, `Your text file is ready. Downloading ${made(2).filename}.`);
+    assert.deepEqual(posted(calls).map(call => call.body), [{ kind: 'draft', fmt: 'pdf', round: 2 }, { kind: 'draft', fmt: 'pdf', round: 2 }]);
+    assert.equal(element('#exportStatus').textContent, `Your PDF is ready. Downloading ${made(2).filename}.`);
   });
   // on the document's page, the option waits until the dialog has been drawn from the document read again, however long
   // that read takes, and is offered again then
-  const after = { ...clone(reviewed), reports: [made(3, 'pdf'), ...clone(reviewed.reports)] };
-  await withPage({ answers: [{ match: reports, status: 201, body: made(3, 'pdf') }, { match: (method, url) => method === 'GET' && url === address, status: 200, body: after }] }, async ({ calls, element }) => {
+  const after = { ...clone(reviewed), reports: [made(3), ...clone(reviewed.reports)] };
+  await withPage({ answers: [{ match: reports, status: 201, body: made(3) }, { match: (method, url) => method === 'GET' && url === address, status: 200, body: after }] }, async ({ calls, element }) => {
     const holds = holdReads(address);
     Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 81, docKey: '', viewerKey: app.viewerKey(reviewed) });
     click('[data-action]', { action: 'export' });
@@ -3430,8 +3416,8 @@ test('L5-1: one gesture makes one download - a double click\'s second click is i
     assert.equal(posted(calls).length, 1, 'the option was offered again before the dialog was drawn from the new read');
     assert.deepEqual(states(element)[0], ['draft pdf', true, false]);
     holds[0]();
-    await settle(() => (element('#exportOptions').innerHTML || '').includes(made(3, 'pdf').filename) && !states(element)[0][1]);
-    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(6).fill(false), 'offered again once drawn from the new read');
+    await settle(() => (element('#exportOptions').innerHTML || '').includes(made(3).filename) && !states(element)[0][1]);
+    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(2).fill(false), 'offered again once drawn from the new read');
     assert.equal(posted(calls).length, 1);
   });
 });
@@ -3441,7 +3427,7 @@ test('R2-4-2: the option of a file just made is offered again once the hold has 
   const session = fixture('session.json');
   const reviewed = fixture('encounter-reviewed.json');
   const address = `/api/encounters/${reviewed.id}`;
-  const made = { id: 'f6100000-0000-4000-8000-00000000d0a0', kind: 'draft', fmt: 'txt', filename: 'CPT-Studio-draft-r2-20261121T090010.txt',
+  const made = { id: 'f6100000-0000-4000-8000-00000000d0a0', kind: 'draft', fmt: 'pdf', filename: 'CPT-Studio-draft-r2-20261121T090010.pdf',
     generated_at: '2026-11-21T09:00:10Z', download_url: '/api/reports/f6100000-0000-4000-8000-00000000d0a0/download', current: true };
   const listed = { ...clone(reviewed), reports: [made, ...clone(reviewed.reports)] };
   const reads = (method, url) => method === 'GET' && url === address;
@@ -3451,18 +3437,18 @@ test('R2-4-2: the option of a file just made is offered again once the hold has 
     const holds = holdReads(address);  // the hold's own read of the document stalls
     Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 181, docKey: '', viewerKey: app.viewerKey(reviewed) });
     click('[data-action]', { action: 'export' });
-    press('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' }, 1);
+    press('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' }, 1);
     await settle(() => holds.length === 1);
-    assert.deepEqual(states(element)[2], ['draft txt', true]);
+    assert.deepEqual(states(element)[0], ['draft pdf', true]);
     // another read, asked after the file was made (an act's read, or a poll), is shown; the hold then passes
     await app.refreshDocument();
     t.mock.timers.tick(app.MADE_HOLD_MS);
-    await settle(() => !states(element)[2][1]);
-    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(6).fill(false), 'the option waited on for a read that stalled');
+    await settle(() => !states(element)[0][1]);
+    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(2).fill(false), 'the option waited on for a read that stalled');
     // the stalled read, answering last, is older than what the page shows and changes nothing
     holds[0]();
     await settle(() => false);
-    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(6).fill(false));
+    assert.deepEqual(states(element).map(([, disabled]) => disabled), Array(2).fill(false));
     assert.equal(posted(calls).length, 1);
   });
 });
@@ -3479,7 +3465,7 @@ test('R2-4-1: a dialog waiting for the latest after a refused download is drawn 
     const holds = holdReads(address);  // the read after the refusal stalls
     Object.assign(app.state, { session, doc: ready, route: { name: 'doc', id: ready.id }, routeSerial: 182, docKey: '', viewerKey: app.viewerKey(ready) });
     click('[data-action]', { action: 'export' });
-    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => holds.length === 1);
     click('[data-action]', { action: 'export' });
     assert.equal(element('#exportStatus').textContent, app.LOADING_LATEST_TEXT);
@@ -3488,7 +3474,7 @@ test('R2-4-1: a dialog waiting for the latest after a refused download is drawn 
     await settle(() => app.state.exporting?.round === 2);
     assert.equal(app.state.rereading, null);
     assert.equal(element('#exportStatus').textContent, app.exportStatusText(later));
-    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled]) => disabled), [false, false, false, true, true, true]);
+    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled]) => disabled), [false, true]);
     // the stalled read, answering last, is older than what the page shows and changes nothing
     holds[0]();
     await settle(() => false);
@@ -3513,7 +3499,7 @@ test('L5-2: an open export dialog follows each read of its document - an approva
   approved.readiness = { draft: true, approved: true, blockers: [] };
   approved.state = 'reviewed';
   const offered = element => controlsOf(element('#exportOptions').innerHTML).filter(([, , disabled]) => !disabled).map(([kind, fmt]) => `${kind} ${fmt}`);
-  const all = ['draft pdf', 'draft csv', 'draft txt', 'approved pdf', 'approved csv', 'approved txt'];
+  const all = ['draft pdf', 'approved pdf'];
   // (1) the member approves a code and chooses "Review and download" while the page reads the document again
   await withPage({ answers: [
     { match: (method, url) => method === 'POST' && url === `${address}/decisions`, status: 201, body: { line: 'L1', code: ready.codes[0].code, action: 'approve' } },
@@ -3527,7 +3513,7 @@ test('L5-2: an open export dialog follows each read of its document - an approva
     await settle(() => holds.length === 1);
     click('[data-action]', { action: 'export' });
     assert.equal(element('#exportStatus').textContent, app.exportStatusText(ready), 'opened on the read the page has');
-    assert.deepEqual(offered(element), ['draft pdf', 'draft csv', 'draft txt']);
+    assert.deepEqual(offered(element), ['draft pdf']);
     holds[0]();
     await saving;
     assert.equal(app.state.doc, approved, 'the page read the approval');
@@ -3560,7 +3546,7 @@ test('L5-2: an open export dialog follows each read of its document - an approva
     assert.equal(app.state.doc, done, 'the poll read the finished review');
     assert.equal(element('#exportStatus').textContent, app.exportStatusText(done), 'the dialog still says nothing can be downloaded');
     assert.equal(element('#exportStatus').classList.contains('reviewed'), false);
-    assert.deepEqual(offered(element), ['draft pdf', 'draft csv', 'draft txt']);
+    assert.deepEqual(offered(element), ['draft pdf']);
   });
   // (3) a read that lands while a file of the document is being made leaves the dialog as it is: every option waits and
   // the status says the file is being prepared; once it is made the dialog shows that read
@@ -3584,7 +3570,7 @@ test('L5-2: an open export dialog follows each read of its document - an approva
     assert.equal(app.state.doc, approved);
     assert.equal(element('#exportStatus').textContent, 'Your PDF is being prepared. The download starts when it is ready.');
     assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]),
-      [[true, true], [true, false], [true, false], [true, false], [true, false], [true, false]]);
+      [[true, true], [true, false]]);
     release();
     await settle(() => calls.some(call => call.download) && (element('#exportOptions').innerHTML || '').includes(pdf.filename));
     assert.equal(element('#exportStatus').textContent, `Your PDF is ready. Downloading ${pdf.filename}.`, 'the status keeps saying the file is ready');
@@ -3630,7 +3616,7 @@ test('L5-3: a dialog opened while the page reads the document again after a refu
     const holds = holdReads(address);
     Object.assign(app.state, { session, doc: ready, route: { name: 'doc', id: ready.id }, routeSerial: 91, docKey: '', viewerKey: app.viewerKey(ready) });
     click('[data-action]', { action: 'export' });
-    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => holds.length === 1);
     assert.equal(element('#exportDialog').open, false, 'the refusal closed the dialog');
     assert.equal(element('#toast').textContent, app.CHANGED_TEXT);
@@ -3639,7 +3625,7 @@ test('L5-3: a dialog opened while the page reads the document again after a refu
     assert.equal(element('#exportDialog').open, true);
     assert.equal(element('#exportStatus').textContent, app.LOADING_LATEST_TEXT, 'the reopened dialog does not say the page is loading the latest');
     assert.equal(element('#exportStatus').classList.contains('reviewed'), false);
-    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]), Array(6).fill([true, false]));
+    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled, busy]) => [disabled, busy]), Array(2).fill([true, false]));
     click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => false);
     assert.equal(posted(calls).length, 1, 'nothing is sent for a coding review the page is still loading');
@@ -3649,10 +3635,10 @@ test('L5-3: a dialog opened while the page reads the document again after a refu
     assert.equal(app.state.doc.round.number, 2);
     assert.equal(element('#exportStatus').textContent, app.exportStatusText(later));
     assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([kind, fmt, disabled]) => [kind, fmt, disabled]), [
-      ['draft', 'pdf', false], ['draft', 'csv', false], ['draft', 'txt', false], ['approved', 'pdf', true], ['approved', 'csv', true], ['approved', 'txt', true]]);
+      ['draft', 'pdf', false], ['approved', 'pdf', true]]);
     click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => calls.some(call => call.download));
-    assert.deepEqual(posted(calls).map(call => call.body), [{ kind: 'draft', fmt: 'txt', round: 1 }, { kind: 'draft', fmt: 'pdf', round: 2 }]);
+    assert.deepEqual(posted(calls).map(call => call.body), [{ kind: 'draft', fmt: 'pdf', round: 1 }, { kind: 'draft', fmt: 'pdf', round: 2 }]);
     assert.equal(element('#exportDialog').open, true);
   });
   // while the page reads one document again, a download of another document is still made: no click is dropped
@@ -3665,7 +3651,7 @@ test('L5-3: a dialog opened while the page reads the document again after a refu
     const holds = holdReads(address);
     Object.assign(app.state, { session, doc: ready, route: { name: 'doc', id: ready.id }, routeSerial: 92, docKey: '', viewerKey: app.viewerKey(ready) });
     click('[data-action]', { action: 'export' });
-    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => holds.length === 1);
     // the member goes to the other document (a route closes the dialogs and moves on) and downloads its PDF
     element('#exportDialog').close();
@@ -3674,7 +3660,7 @@ test('L5-3: a dialog opened while the page reads the document again after a refu
     assert.equal(element('#exportStatus').textContent, app.exportStatusText(reviewed), 'that document is not the one being loaded');
     click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => calls.some(call => call.download));
-    assert.deepEqual(posted(calls).map(call => [call.url, call.body.fmt]), [[`${address}/reports`, 'txt'], [`${other}/reports`, 'pdf']],
+    assert.deepEqual(posted(calls).map(call => [call.url, call.body.fmt]), [[`${address}/reports`, 'pdf'], [`${other}/reports`, 'pdf']],
       'the other document\'s download was dropped while the page read the first one again');
     holds[0]();
     await settle(() => false);
@@ -3688,7 +3674,7 @@ test('L5-3: a dialog opened while the page reads the document again after a refu
     global.fetch = (url, init = {}) => ((init.method || 'GET') === 'GET' && url === address ? new Promise((resolve, reject) => { fail = () => reject(new TypeError('offline')); }) : reply(url, init));
     Object.assign(app.state, { session, doc: ready, route: { name: 'doc', id: ready.id }, routeSerial: 94, docKey: '', viewerKey: app.viewerKey(ready) });
     click('[data-action]', { action: 'export' });
-    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => fail !== null);
     click('[data-action]', { action: 'export' });
     assert.equal(element('#exportStatus').textContent, app.LOADING_LATEST_TEXT);
@@ -3696,7 +3682,7 @@ test('L5-3: a dialog opened while the page reads the document again after a refu
     await settle(() => element('#exportStatus').textContent !== app.LOADING_LATEST_TEXT);
     assert.equal(element('#exportStatus').textContent, app.exportStatusText(ready));
     assert.match(element('#toast').textContent, /^The review could not be refreshed\./);
-    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled]) => disabled), [false, false, false, true, true, true]);
+    assert.deepEqual(controlsOf(element('#exportOptions').innerHTML).map(([, , disabled]) => disabled), [false, true]);
     assert.equal(posted(calls).length, 1);
   });
   // a route reads the document afresh: a dialog opened after it is drawn from that read, though the read asked for after
@@ -3705,7 +3691,7 @@ test('L5-3: a dialog opened while the page reads the document again after a refu
     const holds = holdReads(address);
     Object.assign(app.state, { session, doc: ready, route: { name: 'doc', id: ready.id }, routeSerial: 95, docKey: '', viewerKey: app.viewerKey(ready) });
     click('[data-action]', { action: 'export' });
-    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
+    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
     await settle(() => holds.length === 1);
     global.location.hash = `#doc/${ready.id}`;
     click('[data-action]', { action: 'reload-view' });  // route(), as the hash change runs it
@@ -3735,21 +3721,21 @@ test('L5-4: the two "Download PDF" buttons are told apart by name, each name sta
   // each group is a named group: its label names it
   const page = dom(app.exportOptions(doc));
   assert.deepEqual(page.all('.export-group').map(group => [group.attr('role'), group.one(`#${group.attr('aria-labelledby')}`)?.text ?? null]), [
-    ['group', 'Codes — not approved'], ['group', 'Approved codes'], ['group', 'Earlier downloads']]);
+    ['group', 'Draft report'], ['group', 'Approved report'], ['group', 'Earlier downloads']]);
   const ids = page.all('[id]').map(item => item.attr('id'));
   assert.equal(new Set(ids).size, ids.length, 'every id in the dialog is its own');
-  // the data files keep their own names, their titles
-  assert.equal(new Set(page.all('.export-option').map(item => item.one('strong').text)).size, 4);
+  // every option the dialog offers is one of the two named PDF buttons: no data file is offered beside them
+  assert.deepEqual(page.all('[data-export-kind]').map(item => item.attr('aria-label')), ['Download PDF (draft report)', 'Download PDF (approved report)']);
 });
 
 test('L5-5: reads of the document are applied in the order asked - an older read that answers last changes nothing', async () => {
   const session = fixture('session.json');
   const reviewed = fixture('encounter-reviewed.json');
   const address = `/api/encounters/${reviewed.id}`;
-  const report = (n, fmt) => ({ id: `f6100000-0000-4000-8000-00000000f0${n}0`, kind: 'draft', fmt, filename: `CPT-Studio-draft-r2-20261121T09000${n}.${fmt}`,
+  const report = (n, kind) => ({ id: `f6100000-0000-4000-8000-00000000f0${n}0`, kind, fmt: 'pdf', filename: `CPT-Studio-${kind}-r2-20261121T09000${n}.pdf`,
     generated_at: `2026-11-21T09:00:0${n}Z`, download_url: `/api/reports/f6100000-0000-4000-8000-00000000f0${n}0/download`, current: true });
-  const one = report(1, 'txt');
-  const two = report(2, 'pdf');
+  const one = report(1, 'draft');
+  const two = report(2, 'approved');
   const afterOne = { ...clone(reviewed), reports: [one, ...clone(reviewed.reports)] };
   const afterTwo = { ...clone(reviewed), reports: [two, one, ...clone(reviewed.reports)] };
   const posts = (method, url) => method === 'POST' && url === `${address}/reports`;
@@ -3763,9 +3749,9 @@ test('L5-5: reads of the document are applied in the order asked - an older read
     const holds = holdReads(address);
     Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 61, docKey: '', viewerKey: app.viewerKey(reviewed) });
     click('[data-action]', { action: 'export' });
-    click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'txt' });
-    await settle(() => holds.length === 1);
     click('[data-export-kind]', { exportKind: 'draft', exportFmt: 'pdf' });
+    await settle(() => holds.length === 1);
+    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'pdf' });
     await settle(() => listed(element).includes(two.filename));
     holds[0]();
     await settle(() => false);
@@ -3821,10 +3807,9 @@ test('L1-6: a download that is no longer current is described truthfully, whethe
 test('L1-7: the draft downloads are described by what they hold, saved decisions included; none says nothing in it is approved', () => {
   for (const name of ['encounter-ready.json', 'encounter-reviewed.json']) {
     const draft = dom(app.exportOptions(fixture(name))).all('.export-group')[0];
-    assert.deepEqual([draft.one('.export-pdf-note').text, ...draft.all('.export-option small').map(item => item.text)], [
+    // the draft's one description is its PDF's line: no data file is offered beside it, so no other line describes one
+    assert.deepEqual([...draft.all('.export-pdf-note'), ...draft.all('small')].map(item => item.text), [
       'Every code with its status, any saved decision, the evidence and what still needs a decision.',
-      'One row per code: status, units, modifiers, reason, quoted passages and any saved decision.',
-      'The same codes as plain text, with any saved decision.',
     ], name);
     assert.doesNotMatch(app.exportOptions(fixture(name)), /Nothing in it is approved/, name);
   }
@@ -3873,20 +3858,20 @@ test('the preview server answers decisions as the server does: by round and line
 
 test('the preview server answers downloads as the server does: by the round shown, 409 when the coding review changed', () => {
   const reviewed = fixture('encounter-reviewed.json');
-  const [status, report] = preview.reportAnswer(reviewed, { kind: 'approved', fmt: 'txt', round: 2 });
+  const [status, report] = preview.reportAnswer(reviewed, { kind: 'approved', fmt: 'pdf', round: 2 });
   assert.equal(status, 201);
-  assert.deepEqual([report.kind, report.fmt, report.current, app.safeDownloadUrl(report.download_url) === report.download_url], ['approved', 'txt', true, true]);
+  assert.deepEqual([report.kind, report.fmt, report.current, app.safeDownloadUrl(report.download_url) === report.download_url], ['approved', 'pdf', true, true]);
   for (const stale of [{ round: 1 }, { round: '2' }, { round: undefined }, { round: 3 }]) {
-    assert.deepEqual(preview.reportAnswer(reviewed, { kind: 'draft', fmt: 'csv', ...stale }), [409, { error: preview.CHANGED, details: {} }], JSON.stringify(stale));
+    assert.deepEqual(preview.reportAnswer(reviewed, { kind: 'draft', fmt: 'pdf', ...stale }), [409, { error: preview.CHANGED, details: {} }], JSON.stringify(stale));
   }
   const ready = fixture('encounter-ready.json');
-  assert.deepEqual(preview.reportAnswer(ready, { kind: 'approved', fmt: 'txt', round: 1 }),
+  assert.deepEqual(preview.reportAnswer(ready, { kind: 'approved', fmt: 'pdf', round: 1 }),
     [409, { error: 'The approved download is not available yet.', details: { blockers: ['No code has been approved.'] } }]);
-  assert.equal(preview.reportAnswer(ready, { kind: 'draft', fmt: 'txt', round: 1 })[0], 201);
-  assert.equal(preview.reportAnswer(ready, { kind: 'zip', fmt: 'txt', round: 1 })[0], 400);
+  assert.equal(preview.reportAnswer(ready, { kind: 'draft', fmt: 'pdf', round: 1 })[0], 201);
+  assert.equal(preview.reportAnswer(ready, { kind: 'zip', fmt: 'pdf', round: 1 })[0], 400);
   const running = fixture('encounter-reading.json');
-  assert.equal(preview.reportAnswer(running, { kind: 'draft', fmt: 'txt', round: 1 })[0], 409, 'nothing is exported while a review runs');
-  // a PDF too, as the server makes it: a .pdf served as application/pdf, its bytes a PDF made here; CSV and TXT stay
+  assert.equal(preview.reportAnswer(running, { kind: 'draft', fmt: 'pdf', round: 1 })[0], 409, 'nothing is exported while a review runs');
+  // the PDF, as the server makes it: a .pdf served as application/pdf, its bytes a PDF made here
   const [made, pdf] = preview.reportAnswer(reviewed, { kind: 'draft', fmt: 'pdf', round: 2 });
   assert.equal(made, 201);
   assert.deepEqual([pdf.kind, pdf.fmt, pdf.current, /\.pdf$/.test(pdf.filename), app.safeDownloadUrl(pdf.download_url) === pdf.download_url], ['draft', 'pdf', true, true, true]);
@@ -3894,13 +3879,14 @@ test('the preview server answers downloads as the server does: by the round show
   assert.deepEqual([file.type, file.filename], ['application/pdf', pdf.filename]);
   assert.match(file.content.subarray(0, 9).toString('latin1'), /^%PDF-1\.\d\n/);
   assert.match(file.content.subarray(-6).toString('latin1'), /^%%EOF\n$/);
-  for (const [fmt, type] of [['csv', 'text/csv; charset=utf-8'], ['txt', 'text/plain; charset=utf-8']]) {
-    const [status, answer] = preview.reportAnswer(reviewed, { kind: 'approved', fmt, round: 2 });
-    assert.deepEqual([status, preview.reportFile(answer.id).type, answer.filename.endsWith(`.${fmt}`)], [201, type, true], fmt);
+  // CSV and TXT are no longer made (owner direction 2026-11-21): a request the PDF would answer 201 is refused for them
+  // with the server's own sentence
+  for (const fmt of ['csv', 'txt']) {
+    assert.deepEqual(preview.reportAnswer(reviewed, { kind: 'approved', fmt, round: 2 }), [400, { error: FORMAT_REQUIRED, details: {} }], fmt);
   }
-  // any other format is refused with the server's own sentence
+  // as is any other format
   assert.equal(preview.FORMAT_REQUIRED, FORMAT_REQUIRED);
-  for (const fmt of ['docx', 'PDF', undefined, 'constructor']) {
+  for (const fmt of ['csv', 'txt', 'docx', 'PDF', undefined, 'constructor']) {
     assert.deepEqual(preview.reportAnswer(ready, { kind: 'draft', fmt, round: 1 }), [400, { error: FORMAT_REQUIRED, details: {} }], String(fmt));
   }
   assert.equal(preview.reportFile('f6100000-0000-4000-8000-000000000000'), null);

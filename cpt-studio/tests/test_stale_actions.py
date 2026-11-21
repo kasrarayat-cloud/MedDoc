@@ -104,13 +104,12 @@ class ExportNamesItsRoundTests(StaleCase):
     def test_a_download_from_a_page_showing_an_earlier_round_is_refused(self):
         enc, page_a = self.round_two()
         self.assertEqual(page_a['round']['number'], 1)
-        for kind in ('approved', 'draft'):
-            for fmt in ('pdf', 'txt'):
-                with self.subTest(kind=kind, fmt=fmt):
-                    response = self.post(enc, 'reports', {'kind': kind, 'fmt': fmt, 'round': page_a['round']['number']})
-                    self.assertEqual((response.status_code, response.json()['error']), (409, CHANGED))
+        for kind in ('approved', 'draft'):  # the PDF report, the only format since 2026-11-21
+            with self.subTest(kind=kind):
+                response = self.post(enc, 'reports', {'kind': kind, 'fmt': 'pdf', 'round': page_a['round']['number']})
+                self.assertEqual((response.status_code, response.json()['error']), (409, CHANGED))
         self.assertEqual(models.ExportArtifact.objects.count(), 0)
-        made = self.post(enc, 'reports', {'kind': 'approved', 'fmt': 'txt', 'round': 2})
+        made = self.post(enc, 'reports', {'kind': 'approved', 'fmt': 'pdf', 'round': 2})
         self.assertEqual(made.status_code, 201, made.content)
         self.assertIn('-r2-', made.json()['filename'])
 
@@ -119,22 +118,22 @@ class ExportNamesItsRoundTests(StaleCase):
         r.write_round(enc, codes=[r.row('45385', 'ready')])
         for value in (None, '1', 0, True, 1.0):
             with self.subTest(round=value):
-                body = {'kind': 'draft', 'fmt': 'txt'}
+                body = {'kind': 'draft', 'fmt': 'pdf'}
                 if value is not None:
                     body['round'] = value
                 response = self.post(enc, 'reports', body)
                 self.assertEqual((response.status_code, response.json()['error']),
                                  (400, 'Name the coding review the export is made from.'))
         self.assertEqual(models.ExportArtifact.objects.count(), 0)
-        self.assertEqual(self.post(enc, 'reports', {'kind': 'draft', 'fmt': 'txt', 'round': 1}).status_code, 201)
+        self.assertEqual(self.post(enc, 'reports', {'kind': 'draft', 'fmt': 'pdf', 'round': 1}).status_code, 201)
 
     def test_a_round_that_is_named_but_still_running_is_not_ready_yet(self):
         enc = self.encounter()
         r.write_round(enc, codes=[r.row('45385', 'ready')])
         r.write_round(enc, state_=models.CodingRound.RUNNING)
-        running = self.post(enc, 'reports', {'kind': 'draft', 'fmt': 'txt', 'round': 2})
+        running = self.post(enc, 'reports', {'kind': 'draft', 'fmt': 'pdf', 'round': 2})
         self.assertEqual((running.status_code, running.json()['error']), (409, 'There is nothing to export yet.'))
-        stale = self.post(enc, 'reports', {'kind': 'draft', 'fmt': 'txt', 'round': 1})
+        stale = self.post(enc, 'reports', {'kind': 'draft', 'fmt': 'pdf', 'round': 1})
         self.assertEqual((stale.status_code, stale.json()['error']), (409, CHANGED))
 
 

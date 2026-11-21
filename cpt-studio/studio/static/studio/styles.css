@@ -505,21 +505,15 @@
 @media (forced-colors: active){.zoom-button[aria-disabled="true"]{color:GrayText;border-color:GrayText}
 }
 .viewer-name{order:1;flex:1 0 12ch;max-width:max-content}
-/* The physician PDF (2026-11-21): in the export dialog each group leads with its PDF, the report for the doctor, as a
-   full-width primary button with a line on what it holds; the same codes as data files follow under "Other formats" as
-   the earlier options, a little tighter. While a file is made every option waits; the one chosen stays legible and says
-   so, and the PDF button's icon pulses (still where motion is reduced). */
+/* The physician PDF (2026-11-21): in the export dialog each group holds its PDF, the report for the doctor and the only
+   one made, as a full-width primary button with a line on what it holds. While a file is made every option waits; the
+   one chosen stays legible and says so, and the PDF button's icon pulses (still where motion is reduced). */
 .export-pdf{width:100%;margin-top:10px}
 .dialog .export-pdf{font-size:12px}
-.export-pdf[aria-busy="true"],.export-option[aria-busy="true"]{opacity:1;cursor:progress}
+.export-pdf[aria-busy="true"]{opacity:1;cursor:progress}
 .export-pdf[aria-busy="true"]>svg{animation:studio-step 1.2s ease-in-out infinite}
-.export-option[aria-busy="true"] small{color:var(--teal)}
 .export-pdf-note{font-size:11px;line-height:1.6;color:var(--muted);margin:8px 0 0;overflow-wrap:anywhere}
 .export-group .export-blockers{margin-top:8px}
-.export-other{margin-top:14px}
-.export-other-label{font-size:10px;font-weight:500;color:#5f6f55;margin:0;padding-bottom:6px;border-bottom:1px solid var(--line)}
-.export-other .export-option{padding:11px 0}
-.export-other .export-format{width:34px;height:36px;flex-shrink:0}
 .export-group+.export-group{margin-top:22px}
 @media (prefers-reduced-motion: reduce){.export-pdf[aria-busy="true"]>svg{animation:none}
 }

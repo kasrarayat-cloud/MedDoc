@@ -108,14 +108,23 @@ def iso(value) -> Optional[str]:
 
 NAMES = 'corti|astra|fable|openai|anthropic|claude|gemini|google'
 JOINED_NAMES = 'Corti|Astra|Fable|Openai|OpenAI|Anthropic|Claude|Gemini|Google'
+ANTHROPIC = 'anthropic|claude'  # the names a model family continues
 FAMILIES = 'opus|sonnet|haiku'
-VERSION = r'v?\d+(?:\.\d+)*'
-_MODEL_ID = re.compile(r'\b(?:gpt|claude|gemini)-[a-z0-9]+(?:[.-][a-z0-9]+)*', re.ASCII | re.IGNORECASE)
-# a name with its version ("Gemini 2.5"), then any names or model families after it, each with its own version
-# ("Claude 3 Opus", "Claude Fable 5.2"); bounded by letters and digits only, as the denylist bounds a name, so
-# "fable_unknown" is replaced and "affable", "corticosteroid", "corti2" or a family's name alone is not
-_NAME_RUN = re.compile(rf'(?<![a-z0-9])(?:{NAMES})(?:[ _-]+{VERSION})?'
-                       rf'(?:[ _-]+(?:{NAMES}|{FAMILIES})(?:[ _-]+{VERSION})?)*(?![a-z0-9])', re.ASCII | re.IGNORECASE)
+VERSION = r'v?\d+(?:[._-]\d+)*'
+# What stands between the parts of one name run: anything a reader sees as a gap or as nothing - white space of any kind,
+# control and invisible format characters, dashes and underscores - so "Claude" and "Opus" on either side of a line
+# break, a non-breaking space or a zero-width space are one run (refutation round 3); never other punctuation.
+GAP = r'[\s_\-\x00-\x1f\x7f-\x9f\u00a0\u00ad\u034f\u061c\u115f\u1160\u1680\u17b4\u17b5\u180b-\u180f\u2000-\u2015\u2028-\u202f\u205f-\u206f\u2212\u3000\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffc]+'
+_MODEL_ID = re.compile(rf'\b(?:gpt|claude|gemini)-[a-z0-9]+(?:[.-][a-z0-9]+)*(?:{GAP}(?:{FAMILIES})(?![a-z0-9]))?',
+                       re.ASCII | re.IGNORECASE)
+# a name with its version ("Gemini 2.5"), then any names after it, each with its own version ("Claude Fable 5.2"), and
+# after Anthropic's names its model families too ("Claude 3 Opus", "Claude Sonnet 4.5"); bounded by letters and digits
+# only, as the denylist bounds a name, so "fable_unknown" is replaced and "affable", "corticosteroid", "corti2", a
+# family's name alone or one after another name ("organ of Corti - OPUS 2") is not
+_RUN_VERSION = rf'(?:{GAP}{VERSION})?'
+_NAME_RUN = re.compile(rf'(?<![a-z0-9])(?:(?:{ANTHROPIC}){_RUN_VERSION}(?:{GAP}(?:{NAMES}|{FAMILIES}){_RUN_VERSION})*'
+                       rf'|(?:{NAMES}){_RUN_VERSION}(?:{GAP}(?:{NAMES}){_RUN_VERSION})*)(?![a-z0-9])',
+                       re.ASCII | re.IGNORECASE)
 # a capitalized name joined to a word by its case alone ("GeminiTimeout", "readingGemini"), as written
 _JOINED = re.compile(rf'(?:{JOINED_NAMES})(?=[A-Z])|(?<=[a-z])(?:{JOINED_NAMES})', re.ASCII)
 _SENTENCE_START = re.compile(r'(?:^|[.!?]\s+|\n\s*)$')

@@ -284,8 +284,8 @@ class CloseOnTheDatabaseTests(FableRows):
         self.decision(done, done_round, '43239', 'approve')
         models.CodingAnswer.objects.create(encounter=done, round=done_round, question='Was a biopsy taken?',
                                            answer='Yes, two.', answered_by=done.created_by)
-        models.ExportArtifact.objects.create(encounter=done, round=done_round, kind='approved', fmt='txt',
-                                             filename='synthetic.txt', content=b'SYNTHETIC', sha256='f' * 64,
+        models.ExportArtifact.objects.create(encounter=done, round=done_round, kind='approved', fmt='pdf',
+                                             filename='synthetic.pdf', content=b'SYNTHETIC', sha256='f' * 64,
                                              created_by=done.created_by)
         earlier = self.encounter('earlier')
         extract = self.earlier_job(earlier, 'extract', 'queued')  # the earlier worker runs it: left to it
@@ -586,8 +586,8 @@ class CodingNoteOnTheDatabaseTests(FableRows):
         self.decision(created, round_, '45385', 'revoke')  # cleared: no longer approved
         models.CodingAnswer.objects.create(encounter=created, round=round_, question='Was a biopsy taken?',
                                            answer='Yes.', answered_by=created.created_by)
-        models.ExportArtifact.objects.create(encounter=created, round=round_, kind='approved', fmt='txt',
-                                             filename='x.txt', content=b'SYNTHETIC', sha256='f' * 64,
+        models.ExportArtifact.objects.create(encounter=created, round=round_, kind='approved', fmt='pdf',
+                                             filename='x.pdf', content=b'SYNTHETIC', sha256='f' * 64,
                                              created_by=created.created_by)
         recoded = self.encounter('recoded')
         self.earlier_job(recoded, 'extract', 'succeeded')  # the earlier pipeline read it first

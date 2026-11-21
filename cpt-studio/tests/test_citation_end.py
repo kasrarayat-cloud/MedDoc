@@ -146,4 +146,6 @@ class EndPipelineTests(r.CustomerCase, TestCase):
         self.assertEqual([(code['line'], [quote['text'] for quote in code['quotes']]) for code in codes],
                          [('L1', ['hot snare polypectomy']), ('L2', ['removed by cold snare'])])
         self.assertEqual(self.decide(enc, 'L2', '45380', 'approve').status_code, 201)
-        self.assertNotIn('Signature', self.export_text(enc, 'approved'))
+        approved = self.report_text(enc, 'approved')
+        self.assertIn('removed by cold snare', approved)  # the approved line's own quote is printed; the signature not
+        self.assertNotIn('Signature', approved)

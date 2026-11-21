@@ -3982,3 +3982,33 @@ where an approval made by the review agent is checked and undone.
 (e) ReportLab 4.5.1 (with pillow 13.0.0 and charset-normalizer 3.5.1, the versions the dev pins already carried) moves
 to the runtime requirements; the design's fonts (OFL) and DejaVu Sans as a fallback ship in `studio/report_fonts` with
 their provenance.
+
+## Owner direction, 2026-11-21 (later the same day) — the PDF is the only report; no new TXT or CSV
+
+Given on 2026-11-21 in session 738699b2, before the install of the physician PDF export, verbatim:
+
+> OK ALSO I JUST WANT TO PROVIDE MY OFFICIAL pdf code report no txt and csv removed all ofthem and let ppl only downlaod
+> our pdf report how do you think?
+
+The session's answer: agreed - one official report is the right call for a doctor-facing product; the one loss is a
+machine-readable file (a spreadsheet or a billing system's import), which matters little while the product is synthetic
+and marked not for billing. Done in the same release, before the install.
+
+### Session interpretation (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D388)
+
+(a) New exports are PDF only. The export dialog offers the draft PDF and the approved PDF; a request for a TXT or CSV
+export is refused (400, one sentence). This supersedes the earlier direction's "retain CSV as a secondary option" and
+interpretation (b) above (TXT kept). The accepted-capability loss is the owner's own request: no machine-readable export.
+
+(b) "Removed all of them" is read as no longer offered or made. TXT and CSV files already made are records: they stay
+stored, listed in each document's earlier downloads and downloadable as stored (the earlier direction's "preserve ...
+historical exports"). Deleting them would be a deletion of data (owner class d) and is not done unless the owner says so
+explicitly.
+
+(c) The PDF's review-scope notes that pointed to the TXT and CSV for exact characters point to the document's page,
+which shows every character as saved.
+
+(d) Amending interpretation (d) above: the live check also downloads the approved report of the synthetic walk document
+that already holds a saved approval (6c450473, approved on 2026-11-20), so the approved report is compared with a
+persisted approval on the live site. No decision is made on live; the approval path itself stays exercised on the
+rehearsal only.

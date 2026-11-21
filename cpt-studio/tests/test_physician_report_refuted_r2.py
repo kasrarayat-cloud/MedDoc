@@ -90,7 +90,8 @@ class RoundTwoCase(r.CustomerCase, TestCase):
         self.assertIn(f'“Polyps {FFFD * 2} and {FFFD} were removed”', text)
         self.assertNotIn('1112', text)
         self.assertNotIn('1920', text)
-        self.assertIn(jars, self.export_text(enc, 'draft'))  # the TXT keeps every character
+        page = self.client.get(f'/api/encounters/{enc.pk}').json()
+        self.assertIn(jars, page['codes'][0]['quotes'][0]['text'])  # the document page keeps every character
 
     # --- R2-3-1: a compatibility form grew a capped title past its room ----------------------------------------------------
 
@@ -149,7 +150,7 @@ class RoundTwoCase(r.CustomerCase, TestCase):
         r.write_round(enc, codes=[r.row('45385', 'ready', modifiers=['59', 'Claude', fullwidth('Gemini'),
                                                                      f'Cl{chr(0x200B)}aude'])])
         text = flat(text_of(self.pdf(enc)))
-        self.assertIn(f'Modifiers: 59, The system, {FFFD * 6}, The system', text)
+        self.assertIn(f'Modifiers: 59, the system, {FFFD * 6}, the system', text)  # filtered as one list (round 3)
         for name in VENDORS:
             self.assertNotIn(name, text.lower())
 

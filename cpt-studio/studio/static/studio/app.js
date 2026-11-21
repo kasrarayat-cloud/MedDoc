@@ -1100,7 +1100,7 @@ function exportOffered(doc) {
   return readiness.draft === true || readiness.approved === true || objects(doc?.reports).length > 0;
 }
 
-// The PDF is the report for the doctor; CSV and TXT are the same codes as data files (the export dialog).
+// The PDF is the report for the doctor, and the only one made (the export dialog).
 function readinessText(doc) {
   const readiness = record(doc?.readiness);
   if (readiness.approved === true) return 'The approved report can be downloaded as a PDF. It lists only approved codes.';
@@ -1517,11 +1517,12 @@ function reviewView(doc, ui = {}) {
 
 // --- the export dialog ---
 
-// Each group of the dialog (the draft, the approved codes) leads with its PDF, the report for the doctor, as the primary
-// button, with a line on what it holds; the same codes as data files follow under "Other formats", spreadsheet first.
+// Each group of the dialog (the draft, the approved codes) holds its PDF, the report for the doctor and the only one CPT
+// Studio makes (owner direction 2026-11-21: no more TXT or CSV), as the primary button, with a line on what it holds.
 // Each group is named by its label. While a file is made every option waits (disabled), and the one chosen says it is
-// being prepared. A draft holds the decisions saved so far, approvals among them: its lines say so.
-const EXPORT_GROUPS = [['draft', 'Codes — not approved'], ['approved', 'Approved codes']];
+// being prepared. A draft holds the decisions saved so far, approvals among them: its line says so. Files made earlier,
+// the TXT and CSV of earlier releases among them, stay listed under Earlier downloads.
+const EXPORT_GROUPS = [['draft', 'Draft report'], ['approved', 'Approved report']];
 const PDF_NOTES = {
   draft: 'Every code with its status, any saved decision, the evidence and what still needs a decision.',
   approved: 'Only approved codes, with who approved them and when.',
@@ -1532,24 +1533,14 @@ const PDF_NOTE_IDS = { draft: 'exportPdfDraftNote', approved: 'exportPdfApproved
 const PDF_NAMES = { draft: 'draft report', approved: 'approved report' };
 // the ids of the groups' labels, which name the groups
 const GROUP_LABEL_IDS = { draft: 'exportDraftLabel', approved: 'exportApprovedLabel', earlier: 'exportEarlierLabel' };
-// [kind, format, title, detail]: the data files, in the order offered
-const DATA_FILES = [
-  ['draft', 'csv', 'Codes as a spreadsheet (CSV, draft)', 'One row per code: status, units, modifiers, reason, quoted passages and any saved decision.'],
-  ['draft', 'txt', 'Codes as text (TXT, draft)', 'The same codes as plain text, with any saved decision.'],
-  ['approved', 'csv', 'Approved codes as a spreadsheet (CSV)', 'One row per approved code, with who approved it and when.'],
-  ['approved', 'txt', 'Approved codes as text (TXT)', 'The approved codes as plain text, with who approved them and when.'],
-];
-// a download's format as the list of earlier downloads names it, and as the dialog's sentences name the file
+// a download's format as the list of earlier downloads names it (earlier releases also made CSV and TXT), and as the
+// dialog's sentences name the file being made
 const FORMAT_LABELS = { pdf: 'PDF', csv: 'CSV', txt: 'TXT' };
-const FILE_WORDS = { pdf: 'PDF', csv: 'CSV file', txt: 'text file' };
+const FILE_WORDS = { pdf: 'PDF' };
 const PREPARING_PDF = 'Preparing PDF…';
 // One gesture makes one file: once a file is made its option waits (unavailable) at least this long, and until the
 // dialog has been drawn from the document read again; a double click's second click is not a choice at all (onClick).
 const MADE_HOLD_MS = 1000;
-
-function exportOption(kind, fmt, enabled, title, detail, busy = false) {
-  return `<button type="button" class="export-option" data-export-kind="${kind}" data-export-fmt="${fmt}"${enabled ? '' : ' disabled'}${busy ? ' aria-busy="true"' : ''}><span class="export-format">${fmt.toUpperCase()}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(busy ? `Preparing the ${FILE_WORDS[fmt]}…` : detail)}</small></span>${icon('download')}</button>`;
-}
 
 function pdfOption(kind, enabled, busy = false) {
   const words = busy ? PREPARING_PDF : 'Download PDF';
@@ -1584,8 +1575,7 @@ function exportOptions(doc, making = null, made = null) {
   const label = (key, words) => `<div class="evidence-label" id="${GROUP_LABEL_IDS[key]}">${words}</div>`;
   const opening = key => `<div class="export-group" role="group" aria-labelledby="${GROUP_LABEL_IDS[key]}">`;
   const why = !allowed.approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : '';
-  const group = ([kind, words]) => `${opening(kind)}${label(kind, words)}${pdfOption(kind, free(kind, 'pdf'), busy(kind, 'pdf'))}${kind === 'approved' ? why : ''}`
-    + `<div class="export-other"><p class="export-other-label">Other formats</p>${DATA_FILES.filter(([of]) => of === kind).map(([, fmt, title, detail]) => exportOption(kind, fmt, free(kind, fmt), title, detail, busy(kind, fmt))).join('')}</div></div>`;
+  const group = ([kind, words]) => `${opening(kind)}${label(kind, words)}${pdfOption(kind, free(kind, 'pdf'), busy(kind, 'pdf'))}${kind === 'approved' ? why : ''}</div>`;
   return EXPORT_GROUPS.map(group).join('')
     + (reports.length ? `${opening('earlier')}${label('earlier', 'Earlier downloads')}<ul class="report-list">${reports.map(reportItem).join('')}</ul></div>` : '');
 }

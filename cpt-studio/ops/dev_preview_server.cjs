@@ -10,7 +10,7 @@
 // action, acknowledgement, note}, and for an Undo the decision it undoes: {..., decision}): a round that is not the
 // document's latest finished one, a line it does not have, a code that is not that line's, or an Undo naming another
 // decision than the line's current one is answered 409 with the server's sentence (decisionAnswer). A download names
-// the coding review the page shows ({kind, fmt, round}, fmt pdf, csv or txt): another round is answered 409 the same
+// the coding review the page shows ({kind, fmt, round}, fmt pdf - the only report made): another round is answered 409 the same
 // way (reportAnswer). A PDF download is a one-page synthetic PDF made here, not the server's physician report.
 //
 // Request headers understood by the mock: "X-Preview-Session: agent" serves the agent session;
@@ -502,12 +502,12 @@ function decisionAnswer(doc, body, session) {
 }
 
 // [status, payload] of POST reports on `doc`, as the server answers it: 400 (the server's sentence) for a kind or format
-// it does not make; 409 CHANGED unless `round` is the number of the document's latest coding review and that review has
+// it does not make (any but the PDF, owner direction 2026-11-21); 409 CHANGED unless `round` is the number of the document's latest coding review and that review has
 // finished; 409 with the readiness blockers when the download asked for is not available; else 201 with the report as
 // the page lists it. The download is a mock (registered in `reports`): for a PDF a one-page PDF made here
 // (syntheticPdf), served as application/pdf, never the server's physician report; nothing here changes a fixture.
-const FORMAT_REQUIRED = 'Choose a draft or an approved export as PDF, CSV or TXT.';
-const REPORT_TYPES = { pdf: 'application/pdf', csv: 'text/csv; charset=utf-8', txt: 'text/plain; charset=utf-8' };
+const FORMAT_REQUIRED = 'Choose a draft or an approved PDF report.';
+const REPORT_TYPES = { pdf: 'application/pdf' };
 
 function reportAnswer(doc, body) {
   if (!['draft', 'approved'].includes(body.kind) || !Object.hasOwn(REPORT_TYPES, body.fmt)) return [400, { error: FORMAT_REQUIRED, details: {} }];
@@ -519,11 +519,7 @@ function reportAnswer(doc, body) {
   const id = crypto.randomUUID();
   const filename = `cpt-studio-preview-${body.kind}.${body.fmt}`;
   const lines = ['SYNTHETIC - NOT FOR BILLING', `CPT Studio preview mock download (${body.kind}).`, 'The real download is built by the server from the saved decisions.'];
-  const content = {
-    pdf: () => syntheticPdf([lines]),
-    csv: () => 'notice,kind\r\n"SYNTHETIC — NOT FOR BILLING","preview mock"\r\n',
-    txt: () => `SYNTHETIC — NOT FOR BILLING\nCPT Studio preview mock download (${body.kind}).\nThe real download is built by the server from the saved decisions.\n`,
-  }[body.fmt]();
+  const content = syntheticPdf([lines]);
   reports.set(id, { content, filename, type: REPORT_TYPES[body.fmt] });
   return [201, { id, kind: body.kind, fmt: body.fmt, filename, generated_at: iso(Date.now()), download_url: `/api/reports/${id}/download`, current: true }];
 }

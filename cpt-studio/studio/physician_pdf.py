@@ -157,33 +157,41 @@ _registered = False
 
 
 def register_fonts() -> None:
-    global _registered, _DRAWN_INVISIBLE
+    global _registered, _DRAWN_INVISIBLE, _DRAWN_BLANK
     if _registered:
         return
     for name, filename in _FONT_FILES.items():
         pdfmetrics.registerFont(TTFont(name, str(FONT_DIR / filename)))
     pdfmetrics.registerFontFamily(BODY, normal=BODY, bold=BODY_SEMI, italic=BODY, boldItalic=BODY_SEMI)
-    _DRAWN_INVISIBLE = _measure_invisible()
+    _DRAWN_INVISIBLE, _DRAWN_BLANK = _measure_invisible()
     _registered = True
 
 
-def _blank(face, point: int) -> bool:
+def _outline_free(face, point: int) -> bool:
     glyph = face.charToGlyph.get(point)
-    return (bool(glyph) and face.glyphPos[glyph] == face.glyphPos[glyph + 1]
-            and face.charWidths.get(point, face.defaultWidth) == 0)
+    return bool(glyph) and face.glyphPos[glyph] == face.glyphPos[glyph + 1]
 
 
-def _measure_invisible() -> frozenset:
-    """Every character some report font draws with no outline and no advance, wherever it is printed: in a report
-    font that has a glyph for it, or in the fallback font for one that does not."""
+def _measure_invisible() -> tuple:
+    """(invisible, blank): every character some report font draws with no outline and no advance, and every one it draws
+    with no outline at all - wherever it is printed: in a report font that has a glyph for it, or in the fallback font
+    for one that does not."""
     fallback = pdfmetrics.getFont(FALLBACK).face
-    found = set()
+    invisible, blank = set(), set()
     for name in (DISPLAY, BODY, BODY_SEMI, MONO, MONO_REGULAR):
         face = pdfmetrics.getFont(name).face
         for point in set(face.charToGlyph) | set(fallback.charToGlyph):
-            if _blank(face if _has(face.charToGlyph, point) else fallback, point):
-                found.add(point)
-    return frozenset(found)
+            drawer = face if _has(face.charToGlyph, point) else fallback
+            if _outline_free(drawer, point):
+                blank.add(point)
+                if drawer.charWidths.get(point, drawer.defaultWidth) == 0:
+                    invisible.add(point)
+    return frozenset(invisible), frozenset(blank)
+
+
+def blank(value) -> bool:
+    """``value`` prints no ink: nothing, or only white space and characters the report's fonts draw with no outline."""
+    return all(ch.isspace() or ord(ch) in _DRAWN_BLANK for ch in clean_text(value))
 
 
 # What never prints. Every control character is a separator in the stored text (a vertical tab, a form feed, the
@@ -200,8 +208,11 @@ RTL_CLASSES = ('R', 'AL')
 
 
 # What the report's own fonts draw as nothing (no outline and no advance), measured from them when they load
-# (register_fonts): U+FFFC, the object replacement character, and the interlinear annotation marks among them.
+# (register_fonts): U+FFFC, the object replacement character, and the interlinear annotation marks among them. And what
+# they draw with no outline at all, whatever its advance (a space; U+2800, the blank Braille cell): text made only of
+# those, or of white space, prints no ink (blank).
 _DRAWN_INVISIBLE: frozenset = frozenset()
+_DRAWN_BLANK: frozenset = frozenset()
 
 
 def clean_text(value) -> str:
@@ -236,9 +247,11 @@ def displayable(text: str, font: str = BODY) -> str:
     """``text`` with every character the report cannot draw replaced by U+FFFD - never a blank box that would also vanish
     from the text layer, and never another character: a compatibility form can change what the text says (circled 11
     and 12 would read 1112), can grow a field past its room (one ligature is eighteen letters) and can spell a name the
-    display filter has already read. Nothing else changes; render_report says so on the report."""
+    display filter has already read. The one exception says the same: a space no font draws (U+3000, the ideographic
+    space) prints as a space, so the words on either side stay apart. render_report says so on the report."""
     primary = _covered(font)
-    return ''.join(ch if ch == ' ' or _drawable(ch, primary) else REPLACEMENT for ch in text)
+    return ''.join(ch if ch == ' ' or _drawable(ch, primary) else ' ' if unicodedata.category(ch) == 'Zs'
+                   else REPLACEMENT for ch in text)
 
 
 def markup(value, font: str = BODY) -> str:
@@ -296,7 +309,7 @@ def _styles() -> dict:
         'notes_title': _style('notes_title', BODY_SEMI, 8, 11, SECONDARY, spaceBefore=16, spaceAfter=4,
                               keepWithNext=1),
         'note_item': _style('note_item', BODY, 10.5, 15, INK, leftIndent=12, bulletIndent=0, spaceAfter=4,
-                            bulletFontName=BODY),
+                            bulletFontName=BODY, allowWidows=0, allowOrphans=0),  # no line alone at a page end
         'status_review': _style('status_review', BODY_SEMI, 10, 13, REVIEW_INK),
         'status_ok': _style('status_ok', BODY_SEMI, 10, 13, FOREST),
         'evidence_ref': _style('evidence_ref', BODY, 8.5, 11.5, SECONDARY),
@@ -346,7 +359,7 @@ def _p(text_markup: str, style: ParagraphStyle) -> Paragraph:
 
 
 def _present(value) -> bool:
-    return value is not None and bool(clean_text(value).strip())
+    return value is not None and not blank(value)
 
 
 def _value_or_absent(value: str | None, report: PhysicianReport) -> str:
@@ -390,7 +403,7 @@ class _Pages:
             suffix = f' · {report.header_suffix}' if report.header_suffix else ''
             budget = CONTENT_WIDTH * 0.62 - _text_width(suffix, BODY, 7.5)
             fitted = _fit(report.header_title, BODY, 7.5, budget)
-            line = fitted + suffix if fitted.strip() else report.header_suffix  # no title left: no dangling separator
+            line = report.header_suffix if blank(fitted) else fitted + suffix  # no title left: no dangling separator
             _draw_text(canv, right, PAGE_HEIGHT - 72, line, BODY, 7.5, SECONDARY, align='right')
         else:
             _draw_text(canv, right, PAGE_HEIGHT - 72, report.identity_line, BODY, 7.5, SECONDARY, align='right',
@@ -778,16 +791,16 @@ def _strings(value):
 def notices(report: PhysicianReport) -> tuple:
     """Review-scope rows the printing itself requires: characters the report fonts cannot draw, and right-to-left text
     that is printed (in its stored order; a right-to-left letter no font draws prints as U+FFFD, so it is not one). The
-    TXT and CSV keep both exactly."""
+    document's page in CPT Studio shows both exactly as saved."""
     rows = []
     texts = [clean_text(text) for text in _strings(report)]
     printed = [displayable(text) for text in texts]
-    if printed != texts:
-        rows.append(('Characters', 'Some cannot be drawn in this PDF and are shown as \ufffd; the TXT and CSV keep '
-                                   'every character', True))
+    if any(shown.count(REPLACEMENT) > text.count(REPLACEMENT) for shown, text in zip(printed, texts)):
+        rows.append(('Characters', 'Some cannot be drawn in this PDF and are shown as \ufffd; the document page in '
+                                   'CPT Studio shows every character as saved', True))
     if any(unicodedata.bidirectional(ch) in RTL_CLASSES for text in printed for ch in text):
-        rows.append(('Right-to-left text', 'Shown in its stored order, left to right; the TXT and CSV keep it exactly',
-                     True))
+        rows.append(('Right-to-left text', 'Shown in its stored order, left to right; the document page in CPT Studio '
+                                           'shows it as saved', True))
     return tuple(rows)
 
 

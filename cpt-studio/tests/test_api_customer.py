@@ -1,6 +1,7 @@
 """The customer API (BUILD-SPEC 6; client contract customer-2026-11-22): the contract's keys exactly (held to
 ops/verification/customer-contract.json by the shipped reader, ops/scan_customer.py, and to the spec's own key lists),
-the export formats it lists (PDF, CSV and TXT: studio.exports.FORMATS, one sentence refusing any other),
+the one export format a request may name (the PDF: studio.exports.FORMATS since the owner's direction of 2026-11-21, one
+sentence refusing any other; the contract's fmt still lists csv and txt for the exports stored before it),
 tenancy (404 outside the membership), the reviewer gate, answers starting a new round with every answer so far, the
 vendor-name scan over every customer JSON response, the in-page view's headers, a Word document's converted view, the
 earlier review (an encounter with no round), the upload with its insurance, and the display hygiene. Synthetic data only;
@@ -89,16 +90,19 @@ class ContractTests(ApiCase):
         self.assertEqual(set(payload['codes'][0]), CODE_KEYS)
         self.assertEqual(set(payload['questions'][0]), QUESTION_KEYS)
 
-    def test_an_export_of_each_format_is_listed_as_the_contract_has_it(self):
-        """The formats a request may name (exports.FORMATS: the physician PDF, CSV and TXT) are the contract's report
-        formats, each export the page lists holds to the contract, and any other format is refused with one sentence."""
+    def test_the_pdf_is_the_one_format_made_and_each_export_is_listed_as_the_contract_has_it(self):
+        """The one format a request may name is the PDF (exports.FORMATS, owner direction 2026-11-21: no more TXT or
+        CSV); the contract's report fmt still lists csv and txt, the formats of exports stored before it (listed and
+        served as stored: tests/test_exports.py); each export the page lists holds to the contract, and any other
+        format, TXT and CSV included, is refused with one sentence."""
         report = self.sc.CONTRACT['types']['report']['keys']
-        self.assertEqual(set(report['fmt']['enum']), set(exports.FORMATS))
-        self.assertEqual(set(exports.FORMATS), {'pdf', 'csv', 'txt'})
+        self.assertEqual(exports.FORMATS, ('pdf',))
+        self.assertEqual(set(report['fmt']['enum']), {'pdf', 'csv', 'txt'})
+        self.assertLessEqual(set(exports.FORMATS), set(report['fmt']['enum']))
         enc = self.done()
         self.assertEqual(self.decide(enc, 'L1', '45385', 'approve').status_code, 201)
         made = []
-        for kind, fmt in (('draft', 'pdf'), ('draft', 'csv'), ('draft', 'txt'), ('approved', 'pdf')):
+        for kind, fmt in (('draft', 'pdf'), ('approved', 'pdf')):
             response = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': kind, 'fmt': fmt, 'round': 1})
             self.assertEqual(response.status_code, 201, response.content)
             self.assert_clean(response)
@@ -107,12 +111,12 @@ class ContractTests(ApiCase):
         payload = self.get_json(f'/api/encounters/{enc.pk}')
         self.assert_contract(payload, 'encounter')
         self.assertEqual(sorted((item['kind'], item['fmt']) for item in payload['reports']), sorted(made))
-        for fmt in ('docx', 'PDF', 'xlsx', None):
+        for fmt in ('txt', 'csv', 'docx', 'PDF', 'xlsx', None):
             with self.subTest(fmt=fmt):
                 refused = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': fmt, 'round': 1})
                 self.assertEqual((refused.status_code, refused.json()['error']),
-                                 (400, 'Choose a draft or an approved export as PDF, CSV or TXT.'))
-        self.assertEqual(models.ExportArtifact.objects.filter(encounter=enc).count(), 4)
+                                 (400, 'Choose a draft or an approved PDF report.'))
+        self.assertEqual(models.ExportArtifact.objects.filter(encounter=enc).count(), 2)
 
     def test_a_done_round_reads_as_its_codes_questions_quotes_and_notes(self):
         enc = self.done()
@@ -216,7 +220,7 @@ class ContractTests(ApiCase):
 class TenancyAndRoleTests(ApiCase):
     def test_every_customer_url_of_another_workspace_answers_404(self):
         enc = self.done()
-        export = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'txt', 'round': 1}).json()
+        export = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'pdf', 'round': 1}).json()
         outsider = self.client_for(self.outsider)
         for url in (f'/api/encounters/{enc.pk}', f'/api/encounters/{enc.pk}/original',
                     f'/api/encounters/{enc.pk}/original?view=1', export['download_url']):
@@ -259,7 +263,7 @@ class TenancyAndRoleTests(ApiCase):
         self.assertEqual(upload.status_code, 403)
         self.assertEqual(models.CodeDecision.objects.count(), 0)
         self.assertEqual(models.CodingAnswer.objects.count(), 0)
-        self.assertEqual(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'csv', 'round': 1},
+        self.assertEqual(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'pdf', 'round': 1},
                                         client=viewer).status_code, 201)
 
 
@@ -390,10 +394,10 @@ class VendorNameScanTests(ApiCase):
         responses.append(self.post_json(f'/api/encounters/{enc.pk}/decisions', {
             'round': 1, 'line': 'L1', 'code': '45385', 'action': 'approve',
             'acknowledgement': decisions.ACKNOWLEDGEMENTS['human']}))
-        responses.append(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'approved', 'fmt': 'txt',
-                                                                               'round': 1}))
-        responses.append(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'pdf',
-                                                                               'round': 1}))
+        for kind in ('approved', 'draft'):  # each a report's JSON, scanned like the rest
+            made = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': kind, 'fmt': 'pdf', 'round': 1})
+            self.assertEqual(made.status_code, 201, made.content)
+            responses.append(made)
         responses.append(self.post_json(f'/api/encounters/{enc.pk}/answers', {'answers': [
             {'question_id': payload['questions'][0]['id'], 'text': 'Yes.'}]}))
         responses.append(self.client.get(f'/api/encounters/{enc.pk}'))

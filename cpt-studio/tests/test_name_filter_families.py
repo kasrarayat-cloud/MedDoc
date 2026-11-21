@@ -4,9 +4,9 @@ read "the system", never "the system the system" or "the system Opus"). Alone, a
 MED-EL SONNET 2 or OPUS 2 audio processor, a haiku - and another company's product named in a note ("the patient asked
 ChatGPT") is clinical context: neither is replaced, and neither is a hit of the shared denylist (ops/verification/
 customer-denylist.json; tests/test_api_customer.py pins its name rules equal to the filter's). A bare GPT, or GPT and a
-number, is not a name - GPT is also the liver enzyme ALT. Through the API, a round written that way gives a page JSON, a
-TXT, a CSV and a physician PDF that carry no vendor name, keep the clinical words, and pass the customer scanner.
-Synthetic data only; nothing reaches the network."""
+number, is not a name - GPT is also the liver enzyme ALT. Through the API, a round written that way gives a page JSON and
+a physician PDF (the only report since the owner's direction of 2026-11-21: no more TXT or CSV) that carry no vendor
+name, keep the clinical words, and pass the customer scanner. Synthetic data only; nothing reaches the network."""
 import io
 import json
 import re
@@ -69,10 +69,10 @@ class FamilyNameSurfaceTests(r.CustomerCase, TestCase):
         self.sc = r.scan_customer()
         self.client = self.client_for(self.reviewer)
 
-    def made(self, enc, kind, fmt):
+    def made(self, enc, kind):
         shown = self.client.get(f'/api/encounters/{enc.pk}').json()['round']['number']
         made = self.client.post(f'/api/encounters/{enc.pk}/reports', content_type='application/json',
-                                data=json.dumps({'kind': kind, 'fmt': fmt, 'round': shown}))
+                                data=json.dumps({'kind': kind, 'fmt': 'pdf', 'round': shown}))
         self.assertEqual(made.status_code, 201, made.content)
         got = self.client.get(made.json()['download_url'])
         self.assertEqual(got.status_code, 200)
@@ -94,14 +94,7 @@ class FamilyNameSurfaceTests(r.CustomerCase, TestCase):
         self.assertEqual(payload['notes'], ['The system could not tell the site; the patient is in the OPUS trial.'])
         ctx = self.sc.scan_context(self.sc.quotations(payload))
         self.assertEqual(self.sc.scan_json(payload, ctx), [])
-        for fmt in ('txt', 'csv'):
-            with self.subTest(fmt=fmt):
-                text = self.made(enc, 'draft', fmt).content.decode('utf-8')
-                self.assertIsNone(VENDOR.search(text), text)
-                for kept in ('MED-EL SONNET 2 processor', 'asked ChatGPT') + (('OPUS trial',) if fmt == 'txt' else ()):
-                    self.assertIn(kept, text)  # the CSV has no notes column
-                self.assertEqual(self.sc.scan_file(text, ctx, f'draft.{fmt}', fmt), [])
-        got = self.made(enc, 'draft', 'pdf')
+        got = self.made(enc, 'draft')
         text = ' '.join(' '.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(got.content)).pages).split())
         self.assertIsNone(VENDOR.search(text), text)
         self.assertIn('Reason: The system read the snare; the MED-EL SONNET 2 processor was checked.', text)
