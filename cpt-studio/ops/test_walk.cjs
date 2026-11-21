@@ -1468,6 +1468,7 @@ const playwrightMissing = () => !fs.existsSync(path.join(walk.PLAYWRIGHT, 'packa
 const REPORT = ['SYNTHETIC REPORT - FICTIONAL PATIENT', 'Indication: surveillance of a fictional polyp.', 'Cold forceps biopsies were taken from the antrum.',
   'Impression: two small polyps were removed.', 'Plan: repeat the fictional colonoscopy in five years.'];
 const DENSE = Array.from({ length: 26 }, (_, k) => `Line ${k + 1} of a dense fictional report: the synthetic findings were recorded here.`);
+const LONG = [1, 2, 3, 4].map(n => Array.from({ length: 30 }, (_, k) => `Page ${n}, line ${k + 1}: the fictional record goes on with synthetic words.`));
 const SHAPES = {
   'rotated 90': { pdf: () => pdfOf([{ stream: lines(REPORT), rotate: 90 }, { stream: lines(REPORT.slice(1)), rotate: 90 }]),
     quotes: [{ text: REPORT[2], page: 1 }, { text: REPORT[3], page: 1 }, { text: REPORT[4], page: 2 }] },
@@ -1484,6 +1485,9 @@ const SHAPES = {
     quotes: [{ text: REPORT[2], page: 1 }, { text: 'COURIER LINE: TWO POLYPS WERE REMOVED.', page: 1 }] },
   'a blank page': { pdf: () => pdfOf([lines(REPORT), '']), quotes: [{ text: REPORT[2], page: 1 }, { text: 'Words of a page that has none.', page: 2 }] },
   'a faint scan': { pdf: () => faintScan(REPORT), quotes: [{ text: REPORT[2], page: 1 }, { text: REPORT[3], page: 1 }] },
+  // the viewer draws only the pages near what it shows and lets the others go: reading the fourth page lets the first go
+  'four pages, the first let go while the last is read': { pdf: () => pdfOf(LONG.map(texts => lines(texts))),
+    quotes: [{ text: LONG[0][6], page: 1 }, { text: LONG[3][9], page: 4 }, { text: LONG[1][3], page: 2 }, { text: LONG[0][20], page: 1 }] },
 };
 
 test('every quote is chosen and judged by the walk\'s own reading through the page itself, in a browser', async t => {

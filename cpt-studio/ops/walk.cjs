@@ -2100,7 +2100,10 @@ async function readDrawnPage(page, number) {
 }
 
 // What the walk reads of the viewer for one quote in a drawn PDF: every page to judge it by (pagesToRead), each scrolled
-// to and read once drawn, and every page the quote requires drawn (requiredPages) seen as the member sees it.
+// to and read once drawn, and every page the quote requires drawn (requiredPages) seen as the member sees it. The viewer
+// draws only the pages near what it shows and lets the others go, so a required page read earlier may have been let go
+// while the pages after it were read: each is brought back into view and read again, drawn, right before it is looked
+// at, and that reading is the one judged for it.
 async function readPdfPages(page, quote, reading) {
   const doc = reading.document;
   const result = doc && !doc.error && Array.isArray(doc.pages) ? ownSearch(quote, documentModels(doc), doc.pageCount) : null;
@@ -2108,11 +2111,8 @@ async function readPdfPages(page, quote, reading) {
   for (const number of pagesToRead(quote, reading, result)) reading.pagesRead.set(number, await readDrawnPage(page, number));
   reading.seen = new Map();
   for (const number of requiredPages(quote, reading, result, viewerPagesOf(reading))) {
-    let read = reading.pagesRead.get(number);
-    if (!read?.drawn) {
-      read = await readDrawnPage(page, number);
-      reading.pagesRead.set(number, read);
-    }
+    const read = await readDrawnPage(page, number);
+    reading.pagesRead.set(number, read);
     reading.seen.set(number, await measureSeen(page, number, read));
   }
   return reading;
