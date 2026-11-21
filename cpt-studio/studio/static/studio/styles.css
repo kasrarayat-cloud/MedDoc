@@ -497,3 +497,11 @@
 .zoom-level{min-width:4.5ch;text-align:center;font-size:11px;color:var(--teal);font-variant-numeric:tabular-nums}
 @media(max-width:760px){.zoom-button{min-width:44px;min-height:44px}
 }
+
+/* The PDF viewer, round 5 (DECISIONS D368). In forced colours a zoom step that can go no further shows as unavailable, in
+   GrayText as a native disabled button is. The file name keeps room: it comes last in the toolbar, at least 12 characters
+   wide (all of it where it is shorter) and as wide as it is where there is room, so where the toolbar cannot hold it
+   beside the page and the zoom it takes a row of its own, at the right as before; its full text is its title. */
+@media (forced-colors: active){.zoom-button[aria-disabled="true"]{color:GrayText;border-color:GrayText}
+}
+.viewer-name{order:1;flex:1 0 12ch;max-width:max-content}
