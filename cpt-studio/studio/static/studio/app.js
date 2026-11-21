@@ -3116,8 +3116,10 @@ function paintFrame(frame) {
   const chosen = state.framePassage;
   const held = frameHolds(frame, documentSize());
   if (held === 'waiting') {
+    // nothing is answered yet: data-marked names a quote only once the viewer has answered for it (the walk waits
+    // on it)
     delete frame.dataset.fallback;
-    frame.dataset.marked = chosen ? chosen.key || '' : '';
+    frame.dataset.marked = '';
     frame.dataset.markStatus = '';
     frame.dataset.markCount = '';
     setMarkNote('');

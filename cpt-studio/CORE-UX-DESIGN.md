@@ -372,7 +372,9 @@ sentence can bring about is repaired; the rest is recorded here):
   not found and the note says the exact words could not be found, though the frame shows them.
 - Text documents (round 7, D382): a frame load the browser stops (Esc, the Stop button) or whose body breaks off never
   brings its load, so the viewer waits: it marks nothing and says nothing until the page is opened again, and the
-  frame shows what arrived. A body of size 0 is read as a size the browser did not tell (no view the app serves is
+  frame shows what arrived. After the member reloads only the frame (its own menu), an earlier choice's note stays
+  until that reload's load comes (a moment, normally), and stays on, over the unmarked text, if it never comes, until
+  the next choice (round 8). A body of size 0 is read as a size the browser did not tell (no view the app serves is
   empty).
 
 ## 9. Install and verify
@@ -439,7 +441,7 @@ sentence the viewer gives - 'browser', 'library', 'document', 'slow' or 'downloa
 for marking, so nothing is marked.") - and " The quote is on page N.", and a new frame whenever the quote's page differs
 from the frame's. A text document is judged by the walk's own copy of its rule (`findPassages`). Counted; and where the
 PDF viewer drew the document or the text viewer showed it, at least one of its quotes must be marked, since the walk's
-documents quote their own words (so a text viewer whose frame holds something else fails, whatever that frame says).
+documents quote their own words (so a text viewer that marks none of them fails, whatever its frame holds).
 
 A caller with the document's bytes passes them: `chooseQuotes(page, enc, { bytes })`; without them the walk fetches the
 view address in the page. `judgeQuote(quote, reading)` and `quoteMarkChecks(chosen)` need nothing more than what
@@ -460,7 +462,12 @@ ZapfDingbats without embedding them the walk's reading names those fonts otherwi
 places are equal); and an item whose text direction has zero length is a continuation for the walk and an edge for the
 viewer, which the library never gives (it gives such an item no width). The suite's text scan of the library for code
 built from strings and its stylesheet token pin read the spellings a minifier and a person write, not escaped or
-commented forms; the page's policy refuses code built from strings whatever its spelling.
+commented forms; the page's policy refuses code built from strings whatever its spelling. Recorded in round 8: for a
+text document the walk judges each quote against what the frame holds when the viewer has answered, so a viewer that
+answers before its frame holds the document is judged against that frame (the rule that at least one quote is marked
+still fails a run where none is); and that rule can fail a correct viewer on a round whose every quote is a
+model-written evidence quote not found word for word (the coding service cites the walk's documents, so their quotes
+are found).
 
 ## 10. Read-bind rules; 11. Read-hold registers
 

@@ -2245,7 +2245,7 @@ test('a text frame that does not hold the document is never searched: the note s
       waiting.dataset.markStatus = 'marked';
       app.showQuote('L1#1');
       assert.equal(note.textContent, '');
-      assert.deepEqual({ ...waiting.dataset }, { marked: 'L1#1', markStatus: '', markCount: '' });
+      assert.deepEqual({ ...waiting.dataset }, { marked: '', markStatus: '', markCount: '' }, 'no answer yet: no quote named');
       // the load brings the edge's page: the note follows it
       Object.assign(waiting, { page: pageOf(), entry: { responseStatus: 503, decodedBodySize: 39 } });
       app.noteFrameLoad({ target: waiting });
