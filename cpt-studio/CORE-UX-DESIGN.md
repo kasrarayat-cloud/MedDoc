@@ -27,7 +27,8 @@ so the numbering is kept; sections that described the removed pipeline say so in
 ## 1. What the page does
 
 Upload or paste a document with its date of service and insurance -> watch the coding review read and check it ->
-answer its questions (a new round) -> approve or reject each code -> download a draft or the approved codes.
+answer its questions (a new round) -> approve or reject each code -> download the draft or the approved report as a PDF
+(the same codes as CSV or TXT data files stay available).
 
 ## 2. Where it lives
 
@@ -58,10 +59,12 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   404 under `/ops/`. An operator with no membership signs in on the usual page and lands on `/ops/`; one who is also a
   member signs in as the member.
 - Exports (`cpt-studio-customer-export@3`): a draft (every code with status, units, modifiers, reason, the second check
-  and quotes with pages) or the approved codes (each with who approved it, their kind and when), as TXT or CSV, with the
-  SYNTHETIC banner at both ends. A download names the round the page shows (`{kind, fmt, round}`) and is refused as
-  changed when that is not the latest. A download serves the stored bytes; an export from an earlier round is marked
-  earlier.
+  and quotes with pages) or the approved codes (each with who approved it, their kind and when). The PDF (owner
+  directive 2026-11-21; `studio/physician_report.py`, `studio/physician_pdf.py`) is the report for the doctor and the
+  dialog's primary download; TXT and CSV, with the SYNTHETIC banner at both ends, stay as data files. A download names
+  the round the page shows (`{kind, fmt, round}`, `fmt` pdf, csv or txt) and is refused as changed when that is not the
+  latest; a PDF that cannot be made is refused (503, nothing stored). A download serves the stored bytes; an export from
+  an earlier round is marked earlier.
 
 ## 6. Flow
 
@@ -80,6 +83,14 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   decision changed), the dialog closes, the page says nothing was recorded and reads the document again - nothing is
   sent twice. A download refused the same way (409 with no blockers) closes the export dialog and reads the document
   again; a refusal with blockers stays in the dialog.
+- Downloads: while the server makes the file, every option of the export dialog waits (disabled), the chosen one says
+  so ("Preparing PDF…" on a PDF button, with `aria-busy`) and `#exportStatus` says the file is being prepared. Only the
+  server's 201 makes the page say the file is ready ("Your PDF is ready. Downloading <filename>.") and start the
+  download; the options then come back, and once the page has read the document again the dialog lists the new file
+  under "Earlier downloads". A refusal with blockers, or a PDF that could not be made (503, "The PDF could not be made.
+  Nothing was saved. Try again."), shows the server's sentence in `#exportError` and gives the options back for a
+  retry (a notice instead when the dialog was closed meanwhile); nothing is said to be ready and nothing is downloaded.
+  The dialog opened again while a file is being made says so and its options wait until it is made.
 
 ## 7. The customer encounter contract
 
@@ -133,7 +144,17 @@ The review dialog: `#reviewDialog` with `#reviewLine` (the line's units and modi
 label holding the checkbox `#reviewAckBox` and the session's `acknowledgement`, which the member confirms by ticking
 it), `#reviewNote` and `#saveReview` (enabled once the box is ticked). The upload dialog: `#uploadDialog` with
 `#uploadFile`, `#pasteText`, `#serviceDate`, `#insurance`, `#syntheticAttestation` and `#startReview`. The export
-dialog: `#exportDialog`.
+dialog: `#exportDialog`, its copy presenting the PDF as the report for the doctor and CSV and TXT as data files;
+`#exportStatus` (`role=status`: what can be downloaded, then the file being prepared and made); `#exportOptions` with
+one `.export-group` per kind - "Codes — not approved" (the draft) and "Approved codes" - each leading with its PDF,
+`button.button.primary.export-pdf[data-export-kind][data-export-fmt=pdf]` ("Download PDF", full width; "Preparing
+PDF…" with `aria-busy` while it is made), described by the `p.export-pdf-note` under it (draft: every code with its
+status, evidence and what still needs a decision; approved: only approved codes, with who approved them and when);
+for the approved group, why it waits (`.export-blockers`); then "Other formats" (`.export-other`): the CSV and the TXT
+as `.export-option[data-export-kind][data-export-fmt=csv|txt]`, spreadsheet first. A group's options are enabled by
+the readiness (`readiness.draft`, `readiness.approved`). Downloads made earlier are listed under "Earlier downloads"
+(`.report-list .report-item`: the file's link, then its kind, format - PDF, CSV or TXT, when the server names one - and
+time); `#exportError` (`role=alert`) holds the server's sentence when a download is refused.
 
 ### Marking a quoted passage (the owner's direction of 2026-11-20, DECISIONS D368)
 
@@ -382,8 +403,8 @@ sentence can bring about is repaired; the rest is recorded here):
 `ops/install.py` installs a revision (`ops/INSTALL.md`). `ops/walk.cjs` then drives the real page with a synthetic
 document at desktop width and at 390 px (no horizontal scroll): upload, poll to done, the DOM contract above and the JSON
 contract, every quote chosen and judged by the walk's own search, an answer when one is asked, one approval through the
-dialog (the History naming the line with its code), both exports downloaded twice to equal bytes (each request naming
-the round shown), the approval undone through the row's Undo (naming the decision shown), the denylist scan over every
+dialog (the History naming the line with its code), both exports downloaded as TXT twice to equal bytes (each request
+naming the round shown), the approval undone through the row's Undo (naming the decision shown), the denylist scan over every
 JSON body, the DOM and the downloads, and every `/ops/` path refused to the customer.
 
 The walk never takes the viewer's word for a quote (DECISIONS D368, rounds 3 and 5). It reads every PDF it judges

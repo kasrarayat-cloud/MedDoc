@@ -105,9 +105,10 @@ class ExportNamesItsRoundTests(StaleCase):
         enc, page_a = self.round_two()
         self.assertEqual(page_a['round']['number'], 1)
         for kind in ('approved', 'draft'):
-            with self.subTest(kind=kind):
-                response = self.post(enc, 'reports', {'kind': kind, 'fmt': 'txt', 'round': page_a['round']['number']})
-                self.assertEqual((response.status_code, response.json()['error']), (409, CHANGED))
+            for fmt in ('pdf', 'txt'):
+                with self.subTest(kind=kind, fmt=fmt):
+                    response = self.post(enc, 'reports', {'kind': kind, 'fmt': fmt, 'round': page_a['round']['number']})
+                    self.assertEqual((response.status_code, response.json()['error']), (409, CHANGED))
         self.assertEqual(models.ExportArtifact.objects.count(), 0)
         made = self.post(enc, 'reports', {'kind': 'approved', 'fmt': 'txt', 'round': 2})
         self.assertEqual(made.status_code, 201, made.content)
@@ -169,6 +170,8 @@ class ClientContractTests(StaleCase):
         sc = r.scan_customer()
         enc = self.done()
         self.assertEqual(self.decide(enc, 'L1', '45385', 'approve').status_code, 201)
+        self.assertEqual(self.post(enc, 'reports', {'kind': 'approved', 'fmt': 'pdf', 'round': 1}).status_code, 201)
         payload = self.payload(enc)
         self.assertEqual(sc.shape_problems(payload, sc.CONTRACT['encounter']), [])
         self.assertEqual(set(payload['codes'][0]['decision']), {'id', 'action', 'by', 'at', 'note'})
+        self.assertEqual([(item['kind'], item['fmt']) for item in payload['reports']], [('approved', 'pdf')])

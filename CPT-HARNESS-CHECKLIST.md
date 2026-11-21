@@ -390,6 +390,34 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
 - [ ] **U32: register the reader's v5 false READY** (a WRONG 45385 citing "polypectomy scar" is READY) and the v1/v2/v3/v6
   readings as counterexamples. This waits for the c4 workflow's registry, whose files an agent is writing.
 
+## Physician PDF export, 2026-11-21 (owner directive of 2026-11-21)
+
+The owner approved the first-page design of the physician PDF export (handoff `CPT-Studio-Export-Handoff-20261121.zip`,
+sha256 `c4330a3c56efac8e5e9de584bed758985904c47de51079dcd1f1a7d5e4a5998e`, verified before extraction; its seven files
+match its own SHA256SUMS.json) and asked for it to be implemented and installed: a real searchable PDF built from the
+encounter's saved data, the primary doctor-facing export, with CSV kept as a secondary one. Integration and deployment
+owner: session 738699b2 (the session that installed c28ff379ba40 and 0de2b5844857). The handoff names `HARNESS.md`; that
+file was removed from `main` in `cafdc2171` (the Fable rebuild), so this checklist is the harness checklist the
+directive means. Same rules as the rest of this file: `[x]` only with its evidence; an offline result is never recorded
+as live acceptance.
+
+- [x] **1. Current export/served state and deployment ownership established** — PASS (DOCUMENTED, 2026-11-21 15:19Z).
+  `https://cpt.quillmd.com/health/` serves release `c28ff379ba40edb461cf5476c94968e228dcac03` (image
+  `sha256:64dc0913f57e…`, web on 127.0.0.1:9150). No other Claude session runs on the host (ListAgents, 15:18Z); no run
+  is in flight on `main` (113deb53, CI and secrets-scan success). Exports before this change: POST
+  `/api/encounters/<id>/reports` {kind draft|approved, fmt txt|csv, round} stores an immutable ExportArtifact and an
+  `export.created` audit row; GET `/api/reports/<id>/download` serves the stored bytes; a draft needs the latest round
+  done, the approved export needs a line whose current decision is approve and lists only such lines; every export stays
+  listed, marked earlier once a later decision or round exists. The record holds no patient identifier and no
+  plain-language service label (descriptors are not imported: no AMA licence), so the PDF prints neither.
+- [ ] **2. Dynamic first-page design implemented** — IN PROGRESS.
+- [ ] **3. Evidence continuation and long-document pagination implemented** — IN PROGRESS.
+- [ ] **4. Draft/approved eligibility and saved-revision binding verified** — NOT RUN.
+- [ ] **5. Authorization, tenant isolation and customer confidentiality verified** — NOT RUN.
+- [ ] **6. Searchable PDF, content and visual regression checks passed** — NOT RUN.
+- [ ] **7. Installed on cpt.quillmd.com with rollback available** — NOT RUN.
+- [ ] **8. Actual authenticated download, saved-data comparison and reload passed** — NOT RUN.
+
 ## Progress log (append only)
 
 - **2026-11-01T21:10Z** Checklist created before any harness change. Carried in from round 4, as context and not as

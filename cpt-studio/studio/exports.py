@@ -22,12 +22,20 @@ refused as changed, so a page left open never downloads a round its member did n
 an ExportArtifact (immutable) with its sha256; a download serves the stored bytes. An export made from an earlier round
 stays listed and downloadable, marked earlier (customer.report_json). The text the coding review wrote passes through
 the same display hygiene as the page (customer.shown).
+
+PDF (owner directive 2026-11-21): the doctor-facing report, drawn from the same snapshot by studio.physician_report
+and studio.physician_pdf (searchable text, embedded fonts, US Letter). It is made, stored and served exactly like the
+TXT and CSV: one immutable ExportArtifact (fmt 'pdf'), one export.created audit row, the stored bytes on download.
+ExportArtifact.fmt's declared choices name only txt and csv; they are not a database constraint, and widening them
+would be a field migration the installer refuses, so the formats a request may name are FORMATS here. A PDF that
+cannot be made is refused (NotMade) before anything is stored: no empty or partial file is ever saved or served.
 """
 from __future__ import annotations
 
 import csv
 import hashlib
 import io
+import logging
 import re
 from datetime import timezone as dt_timezone
 
@@ -39,7 +47,8 @@ from . import audit, customer, decisions, models, state
 Round, Export = models.CodingRound, models.ExportArtifact
 DRAFT, APPROVED = Export.DRAFT, Export.APPROVED
 KINDS = (DRAFT, APPROVED)
-FORMATS = (Export.TXT, Export.CSV)
+PDF = 'pdf'
+FORMATS = (PDF, Export.CSV, Export.TXT)
 FORMAT_VERSION = 'cpt-studio-customer-export@3'
 SYNTHETIC_LINE = 'SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS'
 HEADLINES = {DRAFT: 'CPT STUDIO — CODES — DRAFT, NOT APPROVED', APPROVED: 'CPT STUDIO — APPROVED CODES'}
@@ -47,7 +56,7 @@ TITLES = {DRAFT: 'Codes — not approved', APPROVED: 'Approved codes'}
 AGENT_LINE = 'Agent-executed synthetic review — not clinical approval'
 CSV_COLUMNS = ('kind', 'code', 'units', 'modifiers', 'status', 'reason', 'quotes', 'decision', 'decided_by',
                'decided_at')
-CONTENT_TYPES = {Export.TXT: 'text/plain; charset=utf-8', Export.CSV: 'text/csv; charset=utf-8'}
+CONTENT_TYPES = {Export.TXT: 'text/plain; charset=utf-8', Export.CSV: 'text/csv; charset=utf-8', PDF: 'application/pdf'}
 INSURANCE_WORDS = {'medicare': 'Medicare', 'medicaid': 'Medicaid', 'commercial': 'Commercial or other',
                    'unknown': 'Not given'}
 TRIGGER_WORDS = {Round.ANSWERS: ', after the practice answered questions', Round.RETRY: ', after a retry'}
@@ -55,6 +64,8 @@ DECISION_WORDS = {models.CodeDecision.APPROVE: 'approved', models.CodeDecision.R
 NOTHING_YET = 'There is nothing to export yet.'
 APPROVED_NOT_YET = 'The approved export is not available yet.'
 ROUND_REQUIRED = 'Name the coding review the export is made from.'
+FORMAT_REQUIRED = 'Choose a draft or an approved export as PDF, CSV or TXT.'
+PDF_NOT_MADE = 'The PDF could not be made. Nothing was saved. Try again.'
 # Leading characters a spreadsheet may read as a formula (fullwidth forms and line starts included, beyond the minimum).
 FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r', '\n', '＝', '＋', '－', '＠')
 # Shown escaped (\xNN, \uNNNN): what a terminal, printer or spreadsheet acts on (C0 controls but TAB and LF, DEL, C1
@@ -63,6 +74,17 @@ FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r', '\n', '＝', '＋', '－', '
 CONTROL = re.compile('[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]')
 # A line break inside a stored value continues at least this deep: deeper than any structural line of the TXT.
 CONTINUATION = '       '
+
+
+logger = logging.getLogger(__name__)
+
+
+class NotMade(Exception):
+    """The PDF could not be made; nothing was stored. ``message`` is the member's sentence."""
+
+    def __init__(self, message=PDF_NOT_MADE):
+        super().__init__(message)
+        self.message = message
 
 
 class NotReady(Exception):
@@ -230,14 +252,34 @@ def render_csv(snap) -> bytes:
 RENDERERS = {Export.TXT: render_txt, Export.CSV: render_csv}
 
 
+# --- PDF ----------------------------------------------------------------------------------------------------------------
+
+def render_pdf(snap, encounter, round_) -> bytes:
+    """The physician PDF of ``snap``; NotMade when it cannot be made (only the error's type is logged: never its
+    text, which could carry document words)."""
+    from . import physician_report  # ReportLab loads only when a PDF is made
+    try:
+        content = physician_report.render(snap, encounter=encounter, round_=round_)
+    except Exception as exc:  # noqa: BLE001 - any failure refuses the export; nothing is stored
+        logger.error('physician PDF not made for encounter %s round %s: %s', encounter.pk, round_.number,
+                     type(exc).__name__)
+        raise NotMade() from None
+    if not isinstance(content, bytes) or not content.startswith(b'%PDF-') or b'%%EOF' not in content[-64:]:
+        logger.error('physician PDF not made for encounter %s round %s: not a complete PDF', encounter.pk,
+                     round_.number)
+        raise NotMade()
+    return content
+
+
 # --- making and serving an export ------------------------------------------------------------------------------------------
 
 def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact:
     """Make and store one export of the latest round, which must be round ``round_number`` - the one the page shows
     (any active member of the workspace may; the caller has scoped the encounter to the member). ValueError for an
-    unknown kind or format; decisions.Refused (409, changed) for another round; NotReady when it is not available now."""
+    unknown kind or format; decisions.Refused (409, changed) for another round; NotReady when it is not available now;
+    NotMade when a PDF cannot be made (nothing stored)."""
     if kind not in KINDS or fmt not in FORMATS:
-        raise ValueError('Choose a draft or an approved export as TXT or CSV.')
+        raise ValueError(FORMAT_REQUIRED)
     with transaction.atomic():
         locked = models.Encounter.objects.select_for_update().select_related('workspace').get(pk=encounter.pk)
         round_ = state.latest_round(locked)
@@ -250,7 +292,8 @@ def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact
         if kind == APPROVED and not ready['approved']:
             raise NotReady(APPROVED_NOT_YET, ready['blockers'])
         now = timezone.now()
-        content = RENDERERS[fmt](snapshot(locked, round_, current, kind, user, now))
+        snap = snapshot(locked, round_, current, kind, user, now)
+        content = render_pdf(snap, locked, round_) if fmt == PDF else RENDERERS[fmt](snap)
         stamp = now.astimezone(dt_timezone.utc).strftime('%Y%m%dT%H%M%S')
         export = Export.objects.create(
             encounter=locked, round=round_, kind=kind, fmt=fmt, filename=f'CPT-Studio-{kind}-r{round_.number}-{stamp}.{fmt}',

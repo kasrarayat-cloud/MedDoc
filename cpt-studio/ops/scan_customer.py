@@ -22,7 +22,12 @@ links, retrieval logs and rule ids out of every customer screen, API response an
     GET /api/encounters/<id>             against the contract (every key listed, nothing else), scanned
     GET <document.original_url>          its status and headers only: the document is the customer's own
     GET <document.view_url>              likewise (the original, or the PDF a Word file was converted to)
-    GET <reports[].download_url>         every customer export, scanned whole, with no X-Content-SHA256 header
+    GET <reports[].download_url>         every customer export, scanned whole, with no X-Content-SHA256 header: a TXT
+                                         or CSV as its text; a PDF (served as application/pdf, opening with %PDF- or
+                                         listed as pdf) as the text pypdf extracts from each page, read line by line
+                                         under the TXT rules, and its document information values - never its raw
+                                         bytes (its trailer /ID is 32 hex characters; its streams are compressed). A
+                                         PDF that cannot be read fails the scan; it never passes unread
     GET every /ops/ URL of it            each must answer 404 to this session (the operator console's pages)
     GET every removed URL of it          each must answer 404 (the earlier trace and operator API, for everyone)
   POST /logout/ and GET /api/session     the session must then be refused (verify_login.py's sign-out proof)
@@ -38,7 +43,8 @@ the option only matters for a denylist that names some.
 
 Sign-in and transport are ops/verify_login.py's: --credentials a private JSON file with top-level "username" and
 "password" (or --username with --password-file), refused if a group or other user may read it; TLS verified; a plain
-http base URL only on the loopback; no redirect followed; the password never printed or written. Stdlib only.
+http base URL only on the loopback; no redirect followed; the password never printed or written. Stdlib only, but for
+pypdf, imported only to read a PDF export (requirements-dev.txt): where it is missing, a PDF export fails the scan.
 
 The evidence, OUT/scan-evidence.json (which must not exist yet), holds every request made (method, path, status), the
 encounters scanned, every check and the hits (where and what matched, never a password). Exit 0 when every hard check
@@ -48,6 +54,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import io
 import json
 import platform
 import re
@@ -218,6 +225,132 @@ def scan_file(text: str, ctx: ScanContext, name: str, fmt: str, hits: list | Non
         if rest.strip() and rest.strip() in ctx.document_text:
             continue
         scan_text(rest, ctx, 'file', f'{name} line {index}', hits)
+    return hits
+
+
+# --- a PDF export: the text it shows, never its bytes ------------------------------------------------------------------
+
+PDF_TYPE = 'application/pdf'
+# A quoted passage on one line: the TXT export's straight quotation marks, or the curly ones the PDF export prints a
+# quotation between (studio/physician_pdf.py).
+QUOTED = re.compile('"[^"]*"|“[^“”]*”')
+# What a PDF can show beside its pages' text and its document information, which this scan does not read: a PDF that
+# holds any of them is a scan problem, never a pass (a CPT Studio export holds none).
+UNREAD_IN_CATALOG = {'/Outlines': 'bookmarks', '/AcroForm': 'a form', '/Names': 'a names tree (attachments, scripts or '
+                     'destinations)', '/OpenAction': 'an open action', '/AA': 'document actions',
+                     '/Metadata': 'an XMP metadata stream'}
+UNREAD_ON_PAGE = {'/Annots': 'annotations', '/AA': 'page actions'}
+
+
+class Unreadable(Exception):
+    """A download that claims to be a PDF and cannot be read as one, or a Python without pypdf: a scan problem, never a
+    pass. The message says why, never with the file's words."""
+
+
+@dataclass
+class PdfReading:
+    pages: list     # the text pypdf extracts from each page, in order
+    metadata: dict  # each entry of the document information dictionary: its name (without '/') -> its value as text
+
+
+def is_pdf(body: bytes, content_type: str = '') -> bool:
+    """A download is read as a PDF when it is served as one (Content-Type application/pdf) or opens as one (%PDF-)."""
+    return (content_type or '').split(';', 1)[0].strip().lower() == PDF_TYPE or body.startswith(b'%PDF-')
+
+
+def _resolved(value):
+    return value.get_object() if hasattr(value, 'get_object') else value
+
+
+def read_pdf(body: bytes) -> PdfReading:
+    """The text of each page of a PDF and its document information values, read by pypdf in its strict mode (a file it
+    would have to repair is not read). Unreadable when pypdf is missing, when it cannot read the body, when the PDF has
+    no page or a page gives no text, or when it holds what this scan does not read (UNREAD_IN_CATALOG, UNREAD_ON_PAGE,
+    an image or form object)."""
+    try:
+        from pypdf import PdfReader  # imported only here: the rest of this tool is stdlib only
+    except ImportError:
+        raise Unreadable('pypdf is not installed for this Python, so the PDF could not be read') from None
+    try:
+        reader = PdfReader(io.BytesIO(body), strict=True)
+        catalog = _resolved(reader.trailer['/Root'])
+        unread = [what for key, what in UNREAD_IN_CATALOG.items() if key in catalog]
+        pages = []
+        for number, page in enumerate(reader.pages, start=1):
+            unread += [f'{what} on page {number}' for key, what in UNREAD_ON_PAGE.items() if key in page]
+            if _resolved((_resolved(page.get('/Resources')) or {}).get('/XObject')):
+                unread.append(f'an image or form object on page {number}')
+            pages.append(page.extract_text() or '')
+        info = reader.metadata or {}
+        metadata = {str(key).lstrip('/'): str(info[key]) for key in info}
+    except Exception as exc:  # noqa: BLE001 - whatever pypdf raises, the file was not read
+        raise Unreadable(f'pypdf could not read it as a PDF ({type(exc).__name__})') from None
+    if unread:
+        raise Unreadable(f'it holds {", ".join(unread)}, which this scan does not read')
+    if not pages:
+        raise Unreadable('it has no page')
+    empty = [str(number) for number, text in enumerate(pages, start=1) if not text.strip()]
+    if empty:
+        raise Unreadable(f'no text could be read from page {", ".join(empty)}')
+    return PdfReading(pages, metadata)
+
+
+def _squeezed(text: str) -> str:
+    return ' '.join(text.split())
+
+
+def _scan_joint(first: str, second: str, ctx: ScanContext, where: str, hits: list) -> None:
+    """What spans the line break between two neighbouring lines of a PDF page (each line was scanned alone): the two
+    read joined by a space, each with the allowed strings removed first as scan_text removes them, and only a match
+    that starts in the first line and ends in the second reported."""
+    cleaned = []
+    for line in (first, second):
+        for allowed in ctx.allowed:
+            line = line.replace(allowed, ' ')
+        cleaned.append(line)
+    joined, joint = f'{cleaned[0]} {cleaned[1]}', len(cleaned[0])
+    for pattern_id, severity, surfaces, regex in PATTERNS:
+        if 'file' not in surfaces:
+            continue
+        for match in regex.finditer(joined):
+            if match.start() < joint and match.end() > joint + 1:
+                hits.append({'id': pattern_id, 'severity': severity, 'surface': 'file', 'where': where,
+                             'match': _excerpt(joined, match.start(), len(match.group()))})
+
+
+def scan_pdf(reading: PdfReading, ctx: ScanContext, name: str, hits: list | None = None) -> list:
+    """A PDF export as read_pdf read it. Each page's text line by line under scan_file's TXT rules - a quoted passage
+    that is the document's own text set aside, a line that is wholly the document's text not scanned - with white space
+    compared squeezed (a PDF breaks its lines where its layout wraps them), its curly quotation marks, and a quotation
+    the layout wrapped over several lines set aside line by line. Two neighbouring lines of a page are also read joined,
+    for a phrase the layout's line break cut in two ("tool" / "calls"); lines are not joined over a blank line, a line
+    set aside or a page break. Then every document information value, scanned whole: never a quotation."""
+    hits = [] if hits is None else hits
+    document = _squeezed(ctx.document_text)
+
+    def documents(text: str) -> bool:
+        squeezed = _squeezed(text)
+        return bool(squeezed) and squeezed in document
+
+    for page_number, text in enumerate(reading.pages, start=1):
+        previous = None  # (number, text scanned) of the line before, while it was scanned
+        for index, line in enumerate(re.split(r'\r?\n', text), start=1):
+            rest = line
+            for passage in QUOTED.findall(line):
+                if documents(passage[1:-1]):
+                    rest = rest.replace(passage, passage[0] + passage[-1], 1)
+            core = _squeezed(rest)
+            core = core[1:] if core.startswith('“') else core  # the first line of a wrapped quotation
+            core = core[:-1] if core.endswith('”') else core  # and its last
+            if not rest.strip() or documents(core):
+                previous = None
+                continue
+            scan_text(rest, ctx, 'file', f'{name} page {page_number} line {index}', hits)
+            if previous is not None:
+                _scan_joint(previous[1], rest, ctx, f'{name} page {page_number} lines {previous[0]}-{index}', hits)
+            previous = (index, rest)
+    for key, value in reading.metadata.items():
+        scan_text(value, ctx, 'file', f'{name} metadata {key}', hits, quotable=False)
     return hits
 
 
@@ -467,6 +600,16 @@ class Scanner:
             scan_json(data, ctx, f'GET {where}', self.hits['json'])
         return answer, data
 
+    def pdf(self, body: bytes, ctx: ScanContext, name: str, check_id: str, url: str) -> dict:
+        """A PDF export read and scanned (read_pdf, scan_pdf): the check that says it was read, or why it was not."""
+        try:
+            reading = read_pdf(body)
+        except Unreadable as exc:
+            return login.check(check_id, 'hard', False, f'GET {url}: {exc}; it was not scanned')
+        scan_pdf(reading, ctx, name, self.hits['file'])
+        return login.check(check_id, 'hard', True, f'GET {url}: read as a PDF, {len(reading.pages)} page(s) of text and '
+                                                   f'{len(reading.metadata)} document information value(s) scanned')
+
     def encounter(self, encounter_id: str, operator_dir: Path | None) -> dict:
         short = encounter_id[:8]
         operator, trace = None, None
@@ -507,7 +650,11 @@ class Scanner:
             self.checks.append(login.check(f'report.{short}.{report.get("kind")}.{report.get("fmt")}', 'hard', got.status == 200 and not hashed,
                                            f'GET {url} answered HTTP {got.status}' + ('; it carries X-Content-SHA256' if hashed else '')))
             if got.status == 200:
-                scan_file(got.body.decode('utf-8', 'replace'), ctx, f'{report.get("kind")}.{report.get("fmt")}', report.get('fmt', 'txt'), self.hits['file'])
+                name = f'{report.get("kind")}.{report.get("fmt")}'
+                if report.get('fmt') == 'pdf' or is_pdf(got.body, got.content_type):
+                    self.checks.append(self.pdf(got.body, ctx, name, f'report.{short}.{name}.text', url))
+                else:
+                    scan_file(got.body.decode('utf-8', 'replace'), ctx, name, report.get('fmt', 'txt'), self.hits['file'])
         wrong = []
         for template in OPS_GET_PATHS + REMOVED_PATHS:
             where = template.format(id=encounter_id)

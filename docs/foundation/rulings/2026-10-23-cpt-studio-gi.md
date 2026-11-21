@@ -3921,3 +3921,64 @@ Each question is shown once with every line it affects. Answers keep today's sha
 - a refutation pass on the finished diff, because it is the coding path;
 - CI green;
 - its own code-only install through the ruled-act door, after the highlight's.
+
+## Owner direction, 2026-11-21 — the physician PDF export, implemented and installed
+
+Given on 2026-11-21 in session 738699b2, with the design handoff `/home/claude/CPT-Studio-Export-Handoff-20261121.zip`
+(sha256 `c4330a3c56efac8e5e9de584bed758985904c47de51079dcd1f1a7d5e4a5998e`), verbatim:
+
+> Implement and install the approved CPT Studio physician PDF export.
+>
+> The design package is:
+> `/home/claude/CPT-Studio-Export-Handoff-20261121.zip`
+>
+> Verify its SHA-256 before extraction:
+> `c4330a3c56efac8e5e9de584bed758985904c47de51079dcd1f1a7d5e4a5998e`
+>
+> Extract it into a separate working directory. Read README.txt, IMPLEMENTATION-BRIEF.txt and DESIGN-TOKENS.json, and
+> inspect the reference images and PDF.
+>
+> I approve the FIRST-PAGE DESIGN. Match that appearance for the main report. Use the evidence-page treatment for
+> continuation pages when needed. The supplied documents are design references, not application code.
+>
+> Build a real searchable PDF using the encounter’s saved data—not a screenshot or hardcoded sample. Make PDF the primary
+> doctor-facing export and retain CSV as a secondary option.
+>
+> Preserve existing coding engines, validation, approval rules, records and historical exports. Clearly distinguish
+> draft from approved reports. Only saved accepted codes may appear in approved output. Keep provider names and technical
+> logs out of customer-facing reports.
+>
+> Add a scoped checklist to the existing harness. Tick each item only when verified. Complete implementation,
+> appropriate synthetic tests, visual pagination checks, installation and an actual authenticated download from
+> cpt.quillmd.com. Compare the downloaded content against persisted decisions.
+>
+> Keep the website available and coordinate with the existing deployment owner. Follow the normal release process with
+> rollback available. Continue through routine fixes until the installed export works; do not stop at an uninstalled
+> patch.
+>
+> Report the installed revision, completed checklist, actual downloaded PDF, working report link and any remaining
+> limitations.
+
+### Session interpretation, 2026-11-21 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D387)
+
+(a) The PDF is a third export format inside the existing export system, not a new one: the same snapshot of the latest
+done coding round as the TXT and CSV (exports.snapshot), stored as an immutable ExportArtifact with an `export.created`
+audit row and served as stored bytes, so the existing eligibility rules, history and "earlier" marking hold unchanged.
+`ExportArtifact.fmt`'s declared choices (txt, csv) are not a database constraint, and widening them would be a field
+migration the installer refuses; the release therefore carries no migration.
+
+(b) TXT stays as a third option beside CSV: removing it would be a capability loss nobody asked for, and the live walk
+clicks it. The dialog leads each group with the PDF.
+
+(c) Nothing is inferred. The record holds no patient identifier and no plain-language service label (descriptors are
+not imported: no AMA licence), so the PDF prints neither; it prints the document, date of service, insurance, the
+workspace's specialty and the encounter reference instead, and "not recorded"/"not given" where the record is silent.
+
+(d) The live check downloads draft PDFs only (desktop, phone width, after a reload, and from the earlier downloads),
+compared with the saved state the same member reads from the API. An approval is never made on live to test the
+approved report; the approved path is exercised on the rehearsal (a throwaway restore of live with the candidate image),
+where an approval made by the review agent is checked and undone.
+
+(e) ReportLab 4.5.1 (with pillow 13.0.0 and charset-normalizer 3.5.1, the versions the dev pins already carried) moves
+to the runtime requirements; the design's fonts (OFL) and DejaVu Sans as a fallback ship in `studio/report_fonts` with
+their provenance.

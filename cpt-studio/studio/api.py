@@ -16,8 +16,9 @@ record - runs, models, usage, hashes, the coding review's whole answers - is a p
                                                     line of the round the page shows; an undo names the decision it
                                                     undoes (409 when the round or that decision changed)
     POST /api/encounters/<id>/stop | resume | retry
-    POST /api/encounters/<id>/reports               {kind: draft|approved, fmt: txt|csv, round}: an export of the round
-                                                    the page shows (409 when it is not the latest)
+    POST /api/encounters/<id>/reports               {kind: draft|approved, fmt: pdf|csv|txt, round}: an export of the
+                                                    round the page shows (409 when it is not the latest; 503 when a
+                                                    PDF cannot be made, nothing stored)
     GET  /api/encounters/<id>/original[?view=1]     the original (download), or the in-page view (inline)
     GET  /api/reports/<id>/download                 a stored export, exactly as stored
 """
@@ -273,19 +274,21 @@ def retry(request, encounter_id):
 @require_POST
 @api_view
 def create_report(request, encounter_id):
-    """{kind: draft|approved, fmt: txt|csv, round: the round number the page shows} -> 201 the export as the page lists
-    it (exports.create: 409 when that round is not the latest)."""
+    """{kind: draft|approved, fmt: pdf|csv|txt, round: the round number the page shows} -> 201 the export as the page
+    lists it (exports.create: 409 when that round is not the latest; 503 when a PDF cannot be made, nothing stored)."""
     data = _payload(request)
     encounter, _ = scoped_encounter(request.user, encounter_id)
     kind, fmt, round_number = data.get('kind'), data.get('fmt'), data.get('round')
     if kind not in exports.KINDS or fmt not in exports.FORMATS:
-        raise ApiError(400, 'Choose a draft or an approved export as TXT or CSV.')
+        raise ApiError(400, exports.FORMAT_REQUIRED)
     if type(round_number) is not int or round_number < 1:
         raise ApiError(400, exports.ROUND_REQUIRED)
     try:
         export = exports.create(encounter, request.user, kind, fmt, round_number=round_number)
     except exports.NotReady as exc:
         raise ApiError(409, exc.message, blockers=exc.blockers)
+    except exports.NotMade as exc:
+        raise ApiError(503, exc.message)
     return JsonResponse(customer.report_json(export, export.round_id), status=201)
 
 

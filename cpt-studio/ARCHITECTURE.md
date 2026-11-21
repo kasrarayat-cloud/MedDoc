@@ -52,6 +52,7 @@ Django 5.2 on PostgreSQL 17, gunicorn behind the host's nginx, one worker proces
 | `studio/state.py` | the encounter's derived state (5.6) |
 | `studio/decisions.py` | decisions, answers and retries (5.7) |
 | `studio/exports.py` | the customer exports (5.8) |
+| `studio/physician_report.py`, `studio/physician_pdf.py`, `studio/report_fonts/` | the physician PDF report (5.8): its words, its drawing, its fonts |
 | `studio/customer.py`, `studio/api.py`, `studio/client_contract.py` | the customer JSON API ([`API.md`](API.md)) |
 | `studio/operator.py`, `templates/studio/ops_*.html` | the platform-operator console (5.9) |
 | `studio/views.py`, `studio/access.py`, `studio/audit.py` | health, sign-in, the page shell, tenancy, security headers, the audit trail |
@@ -82,7 +83,9 @@ The coding path (migration 0016, additive):
   `L1`.. or `M1`.., and the `code` it holds), by a reviewer of a kind, with the attestation an approval carries; ordered
   by the shared `studio_decision_sequence`. The current decision for (round, line) is the latest row; `revoke` clears
   it. Two lines may hold one code and are decided apart.
-- `ExportArtifact` (immutable) - one export (`draft` or `approved`, `txt` or `csv`) stored as generated, with its sha256.
+- `ExportArtifact` (immutable) - one export (`draft` or `approved`; `pdf`, `csv` or `txt`) stored as generated, with its
+  sha256. `pdf` needed no migration: the field's declared choices (`txt`, `csv`) are no database constraint, and
+  `exports.FORMATS` is what a request may name.
 
 The runner and its record: `Job` (kind `code`, keyed `code:<round>`; a Resume adds a fresh job for the same round),
 `ProviderRun` (one per send: purpose `coding_reader` or `coding_checker`, provider `anthropic`, the request with the
@@ -255,6 +258,20 @@ in both formats control, bidirectional and line-separator characters are shown e
 export is stored once as an `ExportArtifact`; a download serves the stored bytes; one made from an earlier round stays
 listed, marked earlier.
 
+The physician PDF (owner directive 2026-11-21) is the doctor-facing export; CSV and TXT stay. It is made from the same
+snapshot (`exports.snapshot`), so it can list no code, decision or quotation the other two would not:
+`studio/physician_report.py` chooses its words from that snapshot (a draft: every line with its status, decision and
+evidence, then the questions, the lines with no saved decision and the notes; an approved report: only the lines with a
+current approval, each with who approved it and when), and `studio/physician_pdf.py` draws them with ReportLab - a
+searchable US Letter document after the owner-approved first-page design, continuation pages in the evidence-page
+treatment, every dynamic string escaped before it reaches ReportLab's markup, no image and no remote resource. The fonts
+are the files in `studio/report_fonts/`, embedded as subsets; their licences and `PROVENANCE.md` (source and sha256 of
+each file) are beside them, and they are read from the code tree, not served as static files. The PDF is stored like
+the other two - one `ExportArtifact`, fmt `pdf` - and served as stored. Making it reads saved rows only: it writes no
+decision, round or state, calls no provider, and gives the same output for the same saved state, but for the Prepared
+line (when, and by whom, it was made) and the PDF's own date. A PDF that cannot be made is refused (`exports.NotMade`,
+503) before anything is stored.
+
 ### 5.9 The operator console (`studio/operator.py`)
 
 Server-rendered pages under `/ops/` for users holding an operator grant (from `grant_operator` only; no workspace role
@@ -337,8 +354,9 @@ no meaning and never holds or changes a code.
 
 - The Django suite (`manage.py test tests`): the coding step with fake SDK streams and a fake converter, the job runner
   (reuse after a crash, unknown outcomes, the ceiling, holds, Stop, threads and slots), the API contract and tenancy,
-  decisions, answers, exports, the operator console, the page's templates and node tests, and the reference data.
-  Synthetic text only; nothing is sent.
+  decisions, answers, exports (the physician PDF read back with pypdf, and through `ops/scan_customer.py`'s own PDF
+  reading against the shared denylist), the operator console, the page's templates and node tests, and the reference
+  data. Synthetic text only; nothing is sent.
 - CI (`scripts/ci/verify-cpt-studio.sh`): checks, migration drift, the Django suite, the ops unit suites, the browser
   walk's own tests (`ops/test_walk.cjs`) and a dependency audit. CI installs no Playwright, so it runs none of the
   browser tests: the walk's browser subtests (every quote of the dev preview's synthetic documents chosen in Chromium and

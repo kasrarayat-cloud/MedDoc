@@ -1099,19 +1099,20 @@ function exportOffered(doc) {
   return readiness.draft === true || readiness.approved === true || objects(doc?.reports).length > 0;
 }
 
+// The PDF is the report for the doctor; CSV and TXT are the same codes as data files (the export dialog).
 function readinessText(doc) {
   const readiness = record(doc?.readiness);
-  if (readiness.approved === true) return 'The approved download is available. It lists only approved codes.';
-  if (readiness.draft === true) return 'You can download the codes as a draft. Approve codes to download them as approved.';
+  if (readiness.approved === true) return 'The approved report can be downloaded as a PDF. It lists only approved codes.';
+  if (readiness.draft === true) return 'You can download the draft report as a PDF. Approve codes to download the approved report.';
   return 'Downloads become available when the coding review finishes.';
 }
 
 function exportStatusText(doc) {
   const readiness = record(doc?.readiness);
   const blockers = strings(readiness.blockers);
-  if (readiness.approved === true) return 'At least one code is approved. The approved download lists only approved codes, with who approved them.';
+  if (readiness.approved === true) return 'At least one code is approved. The approved report lists only approved codes, with who approved them and when.';
   const head = readiness.draft === true ? 'Draft only: the codes are the coding review\'s, not approvals.' : 'Nothing can be downloaded yet.';
-  return blockers.length ? `${head} Before the approved download: ${blockers.join(' ')}` : head;
+  return blockers.length ? `${head} Before the approved report: ${blockers.join(' ')}` : head;
 }
 
 function emptyCodesText(doc) {
@@ -1133,7 +1134,9 @@ function rowKey(value) {
 const state = {
   session: null, route: null, routeSerial: 0, doc: null, docKey: '', viewerKey: '', selectedQuote: '',
   poll: { timer: 0, count: 0, errors: 0 }, tickTimer: 0, clock: 0, reconnecting: false, outdated: false,
-  upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, exporting: null,
+  // exporting: what the export dialog was opened on (the document, its coding review and that read of it); making: the
+  // file being made ({encounter, kind, fmt}) while its request runs
+  upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, exporting: null, making: null,
   open: new Set(), answers: new Map(), pending: new Set(), toastTimer: 0, leaving: false,
   // the PDF viewer of the document shown (browser wiring), the PDF library once it is asked for and how many times it has
   // been asked for (a failed load is tried again at fresh addresses), and the passage of a text document being marked
@@ -1508,34 +1511,74 @@ function reviewView(doc, ui = {}) {
 
 // --- the export dialog ---
 
-function exportOption(kind, fmt, enabled, title, detail) {
-  return `<button type="button" class="export-option" data-export-kind="${kind}" data-export-fmt="${fmt}"${enabled ? '' : ' disabled'}><span class="export-format">${fmt.toUpperCase()}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></span>${icon('download')}</button>`;
+// Each group of the dialog (the draft, the approved codes) leads with its PDF, the report for the doctor, as the primary
+// button, with a line on what it holds; the same codes as data files follow under "Other formats", spreadsheet first.
+// While a file is made every option waits (disabled), and the one chosen says it is being prepared.
+const EXPORT_GROUPS = [['draft', 'Codes — not approved'], ['approved', 'Approved codes']];
+const PDF_NOTES = {
+  draft: 'Every code with its status, evidence and what still needs a decision. Nothing in it is approved.',
+  approved: 'Only approved codes, with who approved them and when.',
+};
+const PDF_NOTE_IDS = { draft: 'exportPdfDraftNote', approved: 'exportPdfApprovedNote' };
+// [kind, format, title, detail]: the data files, in the order offered
+const DATA_FILES = [
+  ['draft', 'csv', 'Codes as a spreadsheet (CSV, draft)', 'One row per code: status, units, modifiers, reason and quoted passages. Nothing in it is approved.'],
+  ['draft', 'txt', 'Codes as text (TXT, draft)', 'The same codes as plain text. Nothing in it is approved.'],
+  ['approved', 'csv', 'Approved codes as a spreadsheet (CSV)', 'One row per approved code, with who approved it and when.'],
+  ['approved', 'txt', 'Approved codes as text (TXT)', 'The approved codes as plain text, with who approved them and when.'],
+];
+// a download's format as the list of earlier downloads names it, and as the dialog's sentences name the file
+const FORMAT_LABELS = { pdf: 'PDF', csv: 'CSV', txt: 'TXT' };
+const FILE_WORDS = { pdf: 'PDF', csv: 'CSV file', txt: 'text file' };
+const PREPARING_PDF = 'Preparing PDF…';
+
+function exportOption(kind, fmt, enabled, title, detail, busy = false) {
+  return `<button type="button" class="export-option" data-export-kind="${kind}" data-export-fmt="${fmt}"${enabled ? '' : ' disabled'}${busy ? ' aria-busy="true"' : ''}><span class="export-format">${fmt.toUpperCase()}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(busy ? `Preparing the ${FILE_WORDS[fmt]}…` : detail)}</small></span>${icon('download')}</button>`;
 }
 
-// An export made from an earlier coding review is still listed and linked, and says so.
+function pdfOption(kind, enabled, busy = false) {
+  return `<button type="button" class="button primary export-pdf" data-export-kind="${kind}" data-export-fmt="pdf" aria-describedby="${PDF_NOTE_IDS[kind]}"${enabled ? '' : ' disabled'}${busy ? ' aria-busy="true"' : ''}>${icon('download')}<span>${busy ? PREPARING_PDF : 'Download PDF'}</span></button>`
+    + `<p class="export-pdf-note" id="${PDF_NOTE_IDS[kind]}">${escapeHtml(PDF_NOTES[kind])}</p>`;
+}
+
+// An export made from an earlier coding review is still listed and linked, and says so. Its format is named when the
+// server names one of the three.
 function reportItem(report) {
   const url = safeDownloadUrl(report.download_url);
   const name = text(report.filename) || 'Download';
   const kind = report.kind === 'approved' ? 'Approved codes' : 'Codes (draft)';
-  const meta = [kind, formatTimestamp(report.generated_at)].filter(Boolean).join(' · ');
+  const meta = [kind, lookup(FORMAT_LABELS, report.fmt, ''), formatTimestamp(report.generated_at)].filter(Boolean).join(' · ');
   const link = url ? `<a href="${escapeHtml(url)}" download>${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`;
   if (report.current !== true) return `<li class="report-item earlier">${link}<small>${escapeHtml(`${meta} · Earlier: made from an earlier coding review; it may not show the current codes`)}</small></li>`;
   return `<li class="report-item">${link}<small>${escapeHtml(meta)}</small></li>`;
 }
 
-function exportOptions(doc) {
+// The dialog's options for `doc`. `making` ({kind, fmt}) is the file being made: then every option is disabled, and the
+// one with that kind and format says it is being prepared (none does for {kind: null, fmt: null}).
+function exportOptions(doc, making = null) {
   const readiness = record(doc?.readiness);
-  const draft = readiness.draft === true;
-  const approved = readiness.approved === true;
+  const allowed = { draft: readiness.draft === true, approved: readiness.approved === true };
   const blockers = strings(readiness.blockers);
   const reports = objects(doc?.reports);
-  const draftDetail = 'Every code with its status, units, modifiers, reason and quoted passages. Nothing in it is approved.';
-  const approvedDetail = 'Only approved codes, with who approved them and when.';
-  const why = !approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : '';
-  return `<div class="export-group"><div class="evidence-label">Codes — not approved</div>${exportOption('draft', 'txt', draft, 'Codes as text (draft)', draftDetail)}${exportOption('draft', 'csv', draft, 'Codes as a spreadsheet (CSV, draft)', draftDetail)}</div>`
-    + `<div class="export-group"><div class="evidence-label">Approved codes</div>${exportOption('approved', 'txt', approved, 'Approved codes as text', approvedDetail)}${exportOption('approved', 'csv', approved, 'Approved codes as a spreadsheet (CSV)', approvedDetail)}${why}</div>`
+  const waiting = Boolean(making);
+  const busy = (kind, fmt) => waiting && making.kind === kind && making.fmt === fmt;
+  const why = !allowed.approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : '';
+  const group = ([kind, label]) => `<div class="export-group"><div class="evidence-label">${label}</div>${pdfOption(kind, allowed[kind] && !waiting, busy(kind, 'pdf'))}${kind === 'approved' ? why : ''}`
+    + `<div class="export-other"><p class="export-other-label">Other formats</p>${DATA_FILES.filter(([of]) => of === kind).map(([, fmt, title, detail]) => exportOption(kind, fmt, allowed[kind] && !waiting, title, detail, busy(kind, fmt))).join('')}</div></div>`;
+  return EXPORT_GROUPS.map(group).join('')
     + (reports.length ? `<div class="export-group"><div class="evidence-label">Earlier downloads</div><ul class="report-list">${reports.map(reportItem).join('')}</ul></div>` : '');
 }
+
+// What the export dialog's status says while a file is made, and once the server has made it.
+function preparingText(fmt) {
+  return `Your ${lookup(FILE_WORDS, fmt, 'file')} is being prepared. The download starts when it is ready.`;
+}
+
+function readyText(fmt, filename) {
+  return `Your ${lookup(FILE_WORDS, fmt, 'file')} is ready. Downloading ${text(filename) || 'the file'}.`;
+}
+
+const ANOTHER_FILE = 'Another download is still being prepared. Wait a moment, then choose again.';
 
 // The multipart body of one upload attempt, or the sentence that says what is missing.
 function uploadForm(fields, key) {
@@ -3452,15 +3495,40 @@ function progressAction(action, button) {
 
 // The export dialog names the document and the coding review it was opened on: its options are built from them, and a
 // download names that coding review, so one that changed under the dialog is refused rather than made from another.
+// Opened again while a file is still being made, it says so and its options wait.
 function openExport() {
   if (!state.doc) return;
-  state.exporting = { encounter: state.doc.id, round: roundNumber(state.doc) };
+  state.exporting = { encounter: state.doc.id, round: roundNumber(state.doc), doc: state.doc };
   const readiness = record(state.doc.readiness);
+  const making = state.making;
   $('#exportStatus').classList.toggle('reviewed', readiness.approved === true);
-  $('#exportStatus').textContent = exportStatusText(state.doc);
-  $('#exportOptions').innerHTML = exportOptions(state.doc);
+  $('#exportStatus').textContent = !making ? exportStatusText(state.doc) : making.encounter === state.doc.id ? preparingText(making.fmt) : ANOTHER_FILE;
+  drawExportOptions();
   hideError('exportError');
   openDialog('exportDialog');
+}
+
+// The read of the document an export dialog shows: the page's latest while it is still of the coding review the dialog
+// was opened on (so a download just made is listed), else the read it was opened on.
+function dialogDoc(exporting) {
+  return state.doc?.id === exporting.encounter && roundNumber(state.doc) === exporting.round ? state.doc : exporting.doc;
+}
+
+// Draws the export dialog's options from the read it shows (dialogDoc), with the file being made, if any; on another
+// document's dialog, that file makes every option wait without naming one. `focus` ([kind, fmt]) is the option to give
+// the focus once drawn when the focus was lost meanwhile (a disabled button cannot hold it); else an option that held
+// the focus keeps it, as drawn again.
+function drawExportOptions(focus = null) {
+  const exporting = state.exporting;
+  const box = $('#exportOptions');
+  if (!exporting || !box) return;
+  const active = document.activeElement;
+  const held = active?.dataset?.exportKind && box.contains?.(active) ? [active.dataset.exportKind, active.dataset.exportFmt] : null;
+  const lost = !active || active === document.body;
+  const making = state.making;
+  box.innerHTML = exportOptions(dialogDoc(exporting), !making ? null : making.encounter === exporting.encounter ? making : { kind: null, fmt: null });
+  const target = held || (lost ? focus : null);
+  if (target) $$('#exportOptions [data-export-kind]').find(item => item.dataset.exportKind === target[0] && item.dataset.exportFmt === target[1] && !item.disabled)?.focus({ preventScroll: true });
 }
 
 function startDownload(url, filename) {
@@ -3473,36 +3541,54 @@ function startDownload(url, filename) {
   link.remove();
 }
 
-// POST reports {kind, fmt, round}: the round the export dialog was opened on. A refusal that says what is missing (its
-// readiness blockers) is shown in the dialog; any other conflict means the coding review changed under the dialog, so
-// the dialog closes and the page reads the document again and says so.
+// POST reports {kind, fmt, round}: the round the export dialog was opened on. While it runs every option waits and the
+// one chosen says it is being prepared, as the status does; the file is said to be ready, and downloaded, only once the
+// server has made it (201). The options then come back, and the dialog lists the new file once the page has read the
+// document again. A refusal that says what is missing (its readiness blockers), or that the file could not be made, is
+// shown in the dialog with the options back, so the member can try again (as a notice when the dialog was closed
+// meanwhile); any other conflict means the coding review changed under the dialog, so the dialog closes and the page
+// reads the document again and says so. A dialog opened meanwhile on another document is drawn again for its own.
 function generateReport(kind, fmt) {
   const exporting = state.exporting;
   if (!exporting || exporting.round === null) return undefined;
   return guarded('export', async () => {
-    const options = $$('#exportOptions .export-option');
-    const enabled = options.filter(option => !option.disabled);
-    enabled.forEach(option => setBusy(option, true));
+    state.making = { encounter: exporting.encounter, kind, fmt };
+    drawExportOptions();
+    $('#exportStatus').textContent = preparingText(fmt);
     hideError('exportError');
+    // whether the dialog is still on this document when the request ends, and whether it is open
+    const same = () => state.exporting?.encounter === exporting.encounter;
+    const shown = () => same() && $('#exportDialog').open;
+    let report;
     try {
-      const report = await api(`/api/encounters/${encodeURIComponent(exporting.encounter)}/reports`, { method: 'POST', json: { kind, fmt, round: exporting.round } });
-      const url = safeDownloadUrl(report.download_url);
-      if (!url) throw new ApiError('The download could not be started. Try again.');
-      startDownload(url, report.filename);
-      $('#exportStatus').textContent = `${exportStatusText(state.doc)} Downloading ${text(report.filename) || 'the file'}.`;
-      refreshDocument();
+      report = await api(`/api/encounters/${encodeURIComponent(exporting.encounter)}/reports`, { method: 'POST', json: { kind, fmt, round: exporting.round } });
+      if (!safeDownloadUrl(report.download_url)) throw new ApiError('The download could not be started. Try again.');
     } catch (error) {
+      state.making = null;
       const blockers = strings(error.details?.blockers);
-      if (changedUnderPage(error) && !blockers.length) {
+      const sentence = blockers.length ? `${error.message} ${blockers.join(' ')}` : error.message;
+      if (changedUnderPage(error) && !blockers.length && state.doc?.id === exporting.encounter) {
+        const onThis = same();
         if (state.exporting === exporting) state.exporting = null;
-        closeDialog('exportDialog');
+        if (onThis) closeDialog('exportDialog');
         await afterConflict();
-      } else {
-        showError('exportError', blockers.length ? `${error.message} ${blockers.join(' ')}` : error.message);
+        return;
       }
-    } finally {
-      enabled.forEach(option => setBusy(option, false));
+      if (state.exporting) $('#exportStatus').textContent = exportStatusText(dialogDoc(state.exporting));
+      if (shown()) {
+        showError('exportError', sentence);
+        $('#exportError').scrollIntoView?.({ block: 'nearest' });  // under the options, which may be scrolled past
+      } else {
+        toast(state.doc?.id === exporting.encounter ? sentence : `${text(exporting.doc?.title) || 'Another document'}: ${sentence}`);
+      }
+      drawExportOptions([kind, fmt]);
+      return;
     }
+    state.making = null;
+    startDownload(safeDownloadUrl(report.download_url), report.filename);
+    if (state.exporting) $('#exportStatus').textContent = same() ? readyText(fmt, report.filename) : exportStatusText(dialogDoc(state.exporting));
+    drawExportOptions([kind, fmt]);
+    refreshDocument().then(() => drawExportOptions());
   });
 }
 

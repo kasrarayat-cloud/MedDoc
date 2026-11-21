@@ -1,5 +1,6 @@
 """The customer API (BUILD-SPEC 6; client contract customer-2026-11-22): the contract's keys exactly (held to
 ops/verification/customer-contract.json by the shipped reader, ops/scan_customer.py, and to the spec's own key lists),
+the export formats it lists (PDF, CSV and TXT: studio.exports.FORMATS, one sentence refusing any other),
 tenancy (404 outside the membership), the reviewer gate, answers starting a new round with every answer so far, the
 vendor-name scan over every customer JSON response, the in-page view's headers, a Word document's converted view, the
 earlier review (an encounter with no round), the upload with its insurance, and the display hygiene. Synthetic data only;
@@ -15,7 +16,7 @@ from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 
-from studio import api, client_contract, customer, decisions, jobs, models, state
+from studio import api, client_contract, customer, decisions, exports, jobs, models, state
 from studio.fable import document as fable_document
 from tests.support import coding as f
 from tests.support import rounds as r
@@ -87,6 +88,31 @@ class ContractTests(ApiCase):
         payload = self.get_json(f'/api/encounters/{done.pk}')
         self.assertEqual(set(payload['codes'][0]), CODE_KEYS)
         self.assertEqual(set(payload['questions'][0]), QUESTION_KEYS)
+
+    def test_an_export_of_each_format_is_listed_as_the_contract_has_it(self):
+        """The formats a request may name (exports.FORMATS: the physician PDF, CSV and TXT) are the contract's report
+        formats, each export the page lists holds to the contract, and any other format is refused with one sentence."""
+        report = self.sc.CONTRACT['types']['report']['keys']
+        self.assertEqual(set(report['fmt']['enum']), set(exports.FORMATS))
+        self.assertEqual(set(exports.FORMATS), {'pdf', 'csv', 'txt'})
+        enc = self.done()
+        self.assertEqual(self.decide(enc, 'L1', '45385', 'approve').status_code, 201)
+        made = []
+        for kind, fmt in (('draft', 'pdf'), ('draft', 'csv'), ('draft', 'txt'), ('approved', 'pdf')):
+            response = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': kind, 'fmt': fmt, 'round': 1})
+            self.assertEqual(response.status_code, 201, response.content)
+            self.assert_clean(response)
+            self.assertEqual(self.sc.shape_problems(response.json(), {'ref': 'report'}), [])
+            made.append((response.json()['kind'], response.json()['fmt']))
+        payload = self.get_json(f'/api/encounters/{enc.pk}')
+        self.assert_contract(payload, 'encounter')
+        self.assertEqual(sorted((item['kind'], item['fmt']) for item in payload['reports']), sorted(made))
+        for fmt in ('docx', 'PDF', 'xlsx', None):
+            with self.subTest(fmt=fmt):
+                refused = self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': fmt, 'round': 1})
+                self.assertEqual((refused.status_code, refused.json()['error']),
+                                 (400, 'Choose a draft or an approved export as PDF, CSV or TXT.'))
+        self.assertEqual(models.ExportArtifact.objects.filter(encounter=enc).count(), 4)
 
     def test_a_done_round_reads_as_its_codes_questions_quotes_and_notes(self):
         enc = self.done()
@@ -365,6 +391,8 @@ class VendorNameScanTests(ApiCase):
             'round': 1, 'line': 'L1', 'code': '45385', 'action': 'approve',
             'acknowledgement': decisions.ACKNOWLEDGEMENTS['human']}))
         responses.append(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'approved', 'fmt': 'txt',
+                                                                               'round': 1}))
+        responses.append(self.post_json(f'/api/encounters/{enc.pk}/reports', {'kind': 'draft', 'fmt': 'pdf',
                                                                                'round': 1}))
         responses.append(self.post_json(f'/api/encounters/{enc.pk}/answers', {'answers': [
             {'question_id': payload['questions'][0]['id'], 'text': 'Yes.'}]}))

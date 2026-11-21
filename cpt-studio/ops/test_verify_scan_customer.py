@@ -7,12 +7,18 @@ exports, the page and its one script), answers 404 on every /ops/ URL and on eve
 and out as studio/views.py does (verify_login.py's tests hold that contract). Each leak the scanner must catch is a
 switch on it. Nothing leaves the loopback.
 
+The PDF export (the physician report, 2026-11-21) is read as its text, never its bytes: the stand-in's PDF and the
+reader's own cases are small synthetic PDFs drawn here with ReportLab's canvas (invariant, Helvetica), which the
+service installs (requirements.txt); the scanner reads them with pypdf (requirements-dev.txt).
+
     cd cpt-studio && python3 -B -m unittest discover -s ops -p 'test_verify_scan_customer.py' -v
 """
+import functools
 import importlib.util
 import io
 import json
 import os
+import re
 import secrets
 import sys
 import tempfile
@@ -34,6 +40,7 @@ _spec.loader.exec_module(sc)
 USERNAME, PASSWORD = 'review-agent', 'Synthetic-scan pass&+%<>"é-2026'
 ENCOUNTER_ID = 'f6000000-0000-4000-8000-0000000000a1'
 DRAFT_ID, APPROVED_ID = 'f6000000-0000-4000-8000-0000000000d1', 'f6000000-0000-4000-8000-0000000000d2'
+PDF_ID = 'f6000000-0000-4000-8000-0000000000d3'
 QUOTE = 'Cold forceps biopsies were taken from the gastric antrum.'
 # DECISION IDS (FIX-SPEC-2 section 5): a current decision carries its id once the contract lists it (lane G1)
 DECISION_IDS = 'id' in sc.CONTRACT['types']['decision']['keys']
@@ -79,8 +86,55 @@ def encounter_json() -> dict:
                      'current': True},
                     {'id': APPROVED_ID, 'kind': 'approved', 'fmt': 'csv', 'filename': 'synthetic-egd-approved.csv',
                      'generated_at': '2026-11-20T07:54:00Z', 'download_url': f'/api/reports/{APPROVED_ID}/download',
+                     'current': True},
+                    {'id': PDF_ID, 'kind': 'approved', 'fmt': 'pdf', 'filename': 'synthetic-egd-approved.pdf',
+                     'generated_at': '2026-11-20T07:54:30Z', 'download_url': f'/api/reports/{PDF_ID}/download',
                      'current': True}],
         'activity': [{'at': '2026-11-20T07:52:10Z', 'text': 'Review agent approved L1 43239.'}]}
+
+
+def pdf_bytes(*pages, **info) -> bytes:
+    """A small synthetic PDF drawn with ReportLab's canvas (invariant, so the same bytes every time; Helvetica): each of
+    ``pages`` a list of the lines drawn on it; ``info`` its document information (title, author, subject, creator,
+    producer, keywords: the canvas's setters)."""
+    from reportlab.pdfgen import canvas
+    buffer = io.BytesIO()
+    drawing = canvas.Canvas(buffer, invariant=1)
+    for key, value in info.items():
+        getattr(drawing, f'set{key.capitalize()}')(value)
+    for lines in pages:
+        drawing.setFont('Helvetica', 11)
+        for number, line in enumerate(lines):
+            drawing.drawString(72, 720 - 16 * number, line)
+        drawing.showPage()
+    drawing.save()
+    return buffer.getvalue()
+
+
+# The approved PDF in miniature, as the physician report draws it: its running header, the code row, the evidence page
+# with the quotation wrapped over two lines, the footer. Its metadata is the report's own.
+PDF_PAGES = (
+    ['QuillMD', 'CPT STUDIO', 'APPROVED CODES', 'Synthetic EGD with biopsy · F6000000 · Coding review 1',
+     'Approved CPT codes', '01   43239   Approved by Review agent   UNITS 1   Approved', '20 Nov 2026, 07:52 UTC',
+     'Line L1 · Modifiers: none', 'Synthetic data · Not for billing or claims'],
+    ['THE REASONS, IN THE RECORD', 'Every approved code has a source.', '01   43239  /  Approved by Review agent',
+     '“Cold forceps biopsies were taken', 'from the gastric antrum.”', 'Page 1',
+     'Reason: Biopsies were taken during the upper endoscopy (page 1).', 'Report format',
+     'PDF · cpt-studio-customer-export@3', 'Synthetic data · Not for billing or claims'])
+PDF_INFO = {'title': 'CPT Studio approved codes F6000000 r1', 'author': 'QuillMD CPT Studio',
+            'subject': 'CPT coding summary', 'creator': 'QuillMD CPT Studio', 'producer': 'QuillMD CPT Studio',
+            'keywords': ''}
+
+
+@functools.lru_cache(maxsize=None)
+def approved_pdf(leak: str = '') -> bytes:
+    """The stand-in's approved PDF; ``leak`` 'text' adds a model name and its usage to its evidence page, 'metadata'
+    names a vendor as its author."""
+    pages = [list(page) for page in PDF_PAGES]
+    if leak == 'text':
+        pages[1].insert(6, 'Read by claude-fable-5-2 (12,000 tokens).')
+    info = {**PDF_INFO, 'author': 'Anthropic'} if leak == 'metadata' else PDF_INFO
+    return pdf_bytes(*pages, **info)
 
 
 EXPORTS = {
@@ -94,6 +148,7 @@ EXPORTS = {
                   f'"code","43239","1","","ready","Biopsies were taken (page 1).","{QUOTE} (page 1)","approved",'
                   '"Review agent","2026-11-20T07:52:10Z"\r\n'),
 }
+CONTENT_TYPES = {'txt': 'text/plain; charset=utf-8', 'csv': 'text/csv; charset=utf-8'}  # as studio.exports serves them
 
 
 class SharedReaderTests(unittest.TestCase):
@@ -145,7 +200,9 @@ class SharedReaderTests(unittest.TestCase):
         ctx = sc.scan_context(sc.quotations(encounter_json()))
         self.assertEqual(ctx.document_text, QUOTE)
         for report in encounter_json()['reports']:
-            self.assertEqual(sc.scan_file(EXPORTS[report['id']], ctx, report['filename'], report['fmt']), [], report['id'])
+            if report['fmt'] != 'pdf':  # the PDF is read as its text (PdfReaderTests)
+                self.assertEqual(sc.scan_file(EXPORTS[report['id']], ctx, report['filename'], report['fmt']), [],
+                                 report['id'])
         csv_text = EXPORTS[APPROVED_ID]
         self.assertEqual(csv_text.count(',"approved",'), 1)
         leaked = csv_text.replace(',"approved",', ',"approved (claude-fable-5-2)",', 1)
@@ -166,6 +223,133 @@ class SharedReaderTests(unittest.TestCase):
         self.assertEqual(sc.csv_rows('a,"b ""c"", d"\r\n1,2\n'), [['a', 'b "c", d'], ['1', '2']])
         self.assertEqual(sc.scan_headers([('Content-Security-Policy', "script-src 'sha256-x'")], ctx, 'GET /'), [])
         self.assertEqual(sorted({h['id'] for h in sc.scan_headers([('X-Content-SHA256', 'ab' * 32)], ctx, 'GET /x')}), ['long_hex', 'sha256'])
+
+
+class PdfReaderTests(unittest.TestCase):
+    """A PDF export is read as the text pypdf extracts from each page, line by line under the TXT rules, and as its
+    document information values - never as its bytes; a PDF that cannot be read is a scan problem, never a pass."""
+
+    def test_a_clean_pdf_is_read_page_by_page_with_its_metadata_and_passes(self):
+        data = approved_pdf()
+        self.assertTrue(sc.is_pdf(data))
+        reading = sc.read_pdf(data)
+        self.assertEqual(len(reading.pages), 2)
+        self.assertIn('Approved by Review agent', reading.pages[0])
+        self.assertIn('“Cold forceps biopsies were taken\nfrom the gastric antrum.”', reading.pages[1])
+        self.assertLessEqual({'Title', 'Author', 'Subject', 'Creator', 'Producer', 'Keywords'}, set(reading.metadata))
+        self.assertEqual(reading.metadata['Title'], PDF_INFO['title'])
+        ctx = sc.scan_context(sc.quotations(encounter_json()))
+        self.assertEqual(sc.scan_pdf(reading, ctx, 'approved.pdf'), [])
+
+    def test_a_quotation_is_set_aside_only_while_it_is_the_documents_own_words(self):
+        document = ('Dr. Claude Example removed the polyp with a cold snare.\n'
+                    'The specimen was sent by Dr. Claude Example.')
+        # two quotations wrapped over two lines (the name on the first line of one, the last line of the other), the
+        # reason that names the same doctor, and a quotation on one line
+        reading = sc.read_pdf(pdf_bytes(['“Dr. Claude Example removed', 'the polyp with a cold snare.”',
+                                         '“The specimen was sent', 'by Dr. Claude Example.”', 'Page 2',
+                                         'Reason: the note names Dr. Claude Example.',
+                                         'Also quoted: “Dr. Claude Example removed” (page 2)']))
+        hits = sc.scan_pdf(reading, sc.scan_context(document), 'q.pdf')
+        self.assertEqual([(hit['id'], hit['where']) for hit in hits], [('provider_name', 'q.pdf page 1 line 6')])
+        # with no document text nothing is a quotation: the quoted name is scanned too
+        bare = sc.scan_pdf(reading, sc.scan_context(), 'q.pdf')
+        self.assertEqual([(hit['id'], hit['where']) for hit in bare],
+                         [('provider_name', f'q.pdf page 1 line {line}') for line in (1, 4, 6, 7)])
+        # white space is compared squeezed: the PDF prints a stored line break or run of spaces as one space
+        spaced = sc.scan_context('Dr. Claude\nExample   removed  the polyp')
+        self.assertEqual(sc.scan_pdf(sc.read_pdf(pdf_bytes(['“Dr. Claude Example removed the polyp”'])), spaced, 'q.pdf'), [])
+
+    def test_a_denylisted_word_in_the_text_or_the_metadata_is_found(self):
+        ctx = sc.scan_context(sc.quotations(encounter_json()))
+        text = sc.scan_pdf(sc.read_pdf(approved_pdf('text')), ctx, 'approved.pdf')
+        self.assertEqual(sorted({(hit['id'], hit['where']) for hit in text}),
+                         [(rule, 'approved.pdf page 2 line 7') for rule in ('interpreter_model', 'model_id',
+                                                                             'provider_name', 'token')])
+        metadata = sc.scan_pdf(sc.read_pdf(approved_pdf('metadata')), ctx, 'approved.pdf')
+        self.assertEqual([(hit['id'], hit['where']) for hit in metadata], [('provider_name', 'approved.pdf metadata Author')])
+        # metadata is never a quotation of the document, even when the document holds the same word
+        named = sc.scan_pdf(sc.read_pdf(pdf_bytes(['Approved CPT codes'], author='Claude')), sc.scan_context('Dr. Claude'),
+                            'n.pdf')
+        self.assertEqual([(hit['id'], hit['where']) for hit in named], [('provider_name', 'n.pdf metadata Author')])
+
+    def test_a_phrase_the_layout_broke_over_two_lines_is_found_once(self):
+        reading = sc.read_pdf(pdf_bytes(['Reason: its own tool', 'calls retrieved 4 passages.', 'Read by Claude',
+                                         'Fable checked it.']))
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(reading, sc.scan_context(), 'x.pdf')],
+                         [('tool_call', 'x.pdf page 1 lines 1-2'), ('provider_name', 'x.pdf page 1 line 3'),
+                          ('provider_name', 'x.pdf page 1 line 4')])
+        one_line = sc.read_pdf(pdf_bytes(['Reason: its own tool calls retrieved 4 passages.']))
+        self.assertEqual([(hit['id'], hit['where']) for hit in sc.scan_pdf(one_line, sc.scan_context(), 'x.pdf')],
+                         [('tool_call', 'x.pdf page 1 line 1')])
+        # lines a quotation of the document separates are not one phrase: nothing is joined over the quotation
+        apart = sc.read_pdf(pdf_bytes(['Reason: its own tool', '“the polyp was', 'removed”', 'calls retrieved 4 passages.']))
+        self.assertEqual(sc.scan_pdf(apart, sc.scan_context('the polyp was removed'), 'x.pdf'), [])
+
+    def test_the_trailer_id_is_never_read_so_its_hex_never_trips_long_hex(self):
+        data = approved_pdf()
+        self.assertRegex(data, rb'/ID\s*\[\s*<[0-9a-fA-F]{32}>')  # the PDF's identifier: 32 hex characters
+        # read as bytes, as a TXT is, a clean PDF would fail on it
+        self.assertIn('long_hex', {hit['id'] for hit in sc.scan_file(data.decode('utf-8', 'replace'), sc.scan_context(),
+                                                                     'raw', 'txt')})
+        self.assertEqual(sc.scan_pdf(sc.read_pdf(data), sc.scan_context(), 'approved.pdf'), [])
+        # the rule still holds on what the PDF shows: a hash drawn on its page is found
+        drawn = sc.scan_pdf(sc.read_pdf(pdf_bytes([f'Digest {"ab" * 32}'])), sc.scan_context(), 'h.pdf')
+        self.assertEqual([(hit['id'], hit['where']) for hit in drawn], [('long_hex', 'h.pdf page 1 line 1')])
+
+    def test_a_body_that_claims_to_be_a_pdf_and_cannot_be_read_fails_closed(self):
+        clean = approved_pdf()
+        pointer = re.search(rb'startxref\s+(\d+)', clean)
+        # one pypdf would have to repair (its cross-reference pointer moved) is not read either: strict mode
+        repaired = clean[:pointer.start(1)] + str(int(pointer.group(1)) + 5).encode() + clean[pointer.end(1):]
+        for body in (b'%PDF-1.7\nnot a PDF at all\n', clean[:len(clean) // 2], b'', EXPORTS[DRAFT_ID].encode('utf-8'),
+                     repaired):
+            with self.subTest(body=body[:24]):
+                with self.assertRaisesRegex(sc.Unreadable, r'^pypdf could not read it as a PDF \(\w+\)$'):
+                    sc.read_pdf(body)
+        with unittest.mock.patch.dict(sys.modules, {'pypdf': None}):
+            with self.assertRaisesRegex(sc.Unreadable, 'pypdf is not installed'):
+                sc.read_pdf(clean)
+        self.assertEqual(len(sc.read_pdf(clean).pages), 2)  # the control
+        self.assertTrue(sc.is_pdf(b'%PDF-1.4 opens as one', 'text/plain'))
+        self.assertTrue(sc.is_pdf(b'served as one', 'Application/PDF; charset=binary'))
+        self.assertFalse(sc.is_pdf(b'plain words', 'text/plain; charset=utf-8'))
+        self.assertFalse(sc.is_pdf(b' %PDF-1.4 not at the start'))
+
+    def test_a_pdf_holding_what_the_scan_does_not_read_fails_closed(self):
+        from reportlab.pdfgen import canvas
+
+        def drawn(add):
+            buffer = io.BytesIO()
+            drawing = canvas.Canvas(buffer, invariant=1)
+            drawing.setFont('Helvetica', 11)
+            drawing.drawString(72, 720, 'Approved CPT codes')
+            add(drawing)
+            drawing.showPage()
+            drawing.save()
+            return buffer.getvalue()
+
+        def link(drawing):
+            drawing.linkURL('https://example.invalid/', (72, 700, 200, 730))
+
+        def bookmark(drawing):
+            drawing.bookmarkPage('codes')
+            drawing.addOutlineEntry('Codes', 'codes')
+
+        def form(drawing):
+            drawing.beginForm('mark')
+            drawing.drawString(0, 0, 'Approved')
+            drawing.endForm()
+            drawing.doForm('mark')
+
+        for add, what in ((link, 'annotations on page 1'), (bookmark, 'bookmarks'),
+                          (form, 'an image or form object on page 1')):
+            with self.subTest(what=what):
+                with self.assertRaisesRegex(sc.Unreadable, re.escape(what)):
+                    sc.read_pdf(drawn(add))
+        self.assertEqual(sc.read_pdf(drawn(lambda drawing: None)).pages[0].strip(), 'Approved CPT codes')  # the control
+        with self.assertRaisesRegex(sc.Unreadable, 'no text could be read from page 2'):
+            sc.read_pdf(pdf_bytes(['Approved CPT codes'], []))
 
 
 # --- a loopback stand-in for the customer surface ------------------------------------------------------------------
@@ -267,13 +451,21 @@ class StubSite:
             return self.send(request, 200, enc)
         if request.command == 'GET' and request.path.startswith('/api/reports/') and request.path.endswith('/download'):
             report = request.path.split('/')[3]
-            text = self.reports.get(report)
-            if text is None:
+            listed = next((item for item in self.encounter['reports'] if item['id'] == report), None)
+            if listed is None:
                 return self.send(request, 404, {'error': 'Not found.'})
             headers = [('X-Content-SHA256', 'ab' * 32)] if self.leak.get('hash_header') else []
+            if listed['fmt'] == 'pdf':
+                if self.leak.get('pdf_plain'):  # listed as a PDF, served as plain text: still a PDF that cannot be read
+                    return self.send(request, 200, EXPORTS[DRAFT_ID], CONTENT_TYPES['txt'], headers)
+                leak = 'text' if self.leak.get('pdf_leak') else 'metadata' if self.leak.get('pdf_meta_leak') else ''
+                body = b'%PDF-1.7\n% not a readable PDF\n' if self.leak.get('pdf_broken') else approved_pdf(leak)
+                return self.send(request, 200, body, 'text/plain' if self.leak.get('pdf_as_text') else 'application/pdf',
+                                 headers)
+            text = self.reports[report]
             # the TXT export leaks (the CSV has no Limitations line); the leak case expects scan.file to fail on it
             leaked = text.replace('\nLimitations', '\nUSAGE\n  claude-fable-5-2: 12,000 tokens\n\nLimitations', 1) if self.leak.get('report_leak') else text
-            return self.send(request, 200, leaked, 'text/plain', headers)
+            return self.send(request, 200, leaked, CONTENT_TYPES[listed['fmt']], headers)
         if request.command == 'GET' and request.path.startswith('/ops/'):
             if self.leak.get('ops_open') and request.path == f'/ops/encounters/{self.id}':
                 return self.send(request, 200, '<h1>Runs</h1><p>reader claude-fable-5-2</p>', 'text/html')
@@ -314,9 +506,12 @@ class ScanRunTests(unittest.TestCase):
         for check in ('session.contract', 'customer.list_contract', f'customer.contract.{short}', f'authorization.{short}', 'bundle.one_script',
                       'scan.json', 'scan.header', 'scan.file', 'scan.bundle', 'logout.session_refused'):
             self.assertEqual(statuses.get(check), 'pass', check)
-        for check in (f'original.{short}', f'view.{short}', f'report.{short}.draft.txt', f'report.{short}.approved.csv'):
+        for check in (f'original.{short}', f'view.{short}', f'report.{short}.draft.txt', f'report.{short}.approved.csv',
+                      f'report.{short}.approved.pdf', f'report.{short}.approved.pdf.text'):
             self.assertEqual(statuses.get(check), 'pass', check)
-        self.assertEqual(evidence['encounters'], [{'id': site.id, 'status': 200, 'operator_view': False, 'reports': 2}])
+        self.assertEqual(evidence['encounters'], [{'id': site.id, 'status': 200, 'operator_view': False, 'reports': 3}])
+        read = next(item['reason'] for item in evidence['checks'] if item['id'] == f'report.{short}.approved.pdf.text')
+        self.assertIn('read as a PDF, 2 page(s) of text and 9 document information value(s) scanned', read)
         # every operator page and every removed URL was asked for, and answered 404
         asked = {path for method, path in site.log if method == 'GET'}
         for template in sc.OPS_GET_PATHS + sc.REMOVED_PATHS:
@@ -331,6 +526,9 @@ class ScanRunTests(unittest.TestCase):
             ({'trace_open': True}, ['authorization.{short}']),
             ({'hash_header': True}, ['report.{short}.draft.txt', 'scan.header']),
             ({'report_leak': True}, ['scan.file']),
+            ({'pdf_leak': True}, ['scan.file']),
+            ({'pdf_meta_leak': True}, ['scan.file']),
+            ({'pdf_broken': True}, ['report.{short}.approved.pdf.text']),
             ({'bundle_name': True}, ['scan.bundle']),
             ({'two_scripts': True}, ['bundle.one_script']),
             ({'session_mode': True}, ['session.contract']),
@@ -342,6 +540,39 @@ class ScanRunTests(unittest.TestCase):
                 failed = {item['id'] for item in evidence['checks'] if item['status'] == 'fail'}
                 for check in wanted:
                     self.assertIn(check.format(short=site.id[:8]), failed, (leak, sorted(failed)))
+
+    def test_a_pdf_export_is_scanned_as_its_text_and_one_that_cannot_be_read_fails_the_run(self):
+        check = f'report.{ENCOUNTER_ID[:8]}.approved.pdf.text'
+
+        def failed(evidence):
+            return {item['id']: item['reason'] for item in evidence['checks'] if item['status'] == 'fail'}
+
+        # served as text/plain, it is still read as the PDF it says it is
+        code, evidence, printed, _ = self.run_scan('--encounter', ENCOUNTER_ID, site=StubSite(pdf_as_text=True))
+        self.assertEqual(code, 0, printed)
+        self.assertIn('read as a PDF, 2 page(s)', next(c['reason'] for c in evidence['checks'] if c['id'] == check))
+        # a body that claims to be a PDF - served as one, opening as one, or listed as one - and cannot be read fails
+        # the run; it is never scanned as text instead, so it never passes
+        for leak in ('pdf_broken', 'pdf_plain'):
+            with self.subTest(leak=leak):
+                code, evidence, printed, _ = self.run_scan('--encounter', ENCOUNTER_ID, site=StubSite(**{leak: True}))
+                self.assertEqual(code, 1)
+                self.assertEqual(list(failed(evidence)), [check])
+                self.assertIn('pypdf could not read it as a PDF', failed(evidence)[check])
+                self.assertIn('it was not scanned', failed(evidence)[check])
+        # a Python without pypdf cannot read it either: the same failure, never a pass
+        with unittest.mock.patch.dict(sys.modules, {'pypdf': None}):
+            code, evidence, printed, _ = self.run_scan('--encounter', ENCOUNTER_ID)
+        self.assertEqual(code, 1)
+        self.assertEqual(list(failed(evidence)), [check])
+        self.assertIn('pypdf is not installed', failed(evidence)[check])
+        # the leaks are found where the PDF shows them, with their page and line or their metadata entry
+        code, evidence, printed, _ = self.run_scan('--encounter', ENCOUNTER_ID, site=StubSite(pdf_leak=True))
+        self.assertEqual(code, 1)
+        self.assertIn('approved.pdf page 2 line 7', {hit['where'] for hit in evidence['hits']['file']})
+        code, evidence, printed, _ = self.run_scan('--encounter', ENCOUNTER_ID, site=StubSite(pdf_meta_leak=True))
+        self.assertEqual([(hit['id'], hit['where']) for hit in evidence['hits']['file']],
+                         [('provider_name', 'approved.pdf metadata Author')])
 
     def test_an_uploaded_original_and_its_view_are_read_for_their_headers_only_whatever_their_size(self):
         code, evidence, printed, site = self.run_scan('--encounter', ENCOUNTER_ID)

@@ -1,7 +1,8 @@
 """What a customer is shown, beyond the codes (findings SEC-S4, SEC-S3, FG-5, FG-6, SEC-OPS-IDENTITY-TO-CUSTOMER): the
 evidence quotes the coding review wrote pass the vendor-name filter like its other text, a question names only the codes
 of its lines, the exports show control characters escaped, the draft export's questions and notes are filtered, a
-decided encounter is held to the contract, and a platform operator's act reads as CPT Studio's. Synthetic data only."""
+decided encounter (with its PDF exports listed) is held to the contract, and a platform operator's act reads as CPT
+Studio's. Synthetic data only."""
 import csv
 import io
 import json
@@ -85,10 +86,16 @@ class DecidedContractTests(r.CustomerCase, TestCase):
         for response in (approve, reject):
             self.assertEqual(response.status_code, 201, response.content)
             self.assertEqual(set(response.json()), {'id', 'line', 'code', 'action', 'by', 'at', 'note'})
+        for kind in ('draft', 'approved'):  # the physician PDF is listed beside the other exports, as the contract has it
+            self.assertEqual(self.client_for(self.reviewer).post(
+                f'/api/encounters/{enc.pk}/reports', data=json.dumps({'kind': kind, 'fmt': 'pdf', 'round': 1}),
+                content_type='application/json').status_code, 201)
         response = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}')
         payload = response.json()
         self.assertEqual([code['decision']['action'] for code in payload['codes'] if code['decision']],
                          ['approve', 'reject'])
+        self.assertEqual(sorted((item['kind'], item['fmt']) for item in payload['reports']),
+                         [('approved', 'pdf'), ('draft', 'pdf')])
         self.assertEqual(sc.shape_problems(payload, sc.CONTRACT['encounter']), [])
         for decided in (approve, reject, response):
             hits = sc.scan_json(decided.json(), sc.scan_context())

@@ -163,15 +163,39 @@ latest."); the line already has a decision (409: revoke it first); a `needs_answ
 
 ### `POST /api/encounters/<id>/reports` (any member)
 
-`{"kind": "draft|approved", "fmt": "txt|csv", "round": 2}` - `round` is the round number the page shows ->
-`201 {id, kind, fmt, filename, generated_at, download_url, current}`. Refused: no round named (400); `round` is not the
-latest round's number (409 "This coding review has changed. Reload to see the latest.", `details` empty - checked
-before readiness, so a page left open never downloads a round its member did not see); `409` with `details.blockers`
-when the export is not available yet. Format `cpt-studio-customer-export@3`: TXT between
-SYNTHETIC banners; CSV (RFC 4180) with the columns kind, code, units, modifiers, status, reason, quotes, decision,
-decided_by, decided_at, banner rows, formula cells neutralised, control characters shown escaped. The approved export
-lists only the lines whose current decision is an approval and whose status is `ready` or `needs_review`, each with who
-approved it, their kind and when. Units or modifiers the coding review did not give read "not given".
+`{"kind": "draft|approved", "fmt": "pdf|csv|txt", "round": 2}` - `round` is the round number the page shows ->
+`201 {id, kind, fmt, filename, generated_at, download_url, current}`, the file named
+`CPT-Studio-<kind>-r<round>-<UTC time>.<fmt>`. Refused: a kind or format that is not one (400 "Choose a draft or an
+approved export as PDF, CSV or TXT."); no round named (400); `round` is not the latest round's number (409 "This coding
+review has changed. Reload to see the latest.", `details` empty - checked before readiness, so a page left open never
+downloads a round its member did not see); `409` with `details.blockers` when the export is not available yet; `503`
+"The PDF could not be made. Nothing was saved. Try again." when a PDF cannot be made: nothing is stored and no audit
+row is written, so the same request can be sent again.
+
+Every format is made from the same saved rows - the latest round, each line with its own current decision - and is
+stored once, as made: an immutable export and its `export.created` audit row. Making one reads saved rows only: it
+changes no decision, round or state and sends nothing to the coding service. Format `cpt-studio-customer-export@3`:
+
+- **PDF** (`application/pdf`; the doctor-facing report, owner directive 2026-11-21): a searchable US Letter document
+  with its fonts embedded, whose every page shows its status (DRAFT · REVIEW REQUIRED, or APPROVED CODES), the
+  document's title, its encounter reference and the coding review, and its page number of the total. A draft lists
+  every line of the round in stored order with its status, units, modifiers and current decision (who made it and
+  when), its evidence (the document's own quoted words with their pages; a line with no citation shows the coding
+  review's own quotation, marked as such), its reason and the second check; then what still needs a decision (the
+  round's questions and the lines with no saved decision) and the documentation notes. An approved PDF lists only the
+  lines the approved TXT and CSV list, each with who approved it and when, says how many lines of the round it leaves
+  out, and has no questions, second checks or notes. An approval by an automated agent says it is not clinical
+  approval. A value the record does not hold reads "Not recorded" or "Not given", never a guess; no patient identifier
+  is printed (the record has none). No vendor or model name, provider, run, usage or log field reaches it: text the
+  coding review wrote passes the same filter as the page. Two PDFs of the same saved state read the same but for their
+  Prepared line (when, and by whom, each was made) and the PDF's own date.
+- **CSV** (`text/csv; charset=utf-8`, RFC 4180): the columns kind, code, units, modifiers, status, reason, quotes,
+  decision, decided_by, decided_at, banner rows, formula cells neutralised, control characters shown escaped.
+- **TXT** (`text/plain; charset=utf-8`): between SYNTHETIC banners, control characters shown escaped.
+
+The approved export, in every format, lists only the lines whose current decision is an approval and whose status is
+`ready` or `needs_review`, each with who approved it, their kind and when. Units or modifiers the coding review did
+not give read "not given" (in the PDF, "Not given" and "Modifiers: not given").
 
 ### `GET /api/encounters/<id>/original` and `?view=1`
 
@@ -191,4 +215,6 @@ unchanged by it.
 
 ### `GET /api/reports/<id>/download`
 
-The stored export, byte for byte, as an attachment; `404` outside the caller's workspaces.
+The stored export, byte for byte, as an attachment with its format's content type, `Cache-Control: no-store` and no
+hash header; `404` outside the caller's workspaces. An export is never made again on download: one made from an earlier
+round, or before a later decision, is served exactly as it was made and listed with `current: false`.

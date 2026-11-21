@@ -1,7 +1,8 @@
 """Customer exports (BUILD-SPEC 8; studio.exports): the draft and approved exports as TXT and CSV, the readiness rules,
 the SYNTHETIC banners, formula neutralising and control-character escaping, stored bytes served exactly, the earlier
-marker of an export made from an earlier round, the display hygiene and the tenancy of a download. Synthetic data
-only."""
+marker of an export made from an earlier round, the display hygiene and the tenancy of a download, and the refusal of a
+kind or format that is not one (PDF, CSV or TXT). The PDF, the physician report of 2026-11-21, has its own modules:
+tests/test_physician_report.py and tests/test_physician_report_scan.py. Synthetic data only."""
 import csv
 import hashlib
 import io
@@ -135,8 +136,14 @@ class DraftTests(ExportCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json(), {'error': exports.NOTHING_YET,
                                            'details': {'blockers': ['The coding review has not finished.']}})
-        refused = self.post(f'/api/encounters/{self.enc.pk}/reports', {'kind': 'reviewed', 'fmt': 'pdf'})
-        self.assertEqual(refused.status_code, 400)
+        # an unknown kind or format is refused before the round is read (pdf is a format since 2026-11-21)
+        for body in ({'kind': 'reviewed', 'fmt': 'pdf', 'round': 2}, {'kind': 'draft', 'fmt': 'docx', 'round': 2},
+                     {'kind': 'approved', 'fmt': 'PDF', 'round': 2}, {'kind': 'draft', 'round': 2}):
+            with self.subTest(body=body):
+                refused = self.post(f'/api/encounters/{self.enc.pk}/reports', body)
+                self.assertEqual((refused.status_code, refused.json()['error']),
+                                 (400, 'Choose a draft or an approved export as PDF, CSV or TXT.'))
+        self.assertEqual(exports.FORMAT_REQUIRED, 'Choose a draft or an approved export as PDF, CSV or TXT.')
         self.assertEqual(Export.objects.count(), 0)
 
 
