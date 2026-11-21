@@ -441,3 +441,67 @@
 /* The review dialog states the line being decided - its units and its modifiers - under its status, so two lines of one
    code read apart (the fix pass's line identity). */
 .review-summary .review-line{font-size:11px;font-weight:500;color:var(--teal);margin-top:3px}
+
+/* The PDF viewer (2026-11-20, DECISIONS D368): the original's pages drawn in the page, each with its text in a transparent
+   text layer (positioned as the PDF library positions it: the scale and font sizes come from the inline properties the
+   page and the library set). The chosen quote's words are marked in the page's lime beneath the drawing, which is
+   multiplied over them like a highlighter, so the glyphs keep their own colour; the drawing lets the pointer through to
+   the text, which stays selectable. The note under the viewer says what was marked. Elements the approved design did not
+   have, in its own colours: the status line and the page label in its teal, 5.5:1 on the viewer's ground and 6.1:1 on its
+   toolbar (its muted grey read 3.7:1 and 4.1:1 there, under the 4.5:1 that text this small needs). */
+.viewer-frame.pdf-viewer{position:relative;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:#eeefe8;padding:12px}
+.pdf-viewer:focus-visible{outline:3px solid #83b6a3;outline-offset:-3px}
+.pdf-viewer[data-mode="frame"]{padding:0;overflow:hidden}
+.pdf-status{margin:12px 4px;font-size:12px;color:var(--teal)}
+.pdf-pages{display:grid;gap:12px;justify-items:center;min-width:0}
+.pdf-page{position:relative;background:#fff;box-shadow:0 1px 3px #17352b26;overflow:hidden;isolation:isolate}
+.pdf-page>canvas{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%;mix-blend-mode:multiply;pointer-events:none}
+.pdf-text{position:absolute;inset:0;z-index:0;overflow:clip;line-height:1;text-align:initial;letter-spacing:normal;word-spacing:normal;-webkit-text-size-adjust:none;text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0;caret-color:CanvasText}
+.pdf-text span,.pdf-text br{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
+.pdf-text>span{font-size:calc(var(--total-scale-factor) * var(--min-font-size) * var(--font-height));transform:rotate(var(--rotate,0deg)) scaleX(var(--scale-x,1)) scale(calc(1 / var(--min-font-size)))}
+.pdf-text[data-main-rotation="90"]{transform:rotate(90deg) translateY(-100%)}
+.pdf-text[data-main-rotation="180"]{transform:rotate(180deg) translate(-100%,-100%)}
+.pdf-text[data-main-rotation="270"]{transform:rotate(270deg) translateX(-100%)}
+.pdf-text ::selection{background:color-mix(in srgb,var(--teal) 30%,transparent);color:transparent}
+.pdf-text .pdf-mark{position:static;background:var(--lime);box-shadow:inset 0 -2px 0 var(--teal);border-radius:2px}
+.viewer-fallback{display:block;width:100%;height:100%;border:0;background:#fff}
+.viewer-page{font-size:11px;color:var(--teal);white-space:nowrap;font-variant-numeric:tabular-nums}
+.viewer-page:empty{display:none}
+.viewer-mark{margin:0;padding:9px 18px;font-size:11px;line-height:1.6;color:#40592f;background:#f0f5e7;border-top:1px solid #dfe5d6;overflow-wrap:anywhere}
+.viewer-mark:empty{padding:0;border:0}
+.viewer-mark.is-missing{color:#806b3d;background:var(--amber-bg)}
+.viewer-mark:not(:empty)+.viewer-note{border-top:0}
+@media(max-width:760px){.viewer-frame.pdf-viewer{padding:8px}
+}
+
+/* The PDF viewer, round 3 (DECISIONS D368). In the desktop column the drawn pages never set the viewer's share of the
+   column: it starts from nothing and takes what the quoted passages leave them (their approved share, at most 36%), as
+   the frame it replaced did, however long the document. In forced colours the drawn page keeps its own white ground, so
+   its drawing stays legible and the mark visible; the note and the page label around it keep the forced colours. The
+   marks are <mark> elements, in the same look. The zoom, 75% to 300% of the page fitted to the viewer's width: a page
+   wider than the viewer scrolls across inside it; the buttons sit in the toolbar, which wraps where it is narrow, in the
+   page's teal with a focus ring in it. */
+@media(min-width:1001px){.viewer-column .viewer-frame.pdf-viewer{height:0}
+}
+.pdf-page{forced-color-adjust:none}
+.pdf-text mark.pdf-mark{color:transparent}
+.pdf-pages{width:max-content;min-width:100%}
+.viewer-toolbar{flex-wrap:wrap;row-gap:8px}
+.viewer-name{flex:1 1 0;text-align:right}
+.viewer-zoom{display:inline-flex;align-items:center;gap:4px}
+.viewer-zoom[hidden]{display:none}
+.zoom-button{min-width:32px;min-height:32px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--teal);font:inherit;font-size:12px;font-weight:500;line-height:1;cursor:pointer}
+.zoom-button:hover{background:#f0f5e7}
+.zoom-button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.zoom-button[aria-disabled="true"]{color:var(--muted);background:#fafbf6;cursor:default}
+.zoom-level{min-width:4.5ch;text-align:center;font-size:11px;color:var(--teal);font-variant-numeric:tabular-nums}
+@media(max-width:760px){.zoom-button{min-width:44px;min-height:44px}
+}
+
+/* The PDF viewer, round 5 (DECISIONS D368). In forced colours a zoom step that can go no further shows as unavailable, in
+   GrayText as a native disabled button is. The file name keeps room: it comes last in the toolbar, at least 12 characters
+   wide (all of it where it is shorter) and as wide as it is where there is room, so where the toolbar cannot hold it
+   beside the page and the zoom it takes a row of its own, at the right as before; its full text is its title. */
+@media (forced-colors: active){.zoom-button[aria-disabled="true"]{color:GrayText;border-color:GrayText}
+}
+.viewer-name{order:1;flex:1 0 12ch;max-width:max-content}

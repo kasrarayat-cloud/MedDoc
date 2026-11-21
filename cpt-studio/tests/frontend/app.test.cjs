@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const zlib = require('node:zlib');
 
 const app = require('../../studio/static/studio/app.js');
@@ -679,16 +680,32 @@ test('every fixture draws the DOM contract: viewer, quotes, progress, questions,
   for (const name of ENCOUNTERS) {
     const doc = fixture(name);
     const page = dom(render(doc));
-    // the original: an iframe of view_url when the server names a view type, else no viewer at all; the note under a
-    // converted Word document's PDF; the download of the original when there is one
+    // the original when the server names a view type, else no viewer at all: a PDF in the region the page draws it in, a
+    // text in an iframe, each keeping view_url in data-view-url, with the polite note under it that says what a chosen
+    // quote marked; the note under a converted Word document's PDF; the download of the original when there is one
     const viewer = page.one('#documentViewer');
-    if (doc.document.view_media_type) {
+    if (doc.document.view_media_type === 'application/pdf') {
+      assert.ok(viewer && viewer.tag === 'div' && viewer.attr('class') === 'viewer-frame pdf-viewer', name);
+      assert.equal(viewer.attr('data-view-url'), doc.document.view_url, name);
+      assert.deepEqual([viewer.attr('role'), viewer.attr('tabindex')], ['region', '0'], name);
+      assert.match(viewer.attr('aria-label'), /^Original document: /, name);
+      assert.equal(page.all('iframe').length, 0, `${name}: the page draws the PDF itself`);
+      assert.equal(page.one('.viewer-toolbar #viewerPage').text, '', name);
+    } else if (doc.document.view_media_type) {
       assert.ok(viewer && viewer.tag === 'iframe', name);
       assert.equal(viewer.attr('src'), doc.document.view_url, name);
+      assert.equal(viewer.attr('data-view-url'), doc.document.view_url, name);
       assert.ok(viewer.attr('title'), name);
+      assert.equal(page.one('#viewerPage'), null, `${name}: a text has no pages`);
     } else {
       assert.equal(viewer, null, name);
       assert.equal(page.all('iframe').length, 0, name);
+    }
+    const note = page.one('.viewer-panel p#viewerMark');
+    if (doc.document.view_media_type) {
+      assert.deepEqual([note?.attr('role'), note?.attr('aria-live'), note?.text], ['status', 'polite', ''], name);
+    } else {
+      assert.equal(note, null, `${name}: nothing to mark where nothing is shown`);
     }
     assert.deepEqual(page.all('.viewer-panel .viewer-note').map(note => note.text), doc.document.converted ? [app.CONVERTED_NOTE] : [], name);
     const download = page.one('#downloadOriginal');
@@ -851,7 +868,7 @@ test('units the coding review did not give read "Units not given", never a numbe
   assert.equal(dom(render(doc)).one('li.code-row[data-line="L3"] .code-units').text, '1 unit');
 });
 
-test('quote page links: a page opens the viewer at view_url#page=N; a text quote has no page', () => {
+test('quote page links: a quote names its page; the browser\'s own viewer opens at view_url#page=N; a text quote has no page', () => {
   const view = `/api/encounters/${UUID}/original?view=1`;
   assert.equal(app.viewerUrl(view, 3), `${view}#page=3`);
   assert.equal(app.viewerUrl(view, null), view);
@@ -869,11 +886,11 @@ test('quote page links: a page opens the viewer at view_url#page=N; a text quote
   assert.deepEqual(panel.slice(0, 3), ['L1#0', 'L1#1', 'L2#0']);
   assert.deepEqual(page.all('li.code-row .code-quote').map(quote => quote.attr('data-view-page')), ['1', '1', '2', '2', '2']);
   assert.equal(page.one('#quotesPanel .quote').one('.quote-page').text, 'Page 1');
-  assert.match(page.one('#quotesPanel .quotes-lead').text, /open its page/);
-  // a text document's quotes carry no page, and the panel says they are found in the document
+  assert.equal(page.one('#quotesPanel .quotes-lead').text, 'Each code rests on these passages. Choose one to open its page and mark its words there.');
+  // a text document's quotes carry no page, and the panel says they are marked in the document
   const text = dom(render(fixture('encounter-awaiting-answer.json')));
   assert.deepEqual(text.all('#quotesPanel .quote').map(quote => quote.attr('data-page')), ['', '', '']);
-  assert.match(text.one('#quotesPanel .quotes-lead').text, /find it in the document/);
+  assert.equal(text.one('#quotesPanel .quotes-lead').text, 'Each code rests on these passages. Choose one to mark it in the document.');
 });
 
 test('the viewer follows document.view_media_type, never media_type: a PDF or a text in the page, else only the download', () => {
@@ -922,14 +939,16 @@ test('a Word document is viewed as the PDF the coding review read, with the note
   assert.equal(app.CONVERTED_NOTE, 'Shown as the PDF the coding review read (converted from the Word file).');
   const panel = dom(app.viewerPanel(doc)).one('section.viewer-panel');
   const children = panel.children.filter(child => typeof child !== 'string').map(child => child.attr('class') || child.attr('id'));
-  assert.deepEqual(children, ['viewer-toolbar', 'viewer-frame', 'viewer-note', 'viewer-bottom'], 'the note sits under the viewer');
-  assert.equal(panel.one('iframe#documentViewer').attr('src'), doc.document.view_url);
+  assert.deepEqual(children, ['viewer-toolbar', 'viewer-frame pdf-viewer', 'viewer-mark', 'viewer-note', 'viewer-bottom'],
+    'the notes sit under the viewer: what a chosen quote marked, then that the PDF is a converted one');
+  assert.equal(panel.one('div#documentViewer').attr('data-view-url'), doc.document.view_url);
+  assert.equal(panel.all('iframe').length, 0);
   assert.equal(panel.one('.viewer-note').text, app.CONVERTED_NOTE);
   assert.equal(panel.one('.viewer-name').text, 'synthetic-colonoscopy-report.docx');
   assert.equal(panel.one('#downloadOriginal').attr('href'), doc.document.original_url, 'the download is the Word file itself');
   // its quotes open their pages: the PDF's pages are the pages the quotes name
   const page = dom(render(doc));
-  assert.match(page.one('#quotesPanel .quotes-lead').text, /open its page/);
+  assert.match(page.one('#quotesPanel .quotes-lead').text, /open its page and mark its words/);
   assert.deepEqual(page.all('#quotesPanel .quote').map(quote => quote.attr('data-page')), ['2', '1', '1', '2']);
   // the note only for a converted PDF: not for a PDF or a text uploaded as such, not without a view
   for (const name of ['encounter-ready.json', 'encounter-awaiting-answer.json', 'encounter-no-codes.json', 'encounter-earlier.json']) {
@@ -962,29 +981,1285 @@ test('the second check without a verdict shows the server\'s own sentence as giv
   assert.equal(app.tallyText(doc), '1 ready for approval · 2 need your review');
 });
 
-test('a quote opens its page in the PDF viewer; in the text viewer the passage is found instead', async () => {
-  const frame = () => fakeElement({ src: 'unchanged', scrollIntoView() {} });
+// A viewer element as the browser wiring holds it: what it is given to show, and the data it is marked with.
+function viewerElement(extra = {}) {
+  return fakeElement({ children: [], replaceChildren(...nodes) { this.children = nodes; }, scrollIntoView() {}, removeEventListener() {},
+    scrollTo(options) { this.scrolled = options; }, ...extra });
+}
+
+// One page of a PDF as the library serves it: its text items, read once each.
+function pdfPage(strings, reads) {
+  return { getTextContent: async () => { reads.push(strings); return { items: strings.map(str => ({ str, hasEOL: false })) }; } };
+}
+
+test('where the PDF library cannot run, the browser\'s own viewer is framed and opens a quoted page, saying marking needs a newer browser', async () => {
   const word = fixture('encounter-word.json');
-  await withPage({ elements: { documentViewer: frame() } }, async ({ element }) => {
-    Object.assign(app.state, { doc: word, route: null });
-    app.showQuote('L2#0');
-    assert.equal(element('#documentViewer').src, `${word.document.view_url}#page=1`);
-    assert.equal(app.state.selectedQuote, 'L2#0');
-    app.showQuote('M1#0');
-    assert.equal(element('#documentViewer').src, `${word.document.view_url}#page=2`);
-    app.showQuote('L9#0');
-    app.showQuote('45381#0');
-    assert.equal(app.state.selectedQuote, 'M1#0', 'a quote the page does not hold changes nothing');
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  const saved = { viewer: app.state.viewer, pdfLibrary: app.state.pdfLibrary };
+  try {
+    await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+      Object.assign(app.state, { doc: word, route: null, pdfLibrary: null });
+      // no IntersectionObserver here: the browser lacks what marking needs, and the library is never asked for
+      assert.equal(app.pdfCapable(), false);
+      const loads = [];
+      const load = app.PDF_IMPORT.load;
+      app.PDF_IMPORT.load = specifier => { loads.push(specifier); return new Promise(() => {}); };
+      try {
+        app.mountViewer(word);
+        await settle(() => app.state.viewer?.mode === 'frame');
+      } finally {
+        app.PDF_IMPORT.load = load;
+      }
+      const viewer = app.state.viewer;
+      assert.deepEqual(loads, [], 'the library is not downloaded');
+      assert.equal(viewer.mode, 'frame');
+      assert.equal(element.dataset.mode, 'frame');
+      assert.deepEqual([viewer.fallback, element.dataset.fallback], ['browser', 'browser'], 'the browser is why');
+      assert.deepEqual(element.children, [viewer.frame], 'the frame alone, in the viewer\'s place');
+      assert.equal(viewer.frame.src, word.document.view_url);
+      assert.equal(viewer.frame.className, 'viewer-fallback');
+      assert.equal(viewer.frame.title, 'Original document: synthetic-colonoscopy-report.docx');
+      assert.equal(find('#viewerMark').textContent, '', 'nothing said before a quote is chosen');
+      // a quote on another page than the frame was opened at gets a new frame at its page: the browser's viewer opens
+      // #page=N only as its frame loads, so changing the address of the frame it has would move nothing
+      const first = viewer.frame;
+      app.showQuote('L2#0');
+      assert.notEqual(viewer.frame, first, 'a new frame element');
+      assert.deepEqual(element.children, [viewer.frame]);
+      assert.equal(viewer.frame.src, `${word.document.view_url}#page=1`);
+      assert.equal(first.src, word.document.view_url, 'the old frame was not moved, it was replaced');
+      assert.equal(app.state.selectedQuote, 'L2#0');
+      // the note says why and names the quote's page, never what the frame shows
+      assert.equal(find('#viewerMark').textContent, 'Marking needs a newer browser. The quote is on page 1.');
+      assert.ok(find('#viewerMark').classList.contains('is-missing'));
+      assert.equal(element.dataset.marked, '', 'nothing marked');
+      // the same page again: the frame is kept, not reloaded
+      const atOne = viewer.frame;
+      app.showQuote('L1#1');
+      assert.equal(viewer.frame, atOne, 'the same page keeps its frame');
+      app.showQuote('M1#0');
+      assert.notEqual(viewer.frame, atOne);
+      assert.equal(viewer.frame.src, `${word.document.view_url}#page=2`);
+      assert.equal(find('#viewerMark').textContent, 'Marking needs a newer browser. The quote is on page 2.');
+      const atTwo = viewer.frame;
+      app.showQuote('L9#0');
+      app.showQuote('45381#0');
+      assert.equal(app.state.selectedQuote, 'M1#0', 'a quote the page does not hold changes nothing');
+      assert.equal(viewer.frame, atTwo);
+      // a quote with no page keeps the frame where it is, and the note says why alone
+      const pageless = clone(word);
+      pageless.codes[1].quotes[0].page = null;
+      app.state.doc = pageless;
+      app.showQuote('L2#0');
+      assert.equal(viewer.frame, atTwo, 'no page: no new frame');
+      assert.equal(find('#viewerMark').textContent, 'Marking needs a newer browser.');
+      app.closeViewer();
+      assert.equal(app.state.viewer, null);
+      assert.equal(viewer.mode, 'closed');
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('the browser\'s own viewer says why it is shown: the browser, the library, a document the library cannot draw, a stalled download, a failed download', async () => {
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  // the five reasons, word for word; a reason the page does not name is read as the document's, never as the browser's
+  assert.deepEqual(app.FRAME_REASONS, {
+    browser: 'Marking needs a newer browser.',
+    library: 'The marking tool did not work here, so nothing is marked.',
+    document: 'This document cannot be drawn here, so nothing is marked.',
+    slow: 'The document took too long to load here, so nothing is marked.',
+    download: 'The document could not be downloaded for marking, so nothing is marked.',
   });
-  // a text has no pages: even a quote that names one is looked for in the text, and the viewer is not moved
+  const cases = [['browser', 'browser'], ['library', 'library'], ['document', 'document'], ['slow', 'slow'], ['download', 'download'],
+    ['toString', 'document'], [undefined, 'document']];
+  try {
+    for (const [reason, kept] of cases) {
+      const said = app.FRAME_REASONS[kept];
+      const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+      await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+        Object.assign(app.state, { doc: word, route: null });
+        // a quote was chosen while the document was still opening
+        const viewer = { element, view: word.document.view_url, name: 'x', mode: 'loading', pages: [], texts: new Map(), prepared: new Map(), mark: null,
+          pending: { quote: { text: 'A 7 mm sessile polyp', page: 2 }, key: 'M1#0' }, chosen: null, markSerial: 0, reveal: 0, frame: null, framePage: null,
+          fallback: '', task: null, worker: null };
+        app.state.viewer = viewer;
+        app.fallbackViewer(viewer, reason);
+        assert.deepEqual([viewer.mode, viewer.fallback, element.dataset.mode, element.dataset.fallback], ['frame', kept, 'frame', kept], String(reason));
+        assert.equal(viewer.frame.src, `${word.document.view_url}#page=2`, 'the page of the quote that was waiting');
+        assert.equal(viewer.framePage, 2);
+        assert.equal(find('#viewerMark').textContent, `${said} The quote is on page 2.`);
+        assert.ok(find('#viewerMark').classList.contains('is-missing'));
+        // a quote chosen in the frame says the same of its own page, in a new frame there
+        app.showQuote('L2#0');
+        assert.equal(viewer.frame.src, `${word.document.view_url}#page=1`);
+        assert.equal(find('#viewerMark').textContent, `${said} The quote is on page 1.`);
+        // once framed, the reason stays: a second failure does not change what the note says
+        app.fallbackViewer(viewer, 'browser');
+        assert.equal(viewer.fallback, kept);
+        app.closeViewer();
+      });
+    }
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+// A viewer of the PDF of `doc` as the browser wiring holds it, its pages built from `pages` (each page's text items).
+function pdfViewer(doc, element, pages, reads, extra = {}) {
+  const pageAt = number => ({ number, proxy: pdfPage(pages[number - 1], reads), element: fakeElement({ offsetTop: 400 * (number - 1), querySelector: () => null, replaceChildren() {} }),
+    drawn: '', layer: null, painted: [], serial: 0 });
+  return { element, view: doc.document.view_url, name: 'x', mode: 'pdf', pages: pages.map((_, index) => pageAt(index + 1)), texts: new Map(),
+    prepared: new Map(), mark: null, pending: null, chosen: null, markSerial: 0, reveal: 0, frame: null, framePage: null, fallback: '', zoom: app.ZOOM_FIT,
+    task: null, worker: null, ...extra };
+}
+
+test('a quote chosen in the PDF viewer reads its page and the next, is located, and says what was marked', async () => {
+  const word = fixture('encounter-word.json');
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  const reads = [];
+  // the synthetic Word document's two pages, as its PDF's text items (dev_preview_server.cjs SYNTHETIC_DOCUMENTS)
+  const pages = preview.SYNTHETIC_DOCUMENTS['synthetic-colonoscopy-report.docx'].pages;
+  const saved = { viewer: app.state.viewer };
+  try {
+    await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+      Object.assign(app.state, { doc: word, route: null });
+      const viewer = pdfViewer(word, element, pages, reads, { mode: 'loading', pages: [] });
+      app.state.viewer = viewer;
+      // while the PDF is still opening, the choice waits
+      app.showQuote('L2#0');
+      assert.deepEqual(viewer.pending, { quote: { text: 'Two biopsies were taken from the cecum with cold forceps.', page: 1 }, key: 'L2#0' });
+      assert.deepEqual(viewer.chosen, viewer.pending, 'the quote being chosen is kept');
+      viewer.pending = null;
+      Object.assign(viewer, { mode: 'pdf', pages: pdfViewer(word, element, pages, reads).pages });
+      const result = await app.showQuote('L2#0');
+      assert.deepEqual(reads, pages, 'the quote\'s page and the next are read, in order');
+      assert.equal(result.status, 'marked');
+      assert.deepEqual([result.scope, result.count, result.pages, result.caseBlind], ['page', 1, [1], false]);
+      assert.deepEqual(viewer.mark.key, 'L2#0');
+      assert.equal(find('#viewerMark').textContent, 'Marked on page 1.');
+      assert.equal(find('#viewerMark').classList.contains('is-missing'), false);
+      assert.deepEqual([element.dataset.marked, element.dataset.markStatus, element.dataset.markPages, element.dataset.markCount], ['L2#0', 'marked', '1', '1']);
+      assert.deepEqual(element.scrolled, { top: 0, behavior: 'smooth' }, 'the page is scrolled to');
+      // each page's text is read and prepared once for the document: a second quote of the same pages reads nothing
+      const prepared = [...viewer.prepared.entries()];
+      await app.showQuote('M1#0');
+      assert.equal(reads.length, 2);
+      assert.ok(prepared.length === 2 && prepared.every(([number, text]) => viewer.prepared.get(number) === text), 'the same prepared texts, not made again');
+      assert.equal(find('#viewerMark').textContent, 'Marked on page 2.');
+      assert.equal(element.scrolled.top, 400 - app.PDF_VIEW.gap);
+      // a quote whose words are not on its page, which has text: nothing marked, the page still opened, and the note says
+      // what was searched
+      const missing = clone(word);
+      missing.codes[0].quotes[0] = { text: 'A passage that is in no page of this document.', page: 2 };
+      app.state.doc = missing;
+      const none = await app.showQuote('L1#0');
+      assert.deepEqual([none.status, none.count, none.pages, none.textless], ['not_found', 0, [], false]);
+      assert.equal(find('#viewerMark').textContent, 'The exact words were not found in the searchable text of page 2, so nothing is marked. Page 2 is shown.');
+      assert.ok(find('#viewerMark').classList.contains('is-missing'));
+      assert.deepEqual([element.dataset.marked, element.dataset.markStatus, element.dataset.markCount], ['L1#0', 'not_found', '0']);
+      assert.equal(element.scrolled.top, 400 - app.PDF_VIEW.gap);
+      // a newer coding review clears the mark, its note and the quote being chosen
+      app.clearViewerMark();
+      assert.equal(viewer.mark, null);
+      assert.equal(viewer.chosen, null);
+      assert.equal(find('#viewerMark').textContent, '');
+      assert.equal(element.dataset.marked, '');
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('a page with no text to search says so, whatever the next page holds, and is told apart from words not found', async () => {
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const scanned = [[], ['A 7 mm sessile polyp in the transverse colon was removed with a cold snare.']];
+  try {
+    const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+    await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+      const doc = clone(word);
+      doc.codes[0].quotes = [{ text: 'Two biopsies were taken from the cecum with cold forceps.', page: 1 }, { text: 'Two biopsies were taken', page: null }];
+      Object.assign(app.state, { doc, route: null });
+      app.state.viewer = pdfViewer(doc, element, scanned, []);
+      const result = await app.showQuote('L1#0');
+      assert.deepEqual([result.status, result.textless], ['not_found', true]);
+      assert.equal(find('#viewerMark').textContent, 'Page 1 has no text the viewer can search (it may be a scanned image), so nothing is marked. Page 1 is shown.');
+      assert.ok(find('#viewerMark').classList.contains('is-missing'));
+      // with no page, every page is searched: one of them has text, so the words are said not to be found in it
+      const pageless = await app.showQuote('L1#1');
+      assert.deepEqual([pageless.status, pageless.textless], ['not_found', false]);
+      assert.equal(find('#viewerMark').textContent, 'The exact words were not found in the searchable text of this document, so nothing is marked.');
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+  // the rule itself: zero characters after folding, overprint copies left out
+  const run = (texts, quote) => app.locateQuote(quote, texts);
+  assert.equal(run([['   ', '\n'], ['words']], { text: 'words', page: 1 }).textless, true, 'white space only is no text');
+  const drawnTwice = [{ str: 'BOLD', transform: [10, 0, 0, 10, 50, 700], hasEOL: false }, { str: 'BOLD', transform: [10, 0, 0, 10, 50.3, 700], hasEOL: false }];
+  assert.equal(run([drawnTwice], { text: 'other', page: 1 }).textless, false, 'one copy of overprinted words is text');
+  assert.equal(run([[]], { text: 'words', page: null }).textless, true, 'a document with no text at all');
+  assert.equal(app.markNote(run([[]], { text: 'words', page: null })), 'This document has no text the viewer can search (it may be a scanned image), so nothing is marked.');
+  assert.equal(run([[], ['x']], { text: 'words', page: null }).textless, false);
+  assert.equal(run([['x']], { text: 'words', page: 1 }).textless, false);
+  assert.equal(run([null], { text: 'words', page: 1 }).textless, false, 'a page not read is not said to have no text');
+  assert.equal(app.markNote(run([['x']], { text: 'words', page: 1 })), 'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.');
+});
+
+test('a read that changes the page never reloads the viewer: its mark stays, a new coding review clears it, a new document closes it', async () => {
+  const word = fixture('encounter-word.json');
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  const saved = { viewer: app.state.viewer };
+  try {
+    await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+      const viewer = { element, view: word.document.view_url, name: 'x', mode: 'pdf', pages: [], texts: new Map(), markSerial: 0, reveal: 0, frame: null,
+        mark: { key: 'L2#0', quote: word.codes[1].quotes[0], result: { status: 'marked', pages: [1], count: 1, marks: {} } }, pending: null };
+      Object.assign(app.state, { doc: word, route: { name: 'doc', id: word.id }, docKey: 'drawn', viewerKey: app.viewerKey(word), selectedQuote: 'L2#0', viewer });
+      find('#viewerMark').textContent = 'Marked on page 1.';
+      // the same coding review, read again with a change (a decision recorded): the review column is redrawn, the viewer kept
+      const decided = clone(word);
+      decided.codes[1].reason = `${decided.codes[1].reason} Again.`;
+      app.renderDocument(decided, false);
+      assert.equal(app.state.viewer, viewer, 'the same viewer');
+      assert.equal(viewer.mode, 'pdf');
+      assert.equal(viewer.mark.key, 'L2#0', 'its mark stays');
+      assert.equal(app.state.selectedQuote, 'L2#0');
+      assert.equal(find('#viewerMark').textContent, 'Marked on page 1.');
+      // a newer coding review of the same document: the passage chosen and its mark go, the viewer stays
+      const newer = clone(decided);
+      newer.round = { ...newer.round, number: newer.round.number + 1 };
+      app.renderDocument(newer, false);
+      assert.equal(app.state.viewer, viewer);
+      assert.equal(viewer.mark, null);
+      assert.equal(app.state.selectedQuote, '');
+      assert.equal(find('#viewerMark').textContent, '');
+      // another view of the document (another viewer key): the page is redrawn whole and the viewer closed
+      const other = clone(newer);
+      other.document.converted = false;
+      app.renderDocument(other, false);
+      assert.equal(viewer.mode, 'closed', 'the old viewer is closed');
+      assert.notEqual(app.state.viewer, viewer);
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+// The PDF library as a test stands it in: a module whose PDFWorker takes the viewer's own worker as its port, and whose
+// documents open as `open(task)` says (never, by default).
+function fakeLibrary({ open = null } = {}) {
+  const made = { workers: [], tasks: [] };
+  const library = {
+    GlobalWorkerOptions: { workerSrc: '' }, VerbosityLevel: { ERRORS: 0 }, AnnotationMode: { ENABLE: 2 },
+    PDFWorker: class {
+      constructor(options) {
+        made.workers.push(this);
+        this.options = options;
+        this.destroyed = false;
+        this.promise = Promise.resolve();
+      }
+
+      destroy() { this.destroyed = true; }
+    },
+    getDocument(options) {
+      const task = { options, destroyed: false, destroy() { this.destroyed = true; return Promise.resolve(); } };
+      task.promise = open ? open(task) : new Promise(() => {});
+      task.promise.catch(() => {});
+      made.tasks.push(task);
+      return task;
+    },
+  };
+  return { library, made };
+}
+
+// The viewer's own worker as a test stands it in (A4): made with `new Worker(address, {type: 'module'})`, it says it is
+// ready with the message the library's worker sends ({sourceName: 'worker', targetName: 'main', action: 'ready'}), or
+// fails ('error' or 'messageerror' before ready), or never answers, as FakeWorker.start says; emit() sends it anything.
+class FakeWorker {
+  constructor(url, options) {
+    this.url = url;
+    this.options = options;
+    this.terminated = false;
+    this.listeners = new Map();
+    FakeWorker.made.push(this);
+    const start = FakeWorker.start;
+    if (start === 'ready') setImmediate(() => this.emit('message', { data: { sourceName: 'worker', targetName: 'main', action: 'ready', data: new Uint8Array() } }));
+    else if (start !== 'never') setImmediate(() => this.emit(start, {}));
+  }
+
+  addEventListener(type, fn) {
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+    this.listeners.get(type).add(fn);
+  }
+
+  removeEventListener(type, fn) { this.listeners.get(type)?.delete(fn); }
+
+  emit(type, event = {}) {
+    if (this.terminated) return;
+    for (const fn of [...(this.listeners.get(type) || [])]) fn(event);
+  }
+
+  terminate() { this.terminated = true; }
+}
+FakeWorker.made = [];
+FakeWorker.start = 'ready';
+
+// A response to the viewer's own download of the document (A5): `status`, a body read in `chunks`, which breaks off after
+// them where `breaks` is set.
+function viewResponse({ status = 200, chunks = [Uint8Array.from([37, 80, 68, 70, 45]), Uint8Array.from([49, 46, 52])], breaks = false } = {}) {
+  return {
+    ok: status >= 200 && status < 300, status,
+    body: { getReader() {
+      let next = 0;
+      return { read: async () => {
+        if (next < chunks.length) return { done: false, value: chunks[next++] };
+        if (breaks) throw new TypeError('network error');
+        return { done: true, value: undefined };
+      } };
+    } },
+  };
+}
+
+const PDF_MODULE = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.min.0123456789ab.mjs';
+const PDF_WORKER = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.worker.min.0123456789ab.mjs';
+
+// Runs fn on a page that can draw a PDF (the observers a browser has, and Worker), with the library's module loaded by
+// `load`, the view's download answered by `download(url, init)` (a whole document by default) and the page's state kept
+// apart. fn gets {element, loads, fetches} besides the page's own.
+async function withPdfPage(load, fn, download = () => Promise.resolve(viewResponse())) {
+  const saved = { viewer: app.state.viewer, pdfLibrary: app.state.pdfLibrary, pdfAttempt: app.state.pdfAttempt, framePassage: app.state.framePassage };
+  const globals = { IntersectionObserver: global.IntersectionObserver, ResizeObserver: global.ResizeObserver, Worker: global.Worker };
+  const loader = app.PDF_IMPORT.load;
+  global.IntersectionObserver = function IntersectionObserver() { this.observe = () => {}; this.disconnect = () => {}; };
+  global.ResizeObserver = function ResizeObserver() { this.observe = () => {}; this.disconnect = () => {}; };
+  global.Worker = FakeWorker;
+  FakeWorker.made = [];
+  FakeWorker.start = 'ready';
+  const loads = [];
+  app.PDF_IMPORT.load = specifier => { loads.push(specifier); return load(specifier); };
+  try {
+    await withPage({}, async page => {
+      global.document.body.dataset = { pdfModule: PDF_MODULE, pdfWorker: PDF_WORKER };
+      global.location.href = 'http://studio.test/';
+      const fetches = [];
+      global.fetch = (url, init = {}) => {
+        fetches.push({ url, init });
+        return download(url, init);
+      };
+      Object.assign(app.state, { pdfLibrary: null, pdfAttempt: 0, viewer: null });
+      await fn({ ...page, loads, fetches });
+      app.closeViewer();
+    });
+  } finally {
+    app.PDF_IMPORT.load = loader;
+    Object.assign(global, globals);
+    Object.assign(app.state, saved);
+  }
+}
+
+// Mounts the viewer of `doc` on a fresh #documentViewer and lets it run until `done(viewer)` holds.
+async function mount(doc, find, done) {
+  const element = viewerElement({ dataset: { viewUrl: doc.document.view_url } });
+  find('#documentViewer');
+  Object.assign(find('#documentViewer'), element);
+  app.state.doc = doc;
+  app.mountViewer(doc);
+  const viewer = app.state.viewer;
+  await settle(() => done(viewer));
+  return viewer;
+}
+
+test('L1, A4: a library or its worker that does not start is the library\'s note, and the next document tries again at fresh addresses', async () => {
+  const word = fixture('encounter-word.json');
+  let answer = () => Promise.reject(new Error('404'));
+  await withPdfPage(specifier => answer(specifier), async ({ element: find, loads, fetches }) => {
+    // the module does not load: the frame, and the note blames neither the browser nor the document; no worker is made
+    const first = await mount(word, find, viewer => viewer.mode === 'frame');
+    assert.deepEqual([first.fallback, first.element.dataset.fallback], ['library', 'library']);
+    assert.deepEqual(loads, [PDF_MODULE], 'the first attempt asks for the address the page names');
+    assert.equal(FakeWorker.made.length, 0);
+    assert.equal(app.state.pdfLibrary, null, 'a failure is not kept');
+    app.showQuote('L2#0');
+    assert.equal(find('#viewerMark').textContent, 'The marking tool did not work here, so nothing is marked. The quote is on page 1.');
+    assert.equal(first.mode, 'frame', 'the document that failed stays framed with the library\'s note');
+    // the next document: fresh addresses for the module and its worker (the browser keeps a failed module by its address
+    // for the life of the page); the module loads, and the viewer starts its own worker there, which fails before it is
+    // ready (an 'error' event: its script did not load) - the library's failure too
+    const broken = fakeLibrary();
+    answer = () => Promise.resolve(broken.library);
+    FakeWorker.start = 'error';
+    const second = await mount(word, find, viewer => viewer.mode === 'frame');
+    assert.equal(second.fallback, 'library');
+    assert.deepEqual(loads, [PDF_MODULE, `${PDF_MODULE}?attempt=2`]);
+    assert.equal(broken.library.GlobalWorkerOptions.workerSrc, `${PDF_WORKER}?attempt=2`);
+    assert.deepEqual(FakeWorker.made.map(made => [made.url, made.options]), [[`${PDF_WORKER}?attempt=2`, { type: 'module' }]], 'the viewer\'s own module worker');
+    assert.equal(broken.made.workers.length, 0, 'the library is never handed a worker that did not start');
+    await settle(() => FakeWorker.made[0].terminated);
+    assert.ok(FakeWorker.made[0].terminated, 'the worker that failed is ended');
+    assert.equal(app.state.pdfLibrary, null);
+    assert.deepEqual(fetches, [], 'nothing is downloaded before the library and its worker start');
+    // the third: a worker whose first message cannot be read ('messageerror') fails the same way
+    FakeWorker.start = 'messageerror';
+    const third = await mount(word, find, viewer => viewer.mode === 'frame');
+    assert.equal(third.fallback, 'library');
+    assert.equal(FakeWorker.made.at(-1).url, `${PDF_WORKER}?attempt=3`);
+    // the fourth: the worker says it is ready, and only then is it handed to the library as its port; the viewer downloads
+    // the document itself and gives the library its bytes
+    const working = fakeLibrary();
+    answer = () => Promise.resolve(working.library);
+    FakeWorker.start = 'ready';
+    const fourth = await mount(word, find, () => working.made.tasks.length === 1);
+    assert.equal(fourth.mode, 'loading', 'opening the document');
+    assert.deepEqual(loads.slice(3), [`${PDF_MODULE}?attempt=4`]);
+    const own = FakeWorker.made.at(-1);
+    assert.equal(own.url, `${PDF_WORKER}?attempt=4`);
+    assert.deepEqual(working.made.workers.map(worker => worker.options), [{ port: own, verbosity: 0 }], 'the library takes the viewer\'s worker as its port');
+    const { options } = working.made.tasks[0];
+    assert.equal(options.worker, working.made.workers[0], 'the document is opened with that worker');
+    assert.deepEqual([...options.data], [37, 80, 68, 70, 45, 49, 46, 52], 'the bytes the viewer downloaded, chunk after chunk');
+    assert.equal(options.url, undefined, 'the library fetches nothing itself');
+    assert.deepEqual(fetches.map(({ url, init }) => [url, init.credentials, init.signal === fourth.download?.signal]), [[word.document.view_url, 'same-origin', true]]);
+    const kept = app.state.pdfLibrary;
+    assert.ok(kept);
+    // a working library is kept for the next document, which starts its own worker again (one per document)
+    const fifth = await mount(word, find, () => working.made.tasks.length === 2);
+    assert.equal(loads.length, 4, 'loaded once while it works');
+    assert.equal(app.state.pdfLibrary, kept);
+    assert.equal(FakeWorker.made.length, 4, 'a worker for each document opened (none for the first)');
+    await settle(() => own.terminated && working.made.workers[0].destroyed);
+    assert.ok(own.terminated && working.made.workers[0].destroyed, 'the document closed: the library let go of its worker, and the worker is ended');
+    // a worker that fails once it has started ('error' after ready) is the library not working: the frame, and the next
+    // document tries again at fresh addresses
+    FakeWorker.made.at(-1).emit('error', {});
+    await settle(() => fifth.mode === 'frame');
+    assert.deepEqual([fifth.mode, fifth.fallback], ['frame', 'library']);
+    assert.equal(app.state.pdfLibrary, null);
+    await mount(word, find, () => working.made.tasks.length === 3);
+    assert.equal(loads.at(-1), `${PDF_MODULE}?attempt=5`);
+    assert.equal(FakeWorker.made.at(-1).url, `${PDF_WORKER}?attempt=5`);
+    app.closeViewer();
+    await settle(() => FakeWorker.made.every(made => made.terminated));
+    assert.ok(FakeWorker.made.every(made => made.terminated), 'no worker is left running');
+  });
+});
+
+test('L1: loading the library and starting its worker has a time limit of 20 s, after which the next document tries again', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const word = fixture('encounter-word.json');
+  let answer = () => new Promise(() => {});
+  await withPdfPage(specifier => answer(specifier), async ({ element: find, loads }) => {
+    // the module never arrives (a request held, never answered)
+    const held = await mount(word, find, () => loads.length === 1);
+    t.mock.timers.tick(19999);
+    await settle(() => false);
+    assert.equal(held.mode, 'loading', 'still opening before 20 s');
+    t.mock.timers.tick(1);
+    await settle(() => held.mode === 'frame');
+    assert.deepEqual([held.mode, held.fallback], ['frame', 'library'], 'at 20 s: the frame, as the library not working');
+    assert.equal(app.state.pdfLibrary, null, 'a timeout is not kept');
+    // a worker that never says it is ready is given up the same way, and ended
+    const stuck = fakeLibrary();
+    answer = () => Promise.resolve(stuck.library);
+    FakeWorker.start = 'never';
+    const second = await mount(word, find, () => FakeWorker.made.length === 1);
+    assert.equal(loads[1], `${PDF_MODULE}?attempt=2`);
+    t.mock.timers.tick(20000);
+    await settle(() => second.mode === 'frame');
+    assert.deepEqual([second.mode, second.fallback], ['frame', 'library']);
+    await settle(() => FakeWorker.made[0].terminated);
+    assert.ok(FakeWorker.made[0].terminated, 'the worker given up is ended');
+    assert.equal(stuck.made.workers.length, 0);
+  });
+});
+
+test('a time limit counts only the time the page is visible: a hidden tab draws nothing', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const saved = global.document;
+  const listeners = new Set();
+  global.document = { hidden: true, addEventListener(type, fn) { if (type === 'visibilitychange') listeners.add(fn); }, removeEventListener(type, fn) { listeners.delete(fn); } };
+  const show = hidden => { global.document.hidden = hidden; for (const fn of [...listeners]) fn(); };
+  try {
+    let outcome = 'waiting';
+    app.withinLimit(new Promise(() => {}), 20000).catch(error => { outcome = error instanceof app.TimeLimit ? 'limit' : 'other'; });
+    t.mock.timers.tick(60000);
+    await settle(() => false);
+    assert.equal(outcome, 'waiting', 'a minute hidden counts nothing');
+    show(false);
+    t.mock.timers.tick(15000);
+    show(true);
+    t.mock.timers.tick(60000);
+    show(false);
+    t.mock.timers.tick(4999);
+    await settle(() => false);
+    assert.equal(outcome, 'waiting', '15 s + 4.999 s visible');
+    t.mock.timers.tick(1);
+    await settle(() => outcome !== 'waiting');
+    assert.equal(outcome, 'limit', 'at 20 s visible');
+    assert.equal(listeners.size, 0, 'it stops listening once settled');
+    // a wait that settles in time settles as it did, and stops its timer
+    const value = await app.withinLimit(Promise.resolve(7), 20000);
+    assert.equal(value, 7);
+    await assert.rejects(app.withinLimit(Promise.reject(new Error('refused')), 20000), /refused/);
+  } finally {
+    global.document = saved;
+  }
+});
+
+test('B3, A3, A5: a document with no page gives the frame; once it opened, the download\'s timer stops and the watchdog takes over', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const word = fixture('encounter-word.json');
+  // a document the library opens with no page (a page tree that says /Count 0): the document's note
+  const empty = fakeLibrary({ open: () => Promise.resolve({ numPages: 0, getPage: () => Promise.reject(new Error('none')) }) });
+  await withPdfPage(() => Promise.resolve(empty.library), async ({ element: find }) => {
+    const viewer = await mount(word, find, opened => opened.mode === 'frame');
+    assert.deepEqual([viewer.mode, viewer.fallback], ['frame', 'document']);
+  });
+  for (const pages of [-1, 1.5, undefined]) {
+    const odd = fakeLibrary({ open: () => Promise.resolve({ numPages: pages, getPage: () => new Promise(() => {}) }) });
+    await withPdfPage(() => Promise.resolve(odd.library), async ({ element: find }) => {
+      const viewer = await mount(word, find, opened => opened.mode === 'frame');
+      assert.equal(viewer.fallback, 'document', String(pages));
+    });
+  }
+  // the document opens, then its pages do not come (the worker stopped): the download's timer has stopped, so the frame
+  // that follows at 20 s is the library's (the watchdog: nothing answered), never "took too long to load"
+  const stopped = fakeLibrary({ open: () => Promise.resolve({ numPages: 3, getPage: () => new Promise(() => {}) }) });
+  await withPdfPage(() => Promise.resolve(stopped.library), async ({ element: find }) => {
+    const viewer = await mount(word, find, opened => stopped.made.tasks.length === 1 && opened.stallTimer === 0 && opened.watchdog);
+    assert.equal(viewer.stallTimer, 0, 'the download\'s timer stopped once the document opened');
+    t.mock.timers.tick(19999);
+    await settle(() => false);
+    assert.equal(viewer.mode, 'loading');
+    t.mock.timers.tick(1);
+    await settle(() => viewer.mode === 'frame');
+    assert.deepEqual([viewer.mode, viewer.fallback], ['frame', 'library']);
+  });
+  // the same, but the worker keeps answering (busy decoding other pages' images): the pages are waited for, however long;
+  // only once it has said nothing for 20 s is it taken as not working
+  const busy = fakeLibrary({ open: () => Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }) });
+  await withPdfPage(() => Promise.resolve(busy.library), async ({ element: find }) => {
+    const viewer = await mount(word, find, opened => busy.made.tasks.length === 1 && opened.watchdog);
+    const thread = FakeWorker.made.at(-1);
+    for (let second = 5; second <= 60; second += 5) {
+      t.mock.timers.tick(5000);
+      thread.emit('message', { data: { sourceName: 'worker', targetName: 'main', action: 'commonobj' } });
+      await settle(() => false);
+      assert.equal(viewer.mode, 'loading', `${second} s, answering all along: busy is not broken`);
+    }
+    t.mock.timers.tick(19999);
+    await settle(() => false);
+    assert.equal(viewer.mode, 'loading', '19.999 s after its last answer');
+    t.mock.timers.tick(1);
+    await settle(() => viewer.mode === 'frame');
+    assert.deepEqual([viewer.mode, viewer.fallback], ['frame', 'library'], '20 s after its last answer');
+  });
+});
+
+test('B4, N4: a page\'s text read or drawing that does not settle within 20 s is the library\'s note, naming the quote being chosen', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const pages = preview.SYNTHETIC_DOCUMENTS['synthetic-colonoscopy-report.docx'].pages;
+  try {
+    for (const [what, read, reason] of [['a text read that never settles', () => new Promise(() => {}), 'library'],
+      ['a text read that fails', () => Promise.reject(new Error('bad page')), 'document']]) {
+      const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+      await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+        Object.assign(app.state, { doc: word, route: null });
+        const viewer = pdfViewer(word, element, pages, []);
+        // page 2's text was read and a quote on it marked; page 1's text cannot be read
+        viewer.pages[0].proxy = { getTextContent: read };
+        app.state.viewer = viewer;
+        await app.showQuote('M1#0');
+        assert.equal(find('#viewerMark').textContent, 'Marked on page 2.');
+        app.showQuote('L2#0');
+        await settle(() => viewer.mode === 'frame');
+        t.mock.timers.tick(20000);
+        await settle(() => viewer.mode === 'frame');
+        assert.deepEqual([viewer.mode, viewer.fallback], ['frame', reason], what);
+        // the quote being chosen is the one named: its page, not the page of the quote marked before
+        assert.equal(viewer.frame.src, `${word.document.view_url}#page=1`, what);
+        assert.equal(find('#viewerMark').textContent, `${app.FRAME_REASONS[reason]} The quote is on page 1.`, what);
+        app.closeViewer();
+      });
+    }
+    // a page's drawing that never settles: the library's note; one that fails: the document's
+    for (const [render, reason] of [[() => ({ promise: new Promise(() => {}), cancel() {} }), 'library'],
+      [() => ({ promise: Promise.reject(new Error('bad drawing')), cancel() {} }), 'document']]) {
+      const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+      await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+        Object.assign(app.state, { doc: word, route: null });
+        const viewer = pdfViewer(word, element, pages, [], { library: { AnnotationMode: { ENABLE: 2 } }, ratio: 1,
+          chosen: { quote: word.codes[2].quotes[0], key: 'M1#0' } });
+        const page = viewer.pages[0];
+        Object.assign(page, { viewport: { width: 612, height: 792, scale: 1 }, proxy: { render, getTextContent: async () => ({ items: [] }) } });
+        app.state.viewer = viewer;
+        app.drawPage(viewer, page);
+        await settle(() => viewer.mode === 'frame');
+        t.mock.timers.tick(20000);
+        await settle(() => viewer.mode === 'frame');
+        assert.deepEqual([viewer.mode, viewer.fallback], ['frame', reason]);
+        assert.equal(find('#viewerMark').textContent, `${app.FRAME_REASONS[reason]} The quote is on page 2.`);
+        app.closeViewer();
+      });
+    }
+    // a page whose drawing is given up because it left the view is not a failure: no frame
+    const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+    await withPage({ elements: { documentViewer: element } }, async () => {
+      Object.assign(app.state, { doc: word, route: null });
+      const viewer = pdfViewer(word, element, pages, [], { library: { AnnotationMode: { ENABLE: 2 } }, ratio: 1 });
+      const page = viewer.pages[0];
+      const cleaned = [];
+      Object.assign(page, { viewport: { width: 612, height: 792, scale: 1 }, proxy: { render: () => ({ promise: new Promise(() => {}), cancel() {} }),
+        cleanup: () => cleaned.push(page.number) } });
+      app.state.viewer = viewer;
+      app.drawPage(viewer, page);
+      app.releasePage(page);
+      t.mock.timers.tick(20000);
+      await settle(() => false);
+      assert.equal(viewer.mode, 'pdf', 'a page released is not waited on');
+      // B1: a page released lets the library free what it decoded to draw it
+      assert.deepEqual(cleaned, [1]);
+      app.closeViewer();
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+// Page nodes as the text layer holds them, for a test that paints marks: textContent, append, and the nodes made.
+function layerNodes() {
+  const made = [];
+  const node = tag => {
+    const made1 = { tag, children: [], dataset: {}, className: '', set textContent(value) { this.children = value === '' ? [] : [value]; },
+      get textContent() { return this.children.map(child => (typeof child === 'string' ? child : child.textContent)).join(''); },
+      append(...items) { this.children.push(...items); } };
+    made.push(made1);
+    return made1;
+  };
+  const layer = strings => ({ textDivs: strings.map(value => { const div = node('span'); div.textContent = value; return div; }), textContentItemsStr: strings });
+  const marks = layered => layered.textDivs.flatMap(div => div.children.filter(child => typeof child !== 'string').map(child => child.textContent));
+  return { node, layer, marks };
+}
+
+test('A2: a new choice clears the old one at once - its marks on every drawn page, the mark state and the note - before anything is waited on', async () => {
+  const word = fixture('encounter-word.json');
+  const pages = preview.SYNTHETIC_DOCUMENTS['synthetic-colonoscopy-report.docx'].pages;
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  const saved = { viewer: app.state.viewer };
+  const { node, layer, marks } = layerNodes();
+  try {
+    await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+      global.document.createElement = node;
+      Object.assign(app.state, { doc: word, route: null });
+      const viewer = pdfViewer(word, element, pages, []);
+      const first = viewer.pages[0];
+      Object.assign(first, { drawn: 'key', layer: layer(pages[0]) });
+      app.state.viewer = viewer;
+      const state = () => [element.dataset.marked, element.dataset.markStatus, element.dataset.markPages, element.dataset.markCount, find('#viewerMark').textContent];
+      // a quote on page 1, marked
+      await app.showQuote('L2#0');
+      assert.deepEqual(state(), ['L2#0', 'marked', '1', '1', 'Marked on page 1.']);
+      assert.deepEqual(marks(first.layer), ['Two biopsies were taken from the cecum with cold forceps.']);
+      // the next quote's page has to be read first, and its read is held: at once, in the same task, nothing of the first
+      // quote is shown - no mark on any drawn page, no mark state, no note
+      let release;
+      viewer.prepared.delete(2);
+      viewer.texts.delete(2);
+      viewer.pages[1].proxy = { getTextContent: () => new Promise(resolve => { release = () => resolve({ items: pages[1].map(str => ({ str, hasEOL: false })) }); }) };
+      const shown = app.showQuote('M1#0');
+      assert.equal(viewer.mark, null);
+      assert.deepEqual(marks(first.layer), [], 'the first quote\'s marks are gone from its page');
+      assert.deepEqual(state(), ['', '', '', '', ''], 'no mark state and no note');
+      assert.equal(app.state.selectedQuote, 'M1#0');
+      // a page drawn meanwhile gets nothing of the first quote
+      first.drawn = 'key2';
+      app.paintPage(viewer, first);
+      assert.deepEqual(marks(first.layer), []);
+      release();
+      const result = await shown;
+      assert.equal(result.status, 'marked');
+      assert.deepEqual(state(), ['M1#0', 'marked', '2', '1', 'Marked on page 2.']);
+      // a quote whose pages are prepared already: cleared and shown in the same task, so nothing flickers
+      app.showQuote('L2#0');
+      assert.deepEqual(state(), ['L2#0', 'marked', '1', '1', 'Marked on page 1.'], 'already shown when showQuote returns');
+      assert.deepEqual(marks(first.layer), ['Two biopsies were taken from the cecum with cold forceps.']);
+      // while the PDF is still loading, a choice clears what was said and waits
+      viewer.mode = 'loading';
+      app.showQuote('M1#0');
+      assert.deepEqual(state(), ['', '', '', '', '']);
+      assert.deepEqual(marks(first.layer), [], 'and its marks go');
+      assert.deepEqual(viewer.pending, { quote: word.codes[2].quotes[0], key: 'M1#0' });
+      viewer.mode = 'pdf';
+      viewer.pending = null;
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('A3: the watchdog gives up waits on the library only when it has not answered for 20 s, from the later of its last answer and the wait\'s start', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const run = async fn => {
+    const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+    await withPage({ elements: { documentViewer: element } }, async page => {
+      Object.assign(app.state, { doc: word, route: null });
+      const viewer = pdfViewer(word, element, [['a'], ['b']], []);
+      app.state.viewer = viewer;
+      await fn(viewer, app.libraryWatchdog(viewer), page);
+      app.closeViewer();
+    });
+  };
+  const outcome = promise => {
+    const seen = { value: 'waiting' };
+    promise.then(() => { seen.value = 'settled'; }, error => { seen.value = error instanceof app.TimeLimit ? 'limit' : error?.name || 'error'; });
+    return seen;
+  };
+  try {
+    // answers keep a wait alive however long it takes; 20 s with none gives every pending wait up, and the frame
+    await run(async (viewer, dog) => {
+      assert.equal(app.libraryWatchdog(viewer), dog, 'one watchdog per viewer');
+      const one = outcome(dog.wait(new Promise(() => {})));
+      for (let step = 0; step < 6; step += 1) {
+        t.mock.timers.tick(15000);
+        dog.answer();
+        await settle(() => false);
+      }
+      const two = outcome(dog.wait(new Promise(() => {})));
+      t.mock.timers.tick(19999);
+      await settle(() => false);
+      assert.deepEqual([one.value, two.value, viewer.mode], ['waiting', 'waiting', 'pdf'], '90 s of answers, then 19.999 s quiet');
+      t.mock.timers.tick(1);
+      await settle(() => one.value !== 'waiting' && two.value !== 'waiting');
+      assert.deepEqual([one.value, two.value], ['limit', 'limit'], 'every pending wait rejects with TimeLimit');
+      assert.deepEqual([viewer.mode, viewer.fallback], ['frame', 'library']);
+    });
+    // counted from the later of the last answer and the start of the wait: quiet before a wait does not count
+    await run(async (viewer, dog) => {
+      dog.answer();
+      t.mock.timers.tick(15000);
+      const one = outcome(dog.wait(new Promise(() => {})));
+      t.mock.timers.tick(19999);
+      await settle(() => false);
+      assert.equal(one.value, 'waiting', '35 s after the last answer, 19.999 s after the wait began');
+      t.mock.timers.tick(1);
+      await settle(() => one.value !== 'waiting');
+      assert.equal(one.value, 'limit');
+    });
+    // a wait settling is an answer; a wait that settles settles as it did
+    await run(async (viewer, dog) => {
+      const pending = outcome(dog.wait(new Promise(() => {})));
+      const quick = outcome(dog.wait(new Promise(resolve => setTimeout(resolve, 10000))));
+      t.mock.timers.tick(10000);
+      await settle(() => quick.value !== 'waiting');
+      assert.equal(quick.value, 'settled');
+      t.mock.timers.tick(19999);
+      await settle(() => false);
+      assert.equal(pending.value, 'waiting', '29.999 s: 19.999 s after the other wait settled');
+      t.mock.timers.tick(1);
+      await settle(() => pending.value !== 'waiting');
+      assert.equal(pending.value, 'limit');
+      await assert.rejects(app.libraryWatchdog(viewer).wait(Promise.reject(new Error('refused'))), /refused|no longer shown/);
+    });
+    // a page released is no longer waited on: its waits are let go, and nothing fires
+    await run(async (viewer, dog) => {
+      const page = viewer.pages[0];
+      const drawing = outcome(dog.wait(new Promise(() => {}), page));
+      dog.forget(page);
+      await settle(() => drawing.value !== 'waiting');
+      assert.equal(drawing.value, 'AbortException');
+      t.mock.timers.tick(60000);
+      await settle(() => false);
+      assert.equal(viewer.mode, 'pdf');
+    });
+    // only visible time counts: a hidden tab draws nothing
+    await run(async (viewer, dog, page) => {
+      const listeners = new Set();
+      Object.assign(global.document, { hidden: false, addEventListener(type, fn) { if (type === 'visibilitychange') listeners.add(fn); },
+        removeEventListener(type, fn) { listeners.delete(fn); } });
+      viewer.watchdog = null;
+      const watchdog = app.libraryWatchdog(viewer);
+      const show = hidden => { global.document.hidden = hidden; for (const fn of [...listeners]) fn(); };
+      const one = outcome(watchdog.wait(new Promise(() => {})));
+      t.mock.timers.tick(15000);
+      show(true);
+      t.mock.timers.tick(60000);
+      show(false);
+      t.mock.timers.tick(4999);
+      await settle(() => false);
+      assert.equal(one.value, 'waiting', '15 s + 4.999 s visible');
+      t.mock.timers.tick(1);
+      await settle(() => one.value !== 'waiting');
+      assert.equal(one.value, 'limit');
+      assert.equal(page.element('#viewerMark').textContent, '', 'no quote chosen: nothing said');
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('A3: the pages are drawn one at a time, the quote\'s page first, and a page that leaves the view before its turn is never drawn', async () => {
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  try {
+    await withPage({ elements: { documentViewer: element } }, async () => {
+      Object.assign(app.state, { doc: word, route: null });
+      const started = [];
+      const finish = new Map();
+      const viewer = pdfViewer(word, element, [['a'], ['b'], ['c'], ['d']], [], { ratio: 1, library: { AnnotationMode: { ENABLE: 2 },
+        TextLayer: class { constructor() { this.textDivs = []; this.textContentItemsStr = []; } render() { return Promise.resolve(); } cancel() {} } } });
+      for (const page of viewer.pages) {
+        page.viewport = { width: 612, height: 792, scale: 1 };
+        page.proxy = { getTextContent: async () => ({ items: [] }), cleanup() {}, render: () => {
+          started.push(page.number);
+          let settle;
+          const promise = new Promise((resolve, reject) => { settle = { resolve, reject }; });
+          finish.set(page.number, settle);
+          return { promise, cancel: () => settle.reject(Object.assign(new Error('cancelled'), { name: 'RenderingCancelledException' })) };
+        } };
+      }
+      app.state.viewer = viewer;
+      for (const page of viewer.pages) app.drawPage(viewer, page);
+      assert.deepEqual(started, [1], 'one page at a time');
+      // the quote is waiting for page 4; page 2 leaves the view before its turn
+      viewer.reveal = 4;
+      app.releasePage(viewer.pages[1]);
+      finish.get(1).resolve();
+      await settle(() => started.length === 2);
+      assert.deepEqual(started, [1, 4], 'the quote\'s page next');
+      assert.equal(viewer.pages[0].drawn, '1 1', 'page 1 drawn');
+      finish.get(4).resolve();
+      await settle(() => started.length === 3);
+      assert.deepEqual(started, [1, 4, 3], 'then the others still asked for, in order; page 2 never');
+      // a page released while it is drawn lets the next one start at once
+      app.releasePage(viewer.pages[2]);
+      await settle(() => viewer.busy === null);
+      assert.equal(viewer.busy, null);
+      assert.deepEqual(viewer.queue, []);
+      assert.equal(viewer.mode, 'pdf', 'nothing given up is a failure');
+      // a page asked for at a new size while it is drawn (a zoom) is not cancelled: its drawing finishes and is shown, then
+      // it is drawn again at the new size (from what the library decoded for it)
+      viewer.reveal = 0;
+      const first = viewer.pages[0];
+      first.drawn = '';
+      app.drawPage(viewer, first);
+      assert.deepEqual(started.slice(3), [1]);
+      let cancelled = false;
+      const settle1 = finish.get(1);
+      finish.set(1, { resolve: settle1.resolve, reject: error => { cancelled = true; settle1.reject(error); } });
+      first.viewport = { width: 765, height: 990, scale: 1.25 };
+      app.drawPage(viewer, first);
+      assert.equal(cancelled, false, 'the drawing under way is not cancelled');
+      assert.deepEqual(viewer.queue, [first], 'the page is asked for again');
+      settle1.resolve();
+      await settle(() => started.length === 5);
+      assert.equal(first.drawn, '1 1', 'the first drawing was shown');
+      assert.deepEqual(started.slice(3), [1, 1], 'and the page is drawn again at the new size');
+      finish.get(1).resolve();
+      await settle(() => first.drawn === '1.25 1');
+      assert.deepEqual([first.drawn, first.drawing], ['1.25 1', '']);
+      app.closeViewer();
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('A3: while the view scrolls no page is started, so a page the view only passes is never decoded', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  try {
+    await withPage({ elements: { documentViewer: element } }, async () => {
+      Object.assign(app.state, { doc: word, route: null });
+      const started = [];
+      const viewer = pdfViewer(word, element, [['a'], ['b'], ['c']], [], { ratio: 1, library: { AnnotationMode: { ENABLE: 2 } } });
+      for (const page of viewer.pages) {
+        page.viewport = { width: 612, height: 792, scale: 1 };
+        page.proxy = { cleanup() {}, getTextContent: async () => ({ items: [] }), render: () => { started.push(page.number); return { promise: new Promise(() => {}), cancel() {} }; } };
+      }
+      app.state.viewer = viewer;
+      // the view is scrolling (a smooth scroll to a quote): pages 1 and 2 come near and are asked for, page 1 leaves again
+      viewer.scrolledAt = Date.now();
+      app.drawPage(viewer, viewer.pages[0]);
+      app.drawPage(viewer, viewer.pages[1]);
+      t.mock.timers.tick(100);
+      viewer.scrolledAt = Date.now();
+      app.releasePage(viewer.pages[0]);
+      t.mock.timers.tick(app.PDF_VIEW.settleMs - 1);
+      await settle(() => false);
+      assert.deepEqual(started, [], 'nothing is started while the view moves');
+      t.mock.timers.tick(1);
+      await settle(() => started.length === 1);
+      assert.deepEqual(started, [2], 'once it has stopped: the page still near; the page passed is never asked of the library');
+      app.closeViewer();
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('A5: the viewer downloads the document itself - a failed download is said so, a stalled one too, a refused one is the document\'s, and closing stops it', async t => {
+  const word = fixture('encounter-word.json');
+  const failing = [['a 503', () => Promise.resolve(viewResponse({ status: 503, chunks: [] }))], ['a 502', () => Promise.resolve(viewResponse({ status: 502, chunks: [] }))],
+    ['an app 500', () => Promise.resolve(viewResponse({ status: 500, chunks: [] }))], ['a fetch that fails', () => Promise.reject(new TypeError('Failed to fetch'))],
+    ['a body cut short', () => Promise.resolve(viewResponse({ breaks: true }))], ['a 401', () => Promise.resolve(viewResponse({ status: 401, chunks: [] }))]];
+  for (const [what, download] of failing) {
+    const library = fakeLibrary({ open: () => Promise.resolve({ numPages: 1, getPage: () => new Promise(() => {}) }) });
+    await withPdfPage(() => Promise.resolve(library.library), async ({ element: find, fetches }) => {
+      const viewer = await mount(word, find, opened => opened.mode === 'frame');
+      assert.deepEqual([viewer.fallback, viewer.element.dataset.fallback], ['download', 'download'], what);
+      assert.equal(library.made.tasks.length, 0, `${what}: the library is given nothing`);
+      assert.equal(fetches.length, 1, `${what}: one download, never repeated by itself`);
+      app.showQuote('L2#0');
+      assert.equal(find('#viewerMark').textContent, 'The document could not be downloaded for marking, so nothing is marked. The quote is on page 1.', what);
+      // the frame tries the document again with the browser's own viewer, at the quote's page
+      assert.equal(viewer.frame.src, `${word.document.view_url}#page=1`);
+    }, download);
+  }
+  // bytes the library refuses (a file that is no PDF): the document's note, as before
+  const refusing = fakeLibrary({ open: () => Promise.reject(Object.assign(new Error('Invalid PDF structure.'), { name: 'InvalidPDFException' })) });
+  await withPdfPage(() => Promise.resolve(refusing.library), async ({ element: find }) => {
+    const viewer = await mount(word, find, opened => opened.mode === 'frame');
+    assert.equal(viewer.fallback, 'document');
+    assert.equal(refusing.made.tasks.length, 1);
+  });
+  // closing the viewer while the document downloads stops the download
+  await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ element: find, fetches }) => {
+    const viewer = await mount(word, find, () => fetches.length === 1);
+    const { signal } = fetches[0].init;
+    assert.equal(signal.aborted, false);
+    app.closeViewer();
+    assert.equal(signal.aborted, true, 'the download is aborted');
+    assert.equal(viewer.mode, 'closed');
+  }, () => new Promise(() => {}));
+  // a download that stops moving: each chunk restarts the 20 s stall timer; 20 s with no byte before the document opens
+  // gives 'slow', and stops the download
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const deliveries = [];
+  const trickle = () => Promise.resolve({ ok: true, status: 200, body: { getReader: () => ({ read: () => new Promise(resolve => deliveries.push(resolve)) }) } });
+  await withPdfPage(() => Promise.resolve(fakeLibrary().library), async ({ element: find, fetches }) => {
+    const viewer = await mount(word, find, () => deliveries.length === 1);
+    for (let chunk = 0; chunk < 3; chunk += 1) {
+      t.mock.timers.tick(15000);
+      deliveries.at(-1)({ done: false, value: Uint8Array.from([37]) });
+      await settle(() => deliveries.length === chunk + 2);
+      assert.equal(viewer.mode, 'loading', `${(chunk + 1) * 15} s, a chunk every 15 s`);
+    }
+    t.mock.timers.tick(19999);
+    await settle(() => false);
+    assert.equal(viewer.mode, 'loading');
+    t.mock.timers.tick(1);
+    await settle(() => viewer.mode === 'frame');
+    assert.deepEqual([viewer.mode, viewer.fallback], ['frame', 'slow']);
+    assert.equal(fetches[0].init.signal.aborted, true);
+  }, trickle);
+});
+
+test('A6: choosing a quote brings its first mark into view across as well, where the pages are wider than the viewer; nothing changes at fit width', () => {
+  const geometry = ({ scrollWidth, scrollLeft = 0, mark }) => {
+    const element = { clientWidth: 554, clientHeight: 600, scrollWidth, scrollLeft, scrollTop: 0, scrollTo(options) { this.scrolled = options; } };
+    const box = { top: 300, left: mark[0], width: mark[1], height: 14 };
+    const page = { number: 1, drawn: 'key', element: { offsetTop: 12, offsetLeft: 12, getBoundingClientRect: () => ({ top: 0, left: 0 }), querySelector: () => ({ getBoundingClientRect: () => box }) } };
+    const viewer = { element, pages: [page], mode: 'pdf', settleTimer: 0, quoteScroll: null, reveal: 0 };
+    app.scrollToQuote(viewer, page);
+    clearTimeout(viewer.settleTimer);
+    return element.scrolled;
+  };
+  const saved = global.window;
+  global.window = { matchMedia: () => ({ matches: false }) };
+  try {
+    const top = 12 + 300 - 600 / 3;
+    // fit width: the page is as wide as the viewer, and only the vertical position is set, as before
+    assert.deepEqual(geometry({ scrollWidth: 554, mark: [400, 100] }), { top, behavior: 'smooth' });
+    // a mark out of view to the right that fits: the least distance that shows it all with the gap after it
+    assert.deepEqual(geometry({ scrollWidth: 1108, mark: [700, 100] }), { top, behavior: 'smooth', left: 712 + 100 + 12 - 554 });
+    // out of view to the left: its start the gap from the viewer's start
+    assert.deepEqual(geometry({ scrollWidth: 1108, scrollLeft: 600, mark: [100, 100] }), { top, behavior: 'smooth', left: 112 - 12 });
+    // partly out of view at the right edge
+    assert.deepEqual(geometry({ scrollWidth: 1108, scrollLeft: 300, mark: [800, 60] }), { top, behavior: 'smooth', left: 812 + 60 + 12 - 554 });
+    // already in view with its gaps: nothing moves across
+    assert.deepEqual(geometry({ scrollWidth: 1108, scrollLeft: 600, mark: [700, 100] }), { top, behavior: 'smooth' });
+    // wider than the viewer: its start the gap from the viewer's start
+    assert.deepEqual(geometry({ scrollWidth: 1662, mark: [900, 600] }), { top, behavior: 'smooth', left: 912 - 12 });
+    // never beyond what the viewer can scroll
+    assert.deepEqual(geometry({ scrollWidth: 1108, mark: [1060, 40] }), { top, behavior: 'smooth', left: 1108 - 554 });
+  } finally {
+    global.window = saved;
+  }
+});
+
+test('A7: a zoom or a new width while a quote is being scrolled to keeps the quote; the member\'s own scrolling ends it', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const style = global.getComputedStyle;
+  global.getComputedStyle = () => ({ paddingLeft: '12px', paddingRight: '12px' });
+  const globals = { IntersectionObserver: global.IntersectionObserver, ResizeObserver: global.ResizeObserver };
+  global.IntersectionObserver = function IntersectionObserver() { this.observe = () => {}; this.disconnect = () => {}; };
+  global.ResizeObserver = function ResizeObserver() { this.observe = () => {}; this.disconnect = () => {}; };
+  try {
+    const listeners = {};
+    const element = viewerElement({ dataset: { viewUrl: word.document.view_url }, clientWidth: 636, clientHeight: 800, scrollTop: 0, scrollLeft: 0, scrollWidth: 636,
+      addEventListener(type, fn) { (listeners[type] ||= []).push(fn); }, removeEventListener(type, fn) { listeners[type] = (listeners[type] || []).filter(item => item !== fn); } });
+    element.scrollTo = function scrollTo(options) { this.scrolled = options; this.scrolls = (this.scrolls || 0) + 1; };
+    await withPage({ elements: { documentViewer: element } }, async () => {
+      global.window.devicePixelRatio = 1;
+      const made = () => ({ className: '', dataset: {}, style: { setProperty(name, value) { this[name] = value; } }, children: [], append(...nodes) { this.children.push(...nodes); },
+        setAttribute() {}, replaceChildren(...nodes) { this.children = nodes; }, querySelector: () => null });
+      global.document.createElement = made;
+      Object.assign(app.state, { doc: word, route: null });
+      const viewer = { element, view: word.document.view_url, name: 'x', mode: 'loading', pages: [], texts: new Map(), prepared: new Map(), mark: null, pending: null,
+        chosen: null, markSerial: 0, reveal: 0, quoteScroll: null, frame: null, framePage: null, fallback: '', zoom: app.ZOOM_FIT, inputs: [], settleTimer: 0 };
+      app.state.viewer = viewer;
+      const proxy = () => ({ getViewport: ({ scale }) => ({ width: 612 * scale, height: 792 * scale, scale, userUnit: 1 }) });
+      app.buildPages(viewer, [proxy(), proxy(), proxy()]);
+      viewer.pages.forEach((page, index) => {
+        Object.defineProperty(page.element, 'offsetTop', { get: () => 12 + index * (parseFloat(page.element.style.height) + 12) });
+        Object.defineProperty(page.element, 'offsetHeight', { get: () => parseFloat(page.element.style.height) });
+        page.element.offsetLeft = 12;
+        page.element.getBoundingClientRect = () => ({ top: 0, left: 0 });
+      });
+      // the quote's page 3 is not drawn yet: the view is sent to its top and its reveal armed
+      const third = viewer.pages[2];
+      viewer.reveal = 3;
+      app.scrollToQuote(viewer, third);
+      assert.deepEqual(viewer.quoteScroll, { page: 3 });
+      assert.equal(element.scrolled.top, third.element.offsetTop - app.PDF_VIEW.gap);
+      // the smooth scroll is under way (the view moves) when Zoom in is pressed: the relayout keeps the quote - its page's
+      // top at the new size, its reveal kept - not the page that was passing the top of the view
+      element.scrollTop = 900;
+      t.mock.timers.tick(app.PDF_VIEW.settleMs);
+      assert.deepEqual(viewer.quoteScroll, { page: 3 }, 'still moving');
+      app.zoomViewer('in');
+      assert.equal(viewer.pages[0].viewport.scale, 1.25);
+      assert.equal(element.scrolled.top, third.element.offsetTop - app.PDF_VIEW.gap, 'its page\'s top at 125%');
+      assert.equal(viewer.reveal, 3, 'the reveal kept');
+      // its page drawn, with a mark: a new width keeps the quote at its first mark
+      Object.assign(third, { drawn: 'key' });
+      third.element.querySelector = () => ({ getBoundingClientRect: () => ({ top: 500, left: 40, width: 80, height: 14 }) });
+      element.clientWidth = 524;
+      viewer.resize?.disconnect();
+      app.relayoutPages(viewer);
+      assert.equal(element.scrolled.top, third.element.offsetTop + 500 - element.clientHeight / 3, 'to its first mark');
+      // once the view stops moving, the scroll is over, and a relayout keeps the page at the top as before
+      t.mock.timers.tick(app.PDF_VIEW.settleMs);
+      assert.equal(viewer.quoteScroll, null, 'the view stopped: the scroll is over');
+      viewer.reveal = 0;
+      const before = element.scrolls;
+      app.zoomViewer('in');
+      assert.equal(element.scrolls, before, 'nothing scrolls to the quote any more');
+      // the member's own scrolling ends the scroll to a quote and its reveal: a wheel, a touch, a pointer on the viewer, a
+      // scroll key (another key does not)
+      for (const [type, event, ends] of [['wheel', {}, true], ['touchstart', {}, true], ['pointerdown', {}, true], ['keydown', { key: 'PageDown' }, true],
+        ['keydown', { key: 'ArrowDown' }, true], ['keydown', { key: ' ' }, true], ['keydown', { key: 'a' }, false], ['keydown', { key: 'Tab' }, false]]) {
+        viewer.reveal = 3;
+        app.scrollToQuote(viewer, third);
+        for (const fn of listeners[type] || []) fn(event);
+        assert.deepEqual([viewer.reveal === 0, viewer.quoteScroll === null], [ends, ends], `${type} ${event.key || ''}`);
+      }
+      // and then nothing moves the view later, unasked: a relayout anchors on the page at the top
+      viewer.reveal = 3;
+      app.scrollToQuote(viewer, third);
+      for (const fn of listeners.wheel) fn({});
+      const count = element.scrolls;
+      app.zoomViewer('out');
+      assert.equal(element.scrolls, count);
+      app.closeViewer();
+      assert.deepEqual(Object.values(listeners).map(list => list.length), Object.keys(listeners).map(() => 0), 'its listeners go with the viewer');
+    });
+  } finally {
+    global.getComputedStyle = style;
+    Object.assign(global, globals);
+    Object.assign(app.state, saved);
+  }
+});
+
+test('A8: the toolbar keeps the file name\'s room, with its full text as its title, and an unavailable zoom step looks unavailable in forced colours', () => {
+  const doc = clone(fixture('encounter-word.json'));
+  doc.document.name = 'a "very" long & <odd> name.docx';
+  const html = app.viewerPanel(doc);
+  assert.match(html, /<span class="viewer-name" title="a &quot;very&quot; long &amp; &lt;odd&gt; name\.docx">a &quot;very&quot; long &amp; &lt;odd&gt; name\.docx<\/span>/);
+  const appended = fs.readFileSync(STYLES, 'utf8').slice(32785);
+  assert.ok(appended.includes('@media (forced-colors: active){.zoom-button[aria-disabled="true"]{color:GrayText;border-color:GrayText}\n}'), 'GrayText in forced colours');
+  // last in the toolbar, at least 12 characters (or all of it), as wide as it is where there is room
+  assert.ok(appended.includes('.viewer-name{order:1;flex:1 0 12ch;max-width:max-content}'));
+  assert.ok(appended.lastIndexOf('.viewer-name{order:1') > appended.lastIndexOf('.viewer-name{flex:1 1 0'), 'the later rule wins');
+});
+
+test('V3: the zoom steps through 75%, 100% (fit width), 125%, 150%, 200% and 300%, and the pages follow at every step', async () => {
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const style = global.getComputedStyle;
+  global.getComputedStyle = () => ({ paddingLeft: '12px', paddingRight: '12px' });
+  try {
+    const element = viewerElement({ dataset: { viewUrl: word.document.view_url }, clientWidth: 636, clientHeight: 800, scrollTop: 0, scrollLeft: 0, scrollWidth: 636 });
+    await withPage({ elements: { documentViewer: element } }, async ({ element: find }) => {
+      global.window.devicePixelRatio = 1;
+      Object.assign(app.state, { doc: word, route: null });
+      const viewer = pdfViewer(word, element, [['a'], ['b']], []);
+      const sizes = [];
+      for (const page of viewer.pages) {
+        page.proxy.getViewport = ({ scale }) => ({ width: 612 * scale, height: 792 * scale, scale, userUnit: 1 });
+        page.element.style = { setProperty(name, value) { this[name] = value; } };
+        Object.defineProperty(page.element, 'offsetHeight', { get: () => parseFloat(page.element.style.height) });
+      }
+      app.state.viewer = viewer;
+      app.layoutPages(viewer);
+      const shown = () => ({ scale: viewer.pages[0].viewport.scale, width: viewer.pages[0].element.style.width, level: find('#zoomLevel').textContent,
+        out: find('#viewerZoom [data-zoom="out"]').attributes['aria-disabled'], in: find('#viewerZoom [data-zoom="in"]').attributes['aria-disabled'],
+        fit: find('#viewerZoom [data-zoom="fit"]').attributes['aria-disabled'], hidden: find('#viewerZoom').hidden });
+      assert.equal(viewer.pages[0].viewport.scale, 1, 'fitted to the 612 px the viewer holds inside its padding');
+      assert.deepEqual(app.ZOOM_STEPS, [0.75, 1, 1.25, 1.5, 2, 3]);
+      for (const action of ['in', 'in', 'in', 'in', 'in', 'out', 'out', 'out', 'out', 'out', 'out', 'fit']) {
+        app.zoomViewer(action);
+        sizes.push(shown());
+      }
+      assert.deepEqual(sizes.map(size => size.level), ['125%', '150%', '200%', '300%', '300%', '200%', '150%', '125%', '100%', '75%', '75%', '100%']);
+      assert.deepEqual(sizes.map(size => size.scale), [1.25, 1.5, 2, 3, 3, 2, 1.5, 1.25, 1, 0.75, 0.75, 1]);
+      assert.deepEqual(sizes.map(size => size.width), ['765px', '918px', '1224px', '1836px', '1836px', '1224px', '918px', '765px', '612px', '459px', '459px', '612px']);
+      assert.ok(sizes.every(size => size.hidden === false), 'the zoom shows with the drawn pages');
+      // a step that cannot go further says so, and keeps the focus (aria-disabled, not disabled)
+      assert.deepEqual([sizes[3].in, sizes[3].out, sizes[3].fit], ['true', 'false', 'false']);
+      assert.deepEqual([sizes[9].in, sizes[9].out, sizes[9].fit], ['false', 'true', 'false']);
+      assert.deepEqual([sizes[11].in, sizes[11].out, sizes[11].fit], ['false', 'false', 'true']);
+      // the text layer's scale follows the zoom
+      app.zoomViewer('in');
+      assert.equal(viewer.pages[1].element.style['--total-scale-factor'], '1.25');
+      // a new width keeps the zoom: the pages are 125% of the new fit
+      element.clientWidth = 524;
+      viewer.width = 0;
+      app.layoutPages(viewer);
+      assert.equal(viewer.pages[0].viewport.scale, (500 / 612) * 1.25);
+      // the zoom is the drawn pages' only: in the frame it is hidden, and asks for nothing
+      app.fallbackViewer(viewer, 'document');
+      assert.equal(find('#viewerZoom').hidden, true);
+      app.zoomViewer('in');
+      assert.equal(viewer.zoom, 2);
+      app.closeViewer();
+    });
+  } finally {
+    global.getComputedStyle = style;
+    Object.assign(app.state, saved);
+  }
+});
+
+test('a text has no pages: a quote is marked in the text frame, never by moving the frame', async () => {
   const text = clone(fixture('encounter-awaiting-answer.json'));
   text.codes[0].quotes[0].page = 1;
-  await withPage({ elements: { documentViewer: frame() } }, async ({ element }) => {
-    Object.assign(app.state, { doc: text, route: null });
-    app.showQuote('L1#0');
-    assert.equal(element('#documentViewer').src, 'unchanged');
-    assert.equal(app.state.selectedQuote, 'L1#0');
-  });
+  const frame = fakeElement({ tagName: 'IFRAME', src: 'unchanged', scrollIntoView() {} });
+  const saved = { framePassage: app.state.framePassage };
+  try {
+    await withPage({ elements: { documentViewer: frame } }, async () => {
+      Object.assign(app.state, { doc: text, route: null });
+      app.showQuote('L1#0');
+      assert.equal(frame.src, 'unchanged');
+      assert.equal(app.state.selectedQuote, 'L1#0');
+      // the frame's text is not loaded here: the passage waits for it
+      assert.deepEqual(app.state.framePassage, { passage: text.codes[0].quotes[0].text, key: 'L1#0', frame });
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
+test('a text frame that does not hold the document is never searched: the note says it could not be downloaded', async () => {
+  const size = 376;
+  const view = 'http://studio.test/api/encounters/x/original?view=1';
+  const pageOf = (fields = {}) => ({ URL: view, readyState: 'complete', body: {}, ...fields });
+  // a frame as the page sees it: its current document (null when this page cannot read it) and its navigation entry,
+  // both changeable, as a reload changes them
+  const frameOf = ({ page = pageOf(), entry = { responseStatus: 200, decodedBodySize: size }, throws = false } = {}) => {
+    const frame = fakeElement({ tagName: 'IFRAME', id: 'documentViewer', scrollIntoView() {} });
+    Object.assign(frame, { page, entry });
+    Object.defineProperty(frame, 'contentDocument', { get() { if (throws) throw new Error('blocked'); return this.page; } });
+    frame.contentWindow = { performance: { getEntriesByType: type => (type === 'navigation' && frame.entry ? [frame.entry] : []) } };
+    return frame;
+  };
+  const loaded = frame => {
+    app.noteFrameLoad({ target: frame });
+    return frame;
+  };
+  // only a document whose own load has come is the frame's: one still loading, or a load the browser stopped mid-body
+  // (complete, with no load event), is waited for and never searched
+  assert.equal(app.frameHolds(frameOf(), size), 'waiting');
+  assert.equal(app.frameHolds(loaded(frameOf()), size), 'document');
+  // the edge's own page while the app restarts: readable, its own size and status
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { responseStatus: 503, decodedBodySize: 39 } })), size), 'failed');
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { decodedBodySize: 39 } })), size), 'failed', 'a positive size that is not the document\'s');
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { responseStatus: 503, decodedBodySize: size } })), size), 'failed', 'an answer other than 200');
+  // what the browser does not tell (no entry, a status of 0, a size of 0) is not held against the frame
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: null })), size), 'document');
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { responseStatus: 0, decodedBodySize: 0 } })), size), 'document');
+  assert.equal(app.frameHolds(loaded(frameOf({ entry: { decodedBodySize: 39 } })), null), 'document', 'no size to compare with');
+  const noTiming = loaded(frameOf());
+  noTiming.contentWindow = { get performance() { throw new Error('no timing'); } };
+  assert.equal(app.frameHolds(noTiming, size), 'document');
+  // a frame this page cannot read: waited for until its load, then it does not hold the document
+  for (const unreadable of [frameOf({ page: null }), frameOf({ throws: true })]) {
+    assert.equal(app.frameHolds(unreadable, size), 'waiting');
+    app.noteFrameLoad({ target: unreadable });
+    assert.equal(app.frameHolds(unreadable, size), 'failed');
+  }
+  // the frame's first, empty document is not its load
+  const blank = loaded(frameOf({ page: pageOf({ URL: 'about:blank' }) }));
+  assert.equal(app.frameHolds(blank, size), 'waiting');
+  // a reload from the frame's menu: the new document is waited for, loading or stopped, until its own load
+  const reloaded = loaded(frameOf());
+  reloaded.page = pageOf({ readyState: 'loading' });
+  assert.equal(app.frameHolds(reloaded, size), 'waiting');
+  reloaded.page = pageOf();
+  assert.equal(app.frameHolds(reloaded, size), 'waiting', 'complete with no load of its own: stopped');
+  reloaded.entry = { responseStatus: 503, decodedBodySize: 39 };
+  assert.equal(app.frameHolds(loaded(reloaded), size), 'failed');
+  app.noteFrameLoad({ target: fakeElement({ tagName: 'IMG' }) });
+
+  const text = clone(fixture('encounter-awaiting-answer.json'));
+  assert.equal(text.document.size, size);
+  const note = fakeElement();
+  const saved = { framePassage: app.state.framePassage, doc: app.state.doc, route: app.state.route };
+  try {
+    const failed = loaded(frameOf({ entry: { responseStatus: 503, decodedBodySize: 39 } }));
+    await withPage({ elements: { documentViewer: failed, viewerMark: note } }, async () => {
+      Object.assign(app.state, { doc: text, route: null });
+      app.showQuote('L1#0');
+      assert.equal(note.textContent, app.FRAME_REASONS.download);
+      assert.equal(note.classList.contains('is-missing'), true);
+      assert.deepEqual({ ...failed.dataset }, { fallback: 'download', marked: 'L1#0', markStatus: 'unavailable', markCount: '0' });
+      app.clearViewerMark();
+      assert.equal(note.textContent, '');
+      assert.deepEqual({ ...failed.dataset }, { fallback: 'download', marked: '', markStatus: '', markCount: '' });
+    });
+    // a choice made while the frame waits clears what an earlier one said, and the frame's load paints it
+    const waiting = frameOf({ page: pageOf({ readyState: 'loading' }) });
+    await withPage({ elements: { documentViewer: waiting, viewerMark: note } }, async () => {
+      Object.assign(app.state, { doc: text, route: null });
+      note.textContent = 'Marked in the document.';
+      waiting.dataset.markStatus = 'marked';
+      app.showQuote('L1#1');
+      assert.equal(note.textContent, '');
+      assert.deepEqual({ ...waiting.dataset }, { marked: '', markStatus: '', markCount: '' }, 'no answer yet: no quote named');
+      // the load brings the edge's page: the note follows it
+      Object.assign(waiting, { page: pageOf(), entry: { responseStatus: 503, decodedBodySize: 39 } });
+      app.noteFrameLoad({ target: waiting });
+      assert.equal(note.textContent, app.FRAME_REASONS.download);
+      assert.deepEqual({ ...waiting.dataset }, { fallback: 'download', marked: 'L1#1', markStatus: 'unavailable', markCount: '0' });
+      // a load of another frame paints nothing
+      const other = frameOf({ page: pageOf(), entry: { responseStatus: 503, decodedBodySize: 39 } });
+      note.textContent = 'unchanged';
+      app.noteFrameLoad({ target: other });
+      assert.equal(note.textContent, 'unchanged');
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
 });
 
 test('the progress panel: three steps per phase, Stop, Resume and Retry only when offered to a reviewer', () => {
@@ -1904,6 +3179,905 @@ test('a quoted passage is found in a text despite line breaks and case', () => {
   assert.equal(app.findPassage(source, 'not in the text'), null);
   assert.equal(app.findPassage(source, '   '), null);
   assert.deepEqual(app.findPassage('\u{1F600} cecum', 'cecum'), [3, 8], 'offsets are the text\'s own UTF-16 units');
+});
+
+test('a text document\'s passage is counted by the same rule: every occurrence, exact case before case-blind', () => {
+  const source = 'The cecum was reached.\nThe  cecum\nwas reached again. the cecum was reached';
+  assert.deepEqual(app.findPassages(source, 'The cecum was reached'), [[0, 21], [23, 45]], 'exact case: the lower-case one is not counted');
+  assert.equal(source.slice(23, 45), 'The  cecum\nwas reached', 'white space runs are one space');
+  assert.deepEqual(app.findPassages(source, 'THE CECUM WAS REACHED'), [[0, 21], [23, 45], [53, 74]], 'case-blind: all three');
+  assert.deepEqual(app.findPassages(source, 'not in it'), []);
+  assert.deepEqual(app.findPassages(source, ' \n '), []);
+  assert.deepEqual(app.findPassages('aaaa', 'aa'), [[0, 2], [2, 4]], 'left to right, without overlap');
+  assert.deepEqual(app.findPassage(source, 'THE CECUM WAS REACHED'), [0, 21], 'findPassage is the first of them');
+  // a letter whose lower case is two units is compared as written, so no offset moves
+  assert.deepEqual(app.findPassages('İstanbul cecum', 'CECUM'), [[9, 14]]);
+  assert.equal(app.textMarkNote(0), 'The exact words could not be found in the document, so nothing is marked.');
+  assert.equal(app.textMarkNote(1), 'Marked in the document.');
+  assert.equal(app.textMarkNote(3), 'These words appear 3 times in the document. Each is marked.');
+});
+
+// --- the quoted words, marked on a page of a PDF (the owner's direction of 2026-11-20, DECISIONS D368) ------------------
+
+// What locateQuote marks, as [page, the marked text of each item part, occurrence], read back from the page strings.
+function markedParts(result, texts) {
+  return Object.entries(result.marks).flatMap(([page, parts]) => parts.map(part => [Number(page), texts[page - 1][part.item].slice(part.start, part.end), part.occurrence]));
+}
+
+test('the matcher marks the quote\'s own characters: white space ignored entirely, NFKC on both sides', () => {
+  const pages = [['Patchy erythema was seen in the gastric antrum.', 'Cold forceps biop', 'sies were taken.'], ['Second page.']];
+  // exact: one item
+  const exact = app.locateQuote({ text: 'Patchy erythema was seen in the gastric antrum.', page: 1 }, pages);
+  assert.deepEqual([exact.status, exact.scope, exact.count, exact.pages, exact.caseBlind], ['marked', 'page', 1, [1], false]);
+  assert.deepEqual(markedParts(exact, pages), [[1, 'Patchy erythema was seen in the gastric antrum.', 0]]);
+  // white space differences: line breaks and runs of spaces in the quote, a word split across two items on the page
+  const spaced = app.locateQuote({ text: 'Cold  forceps\nbiopsies were', page: 1 }, pages);
+  assert.deepEqual(markedParts(spaced, pages), [[1, 'Cold forceps biop', 0], [1, 'sies were', 0]]);
+  // ...and white space ignored entirely: the page's "biop" + "sies" is the quote's "biopsies", a quote without spaces too
+  assert.equal(app.locateQuote({ text: 'Coldforcepsbiopsies', page: 1 }, pages).count, 1);
+  // only the characters matched are marked: no white space before or after them
+  const inner = app.locateQuote({ text: 'erythema was', page: 1 }, pages);
+  assert.deepEqual(inner.marks, { 1: [{ item: 0, start: 7, end: 19, occurrence: 0 }] });
+  // NFKC: a ligature on the page and plain letters in the quote, and the other way round; full-width letters; NBSP
+  const ligature = [['The ﬁnding was conﬁrmed.', 'Ｓｎａｒｅ polypectomy']];
+  assert.deepEqual(markedParts(app.locateQuote({ text: 'finding was confirmed', page: 1 }, ligature), ligature), [[1, 'ﬁnding was conﬁrmed', 0]]);
+  assert.equal(app.locateQuote({ text: 'Snare polypectomy', page: 1 }, ligature).count, 1);
+  assert.equal(app.locateQuote({ text: 'The ﬁnding', page: 1 }, [['The finding']]).count, 1);
+  // whole characters only: never half of a ligature, never a letter without its accent
+  assert.equal(app.locateQuote({ text: 'The f', page: 1 }, ligature).status, 'not_found');
+  const accented = [['café au lait']];
+  assert.equal(app.locateQuote({ text: 'cafe au', page: 1 }, accented).status, 'not_found');
+  assert.deepEqual(markedParts(app.locateQuote({ text: 'café au', page: 1 }, accented), accented), [[1, 'café au', 0]], 'composed and decomposed are one character');
+  // offsets are the item's own UTF-16 units, astral characters included
+  const astral = [['\u{1F600} cecum reached']];
+  assert.deepEqual(app.locateQuote({ text: 'cecum', page: 1 }, astral).marks, { 1: [{ item: 0, start: 3, end: 8, occurrence: 0 }] });
+});
+
+test('a character is cut from the page\'s whole text: an accent the PDF draws as an item of its own belongs to the letter before it', () => {
+  // the PDF library starts a new item where the font changes, so an accent drawn in another font is an item of its own
+  const split = [['The patient Jose', '́', ' ', 'Garcia was seen today.']];
+  const bare = app.locateQuote({ text: 'The patient Jose', page: 1 }, split);
+  assert.deepEqual([bare.status, bare.count, bare.marks], ['not_found', 0, {}], 'never a letter without its accent');
+  for (const text of ['The patient José Garcia was seen today.', 'The patient José Garcia was seen today.']) {
+    const whole = app.locateQuote({ text, page: 1 }, split);
+    assert.deepEqual([whole.status, whole.count], ['marked', 1], 'the accented quote is on the page, composed or not');
+    assert.deepEqual(whole.marks, { 1: [{ item: 0, start: 0, end: 16, occurrence: 0 }, { item: 1, start: 0, end: 1, occurrence: 0 },
+      { item: 3, start: 0, end: 22, occurrence: 0 }] }, 'the letter and its accent are marked together, in both items');
+  }
+  // so a plain "Jose" elsewhere on the page is counted once, not twice
+  const count = app.locateQuote({ text: 'Jose', page: 1 }, [['Jose', '́', ' and Jose was seen.']]);
+  assert.deepEqual([count.count, count.marks], [1, { 1: [{ item: 2, start: 5, end: 9, occurrence: 0 }] }]);
+  // an accent that follows white space stands on its own: the letter before the space is whole
+  assert.deepEqual(app.locateQuote({ text: 'Jose', page: 1 }, [['Jose ', '́']]).marks, { 1: [{ item: 0, start: 0, end: 4, occurrence: 0 }] });
+  // a mark NFKC has no composed letter for is still part of its letter
+  assert.equal(app.locateQuote({ text: 'q', page: 1 }, [['q', '́']]).status, 'not_found');
+  // two marks in another order, the second in the next item: NFKC orders them and composes the letter with one
+  assert.equal(app.locateQuote({ text: 'a̖', page: 1 }, [['a̖', '̀']]).status, 'not_found');
+  assert.equal(app.locateQuote({ text: 'à̖', page: 1 }, [['a̖', '̀']]).count, 1);
+  // Hangul: a syllable written as conjoining jamo is one character, in one item or two
+  assert.equal(app.locateQuote({ text: '하', page: 1 }, [['한']]).status, 'not_found');
+  assert.equal(app.locateQuote({ text: '하', page: 1 }, [['하', 'ᆫ']]).status, 'not_found');
+  assert.deepEqual(app.locateQuote({ text: '한', page: 1 }, [['하', 'ᆫ']]).marks,
+    { 1: [{ item: 0, start: 0, end: 2, occurrence: 0 }, { item: 1, start: 0, end: 1, occurrence: 0 }] });
+  // NFKC combines across what a reader sees as two characters: compatibility jamo, a half-width kana and its voiced mark
+  assert.equal(app.locateQuote({ text: '하', page: 1 }, [['ㅎㅏ']]).count, 1);
+  assert.equal(app.locateQuote({ text: 'ㅎ', page: 1 }, [['ㅎㅏ']]).status, 'not_found');
+  assert.equal(app.locateQuote({ text: 'ガ', page: 1 }, [['ｶ', 'ﾞ']]).count, 1);
+  assert.equal(app.locateQuote({ text: 'カ', page: 1 }, [['ｶ', 'ﾞ']]).status, 'not_found');
+  // a flag is one character (a sequence held together by a joiner is its characters: the joiner is a format character,
+  // dropped on both sides, as the library drops it - R3)
+  assert.equal(app.locateQuote({ text: '\u{1F1FA}', page: 1 }, [['\u{1F1FA}\u{1F1F8} ok']]).status, 'not_found');
+  assert.equal(app.locateQuote({ text: '\u{1F1FA}\u{1F1F8} ok', page: 1 }, [['\u{1F1FA}\u{1F1F8} ok']]).count, 1);
+  // a character never spans two pages: an accent at the top of the next page is not the last letter's
+  const pages = [['the end of page one'], ['́ page two']];
+  assert.deepEqual(app.locateQuote({ text: 'the end of page one', page: 1 }, pages).pages, [1]);
+  // the page's characters fold to NFKC of its whole text, white space dropped, and each lists the pieces it is made of
+  assert.deepEqual(app.pageCharacters(['Jose', '́', ' x']).map(({ pieces, folded }) => [folded, pieces]), [
+    ['J', [{ item: 0, start: 0, end: 1 }]], ['o', [{ item: 0, start: 1, end: 2 }]], ['s', [{ item: 0, start: 2, end: 3 }]],
+    ['é', [{ item: 0, start: 3, end: 4 }, { item: 1, start: 0, end: 1 }]], ['x', [{ item: 2, start: 1, end: 2 }]]]);
+  assert.deepEqual(app.characterSpans('é\u{1F469}‍\u{1F4BB}한'), [[0, 2], [2, 7], [7, 10]]);
+});
+
+// A text with its format characters (\p{Cf}) dropped, and where each UTF-16 unit left came from.
+function dropFormat(value) {
+  let text = '';
+  const origin = [];
+  for (let at = 0; at < value.length;) {
+    const size = value.codePointAt(at) > 0xffff ? 2 : 1;
+    const point = value.slice(at, at + size);
+    if (!/\p{Cf}/u.test(point)) {
+      text += point;
+      for (let unit = 0; unit < size; unit += 1) origin.push(at + unit);
+    }
+    at += size;
+  }
+  return { text, origin };
+}
+
+// The rule stated again by brute force, apart from the matcher: the page's text is its items joined, format characters
+// dropped (R3), and the places between one item's last character and the next item's first are where two drawings meet
+// (bare strings have no geometry, so each such place is a word edge: R2b); an occurrence is a stretch of the text that
+// begins and ends where one character ends and the next begins and NFKC of the whole text is cut cleanly, begins with a
+// character that is not only white space, and whose NFKC, white space dropped, is the quote's; the first such stretch is
+// the shortest. At each end, a place where two drawings meet is an edge; else, where the quote's character there (its
+// first or last that is not white space) begins with a letter or a digit that is not a Han ideograph or a hiragana
+// character, the code point beside the stretch is none of a letter, a digit or a mark other than those (R2, R2c; the
+// text's start and end are edges); and then a digit with a number separator beside the stretch and a digit beyond it, or
+// a separator ending the quote beside a digit, keeps the stretch inside a number (R2a; reading stops where two drawings
+// meet). A stretch turned away takes nothing. They are taken left to right without overlap, exact-case first; returned in
+// the given text's offsets.
+const BRUTE_SEPARATORS = new Set([0x27, 0x2c, 0x2e, 0x3b, 0x37e, 0x589, 0x60c, 0x60d, 0x66c, 0x7f8, 0x2018, 0x2019, 0x2024, 0x2044,
+  0xfe50, 0xfe52, 0xfe54, 0xff07, 0xff0c, 0xff0e, 0xff1b]);
+function bruteOccurrences(items, quote) {
+  const nfkc = value => value.normalize('NFKC');
+  const fold = value => nfkc(value).replace(/\s+/gu, '');
+  const boundsOf = value => {
+    const whole = nfkc(value);
+    return [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(value)].map(segment => segment.index)
+      .concat(value.length).filter(at => nfkc(value.slice(0, at)) + nfkc(value.slice(at)) === whole);
+  };
+  let text = '';
+  const origin = [];
+  const meets = new Set();
+  let base = 0;
+  for (const item of items) {
+    const own = dropFormat(item);
+    if (own.text && text) meets.add(text.length);
+    text += own.text;
+    for (const at of own.origin) origin.push(base + at);
+    base += item.length;
+  }
+  const bounds = boundsOf(text);
+  const asked = dropFormat(quote).text;
+  const want = fold(asked);
+  const own = boundsOf(asked);
+  const characters = own.slice(0, -1).map((at, index) => fold(asked.slice(at, own[index + 1]))).filter(Boolean);
+  const first = point => (point === undefined ? '' : String.fromCodePoint(point));
+  const lone = character => /^[\p{Ideographic}\p{Script=Hiragana}]/u.test(character);
+  const keeps = character => Boolean(character) && /^[\p{L}\p{N}]/u.test(character) && !lone(character);
+  const digit = character => Boolean(character) && /^\p{Nd}/u.test(character);
+  const separator = character => Boolean(character) && BRUTE_SEPARATORS.has(character.codePointAt(0));
+  const joins = character => Boolean(character) && /^[\p{L}\p{N}\p{M}]$/u.test(character) && !lone(character);
+  const [head, second] = characters;
+  const tail = characters[characters.length - 1];
+  const beforeTail = characters[characters.length - 2];
+  const startOk = start => {
+    if (meets.has(start)) return true;
+    const one = [...text.slice(0, start)].pop();
+    if (one === undefined) return true;
+    if (keeps(head) && joins(one)) return false;
+    if (digit(head) && separator(one)) {
+      const from = start - one.length;
+      const two = meets.has(from) ? undefined : [...text.slice(0, from)].pop();
+      if (digit(two)) return false;
+    }
+    return !(separator(head) && digit(second) && digit(one));
+  };
+  const endOk = end => {
+    if (meets.has(end)) return true;
+    const one = first(text.codePointAt(end));
+    if (!one) return true;
+    if (keeps(tail) && joins(one)) return false;
+    if (digit(tail) && separator(one)) {
+      const from = end + one.length;
+      const two = meets.has(from) ? '' : first(text.codePointAt(from));
+      if (digit(two)) return false;
+    }
+    return !(separator(tail) && digit(beforeTail) && digit(one));
+  };
+  let turned = false;
+  const scan = same => {
+    const found = [];
+    let from = 0;
+    bounds.forEach((start, index) => {
+      if (!want || start < from || index === bounds.length - 1 || !fold(text.slice(start, bounds[index + 1]))) return;
+      for (let next = index + 1; next < bounds.length; next += 1) {
+        if (same(fold(text.slice(start, bounds[next])))) {
+          const end = bounds[next];
+          if (!startOk(start) || !endOk(end)) {
+            turned = true;
+            return;
+          }
+          found.push([start, end]);
+          from = end;
+          return;
+        }
+      }
+    });
+    return found;
+  };
+  const exact = scan(value => value === want);
+  const chosen = exact.length ? { found: exact, caseBlind: false } : { found: scan(value => value.toLowerCase() === want.toLowerCase()), caseBlind: true };
+  return { found: chosen.found.map(([start, end]) => [origin[start], origin[end - 1] + 1]), caseBlind: chosen.caseBlind, turned };
+}
+
+test('the matcher agrees with the rule stated by brute force on pages of accents, jamo, kana, ligatures, emoji, numbers and CJK split into items', () => {
+  const alphabet = ['a', 'e', 'E', 'q', ' ', '\n', '́', '̖', '̀', 'é', 'É', 'ﬁ', 'f', 'i', 'I', 'İ',
+    'ᄒ', 'ᅡ', 'ᆫ', '하', '한', 'ㅎ', 'ㅏ', 'ㄳ', 'ｶ', 'ﾞ', 'カ', 'ガ', '\u{1F469}',
+    '‍', '\u{1F4BB}', '\u{1F1FA}', '\u{1F1F8}', '¨', 'ß', 'S', 'k', 'K', 'क', '्', 'ष', 'େ',
+    'ା', '½', '1', '⁄', '2', ' ', '　', '゛', 'か',
+    // R2a: digits and number separators (ASCII, fullwidth, Arabic), and what is neither; R2c: Han, hiragana, katakana
+    '1', '2', '5', '.', ',', '.', '’', '/', '-', '１', '．', '٥', '٬', '²', '糖', '病', 'の', 'ア', '゙', '〇'];
+  let seed = 20261120;
+  const random = bound => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return (seed >>> 8) % bound;
+  };
+  let marked = 0;
+  let turned = 0;
+  for (let trial = 0; trial < 6000; trial += 1) {
+    const items = Array.from({ length: 1 + random(4) }, () => Array.from({ length: random(6) }, () => alphabet[random(alphabet.length)]).join(''));
+    const text = items.join('');
+    let quote;
+    if (text && random(3)) {
+      const points = [...text];
+      const from = random(points.length);
+      quote = points.slice(from, from + 1 + random(Math.min(6, points.length - from))).join('');
+      if (random(4) === 0) quote = quote.toUpperCase();
+    } else {
+      quote = Array.from({ length: 1 + random(4) }, () => alphabet[random(alphabet.length)]).join('');
+    }
+    const label = JSON.stringify({ items, quote });
+    assert.equal(app.pageCharacters(items).map(character => character.folded).join(''), dropFormat(text).text.normalize('NFKC').replace(/\s+/gu, ''), label);
+    const result = app.locateQuote({ text: quote, page: 1 }, [items]);
+    const starts = items.map((_, index) => items.slice(0, index).join('').length);
+    const spans = new Map();
+    for (const part of result.marks[1] || []) {
+      const span = spans.get(part.occurrence) || [Infinity, -Infinity];
+      spans.set(part.occurrence, [Math.min(span[0], starts[part.item] + part.start), Math.max(span[1], starts[part.item] + part.end)]);
+    }
+    const expected = bruteOccurrences(items, quote);
+    if (expected.turned) turned += 1;
+    assert.deepEqual([...spans.keys()].sort((a, b) => a - b).map(key => spans.get(key)), expected.found, label);
+    assert.equal(result.count, expected.found.length, label);
+    if (expected.found.length) {
+      assert.equal(result.caseBlind, expected.caseBlind, label);
+      marked += 1;
+    }
+  }
+  assert.ok(marked > 900, `the trials mark often enough to mean something (${marked})`);
+  assert.ok(turned > 300, `and the word edges turn some away (${turned})`);
+});
+
+// What a page has that a bare script realm does not: the observers and structuredClone (the rest the viewer needs is the
+// language's own, as in a browser).
+const PAGE_APIS = 'globalThis.IntersectionObserver = function () {}; globalThis.ResizeObserver = function () {};'
+  + ' globalThis.structuredClone = function () {};';
+
+test('without Intl.Segmenter the matcher still cuts characters from the page\'s whole text, and the viewer is not offered', () => {
+  const context = vm.createContext({ module: { exports: {} } });
+  vm.runInContext('delete Intl.Segmenter;', context);
+  vm.runInContext(fs.readFileSync(BUNDLE, 'utf8'), context, { filename: BUNDLE });
+  const bare = context.module.exports;
+  const split = [['The patient Jose', '́', ' ', 'Garcia was seen today.']];
+  assert.equal(bare.locateQuote({ text: 'The patient Jose', page: 1 }, split).status, 'not_found');
+  assert.equal(bare.locateQuote({ text: 'The patient José Garcia', page: 1 }, split).count, 1);
+  assert.equal(bare.locateQuote({ text: '하', page: 1 }, [['ㅎㅏ']]).count, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(bare.characterSpans('éx'))), [[0, 2], [2, 3]]);
+  // everything else the viewer needs is there; without Intl.Segmenter the browser's own viewer is framed instead
+  vm.runInContext(PAGE_APIS, context);
+  assert.equal(bare.pdfCapable(), false);
+  vm.runInContext('Intl.Segmenter = function () {};', context);
+  assert.equal(bare.pdfCapable(), true);
+});
+
+test('the viewer is offered only where every built-in it and the legacy library need natively is there, and no other is asked for', () => {
+  const context = vm.createContext({ module: { exports: {} } });
+  vm.runInContext(fs.readFileSync(BUNDLE, 'utf8'), context, { filename: BUNDLE });
+  const bare = context.module.exports;
+  assert.equal(bare.pdfCapable(), false, 'no observers in a bare realm');
+  vm.runInContext(PAGE_APIS, context);
+  assert.equal(bare.pdfCapable(), true);
+  const without = (holder, key, check) => {
+    vm.runInContext(`globalThis.__kept = ${holder}[${JSON.stringify(key)}]; delete ${holder}[${JSON.stringify(key)}];`, context);
+    assert.equal(vm.runInContext(`typeof ${holder}[${JSON.stringify(key)}]`, context), 'undefined', `${holder}.${key} deleted`);
+    check(bare.pdfCapable(), `${holder}.${key}`);
+    vm.runInContext(`${holder}[${JSON.stringify(key)}] = globalThis.__kept;`, context);
+    assert.equal(bare.pdfCapable(), true);
+  };
+  // asked for: our own code's (the observers, the matcher's Intl.Segmenter), what the measurement found the legacy
+  // library cannot run without (Promise.withResolvers, ArrayBuffer.prototype.transferToFixedLength, Array.prototype.at)
+  // and what it calls with no stand-in on paths the viewer can take (structuredClone, Object.hasOwn)
+  for (const [holder, key] of [['globalThis', 'IntersectionObserver'], ['globalThis', 'ResizeObserver'], ['Intl', 'Segmenter'],
+    ['Promise', 'withResolvers'], ['ArrayBuffer.prototype', 'transferToFixedLength'], ['Array.prototype', 'at'],
+    ['globalThis', 'structuredClone'], ['Object', 'hasOwn']]) {
+    without(holder, key, (capable, name) => assert.equal(capable, false, name));
+  }
+  // not asked for: what the legacy build brings its own stand-ins for (the modern build needed several natively - Map
+  // getOrInsertComputed from Chrome 145, Math.sumPrecise from Chrome 147), what it uses only where it exists, and what the
+  // page script no longer calls (Array.prototype.findLast)
+  for (const [holder, key] of [['Map.prototype', 'getOrInsertComputed'], ['Map.prototype', 'getOrInsert'], ['WeakMap.prototype', 'getOrInsertComputed'],
+    ['Math', 'sumPrecise'], ['Promise', 'try'], ['Uint8Array', 'fromBase64'], ['Uint8Array.prototype', 'toBase64'], ['Uint8Array.prototype', 'toHex'],
+    ['Set.prototype', 'union'], ['Set.prototype', 'intersection'], ['globalThis', 'Iterator'], ['globalThis', 'Float16Array'],
+    ['Array.prototype', 'findLast']]) {
+    // one this node does not have is given a stand-in first, so that its going is a real deletion
+    vm.runInContext(`if (typeof ${holder}[${JSON.stringify(key)}] === 'undefined') ${holder}[${JSON.stringify(key)}] = function () {};`, context);
+    without(holder, key, (capable, name) => assert.equal(capable, true, name));
+  }
+});
+
+// A synthetic PDF, one content stream per page, with Helvetica as /F1 and Helvetica-Bold as /F2 (standard fonts, no
+// embedded data): enough to read what the library makes of a drawing.
+function rawPdf(pages) {
+  const objects = [];
+  const add = body => { objects.push(body); return objects.length; };
+  const catalog = add(null);
+  const tree = add(null);
+  const regular = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+  const bold = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  const kids = pages.map(content => {
+    const stream = add(`<< /Length ${Buffer.byteLength(content, 'latin1')} >>\nstream\n${content}\nendstream`);
+    return add(`<< /Type /Page /Parent ${tree} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${regular} 0 R /F2 ${bold} 0 R >> >> /Contents ${stream} 0 R >>`);
+  });
+  objects[catalog - 1] = `<< /Type /Catalog /Pages ${tree} 0 R >>`;
+  objects[tree - 1] = `<< /Type /Pages /Kids [${kids.map(kid => `${kid} 0 R`).join(' ')}] /Count ${kids.length} >>`;
+  let out = '%PDF-1.4\n';
+  const offsets = [];
+  objects.forEach((body, index) => {
+    offsets.push(Buffer.byteLength(out, 'latin1'));
+    out += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(out, 'latin1');
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+
+// Every page's text items as the pinned library reads them (getTextContent with its defaults, as the viewer calls it), in
+// node: {str, transform, width, hasEOL} of each item that has a string.
+async function readPdfItems(bytes) {
+  const { pathToFileURL } = require('node:url');
+  const build = path.join(ROOT, 'studio', 'static', 'studio', 'lib', 'pdfjs-6.5.438', 'legacy', 'build');
+  const library = await import(pathToFileURL(path.join(build, 'pdf.min.mjs')).href);
+  library.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(build, 'pdf.worker.min.mjs')).href;
+  const task = library.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, enableXfa: false, useWasm: false, useSystemFonts: false,
+    verbosity: 0, standardFontDataUrl: pathToFileURL(path.join(build, '..', '..', 'standard_fonts', path.sep)).href });
+  try {
+    const pdf = await task.promise;
+    const pages = [];
+    for (let number = 1; number <= pdf.numPages; number += 1) {
+      const content = await (await pdf.getPage(number)).getTextContent();
+      pages.push(content.items.filter(made => typeof made.str === 'string').map(({ str, transform, width, hasEOL }) => ({ str, transform, width, hasEOL })));
+    }
+    return pages;
+  } finally {
+    await task.destroy();
+  }
+}
+
+// A text item as the PDF library reads it: its string, its transform (font size, origin), its width (the advance along
+// its text; none unless given, so no R2b geometry) and whether a line ends after it.
+function item(str, x = 0, y = 0, { size = 10, eol = false, width } = {}) {
+  return width === undefined ? { str, transform: [size, 0, 0, size, x, y], hasEOL: eol } : { str, transform: [size, 0, 0, size, x, y], width, hasEOL: eol };
+}
+
+test('R1: text drawn again over an earlier drawing of the same words and font height is one occurrence, never marked, and does not break a passage that crosses it', t => {
+  // fake bold: the same string drawn twice 0.35 pt apart, as two items
+  const bold = [item('DIAGNOSIS: TUBULAR ADENOMA.', 46.56, 700, { eol: true }), item('DIAGNOSIS: TUBULAR ADENOMA.', 46.91, 700, { eol: true }),
+    item('The procedure was uneventful.', 46.56, 680), item(' ', 160, 680), item('Impression:', 180, 680), item('Impression:', 180.3, 680),
+    item(' ', 230, 680), item('two polyps were removed.', 236, 680, { eol: true })];
+  assert.deepEqual([...app.overprintCopies(bold)], [1, 5], 'the second drawing of each is the copy');
+  const once = app.locateQuote({ text: 'DIAGNOSIS: TUBULAR ADENOMA.', page: 1 }, [bold]);
+  assert.deepEqual([once.status, once.count, once.marks], ['marked', 1, { 1: [{ item: 0, start: 0, end: 27, occurrence: 0 }] }], 'counted once, the copy unmarked');
+  assert.equal(app.markNote(once), 'Marked on page 1.');
+  const across = app.locateQuote({ text: 'The procedure was uneventful. Impression: two polyps were removed.', page: 1 }, [bold]);
+  assert.deepEqual([across.status, across.count], ['marked', 1], 'the passage crosses the doubled label');
+  assert.ok(across.marks[1].every(part => part.item !== 5), 'the copy is never marked');
+  assert.deepEqual(app.pageText(bold).copies, [1, 5]);
+  // what makes a copy, part by part: the distance, a straight line within max(1, 0.2 x the later item's height)
+  const copies = items => [...app.overprintCopies(items)];
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 51, 700)]), [1], 'within max(1, 0.2 x 10) = 2 units');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 52, 700)]), [1], 'exactly 2 units: within');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 52.01, 700)]), [], 'just beyond');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 51.2, 701.5)]), [1], 'the distance is measured as a straight line (1.2, 1.5: 1.92)');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 51.3, 701.6)]), [], '(1.3, 1.6: 2.06)');
+  assert.deepEqual(copies([item('Polyp', 50, 700, { size: 2 }), item('Polyp', 50.9, 700, { size: 2 })]), [1], 'a small font: at least 1 unit');
+  assert.deepEqual(copies([item('Polyp', 50, 700, { size: 2 }), item('Polyp', 51.1, 700, { size: 2 })]), []);
+  assert.deepEqual(copies([item('Polyp', 50, 700, { size: 30 }), item('Polyp', 55.9, 700, { size: 30 })]), [1], 'a large font: 0.2 x 30 = 6 units');
+  // the font heights, hypot(transform[2], transform[3]), agree within 1% (|h1 - h2| <= 0.01 x the larger): a rotated font
+  // has the same height; the same words at the same place in another size are other words (shared example 22)
+  assert.deepEqual(copies([item('Polyp', 50, 700), { str: 'Polyp', transform: [0, 10, -10, 0, 51.9, 700], hasEOL: false }]), [1]);
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 10.1 })]), [1], '10 and 10.1: within 1%');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 10.11 })]), [], '10 and 10.11: beyond');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 10.103 })]), [], '10 and 10.103: just beyond 1%, though close in size');
+  assert.deepEqual(copies([item('Polyp', 50, 700, { size: 10.103 }), item('Polyp', 50, 700)]), [], 'in either order');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 10.1009 })]), [1], '10 and 10.1009: within');
+  assert.deepEqual(copies([item('Polyp', 50, 700, { size: 10.1 }), item('Polyp', 50, 700)]), [1], 'the later one smaller, within 1%');
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 50, 700, { size: 24 })]), [], '10 and 24 at one place: two drawings');
+  assert.deepEqual(copies([item('Polyp', 50, 700, { size: 0 }), item('Polyp', 50.5, 700, { size: 0 })]), [1], 'two heights of 0 agree, reach 1');
+  assert.deepEqual(copies([item('Polyp', 50, 700, { size: 0 }), item('Polyp', 50.5, 700, { size: 0.001 })]), []);
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('polyp', 50.3, 700)]), [], 'another case is another string');
+  assert.deepEqual(copies([item('ﬁ', 50, 700), item('fi', 50.3, 700)]), [1], 'equal after NFKC');
+  assert.deepEqual(copies([item(' ', 50, 700), item(' ', 50.3, 700)]), [], 'white space alone is never a copy');
+  assert.deepEqual(copies([item('', 50, 700), item('', 50, 700)]), []);
+  // the earlier item is any earlier item of the page: there is no window
+  const between = n => [item('Polyp', 50, 700), ...Array.from({ length: n }, (_, i) => item(`w${i}`, 100 + i * 20, 700)), item('Polyp', 50.3, 700)];
+  for (const n of [7, 8, 9, 40, 3000]) assert.deepEqual(copies(between(n)), [n + 1], `${n} items between`);
+  // a copy of a copy counts (each is within its own reach of the one before), and the earlier item's place is its own
+  assert.deepEqual(copies([item('Polyp', 50, 700), item('Polyp', 51.9, 700), item('Polyp', 53.8, 700)]), [1, 2]);
+  assert.deepEqual(copies([item('Polyp', 53.8, 700), item('Polyp', 50, 700)]), [], '3.8 apart: two drawings, in either order');
+  // bare strings carry no geometry: never a copy, nor the earlier item of one
+  assert.deepEqual(copies(['Polyp', 'Polyp']), []);
+  assert.deepEqual(copies([{ str: 'Polyp' }, { str: 'Polyp', transform: [10, 0, 0, 10, 0, 0] }]), []);
+  assert.deepEqual(copies([item('Polyp', 50, 700), { str: 'Polyp', transform: [10, 0, 0, NaN, 50, 700] }]), []);
+  // the same words drawn at another place are two occurrences
+  const twice = app.locateQuote({ text: 'Polyp', page: 1 }, [[item('Polyp', 50, 700, { eol: true }), item('Polyp', 50, 600, { eol: true })]]);
+  assert.equal(twice.count, 2);
+  // a line-printer line drawn as 9 items and overstruck 0.2 pt to the right: every copy is the 9th item after its original
+  // (shared example 21)
+  const words = ['IMPRESSION:', ' ', 'TWO', ' ', 'POLYPS', ' ', 'WERE', ' ', 'REMOVED.'];
+  const line = dx => { let x = 56 + dx; return words.map(word => { const made = item(word, x, 700, { size: 9, width: word.length * 5.4 }); x += word.length * 5.4; return made; }); };
+  const overstruck = [...line(0), ...line(0.2)];
+  assert.deepEqual(copies(overstruck), [9, 11, 13, 15, 17]);
+  // the cost is linear in the page's items: a page of 20,000 items holding 2,000 strings drawn 10 times each at distinct
+  // places, and one of 20,000 identical strings at distinct places, are each prepared well under a second
+  const page = name => Array.from({ length: 20000 }, (_, index) => item(name(index), 50 + (index % 100) * 6, 700 - Math.floor(index / 100) * 12,
+    { width: 5, eol: index % 100 === 99 }));
+  for (const [label, name] of [['2,000 strings x 10', index => `w${index % 2000}`], ['20,000 identical strings', () => 'Polyp']]) {
+    const began = performance.now();
+    const text = app.pageText(page(name));
+    const took = performance.now() - began;
+    t.diagnostic(`R1 cost, ${label}: ${took.toFixed(1)} ms`);
+    assert.deepEqual(text.copies, [], label);
+    assert.ok(took < 1000, `${label}: ${took.toFixed(1)} ms`);
+  }
+});
+
+test('R2: a quote that begins or ends with a letter or a digit is never counted inside a longer word', () => {
+  const page = [['The patient was told to bathe ending the preparation at noon.', ' ', 'Findings: the end of the procedure was uneventful.', ' ',
+    'Mild pain was reported; the abdomen was painless on palpation.', ' ', 'A 5 mm polyp was found; polypectomy was performed; no other polyps.']];
+  const count = (text, pages = page) => app.locateQuote({ text, page: 1 }, pages).count;
+  assert.equal(count('the end'), 1, '"the end" inside "bathe ending" is not counted');
+  assert.equal(count('pain'), 1, '"pain" inside "painless" is not counted');
+  assert.equal(count('polyp'), 1, 'nor "polyp" inside "polypectomy" or "polyps"');
+  assert.deepEqual(app.locateQuote({ text: 'the end', page: 1 }, page).marks, { 1: [{ item: 2, start: 10, end: 17, occurrence: 0 }] });
+  // white space inside the quote stays ignored entirely: spaces the page has or lacks inside the words do not matter
+  assert.equal(count('the end of'), 1);
+  assert.equal(count('theendof'), 1);
+  // so a quote whose words run together on the page is found where they make one whole word (the rule as stated)
+  assert.equal(count('not able', [['This is notable.']]), 1);
+  assert.equal(count('not able', [['This is notables.']]), 0);
+  assert.equal(count('notable', [['It is not able.']]), 1, 'but the page\'s words may run together inside the quote');
+  // digits keep to the edge too
+  assert.equal(count('5 mm', [['A 15 mm polyp; a 5 mm polyp.']]), 1);
+  assert.deepEqual(app.locateQuote({ text: '5 mm', page: 1 }, [['A 15 mm polyp; a 5 mm polyp.']]).marks[1][0].start, 17);
+  // a quote that begins or ends with something else keeps no edge there
+  assert.equal(count('.', [['a.b.']]), 2);
+  assert.equal(count('polyp;', [['polyp; xpolyp;']]), 1, 'it begins with a letter: the start keeps to an edge');
+  assert.equal(count('(polyp', [['x(polyps']]), 0, 'it ends with a letter: the end keeps to an edge');
+  assert.equal(count('(polyp)', [['x(polyp)y']]), 1, 'neither end is a letter or a digit');
+  // the page's start and end are edges
+  assert.equal(count('polyp', [['polyp']]), 1);
+  // what is read before and after: the items' strings in order, joined with nothing between them, and a line break after
+  // an item the library ends a line with; where two items meet with nothing between them, they run their words together
+  // only where the second visibly continues the first (R2b): bare strings have no geometry, so they meet at an edge
+  assert.equal(count('polyp', [['the', 'polyp', 's']]), 1, 'bare strings meet at word edges (shared example 15)');
+  assert.equal(count('polyp', [[item('the', 0, 0, { eol: true }), item('polyp', 0, -12, { eol: true }), item('s', 0, -24)]]), 1, 'line breaks between them: a word');
+  const continued = [[item('pain', 56, 700, { size: 11, width: 20.2 }), item('less', 76.2, 700, { size: 11, width: 18.3 })]];
+  assert.deepEqual([count('pain', continued), count('less', continued), count('painless', continued)], [0, 0, 1], 'one word drawn in two (shared example 13)');
+  // a letter, a digit or a combining mark joins a word; another character does not
+  assert.equal(count('polyp', [['xpolyp']]), 0);
+  assert.equal(count('polyp', [['2polyp']]), 0);
+  assert.equal(count('polyp', [['́polyp']]), 0, 'a mark before it');
+  assert.equal(count('polyp', [['épolyp']]), 0, 'an accented letter before it');
+  assert.equal(count('polyp', [['\u{1D49C}polyp']]), 0, 'an astral letter before it (read as one character, not half of one)');
+  assert.equal(count('polyp', [['-polyp/']]), 1);
+  // the characters before and after are read as the page writes them, not after NFKC (the walk's judge reads them so too)
+  assert.equal(count('Botox', [['Botox™ was given.']]), 1, 'a trade mark sign after it is an edge, though NFKC writes it "TM"');
+  assert.equal(count('5', [['5㎏ dose']]), 1, 'a unit sign after it is an edge, though NFKC writes it "kg"');
+  assert.equal(count('polyp', [['⑴polyp']]), 0, 'a parenthesised digit before it is a digit, though NFKC writes it "(1)"');
+  assert.equal(count('polyp', [[' polyp ']]), 1, 'other spaces are edges');
+  // an overprint copy is not read as the character before: what is read is the page's text, copies left out
+  assert.equal(count('polyp', [[item('polyp', 10, 0), item('polyp', 10.3, 0)]]), 1, 'the copy right after it is not read');
+  assert.equal(count('polyp', [[item('polyp', 10, 0, { width: 20 }), item('polyp', 30, 0, { width: 20 })]]), 0, 'one drawing continuing another: one word "polyppolyp"');
+  assert.equal(count('polyp', [[item('polyp', 10, 0, { width: 20 }), item('polyp', 40, 0, { width: 20 })]]), 2, 'a gap between them: two drawings, two words');
+  // a place turned away is passed over by one unit only, so a word right after it is still found
+  assert.equal(count('aa', [['a aa']]), 1, 'not "a a" (inside "a aa"), but "aa"');
+  assert.deepEqual(app.locateQuote({ text: 'aa', page: 1 }, [['a aa']]).marks, { 1: [{ item: 0, start: 2, end: 4, occurrence: 0 }] });
+  assert.equal(count('aa', [['aaaa']]), 0, 'one word: none of it is these words');
+  // case-blind keeps to the edges as exact case does
+  assert.equal(app.locateQuote({ text: 'PAIN', page: 1 }, page).count, 1);
+  // the quote's own first and last characters decide: a letter with its accent counts as a letter, a final mark too
+  assert.equal(count('café', [['cafés']]), 0);
+  assert.equal(count('café', [['café s']]), 1);
+  const ends = text => app.quoteEdges(app.pageText([text]));
+  const none = { start: false, end: false, startDigit: false, endDigit: false, startSeparated: false, endSeparated: false };
+  assert.deepEqual(ends('.polyp'), { ...none, end: true });
+  assert.deepEqual(ends('q́'), { ...none, start: true, end: true }, 'the last character is q with its accent');
+  assert.deepEqual(ends(' (x) '), none);
+  assert.deepEqual(ends('2.5 mg'), { ...none, start: true, end: true, startDigit: true });
+  assert.deepEqual(ends('.5 mg.'), { ...none, startSeparated: true }, 'a separator with a digit after it in the quote');
+  assert.deepEqual(ends('Take 2.'), { ...none, start: true, endSeparated: true }, 'a separator with a digit before it in the quote');
+  assert.deepEqual(ends('１２．'), { ...none, start: true, startDigit: true, endSeparated: true }, 'its folded characters: NFKC first');
+  assert.deepEqual(ends('糖尿病'), none, 'a Han ideograph asks for no edge (R2c)');
+  // continuation: the edges are read in the two pages - the start on the quote's page, the end on the next
+  const pages = [['It ends with the start of a'], ['passage that runs on.']];
+  assert.equal(app.locateQuote({ text: 'the start of a passage', page: 1 }, pages).scope, 'continued');
+  assert.equal(app.locateQuote({ text: 'he start of a passage', page: 1 }, pages).status, 'not_found', 'its start is inside "the"');
+  assert.equal(app.locateQuote({ text: 'the start of a passag', page: 1 }, pages).status, 'not_found', 'its end is inside "passage"');
+  // a text document keeps its own rule (findPassages): no word edges there
+  assert.deepEqual(app.findPassages('bathe ending', 'the end'), [[2, 9]]);
+});
+
+test('R2a: a number\'s own separator keeps its digits in one word, at both ends of an occurrence, as Unicode\'s word boundaries have it', () => {
+  // the table: exactly the 21 code points Unicode 16.0 calls MidNum, MidNumLet or Single_Quote, which join two digits only
+  // when a digit stands on each side (UAX #29 WB11, WB12), pinned and held to Intl.Segmenter here
+  const table = [0x0027, 0x002c, 0x002e, 0x003b, 0x037e, 0x0589, 0x060c, 0x060d, 0x066c, 0x07f8, 0x2018, 0x2019, 0x2024, 0x2044,
+    0xfe50, 0xfe52, 0xfe54, 0xff07, 0xff0c, 0xff0e, 0xff1b];
+  assert.deepEqual([...app.NUMBER_SEPARATORS].sort((a, b) => a - b), table);
+  const words = new Intl.Segmenter('en', { granularity: 'word' });
+  const parts = value => [...words.segment(value)].length;
+  for (const point of table) {
+    const x = String.fromCodePoint(point);
+    assert.deepEqual([parts(`1${x}2`), parts(`1${x}`), parts(`${x}2`)], [1, 2, 2], `U+${point.toString(16)}`);
+  }
+  for (const other of ['/', '-', ':', '·', ' ', 'x']) assert.ok(!app.NUMBER_SEPARATORS.has(other.codePointAt(0)), other);
+  const count = (text, items) => app.locateQuote({ text, page: 1 }, [items]).count;
+  // (start, a): the quote begins with a digit; before it, a separator with a digit before that
+  assert.equal(count('1 cm lesion', ['A 2.1 cm lesion was excised.']), 0);
+  assert.equal(count('500 mL', ['Estimated blood loss 1,500 mL.']), 0);
+  assert.equal(count('000 m', ['Total 1’000 m walked']), 0, 'an apostrophe as a thousands separator');
+  assert.equal(count('٥٠٠', ['١٬٥٠٠ ml']), 0, 'Arabic-Indic digits and the Arabic thousands separator');
+  assert.equal(count('5 mg', ['Dose 2. 5 mg later']), 1, 'a space after the point: two words');
+  assert.equal(count('2', ['1/2 tablet']), 1, 'a slash is no separator');
+  assert.equal(count('2', ['1-2 tablets']), 1, 'nor a hyphen');
+  assert.equal(count('5 mg', ['Take .5 mg']), 1, 'no digit before the separator');
+  // (start, b): the quote begins with a separator and a digit; before it, a digit
+  assert.equal(count('.5 mg', ['Take 2.5 mg']), 0);
+  assert.equal(count('.5 mg', ['Take .5 mg']), 1);
+  // (end, a): the quote ends with a digit; after it, a separator with a digit after that
+  assert.equal(count('Hemoglobin 12', ['Hemoglobin 12.5 g/dL']), 0);
+  assert.equal(count('3.1', ['Sections 3.1.2 and 4.']), 0);
+  assert.equal(count('1990', ['the 1990’s']), 1, 'a letter after the separator');
+  assert.equal(count('Hemoglobin 12', ['Hemoglobin 12. Next']), 1);
+  // (end, b): the quote ends with a separator after a digit; after it, a digit
+  assert.equal(count('2.', ['Take 2.5 mg.']), 0);
+  assert.equal(count('2.', ['Take 2. Then 5 mg.']), 1);
+  assert.deepEqual(app.locateQuote({ text: '1.', page: 1 }, [['1. Hypokalemia, potassium 3.1.']]).marks, { 1: [{ item: 0, start: 0, end: 2, occurrence: 0 }] }, 'the list number only');
+  // the quote's characters are folded (NFKC) and the page's read as written
+  assert.equal(count('５ mg', ['１２．５ mg']), 0, 'full-width digits and point');
+  assert.equal(count('２．', ['Take 2.5 mg']), 0, 'a full-width quote of "2."');
+  // reading stops at an edge two drawings make (R2b): a code point beyond it counts as none
+  const at = (str, x, width) => item(str, x, 700, { width });
+  assert.equal(count('5 mg', [at('Total 12', 56, 40), at('.5 mg', 96, 25)]), 0, 'the second continues the first (shared example 16)');
+  assert.equal(count('5 mg', [at('Total 12', 56, 40), at('.5 mg', 50, 25)]), 1, 'it jumps back: an edge (shared example 17)');
+  assert.equal(count('Dose 2', [at('Dose 2.', 56, 35), at('5 mg', 91, 25)]), 0, 'the end: continued');
+  assert.equal(count('Dose 2', [at('Dose 2.', 56, 35), at('5 mg', 40, 25)]), 1, 'the end: an edge beyond the separator');
+});
+
+test('R2b: two drawings meet at a word edge unless the second visibly continues the first', async () => {
+  const drawing = (str, transform, width) => ({ str, transform, width, hasEOL: false });
+  const flat = (x, y, size, width, str = 'w') => drawing(str, [size, 0, 0, size, x, y], width);
+  const continues = (a, b) => app.continuesDrawing(a, b);
+  // the next one's origin at the first one's end: along within 0.25 x its height of its width, across within 0.1 x it
+  assert.ok(continues(flat(56, 700, 10, 40), flat(96, 700, 10, 9)));
+  assert.ok(continues(flat(56, 700, 10, 40), flat(98.5, 700, 10, 9)), '2.5 further along');
+  assert.ok(!continues(flat(56, 700, 10, 40), flat(98.6, 700, 10, 9)), '2.6 further');
+  assert.ok(continues(flat(56, 700, 10, 40), flat(93.5, 700, 10, 9)), '2.5 back');
+  assert.ok(!continues(flat(56, 700, 10, 40), flat(93.4, 700, 10, 9)), '2.6 back');
+  assert.ok(continues(flat(56, 700, 10, 40), flat(96, 701, 10, 9)), '1 up');
+  assert.ok(!continues(flat(56, 700, 10, 40), flat(96, 701.1, 10, 9)), '1.1 up: raised');
+  assert.ok(!continues(flat(56, 700, 10, 40), flat(96, 698.9, 10, 9)), '1.1 down');
+  // font heights within 5%
+  assert.ok(continues(flat(56, 700, 11, 40), flat(96, 700, 11.55, 9)));
+  assert.ok(!continues(flat(56, 700, 11, 40), flat(96, 700, 11.6, 9)), 'a smaller or larger marker');
+  // both need that geometry: a finite transform and a finite width above 0
+  assert.ok(!continues(flat(56, 700, 10, 0), flat(96, 700, 10, 9)), 'no width');
+  assert.ok(!continues({ str: 'w', transform: [10, 0, 0, 10, 56, 700] }, flat(66, 700, 10, 9)), 'no width given');
+  assert.ok(!continues(drawing('w', [10, 0, 0, 10, NaN, 700], 40), flat(96, 700, 10, 9)), 'no finite transform');
+  assert.ok(!continues('the', 'polyp'), 'bare strings');
+  assert.ok(!continues(flat(56, 700, 10, 40), flat(96, 700, 10, Infinity)), 'an infinite width');
+  // rotated text: the library's width is the advance along the text (read below), so along and across follow the text
+  const turned = (y, width, str) => drawing(str, [0, 11, -11, 0, 300, y], width);
+  assert.ok(continues(turned(100, 20.2, 'pain'), turned(120.2, 18.3, 'less')), 'shared example 20');
+  assert.ok(!continues(turned(100, 20.2, 'pain'), turned(124, 18.3, 'less')));
+  assert.equal(app.locateQuote({ text: 'pain', page: 1 }, [[turned(100, 20.2, 'pain'), turned(120.2, 18.3, 'less')]]).count, 0);
+  // the place lies between two items' characters with nothing between them: a line break or an item that gives nothing
+  // in between does not make one; a drawing that gives only a format character does not count
+  const pain = flat(56, 700, 11, 20.2, 'pain');
+  const less = flat(76.2, 700, 11, 18.3, 'less');
+  const countPain = items => app.locateQuote({ text: 'pain', page: 1 }, [items]).count;
+  assert.equal(countPain([pain, { ...flat(200, 500, 11, 5, '​') }, less]), 0, 'a zero-width space drawn elsewhere between them gives nothing');
+  assert.equal(countPain([{ ...pain, hasEOL: true }, less]), 1, 'a line break between them');
+  assert.deepEqual([...app.pageText([pain, less]).edges], new Array(9).fill(0), 'no edge where one continues the other');
+  assert.deepEqual([...app.pageText([pain, { ...less, transform: [11, 0, 0, 11, 56, 700] }]).edges].indexOf(1), 4, 'an edge at the place between them');
+  // a footnote marker raised and smaller, glued to a word (shared example 12), and fake bold's jump back (example 14)
+  const footnote = [flat(56, 700, 11, 190, 'Assessment: type 2 diabetes mellitus'), flat(246, 704, 7, 3.9, '1'), flat(249.9, 700, 11, 85, ', well controlled.')];
+  assert.equal(app.locateQuote({ text: 'type 2 diabetes mellitus', page: 1 }, [footnote]).count, 1);
+  // what the library gives, read with the pinned library itself: a word drawn in two fonts, flat and turned a quarter
+  // round by its text matrix or by the page's matrix, is two items; each width is its advance along its text (Helvetica
+  // "pain" at 11 pt: 20.79), so the rule finds them continued and "pain" is no word of its own there
+  const items = await readPdfItems(rawPdf([
+    'BT /F1 11 Tf 56 700 Td (pain) Tj ET BT /F2 11 Tf 76.79 700 Td (less) Tj ET',
+    'BT /F1 11 Tf 0 1 -1 0 300 100 Tm (pain) Tj ET BT /F2 11 Tf 0 1 -1 0 300 120.79 Tm (less) Tj ET',
+    'q 0 1 -1 0 300 100 cm BT /F1 11 Tf 0 0 Td (pain) Tj ET BT /F2 11 Tf 20.79 0 Td (less) Tj ET Q',
+    'BT /F1 11 Tf 56 700 Td (pain) Tj ET BT /F2 7 Tf 76.79 704 Td (1) Tj ET',
+  ]));
+  for (const [index, page] of items.slice(0, 3).entries()) {
+    assert.deepEqual(page.map(made => made.str), ['pain', 'less'], `page ${index + 1}`);
+    assert.ok(Math.abs(page[0].width - 20.79) < 1e-6, `page ${index + 1}: the advance along the text, ${page[0].width}`);
+    assert.ok(continues(page[0], page[1]), `page ${index + 1}`);
+    assert.equal(app.locateQuote({ text: 'pain', page: 1 }, [page]).count, 0, `page ${index + 1}`);
+    assert.equal(app.locateQuote({ text: 'painless', page: 1 }, [page]).count, 1, `page ${index + 1}`);
+  }
+  assert.deepEqual(items[3].map(made => made.str), ['pain', '1'], 'a raised, smaller marker is an item of its own');
+  assert.equal(app.locateQuote({ text: 'pain', page: 1 }, [items[3]]).count, 1, 'and meets the word at an edge');
+});
+
+test('R2c: a Han ideograph or a hiragana character is a word of its own; katakana stays a word part', () => {
+  const count = (text, items) => app.locateQuote({ text, page: 1 }, [items]).count;
+  assert.equal(count('糖尿病', ['患者有糖尿病史和高血压']), 1, 'shared example 18');
+  assert.equal(count('高血压', ['患者有糖尿病史和高血压']), 1);
+  assert.equal(count('高血圧', ['高血圧の治療']), 1, 'shared example 19: before a hiragana character');
+  assert.equal(count('Botox', ['Botox注射']), 1, 'a Latin word before a Han ideograph');
+  assert.equal(count('こと', ['ひとつのこと']), 1, 'hiragana among hiragana');
+  assert.equal(count('カナ', ['カタカナテスト']), 0, 'katakana inside katakana: inside a word');
+  assert.equal(count('テスト', ['カタカナ テスト']), 1);
+  assert.equal(count('糖x', ['a糖xb']), 0, 'a Han ideograph asks for no edge, the Latin end still does');
+  assert.equal(count('糖x', ['a糖x b']), 1);
+  assert.equal(count('x', ['〇x〇']), 1, 'an ideographic number sign is a word of its own too');
+});
+
+test('the shared examples of round 5, as the walk\'s judge pins them', () => {
+  const at = (str, size, x, y, width) => ({ str, transform: [size, 0, 0, size, x, y], width, hasEOL: false });
+  const courier = dx => {
+    let x = 56 + dx;
+    return ['IMPRESSION:', ' ', 'TWO', ' ', 'POLYPS', ' ', 'WERE', ' ', 'REMOVED.'].map(word => {
+      const made = at(word, 9, x, 700, word.length * 5.4);
+      x += word.length * 5.4;
+      return made;
+    });
+  };
+  const rows = [
+    [1, ['A 2.1 cm lesion was excised.'], [['1 cm lesion', 0]]],
+    [2, ['Lisinopril 2.5 mg daily.'], [['5 mg daily', 0], ['2.5 mg daily', 1]]],
+    [3, ['Hemoglobin 12.5 g/dL'], [['Hemoglobin 12', 0]]],
+    [4, ['Estimated blood loss 1,500 mL.'], [['500 mL', 0], ['1,500 mL', 1]]],
+    [5, ['1. Hypokalemia, potassium 3.1.'], [['1.', 1]]],
+    [6, ['Take 2.5 mg.'], [['2.', 0]]],
+    [7, ['A 15 mm polyp; a 5 mm polyp.'], [['5 mm', 1]]],
+    [8, ['Sections 3.1.2 and 4.'], [['3.1', 0], ['3.1.2', 1]]],
+    [9, ['Dose 2. 5 mg later'], [['5 mg', 1]]],
+    [10, ['１２．５ mg'], [['５ mg', 0]]],
+    [11, ['the 1990’s'], [['1990', 1]]],
+    [12, [at('Assessment: type 2 diabetes mellitus', 11, 56, 700, 190), at('1', 7, 246, 704, 3.9), at(', well controlled.', 11, 249.9, 700, 85)],
+      [['type 2 diabetes mellitus', 1], ['mellitus1', 1]]],
+    [13, [at('pain', 11, 56, 700, 20.2), at('less', 11, 76.2, 700, 18.3)], [['pain', 0], ['painless', 1]]],
+    [14, [at('Diagnosis: Chest pain', 11, 56, 700, 107), at('Chest pain since this morning.', 11, 111.3, 700, 150)],
+      [['Diagnosis: Chest pain', 1], ['Chest pain since this morning.', 1], ['Chest pain', 2]]],
+    [15, ['the', 'polyp', 's'], [['polyp', 1]]],
+    [16, [at('Total 12', 10, 56, 700, 40), at('.5 mg', 10, 96, 700, 25)], [['5 mg', 0]]],
+    [17, [at('Total 12', 10, 56, 700, 40), at('.5 mg', 10, 50, 700, 25)], [['5 mg', 1]]],
+    [18, ['患者有糖尿病史和高血压'], [['糖尿病', 1], ['高血压', 1]]],
+    [19, ['高血圧の治療'], [['高血圧', 1]]],
+    [20, [{ str: 'pain', transform: [0, 11, -11, 0, 300, 100], width: 20.2, hasEOL: false }, { str: 'less', transform: [0, 11, -11, 0, 300, 120.2], width: 18.3, hasEOL: false }],
+      [['pain', 0]]],
+    [21, [...courier(0), ...courier(0.2)], [['TWO POLYPS', 1], ['IMPRESSION: TWO POLYPS WERE REMOVED.', 1]]],
+    [22, [at('Polyp', 10, 50, 700, 26), at('Polyp', 24, 50, 700, 62)], [['Polyp', 2]]],
+  ];
+  assert.equal(rows.length, 22);
+  for (const [number, items, quotes] of rows) {
+    for (const [text, count] of quotes) assert.equal(app.locateQuote({ text, page: 1 }, [items]).count, count, `row ${number}: ${JSON.stringify(text)}`);
+  }
+});
+
+test('whole characters of the text as the PDF library reads it, which is not always the text as drawn', () => {
+  // the library never gives a ligature character: a drawn ligature the PDF declares as two letters reads as two letters
+  // ("fi" below is one glyph on the page), so only the word-edge rule keeps a mark from ending between them
+  const ligature = [['The finding was confirmed.']];
+  assert.equal(app.locateQuote({ text: 'The f', page: 1 }, ligature).status, 'not_found', 'it would end inside the word');
+  assert.equal(app.locateQuote({ text: 'The finding', page: 1 }, ligature).count, 1);
+  // a spacing accent (U+00B4) kerned back over a letter is a character of its own, after the letter: the letter is marked
+  // without the accent it is drawn with, and the accented quote is not found
+  const accent = [['Patient Jose', '\u00b4 was seen.']];
+  assert.deepEqual(app.locateQuote({ text: 'Patient Jose', page: 1 }, accent).marks, { 1: [{ item: 0, start: 0, end: 12, occurrence: 0 }] });
+  assert.equal(app.locateQuote({ text: 'Patient Jos\u00e9', page: 1 }, accent).status, 'not_found');
+});
+
+test('R3: format characters are dropped from the quote as the PDF library drops them from the page', () => {
+  // the library drops a glyph whose Unicode is a format character (a soft hyphen, a zero-width space or joiner, a
+  // direction mark, a word joiner, a byte-order mark): the quote drops the same, and is found
+  const page = [['alphabeta north gate softhyphen']];
+  for (const mark of ['­', '​', '‌', '‍', '‎', '⁠', '﻿']) {
+    const result = app.locateQuote({ text: `alpha${mark}beta`, page: 1 }, page);
+    assert.deepEqual([result.status, result.count], ['marked', 1], `U+${mark.codePointAt(0).toString(16)}`);
+  }
+  assert.equal(app.locateQuote({ text: 'soft­hyphen', page: 1 }, page).count, 1);
+  assert.equal(app.locateQuote({ text: '​‍', page: 1 }, page).status, 'empty', 'a quote of format characters only has nothing to mark');
+  // the page's own format characters, where a text holds them, are dropped too, and an item's offsets are its own
+  const own = [['alpha­beta and more']];
+  const found = app.locateQuote({ text: 'alphabeta', page: 1 }, own);
+  assert.deepEqual(found.marks, { 1: [{ item: 0, start: 0, end: 10, occurrence: 0 }] }, 'the mark covers the dropped character between its letters');
+  assert.equal(app.pageText(own[0]).joined, 'alphabeta and more');
+  // a joiner dropped: a sequence the joiner held together is its characters (the library never keeps one)
+  assert.equal(app.locateQuote({ text: '\u{1F469}', page: 1 }, [['\u{1F469}‍\u{1F4BB} ok']]).count, 1);
+  assert.equal(app.locateQuote({ text: '\u{1F469}‍\u{1F4BB}', page: 1 }, [['\u{1F469}\u{1F4BB} ok']]).count, 1);
+});
+
+test('the matcher is exact-case first, case-blind only where no exact-case occurrence exists, and counts every one', () => {
+  const pages = [['Gastric antrum biopsy. The gastric antrum was red. gastric antrum.']];
+  const exact = app.locateQuote({ text: 'gastric antrum', page: 1 }, pages);
+  assert.deepEqual([exact.count, exact.caseBlind], [2, false], 'the capitalised one is not counted while exact ones exist');
+  assert.deepEqual(markedParts(exact, pages).map(([, , occurrence]) => occurrence), [0, 1]);
+  const blind = app.locateQuote({ text: 'GASTRIC ANTRUM', page: 1 }, pages);
+  assert.deepEqual([blind.count, blind.caseBlind], [3, true]);
+  assert.equal(app.markNote(blind), 'These words appear 3 times on page 1. Each is marked.');
+  // duplicates: each is marked and counted, left to right, never overlapping
+  const twice = [['the gastric antrum.', ' x ', 'the gastric antrum.']];
+  const both = app.locateQuote({ text: 'the gastric antrum.', page: 1 }, twice);
+  assert.deepEqual(markedParts(both, twice), [[1, 'the gastric antrum.', 0], [1, 'the gastric antrum.', 1]]);
+  assert.equal(app.markNote(both), 'These words appear 2 times on page 1. Each is marked.');
+  assert.equal(app.locateQuote({ text: 'aa', page: 1 }, [['aa aa aa']]).count, 3);
+});
+
+test('the matcher looks on the quote\'s page, then from it onto the next, and never marks another page', () => {
+  const pages = [['First page text.', 'It ends with the start of a'], ['passage that runs on.', 'Only on page two.'], ['Only on page three.']];
+  // not found: nothing marked, and the page is named
+  const none = app.locateQuote({ text: 'Not in the document.', page: 1 }, pages);
+  assert.deepEqual([none.status, none.count, none.pages, none.marks], ['not_found', 0, [], {}]);
+  assert.equal(app.markNote(none), 'The exact words were not found in the searchable text of page 1, so nothing is marked. Page 1 is shown.');
+  // continuation: it starts on the quote's page and runs onto the next; the marked part on each page is shown
+  const run = app.locateQuote({ text: 'the start of a passage that runs on', page: 1 }, pages);
+  assert.deepEqual([run.status, run.scope, run.count, run.pages], ['marked', 'continued', 1, [1, 2]]);
+  assert.deepEqual(markedParts(run, pages), [[1, 'the start of a', 0], [2, 'passage that runs on', 0]]);
+  assert.equal(app.markNote(run), 'Marked on page 1, continuing onto page 2.');
+  // a quote found only on another page is NOT marked: not the next page, not any other
+  for (const [text, page] of [['Only on page two.', 1], ['Only on page three.', 1], ['Only on page three.', 2], ['First page text.', 2]]) {
+    const other = app.locateQuote({ text, page }, pages);
+    assert.deepEqual([other.status, other.pages, other.marks], ['not_found', [], {}], `${text} on page ${page}`);
+  }
+  // a passage that starts on the page before the quote's is not the quote's page's either
+  assert.equal(app.locateQuote({ text: 'the start of a passage that runs on', page: 2 }, pages).status, 'not_found');
+  // the quote's own page wins: found there, the next page is not looked at
+  const both = [['repeat me'], ['repeat me']];
+  assert.deepEqual(app.locateQuote({ text: 'repeat me', page: 2 }, both).pages, [2]);
+  // the last page has no next page
+  assert.equal(app.locateQuote({ text: 'three. More', page: 3 }, pages).status, 'not_found');
+  // case-blind continuation only where there is no exact one
+  const shouting = app.locateQuote({ text: 'THE START OF A PASSAGE', page: 1 }, pages);
+  assert.deepEqual([shouting.scope, shouting.caseBlind, shouting.pages], ['continued', true, [1, 2]]);
+  // only the pages read are needed: the quote's page and the next
+  assert.equal(app.locateQuote({ text: 'passage that runs on', page: 2 }, [null, ['passage that runs on.'], null]).count, 1);
+});
+
+test('a quote with no page is looked for on every page, every occurrence marked, the pages named', () => {
+  const pages = [['The cecum was reached.'], ['No match here.'], ['The cecum was reached again.', 'the cecum']];
+  const all = app.locateQuote({ text: 'The cecum', page: null }, pages);
+  assert.deepEqual([all.status, all.scope, all.count, all.pages, all.caseBlind], ['marked', 'document', 2, [1, 3], false]);
+  assert.equal(app.markNote(all), 'These words appear 2 times, on pages 1 and 3. Each is marked.');
+  const one = app.locateQuote({ text: 'No match here.' }, pages);
+  assert.equal(app.markNote(one), 'Marked on page 2.');
+  const none = app.locateQuote({ text: 'Absent words.', page: null }, pages);
+  assert.equal(app.markNote(none), 'The exact words were not found in the searchable text of this document, so nothing is marked.');
+  const across = app.locateQuote({ text: 'reached. No match', page: null }, pages);
+  assert.deepEqual([across.count, across.pages], [1, [1, 2]]);
+  assert.equal(app.markNote(across), 'Marked on pages 1 and 2.');
+  const three = app.locateQuote({ text: 'e' }, [['e'], ['e'], ['e']]);
+  assert.equal(app.markNote(three), 'These words appear 3 times, on pages 1, 2 and 3. Each is marked.');
+});
+
+test('the matcher refuses empty and odd input, and names a page the document does not have', () => {
+  const pages = [['Some text.']];
+  for (const quote of [null, undefined, {}, { text: '' }, { text: '   \n\t ' }, { text: 7 }, { text: null, page: 1 }]) {
+    const result = app.locateQuote(quote, pages);
+    assert.deepEqual([result.status, result.count, result.marks], ['empty', 0, {}], JSON.stringify(quote));
+  }
+  assert.equal(app.markNote(app.locateQuote({ text: ' ' }, pages)), 'This passage has no words to mark.');
+  const beyond = app.locateQuote({ text: 'Some text.', page: 4 }, pages);
+  assert.deepEqual([beyond.status, beyond.pageCount, beyond.marks], ['missing_page', 1, {}]);
+  assert.equal(app.markNote(beyond), 'This passage names page 4, but the document has 1 page. Nothing is marked.');
+  // a page that is not a positive whole number is no page: every page is searched
+  for (const page of [0, -1, 1.5, '1', null]) assert.equal(app.locateQuote({ text: 'Some text.', page }, pages).scope, 'document', String(page));
+  // no pages, unreadable pages and odd items
+  assert.equal(app.locateQuote({ text: 'x', page: 1 }, null).status, 'missing_page');
+  assert.equal(app.locateQuote({ text: 'x' }, []).status, 'not_found');
+  assert.equal(app.locateQuote({ text: 'Some', page: 1 }, [['', null, 7, 'Some', { str: ' x' }]]).count, 1, 'an item the library gives ({str}) is read too');
+  assert.deepEqual(app.locateQuote({ text: 'Some', page: 1 }, [['', null, 7, 'Some']]).marks, { 1: [{ item: 3, start: 0, end: 4, occurrence: 0 }] });
+  assert.equal(app.locateQuote({ text: 'x', page: 1 }, [null]).status, 'not_found');
+  assert.equal(app.markNote(null), 'The exact words were not found in the searchable text of this document, so nothing is marked.');
+  // the frame's note says why the PDF is not drawn and marked in the page, then the quote's page - never what the frame
+  // shows: the browser, the library, the document, or a stalled download
+  assert.equal(app.frameNote(3, 'browser'), 'Marking needs a newer browser. The quote is on page 3.');
+  assert.equal(app.frameNote(null, 'browser'), 'Marking needs a newer browser.');
+  assert.equal(app.frameNote(3, 'library'), 'The marking tool did not work here, so nothing is marked. The quote is on page 3.');
+  assert.equal(app.frameNote(null, 'library'), 'The marking tool did not work here, so nothing is marked.');
+  assert.equal(app.frameNote(3, 'document'), 'This document cannot be drawn here, so nothing is marked. The quote is on page 3.');
+  assert.equal(app.frameNote(null, 'document'), 'This document cannot be drawn here, so nothing is marked.');
+  assert.equal(app.frameNote(2, 'slow'), 'The document took too long to load here, so nothing is marked. The quote is on page 2.');
+  for (const odd of [undefined, '', 'toString', '__proto__', 7]) {
+    assert.equal(app.frameNote(1, odd), 'This document cannot be drawn here, so nothing is marked. The quote is on page 1.', String(odd));
+  }
+  for (const reason of Object.keys(app.FRAME_REASONS)) assert.doesNotMatch(app.frameNote(4, reason), /is shown|Page 4/, reason);
+});
+
+test('a drawn page\'s marks split exactly the matched characters out of the text layer\'s spans, as text only', async () => {
+  const strings = ['Cold forceps <b>biopsies</b>', 'were taken.', 'Other text.'];
+  const made = [];
+  const element = tag => {
+    const node = { tag, children: [], dataset: {}, className: '', set textContent(value) { this.children = value === '' ? [] : [value]; },
+      get textContent() { return this.children.map(child => (typeof child === 'string' ? child : child.textContent)).join(''); },
+      append(...items) { this.children.push(...items); } };
+    made.push(node);
+    return node;
+  };
+  const saved = global.document;
+  global.document = { createElement: element };
+  try {
+    const divs = strings.map(value => { const div = element(); div.textContent = value; return div; });
+    const page = { number: 1, drawn: 'key', layer: { textDivs: divs, textContentItemsStr: strings }, painted: [] };
+    const result = app.locateQuote({ text: 'forceps <b>biopsies</b> were', page: 1 }, [strings]);
+    app.paintPage({ mark: { key: 'L1#0', result } }, page);
+    const shape = div => div.children.map(child => (typeof child === 'string' ? child : [`${child.tag}.${child.className}`, child.dataset.occurrence, child.textContent]));
+    assert.deepEqual(shape(divs[0]), ['Cold ', ['mark.pdf-mark', '0', 'forceps <b>biopsies</b>']], 'the markup-like text stays text');
+    assert.deepEqual(shape(divs[1]), [['mark.pdf-mark', '0', 'were'], ' taken.']);
+    assert.deepEqual(shape(divs[2]), ['Other text.'], 'an item with no mark is not touched');
+    assert.deepEqual(page.painted, [0, 1]);
+    // another quote: the spans painted before are restored first
+    app.paintPage({ mark: { key: 'L2#0', result: app.locateQuote({ text: 'Other', page: 1 }, [strings]) } }, page);
+    assert.deepEqual([shape(divs[0]), shape(divs[1]), shape(divs[2])], [[strings[0]], [strings[1]], [['mark.pdf-mark', '0', 'Other'], ' text.']]);
+    // no mark (the document changed, or a new coding review): every span as it was
+    app.paintPage({ mark: null }, page);
+    assert.deepEqual(divs.map(shape), strings.map(value => [value]));
+    // a page not drawn yet is left alone; it is painted when it is drawn
+    app.paintPage({ mark: { key: 'L1#0', result } }, { ...page, layer: null });
+    assert.deepEqual(divs.map(shape), strings.map(value => [value]));
+  } finally {
+    global.document = saved;
+  }
+});
+
+test('nothing the page script declares shadows a property of window the page or the walk reads', () => {
+  // app.js is a classic script: every function it declares at its top level becomes a property of window, so one named
+  // innerWidth replaced window.innerWidth (the walk's viewport check reads it) while the viewer was being built
+  const source = fs.readFileSync(BUNDLE, 'utf8');
+  const declared = [...source.matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)|^(?:const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm)].map(match => match[1] || match[2]);
+  assert.ok(declared.includes('locateQuote') && declared.includes('viewerWidth'), 'the declarations are read');
+  const windowProperties = ['innerWidth', 'innerHeight', 'outerWidth', 'outerHeight', 'scrollX', 'scrollY', 'pageXOffset', 'pageYOffset', 'screenX',
+    'screenY', 'screenLeft', 'screenTop', 'devicePixelRatio', 'name', 'status', 'closed', 'length', 'opener', 'parent', 'top', 'frames', 'self',
+    'window', 'document', 'location', 'history', 'navigator', 'origin', 'event', 'external', 'screen', 'visualViewport', 'performance', 'crypto',
+    'open', 'close', 'stop', 'focus', 'blur', 'print', 'alert', 'confirm', 'prompt', 'find', 'scroll', 'scrollTo', 'scrollBy', 'moveTo', 'moveBy',
+    'resizeTo', 'resizeBy', 'postMessage', 'fetch', 'getComputedStyle', 'getSelection', 'matchMedia', 'requestAnimationFrame',
+    'cancelAnimationFrame', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'structuredClone', 'atob', 'btoa',
+    'customElements', 'localStorage', 'sessionStorage', 'indexedDB', 'caches', 'menubar', 'toolbar', 'statusbar', 'scrollbars', 'personalbar',
+    'locationbar', 'onload', 'onerror', 'onresize', 'onscroll', 'reportError', 'createImageBitmap', 'IntersectionObserver', 'ResizeObserver',
+    'Worker', 'URL', 'Map', 'Promise'];
+  assert.deepEqual(declared.filter(name => windowProperties.includes(name)), []);
+});
+
+test('the PDF library is named on the page as same-origin static modules, and nothing else is accepted', () => {
+  const saved = global.document;
+  try {
+    const page = data => { global.document = { body: { dataset: data } }; return app.pdfAssets(); };
+    const module = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.min.0123456789ab.mjs';
+    const worker = '/static/studio/lib/pdfjs-6.5.438/legacy/build/pdf.worker.min.0123456789ab.mjs';
+    assert.deepEqual(page({ pdfModule: module, pdfWorker: worker }), { module, worker });
+    for (const bad of ['https://cdn.example/pdf.mjs', '//cdn.example/pdf.mjs', '/static/x.js', 'data:text/javascript,1', '/api/x.mjs', '/static/a b.mjs', 7, null]) {
+      assert.deepEqual(page({ pdfModule: bad, pdfWorker: bad }), { module: '', worker: '' }, String(bad));
+    }
+    assert.deepEqual(page(undefined), { module: '', worker: '' });
+  } finally {
+    global.document = saved;
+  }
+  // the shell names the pinned copy; the page script names no address of its own
+  const template = fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8');
+  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}">/);
+  const bundle = fs.readFileSync(BUNDLE, 'utf8');
+  assert.ok(!/pdf(\.worker)?\.min\.mjs/.test(bundle), 'the bundle reads the addresses from the page');
+  // the image decoders and standard fonts are the package's own folders, two up from the legacy worker
+  assert.match(bundle, /wasmUrl: new URL\('\.\.\/\.\.\/wasm\/', worker\)\.href, standardFontDataUrl: new URL\('\.\.\/\.\.\/standard_fonts\/', worker\)\.href,/);
+  // the viewer starts the worker itself as a module worker, waits for it to say it is ready, then hands it to the library as
+  // its port and the document to that (A4): a worker that cannot start is told apart from a document the library refuses
+  assert.match(bundle, /const thread = new Worker\(address, \{ type: 'module' \}\);/);
+  assert.match(bundle, /data\.sourceName === 'worker' && data\.targetName === 'main' && data\.action === 'ready'/);
+  assert.match(bundle, /viewer\.worker = new library\.PDFWorker\(\{ port: thread, verbosity: library\.VerbosityLevel\.ERRORS \}\);/);
+  assert.match(bundle, /\n\s+worker: viewer\.worker,\n/);
+  // the viewer downloads the view address itself (A5) and the library is opened on its bytes, with no eval, no WebAssembly,
+  // no XFA and the page drawn on the main thread
+  assert.match(bundle, /await fetch\(view, \{ credentials: 'same-origin', signal \}\)/);
+  assert.match(bundle, /library\.getDocument\(\{\n\s+data, isEvalSupported: false, enableXfa: false, useWasm: false,/);
+  assert.ok(!/getDocument\(\{[^}]*\burl:/.test(bundle), 'the library is given no address to fetch');
+  assert.match(bundle, /disableWorkerRendering: true/);
+  assert.ok(!/AnnotationLayer|XfaLayer|enableScripting/.test(bundle), 'no annotation or XFA layer, no document scripting');
 });
 
 test('the overview, the documents list and How it works speak of the coding review and the second check', () => {
