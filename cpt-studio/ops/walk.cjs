@@ -1981,7 +1981,7 @@ async function measureSeen(page, number, read) {
   const [pageW, pageH] = [start.page[2], start.page[3]];
   const [viewW, viewH] = [start.view[2], start.view[3]];
   if (!(viewW >= SEEN_BLOCK && viewH >= SEEN_BLOCK && pageW > 0 && pageH > 0)) return { error: 'the viewer shows none of it' };
-  const offsets =(size, view) => (size <= view ? [0] : [...new Set([...Array.from({ length: Math.ceil(size / view) }, (_, k) => Math.min(k * view, size - view)), size - view])]);
+  const offsets = (size, view) => (size <= view ? [0] : [...new Set([...Array.from({ length: Math.ceil(size / view) }, (_, k) => Math.min(k * view, size - view)), size - view])]);
   const out = { blocks: 0, tiles: 0, paperBlocks: 0, paperDifference: 0, inkBlocks: 0, inkCanvas: 0, inkScreen: 0 };
   const paper = read.canvas.paper;
   try {
@@ -2087,10 +2087,12 @@ async function settleViewer(page) {
 // near the visible area only), its text layer waited for, then two frames so the library has filled it and the viewer
 // painted its marks.
 async function readDrawnPage(page, number) {
-  await page.evaluate(wanted => {
+  const there = await page.evaluate(wanted => {
     const target = document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"]`);
     if (target && !target.querySelector('.pdf-text')) target.scrollIntoView({ block: 'center' });
+    return Boolean(target);
   }, number);
+  if (!there) return { number, drawn: false };  // a page the viewer does not have (its page count is judged)
   await page.waitForFunction(wanted => Boolean(document.querySelector(`#documentViewer .pdf-page[data-page="${wanted}"] .pdf-text`)),
     number, { timeout: UI_TIMEOUT_MS }).catch(() => null);
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 50)))));
