@@ -1871,6 +1871,41 @@ test('A3: the pages are drawn one at a time, the quote\'s page first, and a page
   }
 });
 
+test('A3: while the view scrolls no page is started, so a page the view only passes is never decoded', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const word = fixture('encounter-word.json');
+  const saved = { viewer: app.state.viewer };
+  const element = viewerElement({ dataset: { viewUrl: word.document.view_url } });
+  try {
+    await withPage({ elements: { documentViewer: element } }, async () => {
+      Object.assign(app.state, { doc: word, route: null });
+      const started = [];
+      const viewer = pdfViewer(word, element, [['a'], ['b'], ['c']], [], { ratio: 1, library: { AnnotationMode: { ENABLE: 2 } } });
+      for (const page of viewer.pages) {
+        page.viewport = { width: 612, height: 792, scale: 1 };
+        page.proxy = { cleanup() {}, getTextContent: async () => ({ items: [] }), render: () => { started.push(page.number); return { promise: new Promise(() => {}), cancel() {} }; } };
+      }
+      app.state.viewer = viewer;
+      // the view is scrolling (a smooth scroll to a quote): pages 1 and 2 come near and are asked for, page 1 leaves again
+      viewer.scrolledAt = Date.now();
+      app.drawPage(viewer, viewer.pages[0]);
+      app.drawPage(viewer, viewer.pages[1]);
+      t.mock.timers.tick(100);
+      viewer.scrolledAt = Date.now();
+      app.releasePage(viewer.pages[0]);
+      t.mock.timers.tick(app.PDF_VIEW.settleMs - 1);
+      await settle(() => false);
+      assert.deepEqual(started, [], 'nothing is started while the view moves');
+      t.mock.timers.tick(1);
+      await settle(() => started.length === 1);
+      assert.deepEqual(started, [2], 'once it has stopped: the page still near; the page passed is never asked of the library');
+      app.closeViewer();
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
 test('A5: the viewer downloads the document itself - a failed download is said so, a stalled one too, a refused one is the document\'s, and closing stops it', async t => {
   const word = fixture('encounter-word.json');
   const failing = [['a 503', () => Promise.resolve(viewResponse({ status: 503, chunks: [] }))], ['a 502', () => Promise.resolve(viewResponse({ status: 502, chunks: [] }))],

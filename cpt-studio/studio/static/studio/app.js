@@ -2407,7 +2407,7 @@ function mountViewer(doc) {
     download: null, watchdog: null, pages: [], texts: new Map(), prepared: new Map(), mark: null, pending: null, chosen: null,
     markSerial: 0, reveal: 0, quoteScroll: null, frame: null, framePage: null, fallback: '', zoom: ZOOM_FIT, watch: null,
     resize: null, onScroll: null, inputs: [], unwatchRatio: null, width: 0, ratio: 1, stallTimer: 0, resizeTimer: 0,
-    settleTimer: 0, labelFrame: 0, queue: [], busy: null,
+    settleTimer: 0, labelFrame: 0, queue: [], busy: null, drawTimer: 0, scrolledAt: 0,
   };
   state.viewer = viewer;
   openPdf(viewer);
@@ -2543,6 +2543,7 @@ function buildPages(viewer, proxies) {
   viewer.resize.observe(viewer.element);
   watchRatio(viewer);
   viewer.onScroll = () => {
+    viewer.scrolledAt = Date.now();
     if (!viewer.labelFrame) viewer.labelFrame = requestAnimationFrame(() => { viewer.labelFrame = 0; showPageLabel(viewer); });
   };
   viewer.element.addEventListener('scroll', viewer.onScroll, { passive: true });
@@ -2704,9 +2705,16 @@ function drawPage(viewer, page) {
   drawNext(viewer);
 }
 
-// Starts the next page asked for, once the page being drawn is done (or given up).
+// Starts the next page asked for, once the page being drawn is done (or given up) and the view has stopped scrolling for
+// PDF_VIEW.settleMs: a page the view only passes (a scroll to a quote, the member's own scrolling) is let go before its
+// turn, so the library never decodes it.
 function drawNext(viewer) {
   if (viewer.busy || state.viewer !== viewer || viewer.mode !== 'pdf' || !Array.isArray(viewer.queue)) return;
+  const still = Date.now() - (viewer.scrolledAt || 0);
+  if (viewer.queue.length && still < PDF_VIEW.settleMs) {
+    if (!viewer.drawTimer) viewer.drawTimer = setTimeout(() => { viewer.drawTimer = 0; drawNext(viewer); }, PDF_VIEW.settleMs - still);
+    return;
+  }
   while (viewer.queue.length) {
     const first = viewer.queue.findIndex(item => item.number === viewer.reveal);
     const [page] = viewer.queue.splice(Math.max(0, first), 1);
@@ -2997,6 +3005,7 @@ function stopPdf(viewer) {
   clearTimeout(viewer.stallTimer);
   clearTimeout(viewer.resizeTimer);
   clearTimeout(viewer.settleTimer);
+  clearTimeout(viewer.drawTimer);
   if (viewer.labelFrame) cancelAnimationFrame(viewer.labelFrame);
   viewer.download?.abort();
   viewer.watchdog?.stop();
@@ -3019,7 +3028,7 @@ function stopPdf(viewer) {
   });
   Object.assign(viewer, { watch: null, resize: null, onScroll: null, inputs: [], unwatchRatio: null, task: null, worker: null,
     thread: null, download: null, watchdog: null, pages: [], texts: new Map(), prepared: new Map(), labelFrame: 0, stallTimer: 0,
-    settleTimer: 0, quoteScroll: null, queue: [], busy: null });
+    settleTimer: 0, quoteScroll: null, queue: [], busy: null, drawTimer: 0 });
 }
 
 // --- a passage of a text document, marked inside its frame (the text rule: findPassages) ---------------------------
