@@ -1037,6 +1037,16 @@ test('a text document keeps its own rule (findPassages), judged by the walk\'s o
   assert.equal(walk.judgeQuote({ ...quote, text: 'not in it' }, { mode: 'text', status: 'not_found', count: 0, pages: [],
     note: 'The exact words could not be found in the document, so nothing is marked.', text: { source, marks: [] } }).outcome, 'not_found');
   assert.deepEqual(walk.findPassagesText('COLD FORCEPS', 'cold  forceps'), [[0, 12]]);
+  // a frame the viewer found not to hold the document (the edge's own page while the app restarts): nothing searched,
+  // a failure for the walk's documents, and the note must give the reason as written
+  const absent = fields => walk.judgeQuote(quote, { mode: 'text', status: 'unavailable', fallback: 'download', count: 0, pages: [],
+    note: walk.FRAME_REASONS.download, text: { source: 'CPT Studio is temporarily unavailable.\n', marks: [] }, ...fields });
+  assert.equal(absent().outcome, 'unavailable');
+  assert.deepEqual(absent().problems, ['quote L1: the text is not in the viewer\'s frame (the document could not be downloaded in the page), so nothing could be marked']);
+  assert.match(absent({ note: 'The exact words could not be found in the document, so nothing is marked.' }).problems.join(), /does not say why marking is unavailable/);
+  assert.match(absent({ fallback: 'toString' }).problems.join(), /\(no reason given\).*does not say why/);
+  const checked = walk.quoteMarkChecks([{ quote, reading: { mode: 'text', status: 'unavailable', fallback: 'download', count: 0, pages: [], note: walk.FRAME_REASONS.download, text: { source: '', marks: [] } } }]);
+  assert.deepEqual([checked.status, checked.data.unavailable], ['fail', 1]);
 });
 
 test('every quote chosen is counted, the last one marked judged again after each redraw, and the check fails on anything refused', () => {

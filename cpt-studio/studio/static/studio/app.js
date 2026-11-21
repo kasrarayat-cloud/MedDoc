@@ -348,8 +348,10 @@ function findPassages(source, passage) {
 // that text; and at each end of a match a word edge is asked for (keepsEdge): two drawings that do not visibly continue
 // each other meet at an edge (R2b); else, where the quote's end is a letter or a digit, the page's character beside the
 // match may not be a letter, a digit or a mark - a Han ideograph or a hiragana character is a word of its own (R2, R2c);
-// and a number's own decimal point or thousands separator keeps its digits in one word (R2a). So a quote is never counted
-// inside a longer word or number. Whole characters of the text as the library reads it are not always the text as drawn:
+// and a number's own decimal point or thousands separator keeps its digits in one word (R2a). So a quote is never
+// counted inside a longer word or number as the library's text reads (CORE-UX-DESIGN.md section 8 records where that
+// text differs from what is drawn: letter-spaced text, a browser's drawing order). Whole characters of the text as the
+// library reads it are not always the text as drawn:
 // two letters the PDF declares for one drawn ligature are two characters (only the word-edge rule keeps a mark from
 // beginning or ending between them), and a spacing accent drawn over a letter is a character of its own (the letter can
 // be marked without it). The words are looked for on the quote's page; only where they are not there, on that page and
@@ -2979,9 +2981,10 @@ function showFrame(viewer, page) {
   viewer.framePage = page || null;
 }
 
-// Where the library cannot run or cannot draw the document, the browser's own viewer is framed in its place (today's
-// viewer), at the page of the quote being chosen, if any. `reason` is why, as frameNote says it: 'browser', 'library',
-// 'document' or 'slow'; the viewer element keeps it (data-fallback) for the walk.
+// Where the library cannot run or cannot draw the document, or the document cannot be downloaded, the browser's own
+// viewer is framed in its place (today's viewer), at the page of the quote being chosen, if any. `reason` is why, as
+// frameNote says it: 'browser', 'library', 'document', 'slow' or 'download'; the viewer element keeps it
+// (data-fallback) for the walk.
 function fallbackViewer(viewer, reason) {
   if (state.viewer !== viewer || viewer.mode === 'frame' || viewer.mode === 'closed') return;
   stopPdf(viewer);
@@ -3034,6 +3037,9 @@ function stopPdf(viewer) {
 // --- a passage of a text document, marked inside its frame (the text rule: findPassages) ---------------------------
 
 const waitingFrames = new WeakSet();
+// Frames whose own load has come, whatever it brought (noteFrameLoad, from boot): a frame that loaded before any quote
+// was chosen is then known to have loaded, even when this page cannot read what it holds.
+const loadedFrames = new WeakSet();
 
 function frameDocument(frame) {
   try {
@@ -3044,10 +3050,56 @@ function frameDocument(frame) {
   }
 }
 
+// A frame's load, heard on the way down to it (boot listens in the capture phase, since load does not bubble). The
+// first, empty document of a frame (about:blank, still readable) is not its load.
+function noteFrameLoad(event) {
+  const frame = event?.target;
+  if (frame?.tagName !== 'IFRAME') return;
+  let blank = false;
+  try {
+    blank = frame.contentDocument?.URL === 'about:blank';
+  } catch {
+    blank = false;
+  }
+  if (!blank) loadedFrames.add(frame);
+}
+
+// Whether the text frame holds the document this page asked for: 'waiting' until it has loaded; 'failed' when what it
+// loaded is not the document - something this page cannot read (an answer the frame refused to show), an answer other
+// than 200, or a body whose size is not the document's (`size`, document.size: the view's exact bytes; the edge's own
+// "temporarily unavailable" page, sent while the app restarts, is shown in the frame and readable); else 'document'.
+// Where the browser does not tell the answer or the size, the frame is taken as the document.
+function frameHolds(frame, size) {
+  let page = null;
+  try {
+    page = frame.contentDocument;
+  } catch {
+    page = null;
+  }
+  // its own document, still loading (the frame reloaded from its menu, say) is waited for like a first load
+  if (page && page.URL !== 'about:blank' && page.readyState !== 'complete') return 'waiting';
+  if (!frameDocument(frame)) return loadedFrames.has(frame) ? 'failed' : 'waiting';
+  let entry = null;
+  try {
+    entry = frame.contentWindow.performance.getEntriesByType('navigation')[0] || null;
+  } catch {
+    entry = null;
+  }
+  const status = entry ? entry.responseStatus : undefined;
+  if (Number.isInteger(status) && status > 0 && status !== 200) return 'failed';
+  const body = entry ? entry.decodedBodySize : undefined;
+  if (Number.isInteger(size) && size >= 0 && Number.isInteger(body) && body > 0 && body !== size) return 'failed';
+  return 'document';
+}
+
+function documentSize() {
+  return record(state.doc?.document).size;
+}
+
 // Marks every occurrence of the passage in the text frame, once its text has loaded.
 function markInFrame(frame, passage, key) {
   state.framePassage = { passage, key };
-  if (frameDocument(frame)) {
+  if (frameHolds(frame, documentSize()) !== 'waiting') {
     paintFrame(frame);
     return;
   }
@@ -3060,12 +3112,24 @@ function markInFrame(frame, passage, key) {
 }
 
 // The marks of the passage chosen (state.framePassage) in the text frame: mark[data-quote-mark] elements around each
-// occurrence, in the page's lime, and the note. A frame this page cannot read falls back to selecting the passage, as
-// before.
+// occurrence, in the page's lime, and the note. A frame that does not hold the document (frameHolds) is never searched:
+// nothing is marked and the note says the document could not be downloaded, as a PDF's does. A frame whose text cannot
+// be marked falls back to selecting the passage, as before.
 function paintFrame(frame) {
   const chosen = state.framePassage;
+  const held = frameHolds(frame, documentSize());
+  if (held === 'waiting') return;
+  if (held === 'failed') {
+    frame.dataset.fallback = 'download';
+    frame.dataset.marked = chosen ? chosen.key || '' : '';
+    frame.dataset.markStatus = chosen ? 'unavailable' : '';
+    frame.dataset.markCount = chosen ? '0' : '';
+    if (chosen) setMarkNote(FRAME_REASONS.download, true);
+    return;
+  }
   const page = frameDocument(frame);
   if (!page) return;
+  delete frame.dataset.fallback;
   try {
     for (const old of page.querySelectorAll('mark[data-quote-mark]')) old.replaceWith(...old.childNodes);
     page.body.normalize();
@@ -3555,6 +3619,7 @@ function boot() {
   document.addEventListener('input', onInput);
   document.addEventListener('keydown', onKeydown);
   document.addEventListener('toggle', onToggle, true);
+  document.addEventListener('load', noteFrameLoad, true);
   bindDialogs();
   bindDragAndDrop();
   $('#menuButton').addEventListener('click', () => {
@@ -3594,7 +3659,7 @@ if (typeof module === 'object' && module.exports) {
     PDF_IMPORT, mountViewer, closeViewer, showPdfQuote, frameQuote, fallbackViewer, clearViewerMark, drawPage, releasePage,
     paintPage, layoutPages, zoomViewer, renderDocument, PDF_VIEW, ZOOM_STEPS, ZOOM_FIT,
     continuesDrawing, keepsEdge, NUMBER_SEPARATORS, libraryWatchdog, startWorker, downloadDocument, scrollToQuote, relayoutPages,
-    buildPages,
+    buildPages, frameHolds, noteFrameLoad, markInFrame, paintFrame,
   };
 }
 if (typeof document !== 'undefined') boot();

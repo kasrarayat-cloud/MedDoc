@@ -1465,8 +1465,9 @@ function textNote(count) {
 // {outcome, off_page, mismatched, missed, cut, blank, flags, no_text, pages, layers, misaligned, unseen, problems}.
 // outcome: 'once' or 'multi' (the viewer marked exactly the walk's own occurrences - their count, places and case - and
 // said so), 'not_found' (the walk's own search finds nothing either, and the note says so exactly: N1, N2 when the page
-// has no searchable text, the missing page or the empty passage), 'unavailable' (the browser's own viewer is shown: no
-// marking; the problem says why, as the viewer keeps it in data-fallback) or 'unresolved'. off_page counts marks on a page
+// has no searchable text, the missing page or the empty passage), 'unavailable' (the browser's own viewer is shown, or
+// a text's frame does not hold the document: no marking; the problem says why, as the viewer keeps it in
+// data-fallback) or 'unresolved'. off_page counts marks on a page
 // that is neither the quote's nor, for an occurrence that starts on it, the next; mismatched the viewer's occurrences
 // that are not the walk's; missed the walk's occurrences the viewer did not mark; cut the occurrences' marked runs that
 // begin or end inside a character (S5); blank the required pages whose canvas is not drawn, shows no ink though the page
@@ -1497,6 +1498,15 @@ function judgeQuote(quote, reading) {
       if (frame.previousPage !== page && !frame.replaced) problem(`the frame keeps the element that showed page ${frame.previousPage}, so the browser's viewer does not move to page ${page}`);
       if (frame.previousPage === page && frame.replaced) problem(`the frame was opened again for page ${page}, which it already showed`);
     }
+    return out;
+  }
+  if (reading.mode === 'text' && reading.status === 'unavailable') {
+    // the viewer found that its frame does not hold the document (frameHolds), so it searched nothing: the walk's
+    // documents are always there to be shown, so this fails, and the note must give the reason as written
+    out.outcome = 'unavailable';
+    const own = map => (Object.prototype.hasOwnProperty.call(map, reading.fallback) ? map[reading.fallback] : null);
+    problem(`the text is not in the viewer's frame (${own(FALLBACK_WHY) || 'no reason given'}), so nothing could be marked`);
+    if (!own(FRAME_REASONS) || note !== own(FRAME_REASONS)) problem('the note does not say why marking is unavailable, as written');
     return out;
   }
   if (reading.mode === 'text') {

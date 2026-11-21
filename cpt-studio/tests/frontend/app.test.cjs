@@ -2170,6 +2170,64 @@ test('a text has no pages: a quote is marked in the text frame, never by moving 
   }
 });
 
+test('a text frame that does not hold the document is never searched: the note says it could not be downloaded', async () => {
+  const size = 376;
+  const view = 'http://studio.test/api/encounters/x/original?view=1';
+  // a frame as the page sees it: its document (null when this page cannot read it), and its navigation entry
+  const frameOf = ({ page = { URL: view, readyState: 'complete', body: {} }, entry = { responseStatus: 200, decodedBodySize: size }, throws = false } = {}) => {
+    const frame = fakeElement({ tagName: 'IFRAME', scrollIntoView() {} });
+    Object.defineProperty(frame, 'contentDocument', { get() { if (throws) throw new Error('blocked'); return page; } });
+    frame.contentWindow = { performance: { getEntriesByType: type => (type === 'navigation' && entry ? [entry] : []) } };
+    return frame;
+  };
+  assert.equal(app.frameHolds(frameOf(), size), 'document');
+  // the edge's own page while the app restarts: readable, its own size and status
+  assert.equal(app.frameHolds(frameOf({ entry: { responseStatus: 503, decodedBodySize: 39 } }), size), 'failed');
+  assert.equal(app.frameHolds(frameOf({ entry: { decodedBodySize: 39 } }), size), 'failed', 'a body that is not the document\'s size, the status unknown');
+  assert.equal(app.frameHolds(frameOf({ entry: { responseStatus: 503, decodedBodySize: size } }), size), 'failed', 'an answer other than 200');
+  // what the browser does not tell is not held against the frame
+  assert.equal(app.frameHolds(frameOf({ entry: null }), size), 'document');
+  assert.equal(app.frameHolds(frameOf({ entry: { responseStatus: 0, decodedBodySize: 0 } }), size), 'document');
+  assert.equal(app.frameHolds(frameOf({ entry: { decodedBodySize: 39 } }), null), 'document', 'no size to compare with');
+  const noTiming = frameOf();
+  noTiming.contentWindow = { get performance() { throw new Error('no timing'); } };
+  assert.equal(app.frameHolds(noTiming, size), 'document');
+  // before its load the frame is waited for; a frame this page cannot read, once loaded, does not hold the document
+  for (const unreadable of [frameOf({ page: null }), frameOf({ throws: true })]) {
+    assert.equal(app.frameHolds(unreadable, size), 'waiting');
+    app.noteFrameLoad({ target: unreadable });
+    assert.equal(app.frameHolds(unreadable, size), 'failed');
+  }
+  // the frame's first, empty document is not its load; its own document still loading is waited for
+  const blank = frameOf({ page: { URL: 'about:blank', readyState: 'complete', body: {} } });
+  app.noteFrameLoad({ target: blank });
+  assert.equal(app.frameHolds(blank, size), 'waiting');
+  const reloading = frameOf({ page: { URL: view, readyState: 'interactive', body: {} } });
+  app.noteFrameLoad({ target: reloading });
+  assert.equal(app.frameHolds(reloading, size), 'waiting');
+  app.noteFrameLoad({ target: fakeElement({ tagName: 'IMG' }) });
+
+  const text = clone(fixture('encounter-awaiting-answer.json'));
+  assert.equal(text.document.size, size);
+  const failed = frameOf({ entry: { responseStatus: 503, decodedBodySize: 39 } });
+  const note = fakeElement();
+  const saved = { framePassage: app.state.framePassage, doc: app.state.doc, route: app.state.route };
+  try {
+    await withPage({ elements: { documentViewer: failed, viewerMark: note } }, async () => {
+      Object.assign(app.state, { doc: text, route: null });
+      app.showQuote('L1#0');
+      assert.equal(note.textContent, app.FRAME_REASONS.download);
+      assert.equal(note.classList.contains('is-missing'), true);
+      assert.deepEqual({ ...failed.dataset }, { fallback: 'download', marked: 'L1#0', markStatus: 'unavailable', markCount: '0' });
+      app.clearViewerMark();
+      assert.equal(note.textContent, '');
+      assert.deepEqual({ ...failed.dataset }, { fallback: 'download', marked: '', markStatus: '', markCount: '' });
+    });
+  } finally {
+    Object.assign(app.state, saved);
+  }
+});
+
 test('the progress panel: three steps per phase, Stop, Resume and Retry only when offered to a reviewer', () => {
   const states = phase => app.progressSteps(phase).map(step => step.state);
   assert.deepEqual(states('queued'), ['waiting', 'waiting', 'waiting']);

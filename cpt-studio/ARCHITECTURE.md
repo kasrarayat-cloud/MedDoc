@@ -291,9 +291,9 @@ sha256, the manifest included (`PDF_LIB_DIGEST`), so a changed vendored file fai
 [`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) section 8: the DOM and copy contract the browser walk checks, and the one
 statement of how a chosen quote's words are marked in the document viewer ("Marking a quoted passage", DECISIONS D368:
 its own characters on its page, white space ignored, NFKC and format characters dropped on both sides, exact case first,
-never inside a longer word or number - two drawings that do not visibly continue each other meet at a word edge, a Han
-ideograph or a hiragana character is a word of its own, a number's own decimal point or thousands separator keeps it
-one word -, an overprinted copy counted once, every occurrence counted, never another page; the notes, the zoom, the
+never inside a longer word or number as the text reads (within the known limits) - two drawings that do not visibly
+continue each other meet at a word edge, a Han ideograph or a hiragana character is a word of its own, a number's own
+decimal point or thousands separator keeps it one word -, an overprinted copy counted once, every occurrence counted, never another page; the notes, the zoom, the
 viewer's own worker and download, its watchdog on the library and the fallback to the browser's own viewer with its
 reasons; the known limits). It is display only: it reads Unicode character classes, NFKC and the text's geometry, reads
 no meaning and never holds or changes a code.

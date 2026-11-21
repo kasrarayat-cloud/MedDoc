@@ -229,7 +229,8 @@ apart from the page script.
   for marking, so nothing is marked. The quote is on page N." where the download fails (an answer that is not 2xx, a
   fetch that fails, a body that breaks off). With no page, the reason sentence alone. The viewer keeps the reason on
   `#documentViewer` (`data-fallback`: `browser`, `library`, `document`, `slow` or `download`), and the note names the
-  page of the quote being chosen. The time limits count only the time the page is visible (a hidden tab draws nothing).
+  page of the quote being chosen. The time limits count only the time the page is visible (a hidden tab draws nothing),
+  except the stalled download's 20 seconds, which run from the last data received whether the page is visible or not.
   A library that failed or timed out, or whose worker failed, is tried again for the next document opened, at fresh
   addresses (`?attempt=2`, `3`, ..., for the module and its worker: the browser remembers a module that failed to load, by
   its address, for the life of the page); the document that failed stays framed.
@@ -260,8 +261,8 @@ apart from the page script.
   downloading the library.
 - **Drawing.** The pages near the view are drawn one at a time, the page a quote waits to be shown on first, and none is
   started while the view scrolls: the library's worker decodes one page's images at a time and answers as each page is
-  done, a page only passed by a scroll is never decoded, and a page asked for at a new size while it is drawn finishes
-  and is then drawn again from what was decoded. Pages away from the view are released and the library lets go of what
+  done, a page only passed by a continuous scroll is never decoded, and a page asked for at a new size while it is
+  drawn finishes and is then drawn again from what was decoded. Pages away from the view are released and the library lets go of what
   it decoded to draw them (a 40-page 300 dpi scan scrolled to the end and back stays near 300 MB, against 1.5 GB before); a change of the screen's
   pixel ratio with no change of size redraws the canvases at the new ratio; in forced colours (Windows contrast themes)
   the drawn page keeps its own white ground, so it stays legible and the mark visible, while the note and the page label
@@ -269,7 +270,13 @@ apart from the page script.
   36%), however long the document.
 - A text document keeps its own rule (`findPassages`, as `findPassage`: runs of white space count as one space, exact
   case before case-blind, no word edges): every occurrence is marked inside the text's frame (marked, not selected: the
-  marks stay while a selection would not) and the note says how many, or that the exact words could not be found.
+  marks stay while a selection would not) and the note says how many, or that the exact words could not be found. The
+  frame is searched only when it holds the document (`frameHolds`): once it has loaded, what it holds must be readable,
+  answered 200 where the browser tells the answer, and the document's exact size (`document.size`) where the browser
+  tells the body's size. Otherwise - the edge's own "temporarily unavailable" page while the app restarts, which the
+  frame shows, or an answer the frame refuses to show - nothing is searched, `data-mark-status` is `unavailable` with
+  `data-fallback="download"`, and the note is the 'download' sentence ("The document could not be downloaded for
+  marking, so nothing is marked."). The walk fails such a reading, since its documents are always there to be shown.
 - It reads no meaning, adds no word list or code rule, and never holds or changes a code (owner condition D358). The
   viewer keeps what it marked on `#documentViewer` (`data-marked`, `data-mark-status`, `data-mark-pages`,
   `data-mark-count`) for the walk.
@@ -296,9 +303,11 @@ apart from the page script.
 - A copy the library joins to the text beside it is no item of its own, so it is not found as an overprint copy: fake
   bold drawn inside a line in the line's own font, or a line-printer overstrike where only the bold part is drawn again.
   Those words then read twice: a quote of just those words is counted at two places in one spot, and a passage that runs
-  across them is not found. The same holds for a copy the library splits into items otherwise than its original.
+  across them is not found. The same holds for a copy the library splits into items otherwise than its original. A
+  browser's print of text with a CSS text shadow (even an invisible one) draws the shadow as such a copy.
 - Thai, Lao, Khmer and Myanmar are written without spaces between words, and their letters are word parts, so a run of
-  them reads as one word and a quote inside such a run is not found.
+  them reads as one word and a quote inside such a run is not found. Katakana is a word part too, so it joins Latin
+  letters and digits written against it (CTスキャン, 5ミリ): a quote that starts or ends where they meet is not found.
 - A single page whose images take more than 20 seconds to decode, with no other answer from the library meanwhile, is
   taken as the marking tool not working.
 - On a dark fill the highlight is faint: the drawing is multiplied over the mark like a highlighter, so a dark band
@@ -311,6 +320,54 @@ apart from the page script.
 - Text documents: the case-blind fallback lowers one UTF-16 unit at a time, so case that depends on context (a Greek
   final sigma) or astral letters (Deseret) is not matched case-blind; quotes are cited from the document, so the
   exact-case match normally comes first.
+
+Recorded in round 6 under the stop rule (D381: a wrong mark or a false message that a normal document and a cited
+sentence can bring about is repaired; the rest is recorded here):
+- A page printed by a web browser (Chrome or Edge "Save as PDF") is searched in the order the browser drew it, which is
+  not always reading order: floated labels are drawn before the rest of the page, and text the page moves or makes
+  translucent (superscripts and subscripts as the common web style sheets set them, `position: relative` badges,
+  translucent or transformed spans) after it. A quote that runs across such text is not found (the note says the words
+  are not in the page's searchable text; the browser's own find does not find them there either), and a count can leave
+  out an occurrence that runs across it.
+- A superscript or subscript digit written as a character (¹ ² ³ ₂), not drawn raised or smaller, is a word part like
+  any digit: a quote that ends or starts right at one (a footnote marker typed after a word) is not found, and an
+  occurrence glued to one is not counted. A quote that includes it is found.
+- In letter-spaced text (a gap of about a tenth of the font size or more between letters, as some web styles space out
+  capitals) the library writes a space between every two letters, so R2 and R2a see no word or number edge inside it: a
+  quote that starts or ends inside such a word or number is marked inside it ("2.5 mg" inside a spaced "12.5 MG") and
+  counted at each spaced copy. Whole words and sentences are not affected.
+- Where a browser slants a font that has no italic face, R2b measures across the slanted letters, so an italic run
+  that ends inside a word ("<i>polyp</i>ectomy") is an edge there and "polyp" is counted inside "polypectomy";
+  italic set from inside a word ("polyp<i>ectomy</i>") is read with a line break before the italic run, so each part
+  is found alone. Whole italic words are not affected.
+- The word edges are R2's, not Unicode's word boundaries: the Arabic decimal separator (٫) is not a number separator, an
+  underscore is an edge (Unicode joins words across it), and a letter drawn at another size (a drop cap) is an edge. A
+  quote that begins with a number separator, a space and a digit right after a digit on the page (", 4.0") is turned
+  away; no cited sentence has that shape.
+- R1's grid takes one cell size for a page, from its largest item, so a page of many identical small items with one
+  very large item prepares slowly (8 s measured for 20,000 items around one item 10,000 units high).
+- The note says what was marked as soon as the quote is found; its page is drawn after it (about a second on ordinary
+  documents, several seconds on JPEG 2000 scans), so the page can be blank under the note for that time. A not-found
+  quote's page is drawn in its turn among the pages near the view. Where that one page takes more than 20 seconds, the
+  note becomes the marking tool's sentence (the 20-second limit above).
+- When the member scrolls with pauses over 150 ms, the page drawn at each pause is the oldest still near the view, often
+  the one above it, and a page let go before it is drawn has still been decoded by the worker (it does not stop a decode
+  it has begun): on heavy JPEG 2000 scans a quote chosen right after such a scroll waits for that backlog (up to half a
+  minute measured). While the view keeps scrolling, nothing is drawn.
+- A quote whose words take a while to find (no page on a long PDF, or a page of a heavy scan still decoding) moves the
+  view to its words when they are found, even if the member scrolled meanwhile. After a quote's scroll the page label
+  names the page at the middle of the view, which for a quote in a page's last lines (a footer; the last lines on a
+  phone) can be the next page.
+- Zoom in and back out within 150 ms can leave a drawn page's canvas at the earlier size, stretched (blurred, the marks
+  in place), until its next drawing. A viewer closed while its worker is starting can set the library aside 20 seconds
+  later, so the next document downloads it again. A worker that says it is ready and then stops before the document
+  opens is named as a stalled download ('slow') rather than the marking tool ('library').
+- In the browser's own viewer the quoted passages' lead still says choosing marks the words; the note after each choice
+  says why nothing is marked. An overprint copy stays in the drawn page's text for assistive technology, so a screen
+  reader reads fake-bold words twice (once marked).
+- Text documents: a text whose accented letters are stored decomposed (a letter then a combining accent, as some copies
+  out of PDFs give it) is searched as stored, while the coding review read it composed, so a quote with such a letter is
+  not found and the note says the exact words could not be found, though the frame shows them.
 
 ## 9. Install and verify
 
@@ -386,7 +443,18 @@ ride on the array as `chosen.redraws`).
 Known limits of the walk: a page whose only ink lies under its marks is seen through its paper only; a page whose text is
 all invisible (drawn in render mode 3 over nothing) has text and no ink, and is failed (on the safe side); a span of a
 vertical font is not placed, and is counted out of the alignment check; the screenshot comparison covers the parts of
-the page the viewer can scroll into view.
+the page the viewer can scroll into view. Recorded in round 6: the walk checks where the marks are, not how they look
+(a style that cancels the mark's colour passes); on a dense page the ink under the marks (B6) is met by any drawing of
+text, so a canvas drawn a line off, slightly larger or from a page with the same layout passes, while the text layer,
+the marks and their places are held to the walk's own reading; the walk and the suites run at a device pixel ratio of 1
+only (the viewer was measured at 1, 1.25, 1.5 and 2); a faint scan with a dark edge or band over about 2% of the page
+(black scanner backing, a dark border) sets the ink threshold so low that the ink under the marks is not seen, and a
+correct page fails (on the safe side); in Node the library cannot load its standard fonts, so for a PDF using Symbol or
+ZapfDingbats without embedding them the walk's reading names those fonts otherwise than the page's (the text and its
+places are equal); and an item whose text direction has zero length is a continuation for the walk and an edge for the
+viewer, which the library never gives (it gives such an item no width). The suite's text scan of the library for code
+built from strings and its stylesheet token pin read the spellings a minifier and a person write, not escaped or
+commented forms; the page's policy refuses code built from strings whatever its spelling.
 
 ## 10. Read-bind rules; 11. Read-hold registers
 
