@@ -155,9 +155,12 @@ class CombineTests(SimpleTestCase):
         self.assertEqual(combined['problems'], ['No signature.', '4'])
 
     def test_the_listing_the_checker_is_given(self):
-        reader = f.reader_result([f.code('45385', modifiers=['PT'], question=None)])
-        self.assertEqual(result.listing(reader), [{'line': 'L1', 'code': '45385', 'units': 1, 'modifiers': ['PT'],
-                                                   'status': 'ready', 'question': None}])
+        reader = f.reader_result([f.code('45385', modifiers=['PT'], question=None)],
+                                 questions=[{'question': 'Which payer applies?', 'affects': ['45385']}])
+        self.assertEqual(result.listing(reader), {
+            'lines': [{'line': 'L1', 'code': '45385', 'units': 1, 'modifiers': ['PT'], 'status': 'ready',
+                       'question_ids': []}],
+            'questions': [{'id': None, 'question': 'Which payer applies?', 'affects': ['45385']}]})
 
 
 class CitationTests(SimpleTestCase):

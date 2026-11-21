@@ -1,0 +1,169 @@
+{
+ "id": "fd000000-0000-4000-8000-000000000001",
+ "title": "Synthetic colonoscopy, one question for two lines",
+ "created_at": "2026-11-20T08:30:00Z",
+ "updated_at": "2026-11-20T08:36:40Z",
+ "state": "awaiting_answer",
+ "state_label": "Questions for you",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "name": "synthetic-colonoscopy-biopsy-title.txt",
+  "media_type": "text/plain",
+  "size": 405,
+  "kind": "upload",
+  "original_url": "/api/encounters/fd000000-0000-4000-8000-000000000001/original",
+  "view_url": "/api/encounters/fd000000-0000-4000-8000-000000000001/original?view=1",
+  "view_media_type": "text/plain",
+  "converted": false
+ },
+ "context": {
+  "service_date": "2026-11-13",
+  "insurance": "commercial"
+ },
+ "progress": {
+  "phase": "done",
+  "busy": false,
+  "started_at": "2026-11-20T08:30:10Z",
+  "finished_at": "2026-11-20T08:36:40Z",
+  "server_time": "2026-11-20T08:50:00Z",
+  "message": "",
+  "can_stop": false,
+  "can_resume": false,
+  "can_retry": false,
+  "error": null
+ },
+ "round": {
+  "number": 1,
+  "trigger": "upload",
+  "finished_at": "2026-11-20T08:36:40Z"
+ },
+ "codes": [
+  {
+   "line": "L1",
+   "code": "45380",
+   "units": 1,
+   "modifiers": [],
+   "status": "needs_answer",
+   "status_label": "Needs your answer",
+   "reason": "The procedure title names a biopsy, but the description does not record one. A colonoscopy with a biopsy is coded 45380 only when a biopsy was taken.",
+   "second_check": {
+    "agrees": true,
+    "reason": "A biopsy is named in the title only, so the answer decides between 45380 and 45378."
+   },
+   "question": "Was a biopsy taken during the colonoscopy? The procedure title names one, but the description of the procedure does not.\nWhich date of service is right: 2026-11-13, entered at upload, or 2026-11-12, written in the note?",
+   "quotes": [
+    {
+     "text": "Procedure: colonoscopy with biopsy (fictional)",
+     "page": null
+    },
+    {
+     "text": "The colonoscope was advanced to the cecum and the mucosa was examined on withdrawal.",
+     "page": null
+    }
+   ],
+   "decision": null,
+   "allowed_actions": []
+  },
+  {
+   "line": "L2",
+   "code": "45378",
+   "units": 1,
+   "modifiers": [],
+   "status": "needs_review",
+   "status_label": "Needs your review",
+   "reason": "If no biopsy was taken, the procedure is a diagnostic colonoscopy, coded 45378 instead of 45380.",
+   "second_check": {
+    "agrees": false,
+    "reason": "This is the alternative to line L1, not a separate service: only one of the two can be reported."
+   },
+   "question": "Was a biopsy taken during the colonoscopy? The procedure title names one, but the description of the procedure does not.\nWhich date of service is right: 2026-11-13, entered at upload, or 2026-11-12, written in the note?",
+   "quotes": [
+    {
+     "text": "The colonoscope was advanced to the cecum and the mucosa was examined on withdrawal.",
+     "page": null
+    },
+    {
+     "text": "The mucosa appeared normal throughout, and the scope was withdrawn.",
+     "page": null
+    }
+   ],
+   "decision": null,
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ]
+  },
+  {
+   "line": "L3",
+   "code": "99152",
+   "units": 1,
+   "modifiers": [],
+   "status": "not_supported",
+   "status_label": "Not supported",
+   "reason": "Moderate sedation by the endoscopist is coded only with a recorded intraservice time of at least 10 minutes, and no time is recorded.",
+   "second_check": {
+    "agrees": true,
+    "reason": "No sedation time is documented."
+   },
+   "question": null,
+   "quotes": [
+    {
+     "text": "Moderate sedation was given by the endoscopist; no start or stop time is recorded.",
+     "page": null
+    }
+   ],
+   "decision": null,
+   "allowed_actions": []
+  }
+ ],
+ "questions": [
+  {
+   "id": "fd100000-0000-4000-8000-000000000001",
+   "text": "Was a biopsy taken during the colonoscopy? The procedure title names one, but the description of the procedure does not.",
+   "codes": [
+    "45380",
+    "45378"
+   ],
+   "lines": [
+    "L1",
+    "L2"
+   ]
+  },
+  {
+   "id": "fd100000-0000-4000-8000-000000000002",
+   "text": "Which date of service is right: 2026-11-13, entered at upload, or 2026-11-12, written in the note?",
+   "codes": [
+    "45380",
+    "45378"
+   ],
+   "lines": [
+    "L1",
+    "L2"
+   ]
+  }
+ ],
+ "answers": [],
+ "notes": [
+  "The date of service written in the note differs from the date entered at upload."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": false,
+  "blockers": [
+   "No code has been approved."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "at": "2026-11-20T08:30:00Z",
+   "text": "Uploaded by Reviewer."
+  },
+  {
+   "at": "2026-11-20T08:36:40Z",
+   "text": "Coding review 1 finished with 2 questions."
+  }
+ ]
+}

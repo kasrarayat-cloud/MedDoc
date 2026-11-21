@@ -46,7 +46,7 @@ class LastFencedBlockTests(SimpleTestCase):
                 self.assertEqual(result.last_json(text), FINAL)
                 parsed = result.read_reader(f.message([f.text_block(text)]))
                 self.assertEqual(codes_of(parsed), ['99214'])
-                self.assertEqual([line['code'] for line in result.listing(parsed)], ['99214'])  # what the checker gets
+                self.assertEqual([line['code'] for line in result.listing(parsed)['lines']], ['99214'])  # the checker's
 
     def test_the_checkers_final_disagreement_is_read_under_any_fence(self):
         draft = {'reviews': [{'line': 'L1', 'code': '99214', 'verdict': 'agree', 'reason': 'Draft: agreed.'}],

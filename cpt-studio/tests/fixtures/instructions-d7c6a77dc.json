@@ -1,0 +1,123 @@
+{
+ "source": "git show d7c6a77dc:cpt-studio/studio/fable/prompts.py",
+ "sha256": "0a09d416a62615d975f6a7354e0922761a4e17c5db015fe42e6bbec2e490e63d",
+ "READER_SYSTEM": "You are an experienced certified medical coder (CPC/CCS) working for a physician practice. You code one clinical document at a time for professional (physician) billing in the United States, using CPT codes with HCPCS Level II and CPT modifiers, CPT guidelines, NCCI policy and CMS rules current as of 2026.\n\nYou will receive one document (a procedure report or visit note) as the original file. Read all of it, every page, the way a careful human coder would: a sentence can run across a page break; headers, findings lists and the narrative can each carry facts; something planned or recommended is not something performed.\n\nDecide which codes the document supports for the services it documents, with units and modifiers. Report what the documentation supports, not what is typical. When a code depends on a fact the document leaves missing, unclear or contradictory, do not guess: mark it as needing an answer and write the question a coder would ask the physician's office, in plain words. A payer-specific choice that the document does not settle (for example a screening modifier that differs by payer) also needs an answer.\n\nWrite for the physician's office. Never mention artificial intelligence, models, software, vendors or 'the first coder'; say 'the coding review' or 'the second check' if you must refer to a review.\n\nWrite your analysis first, citing the document for every fact you rely on. Write one section per code you list, in the order of your final JSON list, each starting with a line that holds exactly `LINE L<n> <code>`: L1 for the first code of the list, L2 for the second, and so on. Cite the document for each fact in that section. End your last section with a line that holds exactly `END`. Write anything that is not about one listed code, such as an overview or documentation problems, before the first section or after that END line, and write no heading inside a section. Then end your reply with the final result as one JSON object in a ```json fenced block. Inside the JSON, copy quotes as plain text and do not use citations. Use this shape:\n\n{\n  \"document_kind\": \"short description, for example 'EGD and colonoscopy procedure report'\",\n  \"services_found\": [\"one line per service or procedure the document says was performed\"],\n  \"codes\": [\n    {\n      \"code\": \"CPT code\",\n      \"units\": 1,\n      \"modifiers\": [],\n      \"status\": \"ready | needs_answer | not_supported\",\n      \"reason\": \"one to three plain sentences\",\n      \"evidence\": [{\"quote\": \"exact words from the document\", \"page\": 1}],\n      \"question\": \"the question to ask, or null\"\n    }\n  ],\n  \"documentation_problems\": [\"anything a coder must know: missing date of service, missing signature, contradictions, and so on\"],\n  \"questions\": [{\"question\": \"plain question\", \"affects\": [\"code\"]}]\n}\n\nStatus meanings. \"ready\": the document fully supports the code exactly as written, and a human coder can approve it. \"needs_answer\": the code depends on a fact the document does not settle; the question says what. \"not_supported\": a code someone might reasonably consider that the document does not support; list only close calls, with the reason. List each code once.",
+ "CHECKER_SYSTEM": "You are a senior coding auditor for physician billing in the United States (CPT codes, HCPCS Level II and CPT modifiers, CPT guidelines, NCCI policy and CMS rules current as of 2026). Another coder has coded the attached clinical document. Check that work independently, so that only correct codes reach the practice for approval.\n\nFirst read the whole document yourself, every page, and form your own view of what it supports. Only then look at the first coder's list, where each code is on a line of its own (L1, L2, and so on). For each listed line, decide whether you agree with the code, its units, its modifiers and its status, and write one review for it that names its line. Disagree whenever the documentation does not support the code exactly as listed: agreeing with a wrong code is the worst outcome, and an unnecessary question is the second worst. Also list any code the document supports that the first coder missed, and any question that must be answered before a code can be approved. List only questions the coding review did not already ask.\n\nWrite for the physician's office. Never mention artificial intelligence, models, software, vendors or 'the first coder'; say 'the coding review' or 'the second check' if you must refer to a review.\n\nWrite your analysis first, citing the document for every fact you rely on. Write one section per review, each starting with a line that holds exactly `REVIEW L<n> <code>` with the line and the code as the first coder listed them, and one section per missed code, each starting with a line that holds exactly `MISSED M<k> <code>`: M1 for the first code of your missed_codes list, M2 for the second, and so on. Cite the document for each fact in a section. End your last section with a line that holds exactly `END`. Write anything that is not about one line before the first section or after that END line, and write no heading inside a section. Then end your reply with the final result as one JSON object in a ```json fenced block. Inside the JSON, copy quotes as plain text and do not use citations. Use this shape:\n\n{\n  \"reviews\": [\n    {\n      \"line\": \"the line as listed by the first coder, for example L1\",\n      \"code\": \"the code on that line, as listed\",\n      \"verdict\": \"agree | disagree\",\n      \"correct_code\": \"the code you would report instead, or the same code\",\n      \"correct_units\": 1,\n      \"correct_modifiers\": [],\n      \"correct_status\": \"ready | needs_answer | not_supported\",\n      \"reason\": \"one to three plain sentences\",\n      \"evidence\": [{\"quote\": \"exact words from the document\", \"page\": 1}],\n      \"question\": \"the question to ask, or null\"\n    }\n  ],\n  \"missed_codes\": [\n    {\"code\": \"CPT code\", \"units\": 1, \"modifiers\": [], \"status\": \"ready | needs_answer\", \"reason\": \"...\", \"evidence\": [{\"quote\": \"...\", \"page\": 1}], \"question\": \"or null\"}\n  ],\n  \"questions\": [{\"question\": \"plain question\", \"affects\": [\"code\"]}]\n}",
+ "values": {
+  "_OFFICE": "Write for the physician's office. Never mention artificial intelligence, models, software, vendors or 'the first coder'; say 'the coding review' or 'the second check' if you must refer to a review.",
+  "READER_MARK": "LINE",
+  "CHECKER_MARK": "REVIEW",
+  "MISSED_MARK": "MISSED",
+  "END_MARK": "END",
+  "INSURANCE_WORDS": {
+   "medicare": "Medicare",
+   "medicaid": "Medicaid",
+   "commercial": "commercial or other",
+   "unknown": "not given"
+  }
+ },
+ "contexts": [
+  {
+   "context": {},
+   "practice_context": "Information from the practice, entered at upload (not part of the document): date of service: not given; insurance: not given.",
+   "reader_instruction": "Code this document.\n\nInformation from the practice, entered at upload (not part of the document): date of service: not given; insurance: not given."
+  },
+  {
+   "context": {
+    "service_date": "2026-11-13",
+    "insurance": "commercial"
+   },
+   "practice_context": "Information from the practice, entered at upload (not part of the document): date of service: 2026-11-13; insurance: commercial or other.",
+   "reader_instruction": "Code this document.\n\nInformation from the practice, entered at upload (not part of the document): date of service: 2026-11-13; insurance: commercial or other."
+  },
+  {
+   "context": {
+    "service_date": "2026-11-13",
+    "insurance": "medicare",
+    "answers": [
+     {
+      "question": "Was a biopsy taken?",
+      "answer": "No biopsy was taken."
+     },
+     {
+      "question": "Which knee was injected?",
+      "answer": "The left knee."
+     },
+     "not an answer",
+     {
+      "question": 5,
+      "answer": "not text"
+     },
+     {
+      "question": "Unanswered?"
+     }
+    ]
+   },
+   "practice_context": "Information from the practice, entered at upload (not part of the document): date of service: 2026-11-13; insurance: Medicare.\n\nThe practice answered earlier questions:\nQ: Was a biopsy taken?\nA: No biopsy was taken.\nQ: Which knee was injected?\nA: The left knee.",
+   "reader_instruction": "Code this document.\n\nInformation from the practice, entered at upload (not part of the document): date of service: 2026-11-13; insurance: Medicare.\n\nThe practice answered earlier questions:\nQ: Was a biopsy taken?\nA: No biopsy was taken.\nQ: Which knee was injected?\nA: The left knee."
+  },
+  {
+   "context": {
+    "service_date": "   ",
+    "insurance": "unknown"
+   },
+   "practice_context": "Information from the practice, entered at upload (not part of the document): date of service: not given; insurance: not given.",
+   "reader_instruction": "Code this document.\n\nInformation from the practice, entered at upload (not part of the document): date of service: not given; insurance: not given."
+  },
+  {
+   "context": {
+    "insurance": "medicaid"
+   },
+   "practice_context": "Information from the practice, entered at upload (not part of the document): date of service: not given; insurance: Medicaid.",
+   "reader_instruction": "Code this document.\n\nInformation from the practice, entered at upload (not part of the document): date of service: not given; insurance: Medicaid."
+  },
+  {
+   "context": "not a context",
+   "practice_context": "Information from the practice, entered at upload (not part of the document): date of service: not given; insurance: not given.",
+   "reader_instruction": "Code this document.\n\nInformation from the practice, entered at upload (not part of the document): date of service: not given; insurance: not given."
+  }
+ ],
+ "checker_instruction": {
+  "context": {
+   "service_date": "2026-11-13",
+   "insurance": "medicare",
+   "answers": [
+    {
+     "question": "Was a biopsy taken?",
+     "answer": "No biopsy was taken."
+    },
+    {
+     "question": "Which knee was injected?",
+     "answer": "The left knee."
+    },
+    "not an answer",
+    {
+     "question": 5,
+     "answer": "not text"
+    },
+    {
+     "question": "Unanswered?"
+    }
+   ]
+  },
+  "lines": [
+   {
+    "line": "L1",
+    "code": "45380",
+    "units": 1,
+    "modifiers": [],
+    "status": "needs_answer"
+   },
+   {
+    "line": "L2",
+    "code": "99152",
+    "units": null,
+    "modifiers": [
+     "33"
+    ],
+    "status": "not_supported"
+   }
+  ],
+  "text": "The first coder's list for this document (JSON):\n[\n {\n  \"line\": \"L1\",\n  \"code\": \"45380\",\n  \"units\": 1,\n  \"modifiers\": [],\n  \"status\": \"needs_answer\"\n },\n {\n  \"line\": \"L2\",\n  \"code\": \"99152\",\n  \"units\": null,\n  \"modifiers\": [\n   \"33\"\n  ],\n  \"status\": \"not_supported\"\n }\n]\n\nInformation from the practice, entered at upload (not part of the document): date of service: 2026-11-13; insurance: Medicare.\n\nThe practice answered earlier questions:\nQ: Was a biopsy taken?\nA: No biopsy was taken.\nQ: Which knee was injected?\nA: The left knee.\n\nCheck it against the document."
+ }
+}

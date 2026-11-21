@@ -15,8 +15,10 @@ studio.customer). Vendor and model names, usage, costs, hashes and request ids a
     GET  /ops/encounters/<id>                its rounds (trigger, state, failure, cost, context), each run (models, served
                                              by a fallback, tokens, cost, latency, state, ids), the reader's and the
                                              checker's whole answers, the final codes, every review of the checker that
-                                             belongs to no line (in full, with the lines it reaches), decisions,
-                                             answers, audit events, and the original with its sha256
+                                             belongs to no line (in full, with the lines it reaches), every question id
+                                             a line, review or missed code gave that names no question (D370), the
+                                             question ids both answers defined, decisions, answers, audit events, and
+                                             the original with its sha256
     GET  /ops/encounters/<id>/original       the original exactly as stored, with its sha256
     POST /ops/encounters/<id>/reconcile      the reconciliation of an unknown run: run, note (at least 12 characters)
     POST /ops/encounters/<id>/retry          a new round of a failed latest round (jobs.retry)
@@ -243,6 +245,20 @@ def round_view(round_) -> dict:
             'unmatched': [{'number': item['number'], 'reaches': item['reaches'], 'json': _pretty(item['review'])}
                           for item in (fable_result.unmatched_reviews(round_.codes, round_.checker_result)
                                        if round_.state == models.CodingRound.DONE else ())],
+            # every reference to a question id that names no question (D370): it carried no text, so the customer saw
+            # none from it - fable.result's own reading over the two answers as stored, here because this is where the
+            # round's whole record is read, and the customer is never shown it (a needs_answer line no question names
+            # still gets a question the member can answer)
+            'dangling': [{**item, 'reference': json.dumps(item['reference'], ensure_ascii=False)}
+                         for item in (fable_result.dangling_references(round_.reader_result, round_.checker_result)
+                                      if round_.state == models.CodingRound.DONE else ())],
+            # every question id both the reader and the checker defined, case aside (D370 round 2, F3): a reference of
+            # the checker's to it reaches every question carrying it in either answer - one question where their texts
+            # are the same (round 3, G1) - and the code never chooses among them; shown, as written, beside the ids
+            # that name no question, read the same way from the two stored answers
+            'shared_ids': [json.dumps(ident, ensure_ascii=False)
+                           for ident in (fable_result.shared_ids(round_.reader_result, round_.checker_result)
+                                         if round_.state == models.CodingRound.DONE else ())],
             'problems': [item for item in round_.problems or () if isinstance(item, str)],
             'citations': _pretty(round_.citations or {}), 'reader_result': _pretty(round_.reader_result),
             'checker_result': _pretty(round_.checker_result)}

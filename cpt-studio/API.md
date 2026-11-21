@@ -107,8 +107,17 @@ with the encounter the first made). Answers `201 {"id": "..."}`; coding round 1 
   reason opens with "The second check did not give a clear verdict." (never "disagrees") before the review's own. A
   review that names no line, or one that does not exist, sends every line carrying its code to `needs_review` - or
   every line of the round when no line carries it: the code never picks a line for it.
-- `questions[].lines` are the lines a question affects and `codes` those lines' codes; a `needs_answer` line always has
-  at least one question.
+- `questions[]`: the coding review is asked to write each question once, and its code lines refer to a question by its
+  number. A question's number links code lines to every question that carries it among the questions the line's author
+  was shown (a number on a line of the coding review reaches the coding review's questions only; one the second check
+  gives reaches the coding review's and its own); only identical text (case and spacing aside) makes two questions one.
+  A question written again in other words is therefore shown again. A question several codes refer to is one question
+  naming all their lines, and one answer to it covers every line it affects. `lines` are the lines a question affects
+  and `codes` those lines' codes; a `needs_answer` line always has at least one question. A question whose text is blank
+  is never served: nothing is left of it once byte-order marks and white space are removed, white space as Python reads
+  it (every character the page's trim() removes, and also U+001C to U+001F and U+0085, which the page would show).
+- `codes[].question` is the line's own question text, then the text of the questions the line's own references name,
+  one per line of text. A question that names the line only in `questions[].lines` is not repeated there.
 - `allowed_actions`: `approve` and `reject` for a `ready` or `needs_review` code; none for `needs_answer` (answer first)
   or `not_supported`; `revoke` while a decision stands; none at all for a viewer.
 - `notes` are the coding review's documentation notes, then one note for each review of the second check that could

@@ -471,7 +471,7 @@ test('the fixtures cover every state the page draws, and the list matches them, 
     'encounter-needs-review.json': ['needs_review', 'done'], 'encounter-no-codes.json': ['no_codes', 'done'],
     'encounter-reading.json': ['processing', 'reading'], 'encounter-ready.json': ['ready', 'done'],
     'encounter-reviewed.json': ['reviewed', 'done'], 'encounter-same-code.json': ['needs_review', 'done'],
-    'encounter-word.json': ['needs_review', 'done'],
+    'encounter-shared-question.json': ['awaiting_answer', 'done'], 'encounter-word.json': ['needs_review', 'done'],
   });
   // every document's view as the server builds it: a PDF or a text as uploaded, a pasted text as text, a Word file as
   // the PDF it was converted to - or, never converted (an earlier review), no view
@@ -2529,9 +2529,9 @@ test('list rows show the state, the kind, the insurance and the date; the queue 
   const pasted = page.all('a.document-row').find(row => row.attr('href') === '#doc/f8000000-0000-4000-8000-000000000001');
   assert.match(pasted.text, /Pasted textNo codes foundNot entered/);
   const queue = dom(app.listBody('queue', rows)).all('a.document-row').map(row => row.attr('href'));
-  assert.deepEqual(queue, ['#doc/f3000000-0000-4000-8000-000000000001', '#doc/f4000000-0000-4000-8000-000000000001', '#doc/f5000000-0000-4000-8000-000000000001',
-    '#doc/f9000000-0000-4000-8000-000000000001', '#doc/fc000000-0000-4000-8000-000000000001']);
-  assert.match(app.listDescription('queue', rows), /^5 documents wait on you: questions to answer, or codes to review or approve\.$/);
+  assert.deepEqual(queue, ['#doc/f3000000-0000-4000-8000-000000000001', '#doc/fd000000-0000-4000-8000-000000000001', '#doc/f4000000-0000-4000-8000-000000000001',
+    '#doc/f5000000-0000-4000-8000-000000000001', '#doc/f9000000-0000-4000-8000-000000000001', '#doc/fc000000-0000-4000-8000-000000000001']);
+  assert.match(app.listDescription('queue', rows), /^6 documents wait on you: questions to answer, or codes to review or approve\.$/);
   const earlier = page.all('a.document-row').find(row => row.attr('href') === '#doc/fb000000-0000-4000-8000-000000000001');
   assert.match(earlier.text, /Synthetic colonoscopy report, earlier reviewUploaded fileEarlier review9 Nov 2026/);
   assert.equal(app.listDescription('queue', []), 'No document waits on you for an answer or a decision.');
@@ -4092,4 +4092,23 @@ test('the overview, the documents list and How it works speak of the coding revi
   const about = fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8');
   assert.match(about, /Every code read from the whole document and checked a second time/);
   assert.doesNotMatch(about, /independent checks and coding validation/);
+});
+
+test('the page drops a question only where the server also calls it blank', () => {
+  // tests/fixtures/blank-question-characters.json: every code point trim() removes (ECMAScript WhiteSpace and
+  // LineTerminator); the server's one blank test calls every text made of them blank (tests/test_question_ids.py)
+  const listed = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'blank-question-characters.json'), 'utf8'))
+    .code_points.map(point => parseInt(point, 16));
+  const removed = [];
+  for (let point = 0; point <= 0x10FFFF; point += 1) {
+    if ((point < 0xD800 || point > 0xDFFF) && String.fromCodePoint(point).trim() === '') removed.push(point);
+  }
+  assert.deepEqual(removed, listed);
+  const kept = text => app.questionsOf({ questions: [{ id: 'q-1', text, codes: [], lines: [] }] }).length;
+  for (const point of listed) {
+    assert.equal(kept(String.fromCodePoint(point)), 0, `U+${point.toString(16).toUpperCase()} alone is dropped`);
+  }
+  assert.equal(kept(listed.map(point => String.fromCodePoint(point)).join('')), 0);
+  // a question with any other text is shown: U+FEFF before a word, U+200B and U+180E, which trim() keeps
+  for (const text of ['\uFEFFWas a biopsy taken?', '\u200B', '\u180E', '?']) assert.equal(kept(text), 1, JSON.stringify(text));
 });

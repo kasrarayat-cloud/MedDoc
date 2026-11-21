@@ -107,6 +107,16 @@
 <ol>{% for review in item.unmatched %}<li>Review {{ review.number }} · {% if review.reaches %}reaches {{ review.reaches|join:", " }}{% else %}names no line and no line's code: every line needs review{% endif %}<pre>{{ review.json }}</pre></li>{% endfor %}</ol>
 {% endif %}
 {% if item.questions %}<h3>Questions</h3><ol>{% for question in item.questions %}<li>{{ question.text }} <span class="muted">({{ question.source }}; lines {{ question.lines|join:", "|default:"none" }}; codes {{ question.codes|join:", "|default:"none" }})</span></li>{% endfor %}</ol>{% endif %}
+{% if item.dangling %}
+<h3>Question ids that name no question</h3>
+<p class="muted">Ids a line, a review or a missed code gave in question_ids that name no question its author was shown (the reader's questions for a reader line; the reader's and the checker's for the checker's reviews and missed codes), or that are no id: each carried no text to the customer. A line that needs an answer and that no question names still gets a question the member can answer.</p>
+<ol>{% for ref in item.dangling %}<li>{{ ref.item }} <span class="mono">{{ ref.code }}</span> names <span class="mono">{{ ref.reference }}</span></li>{% endfor %}</ol>
+{% endif %}
+{% if item.shared_ids %}
+<h3>Question ids both the reader and the checker defined</h3>
+<p class="muted">Each reference the checker made to one of these ids reaches every question that carries it in either answer, which is one question where their texts are the same; a reader line's reference reaches the reader's only.</p>
+<ol>{% for ident in item.shared_ids %}<li><span class="mono">{{ ident }}</span></li>{% endfor %}</ol>
+{% endif %}
 {% if item.problems %}<h3>Documentation problems</h3><ul>{% for problem in item.problems %}<li>{{ problem }}</li>{% endfor %}</ul>{% endif %}
 <details><summary>Citations by line</summary><pre>{{ item.citations }}</pre></details>
 <details><summary>The reader's final JSON</summary><pre>{{ item.reader_result }}</pre></details>

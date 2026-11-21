@@ -287,7 +287,7 @@ class CustomerFixtureTests(SimpleTestCase):
 
     def test_every_encounter_fixture_has_exactly_the_contract_keys(self):
         docs = self.encounters()
-        self.assertEqual(len(docs), 11)
+        self.assertEqual(len(docs), 12)
         self.assertEqual(DOCUMENT_KEYS, {'name', 'media_type', 'size', 'kind', 'original_url', 'view_url',
                                          'view_media_type', 'converted'})
         for name, doc in docs.items():

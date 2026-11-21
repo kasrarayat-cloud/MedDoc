@@ -3880,3 +3880,44 @@ and CI green, his share-link PDFs measured offline with real API citations, a re
 installed through scripts/run-ruled-mutation.sh with a declaration committed before the act (a code-only release, no
 migration), checked on the live site without changing anything but the check's own sign-in, and reported. Paid calls
 are limited to citation samples with a small model on his PDFs (cents); no paid coding round is run without need.
+
+## Owner direction, 2026-11-20 — ask each question once, for every document
+
+Given on 2026-11-20 in session 738699b2, after his own test upload on the live site (a de-identified operative note of
+his, filled in with synthetic demographics; its number is left out here), verbatim:
+
+> AFter this job done i need you to check the file [document name left out] site doing good so far but i aliitle
+> propblem which i dont know is propblem or not it asked 5 question from that pdf which i dont know is it has to or now i
+> ask someone it says it suppsoe to ask 2 question not 5 check this out soon because its important and report me back
+
+and, after the read-only report:
+
+> is it fixable and also i expect taht fix for whole thing not related only for this pdf tho
+
+> yeah run alongside since we have resources
+
+### Session interpretation, 2026-11-20 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D370, D372)
+
+(a) The diagnosis, read-only: the round asked 2 distinct questions and showed them 5 times. The codes were right and
+nothing unsupported was ready. The repeats have two sources:
+- the reader writes each question in its question list and again, in other words, on every code line it affects;
+- the checker is told to list only questions the coding review did not already ask, but it is shown the coding
+  review's code lines only, not its question list, so it writes its own copy.
+
+The site merges only copies whose text is identical (case and spacing aside). That is all code may do under D358.
+
+(b) The fix is general: every document and every round, never a rule about one document or one wording.
+- Each question is written once, with an id: the reader's Q1, Q2 and so on, the checker's C1, C2 and so on.
+- Code lines and reviews refer to questions by id.
+- The checker is given the coding review's questions with their ids, refers to them, and writes only new ones.
+- The site merges by id.
+
+Nothing reads a question's meaning or compares wordings beyond today's exact-text merge, and no question is dropped.
+Each question is shown once with every line it affects. Answers keep today's shape.
+
+(c) It is proven like the Fable build:
+- offline tests over synthetic results, with rounds already stored still shown as they were;
+- one paid pair (one short and one realistic document) to confirm Fable follows the format;
+- a refutation pass on the finished diff, because it is the coding path;
+- CI green;
+- its own code-only install through the ruled-act door, after the highlight's.

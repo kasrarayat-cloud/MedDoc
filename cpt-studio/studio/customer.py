@@ -137,6 +137,13 @@ def _shown_or(text, default=None):
     return value if isinstance(value, str) and value.strip() else default
 
 
+def _shown_question(text):
+    """A code row's question as the customer reads it (shown), or None when it is no text or a blank one (the one test
+    of a blank question, fable.result.blank_question, under which every text the page drops is blank)."""
+    value = shown(text)
+    return value if isinstance(value, str) and not fable_result.blank_question(value) else None
+
+
 # --- the session and the list ----------------------------------------------------------------------------------------------
 
 def initials(user) -> str:
@@ -398,7 +405,7 @@ def code_json(row, index, decision, can_review: bool) -> dict:
             'modifiers': _modifiers(row.get('modifiers')),
             'status': status, 'status_label': CODE_STATUS_LABELS.get(status, 'Not reviewable'),
             'reason': _shown_or(row.get('reason'), ''), 'second_check': check_json(row),
-            'question': _shown_or(row.get('question')), 'quotes': quotes(row, index),
+            'question': _shown_question(row.get('question')), 'quotes': quotes(row, index),
             'decision': decision_json(decision), 'allowed_actions': decisions.allowed_actions(row, decision, can_review)}
 
 
