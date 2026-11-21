@@ -2691,12 +2691,15 @@ function preparedPage(viewer, number, content) {
 // time and answers as each is done, so a busy scan keeps answering the watchdog (several pages asked for at once have
 // their images decoded as one batch before any is sent), and a page that leaves the view before its turn is never
 // decoded at all.
+// A page asked for at a new size while it is being drawn is not cancelled: its drawing finishes and is shown, and the
+// page is drawn again at the new size from what the library has already decoded for it (a cancelled drawing would have
+// its images decoded again).
 function drawPage(viewer, page) {
   const key = `${page.viewport.scale} ${viewer.ratio}`;
   if (page.drawn === key || page.drawing === key) return;
-  cancelPage(page);
-  page.drawing = key;
   if (!Array.isArray(viewer.queue)) viewer.queue = [];
+  if (viewer.busy !== page) cancelPage(page);
+  page.drawing = key;
   if (!viewer.queue.includes(page)) viewer.queue.push(page);
   drawNext(viewer);
 }
@@ -2748,7 +2751,7 @@ async function renderPage(viewer, page) {
     if (!live()) return;
     for (const item of preparedPage(viewer, page.number, content).copies) page.layer.textDivs[item]?.setAttribute('data-overprint', '1');
     page.drawn = key;
-    page.drawing = '';
+    if (page.drawing === key) page.drawing = '';  // else asked for at another size meanwhile: it is queued again
     paintPage(viewer, page);
     if (viewer.reveal === page.number) {
       viewer.reveal = 0;

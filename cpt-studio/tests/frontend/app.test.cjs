@@ -1843,6 +1843,27 @@ test('A3: the pages are drawn one at a time, the quote\'s page first, and a page
       assert.equal(viewer.busy, null);
       assert.deepEqual(viewer.queue, []);
       assert.equal(viewer.mode, 'pdf', 'nothing given up is a failure');
+      // a page asked for at a new size while it is drawn (a zoom) is not cancelled: its drawing finishes and is shown, then
+      // it is drawn again at the new size (from what the library decoded for it)
+      viewer.reveal = 0;
+      const first = viewer.pages[0];
+      first.drawn = '';
+      app.drawPage(viewer, first);
+      assert.deepEqual(started.slice(3), [1]);
+      let cancelled = false;
+      const settle1 = finish.get(1);
+      finish.set(1, { resolve: settle1.resolve, reject: error => { cancelled = true; settle1.reject(error); } });
+      first.viewport = { width: 765, height: 990, scale: 1.25 };
+      app.drawPage(viewer, first);
+      assert.equal(cancelled, false, 'the drawing under way is not cancelled');
+      assert.deepEqual(viewer.queue, [first], 'the page is asked for again');
+      settle1.resolve();
+      await settle(() => started.length === 5);
+      assert.equal(first.drawn, '1 1', 'the first drawing was shown');
+      assert.deepEqual(started.slice(3), [1, 1], 'and the page is drawn again at the new size');
+      finish.get(1).resolve();
+      await settle(() => first.drawn === '1.25 1');
+      assert.deepEqual([first.drawn, first.drawing], ['1.25 1', '']);
       app.closeViewer();
     });
   } finally {
