@@ -4060,3 +4060,16 @@ read as line labels when evidence is filed, "List each code once", the output an
 ("after that we decid").
 
 (e) Everything else as GI: the same upload, coding review, questions, approvals, PDF report, release process and checks.
+
+Given later the same day, verbatim, after the session estimated the paid test cost (one pair per specialty about
+US$15-30; every subcategory about US$100-200):
+
+> for testing only test one short and one long for both category until you get a approval for live relase i will test
+> the majority of that both categiry by my self dont spend to much for testing dont forget only one short and one long
+> realistic long not a 20 pages until eveyrhting works fine
+
+(f) Paid testing before the live release is exactly one short and one realistic (a few pages, not 20) synthetic document
+per specialty - four coding runs in all, run one pair at a time on a rehearsal copy with the test key, never on live.
+The owner tests the majority of both specialties themselves. The live release waits for the owner's approval after the
+pairs' results are reported. The synthetic documents for every subcategory are still written (no paid run), for the
+owner's own testing.

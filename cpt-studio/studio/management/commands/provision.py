@@ -1,4 +1,11 @@
-"""Create the Gastroenterology workspace and its accounts, idempotently.
+"""Create a specialty's workspace and its accounts, idempotently.
+
+The specialties (owner directions of 2026-10-23 and 2026-11-22, DECISIONS D390): Gastroenterology, Neurosurgery and
+Orthopedic Surgery, each a workspace category. A workspace's specialty is a label - the page and the PDF report show it -
+and nothing on the coding path reads it: Fable codes every specialty, with no engine, code list or routing (D358).
+
+One login serves one workspace until a workspace switcher exists (D390): an account already active in another workspace
+is refused, never added to a second one, so nobody is left seeing the wrong workspace's documents.
 
 Passwords are read from files (never argv, never printed). An existing account
 keeps its password unless --reset-passwords is given.
@@ -16,11 +23,16 @@ from django.db import transaction
 
 from studio import audit, models
 
-# The workspace category's identity, as studio/gi/profiles.py defined it (that module went with the earlier pipeline,
-# DECISIONS D351-D352): unchanged, so provisioning finds, and leaves as it is, the category an installation already has.
+# Each specialty's category: slug -> (name, profiles_version). Gastroenterology keeps the identity studio/gi/profiles.py
+# defined (that module went with the earlier pipeline, DECISIONS D351-D352), so provisioning finds, and leaves as it is,
+# the category an installation already has. profiles_version is a label that nothing reads.
+SPECIALTIES = {
+    'gastroenterology': ('Gastroenterology', 'gi-profiles@3'),
+    'neurosurgery': ('Neurosurgery', 'fable-coding@1'),
+    'orthopedic-surgery': ('Orthopedic Surgery', 'fable-coding@1'),
+}
 CATEGORY_SLUG = 'gastroenterology'
-CATEGORY_NAME = 'Gastroenterology'
-PROFILES_VERSION = 'gi-profiles@3'
+CATEGORY_NAME, PROFILES_VERSION = SPECIALTIES[CATEGORY_SLUG]
 
 
 def _password(path):
@@ -31,11 +43,12 @@ def _password(path):
 
 
 class Command(BaseCommand):
-    help = ('Provision the GI workspace with an owner and (optionally) an automated review agent account and a '
-            'human reviewer account.')
+    help = ('Provision a specialty workspace (Gastroenterology unless --specialty names another) with an owner and '
+            '(optionally) an automated review agent account and a human reviewer account.')
 
     def add_arguments(self, parser):
-        parser.add_argument('--workspace-name', default='Gastroenterology')
+        parser.add_argument('--specialty', choices=sorted(SPECIALTIES), default=CATEGORY_SLUG)
+        parser.add_argument('--workspace-name', default='', help="the workspace's name (default: the specialty's name)")
         parser.add_argument('--owner-username', default='')
         parser.add_argument('--owner-display-name', default='')
         parser.add_argument('--owner-password-file', default='')
@@ -56,17 +69,20 @@ class Command(BaseCommand):
             raise CommandError('--owner-password-file is required with --owner-username.')
         if options['reviewer_username'] and not options['reviewer_password_file']:
             raise CommandError('--reviewer-password-file is required with --reviewer-username.')
+        slug = options['specialty']
+        name, profiles_version = SPECIALTIES[slug]
+        workspace_name = options['workspace_name'] or name
         category, _ = models.Category.objects.get_or_create(
-            slug=CATEGORY_SLUG, defaults={'name': CATEGORY_NAME, 'profiles_version': PROFILES_VERSION})
-        if category.profiles_version != PROFILES_VERSION:
-            category.profiles_version = PROFILES_VERSION
+            slug=slug, defaults={'name': name, 'profiles_version': profiles_version})
+        if category.profiles_version != profiles_version:
+            category.profiles_version = profiles_version
             category.save(update_fields=['profiles_version'])
-        workspace = models.Workspace.objects.filter(category=category, name=options['workspace_name']).first()
+        workspace = models.Workspace.objects.filter(category=category, name=workspace_name).first()
         if workspace is None:
             if not options['owner_username']:
-                raise CommandError(f'No workspace named {options["workspace_name"]!r} exists; provision it with its '
+                raise CommandError(f'No workspace named {workspace_name!r} exists; provision it with its '
                                    f'owner first.')
-            workspace = models.Workspace.objects.create(category=category, name=options['workspace_name'])
+            workspace = models.Workspace.objects.create(category=category, name=workspace_name)
         accounts = []
         if options['owner_username']:
             accounts.append((options['owner_username'], options['owner_display_name'], options['owner_password_file'],
@@ -86,6 +102,9 @@ class Command(BaseCommand):
                 user = models.User(username=username, actor_kind=kind, display_name=display or username)
             elif user.actor_kind != kind:
                 raise CommandError(f'Account {username} exists with a different actor kind.')
+            elif models.Membership.objects.filter(user=user, active=True).exclude(workspace=workspace).exists():
+                raise CommandError(f'Account {username} already serves another workspace; one login serves one '
+                                   f'workspace until a workspace switcher exists (D390). Use a separate login.')
             if created or options['reset_passwords']:
                 password = _password(password_file)
                 validate_password(password, user)

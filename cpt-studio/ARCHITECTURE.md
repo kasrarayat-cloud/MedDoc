@@ -18,6 +18,15 @@ environment.
 Non-goals: real patient data, claims submission, licensed CPT descriptors, NCCI procedure-to-procedure edits, accuracy
 claims.
 
+Specialties (owner direction 2026-11-22, DECISIONS D390): Gastroenterology, Neurosurgery and Orthopedic Surgery, each a
+workspace category provisioned the same way (`manage provision --specialty`; ops/INSTALL.md, provision). A workspace's
+specialty is a label: the page names it (the upload form's Specialty field and the review heading, rendered from the
+member's workspace) and so does the PDF report's Specialty cell. Nothing on the coding path reads it - Fable codes every
+specialty, with no engine, code list, routing or specialty rule (D358), so a Neurosurgery or Orthopedic Surgery document
+runs exactly the GI path. "Subcategories" are what they are for GI: the coverage of the synthetic verification
+documents, not a choice a member makes and not rules. One login serves one workspace until a workspace switcher exists:
+provisioning refuses an account already active in another workspace.
+
 ## 2. Truth rules
 
 1. **Fable's decision is final apart from the human.** No code holds, drops, downgrades or upgrades a code the coding

@@ -80,7 +80,7 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | 6 | `reference` | `--pfs-zip <abs> --pfs-retrieved-at <ISO> --mue-zip <abs> --mue-retrieved-at <ISO>` | reference copies in the files volume; two `ReferenceSource` imports |
 | 7 | `passages` | — | each committed `studio/reference/data/` file imported (`PassageSource`, `ReferencePassage`); idempotent |
 | 8 | `license-note` | — | CPT Studio's own licence note on each imported reference source (`ReferenceSource.license_note`): exactly the old text replaced by the corrected one, nothing else; idempotent |
-| 9 | `provision` | `--owner-username <name>` (optional `--agent-username`, display names, `--reset-passwords`) | GI workspace, owner and agent accounts; credentials files |
+| 9 | `provision` | `--owner-username <name>` (optional `--specialty`, `--agent-username`, display names, `--reset-passwords`) | a specialty's workspace (Gastroenterology unless `--specialty` names neurosurgery or orthopedic-surgery), owner and agent accounts; credentials files |
 | 9a | `operators` | optional `--reset-passwords` | the two platform-operator accounts (no membership), their grants and credentials files |
 | 10 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload |
 | 11 | `cert` | — | lineage `cpt.quillmd.com` |
@@ -592,6 +592,17 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   with the generated passwords; an account that already existed (password
   unchanged) aborts and discards them unless `--reset-passwords` was given.
   Passwords travel as RAM-only files under `/dev/shm`, never argv or output.
+  `--specialty neurosurgery` or `--specialty orthopedic-surgery` (owner direction
+  2026-11-22, D390) provisions that specialty's own workspace (named after it
+  unless `--workspace-name` says otherwise) with its own review agent
+  (`review-agent-neuro`, `review-agent-ortho` unless `--agent-username` says
+  otherwise) and its own pair of files, `/etc/cpt-studio/initial-credentials-<specialty>.json`
+  and `~/.cpt-studio/agent-credentials-<specialty>.json`; Gastroenterology keeps
+  `initial-credentials.json` and `agent-credentials.json`, so provisioning one
+  specialty never touches another's. One login serves one workspace until a
+  workspace switcher exists: `manage provision` refuses an account already
+  active in another workspace. The specialty is a label the page and the PDF
+  show; the coding path does not read it (D358).
 - **operators** (after `app`; it needs the revision's operator grant, owner
   directive 2026-11-03 section 2, and refuses - creating no account and no file -
   unless `manage migrate --check` passes with this revision's image) creates the

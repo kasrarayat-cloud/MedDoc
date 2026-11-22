@@ -94,3 +94,62 @@ class ProvisionTests(TestCase):
         with self.assertRaisesMessage(CommandError, 'different actor kind'):
             self.run_command('--reviewer-username', 'agent1', '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
         self.assertEqual(models.User.objects.get(username='agent1').actor_kind, models.User.AGENT)
+
+
+class SpecialtyProvisionTests(TestCase):
+    """Owner direction 2026-11-22 (D390): Neurosurgery and Orthopedic Surgery are workspace categories beside
+    Gastroenterology, each provisioned the GI way; one login serves one workspace until a switcher exists."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+
+    def secret(self, name, value):
+        path = Path(self.dir.name) / name
+        path.write_text(value + '\n', encoding='utf-8')
+        return str(path)
+
+    def run_command(self, *args):
+        out = io.StringIO()
+        call_command('provision', *args, stdout=out)
+        return out.getvalue()
+
+    def provision(self, specialty, owner, agent):
+        return self.run_command('--specialty', specialty, '--owner-username', owner,
+                                '--owner-password-file', self.secret(owner, OWNER_PASSWORD),
+                                '--agent-username', agent, '--agent-password-file', self.secret(agent, AGENT_PASSWORD))
+
+    def test_each_specialty_is_its_own_category_and_workspace(self):
+        self.provision('gastroenterology', 'owner1', 'agent1')
+        out = self.provision('neurosurgery', 'owner-neuro', 'review-agent-neuro')
+        self.assertIn('created human account owner-neuro (owner)', out)
+        self.assertIn('(Neurosurgery, neurosurgery)', out)
+        self.provision('orthopedic-surgery', 'owner-ortho', 'review-agent-ortho')
+        self.assertEqual(sorted(models.Category.objects.values_list('slug', 'name')),
+                         [('gastroenterology', 'Gastroenterology'), ('neurosurgery', 'Neurosurgery'),
+                          ('orthopedic-surgery', 'Orthopedic Surgery')])
+        for username, specialty in (('owner1', 'Gastroenterology'), ('owner-neuro', 'Neurosurgery'),
+                                    ('owner-ortho', 'Orthopedic Surgery'), ('review-agent-ortho', 'Orthopedic Surgery')):
+            membership = models.Membership.objects.get(user__username=username)
+            self.assertEqual((membership.workspace.name, membership.workspace.category.name), (specialty, specialty))
+        # Gastroenterology keeps the identity an installation already has
+        self.assertEqual(models.Category.objects.get(slug='gastroenterology').profiles_version, 'gi-profiles@3')
+
+    def test_the_default_stays_gastroenterology(self):
+        self.run_command('--owner-username', 'owner1', '--owner-password-file', self.secret('o', OWNER_PASSWORD))
+        workspace = models.Workspace.objects.get()
+        self.assertEqual((workspace.name, workspace.category.slug), ('Gastroenterology', 'gastroenterology'))
+
+    def test_one_login_serves_one_workspace(self):
+        self.provision('gastroenterology', 'owner1', 'agent1')
+        with self.assertRaisesMessage(CommandError, 'already serves another workspace'):
+            self.run_command('--specialty', 'neurosurgery', '--owner-username', 'owner1',
+                             '--owner-password-file', self.secret('o2', OWNER_PASSWORD))
+        # refused as a whole: no Neurosurgery category or workspace is left behind
+        self.assertFalse(models.Category.objects.filter(slug='neurosurgery').exists())
+        self.assertEqual(models.Membership.objects.filter(user__username='owner1').count(), 1)
+
+    def test_an_unknown_specialty_is_refused(self):
+        with self.assertRaises(CommandError):
+            self.run_command('--specialty', 'cardiology', '--owner-username', 'x',
+                             '--owner-password-file', self.secret('x', OWNER_PASSWORD))

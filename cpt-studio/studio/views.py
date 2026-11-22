@@ -105,7 +105,9 @@ def logout_view(request):
 def index(request):
     if is_operator(request.user) and not request.user.memberships.filter(active=True).exists():
         return redirect('/ops/')  # an operator with no membership has no workspace here: the diagnostics are theirs
-    active_membership(request.user)  # 404 for accounts without an active workspace
-    response = render(request, 'studio/index.html', {'release': settings.RELEASE_SHA})
+    membership = active_membership(request.user)  # 404 for accounts without an active workspace
+    # the workspace's specialty, a label the page shows (owner direction 2026-11-22, D390); nothing codes from it
+    response = render(request, 'studio/index.html', {'release': settings.RELEASE_SHA,
+                                                     'specialty': membership.workspace.category.name})
     response.headers['Content-Security-Policy'] = INDEX_CSP
     return response

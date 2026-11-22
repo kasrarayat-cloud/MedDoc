@@ -8,7 +8,11 @@
  *
  *   node ops/walk.cjs --base-url https://cpt.quillmd.com --credentials agent.json --operator-credentials ops-agent.json \
  *     --docs DIR_OR_FILE --out EVIDENCE_DIR [--deadline-seconds 1800] [--allow-live-provider] \
- *     [--service-date YYYY-MM-DD] [--insurance medicare|medicaid|commercial|unknown]
+ *     [--service-date YYYY-MM-DD] [--insurance medicare|medicaid|commercial|unknown] [--workspace NAME]
+ *
+ * --workspace names the workspace the account must be signed in to (its name as the session serves it, for example
+ * Neurosurgery): with several specialty workspaces (owner direction 2026-11-22, D390) a credentials file for the wrong
+ * one would otherwise walk the wrong specialty without a word, so a session in another workspace stops the walk.
  *
  * --credentials and --operator-credentials each name a private JSON file (no group or other access, checked on the
  * descriptor that is read) holding a flat {"username", "password"}: the customer account (an agent reviewer of a
@@ -114,7 +118,7 @@ const REVIEW_DIALOG = { dialog: '#reviewDialog', label: '#reviewAcknowledgement'
   note: '#reviewNote', save: '#saveReview' };
 const USAGE = 'usage: walk.cjs --base-url URL --credentials FILE --operator-credentials FILE --docs DIR_OR_FILE --out DIR '
   + '[--deadline-seconds N] [--allow-live-provider] [--service-date YYYY-MM-DD] '
-  + '[--insurance medicare|medicaid|commercial|unknown]';
+  + '[--insurance medicare|medicaid|commercial|unknown] [--workspace NAME]';
 
 class UsageError extends Error {}
 
@@ -177,9 +181,9 @@ function warn(id, reason, data) {
 function parseArgs(argv) {
   const flags = new Set(['allow-live-provider']);
   const values = new Set(['base-url', 'credentials', 'operator-credentials', 'docs', 'out', 'deadline-seconds',
-    'service-date', 'insurance']);
+    'service-date', 'insurance', 'workspace']);
   const opts = { deadlineSeconds: DEFAULT_DEADLINE_SECONDS, allowLiveProvider: false, serviceDate: null,
-    insurance: 'commercial' };
+    insurance: 'commercial', workspace: null };
   for (let i = 0; i < argv.length; i += 1) {
     if (!argv[i].startsWith('--')) throw new UsageError(`unexpected argument ${argv[i]}`);
     const [name, inline] = argv[i].slice(2).split(/=(.*)/s);
@@ -3104,6 +3108,9 @@ function sessionProblems(session, opts) {
   const problems = [];
   if (!isObject(session)) return ['GET /api/session served no object'];
   if (session.can_review !== true) problems.push('the account cannot review in this workspace');
+  if (opts.workspace != null && session.workspace?.name !== opts.workspace) {
+    problems.push(`the account is signed in to the workspace ${JSON.stringify(session.workspace?.name ?? null)}, not ${JSON.stringify(opts.workspace)}`);
+  }
   if (typeof session.acknowledgement !== 'string' || !session.acknowledgement.trim()) problems.push('the session serves no acknowledgement to approve with');
   if (!opts.allowLiveProvider) {
     problems.push('the customer session serves no provider mode, so each upload may make paid requests: re-run with --allow-live-provider to accept');
@@ -3142,7 +3149,7 @@ async function main(argv) {
     schema: EVIDENCE_SCHEMA, run_id: `walk-${isoNow().replace(/[-:.]/g, '')}-${crypto.randomBytes(4).toString('hex')}`,
     started_at: isoNow(), finished_at: null, base_url: opts.baseUrl, synthetic_only: true,
     options: { deadline_seconds: opts.deadlineSeconds, allow_live_provider: opts.allowLiveProvider, service_date: opts.serviceDate,
-      insurance: opts.insurance, docs: path.resolve(opts.docs) },
+      insurance: opts.insurance, workspace: opts.workspace, docs: path.resolve(opts.docs) },
     environment: { node: process.version, playwright: require(path.join(PLAYWRIGHT, 'package.json')).version, browser: null,
       denylist: denylist().schema, contract: contract().schema },
     credentials: { username: creds.username, file_mode: creds.mode },

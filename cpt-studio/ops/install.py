@@ -188,6 +188,20 @@ PASSAGE_DATA = f'{APP}/studio/reference/data'
 PASSAGE_DATA_IN_IMAGE = '/app/studio/reference/data'
 INITIAL_CREDENTIALS = 'initial-credentials.json'
 AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/agent-credentials.json')
+# The specialties a workspace may be provisioned for (owner direction 2026-11-22, DECISIONS D390), as manage.py provision
+# names them. Gastroenterology keeps its credentials files; each other specialty has its own pair, so provisioning one
+# never touches another's, and its own review agent (one login serves one workspace until a switcher exists).
+SPECIALTY_NAMES = {'gastroenterology': 'Gastroenterology', 'neurosurgery': 'Neurosurgery',
+                   'orthopedic-surgery': 'Orthopedic Surgery'}
+SPECIALTY_AGENTS = {'gastroenterology': 'review-agent', 'neurosurgery': 'review-agent-neuro',
+                    'orthopedic-surgery': 'review-agent-ortho'}
+
+
+def credentials_files(specialty: str) -> tuple:
+    """(the root-only file's name in /etc/cpt-studio, the agent's user file) of a specialty's provisioning."""
+    if specialty == 'gastroenterology':
+        return INITIAL_CREDENTIALS, AGENT_CREDENTIALS
+    return f'initial-credentials-{specialty}.json', AGENT_CREDENTIALS.with_name(f'agent-credentials-{specialty}.json')
 # The operators phase's two platform-operator accounts (ops/INSTALL.md, operators): no workspace membership, a grant
 # from `manage grant_operator`. The agent's login is a user file like AGENT_CREDENTIALS; the human's is root-only.
 OPERATOR_ACCOUNTS_SPEC = (('ops-agent', 'agent', 'CPT Studio operations agent'),
@@ -453,7 +467,7 @@ PHASE_ARGUMENTS = {
     'provider_mode': {'switch-back'}, 'astra_mode': {'switch-back'}, 'fable_mode': {'switch-back'},
     'interpreter_mode': {'switch-back'},
     'owner_username': {'provision'}, 'owner_display_name': {'provision'}, 'agent_username': {'provision'},
-    'agent_display_name': {'provision'}, 'workspace_name': {'provision'},
+    'agent_display_name': {'provision'}, 'workspace_name': {'provision'}, 'specialty': {'provision'},
     'reset_passwords': {'provision', 'operators'},
 }
 
@@ -491,6 +505,8 @@ def parse_args(argv=None):
     parser.add_argument('--agent-username')
     parser.add_argument('--agent-display-name')
     parser.add_argument('--workspace-name')
+    parser.add_argument('--specialty', choices=sorted(SPECIALTY_NAMES),
+                        help='provision: the workspace\'s specialty (default gastroenterology; D390)')
     parser.add_argument('--reset-passwords', action='store_true', default=None)
     args = parser.parse_args(argv)
     problem = argument_problem(args)
@@ -500,10 +516,11 @@ def parse_args(argv=None):
     args.fable_mode = args.fable_mode or 'disabled'
     # --interpreter-mode and --coding-mode stay None when they are not given (interpreter_mode and coding_mode read that
     # as disabled); app refuses to run without an explicit --coding-mode (argument_problem)
-    args.agent_username = args.agent_username or 'review-agent'
+    args.specialty = args.specialty or 'gastroenterology'
+    args.agent_username = args.agent_username or SPECIALTY_AGENTS[args.specialty]
     args.agent_display_name = args.agent_display_name or 'CPT Studio review agent'
     args.owner_display_name = args.owner_display_name or ''
-    args.workspace_name = args.workspace_name or 'Gastroenterology'
+    args.workspace_name = args.workspace_name or SPECIALTY_NAMES[args.specialty]
     return args
 
 
@@ -551,7 +568,7 @@ def argument_problem(args) -> str:
     if args.phase == 'provision':
         if not args.owner_username:
             return '--phase provision needs --owner-username.'
-        agent = args.agent_username or 'review-agent'
+        agent = args.agent_username or SPECIALTY_AGENTS[args.specialty or 'gastroenterology']
         for value in (args.owner_username, agent):
             if not USERNAME_RE.fullmatch(value):
                 return f'Username {value!r} must match {USERNAME_RE.pattern}.'
@@ -6201,11 +6218,14 @@ def phase_provision(ctx) -> dict:
     image_id = installed_image(ctx)
     require_db()
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
-    state = root_file('state')
-    agent_staged = AGENT_CREDENTIALS.with_name('.agent-credentials.json.new')
+    specialty = getattr(args, 'specialty', None) or 'gastroenterology'
+    final, agent_credentials = credentials_files(specialty)
+    names = {'final': final}
+    state = root_file('state', **names)
+    agent_staged = agent_credentials.with_name(f'.{agent_credentials.name}.new')
     if state['staged_exists'] or agent_staged.exists():
         raise InstallError('Staged credentials from an interrupted run exist; resolve them by hand first.')
-    if not reset and (state['final_exists'] or AGENT_CREDENTIALS.exists()):
+    if not reset and (state['final_exists'] or agent_credentials.exists()):
         raise InstallError('Credentials files already exist; use --reset-passwords to rotate them.')
     expected = {args.owner_username: ('human', 'owner'), args.agent_username: ('agent', 'reviewer')}
     passwords = {args.owner_username: secrets.token_urlsafe(24), args.agent_username: secrets.token_urlsafe(24)}
@@ -6213,20 +6233,20 @@ def phase_provision(ctx) -> dict:
                 for user, (kind, role) in expected.items()]
     root_bytes = json.dumps(credentials_document(ctx, accounts), indent=2).encode()
     agent_bytes = json.dumps(credentials_document(ctx, accounts[1:]), indent=2).encode()
-    AGENT_CREDENTIALS.parent.mkdir(mode=0o700, exist_ok=True)
-    folder = AGENT_CREDENTIALS.parent.lstat()
+    agent_credentials.parent.mkdir(mode=0o700, exist_ok=True)
+    folder = agent_credentials.parent.lstat()
     if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != os.getuid() or stat.S_IMODE(folder.st_mode) != 0o700:
-        raise InstallError(f'{AGENT_CREDENTIALS.parent} must be a directory owned by this user with mode 0700.')
+        raise InstallError(f'{agent_credentials.parent} must be a directory owned by this user with mode 0700.')
     # Password files live in RAM only (/dev/shm) and are wiped whatever happens.
     scratch = Path(tempfile.mkdtemp(prefix='cpt-studio-provision-', dir='/dev/shm'))
     try:
-        root_file('stage', content=base64.b64encode(root_bytes).decode())
+        root_file('stage', content=base64.b64encode(root_bytes).decode(), **names)
         write_private(agent_staged.parent, agent_staged.name, agent_bytes)
         mounts = []
         for user in expected:
             write_private(scratch, f'{user}.pw', passwords[user].encode())
             mounts.append(f'type=bind,src={scratch / (user + ".pw")},dst=/run/cpt-provision/{user}.pw,readonly')
-        command = ['manage', 'provision', '--workspace-name', args.workspace_name,
+        command = ['manage', 'provision', '--specialty', specialty, '--workspace-name', args.workspace_name,
                    '--owner-username', args.owner_username, '--owner-display-name', args.owner_display_name,
                    '--owner-password-file', f'/run/cpt-provision/{args.owner_username}.pw',
                    '--agent-username', args.agent_username, '--agent-display-name', args.agent_display_name,
@@ -6242,14 +6262,14 @@ def phase_provision(ctx) -> dict:
         if not reset and set(outcome.values()) != {'created'}:
             raise InstallError('An account already existed, so its password was not set; nothing was saved. '
                                'Rerun with --reset-passwords to rotate.')
-        root_file('commit', replace=reset)
+        root_file('commit', replace=reset, **names)
         if reset:
-            os.replace(agent_staged, AGENT_CREDENTIALS)
+            os.replace(agent_staged, agent_credentials)
         else:
-            os.link(agent_staged, AGENT_CREDENTIALS)
+            os.link(agent_staged, agent_credentials)
             agent_staged.unlink()
     except BaseException:
-        root_file('discard', sha256=sha256(root_bytes))
+        root_file('discard', sha256=sha256(root_bytes), **names)
         agent_staged.unlink(missing_ok=True)
         raise
     finally:
@@ -6257,8 +6277,8 @@ def phase_provision(ctx) -> dict:
             path.write_bytes(b'\0' * 64)
             path.unlink()
         scratch.rmdir()
-    return {'accounts': outcome, 'root_credentials': f'{ETC_DIR}/{INITIAL_CREDENTIALS}',
-            'agent_credentials': str(AGENT_CREDENTIALS), 'log': log, 'reset_passwords': reset,
+    return {'accounts': outcome, 'specialty': specialty, 'root_credentials': f'{ETC_DIR}/{final}',
+            'agent_credentials': str(agent_credentials), 'log': log, 'reset_passwords': reset,
             'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())}
 
 

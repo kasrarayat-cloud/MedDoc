@@ -1179,7 +1179,7 @@ function listRows(name, rows) {
 
 function listBody(name, rows) {
   const shown = listRows(name, rows);
-  const empty = { workspace: 'No documents yet. Start with a synthetic GI document.', documents: 'No documents yet. Use New document to upload a synthetic GI document or paste its text.', queue: 'Nothing is waiting for you.' }[name];
+  const empty = { workspace: 'No documents yet. Start with a synthetic document.', documents: 'No documents yet. Use New document to upload a synthetic document or paste its text.', queue: 'Nothing is waiting for you.' }[name];
   return LIST_HEADER + (shown.length ? shown.map(row => documentRow(row)).join('') : `<p class="empty-state">${escapeHtml(empty)}</p>`);
 }
 
@@ -1194,7 +1194,7 @@ function listDescription(name, rows) {
 function inviteMarkup(rows) {
   const recent = rows?.[0];
   if (rows === null) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>Loading recent documents…</strong><p>One moment.</p></span>`;
-  if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see its CPT codes beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
+  if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic document to see its CPT codes beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
   const detail = ['Most recent', stateLabel(recent.state, recent.state_label), formatDate(recent.service_date) || 'service date not entered'].join(' · ');
   return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>${escapeHtml(text(recent.title) || 'Untitled document')}</strong><p>${escapeHtml(detail)}</p></span><button type="button" class="button secondary" data-open="${escapeHtml(recent.id)}">Open review ${icon('arrow')}</button>`;
 }
@@ -1246,7 +1246,7 @@ function reviewMeta(doc) {
 
 function reviewHeading(doc) {
   const download = exportOffered(doc) ? `<button type="button" class="button secondary" data-action="export">${icon('download')}<span>Download</span></button>` : '';
-  return `<div class="heading-row review-heading"><div><span class="eyebrow">CODING REVIEW · GASTROENTEROLOGY</span><h1>${escapeHtml(text(doc?.title) || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}<span>New document</span></button>${download}</div></div>`;
+  return `<div class="heading-row review-heading"><div><span class="eyebrow">${escapeHtml(specialtyEyebrow())}</span><h1>${escapeHtml(text(doc?.title) || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}<span>New document</span></button>${download}</div></div>`;
 }
 
 // --- the original document and its quoted passages (left) ---
@@ -1755,6 +1755,13 @@ function setCount(selector, value) {
   const valid = Number.isInteger(value) && value >= 0;
   element.textContent = valid ? String(value) : '';
   element.hidden = !valid;
+}
+
+// The workspace's specialty, as the page shell names it (data-specialty on <body>, from the member's workspace; owner
+// direction 2026-11-22, D390): a label only - nothing on the page or the server codes from it.
+function specialtyEyebrow() {
+  const specialty = typeof document === 'undefined' ? '' : text(document.body?.dataset?.specialty);
+  return specialty ? `CODING REVIEW · ${specialty.toUpperCase()}` : 'CODING REVIEW';
 }
 
 function renderSession(session) {

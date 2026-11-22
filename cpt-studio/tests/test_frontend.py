@@ -159,8 +159,9 @@ def _strings(value):
 
 @override_settings(STORAGES=PLAIN_STATIC)
 class ShellTemplateTests(SimpleTestCase):
-    def render_index(self):
-        return render_to_string('studio/index.html', {'release': 'test-release'}, request=RequestFactory().get('/'))
+    def render_index(self, specialty='Gastroenterology'):
+        return render_to_string('studio/index.html', {'release': 'test-release', 'specialty': specialty},
+                                request=RequestFactory().get('/'))
 
     def test_index_renders_static_paths_and_a_csrf_token_from_the_request_alone(self):
         html = self.render_index()
