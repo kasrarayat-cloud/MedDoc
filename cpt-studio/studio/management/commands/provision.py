@@ -7,6 +7,11 @@ it - and nothing on the coding path reads it: Fable codes every specialty, with 
 One login serves one workspace until a workspace switcher exists (D390): an account already active in another workspace
 is refused, never added to a second one, so nobody is left seeing the wrong workspace's documents.
 
+A workspace is found by its name exactly as stored. A NEW workspace's name is not another specialty's name, reads unlike
+every workspace of every specialty (white space and letter case aside), and is written with single ordinary spaces; a
+refusal names what stands in the way and suggests no command, so following it never puts an account in a workspace
+other than a new one.
+
 Passwords are read from files (never argv, never printed). An existing account
 keeps its password unless --reset-passwords is given.
 
@@ -19,7 +24,7 @@ from pathlib import Path
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import connection, transaction
 
 from studio import audit, models
 
@@ -33,6 +38,8 @@ SPECIALTIES = {
 }
 CATEGORY_SLUG = 'gastroenterology'
 CATEGORY_NAME, PROFILES_VERSION = SPECIALTIES[CATEGORY_SLUG]
+# one provisioning run at a time (a transaction-level PostgreSQL advisory lock, apart from studio/jobs.py's provider slots)
+PROVISION_LOCK = 0x4350545350524F56  # 'CPTSPROV'
 
 
 def _read(name: str) -> str:
@@ -42,33 +49,35 @@ def _read(name: str) -> str:
     return ' '.join(name.split()).casefold()
 
 
+def _named_alike(workspace_name: str) -> str:
+    """" Named alike: ..." - every workspace, of any specialty, whose name reads the same as ``workspace_name``, named as
+    stored with its specialty, sorted - or nothing. It names; it never suggests a command (refutation N5-1-2)."""
+    reading = _read(workspace_name)
+    found = sorted((each.name, each.category.name) for each in models.Workspace.objects.select_related('category')
+                   if _read(each.name) == reading)
+    return (' Named alike: ' + ', '.join(f'{name!r} ({specialty})' for name, specialty in found) + '.') if found else ''
+
+
 def _check_new_name(workspace_name: str, slug: str, category) -> None:
     """The rules a NEW workspace's name meets (owner direction 2026-11-22, D390; refutation N1-2-1, N1-2-2, N2-2-1,
-    N4-1-1): written cleanly; not another specialty's name; not read the same as a workspace of this specialty (name
-    that one exactly as stored instead); and not read the same as a workspace of another specialty - each workspace name
-    belongs to one specialty, so a member, or a check that knows a workspace by its name, knows its specialty too."""
-    if not workspace_name or workspace_name != ' '.join(workspace_name.split()):
-        raise CommandError('Write the workspace name without leading, trailing or repeated spaces.')
+    N4-1-1, N5-1-1..4, N5-1-7), in this order: it is not another specialty's name; it reads unlike every workspace of
+    every specialty (_read), so a member, or a check that knows a workspace by its name, knows which workspace and which
+    specialty; and it is written cleanly. Each refusal names what stands in the way and suggests no command, and a name
+    that reads like an existing workspace is refused before its spacing is - so following a refusal, correcting the
+    spacing included, never puts these accounts in a workspace other than a new one."""
+    if not workspace_name.split():
+        raise CommandError('Give the new workspace a name.')
     reading = _read(workspace_name)
-    owner_of_name = next((other for other, (other_name, _) in SPECIALTIES.items() if _read(other_name) == reading), slug)
-    if owner_of_name != slug:
-        raise CommandError(f'{workspace_name!r} is the name of the {SPECIALTIES[owner_of_name][0]} specialty; give '
-                           f'--specialty {owner_of_name}.')
-    same = sorted(each.name for each in models.Workspace.objects.filter(category=category) if _read(each.name) == reading)
-    if same:
-        raise CommandError(f'{category.name} workspace{"s" if len(same) > 1 else ""} called '
-                           f'{", ".join(repr(each) for each in same)}: name one exactly as stored.')
-    other = sorted(((each.category.name, each.name, each.category.slug) for each in
-                    models.Workspace.objects.exclude(category=category).select_related('category')
-                    if _read(each.name) == reading))
-    if other:
-        other_specialty, other_name, other_slug = other[0]
-        if reading == _read(SPECIALTIES[slug][0]):
-            raise CommandError(f'{workspace_name!r} is the name of the {SPECIALTIES[slug][0]} specialty, but the '
-                               f'{other_specialty} workspace {other_name!r} reads the same; rename that workspace '
-                               f'first.')
-        raise CommandError(f'The workspace {other_name!r} is a {other_specialty} workspace; give --specialty '
-                           f'{other_slug} (each workspace name belongs to one specialty).')
+    alike = _named_alike(workspace_name)
+    for other, (other_name, _) in SPECIALTIES.items():
+        if other != slug and _read(other_name) == reading:
+            raise CommandError(f'{workspace_name!r} is the name of the {other_name} specialty: choose another name for '
+                               f'a {category.name} workspace.' + alike)
+    if alike:
+        raise CommandError(f'The name {workspace_name!r} is taken: choose a name no workspace has.' + alike)
+    if workspace_name != ' '.join(workspace_name.split()):
+        raise CommandError('Write the workspace name with single ordinary spaces between words and none around it (no '
+                           'tab, no non-breaking or other special space).')
 
 
 def _password(path):
@@ -84,7 +93,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--specialty', choices=sorted(SPECIALTIES), default=CATEGORY_SLUG)
-        parser.add_argument('--workspace-name', default='', help="the workspace's name (default: the specialty's name)")
+        parser.add_argument('--workspace-name', default=None, help="the workspace's name (default: the specialty's name)")
         parser.add_argument('--owner-username', default='')
         parser.add_argument('--owner-display-name', default='')
         parser.add_argument('--owner-password-file', default='')
@@ -107,7 +116,12 @@ class Command(BaseCommand):
             raise CommandError('--reviewer-password-file is required with --reviewer-username.')
         slug = options['specialty']
         name, profiles_version = SPECIALTIES[slug]
-        workspace_name = options['workspace_name'] or name
+        # an explicit name is taken as given, '' included (refutation N5-1-5)
+        workspace_name = name if options['workspace_name'] is None else options['workspace_name']
+        # first, before any read: two runs at once cannot both pass the name rules and both create (refutation N5-1-4);
+        # released when this run commits or fails
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT pg_advisory_xact_lock(%s)', [PROVISION_LOCK])
         category, _ = models.Category.objects.get_or_create(
             slug=slug, defaults={'name': name, 'profiles_version': profiles_version})
         if category.profiles_version != profiles_version:
@@ -116,11 +130,14 @@ class Command(BaseCommand):
         # an existing workspace is found by its name exactly as stored, as before; the rules below apply only when a
         # workspace is made, so an installation's existing names keep working as they did (refutation N4-1-1..3)
         workspace = models.Workspace.objects.filter(category=category, name=workspace_name).first()
-        if workspace is None:
-            _check_new_name(workspace_name, slug, category)
+        made = workspace is None
+        if made:
             if not options['owner_username']:
-                raise CommandError(f'No workspace named {workspace_name!r} exists; provision it with its '
-                                   f'owner first.')
+                # adding accounts never makes a workspace and never meets the new-name rules: the workspace is named
+                # exactly, and any that read the same are named as stored (refutation N5-1-1, N5-1-3)
+                raise CommandError(f'No {category.name} workspace is named exactly {workspace_name!r}; provision it with '
+                                   f'its owner first.' + _named_alike(workspace_name))
+            _check_new_name(workspace_name, slug, category)
             workspace = models.Workspace.objects.create(category=category, name=workspace_name)
         accounts = []
         if options['owner_username']:
@@ -142,7 +159,10 @@ class Command(BaseCommand):
                 user = models.User(username=username, actor_kind=kind, display_name=display or username)
             elif user.actor_kind != kind:
                 raise CommandError(f'Account {username} exists with a different actor kind.')
-            elif models.Membership.objects.filter(user=user, active=True).exclude(workspace=workspace).exists():
+            elif (not models.Membership.objects.filter(user=user, workspace=workspace, active=True).exists()
+                  and models.Membership.objects.filter(user=user, active=True).exclude(workspace=workspace).exists()):
+                # refused only when it would ADD the account to a second workspace: an account an earlier installation
+                # made a member of several keeps working where it is (a password rotation; refutation N5-1-6)
                 raise CommandError(f'Account {username} already serves another workspace; one login serves one '
                                    f'workspace until a workspace switcher exists (D390). Use a separate login.')
             if created or options['reset_passwords']:
@@ -160,4 +180,5 @@ class Command(BaseCommand):
             audit.record(workspace, 'account.provisioned', actor=None, username=username, actor_kind=kind,
                          role=role, created=created)
             self.stdout.write(f'{"created" if created else "kept"} {kind} account {username} ({role})')
-        self.stdout.write(f'workspace {workspace.pk} ({workspace.name}, {category.slug})')
+        self.stdout.write(f'workspace {workspace.pk} ({workspace.name}, {category.slug}) '
+                          f'{"created" if made else "existing"}')

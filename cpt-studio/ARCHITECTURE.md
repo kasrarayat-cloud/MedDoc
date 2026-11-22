@@ -25,7 +25,8 @@ member's workspace) and so does the PDF report's Specialty cell. Nothing on the 
 specialty, with no engine, code list, routing or specialty rule (D358), so a Neurosurgery or Orthopedic Surgery document
 runs exactly the GI path. "Subcategories" are what they are for GI: the coverage of the synthetic verification
 documents, not a choice a member makes and not rules. One login serves one workspace until a workspace switcher exists:
-provisioning refuses an account already active in another workspace.
+provisioning refuses an account already active in another workspace. A workspace is found by its name exactly as stored,
+and a new one's name reads unlike every workspace's and every other specialty's name (ops/INSTALL.md, provision).
 
 ## 2. Truth rules
 

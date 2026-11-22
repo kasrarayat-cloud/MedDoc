@@ -601,8 +601,12 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   `initial-credentials.json` and `agent-credentials.json`, so provisioning one
   specialty never touches another's. One login serves one workspace until a
   workspace switcher exists: `manage provision` refuses an account already
-  active in another workspace. The specialty is a label the page and the PDF
-  show; the coding path does not read it (D358).
+  active in another workspace. An existing workspace is found by its name
+  exactly as stored; a new workspace's name is not another specialty's name,
+  reads unlike every workspace's name (white space and letter case aside) and
+  is written with single ordinary spaces - a refusal names the workspaces in
+  the way, as stored, and suggests no command. The specialty is a label the
+  page and the PDF show; the coding path does not read it (D358).
 - **operators** (after `app`; it needs the revision's operator grant, owner
   directive 2026-11-03 section 2, and refuses - creating no account and no file -
   unless `manage migrate --check` passes with this revision's image) creates the
