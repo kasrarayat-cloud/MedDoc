@@ -1,0 +1,50 @@
+{# One row per workspace membership, with the acts on that person (studio.console). back: the workspace page to return to, or empty for People. #}
+<div class="table-card scroll">
+<table>
+  <thead><tr><th>Person</th>{% if not hide_workspace %}<th>Workspace</th>{% endif %}<th>Role</th><th>Access</th><th>Last sign-in</th><th>Manage</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td><strong>{{ row.person.label }}</strong><br><span class="muted mono">{{ row.person.username }}</span></td>
+      {% if not hide_workspace %}<td><a href="/ops/workspaces/{{ row.workspace.pk }}">{{ row.workspace.name }}</a><br><span class="muted">{{ row.workspace.category.name }}</span></td>{% endif %}
+      <td>{{ row.role_label }}{% if not row.membership.active %} <span class="flag">membership inactive</span>{% endif %}</td>
+      <td>{% if row.person.is_active %}<span class="chip ok">On</span>{% else %}<span class="chip bad">Off</span>{% endif %}</td>
+      <td class="mono">{% if row.person.last_login %}{{ row.person.last_login|date:"Y-m-d H:i" }} UTC{% else %}never{% endif %}</td>
+      <td>
+        {% if row.operator %}
+          <span class="muted">Operator account: managed on the server.</span>
+        {% else %}
+        <details>
+          <summary>Manage</summary>
+          <div class="actions">
+            <form method="post" action="/ops/people/{{ row.person.pk }}/role">{% csrf_token %}
+              <input type="hidden" name="membership" value="{{ row.membership.pk }}">
+              <input type="hidden" name="back" value="{{ back }}">
+              <label>Role
+                <select name="role">{% for value, label in roles %}<option value="{{ value }}"{% if value == row.membership.role %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+              </label>
+              <button type="submit" class="secondary">Change role</button>
+            </form>
+            <form method="post" action="/ops/people/{{ row.person.pk }}/password">{% csrf_token %}
+              <input type="hidden" name="back" value="{{ back }}">
+              <button type="submit" class="secondary">Reset password</button>
+            </form>
+            <form method="post" action="/ops/people/{{ row.person.pk }}/access">{% csrf_token %}
+              <input type="hidden" name="back" value="{{ back }}">
+              {% if row.person.is_active %}
+              <input type="hidden" name="access" value="off"><button type="submit" class="danger">Turn access off</button>
+              {% else %}
+              <input type="hidden" name="access" value="on"><button type="submit" class="secondary">Turn access on</button>
+              {% endif %}
+            </form>
+          </div>
+        </details>
+        {% endif %}
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="{% if hide_workspace %}5{% else %}6{% endif %}" class="muted">No one yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

@@ -105,8 +105,11 @@ const UNSCANNED_HEADERS = new Set(['set-cookie', 'date', 'etag', 'last-modified'
   'content-security-policy-report-only', 'strict-transport-security', 'permissions-policy', 'report-to', 'nel', 'expires',
   'cache-control', 'vary', 'connection', 'keep-alive', 'transfer-encoding', 'content-encoding', 'accept-ranges', 'age',
   'content-disposition', 'x-frame-options', 'referrer-policy', 'cross-origin-opener-policy', 'x-content-type-options']);
-const OPS_GET_PATHS = id => ['/ops/', '/ops/encounters/', `/ops/encounters/${id}`];
-const OPS_POST_PATHS = id => [`/ops/encounters/${id}/retry`, `/ops/encounters/${id}/reconcile`, `/ops/holds/${id}/release`];
+// The console's controls (studio.console, owner direction 2026-11-22, D395) are probed too: 404 to the customer as well.
+const OPS_GET_PATHS = id => ['/ops/', '/ops/encounters/', `/ops/encounters/${id}`, '/ops/people', '/ops/workspaces',
+  `/ops/workspaces/${id}`, '/ops/spending', '/ops/activity', '/ops/activity/sign-ins'];
+const OPS_POST_PATHS = id => [`/ops/encounters/${id}/retry`, `/ops/encounters/${id}/reconcile`, `/ops/holds/${id}/release`,
+  '/ops/people/add', `/ops/people/${id}/role`, `/ops/people/${id}/password`, `/ops/people/${id}/access`, '/ops/workspaces/new'];
 const DENYLIST_FILE = path.join(__dirname, 'verification', 'customer-denylist.json');
 // The customer contract (BUILD-SPEC section 6): read by ops/scan_customer.py, the Django suite and this walk, so a key
 // the server adds, drops or retypes fails all three until the file is consciously changed.

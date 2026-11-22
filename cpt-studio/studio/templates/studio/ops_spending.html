@@ -1,0 +1,63 @@
+{% extends "studio/ops_base.html" %}
+{% block title %}Spending{% endblock %}
+{% block content %}
+<h1>Spending</h1>
+<p class="lead">What the coding review has cost, estimated from each coding run's recorded usage at the coding model's prices (the figures this console shows on every document). Amounts are US dollars, rounded to the cent. A run whose cost cannot be worked out is counted apart, never as zero.</p>
+
+<div class="stats">
+  <div class="stat"><span class="value">${{ recent.cost_text }}</span><span class="label">Last {{ days_window }} days ({{ recent.runs }} run{{ recent.runs|pluralize }})</span></div>
+  <div class="stat"><span class="value">${{ total.cost_text }}</span><span class="label">Since the start ({{ total.runs }} run{{ total.runs|pluralize }}; exactly <span class="mono">{{ exact_total }}</span>)</span></div>
+  <div class="stat"><span class="value">{{ total.unpriced }}</span><span class="label">Run{{ total.unpriced|pluralize }} that could not be priced{% if total.unpriced %} (at most ${{ total.worst_text }} reserved){% endif %}</span></div>
+  <div class="stat"><span class="value">${{ ceiling }}</span><span class="label">The most one document may cost; {{ concurrent }} document{{ concurrent|pluralize }} coded at once</span></div>
+</div>
+{% if other_runs %}<p class="muted">{{ other_runs }} earlier request{{ other_runs|pluralize }} from before the current coding review {% if other_runs == 1 %}is{% else %}are{% endif %} not counted here.</p>{% endif %}
+
+<h2>By day</h2>
+<p class="muted">The last {{ days_window }} days, by the day a run was sent (UTC). Days with no run are left out.</p>
+<div class="table-card scroll">
+<table>
+  <thead><tr><th>Day</th><th class="num">Runs</th><th class="num">Cost (USD, estimated)</th><th class="num">Not priced</th></tr></thead>
+  <tbody>
+  {% for row in days %}
+    <tr><td class="mono">{{ row.day|date:"Y-m-d" }}</td><td class="num">{{ row.runs }}</td><td class="num mono">{{ row.cost_text }}</td>
+        <td class="num">{% if row.unpriced %}<span class="flag warn">{{ row.unpriced }}</span>{% else %}0{% endif %}</td></tr>
+  {% empty %}
+    <tr><td colspan="4" class="muted">No coding run in the last {{ days_window }} days.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>By workspace</h2>
+<div class="table-card scroll">
+<table>
+  <thead><tr><th>Workspace</th><th>Specialty</th><th class="num">Documents</th><th class="num">Runs</th><th class="num">Cost (USD, estimated)</th><th class="num">Not priced</th></tr></thead>
+  <tbody>
+  {% for row in workspaces %}
+    <tr><td><a href="/ops/workspaces/{{ row.workspace.pk }}">{{ row.workspace.name }}</a></td><td>{{ row.workspace.category.name }}</td>
+        <td class="num">{{ row.documents }}</td><td class="num">{{ row.runs }}</td><td class="num mono">{{ row.cost_text }}</td>
+        <td class="num">{% if row.unpriced %}<span class="flag warn">{{ row.unpriced }}</span>{% else %}0{% endif %}</td></tr>
+  {% empty %}
+    <tr><td colspan="6" class="muted">No coding run yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>By document</h2>
+<p class="muted">{% if documents_total > top_documents %}The {{ top_documents }} costliest of {{ documents_total }} documents with a coding run.{% else %}Every document with a coding run, costliest first.{% endif %} Each document's page has the exact cost of every run.</p>
+<div class="table-card scroll">
+<table>
+  <thead><tr><th>Document</th><th>Workspace</th><th class="num">Runs</th><th class="num">Cost (USD, estimated)</th><th class="num">Not priced</th></tr></thead>
+  <tbody>
+  {% for row in documents %}
+    <tr><td><a href="/ops/encounters/{{ row.encounter.pk }}">{{ row.encounter.title }}</a></td><td>{{ row.encounter.workspace.name }}</td>
+        <td class="num">{{ row.runs }}</td><td class="num mono">{{ row.cost_text }}</td>
+        <td class="num">{% if row.unpriced %}<span class="flag warn">{{ row.unpriced }}</span>{% else %}0{% endif %}</td></tr>
+  {% empty %}
+    <tr><td colspan="5" class="muted">No coding run yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

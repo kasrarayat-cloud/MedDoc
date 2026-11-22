@@ -1,6 +1,6 @@
 from django.urls import path
 
-from studio import api, operator, views
+from studio import api, console, operator, views
 
 urlpatterns = [
     path('', views.index, name='index'),
@@ -27,4 +27,16 @@ urlpatterns = [
     path('ops/encounters/<uuid:encounter_id>/reconcile', operator.reconcile),
     path('ops/encounters/<uuid:encounter_id>/retry', operator.retry),
     path('ops/holds/release', operator.release_holds),
+    # The console's controls (owner direction 2026-11-22, D395; studio.console), behind the same gate.
+    path('ops/people', console.people),
+    path('ops/people/add', console.add_person),
+    path('ops/people/<uuid:user_id>/role', console.set_role),
+    path('ops/people/<uuid:user_id>/password', console.reset_password),
+    path('ops/people/<uuid:user_id>/access', console.set_access),
+    path('ops/workspaces', console.workspaces),
+    path('ops/workspaces/new', console.create_workspace),
+    path('ops/workspaces/<uuid:workspace_id>', console.workspace_page),
+    path('ops/spending', console.spending_page),
+    path('ops/activity', console.activity),
+    path('ops/activity/sign-ins', console.sign_ins),
 ]

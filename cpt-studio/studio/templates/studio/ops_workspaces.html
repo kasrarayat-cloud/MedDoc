@@ -1,0 +1,40 @@
+{% extends "studio/ops_base.html" %}
+{% block title %}Workspaces{% endblock %}
+{% block content %}
+<h1>Workspaces</h1>
+<p class="lead">Each workspace is one specialty. A person belongs to one workspace and sees only its documents.</p>
+
+<div class="table-card scroll">
+<table>
+  <thead><tr><th>Workspace</th><th>Specialty</th><th class="num">People with access</th><th class="num">People</th><th class="num">Documents</th><th>Created</th></tr></thead>
+  <tbody>
+  {% for item in workspaces %}
+    <tr><td><a href="/ops/workspaces/{{ item.pk }}">{{ item.name }}</a></td><td>{{ item.category.name }}</td>
+        <td class="num">{{ item.active_people }}</td><td class="num">{{ item.people }}</td><td class="num">{{ item.documents }}</td>
+        <td class="mono">{{ item.created_at|date:"Y-m-d" }}</td></tr>
+  {% empty %}
+    <tr><td colspan="6" class="muted">No workspace yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<section class="card" aria-labelledby="create-title">
+  <h2 id="create-title">Create a workspace</h2>
+  <p class="muted">Choose one of the specialties the coding review supports. Add its people after you create it. A workspace is not renamed or deleted here.</p>
+  <form method="post" action="/ops/workspaces/new">{% csrf_token %}
+    <div class="fields">
+      <label>Workspace name <span class="hint">For example the practice's name</span>
+        <input type="text" name="name" required maxlength="120" autocomplete="off">
+      </label>
+      <label>Specialty
+        <select name="category" required>
+          <option value="">Choose a specialty</option>
+          {% for category in categories %}<option value="{{ category.pk }}">{{ category.name }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <button type="submit">Create the workspace</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "studio/ops_base.html" %}
+{% block title %}{{ workspace.name }}{% endblock %}
+{% block content %}
+<a class="back" href="/ops/workspaces">&larr; Every workspace</a>
+<h1>{{ workspace.name }}</h1>
+<p class="lead">{{ workspace.category.name }} · {{ documents }} document{{ documents|pluralize }} · created {{ workspace.created_at|date:"Y-m-d" }} · <span class="mono">{{ workspace.pk }}</span></p>
+<p><a href="/ops/activity?workspace={{ workspace.pk }}">This workspace's activity</a></p>
+
+<h2>People</h2>
+{% include "studio/ops_people_rows.html" with back=workspace.pk hide_workspace=True %}
+
+{% include "studio/ops_add_person.html" with workspace=workspace %}
+{% endblock %}

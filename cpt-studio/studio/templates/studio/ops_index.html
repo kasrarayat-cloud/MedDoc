@@ -2,30 +2,37 @@
 {% block title %}Encounters{% endblock %}
 {% block content %}
 <h1>Encounters</h1>
-<p class="muted">Every workspace, most recently updated first ({{ rows|length }} of {{ total }} shown; at most {{ limit }}). Coding mode on this web process: <code>{{ mode }}</code> (the worker's own mode is the worker's).</p>
+<p class="lead">Every workspace, most recently updated first ({{ rows|length }} of {{ total }} shown; at most {{ limit }}). Coding mode on this web process: <code>{{ mode }}</code> (the worker's own mode is the worker's).</p>
 
-<h2>Standing holds</h2>
 {% if holds %}
+<section class="card hold" aria-labelledby="holds-title">
+<div class="card-head"><h2 id="holds-title">Standing holds</h2></div>
+<div class="scroll">
 <table>
   <thead><tr><th>Since</th><th>Reason</th><th>HTTP status</th><th>Error type</th><th>Run</th></tr></thead>
   <tbody>
   {% for item in holds %}
-    <tr><td>{{ item.hold.created_at|date:"Y-m-d H:i:s" }}</td><td>{{ item.hold.reason }}</td>
-        <td>{{ item.hold.http_status|default:"" }}</td><td>{{ item.hold.vendor_status }}</td>
+    <tr><td class="mono">{{ item.hold.created_at|date:"Y-m-d H:i:s" }}</td><td class="mono">{{ item.hold.reason }}</td>
+        <td class="mono">{{ item.hold.http_status|default:"" }}</td><td class="mono">{{ item.hold.vendor_status }}</td>
         <td class="mono"><a href="/ops/encounters/{{ item.run.encounter_id }}">{{ item.run.pk }}</a> ({{ item.run.purpose }})</td></tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
 <form class="inline" method="post" action="/ops/holds/release">{% csrf_token %}
-  <label>Release note <textarea name="note" required maxlength="2000" placeholder="Why the hold may end: what was checked and fixed."></textarea></label>
+  <label style="flex: 1 1 420px">Release note <textarea name="note" required maxlength="2000" placeholder="Why the hold may end: what was checked and fixed."></textarea></label>
   <button type="submit">Release every standing hold</button>
 </form>
+</section>
 {% else %}
+<section class="card" aria-labelledby="holds-title">
+<h2 id="holds-title">Standing holds</h2>
 <p class="muted">No hold stands: coding requests are sent.</p>
+</section>
 {% endif %}
 
 <h2>Encounters</h2>
-<div class="scroll">
+<div class="table-card scroll">
 <table>
   <thead><tr><th>Title</th><th>Workspace</th><th>State</th><th class="num">Rounds</th><th>Latest round</th><th class="num">Latest round cost (USD)</th><th>Updated</th></tr></thead>
   <tbody>
@@ -37,7 +44,7 @@
       <td class="num">{{ row.encounter.rounds_count }}</td>
       <td>{% if row.latest %}#{{ row.latest.number }} {{ row.latest.trigger }} · {{ row.latest.state }}{% if row.latest.failure_kind %} · <span class="flag bad">{{ row.latest.failure_kind }}</span>{% endif %}{% else %}<span class="muted">none (earlier review)</span>{% endif %}</td>
       <td class="num mono">{{ row.cost|default:"" }}{% if row.unpriced %} <span class="flag warn">{{ row.unpriced }} unpriced</span>{% endif %}</td>
-      <td>{{ row.encounter.updated_at|date:"Y-m-d H:i:s" }}</td>
+      <td class="mono">{{ row.encounter.updated_at|date:"Y-m-d H:i:s" }}</td>
     </tr>
   {% empty %}
     <tr><td colspan="7" class="muted">No encounters yet.</td></tr>
