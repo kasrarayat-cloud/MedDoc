@@ -2,12 +2,12 @@
 {% block title %}Spending{% endblock %}
 {% block content %}
 <h1>Spending</h1>
-<p class="lead">What the coding review has cost, estimated from each coding run's recorded usage at the coding model's prices (the figures this console shows on every document). Amounts are US dollars, rounded to the cent. A run whose cost cannot be worked out is counted apart, never as zero.</p>
+<p class="lead">What the coding review has cost, estimated from each finished coding run's recorded usage at the coding model's prices (the figures this console shows on every document). Amounts are US dollars, rounded to the cent. A run whose cost is not known yet is counted apart at the most it can cost, never as zero.</p>
 
 <div class="stats">
-  <div class="stat"><span class="value">${{ recent.cost_text }}</span><span class="label">Last {{ days_window }} days ({{ recent.runs }} run{{ recent.runs|pluralize }})</span></div>
+  <div class="stat"><span class="value">${{ recent.cost_text }}</span><span class="label">Last {{ days_window }} days ({{ recent.runs }} run{{ recent.runs|pluralize }}{% if recent.unpriced %}; {{ recent.unpriced }} of them not priced, at most ${{ recent.worst_text }} more{% endif %})</span></div>
   <div class="stat"><span class="value">${{ total.cost_text }}</span><span class="label">Since the start ({{ total.runs }} run{{ total.runs|pluralize }}; exactly <span class="mono">{{ exact_total }}</span>)</span></div>
-  <div class="stat"><span class="value">{{ total.unpriced }}</span><span class="label">Run{{ total.unpriced|pluralize }} that could not be priced{% if total.unpriced %} (at most ${{ total.worst_text }} reserved){% endif %}</span></div>
+  <div class="stat"><span class="value">{{ total.unpriced }}</span><span class="label">Run{{ total.unpriced|pluralize }} whose cost is not known: still being sent, of unknown outcome, or not priceable{% if total.unpriced %} (at most ${{ total.worst_text }} reserved){% endif %}</span></div>
   <div class="stat"><span class="value">${{ ceiling }}</span><span class="label">The most one document may cost; {{ concurrent }} document{{ concurrent|pluralize }} coded at once</span></div>
 </div>
 {% if other_runs %}<p class="muted">{{ other_runs }} earlier request{{ other_runs|pluralize }} from before the current coding review {% if other_runs == 1 %}is{% else %}are{% endif %} not counted here.</p>{% endif %}

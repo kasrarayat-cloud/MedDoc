@@ -7,10 +7,14 @@ import re
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth import authenticate
+from django.contrib.sessions.models import Session
+from django.db import connection
 from django.test import Client, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from studio import console, customer, jobs, models
@@ -50,6 +54,9 @@ class AdminCase(r.CustomerCase, TestCase):
 
     def membership(self, user):
         return Membership.objects.get(user=user)
+
+    def sessions_of(self, user):
+        return sum(1 for item in Session.objects.all() if item.get_decoded().get('_auth_user_id') == str(user.pk))
 
 
 class GateTests(AdminCase):
@@ -192,8 +199,10 @@ class PeopleTests(AdminCase):
         self.assertTrue(self.viewer.check_password(password))
         self.assertIsNone(authenticate(username=self.viewer.username, password='synthetic-pass-123!'))
         self.assertNotEqual(session.get('/api/session').status_code, 200)
+        self.assertEqual(self.sessions_of(self.viewer), 0)
         events = list(models.AuditEvent.objects.order_by('created_at', 'pk')[before:])
         self.assertEqual([(e.event, e.workspace_id) for e in events], [('operator.password_reset', self.ws.pk)])
+        self.assertEqual(events[0].data['sessions_ended'], 1)
         self.assertNotIn(password, repr(events[0].data))
 
     def test_operator_accounts_and_accounts_with_no_workspace_are_left_alone(self):
@@ -267,12 +276,16 @@ class PeopleTests(AdminCase):
         self.assertNotEqual(session.get('/api/session').status_code, 200)
         refused = Client().post('/login/', {'username': self.reviewer.username, 'password': 'synthetic-pass-123!'})
         self.assertEqual(refused.status_code, 400)
+        self.assertEqual(self.sessions_of(self.reviewer), 0)
+        self.assertEqual(models.AuditEvent.objects.get(event='operator.access_off').data['sessions_ended'], 1)
         # nothing deleted: the account and its membership stay
         self.assertTrue(Membership.objects.filter(user=self.reviewer, active=True).exists())
         same = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off'})
         self.assertEqual(same['Location'], '/ops/people?done=same-access')
         back_on = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'on'})
         self.assertEqual(back_on['Location'], '/ops/people?done=on')
+        # the session opened before access was turned off never comes back: the person signs in again
+        self.assertNotEqual(session.get('/api/session').status_code, 200)
         signed = Client().post('/login/', {'username': self.reviewer.username, 'password': 'synthetic-pass-123!'})
         self.assertEqual(signed.status_code, 302)
         self.assertEqual(list(models.AuditEvent.objects.filter(event__startswith='operator.access_')
@@ -366,7 +379,7 @@ class SpendingTests(AdminCase):
         text = page(self.ops.get('/ops/spending'))
         self.assertIn(console.dollars(expected), text)
         self.assertIn('Priced note one', text)
-        self.assertIn('could not be priced', text)
+        self.assertIn('whose cost is not known', text)
 
     def test_a_run_older_than_the_window_counts_in_the_total_only(self):
         self.done(title='Old note')
@@ -407,9 +420,10 @@ class ActivityTests(AdminCase):
                                              actor_kind='human', data={'kind': 'draft', 'fmt': 'pdf', 'number': 1})
         first = page(self.ops.get('/ops/activity'))
         self.assertIn('Older &rarr;', first)
-        self.assertNotIn('&larr; Newer', first)
-        second = page(self.ops.get('/ops/activity?page=2'))
-        self.assertIn('&larr; Newer', second)
+        self.assertNotIn('&larr; Newest', first)
+        older = re.search(r'href="\?before=([^"]+)">Older', first).group(1)
+        second = page(self.ops.get(f'/ops/activity?before={older}'))
+        self.assertIn('&larr; Newest', second)
 
     def test_sign_ins_with_their_result(self):
         Client().post('/login/', {'username': self.reviewer.username, 'password': 'wrong-password-123'})
@@ -460,3 +474,156 @@ class PasswordTests(TestCase):
         self.assertEqual(len(seen), 50)
         for value in seen:
             self.assertRegex(value, r'^[abcdefghjkmnpqrstuvwxyz23456789]{5}(-[abcdefghjkmnpqrstuvwxyz23456789]{5}){3}$')
+
+
+class RefutationRoundOneTests(AdminCase):
+    """The repairs of refutation round 1 (DECISIONS D395), each pinned by the input that broke it."""
+
+    def test_a_name_that_is_no_account_is_never_shown_on_the_sign_ins(self):
+        # a person types their password into the username box (data-3, restyle-2)
+        Client().post('/login/', {'username': 'jrtmn-jutfn-etn9r-2m4ay', 'password': 'whatever-123'})
+        Client().post('/login/', {'username': self.viewer.username, 'password': 'wrong-password-123'})
+        text = page(self.ops.get('/ops/activity/sign-ins'))
+        self.assertNotIn('jrtmn-jutfn-etn9r-2m4ay', text)
+        self.assertIn('a name that is no account', text)
+        self.assertIn(self.viewer.username, text)
+
+    def test_spending_counts_a_run_in_flight_or_of_unknown_outcome_at_its_worst_case(self):
+        self.done(title='Settled note')
+        runs = list(Run.objects.filter(purpose__in=jobs.PURPOSES).order_by('created_at', 'pk'))
+        settled = sum((jobs.run_cost(run) for run in runs[2:]), Decimal(0))
+        # a send in flight (not yet marked sent), and a run of unknown outcome holding partial usage (money-2, money-5)
+        Run.objects.filter(pk=runs[0].pk).update(state=Run.SENDING, sent=False, scope={**runs[0].scope, 'worst_usd': '8.5'})
+        Run.objects.filter(pk=runs[1].pk).update(state=Run.UNKNOWN, scope={**runs[1].scope, 'worst_usd': '2.25'})
+        figures = console.spending()
+        self.assertEqual(figures['total']['unpriced'], 2)
+        self.assertEqual(figures['total']['worst'], Decimal('10.75'))
+        self.assertEqual(figures['total']['cost'], settled)
+        self.assertIn('2 of them not priced', page(self.ops.get('/ops/spending')))
+
+    def test_spending_reads_a_missing_or_unreadable_worst_case_as_the_ceiling_and_never_breaks(self):
+        self.done(title='Odd figures')
+        runs = list(Run.objects.filter(purpose__in=jobs.PURPOSES).order_by('created_at', 'pk'))
+        ceiling = jobs.ceiling_usd()
+        for value in (None, 'NaN', '-1', 'Infinity', 'not a number'):
+            with self.subTest(worst=value):
+                scope = {key: item for key, item in runs[0].scope.items() if key != 'worst_usd'}
+                if value is not None:
+                    scope['worst_usd'] = value
+                Run.objects.filter(pk=runs[0].pk).update(state=Run.UNKNOWN, scope=scope)
+                self.assertEqual(console.spending()['total']['worst'], ceiling)
+        Run.objects.filter(pk=runs[0].pk).update(state=Run.UNKNOWN, scope={**runs[0].scope, 'worst_usd': '1e40'})
+        response = self.ops.get('/ops/spending')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(console.dollars(Decimal('1e90')), '1.000E+90')
+        self.assertEqual(console.dollars(Decimal('NaN')), 'not known')
+
+    def test_spending_counts_nothing_for_a_cancelled_run_or_one_refused_before_answering(self):
+        self.done(title='Refused note')
+        runs = list(Run.objects.filter(purpose__in=jobs.PURPOSES).order_by('created_at', 'pk'))
+        Run.objects.filter(pk=runs[0].pk).update(state=Run.CANCELLED)
+        Run.objects.filter(pk=runs[1].pk).update(state=Run.FAILED, http_status=429, usage={})
+        figures = console.spending()
+        self.assertEqual((figures['total']['cost'], figures['total']['unpriced'], figures['total']['runs']),
+                         (Decimal(0), 0, 2))
+
+    def test_the_costliest_documents_put_an_unknown_run_by_its_worst_case(self):
+        known = self.done(title='Known cost')
+        unknown = self.done(title='Unknown cost')
+        run = Run.objects.filter(encounter=unknown, purpose=jobs.READER).get()
+        Run.objects.filter(pk=run.pk).update(state=Run.UNKNOWN, scope={**run.scope, 'worst_usd': '20'})
+        order = [row['encounter'].pk for row in console.spending()['documents']]
+        self.assertEqual(order, [unknown.pk, known.pk])
+
+    def test_an_event_whose_data_holds_no_plain_value_is_shown_and_never_breaks_the_log(self):
+        enc = self.done(title='Odd event')
+        models.AuditEvent.objects.create(workspace=self.ws, encounter=enc, event='decision.recorded', actor_kind='human',
+                                         data={'action': ['approve'], 'code': {'x': 1}, 'line': 'L1'})
+        for url in ('/ops/activity', '/ops/activity?kind=decisions', f'/ops/activity?workspace={self.ws.pk}'):
+            with self.subTest(url=url):
+                response = self.ops.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('Decision recorded', page(response))
+
+    def test_the_log_pages_by_position_so_a_new_row_never_repeats_or_hides_one(self):
+        enc = self.done(title='Paged note')
+        moment = timezone.now() - timedelta(minutes=5)
+        # 150 rows at one moment (audit rows are append-only, so they are made at it): the page edge falls inside a tie
+        with mock.patch.object(timezone, 'now', return_value=moment):
+            for _ in range(150):
+                models.AuditEvent.objects.create(workspace=self.ws, encounter=enc, event='export.created',
+                                                 actor_kind='human', data={'number': 1})
+        first = page(self.ops.get('/ops/activity?kind=downloads'))
+        older = re.search(r'href="\?kind=downloads&amp;before=([^"]+)">Older', first).group(1)
+        # rows arriving between the two reads (newer than everything shown) change nothing on the older page
+        for _ in range(30):
+            models.AuditEvent.objects.create(workspace=self.ws, encounter=enc, event='export.created', actor_kind='human',
+                                             data={'number': 2})
+        second = page(self.ops.get(f'/ops/activity?kind=downloads&before={older}'))
+        shown_first = first.count('Report made<br>')
+        shown_second = second.count('Report made<br>')
+        self.assertEqual((shown_first, shown_second), (100, 50))
+        self.assertNotIn('Older &rarr;', second)
+        bad = self.ops.get('/ops/activity?before=nonsense')
+        self.assertEqual(bad.status_code, 200)
+        self.assertIn('That page address could not be read', page(bad))
+
+    def test_workspace_names_follow_provisionings_rules_and_never_read_alike(self):
+        gi = self.ws.category
+        cases = [('​Spine', 400), ('Spine‮Partners', 400), ('---', 400),
+                 ('neurosurgery', 409),                    # names another specialty, for this one
+                 ('Gastro-enterology', 409),               # reads like the workspace "Gastroenterology"
+                 ('GASTROENTEROLOGY', 409)]
+        before = self.counts()
+        for name, status in cases:
+            with self.subTest(name=name):
+                response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(gi.pk)})
+                self.assertEqual(response.status_code, status)
+        self.assertEqual(self.counts(), before)
+        made = self.ops.post('/ops/workspaces/new', {'name': '  Valley   Endoscopy  ', 'category': str(gi.pk)})
+        self.assertEqual(made.status_code, 303)
+        self.assertTrue(Workspace.objects.filter(name='Valley Endoscopy').exists())
+        self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'valley-endoscopy', 'category': str(self.neuro.pk)})
+                         .status_code, 409)
+
+    def test_adding_and_creating_take_provisionings_lock(self):
+        for url, body in (('/ops/workspaces/new', {'name': 'Locked Practice', 'category': str(self.neuro.pk)}),
+                          ('/ops/people/add', {'workspace': str(self.ws.pk), 'username': 'locked-person', 'role': 'viewer'})):
+            with self.subTest(url=url), CaptureQueriesContext(connection) as seen:
+                self.assertIn(self.ops.post(url, body).status_code, (200, 303))
+            self.assertTrue(any('pg_advisory_xact_lock' in item['sql'] for item in seen.captured_queries))
+
+    def test_an_automated_agent_is_never_made_an_owner(self):
+        member = self.membership(self.agent)
+        response = self.ops.post(f'/ops/people/{self.agent.pk}/role', {'membership': str(member.pk), 'role': 'owner'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(console.AGENT_OWNER, page(response))
+        member.refresh_from_db()
+        self.assertEqual(member.role, 'reviewer')
+        text = page(self.ops.get(f'/ops/workspaces/{self.ws.pk}'))
+        agent_form = text[text.index(f'/ops/people/{self.agent.pk}/role'):]
+        agent_form = agent_form[:agent_form.index('</select>')]
+        self.assertNotIn('value="owner"', agent_form)
+
+    def test_a_refusal_marks_the_page_it_answers_in_the_navigation(self):
+        held = self.ops.post('/ops/holds/release', {'note': 'Nothing stands, so this is refused.'})
+        self.assertEqual(held.status_code, 409)
+        self.assertIn('<a href="/ops/" aria-current="page">Encounters</a>', page(held))
+        back = self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'back': str(self.ws.pk), 'username': 'X',
+                                                 'role': 'viewer'})
+        self.assertIn('<a href="/ops/workspaces" aria-current="page">Workspaces</a>', page(back))
+
+    def test_the_password_page_logs_nothing_that_holds_the_password(self):
+        import logging
+        with self.assertLogs('django.template', level='DEBUG') as captured:
+            logging.getLogger('django.template').debug('marker')
+            response = self.ops.post(f'/ops/people/{self.viewer.pk}/password', {})
+        password = shown_password(response)
+        self.assertFalse([line for line in captured.output if password in line])
+
+    def test_the_fonts_provenance_note_is_not_served(self):
+        root = Path(settings.BASE_DIR) / 'studio'
+        self.assertEqual(sorted(path.name for path in (root / 'static/studio/fonts').iterdir()),
+                         ['IBMPlexMono-Medium.ttf', 'IBMPlexMono-Regular.ttf', 'Manrope-Regular.ttf', 'Manrope-SemiBold.ttf',
+                          'OFL-IBMPlexMono.txt', 'OFL-Manrope.txt'])
+        self.assertIn('The copies the operator console serves', (root / 'report_fonts/PROVENANCE.md').read_text())

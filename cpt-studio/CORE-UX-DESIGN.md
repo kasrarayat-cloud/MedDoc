@@ -58,6 +58,10 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   `grant_operator` command from a reason file; no workspace role confers it. Everyone else gets exactly an unknown URL's
   404 under `/ops/`. An operator with no membership signs in on the usual page and lands on `/ops/`; one who is also a
   member signs in as the member.
+- The operator console also runs CPT Studio (owner direction 2026-11-22, D395; `studio/console.py`): people and roles
+  (add, reset a password shown once, change a role, access off and on; operator accounts and grants are never changed
+  there), workspaces for an existing specialty, spending from the recorded usage, and the activity log. The doctor
+  app's page, payloads and DOM contract are unchanged by it.
 - Exports (`cpt-studio-customer-export@3`): a draft (every code with status, units, modifiers, reason, the second check
   and quotes with pages) or the approved codes (each with who approved it, their kind and when). The PDF (owner
   directive 2026-11-21; `studio/physician_report.py`, `studio/physician_pdf.py`) is the report for the doctor and the

@@ -19,26 +19,35 @@ read (studio.operator.operator_view).
 What it never does:
 - change an operator's account (an account holding a grant no revocation ended): such accounts are listed, and every act
   on one is refused - operator access is granted and ended on the server only (CORE-UX-DESIGN.md 5, studio.operator);
-- delete anything: access off is the account's is_active, and its memberships, records and history stay;
+- delete a record: access off is the account's is_active, and its memberships, records and history stay. What it does
+  delete is sign-in state: access off and a password reset end every stored session of the person at once, so an open
+  session can never come back (refutation r1, gate-1);
 - show, log, audit or redirect with a password: a password is generated here (secrets), checked against the site's
-  password validators, stored only as its hash, and answered once, in the page that answers the POST that made it.
+  password validators, stored only as its hash, and answered once, in the page that answers the POST that made it. A
+  sign-in attempt's name is shown only when it is an account's username: a name that is none can be a password typed in
+  the wrong box (refutation r1, data-3).
 
-Every act is audited in the workspace it concerns, with ids and values and never a password: operator.member_added,
-operator.role_changed, operator.password_reset, operator.access_off, operator.access_on, operator.workspace_created.
-Those rows name no encounter, so the customer's activity (studio.customer.activity_json, an encounter's own events) never
-shows them.
+Every act is audited in the workspace it concerns, with ids, values and counts and never a password:
+operator.member_added, operator.role_changed, operator.password_reset, operator.access_off, operator.access_on,
+operator.workspace_created. Those rows name no encounter, so the customer's activity (studio.customer.activity_json, an
+encounter's own events) never shows them. Adding a person and creating a workspace take provisioning's own lock
+(studio/management/commands/provision.py PROVISION_LOCK), so a console act and a provisioning run never interleave, and a
+new workspace's name follows provisioning's rules plus one: no two workspaces read alike.
 """
 from __future__ import annotations
 
 import re
 import secrets
-from datetime import timedelta
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+import unicodedata
+import uuid
+from datetime import datetime, timedelta, timezone as dt_timezone
+from decimal import ROUND_HALF_UP, Context, Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import render
@@ -46,18 +55,22 @@ from django.utils import timezone
 
 from . import audit, jobs, models
 from .fable import pricing
+from .management.commands import provision
 from .operator import _methods as methods
 from .operator import _see_other as see_other
 from .operator import operator_view
 
-User, Membership, Workspace, Category = models.User, models.Membership, models.Workspace, models.Category
+User, Membership, Workspace, Category, Run = (models.User, models.Membership, models.Workspace, models.Category,
+                                              models.ProviderRun)
 
 ROLES = dict(Membership.ROLES)  # owner -> Owner, reviewer -> Reviewer, viewer -> Viewer, in that order
 USERNAME_RE = re.compile(r'[a-z0-9][a-z0-9._-]{2,39}')
 USERNAME_RULE = ('A username is 3 to 40 characters: lowercase letters, digits, dots, hyphens or underscores, starting '
                  'with a letter or a digit.')
 NAME_CHARS = 120  # User.display_name and Workspace.name hold 120
-UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
+# Characters a name may not hold: controls, format characters (zero-width spaces and joiners, direction marks),
+# surrogates, private-use and unassigned code points, line and paragraph separators (refutation r1, data-4).
+HIDDEN_CATEGORIES = {'Cc', 'Cf', 'Cs', 'Co', 'Cn', 'Zl', 'Zp'}
 PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'  # no 0/o, 1/l/i: it is read aloud or copied by hand
 PASSWORD_GROUPS, PASSWORD_GROUP_CHARS = 4, 5  # 20 random characters (about 99 bits) in four groups
 PAGE_SIZE = 100
@@ -65,10 +78,12 @@ SPENDING_DAYS = 30
 TOP_DOCUMENTS = 50
 OPERATOR_ACCOUNT = 'This is an operator account. Operator accounts are managed on the server, not here.'
 NO_WORKSPACE = 'This account belongs to no workspace. It is managed on the server, not here.'
+AGENT_OWNER = 'An automated agent can be a Reviewer or a Viewer, not an Owner.'
 DONE = {
     'role': 'The role was changed.', 'same-role': 'The role was already that one: nothing changed.',
-    'off': 'Access was turned off. The person can no longer sign in, and any open session ends.',
-    'on': 'Access was turned on again.', 'same-access': 'Access was already that way: nothing changed.',
+    'off': 'Access was turned off. The person can no longer sign in, and every open session has ended.',
+    'on': 'Access was turned on again. The person signs in again with their password.',
+    'same-access': 'Access was already that way: nothing changed.',
     'created': 'The workspace was created. Add its people below.',
 }
 # The activity log's kinds (GET /ops/activity?kind=...): each a set of audit event names, or a prefix.
@@ -102,12 +117,25 @@ EVENT_LABELS = {
     'operator.access_off': 'Access turned off',
     'operator.access_on': 'Access turned on',
     'operator.workspace_created': 'Workspace created',
+    'account.provisioned': 'Account set up on the server',
+    # the earlier pipeline's events (ARCHITECTURE.md 5.11: its records stay and are shown as they are)
+    'assessment.created': 'Review made (earlier version)',
+    'assessment.recompute_queued': 'Review recompute queued (earlier version)',
+    'assessment.refreshed': 'Review refreshed (earlier version)',
+    'context.changed': 'Document details changed (earlier version)',
+    'detail.answered': 'Question answered (earlier version)',
+    'detail.revoked': 'Answer withdrawn (earlier version)',
+    'provider.reused': 'Earlier answer reused (earlier version)',
+    'provider.second_review_requested': 'Second review requested (earlier version)',
+    'report.generated': 'Report made (earlier version)',
+    'revision.addendum': 'Addendum added (earlier version)',
+    'revision.extracted': 'Document text read (earlier version)',
 }
 DECISION_LABELS = {models.CodeDecision.APPROVE: 'Approved', models.CodeDecision.REJECT: 'Rejected',
                    models.CodeDecision.REVOKE: 'Decision undone'}
 # The event data shown beside an event, in this order, by name (ids are kept for the operator's record elsewhere).
 DETAIL_KEYS = ('number', 'line', 'code', 'kind', 'fmt', 'count', 'purpose', 'state', 'username', 'role', 'from', 'to',
-               'name', 'category', 'view')
+               'name', 'category', 'view', 'sessions_ended')
 
 
 class Refused(Exception):
@@ -126,22 +154,31 @@ def operator_ids() -> set:
 
 
 def membership_rows(queryset, operators) -> list:
+    """One row per membership, with the roles its form offers: an automated agent is never offered Owner (unless it
+    already is one), as set_role refuses it (refutation r1, data-7)."""
     rows = []
     for item in queryset.select_related('user', 'workspace', 'workspace__category').order_by(
             'workspace__name', 'workspace_id', 'user__username', 'pk'):
         rows.append({'membership': item, 'person': item.user, 'workspace': item.workspace,
-                     'role_label': ROLES.get(item.role, item.role), 'operator': item.user_id in operators})
+                     'role_label': ROLES.get(item.role, item.role), 'operator': item.user_id in operators,
+                     'roles': [(value, label) for value, label in Membership.ROLES
+                               if not (item.user.actor_kind == User.AGENT and value == Membership.OWNER)
+                               or item.role == value]})
     return rows
 
 
-def _context(**values) -> dict:
-    return {'release': settings.RELEASE_SHA, 'roles': list(Membership.ROLES), **values}
+def _context(section, **values) -> dict:
+    """Every console page's context: the release, the roles, the section the navigation marks, and the notice slots
+    (named, so a page never looks a missing one up - refutation r1, data-6, restyle-3, restyle-4)."""
+    return {'release': settings.RELEASE_SHA, 'roles': list(Membership.ROLES), 'section': section, 'error': None,
+            'done': None, **values}
 
 
 def _people_context(**extra) -> dict:
     operators = operator_ids()
     members = set(Membership.objects.values_list('user_id', flat=True))
     return _context(
+        'people',
         rows=membership_rows(Membership.objects.all(), operators),
         unplaced=list(User.objects.exclude(pk__in=members).exclude(pk__in=operators).order_by('username')),
         operators=[{'person': grant_row.user, 'since': grant_row.created_at}
@@ -152,7 +189,7 @@ def _people_context(**extra) -> dict:
 
 
 def _workspace_context(workspace, **extra) -> dict:
-    return _context(workspace=workspace, rows=membership_rows(workspace.memberships.all(), operator_ids()),
+    return _context('workspaces', workspace=workspace, rows=membership_rows(workspace.memberships.all(), operator_ids()),
                     documents=workspace.encounters.count(), **extra)
 
 
@@ -173,16 +210,22 @@ def _person(user_id):
 # --- the acts' parts -------------------------------------------------------------------------------------------------
 
 def _field(request, name, *, limit=NAME_CHARS, required=False, label='This field') -> str:
+    """A text field as stored: runs of white space made one space, ends stripped; refused when it holds a character no
+    one can see or type (HIDDEN_CATEGORIES), when it is too long, when a required one is empty, or when it holds no
+    letter or digit at all (refutation r1, data-4)."""
     value = request.POST.get(name, '')
     if not isinstance(value, str):
         value = ''
-    value = value.strip()
-    if UNSTORABLE.search(value):
-        raise Refused(f'{label} contains a NUL character or an invalid Unicode code point.')
+    if any(unicodedata.category(ch) in HIDDEN_CATEGORIES for ch in value if ch not in '\t\n\r'):
+        raise Refused(f'{label} contains a character that cannot be seen or typed (a control, format or unassigned '
+                      f'character).')
+    value = ' '.join(value.split())
     if len(value) > limit:
         raise Refused(f'{label} can be at most {limit:,} characters.')
     if required and not value:
         raise Refused(f'{label} is required.')
+    if value and not any(ch.isalnum() for ch in value):
+        raise Refused(f'{label} needs at least one letter or digit.')
     return value
 
 
@@ -198,6 +241,29 @@ def new_password(user) -> str:
             continue
         return candidate
     raise RuntimeError('No generated password passed the password validators.')
+
+
+def end_sessions(user) -> int:
+    """Delete every stored session signed in as ``user`` (the database session backend, Django's default): an open
+    session ends at once and can never come back, whatever happens to the account later (refutation r1, gate-1).
+    Sessions are sign-in state, not records. The number ended."""
+    ended = 0
+    for session in Session.objects.all().iterator(chunk_size=200):
+        try:
+            data = session.get_decoded()
+        except Exception:  # noqa: BLE001 - a session that cannot be read signs nobody in
+            continue
+        if isinstance(data, dict) and str(data.get('_auth_user_id', '')) == str(user.pk):
+            session.delete()
+            ended += 1
+    return ended
+
+
+def _lock():
+    """Provisioning's own transaction-level advisory lock: a console act that adds an account or a workspace never
+    interleaves with another such act or with a provisioning run (refutation r1, data-2)."""
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_advisory_xact_lock(%s)', [provision.PROVISION_LOCK])
 
 
 def _changeable(user, operators=None) -> list:
@@ -230,8 +296,9 @@ def _refused(request, exc, workspace=None):
 def _password_page(request, person, workspace, made, password):
     """The one answer that shows a password: the POST's own response (never a redirect or a URL), no-store like every
     console page (studio.access.SecurityHeadersMiddleware)."""
-    return render(request, 'studio/ops_password.html', _context(person=person, workspace=workspace, made=made,
-                                                                 password=password))
+    return render(request, 'studio/ops_password.html',
+                  _context('workspaces' if workspace is not None else 'people', person=person, workspace=workspace,
+                           made=made, password=password))
 
 
 def _workspaces_of(memberships) -> list:
@@ -258,20 +325,24 @@ def add_person(request):
         except (Workspace.DoesNotExist, ValueError, TypeError, ValidationError):
             raise Refused('Choose the workspace the person works in.')
         came_from = workspace if request.POST.get('back', '') == str(workspace.pk) else None
-        username = _field(request, 'username', limit=40, required=True, label='The username')
+        username = request.POST.get('username', '')
+        username = username.strip() if isinstance(username, str) else ''
+        if not username:
+            raise Refused('The username is required.')
         if not USERNAME_RE.fullmatch(username):
             raise Refused(USERNAME_RULE)
         name = _field(request, 'name', label='The name')
         role = request.POST.get('role', '')
         if role not in ROLES:
             raise Refused('Choose a role: Owner, Reviewer or Viewer.')
-        if User.objects.filter(username__iexact=username).exists():
-            raise Refused('That username is taken. Choose another.', 409)
         person = User(username=username, display_name=name, actor_kind=User.HUMAN)
         password = new_password(person)
         person.set_password(password)
         try:
             with transaction.atomic():
+                _lock()
+                if User.objects.filter(username__iexact=username).exists():
+                    raise Refused('That username is taken. Choose another.', 409)
                 person.save()
                 Membership.objects.create(user=person, workspace=workspace, role=role)
                 audit.record(workspace, 'operator.member_added', actor=request.user, user=str(person.pk),
@@ -286,8 +357,7 @@ def add_person(request):
 @operator_view
 @methods('POST')
 def reset_password(request, user_id):
-    """A new password for the person, generated and answered once; every open session of theirs ends (Django's session
-    check reads the password hash)."""
+    """A new password for the person, generated and answered once; every stored session of theirs is ended."""
     person = _person(user_id)
     memberships = []
     try:
@@ -297,9 +367,10 @@ def reset_password(request, user_id):
             password = new_password(person)
             person.set_password(password)
             person.save(update_fields=['password'])
+            ended = end_sessions(person)
             for workspace in _workspaces_of(memberships):
                 audit.record(workspace, 'operator.password_reset', actor=request.user, user=str(person.pk),
-                             username=person.username)
+                             username=person.username, sessions_ended=ended)
     except Refused as exc:
         return _refused(request, exc, _back(request, memberships)[1])
     return _password_page(request, person, _back(request, memberships)[1], 'reset', password)
@@ -308,7 +379,8 @@ def reset_password(request, user_id):
 @operator_view
 @methods('POST')
 def set_role(request, user_id):
-    """The role of one of the person's memberships (owner, reviewer or viewer)."""
+    """The role of one of the person's memberships (owner, reviewer or viewer; an automated agent is never made an owner:
+    provisioning keeps a workspace's owner a human - refutation r1, data-7)."""
     person = _person(user_id)
     memberships = []
     try:
@@ -321,6 +393,8 @@ def set_role(request, user_id):
             role = request.POST.get('role', '')
             if role not in ROLES:
                 raise Refused('Choose a role: Owner, Reviewer or Viewer.')
+            if role == Membership.OWNER and person.actor_kind == User.AGENT and target.role != role:
+                raise Refused(AGENT_OWNER)
             if target.role == role:
                 done = 'same-role'
             else:
@@ -337,8 +411,8 @@ def set_role(request, user_id):
 @operator_view
 @methods('POST')
 def set_access(request, user_id):
-    """The person's access off (the account's is_active: sign-in refused, open sessions end at their next request) or on
-    again. Nothing is deleted."""
+    """The person's access off (the account's is_active: sign-in refused, and every stored session of theirs ended at
+    once) or on again (they sign in again with their password). Nothing is deleted but sign-in state."""
     person = _person(user_id)
     memberships = []
     try:
@@ -354,9 +428,10 @@ def set_access(request, user_id):
             else:
                 person.is_active = active
                 person.save(update_fields=['is_active'])
+                values = {'sessions_ended': end_sessions(person)} if not active else {}
                 for workspace in _workspaces_of(memberships):
                     audit.record(workspace, f'operator.access_{wanted}', actor=request.user, user=str(person.pk),
-                                 username=person.username)
+                                 username=person.username, **values)
                 done = wanted
     except Refused as exc:
         return _refused(request, exc, _back(request, memberships)[1])
@@ -372,7 +447,25 @@ def _workspaces_context(**extra) -> dict:
                                           filter=Q(memberships__active=True, memberships__user__is_active=True)),
                       documents=Count('encounters', distinct=True))
             .order_by('name', 'pk'))
-    return _context(workspaces=list(rows), categories=list(Category.objects.order_by('name', 'pk')), **extra)
+    return _context('workspaces', workspaces=list(rows), categories=list(Category.objects.order_by('name', 'pk')),
+                    **extra)
+
+
+def workspace_name_problem(name: str, category) -> str:
+    """Why a new workspace cannot take ``name``, or nothing: provisioning's own rules (provision._new_name_problem: it
+    names no other specialty, read by its letters and digits, and no workspace of another specialty has it exactly), and
+    no workspace of any specialty reads alike - the same letters and digits, case aside - so no two workspaces are told
+    apart only by case, spacing or punctuation (refutation r1, data-2, data-4, data-5)."""
+    problem = provision._new_name_problem(name, category.slug, category)
+    if problem:
+        return problem + provision._named_alike(name)
+    reading = provision._read(name)
+    alike = sorted((each.name, each.category.name) for each in Workspace.objects.select_related('category')
+                   if provision._read(each.name) == reading)
+    if alike:
+        return ('A workspace with that name exists: ' + ', '.join(f'{other!r} ({specialty})' for other, specialty in alike)
+                + '. Choose another name.')
+    return ''
 
 
 @operator_view
@@ -384,7 +477,7 @@ def workspaces(request):
 @operator_view
 @methods('POST')
 def create_workspace(request):
-    """A workspace for a specialty that exists (a Category row: what the coding review reads it as)."""
+    """A workspace for a specialty that exists (a Category row: what the page and the report show it as)."""
     try:
         name = _field(request, 'name', required=True, label='The workspace name')
         try:
@@ -392,8 +485,10 @@ def create_workspace(request):
         except (Category.DoesNotExist, ValueError, TypeError, ValidationError):
             raise Refused('Choose the specialty of the workspace.')
         with transaction.atomic():
-            if Workspace.objects.select_for_update().filter(name__iexact=name).exists():
-                raise Refused('A workspace with that name exists. Choose another name.', 409)
+            _lock()
+            problem = workspace_name_problem(name, category)
+            if problem:
+                raise Refused(problem, 409)
             workspace = Workspace.objects.create(name=name, category=category)
             audit.record(workspace, 'operator.workspace_created', actor=request.user, name=name,
                          category=category.slug)
@@ -413,30 +508,59 @@ def workspace_page(request, workspace_id):
 # --- spending ----------------------------------------------------------------------------------------------------------
 
 CENT = Decimal('0.01')
+WIDE = Context(prec=60)
+SETTLED = {Run.SUCCEEDED, Run.FAILED}
+IN_FLIGHT = {Run.SENDING, Run.UNKNOWN}
 
 
 def dollars(amount) -> str:
-    """An estimate to the cent, for reading at a glance (the exact figures are on each document's page)."""
-    return f'{Decimal(amount).quantize(CENT, rounding=ROUND_HALF_UP):,.2f}'
+    """An estimate to the cent, for reading at a glance (the exact figures are on each document's page); never an error,
+    whatever a stored figure holds (refutation r1, money-7)."""
+    amount = Decimal(amount)
+    if not amount.is_finite():
+        return 'not known'
+    try:
+        return f'{amount.quantize(CENT, rounding=ROUND_HALF_UP, context=WIDE):,.2f}'
+    except InvalidOperation:
+        return f'{amount:.3E}'
 
 
-def _worst(run) -> Decimal:
+def reserved(run) -> Decimal:
+    """The worst case a run whose cost is not known counts at: the amount it was reserved at (scope worst_usd), or the
+    whole per-document ceiling when nothing readable says what it could cost - jobs._held_cost's own reading
+    (refutation r1, money-3)."""
     try:
         value = Decimal(str((run.scope or {})['worst_usd']))
     except (KeyError, TypeError, InvalidOperation):
-        return Decimal(0)
-    return value if value.is_finite() and value >= 0 else Decimal(0)
+        return jobs.ceiling_usd()
+    return value if value.is_finite() and value >= 0 else jobs.ceiling_usd()
+
+
+def run_spend(run):
+    """(cost, reserve): a run's known cost - its priced usage once it settled (succeeded or failed); nothing for a
+    cancelled run or one the API refused before answering, as jobs._held_cost counts them - or (None, its worst case)
+    for a run still being sent, of unknown outcome, or whose usage cannot be priced (refutation r1, money-2, money-5)."""
+    if run.state == Run.CANCELLED:
+        return Decimal(0), None
+    if run.state in SETTLED:
+        priced = jobs.run_cost(run)
+        if priced is not None:
+            return priced, None
+        if run.state == Run.FAILED and (run.http_status or 0) >= 400 and not run.usage:
+            return Decimal(0), None
+    return None, reserved(run)
 
 
 def _bucket():
     return {'runs': 0, 'cost': Decimal(0), 'unpriced': 0, 'worst': Decimal(0)}
 
 
-def _add(bucket, cost, run):
+def _add(bucket, spend):
+    cost, reserve = spend
     bucket['runs'] += 1
     if cost is None:
         bucket['unpriced'] += 1
-        bucket['worst'] += _worst(run)
+        bucket['worst'] += reserve
     else:
         bucket['cost'] += cost
 
@@ -446,42 +570,44 @@ def _shown(bucket) -> dict:
 
 
 def spending(now=None) -> dict:
-    """Every coding run that was sent (the reader's and the checker's: jobs.PURPOSES), priced from its recorded usage by
-    jobs.run_cost - the console's own figures - and summed by day (UTC, the day it was sent), workspace and document. A
-    run that cannot be priced is counted apart, with the worst case it was reserved at, never as zero."""
+    """Every coding run (the reader's and the checker's: jobs.PURPOSES) that was sent, is being sent or has an unknown
+    outcome, its known cost or its worst case (run_spend), summed by day (UTC, the day it was sent), workspace and
+    document. A run whose cost is not known is counted apart, never as zero."""
     now = now or timezone.now()
-    first_day = now.date() - timedelta(days=SPENDING_DAYS - 1)
-    runs = (models.ProviderRun.objects.filter(purpose__in=jobs.PURPOSES, sent=True)
+    first_day = now.astimezone(dt_timezone.utc).date() - timedelta(days=SPENDING_DAYS - 1)
+    runs = (Run.objects.filter(Q(sent=True) | Q(state__in=IN_FLIGHT), purpose__in=jobs.PURPOSES)
             .select_related('encounter', 'encounter__workspace', 'encounter__workspace__category')
-            .only('id', 'usage', 'scope', 'created_at', 'started_at', 'encounter', 'encounter__title',
-                  'encounter__workspace', 'encounter__workspace__name', 'encounter__workspace__category',
-                  'encounter__workspace__category__name')
+            .only('id', 'usage', 'scope', 'state', 'http_status', 'sent', 'created_at', 'started_at', 'encounter',
+                  'encounter__title', 'encounter__workspace', 'encounter__workspace__name',
+                  'encounter__workspace__category', 'encounter__workspace__category__name')
             .order_by('created_at', 'pk'))
     total, recent = _bucket(), _bucket()
     days, workspaces_seen, documents = {}, {}, {}
     for run in runs.iterator(chunk_size=500):
-        cost = jobs.run_cost(run)
-        day = (run.started_at or run.created_at).date()
-        _add(total, cost, run)
+        spend = run_spend(run)
+        day = (run.started_at or run.created_at).astimezone(dt_timezone.utc).date()
+        _add(total, spend)
         if day >= first_day:
-            _add(recent, cost, run)
-            _add(days.setdefault(day, _bucket()), cost, run)
+            _add(recent, spend)
+            _add(days.setdefault(day, _bucket()), spend)
         workspace = run.encounter.workspace
         entry = workspaces_seen.setdefault(workspace.pk, {'workspace': workspace, 'documents': set(), **_bucket()})
         entry['documents'].add(run.encounter_id)
-        _add(entry, cost, run)
-        _add(documents.setdefault(run.encounter_id, {'encounter': run.encounter, **_bucket()}), cost, run)
-    other = models.ProviderRun.objects.filter(sent=True).exclude(purpose__in=jobs.PURPOSES).count()
-    by_document = sorted(documents.values(), key=lambda item: (-item['cost'], -item['unpriced'], str(item['encounter'].pk)))
+        _add(entry, spend)
+        _add(documents.setdefault(run.encounter_id, {'encounter': run.encounter, **_bucket()}), spend)
+    other = Run.objects.filter(sent=True).exclude(purpose__in=jobs.PURPOSES).count()
+    # costliest first by what a document may have cost: its known cost and the worst case of its unknown runs (money-4)
+    by_document = sorted(documents.values(), key=lambda item: (-(item['cost'] + item['worst']), -item['unpriced'],
+                                                               str(item['encounter'].pk)))
     return {
         'total': _shown(total), 'recent': _shown(recent), 'days_window': SPENDING_DAYS,
         'days': [{'day': day, **_shown(days[day])} for day in sorted(days, reverse=True)],
         'workspaces': [{**_shown(entry), 'documents': len(entry['documents'])}
-                       for entry in sorted(workspaces_seen.values(), key=lambda item: (-item['cost'],
-                                                                                       item['workspace'].name))],
+                       for entry in sorted(workspaces_seen.values(),
+                                           key=lambda item: (-(item['cost'] + item['worst']), item['workspace'].name))],
         'documents': [_shown(item) for item in by_document[:TOP_DOCUMENTS]], 'documents_total': len(by_document),
         'top_documents': TOP_DOCUMENTS, 'other_runs': other,
-        'ceiling': dollars(Decimal(settings.DOCUMENT_CEILING_USD)), 'concurrent': settings.CONCURRENT_DOCUMENTS,
+        'ceiling': dollars(jobs.ceiling_usd()), 'concurrent': settings.CONCURRENT_DOCUMENTS,
         'exact_total': pricing.usd(total['cost']),
     }
 
@@ -489,27 +615,50 @@ def spending(now=None) -> dict:
 @operator_view
 @methods('GET')
 def spending_page(request):
-    return render(request, 'studio/ops_spending.html', _context(**spending()))
+    return render(request, 'studio/ops_spending.html', _context('spending', **spending()))
 
 
 # --- activity ----------------------------------------------------------------------------------------------------------
+# Pages are read by position (keyset), not by number: "older" names the last row shown, and the next page holds the rows
+# strictly older than it, so rows arriving meanwhile never repeat a row or skip one (refutation r1, money-6).
 
-def _page_number(request) -> int:
-    raw = request.GET.get('page', '1')
-    return int(raw) if isinstance(raw, str) and raw.isascii() and raw.isdigit() and 0 < int(raw) <= 100_000 else 1
+CURSOR_RE = re.compile(r'(\d{8}T\d{6}\.\d{6}Z)~([0-9a-f-]{1,36})')
+
+
+def cursor_of(row) -> str:
+    return f'{row.created_at.astimezone(dt_timezone.utc):%Y%m%dT%H%M%S.%fZ}~{row.pk}'
+
+
+def _older_than(queryset, request, *, integer_pk=False):
+    """(``queryset`` limited to the rows older than the request's ``before`` cursor, the cursor); the whole queryset
+    with no cursor (the newest page); (None, '') when the cursor cannot be read."""
+    raw = request.GET.get('before', '')
+    if not raw:
+        return queryset, ''
+    match = CURSOR_RE.fullmatch(raw) if isinstance(raw, str) else None
+    if not match:
+        return None, ''
+    try:
+        moment = datetime.strptime(match.group(1), '%Y%m%dT%H%M%S.%fZ').replace(tzinfo=dt_timezone.utc)
+        key = int(match.group(2)) if integer_pk else uuid.UUID(match.group(2))
+    except (ValueError, TypeError):
+        return None, ''
+    return queryset.filter(Q(created_at__lt=moment) | Q(created_at=moment, pk__lt=key)), raw
 
 
 def describe(event) -> dict:
-    """An audit event in the log's words: what happened, and the event's own small values beside it."""
+    """An audit event in the log's words: what happened, and the event's own small values beside it (a value that is
+    not a plain one is left out, never read as a key - refutation r1, money-8)."""
     data = event.data if isinstance(event.data, dict) else {}
+    action = data.get('action')
     if event.event == 'decision.recorded':
-        what = DECISION_LABELS.get(data.get('action'), 'Decision recorded')
+        what = DECISION_LABELS.get(action, 'Decision recorded') if isinstance(action, str) else 'Decision recorded'
     else:
         what = EVENT_LABELS.get(event.event, event.event)
     details = []
     for key in DETAIL_KEYS:
         value = data.get(key)
-        if value is None or value == '' or isinstance(value, (dict, list)):
+        if value is None or value == '' or not isinstance(value, (str, int, float)):
             continue
         details.append(f'{key} {value}')
     return {'event': event, 'what': what, 'details': ' · '.join(details)}
@@ -534,14 +683,15 @@ def activity(request):
         events = events.filter(event__startswith=names) if isinstance(names, str) else events.filter(event__in=names)
     else:
         kind = ''
-    page = _page_number(request)
-    window = list(events.order_by('-created_at', '-pk')[(page - 1) * PAGE_SIZE:page * PAGE_SIZE + 1])
+    events, before = _older_than(events, request)
+    window = list(events.order_by('-created_at', '-pk')[:PAGE_SIZE + 1]) if events is not None else []
     query = '&'.join(part for part in (f'workspace={chosen_workspace.pk}' if chosen_workspace else '',
                                        f'kind={kind}' if kind else '') if part)
+    rows = window[:PAGE_SIZE]
     return render(request, 'studio/ops_activity.html', _context(
-        rows=[describe(event) for event in window[:PAGE_SIZE]], page=page, newer=page > 1,
-        older=len(window) > PAGE_SIZE, query=query, kinds=[(key, label) for key, (label, _names) in KINDS.items()],
-        kind=kind, chosen_workspace=chosen_workspace,
+        'activity', rows=[describe(event) for event in rows], earlier=bool(before), unreadable=events is None,
+        older=cursor_of(rows[-1]) if len(window) > PAGE_SIZE else '', query=query,
+        kinds=[(key, label) for key, (label, _names) in KINDS.items()], kind=kind, chosen_workspace=chosen_workspace,
         workspaces=list(Workspace.objects.order_by('name', 'pk')), tab='actions'))
 
 
@@ -556,10 +706,13 @@ def sign_ins(request):
         attempts = attempts.filter(succeeded=True)
     else:
         result = ''
-    page = _page_number(request)
-    window = list(attempts.order_by('-created_at', '-pk')[(page - 1) * PAGE_SIZE:page * PAGE_SIZE + 1])
+    attempts, before = _older_than(attempts, request, integer_pk=True)
+    window = list(attempts.order_by('-created_at', '-pk')[:PAGE_SIZE + 1]) if attempts is not None else []
+    rows = window[:PAGE_SIZE]
+    accounts = set(User.objects.filter(username__in={row.username for row in rows}).values_list('username', flat=True))
     return render(request, 'studio/ops_activity.html', _context(
-        attempts=window[:PAGE_SIZE], page=page, newer=page > 1, older=len(window) > PAGE_SIZE,
+        'activity', attempts=[{'attempt': row, 'known': row.username in accounts} for row in rows],
+        earlier=bool(before), unreadable=attempts is None, older=cursor_of(rows[-1]) if len(window) > PAGE_SIZE else '',
         query=f'result={result}' if result else '', result=result, tab='sign-ins',
         throttle_attempts=settings.LOGIN_THROTTLE_ATTEMPTS,
         throttle_minutes=settings.LOGIN_THROTTLE_WINDOW_SECONDS // 60))

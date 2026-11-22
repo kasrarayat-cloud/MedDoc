@@ -288,7 +288,7 @@ def encounter_view(encounter, **extra) -> dict:
                               .select_related('reviewer', 'round').order_by('sequence')),
             'answers': list(models.CodingAnswer.objects.filter(encounter_id=encounter.pk)
                             .select_related('answered_by', 'round').order_by('answered_at', 'pk')),
-            'events': events, 'holds': holds_view(), 'release': settings.RELEASE_SHA,
+            'events': events, 'holds': holds_view(), 'release': settings.RELEASE_SHA, 'section': 'encounters',
             'note_chars': jobs.RECONCILE_NOTE_CHARS, **extra}
 
 
@@ -320,7 +320,8 @@ def _index_page(request, *, error=None, done=None, status=200):
                      'state_label': state.label(encounter.state) if latest is not None else 'Earlier review'})
     return render(request, 'studio/ops_index.html', {
         'rows': rows, 'total': models.Encounter.objects.count(), 'limit': LIST_LIMIT, 'holds': holds_view(),
-        'error': error, 'done': done, 'release': settings.RELEASE_SHA, 'mode': settings.CODING_MODE},
+        'error': error, 'done': done, 'release': settings.RELEASE_SHA, 'mode': settings.CODING_MODE,
+        'section': 'encounters'},
         status=status)
 
 

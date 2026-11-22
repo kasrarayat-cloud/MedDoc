@@ -42,15 +42,16 @@
   </label>
   <button type="submit" class="secondary">Show</button>
 </form>
-<p class="muted">After {{ throttle_attempts }} refused attempts within {{ throttle_minutes }} minutes, a username is refused until the oldest of them is {{ throttle_minutes }} minutes old.</p>
+<p class="muted">After {{ throttle_attempts }} refused attempts within {{ throttle_minutes }} minutes, a username is refused until the oldest of them is {{ throttle_minutes }} minutes old. A name that is no account is not shown: it can be a password typed into the username box.</p>
 <div class="table-card scroll">
 <table>
   <thead><tr><th>When (UTC)</th><th>Username</th><th>Result</th><th>From</th></tr></thead>
   <tbody>
-  {% for attempt in attempts %}
-    <tr><td class="mono">{{ attempt.created_at|date:"Y-m-d H:i:s" }}</td><td class="mono">{{ attempt.username }}</td>
-        <td>{% if attempt.succeeded %}<span class="chip ok">Signed in</span>{% else %}<span class="chip bad">Refused</span>{% endif %}</td>
-        <td class="mono">{{ attempt.client }}</td></tr>
+  {% for item in attempts %}
+    <tr><td class="mono">{{ item.attempt.created_at|date:"Y-m-d H:i:s" }}</td>
+        <td>{% if item.known %}<span class="mono">{{ item.attempt.username }}</span>{% else %}<span class="muted">a name that is no account</span>{% endif %}</td>
+        <td>{% if item.attempt.succeeded %}<span class="chip ok">Signed in</span>{% else %}<span class="chip bad">Refused</span>{% endif %}</td>
+        <td class="mono">{{ item.attempt.client }}</td></tr>
   {% empty %}
     <tr><td colspan="4" class="muted">No sign-in attempt recorded{% if result %} for this choice{% endif %}.</td></tr>
   {% endfor %}
@@ -59,9 +60,9 @@
 </div>
 {% endif %}
 
+{% if unreadable %}<p class="notice warn">That page address could not be read. The newest entries are shown from the start link below.</p>{% endif %}
 <div class="pager">
-  <span>{% if newer %}<a href="?{% if query %}{{ query }}&amp;{% endif %}page={{ page|add:"-1" }}">&larr; Newer</a>{% endif %}</span>
-  <span class="muted">Page {{ page }}</span>
-  <span>{% if older %}<a href="?{% if query %}{{ query }}&amp;{% endif %}page={{ page|add:"1" }}">Older &rarr;</a>{% endif %}</span>
+  <span>{% if earlier or unreadable %}<a href="?{{ query }}">&larr; Newest</a>{% endif %}</span>
+  <span>{% if older %}<a href="?{% if query %}{{ query }}&amp;{% endif %}before={{ older|urlencode }}">Older &rarr;</a>{% endif %}</span>
 </div>
 {% endblock %}

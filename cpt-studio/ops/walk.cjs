@@ -2882,6 +2882,22 @@ async function probeOps(page, ctx, operator, anonymous, enc) {
     const nobody = await anonymous.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
     probes.push({ method: 'GET', path: where.replace(enc.id, '<id>'), customer: customer.status(), anonymous: nobody.status() });
   }
+  // The member's own workspace and account, by their real ids (GET only: a broken gate still changes nothing): a 404 here
+  // is the gate's, never a missing record's - a workspace page or a person's act behind no gate would answer 200 or 405
+  // (refutation r1, gate-2).
+  const mine = await page.request.get(`${ctx.base}/api/session`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+  const session = await mine.json().catch(() => null);
+  const own = { workspace: session && session.workspace && session.workspace.id, user: session && session.user && session.user.id };
+  const realPaths = [];
+  if (typeof own.workspace === 'string' && /^[0-9a-f-]{36}$/.test(own.workspace)) realPaths.push([`/ops/workspaces/${own.workspace}`, '/ops/workspaces/<own workspace>']);
+  if (typeof own.user === 'string' && /^[0-9a-f-]{36}$/.test(own.user)) {
+    for (const act of ['role', 'password', 'access']) realPaths.push([`/ops/people/${own.user}/${act}`, `/ops/people/<own account>/${act}`]);
+  }
+  for (const [where, shown] of realPaths) {
+    const customer = await page.request.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+    const nobody = await anonymous.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+    probes.push({ method: 'GET', path: shown, customer: customer.status(), anonymous: nobody.status() });
+  }
   for (const where of OPS_POST_PATHS(fake)) {
     const customer = await page.request.post(`${ctx.base}${where}`, { form: { note: 'walk probe of the operator gate' }, maxRedirects: 0,
       timeout: UI_TIMEOUT_MS, headers: { 'X-CSRFToken': token, Origin: ctx.base, Referer: `${ctx.base}/` } });

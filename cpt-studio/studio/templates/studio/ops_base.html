@@ -133,20 +133,18 @@
 </head>
 <body>
   <a class="skip" href="#main">Skip to the console</a>
-  {% with p=request.path %}
   <header class="topbar">
     <a class="brand" href="/ops/">CPT Studio · Operator console</a>
     <nav class="topnav" aria-label="Console">
-      <a href="/ops/"{% if p == "/ops/" or p|slice:":15" == "/ops/encounters" %} aria-current="page"{% endif %}>Encounters</a>
-      <a href="/ops/people"{% if p|slice:":11" == "/ops/people" %} aria-current="page"{% endif %}>People</a>
-      <a href="/ops/workspaces"{% if p|slice:":15" == "/ops/workspaces" %} aria-current="page"{% endif %}>Workspaces</a>
-      <a href="/ops/spending"{% if p|slice:":13" == "/ops/spending" %} aria-current="page"{% endif %}>Spending</a>
-      <a href="/ops/activity"{% if p|slice:":13" == "/ops/activity" %} aria-current="page"{% endif %}>Activity</a>
+      <a href="/ops/"{% if section == "encounters" %} aria-current="page"{% endif %}>Encounters</a>
+      <a href="/ops/people"{% if section == "people" %} aria-current="page"{% endif %}>People</a>
+      <a href="/ops/workspaces"{% if section == "workspaces" %} aria-current="page"{% endif %}>Workspaces</a>
+      <a href="/ops/spending"{% if section == "spending" %} aria-current="page"{% endif %}>Spending</a>
+      <a href="/ops/activity"{% if section == "activity" %} aria-current="page"{% endif %}>Activity</a>
     </nav>
     <span class="meta">Synthetic data only · release {{ release }}</span>
     <form method="post" action="/logout/">{% csrf_token %}<button class="signout" type="submit">Sign out</button></form>
   </header>
-  {% endwith %}
   <main id="main">
     {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
     {% if done %}<p class="notice done" role="status">{{ done }}</p>{% endif %}
