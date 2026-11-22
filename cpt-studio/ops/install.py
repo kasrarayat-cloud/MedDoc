@@ -521,7 +521,9 @@ def parse_args(argv=None):
     args.agent_username = args.agent_username or SPECIALTY_AGENTS[args.specialty]
     args.agent_display_name = args.agent_display_name or 'CPT Studio review agent'
     args.owner_display_name = args.owner_display_name or ''
-    args.workspace_name = args.workspace_name or SPECIALTY_NAMES[args.specialty]
+    # an absent name is the specialty's; an explicit empty one is refused (argument_problem), never read as absent: an
+    # unset shell variable must not land accounts in the default workspace (refutation N6-1-4)
+    args.workspace_name = SPECIALTY_NAMES[args.specialty] if args.workspace_name is None else args.workspace_name
     return args
 
 
@@ -575,6 +577,8 @@ def argument_problem(args) -> str:
                 return f'Username {value!r} must match {USERNAME_RE.pattern}.'
         if args.owner_username == agent:
             return 'The owner and agent usernames must differ.'
+        if args.workspace_name is not None and not args.workspace_name.split():
+            return '--workspace-name is empty.'
         for value in (args.owner_display_name, args.agent_display_name, args.workspace_name):
             if value is not None and not DISPLAY_RE.fullmatch(value):
                 return 'Display and workspace names may use letters, digits, spaces and .,\'()- only (80 max).'

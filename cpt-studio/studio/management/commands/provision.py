@@ -4,13 +4,14 @@ The specialties (owner directions of 2026-10-23 and 2026-11-22, DECISIONS D390):
 Orthopedic Surgery, each a workspace category. A workspace's specialty is a label - the page and the PDF report show
 it - and nothing on the coding path reads it: Fable codes every specialty, with no engine, code list or routing (D358).
 
-One login serves one workspace until a workspace switcher exists (D390): an account already active in another workspace
-is refused, never added to a second one, so nobody is left seeing the wrong workspace's documents.
+One login serves one workspace until a workspace switcher exists (D390): a run never adds an account to a second
+workspace (an account an earlier installation put in several keeps working there), so nobody is left seeing the wrong
+workspace's documents.
 
-A workspace is found by its name exactly as stored. A NEW workspace's name is not another specialty's name, reads unlike
-every workspace of every specialty (white space and letter case aside), and is written with single ordinary spaces; a
-refusal names what stands in the way and suggests no command, so following it never puts an account in a workspace
-other than a new one.
+A workspace is found by its name exactly as stored, and a name is stored as given. A NEW workspace's name is not another
+specialty's name (white space and letter case aside: --specialty left out), and no workspace of another specialty has
+exactly that name, so a check that knows a workspace by its name (walk --workspace, verify_login) knows its specialty
+too. A refusal states what is in the way; it gives no command.
 
 Passwords are read from files (never argv, never printed). An existing account
 keeps its password unless --reset-passwords is given.
@@ -50,34 +51,38 @@ def _read(name: str) -> str:
 
 
 def _named_alike(workspace_name: str) -> str:
-    """" Named alike: ..." - every workspace, of any specialty, whose name reads the same as ``workspace_name``, named as
-    stored with its specialty, sorted - or nothing. It names; it never suggests a command (refutation N5-1-2)."""
+    """" Named alike: ..." - every workspace, of any specialty, whose name reads the same as ``workspace_name`` (_read),
+    named as stored with its specialty, sorted - or nothing. Facts for the operator; never a command."""
     reading = _read(workspace_name)
     found = sorted((each.name, each.category.name) for each in models.Workspace.objects.select_related('category')
                    if _read(each.name) == reading)
     return (' Named alike: ' + ', '.join(f'{name!r} ({specialty})' for name, specialty in found) + '.') if found else ''
 
 
-def _check_new_name(workspace_name: str, slug: str, category) -> None:
-    """The rules a NEW workspace's name meets (owner direction 2026-11-22, D390; refutation N1-2-1, N1-2-2, N2-2-1,
-    N4-1-1, N5-1-1..4, N5-1-7), in this order: it is not another specialty's name; it reads unlike every workspace of
-    every specialty (_read), so a member, or a check that knows a workspace by its name, knows which workspace and which
-    specialty; and it is written cleanly. Each refusal names what stands in the way and suggests no command, and a name
-    that reads like an existing workspace is refused before its spacing is - so following a refusal, correcting the
-    spacing included, never puts these accounts in a workspace other than a new one."""
+def _new_name_problem(workspace_name: str, slug: str, category) -> str:
+    """Why a NEW workspace could not take this name, as facts with no command (refutation N6-1-1, N6-1-2) - or nothing.
+    The rules (owner direction 2026-11-22, D390): it has a name; it is not another specialty's name, read with white
+    space and letter case aside (refutation N1-2-2, N2-2-1: --specialty left out); and no workspace of another specialty
+    has exactly this name, so a check that knows a workspace by its exact name - walk --workspace and verify_login
+    compare it exactly - knows its specialty too (refutation N1-2-1). Nothing else is ruled: a name is stored as given,
+    and names that differ in case or spacing are different names, as they always were."""
     if not workspace_name.split():
-        raise CommandError('Give the new workspace a name.')
+        return 'A new workspace needs a name.'
     reading = _read(workspace_name)
-    alike = _named_alike(workspace_name)
     for other, (other_name, _) in SPECIALTIES.items():
         if other != slug and _read(other_name) == reading:
-            raise CommandError(f'{workspace_name!r} is the name of the {other_name} specialty: choose another name for '
-                               f'a {category.name} workspace.' + alike)
-    if alike:
-        raise CommandError(f'The name {workspace_name!r} is taken: choose a name no workspace has.' + alike)
-    if workspace_name != ' '.join(workspace_name.split()):
-        raise CommandError('Write the workspace name with single ordinary spaces between words and none around it (no '
-                           'tab, no non-breaking or other special space).')
+            return f'{workspace_name!r} is the name of the {other_name} specialty, and this run is for {category.name}.'
+    same = sorted(each.category.name for each in models.Workspace.objects.filter(name=workspace_name)
+                  .exclude(category=category).select_related('category'))
+    if same:
+        return f'The {same[0]} workspace {workspace_name!r} has this name, and this run is for {category.name}.'
+    return ''
+
+
+def _check_new_name(workspace_name: str, slug: str, category) -> None:
+    problem = _new_name_problem(workspace_name, slug, category)
+    if problem:
+        raise CommandError(problem)
 
 
 def _password(path):
@@ -133,10 +138,16 @@ class Command(BaseCommand):
         made = workspace is None
         if made:
             if not options['owner_username']:
-                # adding accounts never makes a workspace and never meets the new-name rules: the workspace is named
-                # exactly, and any that read the same are named as stored (refutation N5-1-1, N5-1-3)
-                raise CommandError(f'No {category.name} workspace is named exactly {workspace_name!r}; provision it with '
-                                   f'its owner first.' + _named_alike(workspace_name))
+                # adding accounts never makes a workspace. Main's instruction stands only where it holds - a run with
+                # the owner would make this workspace; otherwise the refusal states the facts (the rule that run would
+                # meet, and the workspaces of any specialty whose names read the same, as stored) and gives no command
+                # (refutation N1-2-2, N5-1-1, N6-1-2)
+                problem, alike = _new_name_problem(workspace_name, slug, category), _named_alike(workspace_name)
+                if not problem and not alike:
+                    raise CommandError(f'No workspace named {workspace_name!r} exists; provision it with its owner '
+                                       f'first.')
+                raise CommandError(f'No {category.name} workspace is named exactly {workspace_name!r}.'
+                                   + (f' {problem}' if problem else '') + alike)
             _check_new_name(workspace_name, slug, category)
             workspace = models.Workspace.objects.create(category=category, name=workspace_name)
         accounts = []
@@ -159,12 +170,17 @@ class Command(BaseCommand):
                 user = models.User(username=username, actor_kind=kind, display_name=display or username)
             elif user.actor_kind != kind:
                 raise CommandError(f'Account {username} exists with a different actor kind.')
-            elif (not models.Membership.objects.filter(user=user, workspace=workspace, active=True).exists()
-                  and models.Membership.objects.filter(user=user, active=True).exclude(workspace=workspace).exists()):
+            elif not models.Membership.objects.filter(user=user, workspace=workspace, active=True).exists():
                 # refused only when it would ADD the account to a second workspace: an account an earlier installation
-                # made a member of several keeps working where it is (a password rotation; refutation N5-1-6)
-                raise CommandError(f'Account {username} already serves another workspace; one login serves one '
-                                   f'workspace until a workspace switcher exists (D390). Use a separate login.')
+                # made a member of several keeps working where it is (a password rotation; refutation N5-1-6); the
+                # refusal names where it serves and gives no command (refutation N6-1-1)
+                serves = sorted((each.workspace.category.name, each.workspace.name) for each in
+                                models.Membership.objects.filter(user=user, active=True).exclude(workspace=workspace)
+                                .select_related('workspace__category'))
+                if serves:
+                    raise CommandError(f'Account {username} already serves ' + ', '.join(
+                        f'the {specialty} workspace {name!r}' for specialty, name in serves)
+                        + '; one login serves one workspace until a workspace switcher exists (D390).')
             if created or options['reset_passwords']:
                 password = _password(password_file)
                 validate_password(password, user)

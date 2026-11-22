@@ -1750,12 +1750,17 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
         self.refused('--phase', 'provision', '--owner-username', 'owner', '--specialty', 'cardiology')
 
     def test_the_installer_passes_the_workspace_name_as_typed(self):
-        # refutation N4-1-2, N4-1-3: an existing workspace is found exactly as typed and the credentials file names
-        # it so; a new name that is not written cleanly is refused by provision itself
+        # refutation N4-1-2, N4-1-3: an existing workspace is found exactly as typed and the credentials file names it
         for name in ('Spine Center', 'GI  Demo', ' Spine Center'):
             with self.subTest(name=name):
                 args = self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name)
                 self.assertEqual(args.workspace_name, name)
+        # absent: the specialty's name; explicitly empty (an unset shell variable): refused (refutation N6-1-4)
+        self.assertEqual(self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--specialty',
+                                    'neurosurgery').workspace_name, 'Neurosurgery')
+        for name in ('', '  '):
+            with self.subTest(name=name):
+                self.refused('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name)
 
     def test_each_specialty_has_its_own_credentials_files(self):
         self.assertEqual(install.credentials_files('gastroenterology'),
