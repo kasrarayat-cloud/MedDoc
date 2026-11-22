@@ -5,7 +5,7 @@
 <p class="lead">Everyone who can sign in to a workspace, with their role and access. Turning access off stops sign-in and ends any open session; nothing is deleted, and it can be turned on again.</p>
 
 <h2>Workspace members</h2>
-{% include "studio/ops_people_rows.html" with back="" %}
+{% include "studio/ops_people_rows.html" with back="" hide_workspace=False %}
 
 {% include "studio/ops_add_person.html" with workspace=None %}
 

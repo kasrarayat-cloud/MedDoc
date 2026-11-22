@@ -36,7 +36,7 @@
   {% for row in workspaces %}
     <tr><td><a href="/ops/workspaces/{{ row.workspace.pk }}">{{ row.workspace.name }}</a></td><td>{{ row.workspace.category.name }}</td>
         <td class="num">{{ row.documents }}</td><td class="num">{{ row.runs }}</td><td class="num mono">{{ row.cost_text }}</td>
-        <td class="num">{% if row.unpriced %}<span class="flag warn">{{ row.unpriced }}</span>{% else %}0{% endif %}</td></tr>
+        <td class="num">{% if row.unpriced %}<span class="flag warn">{{ row.unpriced }}, up to ${{ row.worst_text }} more</span>{% else %}0{% endif %}</td></tr>
   {% empty %}
     <tr><td colspan="6" class="muted">No coding run yet.</td></tr>
   {% endfor %}
@@ -45,7 +45,7 @@
 </div>
 
 <h2>By document</h2>
-<p class="muted">{% if documents_total > top_documents %}The {{ top_documents }} costliest of {{ documents_total }} documents with a coding run.{% else %}Every document with a coding run, costliest first.{% endif %} Each document's page has the exact cost of every run.</p>
+<p class="muted">{% if documents_total > top_documents %}The {{ top_documents }} costliest of {{ documents_total }} documents with a coding run.{% else %}Every document with a coding run.{% endif %} They are ordered by the most each may have cost: its known cost and, for runs not priced, the most they can cost. Each document's page has the exact cost of every run.</p>
 <div class="table-card scroll">
 <table>
   <thead><tr><th>Document</th><th>Workspace</th><th class="num">Runs</th><th class="num">Cost (USD, estimated)</th><th class="num">Not priced</th></tr></thead>
@@ -53,7 +53,7 @@
   {% for row in documents %}
     <tr><td><a href="/ops/encounters/{{ row.encounter.pk }}">{{ row.encounter.title }}</a></td><td>{{ row.encounter.workspace.name }}</td>
         <td class="num">{{ row.runs }}</td><td class="num mono">{{ row.cost_text }}</td>
-        <td class="num">{% if row.unpriced %}<span class="flag warn">{{ row.unpriced }}</span>{% else %}0{% endif %}</td></tr>
+        <td class="num">{% if row.unpriced %}<span class="flag warn">{{ row.unpriced }}, up to ${{ row.worst_text }} more</span>{% else %}0{% endif %}</td></tr>
   {% empty %}
     <tr><td colspan="5" class="muted">No coding run yet.</td></tr>
   {% endfor %}

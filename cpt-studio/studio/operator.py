@@ -44,7 +44,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect
 
-from . import audit, jobs, models, state
+from . import audit, jobs, models, spend, state
 from .fable import pricing
 from .fable import result as fable_result
 from .storage import OriginalCorrupted, read_original
@@ -188,12 +188,16 @@ def round_runs(round_):
 
 
 def runs_cost(runs):
-    """(the priced cost of ``runs`` as a string, how many could not be priced)."""
+    """(the known cost of ``runs`` as a string, how many have no known cost): studio.spend's reading, the Spending page's
+    own (refutation r2, figures-1) - a run still being sent, of unknown outcome or not priceable counts apart, a run that
+    sent nothing, was cancelled or was refused before answering costs nothing, and a run only reserved is not counted."""
     total, unpriced = Decimal(0), 0
     for run in runs:
-        cost = jobs.run_cost(run)
+        if run.state == models.ProviderRun.RESERVED and not run.sent:
+            continue
+        cost, _worst = spend.run_spend(run)
         if cost is None:
-            unpriced += int(bool(run.sent))
+            unpriced += 1
         else:
             total += cost
     return pricing.usd(total), unpriced
@@ -279,7 +283,8 @@ def encounter_view(encounter, **extra) -> dict:
     # a send of the failed round that may have reached the vendor with no outcome known waits for the reconcile first:
     # jobs.retry refuses it until then (FIX-SPEC 4), so the retry is not offered
     waits = failed and jobs.awaiting_reconcile(latest)
-    return {'encounter': encounter, 'state_label': state.label(encounter.state) if latest else 'Earlier review',
+    return {'error': None, 'done': None,  # the notice slots, named so the page never looks a missing one up (r2, figures-4)
+            'encounter': encounter, 'state_label': state.label(encounter.state) if latest else 'Earlier review',
             'source': source, 'revision': revision,
             'pasted_chars': len(revision.pasted_text or '') if revision is not None and source is None else None,
             'rounds': [round_view(round_) for round_ in rounds],

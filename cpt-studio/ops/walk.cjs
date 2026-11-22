@@ -2885,7 +2885,7 @@ async function probeOps(page, ctx, operator, anonymous, enc) {
   // The member's own workspace and account, by their real ids (GET only: a broken gate still changes nothing): a 404 here
   // is the gate's, never a missing record's - a workspace page or a person's act behind no gate would answer 200 or 405
   // (refutation r1, gate-2).
-  const mine = await page.request.get(`${ctx.base}/api/session`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+  const mine = await page.request.get(`${ctx.base}/api/session`, { headers: { Accept: 'application/json', ...CLIENT_HEADERS }, maxRedirects: 0, timeout: UI_TIMEOUT_MS });
   const session = await mine.json().catch(() => null);
   const own = { workspace: session && session.workspace && session.workspace.id, user: session && session.user && session.user.id };
   const realPaths = [];

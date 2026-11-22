@@ -627,3 +627,128 @@ class RefutationRoundOneTests(AdminCase):
                          ['IBMPlexMono-Medium.ttf', 'IBMPlexMono-Regular.ttf', 'Manrope-Regular.ttf', 'Manrope-SemiBold.ttf',
                           'OFL-IBMPlexMono.txt', 'OFL-Manrope.txt'])
         self.assertIn('The copies the operator console serves', (root / 'report_fonts/PROVENANCE.md').read_text())
+
+
+class RefutationRoundTwoTests(AdminCase):
+    """The repairs of refutation round 2 (DECISIONS D395), each pinned by the input that broke it."""
+
+    def test_one_cost_reading_on_every_console_page_held_to_the_ceilings_reading(self):
+        from studio import operator, spend
+        enc = self.done(title='One reading')
+        runs = list(Run.objects.filter(encounter=enc).order_by('created_at', 'pk'))
+        base = runs[0]
+        cases = [(Run.SUCCEEDED, True, 200, base.usage, '0.5'), (Run.SUCCEEDED, True, 200, {}, '0.5'),
+                 (Run.SUCCEEDED, False, None, {}, '0.5'), (Run.FAILED, True, 429, {}, '0.5'),
+                 (Run.FAILED, True, 200, base.usage, '0.5'), (Run.FAILED, True, 500, {'input_tokens': 'x'}, '0.5'),
+                 (Run.UNKNOWN, True, None, base.usage, '0.5'), (Run.SENDING, False, None, {}, '0.5'),
+                 (Run.NOT_SENT, False, None, {}, '0.5'), (Run.CANCELLED, True, None, base.usage, '0.5'),
+                 (Run.UNKNOWN, True, None, {}, None)]
+        for state, sent, status, usage, worst in cases:
+            with self.subTest(state=state, sent=sent, status=status, usage=bool(usage), worst=worst):
+                scope = {key: item for key, item in base.scope.items() if key != 'worst_usd'}
+                if worst is not None:
+                    scope['worst_usd'] = worst
+                Run.objects.filter(pk=base.pk).update(state=state, sent=sent, http_status=status, usage=usage, scope=scope)
+                run = Run.objects.get(pk=base.pk)
+                cost, worst_case = spend.run_spend(run)
+                self.assertEqual(cost if cost is not None else worst_case, jobs._held_cost(run))
+        # the encounter's round total and the Spending page agree on an unknown run: counted apart, not as its partial cost
+        Run.objects.filter(pk=base.pk).update(state=Run.UNKNOWN, sent=True, usage=base.usage, scope=base.scope)
+        round_cost, unpriced = operator.runs_cost(list(Run.objects.filter(encounter=enc)))
+        figures = console.spending()
+        self.assertEqual(unpriced, 1)
+        self.assertEqual(Decimal(round_cost), figures['total']['cost'])
+        self.assertEqual(figures['total']['unpriced'], 1)
+
+    def test_absurd_stored_figures_never_break_the_spending_page(self):
+        enc = self.done(title='Absurd figures')
+        runs = list(Run.objects.filter(encounter=enc).order_by('created_at', 'pk'))
+        for index, run in enumerate(runs[:2]):
+            Run.objects.filter(pk=run.pk).update(state=Run.UNKNOWN, scope={**run.scope, 'worst_usd': '9e999999'})
+        response = self.ops.get('/ops/spending')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('not known', page(response))
+
+    def test_each_row_shows_the_worst_case_that_places_it(self):
+        enc = self.done(title='Worst case shown')
+        run = Run.objects.filter(encounter=enc, purpose=jobs.READER).get()
+        Run.objects.filter(pk=run.pk).update(state=Run.UNKNOWN, scope={**run.scope, 'worst_usd': '20'})
+        text = page(self.ops.get('/ops/spending'))
+        self.assertIn('1, up to $20.00 more', text)
+
+    def test_the_encounter_page_and_its_refusals_look_no_notice_up(self):
+        import logging
+        enc = self.done(title='Lookups')
+        with self.assertLogs('django.template', level='DEBUG') as captured:
+            logging.getLogger('django.template').debug('marker')
+            self.ops.get(f'/ops/encounters/{enc.pk}')
+            self.ops.post(f'/ops/encounters/{enc.pk}/retry', {})
+            self.ops.get('/ops/people')
+        self.assertFalse([line for line in captured.output if 'Failed lookup' in line], captured.output)
+
+    def test_turning_access_on_ends_a_session_made_while_it_was_off(self):
+        from importlib import import_module
+        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off'})
+        # a sign-in that raced the off act leaves a session written after the act's scan (r2, secure-1)
+        store = import_module(settings.SESSION_ENGINE).SessionStore()
+        store['_auth_user_id'] = str(self.reviewer.pk)
+        store['_auth_user_backend'] = 'django.contrib.auth.backends.ModelBackend'
+        store['_auth_user_hash'] = self.reviewer.get_session_auth_hash()
+        store.create()
+        self.assertEqual(self.sessions_of(self.reviewer), 1)
+        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'on'})
+        self.assertEqual(self.sessions_of(self.reviewer), 0)
+        self.assertEqual(models.AuditEvent.objects.get(event='operator.access_on').data['sessions_ended'], 1)
+        replay = Client()
+        replay.cookies[settings.SESSION_COOKIE_NAME] = store.session_key
+        self.assertNotEqual(replay.get('/api/session').status_code, 200)
+
+    def test_an_expired_session_is_not_counted_or_read(self):
+        from importlib import import_module
+        store = import_module(settings.SESSION_ENGINE).SessionStore()
+        store['_auth_user_id'] = str(self.reviewer.pk)
+        store.create()
+        Session.objects.filter(session_key=store.session_key).update(expire_date=timezone.now() - timedelta(days=1))
+        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off'})
+        self.assertEqual(models.AuditEvent.objects.get(event='operator.access_off').data['sessions_ended'], 0)
+
+    def test_a_session_store_the_console_cannot_end_refuses_the_acts(self):
+        self.assertIn(settings.SESSION_ENGINE, console.SESSION_STORES)  # the deployed setting: Django's database store
+        with self.settings(SESSION_ENGINE='django.contrib.sessions.backends.signed_cookies'):
+            with self.assertRaises(console.Refused) as refused:
+                console.end_sessions(self.viewer)
+        self.assertEqual((str(refused.exception), refused.exception.status), (console.NO_SESSION_STORE, 409))
+        # an act whose sessions cannot be ended changes nothing at all (the refusal comes inside its transaction)
+        before = self.counts()
+        with mock.patch.object(console, 'end_sessions', side_effect=console.Refused(console.NO_SESSION_STORE, 409)):
+            for url, body in ((f'/ops/people/{self.viewer.pk}/access', {'access': 'off'}),
+                              (f'/ops/people/{self.viewer.pk}/password', {})):
+                with self.subTest(url=url):
+                    response = self.ops.post(url, body)
+                    self.assertEqual(response.status_code, 409)
+                    self.assertIn(console.NO_SESSION_STORE, page(response))
+                    self.assertNotIn('class="secret"', page(response))
+        self.assertEqual(self.counts(), before)
+
+    def test_unicode_spellings_of_one_name_read_alike(self):
+        gi = self.ws.category
+        Workspace.objects.create(name='Café Partners', category=gi)
+        before = self.counts()
+        for name in ('Café Partners', 'ＣＡＦＥ́ Partners', 'Ｃafé partners', 'ｎｅｕｒｏｓｕｒｇｅｒｙ'):
+            with self.subTest(name=name):
+                self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(gi.pk)}).status_code, 409)
+        self.assertEqual(self.counts(), before)
+        made = self.ops.post('/ops/workspaces/new', {'name': 'Ｖａｌｌｅｙ Clinic', 'category': str(gi.pk)})
+        self.assertEqual(made.status_code, 303)
+        self.assertTrue(Workspace.objects.filter(name='Valley Clinic').exists())  # stored in its NFKC form
+
+    def test_fillers_and_other_ignorable_characters_are_refused_in_names(self):
+        for name in ('ㅤ', 'SpineㅤCenter', 'ᅟNorth', 'Spine͏Center', 'Spine️', 'ﾠClinic'):
+            with self.subTest(name=repr(name)):
+                response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(self.neuro.pk)})
+                self.assertEqual(response.status_code, 400)
+            with self.subTest(person=repr(name)):
+                response = self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'username': 'filler-test',
+                                                             'name': name, 'role': 'viewer'})
+                self.assertEqual(response.status_code, 400)
+        self.assertFalse(User.objects.filter(username='filler-test').exists())

@@ -41,7 +41,8 @@ import secrets
 import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
-from decimal import ROUND_HALF_UP, Context, Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Context, Decimal, InvalidOperation, Overflow, localcontext
+from importlib import import_module
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
@@ -53,7 +54,7 @@ from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
 
-from . import audit, jobs, models
+from . import audit, jobs, models, spend
 from .fable import pricing
 from .management.commands import provision
 from .operator import _methods as methods
@@ -71,6 +72,14 @@ NAME_CHARS = 120  # User.display_name and Workspace.name hold 120
 # Characters a name may not hold: controls, format characters (zero-width spaces and joiners, direction marks),
 # surrogates, private-use and unassigned code points, line and paragraph separators (refutation r1, data-4).
 HIDDEN_CATEGORIES = {'Cc', 'Cf', 'Cs', 'Co', 'Cn', 'Zl', 'Zp'}
+# and Unicode's Default_Ignorable_Code_Point characters in other categories - the Hangul fillers (letters that show nothing),
+# the combining grapheme joiner, the variation selectors - with every range of the property (refutation r2, secure-3)
+IGNORABLE_RANGES = ((0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5),
+                    (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x3164, 0x3164),
+                    (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3),
+                    (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF))
+# the session stores whose sessions this console can list and end (refutation r2, secure-4)
+SESSION_STORES = ('django.contrib.sessions.backends.db', 'django.contrib.sessions.backends.cached_db')
 PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'  # no 0/o, 1/l/i: it is read aloud or copied by hand
 PASSWORD_GROUPS, PASSWORD_GROUP_CHARS = 4, 5  # 20 random characters (about 99 bits) in four groups
 PAGE_SIZE = 100
@@ -79,10 +88,12 @@ TOP_DOCUMENTS = 50
 OPERATOR_ACCOUNT = 'This is an operator account. Operator accounts are managed on the server, not here.'
 NO_WORKSPACE = 'This account belongs to no workspace. It is managed on the server, not here.'
 AGENT_OWNER = 'An automated agent can be a Reviewer or a Viewer, not an Owner.'
+NO_SESSION_STORE = ('This site keeps sessions where the console cannot end them, so access cannot be turned off or a '
+                    'password reset here.')
 DONE = {
     'role': 'The role was changed.', 'same-role': 'The role was already that one: nothing changed.',
     'off': 'Access was turned off. The person can no longer sign in, and every open session has ended.',
-    'on': 'Access was turned on again. The person signs in again with their password.',
+    'on': 'Access was turned on again. The person signs in again with their password; no earlier session comes back.',
     'same-access': 'Access was already that way: nothing changed.',
     'created': 'The workspace was created. Add its people below.',
 }
@@ -209,17 +220,28 @@ def _person(user_id):
 
 # --- the acts' parts -------------------------------------------------------------------------------------------------
 
+def hidden(ch) -> bool:
+    """Whether ``ch`` cannot be seen or typed: a control, format, surrogate, private-use, unassigned or separator character,
+    or a default-ignorable one (HIDDEN_CATEGORIES, IGNORABLE_RANGES)."""
+    point = ord(ch)
+    return unicodedata.category(ch) in HIDDEN_CATEGORIES or any(low <= point <= high for low, high in IGNORABLE_RANGES)
+
+
 def _field(request, name, *, limit=NAME_CHARS, required=False, label='This field') -> str:
-    """A text field as stored: runs of white space made one space, ends stripped; refused when it holds a character no
-    one can see or type (HIDDEN_CATEGORIES), when it is too long, when a required one is empty, or when it holds no
-    letter or digit at all (refutation r1, data-4)."""
+    """A text field as stored: in Unicode's NFKC form (so canonically and compatibly equal spellings are one spelling:
+    refutation r2, secure-2), runs of white space made one space, ends stripped; refused when it holds a character no
+    one can see or type (hidden), when it is too long, when a required one is empty, or when it holds no letter or
+    digit at all (refutation r1, data-4; r2, secure-3)."""
     value = request.POST.get(name, '')
     if not isinstance(value, str):
         value = ''
-    if any(unicodedata.category(ch) in HIDDEN_CATEGORIES for ch in value if ch not in '\t\n\r'):
-        raise Refused(f'{label} contains a character that cannot be seen or typed (a control, format or unassigned '
-                      f'character).')
-    value = ' '.join(value.split())
+    if any(hidden(ch) for ch in value if ch not in '\t\n\r'):
+        raise Refused(f'{label} contains a character that cannot be seen or typed (a control, format, filler or '
+                      f'unassigned character).')
+    value = ' '.join(unicodedata.normalize('NFKC', value).split())
+    if any(hidden(ch) for ch in value):
+        raise Refused(f'{label} contains a character that cannot be seen or typed (a control, format, filler or '
+                      f'unassigned character).')
     if len(value) > limit:
         raise Refused(f'{label} can be at most {limit:,} characters.')
     if required and not value:
@@ -244,17 +266,22 @@ def new_password(user) -> str:
 
 
 def end_sessions(user) -> int:
-    """Delete every stored session signed in as ``user`` (the database session backend, Django's default): an open
-    session ends at once and can never come back, whatever happens to the account later (refutation r1, gate-1).
-    Sessions are sign-in state, not records. The number ended."""
+    """End every live session signed in as ``user``: an open session ends at once and can never come back, whatever
+    happens to the account later (refutation r1, gate-1). The sessions are read from the database table (the db and
+    cached_db stores, SESSION_STORES; any other store is refused - r2, secure-4), live ones only (an expired session signs
+    nobody in - r2, secure-5), and each is deleted through its store, so a cached copy goes with its row. Sessions are
+    sign-in state, not records. The number ended."""
+    if settings.SESSION_ENGINE not in SESSION_STORES:
+        raise Refused(NO_SESSION_STORE, 409)
+    store = import_module(settings.SESSION_ENGINE).SessionStore
     ended = 0
-    for session in Session.objects.all().iterator(chunk_size=200):
+    for session in Session.objects.filter(expire_date__gt=timezone.now()).iterator(chunk_size=200):
         try:
             data = session.get_decoded()
         except Exception:  # noqa: BLE001 - a session that cannot be read signs nobody in
             continue
         if isinstance(data, dict) and str(data.get('_auth_user_id', '')) == str(user.pk):
-            session.delete()
+            store(session_key=session.session_key).delete()
             ended += 1
     return ended
 
@@ -426,9 +453,11 @@ def set_access(request, user_id):
             if person.is_active == active:
                 done = 'same-access'
             else:
+                # every session ends both ways: off, so none goes on; on, so none made by a sign-in that raced the
+                # off act (it read the account active before the act committed) comes back (refutation r2, secure-1)
+                values = {'sessions_ended': end_sessions(person)}
                 person.is_active = active
                 person.save(update_fields=['is_active'])
-                values = {'sessions_ended': end_sessions(person)} if not active else {}
                 for workspace in _workspaces_of(memberships):
                     audit.record(workspace, f'operator.access_{wanted}', actor=request.user, user=str(person.pk),
                                  username=person.username, **values)
@@ -451,17 +480,29 @@ def _workspaces_context(**extra) -> dict:
                     **extra)
 
 
+def name_reading(name: str) -> str:
+    """A name as it reads: Unicode NFKC caseless (normalised, case folded, normalised again), then provisioning's letters
+    and digits (provision._read), so full-width, mathematical and decomposed spellings read as the plain one (refutation
+    r2, secure-2). No other specialty's name may read so (provision._new_name_problem's rule, read the same way)."""
+    folded = unicodedata.normalize('NFKC', unicodedata.normalize('NFKC', name).casefold())
+    return provision._read(folded)
+
+
 def workspace_name_problem(name: str, category) -> str:
     """Why a new workspace cannot take ``name``, or nothing: provisioning's own rules (provision._new_name_problem: it
     names no other specialty, read by its letters and digits, and no workspace of another specialty has it exactly), and
     no workspace of any specialty reads alike - the same letters and digits, case aside - so no two workspaces are told
     apart only by case, spacing or punctuation (refutation r1, data-2, data-4, data-5)."""
+    reading = name_reading(name)
+    for other, (other_name, _) in provision.SPECIALTIES.items():
+        if other != category.slug and name_reading(other_name) == reading:
+            return f'{name!r} names the {other_name} specialty, and this workspace is {category.name}.'
     problem = provision._new_name_problem(name, category.slug, category)
     if problem:
         return problem + provision._named_alike(name)
-    reading = provision._read(name)
+    reading = name_reading(name)
     alike = sorted((each.name, each.category.name) for each in Workspace.objects.select_related('category')
-                   if provision._read(each.name) == reading)
+                   if name_reading(each.name) == reading)
     if alike:
         return ('A workspace with that name exists: ' + ', '.join(f'{other!r} ({specialty})' for other, specialty in alike)
                 + '. Choose another name.')
@@ -509,13 +550,12 @@ def workspace_page(request, workspace_id):
 
 CENT = Decimal('0.01')
 WIDE = Context(prec=60)
-SETTLED = {Run.SUCCEEDED, Run.FAILED}
 IN_FLIGHT = {Run.SENDING, Run.UNKNOWN}
 
 
 def dollars(amount) -> str:
     """An estimate to the cent, for reading at a glance (the exact figures are on each document's page); never an error,
-    whatever a stored figure holds (refutation r1, money-7)."""
+    whatever a stored figure holds (refutation r1, money-7; r2, figures-2)."""
     amount = Decimal(amount)
     if not amount.is_finite():
         return 'not known'
@@ -525,38 +565,12 @@ def dollars(amount) -> str:
         return f'{amount:.3E}'
 
 
-def reserved(run) -> Decimal:
-    """The worst case a run whose cost is not known counts at: the amount it was reserved at (scope worst_usd), or the
-    whole per-document ceiling when nothing readable says what it could cost - jobs._held_cost's own reading
-    (refutation r1, money-3)."""
-    try:
-        value = Decimal(str((run.scope or {})['worst_usd']))
-    except (KeyError, TypeError, InvalidOperation):
-        return jobs.ceiling_usd()
-    return value if value.is_finite() and value >= 0 else jobs.ceiling_usd()
-
-
-def run_spend(run):
-    """(cost, reserve): a run's known cost - its priced usage once it settled (succeeded or failed); nothing for a
-    cancelled run or one the API refused before answering, as jobs._held_cost counts them - or (None, its worst case)
-    for a run still being sent, of unknown outcome, or whose usage cannot be priced (refutation r1, money-2, money-5)."""
-    if run.state == Run.CANCELLED:
-        return Decimal(0), None
-    if run.state in SETTLED:
-        priced = jobs.run_cost(run)
-        if priced is not None:
-            return priced, None
-        if run.state == Run.FAILED and (run.http_status or 0) >= 400 and not run.usage:
-            return Decimal(0), None
-    return None, reserved(run)
-
-
 def _bucket():
     return {'runs': 0, 'cost': Decimal(0), 'unpriced': 0, 'worst': Decimal(0)}
 
 
-def _add(bucket, spend):
-    cost, reserve = spend
+def _add(bucket, spent):
+    cost, reserve = spent
     bucket['runs'] += 1
     if cost is None:
         bucket['unpriced'] += 1
@@ -571,8 +585,9 @@ def _shown(bucket) -> dict:
 
 def spending(now=None) -> dict:
     """Every coding run (the reader's and the checker's: jobs.PURPOSES) that was sent, is being sent or has an unknown
-    outcome, its known cost or its worst case (run_spend), summed by day (UTC, the day it was sent), workspace and
-    document. A run whose cost is not known is counted apart, never as zero."""
+    outcome, its known cost or its worst case (studio.spend.run_spend, the reading every console page shares), summed by
+    day (UTC, the day it was sent), workspace and document. A run whose cost is not known is counted apart, never as
+    zero."""
     now = now or timezone.now()
     first_day = now.astimezone(dt_timezone.utc).date() - timedelta(days=SPENDING_DAYS - 1)
     runs = (Run.objects.filter(Q(sent=True) | Q(state__in=IN_FLIGHT), purpose__in=jobs.PURPOSES)
@@ -583,28 +598,33 @@ def spending(now=None) -> dict:
             .order_by('created_at', 'pk'))
     total, recent = _bucket(), _bucket()
     days, workspaces_seen, documents = {}, {}, {}
-    for run in runs.iterator(chunk_size=500):
-        spend = run_spend(run)
-        day = (run.started_at or run.created_at).astimezone(dt_timezone.utc).date()
-        _add(total, spend)
-        if day >= first_day:
-            _add(recent, spend)
-            _add(days.setdefault(day, _bucket()), spend)
-        workspace = run.encounter.workspace
-        entry = workspaces_seen.setdefault(workspace.pk, {'workspace': workspace, 'documents': set(), **_bucket()})
-        entry['documents'].add(run.encounter_id)
-        _add(entry, spend)
-        _add(documents.setdefault(run.encounter_id, {'encounter': run.encounter, **_bucket()}), spend)
+    # sums that never raise: an absurd stored figure becomes Infinity, which dollars() shows as not known (r2, figures-2)
+    with localcontext(WIDE) as context:
+        context.traps[Overflow] = False
+        context.traps[InvalidOperation] = False
+        for run in runs.iterator(chunk_size=500):
+            spent = spend.run_spend(run)
+            day = (run.started_at or run.created_at).astimezone(dt_timezone.utc).date()
+            _add(total, spent)
+            if day >= first_day:
+                _add(recent, spent)
+                _add(days.setdefault(day, _bucket()), spent)
+            workspace = run.encounter.workspace
+            entry = workspaces_seen.setdefault(workspace.pk, {'workspace': workspace, 'documents': set(), **_bucket()})
+            entry['documents'].add(run.encounter_id)
+            _add(entry, spent)
+            _add(documents.setdefault(run.encounter_id, {'encounter': run.encounter, **_bucket()}), spent)
+        # the most each document may have cost first: its known cost and the worst case of its runs with no known cost
+        # (money-4; the page shows both parts on each row: r2, figures-3)
+        by_document = sorted(documents.values(), key=lambda item: (-(item['cost'] + item['worst']), -item['unpriced'],
+                                                                   str(item['encounter'].pk)))
+        by_workspace = sorted(workspaces_seen.values(), key=lambda item: (-(item['cost'] + item['worst']),
+                                                                          item['workspace'].name))
     other = Run.objects.filter(sent=True).exclude(purpose__in=jobs.PURPOSES).count()
-    # costliest first by what a document may have cost: its known cost and the worst case of its unknown runs (money-4)
-    by_document = sorted(documents.values(), key=lambda item: (-(item['cost'] + item['worst']), -item['unpriced'],
-                                                               str(item['encounter'].pk)))
     return {
         'total': _shown(total), 'recent': _shown(recent), 'days_window': SPENDING_DAYS,
         'days': [{'day': day, **_shown(days[day])} for day in sorted(days, reverse=True)],
-        'workspaces': [{**_shown(entry), 'documents': len(entry['documents'])}
-                       for entry in sorted(workspaces_seen.values(),
-                                           key=lambda item: (-(item['cost'] + item['worst']), item['workspace'].name))],
+        'workspaces': [{**_shown(entry), 'documents': len(entry['documents'])} for entry in by_workspace],
         'documents': [_shown(item) for item in by_document[:TOP_DOCUMENTS]], 'documents_total': len(by_document),
         'top_documents': TOP_DOCUMENTS, 'other_runs': other,
         'ceiling': dollars(jobs.ceiling_usd()), 'concurrent': settings.CONCURRENT_DOCUMENTS,
