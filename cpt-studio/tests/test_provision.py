@@ -151,8 +151,9 @@ class SpecialtyProvisionTests(ProvisionCommand, TestCase):
             self.run_command('--specialty', 'neurosurgery', '--owner-username', 'owner1',
                              '--owner-password-file', self.secret('o2', OWNER_PASSWORD))
         self.assertEqual(str(caught.exception), "Account owner1 already serves the Gastroenterology workspace "
-                                                "'Gastroenterology'; one login serves one workspace until a workspace "
-                                                "switcher exists (D390).")
+                                                "'Gastroenterology'; this run is for the Neurosurgery workspace "
+                                                "'Neurosurgery' (new); one login serves one workspace until a "
+                                                "workspace switcher exists (D390).")
         # refused as a whole: no Neurosurgery category or workspace is left behind
         self.assertFalse(models.Category.objects.filter(slug='neurosurgery').exists())
         self.assertEqual(models.Membership.objects.filter(user__username='owner1').count(), 1)
@@ -166,8 +167,9 @@ class SpecialtyProvisionTests(ProvisionCommand, TestCase):
 class WorkspaceNameTests(ProvisionCommand, TestCase):
     """A workspace is found by its name exactly as stored and a name is stored as given; a new workspace's name is not
     another specialty's name (read with white space and case aside) and no workspace of another specialty has exactly
-    that name (refutation N1-2-1, N1-2-2, N2-2-1). Every refusal states facts and gives no command (refutation N6-1-1,
-    N6-1-2), so the whole message is pinned."""
+    that name (refutation N1-2-1, N1-2-2, N2-2-1). Every refusal states facts and gives no command - except main's own
+    "provision it with its owner first", where a run with the owner would make that workspace and no workspace is named
+    alike (refutation N6-1-1, N6-1-2, N7-1-2, N7-1-3) - so the whole message is pinned."""
 
     def refusal(self, *argv):
         with self.assertRaises(CommandError) as caught:
@@ -180,7 +182,8 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
         self.assertEqual(self.refusal('--specialty', 'orthopedic-surgery', '--workspace-name', 'Riverside',
                                       '--owner-username', 'own-o', '--owner-password-file',
                                       self.secret('o', OWNER_PASSWORD)),
-                         "The Neurosurgery workspace 'Riverside' has this name, and this run is for Orthopedic Surgery.")
+                         "The Neurosurgery workspace 'Riverside' has this name, and this run is for Orthopedic Surgery. "
+                         "Named alike: 'Riverside' (Neurosurgery).")
         self.assertFalse(models.User.objects.filter(username='own-o').exists())
         # walk --workspace and verify_login compare names exactly, so a case variant is a different name to them
         out = self.run_command('--specialty', 'orthopedic-surgery', '--workspace-name', 'riverside', '--owner-username',
@@ -190,13 +193,21 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
                          [('Riverside', 'neurosurgery'), ('riverside', 'orthopedic-surgery')])
 
     def test_a_specialty_name_is_that_specialtys_alone(self):
+        # read by letters and digits, case aside: the slug and spelling variants name the specialty (refutation N7-1-1)
         for name, specialty in (('Neurosurgery', 'Neurosurgery'), ('NEUROSURGERY', 'Neurosurgery'),
-                                (' Neurosurgery', 'Neurosurgery'), ('orthopedic  surgery', 'Orthopedic Surgery')):
+                                (' Neurosurgery', 'Neurosurgery'), ('orthopedic  surgery', 'Orthopedic Surgery'),
+                                ('orthopedic-surgery', 'Orthopedic Surgery'), ('OrthopedicSurgery', 'Orthopedic Surgery'),
+                                ('Neuro Surgery', 'Neurosurgery'), ('neuro-surgery', 'Neurosurgery')):
             with self.subTest(name=name):
                 self.assertEqual(self.refusal('--workspace-name', name, '--owner-username', 'drneuro2',
                                               '--owner-password-file', self.secret('x', OWNER_PASSWORD)),
-                                 f"{name!r} is the name of the {specialty} specialty, and this run is for "
-                                 f"Gastroenterology.")
+                                 f"{name!r} names the {specialty} specialty, and this run is for Gastroenterology.")
+        for name in ('gastro-enterology', 'Gastro Enterology'):
+            with self.subTest(name=name):
+                self.assertEqual(self.refusal('--specialty', 'neurosurgery', '--workspace-name', name,
+                                              '--owner-username', 'drneuro2', '--owner-password-file',
+                                              self.secret('y', OWNER_PASSWORD)),
+                                 f"{name!r} names the Gastroenterology specialty, and this run is for Neurosurgery.")
         self.assertFalse(models.Workspace.objects.exists())
         self.assertFalse(models.Category.objects.exists())
 
@@ -221,8 +232,8 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
         # --specialty left out: the facts name the workspace and its specialty (refutation N1-2-2, N6-1-2)
         self.assertEqual(self.refusal('--workspace-name', 'Neurosurgery', '--reviewer-username', 'drj',
                                       '--reviewer-password-file', self.secret('r1', REVIEWER_PASSWORD)),
-                         "No Gastroenterology workspace is named exactly 'Neurosurgery'. 'Neurosurgery' is the name of "
-                         "the Neurosurgery specialty, and this run is for Gastroenterology. Named alike: 'Neurosurgery' "
+                         "No Gastroenterology workspace is named exactly 'Neurosurgery'. 'Neurosurgery' names the "
+                         "Neurosurgery specialty, and this run is for Gastroenterology. Named alike: 'Neurosurgery' "
                          "(Neurosurgery).")
         out = self.run_command('--specialty', 'neurosurgery', '--workspace-name', 'Neurosurgery', '--reviewer-username',
                                'drj', '--reviewer-password-file', self.secret('r2', REVIEWER_PASSWORD))
@@ -265,9 +276,9 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
         self.assertFalse(models.Membership.objects.filter(workspace=old).exists())
         self.assertEqual(self.refusal('--workspace-name', 'Orthopedic Surgery', '--reviewer-username', 'drgi',
                                       '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD)),
-                         "No Gastroenterology workspace is named exactly 'Orthopedic Surgery'. 'Orthopedic Surgery' is "
-                         "the name of the Orthopedic Surgery specialty, and this run is for Gastroenterology. Named "
-                         "alike: 'Orthopedic  Surgery' (Gastroenterology), 'Orthopedic Surgery' (Orthopedic Surgery).")
+                         "No Gastroenterology workspace is named exactly 'Orthopedic Surgery'. 'Orthopedic Surgery' "
+                         "names the Orthopedic Surgery specialty, and this run is for Gastroenterology. Named alike: "
+                         "'Orthopedic  Surgery' (Gastroenterology), 'Orthopedic Surgery' (Orthopedic Surgery).")
 
     def test_an_account_already_in_several_workspaces_keeps_working_where_it_is(self):
         # refutation N5-1-6: an earlier installation's agent in two workspaces can have its password rotated in either;
@@ -292,8 +303,8 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
                                       '--owner-password-file', self.secret('o3', OWNER_PASSWORD), '--agent-username',
                                       'review-agent', '--agent-password-file', self.secret('a3', AGENT_PASSWORD)),
                          "Account review-agent already serves the Gastroenterology workspace 'GI Demo', the "
-                         "Gastroenterology workspace 'Gastroenterology'; one login serves one workspace until a "
-                         "workspace switcher exists (D390).")
+                         "Gastroenterology workspace 'Gastroenterology'; this run is for the Gastroenterology workspace "
+                         "'GI Third'; one login serves one workspace until a workspace switcher exists (D390).")
         self.assertFalse(models.Membership.objects.filter(workspace=third, active=True).exists())
         self.assertFalse(models.User.objects.filter(username='owner3').exists())
 
@@ -309,8 +320,8 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
         self.assertEqual(self.refusal('--specialty', 'orthopedic-surgery', '--workspace-name', 'Neurosurgery',
                                       '--reviewer-username', 'drj', '--reviewer-password-file',
                                       self.secret('r2', REVIEWER_PASSWORD)),
-                         "No Orthopedic Surgery workspace is named exactly 'Neurosurgery'. 'Neurosurgery' is the name "
-                         "of the Neurosurgery specialty, and this run is for Orthopedic Surgery.")
+                         "No Orthopedic Surgery workspace is named exactly 'Neurosurgery'. 'Neurosurgery' names the "
+                         "Neurosurgery specialty, and this run is for Orthopedic Surgery.")
         self.assertEqual(self.refusal('--workspace-name', '', '--reviewer-username', 'drj', '--reviewer-password-file',
                                       self.secret('r3', REVIEWER_PASSWORD)),
                          "No Gastroenterology workspace is named exactly ''. A new workspace needs a name.")
@@ -318,6 +329,40 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
                                       '--reviewer-password-file', self.secret('r4', REVIEWER_PASSWORD)),
                          "No workspace named 'Lakeside' exists; provision it with its owner first.")
         self.assertFalse(models.User.objects.filter(username='drj').exists())
+
+    def test_an_owner_run_refused_names_the_workspaces_named_alike(self):
+        # refutation N7-1-4: acting on "this run is for Gastroenterology" never meets a workspace no refusal named
+        self.provision('neurosurgery', 'owner-neuro', 'review-agent-neuro')
+        self.assertEqual(self.refusal('--workspace-name', 'Neurosurgery', '--owner-username', 'drb',
+                                      '--owner-password-file', self.secret('b', OWNER_PASSWORD)),
+                         "'Neurosurgery' names the Neurosurgery specialty, and this run is for Gastroenterology. "
+                         "Named alike: 'Neurosurgery' (Neurosurgery).")
+
+    def test_a_refused_run_prints_no_account(self):
+        # refutation N7-1-6: the account lines are written once every account has passed
+        self.provision('neurosurgery', 'owner-neuro', 'review-agent-neuro')
+        out = io.StringIO()
+        with self.assertRaises(CommandError):
+            call_command('provision', '--specialty', 'orthopedic-surgery', '--workspace-name', 'Lakeside',
+                         '--owner-username', 'o3', '--owner-password-file', self.secret('o3', OWNER_PASSWORD),
+                         '--agent-username', 'review-agent-neuro', '--agent-password-file',
+                         self.secret('a3', AGENT_PASSWORD), stdout=out)
+        self.assertEqual(out.getvalue(), '')
+        self.assertFalse(models.User.objects.filter(username='o3').exists())
+
+    def test_a_name_without_letters_or_digits_is_named_alike_to_nothing(self):
+        category = models.Category.objects.create(slug='gastroenterology', name='Gastroenterology',
+                                                  profiles_version='gi-profiles@3')
+        models.Workspace.objects.create(category=category, name='---')
+        self.assertEqual(self.refusal('--workspace-name', '', '--reviewer-username', 'drj', '--reviewer-password-file',
+                                      self.secret('r', REVIEWER_PASSWORD)),
+                         "No Gastroenterology workspace is named exactly ''. A new workspace needs a name.")
+
+    def test_a_name_that_starts_with_a_dash_is_a_name(self):
+        # refutation N7-1-7: the installer passes '--workspace-name=<name>', which provision reads as that name
+        out = self.run_command('--specialty', 'orthopedic-surgery', '--workspace-name=-Spine', '--owner-username',
+                               'own-o', '--owner-password-file', self.secret('o', OWNER_PASSWORD))
+        self.assertIn('(-Spine, orthopedic-surgery) created', out)
 
     def test_a_run_takes_the_provisioning_lock_before_anything_else(self):
         # refutation N5-1-4: two runs at once are serialized, so both cannot pass the name rules and both create

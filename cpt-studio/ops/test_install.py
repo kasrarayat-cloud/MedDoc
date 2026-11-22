@@ -1812,6 +1812,11 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
         self.assertEqual({final for _, final in finals}, {'initial-credentials-neurosurgery.json'})
         self.assertEqual([op for op, _ in finals], ['state', 'stage', 'commit'])
         self.assertEqual(commands[0][:4], ['manage', 'provision', '--specialty', 'neurosurgery'])
+        # each name is one '--option=value' item, so a name starting with '-' reaches provision (refutation N7-1-7)
+        self.assertIn('--workspace-name=Neurosurgery', commands[0])
+        self.assertIn('--owner-display-name=', commands[0])
+        self.assertIn('--agent-display-name=CPT Studio review agent', commands[0])
+        self.assertFalse({'--workspace-name', '--owner-display-name', '--agent-display-name'} & set(commands[0]))
         self.assertTrue((home / 'agent-credentials-neurosurgery.json').exists())
         self.assertFalse((home / 'agent-credentials.json').exists())  # Gastroenterology's file is never touched
         self.assertEqual(outcome['specialty'], 'neurosurgery')

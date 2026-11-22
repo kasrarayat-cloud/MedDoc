@@ -603,9 +603,10 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   workspace switcher exists: `manage provision` never adds an account to a
   second workspace (an account an earlier installation put in several keeps
   working there). An existing workspace is found by its name exactly as
-  stored; a new workspace's name is not another specialty's name (white space
-  and letter case aside), and no workspace of another specialty has exactly
-  that name. A refusal states what is in the way. An empty `--workspace-name`
+  stored; a new workspace needs a name that does not name another specialty
+  (read by its letters and digits, case aside: `orthopedic-surgery` names
+  Orthopedic Surgery) and that no workspace of another specialty has exactly.
+  A refusal states what is in the way. An empty `--workspace-name`
   is refused; without one, the workspace is the specialty's name. The
   specialty is a label the page and the PDF show; the coding path does not
   read it (D358).

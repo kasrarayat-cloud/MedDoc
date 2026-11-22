@@ -6254,10 +6254,12 @@ def phase_provision(ctx) -> dict:
         for user in expected:
             write_private(scratch, f'{user}.pw', passwords[user].encode())
             mounts.append(f'type=bind,src={scratch / (user + ".pw")},dst=/run/cpt-provision/{user}.pw,readonly')
-        command = ['manage', 'provision', '--specialty', specialty, '--workspace-name', args.workspace_name,
-                   '--owner-username', args.owner_username, '--owner-display-name', args.owner_display_name,
+        # a name is one item, '--option=value', so a name the installer accepted that starts with '-' reaches provision
+        # as that name (refutation N7-1-7)
+        command = ['manage', 'provision', '--specialty', specialty, f'--workspace-name={args.workspace_name}',
+                   '--owner-username', args.owner_username, f'--owner-display-name={args.owner_display_name}',
                    '--owner-password-file', f'/run/cpt-provision/{args.owner_username}.pw',
-                   '--agent-username', args.agent_username, '--agent-display-name', args.agent_display_name,
+                   '--agent-username', args.agent_username, f'--agent-display-name={args.agent_display_name}',
                    '--agent-password-file', f'/run/cpt-provision/{args.agent_username}.pw']
         if reset:
             command.append('--reset-passwords')

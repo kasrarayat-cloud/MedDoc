@@ -8,10 +8,12 @@ One login serves one workspace until a workspace switcher exists (D390): a run n
 workspace (an account an earlier installation put in several keeps working there), so nobody is left seeing the wrong
 workspace's documents.
 
-A workspace is found by its name exactly as stored, and a name is stored as given. A NEW workspace's name is not another
-specialty's name (white space and letter case aside: --specialty left out), and no workspace of another specialty has
-exactly that name, so a check that knows a workspace by its name (walk --workspace, verify_login) knows its specialty
-too. A refusal states what is in the way; it gives no command.
+A workspace is found by its name exactly as stored, and a name is stored as given. A NEW workspace needs a name that does
+not name another specialty (read by its letters and digits, case aside, so its slug and spelling variants count:
+--specialty left out), and that no workspace of another specialty has exactly, so a check that knows a workspace by its
+name (walk --workspace, verify_login) knows its specialty too. A refusal states what is in the way, with the workspaces
+named alike; it gives no command, except main's own "provision it with its owner first" where a run with the owner
+would make that workspace and no workspace is named alike.
 
 Passwords are read from files (never argv, never printed). An existing account
 keeps its password unless --reset-passwords is given.
@@ -44,16 +46,18 @@ PROVISION_LOCK = 0x4350545350524F56  # 'CPTSPROV'
 
 
 def _read(name: str) -> str:
-    """A workspace name as a member reads it: white space around it set aside, runs of it as one space, letter case
-    aside (str.casefold, which also folds a few compatibility letters such as the long s). Other look-alike letters and
-    invisible characters are not folded: the operator names workspaces."""
-    return ' '.join(name.split()).casefold()
+    """A name as an operator or member reads it: its letters and digits, letter case aside (str.casefold, then
+    str.isalnum), so 'Orthopedic Surgery', 'orthopedic-surgery' and 'OrthopedicSurgery' read the same (refutation
+    N7-1-1). Look-alike letters of other scripts are not folded: the operator names workspaces."""
+    return ''.join(ch for ch in name.casefold() if ch.isalnum())
 
 
 def _named_alike(workspace_name: str) -> str:
     """" Named alike: ..." - every workspace, of any specialty, whose name reads the same as ``workspace_name`` (_read),
     named as stored with its specialty, sorted - or nothing. Facts for the operator; never a command."""
     reading = _read(workspace_name)
+    if not reading:
+        return ''
     found = sorted((each.name, each.category.name) for each in models.Workspace.objects.select_related('category')
                    if _read(each.name) == reading)
     return (' Named alike: ' + ', '.join(f'{name!r} ({specialty})' for name, specialty in found) + '.') if found else ''
@@ -61,9 +65,9 @@ def _named_alike(workspace_name: str) -> str:
 
 def _new_name_problem(workspace_name: str, slug: str, category) -> str:
     """Why a NEW workspace could not take this name, as facts with no command (refutation N6-1-1, N6-1-2) - or nothing.
-    The rules (owner direction 2026-11-22, D390): it has a name; it is not another specialty's name, read with white
-    space and letter case aside (refutation N1-2-2, N2-2-1: --specialty left out); and no workspace of another specialty
-    has exactly this name, so a check that knows a workspace by its exact name - walk --workspace and verify_login
+    The rules (owner direction 2026-11-22, D390): it has a name; it does not name another specialty, read by its letters
+    and digits with case aside, so the specialty's slug and spelling variants count (refutation N1-2-2, N2-2-1, N7-1-1:
+    --specialty left out); and no workspace of another specialty has exactly this name, so a check that knows a workspace by its exact name - walk --workspace and verify_login
     compare it exactly - knows its specialty too (refutation N1-2-1). Nothing else is ruled: a name is stored as given,
     and names that differ in case or spacing are different names, as they always were."""
     if not workspace_name.split():
@@ -71,7 +75,7 @@ def _new_name_problem(workspace_name: str, slug: str, category) -> str:
     reading = _read(workspace_name)
     for other, (other_name, _) in SPECIALTIES.items():
         if other != slug and _read(other_name) == reading:
-            return f'{workspace_name!r} is the name of the {other_name} specialty, and this run is for {category.name}.'
+            return f'{workspace_name!r} names the {other_name} specialty, and this run is for {category.name}.'
     same = sorted(each.category.name for each in models.Workspace.objects.filter(name=workspace_name)
                   .exclude(category=category).select_related('category'))
     if same:
@@ -82,7 +86,8 @@ def _new_name_problem(workspace_name: str, slug: str, category) -> str:
 def _check_new_name(workspace_name: str, slug: str, category) -> None:
     problem = _new_name_problem(workspace_name, slug, category)
     if problem:
-        raise CommandError(problem)
+        # with the workspaces named alike, so acting on the facts never meets a workspace no refusal named (N7-1-4)
+        raise CommandError(problem + _named_alike(workspace_name))
 
 
 def _password(path):
@@ -138,10 +143,10 @@ class Command(BaseCommand):
         made = workspace is None
         if made:
             if not options['owner_username']:
-                # adding accounts never makes a workspace. Main's instruction stands only where it holds - a run with
-                # the owner would make this workspace; otherwise the refusal states the facts (the rule that run would
-                # meet, and the workspaces of any specialty whose names read the same, as stored) and gives no command
-                # (refutation N1-2-2, N5-1-1, N6-1-2)
+                # adding accounts never makes a workspace. Main's instruction stands where it holds and nothing is
+                # named alike - a run with the owner would make this workspace; otherwise the refusal states the facts
+                # (the rule that run would meet, and the workspaces of any specialty whose names read the same, as
+                # stored) and gives no command (refutation N1-2-2, N5-1-1, N6-1-2, N7-1-2)
                 problem, alike = _new_name_problem(workspace_name, slug, category), _named_alike(workspace_name)
                 if not problem and not alike:
                     raise CommandError(f'No workspace named {workspace_name!r} exists; provision it with its owner '
@@ -150,7 +155,7 @@ class Command(BaseCommand):
                                    + (f' {problem}' if problem else '') + alike)
             _check_new_name(workspace_name, slug, category)
             workspace = models.Workspace.objects.create(category=category, name=workspace_name)
-        accounts = []
+        accounts, lines = [], []
         if options['owner_username']:
             accounts.append((options['owner_username'], options['owner_display_name'], options['owner_password_file'],
                              models.User.HUMAN, models.Membership.OWNER))
@@ -178,9 +183,12 @@ class Command(BaseCommand):
                                 models.Membership.objects.filter(user=user, active=True).exclude(workspace=workspace)
                                 .select_related('workspace__category'))
                 if serves:
+                    # with the workspace this run is for, so a stray character in the name shows (refutation N7-1-5)
                     raise CommandError(f'Account {username} already serves ' + ', '.join(
                         f'the {specialty} workspace {name!r}' for specialty, name in serves)
-                        + '; one login serves one workspace until a workspace switcher exists (D390).')
+                        + f'; this run is for the {category.name} workspace {workspace.name!r}'
+                        + (' (new)' if made else '') + '; one login serves one workspace until a workspace switcher '
+                        'exists (D390).')
             if created or options['reset_passwords']:
                 password = _password(password_file)
                 validate_password(password, user)
@@ -195,6 +203,9 @@ class Command(BaseCommand):
                 membership.save(update_fields=['role', 'active'])
             audit.record(workspace, 'account.provisioned', actor=None, username=username, actor_kind=kind,
                          role=role, created=created)
-            self.stdout.write(f'{"created" if created else "kept"} {kind} account {username} ({role})')
+            lines.append(f'{"created" if created else "kept"} {kind} account {username} ({role})')
+        # written once every account has passed: a refused run prints no account it rolled back (refutation N7-1-6)
+        for line in lines:
+            self.stdout.write(line)
         self.stdout.write(f'workspace {workspace.pk} ({workspace.name}, {category.slug}) '
                           f'{"created" if made else "existing"}')

@@ -26,8 +26,8 @@ specialty, with no engine, code list, routing or specialty rule (D358), so a Neu
 runs exactly the GI path. "Subcategories" are what they are for GI: the coverage of the synthetic verification
 documents, not a choice a member makes and not rules. One login serves one workspace until a workspace switcher exists:
 provisioning never adds an account to a second workspace. A workspace is found by its name exactly as stored; a new
-one's name is not another specialty's name, and no workspace of another specialty has exactly that name (ops/INSTALL.md,
-provision).
+one needs a name that does not name another specialty (read by its letters and digits, case aside) and that no workspace
+of another specialty has exactly (ops/INSTALL.md, provision).
 
 ## 2. Truth rules
 
