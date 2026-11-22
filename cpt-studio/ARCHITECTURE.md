@@ -393,7 +393,7 @@ no meaning and never holds or changes a code.
   locally, where Playwright is installed (`CPT_VERIFY_PLAYWRIGHT`), and records the counts.
 - After an install, `ops/walk.cjs` drives the real page with a synthetic document: upload, poll, the DOM and JSON
   contract, every quote chosen and judged by the walk's own search (below), an answer, an approval through the dialog,
-  both exports re-downloaded byte for byte, the denylist scan, a 390 px viewport, and every `/ops/` path refused to the
+  both reports re-downloaded byte for byte (the PDFs' wording scanned by `ops/scan_customer.py`, not by the walk), the denylist scan of the JSON, headers and page, a 390 px viewport, and every `/ops/` path refused to the
   customer.
 - The walk judges the viewer instead of taking its word (DECISIONS D368, rounds 3 and 5). It reads every PDF it judges
   itself, in Node, with the pinned library the page draws with (its own upload's bytes, else the view address fetched in

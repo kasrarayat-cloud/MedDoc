@@ -318,8 +318,8 @@ test('scanFile reads a text line by line, its quoted lines set aside (a PDF repo
   const ctx = walk.scanContext({});
   walk.addQuotes(ctx, { codes: [{ quotes: [{ text: 'Trace fluid in the pouch.', page: 1 },
     { text: 'Cold forceps biopsies were taken from the antrum, where trace fluid was seen.', page: 1 }] }] });
-  // the draft PDF report as exportPdf hands it to the scan (each page's lines as the walk's own reading gives them, the
-  // pages joined): a quotation on a line of its own, or wrapped over two, its page on the line under it
+  // scanFile on a text laid out as a report's lines (it is the walk's reader for a text; the walk does not scan the PDF
+  // reports it downloads - ops/scan_customer.py does): a quotation on a line of its own, or wrapped over two
   const text = ['QuillMD', 'C P T   S T U D I O', 'DRAFT · REVIEW REQUIRED', 'gi-02 · E5C1D3A2 · Coding review 1',
     'Synthetic data · Not for billing or claims   CPT-E5C1D3A2 · r1   /   01 of 01', '01   43239 / Ready for approval',
     '“Trace fluid in the pouch.”', 'Page 1', 'Reason: read by the model gpt-6', '02   00731 / Needs your answer',
@@ -329,8 +329,9 @@ test('scanFile reads a text line by line, its quoted lines set aside (a PDF repo
   // the control: the same lines, the quotations not the document's, are hits - so it is the setting aside that clears them
   assert.deepEqual(walk.scanFile(text, walk.scanContext({}), 'draft.pdf').map(hit => [hit.id, hit.where]),
     [['trace', 'draft.pdf line 7'], ['model_id', 'draft.pdf line 9'], ['trace', 'draft.pdf line 12']]);
-  const checks = walk.checkScan('scan.files', [...hits, { id: 'provider_word', severity: 'soft', where: 'x', match: 'provider' }], 'the downloads');
-  assert.deepEqual(checks.map(item => [item.id, item.status]), [['scan.files', 'fail'], ['scan.files.wording', 'warn']]);
+  // checkScan turns hits into a failed check and soft hits into a warning, whatever surface it is given
+  const checks = walk.checkScan('scan.text', [...hits, { id: 'provider_word', severity: 'soft', where: 'x', match: 'provider' }], 'a text');
+  assert.deepEqual(checks.map(item => [item.id, item.status]), [['scan.text', 'fail'], ['scan.text.wording', 'warn']]);
   assert.deepEqual(walk.checkScan('scan.dom', [], 'the page').map(item => item.status), ['pass']);
   assert.deepEqual(walk.scanHeaders({ 'content-security-policy': 'claude', 'x-served-by': 'anthropic' }, ctx, 'GET /x')
     .map(hit => hit.where), ['GET /x header x-served-by']);

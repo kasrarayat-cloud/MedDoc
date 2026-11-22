@@ -400,6 +400,8 @@ owner: session 738699b2 (the session that installed c28ff379ba40 and 0de2b584485
 file was removed from `main` in `cafdc2171` (the Fable rebuild), so this checklist is the harness checklist the
 directive means. Same rules as the rest of this file: `[x]` only with its evidence; an offline result is never recorded
 as live acceptance.
+Later the same day the owner made the PDF the only report ("no txt and csv ... let ppl only download our pdf
+report"; D388): new TXT and CSV exports are refused, and those made before stay listed and downloadable.
 
 - [x] **1. Current export/served state and deployment ownership established** — PASS (DOCUMENTED, 2026-11-21 15:19Z).
   `https://cpt.quillmd.com/health/` serves release `c28ff379ba40edb461cf5476c94968e228dcac03` (image
@@ -410,11 +412,39 @@ as live acceptance.
   done, the approved export needs a line whose current decision is approve and lists only such lines; every export stays
   listed, marked earlier once a later decision or round exists. The record holds no patient identifier and no
   plain-language service label (descriptors are not imported: no AMA licence), so the PDF prints neither.
-- [ ] **2. Dynamic first-page design implemented** — IN PROGRESS.
-- [ ] **3. Evidence continuation and long-document pagination implemented** — IN PROGRESS.
-- [ ] **4. Draft/approved eligibility and saved-revision binding verified** — NOT RUN.
-- [ ] **5. Authorization, tenant isolation and customer confidentiality verified** — NOT RUN.
-- [ ] **6. Searchable PDF, content and visual regression checks passed** — NOT RUN.
+- [x] **2. Dynamic first-page design implemented** — PASS (offline, PR #1506 head). The first page follows the approved
+  design: running header (QuillMD / CPT STUDIO, the status - DRAFT · REVIEW REQUIRED or APPROVED CODES - and the
+  identity line: title · reference · coding review), the eyebrow and title, the strip (document, date of service,
+  insurance, specialty, encounter reference), three metrics, the codes table (index, code, caption, status or approver
+  with details, units, decision and evidence reference), the review box and the record; footer with the synthetic
+  marking and "NN of TT". Every value comes from the saved snapshot (exports.snapshot); nothing is inferred (no patient
+  identifier or service label exists, so neither is printed; a missing value reads "Not recorded" or "Not given").
+  Evidence: tests/test_physician_report.py (18), the four refutation test modules; the visual check of 12 scenario PDFs
+  rasterized from the tests (session scratch, synthetic): draft, approved, agent, long (11 pages), missing data, no codes.
+- [x] **3. Evidence continuation and long-document pagination implemented** — PASS (offline, PR #1506 head). Continuation
+  pages use the evidence-page treatment; code rows never split (a row too tall for a page flows as paragraphs);
+  headings never end a page alone; a quotation and its locator stay together (a long one flows with its locator first
+  and two lines at least); notes keep their heading; page numbering is "NN of TT" on every page, the same in both render
+  passes. Evidence: the round-1 to round-4 layout tests (sweeps through the API), and the round-3 lens's ~10,000 renders
+  with no LayoutError, no text past the footer and no page-count mismatch.
+- [x] **4. Draft/approved eligibility and saved-revision binding verified** — PASS (offline, PR #1506 head). A report names
+  the round the page shows (409 when it is not the latest); a draft needs a finished round; the approved report needs a
+  current approval and lists only lines whose current decision is approve (ready or needs_review), with who approved
+  and when; an undone approval is not an approval; an agent's approval says it is not clinical approval. The PDF is the
+  only report made (owner direction 2026-11-21): TXT and CSV requests are refused (400) and store nothing; TXT and CSV
+  files made before stay listed and download as stored. Evidence: tests/test_exports.py, test_stale_actions.py,
+  test_api_customer.py, test_physician_report.py.
+- [x] **5. Authorization, tenant isolation and customer confidentiality verified** — PASS (offline, PR #1506 head). Another
+  workspace's member gets 404, a signed-out caller is refused, a viewer can download what a reviewer can; no vendor or
+  model name, provider, usage or log field reaches the report from plausible coding-review output (text the coding
+  review wrote is filtered as written and as printed); the customer scanner reads every PDF export (fail-closed on
+  anything it does not read). Six refutation rounds on the clinical-report path (rounds 1-6: 38, 39, 17, 22, 10 and 8
+  findings; every repair mutation-proven; the last round found no high finding and no medium regression), the residuals recorded as known limits in cpt-studio/ARCHITECTURE.md.
+  Evidence: tests/test_tenancy.py, test_physician_report_scan.py, test_name_filter_families.py, the refutation modules.
+- [x] **6. Searchable PDF, content and visual regression checks passed** — PASS (offline, PR #1506 head). The PDF is real
+  text (pypdf and pdf.js read every word; fonts embedded as subsets; no image, no remote resource); content checks
+  compare it with the saved state (codes, decisions, units, modifiers, quotations); the visual check of the scenario
+  PDFs matches the approved design. Gate (scripts/ci/verify-cpt-studio.sh) on the final tree: see the commit that lands this entry.
 - [ ] **7. Installed on cpt.quillmd.com with rollback available** — NOT RUN.
 - [ ] **8. Actual authenticated download, saved-data comparison and reload passed** — NOT RUN.
 

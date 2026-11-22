@@ -99,3 +99,40 @@ class RoundFiveNamesCase(r.CustomerCase, TestCase):
         text = flat(text_of(self.pdf(enc)))
         self.assertIn('Unnamed member, Unnamed member, Unnamed member (automated agent)', text)
         self.assertIn('by Unnamed member', text.split('REVIEW SCOPE')[1])  # the Prepared row
+
+
+class RoundSixScannerTests(SimpleTestCase):
+    """Refutation round 6: the scanner's fixed-width reading now opens with a literal (the undrawn runs at either end left
+    off), so a failing quotation with a long undrawn run at its start is answered at once; it answers nothing the
+    placement would not (a differential against a brute-force reading of the rule). And the walk says it skipped the
+    downloads' scan, naming the files, or that none was downloaded."""
+
+    def test_the_fixed_width_reading_answers_as_the_rule_does(self):
+        import random
+        import re
+        sc = r.scan_customer()
+        fffd = chr(0xFFFD)
+
+        def oracle(printed, document):  # each run of k undrawn characters stands for 0 to k characters
+            if not printed:
+                return False
+            pieces = re.findall(f'{fffd}+|[^{fffd}]+', printed)
+            pattern = ''.join(f'.{{0,{len(p)}}}' if p.startswith(fffd) else re.escape(p) for p in pieces)
+            return re.search(pattern, document, re.DOTALL) is not None
+
+        rng = random.Random(20261122)
+        for _ in range(3000):
+            printed = ''.join(rng.choice('ab' + fffd) for _ in range(rng.randint(1, 7)))
+            document = ''.join(rng.choice('abc') for _ in range(rng.randint(0, 12)))
+            with self.subTest(printed=printed, document=document):
+                self.assertEqual(sc._of_document(printed, document), oracle(printed, document))
+        # a quotation that fails, with a long undrawn run at its start: the fixed-width reading opens with its literal, so
+        # it is answered at once (opening with the run, it tried 20,000 wildcards at each of 180,000 places)
+        started = time.monotonic()
+        self.assertFalse(sc._of_document(fffd * 20000 + 'zz', 'ab' * 100000))
+        self.assertLess(time.monotonic() - started, 1)
+
+    def test_the_walk_names_what_it_skipped(self):
+        source = (pathlib.Path(__file__).resolve().parent.parent / 'ops' / 'walk.cjs').read_text(encoding='utf-8')
+        self.assertIn("'no report was downloaded'", source)
+        self.assertIn('the walk does not scan the PDF reports it downloaded', source)

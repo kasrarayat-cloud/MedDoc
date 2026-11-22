@@ -365,12 +365,6 @@ def _of_document(printed: str, document: str) -> bool:
     # for nothing, so only the pieces from the first literal to the last are placed: by the set of document positions
     # each placement can end at, in time linear in the document for each piece (a pattern of k optional wildcards
     # backtracks exponentially on a run of undrawable characters, refutation round 4).
-    # The usual case first: each U+FFFD one character of the document, a fixed-width pattern with no optional part, which
-    # stops at its first placement; only a quotation that fails it (an undrawn white space or format character the
-    # reading removed) is placed piece by piece below (refutation round 5: keeping every placement of a clean quotation
-    # cost the document's length times the quotation's).
-    if re.search('.'.join(re.escape(part) for part in printed.split(REPLACEMENT)), document, re.DOTALL):
-        return True
     parts = re.split('(' + re.escape(REPLACEMENT) + '+)', printed)
     literals, gaps = parts[0::2], [len(run) for run in parts[1::2]]
     if literals[0] == '':
@@ -379,6 +373,13 @@ def _of_document(printed: str, document: str) -> bool:
         literals, gaps = literals[:-1], gaps[:-1]
     if not literals:
         return True  # nothing but undrawn characters: no word of it can be read, so none can be scanned
+    # The usual case first: each U+FFFD one character of the document, a fixed-width pattern that opens with a literal (the
+    # runs at either end, which can stand for nothing, are left off) and has no optional part, so it stops at its first
+    # placement; only a quotation that fails it (an undrawn white space or format character the reading removed) is
+    # placed piece by piece below (refutation rounds 5 and 6). It answers nothing the placement below would not.
+    fixed = re.escape(literals[0]) + ''.join(f'.{{{gap}}}' + re.escape(literal) for gap, literal in zip(gaps, literals[1:]))
+    if re.search(fixed, document, re.DOTALL):
+        return True
     ends, at = set(), document.find(literals[0])
     while at >= 0:
         ends.add(at + len(literals[0]))
