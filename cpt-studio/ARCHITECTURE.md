@@ -165,9 +165,10 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   `#` a resequenced code, at most one of each - is the code they mark (`+22614` is 22614: the code itself says what the
   mark says; owner direction 2026-11-22, D390, nothing may drop a code Fable writes), and so are a review's code, the
   checker's correction and a question's target, so a marked line and a marked review of it agree (refutation
-  N2-1-1..4); a stored round is read again whenever a page shows it, so the release that installs this reading checks,
-  before its switch, that no stored round holds a marked code (refutation N3-1-1; cpt.quillmd.com held none); any other
-  shape is unreadable, never corrected or guessed. **Lines**: every code row has one -
+  N2-1-1..4) - a review's code, a correction and a target in any other form are kept as written and matched as before
+  (white space and case aside), never unreadable; a stored round is read again whenever a page shows it, so the release
+  that installs this reading checks, before its switch, that no stored round holds a marked code (refutation N3-1-1;
+  cpt.quillmd.com held none); a code line's code in any other shape is unreadable, never corrected or guessed. **Lines**: every code row has one -
   `L1`..`Ln`, the
   reader's codes in its order, then `M1`..`Mk`, the checker's additions - and the checker is given each line and names
   the line of every review. **Combination**, the only glue logic: a reader line keeps the reader's status only when the

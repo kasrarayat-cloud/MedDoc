@@ -35,7 +35,9 @@ lossless ones:
   is no id - the question is kept and shown, and no reference reaches it);
 - documentation_problems: a list, or a single value read as a list of one; an item that is no string is kept as its
   JSON text, never dropped;
-- every review names its code as a non-empty string;
+- every review names its code as a non-empty string (read with the CPT book's marks set aside, as a code line's is;
+  matched to a line with white space and letter case aside, as before - a review is never Unreadable for its code's
+  form, and one that names no line's code is shown as such);
 any other shape is Unreadable, so nothing Fable wrote is dropped, altered or guessed. A question is blank when nothing
 is left of its text once U+FEFF and white space are removed (blank_question, the one test of it: every text the customer
 page's trim() empties is blank to it, and it also calls blank U+001C to U+001F and U+0085, which the page keeps), and a
@@ -96,7 +98,8 @@ proportion to what it reads: no step rescans what an earlier one built.
 
 Citations (FIX-SPEC 1; FIX-SPEC-2 section 4): the joined text is read line by line. A marker is a whole line holding
 exactly ``LINE L<n> <code>`` (reader), ``REVIEW L<n> <code>`` or ``MISSED M<k> <code>`` (checker), case-sensitive,
-optionally after a run of '#' and one space (trailing spaces aside). A section starts at a marker and ends at the next
+optionally after a run of '#' and one space (trailing spaces aside); the code may carry the CPT book's marks ('+', '#',
+at most one each, either order: _written_code). A section starts at a marker and ends at the next
 marker, at a line holding exactly END (the reader and the checker are asked to end their last section with one) or at
 the start of the final answer - its fence, or the start of its widest span - after which nothing starts a section; a
 line that looks like a marker but is not one, a heading (a line starting with '#', or a line all in bold), a thematic
@@ -156,8 +159,9 @@ def _written_code(value: object) -> object:
     is 22853 (owner direction 2026-11-22, D390: nothing in CPT Studio may drop a code Fable writes, and spine and joint
     cases are built on add-on codes, some of them resequenced). A lossless conversion of the shape in the sense of
     FIX-SPEC-2 section 2, the code itself saying what the mark says; everything else is returned exactly as written, so
-    the rest of that section stands - white space, lower case, a mark with a space after it or repeated, another
-    symbol, or a code joined to a modifier ("22614-62") still make the answer unreadable rather than altered or guessed.
+    the rest of that section stands - on a code line, white space, lower case, a mark with a space after it or repeated,
+    another symbol, or a code joined to a modifier ("22614-62") still make the answer unreadable rather than altered or
+    guessed (a review's code, a correction and a target are kept as written and matched as before).
 
     Read wherever an answer names a code - a code line, a missed code, a review's code, the checker's correction, a
     question's target and a section marker - so a marked line and a marked review of it agree (refutation N2-1-1..4).

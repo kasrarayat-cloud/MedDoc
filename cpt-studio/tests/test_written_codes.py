@@ -95,3 +95,26 @@ class WrittenCodeTests(SimpleTestCase):
         self.assertEqual((texts(found, 'L1'), texts(found, 'L2'), texts(found, 'L3'), texts(found, '_document')),
                          (['posterolateral arthrodesis L4-L5'], ['extended to L5-S1'], ['interbody cage at L4-L5'],
                           ['a single cage was inserted']))
+
+    def test_a_bare_resequencing_mark_is_a_marker_and_a_heading_still_ends_a_section(self):
+        # refutation N4-2-3: "LINE L1 #22853" is that line's marker
+        reader = f.message([
+            f.text_block('LINE L1 #22853\n'),
+            f.text_block('A cage.', [f.page_cite('interbody cage at L4-L5', 1)]),
+            f.text_block('\nEND'),
+            f.text_block(f.fenced(f.reader_result([f.code('#22853')])))])
+        self.assertEqual(texts(result.citations(reader, None), 'L1'), ['interbody cage at L4-L5'])
+        # N4-2-2: a heading that starts with a code, as the CPT book prints an entry's title, ends the section as on main,
+        # so what follows goes to _document and never to the line before
+        for heading in ('#+22853 Insertion of an interbody device, each interspace', '# 22853', '#22853', '##+22614 Add-on'):
+            with self.subTest(heading=heading):
+                reader = f.message([
+                    f.text_block('LINE L1 22612\n'),
+                    f.text_block('Fusion.', [f.page_cite('posterolateral arthrodesis', 1)]),
+                    f.text_block('\n' + heading + '\n'),
+                    f.text_block('After it.', [f.page_cite('a cage was inserted', 1)]),
+                    f.text_block('\nEND'),
+                    f.text_block(f.fenced(f.reader_result([f.code('22612')])))])
+                found = result.citations(reader, None)
+                self.assertEqual((texts(found, 'L1'), texts(found, '_document')),
+                                 (['posterolateral arthrodesis'], ['a cage was inserted']))

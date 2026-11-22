@@ -161,59 +161,52 @@ class SpecialtyProvisionTests(ProvisionCommand, TestCase):
 
 
 class WorkspaceNameTests(ProvisionCommand, TestCase):
-    """Refutation N1-2-1 and N1-2-2: each workspace name belongs to one specialty, and a specialty's own name is its alone,
-    so a workspace known by its name (a member, the walk's --workspace) is known with its specialty."""
+    """Each workspace name belongs to one specialty and a specialty's own name is its alone (refutation N1-2-1, N1-2-2,
+    N2-2-1); an existing workspace is found by its name exactly as stored and the rules apply only to a NEW workspace's
+    name, so an installation's existing names keep working as they did (refutation N4-1-1..3)."""
 
     def test_a_workspace_name_belongs_to_one_specialty(self):
         self.run_command('--specialty', 'neurosurgery', '--workspace-name', 'Riverside', '--owner-username', 'own-n',
                          '--owner-password-file', self.secret('n', OWNER_PASSWORD))
-        with self.assertRaisesMessage(CommandError, "'Riverside' is a Neurosurgery workspace; give --specialty neurosurgery"):
+        with self.assertRaisesMessage(CommandError, "The workspace 'Riverside' is a Neurosurgery workspace; give "
+                                                    "--specialty neurosurgery"):
             self.run_command('--specialty', 'orthopedic-surgery', '--workspace-name', 'riverside', '--owner-username',
                              'own-o', '--owner-password-file', self.secret('o', OWNER_PASSWORD))
         self.assertEqual(list(models.Workspace.objects.values_list('name', flat=True)), ['Riverside'])
         self.assertFalse(models.User.objects.filter(username='own-o').exists())
 
     def test_a_specialty_name_is_that_specialtys_alone(self):
-        with self.assertRaisesMessage(CommandError, "'Neurosurgery' is the name of the Neurosurgery specialty; give "
-                                                    "--specialty neurosurgery"):
-            self.run_command('--workspace-name', 'Neurosurgery', '--owner-username', 'drneuro2',
-                             '--owner-password-file', self.secret('x', OWNER_PASSWORD))
+        for name in ('Neurosurgery', 'NEUROSURGERY', 'orthopedic surgery'):
+            with self.subTest(name=name), self.assertRaisesMessage(CommandError, 'is the name of the'):
+                self.run_command('--workspace-name', name, '--owner-username', 'drneuro2',
+                                 '--owner-password-file', self.secret('x', OWNER_PASSWORD))
         self.assertFalse(models.Workspace.objects.exists())
 
-    def test_the_reviewer_path_names_the_specialty_a_workspace_has(self):
-        self.provision('neurosurgery', 'owner-neuro', 'review-agent-neuro')
-        with self.assertRaisesMessage(CommandError, "'Neurosurgery' is a Neurosurgery workspace; give --specialty "
-                                                    "neurosurgery"):
-            self.run_command('--workspace-name', 'Neurosurgery', '--reviewer-username', 'drjones',
-                             '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
-        out = self.run_command('--specialty', 'neurosurgery', '--reviewer-username', 'drjones',
-                               '--reviewer-password-file', self.secret('r2', REVIEWER_PASSWORD))
-        self.assertIn('created human account drjones (reviewer)', out)
+    def test_a_new_name_is_written_cleanly(self):
+        for name in ('Neurosurgery ', ' Neurosurgery', 'Orthopedic  Surgery', ' Spine Center ', 'Spine  Center'):
+            with self.subTest(name=name), self.assertRaisesMessage(
+                    CommandError, 'Write the workspace name without leading, trailing or repeated spaces.'):
+                self.run_command('--specialty', 'neurosurgery', '--workspace-name', name, '--owner-username', 'own-n',
+                                 '--owner-password-file', self.secret('n', OWNER_PASSWORD))
+        self.assertFalse(models.Workspace.objects.exists())
 
-    def test_white_space_in_a_name_gets_past_neither_rule(self):
-        # refutation N2-2-1: spaces around or inside a name are read as a member reads them
-        for name in ('Neurosurgery ', ' Neurosurgery', 'Orthopedic  Surgery', ' Orthopedic Surgery '):
-            with self.subTest(name=name), self.assertRaisesMessage(CommandError, 'is the name of the'):
-                self.run_command('--workspace-name', name, '--owner-username', 'gi-own0',
-                                 '--owner-password-file', self.secret('g', OWNER_PASSWORD))
-        self.run_command('--specialty', 'neurosurgery', '--workspace-name', ' Spine  Center ', '--owner-username',
-                         'own-n', '--owner-password-file', self.secret('n', OWNER_PASSWORD))
-        self.assertEqual(list(models.Workspace.objects.values_list('name', flat=True)), ['Spine Center'])
-        with self.assertRaisesMessage(CommandError, "'Spine Center' is a Neurosurgery workspace"):
-            self.run_command('--specialty', 'orthopedic-surgery', '--workspace-name', 'spine center ',
-                             '--owner-username', 'own-o', '--owner-password-file', self.secret('o', OWNER_PASSWORD))
-
-    def test_the_reviewer_path_finds_its_workspace_as_the_hint_names_it(self):
-        # refutation N2-2-3: the lookup and the hint agree, so following the hint reaches the existing workspace
+    def test_a_name_read_the_same_in_the_specialty_is_named_exactly(self):
         self.provision('neurosurgery', 'owner-neuro', 'review-agent-neuro')
-        self.run_command('--specialty', 'neurosurgery', '--workspace-name', 'neurosurgery', '--reviewer-username',
-                         'drj', '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
+        with self.assertRaisesMessage(CommandError, "Neurosurgery workspace called 'Neurosurgery': name one exactly "
+                                                    "as stored."):
+            self.run_command('--specialty', 'neurosurgery', '--workspace-name', 'neurosurgery', '--reviewer-username',
+                             'drj', '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
+        out = self.run_command('--specialty', 'neurosurgery', '--workspace-name', 'Neurosurgery', '--reviewer-username',
+                               'drj', '--reviewer-password-file', self.secret('r2', REVIEWER_PASSWORD))
+        self.assertIn('created human account drj (reviewer)', out)
         self.assertEqual(models.Workspace.objects.filter(category__slug='neurosurgery').count(), 1)
-        self.assertEqual(models.Membership.objects.get(user__username='drj').workspace.name, 'Neurosurgery')
+        with self.assertRaisesMessage(CommandError, "'Neurosurgery' is the name of the Neurosurgery specialty; give "
+                                                    "--specialty neurosurgery"):
+            self.run_command('--workspace-name', 'Neurosurgery', '--reviewer-username', 'drk',
+                             '--reviewer-password-file', self.secret('r3', REVIEWER_PASSWORD))
 
-    def test_an_existing_name_is_found_exactly_as_stored_first(self):
-        # refutation N3-2-1, N3-2-2: two workspaces stored before these rules whose names differ only in white space or
-        # case stay apart, and a name stored with spaces is still reached by that name
+    def test_existing_names_are_found_exactly_as_stored(self):
+        # names stored before these rules (main stored any name as given) are reached exactly as they are
         category = models.Category.objects.create(slug='gastroenterology', name='Gastroenterology',
                                                   profiles_version='gi-profiles@3')
         spaced = models.Workspace.objects.create(category=category, name='GI  Clinic ')
@@ -224,6 +217,22 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
         self.run_command('--workspace-name', 'GI Clinic', '--reviewer-username', 'dry',
                          '--reviewer-password-file', self.secret('y', REVIEWER_PASSWORD))
         self.assertEqual(models.Membership.objects.get(user__username='dry').workspace, plain)
-        with self.assertRaisesMessage(CommandError, "2 Gastroenterology workspaces read as 'gi clinic': name one exactly"):
+        with self.assertRaisesMessage(CommandError, "Gastroenterology workspaces called 'GI  Clinic ', 'GI Clinic': "
+                                                    "name one exactly as stored."):
             self.run_command('--workspace-name', 'gi clinic', '--reviewer-username', 'drx',
                              '--reviewer-password-file', self.secret('x', REVIEWER_PASSWORD))
+
+    def test_an_old_workspace_named_like_a_specialty_captures_nothing(self):
+        # refutation N4-1-1: a Gastroenterology workspace stored before these rules under a specialty's name (with stray
+        # spaces) neither takes members asking for that specialty's name nor sends them into Gastroenterology
+        category = models.Category.objects.create(slug='gastroenterology', name='Gastroenterology',
+                                                  profiles_version='gi-profiles@3')
+        models.Workspace.objects.create(category=category, name='Neurosurgery ')
+        models.Workspace.objects.create(category=category, name='Orthopedic  Surgery')
+        with self.assertRaisesMessage(CommandError, "'Neurosurgery' is the name of the Neurosurgery specialty"):
+            self.run_command('--workspace-name', 'Neurosurgery', '--reviewer-username', 'drneuro2',
+                             '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
+        with self.assertRaisesMessage(CommandError, "the Gastroenterology workspace 'Orthopedic  Surgery' reads the same; "
+                                                    "rename that workspace first"):
+            self.provision('orthopedic-surgery', 'drortho', 'agent-ortho')
+        self.assertFalse(models.User.objects.filter(username__in=['drneuro2', 'drortho']).exists())

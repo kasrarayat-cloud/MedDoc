@@ -37,8 +37,38 @@ CATEGORY_NAME, PROFILES_VERSION = SPECIALTIES[CATEGORY_SLUG]
 
 def _read(name: str) -> str:
     """A workspace name as a member reads it: white space around it set aside, runs of it as one space, letter case
-    aside. Look-alike letters and invisible characters are not folded: the operator names workspaces."""
+    aside (str.casefold, which also folds a few compatibility letters such as the long s). Other look-alike letters and
+    invisible characters are not folded: the operator names workspaces."""
     return ' '.join(name.split()).casefold()
+
+
+def _check_new_name(workspace_name: str, slug: str, category) -> None:
+    """The rules a NEW workspace's name meets (owner direction 2026-11-22, D390; refutation N1-2-1, N1-2-2, N2-2-1,
+    N4-1-1): written cleanly; not another specialty's name; not read the same as a workspace of this specialty (name
+    that one exactly as stored instead); and not read the same as a workspace of another specialty - each workspace name
+    belongs to one specialty, so a member, or a check that knows a workspace by its name, knows its specialty too."""
+    if not workspace_name or workspace_name != ' '.join(workspace_name.split()):
+        raise CommandError('Write the workspace name without leading, trailing or repeated spaces.')
+    reading = _read(workspace_name)
+    owner_of_name = next((other for other, (other_name, _) in SPECIALTIES.items() if _read(other_name) == reading), slug)
+    if owner_of_name != slug:
+        raise CommandError(f'{workspace_name!r} is the name of the {SPECIALTIES[owner_of_name][0]} specialty; give '
+                           f'--specialty {owner_of_name}.')
+    same = sorted(each.name for each in models.Workspace.objects.filter(category=category) if _read(each.name) == reading)
+    if same:
+        raise CommandError(f'{category.name} workspace{"s" if len(same) > 1 else ""} called '
+                           f'{", ".join(repr(each) for each in same)}: name one exactly as stored.')
+    other = sorted(((each.category.name, each.name, each.category.slug) for each in
+                    models.Workspace.objects.exclude(category=category).select_related('category')
+                    if _read(each.name) == reading))
+    if other:
+        other_specialty, other_name, other_slug = other[0]
+        if reading == _read(SPECIALTIES[slug][0]):
+            raise CommandError(f'{workspace_name!r} is the name of the {SPECIALTIES[slug][0]} specialty, but the '
+                               f'{other_specialty} workspace {other_name!r} reads the same; rename that workspace '
+                               f'first.')
+        raise CommandError(f'The workspace {other_name!r} is a {other_specialty} workspace; give --specialty '
+                           f'{other_slug} (each workspace name belongs to one specialty).')
 
 
 def _password(path):
@@ -77,42 +107,17 @@ class Command(BaseCommand):
             raise CommandError('--reviewer-password-file is required with --reviewer-username.')
         slug = options['specialty']
         name, profiles_version = SPECIALTIES[slug]
-        requested = options['workspace_name'] or name
-        # a new workspace's name is stored as a member reads it: white space around it set aside and runs of it read as
-        # one space (refutation N2-2-1)
-        workspace_name = ' '.join(requested.split())
-        if not workspace_name:
-            raise CommandError('The workspace name is empty.')
+        workspace_name = options['workspace_name'] or name
         category, _ = models.Category.objects.get_or_create(
             slug=slug, defaults={'name': name, 'profiles_version': profiles_version})
         if category.profiles_version != profiles_version:
             category.profiles_version = profiles_version
             category.save(update_fields=['profiles_version'])
-        # an existing workspace is found by its name exactly as stored first (as before; refutation N3-2-1, N3-2-2), and
-        # only then as a member reads it - and only when that names one workspace of the specialty
-        in_specialty = list(models.Workspace.objects.filter(category=category).order_by('pk'))
-        workspace = next((each for each in in_specialty if each.name == requested), None)
+        # an existing workspace is found by its name exactly as stored, as before; the rules below apply only when a
+        # workspace is made, so an installation's existing names keep working as they did (refutation N4-1-1..3)
+        workspace = models.Workspace.objects.filter(category=category, name=workspace_name).first()
         if workspace is None:
-            readings = [each for each in in_specialty if _read(each.name) == _read(workspace_name)]
-            if len(readings) > 1:
-                raise CommandError(f'{len(readings)} {category.name} workspaces read as {workspace_name!r}: name one '
-                                   f'exactly as stored ({", ".join(repr(each.name) for each in readings)}).')
-            workspace = readings[0] if readings else None
-        if workspace is None:
-            # each workspace name belongs to one specialty, and a specialty's own name is its alone (refutation
-            # N1-2-1, N1-2-2): a member or a check that knows a workspace by its name always knows its specialty too
-            elsewhere = next((each for each in models.Workspace.objects.exclude(category=category)
-                              .select_related('category').order_by('pk')
-                              if _read(each.name) == _read(workspace_name)), None)
-            if elsewhere is not None:
-                raise CommandError(f'The workspace {elsewhere.name!r} is a {elsewhere.category.name} workspace; give '
-                                   f'--specialty {elsewhere.category.slug} (each workspace name belongs to one '
-                                   f'specialty).')
-            owner_of_name = next((other for other, (other_name, _) in SPECIALTIES.items()
-                                  if _read(other_name) == _read(workspace_name)), slug)
-            if owner_of_name != slug:
-                raise CommandError(f'{workspace_name!r} is the name of the {SPECIALTIES[owner_of_name][0]} specialty; '
-                                   f'give --specialty {owner_of_name}.')
+            _check_new_name(workspace_name, slug, category)
             if not options['owner_username']:
                 raise CommandError(f'No workspace named {workspace_name!r} exists; provision it with its '
                                    f'owner first.')
