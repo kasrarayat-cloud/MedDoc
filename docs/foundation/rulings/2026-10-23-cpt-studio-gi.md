@@ -4073,3 +4073,18 @@ per specialty - four coding runs in all, run one pair at a time on a rehearsal c
 The owner tests the majority of both specialties themselves. The live release waits for the owner's approval after the
 pairs' results are reported. The synthetic documents for every subcategory are still written (no paid run), for the
 owner's own testing.
+
+### The owner's approval of the live release, 2026-11-22 (738699b2, on receipt) — recorded, DECISIONS D391
+
+After the paid pairs' results were reported (one short and one realistic synthetic document per specialty on a
+rehearsal copy with the test key: 13 of 13 author-expected codes ready, US$8.56 in all; the session's report ended
+"Nothing is live yet. It's waiting for your OK to release."), the owner replied, verbatim:
+
+> ok
+
+(g) The session reads it as the owner's approval of the live release under (f). The release is installed under
+docs/foundation/mutations/20261122-cpt-studio-neuro-ortho-install.md, committed before the act, by the standing
+process: the merge (PR #1509, 3ce5383ce485), offline predictions on a fresh read-only dump of live, a rehearsal on a
+restored copy, the act through the ruled-act door, the two specialties' workspaces and accounts provisioned by the
+installer, a live check on the new accounts and a report. It does not answer the session's earlier, separate question
+about deleting older leftover copies of live data on the test server (class d): those stay until the owner says so.
