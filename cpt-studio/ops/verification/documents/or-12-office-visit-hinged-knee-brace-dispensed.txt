@@ -1,0 +1,35 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Cedar Ridge Orthopaedic Associates (fictional practice)
+Office follow-up visit - progress note with knee brace fitting
+
+Patient: Caspian Reyes (fictional)
+Synthetic record: SYN-OR-0012
+Date of service: 2026-11-04
+Place of service: Office, in-person outpatient visit
+Clinician: Dr. Harriet Solberg, MD, Orthopedic Surgery (fictional)
+Patient status: Established patient. Seen by Dr. Solberg on 2026-10-28 for a right knee injury.
+
+History of present illness
+34-year-old recreational soccer player with a valgus injury to the right knee on 2026-10-26, diagnosed at the last visit with a grade II medial collateral ligament sprain; radiographs that day showed no fracture. Medial knee pain is improving, now 3/10, but the knee feels unstable on stairs and when turning. No locking. Walking without crutches.
+
+Examination
+Right knee: trace effusion; tender over the femoral origin of the medial collateral ligament. Valgus stress at 30 degrees opens about 6 mm with a firm endpoint; stable in full extension. Lachman, posterior drawer and McMurray tests negative. Motion 0 to 120 degrees. Neurovascularly intact.
+
+Assessment
+Grade II right medial collateral ligament sprain, improving, with valgus instability during activity.
+
+Plan
+1. Hinged knee brace (below) when walking, for 6 weeks.
+2. Referral to physical therapy for motion and quadriceps strengthening.
+3. Ibuprofen 400 mg over the counter as needed, with food.
+4. No soccer until cleared. MRI only if instability persists; not ordered today.
+5. Return in 4 weeks.
+
+Brace fitted and dispensed today
+Prefabricated, off-the-shelf hinged functional knee brace for the right knee: double-upright frame with medial and lateral aluminum uprights along the thigh and calf, rigid thigh and calf cuffs with straps, and polycentric hinges with adjustable flexion and extension stops, giving medial-lateral (varus-valgus) and rotational control. Size medium, chosen by thigh and calf circumference. Dr. Solberg applied the brace, adjusted the straps and set the hinges to 0 to 90 degrees. No trimming, bending, molding or other customization was needed. He was taught donning, doffing and skin checks, and walked in the clinic with good fit and no pressure points.
+
+Medical decision making
+Low: one acute uncomplicated injury; low-risk management (brace, physical therapy, over-the-counter medication).
+
+Electronically signed: Dr. Harriet Solberg, MD (fictional), 2026-11-04 15:20

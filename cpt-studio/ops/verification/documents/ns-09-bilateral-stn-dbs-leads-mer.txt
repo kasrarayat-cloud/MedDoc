@@ -1,0 +1,74 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Granite Ridge Neuroscience Hospital (fictional hospital)
+Operative report - functional and stereotactic neurosurgery
+
+Patient: Gerald Ostrowski (fictional)
+Synthetic record: SYN-NS-0009
+Date of procedure: 2026-11-05
+Place of service: Inpatient hospital, operating room
+Surgeon: Dr. Miriam Achterberg, MD, Neurosurgery (fictional)
+Assistant: None; scrubbed surgical technologist only.
+Anesthesia: Dr. Owen Pritchard, MD, Anesthesiology (fictional) - monitored anesthesia care
+Neurophysiology: Microelectrode recording performed and interpreted by the operating surgeon; the recording system was operated by Danielle Okoro, R. EEG T., neurophysiology technologist (fictional). Clinical testing assisted by Jonah Whitcomb, RN, movement disorders nurse (fictional).
+
+Preoperative diagnosis
+Idiopathic Parkinson disease with motor fluctuations and levodopa-induced dyskinesia.
+
+Postoperative diagnosis
+Same.
+
+Procedure
+1. Bilateral stereotactic implantation of deep brain stimulation leads in the subthalamic nucleus through bilateral burr holes, with intraoperative microelectrode recording on each side (left first, then right).
+2. Stereotactic headframe application and frame-based targeting with CT-MRI fusion.
+
+Indication
+63-year-old man with Parkinson disease diagnosed 11 years ago, levodopa-responsive, with about four hours of off time daily, peak-dose dyskinesia and off-period right-greater-than-left tremor despite optimized medication. On levodopa challenge the MDS-UPDRS motor score improved from 46 off to 17 on (63 percent). Neuropsychological testing showed no dementia, and mood is stable. The movement disorders conference recommended bilateral subthalamic stimulation, staged: leads today, with the pulse generator and extensions at a second operation in about two weeks.
+
+Consent
+Risks including intracranial hemorrhage, stroke, infection, seizure, hardware failure or erosion, lead migration, speech or mood change, revision surgery and death were discussed, with the alternatives of continued medical therapy, infusion therapies and focused ultrasound. Written informed consent was obtained.
+
+Anesthesia
+Parkinson medications were held overnight so that testing was done in the off state. Monitored anesthesia care with dexmedetomidine was given during frame application and opening; sedation was stopped for microelectrode recording and test stimulation, during which the patient was awake and cooperative.
+
+Planning
+Preoperative 3 T MRI with volumetric contrast T1 and T2 sequences was obtained on 2026-11-02 at a separate visit. This morning I applied the stereotactic headframe under local anesthesia at the four pin sites. A stereotactic CT with the localizer was acquired in the radiology department and fused with the MRI on the planning workstation. Indirect targets (12 mm lateral, 2 mm posterior and 4 mm inferior to the midcommissural point) were refined on direct T2 visualization of each subthalamic nucleus, and trajectories were planned to avoid sulci, cortical veins and the ventricles.
+
+Description of procedure
+The frame was fixed to the table with the patient supine and semi-recumbent. A curvilinear incision was made over each planned entry point near the coronal suture, and the left side was done first.
+
+Left subthalamic nucleus: a 14 mm burr hole was made and the lead anchoring base secured to the skull. The dura and pia were opened and coagulated. With the microdrive on the frame arc, three parallel microelectrodes (central, anterior, lateral) were advanced from 10 mm above target. On the central track, low-activity thalamus and zona incerta were followed by entry into the nucleus 3.5 mm above target, with high background activity, irregular high-frequency firing, beta oscillations and cells responding to passive movement of the right wrist and elbow; the span was 5.5 mm, with exit 2.0 mm below target into the substantia nigra pars reticulata, which showed regular high-frequency firing. The anterior and lateral tracks showed spans of 3.0 mm and 2.5 mm, and the central track was selected. Macrostimulation through the central electrode reduced right wrist rigidity at 1.5 mA, with transient paresthesias at 4.0 mA and no muscle contraction or eye deviation up to 4.5 mA. An 8-contact directional lead was passed along the central track with the deepest contact at the ventral border of the nucleus. Lateral fluoroscopy confirmed the planned depth and no displacement on stylet withdrawal. Test stimulation through the lead with the external stimulator improved rigidity at 2.0 mA, with a paresthesia threshold of 4.5 mA. The lead was locked in the anchoring device and capped.
+
+Right subthalamic nucleus: the same steps were repeated. On the central track the nucleus was entered 4.0 mm above target with a 4.0 mm span; the anterior track showed a 5.5 mm span with robust responses to passive movement of the left arm and leg and exited 1.5 mm below target, so the anterior track was selected. Macrostimulation reduced left wrist rigidity at 2.0 mA, with facial pulling at 5.0 mA. The second 8-contact directional lead was placed along the anterior track and confirmed by lateral fluoroscopy; test stimulation through the lead improved rigidity at 2.0 mA, with a side-effect threshold of 5.0 mA. The lead was locked and capped.
+
+The proximal ends of both leads were tunneled subgaleally to a left parietal pocket and coiled for connection to extension cables at the second stage. The wounds were irrigated, the galea was closed with interrupted absorbable sutures and the skin with staples. The headframe was removed and the pin sites dressed.
+
+Findings
+1. Left subthalamic nucleus: 5.5 mm recording span on the central track; lead placed on the central track.
+2. Right subthalamic nucleus: 5.5 mm recording span on the anterior track; lead placed on the anterior track.
+3. Rigidity benefit on both sides at 2.0 mA, with side-effect thresholds of 4.5 mA (left lead) and 5.0 mA (right lead).
+
+Implants
+Two 8-contact directional deep brain stimulation leads; two burr hole lead anchoring devices.
+
+Fluoroscopy
+Lateral fluoroscopy, 0.4 minutes.
+
+Specimens
+None.
+
+Estimated blood loss
+20 mL.
+
+Complications
+None.
+
+Disposition
+To the recovery room, then the neuroscience step-down floor, at neurological baseline.
+
+Plan
+1. Noncontrast CT of the head in recovery to confirm lead position and exclude hemorrhage, ordered for performance and reading by radiology.
+2. Resume home Parkinson medications this evening.
+3. Second-stage implantation of a dual-channel pulse generator in the left infraclavicular region with bilateral extension cables is scheduled for 2026-11-19; programming will start after that operation.
+
+Electronically signed: Dr. Miriam Achterberg, MD (fictional), 2026-11-05 15:20

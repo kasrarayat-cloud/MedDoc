@@ -1,0 +1,62 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Cedar Hollow Hand Surgery Center (fictional ambulatory surgery center)
+Operative report - hand surgery
+
+Patient: Marisol Vantreese (fictional)
+Synthetic record: SYN-OR-0004
+Date of procedure: 2026-10-27
+Place of service: Ambulatory surgery center
+Surgeon: Dr. Callum Whitlock, MD, Orthopedic Surgery, Hand and Upper Extremity (fictional)
+Assistant: None
+Anesthesia: Local anesthesia by the wide-awake technique, given by the surgeon. No anesthesia professional was involved and no sedation was given.
+
+Preoperative diagnoses
+1. Left carpal tunnel syndrome, moderate, confirmed by electrodiagnostic testing.
+2. Stenosing tenosynovitis (trigger finger) of the left ring finger with locking.
+
+Postoperative diagnoses
+Same.
+
+Procedures performed
+1. Open carpal tunnel release, left wrist: complete division of the transverse carpal ligament with decompression of the median nerve.
+2. Trigger finger release, left ring finger: incision of the A1 pulley of the flexor tendon sheath, through a separate incision.
+
+Indications
+58-year-old right-hand-dominant bookkeeper with 14 months of numbness and tingling in the left thumb, index and middle fingers that wakes her most nights, with dropping of small objects, despite four months of night splinting and a corticosteroid injection into the left carpal tunnel in March 2026 that helped for eight weeks. Nerve conduction studies and needle electromyography on 2026-08-19 by Dr. Henrik Solberg, Neurology (fictional), showed a moderate left median neuropathy at the wrist without active denervation; the results were reviewed and no testing was repeated. She also has six months of painful catching of the left ring finger, locking in flexion most mornings, which recurred six weeks after a corticosteroid injection into the ring finger flexor sheath in May 2026. The right hand is asymptomatic. Surgery for both conditions was recommended and scheduled at the office visit on 2026-09-30.
+
+She also reports occasional catching of the left middle finger. In the preoperative area today the middle finger had mild tenderness over the A1 pulley with no nodule, triggering or locking. Release of the middle finger was discussed and was not performed; it will be observed.
+
+Consent
+The risks, including infection, bleeding, injury to nerves, vessels or tendons, incomplete relief, pillar pain, stiffness, recurrence and complex regional pain syndrome, and the benefits and alternatives were discussed, and written informed consent was obtained. The surgeon marked the left palm and the left ring finger.
+
+Anesthesia and preparation
+In the preoperative area the surgeon infiltrated buffered 1% lidocaine with 1:100,000 epinephrine, 20 mL along the planned carpal tunnel incision and distal forearm and 4 mL over the A1 pulley of the left ring finger. After 30 minutes the patient was positioned supine in the operating room with the left arm on a hand table. The left hand and forearm were prepped with chlorhexidine and draped in sterile fashion. A time-out confirmed the patient, both procedures and the left side. No tourniquet was used. Loupe magnification was used; the operating microscope was not used.
+
+Description of procedure
+1. Open carpal tunnel release, left. A 2.5 cm longitudinal palmar incision was made in line with the radial border of the ring finger, from Kaplan's cardinal line to just short of the distal wrist crease. The superficial palmar fascia was divided. The transverse carpal ligament was divided longitudinally under direct vision along its ulnar side, from its distal edge at the fat pad over the superficial palmar arch to its proximal edge, and the distal antebrachial fascia was released 2 cm proximally under direct vision. The median nerve was visualized along the entire release and showed hourglass narrowing with hyperemia at the mid-tunnel. The recurrent motor branch was extraligamentous and intact. The epineurium was not opened and no internal neurolysis was performed. The canal floor was free of mass. The flexor tenosynovium was mildly thickened and was not excised. After irrigation and bipolar hemostasis, the skin was closed with interrupted 4-0 nylon horizontal mattress sutures.
+
+2. Trigger finger release, left ring finger. A separate 1.5 cm transverse incision was made at the distal palmar crease over the A1 pulley of the left ring finger. Blunt longitudinal spreading exposed the flexor tendon sheath, and the radial and ulnar digital neurovascular bundles were retracted and protected. The thickened A1 pulley was incised longitudinally along its full length under direct vision, preserving the A2 pulley. The flexor tendons were lifted with a tendon hook, showing a small nodule on the flexor digitorum superficialis tendon with mild synovitis; no tenosynovectomy or tendon debulking was performed. The patient actively flexed and extended the ring finger fully, with smooth gliding, no residual triggering and no bowstringing. The wound was irrigated and closed with interrupted 4-0 nylon.
+
+A soft bulky dressing with a light elastic wrap was applied to the left hand and wrist, leaving the fingertips free. No splint was applied.
+
+Findings
+1. Compression of the left median nerve at the mid-carpal tunnel; complete release of the transverse carpal ligament.
+2. Thickened A1 pulley of the left ring finger with a superficialis tendon nodule; complete A1 pulley release with triggering resolved on active motion.
+
+Specimens: None.
+Implants: None.
+Fluoroscopy: None.
+Estimated blood loss: Less than 5 mL.
+Complications: None.
+
+Disposition
+The patient tolerated both procedures well and went home from the recovery area in stable condition.
+
+Postoperative plan
+1. Elevation and frequent finger motion; no heavy gripping for four weeks.
+2. Acetaminophen and ibuprofen as needed; no opioid was prescribed.
+3. Return on 2026-11-09 for a wound check and suture removal.
+4. Left middle finger: observation; a flexor sheath injection may be considered at a later visit if the catching progresses.
+
+Electronically signed: Dr. Callum Whitlock, MD (fictional), 2026-10-27 11:48

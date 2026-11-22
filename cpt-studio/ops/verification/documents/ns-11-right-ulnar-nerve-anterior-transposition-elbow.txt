@@ -1,0 +1,46 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Cedar Point Surgery Center (fictional ambulatory surgery center)
+Operative report - peripheral nerve surgery
+
+Patient: Marisol Trevino (fictional)
+Synthetic record: SYN-NS-0011
+Date of procedure: 2026-11-04
+Place of service: Ambulatory surgery center
+Surgeon: Dr. Owen Castellano, MD, Neurosurgery (fictional)
+Assistant: None
+Anesthesia: General anesthesia with a laryngeal mask airway by Dr. Nadine Albrecht, MD, Anesthesiology (fictional)
+
+Preoperative diagnosis
+Right cubital tunnel syndrome (ulnar neuropathy at the elbow) with intrinsic weakness and a subluxing ulnar nerve.
+
+Postoperative diagnosis
+Same.
+
+Procedure performed
+Right ulnar nerve decompression with anterior subcutaneous transposition at the elbow, secured with a fasciodermal sling.
+
+Indication
+Ms. Trevino is a 47-year-old right-hand-dominant dental hygienist with 10 months of progressive numbness and tingling in the right ring and small fingers, night waking, and loss of grip and pinch strength with dropping of instruments. Examination showed two-point discrimination of 9 mm in the small finger, first dorsal interosseous strength 4/5, a positive Froment sign, a positive Tinel sign over the cubital tunnel, a positive elbow flexion test at 30 seconds, and an ulnar nerve that subluxes over the medial epicondyle with elbow flexion. Nerve conduction studies and electromyography on 2026-09-15 by Dr. Lena Moravec, MD, Physical Medicine and Rehabilitation (fictional), showed slowing of ulnar motor conduction across the elbow to 36 m/s, a reduced ulnar sensory amplitude and chronic denervation in the first dorsal interosseous, with no evidence of C8 radiculopathy or compression at the wrist. Three months of nighttime elbow extension splinting and activity modification did not help. Because the nerve subluxes, anterior transposition was recommended rather than in situ decompression.
+
+Consent
+Risks including infection, bleeding, injury to the medial antebrachial cutaneous nerve with numbness or a painful neuroma, incomplete recovery, recurrence, elbow stiffness and complex regional pain syndrome were discussed, together with the alternatives of in situ decompression and continued nonoperative care. Written informed consent was obtained and the right elbow was marked.
+
+Description of procedure
+General anesthesia was induced with a laryngeal mask airway, and intravenous cefazolin was given by the anesthesia team before incision. The patient was positioned supine with the right arm abducted on a hand table, and a well-padded pneumatic tourniquet was placed on the upper arm. The arm was prepped and draped, and a time-out confirmed the right side. The limb was exsanguinated with an Esmarch bandage and the tourniquet was inflated to 250 mm Hg. Loupe magnification (3.5x) was used throughout.
+
+A 10 cm curvilinear incision was made just posterior to the medial epicondyle. Two branches of the medial antebrachial cutaneous nerve crossing the distal field were identified and protected with a vessel loop throughout. The ulnar nerve was found proximally behind the medial intermuscular septum. The arcade of Struthers was released 8 cm above the epicondyle, and 4 cm of the medial intermuscular septum was excised so that the nerve would not kink after transposition. Osborne's ligament was divided; beneath it the nerve was flattened and hyperemic, with a fusiform swelling just proximal to the tunnel. Distally, the fascia between the two heads of the flexor carpi ulnaris and the deep flexor-pronator aponeurosis were released for 5 cm into the forearm. The nerve was then mobilized circumferentially from the arcade of Struthers to the flexor carpi ulnaris, preserving its accompanying vessels where possible. The small articular branch to the elbow joint was sacrificed to permit transposition, and the motor branches to the flexor carpi ulnaris were preserved. Internal neurolysis was not required.
+
+The nerve was transposed anterior to the medial epicondyle into a subcutaneous bed superficial to the flexor-pronator mass. A 1.5 by 2 cm flap of flexor-pronator fascia based on the medial epicondyle was elevated and sutured to the subcutaneous tissue to form a sling that keeps the nerve from returning posteriorly. Through a full range of elbow motion the nerve stayed anterior, without tension or kinking proximally at the septum or distally at the flexor carpi ulnaris.
+
+The tourniquet was released after 52 minutes and hemostasis was obtained with bipolar cautery. The wound was irrigated and local anesthetic was infiltrated. The subcutaneous tissue was closed with 3-0 absorbable sutures and the skin with a 4-0 monofilament subcuticular suture. A sterile dressing and a well-padded posterior long-arm plaster splint, from the upper arm to the metacarpal heads with the elbow at 90 degrees, the forearm in neutral and the wrist in slight extension, were applied, leaving the fingers free. Counts were correct.
+
+Findings
+Subluxing right ulnar nerve with flattening and hyperemia beneath Osborne's ligament and a pseudoneuroma just proximal to the cubital tunnel. No anconeus epitrochlearis, ganglion or other mass. Medial antebrachial cutaneous nerve branches preserved.
+
+Estimated blood loss: 10 mL. Tourniquet time: 52 minutes at 250 mm Hg. Specimens: none. Drains: none. Complications: none.
+
+Disposition
+The laryngeal mask was removed and the patient was taken to recovery in stable condition with warm, well-perfused fingers and active finger motion. She will be discharged home today with an adult escort. She is to keep the splint clean and dry, elevate the arm and move the fingers often, and take acetaminophen and ibuprofen for pain. Follow-up in 10 to 14 days for splint removal and a wound check, followed by a hand therapy referral for elbow range of motion and nerve gliding.
+
+Electronically signed: Dr. Owen Castellano, MD (fictional), 2026-11-04 11:26

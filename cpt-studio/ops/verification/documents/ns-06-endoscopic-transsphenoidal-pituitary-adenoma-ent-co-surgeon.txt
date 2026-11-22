@@ -1,0 +1,56 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Osterly Point University Hospital, Skull Base Surgery Program (fictional academic medical center)
+Operative report - neurosurgery, endoscopic endonasal pituitary surgery
+
+Patient: Margarethe Lindqvist (fictional)
+Synthetic record: SYN-NS-0006
+Date of procedure: 2026-11-05
+Place of service: Inpatient hospital, operating room
+Neurosurgeon (author of this report): Dr. Felix Adebayo-Strand, MD, Neurosurgery (fictional)
+Co-surgeon: Dr. Helena Voskuijlen, MD, Otolaryngology - Head and Neck Surgery (fictional)
+Anesthesia: Dr. Wen-Li Garrity, MD, Anesthesiology (fictional); general endotracheal anesthesia
+Neurophysiologic monitoring: none
+
+Preoperative diagnosis
+Nonfunctioning pituitary macroadenoma with suprasellar extension compressing the optic chiasm; bitemporal hemianopia.
+
+Postoperative diagnosis
+Same. Frozen section consistent with pituitary adenoma.
+
+Procedures performed
+1. Endoscopic endonasal transsphenoidal resection of a pituitary macroadenoma, performed by two co-surgeons: the endonasal and sphenoid approach by Dr. Voskuijlen (otolaryngology); the sellar opening, tumor resection and sellar reconstruction by me (neurosurgery).
+2. Multilayer sellar floor reconstruction with a collagen dural substitute inlay and a free sphenoid mucosal graft.
+
+Division of work
+Dr. Voskuijlen performed the nasal and sphenoid approach and the final nasal closure and is documenting her portion in her own operative report. I performed the sellar bone opening, dural opening, tumor resection and sellar reconstruction, with Dr. Voskuijlen holding and directing the endoscope (two-surgeon, four-handed technique). Both surgeons were scrubbed for the entire procedure.
+
+Indication
+49-year-old woman with 6 months of progressive loss of vision to both sides and frontal headaches. Automated perimetry by neuro-ophthalmology shows a dense bitemporal hemianopia. MRI of the sella with and without contrast shows a 2.6 x 2.2 x 2.4 cm sellar and suprasellar mass elevating and thinning the chiasm, without cavernous sinus invasion, and a well-pneumatized sellar-type sphenoid sinus. Endocrine evaluation showed a prolactin of 38 ng/mL consistent with stalk effect, normal IGF-1 and morning cortisol, and central hypothyroidism treated with levothyroxine. Surgical decompression was recommended.
+
+Consent
+We discussed the risks, including cerebrospinal fluid leak and meningitis, carotid artery injury with hemorrhage or stroke, worsening vision, new hormone deficiency, diabetes insipidus and delayed hyponatremia, nasal bleeding, sinusitis and change in smell, residual tumor and anesthetic risks, and the possible need for a vascularized nasoseptal flap, an abdominal fat graft or a lumbar drain if a significant leak occurred. Alternatives, including observation and transcranial surgery, were reviewed. Written informed consent was obtained.
+
+Description of procedure
+General endotracheal anesthesia was induced by the anesthesia team and antibiotics were given before incision. The patient was positioned supine with the head on a gel horseshoe headrest, slightly extended and turned to the right. The nose was decongested with oxymetazoline pledgets. The face and the right lower abdomen (a possible fat graft donor site) were prepped and draped. After a time-out, the whole procedure was done under rigid 0-degree and 30-degree endoscopes; the operating microscope was not used. Image guidance was not used; the anatomy was confirmed endoscopically and with a micro-Doppler probe.
+
+Approach (Dr. Voskuijlen). The middle turbinates were gently lateralized and both sphenoid ostia identified. A right-sided rescue flap incision was made on the posterior septum to preserve the pedicle in case a nasoseptal flap was needed; no flap was elevated. The mucosa over the sphenoid rostrum was elevated and preserved. A posterior septectomy of about 1 cm was made for binarial access. Wide bilateral sphenoidotomies were performed, the rostrum was removed with a drill and Kerrison rongeurs, and the intersinus septations were taken down to expose the sellar floor, tuberculum, clival recess and both carotid and optic prominences.
+
+Sellar portion (Dr. Adebayo-Strand). The sellar floor was thinned with a diamond drill and opened with Kerrison rongeurs from one cavernous sinus to the other and from the tuberculum to the clival recess. The micro-Doppler probe confirmed both cavernous carotid arteries before the dura was opened in a cruciate fashion. Soft, gray-purple tumor typical of adenoma was found; a specimen sent for frozen section was read as pituitary adenoma. The tumor was removed with ring curettes and suction, inferiorly first, then laterally on both sides, then superiorly so the diaphragma descended last. A 30-degree endoscope was used to inspect both lateral recesses and the suprasellar space, and a small residual fragment in the right lateral recess was removed. The diaphragma descended uniformly, and the normal gland, displaced posterosuperiorly, was preserved. A Valsalva maneuver to 40 cm of water showed no cerebrospinal fluid leak, and the diaphragma remained intact.
+
+Sellar reconstruction (Dr. Adebayo-Strand). Hemostasis was obtained with warm irrigation and gelatin-thrombin matrix. A collagen dural substitute was placed as an inlay between the dura and the bony edges of the sellar opening. The preserved rostral mucosa was laid over the opening as a free onlay graft and covered with fibrin sealant and absorbable gelatin sponge. Because no leak was seen, no nasoseptal flap was raised, no fat graft was harvested and no lumbar drain was placed.
+
+Closure (Dr. Voskuijlen). The nasal cavity was irrigated and hemostasis confirmed. The middle turbinates were returned medially, and silicone septal splints were placed on both sides and secured with a transseptal suture. No nasal packing was used.
+
+Findings
+2.6 cm soft pituitary macroadenoma with suprasellar extension; gross total resection on endoscopic inspection; normal gland preserved; no intraoperative cerebrospinal fluid leak. Frozen section: pituitary adenoma.
+
+Grafts and implants: collagen dural substitute inlay; free sphenoid mucosal graft from the operative field; fibrin sealant; silicone septal splints.
+Specimens: sellar tumor, frozen section and permanent pathology with immunostains.
+Estimated blood loss: 150 mL. No transfusion.
+Complications: none.
+
+Disposition
+Extubated in the operating room, awake, with improved confrontation visual fields. Transferred to the neurosurgical ICU. Strict intake and output, serum sodium every 6 hours, and morning cortisol on postoperative days 1 and 2, with endocrinology following. Sinus precautions and saline nasal spray. Otolaryngology clinic in 1 to 2 weeks for splint removal and endoscopic cleaning; neuro-ophthalmology visual fields at 6 weeks; sellar MRI at 3 months.
+
+Electronically signed: Dr. Felix Adebayo-Strand, MD (fictional), 2026-11-05 14:22

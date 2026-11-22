@@ -1,0 +1,61 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Larkspur Valley Medical Center, Neurosurgery (fictional hospital)
+Procedure report - percutaneous vertebral augmentation
+
+Patient: Margaret Oyelaran (fictional)
+Synthetic record: SYN-NS-0003
+Date of procedure: 2026-11-04
+Place of service: Hospital outpatient department, operating room
+Surgeon: Dr. Samuel Nakagawa, MD, Neurosurgery (fictional)
+Assistant: None
+Anesthesia: Dr. Ines Carvalho, MD, Anesthesiology (fictional), monitored anesthesia care
+
+Preoperative diagnosis
+Acute osteoporotic compression fractures of T12 and L1 with intractable pain.
+
+Postoperative diagnosis
+Same.
+
+Procedure
+Percutaneous balloon kyphoplasty (vertebral augmentation with balloon cavity creation) by a bilateral transpedicular approach, with vertebral body core biopsy, under biplanar fluoroscopic guidance.
+
+Indication
+79-year-old woman with osteoporosis who fell at home on 2026-10-12 and has had severe pain at the thoracolumbar junction since, rated 8/10, worse with standing and transfers and limiting her walking to a few steps, despite scheduled analgesics and a prefabricated thoracolumbar brace prescribed by her primary care physician after the fall. Examination shows focal midline tenderness at T12-L1 and a normal neurologic examination. MRI on 2026-10-28 shows acute compression fractures of T12 and L1 with marrow edema on STIR images, no retropulsion and intact posterior walls, and an old healed L3 compression deformity without edema. Kyphoplasty was recommended at her clinic visit on 2026-10-30.
+
+Consent
+Risks including bleeding, infection, cement leakage with possible nerve or spinal cord injury or pulmonary embolism, new fractures at other levels and failure to relieve pain, as well as the benefits and the alternatives, including continued bracing and medication, were discussed. Written informed consent was obtained. The history and physical examination were reviewed before the procedure, with no interval change.
+
+Anesthesia
+Monitored anesthesia care by Dr. Ines Carvalho (fictional). The surgeon did not administer sedation. Local anesthetic was given by the surgeon.
+
+Description of procedure
+The patient was positioned prone on a radiolucent table with chest and pelvic bolsters, and two C-arms were set up for biplanar fluoroscopy. After prepping, draping and a time-out, the target level(s) were identified on the AP and lateral views and each pedicle was aligned, with the endplates parallel and the posterior vertebral wall sharp. The skin, soft tissues and periosteum over each pedicle were infiltrated with 1% lidocaine with epinephrine.
+
+Through stab incisions, 11-gauge access needles were advanced by a bilateral transpedicular approach, staying lateral to the medial pedicle wall on the AP view until each tip had crossed the posterior vertebral body wall on the lateral view. Over guide pins the needles were exchanged for working cannulas seated in the posterior third of the vertebral body(ies). A core bone biopsy specimen was obtained through a working cannula and sent to pathology. A hand drill created channels toward the anterior third of the vertebral body(ies).
+
+Inflatable bone tamps were introduced through the working cannulas and inflated slowly with iodinated contrast under fluoroscopic monitoring to a maximum of 180 psi, creating cavities in the cancellous bone with partial elevation of the superior endplate(s). The balloons were then deflated and removed.
+
+Polymethylmethacrylate bone cement was mixed and, at a doughy consistency, delivered into the cavities through bone filler devices under continuous lateral fluoroscopy, filling from anterior to posterior and stopping as the cement approached the posterior quarter of the vertebral body. Total cement volume: 8.5 mL. The cannulas were removed once the cement had begun to set, pressure was held, and the stab incisions were closed with skin adhesive and adhesive strips. Fluoroscopy time was 6.4 minutes.
+
+Findings
+1. Acute osteoporotic compression fractures at T12 and L1 confirmed under fluoroscopy: T12 with about 35% loss of anterior vertebral body height and an intravertebral cleft; L1 with about 25% loss of anterior height. Posterior vertebral walls intact.
+2. Old healed L3 compression deformity, not a target.
+3. Cement interdigitated well within the augmented vertebral body(ies), with no extravasation into the spinal canal, the neural foramina, the disc spaces or the paravertebral veins.
+4. Partial restoration of anterior vertebral body height after balloon inflation.
+
+Specimens: vertebral body core biopsy to pathology.
+Estimated blood loss: less than 5 mL.
+Complications: none.
+
+Disposition
+Taken to the recovery room in stable condition with a normal neurologic examination. Her pain improved from 8/10 to 3/10, and she walked with a walker before going home with her daughter the same day.
+
+Plan
+1. Activity as tolerated; the brace may be discontinued as comfort allows.
+2. Taper analgesics.
+3. Follow up the biopsy result.
+4. Osteoporosis care: referral to the bone health clinic and a repeat bone density scan are recommended, and anabolic therapy will be discussed there. Neither was done today.
+5. Neurosurgery clinic follow-up in 2 weeks with standing thoracolumbar radiographs.
+
+Electronically signed: Dr. Samuel Nakagawa, MD (fictional), 2026-11-04 11:20

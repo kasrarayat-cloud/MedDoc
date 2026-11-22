@@ -1,0 +1,88 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Bellwether General Hospital, Spine Surgery Service (fictional hospital)
+Operative report - lumbar decompression and fusion
+
+Patient: Denise Calloway (fictional)
+Synthetic record: SYN-NS-0002
+Date of procedure: 2026-10-20
+Place of service: Hospital inpatient, main operating room
+Surgeon: Dr. Rafael Quintero, MD, Neurosurgery (fictional)
+First assistant: Jordan Whitfield, PA-C (fictional)
+Anesthesia: Dr. Esther Lindqvist, MD, Anesthesiology (fictional)
+Neuromonitoring: Dr. Kwabena Adusei, MD, Clinical Neurophysiology (fictional), separate monitoring provider
+
+Preoperative diagnosis
+Grade I degenerative spondylolisthesis of L4 on L5 with dynamic instability, severe central and bilateral lateral recess stenosis, and bilateral L5 radiculopathy, left worse than right.
+
+Postoperative diagnosis
+Same.
+
+Procedures performed
+1. Left transforaminal lumbar interbody fusion combined with bilateral posterolateral fusion, L4-L5.
+2. Laminectomy at L4-L5 with right medial facetectomy and foraminotomy for stenosis, in addition to the left facetectomy required for interbody access.
+3. One interbody cage at L4-L5.
+4. Bilateral L4 and L5 pedicle screws with two rods, spanning the single L4-L5 interspace.
+5. Local autograft from the same incision and morselized cancellous allograft.
+6. Computer-assisted navigation for pedicle screw placement.
+
+Indication
+63-year-old woman with two years of low back pain and nine months of bilateral leg pain, left worse than right, with neurogenic claudication at two blocks despite physical therapy, medications and epidural steroid injections earlier this year. MRI shows grade I anterolisthesis of L4 on L5 with severe central and bilateral lateral recess stenosis. Flexion-extension radiographs show 6 mm of translation in flexion and 3 mm in extension. Left extensor hallucis longus strength is 4+/5, with reduced left L5 sensation. Decompression with instrumented fusion was recommended because of the dynamic instability.
+
+Consent
+Risks (infection, bleeding, durotomy, nerve injury, implant malposition, nonunion, adjacent segment degeneration), benefits and alternatives were discussed, as was neuromonitoring by a separate neurophysiologist. Written informed consent was obtained.
+
+Anesthesia
+General endotracheal anesthesia (total intravenous technique) by Dr. Esther Lindqvist (fictional), who gave intravenous antibiotic prophylaxis before incision.
+
+Neuromonitoring
+Somatosensory and transcranial motor evoked potentials and free-running and triggered electromyography were performed and interpreted by Dr. Kwabena Adusei (fictional), present in the operating room throughout, who documents them in a separate report. Per Dr. Adusei there were no significant signal changes, and every pedicle screw stimulated above 20 mA.
+
+Technique details
+Approach: open posterior midline.
+Navigation: optical navigation registered to an intraoperative cone-beam CT spin, used for all four pedicle screws.
+Magnification: 3.5x loupes and a headlight. The operating microscope was not used.
+Fluoroscopy: lateral images for localization and cage positioning.
+
+Description of procedure
+The patient was positioned prone on a Jackson table with all pressure points padded. After prepping, draping and a time-out, a lateral fluoroscopic image localized L4-L5 and a 9 cm midline incision was made. Subperiosteal dissection exposed the L4 and L5 laminae, facets, pars and transverse processes bilaterally, preserving the L3-L4 facet capsules.
+
+A navigation reference pin was placed in the right posterior superior iliac spine through a separate stab incision. A cone-beam CT spin was acquired and registered, and accuracy was confirmed on bony landmarks. Navigated pilot holes were drilled and tapped in the L4 and L5 pedicles bilaterally, each tract was palpated, and polyaxial titanium screws were placed.
+
+Decompression: the L4 spinous process was removed, and the laminectomy at L4-L5 removed the caudal L4 lamina, the cephalad edge of the L5 lamina and the hypertrophied ligamentum flavum, decompressing the central canal. On the right, a partial medial facetectomy and foraminotomy freed the traversing L5 and exiting L4 roots. On the left, a complete L4-L5 facetectomy opened the transforaminal corridor and completed the left foraminal decompression, with the left L4 and L5 roots identified and protected. The central and right-sided decompression was required for the stenosis and was in addition to the left facetectomy needed for interbody access. All removed bone was cleaned, morselized and saved as local autograft.
+
+Interbody fusion: an annulotomy was made in Kambin's triangle, a thorough discectomy was performed, and the endplates were prepared to bleeding subchondral bone. The anterior disc space was packed with local autograft mixed with allograft chips, and a porous titanium oblique cage packed with local autograft was impacted across the midline under navigation and lateral fluoroscopy.
+
+Instrumentation: two titanium rods were contoured, seated and compressed across L4-L5, and the set screws were final-tightened.
+
+Posterolateral fusion: the L4 and L5 transverse processes and the lateral pars were decorticated bilaterally with a burr, and the remaining graft mixture was laid along both intertransverse spaces.
+
+A final cone-beam CT spin confirmed all four screws within the pedicles and the cage in good position. After irrigation and removal of the reference pin, a subfascial drain was placed and the wound was closed in layers. Counts were correct.
+
+Findings
+Grade I anterolisthesis of L4 on L5; facet and ligamentum flavum hypertrophy with severe central and bilateral lateral recess stenosis compressing both L5 roots; bilateral foraminal narrowing, worse on the left; collapsed L4-L5 disc. Good bone quality. After decompression the thecal sac and both L4 and L5 roots were free.
+
+Implants
+Four polyaxial titanium pedicle screws, 6.5 x 45 mm, at L4 and L5 bilaterally.
+Two titanium rods, 5.5 mm diameter, 40 mm long.
+One porous titanium oblique interbody cage, 10 mm high, 28 mm long, 8 degrees of lordosis, at L4-L5.
+
+Bone graft
+Local autograft, about 15 mL, from the laminectomy, spinous process and left facetectomy, through the same incision.
+Morselized cancellous allograft chips, 30 mL.
+No bone was harvested through a separate incision.
+
+Estimated blood loss: 450 mL. No transfusion.
+Drains: one subfascial drain. Specimens: none.
+Complications: none. No durotomy.
+
+Disposition
+Extubated and neurologically intact; to the recovery room in stable condition, then the neurosurgical ward.
+
+Plan
+1. Mobilize on postoperative day 1 with therapy. No brace is planned.
+2. Remove the drain when output is low; standing radiographs before going home.
+3. Thromboprophylaxis per protocol; multimodal analgesia.
+4. Clinic follow-up in 2 weeks.
+
+Electronically signed: Dr. Rafael Quintero, MD (fictional), 2026-10-20 16:05

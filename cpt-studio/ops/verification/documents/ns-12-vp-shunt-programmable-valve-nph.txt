@@ -1,0 +1,54 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harrow Valley Medical Center, Department of Neurosurgery (fictional hospital)
+Operative report - cerebrospinal fluid shunt
+
+Patient: Theodore Ashby (fictional)
+Synthetic record: SYN-NS-0012
+Date of procedure: 2026-11-10
+Place of service: Inpatient hospital, main operating room
+Surgeon: Dr. Rafael Moreau, MD, Neurosurgery (fictional)
+Assistant: None
+Anesthesia: General endotracheal anesthesia by Dr. Grace Lindqvist, MD, Anesthesiology (fictional)
+
+Preoperative diagnosis
+Idiopathic normal pressure hydrocephalus with a positive extended lumbar drainage trial.
+
+Postoperative diagnosis
+Same.
+
+Procedures performed
+1. Creation of a right frontal ventriculoperitoneal shunt with a programmable valve and an anti-siphon device; peritoneal catheter placed through an open mini-laparotomy.
+2. Frameless stereotactic computer-assisted (electromagnetic) navigation for planning and real-time guidance of the ventricular catheter into the right frontal horn.
+
+Indication
+Mr. Ashby is a 74-year-old man with 18 months of progressive gait disturbance (short, shuffling, wide-based steps with freezing on turns), urinary urgency with incontinence and slowed thinking (Montreal Cognitive Assessment 22/30). MRI of the brain shows ventriculomegaly with an Evans index of 0.36, a callosal angle of 72 degrees, crowded high-convexity sulci with enlarged Sylvian fissures and no obstructing lesion. Lumbar opening pressure was 16 cm of water. During a 72-hour external lumbar drainage trial (admission 2026-10-20 to 2026-10-23), his 10-meter walk time improved from 18 to 11 seconds and his Timed Up and Go from 24 to 15 seconds, with fewer freezing episodes. He was readmitted electively for shunt placement. Aspirin was held for seven days before surgery.
+
+Consent
+Risks including infection, intracerebral or subdural hemorrhage, seizure, over- or under-drainage, shunt malfunction requiring revision, abdominal organ injury and anesthetic risks were discussed with the patient and his daughter, along with the alternative of no surgery. Written informed consent was obtained and the right side was marked.
+
+Description of procedure
+After induction of general endotracheal anesthesia, intravenous cefazolin was given by the anesthesia team before incision. The patient was positioned supine with a shoulder roll and the head turned to the left on a gel ring, and a strip of hair was clipped. The electromagnetic navigation reference was fixed to the forehead and the system was registered by surface tracing to the thin-cut navigation CT obtained the previous day, with accuracy within 2 mm on bony landmarks. On the navigation workstation, an entry point at the right Kocher's point (11 cm behind the nasion and 3 cm lateral to the midline) and a trajectory to the right frontal horn just anterior to the foramen of Monro were planned, with a target depth of 6.5 cm from the outer table. The scalp, right neck, chest and abdomen were prepped and draped as one field. A time-out was performed.
+
+A curvilinear right frontal incision was made at the planned entry point and a burr hole was drilled. A small retroauricular incision was made and a subgaleal pocket was fashioned for the valve. A 3 cm transverse right upper quadrant incision was made down to the anterior rectus sheath. The shunt passer was tunneled subcutaneously from the retroauricular incision over the neck and chest to the abdominal incision, and the distal catheter was drawn through. A short subgaleal tunnel was made between the frontal and retroauricular incisions.
+
+The dura was coagulated and opened in a cruciate fashion and the pia was coagulated. The ventricular catheter, mounted on a navigation-tracked stylet, was passed along the planned trajectory under real-time navigation guidance and entered the right frontal horn on the first pass at 6.5 cm, with clear, colorless cerebrospinal fluid under normal pressure. The navigation display confirmed the tip in the frontal horn anterior to the foramen of Monro. Cerebrospinal fluid was sent for cell count, glucose, protein, Gram stain and culture. The catheter was secured at the burr hole with a right-angle clip and passed through the subgaleal tunnel to the valve pocket.
+
+The programmable differential-pressure valve, with its in-line gravitational anti-siphon device, was set to 120 mm of water before implantation, and the setting was confirmed with the manufacturer's indicator tool. The valve was primed with saline and connected to the ventricular catheter and to the distal catheter, each connection secured with a 2-0 silk tie, and it was seated in the retroauricular pocket. Spontaneous, steady cerebrospinal fluid flow from the distal end of the catheter was confirmed.
+
+At the abdominal incision the anterior rectus sheath was opened, the rectus fibers were split, and the posterior sheath and peritoneum were opened under direct vision. With flow still visible, about 30 cm of the distal catheter was placed freely into the peritoneal cavity and the peritoneum was closed around it with a purse-string suture. The fascia was closed with 0 absorbable suture.
+
+All wounds were irrigated. The galea was closed with 3-0 absorbable sutures and the scalp with staples; the abdominal subcutaneous tissue was closed with 3-0 absorbable sutures and the skin with staples. Sterile dressings were applied. Counts were correct.
+
+Findings
+Right frontal horn cannulated on the first navigated pass, with clear cerebrospinal fluid under normal pressure. Free distal runoff. Normal peritoneum without adhesions.
+
+Implants (recorded in the hospital implant log)
+Ventricular catheter; programmable differential-pressure valve with in-line gravitational anti-siphon device, set at 120 mm of water; peritoneal catheter.
+
+Estimated blood loss: 25 mL. Specimens: cerebrospinal fluid for laboratory studies. Drains: none. Complications: none.
+
+Disposition
+The patient was extubated and taken to recovery in stable condition at his neurologic baseline, then to the neurosurgical floor. Plan: CT of the head and a shunt series in the morning; mobilize with physical therapy; resume aspirin in seven days if imaging is satisfactory; expected discharge in one to two days. Follow-up in two weeks for staple removal and a gait assessment; the valve setting will be reviewed at six to eight weeks according to his gait and imaging.
+
+Electronically signed: Dr. Rafael Moreau, MD (fictional), 2026-11-10 13:18

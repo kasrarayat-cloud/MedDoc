@@ -1,0 +1,61 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Wrenfield University Hospital, Department of Neurosurgery (fictional academic medical center)
+Operative report - thoracic spine, intradural tumor resection
+
+Patient: Corinne Ashdown (fictional)
+Synthetic record: SYN-NS-0004
+Date of procedure: 2026-10-14
+Place of service: Inpatient hospital, main operating room
+Surgeon: Dr. Tobias Renwick, MD, Neurosurgery (fictional)
+Assistant: Dr. Priyanka Solano, MD, neurosurgery resident, postgraduate year 5 (fictional)
+Anesthesia: Dr. Elsa Marchetti, MD, Anesthesiology (fictional); general endotracheal anesthesia
+Neurophysiologic monitoring: Jonah Pettibone, CNIM (fictional), technologist in the room, with real-time remote oversight by Dr. Ruth Okafor-Lind, MD, Clinical Neurophysiology (fictional), Thistlecombe Neurophysiology Group (fictional)
+
+Preoperative diagnosis
+Intradural extramedullary tumor at T6-T7 with spinal cord compression and progressive myelopathy; imaging most consistent with meningioma.
+
+Postoperative diagnosis
+Same. Frozen section consistent with meningioma.
+
+Procedures performed
+1. Laminectomy of T6 and T7, with undercutting of the inferior edge of the T5 lamina, for resection of an intradural extramedullary spinal tumor.
+2. Gross total microsurgical tumor resection using the operating microscope.
+3. Primary watertight dural closure.
+
+Indication
+67-year-old woman with eight months of progressive gait imbalance, numbness of both legs and the lower trunk, and two falls in the past month. Examination shows a sensory level at about T8, hyperreflexia of both legs with sustained left ankle clonus, bilateral extensor plantar responses, and left hip flexor weakness 4+/5. MRI of the thoracic spine with and without contrast shows a 1.9 x 1.4 x 1.3 cm homogeneously enhancing intradural extramedullary mass behind the T6-T7 disc space in the left dorsolateral canal, with a broad dural base and dural tail and no extradural extension, compressing the cord ventrally and to the right with cord signal change. Resection was recommended for progressive myelopathy.
+
+Consent
+Risks including spinal cord injury with weakness or paralysis, bowel and bladder dysfunction, cerebrospinal fluid leak, infection, bleeding, residual or recurrent tumor, late deformity and anesthetic risks were discussed with the benefits and the alternatives of observation and radiation. Osteoplastic replacement of the laminae was discussed; because of her osteopenia we agreed to decide this during surgery. Written informed consent was obtained.
+
+Description of procedure
+General endotracheal anesthesia was induced by the anesthesia team, and total intravenous anesthesia was maintained to permit motor evoked potential monitoring. Antibiotics were given before incision. The neurophysiology technologist placed the electrodes and obtained reliable baseline somatosensory and transcranial motor evoked potentials from the upper and lower extremities.
+
+The patient was turned prone onto a Jackson table with all pressure points padded, and the back was prepped and draped. After a time-out, anteroposterior and lateral fluoroscopy localized the level by counting from the sacrum and the twelfth rib, correlated with the preoperative whole-spine localizer; a spinal needle confirmed the T6 spinous process.
+
+A midline incision was made from T5 to T8 and subperiosteal dissection exposed the T6 and T7 spinous processes and laminae bilaterally to the medial facets, preserving the facet capsules. The bone was soft, so en bloc removal for later replacement was judged unsafe: the T6 and T7 laminae were removed piecemeal with a rongeur, a high-speed drill and Kerrison rongeurs, together with the ligamentum flavum, and were not replaced. The inferior edge of the T5 lamina was undercut to expose the upper pole of the tumor. Both facet joints were preserved at each level. Epidural bleeding was controlled with bipolar cautery and gelatin-thrombin matrix.
+
+The operating microscope was brought into the field and used from the dural opening through the dural closure. The dura was opened in the midline from upper T6 to lower T7 and tacked up with 4-0 sutures, and the arachnoid was opened sharply. A firm, tan, well-circumscribed tumor arose from a broad base on the left dorsolateral dura, displacing the cord ventrally and to the right, with a clear arachnoid plane; the left T7 dorsal rootlets were stretched over its lower pole. The tumor was debulked internally with the ultrasonic aspirator at low power, and the capsule was folded away from the cord and dissected free of the pia and the T7 rootlets, which were preserved. The dural base was detached with microscissors and bipolar cautery and the tumor was removed completely. A specimen was sent for frozen section, read as meningioma; the remainder went for permanent pathology. The dural attachment was coagulated thoroughly (Simpson grade II). The cord re-expanded and was pulsatile, with no residual tumor. The neurophysiology team reported stable evoked potentials throughout, with no alerts.
+
+The dura was closed primarily with running 6-0 polypropylene. A Valsalva maneuver to 40 cm of water showed no cerebrospinal fluid leak, and a polyethylene glycol hydrogel sealant was applied over the suture line. No dural graft was needed. The fascia was closed watertight with interrupted 0 braided absorbable sutures, the subcutaneous layer with 2-0 absorbable sutures and the skin with running 3-0 nylon. No drain was placed.
+
+Findings
+Left dorsolateral intradural extramedullary tumor at T6-T7 with a broad dural base; gross total resection with coagulation of the dural attachment. Frozen section: meningioma. Cord decompressed and pulsatile at completion.
+
+Neurophysiologic monitoring
+Somatosensory and transcranial motor evoked potential monitoring was performed and interpreted by the neurophysiology service. The operating surgeon did not perform or interpret the monitoring; its record and interpretation are documented separately by that service.
+
+Imaging: fluoroscopy was used only to localize the level.
+Implants: none. No instrumentation or fusion was performed.
+Specimens: T6-T7 intradural tumor, frozen section and permanent pathology.
+Estimated blood loss: 150 mL. No transfusion.
+Complications: none.
+
+Disposition
+Extubated in the operating room, moving both legs with strength at baseline. To the post-anesthesia care area, then the neurosurgical step-down floor. Flat bed rest for 24 hours to protect the dural closure, then mobilization with physical therapy. Clinic wound check in 2 weeks; MRI in 3 months.
+
+Attestation
+I was present and scrubbed for the entire procedure, including the exposure, laminectomy, durotomy, tumor resection and closure. Dr. Solano assisted throughout.
+
+Electronically signed: Dr. Tobias Renwick, MD (fictional), 2026-10-14 16:48

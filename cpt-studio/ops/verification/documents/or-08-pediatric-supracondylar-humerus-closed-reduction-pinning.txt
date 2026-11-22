@@ -1,0 +1,67 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Bramblewood Children's Hospital (fictional children's hospital)
+Operative report - pediatric orthopaedics
+
+Patient: Leo Marchetti (fictional)
+Synthetic record: SYN-OR-0008
+Date of procedure: 2026-10-24
+Place of service: Hospital outpatient surgery, main operating room, followed by an overnight observation stay
+Surgeon: Dr. Ingrid Solberg, MD, Pediatric Orthopaedic Surgery (fictional)
+Assistant: none
+Anesthesia: Dr. Rafael Duarte, MD, Pediatric Anesthesiology (fictional)
+
+Preoperative diagnosis
+Closed, displaced, extension-type supracondylar fracture of the left humerus, Gartland type III with posteromedial displacement, without intercondylar extension, in a 6-year-old boy.
+
+Postoperative diagnosis
+Same.
+
+Procedure performed
+Closed reduction and percutaneous pin fixation of the left supracondylar humerus fracture under fluoroscopic guidance, with three lateral-entry smooth Kirschner wires, and application of a long-arm cast.
+
+Indications
+Leo is a 6-year-old right-hand-dominant boy who fell from playground monkey bars on the evening of 2026-10-23, landing on his outstretched left hand, with immediate left elbow pain, swelling and deformity. In the emergency department the skin was intact, without puckering or tenting. The hand was warm and pink with a palpable radial pulse and capillary refill under 2 seconds. Anterior interosseous, posterior interosseous and ulnar nerve motor function were intact (OK sign, thumbs up and finger crossing), with normal sensation in the median, radial and ulnar distributions. Radiographs showed a completely displaced extension-type supracondylar fracture of the left humerus with posteromedial displacement and no intercondylar extension; the forearm and wrist were normal. The emergency department staff placed a temporary posterior splint in about 30 degrees of elbow flexion. He was kept fasting overnight with the arm elevated, his neurovascular checks remained normal, and he was brought to the operating room this morning.
+
+Consent
+The procedure, its risks (pin site infection, loss of reduction, malunion including cubitus varus, nerve injury, vascular injury, compartment syndrome, elbow stiffness and the possible need for open reduction), its benefits and the alternatives were discussed with his mother, who signed the written consent. Leo assented.
+
+Anesthesia
+General anesthesia with a laryngeal mask airway, administered by Dr. Rafael Duarte (fictional), pediatric anesthesiology, and documented in the anesthesia record. Cefazolin was given intravenously before pin insertion. No tourniquet was used.
+
+Description of procedure
+After a time-out confirming the patient, the procedure and the left side, the temporary splint was removed and the skin was confirmed intact. The left arm was placed on a radiolucent hand table with the mini C-arm positioned for imaging. I operated the mini C-arm myself throughout the case. The arm was prepped and draped in the usual sterile fashion.
+
+Gentle longitudinal traction was applied with the elbow extended, and coronal and rotational alignment were corrected under fluoroscopy. The elbow was then flexed with anterior pressure on the olecranon and the forearm pronated to correct the posteromedial displacement. With the elbow held in hyperflexion, anteroposterior, lateral and oblique views showed an anatomic reduction: the anterior humeral line passed through the middle third of the capitellum, the Baumann angle measured 72 degrees, and the medial and lateral columns were restored without a rotational step-off. No soft tissue was interposed, and no incision was made at the fracture site.
+
+Three smooth 1.6 mm Kirschner wires were inserted percutaneously from the lateral side under fluoroscopy in a divergent configuration, each crossing the fracture and engaging the opposite cortex, with wide separation at the fracture line across both columns. No medial-entry pin was used. Under live fluoroscopy the fracture was stable with gentle flexion, extension, and varus and valgus stress. The elbow was brought to about 70 degrees of flexion, and the hand remained warm and pink with a palpable radial pulse, confirmed by Doppler signal.
+
+The wires were bent and cut outside the skin and the pin sites were dressed with sterile felt pads. I applied a well-padded long-arm fiberglass cast with the elbow in about 70 degrees of flexion and the forearm in neutral rotation. The cast was bivalved and overwrapped with an elastic bandage to allow for swelling.
+
+The open reduction instruments were opened and available, but open reduction was not needed and was not performed.
+
+Fluoroscopy
+Mini C-arm fluoroscopy was operated and interpreted by me throughout the procedure. Fluoroscopy time was 0.7 minutes.
+
+Findings
+Gartland type III extension-type supracondylar fracture of the left humerus with posteromedial displacement, reduced closed to anatomic alignment and stable after three divergent lateral-entry pins. The hand was perfused, with a palpable radial pulse, before and after reduction.
+
+Implants
+Three smooth Kirschner wires, 1.6 mm, left protruding through the skin for later removal.
+
+Estimated blood loss: minimal, under 5 mL.
+Drains: none.
+Specimens: none.
+Complications: none.
+
+Disposition
+The patient awoke without difficulty and was taken to the recovery room in stable condition. There he made an OK sign, gave a thumbs up and crossed his fingers, with normal sensation in the median, radial and ulnar distributions and a palpable radial pulse.
+
+Plan
+1. Overnight observation stay with neurovascular checks every 2 hours, arm elevation and ice.
+2. Acetaminophen and ibuprofen dosed by weight for pain.
+3. Home tomorrow if neurovascular checks remain normal and pain is controlled, with cast and pin care instructions for the family.
+4. Clinic visit in 1 week with radiographs of the left elbow in the cast.
+5. Pin removal and cast removal are planned in the clinic at about 3 to 4 weeks; neither was done today. Elbow motion will then be allowed as tolerated.
+
+Electronically signed: Dr. Ingrid Solberg, MD (fictional), 2026-10-24 09:58

@@ -1,0 +1,70 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Brookfield Valley Hospital (fictional hospital)
+Operative report - orthopedic surgery, foot and ankle
+
+Patient: Desmond Achterberg (fictional)
+Synthetic record: SYN-OR-0005
+Date of procedure: 2026-10-29
+Place of service: Hospital outpatient surgery department, main operating room
+Surgeon: Dr. Imogen Fairweather, MD, Orthopedic Surgery, Foot and Ankle (fictional)
+Assistant: None; scrub technologist only
+Anesthesiologist: Dr. Rafael Quintanilla, MD (fictional)
+
+Preoperative diagnosis
+Closed displaced bimalleolar ankle fracture.
+
+Postoperative diagnosis
+Same.
+
+Procedure performed
+Open reduction and internal fixation of a bimalleolar ankle fracture: lag screw and plate fixation of the lateral malleolus and screw fixation of the medial malleolus.
+
+Indications
+47-year-old warehouse supervisor who slipped on a wet loading dock on 2026-10-21 and twisted the ankle. Emergency department radiographs showed an oblique fracture of the lateral malleolus at the level of the syndesmosis and a displaced transverse fracture of the medial malleolus, with lateral talar shift. The posterior malleolus was intact on the anteroposterior, mortise and lateral views. The skin and the neurovascular examination were intact. The emergency physician reduced and splinted the ankle on the day of injury. At the orthopedic clinic visit on 2026-10-23, open reduction and internal fixation was recommended because the medial clear space remained widened after closed reduction, and surgery was scheduled for when the swelling had subsided. Today the skin wrinkles normally and there are no fracture blisters. The patient does not smoke and does not have diabetes.
+
+Consent
+The risks, including infection, wound breakdown, nerve injury, malunion, nonunion, symptomatic hardware, post-traumatic arthritis, blood clots and further surgery, and the benefits and alternatives, including continued nonoperative care, were discussed, and written informed consent was obtained. The surgeon marked the operative site in the preoperative holding area.
+
+Anesthesia
+General anesthesia with a laryngeal mask airway by the anesthesiologist named above. Cefazolin 2 g was given intravenously by the anesthesia team before incision.
+
+Description of procedure
+The patient was placed supine on a radiolucent table. After induction, a bump was placed under the ipsilateral hip to bring the ankle into neutral rotation, and the nonoperative leg was padded. A padded thigh tourniquet was applied to the operative extremity, which was prepped and draped in sterile fashion. A time-out confirmed the patient, the procedure, the side and the site, and the surgeon's mark was visible in the field. The limb was exsanguinated and the tourniquet was inflated to 300 mmHg.
+
+Lateral malleolus. A 9 cm longitudinal incision was made along the posterior border of the distal fibula. The superficial peroneal nerve was identified in the proximal wound and protected. The fracture was exposed with minimal periosteal stripping and cleared of hematoma and interposed periosteum. It was reduced with pointed reduction forceps, restoring fibular length and rotation, and fixed with a 3.5 mm cortical screw placed from anterior to posterior by lag technique. A seven-hole precontoured distal fibular locking plate was applied laterally as a neutralization plate with three 3.5 mm cortical screws proximally and four 3.5 mm locking screws distally. Fluoroscopy confirmed restored fibular length and alignment and appropriate screw lengths.
+
+Medial malleolus. A 5 cm curvilinear incision was centered over the medial malleolus, protecting the saphenous vein and nerve. Interposed periosteum was cleared from the fracture. The joint was inspected through the fracture site; the talar dome cartilage was intact with no osteochondral lesion or loose fragment. The medial malleolus was reduced anatomically with a pointed clamp, held with two guide wires and fixed with two 4.0 mm partially threaded cannulated cancellous screws perpendicular to the fracture line. Fluoroscopy confirmed anatomic reduction with no intra-articular screw penetration.
+
+Syndesmosis. After fixation of both malleoli, a lateral hook (Cotton) test and an external rotation stress view were performed under fluoroscopy. There was no widening of the tibiofibular clear space or the medial clear space and no fibular displacement on the lateral view. The syndesmosis was stable and syndesmotic fixation was not required.
+
+Final anteroposterior, mortise and lateral fluoroscopic images showed anatomic reduction of both malleoli, a congruent mortise and a symmetric medial clear space. The surgeon performed and interpreted the fluoroscopy intraoperatively; fluoroscopy time was 41 seconds.
+
+Closure. The wounds were irrigated. The tourniquet was deflated after 74 minutes and hemostasis was obtained with electrocautery. The deep tissues were closed with 2-0 braided absorbable suture, the subcutaneous layer with 3-0 monofilament absorbable suture and the skin with 3-0 nylon in an Allgower-Donati pattern. The surgeon infiltrated 20 mL of 0.5% bupivacaine around the incisions. Sterile dressings and a well-padded posterior splint with a stirrup were applied with the ankle in neutral dorsiflexion.
+
+Findings
+1. Displaced oblique fracture of the lateral malleolus at the level of the syndesmosis and displaced transverse fracture of the medial malleolus, both reduced anatomically and internally fixed.
+2. Intact posterior malleolus and intact talar dome cartilage.
+3. Stable syndesmosis on intraoperative stress examination after malleolar fixation.
+
+Implants
+1. Precontoured distal fibular locking plate, seven holes, stainless steel.
+2. One 3.5 mm cortical lag screw, three 3.5 mm cortical plate screws and four 3.5 mm locking plate screws (lateral malleolus).
+3. Two 4.0 mm partially threaded cannulated cancellous screws (medial malleolus).
+
+Specimens: None.
+Drains: None.
+Estimated blood loss: 40 mL.
+Complications: None.
+
+Disposition
+The laryngeal mask airway was removed in the operating room and the patient went to the recovery room in stable condition, with a warm, well-perfused foot, intact sensation in the toes and active toe motion. The patient is expected to go home later today once recovery criteria are met.
+
+Postoperative plan
+1. Strict non-weight-bearing on the operative extremity in the splint, with elevation.
+2. Aspirin 325 mg once daily for four weeks for blood clot prophylaxis.
+3. Oxycodone with acetaminophen for breakthrough pain, a three-day supply at most.
+4. Clinic visit in two weeks for a wound check, suture removal, radiographs and transition to a removable boot.
+5. Progressive weight-bearing expected from six weeks if healing is satisfactory.
+
+Electronically signed: Dr. Imogen Fairweather, MD (fictional), 2026-10-29 15:22

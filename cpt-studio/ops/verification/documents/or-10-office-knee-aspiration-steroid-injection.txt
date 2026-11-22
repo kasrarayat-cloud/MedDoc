@@ -1,0 +1,35 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Cedar Ridge Orthopaedic Associates (fictional practice)
+Office procedure note - right knee aspiration and corticosteroid injection
+
+Patient: Rosalind Achterberg (fictional)
+Synthetic record: SYN-OR-0010
+Date of procedure: 2026-10-27
+Place of service: Office, in-person outpatient visit
+Surgeon: Dr. Tobias Wren, MD, Orthopedic Surgery (fictional)
+Patient status: Established patient. Seen by Dr. Wren on 2026-10-13, when today's procedure was planned.
+
+Indication
+67-year-old with tricompartmental osteoarthritis of the right knee and a recurrent effusion. A right knee corticosteroid injection on 2026-06-09 gave four months of relief. At the 2026-10-13 visit she chose a repeat aspiration and injection, scheduled for today. Since then there has been no fever, new injury or redness. She is not diabetic. No other problem was addressed today.
+
+Consent
+Risks (infection, bleeding, post-injection flare, skin depigmentation), benefits and alternatives were discussed, and written consent was obtained. A time-out confirmed the right knee.
+
+Procedure
+Aspiration followed by intra-articular corticosteroid injection of the right knee, by palpation of surface landmarks. No ultrasound, fluoroscopy or other imaging guidance was used.
+
+Technique
+Supine with the knee extended; a moderate effusion was palpable. The superolateral entry site was prepped with chlorhexidine and anesthetized with ethyl chloride spray. Through an 18-gauge needle, 32 mL of clear, straw-colored, viscous synovial fluid was aspirated. With the needle left in place, the syringe was exchanged and the joint was injected with triamcinolone acetonide 40 mg (1 mL of the 40 mg/mL suspension, drawn from a multiple-dose vial from clinic stock) mixed with 4 mL of 1% lidocaine without epinephrine. The injection flowed freely. A sterile dressing was applied.
+
+Specimens
+None. The fluid was not sent for analysis because its appearance was typical of her known osteoarthritic effusion.
+
+Estimated blood loss: none. Complications: none. Knee pain improved from 6/10 to 2/10 at 10 minutes.
+
+Plan
+1. Ice and relative rest for 48 hours; call for redness, fever or increasing pain.
+2. Viscosupplementation was discussed as an alternative; she declined it, and none was given.
+3. Return in 3 months for reassessment.
+
+Electronically signed: Dr. Tobias Wren, MD (fictional), 2026-10-27 10:42

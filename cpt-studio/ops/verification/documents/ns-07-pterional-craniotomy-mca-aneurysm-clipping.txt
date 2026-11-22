@@ -1,0 +1,74 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Altamont Valley Medical Center (fictional hospital)
+Operative report - cerebrovascular neurosurgery
+
+Patient: Margaret Lindqvist (fictional)
+Synthetic record: SYN-NS-0007
+Date of procedure: 2026-10-14
+Place of service: Inpatient hospital, main operating room
+Surgeon: Dr. Adrian Kessler, MD, Neurosurgery (fictional)
+First assistant: Lena Okafor, PA-C, Neurosurgery physician assistant (fictional)
+Anesthesia: Dr. Henrik Solberg, MD, Anesthesiology (fictional) - general endotracheal anesthesia
+Neurophysiology: Tobias Bellamy, CNIM, neurophysiology technologist (fictional), in the room, with remote real-time oversight by Dr. Celeste Arora, MD, Clinical Neurophysiology (fictional), of a separate neurodiagnostic service
+
+Preoperative diagnosis
+Unruptured right middle cerebral artery bifurcation aneurysm, enlarging on surveillance imaging.
+
+Postoperative diagnosis
+Same.
+
+Procedure
+1. Right pterional (frontotemporal) craniotomy for microsurgical clip occlusion of the right middle cerebral artery bifurcation aneurysm.
+2. Frameless stereotactic navigation.
+3. Operating microscope for the intradural microdissection and clip placement.
+
+Indication
+54-year-old woman with a right middle cerebral artery (MCA) bifurcation aneurysm found on MRI obtained for migraine and confirmed on diagnostic catheter angiography on 2026-09-22 at a separate encounter. It enlarged from 6.1 mm to 7.2 mm over nine months of CT angiographic surveillance. She smokes, has treated hypertension, and her sister had an aneurysmal subarachnoid hemorrhage. The cerebrovascular conference recommended treatment; the broad neck (dome-to-neck ratio 1.5) at the bifurcation favored microsurgical clipping over endovascular treatment.
+
+Consent
+Risks including stroke, intraoperative rupture, hemorrhage, seizure, infection, cognitive or speech deficit, incomplete occlusion, further surgery and death were discussed, with the alternatives of continued surveillance and endovascular treatment. Written informed consent was obtained.
+
+Anesthesia and monitoring
+General endotracheal anesthesia; a right radial arterial line was placed by the anesthesia team before induction. Cefazolin 2 g, dexamethasone 10 mg, levetiracetam 1,000 mg and mannitol 1 g/kg were given at incision. After positioning, the technologist obtained baseline upper- and lower-extremity somatosensory evoked potentials and transcranial motor evoked potentials; the neurophysiology service documents the monitoring in its own report.
+
+Description of procedure
+The patient was supine with the head fixed in a three-pin skull clamp, rotated 30 degrees to the left and extended. Optical frameless navigation was registered to the preoperative CT angiogram by surface matching (accuracy 1.4 mm) and used to plan the incision and bone flap. A curvilinear frontotemporal incision was made behind the hairline from the zygomatic root to the midline, and an interfascial myocutaneous flap was reflected anteriorly to protect the frontal branch of the facial nerve. A keyhole burr hole was placed and a free frontotemporal bone flap elevated with the craniotome. The lesser sphenoid wing was drilled flat to the meningo-orbital band. The dura was tacked up and opened in a C-shape based on the sphenoid ridge.
+
+The operating microscope was brought into the field and used for all intradural work. After the dural opening, the navigation pointer was used under the microscope to localize the point of the sylvian fissure overlying the MCA bifurcation and to confirm the inferolateral projection of the dome before dissection. The sylvian fissure was split sharply from distal to proximal, preserving the superficial sylvian veins. The carotid and opticocarotid cisterns were opened for cerebrospinal fluid release, with good brain relaxation. The supraclinoid internal carotid artery and the M1 segment were exposed, proximal control on M1 was secured, and the lenticulostriate arteries were identified and preserved.
+
+M1 was followed to the bifurcation. The aneurysm measured 7.2 x 6.1 mm with a 4.8 mm neck and projected inferolaterally. The superior and inferior M2 trunks arose from the bifurcation separate from the neck; no branch was incorporated into the neck, and the neck was free of calcification and atheroma. The thin fundus, with a daughter bleb, was adherent to the inferior M2 trunk and the temporal pia.
+
+Because this adherence made the final neck dissection unsafe under full arterial pressure, temporary occlusion was required to complete the clipping. Anesthesia raised the mean arterial pressure by 15 percent and gave a propofol bolus, and a temporary clip was placed on the M1 segment distal to the lenticulostriate origins at 10:42. With the dome softened, the inferior trunk was freed from the neck and a straight 9 mm permanent titanium clip was applied across the neck parallel to the bifurcation. The temporary clip was removed at 10:46, a total temporary occlusion time of 4 minutes. Evoked potentials remained at baseline throughout, as reported in real time by the neurophysiology team.
+
+Micro-Doppler confirmed flow in M1 and both M2 trunks and no flow in the dome. The dome was punctured with a 27-gauge needle and collapsed without bleeding. Inspection showed complete neck occlusion with no perforator in the clip blades.
+
+After hemostasis, the dura was closed watertight with running 4-0 suture and an onlay collagen dural graft. The bone flap was secured with titanium plates and screws. The temporalis muscle and fascia were reapproximated, the galea closed with interrupted absorbable sutures and the skin with staples. No drain was placed.
+
+Ms. Okafor, PA-C, was scrubbed for the entire procedure and provided exposure, retraction, suction-irrigation under the microscope and clip handling; a skilled first assistant was necessary for this microsurgical procedure. No residents take part in surgery at this hospital.
+
+Findings
+1. Unruptured saccular aneurysm of the right MCA bifurcation, 7.2 x 6.1 mm, neck 4.8 mm, no neck calcification, no branch incorporation, with fundal adherence that required temporary M1 occlusion (4 minutes).
+2. Complete occlusion with one permanent clip; flow preserved in M1 and both M2 trunks.
+
+Implants
+One straight 9 mm permanent titanium aneurysm clip; titanium cranial plates and screws.
+
+Specimens
+None.
+
+Estimated blood loss
+150 mL. No transfusion.
+
+Complications
+None. No intraoperative rupture.
+
+Disposition
+Extubated in the operating room, following commands with full strength and fluent speech; transferred to the neuroscience ICU.
+
+Plan
+1. Hourly neurological checks; systolic blood pressure below 160.
+2. Levetiracetam for seven days.
+3. CT angiography of the head is planned for postoperative day 1.
+
+Electronically signed: Dr. Adrian Kessler, MD (fictional), 2026-10-14 13:52

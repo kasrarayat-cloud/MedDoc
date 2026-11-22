@@ -1,0 +1,72 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harrow Lake Medical Center (fictional hospital)
+Operative report - musculoskeletal oncology
+
+Patient: Gerald Thornbury (fictional)
+Synthetic record: SYN-OR-0009
+Date of procedure: 2026-11-05
+Place of service: Hospital inpatient, main operating room
+Surgeon: Dr. Helena Lindqvist, MD, Orthopaedic Surgery, Musculoskeletal Oncology (fictional)
+Assistant surgeon: Dr. Daniel Oyelaran, MD, Orthopaedic Surgery (fictional)
+Anesthesia: Dr. Owen Castellanos, MD, Anesthesiology (fictional)
+Pathology, intraoperative frozen section: Dr. Ruth Abernathy, MD, Pathology (fictional)
+
+Preoperative diagnosis
+High-grade undifferentiated pleomorphic sarcoma of the right thigh, deep (subfascial, intramuscular), within the vastus lateralis at mid-thigh.
+
+Postoperative diagnosis
+Same.
+
+Procedure performed
+Radical resection of a deep soft-tissue sarcoma of the right thigh with wide margins, including en bloc excision of the biopsy tract, with placement of marker clips and a closed-suction drain, and layered closure.
+
+Indications
+Mr. Thornbury is a 61-year-old man who noticed a firm, slowly enlarging lump in the right lateral thigh over 4 months. MRI of the right thigh on 2026-09-22 showed a 4.1 x 3.5 x 3.2 cm heterogeneously enhancing mass within the vastus lateralis, deep to the fascia lata, with no involvement of the femur and well away from the femoral neurovascular bundle. Ultrasound-guided core needle biopsy on 2026-10-01 showed high-grade undifferentiated pleomorphic sarcoma. CT of the chest on 2026-10-06 showed no pulmonary metastases. The multidisciplinary sarcoma tumor board recommended radical resection with wide margins followed by postoperative external beam radiation.
+
+Consent
+The risks, including infection, wound breakdown, bleeding, seroma, nerve or vessel injury, quadriceps weakness, local recurrence, positive margins requiring further treatment, blood clots and anesthetic complications, were discussed with the patient together with the benefits and alternatives. He signed the written consent.
+
+Anesthesia
+General endotracheal anesthesia, administered by Dr. Owen Castellanos (fictional), anesthesiology, and documented in the anesthesia record. Cefazolin 2 g intravenously was given before incision. No tourniquet was used.
+
+Description of procedure
+The patient was positioned supine with a bump under the right hip. The entire right lower extremity was prepped circumferentially from the iliac crest to the foot and draped free. A time-out confirmed the patient, the procedure and the right side.
+
+The tumor was palpable deep to the fascia lata in the anterolateral mid-thigh, and its borders were marked on the skin with reference to the MRI. A 16 cm longitudinal incision was made, incorporating an ellipse of skin around the healed biopsy tract. Skin flaps were raised superficial to the fascia lata, well beyond the planned margins. The fascia lata was incised 2 cm beyond the palpable edges of the tumor and kept on the specimen together with the biopsy tract and its skin ellipse.
+
+The vastus lateralis was divided proximally, distally, anteriorly and posteriorly through normal muscle, at least 1.0 cm from the tumor in every direction. The descending branch of the lateral circumflex femoral artery and its veins, which fed the tumor, were ligated and divided. Using a handheld nerve stimulator myself, I identified the femoral nerve motor branches to the vastus intermedius and preserved them; the branch entering the resected segment of the vastus lateralis was divided with the specimen. The deep margin was a 1.0 cm cuff of vastus lateralis with the epimysium of the vastus intermedius. The femur was not exposed, and no bone or periosteum was resected. The tumor was not entered, and the specimen was removed en bloc.
+
+Tumor size and margin, measured at the time of excision: the tumor measured 4.2 cm in greatest diameter. The narrowest margin required for complete excision was 1.0 cm of normal tissue on every side. The greatest diameter of the tumor plus margin was 6.2 cm.
+
+The specimen was oriented with sutures (short superior, long lateral) and sent fresh to pathology. A separate sample from the deep surface of the resection bed was sent for frozen section, which Dr. Abernathy (fictional) reported as negative for tumor.
+
+Four medium titanium clips were placed at the proximal, distal, anterior and posterior borders of the resection bed to guide radiation planning. The wound was irrigated and hemostasis was obtained with bipolar cautery and ties. A 15 French closed-suction drain was placed in the resection bed and brought out through a separate stab incision close to, and in line with, the distal end of the incision. The remaining muscle edges were loosely approximated with 2-0 absorbable suture, the fascia lata was closed with 0 absorbable suture, the subcutaneous tissue with 2-0 absorbable suture and the skin with 3-0 nylon. No extensive undermining, tissue rearrangement or flap was needed for closure. A sterile dressing was applied.
+
+Assistant surgeon
+Dr. Daniel Oyelaran (fictional), orthopaedic surgeon, was assistant surgeon for the entire procedure, providing exposure and retraction, protecting the neurovascular structures during the deep dissection, controlling bleeding and assisting with closure. A skilled surgical assistant was necessary. This hospital has no residency programs, and no qualified resident was available.
+
+Findings
+A firm 4.2 cm deep intramuscular mass within the right vastus lateralis with a thin pseudocapsule and no gross involvement of the overlying fascia lata, the femur or the femoral neurovascular bundle. No satellite nodules. Margins grossly clear.
+
+Specimens
+1. Right thigh sarcoma, radical resection en bloc with overlying fascia lata, biopsy tract and skin ellipse, oriented with sutures, sent fresh.
+2. Deep resection bed tissue for frozen section: negative for tumor.
+
+Estimated blood loss: 250 mL. No transfusion.
+Drains: one 15 French closed-suction drain.
+Fluoroscopy, navigation, operating microscope and neuromonitoring: none used.
+Complications: none.
+
+Disposition
+The patient was extubated in the operating room and taken to the recovery room in stable condition.
+
+Plan
+1. Admit to the orthopaedic floor. Drain to bulb suction; remove when output is under 30 mL per day.
+2. Weight bearing as tolerated on the right leg with a walker; physical therapy for gait and knee motion.
+3. Enoxaparin 40 mg subcutaneously daily from postoperative day 1; cefazolin for 24 hours.
+4. Final pathology to be reviewed at the sarcoma tumor board.
+5. Radiation oncology referral for postoperative external beam radiation, recommended to begin about 4 to 6 weeks after surgery once the wound has healed; no radiation was given today.
+6. Clinic visit in 2 weeks for a wound check and suture removal.
+
+Electronically signed: Dr. Helena Lindqvist, MD (fictional), 2026-11-05 15:12

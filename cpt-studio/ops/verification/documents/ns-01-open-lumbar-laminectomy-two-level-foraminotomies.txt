@@ -1,0 +1,74 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Cedar Hollow Regional Medical Center, Department of Neurosurgery (fictional hospital)
+Operative report - lumbar decompression
+
+Patient: Walter Ashby (fictional)
+Synthetic record: SYN-NS-0001
+Date of procedure: 2026-10-06
+Place of service: Hospital outpatient department, main operating room
+Surgeon: Dr. Celia Brandt, MD, Neurosurgery (fictional)
+Assistant: None
+Anesthesia: Dr. Tobias Renner, MD, Anesthesiology (fictional)
+
+Preoperative diagnosis
+Lumbar spinal stenosis at L3-L4 and L4-L5 with neurogenic claudication.
+
+Postoperative diagnosis
+Same.
+
+Procedure performed
+Open lumbar laminectomy at two contiguous levels, L3-L4 and L4-L5, with bilateral partial medial facetectomies and bilateral foraminotomies, for decompression of the cauda equina and the bilateral L3, L4 and L5 nerve roots. No fusion, no instrumentation and no bone graft.
+
+Indication
+71-year-old man with 18 months of progressive bilateral buttock and posterior thigh pain with leg heaviness on standing and walking, relieved by sitting and bending forward. His walking tolerance has fallen to about one block. Twelve weeks of physical therapy, anti-inflammatory medication and two lumbar epidural steroid injections earlier this year gave only temporary relief. MRI of the lumbar spine on 2026-08-19 shows severe central canal stenosis at L3-L4 and L4-L5 from ligamentum flavum hypertrophy and facet arthropathy, with bilateral lateral recess stenosis and moderate bilateral foraminal narrowing at both levels. L2-L3 and L5-S1 show mild degeneration without significant stenosis. Standing flexion-extension radiographs show no spondylolisthesis and no abnormal motion. Examination: full strength in both lower extremities, symmetrically reduced ankle reflexes and intact sensation. Because there is no instability, decompression without fusion was recommended.
+
+Consent
+The risks, including infection, bleeding, dural tear with cerebrospinal fluid leak, nerve root injury, weakness, persistent or recurrent pain, recurrent stenosis, later instability that could require fusion, and medical and anesthetic risks, were discussed together with the benefits and the alternatives, including continued nonoperative care. The patient wished to proceed and written informed consent was obtained. The preoperative history and physical examination were reviewed on the morning of surgery and there was no interval change.
+
+Anesthesia
+General endotracheal anesthesia, administered by Dr. Tobias Renner (fictional), anesthesiology. Intravenous antibiotic prophylaxis was given by the anesthesia team within 60 minutes before incision. Sequential compression devices were applied to both legs.
+
+Technique details
+Approach: posterior midline, open.
+Magnification: 3.5x surgical loupes and a headlight. The operating microscope was not used.
+Navigation: not used.
+Neuromonitoring: not used.
+Fluoroscopy: lateral fluoroscopic images for level localization only.
+
+Description of procedure
+After induction of anesthesia the patient was turned prone onto a Wilson frame on a radiolucent table, with all pressure points padded and the abdomen free. The lumbar region was prepped and draped in sterile fashion, and a time-out confirmed the patient, the procedure and the levels.
+
+A spinal needle placed at the presumed L3-L4 interspinous space was confirmed on a lateral fluoroscopic image. A 7 cm midline incision was made from the L3 to the L5 spinous process. The lumbodorsal fascia was opened just off the midline on both sides, and subperiosteal dissection exposed the spinous processes and laminae of L3, L4 and L5 out to the medial facet joints bilaterally, preserving the facet capsules. A second lateral image with an instrument on the L4 lamina confirmed the levels.
+
+The interspinous ligaments at L3-L4 and L4-L5 were resected, and the L4 spinous process and the caudal half of the L3 spinous process were removed. Using a high-speed drill and Kerrison rongeurs, the L4 lamina was removed completely, together with the caudal portion of the L3 lamina and the cephalad portion of the L5 lamina, preserving the pars interarticularis on both sides. The markedly thickened ligamentum flavum was removed in its entirety at L3-L4 and L4-L5. The thecal sac then expanded, with return of epidural fat and dural pulsation.
+
+At L3-L4 and L4-L5 on both sides, partial medial facetectomies were performed by undercutting the medial superior articular processes, preserving more than half of each facet joint, which decompressed the traversing L4 and L5 nerve roots in the lateral recesses. Bilateral foraminotomies were then performed at both levels, and the exiting L3 and L4 nerve roots were followed out through their foramina until they were free. A ball-tipped probe passed easily along each decompressed root and through each foramen.
+
+The L3-L4 and L4-L5 discs were mildly bulging without herniation; the annulus was not incised and no discectomy was performed. The dura was intact, with no cerebrospinal fluid leak. The L2-L3 and L5-S1 levels were not decompressed.
+
+Hemostasis was obtained with bipolar cautery, thrombin-soaked gelatin sponge and bone wax, and the wound was irrigated. One subfascial drain was brought out through a separate stab incision. The fascia was closed with interrupted 0 absorbable sutures, the subcutaneous layer with 2-0 sutures, and the skin with a running 3-0 subcuticular suture and skin adhesive. The wound edges were infiltrated with 20 mL of 0.25% bupivacaine. Sponge, needle and instrument counts were correct.
+
+Findings
+1. Severe central canal stenosis at L3-L4 and L4-L5 from ligamentum flavum hypertrophy (up to 7 mm thick) and facet hypertrophy.
+2. Bilateral lateral recess stenosis compressing the traversing L4 and L5 nerve roots, and moderate bilateral foraminal narrowing at L3-L4 and L4-L5.
+3. No disc herniation, no pars defect and no gross instability.
+4. After decompression, the thecal sac and the bilateral L3, L4 and L5 nerve roots were widely free.
+
+Implants: none. Bone graft: none.
+Specimens: none.
+Drains: one subfascial drain.
+Estimated blood loss: 150 mL. No transfusion.
+Complications: none. No durotomy.
+
+Disposition
+Extubated in the operating room and taken to the recovery room in stable condition, moving both lower extremities with full strength. Planned overnight stay.
+
+Plan
+1. Mobilize this evening with physical therapy. No brace is needed.
+2. Remove the drain on postoperative day 1 if the output is low.
+3. Multimodal analgesia; resume home medications.
+4. No lifting over 10 lb, bending or twisting for 6 weeks.
+5. Neurosurgery clinic follow-up in 2 weeks for a wound check, and again at 6 weeks.
+
+Electronically signed: Dr. Celia Brandt, MD (fictional), 2026-10-06 13:48

@@ -1,0 +1,70 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Alder Creek Regional Medical Center (fictional hospital)
+Operative report - orthopaedic trauma
+
+Patient: Dorothy Kessler (fictional)
+Synthetic record: SYN-OR-0007
+Date of procedure: 2026-10-17
+Place of service: Hospital inpatient, main operating room
+Surgeon: Dr. Samuel Okonkwo, MD, Orthopaedic Surgery (fictional)
+Assistant: Taylor Brandt, PA-C, physician assistant (fictional)
+Anesthesia: Dr. Lena Novak, MD, Anesthesiology (fictional)
+
+Preoperative diagnosis
+Closed, displaced, comminuted intertrochanteric fracture of the right femur, unstable pattern with a separate lesser trochanter fragment.
+
+Postoperative diagnosis
+Same.
+
+Procedure performed
+Internal fixation of the right intertrochanteric femur fracture with a long cephalomedullary (intramedullary) nail, one lag screw into the femoral head and one distal interlocking screw, after closed reduction on a fracture table.
+
+Indications
+The patient is an 83-year-old woman who lives independently at home and walks without an aid. On 2026-10-16 she tripped on a rug and fell onto her right side. She could not bear weight and was brought to the emergency department, where the right leg was shortened and externally rotated, with intact distal pulses and sensation. Radiographs showed a displaced intertrochanteric fracture of the right femur with posteromedial comminution and a displaced lesser trochanter fragment. There was no femoral neck fracture, no femoral shaft fracture and no other injury. She was admitted to the hospital medicine service, which completed her medical optimization and cleared her for surgery. Fixation with a cephalomedullary nail was recommended to allow immediate weight bearing.
+
+Consent
+The risks, including infection, bleeding, blood clots, nerve or vessel injury, malunion, nonunion, implant cut-out, leg length difference, the need for further surgery, and anesthetic and medical complications including death, were discussed with the patient and her daughter, together with the benefits and the alternative of nonoperative care. The patient had decision-making capacity and signed the written consent.
+
+Anesthesia
+Spinal anesthesia with intravenous sedation, administered by Dr. Lena Novak (fictional), anesthesiology. Before positioning, Dr. Novak also placed an ultrasound-guided right fascia iliaca block for postoperative analgesia. The anesthesia care and the block are documented in the anesthesia record. The anesthesia team gave cefazolin 2 g intravenously within 60 minutes before incision and tranexamic acid 1 g intravenously at incision.
+
+Description of procedure
+The patient was positioned supine on a fracture table with the left leg in a padded well-leg holder and a padded perineal post. Under fluoroscopy, longitudinal traction and internal rotation were applied to the right leg and a closed reduction was obtained. Anteroposterior and lateral images confirmed the neck-shaft angle restored to about 130 degrees, medial cortical contact and no posterior sag. The right hip and thigh were prepped and draped in the usual sterile fashion. A time-out confirmed the patient, the procedure, the right side and the implants.
+
+A 4 cm incision was made proximal to the tip of the greater trochanter and the fascia was divided in line with the skin. A guide pin was placed at the tip of the greater trochanter, slightly medial, and its position was confirmed on both views. The proximal femur was opened with the entry reamer. A ball-tipped guidewire was passed across the reduced fracture and down the femoral canal to the distal femoral metaphysis, centered on both views, and the nail length was measured at 380 mm. The canal was reamed in sequence to 11.5 mm. A long titanium cephalomedullary nail, 10 mm in diameter and 380 mm long with a 130-degree neck angle, was inserted by hand across the fracture without forceful impaction, and the reduction was maintained.
+
+Through a separate lateral stab incision and the targeting arm, the guide pin for the lag screw was placed in the center of the femoral head on both the anteroposterior and lateral views, to within 5 mm of subchondral bone. The tip-apex distance was 18 mm. The path was drilled and a 95 mm lag screw was inserted under fluoroscopy. The set screw was engaged to allow controlled sliding. Traction was released and gentle compression was applied across the fracture. One distal interlocking screw, 5.0 mm by 40 mm, was placed freehand through the static distal hole by the perfect-circle technique, with bicortical purchase confirmed on fluoroscopy. The lesser trochanter fragment was not fixed separately. Final images showed a maintained reduction, the lag screw centered in the femoral head and the nail tip seated in the distal femur without anterior cortical contact.
+
+The wounds were irrigated. The fascia was closed with 0 absorbable suture, the subcutaneous tissue with 2-0 absorbable suture and the skin with staples. Sterile dressings were applied.
+
+Fluoroscopy
+The C-arm was operated by the radiology technologist under my direction throughout the case, and I interpreted all intraoperative images. Fluoroscopy time was 2.1 minutes. No navigation or neuromonitoring was used.
+
+Assistant
+Taylor Brandt, PA-C (fictional), was first assistant for the entire procedure: holding traction and the reduction during guidewire passage and nail insertion, managing the targeting arm, retracting and assisting with closure. A skilled assistant was required for this procedure. This hospital has no residency program, and no qualified resident was available.
+
+Findings
+Unstable intertrochanteric fracture of the right femur with posteromedial comminution and a displaced lesser trochanter fragment, in osteoporotic bone. A long nail was chosen to span the femoral shaft in osteoporotic bone; the shaft itself was intact.
+
+Implants
+Long titanium cephalomedullary nail, 10 mm by 380 mm, 130 degrees; lag screw, 95 mm; distal interlocking screw, 5.0 mm by 40 mm.
+
+Estimated blood loss: 150 mL.
+Fluids: 1,100 mL crystalloid. No transfusion.
+Drains: none.
+Specimens: none.
+Complications: none.
+
+Disposition
+The patient was taken to the recovery room awake and in stable condition.
+
+Plan
+1. Weight bearing as tolerated on the right leg with a walker; physical therapy to start today or tomorrow morning.
+2. Postoperative radiographs of the right hip and femur ordered for the recovery room.
+3. Cefazolin for 24 hours. Enoxaparin 40 mg subcutaneously once daily from tomorrow morning for 4 weeks, for venous thromboembolism prophylaxis.
+4. Hospital medicine to continue co-management.
+5. Bone health: vitamin D level ordered; outpatient osteoporosis evaluation and treatment recommended.
+6. Staple removal at 10 to 14 days; office follow-up at 2 weeks and at 6 weeks with radiographs.
+
+Electronically signed: Dr. Samuel Okonkwo, MD (fictional), 2026-10-17 11:38
