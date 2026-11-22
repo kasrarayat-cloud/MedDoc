@@ -445,8 +445,22 @@ report"; D388): new TXT and CSV exports are refused, and those made before stay 
   text (pypdf and pdf.js read every word; fonts embedded as subsets; no image, no remote resource); content checks
   compare it with the saved state (codes, decisions, units, modifiers, quotations); the visual check of the scenario
   PDFs matches the approved design. Gate (scripts/ci/verify-cpt-studio.sh) on the final tree: see the commit that lands this entry.
-- [ ] **7. Installed on cpt.quillmd.com with rollback available** — NOT RUN.
-- [ ] **8. Actual authenticated download, saved-data comparison and reload passed** — NOT RUN.
+- [x] **7. Installed on cpt.quillmd.com with rollback available** — PASS (LIVE, 2026-11-22 01:43:38Z). 9dab92ba0f98
+  (the merge commit of #1506; citation CI 44968552960, cpt-studio 44968552976, secrets-scan 44968553012, all success)
+  installed through the ruled-act door under docs/foundation/mutations/20261122-cpt-studio-physician-pdf-install.md
+  (committed 01:13:41Z, before the act at 01:38:27Z): preflight, image (sha256:6e409ad596bc), PRE-APP PASS, app (no
+  migration; blue/green 9150 to 9151 with 307 availability samples all 200; no state changed), verify; post-checks with 0
+  unexpected differences. The previous pair c28ff379ba40 is parked with its image kept; switch-back rehearsed on a
+  restored copy of live. Report: docs/deploy-reports/20261122-cpt-studio-9dab92ba-install-and-live-check.md.
+- [x] **8. Actual authenticated download, saved-data comparison and reload passed** — PASS (LIVE, 2026-11-22
+  01:44:56-01:45:30Z). Signed in at https://cpt.quillmd.com as the review agent: five PDFs downloaded through the page's
+  export dialog (255e92ac: desktop and phone drafts; 6c450473: desktop draft, approved report, phone draft), each
+  compared with the saved state as that member read it (codes in order, only current approvals in the approved report,
+  units, modifiers, quotations, decisions with reviewer and UTC time, status and page numbering), the desktop drafts
+  downloaded again after a reload from Earlier downloads and equal to the stored bytes; the approved report holds only
+  99214, the one saved approval (re-read independently). The wording scan (7 PDFs, 0 hits) and the live customer scan
+  (34 checks passed, the downloads' answers included, 0 hits) passed; rows exactly as declared (exports +5, audit +5,
+  sign-ins +2). Evidence: export-20261121/install/live-out/ and live-scan/.
 
 ## Progress log (append only)
 
@@ -1304,3 +1318,6 @@ report"; D388): new TXT and CSV exports are refused, and those made before stay 
     messages, were missing and are added late.
   - The U32 c4 workflow was stopped (07:12Z) after hashing its 6,413 files; its registry is kept as a corpus.
   - The migration checklist is in HARNESS.md. Preflight 20261109T071128Z: FIX-AND-GO (an image-reclaim report only).
+- **2026-11-22T01:46Z Physician PDF report installed and checked live.** 9dab92ba0f98 at cpt.quillmd.com with the site
+  serving throughout; the authenticated download check and both scans passed; stages 7 and 8 of the physician PDF
+  section ticked with their evidence. Preflight 20261122T013817Z: FIX-AND-GO (disk 89%, report only).
