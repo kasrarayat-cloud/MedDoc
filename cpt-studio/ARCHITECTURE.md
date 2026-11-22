@@ -161,7 +161,12 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   of strings (an integer item read as its decimal string, a blank item - which carries nothing - removed) or not given;
   units a whole number as written (0 included; a string of digits read as its number) or not given; a reason list
   joined; a question list one question each; a line label the reader writes on its own items must be its place in the
-  list; any other shape is unreadable, never corrected or guessed. **Lines**: every code row has one - `L1`..`Ln`, the
+  list; a code line's code (a reader code or a missed code) written with the CPT book's marks before it - `+` an add-on,
+  `#` a resequenced code, at most one of each - is the code they mark (`+22614` is 22614: the code itself says what the
+  mark says; owner direction 2026-11-22, D390, nothing may drop a code Fable writes), while a review's code, the
+  checker's correction and a question's target are read exactly as written, so rounds stored earlier read as they did
+  (refutation N1-1-1); any other shape is unreadable, never corrected or guessed. **Lines**: every code row has one -
+  `L1`..`Ln`, the
   reader's codes in its order, then `M1`..`Mk`, the checker's additions - and the checker is given each line and names
   the line of every review. **Combination**, the only glue logic: a reader line keeps the reader's status only when the
   reviews naming that line and its code all say `agree` (at least one) and no other review names the line or its code;
@@ -201,8 +206,8 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   (sets of question numbers, each reference list resolved once). A known limit: because a reference reaches every
   question carrying its id and a row shows every question its ids name, an absurd answer with many distinct questions
   sharing one id and many lines naming it multiplies the size of the stored round. The problems are the reader's.
-  **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n> <code>` or `MISSED M<k> <code>` (checker)
-  starts that line's section; a citation after it is filed under the line when
+  **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n> <code>` or `MISSED M<k> <code>` (checker),
+  the code with or without the book's marks, starts that line's section; a citation after it is filed under the line when
   the marker's code is that line's code, else under `_document`. A section also ends at a line holding exactly `END`
   (both answers are asked to end their last section with one), at the start of the final answer, at a heading, a
   thematic break, a code fence or a line that only looks like a marker; a cited block whose own text holds a section

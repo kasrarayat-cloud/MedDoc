@@ -96,9 +96,8 @@ class ProvisionTests(TestCase):
         self.assertEqual(models.User.objects.get(username='agent1').actor_kind, models.User.AGENT)
 
 
-class SpecialtyProvisionTests(TestCase):
-    """Owner direction 2026-11-22 (D390): Neurosurgery and Orthopedic Surgery are workspace categories beside
-    Gastroenterology, each provisioned the GI way; one login serves one workspace until a switcher exists."""
+class ProvisionCommand:
+    """Mixin: password files in a temporary folder and the provision command's output."""
 
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -118,6 +117,12 @@ class SpecialtyProvisionTests(TestCase):
         return self.run_command('--specialty', specialty, '--owner-username', owner,
                                 '--owner-password-file', self.secret(owner, OWNER_PASSWORD),
                                 '--agent-username', agent, '--agent-password-file', self.secret(agent, AGENT_PASSWORD))
+
+
+
+class SpecialtyProvisionTests(ProvisionCommand, TestCase):
+    """Owner direction 2026-11-22 (D390): Neurosurgery and Orthopedic Surgery are workspace categories beside
+    Gastroenterology, each provisioned the GI way; one login serves one workspace until a switcher exists."""
 
     def test_each_specialty_is_its_own_category_and_workspace(self):
         self.provision('gastroenterology', 'owner1', 'agent1')
@@ -153,3 +158,34 @@ class SpecialtyProvisionTests(TestCase):
         with self.assertRaises(CommandError):
             self.run_command('--specialty', 'cardiology', '--owner-username', 'x',
                              '--owner-password-file', self.secret('x', OWNER_PASSWORD))
+
+
+class WorkspaceNameTests(ProvisionCommand, TestCase):
+    """Refutation N1-2-1 and N1-2-2: each workspace name belongs to one specialty, and a specialty's own name is its alone,
+    so a workspace known by its name (a member, the walk's --workspace) is known with its specialty."""
+
+    def test_a_workspace_name_belongs_to_one_specialty(self):
+        self.run_command('--specialty', 'neurosurgery', '--workspace-name', 'Riverside', '--owner-username', 'own-n',
+                         '--owner-password-file', self.secret('n', OWNER_PASSWORD))
+        with self.assertRaisesMessage(CommandError, "'Riverside' is a Neurosurgery workspace; give --specialty neurosurgery"):
+            self.run_command('--specialty', 'orthopedic-surgery', '--workspace-name', 'riverside', '--owner-username',
+                             'own-o', '--owner-password-file', self.secret('o', OWNER_PASSWORD))
+        self.assertEqual(list(models.Workspace.objects.values_list('name', flat=True)), ['Riverside'])
+        self.assertFalse(models.User.objects.filter(username='own-o').exists())
+
+    def test_a_specialty_name_is_that_specialtys_alone(self):
+        with self.assertRaisesMessage(CommandError, "'Neurosurgery' is the name of the Neurosurgery specialty; give "
+                                                    "--specialty neurosurgery"):
+            self.run_command('--workspace-name', 'Neurosurgery', '--owner-username', 'drneuro2',
+                             '--owner-password-file', self.secret('x', OWNER_PASSWORD))
+        self.assertFalse(models.Workspace.objects.exists())
+
+    def test_the_reviewer_path_names_the_specialty_a_workspace_has(self):
+        self.provision('neurosurgery', 'owner-neuro', 'review-agent-neuro')
+        with self.assertRaisesMessage(CommandError, "'Neurosurgery' is a Neurosurgery workspace; give --specialty "
+                                                    "neurosurgery"):
+            self.run_command('--workspace-name', 'Neurosurgery', '--reviewer-username', 'drjones',
+                             '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
+        out = self.run_command('--specialty', 'neurosurgery', '--reviewer-username', 'drjones',
+                               '--reviewer-password-file', self.secret('r2', REVIEWER_PASSWORD))
+        self.assertIn('created human account drjones (reviewer)', out)

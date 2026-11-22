@@ -603,7 +603,8 @@ class PureCheckTests(unittest.TestCase):
     def test_the_customer_session_serves_no_username_and_the_fresh_sign_in_is_the_account(self):
         # CORE-UX-DESIGN 7: the customer session is user {id, label, initials, actor_kind}; no username, provider mode or release
         data = {'user': {'id': 'u-1', 'label': 'Demo reviewer (synthetic demonstration)', 'initials': 'DR', 'actor_kind': 'human'},
-                'workspace': {'id': 'w-1', 'name': WORKSPACE}, 'role': 'reviewer', 'can_review': True, 'synthetic_only': True}
+                'workspace': {'id': 'w-1', 'name': WORKSPACE, 'specialty': WORKSPACE}, 'role': 'reviewer', 'can_review': True,
+                'synthetic_only': True}
         checks = {c['id']: c for c in vl.session_checks(200, data, USERNAME, WORKSPACE)}
         self.assertEqual({c['status'] for c in checks.values()}, {'pass'})
         self.assertIn('serves no username', checks['session.username']['reason'])
@@ -679,7 +680,8 @@ class ContractTests(unittest.TestCase):
         customer = self.read('studio', 'customer.py')
         self.assertIn("                     'actor_kind': user.actor_kind},", customer)
         self.assertIn("            'role': membership.role, 'can_review': bool(membership.can_review),", customer)
-        self.assertIn("            'workspace': {'id': str(workspace.pk), 'name': workspace.name},", customer)
+        self.assertIn("            'workspace': {'id': str(workspace.pk), 'name': workspace.name, 'specialty': workspace.category.name},",
+                      customer)
         models = self.read('studio', 'models.py')
         self.assertIn("    HUMAN, AGENT = 'human', 'agent'", models)
         self.assertIn("    OWNER, REVIEWER, VIEWER = 'owner', 'reviewer', 'viewer'", models)

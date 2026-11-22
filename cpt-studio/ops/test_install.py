@@ -1756,6 +1756,21 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
                          ('initial-credentials-neurosurgery.json',
                           Path('/home/claude/.cpt-studio/agent-credentials-neurosurgery.json')))
 
+    def test_a_refusal_names_the_specialtys_own_files(self):
+        args = SimpleNamespace(phase='provision', revision=REVISION, receipts=str(self.tmp), reset_passwords=None,
+                               owner_username='owner-neuro', agent_username='review-agent-neuro', owner_display_name='',
+                               agent_display_name='CPT Studio review agent', workspace_name='Neurosurgery',
+                               specialty='neurosurgery')
+        with mock.patch.object(install, 'installed_image', return_value='sha256:' + 'c' * 64), \
+                mock.patch.object(install, 'require_db'), \
+                mock.patch.object(install, 'read_protected_env', return_value=b''), \
+                mock.patch.object(install, 'root_file', return_value={'final_exists': True, 'staged_exists': False}), \
+                mock.patch.object(install, 'oneshot') as oneshot, self.assertRaises(install.InstallError) as caught:
+            install.phase_provision(install.Context(args, self.tmp))
+        oneshot.assert_not_called()
+        self.assertIn('initial-credentials-neurosurgery.json', str(caught.exception))
+        self.assertIn('agent-credentials-neurosurgery.json', str(caught.exception))
+
     def test_a_neurosurgery_provision_writes_only_its_own_files_and_names_its_specialty(self):
         home = self.tmp / 'home'
         home.mkdir(mode=0o700)

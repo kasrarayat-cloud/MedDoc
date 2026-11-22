@@ -594,6 +594,11 @@ class StaticHeaderTests(SimpleTestCase):
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             self.assertIn('CPT Studio dev preview', server.stdout.readline())
+            # the preview renders the shell with its fixture session's specialty, as the site does (refutation N1-3-3)
+            with urllib.request.urlopen(f'http://127.0.0.1:{port}/', timeout=30) as answer:
+                shell = answer.read().decode('utf-8')
+            self.assertIn('<select id="specialty" disabled><option>Gastroenterology</option></select>', shell)
+            self.assertIn('data-specialty="Gastroenterology"', shell)
             listed = [item['path'] for item in json.loads((PDF_LIB / 'MANIFEST.json').read_text(encoding='utf-8'))['files']]
             for name in listed:
                 with self.subTest(name):

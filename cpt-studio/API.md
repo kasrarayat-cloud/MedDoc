@@ -47,7 +47,8 @@ response may never carry; the browser walk (`ops/walk.cjs`) holds the deployed s
 
 ```json
 {"user": {"id": "...", "label": "...", "initials": "AB", "actor_kind": "human|agent"},
- "workspace": {"id": "...", "name": "..."}, "role": "owner|reviewer|viewer", "can_review": true,
+ "workspace": {"id": "...", "name": "...", "specialty": "Gastroenterology|Neurosurgery|Orthopedic Surgery"},
+ "role": "owner|reviewer|viewer", "can_review": true,
  "acknowledgement": "<the exact text an approval must send back>",
  "counts": {"documents": 3, "queue": 1}}
 ```

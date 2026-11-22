@@ -15,8 +15,9 @@ Shape (FIX-SPEC-2 section 2): every field is read in the shape the instructions 
 lossless ones:
 - the reader's ``codes`` and the checker's ``reviews`` are lists, ``missed_codes`` a list when present;
 - a code line (a reader code or a missed code) names a code of the code shape (four digits and then a digit or F, T or
-  U; or a capital letter and four digits), the CPT book's add-on mark before it read as the code it marks ("+22614" is
-  22614: a lossless conversion, D390), and a status the instructions allow (the reader's three; ready or
+  U; or a capital letter and four digits), the CPT book's marks before it read as the code they mark ("+22614" is
+  22614, "#+22853" is 22853: a lossless conversion, D390), and a status the instructions allow (the reader's three;
+  ready or
   needs_answer for a missed code); a "line" label it writes on itself, when it writes one, is its own place in its list
   (the code cannot tell which numbering was meant otherwise);
 - units: a whole number of zero or more (the reader writes 0 for a code it does not support: measured on the recorded
@@ -127,7 +128,7 @@ UNASKED_QUESTION = 'What does the coding review need to know to finish code {cod
 _CODE_SHAPE = r'(?:[0-9]{4}[0-9FTU]|[A-Z][0-9]{4})'
 _CODE = re.compile(_CODE_SHAPE)
 _DIGITS = re.compile(r'[0-9]+')
-_MARKER = re.compile(rf'(?:#+ )?(LINE|REVIEW|MISSED) ([LM][1-9][0-9]*) \+?({_CODE_SHAPE})[ \t\r]*')
+_MARKER = re.compile(rf'(?:#+ )?(LINE|REVIEW|MISSED) ([LM][1-9][0-9]*) (?:\+#?|#\+?)?({_CODE_SHAPE})[ \t\r]*')
 # a line that reads like a marker but is not one - led (after any list or emphasis marks) by LINE, REVIEW or MISSED in
 # any case and naming a code further on, or naming a line label after one of them anywhere ("**LINE L2 45380**",
 # "- REVIEW L1 45385", "Line 2 45380", "Review of 45380:"): it ends the current section, so a citation after it never
@@ -146,15 +147,26 @@ _UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
 _ROLE_MARKS = {'reader': {READER_MARK: READER_LINE}, 'checker': {CHECKER_MARK: READER_LINE, MISSED_MARK: MISSED_LINE}}
 
 
+# The CPT book's marks before a code: "+" an add-on, "#" a resequenced code, at most one of each, in either order.
+_BOOK_MARKS = re.compile(rf'(?:\+#?|#\+?)({_CODE_SHAPE})')
+
+
 def _written_code(value: object) -> object:
-    """A code as Fable wrote it, with the CPT book's add-on mark read as the code it marks: "+22614" is 22614 (owner
-    direction 2026-11-22, D390: nothing in CPT Studio may drop a code Fable writes, and spine and joint cases are built
-    on add-on codes). It is a lossless conversion of the shape in the sense of FIX-SPEC-2 section 2, the code itself
-    saying it is an add-on; everything else is returned exactly as written, so the rest of that section stands - white
-    space around a code, lower case, a mark with a space after it, or a code joined to a modifier ("22614-62") still make
-    the answer unreadable rather than altered or guessed. Plumbing only - it decides no code (D358)."""
-    if isinstance(value, str) and value.startswith('+') and _CODE.fullmatch(value[1:]):
-        return value[1:]
+    """A code line's code as Fable wrote it, with the CPT book's marks read as the code they mark: "+22614" is 22614 and
+    "#+22853" is 22853 (owner direction 2026-11-22, D390: nothing in CPT Studio may drop a code Fable writes, and
+    spine and joint cases are built on add-on codes, some of them resequenced). A lossless conversion of the shape in
+    the sense of FIX-SPEC-2 section 2, the code itself saying what the mark says; everything else is returned exactly
+    as written, so the rest of that section stands - white space, lower case, a mark with a space after it or repeated,
+    or a code joined to a modifier ("22614-62") still make the answer unreadable rather than altered or guessed.
+
+    Read only where an answer writes a code LINE (a reader code, a missed code) and in a section marker: a review's
+    code, the checker's correction and a question's target are read as before, because rounds already stored are read
+    again whenever a page shows them, and a stored review must keep the reading it was stored under (refutation N1-1-1).
+    Plumbing only - it decides no code (D358)."""
+    if isinstance(value, str):
+        marked = _BOOK_MARKS.fullmatch(value)
+        if marked:
+            return marked.group(1)
     return value
 
 
@@ -405,7 +417,8 @@ def dangling_references(reader: object, checker: object) -> list[dict]:
     """The references of a round's two answers (each as stored) that name no question - an id naming no question its
     author was shown, or an item of question_ids in a shape that names no question (module docstring) - for the
     operator console: each {'item' (the line: "L2", "M1"; or "review 3", its place in the checker's reviews), 'code'
-    (as written), 'reference' (exactly as written: an integer id stays an integer)}, the reader's lines first, then
+    (as written; a line's as read, the CPT book's marks set aside - _written_code), 'reference' (exactly as written:
+    an integer id stays an integer)}, the reader's lines first, then
     the checker's reviews, then its missed codes. A question defined only on a line or a review (a question object
     with an id) is a question its author was shown. A part that cannot be read (an answer stored before this reading
     of the shape) is left out: it named nothing and defines nothing."""
@@ -529,7 +542,7 @@ def _line(item: object, role: str, label: str, statuses: tuple) -> dict:
     code = _written_code(item.get('code'))
     if not isinstance(code, str) or not _CODE.fullmatch(code):
         raise Unreadable(f'{role} {label} names no code of the code shape')
-    where = f'{role} {label} ({code})'
+    where = f'{role} {label} ({item["code"]})'  # as written
     own = item.get('line')
     if own is not None and not (isinstance(own, str) and (not own.strip() or _key(own) == label)):
         raise Unreadable(f'{where} names itself as another line than its place in the list')
@@ -582,11 +595,10 @@ def _review(item: object) -> dict:
         raise Unreadable('a review names no code')
     line, verdict = item.get('line'), item.get('verdict')
     asked, refs = _own_questions(item, 'a review')
-    return {'line': _key(line) if isinstance(line, str) else None, 'code': _written_code(item['code']),
+    return {'line': _key(line) if isinstance(line, str) else None, 'code': item['code'],
             'verdict': verdict if isinstance(verdict, str) else None,
             'reason': _reason(item.get('reason'), 'a review'), 'question': _question_text([own.text for own in asked]),
-            'correct_code': _written_code(_str(item.get('correct_code'))),
-            'correct_units': _plain_units(item.get('correct_units')),
+            'correct_code': _str(item.get('correct_code')), 'correct_units': _plain_units(item.get('correct_units')),
             'correct_modifiers': _strings(item.get('correct_modifiers')),
             'correct_status': _str(item.get('correct_status')), 'evidence': _evidence(item.get('evidence')),
             'asked': asked, 'refs': refs}
@@ -706,7 +718,7 @@ def _affects(value: object, role: str) -> list[str]:
         if entry is None:
             continue
         if isinstance(entry, str):
-            out.append(_written_code(entry))
+            out.append(entry)
         elif type(entry) is int:
             out.append(str(entry))
         else:

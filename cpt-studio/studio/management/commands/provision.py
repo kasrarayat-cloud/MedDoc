@@ -1,8 +1,8 @@
 """Create a specialty's workspace and its accounts, idempotently.
 
 The specialties (owner directions of 2026-10-23 and 2026-11-22, DECISIONS D390): Gastroenterology, Neurosurgery and
-Orthopedic Surgery, each a workspace category. A workspace's specialty is a label - the page and the PDF report show it -
-and nothing on the coding path reads it: Fable codes every specialty, with no engine, code list or routing (D358).
+Orthopedic Surgery, each a workspace category. A workspace's specialty is a label - the page and the PDF report show
+it - and nothing on the coding path reads it: Fable codes every specialty, with no engine, code list or routing (D358).
 
 One login serves one workspace until a workspace switcher exists (D390): an account already active in another workspace
 is refused, never added to a second one, so nobody is left seeing the wrong workspace's documents.
@@ -79,6 +79,19 @@ class Command(BaseCommand):
             category.save(update_fields=['profiles_version'])
         workspace = models.Workspace.objects.filter(category=category, name=workspace_name).first()
         if workspace is None:
+            # each workspace name belongs to one specialty, and a specialty's own name is its alone (refutation
+            # N1-2-1, N1-2-2): a member or a check that knows a workspace by its name always knows its specialty too
+            elsewhere = (models.Workspace.objects.filter(name__iexact=workspace_name).exclude(category=category)
+                         .select_related('category').first())
+            if elsewhere is not None:
+                raise CommandError(f'The workspace {elsewhere.name!r} is a {elsewhere.category.name} workspace; give '
+                                   f'--specialty {elsewhere.category.slug} (each workspace name belongs to one '
+                                   f'specialty).')
+            owner_of_name = next((other for other, (other_name, _) in SPECIALTIES.items()
+                                  if other_name.casefold() == workspace_name.casefold()), slug)
+            if owner_of_name != slug:
+                raise CommandError(f'{workspace_name!r} is the name of the {SPECIALTIES[owner_of_name][0]} specialty; '
+                                   f'give --specialty {owner_of_name}.')
             if not options['owner_username']:
                 raise CommandError(f'No workspace named {workspace_name!r} exists; provision it with its '
                                    f'owner first.')
@@ -96,7 +109,8 @@ class Command(BaseCommand):
             accounts.append((options['reviewer_username'], options['reviewer_display_name'],
                              options['reviewer_password_file'], models.User.HUMAN, models.Membership.REVIEWER))
         for username, display, password_file, kind, role in accounts:
-            user = models.User.objects.filter(username=username).first()
+            # the row is locked, so two runs at once cannot both pass the one-workspace check (refutation N1-2-3)
+            user = models.User.objects.select_for_update().filter(username=username).first()
             created = user is None
             if created:
                 user = models.User(username=username, actor_kind=kind, display_name=display or username)

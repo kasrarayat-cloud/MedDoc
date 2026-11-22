@@ -1240,12 +1240,18 @@ recomputes every state.
   refuses the switch back, and the new web keeps serving: run `rollback-app`
   again. Do not remove the old web by hand: it is what `rollback-app` switches
   back to.
-- Staged `.initial-credentials.json.new` / `.agent-credentials.json.new` from an
+- Staged `.initial-credentials.json.new` / `.agent-credentials.json.new` (for
+  another specialty `.initial-credentials-<specialty>.json.new` /
+  `.agent-credentials-<specialty>.json.new`; the refusal names them) from an
   interrupted `provision`, or `.operator-credentials.json.new` /
   `.ops-agent-credentials.json.new` from an interrupted `operators`: delete them
   (no account uses their passwords unless the receipt says the accounts were
   created) and rerun.
-- Rotating the two passwords: `--phase provision --owner-username … --reset-passwords`.
+- Rotating the two passwords: `--phase provision --owner-username … --reset-passwords`,
+  with `--specialty neurosurgery` or `--specialty orthopedic-surgery` (and that
+  specialty's owner and agent) for those workspaces. The installer keeps one
+  workspace per specialty, its pair of files naming it; a second workspace of a
+  specialty is provisioned with `manage provision` directly.
 - Rotating the coder's key: the owner replaces its source; remove
   `/etc/cpt-studio/anthropic-credentials.env` by hand (root), run `secrets`,
   which copies the new source, then `app` with the same `--coding-mode`: the

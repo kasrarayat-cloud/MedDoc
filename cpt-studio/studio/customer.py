@@ -191,7 +191,7 @@ def session_json(user, membership) -> dict:
     queue = _with_rounds(encounters).filter(has_round=True, state__in=QUEUE_STATES).count()
     return {'user': {'id': str(user.pk), 'label': user.label(), 'initials': initials(user),
                      'actor_kind': user.actor_kind},
-            'workspace': {'id': str(workspace.pk), 'name': workspace.name},
+            'workspace': {'id': str(workspace.pk), 'name': workspace.name, 'specialty': workspace.category.name},
             'role': membership.role, 'can_review': bool(membership.can_review),
             'acknowledgement': decisions.acknowledgement_for(user),
             'counts': {'documents': encounters.count(), 'queue': queue}}

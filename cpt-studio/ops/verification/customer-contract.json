@@ -36,7 +36,7 @@
   },
   "session": {"keys": {
     "user": {"keys": {"id": "string", "label": "string", "initials": "string", "actor_kind": {"enum": ["human", "agent"]}}},
-    "workspace": {"keys": {"id": "string", "name": "string"}},
+    "workspace": {"keys": {"id": "string", "name": "string", "specialty": "string"}},
     "role": {"enum": ["owner", "reviewer", "viewer"]}, "can_review": "boolean", "acknowledgement": "string",
     "counts": {"keys": {"documents": "integer", "queue": "integer"}}}},
   "list": {"keys": {"encounters": {"items": {"ref": "list_row"}}}},

@@ -188,9 +188,10 @@ PASSAGE_DATA = f'{APP}/studio/reference/data'
 PASSAGE_DATA_IN_IMAGE = '/app/studio/reference/data'
 INITIAL_CREDENTIALS = 'initial-credentials.json'
 AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/agent-credentials.json')
-# The specialties a workspace may be provisioned for (owner direction 2026-11-22, DECISIONS D390), as manage.py provision
-# names them. Gastroenterology keeps its credentials files; each other specialty has its own pair, so provisioning one
-# never touches another's, and its own review agent (one login serves one workspace until a switcher exists).
+# The specialties a workspace may be provisioned for (owner direction 2026-11-22, DECISIONS D390), as manage.py
+# provision names them. Gastroenterology keeps its credentials files; each other specialty has its own pair, so
+# provisioning one never touches another's, and its own review agent (one login serves one workspace until a switcher
+# exists).
 SPECIALTY_NAMES = {'gastroenterology': 'Gastroenterology', 'neurosurgery': 'Neurosurgery',
                    'orthopedic-surgery': 'Orthopedic Surgery'}
 SPECIALTY_AGENTS = {'gastroenterology': 'review-agent', 'neurosurgery': 'review-agent-neuro',
@@ -6224,9 +6225,12 @@ def phase_provision(ctx) -> dict:
     state = root_file('state', **names)
     agent_staged = agent_credentials.with_name(f'.{agent_credentials.name}.new')
     if state['staged_exists'] or agent_staged.exists():
-        raise InstallError('Staged credentials from an interrupted run exist; resolve them by hand first.')
+        raise InstallError(f'Staged credentials from an interrupted run exist ({ETC_DIR}/.{final}.new or {agent_staged}); '
+                           f'resolve them by hand first.')
     if not reset and (state['final_exists'] or agent_credentials.exists()):
-        raise InstallError('Credentials files already exist; use --reset-passwords to rotate them.')
+        raise InstallError(f'Credentials files already exist ({ETC_DIR}/{final}, {agent_credentials}); use '
+                           f'--reset-passwords to rotate them - for this specialty\'s accounts only: the installer keeps '
+                           f'one workspace per specialty.')
     expected = {args.owner_username: ('human', 'owner'), args.agent_username: ('agent', 'reviewer')}
     passwords = {args.owner_username: secrets.token_urlsafe(24), args.agent_username: secrets.token_urlsafe(24)}
     accounts = [{'username': user, 'actor_kind': kind, 'role': role, 'password': passwords[user]}

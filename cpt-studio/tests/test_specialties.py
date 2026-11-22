@@ -7,7 +7,7 @@ import pathlib
 from django.conf import settings
 from django.test import Client, TestCase, override_settings
 
-from studio import models, state
+from studio import client_contract, models, state
 from tests.support import rounds as r
 from tests.test_physician_report import flat, text_of
 
@@ -48,7 +48,18 @@ class PageNamesTheMembersSpecialtyTests(TestCase):
         source = APP_JS.read_text(encoding='utf-8')
         for fixed in ('GASTROENTEROLOGY', 'Gastroenterology', 'synthetic GI document'):
             self.assertNotIn(fixed, source)
-        self.assertIn('document.body?.dataset?.specialty', source)
+        # the session's specialty first (it follows the signed-in workspace, refutation N1-3-1), the shell's before it
+        self.assertIn('text(state.session?.workspace?.specialty) || shell', source)
+        self.assertIn("const specialty = text(session.workspace?.specialty);", source)
+
+    def test_the_session_names_the_workspace_specialty(self):
+        for slug, name in (('neurosurgery', 'Neurosurgery'), ('orthopedic-surgery', 'Orthopedic Surgery')):
+            with self.subTest(specialty=name):
+                user, workspace = specialty_member(slug, name)
+                client = Client()
+                client.force_login(user)
+                session = client.get('/api/session', HTTP_X_CPT_STUDIO_CLIENT=client_contract.VERSION).json()
+                self.assertEqual(session['workspace'], {'id': str(workspace.pk), 'name': name, 'specialty': name})
 
 
 class ReportNamesTheWorkspaceSpecialtyTests(r.CustomerCase, TestCase):

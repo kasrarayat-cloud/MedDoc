@@ -3169,7 +3169,10 @@ async function main(argv) {
     await signIn(page, opts.baseUrl, creds);
     const session = await page.request.get(`${opts.baseUrl}/api/session`, { headers: { Accept: 'application/json', ...CLIENT_HEADERS } });
     ctx.session = session.ok() ? await session.json() : null;
-    evidence.session = ctx.session ? { can_review: ctx.session.can_review ?? null, role: ctx.session.role ?? null,
+    // the workspace the session served is always recorded, with or without --workspace (refutation N1-3-4)
+    evidence.session = ctx.session ? { workspace: ctx.session.workspace?.name ?? null,
+      specialty: ctx.session.workspace?.specialty ?? null,
+      can_review: ctx.session.can_review ?? null, role: ctx.session.role ?? null,
       acknowledgement: ctx.session.acknowledgement ?? null } : { status: session.status() };
     const problems = sessionProblems(ctx.session, opts);
     if (problems.length) throw new Error(`refusing to upload: ${problems.join('; ')}`);

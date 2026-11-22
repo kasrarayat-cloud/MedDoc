@@ -1757,16 +1757,23 @@ function setCount(selector, value) {
   element.hidden = !valid;
 }
 
-// The workspace's specialty, as the page shell names it (data-specialty on <body>, from the member's workspace; owner
-// direction 2026-11-22, D390): a label only - nothing on the page or the server codes from it.
+// The workspace's specialty, as the session names it (GET /api/session, workspace.specialty) and, before the session is
+// read, as the page shell names it (data-specialty on <body>; owner direction 2026-11-22, D390): a label only - nothing
+// on the page or the server codes from it.
 function specialtyEyebrow() {
-  const specialty = typeof document === 'undefined' ? '' : text(document.body?.dataset?.specialty);
+  const shell = typeof document === 'undefined' ? '' : text(document.body?.dataset?.specialty);
+  const specialty = text(state.session?.workspace?.specialty) || shell;
   return specialty ? `CODING REVIEW · ${specialty.toUpperCase()}` : 'CODING REVIEW';
 }
 
 function renderSession(session) {
   const name = text(session.workspace?.name) || 'Workspace';
   $('#workspaceName').textContent = name;
+  // the specialty follows the session, as the workspace name does: a page left open while the same browser signs in to
+  // another workspace names the workspace it now works in (refutation N1-3-1)
+  const specialty = text(session.workspace?.specialty);
+  const specialtyOption = $('#specialty option');
+  if (specialty && specialtyOption) specialtyOption.textContent = specialty;
   $('#workspaceSubtitle').textContent = 'Synthetic demonstration workspace';
   $('#workspaceAvatar').textContent = ([...name][0] || '').toUpperCase();
   const label = text(session.user?.label) || 'Signed in';

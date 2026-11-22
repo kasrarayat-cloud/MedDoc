@@ -2069,3 +2069,9 @@ test('with --workspace the walk stops on a session in another workspace (owner d
   assert.equal(walk.parseArgs([...REQUIRED_ARGS, '--workspace', 'Orthopedic Surgery']).workspace, 'Orthopedic Surgery');
   assert.equal(walk.parseArgs(REQUIRED_ARGS).workspace, null);
 });
+
+test('the walk evidence names the workspace and specialty the session served, with or without --workspace (N1-3-4)', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'walk.cjs'), 'utf8');
+  assert.ok(source.includes('evidence.session = ctx.session ? { workspace: ctx.session.workspace?.name ?? null,'));
+  assert.ok(source.includes('specialty: ctx.session.workspace?.specialty ?? null,'));
+});
