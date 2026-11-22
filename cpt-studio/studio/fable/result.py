@@ -138,7 +138,7 @@ _MARKER_LIKE = re.compile(
     r'|(?i:\b(?:line|review|missed)[ \t]*[:#.-]?[ \t]*[lm][0-9])')
 # a heading that is not a marker: a line starting with '#' (the instructions' own word for a heading line), or a line
 # that is all bold or underlined ("**Summary**")
-_HEADING = re.compile(rf'[ \t]*#(?!\+?{_CODE_SHAPE}(?![A-Za-z0-9]))|[ \t]*(\*\*|__)(?=\S).*\S\1:?[ \t\r]*$')
+_HEADING = re.compile(r'[ \t]*#|[ \t]*(\*\*|__)(?=\S).*\S\1:?[ \t\r]*$')
 _RULE = re.compile(r'[ \t]*([-*_])[ \t]*(?:\1[ \t]*){2,}\r?')  # a thematic break: ---, ***, ___, - - -
 _FENCE = re.compile(r'[ \t]*(`{3,}|~{3,})(.*)')  # a line opening or closing a fenced block (the run, then the rest)
 # PostgreSQL text cannot hold NUL, and a lone surrogate cannot be encoded at all
@@ -161,9 +161,10 @@ def _written_code(value: object) -> object:
 
     Read wherever an answer names a code - a code line, a missed code, a review's code, the checker's correction, a
     question's target and a section marker - so a marked line and a marked review of it agree (refutation N2-1-1..4).
-    A round stored before this reading is read again whenever a page shows it; on cpt.quillmd.com none holds a marked
-    code (measured 2026-11-22: 0 of 8 rounds), and the install declaration measures it again before the switch.
-    Plumbing only - it decides no code (D358)."""
+    A round stored before this reading is read again whenever a page shows it, so the release that installs it must
+    find no stored round holding a marked code: on cpt.quillmd.com there was none (read-only, 2026-11-22: 0 of 8
+    rounds), and that release's pre-app check reads it again before its switch and stops if one appears (refutation
+    N3-1-1). Plumbing only - it decides no code (D358)."""
     if isinstance(value, str):
         marked = _BOOK_MARKS.fullmatch(value)
         if marked:
@@ -418,8 +419,8 @@ def dangling_references(reader: object, checker: object) -> list[dict]:
     """The references of a round's two answers (each as stored) that name no question - an id naming no question its
     author was shown, or an item of question_ids in a shape that names no question (module docstring) - for the
     operator console: each {'item' (the line: "L2", "M1"; or "review 3", its place in the checker's reviews), 'code'
-    (as written; a line's as read, the CPT book's marks set aside - _written_code), 'reference' (exactly as written:
-    an integer id stays an integer)}, the reader's lines first, then
+    (as read: the CPT book's marks set aside - _written_code), 'reference' (exactly as written: an integer id stays an
+    integer)}, the reader's lines first, then
     the checker's reviews, then its missed codes. A question defined only on a line or a review (a question object
     with an id) is a question its author was shown. A part that cannot be read (an answer stored before this reading
     of the shape) is left out: it named nothing and defines nothing."""

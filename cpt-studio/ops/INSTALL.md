@@ -1249,8 +1249,8 @@ recomputes every state.
   created) and rerun.
 - Rotating the two passwords: `--phase provision --owner-username … --reset-passwords`,
   with `--specialty neurosurgery` or `--specialty orthopedic-surgery` (and that
-  specialty's owner and agent, and `--workspace-name` when the workspace was
-  given its own name) for those workspaces. The installer keeps one
+  specialty's owner and agent) for those workspaces, and `--workspace-name` for
+  any workspace, Gastroenterology's included, that was given its own name. The installer keeps one
   workspace per specialty, its pair of files naming it; a second workspace of a
   specialty is provisioned with `manage provision` directly.
 - Rotating the coder's key: the owner replaces its source; remove

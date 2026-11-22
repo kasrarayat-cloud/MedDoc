@@ -35,6 +35,12 @@ CATEGORY_SLUG = 'gastroenterology'
 CATEGORY_NAME, PROFILES_VERSION = SPECIALTIES[CATEGORY_SLUG]
 
 
+def _read(name: str) -> str:
+    """A workspace name as a member reads it: white space around it set aside, runs of it as one space, letter case
+    aside. Look-alike letters and invisible characters are not folded: the operator names workspaces."""
+    return ' '.join(name.split()).casefold()
+
+
 def _password(path):
     data = Path(path).read_text(encoding='utf-8').strip()
     if not data:
@@ -71,9 +77,10 @@ class Command(BaseCommand):
             raise CommandError('--reviewer-password-file is required with --reviewer-username.')
         slug = options['specialty']
         name, profiles_version = SPECIALTIES[slug]
-        # a workspace name as a member reads it: white space around it set aside and runs of it read as one space, so
-        # "Neurosurgery " or "Orthopedic  Surgery" are those names (refutation N2-2-1)
-        workspace_name = ' '.join((options['workspace_name'] or name).split())
+        requested = options['workspace_name'] or name
+        # a new workspace's name is stored as a member reads it: white space around it set aside and runs of it read as
+        # one space (refutation N2-2-1)
+        workspace_name = ' '.join(requested.split())
         if not workspace_name:
             raise CommandError('The workspace name is empty.')
         category, _ = models.Category.objects.get_or_create(
@@ -81,18 +88,28 @@ class Command(BaseCommand):
         if category.profiles_version != profiles_version:
             category.profiles_version = profiles_version
             category.save(update_fields=['profiles_version'])
-        workspace = models.Workspace.objects.filter(category=category, name__iexact=workspace_name).first()
+        # an existing workspace is found by its name exactly as stored first (as before; refutation N3-2-1, N3-2-2), and
+        # only then as a member reads it - and only when that names one workspace of the specialty
+        in_specialty = list(models.Workspace.objects.filter(category=category).order_by('pk'))
+        workspace = next((each for each in in_specialty if each.name == requested), None)
+        if workspace is None:
+            readings = [each for each in in_specialty if _read(each.name) == _read(workspace_name)]
+            if len(readings) > 1:
+                raise CommandError(f'{len(readings)} {category.name} workspaces read as {workspace_name!r}: name one '
+                                   f'exactly as stored ({", ".join(repr(each.name) for each in readings)}).')
+            workspace = readings[0] if readings else None
         if workspace is None:
             # each workspace name belongs to one specialty, and a specialty's own name is its alone (refutation
             # N1-2-1, N1-2-2): a member or a check that knows a workspace by its name always knows its specialty too
-            elsewhere = (models.Workspace.objects.filter(name__iexact=workspace_name).exclude(category=category)
-                         .select_related('category').first())
+            elsewhere = next((each for each in models.Workspace.objects.exclude(category=category)
+                              .select_related('category').order_by('pk')
+                              if _read(each.name) == _read(workspace_name)), None)
             if elsewhere is not None:
                 raise CommandError(f'The workspace {elsewhere.name!r} is a {elsewhere.category.name} workspace; give '
                                    f'--specialty {elsewhere.category.slug} (each workspace name belongs to one '
                                    f'specialty).')
             owner_of_name = next((other for other, (other_name, _) in SPECIALTIES.items()
-                                  if other_name.casefold() == workspace_name.casefold()), slug)
+                                  if _read(other_name) == _read(workspace_name)), slug)
             if owner_of_name != slug:
                 raise CommandError(f'{workspace_name!r} is the name of the {SPECIALTIES[owner_of_name][0]} specialty; '
                                    f'give --specialty {owner_of_name}.')

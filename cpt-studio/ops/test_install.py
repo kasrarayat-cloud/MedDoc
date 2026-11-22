@@ -1749,6 +1749,15 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
         self.refused('--phase', 'preflight', '--specialty', 'neurosurgery')
         self.refused('--phase', 'provision', '--owner-username', 'owner', '--specialty', 'cardiology')
 
+    def test_a_workspace_name_is_written_as_provision_stores_it(self):
+        # refutation N3-2-4: the credentials file names what provision stores
+        for name in (' Spine Center', 'Spine Center ', 'Spine  Center'):
+            with self.subTest(name=name):
+                self.refused('--phase', 'provision', '--owner-username', 'owner-neuro', '--specialty', 'neurosurgery',
+                             '--workspace-name', name)
+        self.assertEqual(self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--specialty',
+                                    'neurosurgery', '--workspace-name', 'Spine Center').workspace_name, 'Spine Center')
+
     def test_each_specialty_has_its_own_credentials_files(self):
         self.assertEqual(install.credentials_files('gastroenterology'),
                          ('initial-credentials.json', Path('/home/claude/.cpt-studio/agent-credentials.json')))

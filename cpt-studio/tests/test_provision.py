@@ -210,3 +210,20 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
                          'drj', '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
         self.assertEqual(models.Workspace.objects.filter(category__slug='neurosurgery').count(), 1)
         self.assertEqual(models.Membership.objects.get(user__username='drj').workspace.name, 'Neurosurgery')
+
+    def test_an_existing_name_is_found_exactly_as_stored_first(self):
+        # refutation N3-2-1, N3-2-2: two workspaces stored before these rules whose names differ only in white space or
+        # case stay apart, and a name stored with spaces is still reached by that name
+        category = models.Category.objects.create(slug='gastroenterology', name='Gastroenterology',
+                                                  profiles_version='gi-profiles@3')
+        spaced = models.Workspace.objects.create(category=category, name='GI  Clinic ')
+        plain = models.Workspace.objects.create(category=category, name='GI Clinic')
+        self.run_command('--workspace-name', 'GI  Clinic ', '--reviewer-username', 'drz',
+                         '--reviewer-password-file', self.secret('z', REVIEWER_PASSWORD))
+        self.assertEqual(models.Membership.objects.get(user__username='drz').workspace, spaced)
+        self.run_command('--workspace-name', 'GI Clinic', '--reviewer-username', 'dry',
+                         '--reviewer-password-file', self.secret('y', REVIEWER_PASSWORD))
+        self.assertEqual(models.Membership.objects.get(user__username='dry').workspace, plain)
+        with self.assertRaisesMessage(CommandError, "2 Gastroenterology workspaces read as 'gi clinic': name one exactly"):
+            self.run_command('--workspace-name', 'gi clinic', '--reviewer-username', 'drx',
+                             '--reviewer-password-file', self.secret('x', REVIEWER_PASSWORD))

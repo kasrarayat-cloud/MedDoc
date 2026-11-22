@@ -85,12 +85,13 @@ class WrittenCodeTests(SimpleTestCase):
             f.text_block('A second level.', [f.page_cite('extended to L5-S1', 1)]),
             f.text_block('\n\nLINE L3 #+22853\n'),
             f.text_block('A cage.', [f.page_cite('interbody cage at L4-L5', 1)]),
-            # a prose line that starts with a resequenced code is no heading: the section goes on (N2-1-5)
+            # a prose line that starts with "#" ends the section, as on main, so what follows it goes to _document and
+            # never to the line before (refutation N3-1-2; N2-1-5 is a recorded limit)
             f.text_block('\n#22853 is reported once per interspace.\n'),
             f.text_block('One cage.', [f.page_cite('a single cage was inserted', 1)]),
             f.text_block('\nEND'),
             f.text_block(f.fenced(f.reader_result([f.code('22612'), f.code('+22614'), f.code('#+22853')])))])
         found = result.citations(reader, None)
-        self.assertEqual((texts(found, 'L1'), texts(found, 'L2'), texts(found, 'L3')),
-                         (['posterolateral arthrodesis L4-L5'], ['extended to L5-S1'],
-                          ['interbody cage at L4-L5', 'a single cage was inserted']))
+        self.assertEqual((texts(found, 'L1'), texts(found, 'L2'), texts(found, 'L3'), texts(found, '_document')),
+                         (['posterolateral arthrodesis L4-L5'], ['extended to L5-S1'], ['interbody cage at L4-L5'],
+                          ['a single cage was inserted']))

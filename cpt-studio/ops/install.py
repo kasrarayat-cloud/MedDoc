@@ -578,6 +578,10 @@ def argument_problem(args) -> str:
         for value in (args.owner_display_name, args.agent_display_name, args.workspace_name):
             if value is not None and not DISPLAY_RE.fullmatch(value):
                 return 'Display and workspace names may use letters, digits, spaces and .,\'()- only (80 max).'
+        # the workspace name exactly as provision stores a new one, so the credentials file names what is stored
+        # (refutation N3-2-4)
+        if args.workspace_name is not None and args.workspace_name != ' '.join(args.workspace_name.split()):
+            return 'Write the workspace name without leading, trailing or repeated spaces.'
     return ''
 
 
