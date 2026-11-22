@@ -1,12 +1,13 @@
 """What a customer is shown, beyond the codes (findings SEC-S4, SEC-S3, FG-5, FG-6, SEC-OPS-IDENTITY-TO-CUSTOMER): the
 evidence quotes the coding review wrote pass the vendor-name filter like its other text, a question names only the codes
-of its lines, the exports show control characters escaped, the draft export's questions and notes are filtered, a
-decided encounter is held to the contract, and a platform operator's act reads as CPT Studio's. Synthetic data only."""
-import csv
+of its lines, the PDF report (the only export since the owner's direction of 2026-11-21) prints no control or
+direction character, the draft report's questions and notes are filtered, a decided encounter (with its PDF reports
+listed) is held to the contract, and a platform operator's act reads as CPT Studio's. Synthetic data only."""
 import io
 import json
 
 from django.test import TestCase
+from pypdf import PdfReader
 
 from studio import models
 from tests.support import operator as ops
@@ -14,6 +15,8 @@ from tests.support import rounds as r
 
 Round = models.CodingRound
 CONTROLS = ('\x0b', '\x0c', '\u202e', '\u202c', '\u2066', '\u2069', '\u200f', '\u061c', '\u2028', '\x85', '\r')
+# what pypdf reads U+2066, U+2069, U+061C and ESC as when a PDF draws them (measured 2026-11-21, cleaning bypassed)
+NO_GLYPH = '\x00'
 
 
 class ModelTextTests(r.CustomerCase, TestCase):
@@ -28,11 +31,9 @@ class ModelTextTests(r.CustomerCase, TestCase):
         self.assertEqual(payload['codes'][0]['quotes'], [{'text': 'The system (the system) reviewed this note',
                                                           'page': 1}])
         self.assertEqual(payload['questions'][0]['codes'], [])
-        for kind, fmt in (('draft', 'txt'), ('draft', 'csv')):
-            with self.subTest(fmt=fmt):
-                text = self.export_text(enc, kind, fmt)
-                self.assertIn('The system (the system) reviewed this note', text)
-                self.assertNotIn('laude', text)
+        text = self.report_text(enc, 'draft')
+        self.assertIn('“The system (the system) reviewed this note”', text)
+        self.assertNotIn('laude', text)
 
     def test_a_cited_passage_of_the_document_is_shown_exactly(self):
         enc = self.encounter()
@@ -42,38 +43,56 @@ class ModelTextTests(r.CustomerCase, TestCase):
         codes = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}').json()['codes']
         self.assertEqual(codes[0]['quotes'], [{'text': 'Dr. Claude Example removed the polyp', 'page': 2}])
 
-    def test_the_draft_exports_questions_and_notes_pass_the_vendor_name_filter(self):
+    def test_the_draft_reports_questions_and_notes_pass_the_vendor_name_filter(self):
         enc = self.encounter()
         r.write_round(enc, codes=[r.row('45385', 'ready')],
                       questions=[{'id': 'q1', 'text': 'Per OpenAI policy, was the polyp retrieved?', 'codes': [],
                                   'lines': ['L1'], 'source': 'reader'}],
                       problems=['Claude Fable 5.2 found no signature.'])
-        text = self.export_text(enc, 'draft')
-        lines = text.splitlines()
-        self.assertIn('- Per the system policy, was the polyp retrieved?', lines)
-        self.assertIn('- The system found no signature.', lines)
-        self.assertEqual([line for line in lines if 'OpenAI' in line or 'Claude' in line], [])
+        text = self.report_text(enc, 'draft')
+        self.assertIn('What still needs your decision Question: Per the system policy, was the polyp retrieved?', text)
+        self.assertIn('DOCUMENTATION NOTES – The system found no signature.', text)
+        self.assertNotIn('OpenAI', text)
+        self.assertNotIn('Claude', text)
 
 
 class ControlCharacterTests(r.CustomerCase, TestCase):
-    def test_control_and_direction_characters_are_shown_escaped_in_both_exports(self):
+    def raw_report_text(self, enc, kind):
+        """The PDF report made through the API, every page's text as pypdf reads it, white space NOT squeezed (squeezing
+        would hide a control that is white space, such as VT, FF, NEL, LS or CR)."""
+        client = self.client_for(self.reviewer)
+        made = client.post(f'/api/encounters/{enc.pk}/reports', data=json.dumps(
+            {'kind': kind, 'fmt': 'pdf', 'round': 1}), content_type='application/json')
+        self.assertEqual(made.status_code, 201, made.content)
+        data = client.get(made.json()['download_url']).content
+        return '\n'.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(data)).pages)
+
+    def test_control_and_direction_characters_never_reach_the_pdf_report(self):
+        """A control or direction character the coding review wrote is never printed: each becomes a space or goes, so
+        none can break, forge or reorder a printed line, and the words around it stay apart and in their stored order.
+        (Measured 2026-11-21 with the report's cleaning bypassed: pypdf then reads U+202E, U+202C and U+200F as
+        themselves and U+2066, U+2069 and U+061C as NUL, so the absence check sees them; a white-space control it would
+        not see either way, so for those the check is the words around them staying apart.)"""
         enc = self.encounter()
         r.write_round(enc, codes=[r.row(
             '45385', 'ready', reason='Snare\x0bremoval\x0cdocumented \u202eDETCELES TON\u202c.\x85x\u2028y\rz',
             modifiers=['P\x0bT'], check_reason='Agreed\x0b.\u2066iso\u2069\u200f\u061c')],
             citations={'L1': [{'text': 'cold \x0csnare\r\nremoved', 'page': 1, 'source': 'reader'}]})
-        raw_csv = self.export_text(enc, 'draft', 'csv')
-        found = {repr(char): raw_csv.count(char) for char in CONTROLS if char in raw_csv.replace('\r\n', '\n')}
-        self.assertEqual(found, {})
-        rows = list(csv.reader(io.StringIO(raw_csv, newline='')))
-        self.assertEqual(len(rows), 4)  # header, banner, one code, closing banner: nothing forged
-        body = dict(zip(rows[0], rows[2]))
-        self.assertEqual(body['modifiers'], 'P\\x0bT')
-        self.assertIn('\\u202eDETCELES TON\\u202c', body['reason'])
-        self.assertEqual(body['quotes'], '"cold \\x0csnare\nremoved" (page 1)')
-        text = self.export_text(enc, 'draft')
-        self.assertEqual({repr(char): text.count(char) for char in CONTROLS if char in text}, {})
-        self.assertIn('\\u202eDETCELES TON\\u202c', text)
+        for kind in ('draft', 'approved'):
+            if kind == 'approved':
+                self.assertEqual(self.decide(enc, 'L1', '45385', 'approve').status_code, 201)
+            with self.subTest(kind=kind):
+                raw = self.raw_report_text(enc, kind)
+                self.assertEqual({repr(char): raw.count(char) for char in CONTROLS + (NO_GLYPH,) if char in raw}, {})
+                # nor drawn as a box: every character of this input is printable or deleted, so no U+FFFD is printed
+                # (refutation round 4: pypdf reads an undeleted direction mark the fonts lack as U+FFFD, not NUL)
+                self.assertNotIn(chr(0xFFFD), raw)
+                text = ' '.join(raw.split())
+                self.assertIn('Line L1 · Modifiers: P T', text)
+                self.assertIn('Reason: Snare removal documented DETCELES TON. x y z', text)
+                self.assertIn('“cold snare removed” Page 1', text)
+                if kind == 'draft':
+                    self.assertIn('Second check: agrees. Agreed .iso', text)  # the marks gone, the words in order
 
 
 class DecidedContractTests(r.CustomerCase, TestCase):
@@ -85,10 +104,16 @@ class DecidedContractTests(r.CustomerCase, TestCase):
         for response in (approve, reject):
             self.assertEqual(response.status_code, 201, response.content)
             self.assertEqual(set(response.json()), {'id', 'line', 'code', 'action', 'by', 'at', 'note'})
+        for kind in ('draft', 'approved'):  # the PDF report, the only export made, is listed as the contract has it
+            self.assertEqual(self.client_for(self.reviewer).post(
+                f'/api/encounters/{enc.pk}/reports', data=json.dumps({'kind': kind, 'fmt': 'pdf', 'round': 1}),
+                content_type='application/json').status_code, 201)
         response = self.client_for(self.reviewer).get(f'/api/encounters/{enc.pk}')
         payload = response.json()
         self.assertEqual([code['decision']['action'] for code in payload['codes'] if code['decision']],
                          ['approve', 'reject'])
+        self.assertEqual(sorted((item['kind'], item['fmt']) for item in payload['reports']),
+                         [('approved', 'pdf'), ('draft', 'pdf')])
         self.assertEqual(sc.shape_problems(payload, sc.CONTRACT['encounter']), [])
         for decided in (approve, reject, response):
             hits = sc.scan_json(decided.json(), sc.scan_context())

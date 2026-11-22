@@ -5,7 +5,8 @@
 // buttons and every decision use the row's line and the number of the coding review the page shows; an Undo names the
 // decision it undoes (the id the page shows for it), and a download names the coding review the export dialog was
 // opened on. What a dialog's act names - the document, the coding review, the line, its code - is fixed when the dialog
-// opens, and leaving the document closes it. An act the server refuses because what the page shows changed reads the
+// opens (an export dialog opened while the page loads the latest offers nothing until it has, and is then drawn as opened
+// on it), and leaving the document closes it. An act the server refuses because what the page shows changed reads the
 // document again and says so. Rendering builds markup strings; every
 // value that comes from the server passes through escapeHtml. Text the coding review wrote (reasons, questions,
 // documentation notes, quoted passages) is shown as written and escaped like every other value. Everything above
@@ -1099,19 +1100,20 @@ function exportOffered(doc) {
   return readiness.draft === true || readiness.approved === true || objects(doc?.reports).length > 0;
 }
 
+// The PDF is the report for the doctor, and the only one made (the export dialog).
 function readinessText(doc) {
   const readiness = record(doc?.readiness);
-  if (readiness.approved === true) return 'The approved download is available. It lists only approved codes.';
-  if (readiness.draft === true) return 'You can download the codes as a draft. Approve codes to download them as approved.';
+  if (readiness.approved === true) return 'The approved report can be downloaded as a PDF. It lists only approved codes.';
+  if (readiness.draft === true) return 'You can download the draft report as a PDF. Approve codes to download the approved report.';
   return 'Downloads become available when the coding review finishes.';
 }
 
 function exportStatusText(doc) {
   const readiness = record(doc?.readiness);
   const blockers = strings(readiness.blockers);
-  if (readiness.approved === true) return 'At least one code is approved. The approved download lists only approved codes, with who approved them.';
+  if (readiness.approved === true) return 'At least one code is approved. The approved report lists only approved codes, with who approved them and when.';
   const head = readiness.draft === true ? 'Draft only: the codes are the coding review\'s, not approvals.' : 'Nothing can be downloaded yet.';
-  return blockers.length ? `${head} Before the approved download: ${blockers.join(' ')}` : head;
+  return blockers.length ? `${head} Before the approved report: ${blockers.join(' ')}` : head;
 }
 
 function emptyCodesText(doc) {
@@ -1133,7 +1135,14 @@ function rowKey(value) {
 const state = {
   session: null, route: null, routeSerial: 0, doc: null, docKey: '', viewerKey: '', selectedQuote: '',
   poll: { timer: 0, count: 0, errors: 0 }, tickTimer: 0, clock: 0, reconnecting: false, outdated: false,
-  upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, exporting: null,
+  // exporting: what the export dialog was opened on (the document, its coding review and that read of it); making: the
+  // file being made ({encounter, kind, fmt}) while its request runs; made: the file just made, whose option waits a moment
+  // (madeTimer), and madeRead the read that releases it; rereading: the document the page reads again after a download
+  // of it was refused because it changed, and rereadAfter the number of the last read asked before that refusal
+  upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, exporting: null, making: null,
+  made: null, madeTimer: 0, madeRead: null, rereading: null, rereadAfter: 0,
+  // the reads of the document, numbered in the order the page asked for them, and the number of the latest one shown
+  reads: { asked: 0, applied: 0 },
   open: new Set(), answers: new Map(), pending: new Set(), toastTimer: 0, leaving: false,
   // the PDF viewer of the document shown (browser wiring), the PDF library once it is asked for and how many times it has
   // been asked for (a failed load is tried again at fresh addresses), and the passage of a text document being marked
@@ -1508,34 +1517,82 @@ function reviewView(doc, ui = {}) {
 
 // --- the export dialog ---
 
-function exportOption(kind, fmt, enabled, title, detail) {
-  return `<button type="button" class="export-option" data-export-kind="${kind}" data-export-fmt="${fmt}"${enabled ? '' : ' disabled'}><span class="export-format">${fmt.toUpperCase()}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></span>${icon('download')}</button>`;
+// Each group of the dialog (the draft, the approved codes) holds its PDF, the report for the doctor and the only one CPT
+// Studio makes (owner direction 2026-11-21: no more TXT or CSV), as the primary button, with a line on what it holds.
+// Each group is named by its label. While a file is made every option waits (disabled), and the one chosen says it is
+// being prepared. A draft holds the decisions saved so far, approvals among them: its line says so. Files made earlier,
+// the TXT and CSV of earlier releases among them, stay listed under Earlier downloads.
+const EXPORT_GROUPS = [['draft', 'Draft report'], ['approved', 'Approved report']];
+const PDF_NOTES = {
+  draft: 'Every code with its status, any saved decision, the evidence and what still needs a decision.',
+  approved: 'Only approved codes, with who approved them and when.',
+};
+const PDF_NOTE_IDS = { draft: 'exportPdfDraftNote', approved: 'exportPdfApprovedNote' };
+// The two PDF buttons show the same words; each one's name adds which report it is, after the words shown, so the two are
+// told apart by name alone (a list of the page's buttons, a spoken command).
+const PDF_NAMES = { draft: 'draft report', approved: 'approved report' };
+// the ids of the groups' labels, which name the groups
+const GROUP_LABEL_IDS = { draft: 'exportDraftLabel', approved: 'exportApprovedLabel', earlier: 'exportEarlierLabel' };
+// a download's format as the list of earlier downloads names it (earlier releases also made CSV and TXT), and as the
+// dialog's sentences name the file being made
+const FORMAT_LABELS = { pdf: 'PDF', csv: 'CSV', txt: 'TXT' };
+const FILE_WORDS = { pdf: 'PDF' };
+const PREPARING_PDF = 'Preparing PDF…';
+// One gesture makes one file: once a file is made its option waits (unavailable) at least this long, and until the
+// dialog has been drawn from the document read again; a double click's second click is not a choice at all (onClick).
+const MADE_HOLD_MS = 1000;
+
+function pdfOption(kind, enabled, busy = false) {
+  const words = busy ? PREPARING_PDF : 'Download PDF';
+  return `<button type="button" class="button primary export-pdf" data-export-kind="${kind}" data-export-fmt="pdf" aria-label="${escapeHtml(`${words} (${PDF_NAMES[kind]})`)}" aria-describedby="${PDF_NOTE_IDS[kind]}"${enabled ? '' : ' disabled'}${busy ? ' aria-busy="true"' : ''}>${icon('download')}<span>${words}</span></button>`
+    + `<p class="export-pdf-note" id="${PDF_NOTE_IDS[kind]}">${escapeHtml(PDF_NOTES[kind])}</p>`;
 }
 
-// An export made from an earlier coding review is still listed and linked, and says so.
+// An export the server no longer lists as current is still listed and linked, and says so: it was made from an earlier
+// coding review, or before a decision recorded after it on the same one. Its format is named when the server names one
+// of the three.
 function reportItem(report) {
   const url = safeDownloadUrl(report.download_url);
   const name = text(report.filename) || 'Download';
   const kind = report.kind === 'approved' ? 'Approved codes' : 'Codes (draft)';
-  const meta = [kind, formatTimestamp(report.generated_at)].filter(Boolean).join(' · ');
+  const meta = [kind, lookup(FORMAT_LABELS, report.fmt, ''), formatTimestamp(report.generated_at)].filter(Boolean).join(' · ');
   const link = url ? `<a href="${escapeHtml(url)}" download>${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`;
-  if (report.current !== true) return `<li class="report-item earlier">${link}<small>${escapeHtml(`${meta} · Earlier: made from an earlier coding review; it may not show the current codes`)}</small></li>`;
+  if (report.current !== true) return `<li class="report-item earlier">${link}<small>${escapeHtml(`${meta} · Earlier: made before a later decision or coding review; it may not show the current codes`)}</small></li>`;
   return `<li class="report-item">${link}<small>${escapeHtml(meta)}</small></li>`;
 }
 
-function exportOptions(doc) {
+// The dialog's options for `doc`. `making` ({kind, fmt}) is the file being made: then every option is disabled, and the
+// one with that kind and format says it is being prepared (none does for {kind: null, fmt: null}). `made` ({kind, fmt})
+// is a file just made: its option alone waits a moment, disabled, saying nothing more.
+function exportOptions(doc, making = null, made = null) {
   const readiness = record(doc?.readiness);
-  const draft = readiness.draft === true;
-  const approved = readiness.approved === true;
+  const allowed = { draft: readiness.draft === true, approved: readiness.approved === true };
   const blockers = strings(readiness.blockers);
   const reports = objects(doc?.reports);
-  const draftDetail = 'Every code with its status, units, modifiers, reason and quoted passages. Nothing in it is approved.';
-  const approvedDetail = 'Only approved codes, with who approved them and when.';
-  const why = !approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : '';
-  return `<div class="export-group"><div class="evidence-label">Codes — not approved</div>${exportOption('draft', 'txt', draft, 'Codes as text (draft)', draftDetail)}${exportOption('draft', 'csv', draft, 'Codes as a spreadsheet (CSV, draft)', draftDetail)}</div>`
-    + `<div class="export-group"><div class="evidence-label">Approved codes</div>${exportOption('approved', 'txt', approved, 'Approved codes as text', approvedDetail)}${exportOption('approved', 'csv', approved, 'Approved codes as a spreadsheet (CSV)', approvedDetail)}${why}</div>`
-    + (reports.length ? `<div class="export-group"><div class="evidence-label">Earlier downloads</div><ul class="report-list">${reports.map(reportItem).join('')}</ul></div>` : '');
+  const waiting = Boolean(making);
+  const busy = (kind, fmt) => waiting && making.kind === kind && making.fmt === fmt;
+  const free = (kind, fmt) => allowed[kind] && !waiting && !(made && made.kind === kind && made.fmt === fmt);
+  const label = (key, words) => `<div class="evidence-label" id="${GROUP_LABEL_IDS[key]}">${words}</div>`;
+  const opening = key => `<div class="export-group" role="group" aria-labelledby="${GROUP_LABEL_IDS[key]}">`;
+  const why = !allowed.approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : '';
+  const group = ([kind, words]) => `${opening(kind)}${label(kind, words)}${pdfOption(kind, free(kind, 'pdf'), busy(kind, 'pdf'))}${kind === 'approved' ? why : ''}</div>`;
+  return EXPORT_GROUPS.map(group).join('')
+    + (reports.length ? `${opening('earlier')}${label('earlier', 'Earlier downloads')}<ul class="report-list">${reports.map(reportItem).join('')}</ul></div>` : '');
 }
+
+// What the export dialog's status says while a file is made, and once the server has made it.
+function preparingText(fmt) {
+  return `Your ${lookup(FILE_WORDS, fmt, 'file')} is being prepared. The download starts when it is ready.`;
+}
+
+function readyText(fmt, filename) {
+  return `Your ${lookup(FILE_WORDS, fmt, 'file')} is ready. Downloading ${text(filename) || 'the file'}.`;
+}
+
+const ANOTHER_FILE = 'Another download is still being prepared. Wait a moment, then choose again.';
+// What an export dialog says, offering nothing, while the page reads the document again after a download was refused
+// because its coding review changed.
+const LOADING_LATEST_TEXT = 'This coding review has changed. The page is loading the latest; what it allows can be downloaded once it has.';
 
 // The multipart body of one upload attempt, or the sentence that says what is missing.
 function uploadForm(fields, key) {
@@ -1666,10 +1723,12 @@ function closeDialog(id) {
 }
 
 // The review and export dialogs belong to the document they were opened on: a route (a link, browser Back) closes them,
-// so nothing one showed is saved while the page shows another.
+// so nothing one showed is saved while the page shows another. A route reads the document afresh, so a read asked for
+// after a refused download is no longer awaited by an export dialog opened after it.
 function closeDocumentDialogs() {
   state.review = null;
   state.exporting = null;
+  state.rereading = null;
   closeDialog('reviewDialog');
   closeDialog('exportDialog');
 }
@@ -1828,13 +1887,18 @@ function setReconnecting(on) {
   if (line) line.hidden = !(on && shouldPoll(state.doc));
 }
 
+// Reads can answer out of order (a poll, the read after an act, the read after a download): one that answers after a
+// read asked later than it was shown is older than what the page shows, and changes nothing - nor does its failure.
+// Each read shown draws an open export dialog again (redrawExportDialog).
 async function loadDocument(id, serial, silent) {
   clearTimeout(state.poll.timer);
+  const read = ++state.reads.asked;
+  const older = () => read < state.reads.applied;
   let doc;
   try {
     doc = await api(`/api/encounters/${encodeURIComponent(id)}`);
   } catch (error) {
-    if (serial !== state.routeSerial || state.outdated) return;
+    if (serial !== state.routeSerial || state.outdated || older()) return;
     if (silent && state.doc) {
       if (shouldPoll(state.doc)) {
         state.poll.errors += 1;
@@ -1850,12 +1914,18 @@ async function loadDocument(id, serial, silent) {
       : messageView('The review could not be loaded.', error.message, true);
     return;
   }
-  if (serial !== state.routeSerial) return;
+  if (serial !== state.routeSerial || older()) return;
+  state.reads.applied = read;
   state.poll.errors = 0;
   state.reconnecting = false;
   state.clock = clockOffset(doc.progress?.server_time, Date.now());
   if (state.ack?.id === doc.id && !isBusy(doc)) state.ack = null;
   renderDocument(doc, !silent);
+  // any read asked after a refused download (or after a file was made) shows what the server had since: the dialog
+  // waiting for the latest, or the option waiting for the page's read, waits no longer for its own read, which may stall
+  if (state.rereading === doc.id && read > state.rereadAfter) state.rereading = null;
+  if (state.madeRead && read > state.madeRead.after) state.madeRead.done();
+  redrawExportDialog();
   schedulePoll(serial);
 }
 
@@ -3452,15 +3522,131 @@ function progressAction(action, button) {
 
 // The export dialog names the document and the coding review it was opened on: its options are built from them, and a
 // download names that coding review, so one that changed under the dialog is refused rather than made from another.
+// Opened again while a file is still being made, it says so and its options wait. Opened while the page reads the
+// document again after a download of it was refused as changed, it says the page is loading the latest and offers
+// nothing; once that read has ended it is drawn as opened on the read the page then has (redrawExportDialog).
 function openExport() {
   if (!state.doc) return;
-  state.exporting = { encounter: state.doc.id, round: roundNumber(state.doc) };
-  const readiness = record(state.doc.readiness);
-  $('#exportStatus').classList.toggle('reviewed', readiness.approved === true);
-  $('#exportStatus').textContent = exportStatusText(state.doc);
-  $('#exportOptions').innerHTML = exportOptions(state.doc);
+  const doc = state.doc;
+  const loading = state.rereading === doc.id;
+  state.exporting = { encounter: doc.id, round: roundNumber(doc), doc, loading, ready: false };
+  const status = $('#exportStatus');
+  status.classList.toggle('reviewed', !loading && record(doc.readiness).approved === true);
+  status.textContent = loading ? LOADING_LATEST_TEXT : makingText(doc.id) || exportStatusText(doc);
+  drawExportOptions();
   hideError('exportError');
   openDialog('exportDialog');
+}
+
+// What the export dialog's status says of a file being made, for a dialog on document `encounter` ('' when none is).
+function makingText(encounter) {
+  const making = state.making;
+  return !making ? '' : making.encounter === encounter ? preparingText(making.fmt) : ANOTHER_FILE;
+}
+
+// An open export dialog's status drawn again: `sentence` when there is one (a file being made or just made), else what
+// can be downloaded from `doc`; marked reviewed while `doc` allows the approved report. The status is announced, so the
+// same words are not written again: a read that changes nothing in it says nothing.
+function showExportStatus(doc, sentence = '') {
+  const status = $('#exportStatus');
+  const words = sentence || exportStatusText(doc);
+  status.classList.toggle('reviewed', record(doc?.readiness).approved === true);
+  if (status.textContent !== words) status.textContent = words;
+}
+
+// The read of the document an export dialog shows: the page's latest while it is still of the coding review the dialog
+// was opened on (so a download just made is listed), else the read it was opened on.
+function dialogDoc(exporting) {
+  return state.doc?.id === exporting.encounter && roundNumber(state.doc) === exporting.round ? state.doc : exporting.doc;
+}
+
+// Draws the export dialog's options from the read it shows (dialogDoc), with the file being made, if any; on another
+// document's dialog, that file makes every option wait without naming one. `focus` ([kind, fmt]) is the option to give
+// the focus once drawn when the focus was lost meanwhile (a disabled button cannot hold it); else an option that held
+// the focus keeps it, as drawn again.
+// While the page loads the latest, every option waits without naming one; a file just made of this document makes its
+// option wait (state.made). Markup the same as drawn is not drawn again, so a read that changes nothing in the dialog
+// takes no option from under the focus.
+function drawExportOptions(focus = null) {
+  const exporting = state.exporting;
+  if (!exporting) return;
+  const box = $('#exportOptions');
+  if (!box) return;
+  const active = document.activeElement;
+  const held = active?.dataset?.exportKind && box.contains?.(active) ? [active.dataset.exportKind, active.dataset.exportFmt] : null;
+  const lost = !active || active === document.body;
+  const making = state.making;
+  const waits = exporting.loading || (making && making.encounter !== exporting.encounter) ? { kind: null, fmt: null } : making;
+  const made = state.made?.encounter === exporting.encounter ? state.made : null;
+  const html = exportOptions(dialogDoc(exporting), waits, made);
+  if (html !== exporting.drawn) {
+    box.innerHTML = html;
+    exporting.drawn = html;
+  }
+  const target = held || (lost ? focus : null);
+  if (target) $$('#exportOptions [data-export-kind]').find(item => item.dataset.exportKind === target[0] && item.dataset.exportFmt === target[1] && !item.disabled)?.focus({ preventScroll: true });
+}
+
+// Every read of the document the page shows draws an open export dialog again, from that read while it is of the coding
+// review the dialog was opened on (dialogDoc): an approval recorded, or the coding review finishing, while the dialog is
+// open shows at once, in its options and its status - unless a file is being made, when the dialog stays as it is (its
+// options wait, its status says so) until the file is made, or its status says a file was just made, which it keeps
+// saying. A dialog opened while the page loaded the latest after a refused download is drawn, once that read has ended,
+// as opened on the read the page then has.
+function redrawExportDialog() {
+  const exporting = state.exporting;
+  if (!exporting) return;
+  if (exporting.loading) {
+    if (state.rereading === exporting.encounter) return;
+    const doc = state.doc?.id === exporting.encounter ? state.doc : exporting.doc;
+    state.exporting = { encounter: exporting.encounter, round: roundNumber(doc), doc, loading: false, ready: false };
+    showExportStatus(doc, makingText(doc.id));
+    drawExportOptions();
+    return;
+  }
+  if (state.making || !$('#exportDialog')?.open) return;
+  const doc = dialogDoc(exporting);
+  showExportStatus(doc, exporting.ready ? $('#exportStatus').textContent : '');
+  drawExportOptions();
+}
+
+// One gesture makes one file: the option of a file just made waits until MADE_HOLD_MS have passed and the page has read
+// the document again - its own read, or any read asked after it, whichever is shown first (the dialog drawn from that
+// read) - then is offered again, the focus going back to it when nothing else holds it. A later file makes its own option
+// wait instead.
+function holdMade(made) {
+  state.made = made;
+  clearTimeout(state.madeTimer);
+  let waiting = 2;
+  let read = false;
+  const release = () => {
+    waiting -= 1;
+    if (waiting > 0 || state.made !== made) return;
+    state.made = null;
+    state.madeRead = null;
+    drawExportOptions([made.kind, made.fmt]);
+  };
+  const done = () => {
+    if (read) return;
+    read = true;
+    release();
+  };
+  state.madeRead = { after: state.reads.asked, done };
+  state.madeTimer = setTimeout(release, MADE_HOLD_MS);
+  refreshDocument().then(done, done);
+}
+
+// After a download refused because its coding review changed, the page reads the document again (afterConflict), with
+// the download's guard already released, so no other choice is held up meanwhile; an export dialog opened on the
+// document in the meantime says the page is loading the latest until that read has ended, or until any read asked after
+// the refusal is shown (loadDocument), whichever comes first.
+async function rereadAfterRefusal(encounter) {
+  try {
+    await afterConflict();
+  } finally {
+    if (state.rereading === encounter) state.rereading = null;
+    redrawExportDialog();
+  }
 }
 
 function startDownload(url, filename) {
@@ -3473,37 +3659,66 @@ function startDownload(url, filename) {
   link.remove();
 }
 
-// POST reports {kind, fmt, round}: the round the export dialog was opened on. A refusal that says what is missing (its
-// readiness blockers) is shown in the dialog; any other conflict means the coding review changed under the dialog, so
-// the dialog closes and the page reads the document again and says so.
+// POST reports {kind, fmt, round}: the round the export dialog was opened on. While it runs every option waits and the
+// one chosen says it is being prepared, as the status does; the file is said to be ready, and downloaded, only once the
+// server has made it (201). The options then come back - the one just used a moment later (holdMade) - and the dialog
+// lists the new file once the page has read the document again. A refusal that says what is missing (its readiness
+// blockers), or that the file could not be made, is shown in the dialog with the options back, so the member can try
+// again (as a notice when the dialog was closed meanwhile); any other conflict means the coding review changed under the
+// dialog, so the dialog closes and the page reads the document again and says so (rereadAfterRefusal). A dialog opened
+// meanwhile on another document is drawn again for its own. The option of a file just made, and a dialog waiting for the
+// latest, make nothing.
 function generateReport(kind, fmt) {
   const exporting = state.exporting;
-  if (!exporting || exporting.round === null) return undefined;
+  if (!exporting || exporting.round === null || exporting.loading) return undefined;
+  const made = state.made;
+  if (made && made.encounter === exporting.encounter && made.kind === kind && made.fmt === fmt) return undefined;
+  let refused = false;
   return guarded('export', async () => {
-    const options = $$('#exportOptions .export-option');
-    const enabled = options.filter(option => !option.disabled);
-    enabled.forEach(option => setBusy(option, true));
+    state.making = { encounter: exporting.encounter, kind, fmt };
+    exporting.ready = false;
+    drawExportOptions();
+    $('#exportStatus').textContent = preparingText(fmt);
     hideError('exportError');
+    // whether the dialog is still on this document when the request ends, and whether it is open
+    const same = () => state.exporting?.encounter === exporting.encounter;
+    const shown = () => same() && $('#exportDialog').open;
+    let report;
     try {
-      const report = await api(`/api/encounters/${encodeURIComponent(exporting.encounter)}/reports`, { method: 'POST', json: { kind, fmt, round: exporting.round } });
-      const url = safeDownloadUrl(report.download_url);
-      if (!url) throw new ApiError('The download could not be started. Try again.');
-      startDownload(url, report.filename);
-      $('#exportStatus').textContent = `${exportStatusText(state.doc)} Downloading ${text(report.filename) || 'the file'}.`;
-      refreshDocument();
+      report = await api(`/api/encounters/${encodeURIComponent(exporting.encounter)}/reports`, { method: 'POST', json: { kind, fmt, round: exporting.round } });
+      if (!safeDownloadUrl(report.download_url)) throw new ApiError('The download could not be started. Try again.');
     } catch (error) {
+      state.making = null;
       const blockers = strings(error.details?.blockers);
-      if (changedUnderPage(error) && !blockers.length) {
+      const sentence = blockers.length ? `${error.message} ${blockers.join(' ')}` : error.message;
+      if (changedUnderPage(error) && !blockers.length && state.doc?.id === exporting.encounter) {
+        const onThis = same();
         if (state.exporting === exporting) state.exporting = null;
-        closeDialog('exportDialog');
-        await afterConflict();
-      } else {
-        showError('exportError', blockers.length ? `${error.message} ${blockers.join(' ')}` : error.message);
+        if (onThis) closeDialog('exportDialog');
+        state.rereading = exporting.encounter;
+        state.rereadAfter = state.reads.asked;
+        refused = true;
+        return;
       }
-    } finally {
-      enabled.forEach(option => setBusy(option, false));
+      if (state.exporting) $('#exportStatus').textContent = exportStatusText(dialogDoc(state.exporting));
+      if (shown()) {
+        showError('exportError', sentence);
+        $('#exportError').scrollIntoView?.({ block: 'nearest' });  // under the options, which may be scrolled past
+      } else {
+        toast(state.doc?.id === exporting.encounter ? sentence : `${text(exporting.doc?.title) || 'Another document'}: ${sentence}`);
+      }
+      drawExportOptions([kind, fmt]);
+      return;
     }
-  });
+    state.making = null;
+    startDownload(safeDownloadUrl(report.download_url), report.filename);
+    if (state.exporting) {
+      state.exporting.ready = same();
+      $('#exportStatus').textContent = same() ? readyText(fmt, report.filename) : exportStatusText(dialogDoc(state.exporting));
+    }
+    holdMade({ encounter: exporting.encounter, kind, fmt });
+    drawExportOptions([kind, fmt]);
+  }).then(() => (refused ? rereadAfterRefusal(exporting.encounter) : undefined));
 }
 
 function hasFiles(event) {
@@ -3550,6 +3765,8 @@ function onClick(event) {
   }
   const report = target.closest('[data-export-kind]');
   if (report) {
+    // the second (or third) click of one gesture - a double click - is not a choice of its own
+    if (event.detail > 1) return;
     generateReport(report.dataset.exportKind, report.dataset.exportFmt);
     return;
   }
@@ -3663,7 +3880,7 @@ if (typeof module === 'object' && module.exports) {
     viewerKey, api, sendAnswers, submitReview, handleDecision, progressAction, onClick, onInput, showQuote, state,
     STATE_LABELS, CODE_STATUSES, DECISIONS, ACTION_BUTTONS, PHASES, PHASE_TITLES, STEP_KEYS, STEP_LABELS, PROGRESS_ACTIONS,
     INSURANCE_CHOICES, QUEUE_STATES, OUTDATED_TEXT, CHANGED_TEXT, UNITS_NOT_GIVEN, MODIFIERS_NOT_GIVEN, CLIENT_HEADER,
-    CLIENT_VERSION, MAX_ANSWER_CHARS, CONVERTED_NOTE, REVIEW_AGAIN,
+    CLIENT_VERSION, MAX_ANSWER_CHARS, CONVERTED_NOTE, REVIEW_AGAIN, MADE_HOLD_MS, LOADING_LATEST_TEXT, loadDocument, refreshDocument,
     findPassages, characterSpans, pageCharacters, pageText, overprintCopies, characterPieces, quoteEdges, foldedOccurrences,
     locateQuote, markNote, frameNote, textMarkNote, FRAME_REASONS, pdfAssets, pdfCapable, loadPdfLibrary, withinLimit, TimeLimit,
     PDF_IMPORT, mountViewer, closeViewer, showPdfQuote, frameQuote, fallbackViewer, clearViewerMark, drawPage, releasePage,

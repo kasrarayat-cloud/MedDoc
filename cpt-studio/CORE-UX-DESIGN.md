@@ -27,7 +27,8 @@ so the numbering is kept; sections that described the removed pipeline say so in
 ## 1. What the page does
 
 Upload or paste a document with its date of service and insurance -> watch the coding review read and check it ->
-answer its questions (a new round) -> approve or reject each code -> download a draft or the approved codes.
+answer its questions (a new round) -> approve or reject each code -> download the draft or the approved report as a PDF
+(the only report; TXT and CSV files made before 2026-11-21 stay listed under Earlier downloads).
 
 ## 2. Where it lives
 
@@ -58,10 +59,13 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   404 under `/ops/`. An operator with no membership signs in on the usual page and lands on `/ops/`; one who is also a
   member signs in as the member.
 - Exports (`cpt-studio-customer-export@3`): a draft (every code with status, units, modifiers, reason, the second check
-  and quotes with pages) or the approved codes (each with who approved it, their kind and when), as TXT or CSV, with the
-  SYNTHETIC banner at both ends. A download names the round the page shows (`{kind, fmt, round}`) and is refused as
-  changed when that is not the latest. A download serves the stored bytes; an export from an earlier round is marked
-  earlier.
+  and quotes with pages) or the approved codes (each with who approved it, their kind and when). The PDF (owner
+  directive 2026-11-21; `studio/physician_report.py`, `studio/physician_pdf.py`) is the report for the doctor and the
+  dialog's only download (owner direction 2026-11-21: no more TXT or CSV). A download names the round the page shows
+  (`{kind, fmt, round}`, `fmt` pdf; any other format is refused, 400) and is refused as changed when that is not the
+  latest; a PDF that cannot be made is refused (503, nothing stored). A download serves the stored bytes; an export from
+  an earlier round, or made before a decision recorded after it on the same round, is marked earlier (`current: false`;
+  the page says "made before a later decision or coding review").
 
 ## 6. Flow
 
@@ -79,7 +83,27 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   when the dialog opens, and leaving the document closes it. When the server answers 409 (the coding review or the
   decision changed), the dialog closes, the page says nothing was recorded and reads the document again - nothing is
   sent twice. A download refused the same way (409 with no blockers) closes the export dialog and reads the document
-  again; a refusal with blockers stays in the dialog.
+  again; a refusal with blockers stays in the dialog. The export dialog opened again while that read runs says "This
+  coding review has changed. The page is loading the latest; the downloads are offered again once it has." and offers
+  nothing; once the read has ended it is drawn as opened on the read the page then has, so its download names the latest
+  round. The refused download's own guard is released first, so no other choice waits on that read.
+- Downloads: while the server makes the file, every option of the export dialog waits (disabled), the chosen one says
+  so ("Preparing PDF…" on a PDF button, with `aria-busy`) and `#exportStatus` says the file is being prepared. Only the
+  server's 201 makes the page say the file is ready ("Your PDF is ready. Downloading <filename>.") and start the
+  download; the options then come back, and once the page has read the document again the dialog lists the new file
+  under "Earlier downloads". A refusal with blockers, or a PDF that could not be made (503, "The PDF could not be made.
+  Nothing was saved. Try again."), shows the server's sentence in `#exportError` and gives the options back for a
+  retry (a notice instead when the dialog was closed meanwhile); nothing is said to be ready and nothing is downloaded.
+  The dialog opened again while a file is being made says so and its options wait until it is made.
+- One gesture makes one file: the second click of a double click (`event.detail` > 1) is not a choice, and once a file
+  is made its option waits (disabled) for at least a second and until the dialog has been drawn from the document read
+  again; then it is offered again, with the focus back on it when nothing else holds the focus.
+- An open export dialog follows every read of its document (the poll, the read after an act or a download) while the
+  read is of the round it was opened on: an approval recorded or the round finishing changes its options and its status
+  at once. A read that lands while a file is being made leaves the dialog as it is until the file is made; a status that
+  says a file was just made keeps saying it; a read that changes nothing in the dialog writes nothing to it. Reads are
+  applied in the order the page asked for them: one that answers after a later read was shown changes nothing, and its
+  failure says nothing.
 
 ## 7. The customer encounter contract
 
@@ -133,7 +157,20 @@ The review dialog: `#reviewDialog` with `#reviewLine` (the line's units and modi
 label holding the checkbox `#reviewAckBox` and the session's `acknowledgement`, which the member confirms by ticking
 it), `#reviewNote` and `#saveReview` (enabled once the box is ticked). The upload dialog: `#uploadDialog` with
 `#uploadFile`, `#pasteText`, `#serviceDate`, `#insurance`, `#syntheticAttestation` and `#startReview`. The export
-dialog: `#exportDialog`.
+dialog: `#exportDialog`, its copy presenting the PDF as the report for the doctor;
+`#exportStatus` (`role=status`: what can be downloaded, then the file being prepared and made); `#exportOptions` with
+one `.export-group` per kind - "Draft report" and "Approved report" - each holding its PDF,
+`button.button.primary.export-pdf[data-export-kind][data-export-fmt=pdf]` ("Download PDF", full width; "Preparing
+PDF…" with `aria-busy` while it is made; named "Download PDF (draft report)" or "Download PDF (approved report)" by
+`aria-label`, the words shown first, so the two are told apart by name), described by the `p.export-pdf-note` under it
+(draft: every code with its status, any saved decision, the evidence and what still needs a decision; approved: only
+approved codes, with who approved them and when);
+for the approved group, why it waits (`.export-blockers`). A group's PDF is enabled by the readiness
+(`readiness.draft`, `readiness.approved`); each `.export-group` is a `role=group` named by its label
+(`aria-labelledby`). The draft's line says what it holds, saved decisions included (a draft holds the decisions saved so
+far, approvals among them). Downloads made earlier are listed under "Earlier downloads"
+(`.report-list .report-item`: the file's link, then its kind, format - PDF, or the CSV or TXT of earlier releases - and
+time); `#exportError` (`role=alert`) holds the server's sentence when a download is refused.
 
 ### Marking a quoted passage (the owner's direction of 2026-11-20, DECISIONS D368)
 
@@ -382,9 +419,11 @@ sentence can bring about is repaired; the rest is recorded here):
 `ops/install.py` installs a revision (`ops/INSTALL.md`). `ops/walk.cjs` then drives the real page with a synthetic
 document at desktop width and at 390 px (no horizontal scroll): upload, poll to done, the DOM contract above and the JSON
 contract, every quote chosen and judged by the walk's own search, an answer when one is asked, one approval through the
-dialog (the History naming the line with its code), both exports downloaded twice to equal bytes (each request naming
+dialog (the History naming the line with its code), both reports downloaded as PDFs, read by the walk's own PDF reading
+(every page marked synthetic with its status, every code named) and fetched twice to equal bytes (each request naming
 the round shown), the approval undone through the row's Undo (naming the decision shown), the denylist scan over every
-JSON body, the DOM and the downloads, and every `/ops/` path refused to the customer.
+JSON body and the DOM (the PDF reports' wording is scanned by `ops/scan_customer.py`, which reads a phrase a line
+break cuts as one and sets aside only the printed quotations of the document), and every `/ops/` path refused to the customer.
 
 The walk never takes the viewer's word for a quote (DECISIONS D368, rounds 3 and 5). It reads every PDF it judges
 itself, in Node, with the pinned library the page draws with (`studio/static/studio/lib/pdfjs-6.5.438`, its legacy build,

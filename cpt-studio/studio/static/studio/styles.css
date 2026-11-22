@@ -505,3 +505,15 @@
 @media (forced-colors: active){.zoom-button[aria-disabled="true"]{color:GrayText;border-color:GrayText}
 }
 .viewer-name{order:1;flex:1 0 12ch;max-width:max-content}
+/* The physician PDF (2026-11-21): in the export dialog each group holds its PDF, the report for the doctor and the only
+   one made, as a full-width primary button with a line on what it holds. While a file is made every option waits; the
+   one chosen stays legible and says so, and the PDF button's icon pulses (still where motion is reduced). */
+.export-pdf{width:100%;margin-top:10px}
+.dialog .export-pdf{font-size:12px}
+.export-pdf[aria-busy="true"]{opacity:1;cursor:progress}
+.export-pdf[aria-busy="true"]>svg{animation:studio-step 1.2s ease-in-out infinite}
+.export-pdf-note{font-size:11px;line-height:1.6;color:var(--muted);margin:8px 0 0;overflow-wrap:anywhere}
+.export-group .export-blockers{margin-top:8px}
+.export-group+.export-group{margin-top:22px}
+@media (prefers-reduced-motion: reduce){.export-pdf[aria-busy="true"]>svg{animation:none}
+}

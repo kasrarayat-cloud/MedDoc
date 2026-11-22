@@ -5,6 +5,7 @@ section under its line marker, each review naming its line - or written directly
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import sys
 import tempfile
@@ -183,15 +184,18 @@ class CustomerCase:
         return client.post(f'/api/encounters/{encounter.pk}/decisions', data=json.dumps(body),
                            content_type='application/json')
 
-    def export_text(self, encounter, kind, fmt='txt', user=None):
-        """Make an export through the API, naming the round the page shows (FIX-SPEC-2 section 5), and download it:
-        its text."""
+    def report_text(self, encounter, kind, user=None):
+        """Make the PDF report through the API, naming the round the page shows (FIX-SPEC-2 section 5), download it and
+        return its text as pypdf reads it: every page, joined, white space squeezed to single spaces. The PDF is the only
+        report made since 2026-11-21 (the TXT and CSV exports it replaced were plain text)."""
+        from pypdf import PdfReader  # a dev requirement, as for every test that reads a PDF
         client = self.client_for(user or self.reviewer)
         shown = client.get(f'/api/encounters/{encounter.pk}').json().get('round') or {}
         made = client.post(f'/api/encounters/{encounter.pk}/reports', data=json.dumps(
-            {'kind': kind, 'fmt': fmt, 'round': shown.get('number')}), content_type='application/json')
+            {'kind': kind, 'fmt': 'pdf', 'round': shown.get('number')}), content_type='application/json')
         assert made.status_code == 201, made.content
-        return client.get(made.json()['download_url']).content.decode('utf-8')
+        data = client.get(made.json()['download_url']).content
+        return ' '.join(' '.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(data)).pages).split())
 
     def encounter(self, *, user=None, title='Synthetic colonoscopy note', service_date='2026-11-02',
                   insurance='medicare', pdf=True):

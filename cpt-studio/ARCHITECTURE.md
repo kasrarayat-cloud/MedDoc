@@ -52,6 +52,7 @@ Django 5.2 on PostgreSQL 17, gunicorn behind the host's nginx, one worker proces
 | `studio/state.py` | the encounter's derived state (5.6) |
 | `studio/decisions.py` | decisions, answers and retries (5.7) |
 | `studio/exports.py` | the customer exports (5.8) |
+| `studio/physician_report.py`, `studio/physician_pdf.py`, `studio/report_fonts/` | the physician PDF report (5.8): its words, its drawing, its fonts |
 | `studio/customer.py`, `studio/api.py`, `studio/client_contract.py` | the customer JSON API ([`API.md`](API.md)) |
 | `studio/operator.py`, `templates/studio/ops_*.html` | the platform-operator console (5.9) |
 | `studio/views.py`, `studio/access.py`, `studio/audit.py` | health, sign-in, the page shell, tenancy, security headers, the audit trail |
@@ -82,7 +83,9 @@ The coding path (migration 0016, additive):
   `L1`.. or `M1`.., and the `code` it holds), by a reviewer of a kind, with the attestation an approval carries; ordered
   by the shared `studio_decision_sequence`. The current decision for (round, line) is the latest row; `revoke` clears
   it. Two lines may hold one code and are decided apart.
-- `ExportArtifact` (immutable) - one export (`draft` or `approved`, `txt` or `csv`) stored as generated, with its sha256.
+- `ExportArtifact` (immutable) - one export (`draft` or `approved`; `pdf`, `csv` or `txt`) stored as generated, with its
+  sha256. `pdf` needed no migration: the field's declared choices (`txt`, `csv`) are no database constraint, and
+  `exports.FORMATS` is what a request may name.
 
 The runner and its record: `Job` (kind `code`, keyed `code:<round>`; a Resume adds a fresh job for the same round),
 `ProviderRun` (one per send: purpose `coding_reader` or `coding_checker`, provider `anthropic`, the request with the
@@ -245,15 +248,56 @@ a reconcile (5.4).
 ### 5.8 Exports (`studio/exports.py`)
 
 `cpt-studio-customer-export@3`, from the latest round, which the request names (the round the page shows; another is
-refused as changed, 409, before readiness is read). TXT opens and closes with the SYNTHETIC banner and states the
-encounter, round, date of service, insurance and who made it when; a draft lists every code with its status, units,
-modifiers, reason, the second check and quotes with pages, then the questions and documentation notes; the approved
-export lists only the lines whose current decision is an approval and whose status is ready or needs_review, with
-approver, kind and time. Units or modifiers not given read "not given". CSV (RFC 4180) has the columns kind, code,
-units, modifiers, status, reason, quotes, decision, decided_by, decided_at, banner rows, and formula cells neutralised;
-in both formats control, bidirectional and line-separator characters are shown escaped. Each
-export is stored once as an `ExportArtifact`; a download serves the stored bytes; one made from an earlier round stays
-listed, marked earlier.
+refused as changed, 409, before readiness is read). A draft lists every code with its status, units, modifiers, reason,
+the second check and quotes with pages, then the questions and documentation notes; the approved report lists only the
+lines whose current decision is an approval and whose status is ready or needs_review, with approver, kind and time.
+Units or modifiers not given read "not given". Each export is stored once as an `ExportArtifact`; a download serves the
+stored bytes; one made from an earlier round stays listed, marked earlier. The report is a PDF and nothing else (owner
+directions 2026-11-21: the doctor-facing report, then the only one); the TXT and CSV exports made before that stay
+stored, listed and downloadable as records, and none is made again (`exports.FORMATS`).
+
+The physician PDF is made from the snapshot every customer export has been made from (`exports.snapshot`):
+`studio/physician_report.py` chooses its words from that snapshot (a draft: every line with its status, decision and
+evidence, then the questions, the lines with no saved decision and the notes; an approved report: only the lines with a
+current approval, each with who approved it and when), and `studio/physician_pdf.py` draws them with ReportLab - a
+searchable US Letter document after the owner-approved first-page design, continuation pages in the evidence-page
+treatment, every dynamic string escaped before it reaches ReportLab's markup, no image and no remote resource. The fonts
+are the files in `studio/report_fonts/`, embedded as subsets; their licences and `PROVENANCE.md` (source and sha256 of
+each file) are beside them, and they are read from the code tree, not served as static files. The PDF is stored like
+the other two - one `ExportArtifact`, fmt `pdf` - and served as stored. Making it reads saved rows only: it writes no
+decision, round or state, calls no provider, and gives the same output for the same saved state, but for the Prepared
+line (when, and by whom, it was made) and the PDF's own date. A PDF that cannot be made is refused (`exports.NotMade`,
+503) before anything is stored.
+
+How the PDF prints text (refutation rounds 1 and 2, 2026-11-21): control characters print as spaces; invisible format
+characters, and whatever the report's own fonts draw as nothing (measured from the fonts when they load), are deleted
+before the display filter reads the text, so the filter reads what the reader sees; a character none of the fonts draws
+prints as U+FFFD - never as a look-alike or a compatibility form, which could change a number in a quotation or spell a
+name the filter has already read - and the report's review scope says so; right-to-left text is printed in its stored
+order, also said there. Every field the coding review wrote (reasons, second checks, questions, notes, its own
+quotations, modifiers) passes `customer.shown`, the filter every customer surface uses. A model family's name (Opus,
+Sonnet, Haiku) is replaced only where it continues a vendor's name ("Claude 3 Opus"); alone it is an ordinary or a
+clinical word (the OPUS trial, a MED-EL SONNET 2 processor).
+
+Known limits of the physician PDF (recorded, not defects; refutation rounds 1-5, 2026-11-21): text the coding review
+wrote is filtered as on the page, so what the shared filter cannot read is printed as on the page - a vendor name in
+look-alike letters (Cyrillic or Greek, enclosed letters a report font draws, Hebrew points or a ligature inside it), with
+its version joined to it ("Claude3.5": the denylist bounds a name by digits too), a model family alone ("Opus 4.5"), in
+parentheses or split by an invisible character after its vendor name, other model tiers ("Gemini 2.5 Flash"), another
+company's product ("ChatGPT", "GPT4o"), and machinery words (a token count, a request id), which the customer scanner
+flags except inside a line's own quotation (the page serves it as a quote, and the scanner reads every quote as the
+document's words). A word the filter cannot tell from a vendor's name is replaced as on the page (the organ of Corti, a
+doctor named Claude), and numbers of one or two digits right after it, joined by dots, dashes or underscores, are read as
+its version ("Dr. Claude 2 polyps" reads "Dr. The system polyps", as on main; so does a small range after "organ of
+Corti"); a longer number is left (a CPT code, a date). A model family split by an invisible character after its vendor
+name, in any field (a modifier too), prints after "the system" (refutation rounds 4 and 5). The scanner
+reads the latest round's quotations as the document's words, so an earlier round's PDF quoting a passage the latest
+round no longer cites fails the scan (a false failure, for a person to read), and a token the layout cuts mid-word is
+read as two. A value too tall for one row (dozens of long modifiers, twenty reviewers with long names) flows as
+paragraphs, and its first heading can end a page apart from its first fact; a code's evidence note can leave its last
+line at the top of the next page. A page of this release left open across a switch-back still offers the PDF and shows
+the earlier server's refusal (that server also offers TXT and CSV again); a page of the earlier release left open across
+the install still offers TXT and CSV, and the server refuses them with its sentence until the page is reloaded.
 
 ### 5.9 The operator console (`studio/operator.py`)
 
@@ -337,8 +381,9 @@ no meaning and never holds or changes a code.
 
 - The Django suite (`manage.py test tests`): the coding step with fake SDK streams and a fake converter, the job runner
   (reuse after a crash, unknown outcomes, the ceiling, holds, Stop, threads and slots), the API contract and tenancy,
-  decisions, answers, exports, the operator console, the page's templates and node tests, and the reference data.
-  Synthetic text only; nothing is sent.
+  decisions, answers, exports (the physician PDF read back with pypdf, and through `ops/scan_customer.py`'s own PDF
+  reading against the shared denylist), the operator console, the page's templates and node tests, and the reference
+  data. Synthetic text only; nothing is sent.
 - CI (`scripts/ci/verify-cpt-studio.sh`): checks, migration drift, the Django suite, the ops unit suites, the browser
   walk's own tests (`ops/test_walk.cjs`) and a dependency audit. CI installs no Playwright, so it runs none of the
   browser tests: the walk's browser subtests (every quote of the dev preview's synthetic documents chosen in Chromium and
@@ -348,7 +393,7 @@ no meaning and never holds or changes a code.
   locally, where Playwright is installed (`CPT_VERIFY_PLAYWRIGHT`), and records the counts.
 - After an install, `ops/walk.cjs` drives the real page with a synthetic document: upload, poll, the DOM and JSON
   contract, every quote chosen and judged by the walk's own search (below), an answer, an approval through the dialog,
-  both exports re-downloaded byte for byte, the denylist scan, a 390 px viewport, and every `/ops/` path refused to the
+  both reports re-downloaded byte for byte (the PDFs' wording scanned by `ops/scan_customer.py`, not by the walk), the denylist scan of the JSON, headers and page, a 390 px viewport, and every `/ops/` path refused to the
   customer.
 - The walk judges the viewer instead of taking its word (DECISIONS D368, rounds 3 and 5). It reads every PDF it judges
   itself, in Node, with the pinned library the page draws with (its own upload's bytes, else the view address fetched in

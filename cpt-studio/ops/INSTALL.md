@@ -29,6 +29,14 @@ run the next. Nothing here was executed by the session that wrote it.
 Every Docker object carries `org.quillmd.cpt-studio=1` and a role label; the
 installer refuses to touch a same-named object without them.
 
+The physician PDF report (2026-11-21) adds no host object. The image installs
+ReportLab, with pillow and charset-normalizer, from `requirements.txt`; the
+report's fonts ship in the code tree under `studio/report_fonts/` (their
+licences and `PROVENANCE.md` beside them) and are read from there, not
+collected as static files. `ops/scan_customer.py` reads a PDF export with pypdf
+(`requirements-dev.txt`): run it with a Python that has pypdf, or every PDF
+export fails the scan.
+
 ## Invocation
 
 ```bash
@@ -927,7 +935,9 @@ Fable coding build's routes. The download verifier, the D15 rollback runtime
 test of the Gemini migration, the GI round-4 proof harness and the differential
 "what changed" check read the earlier pipeline's records, exports and code and
 were removed with their tests: the walk (`ops/walk.cjs`) scans every customer
-response, DOM text and download for the denylist, holds every session, list and
+API JSON response and header and the DOM text for the denylist (the downloads -
+the PDF reports' wording and their answers - are `scan_customer.py`'s, which reads
+them as the report prints them), holds every session, list and
 encounter answer it or the page reads to `ops/verification/customer-contract.json`
 (the same reading as `scan_customer.py`'s, `ops/test_walk_contract.py` holding the
 two to each other), approves one line through the review dialog as the page draws

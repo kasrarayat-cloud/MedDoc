@@ -100,15 +100,42 @@ def iso(value) -> Optional[str]:
 # --- display hygiene (BUILD-SPEC 7.4) --------------------------------------------------------------------------------------
 # The shared denylist's name rules (ops/verification/customer-denylist.json: provider_name, provider_name_joined,
 # model_id, interpreter_model), read here as replacements. The ops directory is not in the image, so the names are
-# repeated; tests/test_api_customer.py pins them to the file's patterns and vectors.
+# repeated; tests/test_api_customer.py pins them to the file's patterns and vectors. A model family's name (Opus, Sonnet,
+# Haiku) is a name only where it continues a vendor's ("Claude 3 Opus" and "Claude Sonnet 4.5" read "the system"):
+# alone it is an ordinary or a clinical word (the OPUS trial, a MED-EL SONNET 2 processor, a haiku), as another
+# company's product named in a note is ("the patient asked ChatGPT"). A bare "GPT" or "GPT 45" is not a name either,
+# because GPT is also the liver enzyme ALT ("GPT 45 U/L", "SGPT"): only "gpt-<x>" is a model id.
 
 NAMES = 'corti|astra|fable|openai|anthropic|claude|gemini|google'
 JOINED_NAMES = 'Corti|Astra|Fable|Openai|OpenAI|Anthropic|Claude|Gemini|Google'
+ANTHROPIC = 'anthropic|claude'  # the names a model family continues
+FAMILIES = 'opus|sonnet|haiku'
+# a model's version: numbers of one or two digits joined by dots, dashes or underscores ("3.5", "3-5", "3_5", "2"),
+# never a longer number, which in a note is a CPT code or a date ("45385-59", "2026-11-02"); a range of small numbers
+# after a word taken for a name is read as a version (a recorded limit, as on main for one number)
+VERSION = r'v?\d{1,2}(?:[._-]\d{1,2})*'
+# What stands between the parts of one name run: anything a reader sees as a gap or as nothing - white space of any kind,
+# control and invisible format characters (Unicode's default-ignorables, those above the BMP too), the blank Braille
+# cell, every dash (Unicode category Pd) and the underscore - so "Claude" and "Opus" on either side of a line break, a
+# non-breaking space or a zero-width space are one run (refutation rounds 3 and 4); never other punctuation.
+GAP = r'[\s_\-\x00-\x1f\x7f-\x9f\u00a0\u00ad\u034f\u058a\u05be\u061c\u115f-\u1160\u1400\u1680\u17b4-\u17b5\u1806\u180b-\u180f\u2000-\u200f\u2010\u2011\u2012\u2013\u2014\u2015\u2028-\u202f\u205f-\u206f\u2212\u2800\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d\u3000\u301c\u3030\u30a0\u3164\ufe00-\ufe0f\ufe31\ufe32\ufe58\ufe63\ufeff\uff0d\uffa0\ufff9-\ufffc\U00010ead\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]+'
 _MODEL_ID = re.compile(r'\b(?:gpt|claude|gemini)-[a-z0-9]+(?:[.-][a-z0-9]+)*', re.ASCII | re.IGNORECASE)
-# a name, any names joined to it ("Claude Fable"), and a version after them ("5.2"); bounded by letters and digits only,
-# so "fable_unknown" is a hit and "affable" or "corticosteroid" is not
-_NAME_RUN = re.compile(rf'(?<![a-z0-9])(?:{NAMES})(?:[ _-]+(?:{NAMES}))*(?:[ _-]+v?\d+(?:\.\d+)*)?(?![a-z0-9])',
-                       re.ASCII | re.IGNORECASE)
+# a Claude model id with the model family that continues it ("claude-3.5 Sonnet 4"): families continue Anthropic's names
+# only, so a device after another vendor's id stays ("gpt-4o - OPUS 2 processor")
+# (the id is an atomic group: a whole id such as claude-3-5-sonnet-20241022 never gives back its own family to this
+# pattern, so _MODEL_ID replaces it whole)
+_CLAUDE_ID_FAMILY = re.compile(rf'\bclaude-(?>[a-z0-9]+(?:[.-][a-z0-9]+)*){GAP}(?:{FAMILIES})(?:{GAP}{VERSION})?(?![a-z0-9])',
+                               re.ASCII | re.IGNORECASE)
+# One part of a name run: one of Anthropic's names with its version and the model families that follow it, each with its
+# own version ("Claude 3 Opus", "Claude Sonnet 4.5"), or another name with its version ("Gemini 2.5"). A run is parts
+# joined by gaps ("Gemini Claude Opus 4.5", "Claude Fable 5.2"), bounded by letters and digits only, as the denylist
+# bounds a name: "fable_unknown" is replaced, and "affable", "corticosteroid", "corti2", a family's name alone and one
+# after another name ("organ of Corti - OPUS 2", "Dr. Claude Corti - OPUS 2") are not.
+_RUN_VERSION = rf'(?:{GAP}{VERSION})?'
+_ANTHROPIC_PART = rf'(?:{ANTHROPIC}){_RUN_VERSION}(?:{GAP}(?:{FAMILIES}){_RUN_VERSION})*'
+_OTHER_PART = rf'(?:{NAMES}){_RUN_VERSION}'
+_NAME_RUN = re.compile(rf'(?<![a-z0-9])(?:{_ANTHROPIC_PART}|{_OTHER_PART})(?:{GAP}(?:{_ANTHROPIC_PART}|{_OTHER_PART}))*'
+                       rf'(?![a-z0-9])', re.ASCII | re.IGNORECASE)
 # a capitalized name joined to a word by its case alone ("GeminiTimeout", "readingGemini"), as written
 _JOINED = re.compile(rf'(?:{JOINED_NAMES})(?=[A-Z])|(?<=[a-z])(?:{JOINED_NAMES})', re.ASCII)
 _SENTENCE_START = re.compile(r'(?:^|[.!?]\s+|\n\s*)$')
@@ -127,7 +154,7 @@ def shown(text):
     system", nothing else changed. Anything that is not a string is returned as it is."""
     if not isinstance(text, str) or not text:
         return text
-    for pattern in (_MODEL_ID, _NAME_RUN, _JOINED):
+    for pattern in (_CLAUDE_ID_FAMILY, _MODEL_ID, _NAME_RUN, _JOINED):
         text = pattern.sub(_the_system, text)
     return text
 

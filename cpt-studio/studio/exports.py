@@ -1,4 +1,5 @@
-"""Customer exports (BUILD-SPEC 8): cpt-studio-customer-export@3, made from the encounter's latest coding round.
+"""Customer exports (BUILD-SPEC 8): the physician PDF report, cpt-studio-customer-export@3, made from the encounter's
+latest coding round.
 
 - draft: every code line of the round with its status, units, modifiers, reason, the second check's verdict, its
   question and its quotes with their pages, and any current decision; then the round's questions and documentation
@@ -6,63 +7,61 @@
 - approved: only the lines whose current decision is approve and whose status is ready or needs_review (FIX-SPEC 1;
   customer.approved_lines), each with who approved it, their kind (human or agent) and when.
 Units or modifiers the coding review did not give read "not given" - never a number or "none" it did not write.
-TXT opens and closes with the SYNTHETIC banner and states the encounter, the round, the date of service, the insurance
-and when and by whom it was made. CSV (RFC 4180: every field quoted, quotes doubled, CRLF records, UTF-8) has the
-columns kind, code, units, modifiers, status, reason, quotes, decision, decided_by, decided_at, a banner row after the
-header (the SYNTHETIC line, and what the export was made from) and one closing the file; every cell a spreadsheet could
-read as a formula is neutralised with a leading apostrophe. In both, control characters and the characters that
-reorder or break a displayed line (C0 controls but TAB and LF, DEL, C1 controls, the bidirectional formatting controls,
-the line and paragraph separators) are shown escaped: in the TXT a line break inside a value continues indented, so no
-stored text can forge a line of the export; in the CSV a line break stays a line break inside its quoted cell (a CRLF
-read as LF) and every other such character is escaped.
 
-Readiness: a draft needs the latest round done; the approved export needs a code of it approved (customer.readiness, the
+The report is a PDF (owner directions of 2026-11-21: the doctor-facing report, and then the only one): drawn from the
+snapshot below by studio.physician_report and studio.physician_pdf (searchable text, embedded fonts, US Letter), stored
+once as an immutable ExportArtifact (fmt 'pdf') with its sha256 and one export.created audit row, and served as the
+stored bytes. A request for any other format is refused (FORMATS). TXT and CSV exports made before that direction are
+records: they stay stored, listed and downloadable exactly as made (CONTENT_TYPES still names their types); none is made
+again. ExportArtifact.fmt's declared choices name only txt and csv; they are not a database constraint, and widening them
+would be a field migration the installer refuses. A PDF that cannot be made is refused (NotMade) before anything is
+stored: no empty or partial file is ever saved or served.
+
+Readiness: a draft needs the latest round done; the approved report needs a code of it approved (customer.readiness, the
 rule the page shows). A request names the round the page shows (FIX-SPEC-2 section 5): one that is not the latest is
-refused as changed, so a page left open never downloads a round its member did not see. Each export is stored once as
-an ExportArtifact (immutable) with its sha256; a download serves the stored bytes. An export made from an earlier round
-stays listed and downloadable, marked earlier (customer.report_json). The text the coding review wrote passes through
-the same display hygiene as the page (customer.shown).
+refused as changed, so a page left open never downloads a round its member did not see. An export made from an earlier
+round stays listed and downloadable, marked earlier (customer.report_json). The text the coding review wrote passes
+through the same display hygiene as the page (customer.shown).
 """
 from __future__ import annotations
 
-import csv
 import hashlib
-import io
-import re
+import logging
 from datetime import timezone as dt_timezone
 
 from django.db import transaction
 from django.utils import timezone
 
-from . import audit, customer, decisions, models, state
+from . import audit, customer, decisions, models, physician_report, state
 
 Round, Export = models.CodingRound, models.ExportArtifact
 DRAFT, APPROVED = Export.DRAFT, Export.APPROVED
 KINDS = (DRAFT, APPROVED)
-FORMATS = (Export.TXT, Export.CSV)
+PDF = 'pdf'
+FORMATS = (PDF,)  # what a new export may be made as (owner direction 2026-11-21: the PDF is the only report)
 FORMAT_VERSION = 'cpt-studio-customer-export@3'
-SYNTHETIC_LINE = 'SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS'
-HEADLINES = {DRAFT: 'CPT STUDIO — CODES — DRAFT, NOT APPROVED', APPROVED: 'CPT STUDIO — APPROVED CODES'}
-TITLES = {DRAFT: 'Codes — not approved', APPROVED: 'Approved codes'}
 AGENT_LINE = 'Agent-executed synthetic review — not clinical approval'
-CSV_COLUMNS = ('kind', 'code', 'units', 'modifiers', 'status', 'reason', 'quotes', 'decision', 'decided_by',
-               'decided_at')
-CONTENT_TYPES = {Export.TXT: 'text/plain; charset=utf-8', Export.CSV: 'text/csv; charset=utf-8'}
+# the stored formats served: the PDF, and the TXT and CSV exports made before 2026-11-21's direction, kept as records
+CONTENT_TYPES = {PDF: 'application/pdf', Export.TXT: 'text/plain; charset=utf-8', Export.CSV: 'text/csv; charset=utf-8'}
 INSURANCE_WORDS = {'medicare': 'Medicare', 'medicaid': 'Medicaid', 'commercial': 'Commercial or other',
                    'unknown': 'Not given'}
 TRIGGER_WORDS = {Round.ANSWERS: ', after the practice answered questions', Round.RETRY: ', after a retry'}
-DECISION_WORDS = {models.CodeDecision.APPROVE: 'approved', models.CodeDecision.REJECT: 'rejected'}
 NOTHING_YET = 'There is nothing to export yet.'
 APPROVED_NOT_YET = 'The approved export is not available yet.'
 ROUND_REQUIRED = 'Name the coding review the export is made from.'
-# Leading characters a spreadsheet may read as a formula (fullwidth forms and line starts included, beyond the minimum).
-FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r', '\n', '＝', '＋', '－', '＠')
-# Shown escaped (\xNN, \uNNNN): what a terminal, printer or spreadsheet acts on (C0 controls but TAB and LF, DEL, C1
-# controls) and what reorders or breaks how the rest of a line is displayed (the bidirectional formatting controls, the
-# line and paragraph separators). The TXT turns the line breaks among them into continuation lines first (_join).
-CONTROL = re.compile('[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]')
-# A line break inside a stored value continues at least this deep: deeper than any structural line of the TXT.
-CONTINUATION = '       '
+FORMAT_REQUIRED = 'Choose a draft or an approved PDF report.'
+PDF_NOT_MADE = 'The PDF could not be made. Nothing was saved. Try again.'
+
+
+logger = logging.getLogger(__name__)
+
+
+class NotMade(Exception):
+    """The PDF could not be made; nothing was stored. ``message`` is the member's sentence."""
+
+    def __init__(self, message=PDF_NOT_MADE):
+        super().__init__(message)
+        self.message = message
 
 
 class NotReady(Exception):
@@ -71,36 +70,6 @@ class NotReady(Exception):
     def __init__(self, message, blockers):
         super().__init__(message)
         self.message, self.blockers = message, list(blockers)
-
-
-def _escaped(match) -> str:
-    point = ord(match.group())
-    return f'\\x{point:02x}' if point < 0x100 else f'\\u{point:04x}'
-
-
-def visible(text: str) -> str:
-    return CONTROL.sub(_escaped, text)
-
-
-def visible_cell(text: str) -> str:
-    """A CSV cell's text: a CRLF read as LF (a line break inside the quoted cell), every other character CONTROL names
-    escaped."""
-    return visible(text.replace('\r\n', '\n'))
-
-
-def neutralise(value) -> str:
-    """A cell a spreadsheet shows as text: a formula-leading character gets an apostrophe before it."""
-    text = '' if value is None else str(value)
-    return "'" + text if text.startswith(FORMULA_PREFIXES) else text
-
-
-def _join(lines) -> str:
-    out = []
-    for line in lines:
-        first, *rest = (visible(part) for part in (str(line).splitlines() or ['']))
-        out.append(first)
-        out += [part if part.startswith(CONTINUATION) else CONTINUATION + part for part in rest]
-    return '\n'.join(out)
 
 
 def _ts(value) -> str:
@@ -131,113 +100,36 @@ def snapshot(encounter, round_, current, kind, user, now) -> dict:
             'notes': customer.notes_json(round_) if kind == DRAFT else []}
 
 
-NOT_GIVEN = 'not given'
+# --- PDF ----------------------------------------------------------------------------------------------------------------
 
-
-def _modifiers(item) -> str:
-    if item['modifiers'] is None:
-        return NOT_GIVEN
-    return ', '.join(item['modifiers']) if item['modifiers'] else 'none'
-
-
-def _units(item) -> str:
-    return str(item['units']) if item['units'] is not None else NOT_GIVEN
-
-
-def _quote_words(quote) -> str:
-    page = f'page {quote["page"]}' if quote['page'] else 'page not given'
-    return f'"{quote["text"]}" ({page})'
-
-
-def _check_words(item) -> str:
-    check = item['second_check']
-    verdict = {True: 'agrees', False: 'disagrees'}.get(check['agrees'], 'no verdict')
-    return f'Second check: {verdict}.' + (f' {check["reason"]}' if check['reason'] else '')
-
-
-def _decider(decision) -> str:
-    return f'{decision.reviewer.label()} ({decision.reviewer_kind}) at {_ts(decision.created_at)}'
-
-
-# --- TXT ----------------------------------------------------------------------------------------------------------------
-
-def render_txt(snap) -> bytes:
-    kind = snap['kind']
-    lines = [SYNTHETIC_LINE, HEADLINES[kind], f'Export format: {FORMAT_VERSION}', f'Encounter: {snap["title"]}',
-             f'Coding review: {snap["round"]}{snap["trigger"]}, finished {snap["finished_at"]}',
-             f'Date of service: {snap["service_date"]}', f'Insurance: {snap["insurance"]}',
-             f'Generated: {snap["generated_at"]} by {snap["generated_by"]}', '', TITLES[kind]]
-    if not snap['items']:
-        lines.append('   The coding review found no CPT code to report for this document.')
-    for number, item in enumerate(snap['items'], start=1):
-        decision = item['decided']
-        if kind == APPROVED:
-            lines.append(f'{number}. {item["code"]} — units {_units(item)} — modifiers: {_modifiers(item)}')
-            lines.append(f'   Approved by {_decider(decision)}')
-            if decision.reviewer_kind == models.User.AGENT:
-                lines.append(f'   {AGENT_LINE}')
-        else:
-            lines.append(f'{number}. {item["code"]} — {item["status_label"]} — units {_units(item)} — modifiers: '
-                         f'{_modifiers(item)}')
-            if decision is not None:
-                lines.append(f'   Decision: {DECISION_WORDS.get(decision.action, decision.action)} by '
-                             f'{_decider(decision)}')
-                if decision.reviewer_kind == models.User.AGENT and decision.action == models.CodeDecision.APPROVE:
-                    lines.append(f'   {AGENT_LINE}')
-        if item['reason']:
-            lines.append(f'   Reason: {item["reason"]}')
-        if kind == DRAFT:
-            lines.append(f'   {_check_words(item)}')
-            if item['question']:
-                lines.append(f'   Question: {item["question"]}')
-        for quote in item['quotes']:
-            lines.append(f'   Quote: {_quote_words(quote)}')
-    if snap['questions']:
-        lines += ['', 'Questions for the practice', *[f'- {text}' for text in snap['questions']]]
-    if snap['notes']:
-        lines += ['', 'Documentation notes', *[f'- {text}' for text in snap['notes']]]
-    return (_join(lines) + f'\n\n{SYNTHETIC_LINE}\n').encode('utf-8')
-
-
-# --- CSV ----------------------------------------------------------------------------------------------------------------
-
-def render_csv(snap) -> bytes:
-    made = (f'Export format {FORMAT_VERSION}; encounter: {snap["title"]}; coding review {snap["round"]}'
-            f'{snap["trigger"]}, finished {snap["finished_at"]}; date of service: {snap["service_date"]}; '
-            f'insurance: {snap["insurance"]}; generated {snap["generated_at"]} by {snap["generated_by"]}')
-    banner = {**dict.fromkeys(CSV_COLUMNS, ''), 'kind': SYNTHETIC_LINE, 'reason': made}
-    rows = [banner]
-    for item in snap['items']:
-        decision = item['decided']
-        reason = item['reason'] + (f' {_check_words(item)}' if snap['kind'] == DRAFT else '')
-        rows.append({'kind': snap['kind'], 'code': item['code'], 'units': _units(item),
-                     'modifiers': NOT_GIVEN if item['modifiers'] is None else ';'.join(item['modifiers']),
-                     'status': item['status'], 'reason': reason.strip(),
-                     'quotes': '\n'.join(_quote_words(quote) for quote in item['quotes']),
-                     'decision': DECISION_WORDS.get(decision.action, '') if decision is not None else '',
-                     'decided_by': decision.reviewer.label() if decision is not None else '',
-                     'decided_at': _ts(decision.created_at) if decision is not None else ''})
-    rows.append({**dict.fromkeys(CSV_COLUMNS, ''), 'kind': SYNTHETIC_LINE})
-    buffer = io.StringIO()
-    writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator='\r\n')
-    writer.writerow([neutralise(column) for column in CSV_COLUMNS])
-    for row in rows:
-        writer.writerow([neutralise(visible_cell(cell) if isinstance(cell, str) else cell)
-                         for cell in (row[column] for column in CSV_COLUMNS)])
-    return buffer.getvalue().encode('utf-8')
-
-
-RENDERERS = {Export.TXT: render_txt, Export.CSV: render_csv}
+def render_pdf(snap, encounter, round_) -> bytes:
+    """The physician PDF of ``snap``; NotMade when it cannot be made (only the error's type is logged: never its
+    text, which could carry document words). physician_report and ReportLab are imported with this module, and the
+    report fonts load at that import, so a broken library or a missing font fails the image phase's system check
+    (manage.py check, whose URL check imports the API and so this module) and every request of an app started anyway,
+    instead of only a doctor's download."""
+    try:
+        content = physician_report.render(snap, encounter=encounter, round_=round_)
+    except Exception as exc:  # noqa: BLE001 - any failure refuses the export; nothing is stored
+        logger.error('physician PDF not made for encounter %s round %s: %s', encounter.pk, round_.number,
+                     type(exc).__name__)
+        raise NotMade() from None
+    if not isinstance(content, bytes) or not content.startswith(b'%PDF-') or b'%%EOF' not in content[-64:]:
+        logger.error('physician PDF not made for encounter %s round %s: not a complete PDF', encounter.pk,
+                     round_.number)
+        raise NotMade()
+    return content
 
 
 # --- making and serving an export ------------------------------------------------------------------------------------------
 
 def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact:
     """Make and store one export of the latest round, which must be round ``round_number`` - the one the page shows
-    (any active member of the workspace may; the caller has scoped the encounter to the member). ValueError for an
-    unknown kind or format; decisions.Refused (409, changed) for another round; NotReady when it is not available now."""
+    (any active member of the workspace may; the caller has scoped the encounter to the member), as a PDF. ValueError for
+    an unknown kind or any format but the PDF; decisions.Refused (409, changed) for another round; NotReady when it is
+    not available now; NotMade when the PDF cannot be made (nothing stored)."""
     if kind not in KINDS or fmt not in FORMATS:
-        raise ValueError('Choose a draft or an approved export as TXT or CSV.')
+        raise ValueError(FORMAT_REQUIRED)
     with transaction.atomic():
         locked = models.Encounter.objects.select_for_update().select_related('workspace').get(pk=encounter.pk)
         round_ = state.latest_round(locked)
@@ -250,7 +142,8 @@ def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact
         if kind == APPROVED and not ready['approved']:
             raise NotReady(APPROVED_NOT_YET, ready['blockers'])
         now = timezone.now()
-        content = RENDERERS[fmt](snapshot(locked, round_, current, kind, user, now))
+        snap = snapshot(locked, round_, current, kind, user, now)
+        content = render_pdf(snap, locked, round_)
         stamp = now.astimezone(dt_timezone.utc).strftime('%Y%m%dT%H%M%S')
         export = Export.objects.create(
             encounter=locked, round=round_, kind=kind, fmt=fmt, filename=f'CPT-Studio-{kind}-r{round_.number}-{stamp}.{fmt}',
