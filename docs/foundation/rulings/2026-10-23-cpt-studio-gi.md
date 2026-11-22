@@ -4012,3 +4012,51 @@ which shows every character as saved.
 that already holds a saved approval (6c450473, approved on 2026-11-20), so the approved report is compared with a
 persisted approval on the live site. No decision is made on live; the approval path itself stays exercised on the
 rehearsal only.
+
+## Owner direction, 2026-11-22 — Neurosurgery and Orthopedic Surgery, added the GI way
+
+Given on 2026-11-22 in session 738699b2, after the physician PDF install, verbatim, in three messages:
+
+> other task is i want add neurosurgery and orthopedic surgery with full complete sub category on out website like
+> completely as GI before you start the task report me am i srite thr srite medical category and make me sure work flow
+> is as same as gi
+
+The session reported first, as asked: both are the official specialties (CMS Medicare specialty codes 14 Neurosurgery and
+20 Orthopedic Surgery; NUCC 207T00000X Neurological Surgery and 207X00000X Orthopaedic Surgery with its seven
+specializations); 16 neurosurgery and 14 orthopedic subcategories; the workflow is the same as GI in code and the coder
+is not told the specialty, for GI either; GI's subcategories exist today only as the coverage of its synthetic
+documents; the gaps (provisioning creates only GI, one workspace per login, GI text hard-coded on the page, GI-only test
+documents, release-scan words); and three decisions (logins or a switcher, subcategory coverage or a picker, the
+coding-path items now or later).
+
+> can we add neuro and orthopedic suregy for now then after that we decid can we?
+
+> make sure you fable cover every code for that both category i dont want to miss any and also username are cool for
+> testing and and make sure like everything id as same as gi dont create  old enigne or any enigne by coding which make
+> us compilated same as GI which fable take care of all the stuff
+
+### Session interpretation, 2026-11-22 (738699b2, on receipt) — recorded, not owner-ruled (DECISIONS D390)
+
+(a) Two specialty categories are added beside Gastroenterology: Neurosurgery and Orthopedic Surgery, the CMS specialty
+names. Each gets its own workspace. This supersedes the 2026-11-01 directive's "Keep the existing single GI category";
+its "approved website design" stays.
+
+(b) "The same as GI" and "Fable take care of all the stuff": no engine, no code list, no routing, no specialty rule and
+no subcategory table; D358 stands. The coder's path does not branch on specialty (as for GI today, the specialty is not
+sent to it). "Full complete sub category" is read as GI's own meaning of subcategories today: coverage by synthetic
+documents, one per subcategory (16 neurosurgery, 14 orthopedic surgery), not a picker and not rules.
+
+(c) "Make sure Fable cover every code ... I dont want to miss any": nothing in CPT Studio may narrow or drop a code Fable
+writes. The app accepts every CPT and HCPCS Level II code shape (five digits; Category II, III and PLA codes; a letter
+and four digits) and holds no code list. Where the app's reading of an answer can lose a code Fable wrote validly (an
+add-on code written with the CPT book's "+"), the reading is fixed as plumbing (D358: no rule reads the note or holds or
+changes a code). Whether Fable finds every code is measured on the synthetic documents with paid pairs, within a ceiling
+the owner sets (money is owner class d; paid tests one pair at a time).
+
+(d) "Username are cool for testing": separate logins per specialty for now, since there is no workspace switcher: an
+owner login per new workspace (owner-neuro, owner-ortho) and a review agent per workspace for the release checks. The
+switcher, an organization level, a subcategory picker and the coding-path items the report found (spine level names
+read as line labels when evidence is filed, "List each code once", the output and cost limits) are decided later
+("after that we decid").
+
+(e) Everything else as GI: the same upload, coding review, questions, approvals, PDF report, release process and checks.
