@@ -1,0 +1,57 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Brightwater Valley Medical Center, Neurosurgery (fictional tertiary care hospital)
+Operative report - craniotomy for brain tumor
+
+Patient: Desmond Pryce-Whitaker (fictional)
+Synthetic record: SYN-NS-0005
+Date of procedure: 2026-10-22
+Place of service: Inpatient hospital, operating room
+Surgeon: Dr. Annika Lowell-Brandt, MD, Neurosurgery (fictional)
+Assistant: Dr. Theo Marchbanks, MD, neurosurgery resident, postgraduate year 4 (fictional)
+Anesthesia: Dr. Samir Haddadin, MD, Anesthesiology (fictional); general endotracheal anesthesia
+Neurophysiologic monitoring: none
+
+Preoperative diagnosis
+Right frontal intra-axial enhancing mass with vasogenic edema, presumed high-grade glioma.
+
+Postoperative diagnosis
+Right frontal high-grade glioma (frozen section: high-grade glial neoplasm); final pathology and molecular studies pending.
+
+Procedures performed
+1. Right frontal craniotomy with bone flap for resection of an intra-axial supratentorial brain tumor (glioma).
+2. Frameless stereotactic computer-assisted navigation, used intradurally to localize the tumor and define the resection margins.
+3. Microsurgical resection using the operating microscope.
+
+Indication
+58-year-old right-handed man who presented 3 weeks ago with a first generalized seizure, after 2 months of apathy and worsening headaches. MRI of the brain with and without gadolinium shows a 4.1 x 3.6 x 3.3 cm heterogeneously ring-enhancing mass with central necrosis in the right middle frontal gyrus, with surrounding T2/FLAIR signal and 4 mm of leftward midline shift. The posterior enhancing margin lies about 2.5 cm anterior to the precentral gyrus, and the deep margin abuts the frontal horn of the right lateral ventricle. He has been seizure-free on levetiracetam and his headaches improved on oral dexamethasone. The neuro-oncology tumor board recommended maximal safe resection.
+
+Consent
+We discussed the risks, including bleeding, infection, stroke, seizures, left-sided weakness, cognitive and personality change, cerebrospinal fluid leak, the need for further surgery, residual or recurrent tumor and the risks of anesthesia, together with the benefits and alternatives. Stereotactic needle biopsy alone followed by chemoradiation was discussed as an alternative; he chose resection. Written informed consent was obtained.
+
+Description of procedure
+The volumetric gadolinium-enhanced MRI obtained the day before surgery was loaded onto the optical navigation workstation and the tumor was outlined for planning. General endotracheal anesthesia was induced by the anesthesia team and antibiotics were given before incision. The patient was positioned supine with the head fixed in a three-pin skull clamp, slightly flexed and turned 15 degrees to the left. The navigation reference array was attached to the clamp and surface-matching registration was performed, with an accuracy of 1.4 mm confirmed on bony landmarks. Navigation was used to plan the incision and a craniotomy centered over the tumor.
+
+A narrow strip of hair was clipped, the scalp was prepped and draped, and a time-out was completed. A curvilinear right frontal incision was made behind the hairline and the scalp flap was reflected anteriorly. Two burr holes were made and a free bone flap of about 6 x 5 cm was elevated with the craniotome, staying 2 cm lateral to the superior sagittal sinus. Dural tack-up sutures were placed and the dura was opened in a horseshoe fashion based medially.
+
+The operating microscope was brought into the field and used for the entire intradural resection. Navigation was used throughout the intradural portion: to localize the tumor beneath the cortical surface, to choose the corticotomy site in the middle frontal gyrus, and repeatedly to confirm the anterior, posterior, medial and deep margins, particularly the posterior margin toward the precentral gyrus and the deep margin at the frontal horn.
+
+A 2 cm corticotomy was made. At about 1 cm depth, gray, friable, hypervascular tumor with a yellow necrotic center was encountered. A specimen sent for frozen section was read as high-grade glial neoplasm. The tumor was resected circumferentially along the interface with the edematous white matter using bipolar cautery, suction and the ultrasonic aspirator, working from the anterior and lateral margins toward the posterior and deep margins under navigation guidance. The ependyma of the frontal horn was identified at the deep margin and preserved; the ventricle was not entered. At completion, navigation and inspection under the microscope showed no residual enhancing tumor; the surrounding non-enhancing T2/FLAIR signal was not pursued. Hemostasis was obtained with bipolar cautery, warm irrigation and a single layer of oxidized cellulose, and was confirmed with a Valsalva maneuver.
+
+The dura was closed with running 4-0 braided nylon, and a small gap along the medial edge was covered with an onlay collagen dural substitute. The bone flap was replaced and secured with three titanium plates and screws, and titanium burr hole covers were placed. The galea was closed with inverted interrupted 2-0 absorbable sutures and the skin with staples. No drain was placed. The skull clamp was removed and the pin sites were dressed.
+
+Findings
+Right frontal intra-axial tumor in the middle frontal gyrus, friable and hypervascular with central necrosis. Frozen section: high-grade glial neoplasm. Gross total resection of the enhancing tumor by navigation and microscopic inspection. Frontal horn not entered. Brain relaxed at closure.
+
+Implants: titanium cranial plates, screws and burr hole covers fixing the patient's own bone flap; collagen dural substitute onlay.
+Specimens: right frontal tumor, frozen section and permanent pathology with molecular studies.
+Estimated blood loss: 350 mL. No transfusion.
+Complications: none.
+
+Disposition
+Extubated in the operating room, awake and following commands, with full strength in all extremities and no new deficit. Transferred to the neurosurgical ICU for hourly neurologic checks overnight. MRI of the brain with and without gadolinium within 48 hours to assess the extent of resection. Continue levetiracetam; taper dexamethasone over 2 weeks. Neuro-oncology and radiation oncology referral once final pathology and molecular markers are available. Clinic visit for staple removal in 10 to 14 days.
+
+Attestation
+I was present and scrubbed for the entire procedure. Dr. Marchbanks, the neurosurgery resident, assisted.
+
+Electronically signed: Dr. Annika Lowell-Brandt, MD (fictional), 2026-10-22 15:05

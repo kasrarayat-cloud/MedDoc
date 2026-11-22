@@ -1,0 +1,63 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Granite Valley Regional Medical Center, Department of Neurosurgery (fictional hospital)
+Operative report - emergency craniotomy
+
+Patient: Raymond Talbert (fictional)
+Synthetic record: SYN-NS-0013
+Date of procedure: 2026-10-07
+Place of service: Inpatient hospital, main operating room (emergency)
+Surgeon: Dr. Nadia Okafor, MD, Neurological Surgery (fictional)
+Assistant: None
+Anesthesia: Dr. Victor Lindqvist, MD, Anesthesiology (fictional)
+Neurophysiologic monitoring: None
+
+Preoperative diagnosis
+Acute right subdural hematoma with midline shift and right pupillary dilation after a fall; severe traumatic brain injury.
+
+Postoperative diagnosis
+Same, with a small non-bleeding right temporal pole contusion.
+
+Procedures performed
+1. Right frontotemporoparietal craniotomy for evacuation of acute subdural hematoma (supratentorial).
+2. Placement of a left frontal intraparenchymal intracranial pressure monitor through a separate twist-drill hole and a separate incision.
+
+Indication
+58-year-old man who fell about 3 meters from a ladder at 23:30 on 2026-10-06. Glasgow Coma Scale was 10 at the scene and declined to 7 (E1 V2 M4) in the emergency department, where the emergency physician intubated him. The right pupil was 5 mm and sluggish; the left was 3 mm and brisk. Non-contrast head CT at 00:52 showed a right frontotemporoparietal acute subdural hematoma 14 mm in maximal thickness with 9 mm of right-to-left midline shift, partial effacement of the basal cisterns, and a 6 mm right temporal pole contusion. INR 1.0 and platelet count normal; no antiplatelet or anticoagulant use. Mannitol 1 g/kg was given in the emergency department. Emergency evacuation is indicated by the thickness, the shift, the neurological decline and the pupillary asymmetry. Because the post-resuscitation Glasgow Coma Scale is 7 with an abnormal CT, intracranial pressure monitoring is indicated after evacuation.
+
+Consent
+Risks, benefits and alternatives, including death, disability, recurrent hemorrhage, infection, seizures, leaving the bone flap out, further surgery and non-operative care, were discussed in person with his wife, his health care proxy, who gave informed consent for the craniotomy and the intracranial pressure monitor.
+
+Anesthesia
+General endotracheal anesthesia by Dr. Lindqvist (fictional). Cefazolin 2 g IV before incision; levetiracetam was loaded in the emergency department.
+
+Description of procedure
+The patient was brought emergently to the operating room and a time-out was completed. The head was fixed in a three-pin skull clamp, rotated 60 degrees to the left, with a roll under the right shoulder. The right hemicranium was clipped, prepped and draped.
+
+A large reverse question-mark incision was made from the root of the zygoma 1 cm anterior to the tragus, curving above and behind the ear across the parietal region and forward to the midline at the hairline. The myocutaneous flap was reflected anteriorly. Four burr holes were made (keyhole, low temporal, posterior parietal, and frontal 2 cm from the midline); the dura was stripped and a 13 x 15 cm right frontotemporoparietal bone flap was elevated with the craniotome. The squamous temporal bone was rongeured down to the floor of the middle cranial fossa to complete the exposure. Epidural hemostasis was obtained and dural tack-up sutures were placed.
+
+The dura was tense and blue. It was opened in a curvilinear fashion based on the sphenoid wing, and thick dark clot extruded under pressure. The acute subdural hematoma was evacuated with irrigation and gentle suction over the frontal, temporal and parietal convexity and from beneath the temporal lobe. The bleeding source was a torn bridging vein on the posterior frontal convexity about 2 cm from the superior sagittal sinus; it was coagulated with bipolar cautery and covered with oxidized cellulose. The small right temporal pole contusion was inspected; it was not bleeding and was not evacuated, and no intracerebral hematoma was entered. After evacuation the brain relaxed below the inner table with normal pulsation, and a Valsalva maneuver showed no further bleeding.
+
+The dura was closed with running 4-0 braided nylon. A collagen dural substitute was laid as an onlay graft over a small gap at the temporal base where the dura had retracted. Because the brain was slack and pulsatile, the bone flap was replaced and fixed with titanium low-profile plates and screws, with titanium burr-hole covers. Decompressive craniectomy was considered and was not performed; the bone flap was not stored. A subgaleal drain was brought out through a separate stab wound to bulb suction. The galea was closed with inverted 2-0 polyglactin sutures and the skin with staples.
+
+Intracranial pressure monitor: the skull clamp was then removed and the head returned to the neutral position. The left frontal scalp was clipped, prepped and draped as a separate field, remote from the craniotomy. A 5 mm stab incision was made at the left Kocher point, 11 cm behind the nasion and 3 cm lateral to the midline in the mid-pupillary line. A twist-drill hole was made through the skull with the cranial access kit, the dura was opened with a spinal needle, and the skull bolt was threaded into the twist-drill hole. The fiberoptic intraparenchymal pressure sensor was zeroed to atmosphere and passed through the bolt 2 cm into the left frontal white matter. The opening pressure was 9 mmHg with a good waveform. The sensor was locked to the bolt and connected to the bedside monitor, and the scalp was closed around the bolt with a 3-0 nylon suture.
+
+Magnification and adjuncts
+Operating microscope not used (loupes and headlight). No stereotactic navigation, no neurophysiologic monitoring and no fluoroscopy.
+
+Findings
+1. Acute subdural hematoma, 14 mm thick, under pressure over the right convexity, from a torn posterior frontal bridging vein.
+2. Small non-bleeding right temporal pole contusion, not evacuated.
+3. Brain relaxed and pulsatile after evacuation; bone flap replaced.
+4. Intracranial pressure 9 mmHg on insertion and 8 mmHg at the end of the case.
+
+Estimated blood loss: 450 mL. No blood products were given.
+Drains: right subgaleal drain to bulb suction.
+Implants: titanium cranial plates, screws and burr-hole covers; collagen dural substitute onlay graft; fiberoptic intraparenchymal pressure sensor with skull bolt (left frontal).
+Specimens: none.
+Complications: none apparent.
+
+Disposition
+To the neuro ICU intubated and sedated, in critical condition. Intracranial pressure goal below 22 mmHg and cerebral perfusion pressure 60 to 70 mmHg; repeat head CT at 06:00; levetiracetam for 7 days; chemical thromboprophylaxis held until a stable CT. His wife was updated after the procedure.
+
+Electronically signed: Dr. Nadia Okafor, MD (fictional), 2026-10-07 04:12

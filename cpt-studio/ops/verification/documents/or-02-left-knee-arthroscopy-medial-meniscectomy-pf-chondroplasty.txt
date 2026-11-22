@@ -1,0 +1,73 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Cedar Ridge Surgery Center (fictional ambulatory surgery center)
+Operative report - knee arthroscopy
+
+Patient: Darnell Kingsford (fictional)
+Synthetic record: SYN-OR-0002
+Date of procedure: 2026-10-20
+Place of service: Ambulatory surgery center
+Surgeon: Dr. Leah Marchetti, MD, Orthopaedic Sports Medicine (fictional)
+Assistant: None
+Anesthesia: Dr. Victor Hallorann, MD, Anesthesiology (fictional)
+
+Preoperative diagnoses
+1. Tear of the posterior horn of the medial meniscus, left knee.
+2. Chondromalacia of the patella, left knee.
+
+Postoperative diagnoses
+1. Complex tear of the posterior horn of the medial meniscus, left knee.
+2. Grade III chondromalacia of the patella and grade II chondromalacia of the trochlea, left knee.
+
+Procedure
+Left knee arthroscopy with partial medial meniscectomy and chondroplasty of the patellofemoral compartment.
+
+Indication
+46-year-old man with four months of medial left knee pain, catching and two episodes of locking after a twisting injury playing basketball. Examination showed medial joint line tenderness, a small effusion and a positive medial McMurray test. MRI on 2026-08-27 showed a complex tear of the posterior horn of the medial meniscus with a displaced flap, an intact lateral meniscus, intact ligaments and thinning of the patellar cartilage. Standing radiographs showed preserved joint spaces without significant osteoarthritis. Symptoms persisted despite eight weeks of physical therapy, activity changes and anti-inflammatory medication. Surgery was decided at the clinic visit on 2026-09-24.
+
+Consent
+Risks including infection, bleeding, stiffness, blood clots, nerve injury, persistent pain, progression of arthritis and the need for further surgery were discussed with the alternatives, and written informed consent was obtained. The left knee was marked and confirmed at the time-out.
+
+Anesthesia
+General anesthesia with a laryngeal mask airway by the anesthesia service. Cefazolin 2 g IV was given before incision.
+
+Description of procedure
+The patient was placed supine. Examination under anesthesia showed motion from 0 to 135 degrees and a stable knee to Lachman, anterior and posterior drawer, varus and valgus stress and pivot shift testing. A thigh tourniquet was applied but not inflated. The left leg was placed in a leg holder, prepped and draped, and a time-out was performed.
+
+Standard anterolateral and anteromedial portals were established, the anteromedial portal localized with a spinal needle. A 30-degree arthroscope was introduced and a systematic examination of the entire knee was performed:
+
+- Suprapatellar pouch: mild synovitis; no loose bodies and no plica.
+- Patellofemoral compartment: grade III chondromalacia of the patella over the median ridge and medial facet, approximately 15 x 12 mm, with unstable fibrillated cartilage flaps; grade II fibrillation of the central trochlear groove, about 10 x 8 mm, with loose fronds. The patella tracked centrally.
+- Medial and lateral gutters: no loose bodies.
+- Medial compartment: complex tear of the posterior horn of the medial meniscus with radial and horizontal cleavage components and a flap displaced into the joint, unstable on probing. The medial femoral condyle and medial tibial plateau showed only grade I softening, which needed no treatment.
+- Intercondylar notch: anterior and posterior cruciate ligaments intact with normal tension on probing.
+- Lateral compartment: lateral meniscus intact and stable on probing along its entire length; normal articular cartilage of the lateral femoral condyle and lateral tibial plateau.
+
+Partial medial meniscectomy: The displaced flap and the unstable torn portions of the posterior horn were resected with straight and up-biting basket forceps and a 4.5 mm full-radius shaver back to a stable, smooth rim. About 30 percent of the width of the posterior horn was removed; the peripheral rim and the posterior root were preserved. Probing confirmed a stable remnant.
+
+Chondroplasty: The unstable chondral flaps of the patella and the loose fronds of the trochlea were debrided with the 4.5 mm shaver and a radiofrequency probe to stable, smooth margins. No subchondral bone was exposed, and no microfracture or abrasion arthroplasty was performed.
+
+The lateral meniscus was not treated. The joint was irrigated, debris was suctioned and the instruments were removed. The portals were closed with nylon sutures, and 20 mL of 0.25 percent bupivacaine with epinephrine was injected into the joint. A sterile dressing and compressive wrap were applied.
+
+Findings
+Complex posterior horn tear of the medial meniscus treated with partial medial meniscectomy; grade III patellar and grade II trochlear chondromalacia treated with chondroplasty; intact lateral meniscus, cruciate ligaments and lateral compartment cartilage.
+
+Images
+Arthroscopic photographs of each compartment, before and after treatment, were saved to the record.
+
+Estimated blood loss
+Minimal.
+
+Specimens
+None; resected meniscal and cartilage fragments were removed with suction.
+
+Complications
+None.
+
+Disposition
+Discharged home from the recovery area the same day, stable and neurovascularly intact.
+
+Postoperative plan
+Weight bearing as tolerated. Ice, elevation and home quadriceps exercises. Acetaminophen and ibuprofen for pain. Clinic follow-up in 10 to 14 days for suture removal and review of the arthroscopic photographs; outpatient physical therapy to begin then.
+
+Electronically signed: Dr. Leah Marchetti, MD (fictional), 2026-10-20 09:52

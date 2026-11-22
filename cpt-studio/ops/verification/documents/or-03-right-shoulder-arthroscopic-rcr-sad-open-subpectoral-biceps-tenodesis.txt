@@ -1,0 +1,75 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Westbrook General Hospital - Outpatient Surgery (fictional hospital)
+Operative report - shoulder arthroscopy and open biceps tenodesis
+
+Patient: Harold Lindqvist (fictional)
+Synthetic record: SYN-OR-0003
+Date of procedure: 2026-11-04
+Place of service: Hospital outpatient department, main operating room
+Surgeon: Dr. Simone Achterberg, MD, Orthopaedic Surgery, Shoulder and Elbow (fictional)
+Assistant: None (scrub technologist only)
+Anesthesia: Dr. Ravi Menezes, MD, Anesthesiology (fictional)
+
+Preoperative diagnoses
+1. Large full-thickness rotator cuff tear, right shoulder.
+2. Subacromial impingement with a type II acromion, right shoulder.
+3. Tendinopathy with partial tearing of the long head of the biceps, right shoulder.
+
+Postoperative diagnoses
+1. Large full-thickness tear of the supraspinatus and upper infraspinatus, right shoulder, 3.5 cm wide with 3 cm of retraction.
+2. Same as preoperative diagnosis 2.
+3. Partial tear of the long head of the biceps with biceps pulley disruption, right shoulder.
+
+Procedures
+1. Right shoulder arthroscopic rotator cuff repair, double-row transosseous-equivalent technique.
+2. Right shoulder arthroscopic subacromial decompression with partial acromioplasty and coracoacromial ligament release.
+3. Right open subpectoral biceps tenodesis with interference screw fixation.
+
+Indication
+62-year-old right-hand-dominant man with nine months of right shoulder pain, night pain and overhead weakness after lifting a heavy box. Examination showed a painful arc, positive Neer and Hawkins signs, supraspinatus strength 4-/5 and external rotation 4/5, bicipital groove tenderness with a positive Speed test, and a normal belly-press test. MRI on 2026-09-15 showed a full-thickness supraspinatus tear extending into the upper infraspinatus, 3.5 cm wide and retracted 3 cm, with Goutallier grade 1 fatty infiltration, a type II acromion, and tendinosis with partial tearing of the long head of the biceps. Symptoms persisted despite three months of physical therapy and one subacromial corticosteroid injection in June. The acromioclavicular joint is not tender and is not a source of symptoms. Surgery was decided at the clinic visit on 2026-10-07.
+
+Consent
+Risks including infection, bleeding, stiffness, nerve injury, failure of the repair or tenodesis, persistent pain and further surgery were discussed with the alternatives; written informed consent was obtained. The right shoulder was marked and confirmed at the time-out.
+
+Anesthesia
+General endotracheal anesthesia and a preoperative interscalene block for postoperative analgesia, both by the anesthesia service and documented in the anesthesia record. Cefazolin 2 g IV was given before incision.
+
+Description of procedure
+The patient was placed in the beach chair position with bony prominences padded. Examination under anesthesia showed full passive motion equal to the opposite shoulder; no manipulation was needed. The right upper extremity was prepped and draped and a time-out was performed.
+
+Glenohumeral joint: Viewed through posterior and anterior rotator interval portals, the humeral head and glenoid cartilage were intact. The labrum showed mild superior fraying, was stable to probing and needed no treatment. The subscapularis was intact, and the cuff tear was seen from the articular side. The long head of the biceps showed tendinosis with partial tearing of about 40 percent of its thickness, an hourglass segment and medial instability from a disrupted pulley; it was released from its superior labral origin with a radiofrequency device as the first step of the tenodesis.
+
+Subacromial decompression: In the subacromial space, through a lateral working portal, a bursectomy was performed with the shaver and radiofrequency device. The coracoacromial ligament was released from the anterior acromion. The type II acromion with an anteroinferior spur was converted to a flat type I acromion with a 5.5 mm burr using the cutting-block technique, removing about 6 mm of bone anteriorly. The distal clavicle was not excised.
+
+Rotator cuff repair: The crescent-shaped tear measured 3.5 cm from anterior to posterior with 3 cm of medial retraction. The degenerative tendon edges were debrided to healthy tissue, bursal adhesions were released, and the tendon reduced to the footprint without tension. The greater tuberosity footprint was decorticated to a bleeding bed. Two 5.5 mm triple-loaded suture anchors were placed at the articular margin, and their sutures were passed through the tendon as horizontal mattress stitches and tied. The suture limbs were crossed over the tendon and secured laterally with two 4.75 mm knotless anchors, completing a double-row transosseous-equivalent repair with full footprint coverage. The repair was stable through a full range of motion.
+
+Open subpectoral biceps tenodesis: The arm was abducted and externally rotated, and a 3 cm incision was made in the axillary fold at the inferior border of the pectoralis major tendon. The pectoralis was retracted superiorly and the biceps tendon identified and delivered into the wound. A blunt retractor on the medial humerus protected the musculocutaneous nerve. The tendon was whipstitched over 2 cm with high-strength suture and the diseased proximal tendon excised. An 8 mm unicortical tunnel was drilled about 1 cm above the inferior border of the pectoralis major tendon, and the tendon was seated at anatomic tension and secured with an 8 x 12 mm interference screw, the suture limbs tied over the screw. The wound was irrigated and closed in layers.
+
+The portals were closed with nylon sutures and the axillary incision with an absorbable subcuticular suture and skin adhesive. Sterile dressings were applied and the arm was placed in a sling with an abduction pillow.
+
+Implants
+Meridian Orthopaedics (fictional manufacturer):
+- Two 5.5 mm triple-loaded PEEK suture anchors (medial row)
+- Two 4.75 mm PEEK knotless anchors (lateral row)
+- One 8 x 12 mm biocomposite interference screw (biceps tenodesis)
+
+Findings
+Large two-tendon cuff tear repaired with full footprint coverage; type II acromion decompressed to type I; partially torn, unstable long head of the biceps tenodesed in the subpectoral position.
+
+Estimated blood loss
+25 mL.
+
+Specimens
+None; the excised proximal biceps tendon was discarded.
+
+Complications
+None.
+
+Disposition
+To the recovery area in stable condition, neurovascularly intact distally; discharged home the same day.
+
+Postoperative plan
+Sling with abduction pillow for 6 weeks except for hygiene and exercises. Pendulum exercises and elbow, wrist and hand motion from tomorrow; no resisted elbow flexion or supination for 6 weeks. Passive range-of-motion physical therapy to begin after the first clinic visit in 10 to 14 days.
+
+Electronically signed: Dr. Simone Achterberg, MD (fictional), 2026-11-04 13:18

@@ -4866,7 +4866,7 @@ test('the PDF library is named on the page as same-origin static modules, and no
   }
   // the shell names the pinned copy; the page script names no address of its own
   const template = fs.readFileSync(path.join(TEMPLATES, 'index.html'), 'utf8');
-  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}">/);
+  assert.match(template, /<body data-pdf-module="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.min\.mjs' %\}" data-pdf-worker="\{% static 'studio\/lib\/pdfjs-6\.5\.438\/legacy\/build\/pdf\.worker\.min\.mjs' %\}" data-specialty="\{\{ specialty \}\}">/);
   const bundle = fs.readFileSync(BUNDLE, 'utf8');
   assert.ok(!/pdf(\.worker)?\.min\.mjs/.test(bundle), 'the bundle reads the addresses from the page');
   // the image decoders and standard fonts are the package's own folders, two up from the legacy worker

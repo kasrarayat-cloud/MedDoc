@@ -1,0 +1,72 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Kestrel Bay Regional Hospital (fictional comprehensive stroke center)
+Neuroendovascular procedure report
+
+Patient: Walter Pennington (fictional)
+Synthetic record: SYN-NS-0008
+Date of procedure: 2026-10-27
+Place of service: Inpatient hospital, neuroendovascular suite
+Operator: Dr. Naomi Ferreira-Lind, MD, Neuroendovascular Surgery (fictional)
+Sedation: Moderate sedation administered by the operator; Alma Reyes, RN (fictional), independent trained observer. No anesthesia professional took part.
+Neurophysiology: None.
+
+Procedure
+1. Ultrasound-guided right common femoral artery access.
+2. Diagnostic cerebral angiography: selective right common carotid artery catheterization with cervical and intracranial carotid angiography; selective left vertebral artery catheterization with cervical and intracranial vertebrobasilar angiography.
+3. Mechanical thrombectomy of the left middle cerebral artery (M1 segment and inferior M2 trunk) with stent retriever and aspiration, including left internal carotid artery catheterization and angiography.
+4. Moderate sedation by the operator.
+
+Indication
+71-year-old right-handed man with sudden aphasia and right hemiplegia, last known well at 07:40. NIHSS 18. Noncontrast CT showed no hemorrhage (ASPECTS 9). CT angiography showed a left M1 occlusion, but motion and dental artifact at the skull base left the right carotid terminus and the posterior circulation nondiagnostic. CT perfusion: core 12 mL, mismatch volume 104 mL. The stroke neurology team gave intravenous tenecteplase in the emergency department at 08:52. Emergent thrombectomy was indicated, with diagnostic angiography of the right carotid and posterior circulations first, to assess collateral supply and exclude occlusions the CT angiogram could not show.
+
+Consent
+Because of aphasia, written consent was given by his wife, his health care proxy, after discussion of the risks (intracranial hemorrhage, vessel injury, distal embolization, groin hematoma, contrast reaction, death) and the alternative of medical therapy alone.
+
+Pre-sedation assessment
+ASA physical status III; Mallampati class II; time of last oral intake unknown (emergent procedure).
+
+Sedation
+Midazolam 1 mg and fentanyl 25 mcg were given intravenously at 11:15 and repeated in divided doses to totals of midazolam 2 mg and fentanyl 75 mcg. Ms. Reyes, whose sole duty was monitoring the patient, continuously monitored consciousness, heart rate, blood pressure, oxygen saturation and end-tidal carbon dioxide. I remained in continuous face-to-face attendance from the first dose at 11:15 until the patient was stable for recovery at 12:03: intraservice time 48 minutes.
+
+Access
+Ultrasound evaluation of both groins: the left common femoral artery had heavy calcified plaque; the right common femoral artery was patent with a plaque-free anterior wall and was selected. Under real-time ultrasound visualization the needle entered the anterior wall of the right common femoral artery at 11:21, and a permanent image of the needle entry was recorded in the imaging archive. Micropuncture access was upsized to an 8 French sheath. A right femoral angiogram through the sheath confirmed a common femoral puncture above the bifurcation, suitable for a closure device.
+
+Diagnostic angiography
+A 5 French angled diagnostic catheter was advanced over a 0.035-inch hydrophilic guidewire; no aortic arch injection was performed.
+Right common carotid artery: selectively catheterized; cervical AP and lateral and intracranial AP and lateral runs. No cervical stenosis or dissection. Right internal carotid, anterior cerebral and middle cerebral arteries patent, with partial cross-filling of the left A2 segment through the anterior communicating artery.
+Left vertebral artery: selectively catheterized at V1 through the left subclavian artery; cervical and intracranial (Towne and lateral) runs. Dominant, normal left vertebral artery; basilar and both posterior cerebral arteries patent; leptomeningeal collaterals from the left posterior cerebral artery to the posterior left MCA territory.
+Left internal carotid artery (treated territory): the left common carotid artery was selected and the catheter advanced into the cervical internal carotid artery. Cervical and intracranial runs showed no cervical stenosis or dissection and an abrupt occlusion of the proximal left M1 segment, with slow leptomeningeal filling of the MCA territory from the left anterior cerebral artery.
+
+Thrombectomy
+Over an exchange wire, an 8 French balloon guide catheter was placed in the cervical left internal carotid artery. A 0.071-inch aspiration catheter, a 0.021-inch microcatheter and a 0.014-inch microwire were advanced coaxially. The microcatheter crossed the occlusion into the inferior M2 trunk, and a microcatheter injection confirmed an intraluminal position with patent distal branches.
+Pass 1 (11:42): a 4 x 40 mm stent retriever was deployed from the inferior M2 trunk across the M1 occlusion. After 3 minutes the aspiration catheter was advanced to the clot face, the balloon guide was inflated, and the stent retriever and aspiration catheter were withdrawn together under continuous aspiration, retrieving a large thrombus. Control angiography: M1 and the superior M2 trunk reperfused; inferior M2 trunk still occluded (eTICI 2a).
+Pass 2 (11:52): the same technique in the inferior M2 trunk retrieved the residual thrombus. Control angiography at 11:56: eTICI 2c reperfusion of the left MCA territory.
+No intra-arterial thrombolytic was given. No angioplasty or stent placement was performed.
+Final left internal carotid angiography, cervical and intracranial: eTICI 2c, no extravasation, no emboli to a new territory, no dissection or vasospasm.
+
+Closure
+The catheters and sheath were removed and the right common femoral arteriotomy was closed with an 8 French collagen-plug vascular closure device at 12:01, with immediate hemostasis. Right pedal pulses were palpable before and after.
+Fluoroscopy time 19.6 minutes; reference air kerma 1,040 mGy; iohexol 300, 130 mL.
+
+Findings
+1. Acute occlusion of the left M1 segment extending into the inferior M2 trunk, treated with two stent retriever and aspiration passes; eTICI 2c reperfusion; groin puncture to reperfusion 35 minutes.
+2. Patent right carotid and vertebrobasilar circulations with collateral supply to the left MCA territory.
+
+Specimens
+Retrieved thrombus sent to pathology for histology.
+
+Estimated blood loss
+Less than 25 mL.
+
+Complications
+None.
+
+Disposition
+To the neuroscience ICU. Post-procedure NIHSS 9, with improved naming and right arm strength.
+
+Plan
+1. Systolic blood pressure below 160; groin and pulse checks per protocol.
+2. Noncontrast CT of the head at 24 hours, before any antithrombotic agent, and MRI of the brain, both planned.
+
+Electronically signed: Dr. Naomi Ferreira-Lind, MD (fictional), 2026-10-27 12:48

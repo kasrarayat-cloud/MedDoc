@@ -1,0 +1,75 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Summit Ridge Regional Medical Center (fictional hospital)
+Operative report - cervical spine surgery
+
+Patient: Harold Penbrook (fictional)
+Synthetic record: SYN-OR-0006
+Date of procedure: 2026-11-05
+Place of service: Inpatient hospital, main operating room
+Surgeon: Dr. Theodora Marchetti, MD, Orthopedic Spine Surgery (fictional)
+Assistant: None
+Anesthesia: Dr. Kwame Adjei-Boateng, MD, anesthesiologist (fictional), with Lena Strand, CRNA (fictional)
+Neurophysiologic monitoring: Dr. Sabine Kroll, MD, Clinical Neurophysiology (fictional), remote oversight; Tomas Reyes, CNIM, technologist (fictional), in the room
+
+Preoperative diagnosis
+Cervical spondylotic myeloradiculopathy at C5-C6 and C6-C7, with spinal cord compression and bilateral foraminal stenosis.
+
+Postoperative diagnosis
+Same.
+
+Procedures performed
+1. C5-C6: anterior cervical discectomy, decompression of the spinal cord and both C6 nerve roots, and anterior interbody arthrodesis.
+2. C6-C7: anterior cervical discectomy, decompression of the spinal cord and both C7 nerve roots, and anterior interbody arthrodesis.
+3. Placement of a PEEK interbody spacer at C5-C6 and at C6-C7.
+4. Anterior cervical plate fixation from C5 to C7.
+5. Morselized allograft (demineralized bone matrix) and local autograft from the same incision.
+6. Use of the operating microscope; intraoperative fluoroscopy.
+
+Indications
+63-year-old retired machinist with eight months of numbness and clumsiness of both hands, two months of gait imbalance and pain radiating into both forearms. Examination showed bilateral Hoffmann signs, hyperreflexia, decreased sensation in the C6 and C7 dermatomes bilaterally and 4+/5 triceps strength bilaterally. MRI on 2026-09-14 showed disc-osteophyte complexes at C5-C6 and C6-C7 flattening the spinal cord, with cord signal change at C5-C6 and bilateral foraminal stenosis at both levels. C4-C5 had mild degeneration without stenosis and was not treated. Cervical disc arthroplasty and posterior laminoplasty were considered and not chosen because of facet arthropathy and anterior two-level compression. The decision for surgery was made at the office visit on 2026-10-08.
+
+Consent
+The risks, including dysphagia, hoarseness, vascular or esophageal injury, dural tear, hematoma, neurologic injury, nonunion and hardware failure, and the benefits and alternatives were discussed, and written informed consent was obtained.
+
+Anesthesia
+General endotracheal anesthesia with total intravenous technique, by the anesthesia team named above. Cefazolin 2 g was given intravenously by anesthesia before incision.
+
+Neurophysiologic monitoring
+Upper and lower extremity somatosensory evoked potentials, transcranial motor evoked potentials and free-running electromyography were recorded throughout by the technologist, with continuous real-time remote interpretation by Dr. Kroll, documented in her separate neurophysiology report. The surgeon did not perform or interpret the monitoring. Baselines after positioning were stable, with no significant changes at any stage.
+
+Description of procedure
+The patient was positioned supine with a roll beneath the shoulders and the arms tucked. The neck was prepped and draped in sterile fashion and a time-out was performed. A 4 cm transverse incision was made in a skin crease on the right side of the neck. The platysma was divided and the Smith-Robinson interval was developed bluntly medial to the carotid sheath and lateral to the trachea and esophagus. A spinal needle in the presumed C5-C6 disc was confirmed on lateral fluoroscopy. The longus colli muscles were elevated bilaterally from C5 to C7 and a self-retaining retractor was placed. Anterior osteophytes at C5-C6 and C6-C7 were removed with a rongeur and the bone was saved for grafting.
+
+C5-C6. Distraction pins were placed in C5 and C6. The operating microscope was brought into the field. A complete discectomy was performed and the endplates were prepared with curettes and a high-speed burr, preserving the subchondral bone. The posterior disc-osteophyte complex was removed with the burr and Kerrison rongeurs, and the posterior longitudinal ligament was resected, decompressing the dura across its full width. Bilateral foraminotomies were performed until a nerve hook passed freely along each C6 nerve root. A 6 mm lordotic PEEK interbody spacer, packed with demineralized bone matrix allograft mixed with morselized local autograft from the resected osteophytes, was impacted into the disc space under lateral fluoroscopy and countersunk 2 mm.
+
+C6-C7. The pins were repositioned to C6 and C7 and the same steps were performed: complete discectomy, endplate preparation, removal of the posterior disc-osteophyte complex, resection of the posterior longitudinal ligament with decompression of the dura, and bilateral foraminotomies freeing each C7 nerve root. A 7 mm lordotic PEEK interbody spacer packed with the same graft mixture was impacted and countersunk 2 mm. The pins were removed.
+
+Instrumentation. A 38 mm titanium anterior cervical plate was placed spanning C5 to C7 and secured with six 4.0 mm by 14 mm variable-angle self-drilling screws, two each in the C5, C6 and C7 vertebral bodies, and the locking mechanism was engaged. Final anteroposterior and lateral fluoroscopic images confirmed spacer and plate position, screw lengths and restored lordosis. The surgeon performed and interpreted the fluoroscopy intraoperatively.
+
+Closure. The wound was irrigated and hemostasis was achieved with bipolar cautery. The esophagus and trachea were intact. A closed suction drain was placed in the prevertebral space. The platysma and skin were closed in layers with absorbable sutures and skin adhesive.
+
+Findings
+1. Disc-osteophyte complexes at C5-C6 and C6-C7 compressing the spinal cord, with bilateral foraminal stenosis; the spinal cord and both C6 and both C7 nerve roots were decompressed.
+2. No dural tear; stable neurophysiologic signals throughout.
+
+Implants and graft
+1. PEEK lordotic interbody spacers: 6 mm at C5-C6 and 7 mm at C6-C7.
+2. Titanium anterior cervical plate, 38 mm, C5 to C7, with six 4.0 mm by 14 mm screws.
+3. Demineralized bone matrix allograft, 2.5 mL, mixed with local autograft from the resected osteophytes; no separate incision was used for graft harvest.
+
+Specimens: None.
+Drains: One closed suction drain.
+Estimated blood loss: 75 mL.
+Complications: None.
+
+Disposition
+Extubated in the operating room; in the recovery room the patient moved all four limbs at baseline strength and the neck was soft. Admitted to the surgical floor.
+
+Postoperative plan
+1. Neck and airway checks every two hours overnight.
+2. Drain removal expected on postoperative day 1.
+3. No cervical collar is needed; no lifting over 10 pounds for six weeks.
+4. Clinic follow-up in two weeks.
+
+Electronically signed: Dr. Theodora Marchetti, MD (fictional), 2026-11-05 14:37

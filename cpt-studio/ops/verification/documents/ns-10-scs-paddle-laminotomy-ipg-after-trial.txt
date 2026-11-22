@@ -1,0 +1,51 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Riverbend Regional Medical Center, Department of Neurosurgery (fictional hospital)
+Operative report - permanent spinal cord stimulator implantation
+
+Patient: Gerald Whitcombe (fictional)
+Synthetic record: SYN-NS-0010
+Date of procedure: 2026-10-27
+Place of service: Hospital outpatient department, main operating room
+Surgeon: Dr. Helena Voss, MD, Neurosurgery (fictional)
+Assistant: None
+Anesthesia: General endotracheal anesthesia by Dr. Samuel Okafor, MD, Anesthesiology (fictional)
+Intraoperative neuromonitoring: Dr. Lila Fairbanks, DO, Clinical Neurophysiology (fictional), with a neurophysiology technologist; her interpretation is documented in her separate report.
+
+Preoperative and postoperative diagnosis
+Persistent spinal pain after L4-S1 fusion (failed back surgery syndrome) with chronic bilateral lower extremity radicular neuropathic pain, left worse than right, and axial low back pain; successful percutaneous spinal cord stimulator trial.
+
+Procedures performed
+1. Laminotomy of the inferior T10 lamina (partial laminectomy at T10-T11) for placement of a 16-contact epidural paddle electrode over the T8 and T9 vertebral bodies.
+2. Insertion of a rechargeable implantable pulse generator in a right upper buttock subcutaneous pocket, with tunneling and connection of the paddle electrode to the generator.
+3. Intraoperative fluoroscopy for localization and positioning.
+
+Indication
+61-year-old man with burning bilateral leg pain in an L5 and S1 distribution, worse on the left, and axial low back pain (average 8/10) persisting since L4-S1 instrumented fusion in 2023. Imaging shows a solid fusion with no compressive lesion. He has failed physical therapy, gabapentin, duloxetine and two epidural steroid injections, and takes oxycodone up to three times daily. A psychological evaluation cleared him for implantation. A 7-day percutaneous trial with two 8-contact leads at T8-T10, placed on 2026-10-06 by Dr. Anika Rao, MD, Pain Medicine (fictional), reduced his leg pain by 70 percent and back pain by 60 percent, increased his walking tolerance from 10 to 40 minutes and reduced opioid use to once daily. The trial leads were removed in the pain clinic on 2026-10-13. A paddle electrode was chosen for durability and a lower migration risk.
+
+Consent
+The risks (infection, bleeding, epidural hematoma, spinal cord injury, spinal fluid leak, lead migration or fracture, device failure, pocket pain, loss of benefit and the need for revision or removal), the benefits and the alternative of continued medical management were discussed. Written informed consent was obtained and the site was marked.
+
+Description of procedure
+After induction of general anesthesia, intravenous cefazolin was given by the anesthesia team before incision. The patient was positioned prone on a Wilson frame on a radiolucent table with all pressure points padded. The neurophysiology team obtained baseline lower extremity signals. A time-out was performed.
+
+Anteroposterior fluoroscopy, counting from the sacrum and confirmed against the twelfth ribs, identified the T10-T11 interspace. The back and right buttock were prepped and draped. A 5 cm midline incision was made over T10-T11 and the paraspinal muscles were elevated subperiosteally from the T10 spinous process and laminae bilaterally. The caudal T10 spinous process was removed and a laminotomy of the inferior T10 lamina was made with a high-speed drill and Kerrison rongeurs. The ligamentum flavum at T10-T11 was removed in the midline to expose the dorsal epidural fat. The bony opening was limited to that needed to pass the paddle, and the dura was intact.
+
+A paddle passer was advanced cephalad in the dorsal epidural space without resistance, followed by the 16-contact, three-column paddle electrode. Anteroposterior and lateral fluoroscopy confirmed the array in the dorsal epidural space, centered between the pedicles, from the superior endplate of T8 to the T9-T10 disc space. Physiologic midline was confirmed by stimulating through the paddle while the neurophysiology team recorded from bilateral leg muscles: responses were initially stronger on the right, the paddle was moved 2 mm to the left, and the central column then produced symmetric responses. Impedances of all 16 contacts were normal. Test stimulation and impedance checks were done under my direction with the manufacturer's clinical specialist (fictional) present. The paddle was anchored to the interspinous ligament and fascia with two anchors and nonabsorbable suture, and a strain-relief loop was left in the subcutaneous tissue.
+
+A 5 cm transverse incision was made in the right upper buttock below the iliac crest, and a subcutaneous pocket was developed about 1.5 cm deep so that transcutaneous charging will be reliable. The tunneling tool was passed subcutaneously from the midline wound to the pocket and the electrode tail was brought through. The electrode was connected directly to the rechargeable generator without an extension or adaptor, and the set screws were tightened with the torque wrench. Repeat impedances through the generator were normal. The generator was placed in the pocket with the engraved side toward the skin, the excess lead was coiled beneath it, and the generator was sutured to the fascia. Final fluoroscopy showed the paddle unchanged; total fluoroscopy time was 0.9 minutes.
+
+Both wounds were irrigated and hemostasis was confirmed. The fascia was closed with 0 absorbable sutures, the subcutaneous layer with 2-0 absorbable sutures and the skin with a 3-0 subcuticular suture and skin adhesive. Neurophysiologic signals remained at baseline throughout. Counts were correct.
+
+Implants (recorded in the hospital implant log)
+One 16-contact epidural paddle electrode, one rechargeable implantable pulse generator and two electrode anchors. No extension or adaptor.
+
+Findings
+Normal dorsal epidural space at T10-T11 without scar. Paddle over T8-T9 in the physiologic midline with normal impedances.
+
+Estimated blood loss: 40 mL. Specimens: none. Drains: none. Complications: none.
+
+Disposition
+Extubated and taken to the recovery area in stable condition, moving both legs with full strength and unchanged sensation. The stimulator was left off. Discharge home today once recovery criteria are met; no bending, twisting, lifting over 10 pounds or reaching overhead for six weeks. The manufacturer's clinical specialist reviewed the charger and handheld remote with the patient. Activation and initial programming are planned at the first postoperative visit in 7 to 10 days, with a wound check.
+
+Electronically signed: Dr. Helena Voss, MD (fictional), 2026-10-27 15:52

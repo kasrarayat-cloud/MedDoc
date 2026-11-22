@@ -1,6 +1,6 @@
 {
   "schema": "cpt-studio-verification-manifest@1",
-  "purpose": "Fresh synthetic US gastroenterology documents for verifying the deployed CPT Studio flow: automatic routing, exact evidence, clarification, review decisions, reload persistence and the downloaded reports.",
+  "purpose": "Fresh synthetic US gastroenterology, neurosurgery and orthopedic surgery documents for verifying the deployed CPT Studio flow: exact evidence, clarification, review decisions, reload persistence and the downloaded reports. The neurosurgery (ns-) and orthopedic surgery (or-) documents cover one subcategory each (owner direction 2026-11-22, D390).",
   "synthetic_only": true,
   "banner": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE",
   "author_expectations": "author_expected_cpt is the document author's expectation, written while authoring these documents. It is NOT independent adjudication, it is never asserted by the verifiers, and it must not be used as accuracy evidence. Accuracy needs independently adjudicated cases withheld from development (ARCHITECTURE.md section 9).",
@@ -1273,6 +1273,2617 @@
             "reason": "No stent was placed."
           }
         ]
+      }
+    },
+    {
+      "id": "ns-01",
+      "specialty": "Neurosurgery",
+      "subcategory": "Spine decompression and discectomy",
+      "title": "Open L3-L4 and L4-L5 laminectomy with bilateral medial facetectomies and foraminotomies for lumbar stenosis, no fusion",
+      "kind": "realistic",
+      "source": "documents/ns-01-open-lumbar-laminectomy-two-level-foraminotomies.txt",
+      "source_sha256": "0fefac804d9d99050b571028a1b45365226b807f9aeb5898bf1ca59015fedc13",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-01-open-lumbar-laminectomy-two-level-foraminotomies.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "63047",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Open laminectomy with bilateral partial medial facetectomies and foraminotomies for lumbar stenosis, first segment (one of L3-L4 / L4-L5). The descriptor covers unilateral or bilateral work, so no laterality or bilateral modifier."
+          },
+          {
+            "code": "63048",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Add-on for the second contiguous decompressed segment (the other of L3-L4 / L4-L5). Two levels decompressed in all."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "63048 with 2 units, or 63047 reported twice",
+            "reason": "Two levels were decompressed (L3-L4 and L4-L5). The partial L3 and L5 laminectomies are part of decompressing those two levels, not a third segment."
+          },
+          {
+            "what": "63005 or 63017 (laminectomy without facetectomy or foraminotomy)",
+            "reason": "Bilateral medial facetectomies and foraminotomies were done, so 63047/63048 describe the whole decompression."
+          },
+          {
+            "what": "63030, 63035, 63042 or 63044 (laminotomy with discectomy)",
+            "reason": "No discectomy: the discs were only bulging and the annulus was not incised."
+          },
+          {
+            "what": "Modifier 50, RT/LT or 59 on 63047/63048",
+            "reason": "The descriptor already covers bilateral decompression, and the second level is captured by the add-on, not by a distinct-procedure modifier."
+          },
+          {
+            "what": "69990 (operating microscope)",
+            "reason": "Loupes and headlight only; the note says the microscope was not used."
+          },
+          {
+            "what": "61783 (spinal navigation) and 95940/95941 (neuromonitoring)",
+            "reason": "Neither was used."
+          },
+          {
+            "what": "Fusion, instrumentation or graft codes (e.g., 22612, 22630, 22633, 22840, 20930, 20936)",
+            "reason": "No fusion, implants or graft; fusion appears only as a possible future risk in the consent."
+          },
+          {
+            "what": "76000 or other fluoroscopy/imaging codes",
+            "reason": "Fluoroscopy was used only to localize the level and is part of the surgery."
+          },
+          {
+            "what": "62323 (lumbar epidural steroid injection)",
+            "reason": "The two injections are history from earlier in the year, not performed at this encounter."
+          },
+          {
+            "what": "E/M for the morning-of-surgery history and physical update (with or without modifier 57)",
+            "reason": "No interval change; the decision for surgery was made earlier; part of the surgical package."
+          },
+          {
+            "what": "Anesthesia services (e.g., 00630) on the surgeon's claim",
+            "reason": "General anesthesia was given by the anesthesiologist, who reports it from the anesthesia record."
+          },
+          {
+            "what": "Separate codes for wound closure, drain placement or local anesthetic infiltration",
+            "reason": "Integral to the laminectomy."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-02",
+      "specialty": "Neurosurgery",
+      "subcategory": "Spine fusion, instrumentation and graft",
+      "title": "L4-L5 TLIF with posterolateral fusion and L4-L5 decompression, one interbody cage, bilateral L4-L5 pedicle screws, local autograft and allograft, navigation; neuromonitoring by a separate neurophysiologist",
+      "kind": "realistic",
+      "source": "documents/ns-02-l4-l5-tlif-pedicle-screws-cage-graft-navigation.txt",
+      "source_sha256": "c88a7b2738ea008fffe9738fbde28b4db7df4f4a0c7f484fecbc5e1bba7b9302",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-02-l4-l5-tlif-pedicle-screws-cage-graft-navigation.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "22633",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Combined posterolateral (intertransverse) and posterior interbody (transforaminal) arthrodesis of one lumbar interspace, L4-L5. Includes the left facetectomy and the discectomy done to prepare the interspace."
+          },
+          {
+            "code": "63052",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Add-on: laminectomy at L4-L5 with right medial facetectomy and bilateral foraminotomies for stenosis. The note says it was required for the stenosis and was in addition to the left facetectomy for interbody access. One segment."
+          },
+          {
+            "code": "22853",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Add-on: one porous titanium interbody cage inserted into the L4-L5 disc space with the interbody arthrodesis; one interspace."
+          },
+          {
+            "code": "22840",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Add-on: bilateral L4 and L5 pedicle screws with two rods across one interspace, which is posterior non-segmental instrumentation."
+          },
+          {
+            "code": "20936",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Add-on: local autograft (laminectomy, spinous process and facetectomy bone) taken through the same incision; once per procedure. Medicare bundles it (no separate payment), but CPT supports reporting it."
+          },
+          {
+            "code": "20930",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Add-on: morselized cancellous allograft chips; once per procedure. Medicare bundles it, but CPT supports reporting it."
+          },
+          {
+            "code": "61783",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Add-on: spinal computer-assisted (stereotactic) navigation, registered to an intraoperative cone-beam CT and used to plan and place all four pedicle screws. Some payers treat navigation as incidental to spine fusion; CPT supports reporting it."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "22612 and 22630 reported together for L4-L5, or 22630 alone",
+            "reason": "Posterolateral and interbody fusion of the same interspace in one session is the single combined-technique code 22633."
+          },
+          {
+            "what": "22842 (posterior segmental instrumentation, 3 to 6 vertebral segments)",
+            "reason": "Pedicle fixation across a single interspace (L4-L5) is non-segmental, 22840."
+          },
+          {
+            "what": "63047 or 63048 for the L4-L5 decompression",
+            "reason": "Decompression at the level of a posterior interbody fusion is the add-on 63052; the stand-alone laminectomy codes are not reported for the same segment."
+          },
+          {
+            "what": "A second unit of 63052, or 63053",
+            "reason": "Decompression was at one segment, L4-L5."
+          },
+          {
+            "what": "Separate decompression credit for the left complete facetectomy",
+            "reason": "That facetectomy was the access needed to prepare the interspace and is included in 22633. 63052 rests on the central and right-sided decompression."
+          },
+          {
+            "what": "22853 with more than 1 unit, 22854 or 22859",
+            "reason": "One cage in one interspace, inserted with an interbody arthrodesis."
+          },
+          {
+            "what": "20931 (structural allograft)",
+            "reason": "No structural allograft: the spacer is a synthetic cage and the allograft was morselized chips."
+          },
+          {
+            "what": "20937 or 20938 (autograft through a separate incision, e.g., iliac crest)",
+            "reason": "The note says no bone was harvested through a separate incision. The stab incision was for the navigation reference pin, not a graft site."
+          },
+          {
+            "what": "22614 or 22634 (additional interspace)",
+            "reason": "Only L4-L5 was fused."
+          },
+          {
+            "what": "69990 (operating microscope)",
+            "reason": "Loupes and headlight only; the microscope was not used."
+          },
+          {
+            "what": "95940, 95941, G0453 or baseline neuromonitoring modality codes (e.g., 95938, 95939, EMG codes) on the surgeon's claim",
+            "reason": "Neuromonitoring was performed and interpreted by a separate neurophysiologist who was present in the room. He reports it from his own monitoring record."
+          },
+          {
+            "what": "Separate imaging codes for the cone-beam CT spins or the fluoroscopy (e.g., 72131, 76000, 76497, 77011)",
+            "reason": "The CT spins served navigation registration and implant confirmation, and fluoroscopy served localization and cage positioning. No separate imaging interpretation is documented; they are part of the navigation and fusion services."
+          },
+          {
+            "what": "62323 (epidural steroid injection)",
+            "reason": "History from earlier in the year."
+          },
+          {
+            "what": "Anesthesia services (e.g., 00670) on the surgeon's claim",
+            "reason": "Reported by the anesthesiologist from the anesthesia record."
+          },
+          {
+            "what": "HCPCS device or supply codes for the screws, rods, cage or allograft",
+            "reason": "Implants supplied by the hospital during an inpatient stay; not on the surgeon's professional claim."
+          },
+          {
+            "what": "Orthosis (brace) HCPCS code",
+            "reason": "The note says no brace is planned, and none was provided."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-03",
+      "specialty": "Neurosurgery",
+      "subcategory": "Spine fracture, tumour, infection, vertebral augmentation",
+      "title": "Balloon kyphoplasty for osteoporotic T12 and L1 compression fractures; the procedure section never states how many levels were augmented",
+      "kind": "realistic",
+      "source": "documents/ns-03-balloon-kyphoplasty-levels-count-not-stated.txt",
+      "source_sha256": "dfacfa603485097d0ae1ee496c2d516a8fc4f56cd2e231f103678d3eed50b61f",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-03-balloon-kyphoplasty-levels-count-not-stated.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence. Deliberate gap (independent review restored it: the findings no longer say the fractures were the levels treated). With T12 and L1 confirmed, one primary (22513 thoracic, or 22514 lumbar, both acceptable) plus 22515 for the other body.",
+        "codes": [
+          {
+            "code": "22513",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Depends on the clarification. The author wrote the case as two vertebral bodies augmented, T12 and L1. One primary balloon kyphoplasty code covers the first body, and the thoracic code is taken for T12: when a thoracic and a lumbar body are treated in one session, only one primary is reported. Includes the core biopsy and all imaging guidance. If only one level is confirmed, the code is 22513 for T12 alone or 22514 for L1 alone, with no add-on."
+          },
+          {
+            "code": "22515",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Depends on the clarification: add-on for the second vertebral body (L1). Add-on units equal the confirmed number of augmented vertebral bodies minus one."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "A final vertebral augmentation code set, especially the 22515 add-on, before the number of augmented levels is confirmed",
+            "reason": "The procedure section never states how many vertebral bodies were augmented: it says 'target level(s)' and 'vertebral body(ies)' and gives a single total cement volume."
+          },
+          {
+            "what": "20225 (bone biopsy, deep, vertebral body)",
+            "reason": "Bone biopsy is included in the vertebral augmentation codes when performed."
+          },
+          {
+            "what": "77002, 77003 or 76000 (fluoroscopic guidance)",
+            "reason": "Vertebral augmentation codes include all imaging guidance."
+          },
+          {
+            "what": "22510, 22511 or 22512 (vertebroplasty)",
+            "reason": "Balloon cavity creation was performed, which makes this kyphoplasty."
+          },
+          {
+            "what": "22514 reported together with 22513 as a second primary",
+            "reason": "Only one primary code per session; each additional thoracic or lumbar body is 22515."
+          },
+          {
+            "what": "Any augmentation code for L3",
+            "reason": "The old healed L3 deformity was not a target and was not treated."
+          },
+          {
+            "what": "99152 or 99153 (moderate sedation by the surgeon)",
+            "reason": "Monitored anesthesia care was given by a separate anesthesiologist; the note says the surgeon did not give sedation."
+          },
+          {
+            "what": "E/M on the procedure date (e.g., 99213 or 99214 with modifier 25 or 57)",
+            "reason": "Kyphoplasty was decided at the 2026-10-30 clinic visit. The pre-procedure review, with no interval change, is part of the procedure."
+          },
+          {
+            "what": "HCPCS orthosis code for the thoracolumbar brace",
+            "reason": "Her primary care physician prescribed the brace after the fall; nothing was provided at this encounter."
+          },
+          {
+            "what": "77080 (bone density scan) or osteoporosis drug codes",
+            "reason": "Recommended for later; the note says neither was done today."
+          },
+          {
+            "what": "Supply or drug HCPCS codes for contrast, lidocaine, PMMA cement or the balloon kit (e.g., Q9966, Q9967)",
+            "reason": "Hospital outpatient supplies used within the procedure; not on the surgeon's professional claim."
+          },
+          {
+            "what": "Pathology codes (e.g., 88305, 88307, 88311)",
+            "reason": "The pathologist interprets and reports the biopsy."
+          },
+          {
+            "what": "Anesthesia services for the monitored anesthesia care",
+            "reason": "Reported by the anesthesia provider."
+          }
+        ],
+        "expected_questions": [
+          "How many vertebral bodies were augmented? The findings name the T12 and L1 fractures, but the procedure section never states how many levels were treated."
+        ]
+      }
+    },
+    {
+      "id": "ns-04",
+      "specialty": "Neurosurgery",
+      "subcategory": "Intradural spinal cord surgery",
+      "title": "T6-T7 laminectomy for resection of an intradural extramedullary meningioma, with operating microscope and primary dural closure",
+      "kind": "realistic",
+      "source": "documents/ns-04-thoracic-laminectomy-intradural-meningioma.txt",
+      "source_sha256": "917b10cfc2bc2cd93cfc4ceed4b9351f22ffd76e9f9792d335db2c3969175d00",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-04-thoracic-laminectomy-intradural-meningioma.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence. Teaching surgeon present for the entire procedure with a resident assisting: GC may apply by payer.",
+        "codes": [
+          {
+            "code": "63281",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Laminectomy to remove an intraspinal tumor, intradural extramedullary, thoracic. Covers the T6-T7 laminectomy with T5 undercutting, the durotomy, gross total resection of the meningioma and primary dural closure. Reported once: the code is not per level."
+          },
+          {
+            "code": "69990",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Operating microscope documented from the dural opening through the dural closure for the microsurgical resection. Add-on to 63281. 63281 is not on the CPT exclusion list for 69990 and falls inside the CMS range where 69990 is payable (63081-63308)."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "A second 63281, or decompressive laminectomy codes (63003, 63016, 63046, 63048) for the T6 and T7 laminae or the T5 undercutting",
+            "reason": "The laminectomy is the exposure for the intradural tumor resection and is included in 63281, which is reported once however many laminae are removed."
+          },
+          {
+            "what": "63295 osteoplastic reconstruction of dorsal spinal elements (laminoplasty)",
+            "reason": "Discussed at consent but not performed. Because of soft bone the laminae were removed piecemeal and not replaced."
+          },
+          {
+            "what": "63290 (combined extradural-intradural lesion) or 63286 (intramedullary, thoracic)",
+            "reason": "The tumor was purely intradural extramedullary with no extradural extension. The cord signal change is not an intramedullary tumor."
+          },
+          {
+            "what": "Intraoperative neurophysiology monitoring and evoked potentials (95938, 95939, 95940, 95941, G0453)",
+            "reason": "Performed and interpreted by a separate neurophysiology service (technologist in the room, neurophysiologist remote) and documented in that service's own record. The operating surgeon did not perform or interpret it, and this report has no modality or time documentation for it."
+          },
+          {
+            "what": "Fluoroscopy (76000, 77003)",
+            "reason": "Used only to localize the level. Included in the surgical procedure."
+          },
+          {
+            "what": "Dural repair codes (63707, 63709), a dural graft, or the hydrogel dural sealant",
+            "reason": "Closing the planned durotomy is part of 63281. There was no CSF leak, no graft was used, and the sealant is an included supply."
+          },
+          {
+            "what": "Spinal instrumentation or arthrodesis (for example 22610, 22840)",
+            "reason": "Implants: none. No fusion or instrumentation was performed."
+          },
+          {
+            "what": "Frozen section and surgical pathology (88331 and surgical pathology codes)",
+            "reason": "These are the pathologist's services, not the surgeon's."
+          },
+          {
+            "what": "Anesthesia services",
+            "reason": "Provided and reported by the anesthesiologist."
+          },
+          {
+            "what": "Assistant-at-surgery reporting (modifier 80, 82 or AS) for the resident",
+            "reason": "A neurosurgery resident assisted in a teaching hospital, and the teaching surgeon attests presence for the entire procedure. No assistant-at-surgery service is supported."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-05",
+      "specialty": "Neurosurgery",
+      "subcategory": "Brain tumour and craniotomy",
+      "title": "Right frontal craniotomy for resection of a supratentorial high-grade glioma, with intradural stereotactic navigation and operating microscope",
+      "kind": "realistic",
+      "source": "documents/ns-05-right-frontal-craniotomy-glioma-navigation-microscope.txt",
+      "source_sha256": "c87ce9e1f6dafe838c77e3f68719957aac5497d9e0b9a9e229c040136eeb9534",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-05-right-frontal-craniotomy-glioma-navigation-microscope.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence. Teaching surgeon present for the entire procedure with a resident assisting: GC may apply by payer.",
+        "codes": [
+          {
+            "code": "61510",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Bone flap craniotomy to remove a supratentorial brain tumor other than meningioma: right frontal craniotomy with gross total resection of a high-grade glioma (frozen section: high-grade glial neoplasm)."
+          },
+          {
+            "code": "61781",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Stereotactic computer-assisted navigation, cranial, intradural. Documented as used throughout the intradural portion to localize the tumor, choose the corticotomy and confirm the resection margins. Add-on to 61510."
+          },
+          {
+            "code": "69990",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Operating microscope used for the entire intradural resection. Add-on to 61510. 61510 is not on the CPT exclusion list and falls inside the CMS range 61304-61546."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "61512 (supratentorial meningioma)",
+            "reason": "The tumor is a glioma. 61510 is the supratentorial tumor code for tumors other than meningioma."
+          },
+          {
+            "what": "61782 (cranial extradural navigation), alone or together with 61781",
+            "reason": "Navigation was used intradurally. Using it to plan the incision and craniotomy does not add a second navigation code, and 61781 and 61782 are not reported together."
+          },
+          {
+            "what": "Stereotactic biopsy (61750, 61751)",
+            "reason": "Discussed as an alternative at consent. Not performed."
+          },
+          {
+            "what": "20660 application of a skull clamp or cranial tongs",
+            "reason": "Three-pin skull fixation for positioning and for the navigation reference array is included in the craniotomy."
+          },
+          {
+            "what": "Cranioplasty or bone flap replacement codes (62140, 62141, 62143, 62146, 62147), or any separate implant item for the titanium plates, screws and burr hole covers",
+            "reason": "Replacing and plating the patient's own bone flap during the same operation is part of 61510."
+          },
+          {
+            "what": "Separate dural repair or dural graft for the collagen dural substitute onlay",
+            "reason": "Dural closure, including an onlay dural substitute, is part of the craniotomy."
+          },
+          {
+            "what": "Intraoperative neurophysiology monitoring or cortical stimulation mapping (95940, 95941, 95961, 95962, G0453)",
+            "reason": "None was performed. The report records neurophysiologic monitoring as none."
+          },
+          {
+            "what": "Frozen section and surgical pathology (88331 and surgical pathology codes)",
+            "reason": "These are the pathologist's services."
+          },
+          {
+            "what": "Postoperative MRI of the brain (70553)",
+            "reason": "Ordered for a later date. It is a radiology service, not part of this operation."
+          },
+          {
+            "what": "Anesthesia services",
+            "reason": "Provided and reported by the anesthesiologist."
+          },
+          {
+            "what": "Assistant-at-surgery reporting (modifier 80, 82 or AS) for the resident",
+            "reason": "A neurosurgery resident assisted in a teaching hospital, and the teaching surgeon attests presence for the entire procedure."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-06",
+      "specialty": "Neurosurgery",
+      "subcategory": "Skull base",
+      "title": "Endoscopic endonasal transsphenoidal resection of a pituitary macroadenoma with an otolaryngology co-surgeon and sellar reconstruction (neurosurgeon's report)",
+      "kind": "realistic",
+      "source": "documents/ns-06-endoscopic-transsphenoidal-pituitary-adenoma-ent-co-surgeon.txt",
+      "source_sha256": "de84320edb539dbc0463e733d90550ecc36fafb06a6992183595863337a4188b",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-06-endoscopic-transsphenoidal-pituitary-adenoma-ent-co-surgeon.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "62165",
+            "units": 1,
+            "modifier_considerations": [
+              "62"
+            ],
+            "basis": "Neuroendoscopy, intracranial, with excision of a pituitary tumor by the transnasal/transsphenoidal approach, done as two-specialty co-surgery. Otolaryngology did the endonasal and sphenoid approach and the closure. Neurosurgery did the sellar opening, resection and multilayer sellar reconstruction. The neurosurgeon reports 62165 with modifier 62 from this report; the otolaryngologist reports the same code and modifier from her own report. The approach and the reconstruction are included."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "61548 (transnasal or transseptal hypophysectomy or pituitary tumor excision, nonstereotactic)",
+            "reason": "The resection was entirely endoscopic and the operating microscope was not used. 62165 is the endoscopic pituitary tumor code. Do not report both."
+          },
+          {
+            "what": "Separate endonasal approach codes for the otolaryngology portion: sphenoidotomy (31287, 31288), septoplasty or posterior septectomy (30520), turbinate procedures (30930, 30140), diagnostic nasal endoscopy (31231)",
+            "reason": "The nasal and sphenoid approach is part of 62165. The otolaryngologist reports her share as 62165 with modifier 62, not as separate sinus codes."
+          },
+          {
+            "what": "62165 without modifier 62, 62165 listed twice on this report, or modifier 80/82 for the otolaryngologist",
+            "reason": "Two surgeons of different specialties each performed a distinct part of one procedure. Each reports 62165 once with modifier 62 on their own claim. The otolaryngologist is a co-surgeon, not an assistant."
+          },
+          {
+            "what": "Repair of CSF leak (31291) or skull base dural repair (61618, 61619)",
+            "reason": "No CSF leak occurred. The multilayer sellar reconstruction closes the opening made by the procedure and is included in 62165."
+          },
+          {
+            "what": "Nasoseptal flap or other flap codes (for example 15733, 15740, 14060)",
+            "reason": "Only a rescue flap incision was made. No flap was raised."
+          },
+          {
+            "what": "Abdominal fat graft or other soft tissue graft harvest (15769)",
+            "reason": "The abdomen was prepped as a possible donor site but no fat was harvested. The free mucosal graft came from tissue raised in the operative field during the approach, not from a separate harvest."
+          },
+          {
+            "what": "Lumbar drain (62272)",
+            "reason": "Discussed as a contingency. Not placed."
+          },
+          {
+            "what": "Operating microscope (69990)",
+            "reason": "Not used; visualization was endoscopic throughout."
+          },
+          {
+            "what": "Stereotactic navigation (61781, 61782)",
+            "reason": "The report states that image guidance was not used."
+          },
+          {
+            "what": "Separate ultrasound or Doppler study for the micro-Doppler carotid localization (for example 76998)",
+            "reason": "Localizing the carotids during surgery is part of the procedure."
+          },
+          {
+            "what": "Nasal endoscopic debridement (31237) and splint removal",
+            "reason": "Planned for a later otolaryngology visit. Not performed during this operation."
+          },
+          {
+            "what": "Frozen section and surgical pathology (88331 and surgical pathology codes)",
+            "reason": "These are the pathologist's services."
+          },
+          {
+            "what": "Anesthesia services",
+            "reason": "Provided and reported by the anesthesiologist."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-07",
+      "specialty": "Neurosurgery",
+      "subcategory": "Cerebrovascular open surgery",
+      "title": "Right pterional craniotomy for clipping of an unruptured right MCA bifurcation aneurysm with temporary M1 occlusion, intradural navigation and operating microscope",
+      "kind": "realistic",
+      "source": "documents/ns-07-pterional-craniotomy-mca-aneurysm-clipping.txt",
+      "source_sha256": "07320d6525eee59f2fa9b25e571ab54a9235e3f4835a61b63ff05c2af3a36e69",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-07-pterional-craniotomy-mca-aneurysm-clipping.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "61697",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Surgeon (Dr. Kessler): intracranial (pterional craniotomy) surgery for an aneurysm in the carotid circulation (right MCA bifurcation). It meets the complex definition because temporary occlusion of M1 (10:42 to 10:46) was needed to finish the clipping. It is 7.2 mm, the neck is not calcified and no branch is incorporated, so temporary occlusion is the only complex criterion. The craniotomy, sphenoid wing drilling, skull clamp, dural closure and bone flap fixation are included."
+          },
+          {
+            "code": "61781",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Surgeon: frameless stereotactic computer-assisted navigation used inside the dura. After the dura was opened, it was used under the microscope to find the sylvian fissure point over the bifurcation and to confirm which way the dome pointed. Intradural use takes the intradural code; the earlier extradural planning use is not reported as well."
+          },
+          {
+            "code": "69990",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Surgeon: operating microscope used for all intradural microdissection and clip placement. The aneurysm procedure is not one where the microscope is already included, and the primary code falls in the cranial range where the microscope is payable."
+          },
+          {
+            "code": "61697",
+            "units": 1,
+            "modifier_considerations": [
+              "AS"
+            ],
+            "basis": "First assistant Lena Okafor, PA-C: assistant-at-surgery service on the PA's own claim. She was scrubbed for the whole procedure; her tasks and the need for a skilled assistant are stated, and no residents take part at this hospital. Only the primary procedure is expected on her claim; whether an assistant can report the add-on services depends on the payer and is not part of the author's expectation."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "61700 (simple carotid-circulation aneurysm)",
+            "reason": "Temporary M1 occlusion was needed to finish the clipping, so the aneurysm is complex even though it is only 7.2 mm."
+          },
+          {
+            "what": "61782 (extradural cranial navigation), alone or together with 61781",
+            "reason": "Navigation was used inside the dura. Only one cranial navigation code is reported per session, and the intradural one applies."
+          },
+          {
+            "what": "20660 (three-pin skull clamp application)",
+            "reason": "Head fixation is part of the craniotomy."
+          },
+          {
+            "what": "Separate craniotomy codes or cranioplasty (62140, 62141)",
+            "reason": "The approach and putting back and fixing the patient's own bone flap in the same operation are included in the aneurysm procedure."
+          },
+          {
+            "what": "61618 or 61619 (secondary dural repair)",
+            "reason": "The onlay collagen dural graft is part of routine closure, not a repair of a skull base CSF leak."
+          },
+          {
+            "what": "95938, 95939, 95940, 95941, G0453 (intraoperative neurophysiology)",
+            "reason": "SSEP and MEP monitoring was done by a technologist, overseen remotely by a separate neurodiagnostic service that documents it in its own report. The surgeon cannot report it, and this operative report does not support it (no monitoring times or interpretation)."
+          },
+          {
+            "what": "Anesthesia services (e.g., 00216) and the radial arterial line (36620)",
+            "reason": "Done by the anesthesia team and reported by the anesthesia provider from the anesthesia record."
+          },
+          {
+            "what": "Diagnostic cerebral angiography (36221-36228) for the 2026-09-22 angiogram",
+            "reason": "That was a separate, earlier encounter."
+          },
+          {
+            "what": "70496 (postoperative CT angiography of the head)",
+            "reason": "Planned for postoperative day 1, not performed."
+          },
+          {
+            "what": "Transcranial or intraoperative vascular Doppler study codes (e.g., 93886, 93888)",
+            "reason": "Checking flow with micro-Doppler is a built-in step of clipping."
+          },
+          {
+            "what": "A second aneurysm procedure, or 61697 with 2 units on the surgeon's claim",
+            "reason": "Only one aneurysm was treated."
+          },
+          {
+            "what": "Modifier 80 or 82 for the assistant",
+            "reason": "The assistant is a physician assistant, so AS applies. No residents take part, so 82 does not apply."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-08",
+      "specialty": "Neurosurgery",
+      "subcategory": "Neuroendovascular",
+      "title": "Diagnostic cerebral angiography (right common carotid, left vertebral) and left MCA mechanical thrombectomy under moderate sedation given by the operator",
+      "kind": "realistic",
+      "source": "documents/ns-08-cerebral-angiography-mca-thrombectomy.txt",
+      "source_sha256": "ee8b719c8d8e087a96a30d06a38566dc9473ecc90816aca4a08d8c1d743fcff8",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-08-cerebral-angiography-mca-thrombectomy.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence. 76937 carries modifier 26 (professional component): the hospital owns the ultrasound equipment.",
+        "codes": [
+          {
+            "code": "61645",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Mechanical thrombectomy (stent retriever plus aspiration, two passes) of the left M1 segment and the inferior M2 trunk: one intracranial vascular territory, the left carotid. It includes catheterizing the left common and internal carotid, diagnostic angiography of the treated territory, the microcatheter runs, fluoroscopic guidance, and the control and final runs."
+          },
+          {
+            "code": "36223",
+            "units": 1,
+            "modifier_considerations": [
+              "RT",
+              "XS"
+            ],
+            "basis": "Selective right common carotid catheterization with cervical and intracranial carotid angiography. This territory was not treated and was imaged for a stated reason (the CTA could not show it; collateral assessment). XS (or 59, per payer) marks it as a separate vascular territory from the thrombectomy."
+          },
+          {
+            "code": "36226",
+            "units": 1,
+            "modifier_considerations": [
+              "LT",
+              "XS"
+            ],
+            "basis": "Selective left vertebral artery catheterization (at V1, reached through the subclavian) with cervical and intracranial vertebrobasilar angiography. Another untreated territory; XS (or 59) for the separate territory."
+          },
+          {
+            "code": "76937",
+            "units": 1,
+            "modifier_considerations": [
+              "26"
+            ],
+            "basis": "Ultrasound guidance for vascular access, with every required element documented: both groins evaluated, the selected right common femoral artery shown patent, the needle entry watched in real time, and a permanent image recorded. The thrombectomy descriptor includes fluoroscopic guidance only, not ultrasound guidance."
+          },
+          {
+            "code": "99152",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Moderate sedation given by the physician doing the procedure, patient aged 5 or older. An independent trained observer had no other duty and a pre-sedation assessment is documented. This covers the first 15 of the 48 minutes of intraservice time (11:15 to 12:03)."
+          },
+          {
+            "code": "99153",
+            "units": 2,
+            "modifier_considerations": [],
+            "basis": "Each additional 15 minutes of moderate sedation intraservice time. 48 minutes falls in the 38 to 52 minute band, which gives two add-on units."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "36224 or 36228 for the left internal carotid runs and the M2 microcatheter injection (or any left-side diagnostic angiography code)",
+            "reason": "Catheterization and diagnostic angiography of the treated left carotid territory are included in 61645."
+          },
+          {
+            "what": "36221 (nonselective aortic arch angiography)",
+            "reason": "No aortic arch injection was done; arch imaging would be included in the selective codes anyway."
+          },
+          {
+            "what": "36225 (subclavian injection for vertebral angiography)",
+            "reason": "The catheter was placed in the vertebral artery itself, so 36226 is correct."
+          },
+          {
+            "what": "75710 or another extremity angiography code for the femoral angiogram through the sheath",
+            "reason": "Imaging the access site to check whether a closure device can be used is not separately reportable."
+          },
+          {
+            "what": "G0269 (placement of a vascular closure device)",
+            "reason": "Closing the arteriotomy is part of the catheter procedure and is not paid separately on the professional claim."
+          },
+          {
+            "what": "61645 with 2 units, or one per pass",
+            "reason": "Reported once per intracranial vascular territory. Both passes and the M2 extension are in the left carotid territory."
+          },
+          {
+            "what": "61650 or 61651 (prolonged intra-arterial infusion); 61630 or 61635 (intracranial angioplasty or stent)",
+            "reason": "No intra-arterial drug, angioplasty or stent was given or placed."
+          },
+          {
+            "what": "37184, 37185, 37186 (mechanical thrombectomy outside the head)",
+            "reason": "The thrombectomy was intracranial, so 61645 is the specific code."
+          },
+          {
+            "what": "37195 (intravenous cerebral thrombolysis)",
+            "reason": "Tenecteplase was given in the emergency department by the stroke neurology team, not by the operator during this service."
+          },
+          {
+            "what": "99155-99157 (moderate sedation by a different physician) or anesthesia codes",
+            "reason": "The operator gave the sedation and no anesthesia professional took part."
+          },
+          {
+            "what": "Surgical pathology of the thrombus (e.g., 88304)",
+            "reason": "Reported by the pathologist from the pathology report."
+          },
+          {
+            "what": "Drug and contrast supply codes (e.g., J2250 midazolam, J3010 fentanyl, Q9967 low-osmolar contrast)",
+            "reason": "The hospital supplied these to an inpatient, so they do not go on the operator's professional claim."
+          },
+          {
+            "what": "A separate evaluation and management service",
+            "reason": "Nothing beyond the usual pre-procedure assessment is documented."
+          },
+          {
+            "what": "The 24-hour CT and MRI of the brain (e.g., 70450, 70551)",
+            "reason": "Planned, not performed in this service."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-09",
+      "specialty": "Neurosurgery",
+      "subcategory": "Functional and stereotactic",
+      "title": "Bilateral subthalamic deep brain stimulation lead implantation with microelectrode recording; pulse generator staged for a later date",
+      "kind": "realistic",
+      "source": "documents/ns-09-bilateral-stn-dbs-leads-mer.txt",
+      "source_sha256": "c921e93ffb1c5f7b5f2c99bf0a50abe89edeac5ca8e7a8a68cdc793f9744b354",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-09-bilateral-stn-dbs-leads-mer.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "61867",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "First array: stereotactic implantation of a DBS lead in the left subthalamic nucleus through a burr hole, with intraoperative microelectrode recording (three tracks, recorded and interpreted by the surgeon). It includes frame application, CT-MRI fusion targeting, the burr hole, microelectrode recording, macrostimulation, test stimulation through the lead, fluoroscopic confirmation and anchoring."
+          },
+          {
+            "code": "61868",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Each additional array: the right subthalamic nucleus lead, with microelectrode recording, in the same session. Placement on both sides is reported with this add-on, not with modifier 50."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "61863 or 61864 (DBS lead implantation without microelectrode recording)",
+            "reason": "Microelectrode recording was done on both sides."
+          },
+          {
+            "what": "61867 with modifier 50, or 61867 with 2 units",
+            "reason": "The second array is reported with 61868."
+          },
+          {
+            "what": "20660 (stereotactic frame application) or 61800 (radiosurgery headframe)",
+            "reason": "Applying the frame is part of the stereotactic lead implantation, and no radiosurgery was done."
+          },
+          {
+            "what": "61781 or 61782 (computer-assisted navigation)",
+            "reason": "Not reported with 61863-61868; stereotactic targeting is already part of the procedure."
+          },
+          {
+            "what": "76376 or 76377 (3D rendering or image fusion); 77011 (CT guidance for stereotactic localization)",
+            "reason": "CT-MRI fusion and frame-based targeting are part of the stereotactic implantation."
+          },
+          {
+            "what": "95961 or 95962 (functional cortical and subcortical mapping) or intraoperative neurophysiology monitoring codes",
+            "reason": "The operating surgeon did and interpreted the microelectrode recording, which is what makes the procedure 61867 and 61868. The technologist and the nurse do not report professional services."
+          },
+          {
+            "what": "95970, 95983, 95984 (neurostimulator analysis or programming)",
+            "reason": "No pulse generator was implanted. Test stimulation through the leads with the external stimulator is part of the implantation, and programming starts after the second stage."
+          },
+          {
+            "what": "61885 or 61886 (pulse generator insertion) and extension cable placement",
+            "reason": "Scheduled for the second-stage operation on 2026-11-19, not performed."
+          },
+          {
+            "what": "76000 (fluoroscopy)",
+            "reason": "Checking lead depth with lateral fluoroscopy is part of the procedure."
+          },
+          {
+            "what": "70450 (the stereotactic CT and the postoperative head CT)",
+            "reason": "The stereotactic CT was acquired in radiology for targeting, and the postoperative CT is ordered for radiology to perform and read. Neither is the surgeon's service."
+          },
+          {
+            "what": "Separate twist drill, burr hole or craniectomy codes (e.g., 61105-61108)",
+            "reason": "The burr holes are included in 61867 and 61868."
+          },
+          {
+            "what": "Device supply codes for the leads and anchors (e.g., L8680, C1778)",
+            "reason": "The hospital supplied these devices to an inpatient, so they do not go on the surgeon's professional claim."
+          },
+          {
+            "what": "Anesthesia services (monitored anesthesia care)",
+            "reason": "Reported by the anesthesia provider from the anesthesia record."
+          },
+          {
+            "what": "The 2026-11-02 planning MRI",
+            "reason": "Done at a separate, earlier visit."
+          },
+          {
+            "what": "69990 (operating microscope)",
+            "reason": "No operating microscope was used or documented."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-10",
+      "specialty": "Neurosurgery",
+      "subcategory": "Neuromodulation and spine pain procedures",
+      "title": "Permanent spinal cord stimulator: paddle electrode by T10-T11 laminotomy and rechargeable pulse generator after a successful trial",
+      "kind": "realistic",
+      "source": "documents/ns-10-scs-paddle-laminotomy-ipg-after-trial.txt",
+      "source_sha256": "5bb1c3ccedc09ae56f3f9cad9b49a444b3b4637ee0699b01d706df20a41f14ee",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-10-scs-paddle-laminotomy-ipg-after-trial.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "63655",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Laminotomy (partial laminectomy) at T10-T11 to place a 16-contact plate/paddle epidural neurostimulator electrode over T8-T9. The bony opening is only the approach for the paddle and is part of this service."
+          },
+          {
+            "code": "63685",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Insertion of the spinal neurostimulator pulse generator, with a subcutaneous pocket made in the right upper buttock and the electrode array connected to it. Tunneling is included. It was done in the same session as the paddle, and no modifier is needed because the payer ranks multiple procedures."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "63650 percutaneous implantation of neurostimulator electrode array (the trial leads)",
+            "reason": "The two trial leads were placed on 2026-10-06 by a different physician. They appear only in the history and were not placed in this session."
+          },
+          {
+            "what": "63661 removal of percutaneous spinal neurostimulator electrode array",
+            "reason": "The trial leads were removed in the pain clinic on 2026-10-13, an earlier encounter."
+          },
+          {
+            "what": "63003 or 63046 thoracic laminectomy for decompression",
+            "reason": "No decompression was done. The T10 laminotomy was limited to what was needed to pass the paddle and is included in the paddle placement."
+          },
+          {
+            "what": "77003 or 76000 fluoroscopic guidance or fluoroscopy",
+            "reason": "Fluoroscopy was listed as a procedure, but its use for level localization and paddle positioning is integral to placing the electrode. There was no separate radiology interpretation."
+          },
+          {
+            "what": "95970, 95971, 95972 electronic analysis, with or without programming, of the spinal neurostimulator",
+            "reason": "Intraoperative test stimulation and impedance checks are part of placement. The stimulator was left off, and activation and programming are planned for a later visit."
+          },
+          {
+            "what": "95940, 95941, G0453 and baseline evoked potential or EMG studies (e.g., 95938) for intraoperative neuromonitoring",
+            "reason": "A separate neurophysiologist performed and interpreted the monitoring and wrote her own report. It is not the operating surgeon's service and cannot be coded from this report."
+          },
+          {
+            "what": "C1778, C1820, L8680, L8685-L8688 neurostimulator lead and generator device codes",
+            "reason": "The hospital supplied the implants in its outpatient department, as the hospital implant log shows, so they go on the facility claim. Like the GI documents, these documents cover only the documenting physician's professional services."
+          },
+          {
+            "what": "L8681 patient programmer and L8689 external recharging system",
+            "reason": "The charger and remote reviewed with the patient in recovery come with the initial system, and both codes are for replacements only."
+          },
+          {
+            "what": "J0690 cefazolin",
+            "reason": "The anesthesia team gave the preoperative antibiotic. The surgeon did not supply this drug."
+          },
+          {
+            "what": "Any anesthesia service",
+            "reason": "The anesthesia provider reports it from the anesthesia record, not from the surgeon's operative report."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-11",
+      "specialty": "Neurosurgery",
+      "subcategory": "Peripheral nerve",
+      "title": "Right ulnar nerve decompression with anterior subcutaneous transposition at the elbow for cubital tunnel syndrome",
+      "kind": "realistic",
+      "source": "documents/ns-11-right-ulnar-nerve-anterior-transposition-elbow.txt",
+      "source_sha256": "fe74486850ac08b2a41ede8323738dacf187ebe11b91c64269b2d26fc15655e7",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-11-right-ulnar-nerve-anterior-transposition-elbow.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "64718",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "Neuroplasty with anterior subcutaneous transposition of the right ulnar nerve at the elbow. Releasing the arcade of Struthers, excising the medial intermuscular septum, releasing the flexor carpi ulnaris fascia, circumferential external neurolysis and the fasciodermal sling are all part of this one service. RT gives the side."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "64727 internal neurolysis requiring the operating microscope",
+            "reason": "The note states internal neurolysis was not required, and only 3.5x loupes were used."
+          },
+          {
+            "what": "69990 operating microscope",
+            "reason": "Only loupe magnification was used. Also, 64718 is not one of the primary procedures this microscope add-on may be reported with."
+          },
+          {
+            "what": "29105 application of long arm splint",
+            "reason": "The operating surgeon applied the splint at the end of surgery, so it falls within the global surgical package."
+          },
+          {
+            "what": "Q4017 long arm plaster splint supplies (adult)",
+            "reason": "In an ambulatory surgery center the casting supplies belong to the facility. Physicians report them only when they apply the cast or splint in the office."
+          },
+          {
+            "what": "20920, 20922, 20926 fascia or tissue graft",
+            "reason": "The fasciodermal sling is a local flap of flexor-pronator fascia and part of the transposition, not a separately harvested graft."
+          },
+          {
+            "what": "64708 neuroplasty of another major peripheral nerve (medial antebrachial cutaneous nerve)",
+            "reason": "The cutaneous branches were only identified and protected. They were not decompressed or released."
+          },
+          {
+            "what": "64719 ulnar nerve neuroplasty at the wrist",
+            "reason": "The studies showed no compression at the wrist, and only the elbow was treated."
+          },
+          {
+            "what": "95907-95913 and 95886 nerve conduction studies and needle EMG",
+            "reason": "Another physician performed them on 2026-09-15. They are reviewed only as history."
+          },
+          {
+            "what": "J0690 cefazolin",
+            "reason": "The anesthesia team gave the preoperative antibiotic in a facility setting. The surgeon did not supply it."
+          },
+          {
+            "what": "Any anesthesia service",
+            "reason": "The anesthesia provider reports general anesthesia with the laryngeal mask airway, not the surgeon."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-12",
+      "specialty": "Neurosurgery",
+      "subcategory": "Hydrocephalus and CSF shunts",
+      "title": "Right frontal ventriculoperitoneal shunt with programmable valve and stereotactic navigation for normal pressure hydrocephalus",
+      "kind": "realistic",
+      "source": "documents/ns-12-vp-shunt-programmable-valve-nph.txt",
+      "source_sha256": "ddccae2abf2ca1e6d5316bcd905a50548f766d066f7b6382ba527bab7a550296",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-12-vp-shunt-programmable-valve-nph.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "62223",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Creation of a ventriculoperitoneal shunt. The right frontal burr hole and ventricular catheter, the programmable valve with anti-siphon device, subcutaneous tunneling and placing the peritoneal catheter through an open mini-laparotomy make up one service. The valve type does not change the procedure."
+          },
+          {
+            "code": "61781",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Add-on for frameless stereotactic computer-assisted (electromagnetic) navigation, used to plan the trajectory and guide a tracked-stylet ventricular catheter in real time to an intradural cranial target (the right frontal horn). It is reported with the shunt creation."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "61210 burr hole for ventricular catheter, or 61107 twist drill hole",
+            "reason": "The burr hole is part of creating the shunt."
+          },
+          {
+            "what": "62252 reprogramming of programmable cerebrospinal shunt",
+            "reason": "The valve was set before implantation and checked with the indicator tool as part of the insertion. No reprogramming was done."
+          },
+          {
+            "what": "61782 stereotactic navigation, cranial extradural",
+            "reason": "The navigated target was intradural (the ventricle), so only the intradural add-on applies, and only once."
+          },
+          {
+            "what": "62160 neuroendoscopy for ventricular catheter placement",
+            "reason": "No endoscope was used."
+          },
+          {
+            "what": "49421 or 49324 open or laparoscopic insertion of a tunneled intraperitoneal catheter",
+            "reason": "The peritoneal end is part of the ventriculoperitoneal shunt. There was no laparoscopy and no second surgeon."
+          },
+          {
+            "what": "62270, 62272, 62328, 62329 lumbar puncture or lumbar drain",
+            "reason": "The opening pressure and the 72-hour lumbar drainage trial belong to an earlier admission (2026-10-20 to 2026-10-23)."
+          },
+          {
+            "what": "Laboratory tests on the cerebrospinal fluid (e.g., 89050, 87205, 87070, 84157, 82945)",
+            "reason": "The laboratory performs the tests on the specimen. Collecting fluid from the catheter is part of the shunt procedure."
+          },
+          {
+            "what": "Imaging: the navigation CT obtained the previous day and the planned postoperative CT head and shunt series (e.g., 70450, 70250, 71045, 74018)",
+            "reason": "These are radiology services on other dates or planned for the next morning. The surgeon did not perform them in this report."
+          },
+          {
+            "what": "HCPCS device codes for the catheters and valve, and J0690 cefazolin",
+            "reason": "The hospital supplied the implants and the antibiotic during an inpatient stay. The surgeon does not report them."
+          },
+          {
+            "what": "Any anesthesia service",
+            "reason": "The anesthesia provider reports it, not the surgeon."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-13",
+      "specialty": "Neurosurgery",
+      "subcategory": "Neurotrauma and neurocritical care",
+      "title": "Emergency right craniotomy for acute subdural hematoma with a separate-site left frontal intracranial pressure monitor",
+      "kind": "realistic",
+      "source": "documents/ns-13-emergency-craniotomy-acute-subdural-icp-monitor.txt",
+      "source_sha256": "8dc48ec1b1384f225d3f51cb4965bec31f16d9a455a644b92d9e687716302512",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-13-emergency-craniotomy-acute-subdural-icp-monitor.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "61312",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Craniotomy to evacuate a supratentorial acute subdural hematoma through a right frontotemporoparietal trauma flap. The bone flap was put back at the same operation, which is included. Also included: the burr holes, the three-pin skull clamp, the dural tack-ups, the collagen dural onlay graft, the titanium plate fixation and burr-hole covers, the rongeuring to complete the exposure, and the subgaleal drain."
+          },
+          {
+            "code": "61107",
+            "units": 1,
+            "modifier_considerations": [
+              "XS"
+            ],
+            "basis": "Twist-drill hole to implant a pressure recording device (fiberoptic intraparenchymal sensor with a skull bolt) at the left Kocher point. It went through its own stab incision in a separately prepped field away from the craniotomy, so it is reportable with the craniotomy using XS (59 where the payer does not take the X modifiers). Medical necessity is documented: GCS 7 after resuscitation with an abnormal CT."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "61313 (craniotomy for intracerebral hematoma)",
+            "reason": "The right temporal pole contusion was inspected but not evacuated, and no intracerebral hematoma was entered."
+          },
+          {
+            "what": "61322 or 61323 (decompressive craniectomy)",
+            "reason": "It was considered and not done: the brain was slack, the bone flap was replaced, and the temporal rongeuring was only to complete the exposure."
+          },
+          {
+            "what": "61316 (storage of the bone flap in a subcutaneous pocket)",
+            "reason": "The bone flap was replaced and not stored."
+          },
+          {
+            "what": "62140-62148 (cranioplasty or replacement of a bone flap)",
+            "reason": "Putting the patient's own flap back at the same craniotomy is part of the craniotomy."
+          },
+          {
+            "what": "61210 (burr hole for a monitoring device)",
+            "reason": "The monitor was placed through a twist-drill hole, not a burr hole."
+          },
+          {
+            "what": "61154, 61156, 61250, 61253 (burr-hole procedures)",
+            "reason": "The four burr holes were the access for the craniotomy."
+          },
+          {
+            "what": "20660 (application of cranial tongs, caliper or frame)",
+            "reason": "Fixing the head in a three-pin skull clamp is included in the craniotomy."
+          },
+          {
+            "what": "69990 (operating microscope)",
+            "reason": "The microscope was not used; loupes and a headlight were."
+          },
+          {
+            "what": "61781 (cranial stereotactic navigation)",
+            "reason": "Navigation was not used."
+          },
+          {
+            "what": "Intraoperative neurophysiologic monitoring (95940, 95941 and the related set-up codes)",
+            "reason": "No monitoring was done."
+          },
+          {
+            "what": "31500 (emergency endotracheal intubation)",
+            "reason": "The emergency physician intubated the patient, not the surgeon."
+          },
+          {
+            "what": "Anesthesia services (for example 00211) and 99140 (emergency qualifying circumstance)",
+            "reason": "These are the separate anesthesiologist's services."
+          },
+          {
+            "what": "99053 (service between 10 PM and 8 AM at a 24-hour facility)",
+            "reason": "An after-hours add-on is not expected on the surgeon's operative service."
+          },
+          {
+            "what": "An E/M visit with modifier 57 (emergency department evaluation or consultation)",
+            "reason": "The operative report does not document an E/M service. Any decision-for-surgery visit would come from its own note."
+          },
+          {
+            "what": "99291 or 99292 (critical care)",
+            "reason": "No critical care is documented in this report. The operating surgeon's postoperative ICU care falls within the surgical package."
+          },
+          {
+            "what": "Assistant-at-surgery lines (80, 82, AS)",
+            "reason": "There was no assistant."
+          },
+          {
+            "what": "Drug HCPCS for cefazolin, levetiracetam or mannitol",
+            "reason": "In the inpatient setting these were supplied by the hospital and given by the emergency department or anesthesia, so they do not go on the surgeon's claim."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-14",
+      "specialty": "Neurosurgery",
+      "subcategory": "Pediatric neurosurgery",
+      "title": "Open cranial vault remodeling (extended sagittal strip craniectomy with barrel-stave osteotomies) for sagittal craniosynostosis with a plastic surgery co-surgeon",
+      "kind": "realistic",
+      "source": "documents/ns-14-sagittal-craniosynostosis-open-vault-remodeling-cosurgeon.txt",
+      "source_sha256": "ed6c5f46ada10862a59e7c65a4fc8a9a82a40448d56b4575b1fba39da9b46a22",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-14-sagittal-craniosynostosis-open-vault-remodeling-cosurgeon.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "61550",
+            "units": 1,
+            "modifier_considerations": [
+              "62"
+            ],
+            "basis": "Craniectomy for craniosynostosis of a single suture: only the sagittal suture is fused (coronal, lambdoid, metopic and squamosal are patent). The open extended vertex strip craniectomy with in-situ barrel-stave osteotomies and out-fracture is the single-suture craniectomy with its remodeling. No bone flap was removed and reshaped, no bone was grafted and nothing was fixed. Neurosurgery and plastic surgery were co-surgeons and the note states who did each distinct part, so this surgeon reports with 62. The plastic surgeon reports the same code with 62 from her own operative report."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "61559 (extensive craniectomy with recontouring and bone autografts, for example barrel-stave)",
+            "reason": "This is a multiple-suture code and only the sagittal suture is fused. No autograft was harvested or placed and the staves stayed attached. The word barrel-stave is a deliberate trap."
+          },
+          {
+            "what": "61552 and 61558 (multiple-suture craniectomies)",
+            "reason": "Only one suture is fused."
+          },
+          {
+            "what": "61556 or 61557 (craniotomy for craniosynostosis with a frontal, parietal or bifrontal bone flap)",
+            "reason": "No bone flap was removed for reshaping."
+          },
+          {
+            "what": "21172, 21175, 21179, 21180 (reconstruction of the forehead or orbital rims)",
+            "reason": "Forehead reshaping and orbital rim advancement were not done."
+          },
+          {
+            "what": "Modifier 50 or RT/LT",
+            "reason": "The fused suture is a single midline suture. The staves on both sides are part of the one procedure."
+          },
+          {
+            "what": "Modifier 63 (infant up to 4 kg)",
+            "reason": "The infant weighs 6.8 kg."
+          },
+          {
+            "what": "Assistant-at-surgery lines (80, 82, AS)",
+            "reason": "There was no assistant. The plastic surgeon was a co-surgeon, not an assistant."
+          },
+          {
+            "what": "Anesthesia services and 99100 (qualifying circumstance for a patient under 1 year)",
+            "reason": "These belong to the separate anesthesiologist."
+          },
+          {
+            "what": "36620 (arterial line), 36000 (peripheral IV lines) and 36430 (transfusion)",
+            "reason": "The anesthesia team placed the lines and gave the transfusion."
+          },
+          {
+            "what": "S1040 (cranial remolding orthosis, helmet)",
+            "reason": "No helmet is planned. Endoscopic surgery with helmet therapy was discussed and declined."
+          },
+          {
+            "what": "69990 (operating microscope) and 61781 (cranial navigation)",
+            "reason": "Neither was used; loupes only."
+          },
+          {
+            "what": "Surgical pathology (88304, 88307)",
+            "reason": "The bone strip was sent to pathology, and the pathologist reports that examination."
+          },
+          {
+            "what": "Drug and blood-product HCPCS (tranexamic acid, cefazolin, packed red cells)",
+            "reason": "The hospital supplied them and the anesthesia team gave them."
+          },
+          {
+            "what": "70450 and 76377 (head CT with 3D reconstruction)",
+            "reason": "Done on an earlier date (2026-09-22) and reported by radiology."
+          },
+          {
+            "what": "An E/M visit with modifier 57",
+            "reason": "The operative report documents no E/M service."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-15",
+      "specialty": "Neurosurgery",
+      "subcategory": "Stereotactic radiosurgery",
+      "title": "Neurosurgeon's note: single-session frame-based cranial stereotactic radiosurgery to three brain metastases (one pontine)",
+      "kind": "realistic",
+      "source": "documents/ns-15-frame-based-radiosurgery-three-brain-metastases.txt",
+      "source_sha256": "588c198ca221630d6f636eccd199edc184be71f27ab2972b5f1c371827b121eb",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-15-frame-based-radiosurgery-three-brain-metastases.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "61798",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Stereotactic radiosurgery to 1 complex cranial lesion. Target 3 (left dorsal pons, 0.7 cm) lies entirely within the brainstem, which makes it complex. When any lesion in the course is complex, the complex primary is reported, once per course. This is a single session with no prior radiosurgery."
+          },
+          {
+            "code": "61797",
+            "units": 2,
+            "modifier_considerations": [],
+            "basis": "Each additional simple cranial lesion: target 1 (left frontal, 1.6 cm) and target 2 (lateral right cerebellar, 1.1 cm). Both are under 3.5 cm, outside the brainstem, away from the optic nerves, chiasm and tracts, and are metastases, not an always-complex tumor type. Reported as an add-on with the complex primary."
+          },
+          {
+            "code": "61800",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Application of the stereotactic headframe for radiosurgery, done by the neurosurgeon (four pins with local infiltration). Add-on to the radiosurgery primary. Removing the frame is included."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "61796 (radiosurgery, 1 simple lesion)",
+            "reason": "Not all lesions are simple. The pontine lesion is complex, so the primary is the complex code."
+          },
+          {
+            "what": "61799 (each additional complex lesion)",
+            "reason": "There is only one complex lesion. The two additional lesions are simple."
+          },
+          {
+            "what": "20660 (application of cranial tongs, caliper or stereotactic frame)",
+            "reason": "The radiosurgery headframe is reported with the headframe add-on, and 20660 is not reported with radiosurgery."
+          },
+          {
+            "what": "61781 or 61782 (stereotactic navigation)",
+            "reason": "None was used, and navigation is not reported with radiosurgery."
+          },
+          {
+            "what": "Radiation oncology, physics and facility services (77263, 77295, 77300, 77301, 77334, 77370, 77371, 77432)",
+            "reason": "The radiation oncologist documents these in her own note, and the facility reports delivery. The neurosurgeon's targeting and dose planning are included in the radiosurgery codes."
+          },
+          {
+            "what": "Co-surgery modifier 62",
+            "reason": "The neurosurgeon reports the radiosurgery codes and the radiation oncologist reports separate radiation oncology services. This is not co-surgery."
+          },
+          {
+            "what": "70553 (brain MRI) and 76376 or 76377 (3D rendering)",
+            "reason": "Neuroradiology reported the stereotactic MRI. Image registration and contouring are part of the radiosurgery service."
+          },
+          {
+            "what": "99152 or 99153 (moderate sedation)",
+            "reason": "Only oral lorazepam was given for anxiolysis. There was no IV sedation and the patient stayed awake."
+          },
+          {
+            "what": "Same-day E/M with modifier 25 or 57",
+            "reason": "The decision was made at the 2026-10-13 clinic visit and the tumor board. Today's pre-procedure assessment is part of the procedure."
+          },
+          {
+            "what": "Local anesthetic injection or nerve block codes",
+            "reason": "Pin-site infiltration is included in applying the headframe."
+          },
+          {
+            "what": "Drug HCPCS for lorazepam or the local anesthetics",
+            "reason": "No drug is separately reportable on the physician's claim in the hospital outpatient setting."
+          },
+          {
+            "what": "Whole-brain radiation therapy or resection of the frontal lesion",
+            "reason": "Both were considered and not recommended. Neither was done."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "ns-16",
+      "specialty": "Neurosurgery",
+      "subcategory": "Visits, consults and post-operative care",
+      "title": "New patient neurosurgery office visit for L4-L5 lumbar stenosis with decision for laminectomy one week later (total time 64 minutes)",
+      "kind": "short",
+      "source": "documents/ns-16-new-patient-visit-lumbar-stenosis-surgery-next-week.txt",
+      "source_sha256": "e1c27de82c63b62b03f9ef2700adfdea9c1484e81df86d5c0a1a94537022d344",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "ns-16-new-patient-visit-lumbar-stenosis-surgery-next-week.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "99205",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "New patient office visit; the patient was never seen by any clinician in the practice. The level is chosen on total time: 64 minutes personally spent on the date of the encounter meets the 60-minute threshold for the highest new-patient level. MDM would give a lower level (moderate: progressing chronic illness, personal review of outside imaging, decision for elective major surgery), so time governs."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "99204",
+            "reason": "MDM alone would support this level, but the documented total time supports the higher level, and the more favorable method is used."
+          },
+          {
+            "what": "Modifier 57 (decision for surgery)",
+            "reason": "The laminectomy is on 2026-11-10, seven days later. Modifier 57 applies only to an E/M on the day of or the day before a major procedure."
+          },
+          {
+            "what": "Modifier 25",
+            "reason": "No procedure was done today."
+          },
+          {
+            "what": "99417 or G2212 (prolonged service)",
+            "reason": "64 minutes is below the CPT threshold of 75 minutes and the Medicare threshold of 89 minutes for the highest new-patient level."
+          },
+          {
+            "what": "Office consultation codes (99243-99245)",
+            "reason": "The patient referred himself. No other clinician asked for an opinion."
+          },
+          {
+            "what": "Established-patient codes (99212-99215)",
+            "reason": "He is a new patient."
+          },
+          {
+            "what": "G2211 (visit complexity add-on)",
+            "reason": "The documented relationship is a time-limited surgical evaluation leading to a scheduled operation, not ongoing longitudinal care, so I do not expect it."
+          },
+          {
+            "what": "Lumbar MRI and lumbar radiograph codes (72148, 72100, 72114, 72120)",
+            "reason": "The imaging was done and reported elsewhere. The personal review counts toward the visit, not as a separate service."
+          },
+          {
+            "what": "63047 or 63048 (lumbar laminectomy)",
+            "reason": "Planned for 2026-11-10 and not done at this visit."
+          },
+          {
+            "what": "Preoperative tests (93000, 80048, 85025)",
+            "reason": "Ordered through hospital pre-admission testing and not done in this office."
+          },
+          {
+            "what": "Epidural injection codes (62323, 64483)",
+            "reason": "These were prior outside injections in the history. No injection was given today."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-01",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Joint replacement",
+      "title": "Primary right total knee arthroplasty, cemented, posterior-stabilized with patellar resurfacing; PA-C first assistant",
+      "kind": "realistic",
+      "source": "documents/or-01-right-total-knee-arthroplasty-cemented.txt",
+      "source_sha256": "6b2e98b10215630290076717070055e146fbfa7e3e41448d6da896862f4bb9c6",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-01-right-total-knee-arthroplasty-cemented.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "27447",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "Operating surgeon: primary total knee arthroplasty, cemented and posterior-stabilized, replacing the medial and lateral femoral condyles and the tibial plateau, right knee. Patellar resurfacing is included in this code ('with or without patella resurfacing')."
+          },
+          {
+            "code": "27447",
+            "units": 1,
+            "modifier_considerations": [
+              "AS",
+              "RT"
+            ],
+            "basis": "The PA-C first assistant is documented as scrubbed for the whole case, with the need for skilled assistance stated. The assistant reports this separately under their own provider number with AS (Medicare non-physician assistant at surgery; some commercial payers use 80 or 81 instead)."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "27438 or any separate patellar resurfacing or patellar arthroplasty code",
+            "reason": "27447 reads 'with or without patella resurfacing', so the patellar component is part of the total knee."
+          },
+          {
+            "what": "27310, 27332/27333, 27334, or any separate code for the arthrotomy, the excision of the menisci and cruciate ligaments, osteophyte removal or the deep MCL release",
+            "reason": "Exposure, soft-tissue balancing and bone preparation are integral steps of the arthroplasty."
+          },
+          {
+            "what": "20610 for the periarticular injection, or for the three corticosteroid injections in the history",
+            "reason": "The surgeon's periarticular infiltration is part of the arthroplasty. The corticosteroid injections are prior history and were not performed on this date."
+          },
+          {
+            "what": "20985 computer-assisted navigation (or any robotic-assistance code)",
+            "reason": "The note states that conventional guides were used and that navigation and robotic assistance were not used."
+          },
+          {
+            "what": "Anesthesia services (01402) and the adductor canal block (64447)",
+            "reason": "These were performed by the anesthesia service and documented in its own record. They are not the operating surgeon's services and cannot be reported from this operative report."
+          },
+          {
+            "what": "Any E/M (admission or office visit) for the morning-of-surgery review of the history and physical; modifiers 57 or 25",
+            "reason": "The decision for surgery was made at the 2026-09-08 visit, and the same-day review is part of the global surgical package."
+          },
+          {
+            "what": "HCPCS Level II drug, supply and device codes (cefazolin, tranexamic acid, ropivacaine/ketorolac/epinephrine, bone cement, knee components such as C1776)",
+            "reason": "The hospital supplied these and reports them on the facility side (inpatient stay). They do not go on the surgeon's professional claim, and the note documents no orthosis or DME dispensed by the practice."
+          },
+          {
+            "what": "27446 (unicompartmental), 27486/27487 (revision)",
+            "reason": "This is a primary, non-hinged, posterior-stabilized total knee that replaces both tibiofemoral compartments."
+          },
+          {
+            "what": "Modifier 22",
+            "reason": "The note documents no unusual difficulty, time or extra work. The varus deformity was corrected with a standard medial release."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-02",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Sports medicine and arthroscopy",
+      "title": "Left knee arthroscopy with partial medial meniscectomy and patellofemoral chondroplasty, every compartment described",
+      "kind": "realistic",
+      "source": "documents/or-02-left-knee-arthroscopy-medial-meniscectomy-pf-chondroplasty.txt",
+      "source_sha256": "279ee2d5cd8c7ff9987d238dfdf45c8bc9092ec3c87e50b45e6790b7e013976d",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-02-left-knee-arthroscopy-medial-meniscectomy-pf-chondroplasty.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "29881",
+            "units": 1,
+            "modifier_considerations": [
+              "LT"
+            ],
+            "basis": "Surgical knee arthroscopy with partial medial meniscectomy. Since 2012, 29881 includes chondroplasty in the same or a separate compartment, so the patellofemoral chondroplasty adds no line. The lateral meniscus was intact and untreated, so the code is not 29880."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "29877 or G0289 for the patellofemoral chondroplasty",
+            "reason": "Chondroplasty in any compartment is included in 29881. G0289 may not be reported for chondroplasty with 29880/29881, and no loose or foreign body was removed."
+          },
+          {
+            "what": "29880 (medial and lateral meniscectomy)",
+            "reason": "Only the medial meniscus was resected. The note states that the lateral meniscus was intact and not treated."
+          },
+          {
+            "what": "29870 diagnostic arthroscopy, or anything for the examination under anesthesia",
+            "reason": "Both are included in the surgical arthroscopy."
+          },
+          {
+            "what": "29879 abrasion arthroplasty or microfracture",
+            "reason": "The note states that no subchondral bone was exposed and that no microfracture or abrasion arthroplasty was performed."
+          },
+          {
+            "what": "20610, or a drug code, for the intra-articular bupivacaine at the end of the case",
+            "reason": "An end-of-case local anesthetic injection is integral to the arthroscopy, and the drug is a surgery-center supply."
+          },
+          {
+            "what": "Synovectomy (29875/29876) or loose-body removal (29874)",
+            "reason": "Mild synovitis was only observed. No synovectomy was performed and no loose bodies were found."
+          },
+          {
+            "what": "Anesthesia services (01400)",
+            "reason": "The anesthesia service provided and documented these. They cannot be reported from the surgeon's operative report."
+          },
+          {
+            "what": "Any E/M on the day of surgery; assistant-at-surgery modifiers (80/AS)",
+            "reason": "The decision for surgery was made at the 2026-09-24 visit and no separately identifiable E/M is documented. No assistant took part."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-03",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Shoulder and elbow",
+      "title": "Right shoulder arthroscopic rotator cuff repair (large two-tendon tear), subacromial decompression and open subpectoral biceps tenodesis",
+      "kind": "realistic",
+      "source": "documents/or-03-right-shoulder-arthroscopic-rcr-sad-open-subpectoral-biceps-tenodesis.txt",
+      "source_sha256": "839ce5d8a4c05829bff3f657b897309e1bf03f64ec70610c0c4138a878b57507",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-03-right-shoulder-arthroscopic-rcr-sad-open-subpectoral-biceps-tenodesis.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence. The open subpectoral tenodesis with the arthroscopic repair on the same shoulder: depending on the current NCCI practitioner PTP table, 23430 may need XS (or 59) besides RT.",
+        "codes": [
+          {
+            "code": "29827",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "Arthroscopic rotator cuff repair (double-row, transosseous-equivalent) of the supraspinatus and upper infraspinatus. Tear size ('large') and the number of anchors do not change the code. Preparing the tendon edges and the footprint is included."
+          },
+          {
+            "code": "29826",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "Add-on for arthroscopic subacromial decompression with partial acromioplasty and coracoacromial ligament release, reported with the primary 29827. As an add-on it is exempt from 51. It is reportable on the professional side even though hospital outpatient payment packages it on the facility side."
+          },
+          {
+            "code": "23430",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "Open tenodesis of the long head of the biceps through a separate subpectoral axillary incision, fixed with an interference screw. The arthroscopic release from the labral origin is documented as the first step of this tenodesis. This is a distinct open procedure on a different structure: if a payer's edit pairs it with the arthroscopic codes, XS (separate structure) or 59 is supported. Use 51 if the payer requires it for multiple-procedure ranking."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "29828 arthroscopic biceps tenodesis",
+            "reason": "The tenodesis was done open, in the subpectoral position. The only arthroscopic step was the release (tenotomy), which is part of the open tenodesis."
+          },
+          {
+            "what": "29805 diagnostic shoulder arthroscopy, or anything for the examination under anesthesia",
+            "reason": "Both are included in the surgical arthroscopy."
+          },
+          {
+            "what": "29822 or 29823 debridement",
+            "reason": "Debriding the cuff edges and the biceps stump is limited work, integral to the repair and the tenodesis. The labrum needed no treatment, and no extensive debridement of a separate area is documented."
+          },
+          {
+            "what": "29824 distal claviculectomy",
+            "reason": "Not performed. The note states that the distal clavicle was not excised and that the AC joint causes no symptoms."
+          },
+          {
+            "what": "23130 or 23415 (open acromioplasty or CA ligament release); 23410, 23412 or 23420 (open cuff repair)",
+            "reason": "The decompression and the cuff repair were both done arthroscopically and are reported with 29826 and 29827."
+          },
+          {
+            "what": "23700 manipulation under anesthesia",
+            "reason": "Examination under anesthesia showed full motion, and the note states that no manipulation was needed."
+          },
+          {
+            "what": "Anesthesia services (01630) and the interscalene block (64415)",
+            "reason": "These were performed by the anesthesia service and documented in its own record. They are not the operating surgeon's services."
+          },
+          {
+            "what": "HCPCS Level II orthosis or sling code for the sling with abduction pillow; device codes for the anchors and the interference screw",
+            "reason": "The hospital supplied these and applied them as part of the surgery. They are not the surgeon's professional service, and the note documents no dispensing by the practice."
+          },
+          {
+            "what": "20610 for the subacromial corticosteroid injection",
+            "reason": "That injection is history from June and was not performed on this date."
+          },
+          {
+            "what": "Any E/M on the day of surgery; assistant-at-surgery modifiers (80/AS)",
+            "reason": "The decision for surgery was made at the 2026-10-07 visit. No assistant took part (scrub technologist only)."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-04",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Hand and wrist",
+      "title": "Left open carpal tunnel release and left ring finger trigger finger release in the same session",
+      "kind": "realistic",
+      "source": "documents/or-04-left-carpal-tunnel-and-ring-trigger-finger-release.txt",
+      "source_sha256": "800d1eb06e88eb1968eaea792e7012087bc85381e2cc61b24d125ec1e812b489",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-04-left-carpal-tunnel-and-ring-trigger-finger-release.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "64721",
+            "units": 1,
+            "modifier_considerations": [
+              "LT"
+            ],
+            "basis": "Open carpal tunnel release on the left. The transverse carpal ligament was fully divided under direct vision and the median nerve was decompressed at the carpal tunnel (neuroplasty of the median nerve at the carpal tunnel). LT marks the left side. This is the highest-valued procedure of the session."
+          },
+          {
+            "code": "26055",
+            "units": 1,
+            "modifier_considerations": [
+              "F3"
+            ],
+            "basis": "Trigger finger release of the left ring finger. The A1 pulley of the flexor tendon sheath was cut along its full length through a separate incision at the distal palmar crease (tendon sheath incision). F3 means left hand, fourth digit. It is a different anatomic site from the carpal tunnel, so it is reported in addition and takes the multiple-procedure reduction as the secondary procedure. No XS/59 is expected unless a payer edit pairs it with 64721; if one does, the separate incision and separate structure support XS."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "Internal neurolysis of the median nerve (64727)",
+            "reason": "The note says the epineurium was not opened and no internal neurolysis was done."
+          },
+          {
+            "what": "Second trigger finger release for the left middle finger (26055 with F2)",
+            "reason": "Releasing the middle finger was discussed and explicitly not done; the finger is being observed."
+          },
+          {
+            "what": "Flexor tenosynovectomy at the wrist (25115) or of the ring finger sheath (26145)",
+            "reason": "The tenosynovium was mildly thickened but not excised, and no tenosynovectomy or tendon debulking was done."
+          },
+          {
+            "what": "Tendon sheath or carpal tunnel injection (20550, 20526)",
+            "reason": "The steroid injections were given in March and May 2026. A middle finger injection is only a possible future option. No injection was given today."
+          },
+          {
+            "what": "Nerve conduction studies and needle EMG (95907-95913, 95886)",
+            "reason": "These were done on 2026-08-19 by a neurologist. Today they were reviewed only, not repeated."
+          },
+          {
+            "what": "Endoscopic carpal tunnel release (29848)",
+            "reason": "The release was open."
+          },
+          {
+            "what": "Operating microscope (69990)",
+            "reason": "Loupe magnification only; the note states the microscope was not used."
+          },
+          {
+            "what": "Anesthesia service, or a drug code for the lidocaine with epinephrine",
+            "reason": "The surgeon gave local anesthesia (wide-awake technique), which is included in the procedures. No anesthesia professional was present and no sedation was given."
+          },
+          {
+            "what": "Evaluation and management visit (for example with modifier 57 or 25)",
+            "reason": "The decision for surgery was made at the 2026-09-30 office visit. The same-day preoperative exam is part of the global surgical package."
+          },
+          {
+            "what": "Splint application or orthosis HCPCS L-code (for example L3908)",
+            "reason": "Only a soft bulky dressing was applied; the note says no splint was applied."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-05",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Foot and ankle",
+      "title": "Open reduction and internal fixation of a bimalleolar ankle fracture, side never stated",
+      "kind": "realistic",
+      "source": "documents/or-05-bimalleolar-ankle-orif-side-not-stated.txt",
+      "source_sha256": "c4e20aa358ff4d3bdfe6e5818562ac1c85fc5ca824e83231900e7506bf234b31",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-05-bimalleolar-ankle-orif-side-not-stated.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence. Deliberate gap: laterality (RT or LT) is never stated, so the side must be asked.",
+        "codes": [
+          {
+            "code": "27814",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Open treatment of a bimalleolar ankle fracture with internal fixation: a lag screw plus a neutralization plate on the lateral malleolus, and two partially threaded cancellous screws on the medial malleolus. The posterior malleolus is documented as intact, so the fracture is bimalleolar, not trimalleolar. This procedure needs a laterality modifier, RT or LT, but the side is never stated. The modifiers entry is a placeholder, not a real modifier: the side must come from the surgeon's answer to the query, never from a guess."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "RT or LT assigned without asking the surgeon",
+            "reason": "No side appears anywhere in the note. The time-out confirmed 'the side' and the surgeon's mark is mentioned, but neither names it. Any laterality modifier would be a guess."
+          },
+          {
+            "what": "Open treatment of distal tibiofibular syndesmosis disruption (27829)",
+            "reason": "The Cotton test and external rotation stress view showed a stable syndesmosis, and the note says syndesmotic fixation was not required."
+          },
+          {
+            "what": "Trimalleolar ankle fracture treatment (27822, 27823)",
+            "reason": "The posterior malleolus is documented as intact; no posterior fragment exists or was treated."
+          },
+          {
+            "what": "Closed treatment of the ankle fracture with manipulation (27810)",
+            "reason": "The emergency physician did the closed reduction and splinting on the day of injury, not this surgeon in this procedure."
+          },
+          {
+            "what": "Ankle arthrotomy or joint exploration (27610, 27620)",
+            "reason": "The joint was inspected through the fracture site as part of the open treatment; there was no separate arthrotomy."
+          },
+          {
+            "what": "Short leg splint application (29515) and splint supply codes",
+            "reason": "A splint applied after open treatment is part of the global surgical package. In a hospital setting, supplies are not reported on the surgeon's professional service."
+          },
+          {
+            "what": "Fluoroscopy (76000) or stress radiography (77071)",
+            "reason": "The surgeon performed and interpreted the intraoperative imaging and stress views as part of the open treatment."
+          },
+          {
+            "what": "Anesthesia services (01480) and the cefazolin dose (J0690)",
+            "reason": "These were given by the anesthesiologist and the anesthesia team, not the surgeon."
+          },
+          {
+            "what": "Bupivacaine local infiltration",
+            "reason": "The surgeon infiltrated it at closure; it is included in the procedure."
+          },
+          {
+            "what": "Facility implant device codes for the plate and screws (for example C1713)",
+            "reason": "These are reported by the hospital outpatient department, not as part of the surgeon's professional service. The GI set uses the same scope."
+          },
+          {
+            "what": "Evaluation and management visit",
+            "reason": "The decision for surgery was made at the 2026-10-23 clinic visit. Nothing in this report supports a separate visit."
+          }
+        ],
+        "expected_questions": [
+          "Which ankle was operated on? The side is never stated in the note."
+        ]
+      }
+    },
+    {
+      "id": "or-06",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Spine",
+      "title": "Anterior cervical discectomy and fusion at C5-C6 and C6-C7 with PEEK interbody spacers and an anterior plate",
+      "kind": "realistic",
+      "source": "documents/or-06-acdf-c5-c6-c6-c7-spacers-anterior-plate.txt",
+      "source_sha256": "feb21c85051d53a6786e26f686f7e3dc7baf379906ffc20a3fd515f7cb7128a7",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-06-acdf-c5-c6-c6-c7-spacers-anterior-plate.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "22551",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Anterior interbody arthrodesis, cervical below C2, first interspace (C5-C6). It includes the complete discectomy, the osteophyte removal and the decompression of the spinal cord and both C6 nerve roots."
+          },
+          {
+            "code": "22552",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Each additional cervical interspace: the same discectomy, decompression of the cord and both C7 roots, and arthrodesis at C6-C7. Add-on to 22551."
+          },
+          {
+            "code": "22853",
+            "units": 2,
+            "modifier_considerations": [],
+            "basis": "Insertion of an interbody biomechanical device (a PEEK spacer) into the disc space with interbody arthrodesis, counted per interspace: one spacer at C5-C6 and one at C6-C7. Add-on."
+          },
+          {
+            "code": "22845",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Anterior instrumentation spanning 2 to 3 vertebral segments: the plate is screwed into C5, C6 and C7, which is three vertebral segments. The plate is a separate implant; the spacers have no built-in fixation, so it is reported in addition to 22853. Add-on."
+          },
+          {
+            "code": "20930",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Morselized allograft (demineralized bone matrix) packed into the spacers for spine surgery. Reported once per operative session regardless of how many levels. Add-on. Medicare bundles it (status B), but it is a valid CPT-reportable service."
+          },
+          {
+            "code": "20936",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Local autograft (bone from the removed osteophytes) taken through the same incision and mixed into the graft. Reported once per session. Add-on. Medicare bundles it (status B)."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "Operating microscope (69990)",
+            "reason": "CPT lists 22551 and 22552 among the procedures whose codes include microscope use."
+          },
+          {
+            "what": "Intraoperative neurophysiology monitoring and baseline studies (95940, 95941, G0453, 95938, 95939, EMG)",
+            "reason": "A technologist ran the monitoring and a separate neurophysiologist interpreted it remotely in real time and documented it in her own report. The note says the surgeon did not perform or interpret it."
+          },
+          {
+            "what": "Fluoroscopy (76000, 77003)",
+            "reason": "The surgeon performed and interpreted the level localization and implant imaging during the operation; it is included."
+          },
+          {
+            "what": "Anterior discectomy codes (63075, 63076)",
+            "reason": "The discectomy and decompression at C5-C6 and C6-C7 are included in 22551/22552 at the same interspaces."
+          },
+          {
+            "what": "Anterior arthrodesis with minimal discectomy (22554)",
+            "reason": "A complete discectomy with cord and root decompression was done, so the 22551/22552 family applies."
+          },
+          {
+            "what": "Anterior instrumentation for 4 to 7 vertebral segments (22846)",
+            "reason": "The plate spans only three vertebral segments: C5, C6 and C7."
+          },
+          {
+            "what": "Corpectomy (63081, 63082) or a corpectomy device (22854)",
+            "reason": "Only the disc spaces and osteophytes were removed; no vertebral body was removed."
+          },
+          {
+            "what": "Cervical disc arthroplasty (22856, 22858) and posterior laminoplasty (63050)",
+            "reason": "Both were considered and not chosen."
+          },
+          {
+            "what": "Any treatment at C4-C5 (a third interspace)",
+            "reason": "The note documents C4-C5 as not treated."
+          },
+          {
+            "what": "Modifier 50, RT or LT on any spine line",
+            "reason": "The foraminotomies on both sides are part of the decompression, and the right-sided approach does not make the procedure a lateralized one."
+          },
+          {
+            "what": "Structural allograft (20931) or autograft from a separate incision (20937, 20938)",
+            "reason": "The spacers are synthetic PEEK and the allograft is morselized bone matrix. The autograft is local, from the same incision, and the note says no separate harvest incision was made."
+          },
+          {
+            "what": "Anesthesia services and the cefazolin dose",
+            "reason": "Given by the anesthesia team, not the surgeon."
+          },
+          {
+            "what": "Drain placement and layered closure",
+            "reason": "Included in the primary procedure."
+          },
+          {
+            "what": "Cervical orthosis HCPCS L-code",
+            "reason": "The note says no cervical collar is needed."
+          },
+          {
+            "what": "Evaluation and management visit",
+            "reason": "The decision for surgery was made at the 2026-10-08 office visit."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-07",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Trauma and fracture care",
+      "title": "Right intertrochanteric femur fracture, long cephalomedullary nail - operative report",
+      "kind": "realistic",
+      "source": "documents/or-07-intertrochanteric-femur-fracture-cephalomedullary-nail.txt",
+      "source_sha256": "3e5c3641b853c713bd6cdbdf2135875fedbc6811470d17d93d4402bfafd0e2d0",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-07-intertrochanteric-femur-fracture-cephalomedullary-nail.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "27245",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "The surgeon treated a right intertrochanteric femur fracture with an intramedullary implant: a long cephalomedullary nail with a lag screw and one distal interlocking screw. The code covers the implant with or without interlocking screws or cerclage. It includes the closed reduction on the fracture table and the fluoroscopy the surgeon directed and read. RT because the right femur was treated."
+          },
+          {
+            "code": "27245",
+            "units": 1,
+            "modifier_considerations": [
+              "AS",
+              "RT"
+            ],
+            "basis": "Assistant-at-surgery line for the PA-C, reported on the assistant's own claim. The note documents him as first assistant for the whole procedure and lists his tasks. It states that a skilled assistant was required and that no qualified resident was available, because the hospital has no residency program. AS is the modifier for a physician assistant assisting at surgery."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "27244 (intertrochanteric fracture treatment with a plate/screw implant, e.g. a sliding hip screw)",
+            "reason": "The implant was an intramedullary cephalomedullary nail, so 27245 applies."
+          },
+          {
+            "what": "27506 (femoral shaft fracture treatment with an intramedullary implant)",
+            "reason": "The fracture is intertrochanteric and the note states the femoral shaft was intact. A long nail spanning the shaft does not make this a shaft fracture treatment."
+          },
+          {
+            "what": "27495 (prophylactic nailing of the femur)",
+            "reason": "The long nail is the fixation of the intertrochanteric fracture, not a separate prophylactic procedure. The shaft was intact, with no impending fracture documented."
+          },
+          {
+            "what": "27240 (closed treatment with manipulation) for the closed reduction on the fracture table",
+            "reason": "Reduction is included in 27245."
+          },
+          {
+            "what": "76000 or any fluoroscopy or imaging-guidance code for the intraoperative C-arm",
+            "reason": "Intraoperative fluoroscopy directed and read by the operating surgeon is part of the fracture fixation. No separate radiology reading was made."
+          },
+          {
+            "what": "Fascia iliaca nerve block (e.g. 64450 or 64447)",
+            "reason": "The anesthesiologist placed it and documented it in the anesthesia record. It is not the surgeon's service."
+          },
+          {
+            "what": "Anesthesia services (spinal anesthesia with intravenous sedation)",
+            "reason": "The anesthesia provider gave and documented them. They are not the surgeon's service."
+          },
+          {
+            "what": "Postoperative hip and femur radiographs (e.g. 73502, 73552)",
+            "reason": "They were only ordered for the recovery room. This note does not perform or read them."
+          },
+          {
+            "what": "Implant device code for the nail and screws (e.g. C1713)",
+            "reason": "The hospital supplies implants during an inpatient stay. They are not reported on the surgeon's professional claim."
+          },
+          {
+            "what": "Drug codes for cefazolin, tranexamic acid or enoxaparin (e.g. J0690, J1650)",
+            "reason": "These are hospital-supplied inpatient drugs, given by the anesthesia team or by nursing. The surgeon does not report them."
+          },
+          {
+            "what": "Separate fixation of the lesser trochanter fragment (e.g. cerclage)",
+            "reason": "Not performed: the note states the fragment was not fixed separately. Cerclage would be included in 27245 in any case."
+          },
+          {
+            "what": "Vitamin D level, osteoporosis evaluation, physical therapy, hospital medicine co-management",
+            "reason": "These are ordered, recommended or given by others. The surgeon did not perform them in this note."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-08",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Pediatric orthopaedics",
+      "title": "Left Gartland type III supracondylar humerus fracture, age 6, closed reduction and percutaneous pinning - operative report",
+      "kind": "realistic",
+      "source": "documents/or-08-pediatric-supracondylar-humerus-closed-reduction-pinning.txt",
+      "source_sha256": "54c084d59b5a5633c0bd2669a45afa471f6c5505df3131701395b154331c4027",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-08-pediatric-supracondylar-humerus-closed-reduction-pinning.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "24538",
+            "units": 1,
+            "modifier_considerations": [
+              "LT"
+            ],
+            "basis": "Percutaneous skeletal fixation, with three lateral-entry smooth Kirschner wires, of a displaced extension-type supracondylar fracture of the left humerus after closed reduction. The code includes the closed manipulation, the mini C-arm fluoroscopy the surgeon ran and read, and the first long-arm cast the surgeon applied and bivalved. LT because the left arm was treated."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "24535 (closed treatment of a supracondylar humerus fracture with manipulation)",
+            "reason": "The manipulation is part of the percutaneous fixation, 24538."
+          },
+          {
+            "what": "24545 (open treatment of a supracondylar humerus fracture)",
+            "reason": "The open reduction instruments were available, but the note states open reduction was not needed and not performed. No incision was made at the fracture site."
+          },
+          {
+            "what": "29065 (long-arm cast application)",
+            "reason": "The first cast, applied by the surgeon who treats the fracture, is included in the fracture treatment code."
+          },
+          {
+            "what": "29705 (removal or bivalving of a full-arm cast)",
+            "reason": "The surgeon bivalved her own cast in the same session. Cast removal and bivalving codes are for casts another clinician applied, and this step is part of the included cast application."
+          },
+          {
+            "what": "29105 (long-arm splint application) for the temporary splint",
+            "reason": "Emergency department staff placed it the evening before. It was not the surgeon's service. Removing it today is part of the procedure."
+          },
+          {
+            "what": "76000 or any fluoroscopy code for the mini C-arm",
+            "reason": "Intraoperative fluoroscopy that the surgeon runs is part of percutaneous fracture fixation."
+          },
+          {
+            "what": "20670 (removal of a superficial implant), or any pin or cast removal",
+            "reason": "Pin and cast removal are planned in clinic at about 3 to 4 weeks. The note states neither was done today."
+          },
+          {
+            "what": "Observation or hospital care E/M by the surgeon for the overnight stay",
+            "reason": "The operating surgeon's postoperative care is part of the surgical package, and no separate visit is documented."
+          },
+          {
+            "what": "Q4008 (cast supplies, long arm, pediatric, fiberglass)",
+            "reason": "In a hospital operating room the facility supplies the cast material. Cast-supply HCPCS codes are not reported on the surgeon's claim in a facility setting."
+          },
+          {
+            "what": "Anesthesia services (general anesthesia with a laryngeal mask airway)",
+            "reason": "The pediatric anesthesiologist gave and documented them. They are not the surgeon's service."
+          },
+          {
+            "what": "Cefazolin (e.g. J0690)",
+            "reason": "A hospital-supplied drug given in the facility. The surgeon does not report it."
+          },
+          {
+            "what": "Radiographs at the 1-week clinic visit",
+            "reason": "A planned future service, not performed today."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-09",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Bone and soft-tissue tumours",
+      "title": "Right thigh deep soft-tissue sarcoma, radical resection (tumour 4.2 cm, tumour plus margin 6.2 cm) - operative report",
+      "kind": "realistic",
+      "source": "documents/or-09-thigh-deep-soft-tissue-sarcoma-radical-resection.txt",
+      "source_sha256": "e55d895cd77d43875aa5f3b7ed52baf0f2f1dc7b7c498a67d39841fd81124efe",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-09-thigh-deep-soft-tissue-sarcoma-radical-resection.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence. The 80 line is the assistant-surgeon line of the second orthopaedic surgeon, an MD. Not expected: a layered closure of the 16 cm wound (an intermediate repair would be 12035; a complex repair 13121 plus 13122 x2) - the closure is part of the resection.",
+        "codes": [
+          {
+            "code": "27364",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "Radical resection, with wide margins, of a deep intramuscular high-grade sarcoma of the right thigh. CPT sets the size from the tumour's greatest diameter plus the narrowest margin required for complete excision, measured at excision. The note documents a 4.2 cm tumour with a 1.0 cm margin on every side, 6.2 cm in total, which is 5 cm or greater. Included in the code: the en bloc biopsy-tract excision, vessel ligation, marker clips, the drain and the layered (intermediate) closure. RT because the right thigh was treated."
+          },
+          {
+            "code": "27364",
+            "units": 1,
+            "modifier_considerations": [
+              "80",
+              "RT"
+            ],
+            "basis": "Assistant-surgeon line for the second orthopaedic surgeon, reported on his own claim. The note documents him as assistant surgeon for the whole procedure and lists his tasks. It states that a skilled assistant was necessary and that the hospital has no residency programs, with no qualified resident available."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "27329 (radical resection of a thigh soft-tissue tumour, less than 5 cm)",
+            "reason": "The tumour alone and the MRI size are under 5 cm. But the size is measured as tumour plus the narrowest required margin at excision, documented as 6.2 cm."
+          },
+          {
+            "what": "27328 or 27339 (subfascial or intramuscular excision of a thigh soft-tissue tumour)",
+            "reason": "Those codes describe excision without removing a significant amount of normal tissue. This was a documented radical resection of a sarcoma with wide margins."
+          },
+          {
+            "what": "27365 (radical resection of a tumour of the femur or knee)",
+            "reason": "No bone or periosteum was resected, and the femur was not exposed."
+          },
+          {
+            "what": "Separate skin lesion excision for the biopsy-tract skin ellipse (e.g. 11606)",
+            "reason": "It was removed en bloc as part of the radical resection."
+          },
+          {
+            "what": "Repair codes for the closure (intermediate, e.g. 12034; complex, e.g. 13121/13122), adjacent tissue transfer or flap",
+            "reason": "Simple and intermediate repairs are included in the radical resection. The note states no extensive undermining, tissue rearrangement or flap was needed."
+          },
+          {
+            "what": "Marker clip placement (e.g. 10035 or 49411)",
+            "reason": "Clips placed in the open resection bed are included. Those codes describe percutaneous, image-guided placement or intra-abdominal and pelvic devices."
+          },
+          {
+            "what": "Frozen section (88331)",
+            "reason": "The pathologist performed and reported it. It is not the surgeon's service."
+          },
+          {
+            "what": "Ligation of the descending branch of the lateral circumflex femoral vessels (e.g. 37618)",
+            "reason": "Ligating the vessels that feed the tumour is part of the resection."
+          },
+          {
+            "what": "Intraoperative neurophysiologic monitoring (e.g. 95940) for the handheld nerve stimulator",
+            "reason": "No neuromonitoring was performed. The surgeon's own use of a handheld stimulator is included in the resection."
+          },
+          {
+            "what": "Closed-suction drain placement",
+            "reason": "Included in the resection."
+          },
+          {
+            "what": "Anesthesia services (general endotracheal anesthesia)",
+            "reason": "The anesthesiologist gave and documented them. They are not the surgeon's service."
+          },
+          {
+            "what": "Postoperative external beam radiation or radiation planning services",
+            "reason": "Recommended and referred only. The note states no radiation was given today."
+          },
+          {
+            "what": "Drug codes for cefazolin or enoxaparin (e.g. J0690, J1650)",
+            "reason": "Hospital-supplied inpatient drugs. The surgeon does not report them."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-10",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Injections and aspirations",
+      "title": "Right knee aspiration and triamcinolone injection, established patient, office, no imaging guidance",
+      "kind": "short",
+      "source": "documents/or-10-office-knee-aspiration-steroid-injection.txt",
+      "source_sha256": "8af522a854b4f23d4302744468094c7517521c63b9a4a9cb273f3ec876ad5d41",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-10-office-knee-aspiration-steroid-injection.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "20610",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "Arthrocentesis of a major joint (right knee): 32 mL aspirated, then an intra-articular injection through the same needle. Landmark technique with no ultrasound guidance. Aspirating and injecting the same joint in one session is one service. RT for the right knee. Minor procedure: the brief pre-procedure check is included."
+          },
+          {
+            "code": "J3301",
+            "units": 4,
+            "modifier_considerations": [],
+            "basis": "Triamcinolone acetonide, not otherwise specified, per 10 mg: 40 mg injected (1 mL of 40 mg/mL) = 4. Supplied from clinic stock. Drawn from a multiple-dose vial, so the single-dose-container discarded-drug modifiers (JW/JZ) do not apply."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "Office or other outpatient E/M visit (established patient) on the procedure date",
+            "reason": "The visit was the scheduled procedure agreed at the 2026-10-13 visit. Only a brief interval history and knee check were done, and the note says no other problem was addressed, so there is no significant, separately identifiable E/M service."
+          },
+          {
+            "what": "A second arthrocentesis service (aspiration and injection counted separately)",
+            "reason": "One joint in one session: the major-joint arthrocentesis descriptor covers aspiration and/or injection and is reported once."
+          },
+          {
+            "what": "Ultrasound-guided arthrocentesis, or separate ultrasound or fluoroscopic needle guidance",
+            "reason": "The note states palpation of surface landmarks and says no ultrasound, fluoroscopy or other imaging guidance was used."
+          },
+          {
+            "what": "Lidocaine 1% (4 mL) and ethyl chloride spray as separately supplied drugs",
+            "reason": "The local anesthetic mixed into the injection and the topical vapocoolant are part of the procedure, not separately reportable drugs."
+          },
+          {
+            "what": "Hyaluronan (viscosupplement) drug or injection",
+            "reason": "Discussed as an alternative; the patient declined and none was given."
+          },
+          {
+            "what": "Synovial fluid laboratory analysis or specimen handling/conveyance",
+            "reason": "The note states the fluid was not sent for analysis."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-11",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Casting and splinting",
+      "title": "Emergency department closed reduction of left distal radius fracture with short arm cast by the orthopedic surgeon",
+      "kind": "realistic",
+      "source": "documents/or-11-ed-distal-radius-closed-reduction-short-arm-cast.txt",
+      "source_sha256": "3570dbb892254a37229143d73bd7b3101c707ca6c8212b96f09e834b7a6fc2f1",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-11-ed-distal-radius-closed-reduction-short-arm-cast.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "99284",
+            "units": 1,
+            "modifier_considerations": [
+              "57"
+            ],
+            "basis": "Emergency department E/M by the orthopedic surgeon. He took over the fracture care at the emergency physician's request, which is a transfer of care, not a consultation. ED services make no new/established distinction and are leveled by MDM only. MDM is stated as moderate: acute complicated injury; independent interpretation of the radiographs plus discussion of management with the emergency physician; the decision for closed reduction and prescription drug management (oxycodone). Modifier 57 because this evaluation led to the decision to perform the fracture treatment (a 90-day-global procedure) the same day, by the same surgeon."
+          },
+          {
+            "code": "25605",
+            "units": 1,
+            "modifier_considerations": [
+              "LT"
+            ],
+            "basis": "Closed treatment of a Colles-type distal radius fracture with manipulation: finger-trap traction and manipulation under hematoma block, with restored alignment. The descriptor includes the ulnar styloid fracture, and the initial short arm cast is part of the fracture treatment. The same surgeon provides the follow-up, so the full surgical package applies with no surgical-care-only split. LT for the left wrist."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "Short arm cast application",
+            "reason": "The initial cast applied by the surgeon who did the restorative fracture treatment is included in that treatment. Cast application codes are for replacement casts, or a cast applied without restorative treatment."
+          },
+          {
+            "what": "Closed treatment of the ulnar styloid fracture as its own service",
+            "reason": "The distal radius fracture treatment descriptor includes closed treatment of the ulnar styloid fracture."
+          },
+          {
+            "what": "Closed treatment of distal radius fracture without manipulation",
+            "reason": "Manipulation was performed and documented."
+          },
+          {
+            "what": "Cast supplies (adult short arm, fiberglass)",
+            "reason": "Hospital emergency department (facility) setting: the supplies belong to the hospital and are not part of the surgeon's professional services."
+          },
+          {
+            "what": "Fluoroscopy (mini C-arm) during the reduction",
+            "reason": "Integral to the reduction. Fluoroscopy is a separate-procedure service and is not reported when it is part of another procedure."
+          },
+          {
+            "what": "Wrist radiographs: three views before reduction and two views after",
+            "reason": "Performed in the hospital and formally reported by the radiologist. The surgeon's own review counts toward his E/M MDM as independent interpretation, not as a radiology service."
+          },
+          {
+            "what": "Hematoma block (local anesthetic injection) and the lidocaine",
+            "reason": "Anesthesia given by the operating surgeon is included in the procedure. There is no separate injection, nerve block, anesthesia or drug service."
+          },
+          {
+            "what": "Moderate (procedural) sedation",
+            "reason": "The note states no procedural sedation was given."
+          },
+          {
+            "what": "Percutaneous pinning or open treatment of the distal radius fracture",
+            "reason": "Mentioned only as a future option if alignment is lost; not performed, planned or scheduled."
+          },
+          {
+            "what": "Bone density study",
+            "reason": "A bone health evaluation was recommended through the primary care physician; nothing was performed."
+          },
+          {
+            "what": "Office or inpatient consultation E/M",
+            "reason": "The surgeon took over care of the fracture in the emergency department (transfer of care), so the emergency department E/M family applies."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-12",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Braces and orthotics",
+      "title": "Established patient visit with prefabricated off-the-shelf hinged knee brace dispensed for a right MCL sprain",
+      "kind": "short",
+      "source": "documents/or-12-office-visit-hinged-knee-brace-dispensed.txt",
+      "source_sha256": "ec9a7f9c109d375e91a0ddc0d346c2f49dc6603f70005b18282b5364eb923013",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-12-office-visit-hinged-knee-brace-dispensed.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "99213",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Established patient office visit with a medically appropriate history and exam. MDM is stated as low: one acute uncomplicated injury, with low-risk management (brace, physical therapy referral, over-the-counter ibuprofen). No modifier: dispensing an orthosis is a supply, not a procedure with a global period."
+          },
+          {
+            "code": "L1852",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "Knee orthosis, double upright, thigh and calf, adjustable flexion and extension joint (polycentric hinges with flexion and extension stops), medial-lateral and rotation control, prefabricated, off-the-shelf. The note says no trimming, bending, molding or other customization was needed; only straps and hinge stops were adjusted, which is minimal self-adjustment. RT for the right knee. Payer-specific DMEPOS modifiers (for example KX when Medicare coverage criteria are met) are outside this author's expectation."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "Custom-fitted version of the double-upright knee orthosis",
+            "reason": "That version needs trimming, bending, molding or other customization by an individual with expertise; the note states none was needed."
+          },
+          {
+            "what": "Positional, rigid-support knee orthosis with adjustable joints, off-the-shelf",
+            "reason": "The brace described is a double-upright functional brace with medial-lateral and rotational control, which matches the more specific double-upright off-the-shelf descriptor."
+          },
+          {
+            "what": "Orthotic management and training, or a separate fitting service",
+            "reason": "Fitting, adjustment and use instructions at delivery are part of the orthosis item; no separate therapy service was provided."
+          },
+          {
+            "what": "Knee radiographs",
+            "reason": "Taken at the 2026-10-28 visit, not today."
+          },
+          {
+            "what": "MRI of the knee",
+            "reason": "Only if instability persists; not ordered."
+          },
+          {
+            "what": "Physical therapy evaluation or treatment",
+            "reason": "Referral only."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-13",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "In-office imaging",
+      "title": "Established patient follow-up with in-office three-view right wrist radiographs interpreted by the surgeon",
+      "kind": "short",
+      "source": "documents/or-13-office-followup-right-wrist-three-view-radiographs.txt",
+      "source_sha256": "3e923080bc9a930c17aafa5402a813989e3a0b3a22a2bd1715b8524dacfc9f16",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-13-office-followup-right-wrist-three-view-radiographs.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "99213",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Established patient follow-up. MDM is stated as low: one acute uncomplicated injury, healing, with over-the-counter naproxen. The radiograph the surgeon reports himself does not count toward MDM. No modifier is needed with a diagnostic radiograph, and no procedure was done at the prior visit, so no postoperative package applies."
+          },
+          {
+            "code": "73110",
+            "units": 1,
+            "modifier_considerations": [
+              "RT"
+            ],
+            "basis": "Wrist radiographs, complete, at least three views (posteroanterior in ulnar deviation, lateral, oblique). Taken on the practice's own equipment and interpreted by the surgeon with a documented report (views, comparison, findings, impression), so this is the global service with no professional/technical split. RT for the right wrist."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "Wrist radiographs, two views",
+            "reason": "Three views were obtained."
+          },
+          {
+            "what": "Professional-component-only or technical-component-only reporting of the radiographs",
+            "reason": "The practice owns the equipment, its technologist took the images and its surgeon interpreted them."
+          },
+          {
+            "what": "Splint application or splint supply",
+            "reason": "The urgent care thumb spica splint was continued at the last visit and stopped today; nothing was applied or dispensed."
+          },
+          {
+            "what": "Closed treatment of a scaphoid fracture",
+            "reason": "No fracture was found or treated."
+          },
+          {
+            "what": "MRI of the wrist",
+            "reason": "Only if snuffbox pain returns; not ordered."
+          },
+          {
+            "what": "The urgent care radiographs of 2026-10-25",
+            "reason": "Used for comparison only; performed and reported elsewhere."
+          }
+        ],
+        "expected_questions": []
+      }
+    },
+    {
+      "id": "or-14",
+      "specialty": "Orthopedic Surgery",
+      "subcategory": "Visits, consults and post-operative care",
+      "title": "New patient visit for left hip osteoarthritis with decision for total hip arthroplasty the next day",
+      "kind": "short",
+      "source": "documents/or-14-new-patient-hip-oa-decision-for-tha-next-day.txt",
+      "source_sha256": "4f3518b539db7308dc7d7001990436a106e6ee07cbb70a2db560499e5f4751b5",
+      "provenance": "Written for the owner direction of 2026-11-22 (DECISIONS D390) by an authoring agent and checked by an independent review agent; corrected per that review (session 738699b2).",
+      "delivery": {
+        "format": "txt",
+        "file": "or-14-new-patient-hip-oa-decision-for-tha-next-day.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only, checked once by an independent reviewer; not adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "99205",
+            "units": 1,
+            "modifier_considerations": [
+              "57"
+            ],
+            "basis": "New patient office visit: never seen by any orthopedic surgeon in the practice, and referred to evaluate and treat. MDM is stated as high, and all three elements are documented: chronic illness with severe progression; extensive data (external note, three unique test results, independent interpretation of outside radiographs, discussion with the referring physician); decision for elective major surgery with identified patient risk factors (diabetes, obesity, sleep apnea). Modifier 57 because the visit is the day before a 90-day-global total hip arthroplasty that the same surgeon will perform, and the decision for surgery was made at this visit."
+          }
+        ],
+        "not_expected": [
+          {
+            "what": "Total hip arthroplasty",
+            "reason": "Scheduled for 2026-11-13, a separate date and report; not performed at this visit."
+          },
+          {
+            "what": "Office consultation E/M",
+            "reason": "The referral was to evaluate and treat (transfer of care), so the new patient office visit family applies."
+          },
+          {
+            "what": "Pelvis and hip radiographs",
+            "reason": "Performed and reported by an outside imaging center. The surgeon's personal review counts in MDM as independent interpretation."
+          },
+          {
+            "what": "Laboratory tests (complete blood count, basic metabolic panel, glycated hemoglobin)",
+            "reason": "Performed elsewhere on 2026-11-03; reviewed only."
+          },
+          {
+            "what": "Hip joint injection",
+            "reason": "History only (an earlier image-guided injection done elsewhere); none today."
+          },
+          {
+            "what": "Prolonged service add-on",
+            "reason": "No total time is documented; the level rests on MDM."
+          },
+          {
+            "what": "Modifier 25 on the visit (in place of 57)",
+            "reason": "The visit is the decision for a major (90-day-global) surgery the next day, which is the modifier 57 case, even though the note also serves as the pre-operative history and physical."
+          }
+        ],
+        "expected_questions": []
       }
     }
   ],

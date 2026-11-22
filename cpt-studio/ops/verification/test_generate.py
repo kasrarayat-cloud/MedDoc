@@ -121,6 +121,32 @@ class ManifestTests(unittest.TestCase):
                 self.assertTrue(expected['note'])
 
 
+class SpecialtyDocumentTests(unittest.TestCase):
+    """Owner direction 2026-11-22 (D390): one synthetic document per subcategory of Neurosurgery (16) and Orthopedic
+    Surgery (14), beside the ten GI documents; subcategories are this coverage, not rules or a choice a member makes."""
+
+    def test_each_specialty_covers_each_of_its_subcategories_once(self):
+        for prefix, specialty, count in (('ns-', 'Neurosurgery', 16), ('or-', 'Orthopedic Surgery', 14)):
+            with self.subTest(specialty=specialty):
+                docs = [doc for doc in MANIFEST['documents'] if doc['id'].startswith(prefix)]
+                self.assertEqual([doc['id'] for doc in docs], [f'{prefix}{n:02d}' for n in range(1, count + 1)])
+                self.assertEqual({doc['specialty'] for doc in docs}, {specialty})
+                subcategories = [doc['subcategory'] for doc in docs]
+                self.assertEqual(len(set(subcategories)), count)
+                self.assertTrue({'short', 'realistic'} <= {doc['kind'] for doc in docs})
+        self.assertEqual(len([doc for doc in MANIFEST['documents'] if doc['id'].startswith('gi-')]), 10)
+
+    def test_specialty_documents_carry_author_codes_never_adjudicated(self):
+        for doc in MANIFEST['documents']:
+            if doc['id'].startswith(('ns-', 'or-')):
+                with self.subTest(doc=doc['id']):
+                    expected = doc['author_expected_cpt']
+                    self.assertIs(expected['adjudicated'], False)
+                    self.assertTrue(expected['codes'])
+                    for code in expected['codes']:
+                        self.assertRegex(code['code'], r'^(?:[0-9]{4}[0-9FTU]|[A-Z][0-9]{4})$')
+
+
 class ClassifyAndWrapTests(unittest.TestCase):
     def test_classify_recognises_banner_title_headings_paragraphs_and_tables(self):
         text = (f'{generate.BANNER}\n\nPractice (fictional)\nReport\n\nPatient: A (fictional)\n\nFindings\n'
@@ -244,7 +270,7 @@ class GeneratedOutputTests(unittest.TestCase):
     def test_index_lists_every_output_with_its_real_hash(self):
         index = json.loads((self.first / 'generated.json').read_text(encoding='utf-8'))
         self.assertEqual(index['manifest_sha256'], hashlib.sha256(MANIFEST_PATH.read_bytes()).hexdigest())
-        self.assertEqual(len(index['documents']), 10)
+        self.assertEqual([row['id'] for row in index['documents']], [doc['id'] for doc in MANIFEST['documents']])
         for row in index['documents']:
             with self.subTest(doc=row['id']):
                 data = (self.first / row['file']).read_bytes()

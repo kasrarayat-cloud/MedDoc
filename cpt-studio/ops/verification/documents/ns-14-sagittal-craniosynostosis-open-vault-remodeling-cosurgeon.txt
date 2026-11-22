@@ -1,0 +1,64 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Bayview Children's Hospital, Craniofacial Program (fictional hospital)
+Operative report - pediatric neurosurgery
+
+Patient: Theo Marchetti (fictional)
+Synthetic record: SYN-NS-0014
+Date of procedure: 2026-10-15
+Place of service: Inpatient hospital, pediatric operating room
+Age and weight: 4 months 2 weeks; 6.8 kg
+Surgeon (neurosurgery, author of this report): Dr. Samuel Achterberg, MD, Pediatric Neurosurgery (fictional)
+Co-surgeon (plastic surgery): Dr. Leah Ferreira-Nakamura, MD, Plastic and Craniofacial Surgery (fictional), who dictates a separate operative report for her portion
+Assistant: None
+Anesthesia: Dr. Imogen Castellanos, MD, Pediatric Anesthesiology (fictional)
+Neurophysiologic monitoring: None
+
+Preoperative diagnosis
+Isolated non-syndromic sagittal craniosynostosis with scaphocephaly.
+
+Postoperative diagnosis
+Same; complete fusion of the sagittal suture, with patent coronal and lambdoid sutures.
+
+Procedure
+Open cranial vault remodeling for single-suture sagittal craniosynostosis: extended vertex (sagittal) strip craniectomy from the coronal to the lambdoid sutures, with bilateral parietal barrel-stave osteotomies and out-fracture. Neurosurgery and plastic surgery operated as co-surgeons.
+
+Indication
+Term-born boy with scaphocephaly noted at birth and progressing since. Cephalic index 66 percent. Low-dose head CT with three-dimensional reconstruction on 2026-09-22 showed complete fusion of the sagittal suture with patent metopic, coronal, lambdoid and squamosal sutures, no hydrocephalus and no other intracranial abnormality. Ophthalmology found no papilledema. Genetics evaluation found no syndrome. At the multidisciplinary craniofacial clinic, endoscopic strip craniectomy followed by helmet therapy was discussed; given his age and the family's wish to avoid months of helmet wear, the family chose open vault remodeling. No helmet is planned after surgery.
+
+Consent
+Both parents were counselled by both surgeons about the risks, including bleeding and transfusion, injury to the dura or superior sagittal sinus, cerebrospinal fluid leak, infection, venous air embolism, incomplete correction, re-fusion and further surgery, and about the alternatives of endoscopic surgery with helmet therapy or observation. Written informed consent was obtained.
+
+Anesthesia
+General endotracheal anesthesia by Dr. Castellanos (fictional). The anesthesia team placed a radial arterial line and two peripheral IV lines, gave cefazolin, and ran a tranexamic acid infusion. Precordial Doppler was used to monitor for venous air embolism.
+
+Description of procedure
+After a time-out, the infant was placed in the modified prone (sphinx) position on a padded horseshoe headrest, without pin fixation, with all pressure points padded. The scalp was prepped and draped from the brow to below the inion.
+
+Division of the work between the co-surgeons: Dr. Ferreira-Nakamura (plastic surgery) made the incision, elevated the scalp flaps, performed the barrel-stave osteotomies, out-fracture and contouring, and closed the scalp. I (neurosurgery) made the burr holes, dissected the dura and superior sagittal sinus from the inner table, performed the vertex strip craniectomy, protected the dura and sinus during every osteotomy, and obtained dural and sinus hemostasis. Both surgeons were scrubbed for the entire procedure.
+
+Dr. Ferreira-Nakamura made a zigzag bicoronal incision from ear to ear after infiltration with dilute epinephrine-containing local anesthetic. The anterior flap was elevated in the subgaleal plane to 2 cm above the orbital rims and the posterior flap to below the inion, preserving the pericranium.
+
+I made four burr holes, two 1.5 cm lateral to the midline just behind the coronal sutures and two just in front of the lambdoid sutures. Under direct vision the dura was stripped from the inner table across the midline, and the superior sagittal sinus was separated from the fused suture with blunt dissectors from the coronal to the lambdoid suture. A 4 cm wide vertex strip of bone containing the entire fused sagittal suture was cut with the craniotome footplate and Kerrison rongeurs and removed in one piece. Emissary venous bleeding was controlled with bipolar cautery and bone wax; the sinus and dura were intact. The strip was sent to pathology and was not replaced; the vertex defect was left open to allow growth.
+
+Dr. Ferreira-Nakamura then made three radial barrel-stave osteotomies in each parietal bone, from the edge of the craniectomy down toward the squamosal suture, leaving each stave attached at its base, while I retracted and protected the dura. The staves were out-fractured with a greenstick technique, widening the biparietal diameter by about 1.5 cm, and the stave edges were contoured with a burr. The staves were not removed from the skull, no bone graft was harvested or placed, and no plates, screws or other fixation were used. The mild frontal bossing is expected to remodel after the release; forehead reshaping and orbital rim advancement were not performed, and no bone flap was removed for reshaping.
+
+Hemostasis along the sinus was confirmed with thrombin-soaked gelatin sponge. Dr. Ferreira-Nakamura closed the galea with interrupted 4-0 absorbable sutures and the skin with running 5-0 fast-absorbing sutures. No drain was placed.
+
+Magnification and adjuncts
+Loupe magnification only; the operating microscope was not used. No image guidance or navigation. No neurophysiologic monitoring. No fluoroscopy.
+
+Findings
+1. Complete bony fusion of the sagittal suture from the coronal to the lambdoid suture, with a palpable ridge; coronal and lambdoid sutures patent.
+2. Dura and superior sagittal sinus intact; no cerebrospinal fluid leak.
+3. Biparietal widening of about 1.5 cm after out-fracture.
+
+Estimated blood loss: 140 mL. Packed red blood cells, 120 mL, were transfused by the anesthesia team.
+Specimens: vertex bone strip containing the sagittal suture, to pathology.
+Implants: none.
+Complications: none. No venous air embolism was detected.
+
+Disposition
+Extubated in the operating room and transferred to the pediatric ICU in stable condition. Hemoglobin checks every 6 hours overnight, head wrap, acetaminophen for pain. Expected to go home on postoperative day 2 or 3. Follow-up in the craniofacial clinic in 2 weeks. I updated both parents after the procedure.
+
+Electronically signed: Dr. Samuel Achterberg, MD (fictional), 2026-10-15 14:08

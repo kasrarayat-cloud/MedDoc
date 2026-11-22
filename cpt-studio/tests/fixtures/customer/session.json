@@ -7,7 +7,8 @@
  },
  "workspace": {
   "id": "fa000000-0000-4000-8000-000000000002",
-  "name": "Gastroenterology"
+  "name": "Gastroenterology",
+  "specialty": "Gastroenterology"
  },
  "role": "reviewer",
  "can_review": true,

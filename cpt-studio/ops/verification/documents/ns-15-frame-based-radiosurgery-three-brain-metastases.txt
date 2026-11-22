@@ -1,0 +1,56 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Northgate University Hospital, Radiosurgery Center (fictional hospital)
+Neurosurgery procedure note - cranial stereotactic radiosurgery
+
+Patient: Eleanor Vasquez-Hall (fictional)
+Synthetic record: SYN-NS-0015
+Date of procedure: 2026-10-22
+Place of service: Hospital outpatient department, radiosurgery center (same-day outpatient treatment)
+Neurosurgeon (author of this note): Dr. Martin Oyelaran, MD, Neurological Surgery (fictional)
+Radiation oncologist (separate provider, separate note): Dr. Hannah Brightwater, MD, Radiation Oncology (fictional)
+Medical physicist: Owen Kessler, PhD (fictional)
+Anesthesia: None; local anesthesia by the neurosurgeon and oral anxiolysis
+
+Procedure
+Single-session, frame-based stereotactic radiosurgery to three brain metastases on a multi-source cobalt-60 radiosurgery platform, including application and removal of the stereotactic headframe.
+
+Indication
+64-year-old woman with stage IV lung adenocarcinoma whose extracranial disease is stable on immunotherapy. MRI of the brain on 2026-10-08, obtained for mild right hand clumsiness, showed three enhancing metastases: left frontal, right cerebellar and left pontine. No prior cranial radiation or radiosurgery. Karnofsky performance status 80. She has taken dexamethasone 2 mg twice daily since 2026-10-08 with improvement of the hand symptoms. I saw her in neurosurgery clinic on 2026-10-13 (separate visit), and the multidisciplinary neuro-oncology tumor board on 2026-10-14 recommended single-session radiosurgery to all three lesions. Surgical resection of the frontal lesion and whole-brain radiation therapy were considered and are not recommended at this time.
+
+Consent
+Written consent was obtained at the clinic visit and reviewed again today. Risks discussed included pin-site bleeding or infection, headache, seizure, transient swelling with worsening of symptoms, radiation necrosis (with greater consequence for the pontine target), new lesions elsewhere in the brain, and the need for further treatment. Her questions were answered and she wished to proceed.
+
+Pre-procedure assessment
+No new symptoms since the clinic visit. Alert and oriented, speech fluent, cranial nerves intact, mild right hand dysmetria improved since the clinic visit, gait steady. No change to the plan.
+
+Anesthesia and anxiolysis
+Lorazepam 1 mg by mouth was given by nursing 30 minutes before frame placement. No intravenous sedation was given; the patient remained awake and conversant throughout. Local anesthesia at the pin sites was given by me.
+
+Description of procedure
+Headframe application: at 07:10, with the patient seated, I applied the stereotactic headframe. The four pin sites (two frontal, two parieto-occipital) were cleaned with chlorhexidine and infiltrated with a 1:1 mixture of 1% lidocaine and 0.5% bupivacaine, 12 mL in total. The frame was shifted slightly posterior and to the left so that the cerebellar and pontine targets were well centered, and the pins were tightened diagonally to the standard torque. The frame was checked for clearance from the face, ears and neck.
+
+Stereotactic imaging: at 07:45 a stereotactic MRI was obtained with the fiducial indicator box attached, using thin-section (1 mm) contrast-enhanced volumetric T1 and axial T2 sequences. Neuroradiology (fictional) reported the study separately. The images were registered to frame space on the planning workstation with an acceptable fiducial registration error.
+
+Target definition and dose planning: I contoured the three targets and, with Dr. Brightwater, the organs at risk (brainstem, optic nerves and chiasm, cochleae). The dose plan was developed jointly by Dr. Brightwater, Dr. Kessler and me. Dr. Brightwater is documenting the radiation treatment planning, dosimetry, physics review and treatment management in her own note. Final targets:
+- Target 1, left frontal lobe (middle frontal gyrus): 1.6 x 1.4 x 1.5 cm, 1.7 mL. Margin dose 20 Gy to the 50 percent isodose line, 6 isocenters, 98 percent coverage. Closest distance to the optic chiasm 4.2 cm.
+- Target 2, lateral right cerebellar hemisphere: 1.1 x 1.0 x 1.0 cm, 0.6 mL. Margin dose 20 Gy to the 50 percent isodose line, 3 isocenters, 99 percent coverage. 2.4 cm from the brainstem.
+- Target 3, left dorsal pons, entirely within the brainstem: 0.7 x 0.6 x 0.6 cm, 0.13 mL. Margin dose 15 Gy to the 50 percent isodose line, 2 isocenters, 97 percent coverage.
+Brainstem volume outside target 3 receiving 12 Gy or more: 0.4 mL. Optic apparatus maximum point dose: 1.1 Gy. Neither the frontal nor the cerebellar target lies near the optic nerves, chiasm or optic tracts.
+
+Treatment delivery: treatment was delivered in a single session from 10:05 to 11:01 (beam-on time 56 minutes) with the patient supine and the frame docked to the couch. Dr. Brightwater and I were both present for treatment delivery, and Dr. Kessler performed the physics checks before treatment. The patient was observed by video and intercom and tolerated the treatment without complaint.
+
+Frame removal: at 11:08 I removed the headframe. Minor pin-site oozing stopped with direct pressure, and the pin sites were dressed with antibiotic ointment and gauze.
+
+Other adjuncts: no incision was made; no operating microscope, navigation, neurophysiologic monitoring or fluoroscopy was used. No specimens.
+
+Findings
+Three metastases treated as planned: left frontal 1.6 cm, right cerebellar 1.1 cm and left pontine 0.7 cm. No new lesions on the stereotactic MRI compared with 2026-10-08.
+
+Estimated blood loss: minimal (pin sites).
+Complications: none.
+
+Disposition
+Observed for 1 hour after frame removal; neurologically unchanged. Went home with her husband. Continue dexamethasone 2 mg twice daily for 5 more days, then taper as directed by radiation oncology. Acetaminophen as needed for headache; pin-site care reviewed; may shower tomorrow. Brain MRI in 8 weeks, followed by neurosurgery and radiation oncology visits. She knows to call for new weakness, worsening headache, vomiting or seizure.
+
+Electronically signed: Dr. Martin Oyelaran, MD (fictional), 2026-10-22 12:20

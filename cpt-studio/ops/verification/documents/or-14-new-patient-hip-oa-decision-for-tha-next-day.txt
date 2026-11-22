@@ -1,0 +1,34 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Cedar Ridge Orthopaedic Associates (fictional practice)
+New patient office visit - adult hip reconstruction
+
+Patient: Beatrix Lindqvist (fictional)
+Synthetic record: SYN-OR-0014
+Date of service: 2026-11-12
+Place of service: Office, in-person outpatient visit
+Surgeon: Dr. Anselm Kovac, MD, Orthopedic Surgery (fictional)
+Referring physician: Dr. Mira Castellane, MD, Family Medicine (fictional), referred to evaluate and treat
+Patient status: New patient; never seen by any orthopedic surgeon in this practice.
+
+History
+71-year-old with four years of progressive left groin pain, now 8/10, night pain, and walking limited to one block with a cane. Failed 18 months of physical therapy, acetaminophen and an image-guided hip injection. Type 2 diabetes on metformin, body mass index 36, obstructive sleep apnea on CPAP, hypertension, chronic kidney disease stage 3a. Penicillin allergy (rash).
+
+Examination
+Antalgic gait. Left hip flexion 85 degrees, 10-degree flexion contracture, no internal rotation, external rotation 20 degrees, groin pain with log roll. Neurovascularly intact.
+
+Data reviewed
+Outside radiographs of 2026-10-30 (Riverbend Imaging, fictional), images personally reviewed: severe left hip joint space loss, subchondral cysts, osteophytes and femoral head flattening.
+Dr. Castellane's pre-operative evaluation of 2026-11-05. Labs of 2026-11-03: normal complete blood count; basic metabolic panel with creatinine 1.2 mg/dL; glycated hemoglobin 7.1%.
+Perioperative plan discussed by phone with Dr. Castellane today.
+
+Assessment
+End-stage primary osteoarthritis of the left hip, progressing despite nonoperative care.
+
+Plan
+Risks (including higher anesthetic and wound risks from diabetes, obesity and sleep apnea), benefits and alternatives were discussed. She chose left total hip arthroplasty; the decision was made today. I will perform it tomorrow, 2026-11-13, in a cancellation slot at Northgate Regional Medical Center (fictional). Consent signed. This note also serves as the pre-operative history and physical.
+
+Medical decision making
+High: chronic illness with severe progression; extensive data (external notes, three unique test results, independent interpretation of outside radiographs, discussion of management with the referring physician); decision for elective major surgery with identified patient risk factors.
+
+Electronically signed: Dr. Anselm Kovac, MD (fictional), 2026-11-12 16:30

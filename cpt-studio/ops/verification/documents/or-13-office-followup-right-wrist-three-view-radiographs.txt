@@ -1,0 +1,39 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Cedar Ridge Orthopaedic Associates (fictional practice)
+Office follow-up visit - progress note with in-office radiographs
+
+Patient: Wendell Ashgrove (fictional)
+Synthetic record: SYN-OR-0013
+Date of service: 2026-11-10
+Place of service: Office, in-person outpatient visit
+Clinician: Dr. Tobias Wren, MD, Orthopedic Surgery (fictional)
+Patient status: Established patient. Seen by Dr. Wren on 2026-10-27; no procedure was performed at that visit.
+
+History of present illness
+41-year-old who fell onto his outstretched right hand while skating on 2026-10-25. At the last visit he had snuffbox tenderness with normal two-view urgent care radiographs, and the thumb spica splint from urgent care was continued for a possible occult scaphoid fracture. Today pain is 1/10 and only with push-ups.
+
+Examination
+Right wrist: no swelling. No tenderness at the anatomic snuffbox or scaphoid tubercle; mild dorsal wrist tenderness. Full motion, with pain only at end flexion. Scaphoid shift test negative. Grip strength 90% of the left. Neurovascularly intact.
+
+Radiographs, right wrist, three views (in office)
+Obtained today on the practice's own equipment by the clinic radiologic technologist and interpreted by Dr. Wren.
+Views: posteroanterior in ulnar deviation, lateral and oblique.
+Comparison: urgent care radiographs of 2026-10-25.
+Findings: no fracture of the scaphoid, other carpal bones, distal radius or ulna; no sclerosis or resorption line at the scaphoid waist. Scapholunate interval 2 mm. Normal carpal alignment and arcs. Joint spaces preserved. Soft tissues normal.
+Impression: no occult scaphoid or other fracture at 16 days after injury.
+
+Assessment
+Right wrist sprain, healing. Occult scaphoid fracture is now unlikely clinically and radiographically.
+
+Plan
+1. Stop the splint; home wrist motion and grip exercises.
+2. Naproxen 220 mg over the counter as needed, with food.
+3. Gradual return to skating; avoid push-ups for 2 weeks.
+4. MRI of the wrist only if snuffbox pain returns; not ordered.
+5. Return as needed.
+
+Medical decision making
+Low: one acute uncomplicated injury, healing; low-risk management with over-the-counter medication.
+
+Electronically signed: Dr. Tobias Wren, MD (fictional), 2026-11-10 11:15

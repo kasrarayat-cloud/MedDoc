@@ -2054,3 +2054,24 @@ test('the walk names the current customer build and refuses to upload unless pai
   assert.equal(walk.summarize(encounter()).codes[0].quotes, 1);  // the evidence keeps counts, never the document's text
   assert.ok(!JSON.stringify(walk.summarize(encounter())).includes('antrum'));
 });
+
+test('with --workspace the walk stops on a session in another workspace (owner direction 2026-11-22, D390)', () => {
+  const session = { can_review: true, acknowledgement: 'I reviewed this code against the document.',
+    workspace: { id: 'w1', name: 'Neurosurgery' } };
+  assert.deepEqual(walk.sessionProblems(session, { allowLiveProvider: true, workspace: 'Neurosurgery' }), []);
+  assert.deepEqual(walk.sessionProblems(session, { allowLiveProvider: true, workspace: null }), []);
+  assert.match(walk.sessionProblems(session, { allowLiveProvider: true, workspace: 'Orthopedic Surgery' }).join(),
+    /signed in to the workspace "Neurosurgery", not "Orthopedic Surgery"/);
+  assert.match(walk.sessionProblems({ ...session, workspace: undefined }, { allowLiveProvider: true, workspace: 'Neurosurgery' }).join(),
+    /signed in to the workspace null/);
+  const REQUIRED_ARGS = ['--base-url', 'https://cpt.quillmd.com', '--credentials', 'a.json', '--operator-credentials', 'o.json',
+    '--docs', 'd', '--out', 'o'];
+  assert.equal(walk.parseArgs([...REQUIRED_ARGS, '--workspace', 'Orthopedic Surgery']).workspace, 'Orthopedic Surgery');
+  assert.equal(walk.parseArgs(REQUIRED_ARGS).workspace, null);
+});
+
+test('the walk evidence names the workspace and specialty the session served, with or without --workspace (N1-3-4)', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'walk.cjs'), 'utf8');
+  assert.ok(source.includes('evidence.session = ctx.session ? { workspace: ctx.session.workspace?.name ?? null,'));
+  assert.ok(source.includes('specialty: ctx.session.workspace?.specialty ?? null,'));
+});

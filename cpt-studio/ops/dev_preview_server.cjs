@@ -592,7 +592,7 @@ async function handle(req, res) {
     return send(res, 204, '');
   }
   if (req.method === 'GET' && url.pathname === '/') {
-    return send(res, 200, renderTemplate('index.html'), {
+    return send(res, 200, renderTemplate('index.html', { specialty: fixtures.session.workspace.specialty }), {
       'Content-Type': 'text/html; charset=utf-8', 'Set-Cookie': `cptstudio_csrf=${CSRF}; Path=/; SameSite=Strict`,
     });
   }

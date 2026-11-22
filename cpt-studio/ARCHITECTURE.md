@@ -18,6 +18,17 @@ environment.
 Non-goals: real patient data, claims submission, licensed CPT descriptors, NCCI procedure-to-procedure edits, accuracy
 claims.
 
+Specialties (owner direction 2026-11-22, DECISIONS D390): Gastroenterology, Neurosurgery and Orthopedic Surgery, each a
+workspace category provisioned the same way (`manage provision --specialty`; ops/INSTALL.md, provision). A workspace's
+specialty is a label: the page names it (the upload form's Specialty field and the review heading, rendered from the
+member's workspace) and so does the PDF report's Specialty cell. Nothing on the coding path reads it - Fable codes every
+specialty, with no engine, code list, routing or specialty rule (D358), so a Neurosurgery or Orthopedic Surgery document
+runs exactly the GI path. "Subcategories" are what they are for GI: the coverage of the synthetic verification
+documents, not a choice a member makes and not rules. One login serves one workspace until a workspace switcher exists:
+provisioning never adds an account to a second workspace. A workspace is found by its name exactly as stored; a new
+one needs a name that does not name another specialty (read by its letters and digits, case aside) and that no workspace
+of another specialty has exactly (ops/INSTALL.md, provision).
+
 ## 2. Truth rules
 
 1. **Fable's decision is final apart from the human.** No code holds, drops, downgrades or upgrades a code the coding
@@ -152,7 +163,15 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   of strings (an integer item read as its decimal string, a blank item - which carries nothing - removed) or not given;
   units a whole number as written (0 included; a string of digits read as its number) or not given; a reason list
   joined; a question list one question each; a line label the reader writes on its own items must be its place in the
-  list; any other shape is unreadable, never corrected or guessed. **Lines**: every code row has one - `L1`..`Ln`, the
+  list; a code line's code (a reader code or a missed code) written with the CPT book's marks before it - `+` an add-on,
+  `#` a resequenced code, at most one of each - is the code they mark (`+22614` is 22614: the code itself says what the
+  mark says; owner direction 2026-11-22, D390, nothing may drop a code Fable writes), and so are a review's code, the
+  checker's correction and a question's target, so a marked line and a marked review of it agree (refutation
+  N2-1-1..4) - a review's code, a correction and a target in any other form are kept as written and matched as before
+  (white space and case aside), never unreadable; a stored round is read again whenever a page shows it, so the release
+  that installs this reading checks, before its switch, that no stored round holds a marked code (refutation N3-1-1;
+  cpt.quillmd.com held none); a code line's code in any other shape is unreadable, never corrected or guessed. **Lines**: every code row has one -
+  `L1`..`Ln`, the
   reader's codes in its order, then `M1`..`Mk`, the checker's additions - and the checker is given each line and names
   the line of every review. **Combination**, the only glue logic: a reader line keeps the reader's status only when the
   reviews naming that line and its code all say `agree` (at least one) and no other review names the line or its code;
@@ -192,8 +211,8 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   (sets of question numbers, each reference list resolved once). A known limit: because a reference reaches every
   question carrying its id and a row shows every question its ids name, an absurd answer with many distinct questions
   sharing one id and many lines naming it multiplies the size of the stored round. The problems are the reader's.
-  **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n> <code>` or `MISSED M<k> <code>` (checker)
-  starts that line's section; a citation after it is filed under the line when
+  **Citations**: a whole line `LINE L<n> <code>` (reader), `REVIEW L<n> <code>` or `MISSED M<k> <code>` (checker),
+  the code with or without the book's marks, starts that line's section; a citation after it is filed under the line when
   the marker's code is that line's code, else under `_document`. A section also ends at a line holding exactly `END`
   (both answers are asked to end their last section with one), at the start of the final answer, at a heading, a
   thematic break, a code fence or a line that only looks like a marker; a cited block whose own text holds a section

@@ -1,0 +1,78 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Northgate Regional Medical Center - Orthopaedic Surgery (fictional hospital)
+Operative report - total knee arthroplasty
+
+Patient: Gloria Pennwright (fictional)
+Synthetic record: SYN-OR-0001
+Date of procedure: 2026-10-13
+Place of service: Inpatient hospital, main operating room (admitted on the day of surgery)
+Surgeon: Dr. Nathaniel Brandvold, MD, Orthopaedic Surgery (fictional)
+First assistant: Jordan Whitcombe, PA-C, Orthopaedic Surgery (fictional)
+Anesthesia: Dr. Tobias Wrenfield, MD, Anesthesiology (fictional)
+
+Preoperative diagnosis
+Primary osteoarthritis of the right knee, tricompartmental, with a correctable varus deformity.
+
+Postoperative diagnosis
+Same.
+
+Procedure
+Right primary total knee arthroplasty, cemented, posterior-stabilized, with patellar resurfacing.
+
+Indication
+68-year-old woman with six years of progressive right knee pain limiting walking to less than one block and waking her at night. Nonoperative care has failed: activity changes, oral anti-inflammatory medication, 12 weeks of supervised physical therapy, three intra-articular corticosteroid injections over the past two years and a course of hyaluronic acid injections. Standing radiographs show bone-on-bone medial narrowing, moderate lateral and patellofemoral narrowing, large osteophytes and 8 degrees of varus. Hemoglobin A1c 6.4 percent; body mass index 31; medically cleared by her primary care physician. Surgery was decided at her clinic visit on 2026-09-08; the history and physical were reviewed this morning with no interval change.
+
+Consent
+Risks including infection, bleeding, blood clots, stiffness, nerve or vessel injury, instability, loosening or wear, persistent pain and further surgery were discussed with the benefits and alternatives, and written informed consent was obtained. The right knee was marked and confirmed at the time-out.
+
+Anesthesia
+Spinal anesthesia with intravenous sedation by the anesthesia service. An adductor canal block for postoperative analgesia was placed preoperatively by the anesthesia service and is documented in the anesthesia record. Cefazolin 2 g IV was given within 60 minutes before incision; tranexamic acid 1 g IV was given by anesthesia before incision and at closure.
+
+Description of procedure
+The patient was positioned supine with a thigh tourniquet, lateral post and foot bump, and the right lower extremity was prepped and draped. A time-out confirmed patient, procedure, right side, antibiotics and implants. The limb was exsanguinated and the tourniquet inflated to 250 mmHg.
+
+A 15 cm midline incision and a medial parapatellar arthrotomy were made and the patella subluxed laterally. The anterior cruciate ligament, both menisci and the posterior cruciate ligament were excised and marginal osteophytes removed. A subperiosteal release of the deep medial collateral ligament to the posteromedial corner corrected the varus deformity.
+
+Femur: An intramedullary guide set the distal femoral resection at 5 degrees of valgus, 10 mm from the distal medial condyle. With posterior referencing the femur sized to 6. Rotation was set at 3 degrees external to the posterior condylar axis and checked against the transepicondylar axis. The anterior, posterior and chamfer cuts were made with the four-in-one block, then the posterior-stabilized box cut.
+
+Tibia: With an extramedullary guide the proximal tibia was cut perpendicular to its mechanical axis with 3 degrees of posterior slope, 2 mm below the deepest point of the medial plateau. Extension and flexion gaps were equal and rectangular with spacer blocks.
+
+Patella: The patella measured 24 mm thick, was resected to 15 mm and sized to 35 mm, and the three peg holes were drilled.
+
+With trial components the knee reached full extension and 125 degrees of flexion, was stable to varus and valgus stress at 0 and 30 degrees and in flexion, and the patella tracked centrally. Trials were removed. All cuts were made with conventional guides; navigation and robotic assistance were not used.
+
+The bone surfaces were cleaned with pulsatile lavage and dried. Two 40 g batches of gentamicin-loaded polymethylmethacrylate cement were vacuum mixed. The tibial baseplate was cemented and impacted, then the femoral component, and the knee was held in extension on a trial insert while the cement cured. The patellar component was cemented and clamped. Extruded cement was removed, the posterior knee checked for retained cement, and the final 11 mm insert impacted and locked. Stability and tracking matched the trial.
+
+The tourniquet was released after 71 minutes and hemostasis obtained with electrocautery. A periarticular injection of ropivacaine, ketorolac and epinephrine was infiltrated into the posterior capsule, collateral ligaments, quadriceps tendon and subcutaneous tissue. The wound was irrigated with dilute povidone-iodine and saline. The arthrotomy was closed in flexion with barbed absorbable suture, then subcutaneous sutures, a subcuticular monofilament suture and skin adhesive with a mesh strip. A sterile dressing and compressive wrap were applied. No drain.
+
+Implants
+Meridian Orthopaedics (fictional manufacturer) Aster posterior-stabilized total knee system, all cemented:
+- Femoral component: cobalt-chromium, posterior-stabilized, right, size 6
+- Tibial baseplate: titanium alloy, modular, size 5
+- Articular insert: highly cross-linked polyethylene, posterior-stabilized, size 5/6, 11 mm
+- Patellar component: all-polyethylene, three-peg, 35 mm diameter, 9 mm thick
+- Bone cement: gentamicin-loaded polymethylmethacrylate, two 40 g batches
+
+Findings
+Full-thickness cartilage loss with eburnated bone on the medial femoral condyle and medial tibial plateau, grade 3 to 4 lateral and patellofemoral changes, large osteophytes, a frayed anterior cruciate ligament and mild synovitis. The varus corrected fully after the medial release.
+
+Assistant
+Jordan Whitcombe, PA-C (fictional), was scrubbed for the entire procedure as first assistant. Skilled assistance was required for limb positioning and retraction, protection of the collateral ligaments, patellar tendon and posterior neurovascular structures during the bone cuts, and for cementation, component impaction and closure.
+
+Estimated blood loss
+100 mL.
+
+Specimens
+None; resected bone and soft tissue were discarded per hospital policy.
+
+Complications
+None.
+
+Disposition
+To the post-anesthesia recovery area awake and stable, right lower extremity neurovascularly intact, then transferred to the orthopaedic ward.
+
+Postoperative plan
+Weight bearing as tolerated; physical therapy today. Cefazolin for 24 hours. Aspirin 81 mg twice daily for 4 weeks with mechanical compression for clot prevention. Expected discharge home on postoperative day 1; wound check in clinic in two weeks.
+
+Electronically signed: Dr. Nathaniel Brandvold, MD (fictional), 2026-10-13 11:26

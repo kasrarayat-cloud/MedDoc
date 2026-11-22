@@ -403,9 +403,9 @@ def account_view(data) -> dict | None:
         return None
     user = data.get('user') if isinstance(data.get('user'), dict) else {}
     space = data.get('workspace') if isinstance(data.get('workspace'), dict) else {}
-    category = space.get('category') if isinstance(space.get('category'), dict) else {}
+    # the workspace's specialty as the session serves it (owner direction 2026-11-22, D390; refutation N2-2-4)
     return {'user': {key: user.get(key) for key in ('username', 'label', 'actor_kind')},
-            'workspace': {'name': space.get('name'), 'category': category.get('slug')},
+            'workspace': {'name': space.get('name'), 'specialty': space.get('specialty')},
             'role': data.get('role'), 'can_review': data.get('can_review'),
             'synthetic_only': data.get('synthetic_only'), 'provider_mode': data.get('provider_mode'),
             'release': data.get('release')}

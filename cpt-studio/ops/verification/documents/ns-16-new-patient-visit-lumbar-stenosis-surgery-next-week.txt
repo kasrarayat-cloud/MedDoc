@@ -1,0 +1,35 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Cedar Ridge Neurosurgery and Spine (fictional practice)
+New patient office visit - neurosurgery
+
+Patient: Walter Pemberton (fictional)
+Synthetic record: SYN-NS-0016
+Date of service: 2026-11-03
+Place of service: Office (in person)
+Clinician: Dr. Aaron Velasquez-Moore, MD, Neurological Surgery (fictional)
+Patient status: New patient; never seen by any clinician in this practice. Self-referred with his outside imaging.
+
+Chief complaint: leg pain and numbness when walking.
+
+History of present illness
+69-year-old man with 14 months of progressive bilateral buttock and leg pain and numbness on walking, now limited to one block and relieved by sitting or bending forward. No bowel, bladder or saddle symptoms. Twelve weeks of physical therapy, anti-inflammatories and two outside L4-L5 epidural steroid injections gave only brief relief. Hypertension on amlodipine; no diabetes or anticoagulants.
+
+Examination
+BP 136/82. Normal gait; heel and toe walking intact. Strength 5/5 except left extensor hallucis longus 4+/5. Reduced light touch in the left L5 dermatome. Reflexes 1+ at the knees, absent at the ankles. Straight leg raise negative. Pedal pulses 2+ bilaterally.
+
+Imaging reviewed
+I personally reviewed the images of the outside lumbar MRI of 2026-10-20, reported by the outside radiologist: severe central canal and bilateral lateral recess stenosis at L4-L5 from ligamentum flavum hypertrophy, facet arthropathy and disc bulge; mild stenosis at L3-L4. Outside flexion-extension radiographs of the same date: no spondylolisthesis or instability.
+
+Assessment
+Lumbar spinal stenosis at L4-L5 with neurogenic claudication, progressing despite more than six months of non-operative care.
+
+Plan
+1. Decision for surgery made today: L4-L5 bilateral laminectomy for decompression, without fusion, scheduled for 2026-11-10. Risks, benefits and alternatives, including continued non-operative care, were discussed; he wishes to proceed.
+2. Preoperative CBC, metabolic panel and ECG ordered through pre-admission testing.
+3. No procedure, injection or imaging was done in the office today.
+
+Time
+Total time personally spent by me on the date of the encounter was 64 minutes, including record and image review, history and examination, counselling on surgical and non-surgical options, ordering preoperative tests and documentation.
+
+Electronically signed: Dr. Aaron Velasquez-Moore, MD (fictional), 2026-11-03 17:25

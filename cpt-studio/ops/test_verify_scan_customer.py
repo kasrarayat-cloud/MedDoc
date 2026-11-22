@@ -50,7 +50,8 @@ DECISION_ID = 'f6000000-0000-4000-8000-0000000000e1'
 def session_json() -> dict:
     return {'user': {'id': 'fa000000-0000-4000-8000-000000000001', 'label': 'Review agent', 'initials': 'RA',
                      'actor_kind': 'agent'},
-            'workspace': {'id': 'fa000000-0000-4000-8000-000000000002', 'name': 'Gastroenterology'},
+            'workspace': {'id': 'fa000000-0000-4000-8000-000000000002', 'name': 'Gastroenterology',
+                          'specialty': 'Gastroenterology'},
             'role': 'reviewer', 'can_review': True,
             'acknowledgement': 'I read the whole source document. This synthetic review is not clinical approval.',
             'counts': {'documents': 1, 'queue': 0}}

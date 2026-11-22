@@ -1,0 +1,60 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Northgate Regional Medical Center Emergency Department (fictional hospital)
+Orthopedic surgery emergency department evaluation and procedure note - closed reduction of left distal radius fracture
+
+Patient: Imogen Castellanos (fictional)
+Synthetic record: SYN-OR-0011
+Date of service: 2026-11-08
+Place of service: Hospital emergency department
+Orthopedic surgeon: Dr. Desmond Okafor-Hale, MD, Orthopedic Surgery (fictional)
+Requesting emergency physician: Dr. Linnea Barros, MD, Emergency Medicine (fictional)
+Anesthesia: hematoma block placed by the orthopedic surgeon; no procedural sedation was given
+Assistant: none
+
+Reason for evaluation
+The emergency physician asked orthopedic surgery to evaluate the patient and to take over care of a displaced left distal radius fracture. I will provide the fracture care and the follow-up.
+
+History of present illness
+64-year-old right-hand-dominant retired teacher who slipped on wet leaves at about 13:30 today and fell onto her outstretched left hand. Immediate wrist pain, swelling and deformity. No head strike, no loss of consciousness and no other injury. She denies numbness or tingling in the fingers. No prior injury or surgery to the left wrist. She lives with her husband, is independent, gardens and plays the piano.
+
+Past medical history: hypertension; osteopenia on a 2024 bone density scan, untreated.
+Medications: lisinopril 10 mg daily; calcium with vitamin D.
+Allergies: no known drug allergies.
+Social history: never smoker; rare alcohol.
+
+Examination
+Blood pressure 146/84, heart rate 88, oxygen saturation 98% on room air. Alert and comfortable at rest.
+Left upper extremity: dorsal "dinner fork" deformity of the distal forearm with moderate swelling. Skin intact, with no wound and no tenting. Tender over the distal radius and the ulnar styloid. No tenderness at the anatomic snuffbox, elbow or shoulder. Fingers warm and pink, capillary refill under 2 seconds, radial pulse 2+. Light touch intact in the median, ulnar and radial nerve distributions; two-point discrimination 5 mm at the index fingertip. Anterior interosseous, posterior interosseous and ulnar nerve motor function intact. Forearm compartments soft.
+The right upper extremity and both lower extremities show no injury.
+
+Imaging
+Left wrist radiographs, three views, were obtained in the emergency department today and formally reported by the radiologist, Dr. Pieter Vance (fictional). I personally reviewed the images: extra-articular distal radius fracture 2 cm proximal to the joint surface with 28 degrees of dorsal angulation, 4 mm of radial shortening, radial inclination of 14 degrees and dorsal comminution, plus a nondisplaced fracture of the tip of the ulnar styloid. The distal radioulnar joint is congruent. No intra-articular extension.
+
+Assessment
+1. Closed, displaced, dorsally angulated extra-articular fracture of the left distal radius (Colles type) with dorsal comminution.
+2. Nondisplaced fracture of the left ulnar styloid tip.
+3. Neurovascularly intact.
+
+Medical decision making
+Moderate. Acute complicated injury: a displaced fracture for which closed and operative treatment were both considered. Independent interpretation of the wrist radiographs and discussion of management with the emergency physician. Decision made at this evaluation, after reviewing the risks and alternatives with the patient, for closed reduction and cast immobilization today; prescription drug management for pain.
+
+Procedure note
+Procedure: closed reduction (manipulation) of the left distal radius fracture and application of a short arm cast.
+Consent: risks including loss of reduction, later surgery, malunion, stiffness, skin problems under the cast, nerve injury and complex regional pain syndrome were discussed, and written consent was obtained. A time-out confirmed the patient and the left wrist.
+Anesthesia: after chlorhexidine preparation, 10 mL of 1% lidocaine without epinephrine was injected into the fracture hematoma from the dorsal side, with return of hematoma confirming placement. Good anesthesia at 10 minutes.
+Reduction: finger traps were placed on the index and long fingers with 10 pounds of countertraction at the upper arm for 10 minutes. The fracture was manipulated by recreating the deformity, applying longitudinal traction, then translating the distal fragment volarly with flexion and ulnar deviation. Mini C-arm fluoroscopy, operated by me, confirmed restoration of alignment during the reduction.
+Cast: with the reduction held, a well-padded short arm fiberglass cast was applied from just below the elbow to the distal palmar crease, with a three-point mold, leaving the thumb and the metacarpophalangeal joints free.
+Post-reduction check: fingers warm and pink, capillary refill under 2 seconds, sensation intact in the median, ulnar and radial distributions, and full passive finger extension without pain.
+Post-reduction radiographs: posteroanterior and lateral views of the left wrist in the cast were obtained in the emergency department and formally reported by the radiologist. My review: volar tilt now 2 degrees, radial height 10 mm, radial inclination 20 degrees, ulnar variance neutral. The ulnar styloid fragment is unchanged and needs no treatment beyond the cast.
+Estimated blood loss: none. Complications: none. The patient tolerated the procedure well.
+
+Disposition and plan
+1. Discharged home from the emergency department with her husband.
+2. Strict elevation above the heart, active finger motion every hour while awake, and ice over the cast.
+3. Acetaminophen 1,000 mg every 8 hours. Oxycodone 5 mg tablets, one every 6 hours as needed for severe pain; 8 tablets prescribed. Avoid anti-inflammatory drugs for now.
+4. Cast care and warning signs reviewed: increasing pain, numbness, color change or a tight cast should prompt immediate return.
+5. Office follow-up with me in 7 days for a cast check and repeat radiographs. If alignment is lost, operative fixation will be discussed then; no operative treatment is planned or scheduled.
+6. Bone health evaluation recommended through her primary care physician, given osteopenia and this fragility fracture; not performed today.
+
+Electronically signed: Dr. Desmond Okafor-Hale, MD (fictional), 2026-11-08 17:55

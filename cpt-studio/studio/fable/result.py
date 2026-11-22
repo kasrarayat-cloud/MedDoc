@@ -15,7 +15,9 @@ Shape (FIX-SPEC-2 section 2): every field is read in the shape the instructions 
 lossless ones:
 - the reader's ``codes`` and the checker's ``reviews`` are lists, ``missed_codes`` a list when present;
 - a code line (a reader code or a missed code) names a code of the code shape (four digits and then a digit or F, T or
-  U; or a capital letter and four digits) and a status the instructions allow (the reader's three; ready or
+  U; or a capital letter and four digits), the CPT book's marks before it read as the code they mark ("+22614" is
+  22614, "#+22853" is 22853: a lossless conversion, D390), and a status the instructions allow (the reader's three;
+  ready or
   needs_answer for a missed code); a "line" label it writes on itself, when it writes one, is its own place in its list
   (the code cannot tell which numbering was meant otherwise);
 - units: a whole number of zero or more (the reader writes 0 for a code it does not support: measured on the recorded
@@ -33,7 +35,9 @@ lossless ones:
   is no id - the question is kept and shown, and no reference reaches it);
 - documentation_problems: a list, or a single value read as a list of one; an item that is no string is kept as its
   JSON text, never dropped;
-- every review names its code as a non-empty string;
+- every review names its code as a non-empty string (read with the CPT book's marks set aside, as a code line's is;
+  matched to a line with white space and letter case aside, as before - a review is never Unreadable for its code's
+  form, and one that names no line's code is shown as such);
 any other shape is Unreadable, so nothing Fable wrote is dropped, altered or guessed. A question is blank when nothing
 is left of its text once U+FEFF and white space are removed (blank_question, the one test of it: every text the customer
 page's trim() empties is blank to it, and it also calls blank U+001C to U+001F and U+0085, which the page keeps), and a
@@ -94,7 +98,8 @@ proportion to what it reads: no step rescans what an earlier one built.
 
 Citations (FIX-SPEC 1; FIX-SPEC-2 section 4): the joined text is read line by line. A marker is a whole line holding
 exactly ``LINE L<n> <code>`` (reader), ``REVIEW L<n> <code>`` or ``MISSED M<k> <code>`` (checker), case-sensitive,
-optionally after a run of '#' and one space (trailing spaces aside). A section starts at a marker and ends at the next
+optionally after a run of '#' and one space (trailing spaces aside); the code may carry the CPT book's marks ('+', '#',
+at most one each, either order: _written_code). A section starts at a marker and ends at the next
 marker, at a line holding exactly END (the reader and the checker are asked to end their last section with one) or at
 the start of the final answer - its fence, or the start of its widest span - after which nothing starts a section; a
 line that looks like a marker but is not one, a heading (a line starting with '#', or a line all in bold), a thematic
@@ -126,7 +131,7 @@ UNASKED_QUESTION = 'What does the coding review need to know to finish code {cod
 _CODE_SHAPE = r'(?:[0-9]{4}[0-9FTU]|[A-Z][0-9]{4})'
 _CODE = re.compile(_CODE_SHAPE)
 _DIGITS = re.compile(r'[0-9]+')
-_MARKER = re.compile(rf'(?:#+ )?(LINE|REVIEW|MISSED) ([LM][1-9][0-9]*) ({_CODE_SHAPE})[ \t\r]*')
+_MARKER = re.compile(rf'(?:#+ )?(LINE|REVIEW|MISSED) ([LM][1-9][0-9]*) (?:\+#?|#\+?)?({_CODE_SHAPE})[ \t\r]*')
 # a line that reads like a marker but is not one - led (after any list or emphasis marks) by LINE, REVIEW or MISSED in
 # any case and naming a code further on, or naming a line label after one of them anywhere ("**LINE L2 45380**",
 # "- REVIEW L1 45385", "Line 2 45380", "Review of 45380:"): it ends the current section, so a citation after it never
@@ -143,6 +148,32 @@ _FENCE = re.compile(r'[ \t]*(`{3,}|~{3,})(.*)')  # a line opening or closing a f
 _UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
 # the markers each answer writes, and the letter of the lines each names
 _ROLE_MARKS = {'reader': {READER_MARK: READER_LINE}, 'checker': {CHECKER_MARK: READER_LINE, MISSED_MARK: MISSED_LINE}}
+
+
+# The CPT book's marks before a code: "+" an add-on, "#" a resequenced code, at most one of each, in either order.
+_BOOK_MARKS = re.compile(rf'(?:\+#?|#\+?)({_CODE_SHAPE})')
+
+
+def _written_code(value: object) -> object:
+    """A code as Fable wrote it, with the CPT book's marks read as the code they mark: "+22614" is 22614 and "#+22853"
+    is 22853 (owner direction 2026-11-22, D390: nothing in CPT Studio may drop a code Fable writes, and spine and joint
+    cases are built on add-on codes, some of them resequenced). A lossless conversion of the shape in the sense of
+    FIX-SPEC-2 section 2, the code itself saying what the mark says; everything else is returned exactly as written, so
+    the rest of that section stands - on a code line, white space, lower case, a mark with a space after it or repeated,
+    another symbol, or a code joined to a modifier ("22614-62") still make the answer unreadable rather than altered or
+    guessed (a review's code, a correction and a target are kept as written and matched as before).
+
+    Read wherever an answer names a code - a code line, a missed code, a review's code, the checker's correction, a
+    question's target and a section marker - so a marked line and a marked review of it agree (refutation N2-1-1..4).
+    A round stored before this reading is read again whenever a page shows it, so the release that installs it must
+    find no stored round holding a marked code: on cpt.quillmd.com there was none (read-only, 2026-11-22: 0 of 8
+    rounds), and that release's pre-app check reads it again before its switch and stops if one appears (refutation
+    N3-1-1). Plumbing only - it decides no code (D358)."""
+    if isinstance(value, str):
+        marked = _BOOK_MARKS.fullmatch(value)
+        if marked:
+            return marked.group(1)
+    return value
 
 
 class Unreadable(Exception):
@@ -392,7 +423,8 @@ def dangling_references(reader: object, checker: object) -> list[dict]:
     """The references of a round's two answers (each as stored) that name no question - an id naming no question its
     author was shown, or an item of question_ids in a shape that names no question (module docstring) - for the
     operator console: each {'item' (the line: "L2", "M1"; or "review 3", its place in the checker's reviews), 'code'
-    (as written), 'reference' (exactly as written: an integer id stays an integer)}, the reader's lines first, then
+    (as read: the CPT book's marks set aside - _written_code), 'reference' (exactly as written: an integer id stays an
+    integer)}, the reader's lines first, then
     the checker's reviews, then its missed codes. A question defined only on a line or a review (a question object
     with an id) is a question its author was shown. A part that cannot be read (an answer stored before this reading
     of the shape) is left out: it named nothing and defines nothing."""
@@ -513,10 +545,10 @@ def _line(item: object, role: str, label: str, statuses: tuple) -> dict:
     ids name (set by the combination) - are the combination's and never stored."""
     if not isinstance(item, dict):
         raise Unreadable(f'{role} {label} is not an object')
-    code = item.get('code')
+    code = _written_code(item.get('code'))
     if not isinstance(code, str) or not _CODE.fullmatch(code):
         raise Unreadable(f'{role} {label} names no code of the code shape')
-    where = f'{role} {label} ({code})'
+    where = f'{role} {label} ({item["code"]})'  # as written
     own = item.get('line')
     if own is not None and not (isinstance(own, str) and (not own.strip() or _key(own) == label)):
         raise Unreadable(f'{where} names itself as another line than its place in the list')
@@ -569,10 +601,11 @@ def _review(item: object) -> dict:
         raise Unreadable('a review names no code')
     line, verdict = item.get('line'), item.get('verdict')
     asked, refs = _own_questions(item, 'a review')
-    return {'line': _key(line) if isinstance(line, str) else None, 'code': item['code'],
+    return {'line': _key(line) if isinstance(line, str) else None, 'code': _written_code(item['code']),
             'verdict': verdict if isinstance(verdict, str) else None,
             'reason': _reason(item.get('reason'), 'a review'), 'question': _question_text([own.text for own in asked]),
-            'correct_code': _str(item.get('correct_code')), 'correct_units': _plain_units(item.get('correct_units')),
+            'correct_code': _written_code(_str(item.get('correct_code'))),
+            'correct_units': _plain_units(item.get('correct_units')),
             'correct_modifiers': _strings(item.get('correct_modifiers')),
             'correct_status': _str(item.get('correct_status')), 'evidence': _evidence(item.get('evidence')),
             'asked': asked, 'refs': refs}
@@ -692,7 +725,7 @@ def _affects(value: object, role: str) -> list[str]:
         if entry is None:
             continue
         if isinstance(entry, str):
-            out.append(entry)
+            out.append(_written_code(entry))
         elif type(entry) is int:
             out.append(str(entry))
         else:

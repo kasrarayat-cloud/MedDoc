@@ -159,8 +159,9 @@ def _strings(value):
 
 @override_settings(STORAGES=PLAIN_STATIC)
 class ShellTemplateTests(SimpleTestCase):
-    def render_index(self):
-        return render_to_string('studio/index.html', {'release': 'test-release'}, request=RequestFactory().get('/'))
+    def render_index(self, specialty='Gastroenterology'):
+        return render_to_string('studio/index.html', {'release': 'test-release', 'specialty': specialty},
+                                request=RequestFactory().get('/'))
 
     def test_index_renders_static_paths_and_a_csrf_token_from_the_request_alone(self):
         html = self.render_index()
@@ -593,6 +594,11 @@ class StaticHeaderTests(SimpleTestCase):
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             self.assertIn('CPT Studio dev preview', server.stdout.readline())
+            # the preview renders the shell with its fixture session's specialty, as the site does (refutation N1-3-3)
+            with urllib.request.urlopen(f'http://127.0.0.1:{port}/', timeout=30) as answer:
+                shell = answer.read().decode('utf-8')
+            self.assertIn('<select id="specialty" disabled><option>Gastroenterology</option></select>', shell)
+            self.assertIn('data-specialty="Gastroenterology"', shell)
             listed = [item['path'] for item in json.loads((PDF_LIB / 'MANIFEST.json').read_text(encoding='utf-8'))['files']]
             for name in listed:
                 with self.subTest(name):

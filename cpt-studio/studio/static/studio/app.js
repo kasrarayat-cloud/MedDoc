@@ -1179,7 +1179,7 @@ function listRows(name, rows) {
 
 function listBody(name, rows) {
   const shown = listRows(name, rows);
-  const empty = { workspace: 'No documents yet. Start with a synthetic GI document.', documents: 'No documents yet. Use New document to upload a synthetic GI document or paste its text.', queue: 'Nothing is waiting for you.' }[name];
+  const empty = { workspace: 'No documents yet. Start with a synthetic document.', documents: 'No documents yet. Use New document to upload a synthetic document or paste its text.', queue: 'Nothing is waiting for you.' }[name];
   return LIST_HEADER + (shown.length ? shown.map(row => documentRow(row)).join('') : `<p class="empty-state">${escapeHtml(empty)}</p>`);
 }
 
@@ -1194,7 +1194,7 @@ function listDescription(name, rows) {
 function inviteMarkup(rows) {
   const recent = rows?.[0];
   if (rows === null) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>Loading recent documents…</strong><p>One moment.</p></span>`;
-  if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see its CPT codes beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
+  if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic document to see its CPT codes beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
   const detail = ['Most recent', stateLabel(recent.state, recent.state_label), formatDate(recent.service_date) || 'service date not entered'].join(' · ');
   return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>${escapeHtml(text(recent.title) || 'Untitled document')}</strong><p>${escapeHtml(detail)}</p></span><button type="button" class="button secondary" data-open="${escapeHtml(recent.id)}">Open review ${icon('arrow')}</button>`;
 }
@@ -1246,7 +1246,7 @@ function reviewMeta(doc) {
 
 function reviewHeading(doc) {
   const download = exportOffered(doc) ? `<button type="button" class="button secondary" data-action="export">${icon('download')}<span>Download</span></button>` : '';
-  return `<div class="heading-row review-heading"><div><span class="eyebrow">CODING REVIEW · GASTROENTEROLOGY</span><h1>${escapeHtml(text(doc?.title) || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}<span>New document</span></button>${download}</div></div>`;
+  return `<div class="heading-row review-heading"><div><span class="eyebrow">${escapeHtml(specialtyEyebrow())}</span><h1>${escapeHtml(text(doc?.title) || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}<span>New document</span></button>${download}</div></div>`;
 }
 
 // --- the original document and its quoted passages (left) ---
@@ -1757,9 +1757,25 @@ function setCount(selector, value) {
   element.hidden = !valid;
 }
 
+// The workspace's specialty, as the session names it (GET /api/session, workspace.specialty) and, before the session is
+// read, as the page shell names it (data-specialty on <body>; owner direction 2026-11-22, D390): a label only - nothing
+// on the page or the server codes from it.
+function specialtyEyebrow() {
+  const shell = typeof document === 'undefined' ? '' : text(document.body?.dataset?.specialty);
+  const specialty = text(state.session?.workspace?.specialty) || shell;
+  return specialty ? `CODING REVIEW · ${specialty.toUpperCase()}` : 'CODING REVIEW';
+}
+
 function renderSession(session) {
   const name = text(session.workspace?.name) || 'Workspace';
   $('#workspaceName').textContent = name;
+  // the specialty follows the session, as the workspace name does: a page left open while the same browser signs in to
+  // another workspace names the workspace it now works in (refutation N1-3-1)
+  const specialty = text(session.workspace?.specialty);
+  const specialtyOption = $('#specialty option');
+  if (specialty && specialtyOption) specialtyOption.textContent = specialty;
+  const eyebrow = $('.review-heading .eyebrow');
+  if (eyebrow) eyebrow.textContent = specialtyEyebrow();
   $('#workspaceSubtitle').textContent = 'Synthetic demonstration workspace';
   $('#workspaceAvatar').textContent = ([...name][0] || '').toUpperCase();
   const label = text(session.user?.label) || 'Signed in';
@@ -1822,7 +1838,10 @@ function route() {
   setActiveNav(next.name);
   closeNavigation();
   window.scrollTo({ top: 0, behavior: 'instant' });
-  if (next.name === 'doc') return showDocument(next.id, serial);
+  if (next.name === 'doc') {
+    loadSession();  // the review heading's specialty follows the session (refutation N2-2-2)
+    return showDocument(next.id, serial);
+  }
   if (next.name === 'how-it-works') {
     $('#main').innerHTML = howItWorksView();
     return undefined;
@@ -3431,6 +3450,8 @@ function openUpload(file) {
   if (state.upload.busy) return openDialog('uploadDialog');
   resetUpload();
   if (file) setUploadFile(file);
+  // the session read again, so the Specialty field names the workspace the upload goes to (refutation N2-2-2)
+  loadSession();
   return openDialog('uploadDialog');
 }
 
