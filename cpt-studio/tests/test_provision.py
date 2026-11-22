@@ -189,3 +189,24 @@ class WorkspaceNameTests(ProvisionCommand, TestCase):
         out = self.run_command('--specialty', 'neurosurgery', '--reviewer-username', 'drjones',
                                '--reviewer-password-file', self.secret('r2', REVIEWER_PASSWORD))
         self.assertIn('created human account drjones (reviewer)', out)
+
+    def test_white_space_in_a_name_gets_past_neither_rule(self):
+        # refutation N2-2-1: spaces around or inside a name are read as a member reads them
+        for name in ('Neurosurgery ', ' Neurosurgery', 'Orthopedic  Surgery', ' Orthopedic Surgery '):
+            with self.subTest(name=name), self.assertRaisesMessage(CommandError, 'is the name of the'):
+                self.run_command('--workspace-name', name, '--owner-username', 'gi-own0',
+                                 '--owner-password-file', self.secret('g', OWNER_PASSWORD))
+        self.run_command('--specialty', 'neurosurgery', '--workspace-name', ' Spine  Center ', '--owner-username',
+                         'own-n', '--owner-password-file', self.secret('n', OWNER_PASSWORD))
+        self.assertEqual(list(models.Workspace.objects.values_list('name', flat=True)), ['Spine Center'])
+        with self.assertRaisesMessage(CommandError, "'Spine Center' is a Neurosurgery workspace"):
+            self.run_command('--specialty', 'orthopedic-surgery', '--workspace-name', 'spine center ',
+                             '--owner-username', 'own-o', '--owner-password-file', self.secret('o', OWNER_PASSWORD))
+
+    def test_the_reviewer_path_finds_its_workspace_as_the_hint_names_it(self):
+        # refutation N2-2-3: the lookup and the hint agree, so following the hint reaches the existing workspace
+        self.provision('neurosurgery', 'owner-neuro', 'review-agent-neuro')
+        self.run_command('--specialty', 'neurosurgery', '--workspace-name', 'neurosurgery', '--reviewer-username',
+                         'drj', '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
+        self.assertEqual(models.Workspace.objects.filter(category__slug='neurosurgery').count(), 1)
+        self.assertEqual(models.Membership.objects.get(user__username='drj').workspace.name, 'Neurosurgery')

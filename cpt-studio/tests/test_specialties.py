@@ -51,6 +51,12 @@ class PageNamesTheMembersSpecialtyTests(TestCase):
         # the session's specialty first (it follows the signed-in workspace, refutation N1-3-1), the shell's before it
         self.assertIn('text(state.session?.workspace?.specialty) || shell', source)
         self.assertIn("const specialty = text(session.workspace?.specialty);", source)
+        # the Specialty field and a drawn review heading follow each session read (N2-2-5), and the session is read
+        # again when the upload dialog or a document opens (N2-2-2)
+        self.assertIn('  if (specialty && specialtyOption) specialtyOption.textContent = specialty;\n', source)
+        self.assertIn('  if (eyebrow) eyebrow.textContent = specialtyEyebrow();\n', source)
+        self.assertIn('  loadSession();\n  return openDialog(\'uploadDialog\');\n', source)
+        self.assertIn("    loadSession();  // the review heading's specialty follows the session", source)
 
     def test_the_session_names_the_workspace_specialty(self):
         for slug, name in (('neurosurgery', 'Neurosurgery'), ('orthopedic-surgery', 'Orthopedic Surgery')):

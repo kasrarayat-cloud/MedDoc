@@ -614,6 +614,8 @@ class PureCheckTests(unittest.TestCase):
         self.assertEqual({c['id']: c['status'] for c in vl.session_checks(200, {**data, 'user': {**data['user'], 'label': ''}}, USERNAME,
                                                                            WORKSPACE)}['session.username'], 'fail')
         self.assertEqual(vl.account_view(data)['user'], {'username': None, 'label': data['user']['label'], 'actor_kind': 'human'})
+        # the evidence keeps the workspace's specialty as the session serves it (refutation N2-2-4)
+        self.assertEqual(vl.account_view(data)['workspace'], {'name': WORKSPACE, 'specialty': WORKSPACE})
 
     def test_a_response_keeps_every_header_it_carried(self):
         stub = StubStudio()

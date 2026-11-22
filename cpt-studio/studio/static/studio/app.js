@@ -1774,6 +1774,8 @@ function renderSession(session) {
   const specialty = text(session.workspace?.specialty);
   const specialtyOption = $('#specialty option');
   if (specialty && specialtyOption) specialtyOption.textContent = specialty;
+  const eyebrow = $('.review-heading .eyebrow');
+  if (eyebrow) eyebrow.textContent = specialtyEyebrow();
   $('#workspaceSubtitle').textContent = 'Synthetic demonstration workspace';
   $('#workspaceAvatar').textContent = ([...name][0] || '').toUpperCase();
   const label = text(session.user?.label) || 'Signed in';
@@ -1836,7 +1838,10 @@ function route() {
   setActiveNav(next.name);
   closeNavigation();
   window.scrollTo({ top: 0, behavior: 'instant' });
-  if (next.name === 'doc') return showDocument(next.id, serial);
+  if (next.name === 'doc') {
+    loadSession();  // the review heading's specialty follows the session (refutation N2-2-2)
+    return showDocument(next.id, serial);
+  }
   if (next.name === 'how-it-works') {
     $('#main').innerHTML = howItWorksView();
     return undefined;
@@ -3445,6 +3450,8 @@ function openUpload(file) {
   if (state.upload.busy) return openDialog('uploadDialog');
   resetUpload();
   if (file) setUploadFile(file);
+  // the session read again, so the Specialty field names the workspace the upload goes to (refutation N2-2-2)
+  loadSession();
   return openDialog('uploadDialog');
 }
 

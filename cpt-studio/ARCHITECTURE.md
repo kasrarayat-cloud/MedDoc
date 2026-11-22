@@ -163,9 +163,11 @@ beats every 30 s; a beat older than 120 s reads as processing paused on the page
   joined; a question list one question each; a line label the reader writes on its own items must be its place in the
   list; a code line's code (a reader code or a missed code) written with the CPT book's marks before it - `+` an add-on,
   `#` a resequenced code, at most one of each - is the code they mark (`+22614` is 22614: the code itself says what the
-  mark says; owner direction 2026-11-22, D390, nothing may drop a code Fable writes), while a review's code, the
-  checker's correction and a question's target are read exactly as written, so rounds stored earlier read as they did
-  (refutation N1-1-1); any other shape is unreadable, never corrected or guessed. **Lines**: every code row has one -
+  mark says; owner direction 2026-11-22, D390, nothing may drop a code Fable writes), and so are a review's code, the
+  checker's correction and a question's target, so a marked line and a marked review of it agree (refutation
+  N2-1-1..4; no stored round on cpt.quillmd.com held a marked code when this was installed, and the install measured
+  it); a line that starts with a code, with or without its marks, is no heading; any other shape is unreadable, never
+  corrected or guessed. **Lines**: every code row has one -
   `L1`..`Ln`, the
   reader's codes in its order, then `M1`..`Mk`, the checker's additions - and the checker is given each line and names
   the line of every review. **Combination**, the only glue logic: a reader line keeps the reader's status only when the

@@ -71,13 +71,17 @@ class Command(BaseCommand):
             raise CommandError('--reviewer-password-file is required with --reviewer-username.')
         slug = options['specialty']
         name, profiles_version = SPECIALTIES[slug]
-        workspace_name = options['workspace_name'] or name
+        # a workspace name as a member reads it: white space around it set aside and runs of it read as one space, so
+        # "Neurosurgery " or "Orthopedic  Surgery" are those names (refutation N2-2-1)
+        workspace_name = ' '.join((options['workspace_name'] or name).split())
+        if not workspace_name:
+            raise CommandError('The workspace name is empty.')
         category, _ = models.Category.objects.get_or_create(
             slug=slug, defaults={'name': name, 'profiles_version': profiles_version})
         if category.profiles_version != profiles_version:
             category.profiles_version = profiles_version
             category.save(update_fields=['profiles_version'])
-        workspace = models.Workspace.objects.filter(category=category, name=workspace_name).first()
+        workspace = models.Workspace.objects.filter(category=category, name__iexact=workspace_name).first()
         if workspace is None:
             # each workspace name belongs to one specialty, and a specialty's own name is its alone (refutation
             # N1-2-1, N1-2-2): a member or a check that knows a workspace by its name always knows its specialty too
