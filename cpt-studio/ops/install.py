@@ -1239,8 +1239,12 @@ def admin_in(raw):
     return names_host_on(raw.decode('utf-8', 'replace'), P['admin_host'])
 
 def admin_now():
-    if not os.path.lexists(f):
+    # quillmd-cpt claims the admin host only as nginx loads it: no file or no sites-enabled link claims nothing; a link
+    # that is not the installer's own (another target, or not a link) cannot be told (check, round R2-1)
+    if not os.path.lexists(f) or not os.path.lexists(l):
         return False
+    if not os.path.islink(l) or os.readlink(l) != P['link_target']:
+        return None
     return admin_in(read(f)) if regular(f) else None
 
 def coupling(quillmd, admin):
@@ -1773,15 +1777,20 @@ def quillmd_bytes(raw: bytes, target: str) -> bytes:
 def read_coupling(quillmd_sha256=None, vhost=None) -> dict:
     """{'quillmd_sha256', 'names_admin', 'coupling'} as the host files are now: the quillmd vhost by its sha256 (given,
     as a phase's nginx_file_state read it, or read here), quillmd-cpt by its bytes (absent: it names nothing; there but
-    not a regular file: it cannot be told). ``vhost`` is vhost_state() when the caller has read it."""
+    not a regular file: it cannot be told) as nginx loads it - without its sites-enabled link it names nothing, behind a
+    link that is not this installer's it cannot be told. ``vhost`` is vhost_state() when the caller has read it."""
     if quillmd_sha256 is None:
         try:
             quillmd_sha256 = sha256(quillmd_vhost_bytes())
         except OSError:
             quillmd_sha256 = None
     vhost = vhost if vhost is not None else vhost_state()
-    if not vhost['file_exists']:
+    # as nginx loads it (check, round R2-1): no file or no sites-enabled link claims nothing; a link that is not this
+    # installer's own cannot be told
+    if not vhost['file_exists'] or not vhost['link_exists']:
         admin = False
+    elif vhost['link_target'] != VHOST_LINK_TARGET:
+        admin = None
     else:
         live = live_vhost_bytes()
         admin = None if live is None else names_host_on(live.decode('utf-8', 'replace'), ADMIN_HOST)
@@ -4208,9 +4217,14 @@ def serves_admin_host(revision) -> bool:
     """Whether ``revision``'s web serves ADMIN_HOST: its tree holds ADMIN_HOST_FILES. The admin checks are revision-aware
     (refutation INSTALLER-5, APP-1): such a web is judged on the answers only the admin urlconf gives; an older one -
     after a switch-back to a revision before release 1, say - answers the admin host 400, which is recorded, never a
-    failure."""
+    failure. A revision this checkout cannot read is refused, not taken for an older one: that answer would leave the
+    admin answers unjudged on the switch paths (check, round R2-3)."""
     if not SHA_RE.fullmatch(str(revision)):
-        return False
+        raise InstallError(f'Cannot tell whether {str(revision)[:40]!r} serves {ADMIN_HOST}: it is not a 40-character '
+                           'revision. Nothing was decided on it.')
+    if run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}^{{commit}}'], check=False, quiet=True).returncode:
+        raise InstallError(f'Cannot tell whether {revision[:12]} serves {ADMIN_HOST}: this checkout cannot read that '
+                           'revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
     return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
                    quiet=True).returncode == 0 for path in ADMIN_HOST_FILES)
 
@@ -7208,13 +7222,15 @@ def phase_https_vhost(ctx) -> dict:
             'summary': f'https://{DOMAIN}/ and https://{ADMIN_HOST}/ served through {ctx.revision[:12]}\'s stage'}
 
 
-def latest_ingress_move(ctx):
-    """(path, record) of the newest successful ingress receipt of this revision that moved admin.quillmd.com's :443
-    (its 'moved'; a rerun on the after state moves nothing), or None."""
+def latest_ingress_move(ctx, *, any_revision=False):
+    """(path, record) of the newest successful ingress receipt of this revision - of any revision with
+    ``any_revision`` - that moved admin.quillmd.com's :443 (its 'moved'; a rerun on the after state moves nothing), or
+    None."""
     for path in sorted(ctx.receipts.glob('ingress-*.json'), reverse=True):
         record = json.loads(path.read_text(encoding='utf-8'))
         if (isinstance(record, dict) and record.get('phase') == 'ingress' and record.get('ok')
-                and record.get('revision') == ctx.revision and (record.get('details') or {}).get('moved') is True):
+                and (any_revision or record.get('revision') == ctx.revision)
+                and (record.get('details') or {}).get('moved') is True):
             return path, record
     return None
 
@@ -7362,7 +7378,20 @@ def phase_ingress_rollback(ctx) -> dict:
     certificate. On the before state with the saved stage live it verifies and changes nothing."""
     preflight = require_receipt(ctx, 'preflight')
     entry = latest_ingress_move(ctx)
+    newest = latest_ingress_move(ctx, any_revision=True)
+    if newest is not None and (entry is None or newest[0] != entry[0]) and read_coupling()['coupling'] != 'before':
+        # the move to roll back was another revision's: its receipt holds the stage to give back, and only its installer
+        # can switch back to the web it found serving (check, round R2-2)
+        mover = str(newest[1].get('revision'))
+        raise InstallError(f'admin.quillmd.com was moved by revision {mover[:12]}\'s --phase ingress ({newest[0].name}), '
+                           'not by this revision\'s; its way back runs through that revision\'s installer, from its act '
+                           'checkout: its --phase switch-back to the web its ingress found serving, then its --phase '
+                           'ingress-rollback. Nothing was written.', details={'ingress_receipt': str(newest[0])})
     if entry is None:
+        if read_coupling()['coupling'] != 'before':
+            raise InstallError(f'No successful --phase ingress receipt in {ctx.receipts} records a move of '
+                               'admin.quillmd.com, yet the quillmd vhost and quillmd-cpt are not in the before state: '
+                               'this installer cannot tell what to give back. Nothing was written.')
         raise InstallError(f'No successful --phase ingress receipt of this revision in {ctx.receipts} records a move of '
                            'admin.quillmd.com; nothing to roll back.')
     moved = entry[1]['details']

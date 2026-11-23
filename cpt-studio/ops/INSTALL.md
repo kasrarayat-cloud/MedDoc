@@ -710,7 +710,11 @@ lineages that name admin, QuillMD's `quillmd.com` and `cpt-studio`.
 **The coupling invariant.** nginx loads `quillmd` before `quillmd-cpt`; a name
 both claim stays the first one's (with a `conflicting server name` warning),
 and a name neither claims falls to a co-tenant's default server and
-certificate. So the two files are coupled, and every state but two refuses:
+certificate. So the two files are coupled, and every state but two refuses.
+`quillmd-cpt` is read as nginx loads it: without its `sites-enabled` link it
+claims nothing, and behind a link that is not the installer's own (another
+target, or not a link) it cannot be told, which refuses like any other
+uncoupled state (the R2 check, round R2-1).
 
 | state | `quillmd` vhost | `quillmd-cpt` | admin.quillmd.com :443 |
 |---|---|---|---|
@@ -774,7 +778,10 @@ nothing (`moved: false`).
 
 **ingress-rollback** gives admin.quillmd.com's :443 back to the `quillmd`
 vhost and `quillmd-cpt` the stage that the newest successful `ingress` of this
-revision that moved admin replaced. It runs only while the web that ingress
+revision that moved admin replaced. When the newest move was another
+revision's and admin is still moved, it refuses and names that revision: its
+receipt holds the stage to give back, and only its installer can switch back to
+the web its ingress found serving (the R2 check, round R2-2). It runs only while the web that ingress
 found serving - the revision its receipt recorded - serves again on the port
 the saved stage proxies to: before `app`, or after a `switch-back` to that
 revision. Otherwise the saved stage would send cpt.quillmd.com to a port
@@ -817,7 +824,9 @@ for the other is served. Before a switch the incoming web gives the same admin
 answers on its loopback port (`smoke_web`). All revision-aware: a revision
 before release 1 answers the admin host with Django's 400 (DisallowedHost),
 which is recorded and never a failure, and a `switch-back` to one says so in its
-summary. The operators phase writes the console's address as
+summary. A revision the act checkout cannot read is refused, never taken for one
+before release 1 (that would leave the admin answers unjudged; the R2 check,
+round R2-3): fetch it into the checkout, then rerun. The operators phase writes the console's address as
 `https://admin.quillmd.com/ops/` (`operator_url`) and keeps
 `https://cpt.quillmd.com/ops/` (`operator_url_cpt`) while both hosts serve it.
 
@@ -1157,13 +1166,16 @@ reader; the committed passage files and their import are unchanged.
 
 ## Reinstalling an older revision
 
-**Since release 2 of the admin move (an accepted-capability loss, class
-b).** Every earlier revision's installer pins the `quillmd` vhost's before
-state alone, so from `ingress` until `ingress-rollback` it refuses every
-phase, its `switch-back` and `rollback-app` included. The way back to a
-revision before release 2 is this revision's `switch-back` (to the web its
-`ingress` found serving), then this revision's `ingress-rollback`, then the
-older installer.
+**Since release 2 of the admin move: a changed procedure, not a lost
+capability.** Every earlier revision's installer pins the `quillmd` vhost's
+before state alone, so from `ingress` until `ingress-rollback` it refuses every
+phase, its `switch-back` and `rollback-app` included. Every older revision
+stays installable, by one more step first: the installer of the revision whose
+`ingress` moved admin.quillmd.com - its `switch-back` (to the web that ingress
+found serving), then its `ingress-rollback` - and then the older installer. A
+later revision's `ingress-rollback` refuses and names that revision. (DECISIONS
+D396 records why this is not taken to the owner as a class-b loss: nothing a
+person uses stops working, and the way back is written here.)
 
 The Fable coding build's own reasons are above (**What still refuses**): an
 unknown coding outcome, and a stage the next worker cannot run still open after

@@ -25,6 +25,22 @@
 # READ-ONLY. Issues HEAD requests. Writes nothing, mutates nothing, and never
 # touches a clinical route.
 #
+# ⚠️ AN EXPECTATION CAN NAME THE REDIRECT, AND A ROW CAN NAME MORE THAN ONE
+# DELIBERATE STATE (D396, the admin.quillmd.com move). `302>URL` means status
+# 302 AND curl's redirect_url exactly URL: app.quillmd.com and the CPT Studio
+# console on admin.quillmd.com both answer 302, and only the target tells a
+# working console from an app answering in its place. Alternatives are
+# comma-separated and each is a whole, named state - never a range: a row that
+# accepts "503 or the console's sign-in" still goes red on a 502, a 200 or a
+# 404. A two-state row exists only across a move and is narrowed when it lands.
+#
+# ⚠️ CPT_INSTALLER_SKIP_HOSTS (exact host names, space-separated) is how CPT
+# Studio's installer tells this script not to judge the hosts it judges itself;
+# the installer passes it alone, from a constant. A skipped host is printed as
+# SKIPPED and left out of the discrimination floor, which is counted from the
+# rows actually judged - so a skip can never make the floor easier to pass.
+# Anyone who sets it by hand silences that host, and the output says so.
+#
 # Usage:  bash scripts/check-cotenants.sh
 # Exit:   0 = every host matches its expected status
 #         1 = AT LEAST ONE DIVERGED  (the finding)
@@ -38,7 +54,7 @@ EXPECTED=(
   "quillmd.com|200|the marketing site serves"
   "www.quillmd.com|200|the same site on the www host. MASTER.md STEP 0.6 names FIVE hosts and this table shipped with FOUR — the watched-set failure INSIDE the check written to cure watched-set failures. Keep every entry on ONE line: the floor is derived by cutting field 2, and a wrapped reason is parsed as extra expected codes."
   "app.quillmd.com|302|owner-authorized normal HTTPS account login; protected application requires an invited account"
-  "admin.quillmd.com|503|fresh rebuild: public administration deliberately in maintenance; MFA preview stays private"
+  "admin.quillmd.com|503,302>https://admin.quillmd.com/login/|TWO DELIBERATE STATES ACROSS ONE MOVE (D396): 503 is the fresh rebuild's maintenance notice (public administration in maintenance; the rebuild's private admin stays on 127.0.0.1:9131); 302 to https://admin.quillmd.com/login/ is CPT Studio's operator console once release 2 of the admin.quillmd.com move is installed. Narrowed to the second when that release lands. Anything else - a 502, a 200, a 404, a 302 elsewhere - is the finding."
   "pro.quillmd.com|410|DELIBERATELY RETIRED. The meddoc-pro CRM container was stopped (SIGTERM) on ~2026-08-04 and Caddy answers Gone. A change AWAY from 410 is the finding: either it started serving again, or a 502 is wearing its place."
 )
 
@@ -46,28 +62,62 @@ have() { command -v "$1" >/dev/null 2>&1; }
 have curl || { echo "🟡 cannot tell — curl not installed"; exit 2; }
 
 probe() {
-  # -I HEAD, no reuse across hosts, generous but bounded timeout.
-  curl -sI -o /dev/null -m 12 -w '%{http_code}' "https://$1" 2>/dev/null || echo 000
+  # -I HEAD, no reuse across hosts, generous but bounded timeout. Prints the
+  # status and curl's redirect_url (empty when the answer is not a redirect).
+  local out
+  out="$(curl -sI -o /dev/null -m 12 -w '%{http_code} %{redirect_url}' "https://$1" 2>/dev/null)" || out='000 '
+  case "$out" in [0-9][0-9][0-9]\ *) printf '%s' "$out" ;; *) printf '000 ' ;; esac
 }
 
-declare -a OBSERVED=()
+# matches <alternatives> <status> <redirect_url>: one alternative names this state
+matches() {
+  local alt
+  local -a alts
+  IFS=',' read -ra alts <<< "$1"
+  for alt in "${alts[@]}"; do
+    case "$alt" in
+      *'>'*) [ "$2" = "${alt%%>*}" ] && [ "$3" = "${alt#*>}" ] && return 0 ;;
+      *) [ "$2" = "$alt" ] && return 0 ;;
+    esac
+  done
+  return 1
+}
+
+declare -A SKIP=()
+read -ra _skip_hosts <<< "${CPT_INSTALLER_SKIP_HOSTS:-}"
+for h in "${_skip_hosts[@]}"; do SKIP["$h"]=1; done
+
+declare -a OBSERVED=() JUDGED=()
+declare -A NAMED=()
 findings=0
 printf '%-22s %-9s %s\n' HOST EXPECTED OBSERVED
 for row in "${EXPECTED[@]}"; do
   host="${row%%|*}"; rest="${row#*|}"; want="${rest%%|*}"; why="${rest#*|}"
-  got="$(probe "$host")"
-  OBSERVED+=("$got")
-  if [ "$got" = "$want" ]; then
-    printf '  🟢 %-20s %-9s %s\n' "$host" "$want" "$got"
+  NAMED["$host"]=1
+  if [ -n "${SKIP[$host]:-}" ]; then
+    printf '  ⏭  %-20s SKIPPED: CPT_INSTALLER_SKIP_HOSTS names it (its installer judges it); not judged here\n' "$host"
+    continue
+  fi
+  answer="$(probe "$host")"; got="${answer%% *}"; target="${answer#* }"
+  JUDGED+=("$want")
+  case "$want" in
+    *'>'*) OBSERVED+=("$got>$target"); shown="$got${target:+ → $target}" ;;
+    *) OBSERVED+=("$got"); shown="$got" ;;
+  esac
+  if [ "$got" != "000" ] && matches "$want" "$got" "$target"; then
+    printf '  🟢 %-20s %-9s %s\n' "$host" "$want" "$shown"
   elif [ "$got" = "000" ]; then
     printf '  🟡 %-20s %-9s %s  (no response — network or DNS)\n' "$host" "$want" "$got"
     echo "🟡 cannot tell — $host did not respond at all."
     exit 2
   else
     findings=$((findings + 1))
-    printf '  🔴 %-20s %-9s %s\n' "$host" "$want" "$got"
+    printf '  🔴 %-20s %-9s %s\n' "$host" "$want" "$shown"
     echo "     WHY $want WAS EXPECTED: $why"
   fi
+done
+for h in "${!SKIP[@]}"; do
+  [ -n "${NAMED[$h]:-}" ] || echo "  note: CPT_INSTALLER_SKIP_HOSTS names $h, which no row names; nothing was skipped for it"
 done
 
 # ── DISCRIMINATION CONTROL ────────────────────────────────────────────────
@@ -83,7 +133,9 @@ done
 # expected codes, so the probe should observe about N — allow exactly ONE to
 # differ (that is a finding, reported above, not a broken probe) and treat
 # anything flatter as an instrument that is not distinguishing hostnames.
-expected_distinct="$(printf '%s\n' "${EXPECTED[@]}" | cut -d'|' -f2 | sort -u | wc -l)"
+# Counted from the rows JUDGED (a skipped host neither lowers nor raises it). A
+# row with alternatives is one expected answer: its states exclude each other.
+expected_distinct="$(printf '%s\n' "${JUDGED[@]}" | sort -u | grep -c .)"
 floor=$(( expected_distinct - 1 )); [ "$floor" -lt 2 ] && floor=2
 distinct="$(printf '%s\n' "${OBSERVED[@]}" | sort -u | wc -l)"
 if [ "$distinct" -lt "$floor" ]; then

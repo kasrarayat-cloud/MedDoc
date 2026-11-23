@@ -1103,6 +1103,22 @@ class VhostHelperTests(TemporaryDirectoryTest):
         self.assertFalse(os.path.lexists(self.enabled / install.VHOST_NAME))
         self.assertEqual((self.available / 'quillmd').read_bytes(), self.BEFORE)
 
+    def test_quillmd_cpt_claims_the_admin_host_only_as_nginx_loads_it(self):
+        """check, round R2-1: the helper reads quillmd-cpt through the installer's sites-enabled link - without it nothing
+        claims admin's :443, behind another link it cannot be told - so the after state with no link is uncoupled and
+        a single-file op refuses before anything is written"""
+        self.live('admin', quillmd=self.AFTER)
+        self.assertEqual(self.op('state')['coupling'], 'after')
+        os.unlink(self.enabled / install.VHOST_NAME)
+        self.assertEqual(self.op('state')['coupling'], 'uncoupled')
+        before = self.files()
+        self.assertIn('error', self.op('replace', expected_sha256=self.sha('admin'), content=self.content('admin-9150')))
+        self.assertEqual(self.files(), before)
+        os.symlink(str(self.available / 'quillmd'), self.enabled / install.VHOST_NAME)  # not the installer's link
+        self.assertEqual(self.op('state')['coupling'], 'uncoupled')
+        self.assertIn('error', self.op('replace', expected_sha256=self.sha('admin'), content=self.content('admin-9150')))
+        self.assertEqual(self.files(), before)
+
     def test_a_single_file_op_never_writes_a_stage_naming_admin_while_the_quillmd_vhost_still_does(self):
         # quillmd-cpt claiming admin while the quillmd vhost also does is the two-file write's mid-state, never a
         # single-file op's result: refused before anything is written
@@ -1681,7 +1697,8 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         self.assertNotEqual(old['https'], new['https'])
         live_file = available / install.VHOST_NAME
         live_file.write_bytes(old['https'].encode())
-        (enabled / install.VHOST_NAME).symlink_to(live_file)
+        # the link as the installer writes it (VHOST_LINK_TARGET): the coupling reads quillmd-cpt as nginx loads it
+        (enabled / install.VHOST_NAME).symlink_to(install.VHOST_LINK_TARGET)
         self.receipt('preflight', {'routing': {}, 'app_health': {'status': 200}})
         install.write_receipt(self.tmp, 'https-vhost', {'phase': 'https-vhost', 'ok': True, 'revision': OTHER,
                                                         'details': {'vhost_sha256': hashlib.sha256(
@@ -1695,7 +1712,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 live_file.unlink()
             elif op == 'install':
                 live_file.write_bytes(base64.b64decode(params['content']))
-                (enabled / install.VHOST_NAME).symlink_to(live_file)
+                (enabled / install.VHOST_NAME).symlink_to(install.VHOST_LINK_TARGET)
             return {}
 
         def publish(ctx, apply, undo, verify):

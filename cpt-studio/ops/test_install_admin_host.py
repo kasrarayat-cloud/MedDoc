@@ -162,12 +162,27 @@ class CouplingTests(TemporaryDirectoryTest):
                                  QUILLMD_VHOST_BEFORE=sha(before), QUILLMD_VHOST_AFTER=sha(after)):
             self.assertEqual(install.read_coupling()['coupling'], 'before')  # no quillmd-cpt names nothing
             (available / install.VHOST_NAME).write_text(pre_admin(rendered(9151)['https']))
+            (enabled / install.VHOST_NAME).symlink_to(install.VHOST_LINK_TARGET)  # as the installer links it
             self.assertEqual(install.read_coupling()['coupling'], 'before')
             (available / install.VHOST_NAME).write_text(rendered(9151)['https'])
             self.assertEqual(install.read_coupling()['coupling'], 'both')
             (available / 'quillmd').write_bytes(after)
             self.assertEqual(install.read_coupling(),
                              {'quillmd_sha256': sha(after), 'names_admin': True, 'coupling': 'after'})
+            # quillmd-cpt claims the admin host only as nginx loads it (check, round R2-1): without its sites-enabled
+            # link nothing claims admin's :443, and behind a link that is not the installer's it cannot be told
+            (enabled / install.VHOST_NAME).unlink()
+            self.assertEqual(install.read_coupling(),
+                             {'quillmd_sha256': sha(after), 'names_admin': False, 'coupling': 'uncoupled'})
+            (enabled / install.VHOST_NAME).symlink_to(available / 'quillmd')
+            self.assertEqual(install.read_coupling(),
+                             {'quillmd_sha256': sha(after), 'names_admin': None, 'coupling': 'uncoupled'})
+            (enabled / install.VHOST_NAME).unlink()
+            (enabled / install.VHOST_NAME).write_text(rendered(9151)['https'])  # a file, not the installer's link
+            self.assertEqual(install.read_coupling()['coupling'], 'uncoupled')
+            (enabled / install.VHOST_NAME).unlink()
+            (enabled / install.VHOST_NAME).symlink_to(install.VHOST_LINK_TARGET)
+            self.assertEqual(install.read_coupling()['coupling'], 'after')
             (available / install.VHOST_NAME).unlink()
             (available / install.VHOST_NAME).symlink_to(available / 'quillmd')  # not a regular file: cannot be told
             self.assertEqual(install.read_coupling()['names_admin'], None)
@@ -249,14 +264,66 @@ class OwnRoutesTests(unittest.TestCase):
 
 # --- which revisions serve the admin host ---------------------------------------------------------------------------
 
+class CotenantScriptContractTests(TemporaryDirectoryTest):
+    """The REAL scripts/check-cotenants.sh (QuillMD's), run by the REAL cotenant_check with curl stood in on the fixed
+    PATH: the contract the installer relies on - the skipped host is printed without two codes (never judged), the
+    floor is counted from the rows judged - and the two deliberate states the script accepts for admin across the move
+    (QuillMD's notice; the console's sign-in on its own host), nothing else."""
+
+    BASE = ('quillmd.com 200', 'www.quillmd.com 200', 'app.quillmd.com 302 https://app.quillmd.com/login/?next=/',
+            'pro.quillmd.com 410')
+
+    def setUp(self):
+        super().setUp()
+        self.bin = self.tmp / 'bin'
+        self.bin.mkdir()
+        curl = self.bin / 'curl'
+        curl.write_text('#!/bin/bash\n'
+                        'url="${*: -1}"; host="${url#https://}"\n'
+                        'line="$(grep -m1 "^$host " "$STUB_SCENARIO")" || { printf "000 "; exit 7; }\n'
+                        'read -r _h code target <<< "$line"\n'
+                        'printf "%s %s" "$code" "${target:-}"\n')
+        curl.chmod(0o755)
+
+    def run_script(self, admin, *, skip=True, base=BASE):
+        scenario = self.tmp / 'scenario'
+        scenario.write_text('\n'.join((*base, f'{ADMIN} {admin}')) + '\n')
+        env = {'PATH': f'{self.bin}:{install.COMMAND_ENV["PATH"]}', 'STUB_SCENARIO': str(scenario)}
+        if skip:
+            with mock.patch.dict(install.COMMAND_ENV, env):
+                return install.cotenant_check()
+        completed = subprocess.run(['bash', str(install.ROOT / 'scripts' / 'check-cotenants.sh')], capture_output=True,
+                                   env={**install.COMMAND_ENV, **env}, timeout=60)
+        return {'returncode': completed.returncode, 'stdout': completed.stdout.decode()}
+
+    def test_the_installers_skip_is_honoured_and_never_judged(self):
+        for admin in ('503', f'302 https://{ADMIN}/login/', '502', '200'):  # admin is the installer's to judge
+            with self.subTest(admin=admin):
+                found = self.run_script(admin)
+                self.assertEqual((found['returncode'], found['judged_skipped']), (0, []))
+                self.assertEqual(found['observed'], {'quillmd.com': '200', 'www.quillmd.com': '200',
+                                                     'app.quillmd.com': '302', 'pro.quillmd.com': '410'})
+        found = self.run_script('503', base=(*self.BASE[:3], 'pro.quillmd.com 200'))  # a co-tenant diverged
+        self.assertEqual(found['returncode'], 1)
+
+    def test_without_the_skip_admin_has_two_deliberate_states_and_nothing_else(self):
+        for admin, code in (('503', 0), (f'302 https://{ADMIN}/login/', 0),
+                            ('302 https://app.quillmd.com/login/?next=/', 1), (f'302 https://{ADMIN}/ops/', 1),
+                            ('502', 1), ('404', 1), ('200', 1)):
+            with self.subTest(admin=admin):
+                self.assertEqual(self.run_script(admin, skip=False)['returncode'], code)
+
+
 class ServesAdminHostTests(unittest.TestCase):
     def test_release_1_and_later_serve_it_and_an_earlier_revision_does_not(self):
         head = subprocess.run(['git', '-C', str(install.ROOT), 'rev-parse', 'HEAD'], capture_output=True,
                               check=True).stdout.decode().strip()
         self.assertTrue(install.serves_admin_host(head))  # this tree holds the admin urlconf and middleware
+        # a value that is not a revision, or one this checkout cannot read, is refused - never taken for an older
+        # revision, which would leave the admin answers unjudged (check, round R2-3)
         for value in ('HEAD', head[:12], '--help', '', None, 'f' * 40):
-            with self.subTest(value=value):
-                self.assertFalse(install.serves_admin_host(value))
+            with self.subTest(value=value), self.assertRaises(install.InstallError):
+                install.serves_admin_host(value)
         found = subprocess.run(['git', '-C', str(install.ROOT), 'cat-file', '-e', f'{EARLIER_REVISION}^{{commit}}'],
                                capture_output=True)
         if found.returncode:
@@ -890,6 +957,22 @@ class IngressTests(TemporaryDirectoryTest):
         details, error = world.run('ingress-rollback')
         self.assertRegex(str(error), 'No successful --phase ingress receipt')
 
+    def test_a_move_made_by_another_revision_is_refused_and_its_way_back_named(self):
+        """check, round R2-2: a later revision's ingress-rollback, with admin moved by an earlier revision's ingress,
+        refuses and names that revision's switch-back and ingress-rollback - never 'nothing to roll back'"""
+        world = self.served_world()
+        details, error = world.run('ingress')
+        self.assertIsNone(error)
+        for path in world.receipts.glob('ingress-*.json'):  # the move was another revision's
+            record = json.loads(path.read_text())
+            record['revision'] = SERVING
+            path.write_text(json.dumps(record))
+        details, error = world.run('ingress-rollback')
+        self.assertRegex(str(error), f'moved by revision {SERVING[:12]}')
+        self.assertIn('--phase switch-back', str(error))
+        self.assertNotIn('nothing to roll back', str(error))
+        self.assertEqual((world.ops, world.files()[0]), (['couple'], world.after))  # nothing written
+
     def test_a_fresh_host_moves_from_this_revisions_http_stage_and_rolls_back_to_it(self):
         world = IngressWorld(self.tmp, live=rendered()['http'], web=(REVISION, 9150), serving=(REVISION,))
         world.receipt('http-vhost', {'vhost_sha256': sha(rendered()['http'])})
@@ -924,7 +1007,7 @@ class PreflightTests(TemporaryDirectoryTest):
     """phase_preflight with the host stood in: the coupling invariant (either state, never another), admin.quillmd.com's
     DNS and HTTP-01 route, and a check-cotenants that honours the installer's skip."""
 
-    def run_preflight(self, *, quillmd=None, live=None, dns=None, admin_acme=True, judged=()):
+    def run_preflight(self, *, quillmd=None, live=None, dns=None, admin_acme=True, judged=(), link=True):
         quillmd = quillmd or install.QUILLMD_VHOST_AFTER
         live = rendered(9151)['https'] if live is None else live
         dns = dns or {}
@@ -938,8 +1021,9 @@ class PreflightTests(TemporaryDirectoryTest):
 
         def run_helper(body, params, **kwargs):
             return {'written': True} if body == install.H_ACME_WRITE else {'removed': True}
-        vhost = {'file_exists': bool(live), 'file_sha256': sha(live) if live else None, 'link_exists': bool(live),
-                 'link_target': install.VHOST_LINK_TARGET if live else None}
+        target = {True: install.VHOST_LINK_TARGET, False: None}.get(link, link)  # link: True, False or a target
+        vhost = {'file_exists': bool(live), 'file_sha256': sha(live) if live else None,
+                 'link_exists': bool(live) and link is not False, 'link_target': target if live else None}
         ctx = install.Context(SimpleNamespace(phase='preflight', revision=REVISION, receipts=str(self.tmp)), self.tmp)
         with mock.patch.multiple(
                 install, docker_positive_control=lambda: '27.0.0',
@@ -985,6 +1069,15 @@ class PreflightTests(TemporaryDirectoryTest):
             with self.subTest(label):
                 details, problems = self.run_preflight(quillmd=quillmd, live=live)
                 self.assertTrue(any(expected in problem for problem in problems), problems)
+
+    def test_the_after_state_is_judged_as_nginx_loads_quillmd_cpt(self):
+        """check, round R2-1: quillmd-cpt claims admin's :443 only through the installer's sites-enabled link"""
+        for label, link in (('no sites-enabled link', False),
+                            ('a link to another file', '/etc/nginx/sites-available/quillmd')):
+            with self.subTest(label):
+                details, problems = self.run_preflight(link=link)
+                self.assertEqual(details['coupling']['coupling'], 'uncoupled')
+                self.assertTrue(any('not coupled' in problem for problem in problems), problems)
 
     def test_admins_dns_route_and_the_skip_are_checked(self):
         aaaa = [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (install.PUBLIC_IPV4, 443)),
