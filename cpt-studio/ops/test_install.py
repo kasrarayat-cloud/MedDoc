@@ -1741,7 +1741,8 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         changed = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'X'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
         self.assertNotEqual(install.other_lineages(changed), install.other_lineages(baseline))
 
-    def run_verify(self, le_now, *, quillmd_now=install.QUILLMD_VHOST_AFTER, quillmd_baseline=install.QUILLMD_VHOST_AFTER):
+    def run_verify(self, le_now, *, quillmd_now=install.QUILLMD_VHOST_AFTER, quillmd_baseline=install.QUILLMD_VHOST_AFTER,
+                   acme=None):
         # Since release 2 of the admin move this revision's stage names admin.quillmd.com, so the quillmd vhost it
         # couples is the after state; the baseline is the preflight the act takes after the ingress, unless given.
         own = f'{install.DOMAIN}.conf'
@@ -1771,8 +1772,8 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'db_container_problems', return_value=[]), \
                 mock.patch.object(install, 'service_problems', return_value=[]), \
                 mock.patch.object(install, 'https_checks', return_value=([], {})), \
-                mock.patch.object(install, 'acme_probe', side_effect=lambda ctx, label, host=install.DOMAIN: {
-                    'passed': True, 'probe_removed': True, 'host': host}), \
+                mock.patch.object(install, 'acme_probe', side_effect=acme or (lambda ctx, label, host=install.DOMAIN: {
+                    'passed': True, 'probe_removed': True, 'host': host})), \
                 mock.patch.object(install, 'foreign_uid_tasks', return_value=0), \
                 mock.patch.object(install, 'own_service_ids', return_value=[]):
             return install.phase_verify(self.ctx('verify'))
@@ -1785,6 +1786,38 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
             details = self.run_verify(renewed)
         self.assertNotIn('interpretation', details)
         self.assertTrue(details['summary'].endswith('co-tenants and app.quillmd.com unchanged'), details['summary'])
+
+    def test_verify_accepts_the_coupled_quillmd_vhost_whichever_side_of_the_ingress_its_baseline_was_taken(self):
+        # D396 release 2 (refutation INSTALLER-4): the act takes a preflight after the ingress, and verify accepts the
+        # coupled state against one taken before it too - the after state, exactly, as this revision's stage couples it
+        renewed = {'renewal': {'app.quillmd.com.conf': 'b'}, 'live': {'app.quillmd.com': {}}}
+        for baseline in (install.QUILLMD_VHOST_BEFORE, install.QUILLMD_VHOST_AFTER):
+            with self.subTest(baseline=baseline[:8]):
+                for path in self.tmp.glob('*.json'):
+                    path.unlink()
+                self.assertIn('verified', self.run_verify(renewed, quillmd_baseline=baseline)['summary'])
+        for now in (install.QUILLMD_VHOST_BEFORE, '0' * 64):
+            with self.subTest(now=now[:8]), self.assertRaisesRegex(install.InstallError, 'not the after state'):
+                for path in self.tmp.glob('*.json'):
+                    path.unlink()
+                self.run_verify(renewed, quillmd_now=now)
+
+    def test_verify_counts_neither_cpt_lineage_as_another_one(self):
+        own = {'renewal': {f'{install.DOMAIN}.conf': 'a', f'{install.CERT_NAME}.conf': 'new',
+                           'app.quillmd.com.conf': 'b'},
+               'live': {install.DOMAIN: {}, install.CERT_NAME: {}, 'app.quillmd.com': {}}}
+        self.assertIn('verified', self.run_verify(own)['summary'])
+
+    def test_verify_proves_both_acme_routes(self):
+        renewed = {'renewal': {'app.quillmd.com.conf': 'b'}, 'live': {'app.quillmd.com': {}}}
+        seen = []
+
+        def failing(ctx, label, host=install.DOMAIN):
+            seen.append(host)
+            return {'passed': host != install.ADMIN_HOST, 'probe_removed': True}
+        with self.assertRaisesRegex(install.InstallError, f'path of {install.ADMIN_HOST}'):
+            self.run_verify(renewed, acme=failing)
+        self.assertEqual(seen, [install.DOMAIN, install.ADMIN_HOST])
 
     def test_verify_after_a_reinstall_accepts_this_domains_own_renewed_lineage(self):
         own = f'{install.DOMAIN}.conf'
