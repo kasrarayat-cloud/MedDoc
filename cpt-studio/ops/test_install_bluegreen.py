@@ -413,7 +413,9 @@ class BlueGreenWorld:
         return Recorder()
 
     def patches(self):
-        return [mock.patch.multiple(
+        # every stage here names the admin host (release 2 on): the coupling invariant's after state, read by app before
+        # its migration (refutation R2 round 1, WAYBACK-5)
+        return [mock.patch.object(install, 'read_coupling', return_value=coupled('after')), mock.patch.multiple(
             install, inspect=self.inspect, docker=self.docker, wait_service=self.wait_service,
             smoke_web=self.smoke_web, vhost_state=self.vhost_state, live_vhost_bytes=self.live_vhost_bytes,
             vhost_operation=self.vhost_operation, nginx_test=self.nginx_test, nginx_reload=self.nginx_reload,

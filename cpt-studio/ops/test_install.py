@@ -68,11 +68,29 @@ def _guarded_connect(address, *args, **kwargs):
 _HOST_GUARDS = []
 
 
+# No test reads this host's nginx files: the vhost directories point at a path that does not exist, as on a CI runner
+# (the R2 refutation's repairs found tests passing here only because this VPS's quillmd vhost was readable). A test that
+# models the files points NGINX_AVAILABLE at its own directory, or hands read_coupling its own readings, and gets the
+# real reading; any other reads the coupling invariant's before state - the host as it was before release 2 of D396.
+NO_NGINX = Path('/nonexistent-test-host/nginx')
+REAL_READ_COUPLING = install.read_coupling
+# the host's own directories, for the tests that read this QuillMD host on purpose (each skips elsewhere)
+HOST_NGINX_AVAILABLE, HOST_NGINX_ENABLED = install.NGINX_AVAILABLE, install.NGINX_ENABLED
+
+
+def _guarded_coupling(quillmd_sha256=None, vhost=None):
+    if install.NGINX_AVAILABLE != NO_NGINX / 'sites-available' or quillmd_sha256 is not None or vhost is not None:
+        return REAL_READ_COUPLING(quillmd_sha256, vhost)
+    return coupled('before')
+
+
 def guard_host():
     # and the door's wall-clock ceiling a phase that stops a worker needs (install.check_door_ceiling), as an operator
     # gives it to the door (RULED_ACT_MAX_SECS); its own tests set it themselves
     patches = [mock.patch.object(subprocess, 'run', _guarded_run),
                mock.patch.object(socket, 'create_connection', _guarded_connect),
+               mock.patch.multiple(install, NGINX_AVAILABLE=NO_NGINX / 'sites-available',
+                                   NGINX_ENABLED=NO_NGINX / 'sites-enabled', read_coupling=_guarded_coupling),
                mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': str(
                    2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN)})]
     for patcher in patches:
@@ -482,7 +500,8 @@ class NginxParsingTests(unittest.TestCase):
 
     @unittest.skipUnless((install.NGINX_ENABLED / 'quillmd').exists(), 'not the QuillMD host (CI runners ship nginx)')
     def test_live_enabled_vhosts_parse_and_include_the_quillmd_app(self):
-        targets = install.routing_targets(install.enabled_config_texts())
+        with mock.patch.multiple(install, NGINX_AVAILABLE=HOST_NGINX_AVAILABLE, NGINX_ENABLED=HOST_NGINX_ENABLED):
+            targets = install.routing_targets(install.enabled_config_texts())
         self.assertIn(('app.quillmd.com', 443, True, '127.0.0.1'), targets)
         self.assertFalse(any(target[0] == install.DOMAIN for target in targets))
 
@@ -1549,6 +1568,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
             with self.subTest(accounts=accounts), \
                     mock.patch.object(install, 'rendered_vhosts', return_value=rendered()), \
                     mock.patch.object(install, 'vhost_state', return_value=state), \
+                    mock.patch.object(install, 'read_coupling', return_value=coupled('before')), \
                     mock.patch.object(install.socket, 'getaddrinfo', return_value=dns), \
                     mock.patch.object(install, 'le_state', return_value=le), \
                     mock.patch.object(install, 'run_helper') as helper, self.assertRaises(install.InstallError):
@@ -1561,6 +1581,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         moved = [(2, 1, 6, '', (install.PUBLIC_IPV4, 80)), (10, 1, 6, '', ('2001:db8::1', 80, 0, 0))]
         with mock.patch.object(install, 'rendered_vhosts', return_value=rendered()), \
                 mock.patch.object(install, 'vhost_state', return_value=state), \
+                mock.patch.object(install, 'read_coupling', return_value=coupled('before')), \
                 mock.patch.object(install.socket, 'getaddrinfo', return_value=moved), \
                 mock.patch.object(install, 'le_state') as le, self.assertRaises(install.InstallError):
             install.phase_cert(self.ctx('cert'))
@@ -1616,6 +1637,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         redirect = {'status': 301, 'headers': {'location': [f'https://{install.DOMAIN}/']}}
         with mock.patch.object(install, 'rendered_vhosts', return_value=rendered()), \
                 mock.patch.object(install, 'vhost_state', return_value=state), \
+                mock.patch.object(install, 'read_coupling', return_value=coupled('before')), \
                 mock.patch.object(install, 'acme_probe', return_value=acme), \
                 mock.patch.object(install, 'probe', return_value=redirect), \
                 mock.patch.object(install, 'ingress_checks', return_value=[]), \

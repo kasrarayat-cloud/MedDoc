@@ -30,6 +30,9 @@ touch "$LOG" "$STATE"
 # Public clinical hosts are deliberately unavailable during private testing.
 # Exact expected codes detect both an outage and accidental public reactivation.
 # The retired pro.quillmd.com host remains outside this monitor’s target set.
+# admin.quillmd.com is CPT Studio's operator console from release 2 of the
+# admin.quillmd.com move (D396): its anonymous answer is 302 to /login/, and a
+# 503 there is CPT Studio's outage page - DOWN, as it should read.
 uptime_admin_base="${TEST_ADMIN_URL:-https://admin.quillmd.com}"
 uptime_doctor_private_base="${TEST_PRIVATE_DOCTOR_URL:-http://127.0.0.1:9130}"
 uptime_admin_private_base="${TEST_PRIVATE_ADMIN_URL:-http://127.0.0.1:9131}"
@@ -40,7 +43,7 @@ URLS=(
   "${uptime_doctor_private_base%/}/health/"
   "${uptime_admin_private_base%/}/health/"
 )
-EXPECTED_CODES=(200 503 503 200 200)
+EXPECTED_CODES=(200 503 302 200 200)
 
 ts() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
 

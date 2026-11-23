@@ -25,21 +25,31 @@
 # READ-ONLY. Issues HEAD requests. Writes nothing, mutates nothing, and never
 # touches a clinical route.
 #
-# ⚠️ AN EXPECTATION CAN NAME THE REDIRECT, AND A ROW CAN NAME MORE THAN ONE
-# DELIBERATE STATE (D396, the admin.quillmd.com move). `302>URL` means status
-# 302 AND curl's redirect_url exactly URL: app.quillmd.com and the CPT Studio
-# console on admin.quillmd.com both answer 302, and only the target tells a
-# working console from an app answering in its place. Alternatives are
+# ⚠️ AN EXPECTATION CAN NAME THE REDIRECT OR THE BODY, AND A ROW CAN NAME MORE
+# THAN ONE DELIBERATE STATE (D396, the admin.quillmd.com move). `302>URL` means
+# status 302 AND curl's redirect_url exactly URL: app.quillmd.com and the CPT
+# Studio console on admin.quillmd.com both answer 302, and only the target tells
+# a working console from an app answering in its place. `503~TEXT` means status
+# 503 AND the body (fetched with GET, at most 64 KiB) contains TEXT: QuillMD's
+# maintenance notice and CPT Studio's own outage page are both 503, and only the
+# text tells a deliberate notice from a dead console. Alternatives are
 # comma-separated and each is a whole, named state - never a range: a row that
-# accepts "503 or the console's sign-in" still goes red on a 502, a 200 or a
-# 404. A two-state row exists only across a move and is narrowed when it lands.
+# accepts "the notice or the console's sign-in" still goes red on a 502, a 200,
+# a 404, or a 503 that is not the notice. A two-state row exists only across a
+# move and is narrowed when it lands.
 #
-# ⚠️ CPT_INSTALLER_SKIP_HOSTS (exact host names, space-separated) is how CPT
-# Studio's installer tells this script not to judge the hosts it judges itself;
-# the installer passes it alone, from a constant. A skipped host is printed as
-# SKIPPED and left out of the discrimination floor, which is counted from the
-# rows actually judged - so a skip can never make the floor easier to pass.
-# Anyone who sets it by hand silences that host, and the output says so.
+# ⚠️ A FAILED HANDSHAKE IS A FINDING, NOT "NO RESPONSE". curl's TLS failures (a
+# wrong or expired certificate is exactly what a move can break) are red rows;
+# only a failure to resolve, connect or get an answer is "cannot tell" - and
+# every row is still probed, so one silent host never hides another's finding.
+#
+# ⚠️ CPT_INSTALLER_SKIP_HOSTS is how CPT Studio's installer tells this script not
+# to judge the one host it judges itself, admin.quillmd.com; the installer passes
+# it alone, from a constant. It may name THAT HOST ONLY - any other name, or any
+# other host, refuses (exit 2) before a probe, so nobody's variable can silence a
+# co-tenant. A skipped host is printed as SKIPPED and left out of the
+# discrimination floor, which is counted from the rows actually judged - so a
+# skip can never make the floor easier to pass.
 #
 # Usage:  bash scripts/check-cotenants.sh
 # Exit:   0 = every host matches its expected status
@@ -54,22 +64,17 @@ EXPECTED=(
   "quillmd.com|200|the marketing site serves"
   "www.quillmd.com|200|the same site on the www host. MASTER.md STEP 0.6 names FIVE hosts and this table shipped with FOUR — the watched-set failure INSIDE the check written to cure watched-set failures. Keep every entry on ONE line: the floor is derived by cutting field 2, and a wrapped reason is parsed as extra expected codes."
   "app.quillmd.com|302|owner-authorized normal HTTPS account login; protected application requires an invited account"
-  "admin.quillmd.com|503,302>https://admin.quillmd.com/login/|TWO DELIBERATE STATES ACROSS ONE MOVE (D396): 503 is the fresh rebuild's maintenance notice (public administration in maintenance; the rebuild's private admin stays on 127.0.0.1:9131); 302 to https://admin.quillmd.com/login/ is CPT Studio's operator console once release 2 of the admin.quillmd.com move is installed. Narrowed to the second when that release lands. Anything else - a 502, a 200, a 404, a 302 elsewhere - is the finding."
+  "admin.quillmd.com|503~QuillMD administration is temporarily unavailable,302>https://admin.quillmd.com/login/|TWO DELIBERATE STATES ACROSS ONE MOVE (D396): 503 with the fresh rebuild's maintenance notice (public administration in maintenance; the rebuild's private admin stays on 127.0.0.1:9131); 302 to https://admin.quillmd.com/login/ is CPT Studio's operator console once release 2 of the admin.quillmd.com move is installed. Narrowed to the second when that release lands. Anything else - a 502, a 200, a 404, a 302 elsewhere, a 503 that is not the notice (CPT Studio's outage page) - is the finding."
   "pro.quillmd.com|410|DELIBERATELY RETIRED. The meddoc-pro CRM container was stopped (SIGTERM) on ~2026-08-04 and Caddy answers Gone. A change AWAY from 410 is the finding: either it started serving again, or a 502 is wearing its place."
 )
 
 have() { command -v "$1" >/dev/null 2>&1; }
 have curl || { echo "🟡 cannot tell — curl not installed"; exit 2; }
 
-probe() {
-  # -I HEAD, no reuse across hosts, generous but bounded timeout. Prints the
-  # status and curl's redirect_url (empty when the answer is not a redirect).
-  local out
-  out="$(curl -sI -o /dev/null -m 12 -w '%{http_code} %{redirect_url}' "https://$1" 2>/dev/null)" || out='000 '
-  case "$out" in [0-9][0-9][0-9]\ *) printf '%s' "$out" ;; *) printf '000 ' ;; esac
-}
+# curl's exit codes for a TLS or certificate failure: a red row, never "no response"
+TLS_EXITS=' 35 51 53 54 58 59 60 64 66 77 80 82 83 90 91 '
 
-# matches <alternatives> <status> <redirect_url>: one alternative names this state
+# matches <alternatives> <status> <redirect_url> <body file>: one alternative names this state
 matches() {
   local alt
   local -a alts
@@ -77,6 +82,7 @@ matches() {
   for alt in "${alts[@]}"; do
     case "$alt" in
       *'>'*) [ "$2" = "${alt%%>*}" ] && [ "$3" = "${alt#*>}" ] && return 0 ;;
+      *'~'*) [ "$2" = "${alt%%~*}" ] && [ -s "$4" ] && grep -qF -- "${alt#*~}" "$4" && return 0 ;;
       *) [ "$2" = "$alt" ] && return 0 ;;
     esac
   done
@@ -85,40 +91,63 @@ matches() {
 
 declare -A SKIP=()
 read -ra _skip_hosts <<< "${CPT_INSTALLER_SKIP_HOSTS:-}"
-for h in "${_skip_hosts[@]}"; do SKIP["$h"]=1; done
+for h in "${_skip_hosts[@]}"; do
+  if [ "$h" != admin.quillmd.com ]; then
+    echo "🟡 cannot tell — CPT_INSTALLER_SKIP_HOSTS may name admin.quillmd.com only (CPT Studio's installer judges that host itself); it names '$h'. Nothing was probed."
+    exit 2
+  fi
+  SKIP["$h"]=1
+done
 
+BODY="$(mktemp)"
+trap 'rm -f "$BODY"' EXIT
 declare -a OBSERVED=() JUDGED=()
-declare -A NAMED=()
-findings=0
+findings=0; silent=0
 printf '%-22s %-9s %s\n' HOST EXPECTED OBSERVED
 for row in "${EXPECTED[@]}"; do
   host="${row%%|*}"; rest="${row#*|}"; want="${rest%%|*}"; why="${rest#*|}"
-  NAMED["$host"]=1
   if [ -n "${SKIP[$host]:-}" ]; then
-    printf '  ⏭  %-20s SKIPPED: CPT_INSTALLER_SKIP_HOSTS names it (its installer judges it); not judged here\n' "$host"
+    printf '  ⏭  %-20s SKIPPED: CPT_INSTALLER_SKIP_HOSTS names it (CPT Studio'"'"'s installer judges it); not judged here\n' "$host"
     continue
   fi
-  answer="$(probe "$host")"; got="${answer%% *}"; target="${answer#* }"
+  : > "$BODY"
+  # -I HEAD unless an expectation reads the body; no reuse across hosts; a generous but bounded timeout
+  case "$want" in
+    *'~'*) answer="$(curl -s -m 12 --max-filesize 65536 -o "$BODY" -w '%{http_code} %{redirect_url}' "https://$host" 2>/dev/null)"; rc=$? ;;
+    *) answer="$(curl -sI -o /dev/null -m 12 -w '%{http_code} %{redirect_url}' "https://$host" 2>/dev/null)"; rc=$? ;;
+  esac
+  if [ "$rc" -ne 0 ] || ! [[ $answer =~ ^[0-9]{3}\  ]] || [ "${answer%% *}" = 000 ]; then
+    if [[ $TLS_EXITS == *" $rc "* ]]; then answer="tls "; else answer="000 "; fi
+  fi
+  got="${answer%% *}"; target="${answer#* }"
   JUDGED+=("$want")
   case "$want" in
-    *'>'*) OBSERVED+=("$got>$target"); shown="$got${target:+ → $target}" ;;
+    *'>'*|*'~'*) OBSERVED+=("$got>$target"); shown="$got${target:+ → $target}" ;;
     *) OBSERVED+=("$got"); shown="$got" ;;
   esac
-  if [ "$got" != "000" ] && matches "$want" "$got" "$target"; then
-    printf '  🟢 %-20s %-9s %s\n' "$host" "$want" "$shown"
-  elif [ "$got" = "000" ]; then
+  if [ "$got" = 000 ]; then
+    silent=$((silent + 1))
     printf '  🟡 %-20s %-9s %s  (no response — network or DNS)\n' "$host" "$want" "$got"
-    echo "🟡 cannot tell — $host did not respond at all."
-    exit 2
+  elif [ "$got" = tls ]; then
+    findings=$((findings + 1))
+    printf '  🔴 %-20s %-9s %s  (the TLS handshake failed: curl exit %s)\n' "$host" "$want" "$got" "$rc"
+    echo "     WHY $want WAS EXPECTED: $why"
+  elif matches "$want" "$got" "$target" "$BODY"; then
+    printf '  🟢 %-20s %-9s %s\n' "$host" "$want" "$shown"
   else
     findings=$((findings + 1))
     printf '  🔴 %-20s %-9s %s\n' "$host" "$want" "$shown"
     echo "     WHY $want WAS EXPECTED: $why"
   fi
 done
-for h in "${!SKIP[@]}"; do
-  [ -n "${NAMED[$h]:-}" ] || echo "  note: CPT_INSTALLER_SKIP_HOSTS names $h, which no row names; nothing was skipped for it"
-done
+if [ "$silent" -gt 0 ]; then
+  if [ "$findings" -gt 0 ]; then
+    echo "🔴 $findings co-tenant(s) diverged from the expected status (and $silent did not respond). That is THE FINDING."
+    exit 1
+  fi
+  echo "🟡 cannot tell — $silent host(s) did not respond at all."
+  exit 2
+fi
 
 # ── DISCRIMINATION CONTROL ────────────────────────────────────────────────
 # ⚠️ A PROBE THAT RETURNS THE SAME CODE FOR EVERY HOST IS NOT ROUTING. If an
