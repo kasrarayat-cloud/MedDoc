@@ -613,10 +613,14 @@ class KeepBaselineEndToEndTests(TemporaryDirectoryTest):
             if body == install.H_ACME_REMOVE:
                 return {'removed': True}
             raise AssertionError('unexpected root helper call in preflight')
+        # the world's live vhost is this revision's HTTPS stage, which names admin.quillmd.com (D396 release 2): the
+        # quillmd vhost it couples is the after state, and preflight proves admin's HTTP-01 route (stood in here)
         return [mock.patch.object(install, 'docker_positive_control', lambda: '27.0.0'),
                 mock.patch.object(install, 'nginx_file_state', lambda: {
-                    'available': {'quillmd': install.QUILLMD_VHOST_SHA256}, 'enabled': {}, 'nginx_conf_sha256': 'x',
+                    'available': {'quillmd': install.QUILLMD_VHOST_AFTER}, 'enabled': {}, 'nginx_conf_sha256': 'x',
                     'conf_d': []}),
+                mock.patch.object(install, 'acme_probe', lambda ctx, label, host=install.DOMAIN: {
+                    'passed': True, 'probe_removed': True, 'label': label, 'host': host}),
                 mock.patch.object(install, 'containers', lambda: {
                     n: {'id': c['Id'], 'image': c['Image'], 'state': 'running' if c['running'] else 'exited'}
                     for n, c in world.containers.items()}),

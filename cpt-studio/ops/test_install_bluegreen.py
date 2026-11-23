@@ -36,7 +36,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
 from test_install import (TemporaryDirectoryTest, guard_host, release_host, rendered,  # noqa: E402
-                          HOST_GUARD_ATTEMPTS, pre_switch_answer)
+                          HOST_GUARD_ATTEMPTS, pre_switch_answer, pre_admin, coupled)
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 REVISION = 'a' * 40            # the revision being installed
@@ -106,6 +106,7 @@ class BlueGreenWorld:
         self.inflight = {}          # port -> requests old nginx workers still hold to it
         self.availability = None    # the recorder's model: every invariant point it saw, served or not
         self.runs = {}              # container name -> the docker run arguments it was last started with
+        self.smoked_admin = []      # (port, admin) of every smoke_web: the admin arm is asked of a web serving admin
         self.oneshots = []          # (image, command, keyword arguments) of every one-shot, in order
         # what CODING_MADE answers in this revision's image - the declared note's count of what is not carried back
         # (an exception: it raises that)
@@ -248,8 +249,9 @@ class BlueGreenWorld:
             raise install.InstallError(f'{name} did not become ready: readiness not observed.')
         return self.done({'id': c['Id'], 'observations': 2})
 
-    def smoke_web(self, port):
+    def smoke_web(self, port, *, admin=False):
         self.act('smoke', port)
+        self.smoked_admin.append((port, admin))  # whether the admin host's own answers were asked of that web
         assert self.web_on(port) is not None
         return self.done({'login': {'status': 200, 'content_type': 'text/html; charset=utf-8'},
                           'assets': {'/static/studio/styles.0123456789ab.css': 200}})
@@ -1223,14 +1225,17 @@ class VerifyAndVhostPhaseTests(TemporaryDirectoryTest):
         return {'file_exists': True, 'file_sha256': sha(text), 'link_exists': True,
                 'link_target': install.VHOST_LINK_TARGET}
 
-    def verify(self, vhost_text, web_port=9151):
-        files = {'available': {'quillmd': install.QUILLMD_VHOST_SHA256, install.VHOST_NAME: '1' * 64},
+    def verify(self, vhost_text, web_port=9151, quillmd_now=install.QUILLMD_VHOST_AFTER,
+               quillmd_baseline=install.QUILLMD_VHOST_AFTER):
+        # this revision's stage names admin.quillmd.com (D396 release 2): the quillmd vhost it couples is the after state
+        files = {'available': {'quillmd': quillmd_baseline, install.VHOST_NAME: '1' * 64},
                  'enabled': {'quillmd': 'quillmd', install.VHOST_NAME: install.VHOST_LINK_TARGET},
                  'nginx_conf_sha256': '2' * 64, 'conf_d': {}}
         self.receipt('preflight', {'nginx_files': files, 'routing': {}, 'app_health': {'status': 200},
                                    'cotenants': {'ok': True}, 'containers': {}, 'volumes': ['v'],
                                    'letsencrypt': {'renewal': {}, 'live': {}}})
-        current = {**files, 'available': {**files['available'], install.VHOST_NAME: sha(vhost_text)}}
+        current = {**files, 'available': {**files['available'], 'quillmd': quillmd_now,
+                                          install.VHOST_NAME: sha(vhost_text)}}
         running = {WEB: container_on(web_port), WORKER: container_on(None, role='worker'),
                    install.DB_CONTAINER: {'State': {'Running': True}, 'Id': 'db'}}
         problems = {}
@@ -1249,6 +1254,8 @@ class VerifyAndVhostPhaseTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'service_problems', side_effect=lambda c, role, image, port=None:
                                   (problems.setdefault(role, port), [])[1]), \
                 mock.patch.object(install, 'https_checks', return_value=([], {})), \
+                mock.patch.object(install, 'acme_probe', side_effect=lambda ctx, label, host=install.DOMAIN: {
+                    'passed': True, 'probe_removed': True, 'host': host}), \
                 mock.patch.object(install, 'foreign_uid_tasks', return_value=0), \
                 mock.patch.object(install, 'own_service_ids', return_value=[]):
             return install.phase_verify(self.ctx('verify')), problems
@@ -1281,7 +1288,7 @@ class VerifyAndVhostPhaseTests(TemporaryDirectoryTest):
                 install.phase_cert(self.ctx('cert'))
             helper.assert_not_called()
 
-    def https_vhost(self, text, web_port):
+    def https_vhost(self, text, web_port, coupling='after'):
         self.receipt('preflight', {'routing': {}, 'app_health': {'status': 200}})
         self.receipt('cert')
         operations = []
@@ -1291,7 +1298,9 @@ class VerifyAndVhostPhaseTests(TemporaryDirectoryTest):
             return {}
         with self.renderings(), \
                 mock.patch.object(install, 'vhost_state', return_value=self.state(text)), \
-                mock.patch.object(install, 'le_state', return_value={'live': {install.DOMAIN: {
+                mock.patch.object(install, 'live_vhost_bytes', return_value=text.encode()), \
+                mock.patch.object(install, 'read_coupling', return_value=coupled(coupling)), \
+                mock.patch.object(install, 'le_state', return_value={'live': {install.CERT_NAME: {
                     'fullchain.pem': True, 'privkey.pem': True}}}), \
                 mock.patch.object(install, 'inspect', side_effect=lambda kind, name: container_on(web_port)
                                   if name == WEB else None), \
@@ -1305,36 +1314,58 @@ class VerifyAndVhostPhaseTests(TemporaryDirectoryTest):
                     (op, kw))):
             return install.phase_https_vhost(self.ctx('https-vhost')), operations
 
-    def test_https_vhost_renders_for_the_port_the_running_web_publishes(self):
-        details, operations = self.https_vhost(rendered(9151)['http'], 9151)
-        self.assertEqual(operations, [('replace', {'expected_sha256': sha(rendered(9151)['http']),
-                                                   'content': base64.b64encode(
-                                                       rendered(9151)['https'].encode()).decode()})])
-        self.assertEqual((details['upstream_port'], details['vhost_sha256']), (9151, sha(rendered(9151)['https'])))
+    def test_https_vhost_republishes_in_place_for_the_port_the_running_web_publishes(self):
+        # Since release 2 of the admin move (the design: a later template change is an in-place replace between two
+        # stages that both name admin; refutation INSTALLER-1) https-vhost replaces an earlier revision's HTTPS stage
+        # in place; the first HTTPS stage - over the HTTP stage, or over a stage naming no admin host - is the ingress's.
+        earlier = rendered(9151)['https'].replace('client_max_body_size 20m;', 'client_max_body_size 25m;')
+        self.receipt('app', {'switch': {'vhost_sha_after': sha(earlier)}}, revision=OLD)
+        details, operations = self.https_vhost(earlier, 9151)
+        self.assertEqual(operations, [('replace', {'expected_sha256': sha(earlier), 'content': base64.b64encode(
+            rendered(9151)['https'].encode()).decode()})])
+        self.assertEqual((details['upstream_port'], details['vhost_sha256'], details['replaced']),
+                         (9151, sha(rendered(9151)['https']), {'sha256': sha(earlier), 'recorded_by': OLD}))
         details, operations = self.https_vhost(rendered(9151)['https'], 9151)
         self.assertEqual((details['already_installed'], operations), (True, []))
         with self.assertRaisesRegex(install.InstallError, 'for another port than 9151'):
             self.https_vhost(rendered(9150)['https'], 9151)
+        for text, coupling in ((rendered(9151)['http'], 'before'), (pre_admin(earlier), 'before')):
+            self.receipt('app', {'switch': {'vhost_sha_after': sha(text)}}, revision=OLD)
+            with self.assertRaisesRegex(install.InstallError, '--phase ingress') as caught:
+                self.https_vhost(text, 9151, coupling=coupling)
+            self.assertIn('Nothing was written', str(caught.exception))
+        for coupling in ('before', 'both'):  # a stage naming admin while the quillmd vhost still does: never written on
+            with self.assertRaisesRegex(install.InstallError, 'nothing was written'):
+                self.https_vhost(earlier, 9151, coupling=coupling)
 
-    def test_rollback_vhost_removes_either_rendering_and_refuses_a_third(self):
+    def test_rollback_vhost_removes_a_stage_in_the_before_state_alone(self):
         self.receipt('preflight', {'routing': {}, 'app_health': {'status': 200}})
-        for text, removed in ((rendered(9151)['https'], True), (rendered(9151)['https'] + '#\n', False)):
+        earlier = pre_admin(rendered(9151)['https'])
+        self.receipt('https-vhost', {'vhost_sha256': sha(earlier)}, revision=OLD)
+        cases = ((rendered(9151)['http'], 'before', 'removed'), (earlier, 'before', 'removed'),
+                 (rendered(9151)['http'] + '#\n', 'before', 'did not write'),
+                 (rendered(9151)['https'], 'after', 'ingress-rollback'), (rendered(9150)['https'], 'after',
+                                                                          'ingress-rollback'),
+                 (rendered(9151)['https'], 'both', 'not coupled|half way'))
+        for text, coupling, expected in cases:
             operations = []
-            with self.subTest(removed=removed), self.renderings(), \
+            with self.subTest(coupling=coupling, expected=expected), self.renderings(), \
                     mock.patch.object(install, 'vhost_state', return_value=self.state(text)), \
                     mock.patch.object(install, 'live_vhost_bytes', return_value=text.encode()), \
+                    mock.patch.object(install, 'read_coupling', return_value=coupled(coupling)), \
                     mock.patch.object(install, 'vhost_operation', side_effect=lambda op, **kw: operations.append(
                         (op, kw))), \
                     mock.patch.object(install, 'publish_vhost', side_effect=lambda ctx, apply, undo, verify:
                                       apply() or {}):
-                if removed:
+                if expected == 'removed':
                     install.phase_rollback_vhost(self.ctx('rollback-vhost'))
                     self.assertEqual(operations[0][0], 'remove')
                     self.assertEqual(sorted(operations[0][1]['allowed_sha256']),
                                      sorted({sha(rendered(9150)['http']), sha(rendered(9150)['https']),
-                                             sha(rendered(9151)['https'])}))
+                                             sha(rendered(9151)['https'])} | ({sha(earlier)} if text == earlier
+                                                                             else set())))
                 else:
-                    with self.assertRaisesRegex(install.InstallError, 'did not write'):
+                    with self.assertRaisesRegex(install.InstallError, expected):
                         install.phase_rollback_vhost(self.ctx('rollback-vhost'))
                     self.assertEqual(operations, [])
 
@@ -1650,7 +1681,11 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
         self.assertEqual(stat.S_IMODE((self.etc / install.OPERATOR_CREDENTIALS).stat().st_mode), 0o600)
         self.assertGreaterEqual(len(agent['password']), 32)
         self.assertNotEqual(agent['password'], human['password'])
-        self.assertEqual(agent['operator_url'], 'https://cpt.quillmd.com/ops/')
+        # the console's own host (D396, refutation INSTALLER-11), and cpt.quillmd.com/ops/ kept while both serve it
+        self.assertEqual((agent['operator_url'], agent['operator_url_cpt']),
+                         ('https://admin.quillmd.com/ops/', 'https://cpt.quillmd.com/ops/'))
+        self.assertEqual((human['operator_url'], human['operator_url_cpt']),
+                         ('https://admin.quillmd.com/ops/', 'https://cpt.quillmd.com/ops/'))
         # the passwords reached the accounts script only as the mounted RAM-only files, never as parameters
         body, params, mounts, user = self.scripts[0]
         self.assertEqual(params['accounts'], [

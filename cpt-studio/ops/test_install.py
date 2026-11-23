@@ -10,9 +10,11 @@ recorded by a shim instead of needing root.
 import base64
 import hashlib
 import http.server
+import inspect
 import io
 import json
 import os
+import re
 import shutil
 import socket
 import stat
@@ -163,6 +165,27 @@ def template(kind):
 def rendered(port=install.WEB_PORT):
     return {'http': install.render(template('http'), {'DOMAIN': install.DOMAIN}),
             'https': install.render(template('https'), {'DOMAIN': install.DOMAIN, 'UPSTREAM': install.upstream(port)})}
+
+
+# The HTTPS block's server_name line since release 2 of the admin move (D396), and as it was before it.
+TWO_HOST_LINE = f'    server_name {install.DOMAIN} {install.ADMIN_HOST};\n'
+ONE_HOST_LINE = f'    server_name {install.DOMAIN};\n'
+
+
+def pre_admin(conf):
+    """An HTTPS rendering as a stage before release 2 of the admin move - the live stage until --phase ingress: its 443
+    block names DOMAIN alone, so it names no admin host (the rest of it is this template's; only the name matters to the
+    coupling invariant)."""
+    assert conf.count(TWO_HOST_LINE) == 1, 'the HTTPS rendering names both hosts once'
+    return conf.replace(TWO_HOST_LINE, ONE_HOST_LINE)
+
+
+def coupled(state):
+    """read_coupling's answer in ``state``: 'before' (the quillmd vhost claims admin's :443) or 'after' (quillmd-cpt
+    does)."""
+    return {'before': {'quillmd_sha256': install.QUILLMD_VHOST_BEFORE, 'names_admin': False, 'coupling': 'before'},
+            'after': {'quillmd_sha256': install.QUILLMD_VHOST_AFTER, 'names_admin': True, 'coupling': 'after'},
+            'both': {'quillmd_sha256': install.QUILLMD_VHOST_BEFORE, 'names_admin': True, 'coupling': 'both'}}[state]
 
 
 def statements(conf):
@@ -317,20 +340,23 @@ class TemplateRenderingTests(unittest.TestCase):
                 install.render(text, values)
 
     def test_https_vhost_hardening(self):
+        # D396 release 2 changes four pins (the design's Ingress and Certificate): the 443 block names both hosts, its
+        # TLS server name check answers 421 instead of closing (refutation INGRESS-1, INSTALLER-7), the certificate is
+        # the cpt-studio lineage's, and the upstream Host is the one asked for, $host, behind the two-name guard.
         conf = rendered()['https']
         found = statements(conf)
         listens = [words[1:] for blocks, words in found if words[0] == 'listen']
         self.assertEqual(listens, [['80'], ['[::]:80'], ['443', 'ssl', 'http2'], ['[::]:443', 'ssl']])
         names = [words[1:] for blocks, words in found if words[0] == 'server_name']
-        self.assertEqual(names, [[install.DOMAIN], [install.DOMAIN]])
+        self.assertEqual(names, [[install.DOMAIN], [install.DOMAIN, install.ADMIN_HOST]])
         self.assertFalse([args for args in listens if {'default_server', 'default'} & set(args)])
         self.assertNotIn('$proxy_add_x_forwarded_for', conf)
-        returns = [words for blocks, words in found if words[0] == 'return' and words[1] == '444']
-        self.assertEqual(len(returns), 3)  # one Host check on :80, Host and SNI checks on :443
+        returns = [words[1] for blocks, words in found if words[0] == 'return' and words[1] in ('444', '421')]
+        self.assertEqual(returns, ['444', '444', '421'])  # Host on :80, Host on :443, then the TLS server name on :443
         server = [words for blocks, words in found if blocks == ('server',)]
         directives = {words[0]: words[1:] for words in server}
-        self.assertEqual(directives['ssl_certificate'], [f'/etc/letsencrypt/live/{install.DOMAIN}/fullchain.pem'])
-        self.assertEqual(directives['ssl_certificate_key'], [f'/etc/letsencrypt/live/{install.DOMAIN}/privkey.pem'])
+        self.assertEqual(directives['ssl_certificate'], [f'/etc/letsencrypt/live/{install.CERT_NAME}/fullchain.pem'])
+        self.assertEqual(directives['ssl_certificate_key'], [f'/etc/letsencrypt/live/{install.CERT_NAME}/privkey.pem'])
         self.assertEqual(directives['client_max_body_size'], ['20m'])
         headers = {words[1]: words[2:] for words in server if words[0] == 'add_header'}
         self.assertEqual(headers, {'Strict-Transport-Security': ['max-age=31536000', 'always'],
@@ -340,8 +366,10 @@ class TemplateRenderingTests(unittest.TestCase):
         proxy = [words for blocks, words in found if blocks == ('server', 'location') and words[0].startswith('proxy')]
         set_headers = {words[1]: words[2:] for words in proxy if words[0] == 'proxy_set_header'}
         self.assertEqual(set_headers['X-Forwarded-For'], ['$remote_addr'])
+        self.assertEqual(set_headers['X-Forwarded-Proto'], ['https'])
         self.assertEqual(set_headers['Authorization'], [''])
-        self.assertEqual(set_headers['Host'], [install.DOMAIN])
+        self.assertEqual(set_headers['Host'], ['$host'])
+        self.assertEqual(len([words for words in proxy if words[0] == 'proxy_pass']), 1)  # one upstream for both hosts
         for name in ('proxy_read_timeout', 'proxy_send_timeout'):
             value = next(words[1] for words in proxy if words[0] == name)
             self.assertGreaterEqual(int(value.rstrip('s')), 150, name)
@@ -360,6 +388,43 @@ class TemplateRenderingTests(unittest.TestCase):
         self.assertNotIn('proxy_pass', conf)
         self.assertIn('location /.well-known/acme-challenge/ {\n        root /var/www/certbot;', conf)
         self.assertIn(f'return 301 https://{install.DOMAIN}$request_uri;', conf)
+
+    def test_the_443_guards_admit_the_two_hosts_alone_and_misdirect_any_other_server_name_with_421(self):
+        conf = rendered()['https']
+        guards = re.findall(r'if \((\$\w+) !~ (\S+)\) \{ return (\d{3}); \}', conf)
+        self.assertEqual([(variable, status) for variable, _, status in guards],
+                         [('$host', '444'), ('$ssl_server_name', '421')])  # the Host first: any other is closed
+        for variable, pattern, _ in guards:
+            for name in (install.DOMAIN, install.ADMIN_HOST):
+                self.assertIsNotNone(re.search(pattern, name), (variable, name))
+            for name in ('app.quillmd.com', 'quillmd.com', 'www.quillmd.com', 'pro.quillmd.com', 'xcpt.quillmd.com',
+                         'cpt.quillmd.com.example', 'admin.quillmd.comx', 'admin-quillmd.com', 'cptxquillmd.com',
+                         'admin.quillmdxcom', 'cpt.quillmd.com.', '', install.UNMATCHED_HOST):
+                self.assertIsNone(re.search(pattern, name), (variable, name))
+
+    def test_the_http_stage_is_the_one_every_renewal_reads_unchanged(self):
+        # The admin move leaves the :80 template byte-identical (admin's :80 stays the quillmd vhost's); its rendering
+        # is the live HTTP stage's (the read-only map of 2026-11-23: c7b6559f...).
+        self.assertEqual(hashlib.sha256(rendered()['http'].encode()).hexdigest(),
+                         'c7b6559fbcf8087fe4abc3797b92d82a29491a0324efe0d06ba3b85705f1ff73')
+
+    def test_only_the_https_stage_names_the_admin_host_on_443(self):
+        for port in install.WEB_PORTS:
+            confs = rendered(port)
+            self.assertIs(install.names_host_on(confs['https'], install.ADMIN_HOST), True)
+            self.assertIs(install.names_host_on(confs['http'], install.ADMIN_HOST), False)
+            self.assertIs(install.names_host_on(pre_admin(confs['https']), install.ADMIN_HOST), False)
+            self.assertEqual(install.proxied_port(confs['https']), port)  # one proxy_pass serves both hosts
+        cases = {'a comment': f'server {{ listen 443 ssl; server_name {install.DOMAIN}; }} # {install.ADMIN_HOST}\n',
+                 'a :80 block': f'server {{ listen 80; server_name {install.ADMIN_HOST}; }}\n',
+                 'a quoted string': f'server {{ listen 443 ssl; return 200 "{install.ADMIN_HOST}"; }}\n',
+                 'a suffix': f'server {{ listen 443 ssl; server_name x{install.ADMIN_HOST}; }}\n'}
+        for label, text in cases.items():
+            with self.subTest(label):
+                self.assertIs(install.names_host_on(text, install.ADMIN_HOST), False)
+        self.assertIs(install.names_host_on(f'server {{ listen [::]:443 ssl; server_name {install.ADMIN_HOST}; }}',
+                                            install.ADMIN_HOST), True)
+        self.assertIsNone(install.names_host_on('server { listen 443 ssl;', install.ADMIN_HOST))  # cannot be told
 
 
 # --- nginx parsing -------------------------------------------------------------------
@@ -956,21 +1021,46 @@ class ArchiveTests(TemporaryDirectoryTest):
 
 # --- helper bodies, executed against temporary directories --------------------------
 
+class RenameLog(FakeOwnership):
+    """FakeOwnership that records every rename (os.replace) by target name, and can stop the helper at one: ``stop_at``
+    (a 1-based rename count) raises there, before that rename - as an OOM kill or a deadline between two renames."""
+
+    def __init__(self, stop_at=None, during=None):
+        super().__init__()
+        self.renamed, self.stop_at, self.during = [], stop_at, during
+
+    def replace(self, source, target):
+        if self.stop_at is not None and len(self.renamed) + 1 == self.stop_at:
+            raise KeyboardInterrupt('stopped between the renames')
+        super().replace(source, target)
+        self.renamed.append(os.path.basename(target))
+        if self.during is not None:  # someone else writes while the operation runs
+            self.during()
+
+
 class VhostHelperTests(TemporaryDirectoryTest):
+    """H_VHOST in-process against temporary directories, under the coupling invariant (refutation INSTALLER-1, INGRESS-3,
+    INGRESS-4, INSTALLER-6). Two synthetic quillmd vhosts stand for the pinned states: their sha256 travel as the
+    helper's parameters, as vhost_operation passes QUILLMD_VHOST_BEFORE and QUILLMD_VHOST_AFTER."""
+
+    BEFORE = f'server {{ listen 443 ssl; server_name app.quillmd.com {install.ADMIN_HOST}; }}\n'.encode()
+    AFTER = b'server { listen 443 ssl; server_name app.quillmd.com; }\n'
+
     def setUp(self):
         super().setUp()
         self.available, self.enabled = self.tmp / 'available', self.tmp / 'enabled'
         self.available.mkdir()
         self.enabled.mkdir()
-        self.quillmd = b'server { server_name app.quillmd.com; }\n'
-        (self.available / 'quillmd').write_bytes(self.quillmd)
-        self.confs = rendered()
+        (self.available / 'quillmd').write_bytes(self.BEFORE)
+        self.confs = {'http': rendered()['http'], 'admin': rendered(9151)['https'], 'admin-9150': rendered(9150)['https'],
+                      'earlier': pre_admin(rendered(9151)['https'])}
 
-    def op(self, op, **params):
+    def op(self, op, fake_os=None, **params):
         params = {'op': op, 'name': install.VHOST_NAME, 'link_target': install.VHOST_LINK_TARGET,
-                  'quillmd_sha256': hashlib.sha256(self.quillmd).hexdigest(), **params}
+                  'admin_host': install.ADMIN_HOST, 'quillmd_before': hashlib.sha256(self.BEFORE).hexdigest(),
+                  'quillmd_after': hashlib.sha256(self.AFTER).hexdigest(), **params}
         return run_body(install.H_VHOST, params, {"'/available'": repr(str(self.available)),
-                                                  "'/enabled'": repr(str(self.enabled))})
+                                                  "'/enabled'": repr(str(self.enabled))}, fake_os=fake_os)
 
     def content(self, kind):
         return base64.b64encode(self.confs[kind].encode()).decode()
@@ -978,26 +1068,185 @@ class VhostHelperTests(TemporaryDirectoryTest):
     def sha(self, kind):
         return hashlib.sha256(self.confs[kind].encode()).hexdigest()
 
-    def test_install_replace_remove_cycle(self):
+    def live(self, kind, quillmd=None):
+        (self.available / install.VHOST_NAME).write_text(self.confs[kind])
+        if not os.path.lexists(self.enabled / install.VHOST_NAME):
+            os.symlink(install.VHOST_LINK_TARGET, self.enabled / install.VHOST_NAME)
+        if quillmd is not None:
+            (self.available / 'quillmd').write_bytes(quillmd)
+
+    def files(self):
+        cpt = self.available / install.VHOST_NAME
+        return ((self.available / 'quillmd').read_bytes(), cpt.read_text() if cpt.exists() else None,
+                sorted(path.name for path in self.available.iterdir()))
+
+    def couple(self, expected='earlier', fake_os=None, quillmd=None):
+        return self.op('couple', fake_os=fake_os, expected_sha256=self.sha(expected), content=self.content('admin'),
+                       quillmd_content=base64.b64encode(quillmd or self.AFTER).decode())
+
+    def decouple(self, fake_os=None, quillmd=None, content='earlier'):
+        return self.op('decouple', fake_os=fake_os, expected_sha256=self.sha('admin'), content=self.content(content),
+                       quillmd_content=base64.b64encode(quillmd or self.BEFORE).decode())
+
+    def test_install_replace_remove_cycle_in_the_before_state(self):
         result = self.op('install', content=self.content('http'))
-        self.assertEqual(result['done'], 'installed')
+        self.assertEqual((result['done'], result['coupling']), ('installed', 'before'))
         self.assertEqual(result['state']['file_sha256'], self.sha('http'))
         self.assertEqual(os.readlink(self.enabled / install.VHOST_NAME), install.VHOST_LINK_TARGET)
         self.assertIn('error', self.op('install', content=self.content('http')))
-        self.assertIn('error', self.op('replace', expected_sha256=self.sha('https'), content=self.content('https')))
-        self.assertEqual(self.op('replace', expected_sha256=self.sha('http'), content=self.content('https'))['done'],
+        self.assertIn('error', self.op('replace', expected_sha256=self.sha('earlier'), content=self.content('earlier')))
+        self.assertEqual(self.op('replace', expected_sha256=self.sha('http'), content=self.content('earlier'))['done'],
                          'replaced')
-        self.assertEqual((self.available / install.VHOST_NAME).read_text(), self.confs['https'])
-        self.assertEqual(self.op('remove', allowed_sha256=[self.sha('http'), self.sha('https')])['done'], 'removed')
+        self.assertEqual((self.available / install.VHOST_NAME).read_text(), self.confs['earlier'])
+        self.assertEqual(self.op('remove', allowed_sha256=[self.sha('http'), self.sha('earlier')])['done'], 'removed')
         self.assertFalse(os.path.lexists(self.available / install.VHOST_NAME))
         self.assertFalse(os.path.lexists(self.enabled / install.VHOST_NAME))
-        self.assertEqual((self.available / 'quillmd').read_bytes(), self.quillmd)
+        self.assertEqual((self.available / 'quillmd').read_bytes(), self.BEFORE)
 
-    def test_refuses_when_the_quillmd_vhost_is_not_the_pinned_one(self):
-        (self.available / 'quillmd').write_bytes(self.quillmd + b'# edited\n')
-        result = self.op('install', content=self.content('http'))
-        self.assertIn('error', result)
+    def test_a_single_file_op_never_writes_a_stage_naming_admin_while_the_quillmd_vhost_still_does(self):
+        # quillmd-cpt claiming admin while the quillmd vhost also does is the two-file write's mid-state, never a
+        # single-file op's result: refused before anything is written
+        self.live('http')
+        before = self.files()
+        result = self.op('replace', expected_sha256=self.sha('http'), content=self.content('admin'))
+        self.assertIn('would not be coupled', result['error'])
+        self.assertEqual(self.files(), before)
+        os.unlink(self.available / install.VHOST_NAME)
+        os.unlink(self.enabled / install.VHOST_NAME)
+        self.assertIn('would not be coupled', self.op('install', content=self.content('admin'))['error'])
         self.assertFalse(os.path.lexists(self.available / install.VHOST_NAME))
+
+    def test_in_the_after_state_only_a_stage_naming_admin_replaces_one_and_nothing_removes_it(self):
+        self.live('admin', quillmd=self.AFTER)
+        result = self.op('replace', expected_sha256=self.sha('admin'), content=self.content('admin-9150'))
+        self.assertEqual((result['done'], result['coupling']), ('replaced', 'after'))  # the blue/green switch
+        before = self.files()
+        result = self.op('replace', expected_sha256=self.sha('admin-9150'), content=self.content('earlier'))
+        self.assertIn('would not be coupled', result['error'])  # admin would be claimed by nothing on 443
+        result = self.op('remove', allowed_sha256=[self.sha('admin-9150')])
+        self.assertIn('nothing would claim the admin host', result['error'])
+        self.assertEqual(self.files(), before)
+
+    def test_an_uncoupled_start_refuses_every_single_file_op(self):
+        cases = {'after with no quillmd-cpt': (None, self.AFTER),
+                 'after with a stage naming no admin host': ('earlier', self.AFTER),
+                 'both naming admin (a stopped two-file write)': ('admin', self.BEFORE),
+                 'a quillmd vhost in neither pinned state': ('http', self.BEFORE + b'# edited\n')}
+        for label, (kind, quillmd) in cases.items():
+            with self.subTest(label):
+                for path in (self.available / install.VHOST_NAME, self.enabled / install.VHOST_NAME):
+                    if os.path.lexists(path):
+                        os.unlink(path)
+                if kind:
+                    self.live(kind)
+                (self.available / 'quillmd').write_bytes(quillmd)
+                before = self.files()
+                for op, params in (('install', {'content': self.content('http')}),
+                                   ('replace', {'expected_sha256': self.sha(kind or 'http'),
+                                                'content': self.content('http')}),
+                                   ('remove', {'allowed_sha256': [self.sha(kind or 'http')]})):
+                    result = self.op(op, **params)
+                    self.assertIn('not coupled', result['error'], op)
+                self.assertEqual(self.files(), before)
+                self.assertNotIn('error', self.op('state'))  # it reports, never refuses
+                self.assertIn(self.op('state')['coupling'], ('uncoupled', 'both'))
+
+    def test_the_quillmd_vhost_changed_during_an_operation_fails_it(self):
+        # the gate after the op compares with the digest read at its start (refutation INSTALLER-6), not set membership
+        self.live('admin', quillmd=self.AFTER)
+        swap = RenameLog(during=lambda: (self.available / 'quillmd').write_bytes(self.BEFORE))
+        result = self.op('replace', fake_os=swap, expected_sha256=self.sha('admin'), content=self.content('admin-9150'))
+        self.assertEqual(result['error'], 'the quillmd vhost changed during the operation')
+
+    def test_couple_renames_quillmd_cpt_first_and_the_quillmd_vhost_second(self):
+        self.live('earlier')
+        log = RenameLog()
+        result = self.couple(fake_os=log)
+        self.assertEqual((result['done'], result['coupling']), ('coupled', 'after'))
+        self.assertEqual(log.renamed, [install.VHOST_NAME, 'quillmd'])
+        quillmd, cpt, names = self.files()
+        self.assertEqual((quillmd, cpt), (self.AFTER, self.confs['admin']))
+        self.assertEqual(names, ['quillmd', install.VHOST_NAME])  # no staged file is left
+        self.assertEqual(log.owners[str(self.available / 'quillmd')], (0, 0))  # root's, as nginx's other files
+        self.assertEqual(stat.S_IMODE((self.available / 'quillmd').stat().st_mode), 0o644)
+
+    def test_a_couple_stopped_between_its_renames_leaves_both_naming_admin_never_neither(self):
+        self.live('earlier')
+        with self.assertRaises(KeyboardInterrupt):
+            self.couple(fake_os=RenameLog(stop_at=2))
+        quillmd, cpt, _ = self.files()
+        self.assertEqual((quillmd, cpt), (self.BEFORE, self.confs['admin']))  # 'both': nginx keeps the quillmd vhost's
+        self.assertEqual(self.op('state')['coupling'], 'both')
+        self.assertEqual(self.files()[2], ['.quillmd.new', 'quillmd', install.VHOST_NAME])  # the stopped one's staging
+        # every single-file op refuses that state; the undo (decouple) starts from it, clears the stopped operation's
+        # staged file and restores quillmd-cpt alone
+        self.assertIn('not coupled', self.op('remove', allowed_sha256=[self.sha('admin')])['error'])
+        log = RenameLog()
+        result = self.decouple(fake_os=log)
+        self.assertEqual((result['done'], result['coupling'], log.renamed), ('decoupled', 'before', [install.VHOST_NAME]))
+        self.assertEqual(result['cleared'], ['.quillmd.new'])
+        self.assertEqual(self.files(), (self.BEFORE, self.confs['earlier'], ['quillmd', install.VHOST_NAME]))
+        # and the write forward resumes from it too, renaming the quillmd vhost alone
+        with self.assertRaises(KeyboardInterrupt):
+            self.couple(fake_os=RenameLog(stop_at=2))
+        log = RenameLog()
+        self.assertEqual(self.couple(fake_os=log)['coupling'], 'after')
+        self.assertEqual(log.renamed, ['quillmd'])
+        self.assertEqual(self.files(), (self.AFTER, self.confs['admin'], ['quillmd', install.VHOST_NAME]))
+
+    def test_decouple_renames_the_quillmd_vhost_first_and_quillmd_cpt_second(self):
+        self.live('admin', quillmd=self.AFTER)
+        log = RenameLog()
+        result = self.decouple(fake_os=log)
+        self.assertEqual((result['done'], result['coupling']), ('decoupled', 'before'))
+        self.assertEqual(log.renamed, ['quillmd', install.VHOST_NAME])
+        self.assertEqual(self.files()[:2], (self.BEFORE, self.confs['earlier']))
+        with self.assertRaises(KeyboardInterrupt):  # stopped between them: again both name admin, never neither
+            self.couple(fake_os=RenameLog(stop_at=2))
+        self.assertEqual(self.op('state')['coupling'], 'both')
+
+    def test_an_operation_already_done_renames_nothing(self):
+        self.live('admin', quillmd=self.AFTER)
+        log = RenameLog()
+        self.assertEqual((self.couple(fake_os=log)['coupling'], log.renamed), ('after', []))
+        self.live('earlier', quillmd=self.BEFORE)
+        self.assertEqual((self.decouple(fake_os=log)['coupling'], log.renamed), ('before', []))
+
+    def test_the_two_file_ops_refuse_before_writing_anything(self):
+        self.live('earlier')
+        before = self.files()
+        cases = {'the quillmd content is not the after state': (lambda: self.couple(quillmd=self.BEFORE), 'pinned after'),
+                 'the new stage names no admin host': (lambda: self.op(
+                     'couple', expected_sha256=self.sha('earlier'), content=self.content('earlier'),
+                     quillmd_content=base64.b64encode(self.AFTER).decode()), 'does not name'),
+                 'quillmd-cpt is not the stage expected': (lambda: self.couple(expected='http'), 'no state this write'),
+                 'the restored stage names admin': (lambda: self.decouple(content='admin'), 'names the admin host'),
+                 'the quillmd content is not the before state': (lambda: self.decouple(quillmd=self.AFTER),
+                                                                 'pinned before'),
+                 'decouple from the before state with another stage': (lambda: self.op(
+                     'decouple', expected_sha256=self.sha('admin'), content=self.content('http'),
+                     quillmd_content=base64.b64encode(self.BEFORE).decode()), 'no state this write')}
+        for label, (call, message) in cases.items():
+            with self.subTest(label):
+                self.assertIn(message, call()['error'])
+                self.assertEqual(self.files(), before)
+        os.unlink(self.enabled / install.VHOST_NAME)
+        os.symlink('/etc/nginx/sites-available/quillmd', self.enabled / install.VHOST_NAME)
+        self.assertIn('link this installer writes', self.couple()['error'])
+        self.assertEqual(self.files(), before)
+
+    def test_the_helper_reads_quillmd_cpt_with_the_installers_own_reader(self):
+        # one source text, never a second copy (H_NGINX_READER): the helper's names_host_on is the installer's
+        namespace = {}
+        exec(compile(install.H_NGINX_READER, '<reader>', 'exec'), namespace)
+        for function in (install.nginx_tokens, install.parse_server_blocks, install.parse_listen, install.names_host_on):
+            self.assertIn(inspect.getsource(function), install.H_VHOST)
+        samples = list(self.confs.values()) + [f'server {{ listen 80; server_name {install.ADMIN_HOST}; }}',
+                                               f'# server {{ listen 443; server_name {install.ADMIN_HOST}; }}',
+                                               'server { listen 443 ssl;']
+        for text in samples:
+            self.assertEqual(namespace['names_host_on'](text, install.ADMIN_HOST),
+                             install.names_host_on(text, install.ADMIN_HOST))
 
     def test_never_removes_a_vhost_it_did_not_write(self):
         (self.available / install.VHOST_NAME).write_text('server { listen 80; server_name cpt.quillmd.com; }\n')
@@ -1368,8 +1617,10 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                                   mock.Mock())
 
     def republish_case(self, *, recorded=True, reproducible=True):
-        """Live: the OLD revision's HTTPS stage. Running: the NEW revision, whose HTTPS template changed."""
-        old = rendered()
+        """Live: the OLD revision's HTTPS stage. Running: the NEW revision, whose HTTPS template changed. Since release 2
+        of the admin move rollback-vhost runs in the before state alone, so the OLD stage is one naming no admin host
+        (pre_admin): the stage of a revision before the move."""
+        old = {'http': rendered()['http'], 'https': pre_admin(rendered()['https'])}
         new = {'http': old['http'], 'https': old['https'].replace('client_max_body_size 20m;', 'client_max_body_size 25m;')}
         self.assertNotEqual(old['https'], new['https'])
         old_sha = hashlib.sha256(old['https'].encode()).hexdigest()
@@ -1397,6 +1648,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                                side_effect=lambda revision, port=install.WEB_PORT: by_revision[revision]), \
                 mock.patch.object(install, 'vhost_state', side_effect=lambda: next(states)), \
                 mock.patch.object(install, 'live_vhost_bytes', return_value=old['https'].encode()), \
+                mock.patch.object(install, 'read_coupling', return_value=coupled('before')), \
                 mock.patch.object(install, 'vhost_operation', side_effect=lambda op, **kw: operations.append((op, kw))), \
                 mock.patch.object(install, 'publish_vhost', side_effect=publish):
             install.phase_rollback_vhost(self.ctx('rollback-vhost'))
@@ -1424,7 +1676,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         available, enabled = self.tmp / 'sites-available', self.tmp / 'sites-enabled'
         available.mkdir()
         enabled.mkdir()
-        old = rendered()
+        old = {'http': rendered()['http'], 'https': pre_admin(rendered()['https'])}  # an earlier stage: no admin host
         new = {'http': old['http'], 'https': old['https'].replace('client_max_body_size 20m;', 'client_max_body_size 25m;')}
         self.assertNotEqual(old['https'], new['https'])
         live_file = available / install.VHOST_NAME
@@ -1450,8 +1702,11 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
             apply()
             undo()  # as on a failed verification: the removal is put back exactly
             return {}
+        (available / 'quillmd').write_bytes(b'# the quillmd vhost, as the before state\n')
         with mock.patch.object(install, 'NGINX_AVAILABLE', available), \
                 mock.patch.object(install, 'NGINX_ENABLED', enabled), \
+                mock.patch.object(install, 'QUILLMD_VHOST_BEFORE',
+                                  hashlib.sha256(b'# the quillmd vhost, as the before state\n').hexdigest()), \
                 mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision, port=install.WEB_PORT: new), \
                 mock.patch.object(install, 'vhost_operation', side_effect=helper), \
                 mock.patch.object(install, 'publish_vhost', side_effect=publish):
@@ -1470,6 +1725,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                                        side_effect=lambda revision, port=install.WEB_PORT: by_revision[revision]), \
                         mock.patch.object(install, 'vhost_state', return_value=live), \
                         mock.patch.object(install, 'live_vhost_bytes', return_value=live_bytes or old['https'].encode()), \
+                        mock.patch.object(install, 'read_coupling', return_value=coupled('before')), \
                         mock.patch.object(install, 'vhost_operation') as operation, \
                         mock.patch.object(install, 'publish_vhost') as publish, \
                         self.assertRaisesRegex(install.InstallError, message):
@@ -1485,10 +1741,12 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         changed = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'X'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
         self.assertNotEqual(install.other_lineages(changed), install.other_lineages(baseline))
 
-    def run_verify(self, le_now):
+    def run_verify(self, le_now, *, quillmd_now=install.QUILLMD_VHOST_AFTER, quillmd_baseline=install.QUILLMD_VHOST_AFTER):
+        # Since release 2 of the admin move this revision's stage names admin.quillmd.com, so the quillmd vhost it
+        # couples is the after state; the baseline is the preflight the act takes after the ingress, unless given.
         own = f'{install.DOMAIN}.conf'
         https_sha = hashlib.sha256(rendered()['https'].encode()).hexdigest()
-        files = {'available': {'quillmd': install.QUILLMD_VHOST_SHA256, install.VHOST_NAME: '1' * 64},
+        files = {'available': {'quillmd': quillmd_baseline, install.VHOST_NAME: '1' * 64},
                  'enabled': {'quillmd': 'quillmd', install.VHOST_NAME: install.VHOST_LINK_TARGET},
                  'nginx_conf_sha256': '2' * 64, 'conf_d': {}}
         # A reinstall: the preflight baseline already holds this domain's vhost and its lineage.
@@ -1496,7 +1754,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                                    'cotenants': {'ok': True}, 'containers': {}, 'volumes': ['v'],
                                    'letsencrypt': {'renewal': {own: 'a', 'app.quillmd.com.conf': 'b'},
                                                    'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}})
-        current = {**files, 'available': {**files['available'], install.VHOST_NAME: https_sha}}
+        current = {**files, 'available': {**files['available'], 'quillmd': quillmd_now, install.VHOST_NAME: https_sha}}
         running = {'State': {'Running': True}, 'Id': 'x'}
         pair = {install.DB_CONTAINER, *install.SERVICES.values()}  # nothing parked or incoming is left beside it
         with mock.patch.object(install, 'installed_image', return_value='sha256:' + 'c' * 64), \
@@ -1513,6 +1771,8 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'db_container_problems', return_value=[]), \
                 mock.patch.object(install, 'service_problems', return_value=[]), \
                 mock.patch.object(install, 'https_checks', return_value=([], {})), \
+                mock.patch.object(install, 'acme_probe', side_effect=lambda ctx, label, host=install.DOMAIN: {
+                    'passed': True, 'probe_removed': True, 'host': host}), \
                 mock.patch.object(install, 'foreign_uid_tasks', return_value=0), \
                 mock.patch.object(install, 'own_service_ids', return_value=[]):
             return install.phase_verify(self.ctx('verify'))
