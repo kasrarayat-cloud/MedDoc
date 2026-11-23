@@ -580,7 +580,9 @@ class RefutationRoundOneTests(AdminCase):
                 response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(gi.pk)})
                 self.assertEqual(response.status_code, status)
         self.assertEqual(self.counts(), before)
-        made = self.ops.post('/ops/workspaces/new', {'name': '  Valley   Endoscopy  ', 'category': str(gi.pk)})
+        self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': '  Valley   Endoscopy  ', 'category': str(gi.pk)})
+                         .status_code, 400)  # stored exactly as typed: no stray spaces (r6-4)
+        made = self.ops.post('/ops/workspaces/new', {'name': 'Valley Endoscopy', 'category': str(gi.pk)})
         self.assertEqual(made.status_code, 303)
         self.assertTrue(Workspace.objects.filter(name='Valley Endoscopy').exists())
         self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'valley-endoscopy', 'category': str(self.neuro.pk)})
@@ -740,8 +742,10 @@ class RefutationRoundTwoTests(AdminCase):
         gi = self.ws.category
         Workspace.objects.create(name='Caf\u00e9 Partners', category=gi)
         before = self.counts()
-        # a decomposed spelling reads alike (NFC composes it); a compatibility spelling is refused outright (r5-2)
-        for name, status in (('Cafe\u0301 Partners', 409), ('caf\u00e9-partners', 409),
+        # a spelling that reads alike is refused as the existing name; one not stored exactly as typed, or outside the
+        # name's characters, is refused outright (r5-2, r6)
+        for name, status in (('caf\u00e9-partners', 409), ('CAF\u00c9 PARTNERS', 409), ('Cafe Partners', 409),
+                             ('Cafe\u0301 Partners', 400),
                              ('\uff23\uff21\uff26\uff25\u0301 Partners', 400), ('\uff23af\u00e9 partners', 400),
                              ('\uff4e\uff45\uff55\uff52\uff4f\uff53\uff55\uff52\uff47\uff45\uff52\uff59', 400)):
             with self.subTest(name=name):
@@ -751,10 +755,9 @@ class RefutationRoundTwoTests(AdminCase):
         made = self.ops.post('/ops/workspaces/new', {'name': 'Valley Clinic', 'category': str(gi.pk)})
         self.assertEqual(made.status_code, 303)
         self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'valley clinic', 'category': str(gi.pk)})
-                         .status_code, 409)  # read alike (NFKC caseless)
-        decomposed = self.ops.post('/ops/workspaces/new', {'name': 'Re\u0301sume\u0301 Health', 'category': str(gi.pk)})
-        self.assertEqual(decomposed.status_code, 303)
-        self.assertTrue(Workspace.objects.filter(name='R\u00e9sum\u00e9 Health').exists())  # NFC composes it
+                         .status_code, 409)  # read alike
+        accented = self.ops.post('/ops/workspaces/new', {'name': 'R\u00e9sum\u00e9 Health', 'category': str(gi.pk)})
+        self.assertEqual(accented.status_code, 303)
 
     def test_fillers_and_other_ignorable_characters_are_refused_in_names(self):
         for name in ('\u3164', 'Spine\u3164Center', '\u115fNorth', 'Spine\u034fCenter', '\ufe0fSpine', 'Spine \ufe0fX',
@@ -842,10 +845,10 @@ class RefutationRoundFourTests(AdminCase):
             with self.subTest(name=name):
                 response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(self.ws.category.pk)})
                 self.assertEqual(response.status_code, 400)
-                self.assertIn('compatibility character', page(response))
-        # the registered sign is no compatibility character, and provisioning's reading drops it: still a specialty
+                self.assertIn('Latin letters', page(response))
+        # a sign is no letter of a workspace name: refused before any reading (r6)
         self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'Orthopedic Surgery\u00ae',
-                                                               'category': str(self.ws.category.pk)}).status_code, 409)
+                                                               'category': str(self.ws.category.pk)}).status_code, 400)
         self.assertEqual(self.counts(), before)
 
     def test_a_reserved_run_reads_nothing_sent_yet_on_its_card_and_is_not_flagged(self):
@@ -881,21 +884,85 @@ class RefutationRoundFiveTests(AdminCase):
             with self.subTest(name=repr(name)):
                 response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(gi.pk)})
                 self.assertEqual(response.status_code, 400)
-                self.assertIn('accent typed as a separate character', page(response))
         self.assertEqual(self.counts(), before)
 
-    def test_a_script_that_needs_its_marks_keeps_them(self):
-        made = self.ops.post('/ops/workspaces/new', {'name': '\u0928\u092e\u0938\u094d\u0924\u0947 Clinic',
+    def test_a_name_in_another_script_is_refused_a_written_limit(self):
+        before = self.counts()
+        for name in ('\u0928\u092e\u0938\u094d\u0924\u0947 Clinic', '\u0110akovo Health Centre', '\u0628\u064a\u0645\u0627\u0631\u0633\u062a\u0627\u0646',
+                     '\u05d0 Clinic 12', 'Clinic \u1d0b', 'Neurosur\u0261ery'):
+            with self.subTest(name=repr(name)):
+                response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(self.ws.category.pk)})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('Latin letters', page(response))
+        self.assertEqual(self.counts(), before)
+        made = self.ops.post('/ops/workspaces/new', {'name': "St. Mary's & St. Luke's Gastro-Care (North) 24/7",
                                                       'category': str(self.ws.category.pk)})
         self.assertEqual(made.status_code, 303)
 
     def test_a_stored_workspace_name_is_exactly_what_was_typed(self):
-        typed = 'Riverside   Gastro\u00e9nterologie'
-        self.ops.post('/ops/workspaces/new', {'name': typed, 'category': str(self.ws.category.pk)})
-        # what provisioning would look up (the exact text, white space collapsed) is what the console stored (r5-2)
-        self.assertTrue(Workspace.objects.filter(name='Riverside Gastro\u00e9nterologie').exists())
+        typed = 'Riverside Gastro\u00e9nterologie'
+        self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': typed, 'category': str(self.ws.category.pk)})
+                         .status_code, 303)
+        # what provisioning would look up (the exact text) is what the console stored (r5-2, r6-4)
+        self.assertTrue(Workspace.objects.filter(name=typed).exists())
 
     def test_the_specialty_rule_judges_the_stored_name(self):
         made = self.ops.post('/ops/workspaces/new', {'name': 'NeurosurgeryTM Partners', 'category': str(self.ws.category.pk)})
         self.assertEqual(made.status_code, 303)
 
+
+class RefutationRoundSixTests(AdminCase):
+    """The repairs of refutation round 6 (DECISIONS D395), each pinned by the input that broke it."""
+
+    def test_a_workspace_name_is_refused_unless_stored_exactly_as_typed(self):
+        before = self.counts()
+        for typed in ('Riverside   Clinic', ' Riverside Clinic', 'Riverside Clinic ', 'Riverside\u00a0Clinic',
+                      'Riverside\u3000Clinic', 'Riverside\tClinic', 'Re\u0301sume\u0301 Health'):
+            with self.subTest(typed=repr(typed)):
+                response = self.ops.post('/ops/workspaces/new', {'name': typed, 'category': str(self.ws.category.pk)})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('single spaces between words', page(response))
+        self.assertEqual(self.counts(), before)
+
+    def test_names_are_compared_with_case_and_accents_aside(self):
+        gi = str(self.ws.category.pk)
+        Workspace.objects.create(name='Caf\u00e9 Partners', category=self.ws.category)
+        before = self.counts()
+        for name in ('Cafe Partners', 'CAFE PARTNERS', 'Caf\u00e8 Partners'):
+            with self.subTest(name=name):
+                response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': gi})
+                self.assertEqual(response.status_code, 409)
+                self.assertIn('A workspace with that name exists', page(response))
+        for name in ('Orthop\u00e9dic Surgery', 'NEUROSURG\u00c9RY'):
+            with self.subTest(name=name):
+                response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': gi})
+                self.assertEqual(response.status_code, 409)
+                self.assertIn('names the', page(response))
+        self.assertEqual(self.counts(), before)
+
+    def test_a_name_provisioning_stored_is_read_the_same_way(self):
+        gi = self.ws.category
+        for stored, typed in (('O\u0338rsted Clinic', '\u00d8rsted Clinic'),
+                              ('Cl\u0131\u0301nica Garc\u0131\u0301a', 'Cl\u00ednica Garc\u00eda'),
+                              ('\u0110akovo Health Centre', '\u00d0akovo Health Centre'),
+                              ('Spine \u1d04enter', 'Spine Center')):
+            with self.subTest(stored=repr(stored)):
+                Workspace.objects.create(name=stored, category=gi)  # as provisioning stores a name: exactly as given
+                response = self.ops.post('/ops/workspaces/new', {'name': typed, 'category': str(gi.pk)})
+                self.assertEqual(response.status_code, 409)
+                self.assertIn('A workspace with that name exists', page(response))
+
+    def test_every_allowed_character_reads_as_a_plain_letter_or_digit_or_nothing(self):
+        allowed = [chr(point) for point in range(0x110000) if console.name_character_allowed(chr(point))]
+        self.assertEqual(len(allowed), 62 + 10 + 62)  # ASCII letters and digits, the marks, Latin-1's letters
+        for ch in allowed:
+            reading = console.name_reading(ch)
+            self.assertRegex(reading, r'^[a-z0-9]*$', repr(ch))
+            self.assertEqual(bool(reading), ch.isalnum(), repr(ch))
+
+    def test_a_typographic_apostrophe_is_a_plain_mark(self):
+        gi = str(self.ws.category.pk)
+        self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'St. Mary\u2019s Clinic', 'category': gi})
+                         .status_code, 303)
+        self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': "St. Mary's Clinic", 'category': gi})
+                         .status_code, 409)

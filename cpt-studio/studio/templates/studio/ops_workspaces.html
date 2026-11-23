@@ -24,7 +24,7 @@
   <p class="muted">Choose one of the specialties the coding review supports. Add its people after you create it. A workspace is not renamed or deleted here.</p>
   <form method="post" action="/ops/workspaces/new">{% csrf_token %}
     <div class="fields">
-      <label>Workspace name <span class="hint">For example the practice's name</span>
+      <label>Workspace name <span class="hint">For example the practice's name: Latin letters (é, ñ and the other Western European accents included), digits, spaces and . , ' &amp; - / ( )</span>
         <input type="text" name="name" required maxlength="120" autocomplete="off">
       </label>
       <label>Specialty

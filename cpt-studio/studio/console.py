@@ -32,7 +32,8 @@ operator.member_added, operator.role_changed, operator.password_reset, operator.
 operator.workspace_created. Those rows name no encounter, so the customer's activity (studio.customer.activity_json, an
 encounter's own events) never shows them. Adding a person and creating a workspace take provisioning's own lock
 (studio/management/commands/provision.py PROVISION_LOCK), so a console act and a provisioning run never interleave, and a
-new workspace's name follows provisioning's rules plus one: no two workspaces read alike.
+new workspace's name is Latin letters, digits and a few marks, stored exactly as typed, follows provisioning's rules, and
+reads alike no other workspace's.
 """
 from __future__ import annotations
 
@@ -492,53 +493,70 @@ def _workspaces_context(**extra) -> dict:
                     **extra)
 
 
+# Latin letters whose Unicode name gives no single base letter, read as the letters they stand for
+LETTER_FOLDS = {'\u00e6': 'ae', '\u00f0': 'd', '\u00fe': 'th', '\u0153': 'oe'}
+
+
+def base_letter(ch: str) -> str:
+    """A Latin letter read as the base letter its Unicode name gives - 'LATIN SMALL LETTER D WITH STROKE' reads d,
+    'LATIN SMALL LETTER DOTLESS I' reads i, 'LATIN LETTER SMALL CAPITAL K' reads k - or as the letters it stands for
+    (LETTER_FOLDS); any other character as itself."""
+    if ch in LETTER_FOLDS:
+        return LETTER_FOLDS[ch]
+    words = unicodedata.name(ch, '').split(' WITH ')[0].split()
+    if len(words) > 2 and words[0] == 'LATIN' and len(words[-1]) == 1 and words[-1].isalpha():
+        return words[-1].lower()
+    return ch
+
+
 def name_reading(name: str) -> str:
-    """A name as it reads: Unicode NFKC caseless (normalised, case folded, normalised again), then provisioning's letters
-    and digits (provision._read), so full-width, mathematical and decomposed spellings read as the plain one (refutation
-    r2, secure-2). No other specialty's name may read so (provision._new_name_problem's rule, read the same way)."""
-    folded = unicodedata.normalize('NFKC', unicodedata.normalize('NFKC', name).casefold())
-    return provision._read(folded)
+    """How two workspace names are compared (refutations r2-r6): Unicode NFKC, case folded, accents set aside (NFKD, every
+    mark dropped) and each Latin letter read as its base letter (base_letter), then provisioning's letters and digits
+    (provision._read). So 'Caf\u00e9', 'CAFE' and 'Cafe\u0301' read alike, as do '\u00d8rsted' and 'O\u0338rsted', or
+    '\u00d0akovo' and '\u0110akovo'. Look-alike letters of other scripts are not compared (a written limit, as
+    provisioning's own)."""
+    folded = unicodedata.normalize('NFKD', unicodedata.normalize('NFKC', name).casefold())
+    return provision._read(''.join(base_letter(ch) for ch in folded if not unicodedata.category(ch).startswith('M')))
 
 
-# Scripts whose letters come precomposed with their accents: an accent typed apart after one of them is refused in a
-# workspace name (refutation r5, r5-1), as is a mark after a dotless i or j, or a mark with no letter before it.
-PRECOMPOSED_SCRIPTS = ('LATIN', 'GREEK', 'CYRILLIC')
+# A workspace name's characters (refutations r2-r6): Latin letters - the basic ones and the accented letters of
+# Latin-1 (\u00c0 to \u00ff, the multiplication and division signs aside) - digits, single spaces and a few marks,
+# the typographic apostrophe among them. Every look-alike pair the rounds found (other scripts, styled letters, accents
+# typed apart, letters of one script that draw alike, right-to-left order) lies outside this set; within it every
+# letter reads as a plain one (name_reading), and a name is stored exactly as typed, the text provisioning finds a
+# workspace by. Names in other scripts, and Latin letters outside Latin-1, are a written limit.
+NAME_PUNCTUATION = " .,'\u2019&-/()"
 
 
-def plain_name_problem(name: str) -> str:
-    """Why ``name`` (as _field stores it, NFC) cannot name a workspace, or nothing. A workspace name is stored exactly
-    as typed and read exactly so by provisioning, which finds a workspace by its exact text (refutation r4, r4-4; r5,
-    r5-2): so it may hold no compatibility character - its NFKC form must be itself (no full-width or mathematical
-    letter, ligature, superscript or trade mark sign) - and no accent typed apart from a Latin, Greek or Cyrillic letter,
-    which would draw like the precomposed letter and read otherwise, nor one after anything that is no letter (r5-1). Look-alike letters of different scripts are
-    not compared (a written limit, as provisioning's own)."""
-    if unicodedata.normalize('NFKC', name) != name:
-        return ('The workspace name holds a compatibility character (a full-width or styled letter, a ligature, a '
-                'superscript or a sign such as the trade mark sign). Type it with plain characters.')
-    base = ''
-    for ch in name:
-        if unicodedata.category(ch).startswith('M'):
-            script = unicodedata.name(base, '').split(' ')[0] if base else ''
-            if (not base or not unicodedata.category(base).startswith('L') or script in PRECOMPOSED_SCRIPTS
-                    or base in '\u0131\u0237'):
-                return ('The workspace name has an accent typed as a separate character. Type the accented letter '
-                        'itself.')
-        else:
-            base = ch
+def name_character_allowed(ch: str) -> bool:
+    return ((ch.isascii() and ch.isalnum()) or ch in NAME_PUNCTUATION
+            or ('\u00c0' <= ch <= '\u00ff' and ch not in '\u00d7\u00f7'))
+
+
+def plain_name_problem(name: str, typed: str) -> str:
+    """Why ``typed`` cannot name a workspace, or nothing: it must be stored exactly as typed (``name`` is _field's stored
+    form, which must equal it), in the characters name_character_allowed accepts."""
+    if typed != name:
+        return ('Type the workspace name with single spaces between words, no space at either end, and each accented '
+                'letter as one character.')
+    if not all(name_character_allowed(ch) for ch in name):
+        return ("A workspace name uses Latin letters, with the accents of Western European languages (such as \u00e9, "
+                "\u00fc, \u00f1 or \u00f8), digits, spaces and . , ' & - / ( ) only.")
     return ''
 
 
 def workspace_name_problem(name: str, category) -> str:
-    """Why a new workspace cannot take ``name``, or nothing. Provisioning's rules, read the console's one way
-    (name_reading: NFKC caseless, letters and digits), which makes them stricter (refutation r3, r3-2, r3-8): it names no
-    other specialty (provision.SPECIALTIES), and no workspace of ANY specialty reads alike - which covers provisioning's
-    rule that no workspace of another specialty has it exactly - so no two workspaces are told apart only by case,
-    spacing, punctuation or a compatibility spelling (refutation r1, data-2, data-4, data-5; r2, secure-2)."""
+    """Why a new workspace cannot take ``name`` (already through plain_name_problem), or nothing. Provisioning's rules,
+    read the console's one way (name_reading: case and accents aside, letters and digits), which makes them stricter
+    (refutation r3, r3-2, r3-8): it names no other specialty (provision.SPECIALTIES), and no workspace of ANY specialty
+    reads alike - which covers provisioning's rule that no workspace of another specialty has it exactly - so no two
+    workspaces are told apart only by case, accents, spacing or punctuation (refutation r1, data-2, data-4, data-5; r2,
+    secure-2; r6)."""
     reading = name_reading(name)
     if not reading:
         return 'A workspace name needs at least one letter or digit.'
-    # another specialty's name, by either reading of the stored name: the console's and provisioning's (r4, r4-2; r5,
-    # r5-3 - the stored name is what was typed, plain_name_problem having refused anything NFKC would change)
+    # another specialty's name, by either reading of the stored name, the console's and provisioning's (r4, r4-2; r5,
+    # r5-3); the stored name is exactly what was typed (plain_name_problem)
     readings = {reading, provision._read(name)} - {''}
     for other, (other_name, _) in provision.SPECIALTIES.items():
         if other != category.slug and readings & {name_reading(other_name), provision._read(other_name)}:
@@ -563,7 +581,8 @@ def create_workspace(request):
     """A workspace for a specialty that exists (a Category row: what the page and the report show it as)."""
     try:
         name = _field(request, 'name', required=True, label='The workspace name')
-        plain = plain_name_problem(name)
+        typed = request.POST.get('name', '')
+        plain = plain_name_problem(name, typed if isinstance(typed, str) else '')
         if plain:
             raise Refused(plain)
         try:
