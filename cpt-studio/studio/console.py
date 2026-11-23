@@ -79,9 +79,6 @@ IGNORABLE_RANGES = (('\u00ad', '\u00ad'), ('\u034f', '\u034f'), ('\u061c', '\u06
                     ('\u2060', '\u206f'), ('\u3164', '\u3164'), ('\ufe00', '\ufe0f'), ('\ufeff', '\ufeff'),
                     ('\uffa0', '\uffa0'), ('\ufff0', '\ufff8'), ('\U0001bca0', '\U0001bca3'),
                     ('\U0001d173', '\U0001d17a'), ('\U000e0000', '\U000e0fff'))
-# the variation selectors: kept directly after a visible character (an emoji's presentation, a name's ideographic
-# variant, Mongolian spelling), refused anywhere else (refutation r3, r3-5)
-SELECTOR_RANGES = (('\u180b', '\u180d'), ('\u180f', '\u180f'), ('\ufe00', '\ufe0f'), ('\U000e0100', '\U000e01ef'))
 # glyphs that draw nothing and are no white space (refutation r3, r3-6)
 BLANK_GLYPHS = {'\u2800', '\U0001d159', '\ufffc'}
 # the session stores whose sessions this console can list and end (refutation r2, secure-4)
@@ -233,37 +230,31 @@ def hidden(ch) -> bool:
             or any(low <= ch <= high for low, high in IGNORABLE_RANGES))
 
 
-def selector(ch) -> bool:
-    return any(low <= ch <= high for low, high in SELECTOR_RANGES)
-
-
 def hidden_in(value: str) -> bool:
-    """Whether ``value`` holds a character that cannot be seen or typed; a variation selector right after a visible
-    character is not one (it shapes that character)."""
-    previous = ''
-    for ch in value:
-        if ch in '\t\n\r':
-            previous = ''
-            continue
-        if hidden(ch) and not (selector(ch) and previous and not previous.isspace() and not hidden(previous)):
-            return True
-        previous = ch
-    return False
+    """Whether ``value`` holds a character that cannot be seen or typed (tabs and line breaks aside: they are white space).
+    Every default-ignorable character is refused, the variation selectors included: one between a letter and its accent
+    would split a name that draws the same into two readings (refutation r4, r4-1, r4-3). A name with an emoji's
+    presentation mark or an ideographic variant is written without it (a written limit)."""
+    return any(hidden(ch) for ch in value if ch not in '\t\n\r')
 
 
-def _field(request, name, *, limit=NAME_CHARS, required=False, label='This field') -> str:
-    """A text field as stored: in Unicode's NFC form (a decomposed spelling and its composed one are one spelling; what
-    the operator typed is otherwise kept - refutation r3, r3-7), runs of white space made one space, ends stripped;
-    refused when it holds a character no one can see or type (hidden_in), when it is too long, when a required one is
-    empty, or when it holds no letter or digit at all (refutation r1, data-4; r2, secure-3). Names are COMPARED in the
-    NFKC caseless form (name_reading)."""
+def _field(request, name, *, limit=NAME_CHARS, required=False, label='This field', form='NFC') -> str:
+    """A text field as stored: in the Unicode normal ``form`` - NFC for a person's name (a decomposed spelling and its
+    composed one are one spelling; what the operator typed is otherwise kept: refutation r3, r3-7), NFKC for a workspace
+    name (so provisioning, which finds a workspace by its exact text, finds the name the console stored: r4, r4-4) - runs
+    of white space made one space, ends stripped; refused when it holds a character no one can see or type (hidden_in),
+    when it is too long, when a required one is empty, or when it holds no letter or digit at all (refutation r1, data-4;
+    r2, secure-3). Workspace names are COMPARED in the NFKC caseless form (name_reading) and provisioning's form."""
     value = request.POST.get(name, '')
     if not isinstance(value, str):
         value = ''
     if hidden_in(value):
         raise Refused(f'{label} contains a character that cannot be seen or typed (a control, format, filler or '
                       f'unassigned character).')
-    value = ' '.join(unicodedata.normalize('NFC', value).split())
+    value = ' '.join(unicodedata.normalize(form, value).split())
+    if hidden_in(value):
+        raise Refused(f'{label} contains a character that cannot be seen or typed (a control, format, filler or '
+                      f'unassigned character).')
     if len(value) > limit:
         raise Refused(f'{label} can be at most {limit:,} characters.')
     if required and not value:
@@ -289,10 +280,10 @@ def new_password(user) -> str:
 
 def end_sessions(user) -> int:
     """End every live session signed in as ``user``: an open session ends at once and can never come back, whatever
-    happens to the account later (refutation r1, gate-1). The sessions are read from the database table (the db and
-    cached_db stores, SESSION_STORES; any other store is refused - r2, secure-4), live ones only (an expired session signs
-    nobody in - r2, secure-5), and each is deleted through its store, so a cached copy goes with its row. Sessions are
-    sign-in state, not records. The number ended."""
+    happens to the account later (refutation r1, gate-1). The sessions are read from the database table (the db store
+    only, SESSION_STORES; any other store is refused - r2, secure-4; r3, r3-3), live ones only (an expired session signs
+    nobody in - r2, secure-5), and each is deleted through its store. Sessions are sign-in state, not records. The
+    number ended."""
     if settings.SESSION_ENGINE not in SESSION_STORES:
         raise Refused(NO_SESSION_STORE, 409)
     store = import_module(settings.SESSION_ENGINE).SessionStore
@@ -510,7 +501,7 @@ def name_reading(name: str) -> str:
     return provision._read(folded)
 
 
-def workspace_name_problem(name: str, category) -> str:
+def workspace_name_problem(name: str, category, typed: str = '') -> str:
     """Why a new workspace cannot take ``name``, or nothing. Provisioning's rules, read the console's one way
     (name_reading: NFKC caseless, letters and digits), which makes them stricter (refutation r3, r3-2, r3-8): it names no
     other specialty (provision.SPECIALTIES), and no workspace of ANY specialty reads alike - which covers provisioning's
@@ -519,8 +510,11 @@ def workspace_name_problem(name: str, category) -> str:
     reading = name_reading(name)
     if not reading:
         return 'A workspace name needs at least one letter or digit.'
+    # another specialty's name, by either reading of the stored name or of what was typed (r4, r4-2: NFKC can turn a
+    # sign provisioning drops, such as the trade mark sign, into letters)
+    readings = {reading, provision._read(name), name_reading(typed), provision._read(typed)} - {''}
     for other, (other_name, _) in provision.SPECIALTIES.items():
-        if other != category.slug and name_reading(other_name) == reading:
+        if other != category.slug and readings & {name_reading(other_name), provision._read(other_name)}:
             return f'{name!r} names the {other_name} specialty, and this workspace is {category.name}.'
     alike = sorted((each.name, each.category.name) for each in Workspace.objects.select_related('category')
                    if name_reading(each.name) == reading)
@@ -541,14 +535,15 @@ def workspaces(request):
 def create_workspace(request):
     """A workspace for a specialty that exists (a Category row: what the page and the report show it as)."""
     try:
-        name = _field(request, 'name', required=True, label='The workspace name')
+        name = _field(request, 'name', required=True, label='The workspace name', form='NFKC')
         try:
             category = Category.objects.get(pk=request.POST.get('category', ''))
         except (Category.DoesNotExist, ValueError, TypeError, ValidationError):
             raise Refused('Choose the specialty of the workspace.')
         with transaction.atomic():
             _lock()
-            problem = workspace_name_problem(name, category)
+            typed = request.POST.get('name', '')
+            problem = workspace_name_problem(name, category, typed if isinstance(typed, str) else '')
             if problem:
                 raise Refused(problem, 409)
             workspace = Workspace.objects.create(name=name, category=category)
@@ -613,7 +608,7 @@ def spending(now=None) -> dict:
     first_day = now.astimezone(dt_timezone.utc).date() - timedelta(days=SPENDING_DAYS - 1)
     runs = (Run.objects.filter(Q(sent=True) | Q(state__in=IN_FLIGHT), purpose__in=jobs.PURPOSES)
             .select_related('encounter', 'encounter__workspace', 'encounter__workspace__category')
-            .only('id', 'usage', 'scope', 'state', 'http_status', 'sent', 'created_at', 'started_at', 'encounter',
+            .only('id', 'usage', 'scope', 'state', 'http_status', 'sent', 'endpoint', 'created_at', 'started_at', 'encounter',
                   'encounter__title', 'encounter__workspace', 'encounter__workspace__name',
                   'encounter__workspace__category', 'encounter__workspace__category__name')
             .order_by('created_at', 'pk'))

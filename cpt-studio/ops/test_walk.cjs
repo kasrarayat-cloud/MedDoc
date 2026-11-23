@@ -1912,7 +1912,7 @@ test('every /ops/ path is 404 to the customer and never 200 to nobody, and the o
     ['ops.anonymous_not_200']);
   assert.deepEqual(failed(walk.opsChecks({ probes, ownIds, operator: { status: 404, names: false } })), ['ops.operator_view']);
   // the probes by the member's own ids must have run: a failed session read fails the check (refutation r3, r3-10)
-  for (const broken of [{ session: 409, probed: 0 }, { session: 200, probed: 1 }, undefined]) {
+  for (const broken of [{ session: 409, probed: 0 }, { session: 200, probed: 1 }, { session: 500, probed: 4 }, undefined]) {
     assert.deepEqual(failed(walk.opsChecks({ probes, ownIds: broken, operator: { status: 200, names: true } })), ['ops.own_ids_probed']);
   }
 });

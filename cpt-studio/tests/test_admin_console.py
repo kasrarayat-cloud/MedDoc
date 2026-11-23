@@ -746,7 +746,7 @@ class RefutationRoundTwoTests(AdminCase):
         self.assertEqual(self.counts(), before)
         made = self.ops.post('/ops/workspaces/new', {'name': 'Ｖａｌｌｅｙ Clinic', 'category': str(gi.pk)})
         self.assertEqual(made.status_code, 303)
-        self.assertTrue(Workspace.objects.filter(name='Ｖａｌｌｅｙ Clinic').exists())  # stored as typed (NFC)
+        self.assertTrue(Workspace.objects.filter(name='Valley Clinic').exists())  # a workspace name is stored NFKC (r4-4)
         self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'valley clinic', 'category': str(gi.pk)})
                          .status_code, 409)  # read alike (NFKC caseless)
         decomposed = self.ops.post('/ops/workspaces/new', {'name': 'Re\u0301sume\u0301 Health', 'category': str(gi.pk)})
@@ -801,11 +801,21 @@ class RefutationRoundThreeTests(AdminCase):
             with self.assertRaises(console.Refused):
                 console.end_sessions(self.viewer)
 
-    def test_a_variation_selector_after_a_visible_character_is_kept(self):
-        made = self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'username': 'emoji-name',
-                                                  'name': 'Dr. Sun \u2600\ufe0f', 'role': 'viewer'})
-        self.assertEqual(made.status_code, 200)
-        self.assertEqual(User.objects.get(username='emoji-name').display_name, 'Dr. Sun \u2600\ufe0f')
+    def test_a_variation_selector_is_refused_everywhere(self):
+        # one between a letter and its accent would make a second workspace drawn like the first (r4-1, r4-3)
+        Workspace.objects.create(name='Caf\u00e9 Partners', category=self.ws.category)
+        before = self.counts()
+        for name in ('Cafe\ufe0f\u0301 Partners', 'Spine\ufe0f', 'Dr. Sun \u2600\ufe0f', '\u845b\U000e0100 Clinic'):
+            with self.subTest(name=repr(name)):
+                self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(self.ws.category.pk)})
+                                 .status_code, 400)
+                self.assertEqual(self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'username': 'selector-x',
+                                                                   'name': name, 'role': 'viewer'}).status_code, 400)
+        self.assertEqual(self.counts(), before)
+        # a person's name keeps what was typed (NFC only): a compatibility character is not rewritten (r3-7)
+        self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'username': 'kept-name', 'name': 'Dr. \u2160 Rivera',
+                                          'role': 'viewer'})
+        self.assertEqual(User.objects.get(username='kept-name').display_name, 'Dr. \u2160 Rivera')
 
     def test_names_alike_are_listed_by_the_consoles_own_reading(self):
         gi = self.ws.category
@@ -817,3 +827,35 @@ class RefutationRoundThreeTests(AdminCase):
 
     def test_the_session_store_refusal_names_every_act_it_can_stop(self):
         self.assertIn('access cannot be changed', console.NO_SESSION_STORE)
+
+
+class RefutationRoundFourTests(AdminCase):
+    """The repairs of refutation round 4 (DECISIONS D395), each pinned by the input that broke it."""
+
+    def test_a_sign_provisioning_drops_still_counts_for_the_specialty_rule(self):
+        before = self.counts()
+        for name in ('Neurosurgery\u2122', 'Orthopedic Surgery\u00ae', 'NEUROSURGERY\u2122'):
+            with self.subTest(name=name):
+                self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(self.ws.category.pk)})
+                                 .status_code, 409)
+        self.assertEqual(self.counts(), before)
+
+    def test_a_reserved_run_reads_nothing_sent_yet_on_its_card_and_is_not_flagged(self):
+        enc = self.done(title='Reserved run')
+        run = Run.objects.filter(encounter=enc, purpose=jobs.READER).get()
+        Run.objects.filter(pk=run.pk).update(state=Run.RESERVED, sent=False,
+                                             endpoint='https://api.anthropic.example/v1/messages')
+        text = page(self.ops.get(f'/ops/encounters/{enc.pk}'))
+        self.assertIn('nothing sent yet', text)
+        self.assertNotIn('run(s) with no known cost yet', text)
+
+    def test_spending_reads_every_run_in_one_query_whatever_is_in_flight(self):
+        def queries_with(in_flight):
+            enc = self.done(title=f'Flight {in_flight}')
+            for run in list(Run.objects.filter(encounter=enc))[:in_flight]:
+                Run.objects.filter(pk=run.pk).update(state=Run.SENDING, sent=False,
+                                                     endpoint='https://api.anthropic.example/v1/messages')
+            with CaptureQueriesContext(connection) as seen:
+                console.spending()
+            return len(seen.captured_queries)
+        self.assertEqual(queries_with(0), queries_with(2))

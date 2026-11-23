@@ -232,6 +232,8 @@ def run_view(run) -> dict:
             'fallback': bool(scope.get('fallback')), 'tokens': _tokens(run.usage),
             'cost': pricing.usd(known) if known is not None else None,
             'usage_priced': pricing.usd(priced) if priced is not None and priced != known else None,
+            # a run only reserved has sent nothing yet: its round does not count it (runs_cost), nor does its card (r4-5)
+            'reserved_only': run.state == models.ProviderRun.RESERVED and not run.sent,
             'worst_usd': scope.get('worst_usd'),
             'counted_input_tokens': scope.get('input_tokens_counted'), 'stop_reason': scope.get('stop_reason'),
             'failure_kind': scope.get('failure_kind'), 'error_type': scope.get('error_type'),
