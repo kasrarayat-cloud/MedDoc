@@ -326,9 +326,12 @@ method, body, CSRF token or any record is read. The console has a second address
 2026-11-23, D396; `studio/hosts.py`, `cptstudio/urls_admin.py`): that host's urlconf holds the console's own routes
 (taken from the full urlconf, so the two cannot drift), an operator-only sign-in (any other account gets the same
 sentence as a wrong password, no session, and a failed attempt on the shared throttle), and `/` and `/ops` redirects -
-no doctor app and no API. There a signed-out GET or HEAD of a console page goes to the sign-in, which brings the operator
-back; every other request meets the same gate, so the host is a convenience and never the security boundary. The host is
-the Host header as Django reads it (no X-Forwarded-Host), port and trailing dot set aside. Pages: every encounter across workspaces (state, rounds, latest cost),
+no doctor app and no API. There any signed-out request to a console route goes to the sign-in (a GET or HEAD back to
+the page, a form sent after the session ended to the console's front page, its body never read); every signed-in request
+meets the same gate, so the host is a convenience and never the security boundary. The admin host trusts only its own
+origin for an unsafe request (`studio.hosts.foreign_origin`, ahead of every view): Django's global CSRF_TRUSTED_ORIGINS,
+which names cpt.quillmd.com, never applies there. The host is the Host header as Django reads it (no X-Forwarded-Host),
+port and trailing dot set aside. Pages: every encounter across workspaces (state, rounds, latest cost),
 and one encounter's rounds, runs (models, served by a fallback, tokens, cost, latency, state), the reader's and checker's
 whole answers, codes and decisions by line, the reviews tied to no line, the question ids that name no question and
 those both answers defined (read from the two stored answers, so every stored round shows them), answers, audit events

@@ -14,7 +14,7 @@ from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
 from .access import SecurityHeadersMiddleware, active_membership
@@ -117,12 +117,15 @@ def index(request):
 ADMIN_SIGN_IN_REFUSED = 'The username or password is not correct, or the account is not a platform operator.'
 
 
+@csrf_exempt  # it reads no body and writes nothing: every method gets the redirect (refutation h1, gate-1)
 def admin_home(request):
     """admin.quillmd.com/: an operator goes to the console, anyone else to the operator sign-in - every method alike, so
-    a monitor's HEAD gets the same 302 as a browser's GET."""
+    a monitor's HEAD gets the same 302 as a browser's GET (an unsafe request from another origin is refused first by
+    studio.hosts.foreign_origin)."""
     return redirect('/ops/' if is_operator(request.user) else '/login/')
 
 
+@csrf_exempt  # a redirect only, as admin_home
 def admin_ops_slash(request):
     """admin.quillmd.com/ops goes to /ops/ (the full urlconf keeps /ops answering what /opsx answers)."""
     return redirect('/ops/')
