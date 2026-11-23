@@ -18,6 +18,7 @@ from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
 from .access import SecurityHeadersMiddleware, active_membership
+from .hosts import is_console_page
 from .api import UNSTORABLE
 from .models import LoginAttempt
 from .operator import is_operator
@@ -141,7 +142,7 @@ def admin_login_view(request):
     if request.method not in ('GET', 'POST'):
         return HttpResponseNotAllowed(['GET', 'POST'])
     next_url = request.POST.get('next') or request.GET.get('next') or '/ops/'
-    if not (next_url.startswith('/ops/') and url_has_allowed_host_and_scheme(
+    if not (is_console_page(next_url) and url_has_allowed_host_and_scheme(
             next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure())):
         next_url = '/ops/'
     error = ''

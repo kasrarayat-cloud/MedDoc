@@ -11,12 +11,14 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management import call_command
+from django.db.models.signals import pre_delete, pre_save
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import URLPattern, get_resolver
 
 from cptstudio import urls as customer_urls
 from cptstudio import urls_admin
 from studio import hosts, models, views
+from studio import operator as operator_module
 from tests.support import coding as factories
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
@@ -79,6 +81,12 @@ class RoutingTests(AdminHostCase):
                 self.assertEqual((answer.status_code, answer['Location']), (302, '/login/'))
         foreign = self.admin(enforce_csrf_checks=True).post('/', secure=True, HTTP_ORIGIN='https://evil.example')
         self.assertEqual(foreign.status_code, 403)
+        for method in ('get', 'head', 'post', 'put', 'patch', 'delete', 'options'):  # and /ops (refutation h2, repairs-4)
+            with self.subTest(path='/ops', method=method):
+                answer = getattr(self.admin(enforce_csrf_checks=True), method)('/ops')
+                self.assertEqual((answer.status_code, answer['Location']), (302, '/ops/'))
+        foreign = self.admin(enforce_csrf_checks=True).post('/ops', secure=True, HTTP_ORIGIN='https://evil.example')
+        self.assertEqual(foreign.status_code, 403)
         answer = self.signed_in(self.operator).head('/')
         self.assertEqual((answer.status_code, answer['Location']), (302, '/ops/'))
         answer = self.signed_in(self.member).get('/')
@@ -123,6 +131,11 @@ class ConsoleGateTests(AdminHostCase):
                 self.assertEqual(self.admin().get(path).status_code, 302)  # signed out: to the sign-in
                 posted = self.admin().post(path, {'note': 'x' * 30})  # a form sent after the session ended
                 self.assertEqual((posted.status_code, posted['Location']), (303, '/login/?next=%2Fops%2F'))
+                # with the CSRF check enforced: no cookie at all, and a stale token (refutation h2, repairs-3)
+                enforced = self.admin(enforce_csrf_checks=True)
+                self.assertEqual(enforced.post(path, {'note': 'x' * 30}).status_code, 303)
+                enforced.cookies[settings.CSRF_COOKIE_NAME] = 'stale' * 6 + 'xx'
+                self.assertEqual(enforced.post(path, {'csrfmiddlewaretoken': 'stale' * 6 + 'xx'}).status_code, 303)
                 self.assertEqual(member.get(path).status_code, 404)
                 self.assertEqual(member.post(path, {'note': 'x' * 30}).status_code, 404)
 
@@ -141,31 +154,54 @@ class ConsoleGateTests(AdminHostCase):
         self.assertEqual(self.signed_in(self.member, CPT).get('/ops/').status_code, 404)
         self.assertEqual(self.signed_in(self.operator, CPT).get('/ops/').status_code, 200)
 
-    def test_no_admin_url_records_a_grant(self):
-        modules = {inspect.getmodule(p.callback) for p in get_resolver(hosts.ADMIN_URLCONF).url_patterns
-                   if isinstance(p, URLPattern)} | {hosts, urls_admin}
-        for module in modules:
-            source = inspect.getsource(module)
-            if module.__name__ == 'studio.operator':
-                continue  # its grant and revoke are pinned by tests.test_operator's own sweep
-            # any write of a grant or revocation (reads, such as console.py's list of operators, are fine): h1, regression-5
-            writes = r'(?:create|get_or_create|update_or_create|bulk_create|update|delete)\('
-            self.assertNotRegex(source, rf'Operator(?:Grant|Revocation)\.objects\.(?:[a-z_]+\([^)]*\)\.)*{writes}|'
-                                        r'Operator(?:Grant|Revocation)\(|operator\.grant\(|\bgrant\(', module.__name__)
-        before = models.OperatorGrant.objects.count()
-        for user in (self.member, self.operator):
-            client = Client(HTTP_HOST=ADMIN, enforce_csrf_checks=False)
-            client.force_login(user)
-            for pattern in get_resolver(hosts.ADMIN_URLCONF).url_patterns:
-                route = str(pattern.pattern)
-                if route == 'logout/':
-                    continue
-                fields = {'username': user.username, 'reason': 'x' * 20, 'user': str(user.pk), 'workspace': str(self.ws.pk)}
-                client.post(concrete(route), data=json.dumps(fields), content_type='application/json')
-                client.post(concrete(route), data=fields)  # form-encoded, as the console's forms send it (h1, regression-5)
-        self.assertEqual(models.OperatorGrant.objects.count(), before)
-        self.assertFalse(models.OperatorGrant.objects.filter(user=self.member).exists())
+    def test_no_admin_url_records_or_ends_a_grant(self):
+        # (refutation h2, repairs-2 and fresh-5) the authority is behavioural: every admin route is posted with real ids
+        # and each act's own valid fields, as the member and as the operator, while any write of a grant or a revocation is
+        # recorded by signal - whatever module or alias would make it
+        writes = []
 
+        def record(sender, **kwargs):
+            writes.append(sender.__name__)
+        receivers = [(signal, model) for signal in (pre_save, pre_delete)
+                     for model in (models.OperatorGrant, models.OperatorRevocation)]
+        for signal, model in receivers:
+            signal.connect(record, sender=model, weak=False, dispatch_uid=f'admin-sweep-{signal}-{model.__name__}')
+        try:
+            encounter = factories.encounter(self.ws, self.member)
+            membership = models.Membership.objects.get(user=self.member)
+            ids = {'<uuid:encounter_id>': str(encounter.pk), '<uuid:user_id>': str(self.member.pk),
+                   '<uuid:workspace_id>': str(self.ws.pk)}
+            field_sets = [
+                {'username': 'sweep-person', 'workspace': str(self.ws.pk), 'role': 'reviewer', 'name': 'Sweep Person'},
+                {'membership': str(membership.pk), 'role': 'owner', 'back': '/ops/people'},
+                {'access': 'off', 'back': '/ops/people'}, {'access': 'on', 'back': '/ops/people'},
+                {'name': 'Sweep Workspace', 'category': str(self.ws.category.pk)},
+                {'note': 'A synthetic note long enough for every act.', 'run': '1'},
+                {'username': self.member.username, 'reason': 'x' * 20, 'user': str(self.member.pk)},
+            ]
+            for user in (self.member, self.operator):
+                client = Client(HTTP_HOST=ADMIN, enforce_csrf_checks=False)
+                client.force_login(user)
+                for pattern in get_resolver(hosts.ADMIN_URLCONF).url_patterns:
+                    route = str(pattern.pattern)
+                    if route == 'logout/':
+                        continue
+                    path = '/' + route
+                    for placeholder, value in ids.items():
+                        path = path.replace(placeholder, value)
+                    for fields in field_sets:
+                        client.post(path, data=fields)
+                        client.post(path, data=json.dumps(fields), content_type='application/json')
+        finally:
+            for signal, model in receivers:
+                signal.disconnect(record, sender=model, dispatch_uid=f'admin-sweep-{signal}-{model.__name__}')
+        self.assertEqual(writes, [])
+        self.assertTrue(operator_module.is_operator(self.operator))
+        self.assertFalse(operator_module.is_operator(self.member))
+        self.assertTrue(models.User.objects.filter(username='sweep-person').exists())  # the sweep reached the acts' bodies
+        for module in (hosts, urls_admin, views):  # the admin host's own modules name no grant writer at all
+            self.assertNotRegex(inspect.getsource(module), r'\bOperator(?:Grant|Revocation)\b|operator\.(?:grant|revoke)\(',
+                                module.__name__)
 
 class SignInTests(AdminHostCase):
     def test_an_operator_signs_in_and_lands_in_the_console(self):
@@ -197,7 +233,10 @@ class SignInTests(AdminHostCase):
     def test_next_may_only_name_a_console_page_on_this_host(self):
         for next_url, landing in (('https://evil.example/ops/', '/ops/'), ('//evil.example/ops/', '/ops/'),
                                   ('/api/session', '/ops/'), ('/', '/ops/'), ('/ops/workspaces', '/ops/workspaces'),
-                                  ('https://admin.quillmd.com/ops/people', '/ops/')):
+                                  ('https://admin.quillmd.com/ops/people', '/ops/'),
+                                  # paths that climb out of the console or name no console page (refutation h2, fresh-3)
+                                  ('/ops/../login/', '/ops/'), ('/ops/%2e%2e/login/', '/ops/'), ('/ops/\\evil.example', '/ops/'),
+                                  ('/ops/no-such-page', '/ops/'), ('/ops/people?tab=x', '/ops/people?tab=x')):
             with self.subTest(next_url=next_url):
                 answer = self.sign_in(self.admin(), self.operator.username, next_url=next_url)
                 self.assertEqual(answer['Location'], landing)
@@ -233,6 +272,12 @@ class SignInTests(AdminHostCase):
         self.assertEqual(from_cpt.status_code, 403)
         referer_only = client.post('/login/', data, secure=True, HTTP_REFERER='https://cpt.quillmd.com/')
         self.assertEqual(referer_only.status_code, 403)
+        malformed = client.post('/login/', data, secure=True, HTTP_REFERER='https://[')  # a 403, never a 500 (h2, fresh-1)
+        self.assertEqual(malformed.status_code, 403)
+        plain = self.admin(enforce_csrf_checks=True)  # a plain request is judged by its Referer too (h2, fresh-4)
+        plain.get('/login/')
+        plain_data = {**data, 'csrfmiddlewaretoken': plain.cookies[settings.CSRF_COOKIE_NAME].value}
+        self.assertEqual(plain.post('/login/', plain_data, HTTP_REFERER='http://evil.example/').status_code, 403)
         own = client.post('/login/', data, secure=True, HTTP_ORIGIN='https://admin.quillmd.com')
         self.assertEqual((own.status_code, own['Location']), (302, '/ops/'))
         token = client.cookies[settings.CSRF_COOKIE_NAME].value  # rotated by the sign-in
@@ -241,6 +286,7 @@ class SignInTests(AdminHostCase):
         before = models.User.objects.count()
         crossed = client.post('/ops/people/add', act, secure=True, HTTP_ORIGIN='https://cpt.quillmd.com')
         self.assertEqual(crossed.status_code, 403)
+        self.assertEqual(client.post('/ops/people/add', act, secure=True, HTTP_REFERER='https://[').status_code, 403)
         self.assertEqual(models.User.objects.count(), before)
 
     def test_the_sign_in_page_is_the_console_s_and_names_a_static_asset(self):

@@ -11,6 +11,7 @@ from urllib.parse import urlencode, urlsplit
 from django.conf import settings
 from django.http.request import split_domain_port
 from django.shortcuts import redirect
+from django.urls import Resolver404, resolve
 from django.views.csrf import csrf_failure
 
 ADMIN_URLCONF = 'cptstudio.urls_admin'
@@ -31,11 +32,31 @@ def foreign_origin(request) -> str:
     if origin is not None:
         return '' if origin == own else 'Origin checking failed - the admin host accepts only its own origin.'
     referer = request.META.get('HTTP_REFERER')
-    if referer and request.is_secure():
-        parts = urlsplit(referer)
+    if referer:  # on a plain request too: the own origin carries the scheme (refutation h2, fresh-4)
+        try:
+            parts = urlsplit(referer)
+        except ValueError:  # refused as Django's own Referer rule refuses it, never a 500 (refutation h2, fresh-1)
+            return 'Referer checking failed - Referer is malformed.'
         if f'{parts.scheme}://{parts.netloc}' != own:
             return 'Referer checking failed - the admin host accepts only its own origin.'
     return ''  # neither header: CsrfViewMiddleware's own Referer rule refuses a secure request that names none
+
+
+def is_console_page(target) -> bool:
+    """Whether ``target`` (a sign-in's next) names a console page of the admin host: a path alone - no scheme, no host -
+    that resolves in the admin urlconf to an ops/ route. A path that climbs out ('/ops/../login/', '/ops/%2e%2e/') or
+    names anything else resolves to no console route (refutation h2, fresh-3)."""
+    try:
+        parts = urlsplit(target)
+    except ValueError:
+        return False
+    if parts.scheme or parts.netloc or not parts.path.startswith('/ops/'):
+        return False
+    try:
+        match = resolve(parts.path, urlconf=ADMIN_URLCONF)
+    except Resolver404:
+        return False
+    return str(match.route).startswith('ops/')
 
 
 class HostUrlconfMiddleware:
@@ -71,4 +92,8 @@ def signed_out_to_sign_in(view):
             response.status_code = 303
             return response
         return view(request, *args, **kwargs)
+    # said here, not left to functools.wraps copying them from operator_view's wrapper (refutation h2, repairs-3): the
+    # global CSRF check never runs ahead of this redirect, and operator_view's csrf_protect runs after its gate
+    wrapper.csrf_exempt = True
+    wrapper.should_append_slash = False
     return wrapper
