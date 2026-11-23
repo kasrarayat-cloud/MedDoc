@@ -800,7 +800,7 @@ body) with the `quillmd.com` lineage's certificate, co-tenant routing is
 unchanged, and both files read back; any failure writes both forward again
 (`couple`). Run again in the state it left, it verifies and writes nothing. The
 QuillMD-side checks the move changed to expect CPT Studio's answer on admin -
-`scripts/check-cotenants.sh` (its two-state row, until it is narrowed),
+`scripts/check-cotenants.sh` (its admin row, narrowed to the console's 302 on 2026-11-23),
 `scripts/verify-post-reboot.sh` and `tests/automated/monitoring/uptime-check.sh`
 (admin's row 302) - are QuillMD's: revert them to Caddy's notice in the same
 step. (`rebuild/ops/owner_normal_origin.py` also expects the notice, but it is a
