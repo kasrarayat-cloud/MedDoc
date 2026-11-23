@@ -239,12 +239,11 @@ def hidden_in(value: str) -> bool:
 
 
 def _field(request, name, *, limit=NAME_CHARS, required=False, label='This field', form='NFC') -> str:
-    """A text field as stored: in the Unicode normal ``form`` - NFC for a person's name (a decomposed spelling and its
-    composed one are one spelling; what the operator typed is otherwise kept: refutation r3, r3-7), NFKC for a workspace
-    name (so provisioning, which finds a workspace by its exact text, finds the name the console stored: r4, r4-4) - runs
-    of white space made one space, ends stripped; refused when it holds a character no one can see or type (hidden_in),
-    when it is too long, when a required one is empty, or when it holds no letter or digit at all (refutation r1, data-4;
-    r2, secure-3). Workspace names are COMPARED in the NFKC caseless form (name_reading) and provisioning's form."""
+    """A text field as stored, in Unicode NFC (a decomposed spelling and its composed one are one spelling; what the
+    operator typed is otherwise kept: refutation r3, r3-7), runs of white space made one space, ends stripped; refused
+    when it holds a character no one can see or type (hidden_in), when it is too long, when a required one is empty, or
+    when it holds no letter or digit at all (refutation r1, data-4; r2, secure-3). A workspace name has further rules
+    (plain_name_problem)."""
     value = request.POST.get(name, '')
     if not isinstance(value, str):
         value = ''
@@ -501,7 +500,35 @@ def name_reading(name: str) -> str:
     return provision._read(folded)
 
 
-def workspace_name_problem(name: str, category, typed: str = '') -> str:
+# Scripts whose letters come precomposed with their accents: an accent typed apart after one of them is refused in a
+# workspace name (refutation r5, r5-1), as is a mark after a dotless i or j, or a mark with no letter before it.
+PRECOMPOSED_SCRIPTS = ('LATIN', 'GREEK', 'CYRILLIC')
+
+
+def plain_name_problem(name: str) -> str:
+    """Why ``name`` (as _field stores it, NFC) cannot name a workspace, or nothing. A workspace name is stored exactly
+    as typed and read exactly so by provisioning, which finds a workspace by its exact text (refutation r4, r4-4; r5,
+    r5-2): so it may hold no compatibility character - its NFKC form must be itself (no full-width or mathematical
+    letter, ligature, superscript or trade mark sign) - and no accent typed apart from a Latin, Greek or Cyrillic letter,
+    which would draw like the precomposed letter and read otherwise, nor one after anything that is no letter (r5-1). Look-alike letters of different scripts are
+    not compared (a written limit, as provisioning's own)."""
+    if unicodedata.normalize('NFKC', name) != name:
+        return ('The workspace name holds a compatibility character (a full-width or styled letter, a ligature, a '
+                'superscript or a sign such as the trade mark sign). Type it with plain characters.')
+    base = ''
+    for ch in name:
+        if unicodedata.category(ch).startswith('M'):
+            script = unicodedata.name(base, '').split(' ')[0] if base else ''
+            if (not base or not unicodedata.category(base).startswith('L') or script in PRECOMPOSED_SCRIPTS
+                    or base in '\u0131\u0237'):
+                return ('The workspace name has an accent typed as a separate character. Type the accented letter '
+                        'itself.')
+        else:
+            base = ch
+    return ''
+
+
+def workspace_name_problem(name: str, category) -> str:
     """Why a new workspace cannot take ``name``, or nothing. Provisioning's rules, read the console's one way
     (name_reading: NFKC caseless, letters and digits), which makes them stricter (refutation r3, r3-2, r3-8): it names no
     other specialty (provision.SPECIALTIES), and no workspace of ANY specialty reads alike - which covers provisioning's
@@ -510,9 +537,9 @@ def workspace_name_problem(name: str, category, typed: str = '') -> str:
     reading = name_reading(name)
     if not reading:
         return 'A workspace name needs at least one letter or digit.'
-    # another specialty's name, by either reading of the stored name or of what was typed (r4, r4-2: NFKC can turn a
-    # sign provisioning drops, such as the trade mark sign, into letters)
-    readings = {reading, provision._read(name), name_reading(typed), provision._read(typed)} - {''}
+    # another specialty's name, by either reading of the stored name: the console's and provisioning's (r4, r4-2; r5,
+    # r5-3 - the stored name is what was typed, plain_name_problem having refused anything NFKC would change)
+    readings = {reading, provision._read(name)} - {''}
     for other, (other_name, _) in provision.SPECIALTIES.items():
         if other != category.slug and readings & {name_reading(other_name), provision._read(other_name)}:
             return f'{name!r} names the {other_name} specialty, and this workspace is {category.name}.'
@@ -535,15 +562,17 @@ def workspaces(request):
 def create_workspace(request):
     """A workspace for a specialty that exists (a Category row: what the page and the report show it as)."""
     try:
-        name = _field(request, 'name', required=True, label='The workspace name', form='NFKC')
+        name = _field(request, 'name', required=True, label='The workspace name')
+        plain = plain_name_problem(name)
+        if plain:
+            raise Refused(plain)
         try:
             category = Category.objects.get(pk=request.POST.get('category', ''))
         except (Category.DoesNotExist, ValueError, TypeError, ValidationError):
             raise Refused('Choose the specialty of the workspace.')
         with transaction.atomic():
             _lock()
-            typed = request.POST.get('name', '')
-            problem = workspace_name_problem(name, category, typed if isinstance(typed, str) else '')
+            problem = workspace_name_problem(name, category)
             if problem:
                 raise Refused(problem, 409)
             workspace = Workspace.objects.create(name=name, category=category)

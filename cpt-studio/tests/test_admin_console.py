@@ -738,15 +738,18 @@ class RefutationRoundTwoTests(AdminCase):
 
     def test_unicode_spellings_of_one_name_read_alike(self):
         gi = self.ws.category
-        Workspace.objects.create(name='Café Partners', category=gi)
+        Workspace.objects.create(name='Caf\u00e9 Partners', category=gi)
         before = self.counts()
-        for name in ('Café Partners', 'ＣＡＦＥ́ Partners', 'Ｃafé partners', 'ｎｅｕｒｏｓｕｒｇｅｒｙ'):
+        # a decomposed spelling reads alike (NFC composes it); a compatibility spelling is refused outright (r5-2)
+        for name, status in (('Cafe\u0301 Partners', 409), ('caf\u00e9-partners', 409),
+                             ('\uff23\uff21\uff26\uff25\u0301 Partners', 400), ('\uff23af\u00e9 partners', 400),
+                             ('\uff4e\uff45\uff55\uff52\uff4f\uff53\uff55\uff52\uff47\uff45\uff52\uff59', 400)):
             with self.subTest(name=name):
-                self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(gi.pk)}).status_code, 409)
+                self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(gi.pk)}).status_code,
+                                 status)
         self.assertEqual(self.counts(), before)
-        made = self.ops.post('/ops/workspaces/new', {'name': 'Ｖａｌｌｅｙ Clinic', 'category': str(gi.pk)})
+        made = self.ops.post('/ops/workspaces/new', {'name': 'Valley Clinic', 'category': str(gi.pk)})
         self.assertEqual(made.status_code, 303)
-        self.assertTrue(Workspace.objects.filter(name='Valley Clinic').exists())  # a workspace name is stored NFKC (r4-4)
         self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'valley clinic', 'category': str(gi.pk)})
                          .status_code, 409)  # read alike (NFKC caseless)
         decomposed = self.ops.post('/ops/workspaces/new', {'name': 'Re\u0301sume\u0301 Health', 'category': str(gi.pk)})
@@ -834,10 +837,15 @@ class RefutationRoundFourTests(AdminCase):
 
     def test_a_sign_provisioning_drops_still_counts_for_the_specialty_rule(self):
         before = self.counts()
-        for name in ('Neurosurgery\u2122', 'Orthopedic Surgery\u00ae', 'NEUROSURGERY\u2122'):
+        # a trade mark sign is a compatibility character: refused, so it never hides a specialty's name (r4-2, r5-3)
+        for name in ('Neurosurgery\u2122', 'NEUROSURGERY\u2122'):
             with self.subTest(name=name):
-                self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(self.ws.category.pk)})
-                                 .status_code, 409)
+                response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(self.ws.category.pk)})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('compatibility character', page(response))
+        # the registered sign is no compatibility character, and provisioning's reading drops it: still a specialty
+        self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'Orthopedic Surgery\u00ae',
+                                                               'category': str(self.ws.category.pk)}).status_code, 409)
         self.assertEqual(self.counts(), before)
 
     def test_a_reserved_run_reads_nothing_sent_yet_on_its_card_and_is_not_flagged(self):
@@ -859,3 +867,35 @@ class RefutationRoundFourTests(AdminCase):
                 console.spending()
             return len(seen.captured_queries)
         self.assertEqual(queries_with(0), queries_with(2))
+
+
+class RefutationRoundFiveTests(AdminCase):
+    """The repairs of refutation round 5 (DECISIONS D395), each pinned by the input that broke it."""
+
+    def test_an_accent_typed_apart_from_a_latin_letter_is_refused(self):
+        gi = self.ws.category
+        Workspace.objects.create(name='\u00d8rsted Clinic', category=gi)
+        before = self.counts()
+        for name in ('O\u0338rsted Clinic', 'Cl\u0131\u0301nica Garc\u0131\u0301a', 'Ana\u0131\u0308s Clinic',
+                     'Orthoped\u0131\u0307c Surgery', '\u0301Clinic', 'Spine \u0301Center', '\u03b1\u0338thens Clinic', 'Clinic 7\u0301'):
+            with self.subTest(name=repr(name)):
+                response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(gi.pk)})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('accent typed as a separate character', page(response))
+        self.assertEqual(self.counts(), before)
+
+    def test_a_script_that_needs_its_marks_keeps_them(self):
+        made = self.ops.post('/ops/workspaces/new', {'name': '\u0928\u092e\u0938\u094d\u0924\u0947 Clinic',
+                                                      'category': str(self.ws.category.pk)})
+        self.assertEqual(made.status_code, 303)
+
+    def test_a_stored_workspace_name_is_exactly_what_was_typed(self):
+        typed = 'Riverside   Gastro\u00e9nterologie'
+        self.ops.post('/ops/workspaces/new', {'name': typed, 'category': str(self.ws.category.pk)})
+        # what provisioning would look up (the exact text, white space collapsed) is what the console stored (r5-2)
+        self.assertTrue(Workspace.objects.filter(name='Riverside Gastro\u00e9nterologie').exists())
+
+    def test_the_specialty_rule_judges_the_stored_name(self):
+        made = self.ops.post('/ops/workspaces/new', {'name': 'NeurosurgeryTM Partners', 'category': str(self.ws.category.pk)})
+        self.assertEqual(made.status_code, 303)
+
