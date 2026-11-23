@@ -1,9 +1,9 @@
 {% extends "studio/ops_base.html" %}
 {% block title %}{{ encounter.title }}{% endblock %}
 {% block content %}
-<p><a href="/ops/">&larr; Every encounter</a></p>
+<a class="back" href="/ops/">&larr; Every encounter</a>
 <h1>{{ encounter.title }}</h1>
-<table>
+<section class="card"><div class="scroll"><table class="kv">
   <tbody>
     <tr><th>Workspace</th><td>{{ encounter.workspace.name }} <span class="muted mono">{{ encounter.workspace_id }}</span></td></tr>
     <tr><th>Encounter</th><td class="mono">{{ encounter.pk }}</td></tr>
@@ -22,7 +22,7 @@
       {% endif %}
     </td></tr>
   </tbody>
-</table>
+</table></div></section>
 
 {% if can_retry %}
 <form class="inline" method="post" action="/ops/encounters/{{ encounter.pk }}/retry">{% csrf_token %}
@@ -34,31 +34,33 @@
 {% endif %}
 
 {% for item in rounds %}
+<section class="card">
 <h2>Round {{ item.round.number }} · {{ item.round.trigger }} · {{ item.round.state }}{% if item.round.failure_kind %} · <span class="flag bad">{{ item.round.failure_kind }}</span>{% endif %}</h2>
-<table>
+<div class="scroll"><table class="kv">
   <tbody>
     {% if item.round.error %}<tr><th>Customer sentence</th><td>{{ item.round.error }}</td></tr>{% endif %}
     <tr><th>Queued / started / finished</th><td>{{ item.round.created_at|date:"Y-m-d H:i:s" }} / {{ item.round.started_at|date:"Y-m-d H:i:s"|default:"-" }} / {{ item.round.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</td></tr>
-    <tr><th>Cost (USD, estimated)</th><td class="mono">{{ item.cost }}{% if item.unpriced %} <span class="flag warn">{{ item.unpriced }} sent run(s) unpriced</span>{% endif %}</td></tr>
+    <tr><th>Cost (USD, estimated)</th><td class="mono">{{ item.cost }}{% if item.unpriced %} <span class="flag warn">{{ item.unpriced }} run(s) with no known cost yet</span>{% endif %}</td></tr>
     <tr><th>Context</th><td>date of service {{ item.service_date|default:"not given" }} · insurance {{ item.insurance|default:"unknown" }} · {{ item.answers|length }} answer(s)</td></tr>
     <tr><th>Revision</th><td class="mono">{{ item.round.revision_id }}</td></tr>
     {% if item.round.view_pdf_sha256 %}<tr><th>Converted PDF read</th><td class="mono">sha256 {{ item.round.view_pdf_sha256 }}</td></tr>{% endif %}
   </tbody>
-</table>
+</table></div>
 {% if item.answers %}
 <h3>Answers in this round's context</h3>
 <ol>{% for answer in item.answers %}<li><strong>Q:</strong> {{ answer.question }}<br><strong>A:</strong> {{ answer.answer }}</li>{% endfor %}</ol>
 {% endif %}
 
 <h3>Runs</h3>
+<div class="grid-2">
 {% for view in item.runs %}
-<div class="card">
+<div class="card run">
   <strong>{{ view.role }}</strong> · <span class="mono">{{ view.run.pk }}</span> · {{ view.run.state }}{% if view.run.sent %} · sent{% endif %}{% if view.run.http_status %} · HTTP {{ view.run.http_status }}{% endif %}{% if view.fallback %} · <span class="flag warn">served by a fallback</span>{% endif %}
-  <div class="scroll"><table>
+  <div class="scroll"><table class="kv">
     <tbody>
       <tr><th>Model requested / returned</th><td class="mono">{{ view.run.requested_model }} / {{ view.run.returned_model|default:"-" }}</td></tr>
       <tr><th>Tokens</th><td class="mono">input {{ view.tokens.input_tokens|default:"-" }} · output {{ view.tokens.output_tokens|default:"-" }} · cache write {{ view.tokens.cache_creation_input_tokens|default:"-" }} · cache read {{ view.tokens.cache_read_input_tokens|default:"-" }}{% if view.tokens.iterations %} · {{ view.tokens.iterations }} iteration(s){% endif %}</td></tr>
-      <tr><th>Cost (USD, estimated)</th><td class="mono">{{ view.cost|default:"not priced" }} · worst case reserved {{ view.worst_usd|default:"-" }}{% if view.counted_input_tokens %} · input counted {{ view.counted_input_tokens }} tokens{% endif %}</td></tr>
+      <tr><th>Cost (USD, estimated)</th><td class="mono">{% if view.reserved_only %}nothing sent yet{% elif view.cost is not None %}{{ view.cost }}{% else %}not known yet{% endif %}{% if view.usage_priced %} · its stored usage prices at {{ view.usage_priced }}{% endif %} · worst case reserved {{ view.worst_usd|default:"-" }}{% if view.counted_input_tokens %} · input counted {{ view.counted_input_tokens }} tokens{% endif %}</td></tr>
       <tr><th>Latency</th><td class="mono">{% if view.run.latency_ms is not None %}{{ view.run.latency_ms }} ms{% else %}-{% endif %}</td></tr>
       <tr><th>Stop reason / failure</th><td class="mono">{{ view.stop_reason|default:"-" }} / {{ view.failure_kind|default:"-" }}{% if view.error_type %} ({{ view.error_type }}){% endif %}</td></tr>
       <tr><th>Request id / response id</th><td class="mono">{{ view.run.provider_request_id|default:"-" }} / {{ view.run.response_id|default:"-" }}</td></tr>
@@ -81,6 +83,7 @@
 {% empty %}
 <p class="muted">No run was recorded for this round.</p>
 {% endfor %}
+</div>
 
 <h3>Final codes</h3>
 {% if item.codes %}
@@ -121,11 +124,15 @@
 <details><summary>Citations by line</summary><pre>{{ item.citations }}</pre></details>
 <details><summary>The reader's final JSON</summary><pre>{{ item.reader_result }}</pre></details>
 <details><summary>The checker's final JSON</summary><pre>{{ item.checker_result }}</pre></details>
+</section>
 {% empty %}
+<section class="card">
 <h2>Rounds</h2>
 <p class="muted">No coding round: an earlier review. A member's Review again codes it with the current version.</p>
+</section>
 {% endfor %}
 
+<section class="card">
 <h2>Decisions</h2>
 {% if decisions %}
 <div class="scroll"><table>
@@ -140,7 +147,9 @@
   </tbody>
 </table></div>
 {% else %}<p class="muted">No decision recorded.</p>{% endif %}
+</section>
 
+<section class="card">
 <h2>Answers</h2>
 {% if answers %}
 <div class="scroll"><table>
@@ -152,7 +161,9 @@
   </tbody>
 </table></div>
 {% else %}<p class="muted">No answer given.</p>{% endif %}
+</section>
 
+<section class="card">
 <h2>Audit events</h2>
 <div class="scroll"><table>
   <thead><tr><th>At</th><th>Event</th><th>Actor</th><th>Data</th></tr></thead>
@@ -164,9 +175,12 @@
   {% endfor %}
   </tbody>
 </table></div>
+</section>
 
 {% if holds %}
+<section class="card hold">
 <h2>Standing holds</h2>
 <p>{{ holds|length }} hold(s) stand: no coding request is sent until they are released on <a href="/ops/">the console's first page</a>.</p>
+</section>
 {% endif %}
 {% endblock %}

@@ -65,7 +65,7 @@ Django 5.2 on PostgreSQL 17, gunicorn behind the host's nginx, one worker proces
 | `studio/exports.py` | the customer exports (5.8) |
 | `studio/physician_report.py`, `studio/physician_pdf.py`, `studio/report_fonts/` | the physician PDF report (5.8): its words, its drawing, its fonts |
 | `studio/customer.py`, `studio/api.py`, `studio/client_contract.py` | the customer JSON API ([`API.md`](API.md)) |
-| `studio/operator.py`, `templates/studio/ops_*.html` | the platform-operator console (5.9) |
+| `studio/operator.py`, `studio/console.py`, `templates/studio/ops_*.html`, `static/studio/fonts/` | the platform-operator console (5.9): its encounter pages, and its people, workspaces, spending and activity |
 | `studio/views.py`, `studio/access.py`, `studio/audit.py` | health, sign-in, the page shell, tenancy, security headers, the audit trail |
 | `studio/static/studio/`, `templates/studio/index.html` | the customer page ([`CORE-UX-DESIGN.md`](CORE-UX-DESIGN.md) 8) |
 | `studio/reference/` | CMS reference sources and passages (5.5) |
@@ -329,6 +329,29 @@ those both answers defined (read from the two stored answers, so every stored ro
 and the original with its sha256. Acts (POST, CSRF):
 reconcile an unknown run (a note of at least 12 characters), retry a failed round (not offered while a send of it awaits
 that reconcile), release the standing holds. Views are audited.
+
+The console's controls (owner direction 2026-11-22, DECISIONS D395; `studio/console.py`), behind the same gate and in
+the console's design (the design tokens of 2026-11-22; Manrope and IBM Plex Mono served from `static/studio/fonts/`,
+byte-identical copies of the report's vendored fonts):
+- People (`/ops/people`): every membership with its role, access and last sign-in; the operators (read-only); acts to add
+  a person to one workspace (one login, one workspace), reset a password, change a membership's role and turn the
+  account's access off or on (`is_active`: sign-in refused, open sessions end). A new or reset password is generated
+  (`secrets`, the site's password validators), stored as its hash and shown once in the POST's own answer - never in a
+  URL, a redirect, a log or an audit row. No act changes an operator's account or records or ends a grant; nothing is
+  deleted.
+- Workspaces (`/ops/workspaces`): each with its specialty, people and documents; a new one for an existing category,
+  its name stored exactly as typed in Latin letters (the Western European ones: Latin-1's, with Œ, Š, Ž, Ÿ and Welsh Ŵ,
+  Ŷ), digits, single spaces and a few marks, and compared with case, accents, modifier letters and punctuation aside
+  (`console.name_reading`): it may read alike no other workspace and no other specialty. Names in other scripts are refused (provisioning can still make such a workspace), and
+  letters a font draws alike (I, l and 1; O and 0) are compared as written. A workspace's page lists its people with
+  the same acts.
+- Spending (`/ops/spending`): sent coding runs priced by `jobs.run_cost` (the console's own figures) by UTC day,
+  workspace and document; an unpriced run is counted apart with its reserved worst case, never as zero.
+- Activity (`/ops/activity`): every audit event in plain words, newest first, filtered by workspace and kind; every
+  sign-in attempt under Sign-ins.
+Every act is audited in the workspace it concerns (`operator.member_added`, `operator.role_changed`,
+`operator.password_reset`, `operator.access_off`, `operator.access_on`, `operator.workspace_created`); those rows name
+no encounter, so the customer's activity never shows them.
 
 ### 5.10 Display hygiene
 

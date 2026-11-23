@@ -105,8 +105,11 @@ const UNSCANNED_HEADERS = new Set(['set-cookie', 'date', 'etag', 'last-modified'
   'content-security-policy-report-only', 'strict-transport-security', 'permissions-policy', 'report-to', 'nel', 'expires',
   'cache-control', 'vary', 'connection', 'keep-alive', 'transfer-encoding', 'content-encoding', 'accept-ranges', 'age',
   'content-disposition', 'x-frame-options', 'referrer-policy', 'cross-origin-opener-policy', 'x-content-type-options']);
-const OPS_GET_PATHS = id => ['/ops/', '/ops/encounters/', `/ops/encounters/${id}`];
-const OPS_POST_PATHS = id => [`/ops/encounters/${id}/retry`, `/ops/encounters/${id}/reconcile`, `/ops/holds/${id}/release`];
+// The console's controls (studio.console, owner direction 2026-11-22, D395) are probed too: 404 to the customer as well.
+const OPS_GET_PATHS = id => ['/ops/', '/ops/encounters/', `/ops/encounters/${id}`, '/ops/people', '/ops/workspaces',
+  `/ops/workspaces/${id}`, '/ops/spending', '/ops/activity', '/ops/activity/sign-ins'];
+const OPS_POST_PATHS = id => [`/ops/encounters/${id}/retry`, `/ops/encounters/${id}/reconcile`, `/ops/holds/${id}/release`,
+  '/ops/people/add', `/ops/people/${id}/role`, `/ops/people/${id}/password`, `/ops/people/${id}/access`, '/ops/workspaces/new'];
 const DENYLIST_FILE = path.join(__dirname, 'verification', 'customer-denylist.json');
 // The customer contract (BUILD-SPEC section 6): read by ops/scan_customer.py, the Django suite and this walk, so a key
 // the server adds, drops or retypes fails all three until the file is consciously changed.
@@ -2879,6 +2882,24 @@ async function probeOps(page, ctx, operator, anonymous, enc) {
     const nobody = await anonymous.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
     probes.push({ method: 'GET', path: where.replace(enc.id, '<id>'), customer: customer.status(), anonymous: nobody.status() });
   }
+  // The member's own workspace and account, by their real ids (GET only: a broken gate still changes nothing): a 404 here
+  // is the gate's, never a missing record's - a workspace page or a person's act behind no gate would answer 200 or 405
+  // (refutation r1, gate-2).
+  const mine = await page.request.get(`${ctx.base}/api/session`, { headers: { Accept: 'application/json', ...CLIENT_HEADERS }, maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+  const session = await mine.json().catch(() => null);
+  const own = { workspace: session && session.workspace && session.workspace.id, user: session && session.user && session.user.id };
+  const realPaths = [];
+  if (typeof own.workspace === 'string' && /^[0-9a-f-]{36}$/.test(own.workspace)) realPaths.push([`/ops/workspaces/${own.workspace}`, '/ops/workspaces/<own workspace>']);
+  if (typeof own.user === 'string' && /^[0-9a-f-]{36}$/.test(own.user)) {
+    for (const act of ['role', 'password', 'access']) realPaths.push([`/ops/people/${own.user}/${act}`, `/ops/people/<own account>/${act}`]);
+  }
+  for (const [where, shown] of realPaths) {
+    const customer = await page.request.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+    const nobody = await anonymous.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+    probes.push({ method: 'GET', path: shown, customer: customer.status(), anonymous: nobody.status() });
+  }
+  // the own-id probes must have run: a session read that failed would drop them silently (refutation r3, r3-10)
+  const ownIds = { session: mine.status(), probed: realPaths.length };
   for (const where of OPS_POST_PATHS(fake)) {
     const customer = await page.request.post(`${ctx.base}${where}`, { form: { note: 'walk probe of the operator gate' }, maxRedirects: 0,
       timeout: UI_TIMEOUT_MS, headers: { 'X-CSRFToken': token, Origin: ctx.base, Referer: `${ctx.base}/` } });
@@ -2886,7 +2907,7 @@ async function probeOps(page, ctx, operator, anonymous, enc) {
   }
   const view = await operator.request.get(`${ctx.base}/ops/encounters/${enc.id}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
   const html = await view.text();
-  return { probes, operator: { status: view.status(), names: html.includes(enc.id) || html.includes(enc.title || '\u0000') } };
+  return { probes, ownIds, operator: { status: view.status(), names: html.includes(enc.id) || html.includes(enc.title || '\u0000') } };
 }
 
 function opsChecks(found) {
@@ -2897,6 +2918,9 @@ function opsChecks(found) {
     check('ops.anonymous_not_200', anonymous.length === 0, anonymous.length ? `answered 200 to nobody signed in: ${anonymous.join('; ')}` : 'no /ops/ path answers 200 to nobody signed in'),
     check('ops.operator_view', found.operator.status === 200 && found.operator.names,
       `GET /ops/encounters/<id> answered the operator ${found.operator.status}${found.operator.names ? ', naming the encounter' : ', not naming the encounter'}`),
+    check('ops.own_ids_probed', !!found.ownIds && found.ownIds.session === 200 && found.ownIds.probed === 4,
+      found.ownIds ? `the member's session answered ${found.ownIds.session}; ${found.ownIds.probed} of 4 probes by the member's own workspace and account ids ran`
+        : 'the probes by the member\'s own ids were not made'),
   ];
 }
 

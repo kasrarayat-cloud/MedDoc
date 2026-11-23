@@ -1,0 +1,34 @@
+{# The add-a-person form (POST /ops/people/add): a fixed workspace (its page) or a choice of every workspace (People). #}
+<section class="card" aria-labelledby="add-title">
+  <h2 id="add-title">Add a person</h2>
+  <p class="muted">They sign in with this username and a password the site makes and shows you once. Give it to them yourself: CPT Studio sends no email. One login opens one workspace.</p>
+  <form method="post" action="/ops/people/add">{% csrf_token %}
+    <div class="fields">
+      {% if workspace %}
+        <input type="hidden" name="workspace" value="{{ workspace.pk }}">
+        <input type="hidden" name="back" value="{{ workspace.pk }}">
+      {% else %}
+        <label>Workspace
+          <select name="workspace" required>
+            <option value="">Choose a workspace</option>
+            {% for item in workspaces %}<option value="{{ item.pk }}">{{ item.name }} · {{ item.category.name }}</option>{% endfor %}
+          </select>
+        </label>
+      {% endif %}
+      <label>Username <span class="hint">3 to 40 lowercase letters, digits, dots, hyphens or underscores</span>
+        <input type="text" name="username" required maxlength="40" pattern="[a-z0-9][a-z0-9._\-]{2,39}" autocomplete="off" spellcheck="false" autocapitalize="none">
+      </label>
+      <label>Name <span class="hint">Optional, as the doctor app shows it, e.g. Dr. Maya Rivera</span>
+        <input type="text" name="name" maxlength="120" autocomplete="off">
+      </label>
+      <label>Role
+        <select name="role" required>
+          <option value="">Choose a role</option>
+          {% for value, label in roles %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <p class="muted">Owners and Reviewers can answer questions and approve or reject codes. Viewers can read and download only.</p>
+    <button type="submit">Add the person</button>
+  </form>
+</section>

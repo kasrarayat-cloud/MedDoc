@@ -44,7 +44,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect
 
-from . import audit, jobs, models, state
+from . import audit, jobs, models, spend, state
 from .fable import pricing
 from .fable import result as fable_result
 from .storage import OriginalCorrupted, read_original
@@ -188,12 +188,16 @@ def round_runs(round_):
 
 
 def runs_cost(runs):
-    """(the priced cost of ``runs`` as a string, how many could not be priced)."""
+    """(the known cost of ``runs`` as a string, how many have no known cost): studio.spend's reading, the Spending page's
+    own (refutation r2, figures-1) - a run still being sent, of unknown outcome or not priceable counts apart, a run that
+    sent nothing, was cancelled or was refused before answering costs nothing, and a run only reserved is not counted."""
     total, unpriced = Decimal(0), 0
     for run in runs:
-        cost = jobs.run_cost(run)
+        if run.state == models.ProviderRun.RESERVED and not run.sent:
+            continue
+        cost, _worst = spend.run_spend(run)
         if cost is None:
-            unpriced += int(bool(run.sent))
+            unpriced += 1
         else:
             total += cost
     return pricing.usd(total), unpriced
@@ -218,11 +222,19 @@ def _tokens(usage) -> dict:
 
 
 def run_view(run) -> dict:
+    """A run's card. Its cost is studio.spend's reading, its round's and the Spending page's own (refutation r3, r3-1):
+    the known cost, or none yet; beside it, what its stored usage prices at whenever that differs (a run in flight or of
+    unknown outcome, a replay, a run that sent nothing), and the worst case it was reserved at."""
     scope = run.scope if isinstance(run.scope, dict) else {}
-    cost = jobs.run_cost(run)
+    known, _worst = spend.run_spend(run)
+    priced = jobs.run_cost(run)
     return {'run': run, 'role': {jobs.READER: 'reader', jobs.CHECKER: 'checker'}.get(run.purpose, run.purpose),
             'fallback': bool(scope.get('fallback')), 'tokens': _tokens(run.usage),
-            'cost': pricing.usd(cost) if cost is not None else None, 'worst_usd': scope.get('worst_usd'),
+            'cost': pricing.usd(known) if known is not None else None,
+            'usage_priced': pricing.usd(priced) if priced is not None and priced != known else None,
+            # a run only reserved has sent nothing yet: its round does not count it (runs_cost), nor does its card (r4-5)
+            'reserved_only': run.state == models.ProviderRun.RESERVED and not run.sent,
+            'worst_usd': scope.get('worst_usd'),
             'counted_input_tokens': scope.get('input_tokens_counted'), 'stop_reason': scope.get('stop_reason'),
             'failure_kind': scope.get('failure_kind'), 'error_type': scope.get('error_type'),
             'can_reconcile': run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is None,
@@ -279,7 +291,8 @@ def encounter_view(encounter, **extra) -> dict:
     # a send of the failed round that may have reached the vendor with no outcome known waits for the reconcile first:
     # jobs.retry refuses it until then (FIX-SPEC 4), so the retry is not offered
     waits = failed and jobs.awaiting_reconcile(latest)
-    return {'encounter': encounter, 'state_label': state.label(encounter.state) if latest else 'Earlier review',
+    return {'error': None, 'done': None,  # the notice slots, named so the page never looks a missing one up (r2, figures-4)
+            'encounter': encounter, 'state_label': state.label(encounter.state) if latest else 'Earlier review',
             'source': source, 'revision': revision,
             'pasted_chars': len(revision.pasted_text or '') if revision is not None and source is None else None,
             'rounds': [round_view(round_) for round_ in rounds],
@@ -288,7 +301,7 @@ def encounter_view(encounter, **extra) -> dict:
                               .select_related('reviewer', 'round').order_by('sequence')),
             'answers': list(models.CodingAnswer.objects.filter(encounter_id=encounter.pk)
                             .select_related('answered_by', 'round').order_by('answered_at', 'pk')),
-            'events': events, 'holds': holds_view(), 'release': settings.RELEASE_SHA,
+            'events': events, 'holds': holds_view(), 'release': settings.RELEASE_SHA, 'section': 'encounters',
             'note_chars': jobs.RECONCILE_NOTE_CHARS, **extra}
 
 
@@ -320,7 +333,8 @@ def _index_page(request, *, error=None, done=None, status=200):
                      'state_label': state.label(encounter.state) if latest is not None else 'Earlier review'})
     return render(request, 'studio/ops_index.html', {
         'rows': rows, 'total': models.Encounter.objects.count(), 'limit': LIST_LIMIT, 'holds': holds_view(),
-        'error': error, 'done': done, 'release': settings.RELEASE_SHA, 'mode': settings.CODING_MODE},
+        'error': error, 'done': done, 'release': settings.RELEASE_SHA, 'mode': settings.CODING_MODE,
+        'section': 'encounters'},
         status=status)
 
 

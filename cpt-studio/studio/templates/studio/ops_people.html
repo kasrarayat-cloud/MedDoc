@@ -1,0 +1,46 @@
+{% extends "studio/ops_base.html" %}
+{% block title %}People{% endblock %}
+{% block content %}
+<h1>People</h1>
+<p class="lead">Everyone who can sign in to a workspace, with their role and access. Turning access off stops sign-in and ends any open session; nothing is deleted, and it can be turned on again.</p>
+
+<h2>Workspace members</h2>
+{% include "studio/ops_people_rows.html" with back="" hide_workspace=False %}
+
+{% include "studio/ops_add_person.html" with workspace=None %}
+
+<section class="card" aria-labelledby="operators-title">
+  <h2 id="operators-title">Operators</h2>
+  <p class="muted">Operator accounts open this console. They are granted and ended on the server only, never here.</p>
+  {% if operators %}
+  <div class="scroll"><table>
+    <thead><tr><th>Person</th><th>Operator since</th><th>Access</th><th>Last sign-in</th></tr></thead>
+    <tbody>
+    {% for item in operators %}
+      <tr><td><strong>{{ item.person.label }}</strong><br><span class="muted mono">{{ item.person.username }}</span></td>
+          <td class="mono">{{ item.since|date:"Y-m-d H:i" }} UTC</td>
+          <td>{% if item.person.is_active %}<span class="chip ok">On</span>{% else %}<span class="chip bad">Off</span>{% endif %}</td>
+          <td class="mono">{% if item.person.last_login %}{{ item.person.last_login|date:"Y-m-d H:i" }} UTC{% else %}never{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">No operator account.</p>{% endif %}
+</section>
+
+{% if unplaced %}
+<section class="card" aria-labelledby="unplaced-title">
+  <h2 id="unplaced-title">Accounts with no workspace</h2>
+  <p class="muted">These accounts belong to no workspace and cannot open the doctor app. They are managed on the server.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Person</th><th>Access</th><th>Last sign-in</th></tr></thead>
+    <tbody>
+    {% for person in unplaced %}
+      <tr><td><strong>{{ person.label }}</strong><br><span class="muted mono">{{ person.username }}</span></td>
+          <td>{% if person.is_active %}<span class="chip ok">On</span>{% else %}<span class="chip bad">Off</span>{% endif %}</td>
+          <td class="mono">{% if person.last_login %}{{ person.last_login|date:"Y-m-d H:i" }} UTC{% else %}never{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+{% endblock %}
