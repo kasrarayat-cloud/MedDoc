@@ -4176,3 +4176,13 @@ then a redirect to https) is untouched, so that certificate keeps renewing for a
 rebuild's private admin on 127.0.0.1:9131 is not on admin.quillmd.com and is not touched. QuillMD's own documents
 reserved admin.quillmd.com for the rebuild's future administrator site; the owner's directions give the name to CPT
 Studio's console, and the owner was told the rebuild's admin will need another name.
+
+Release 2 (session 738699b2, 2026-11-23) - reconciling D395(c), which names three QuillMD checks to change in the
+same step as the move: scripts/check-cotenants.sh changes in release 2 (the installer's exact-host skip; admin's row
+accepting exactly its two deliberate states across the move - the 503 notice by its text, or the console's 302 to
+https://admin.quillmd.com/login/ - then narrowed to the second once the move is installed); scripts/verify-post-reboot.sh
+and tests/automated/monitoring/uptime-check.sh change admin's row to 302. rebuild/ops/owner_normal_origin.py is left as it
+is: it is a spent one-time act (its precondition, line 26 naming app.quillmd.com, no longer holds on the host, so it
+refuses before any write), and changing its expectation would change nothing that can run. The shared tree's copies of
+these scripts (/opt/meddoc-pro) follow main when QuillMD's deploy surface is next brought to it; until then they report
+admin.quillmd.com against the notice, which the release-2 declaration names.

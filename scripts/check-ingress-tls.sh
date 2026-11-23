@@ -43,8 +43,13 @@
 set -uo pipefail
 
 UPSTREAM="127.0.0.1:8443"
-# The hostnames nginx forwards on. Kept in step with the site blocks in
-# ./Caddyfile and `server_name` in /etc/nginx/sites-enabled/quillmd.
+# The hostnames Caddy holds a certificate for. Kept in step with the site blocks
+# in ./Caddyfile and `server_name` in /etc/nginx/sites-enabled/quillmd - with ONE
+# deliberate exception: from release 2 of the admin.quillmd.com move (D396),
+# nginx serves admin.quillmd.com's :443 from CPT Studio's vhost, not through
+# Caddy. Its Caddy block stays, dormant, as the way back (CPT Studio's
+# ingress-rollback returns the name to the quillmd vhost and so to Caddy), so its
+# handshake must keep working and admin.quillmd.com stays in this list.
 HOSTS=(quillmd.com www.quillmd.com app.quillmd.com admin.quillmd.com)
 BOGUS="this-name-is-not-configured.invalid"
 

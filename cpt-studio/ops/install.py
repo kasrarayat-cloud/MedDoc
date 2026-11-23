@@ -39,6 +39,7 @@ import threading
 import time
 import traceback
 import zipfile
+from inspect import getsource
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -47,6 +48,14 @@ APP = 'cpt-studio'
 SELF = Path(__file__).resolve()
 
 DOMAIN = 'cpt.quillmd.com'
+# The operator console's own host (owner direction 2026-11-23, DECISIONS D396; release 2 of the move): served by the same
+# server block, certificate and upstream as DOMAIN (deploy/nginx/cpt-quillmd-https.conf), so the blue/green switch moves
+# both together. Its :80 stays the quillmd vhost's (QuillMD's file), which answers its HTTP-01 challenge.
+ADMIN_HOST = 'admin.quillmd.com'
+# The lineage both names are served with: one webroot order for DOMAIN and ADMIN_HOST, never an --expand. DOMAIN's own
+# lineage (named DOMAIN) stays and keeps renewing, unused; the cert and verify phases count both as this installer's.
+CERT_NAME = 'cpt-studio'
+CPT_LINEAGES = (DOMAIN, CERT_NAME)
 PUBLIC_IPV4 = '147.189.172.8'
 WEB_PORT = 9150  # the web's port on a fresh host, where nothing is served through the vhost yet
 # Blue/green (ops/INSTALL.md, app): an install starts the incoming web on the other of these two loopback ports beside
@@ -214,7 +223,32 @@ NGINX_AVAILABLE = Path('/etc/nginx/sites-available')
 NGINX_ENABLED = Path('/etc/nginx/sites-enabled')
 VHOST_NAME = 'quillmd-cpt'
 VHOST_LINK_TARGET = f'{NGINX_AVAILABLE}/{VHOST_NAME}'
-QUILLMD_VHOST_SHA256 = 'e9aa049d9190713b60e8243b56e082c3fe59e068c205e0d595407f7d08a97638'
+# The quillmd vhost (/etc/nginx/sites-available/quillmd) is QuillMD's file. This installer writes it only in the ingress
+# and ingress-rollback phases, and only between these two states (ops/INSTALL.md, the coupling invariant):
+#   BEFORE  the file as QuillMD keeps it, admin.quillmd.com named on its :80 block (line 13) and its :443 block (line 26);
+#   AFTER   BEFORE with line 26 replaced whole: QUILLMD_ADMIN_LINE becomes QUILLMD_FREED_LINE (that full line once,
+#           asserted; line 13 - the :80 block that answers admin's HTTP-01 challenge for both lineages naming it -
+#           byte-identical, as every other line). Derivation (quillmd_bytes): AFTER was computed on 2026-11-23 from the
+#           live file, read only, whose sha256 was BEFORE, by exactly that replacement; quillmd_bytes asserts both shas
+#           before anything is written, either way.
+# The coupling invariant replaces the single pin and any "accept either": the quillmd vhost is BEFORE exactly when
+# quillmd-cpt names no admin host on 443, and AFTER exactly when it does; anything else refuses (coupling).
+QUILLMD_VHOST_BEFORE = 'e9aa049d9190713b60e8243b56e082c3fe59e068c205e0d595407f7d08a97638'
+QUILLMD_VHOST_AFTER = 'b3ab66023547790e861c3d12b39d8b268de8748ba6453f830194a4df6e4a3dbb'
+QUILLMD_ADMIN_LINE = b'    server_name quillmd.com www.quillmd.com admin.quillmd.com;'
+QUILLMD_FREED_LINE = b'    server_name quillmd.com www.quillmd.com;'
+QUILLMD_ADMIN_LINE_NUMBER = 26  # 1-based: the :443 block's server_name
+QUILLMD_ACME_LINE_NUMBER = 13   # 1-based: the :80 block's server_name, never changed
+# QuillMD's Caddy, which answers admin.quillmd.com's maintenance notice while the quillmd vhost names admin on 443 (its
+# dormant block after ingress; ingress-rollback reads it before it writes anything: refutation INGRESS-9).
+CADDY_ADDRESS = ('127.0.0.1', 8443)
+# QuillMD's deliberate answer on admin.quillmd.com before the move (its Caddyfile's admin block: 503 with this sentence).
+# ingress-rollback gives admin back to Caddy only when it answers a deliberate state - this notice, or a non-error
+# status - never an error (refutation R2 round 1, COTENANT-3).
+QUILLMD_NOTICE_MARKER = b'QuillMD administration is temporarily unavailable'
+# The hosts scripts/check-cotenants.sh is told not to judge (CPT_INSTALLER_SKIP_HOSTS, exact host names): the
+# installer's own, which it judges itself (admin_checks). Passed by cotenant_check alone, never read from an environment.
+COTENANT_SKIP_HOSTS = (ADMIN_HOST,)
 NGINX_TEST = ['sudo', '-n', '/usr/sbin/nginx', '-t']
 NGINX_RELOAD = ['sudo', '-n', '/usr/bin/systemctl', 'reload', 'nginx']
 TEMPLATES = {'http': f'{APP}/deploy/nginx/cpt-quillmd-http.conf', 'https': f'{APP}/deploy/nginx/cpt-quillmd-https.conf'}
@@ -290,10 +324,12 @@ def stamp() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
 
 
-def run(argv, *, input=None, timeout=60, check=True, quiet=False):
-    """Run a command with a fixed environment. ``quiet`` keeps its output out of errors."""
+def run(argv, *, input=None, timeout=60, check=True, quiet=False, env=None):
+    """Run a command with a fixed environment (``env``: variables the caller adds to COMMAND_ENV; the operator's own
+    environment never reaches it). ``quiet`` keeps its output out of errors."""
     try:
-        proc = subprocess.run(argv, input=input, capture_output=True, timeout=timeout, env=COMMAND_ENV)
+        proc = subprocess.run(argv, input=input, capture_output=True, timeout=timeout,
+                              env={**COMMAND_ENV, **(env or {})})
     except subprocess.TimeoutExpired:
         raise InstallError(f'{command_label(argv)} did not finish within {timeout} s.') from None
     if check and proc.returncode != 0:
@@ -1174,58 +1210,137 @@ else:
 print(json.dumps(R))
 '''
 
-# Writes only the quillmd-cpt file and link; asserts the quillmd vhost before and after.
-H_VHOST = '''
+# The root helper's vhost operations (H_VHOST, assembled below with the installer's own nginx reader). They write only
+# quillmd-cpt (its file and sites-enabled link) and - in the two-file operations alone - the quillmd vhost's file, to one
+# of its two pinned states and nothing else. Every operation holds the coupling invariant (ops/INSTALL.md): the quillmd
+# vhost is QUILLMD_VHOST_BEFORE exactly when quillmd-cpt names no admin host on 443, and QUILLMD_VHOST_AFTER exactly when
+# it does. A single-file operation (install, replace, remove) starts only from a coupled state and refuses, before
+# writing, a quillmd-cpt the quillmd vhost would not be coupled with. A two-file operation moves both files in the one
+# safe order (refutation INGRESS-4, INSTALLER-6): couple renames quillmd-cpt FIRST and the quillmd vhost SECOND,
+# decouple the quillmd vhost FIRST and quillmd-cpt SECOND, so the only state between the two renames is both files
+# naming the admin host - where nginx keeps the quillmd vhost's (it loads first) and warns 'conflicting server name' -
+# never a state in which nothing claims it; each accepts that state as its start, so an undo completes from wherever
+# its operation stopped. Afterwards both files are read again: the quillmd vhost against the digest read at the start
+# (a single-file operation; never a set membership) or the state written (a two-file operation).
+_VHOST_OPS = r'''
 A, E, name = '/available', '/enabled', P['name']
-f, l = os.path.join(A, name), os.path.join(E, name)
+f, l, q = os.path.join(A, name), os.path.join(E, name), os.path.join(A, 'quillmd')
+BEFORE, AFTER = P['quillmd_before'], P['quillmd_after']
 
 def digest(path):
     with open(path, 'rb') as h:
         return hashlib.sha256(h.read()).hexdigest()
 
-def state():
-    regular = os.path.isfile(f) and not os.path.islink(f)
-    return {'file_exists': os.path.lexists(f), 'file_sha256': digest(f) if regular else None,
-            'link_exists': os.path.lexists(l), 'link_target': os.readlink(l) if os.path.islink(l) else None}
+def regular(path):
+    return os.path.isfile(path) and not os.path.islink(path)
 
-def put(path, raw, exclusive):
-    target = path if exclusive else os.path.join(A, '.' + name + '.new')
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+def state():
+    return {'file_exists': os.path.lexists(f), 'file_sha256': digest(f) if regular(f) else None,
+            'link_exists': os.path.lexists(l), 'link_target': os.readlink(l) if os.path.islink(l) else None,
+            'quillmd_sha256': digest(q) if regular(q) else None}
+
+def admin_in(raw):
+    return names_host_on(raw.decode('utf-8', 'replace'), P['admin_host'])
+
+def admin_now():
+    # quillmd-cpt claims the admin host only as nginx loads it: no file or no sites-enabled link claims nothing; a link
+    # that is not the installer's own (another target, or not a link) cannot be told (check, round R2-1)
+    if not os.path.lexists(f) or not os.path.lexists(l):
+        return False
+    if not os.path.islink(l) or os.readlink(l) != P['link_target']:
+        return None
+    return admin_in(read(f)) if regular(f) else None
+
+def coupling(quillmd, admin):
+    if admin is None or quillmd not in (BEFORE, AFTER):
+        return 'uncoupled'
+    if quillmd == BEFORE:
+        return 'both' if admin else 'before'
+    return 'after' if admin else 'uncoupled'
+
+def write(path, raw):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
     try:
         os.fchown(fd, 0, 0)
         os.fchmod(fd, 0o644)
-        os.write(fd, raw)
+        view = memoryview(raw)
+        while view:
+            view = view[os.write(fd, view):]
         os.fsync(fd)
     finally:
         os.close(fd)
-    if not exclusive:
-        os.replace(target, path)
+
+def staged(path):
+    return os.path.join(A, '.' + os.path.basename(path) + '.new')
+
+def put(path, raw, exclusive):
+    if exclusive:
+        write(path, raw)
+    else:
+        write(staged(path), raw)
+        os.replace(staged(path), path)
 
 def sync(d):
     fd = os.open(d, os.O_RDONLY | os.O_DIRECTORY)
     os.fsync(fd)
     os.close(fd)
 
+def pair(steps):
+    # a staged file a stopped operation left (this helper's own name, in a root-only directory) is cleared first, so an
+    # undo completes from where its operation stopped; then each (path, raw) not already holding raw is staged and
+    # fsynced, and only then renamed, in the order given
+    cleared = []
+    for path, raw in steps:
+        if os.path.lexists(staged(path)) and regular(staged(path)):
+            os.unlink(staged(path))
+            cleared.append(os.path.basename(staged(path)))
+    if cleared:
+        sync(A)
+    todo = [(path, raw) for path, raw in steps
+            if not (regular(path) and digest(path) == hashlib.sha256(raw).hexdigest())]
+    made = []
+    try:
+        for path, raw in todo:
+            write(staged(path), raw)
+            made.append(staged(path))
+    except BaseException:
+        for path in made:
+            os.unlink(path)
+        raise
+    renamed = []
+    for path, raw in todo:
+        os.replace(staged(path), path)
+        sync(A)
+        renamed.append(os.path.basename(path))
+    return renamed, cleared
+
 s = state()
 op = P['op']
-if digest(os.path.join(A, 'quillmd')) != P['quillmd_sha256']:
-    R = {'error': 'the quillmd vhost sha256 is not the expected one'}
-elif op == 'state':
+start = coupling(s['quillmd_sha256'], admin_now())
+if op == 'state':
     R = {}
+elif op in ('install', 'replace', 'remove') and start not in ('before', 'after'):
+    R = {'error': 'the quillmd vhost and quillmd-cpt are not coupled (' + start + '); nothing was written'}
 elif op == 'install':
+    raw = base64.b64decode(P['content'])
     if s['file_exists'] or s['link_exists']:
         R = {'error': 'quillmd-cpt is already present'}
+    elif coupling(s['quillmd_sha256'], admin_in(raw)) != start:
+        R = {'error': 'the quillmd vhost would not be coupled with this quillmd-cpt; nothing was written'}
     else:
-        put(f, base64.b64decode(P['content']), True)
+        put(f, raw, True)
         os.symlink(P['link_target'], l)
         sync(A)
         sync(E)
         R = {'done': 'installed'}
 elif op == 'replace':
+    raw = base64.b64decode(P['content'])
     if s['file_sha256'] != P['expected_sha256'] or s['link_target'] != P['link_target']:
         R = {'error': 'quillmd-cpt is not in the expected state'}
+    elif coupling(s['quillmd_sha256'], admin_in(raw)) != start:
+        R = {'error': 'the quillmd vhost would not be coupled with this quillmd-cpt; nothing was written'}
     else:
-        put(f, base64.b64decode(P['content']), False)
+        put(f, raw, False)
         sync(A)
         R = {'done': 'replaced'}
 elif op == 'remove':
@@ -1233,6 +1348,9 @@ elif op == 'remove':
         R = {'error': 'quillmd-cpt holds content this installer did not write'}
     elif s['link_exists'] and s['link_target'] != P['link_target']:
         R = {'error': 'the quillmd-cpt link points somewhere else'}
+    elif start != 'before':
+        R = {'error': 'the quillmd vhost is the after state: without quillmd-cpt nothing would claim the admin host on '
+                      '443; nothing was removed'}
     else:
         if s['link_exists']:
             os.unlink(l)
@@ -1241,21 +1359,56 @@ elif op == 'remove':
             os.unlink(f)
             sync(A)
         R = {'done': 'removed'}
+elif op in ('couple', 'decouple'):
+    forward = op == 'couple'
+    raw, quillmd_raw = base64.b64decode(P['content']), base64.b64decode(P['quillmd_content'])
+    target_sha, target_q = hashlib.sha256(raw).hexdigest(), (AFTER if forward else BEFORE)
+    admin_stage = target_sha if forward else P['expected_sha256']
+    starts = [((BEFORE if forward else AFTER), P['expected_sha256']),  # the full start
+              (BEFORE, admin_stage),                                  # the only state between the two renames
+              (target_q, target_sha)]                                 # already written
+    if hashlib.sha256(quillmd_raw).hexdigest() != target_q:
+        R = {'error': 'the quillmd vhost content is not its pinned ' + ('after' if forward else 'before')
+                      + ' state; nothing was written'}
+    elif admin_in(raw) is not forward:
+        R = {'error': 'the quillmd-cpt content ' + ('does not name' if forward else 'names')
+                      + ' the admin host on 443; nothing was written'}
+    elif not regular(f) or s['link_target'] != P['link_target']:
+        R = {'error': 'quillmd-cpt is not the regular file and link this installer writes; nothing was written'}
+    elif (s['quillmd_sha256'], s['file_sha256']) not in starts:
+        R = {'error': 'the quillmd vhost and quillmd-cpt are in no state this write starts from (' + start
+                      + '); nothing was written'}
+    else:
+        order = [(f, raw), (q, quillmd_raw)] if forward else [(q, quillmd_raw), (f, raw)]
+        renamed, cleared = pair(order)
+        R = {'done': 'coupled' if forward else 'decoupled', 'renamed': renamed, 'cleared': cleared}
 else:
     R = {'error': 'unknown operation'}
-if 'error' not in R and digest(os.path.join(A, 'quillmd')) != P['quillmd_sha256']:
-    R = {'error': 'the quillmd vhost changed during the operation'}
+if 'error' not in R and op != 'state':
+    now = state()
+    end = coupling(now['quillmd_sha256'], admin_now())
+    if op in ('couple', 'decouple'):
+        if (now['quillmd_sha256'], now['file_sha256'], end) != (target_q, target_sha,
+                                                               'after' if forward else 'before'):
+            R = {'error': 'the two files did not read back as written'}
+    elif now['quillmd_sha256'] != s['quillmd_sha256'] or end != start:
+        R = {'error': 'the quillmd vhost changed during the operation'}
 R['state'] = state()
+R['coupling'] = coupling(R['state']['quillmd_sha256'], admin_now())
 print(json.dumps(R, sort_keys=True))
 '''
 
 # Host certbot through a chroot. No --agree-tos or e-mail: it cannot register a
-# new ACME account, so a missing account fails instead of creating one.
+# new ACME account, so a missing account fails instead of creating one. One order
+# for every name in P['domains'], all by the one webroot, under P['cert_name'];
+# never --expand (a new lineage is named, never an existing one widened).
 H_CERTBOT = '''
 os.chroot('/host')
 os.chdir('/')
-cmd = ['/usr/bin/certbot', 'certonly', '--webroot', '-w', '/var/www/certbot', '-d', P['domain'],
-       '--cert-name', P['domain'], '--non-interactive', '--keep-until-expiring', '--account', P['account']]
+cmd = ['/usr/bin/certbot', 'certonly', '--webroot', '-w', '/var/www/certbot']
+for domain in P['domains']:
+    cmd += ['-d', domain]
+cmd += ['--cert-name', P['cert_name'], '--non-interactive', '--keep-until-expiring', '--account', P['account']]
 r = subprocess.run(cmd, capture_output=True, timeout=P['timeout'],
                    env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C.UTF-8', 'HOME': '/root'})
 print(json.dumps({'returncode': r.returncode, 'output': (r.stdout + r.stderr).decode('utf-8', 'replace')[-6000:]}))
@@ -1554,6 +1707,115 @@ def parse_listen(args):
     return {'port': int(match.group(2)), 'ssl': 'ssl' in args[1:], 'connect': connect}
 
 
+def names_host_on(text, host, port=443):
+    """Whether a server block of ``text`` that listens on ``port`` names ``host`` (an exact server_name); None when its
+    braces do not balance, so it cannot be told."""
+    try:
+        blocks = parse_server_blocks(text)
+    except ValueError:
+        return None
+    return any(host in block['server_names'] and any((parse_listen(args) or {}).get('port') == port
+                                                     for args in block['listen'])
+               for block in blocks)
+
+
+# The root helper reads quillmd-cpt with the installer's own reader - the same source text, never a second copy, which
+# would drift from the first the day either is fixed.
+H_NGINX_READER = 'import re\n' + ''.join(getsource(function) for function in (
+    nginx_tokens, parse_server_blocks, parse_listen, names_host_on))
+H_VHOST = H_NGINX_READER + _VHOST_OPS
+
+
+def coupling(quillmd_sha256, names_admin) -> str:
+    """The coupling invariant (ops/INSTALL.md), as H_VHOST reads it: 'before' - the quillmd vhost is
+    QUILLMD_VHOST_BEFORE and quillmd-cpt names no ADMIN_HOST on 443 (``names_admin`` False; an absent quillmd-cpt names
+    none); 'after' - it is QUILLMD_VHOST_AFTER and quillmd-cpt names it; 'both' - BEFORE while quillmd-cpt names it, the
+    only state between the two renames of the two-file write (nginx keeps the quillmd vhost's admin and warns), never
+    left behind by a phase; 'uncoupled' - anything else: AFTER with no claim on admin's :443 (it would fall to a
+    co-tenant's default server), a quillmd vhost in neither pinned state, or a quillmd-cpt that cannot be read
+    (``names_admin`` None)."""
+    if names_admin is None or quillmd_sha256 not in (QUILLMD_VHOST_BEFORE, QUILLMD_VHOST_AFTER):
+        return 'uncoupled'
+    if quillmd_sha256 == QUILLMD_VHOST_BEFORE:
+        return 'both' if names_admin else 'before'
+    return 'after' if names_admin else 'uncoupled'
+
+
+def quillmd_vhost_bytes() -> bytes:
+    """The quillmd vhost as it is now (world-readable; read only - only the root helper writes it)."""
+    return (NGINX_AVAILABLE / 'quillmd').read_bytes()
+
+
+def quillmd_bytes(raw: bytes, target: str) -> bytes:
+    """The quillmd vhost's bytes in the pinned state ``target`` ('before' or 'after'), from ``raw``, its bytes in either
+    pinned state: unchanged when ``raw`` already is ``target``; else line QUILLMD_ADMIN_LINE_NUMBER replaced whole
+    (QUILLMD_ADMIN_LINE <-> QUILLMD_FREED_LINE) - that full line exactly once in ``raw``, at that line, every other line
+    (line QUILLMD_ACME_LINE_NUMBER, admin's HTTP-01 route, among them) byte-identical - and the result's sha256 the
+    pinned value of ``target``, all asserted before anything is written (refutation INGRESS-6: a substring edit would
+    take admin out of the :80 block first, which serves the challenge of every lineage naming it)."""
+    pinned = {'before': QUILLMD_VHOST_BEFORE, 'after': QUILLMD_VHOST_AFTER}
+    if sha256(raw) == pinned[target]:
+        return raw
+    if sha256(raw) != pinned['after' if target == 'before' else 'before']:
+        raise InstallError('The quillmd vhost is in neither pinned state (its sha256 is neither the before nor the after '
+                           'one); nothing was written.')
+    old, new = ((QUILLMD_ADMIN_LINE, QUILLMD_FREED_LINE) if target == 'after'
+                else (QUILLMD_FREED_LINE, QUILLMD_ADMIN_LINE))
+    lines = raw.split(b'\n')
+    found = [index for index, line in enumerate(lines) if line == old]
+    if found != [QUILLMD_ADMIN_LINE_NUMBER - 1]:
+        raise InstallError(f'The quillmd vhost carries its :443 server_name line {len(found)} time(s), not once at line '
+                           f'{QUILLMD_ADMIN_LINE_NUMBER}; nothing was written.')
+    edited = list(lines)
+    edited[found[0]] = new
+    changed = [index for index, (a, b) in enumerate(zip(lines, edited)) if a != b]
+    if (changed != found or len(edited) != len(lines)
+            or edited[QUILLMD_ACME_LINE_NUMBER - 1] != lines[QUILLMD_ACME_LINE_NUMBER - 1]):
+        raise InstallError('The quillmd vhost edit would change more than its :443 server_name line; nothing was written.')
+    result = b'\n'.join(edited)
+    if sha256(result) != pinned[target]:
+        raise InstallError(f'The quillmd vhost edit does not give the pinned {target} sha256; nothing was written.')
+    return result
+
+
+def read_coupling(quillmd_sha256=None, vhost=None) -> dict:
+    """{'quillmd_sha256', 'names_admin', 'coupling'} as the host files are now: the quillmd vhost by its sha256 (given,
+    as a phase's nginx_file_state read it, or read here), quillmd-cpt by its bytes (absent: it names nothing; there but
+    not a regular file: it cannot be told) as nginx loads it - without its sites-enabled link it names nothing, behind a
+    link that is not this installer's it cannot be told. ``vhost`` is vhost_state() when the caller has read it."""
+    if quillmd_sha256 is None:
+        try:
+            quillmd_sha256 = sha256(quillmd_vhost_bytes())
+        except OSError:
+            quillmd_sha256 = None
+    vhost = vhost if vhost is not None else vhost_state()
+    # as nginx loads it (check, round R2-1): no file or no sites-enabled link claims nothing; a link that is not this
+    # installer's own cannot be told
+    if not vhost['file_exists'] or not vhost['link_exists']:
+        admin = False
+    elif vhost['link_target'] != VHOST_LINK_TARGET:
+        admin = None
+    else:
+        live = live_vhost_bytes()
+        admin = None if live is None else names_host_on(live.decode('utf-8', 'replace'), ADMIN_HOST)
+    return {'quillmd_sha256': quillmd_sha256, 'names_admin': admin, 'coupling': coupling(quillmd_sha256, admin)}
+
+
+def coupling_problem(found, *, expected=('before', 'after'), remedy='') -> str:
+    """The refusal when read_coupling's ``found`` is not one of ``expected``, or ''."""
+    if found['coupling'] in expected:
+        return ''
+    said = {'before': 'the quillmd vhost names admin.quillmd.com on 443 and quillmd-cpt does not',
+            'after': 'quillmd-cpt names admin.quillmd.com on 443 and the quillmd vhost no longer does',
+            'both': 'both name admin.quillmd.com on 443 (a two-file write stopped half way; nginx keeps the quillmd '
+                    "vhost's)",
+            'uncoupled': 'the quillmd vhost and quillmd-cpt are not coupled (ops/INSTALL.md, the coupling invariant): '
+                         f'the quillmd vhost sha256 is {str(found["quillmd_sha256"])[:12]}, and quillmd-cpt '
+                         + {True: 'names', False: 'does not name', None: 'cannot be read for'}[found['names_admin']]
+                         + ' admin.quillmd.com on 443'}[found['coupling']]
+    return said + (f'; {remedy}' if remedy else '')
+
+
 def routing_targets(config_texts):
     """Every (name, port, tls, connect address) the enabled vhosts answer, plus unmatched probes."""
     targets = set()
@@ -1610,7 +1872,10 @@ def vhost_state() -> dict:
 
 
 def vhost_operation(op, **params) -> dict:
-    params.update(op=op, name=VHOST_NAME, quillmd_sha256=QUILLMD_VHOST_SHA256, link_target=VHOST_LINK_TARGET)
+    """One H_VHOST operation as root (state, install, replace, remove; couple and decouple, the two-file write and its
+    way back), under the coupling invariant it holds itself."""
+    params.update(op=op, name=VHOST_NAME, link_target=VHOST_LINK_TARGET, admin_host=ADMIN_HOST,
+                  quillmd_before=QUILLMD_VHOST_BEFORE, quillmd_after=QUILLMD_VHOST_AFTER)
     return run_helper(H_VHOST, params, mounts=[f'type=bind,src={NGINX_AVAILABLE},dst=/available',
                                                f'type=bind,src={NGINX_ENABLED},dst=/enabled'])
 
@@ -1663,7 +1928,8 @@ PROBE_HEADERS = ('location', 'content-type', 'strict-transport-security', 'x-con
 def probe(scheme, host, path='/', *, port=None, connect_ip=None, verify=True, method='GET', headers=None,
           timeout=5.0, keep_body=False):
     """One request with SNI/Host = ``host``; never follows redirects. Errors become data. ``keep_body`` also returns
-    the body read (at most 64 KiB + 1 byte) under 'body'."""
+    the body read (at most 64 KiB + 1 byte) under 'body'. A verified https probe also returns the DNS names of the
+    certificate served ('cert_names', sorted): which lineage answered."""
     port = port or (443 if scheme == 'https' else 80)
     target = connect_ip or host
     if scheme == 'https':
@@ -1680,6 +1946,9 @@ def probe(scheme, host, path='/', *, port=None, connect_ip=None, verify=True, me
                                                   'Connection': 'close', **(headers or {})})
         if scheme == 'https':
             result['cert_sha256'] = sha256(connection.sock.getpeercert(binary_form=True))
+            if verify:
+                result['cert_names'] = sorted(value for kind, value in (connection.sock.getpeercert() or {}).get(
+                    'subjectAltName', ()) if kind == 'DNS')
         response = connection.getresponse()
         body = b'' if method == 'HEAD' else response.read(65537)
         result['status'] = response.status
@@ -1708,8 +1977,16 @@ def routing_snapshot(targets) -> dict:
     return snapshot
 
 
-def routing_diff(before: dict, after: dict, ignore_host=DOMAIN):
-    keys = {key for key in set(before) | set(after) if f'://{ignore_host}:' not in key}
+def own_route(key) -> bool:
+    """Whether a routing_snapshot key is a route this installer answers and judges itself: every one of DOMAIN's, and
+    ADMIN_HOST's on 443 alone (admin_checks). ADMIN_HOST's :80 is the quillmd vhost's block - QuillMD's, which answers
+    admin's HTTP-01 challenge for every lineage naming it - so it stays a co-tenant route, watched like any other
+    (refutation INSTALLER-1, INGRESS-5)."""
+    return f'://{DOMAIN}:' in key or key.startswith(f'https://{ADMIN_HOST}:443@')
+
+
+def routing_diff(before: dict, after: dict):
+    keys = {key for key in set(before) | set(after) if not own_route(key)}
     return sorted(key for key in keys if before.get(key) != after.get(key))
 
 
@@ -1737,9 +2014,21 @@ def app_health() -> dict:
 
 
 def cotenant_check() -> dict:
-    proc = run(['bash', str(ROOT / 'scripts' / 'check-cotenants.sh')], check=False, timeout=120)
-    rows = re.findall(r'^\s+\S+\s+(\S+)\s+(\d{3})\s+(\d{3})', proc.stdout.decode('utf-8', 'replace'), re.M)
-    return {'returncode': proc.returncode, 'observed': {host: got for host, _want, got in rows}}
+    """scripts/check-cotenants.sh, told not to judge the installer's own hosts: CPT_INSTALLER_SKIP_HOSTS holds the exact
+    host names of COTENANT_SKIP_HOSTS - an installer constant passed here alone (run never hands the script the
+    operator's environment), so nobody's variable can silence a co-tenant (refutation INSTALLER-9). 'judged_skipped'
+    names a skipped host the script judged anyway (a row naming it with two codes): a checkout whose script does not
+    honour the skip, which preflight refuses."""
+    proc = run(['bash', str(ROOT / 'scripts' / 'check-cotenants.sh')], check=False, timeout=120,
+               env={'CPT_INSTALLER_SKIP_HOSTS': ' '.join(COTENANT_SKIP_HOSTS)})
+    # a judged row is a verdict mark, the host, its expectation in any shape (a code, alternatives, a redirect or body
+    # mark) and what it observed; a skipped row is marked otherwise and never read as judged (refutation R2 round 1,
+    # CHECKS-4: a row whose expectation was not a bare code was invisible here, so an unhonoured skip went unseen)
+    rows = re.findall(r'^\s+[\U0001F7E2\U0001F534\U0001F7E1]\s+(\S+)\s+(\S+)\s+(\S+)',
+                      proc.stdout.decode('utf-8', 'replace'), re.M)
+    observed = {host: got for host, _want, got in rows}
+    return {'returncode': proc.returncode, 'observed': observed, 'skipped': list(COTENANT_SKIP_HOSTS),
+            'judged_skipped': sorted(set(observed) & set(COTENANT_SKIP_HOSTS))}
 
 
 def cpt_probes() -> dict:
@@ -3718,7 +4007,9 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                     '(*-previous). To keep this revision, remove the parked pair by hand and run --phase app again '
                     'once its failure is fixed; to go back, start this pair again, clear them on its web '
                     '(ops/INSTALL.md, Reinstalling an older revision), run --phase rollback-app, then rename the '
-                    'parked pair back.' + said, details=left) from failure
+                    'parked pair back. While admin.quillmd.com is moved that way back is not open (rollback-app never '
+                    'removes the pair quillmd-cpt proxies to): keep this revision as above, then --phase switch-back '
+                    'returns the previous pair.' + said, details=left) from failure
             # Refutation p2, install2:1: the restored pair shows a stored state by its own labels - a response this
             # revision refused whole would read 'Provider request failed' - so it is handed its own derivation of those.
             try:
@@ -3852,8 +4143,9 @@ def replacement_plan(ctx) -> dict:
     if known is None:
         raise InstallError(f'quillmd-cpt is the HTTPS stage an earlier revision ({recorded[0][:12]}) wrote, which this '
                            'revision does not render for its port (deploy/nginx changed): the switch would change more '
-                           'than its upstream, so nothing was started or stopped. Republish the vhost under this '
-                           'revision first (ops/INSTALL.md, Reinstalling a new revision).')
+                           'than its upstream, so nothing was started or stopped. Publish this revision\'s stage first '
+                           '(ops/INSTALL.md, Reinstalling a new revision: --phase ingress over a stage that names no '
+                           'admin host, --phase https-vhost over one that does).')
     if not SHA_RE.fullmatch(str(facts['web']['revision'] or '')):
         raise InstallError(f'The running {SERVICES["web"]} carries no revision label, so its health cannot be told '
                            'apart from the incoming one\'s; nothing was started or stopped.')
@@ -3926,12 +4218,68 @@ def web_port_layout() -> dict:
 
 
 STATIC_REFERENCE_RE = re.compile(r'''(?:href|src)=["'](/static/[^"'?#\s]+)["']''')
+# The files only a revision that serves the admin host has (release 1 of D396 on): its urlconf and the middleware that
+# chooses it. A revision without them answers Host admin.quillmd.com with Django's 400 (DisallowedHost).
+ADMIN_HOST_FILES = (f'{APP}/cptstudio/urls_admin.py', f'{APP}/studio/hosts.py')
 
 
-def smoke_web(port) -> dict:
+def serves_admin_host(revision) -> bool:
+    """Whether ``revision``'s web serves ADMIN_HOST: its tree holds ADMIN_HOST_FILES. The admin checks are revision-aware
+    (refutation INSTALLER-5, APP-1): such a web is judged on the answers only the admin urlconf gives; an older one -
+    after a switch-back to a revision before release 1, say - answers the admin host 400, which is recorded, never a
+    failure. A revision this checkout cannot read is refused, not taken for an older one: that answer would leave the
+    admin answers unjudged on the switch paths (check, round R2-3)."""
+    if not SHA_RE.fullmatch(str(revision)):
+        raise InstallError(f'Cannot tell whether {str(revision)[:40]!r} serves {ADMIN_HOST}: it is not a 40-character '
+                           'revision. Nothing was decided on it.')
+    if run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}^{{commit}}'], check=False, quiet=True).returncode:
+        raise InstallError(f'Cannot tell whether {revision[:12]} serves {ADMIN_HOST}: this checkout cannot read that '
+                           'revision. Fetch it into the act checkout, then rerun. Nothing was decided on it.')
+    return all(run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{revision}:{path}'], check=False,
+                   quiet=True).returncode == 0 for path in ADMIN_HOST_FILES)
+
+
+def admin_answers(fetch) -> tuple:
+    """(problems, record): the answers the admin urlconf gives and the full urlconf does not (refutation APP-2, APP-5,
+    APP-6), each fetched by ``fetch(path, method, keep_body)`` - one request naming ADMIN_HOST: /api/session 404 (the
+    full urlconf answers 401: the host was not routed); an anonymous GET and HEAD of / 302 to exactly /login/ (the full
+    urlconf: /login/?next=/; a method guard: 405); the operator sign-in 200 text/html naming static files by href or
+    src (STATIC_REFERENCE_RE, as smoke_web reads the doctors' sign-in), each answering 200."""
+    problems, record = [], {}
+    api = fetch('/api/session', 'GET', False)
+    record['api_session'] = api.get('status') or api.get('error')
+    if api.get('status') != 404:
+        problems.append(f'{ADMIN_HOST}/api/session answered {record["api_session"]}, not 404 (the admin host has no API)')
+    for method in ('GET', 'HEAD'):
+        home = fetch('/', method, False)
+        location = (home.get('headers') or {}).get('location')
+        record[f'{method.lower()}_root'] = {'status': home.get('status') or home.get('error'), 'location': location}
+        if home.get('status') != 302 or location != ['/login/']:
+            problems.append(f'an anonymous {method} of {ADMIN_HOST}/ answered {home.get("status") or home.get("error")} '
+                            f'to {location}, not 302 to exactly /login/')
+    login = fetch('/login/', 'GET', True)
+    content_type = ((login.get('headers') or {}).get('content-type') or [''])[0]
+    record['login'] = {'status': login.get('status') or login.get('error'), 'content_type': content_type, 'assets': {}}
+    if login.get('status') != 200 or not content_type.startswith('text/html'):
+        problems.append(f'{ADMIN_HOST}/login/ answered {record["login"]["status"]} {content_type}'.strip())
+    else:
+        paths = sorted(set(STATIC_REFERENCE_RE.findall((login.get('body') or b'').decode('utf-8', 'replace'))))
+        if not paths:
+            problems.append(f'the {ADMIN_HOST} sign-in page names no static file, so none could be checked')
+        for path in paths[:20]:
+            asset = fetch(path, 'GET', False)
+            record['login']['assets'][path] = asset.get('status') or asset.get('error')
+            if asset.get('status') != 200:
+                problems.append(f'{ADMIN_HOST}{path} answered {asset.get("status") or asset.get("error")}')
+    return problems, record
+
+
+def smoke_web(port, *, admin=False) -> dict:
     """Before the incoming web takes traffic: its sign-in page answers 200 text/html on 127.0.0.1:``port``, and every
     static file that page names (hashed names, from the web's own manifest) answers 200 from the same web. Read-only (a
-    GET of the sign-in page writes nothing). Refused when the page names no static file: nothing would be checked."""
+    GET of the sign-in page writes nothing). Refused when the page names no static file: nothing would be checked.
+    ``admin`` (serves_admin_host of the web's revision): the same web also gives the admin host's own answers
+    (admin_answers, Host admin.quillmd.com on the loopback port), before any switch routes the admin host to it."""
     headers = {'X-Forwarded-Proto': 'https'}
     login = probe('http', DOMAIN, '/login/', port=port, connect_ip='127.0.0.1', headers=headers, timeout=5,
                   keep_body=True)
@@ -3950,6 +4298,14 @@ def smoke_web(port) -> dict:
             record['assets'][path] = asset.get('status') or asset.get('error')
             if asset.get('status') != 200:
                 problems.append(f'{path} answered {asset.get("status") or asset.get("error")}')
+    if admin:
+        def fetch(path, method, keep_body):
+            return probe('http', ADMIN_HOST, path, port=port, connect_ip='127.0.0.1', headers=headers, method=method,
+                         timeout=5, keep_body=keep_body)
+        admin_problems, record['admin'] = admin_answers(fetch)
+        problems += admin_problems
+    else:
+        record['admin'] = 'not judged: this revision does not serve the admin host (it answers it 400)'
     if problems:
         raise InstallError('The incoming web did not serve its own pages: ' + '; '.join(problems) + '.',
                            details={'smoke': record})
@@ -4335,7 +4691,7 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
                                           **({'coding': coding} if coding else {})),
                input=env_bytes, quiet=True)
         started['web'] = wait_service('web', ctx.revision, image_id, name=INCOMING_WEB, port=idle)
-        record['smoke'] = smoke_web(idle)
+        record['smoke'] = smoke_web(idle, admin=serves_admin_host(ctx.revision))
         step('S2')
         parked['worker'] = park('worker')
         step('S3')
@@ -4890,11 +5246,18 @@ def coding_source_problems(paths) -> list:
 
 
 def phase_preflight(ctx) -> dict:
+    """The baseline every later phase compares against (ops/INSTALL.md, preflight). Since release 2 of the admin move it
+    takes either state of the coupling invariant - before the ingress, or after it (the act runs it again then, as the
+    baseline app and verify read) - and refuses any other; it also proves admin.quillmd.com's DNS and its HTTP-01 route
+    (the quillmd vhost's :80 block), and that scripts/check-cotenants.sh honours the installer's own-host skip."""
     problems, details = [], {'docker_server': docker_positive_control()}
     files = nginx_file_state()
     details['nginx_files'] = files
-    if files['available'].get('quillmd') != QUILLMD_VHOST_SHA256:
-        problems.append('the quillmd vhost sha256 is not the pinned one')
+    details['vhost'] = vhost_state()
+    details['coupling'] = read_coupling(files['available'].get('quillmd'), details['vhost'])
+    problem = coupling_problem(details['coupling'])
+    if problem:
+        problems.append(problem)
     test = nginx_test()
     details['nginx_test'] = {'ok': test['ok'], 'warnings': test['warnings'],
                              'log': ctx.log('nginx-t', test['output'].encode())}
@@ -4902,13 +5265,16 @@ def phase_preflight(ctx) -> dict:
         problems.append('sudo -n nginx -t did not pass')
     details['routing'] = routing_snapshot(routing_targets(enabled_config_texts()))
     details['cpt_before'] = cpt_probes()
-    details['vhost'] = vhost_state()
     details['app_health'] = app_health()
     if details['app_health']['status'] != 200 or not isinstance(details['app_health']['json'], dict):
         problems.append('app.quillmd.com /health/ did not answer 200 JSON')
     details['cotenants'] = cotenant_check()
     if details['cotenants']['returncode'] != 0:
         problems.append('scripts/check-cotenants.sh did not pass')
+    if details['cotenants']['judged_skipped']:
+        problems.append(f'scripts/check-cotenants.sh judged {", ".join(details["cotenants"]["judged_skipped"])}, which '
+                        'the installer told it to skip (CPT_INSTALLER_SKIP_HOSTS): this checkout\'s script does not '
+                        'honour the skip')
     details['containers'] = containers()
     details['volumes'] = volumes()
     details['networks'] = networks()
@@ -4921,14 +5287,17 @@ def phase_preflight(ctx) -> dict:
     details['foreign_app_uid_tasks'] = foreign_uid_tasks(APP_UID, own_service_ids())
     if details['foreign_app_uid_tasks']:
         problems.append(f'uid {APP_UID} already runs {details["foreign_app_uid_tasks"]} task(s) outside CPT Studio')
-    try:
-        infos = socket.getaddrinfo(DOMAIN, 443, type=socket.SOCK_STREAM)
-    except socket.gaierror:
-        infos = []
-    details['dns'] = {'a': sorted({info[4][0] for info in infos if info[0] == socket.AF_INET}),
-                      'aaaa': sorted({info[4][0] for info in infos if info[0] == socket.AF_INET6})}
-    if details['dns'] != {'a': [PUBLIC_IPV4], 'aaaa': []}:
-        problems.append(f'{DOMAIN} must resolve to A {PUBLIC_IPV4} only')
+    details['dns'] = {}
+    for host in (DOMAIN, ADMIN_HOST):
+        try:
+            infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        except socket.gaierror:
+            infos = []
+        found = {'a': sorted({info[4][0] for info in infos if info[0] == socket.AF_INET}),
+                 'aaaa': sorted({info[4][0] for info in infos if info[0] == socket.AF_INET6})}
+        details['dns'][host] = found
+        if found != {'a': [PUBLIC_IPV4], 'aaaa': []}:
+            problems.append(f'{host} must resolve to A {PUBLIC_IPV4} only')
     details['images'] = {ref: bool(inspect('image', ref)) for ref in (HELPER_IMAGE, POSTGRES_IMAGE)}
     if not all(details['images'].values()):
         problems.append('a pinned image (helper or postgres) is not present locally')
@@ -4955,6 +5324,10 @@ def phase_preflight(ctx) -> dict:
                                                       mounts=[acme])['removed']
     if not details['acme_webroot_writable']:
         problems.append('the ACME webroot probe could not be written and removed')
+    # admin.quillmd.com's HTTP-01 route - the quillmd vhost's :80 block, QuillMD's file - which every lineage naming
+    # admin renews through, the cpt-studio one included (ops/INSTALL.md, Known limits; refutation INGRESS-5)
+    details['admin_acme'] = acme_probe(ctx, 'preflight', ADMIN_HOST)
+    problems += acme_problems({ADMIN_HOST: details['admin_acme']})
     usage = shutil.disk_usage('/')
     meminfo = dict(line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines() if ':' in line)
     details['resources'] = {'root_free_gib': round(usage.free / 2 ** 30, 1),
@@ -5548,6 +5921,11 @@ def phase_app(ctx) -> dict:
     if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{ctx.revision}:{reference}'],
                          check=False).returncode:
         raise InstallError('--authorization-ref is not a file tracked at the revision.')
+    # the coupling as it is now, before the migration (refutation R2 round 1, WAYBACK-5: the newest successful preflight
+    # can be older than a half-written two-file write, which the root helper refused only at the switch)
+    problem = coupling_problem(read_coupling()) or unrecorded_ingress_problem(ctx)  # round 2, INTENT-1, GUARDS-3
+    if problem:
+        raise InstallError(f'{problem}; nothing was started.')
     image_id = installed_image(ctx)
     require_db()
     check_credential_files('disabled', [], coding=mode)
@@ -5646,6 +6024,9 @@ def phase_switch_back(ctx) -> dict:
     receipt of this revision written after its last successful switch-back to that pair, whatever each replaced and
     however it ended (that switch-back's own start when the receipt the pair is read from is older than it) - never
     across that switch-back and never the current containers' creation."""
+    problem = coupling_problem(read_coupling()) or unrecorded_ingress_problem(ctx)
+    if problem:
+        raise InstallError(f'{problem}; nothing was started or stopped.')
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
     modes = participant_modes(ctx.args)
     live = [name for name in PARTICIPANTS if modes[name] == 'live']
@@ -5689,12 +6070,18 @@ def phase_switch_back(ctx) -> dict:
     availability = services.get('availability') or {}
     note = (services.get('not_carried_back') or {}).get('note')
     named = pair_modes(mode, modes, interpreter, coding if coding != 'disabled' else None)
+    # refutation INSTALLER-5, INGRESS-8: a previous revision from before release 1 of D396 answers the admin host 400,
+    # which this revision's stage still routes to it - declared, never a failure, until ingress-rollback runs
+    admin = (None if serves_admin_host(prev_revision) else
+             f'{ADMIN_HOST} answers {prev_revision[:12]}\'s 400 (that revision does not serve the admin host) until '
+             '--phase ingress-rollback gives it back to the quillmd vhost')
     return {'image_id': image_id, 'previous': {'image': prev_image, 'revision': prev_revision},
             'provider_mode': mode, 'authorization_ref': reference, 'participants': modes,
-            'interpreter_mode': interpreter, 'coding_mode': coding, **services,
+            'interpreter_mode': interpreter, 'coding_mode': coding, **services, 'admin_host': admin,
             'summary': f'switched back to {prev_revision[:12]} ({named}) on '
                        f'{plan["idle"]}: {availability.get("samples", 0)} availability samples, '
-                       f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')}
+                       f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')
+                       + (f'; {admin}' if admin else '')}
 
 
 def switch_back_target(ctx, entry) -> tuple:
@@ -5881,7 +6268,7 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
                                           **({'coding': coding} if coding else {})),
                input=env_bytes, quiet=True)
         started['web'] = wait_service('web', prev_revision, prev_image, name=INCOMING_WEB, port=idle)
-        record['smoke'] = smoke_web(idle)
+        record['smoke'] = smoke_web(idle, admin=serves_admin_host(prev_revision))
         step('B3')
         parked['worker'] = park('worker')
         step('B4')
@@ -6340,8 +6727,11 @@ print(ANSWER + json.dumps({'accounts': found}))
 
 
 def operator_document(ctx, username, kind, password) -> dict:
-    """One operator account's login: top-level username and password (what the verification tools read)."""
-    return {'service': 'cpt-studio', 'url': f'https://{DOMAIN}/', 'operator_url': f'https://{DOMAIN}/ops/',
+    """One operator account's login: top-level username and password (what the verification tools read). The console's
+    address is the admin host's (D396; refutation INSTALLER-11); cpt.quillmd.com/ops/ is kept beside it while both
+    hosts serve the console."""
+    return {'service': 'cpt-studio', 'url': f'https://{DOMAIN}/', 'operator_url': f'https://{ADMIN_HOST}/ops/',
+            'operator_url_cpt': f'https://{DOMAIN}/ops/',
             'synthetic_only': True, 'revision': ctx.revision, 'created_at': utc_now(), 'username': username,
             'password': password, 'actor_kind': kind, 'access': 'platform operator: an operator grant, no workspace '
                                                                 'membership'}
@@ -6477,20 +6867,30 @@ def phase_operators(ctx) -> dict:
                        + '; granted and read back as operators with no membership'}
 
 
-def acme_probe(ctx, label) -> dict:
-    """Prove the ACME path for the domain is served by this host's nginx, then remove the probe."""
+def acme_probe(ctx, label, host=DOMAIN) -> dict:
+    """Prove the ACME path for ``host`` is served by this host's nginx from the shared webroot, then remove the probe.
+    For ADMIN_HOST that path is the quillmd vhost's :80 block - QuillMD's file, which this installer never changes
+    there (line QUILLMD_ACME_LINE_NUMBER) - and it answers the challenge of both lineages naming admin, QuillMD's and
+    the cpt-studio one (ops/INSTALL.md, Known limits; refutation INGRESS-5, INSTALLER-10)."""
     token, content = secrets.token_urlsafe(24), secrets.token_hex(16)
     mount = f'type=bind,src={ACME_CHALLENGE_DIR},dst=/acme'
     run_helper(H_ACME_WRITE, {'name': token, 'content': content}, mounts=[mount])
     try:
         def check():
-            result = probe('http', DOMAIN, f'/.well-known/acme-challenge/{token}', connect_ip='127.0.0.1')
+            result = probe('http', host, f'/.well-known/acme-challenge/{token}', connect_ip='127.0.0.1')
             served = result.get('status') == 200 and result.get('body_sha256') == sha256(content.encode())
             return served, {'status': result.get('status'), 'error': result.get('error')}
         passed, observations = poll(check, attempts=30, interval=0.25)
     finally:
         removed = run_helper(H_ACME_REMOVE, {'name': token, 'content': content}, mounts=[mount])
-    return {'passed': passed, 'observations': observations[-3:], 'probe_removed': removed['removed'], 'label': label}
+    return {'passed': passed, 'observations': observations[-3:], 'probe_removed': removed['removed'], 'label': label,
+            'host': host}
+
+
+def acme_problems(found) -> list:
+    """The refusals of acme_probe answers ({host: answer})."""
+    return [f'the ACME challenge path of {host} did not serve the probe (or it was not removed): renewal would fail'
+            for host, answer in found.items() if not (answer.get('passed') and answer.get('probe_removed'))]
 
 
 def ingress_checks(ctx, preflight) -> list:
@@ -6546,12 +6946,20 @@ def publish_vhost(ctx, apply, undo, verify, progress=None) -> dict:
 
 
 def phase_http_vhost(ctx) -> dict:
+    """The HTTP stage (a fresh host's first ingress step). It writes quillmd-cpt only while the quillmd vhost still
+    claims admin.quillmd.com's :443 (the before state): while it is the after state, quillmd-cpt is what claims it, and
+    this phase refuses - run --phase ingress-rollback first (refutation INSTALLER-1, INGRESS-3)."""
     preflight = require_receipt(ctx, 'preflight')
     conf = rendered_vhosts(ctx.revision)['http']
     state = vhost_state()
     if state['file_exists'] or state['link_exists']:
         if state['file_sha256'] != sha256(conf.encode()) or state['link_target'] != VHOST_LINK_TARGET:
-            raise InstallError('quillmd-cpt already exists and is not this HTTP stage; refusing.')
+            raise InstallError('quillmd-cpt already exists and is not this HTTP stage; refusing. While an HTTPS stage '
+                               "claims admin.quillmd.com's :443 (the after state), " + AFTER_STATE_REMEDY + '.')
+    found = read_coupling(vhost=state)
+    problem = coupling_problem(found, expected=('before',), remedy=AFTER_STATE_REMEDY)
+    if problem:
+        raise InstallError(f'{problem}; nothing was written.', details={'coupling': found})
 
     def apply():
         vhost_operation('install', content=base64.b64encode(conf.encode()).decode())
@@ -6572,42 +6980,80 @@ def phase_http_vhost(ctx) -> dict:
         return {'acme': acme, 'redirect': redirect}
     result = verify() if state['file_exists'] else publish_vhost(ctx, apply, undo, verify)
     return {**result, 'vhost_sha256': sha256(conf.encode()), 'already_installed': state['file_exists'],
-            'summary': 'HTTP stage live; ACME path proven'}
+            'coupling': found, 'summary': 'HTTP stage live; ACME path proven'}
+
+
+# The way back while quillmd-cpt claims admin.quillmd.com's :443 (the after state): a phase that would leave the quillmd
+# vhost the after state with no quillmd-cpt naming admin refuses and names it.
+AFTER_STATE_REMEDY = ('run --phase ingress-rollback first: it gives admin.quillmd.com back to the quillmd vhost and '
+                      'quillmd-cpt the stage the ingress replaced, in one act (ops/INSTALL.md, ingress-rollback)')
+
+
+def cert_stage(ctx) -> dict:
+    """What the cert phase stands on, read before certbot is asked for anything (refutation INGRESS-7, INSTALLER-3): on
+    a fresh host, this revision's http-vhost receipt and a stage this revision renders ('fresh'); on a served site, with
+    no http-vhost receipt of this revision, the stage the running web is served through ('served') - an HTTPS stage a
+    successful receipt here recorded, whichever revision wrote it, proxying to the port the running web publishes
+    (live_web_port). Without any receipt recording a stage it refuses before reading the host."""
+    fresh = latest_receipt(ctx.receipts, 'http-vhost', ctx.revision)
+    recorded = recorded_vhosts(ctx)
+    if fresh is None and not recorded:
+        raise InstallError(f'No successful --phase http-vhost receipt for this revision in {ctx.receipts}, and no '
+                           'receipt there records the stage a served site runs; refusing to request a certificate.')
+    current = vhost_state()['file_sha256']
+    renderings = vhost_renderings(ctx.revision)
+    if fresh is not None and current in renderings:
+        return {'site': 'fresh', 'vhost_sha256': current, 'kind': renderings[current]['kind']}
+    if current in recorded and recorded[current][1] == 'https':
+        return {'site': 'served', 'vhost_sha256': current, 'kind': 'https', 'port': live_web_port(),
+                'recorded_by': recorded[current][0]}
+    raise InstallError('quillmd-cpt is not a stage this installer wrote; refusing to request a certificate.')
 
 
 def phase_cert(ctx) -> dict:
-    require_receipt(ctx, 'http-vhost')
-    # Any stage this revision renders: the HTTP stage, or the HTTPS stage for either web port (blue/green).
-    if vhost_state()['file_sha256'] not in vhost_renderings(ctx.revision):
-        raise InstallError('quillmd-cpt is not a stage this installer wrote; refusing to request a certificate.')
-    infos = socket.getaddrinfo(DOMAIN, 80, type=socket.SOCK_STREAM)
-    if {info[4][0] for info in infos} != {PUBLIC_IPV4}:
-        raise InstallError(f'{DOMAIN} no longer resolves to {PUBLIC_IPV4} alone.')
+    """The cpt-studio lineage for both hosts the HTTPS stage serves, DOMAIN and ADMIN_HOST (D396 release 2): one certbot
+    run, webroot /var/www/certbot for both names - DOMAIN's HTTP-01 challenge answered by quillmd-cpt's :80 block,
+    ADMIN_HOST's by the quillmd vhost's (QuillMD's file, unchanged: ops/INSTALL.md, Known limits) - the one existing
+    ACME account, never --expand. Both challenge paths are proven first (acme_probe), and DNS for both names. DOMAIN's
+    own lineage stays and keeps renewing, unused; neither CPT lineage counts as another lineage (other_lineages)."""
+    stage = cert_stage(ctx)
+    problem = coupling_problem(read_coupling())  # refutation R2 round 1, WAYBACK-5
+    if problem:
+        raise InstallError(f'{problem}; no certificate was requested.')
+    for host in (DOMAIN, ADMIN_HOST):
+        infos = socket.getaddrinfo(host, 80, type=socket.SOCK_STREAM)
+        if {info[4][0] for info in infos} != {PUBLIC_IPV4}:
+            raise InstallError(f'{host} no longer resolves to {PUBLIC_IPV4} alone.')
     before = le_state()
     if len(before['accounts']) != 1:
         raise InstallError(f'Exactly one existing ACME account is required, found {len(before["accounts"])}; '
                            'this installer never registers one.')
+    acme = {host: acme_probe(ctx, 'cert', host) for host in (DOMAIN, ADMIN_HOST)}
+    failed = acme_problems(acme)
+    if failed:
+        raise InstallError('; '.join(failed) + '; no certificate was requested.', details={'acme': acme})
     mounts = [ROOT_MOUNT, 'type=tmpfs,dst=/host/tmp'] + [f'type=bind,src={path},dst=/host{path}' for path in LE_DIRS]
-    result = run_helper(H_CERTBOT, {'domain': DOMAIN, 'account': before['accounts'][0], 'timeout': 240},
+    result = run_helper(H_CERTBOT, {'domains': [DOMAIN, ADMIN_HOST], 'cert_name': CERT_NAME,
+                                    'account': before['accounts'][0], 'timeout': 240},
                         mounts=mounts, network='host', timeout=300)
     log = ctx.log('certbot', result['output'].encode())
     after = le_state()
-    lineage = after['live'].get(DOMAIN) or {}
+    lineage = after['live'].get(CERT_NAME) or {}
     problems = []
     if result['returncode']:
         problems.append(f'certbot exited {result["returncode"]}')
-    if not (lineage.get('fullchain.pem') and lineage.get('privkey.pem') and f'{DOMAIN}.conf' in after['renewal']):
-        problems.append('the lineage paths are not all present')
-    others_before = {name: digest for name, digest in before['renewal'].items() if name != f'{DOMAIN}.conf'}
-    others_after = {name: digest for name, digest in after['renewal'].items() if name != f'{DOMAIN}.conf'}
-    if others_before != others_after or set(before['live']) - {DOMAIN} != set(after['live']) - {DOMAIN}:
+    if not (lineage.get('fullchain.pem') and lineage.get('privkey.pem') and f'{CERT_NAME}.conf' in after['renewal']):
+        problems.append(f'the {CERT_NAME} lineage paths are not all present')
+    if other_lineages(before) != other_lineages(after):
         problems.append('another lineage changed')
     if after['accounts'] != before['accounts']:
         problems.append('the ACME account set changed')
     if problems:
         raise InstallError('; '.join(problems) + f'; see {log}.')
-    return {'lineage': lineage, 'renewal_conf': f'{DOMAIN}.conf', 'account_reused': True, 'certbot_log': log,
-            'summary': f'lineage {DOMAIN} present (paths only recorded)'}
+    return {'lineage': lineage, 'cert_name': CERT_NAME, 'domains': [DOMAIN, ADMIN_HOST],
+            'renewal_conf': f'{CERT_NAME}.conf', 'stage': stage, 'acme': acme, 'account_reused': True,
+            'certbot_log': log,
+            'summary': f'lineage {CERT_NAME} for {DOMAIN} and {ADMIN_HOST} present (paths only recorded)'}
 
 
 def public_health(revision) -> tuple:
@@ -6621,75 +7067,620 @@ def public_health(revision) -> tuple:
     return poll(check, attempts=30, interval=0.25)
 
 
+# The edge's policy headers (deploy/nginx/cpt-quillmd-https.conf), one copy each on every answer of either host.
+POLICY_HEADERS = (('strict-transport-security', 'max-age=31536000'), ('x-content-type-options', 'nosniff'),
+                  ('referrer-policy', 'same-origin'), ('x-robots-tag', 'noindex, nofollow'))
+ADMIN_CERT_NAMES = sorted((DOMAIN, ADMIN_HOST))  # the cpt-studio lineage's certificate names exactly these
+
+
+def admin_checks(revision) -> tuple:
+    """(problems, evidence): admin.quillmd.com's :443 judged positively through the public path (refutation
+    INSTALLER-1, INSTALLER-5, INGRESS-10, APP-2): first, polled (reloads are asynchronous), it is served with the
+    cpt-studio lineage's certificate - which names exactly the two hosts, so quillmd-cpt's block answered, never the
+    quillmd vhost's (the quillmd.com lineage) or a co-tenant's - with the edge's four policy headers once each. Then,
+    when ``revision``'s web serves the admin host (serves_admin_host: release 1 of D396 on), the answers only the admin
+    urlconf gives (admin_answers) and its /health/ for ``revision``; an older web answers the admin host 400, which is
+    recorded and never a problem (after a switch-back to a revision before release 1, until ingress-rollback)."""
+    def check():
+        found = probe('https', ADMIN_HOST, '/health/', timeout=3)
+        return found.get('cert_names') == ADMIN_CERT_NAMES, {
+            'status': found.get('status'), 'error': found.get('error'), 'cert_names': found.get('cert_names')}
+    served, observations = poll(check, attempts=30, interval=0.25)
+    edge = probe('https', ADMIN_HOST, '/health/', timeout=5)
+    problems = []
+    if not served or edge.get('cert_names') != ADMIN_CERT_NAMES:
+        problems.append(f'{ADMIN_HOST} was not served with the {CERT_NAME} certificate (it named '
+                        f'{edge.get("cert_names") or edge.get("error")})')
+    headers = edge.get('headers') or {}
+    for name, value in POLICY_HEADERS:
+        if headers.get(name) != [value]:
+            problems.append(f'{ADMIN_HOST}: {name} is not exactly one {value!r}')
+    evidence = {'observations': observations[-3:],
+                'edge': {key: edge.get(key) for key in ('status', 'error', 'cert_sha256', 'cert_names', 'headers')}}
+    if serves_admin_host(revision):
+        if not (edge.get('status') == 200 and health_ok(edge.get('json'), revision)):
+            problems.append(f'https://{ADMIN_HOST}/health/ did not serve revision {revision[:12]}')
+
+        def fetch(path, method, keep_body):
+            return probe('https', ADMIN_HOST, path, method=method, timeout=5, keep_body=keep_body)
+        answer_problems, evidence['answers'] = admin_answers(fetch)
+        problems += answer_problems
+    else:
+        evidence['answers'] = {'judged': False, 'status': edge.get('status'),
+                               'why': f'revision {str(revision)[:12]} does not serve the admin host (400 expected)'}
+    return problems, evidence
+
+
 def https_checks(ctx, revision=None) -> tuple:
-    """Through the public path: /health/ serves ``revision`` (this phase's revision unless given: a switch-back
-    expects the previous one), the four policy headers once each, and a mismatched SNI is closed."""
+    """Through the public path, both hosts of the HTTPS stage (ops/INSTALL.md, own-host checks): /health/ serves
+    ``revision`` (this phase's revision unless given: a switch-back expects the previous one) with the four policy
+    headers once each; admin_checks (revision-aware), polled until the reloaded configuration answers the admin host;
+    the two hosts served the same certificate; a request for either host on a connection opened for app.quillmd.com -
+    whose certificate also covers admin.quillmd.com, so a browser may reuse it - answered 421 Misdirected Request, never
+    the application (refutation INGRESS-1, INSTALLER-7: a 444 would end in a browser error page; a 421 makes it retry on
+    a fresh connection); and a request for either host on a connection opened for the other served (one certificate
+    covers both), the admin host's revision-aware."""
     expected = revision or ctx.revision
     passed, observations = public_health(expected)
+    admin_problems, admin = admin_checks(expected)
     final = probe('https', DOMAIN, '/health/', timeout=5)
     headers = final.get('headers', {})
     problems = [] if passed else [f'https://{DOMAIN}/health/ did not serve revision {expected[:12]}']
-    for name, value in (('strict-transport-security', 'max-age=31536000'), ('x-content-type-options', 'nosniff'),
-                        ('referrer-policy', 'same-origin'), ('x-robots-tag', 'noindex, nofollow')):
+    for name, value in POLICY_HEADERS:
         if headers.get(name) != [value]:
             problems.append(f'{name} is not exactly one {value!r}')
-    # nginx picks the server by Host, so SNI app.quillmd.com + Host cpt.quillmd.com reaches
-    # this vhost with the wrong SNI; its $ssl_server_name check must close it (444).
-    mismatch = probe('https', APP_HEALTH_HOST, '/health/', headers={'Host': DOMAIN}, timeout=5)
-    if 'error' not in mismatch:
-        problems.append('a request whose SNI is not the domain was answered instead of closed (444)')
-    return problems, {'observations': observations[-3:], 'final': final, 'sni_mismatch': mismatch}
+    problems += admin_problems
+    # by the names they carry, not their bytes: a renewal between the two probes changes the bytes of a right
+    # certificate (refutation R2 round 1, CERT-4); a wrong lineage still differs by its names
+    if admin['edge'].get('cert_names') != final.get('cert_names') or not final.get('cert_names'):
+        problems.append(f'{ADMIN_HOST} and {DOMAIN} were not served certificates naming the same hosts')
+    # nginx picks the server by Host, so SNI app.quillmd.com with Host cpt.quillmd.com (or admin.quillmd.com) reaches
+    # this vhost on another name's connection: its $ssl_server_name guard must answer 421.
+    misdirected = {host: probe('https', APP_HEALTH_HOST, '/health/', headers={'Host': host}, timeout=5)
+                   for host in (DOMAIN, ADMIN_HOST)}
+    for host, answer in misdirected.items():
+        if answer.get('status') != 421 or 'json' in answer:
+            problems.append(f'a request for {host} on a connection opened for {APP_HEALTH_HOST} was answered '
+                            f'{answer.get("status") or answer.get("error")}, not 421 Misdirected Request')
+    cross = {(sni, host): probe('https', sni, '/health/', headers={'Host': host}, timeout=5)
+             for sni, host in ((ADMIN_HOST, DOMAIN), (DOMAIN, ADMIN_HOST))}
+    serving = serves_admin_host(expected)
+    for (sni, host), answer in cross.items():
+        if host == ADMIN_HOST and not serving:
+            continue  # recorded: an older web answers the admin host 400
+        if not (answer.get('status') == 200 and health_ok(answer.get('json'), expected)):
+            problems.append(f'a request for {host} on a connection opened for {sni} was answered '
+                            f'{answer.get("status") or answer.get("error")}, not {expected[:12]}\'s /health/')
+    return problems, {'observations': observations[-3:], 'final': final, 'admin': admin,
+                      'sni_mismatch': {host: {key: answer.get(key) for key in ('status', 'error')}
+                                       for host, answer in misdirected.items()},
+                      'cross_name': {f'{sni} > {host}': {key: answer.get(key) for key in ('status', 'error')}
+                                     for (sni, host), answer in cross.items()}}
+
+
+def running_web() -> dict:
+    """The running cpt-studio-web this installer started: {'id', 'image', 'revision', 'port'}; refused otherwise."""
+    web = inspect('container', SERVICES['web'])
+    if web is None or not owned(web, 'web') or not (web.get('State') or {}).get('Running'):
+        raise InstallError(f'{SERVICES["web"]} is not a running CPT Studio web; nothing was written.')
+    return {'id': web.get('Id'), 'image': web.get('Image'), 'revision': labels_of(web).get(REVISION_LABEL),
+            'port': published_port(web)}
 
 
 def phase_https_vhost(ctx) -> dict:
+    """This revision's HTTPS stage for the port the running web publishes, written in place over the HTTPS stage an
+    earlier revision's phase wrote there: the republish of a deploy/nginx change (ops/INSTALL.md, Reinstalling a new
+    revision; refutation INSTALLER-1). Since release 2 of the admin move every HTTPS stage this installer renders names
+    admin.quillmd.com, so the stage it replaces must too: the quillmd vhost stays the after state (the coupling
+    invariant), and one file is replaced in one reload - both hosts served throughout, never a removal. The first such
+    stage - over a fresh host's HTTP stage, or over an earlier stage that names no admin host - moves admin's :443 off
+    the quillmd vhost, which --phase ingress alone does (both files in one act): this phase refuses it and names that
+    phase. Run with this revision's stage already live, it verifies and changes nothing."""
     preflight = require_receipt(ctx, 'preflight')
     require_receipt(ctx, 'cert')
+    problem = unrecorded_ingress_problem(ctx)  # round 2, INTENT-1: no stage moves under an unrecorded ingress
+    if problem:
+        raise InstallError(f'{problem}; nothing was written.')
     state = vhost_state()
-    if state['link_target'] != VHOST_LINK_TARGET or state['file_sha256'] not in vhost_renderings(ctx.revision):
-        raise InstallError('quillmd-cpt is not the HTTP stage this installer wrote; refusing.')
+    current = state['file_sha256']
+    renderings = vhost_renderings(ctx.revision)
+    recorded = recorded_vhosts(ctx).get(current)
+    if (state['link_target'] != VHOST_LINK_TARGET or current is None
+            or (current not in renderings and (recorded or (None, None))[1] != 'https')):
+        raise InstallError('quillmd-cpt is not a stage this installer wrote and no successful receipt here records; '
+                           'refusing.')
     # The HTTPS stage proxies to the port the running web publishes (it alternates with each blue/green install).
     port = serving_web_port()
     confs = rendered_vhosts(ctx.revision, port)
     http_sha, https_sha = sha256(confs['http'].encode()), sha256(confs['https'].encode())
-    if state['file_sha256'] not in (http_sha, https_sha):
+    if current == http_sha:
+        raise InstallError("quillmd-cpt is the HTTP stage: its first HTTPS stage moves admin.quillmd.com's :443 off the "
+                           'quillmd vhost, which --phase ingress does (both files in one act); run it instead. Nothing '
+                           'was written.')
+    if current in renderings and current != https_sha:
         raise InstallError(f'quillmd-cpt holds the HTTPS stage for another port than {port}, the one '
                            f'{SERVICES["web"]} publishes; refusing.')
-    lineage = le_state()['live'].get(DOMAIN) or {}
+    replaced = live = None
+    if current != https_sha:
+        live = live_vhost_bytes()
+        if live is None or sha256(live) != current:
+            raise InstallError('quillmd-cpt changed while it was being read; refusing.')
+        text = live.decode('utf-8', 'replace')
+        if proxied_port(text) != port:
+            raise InstallError(f'quillmd-cpt is an earlier HTTPS stage proxying to another port than {port}, the one '
+                               f'{SERVICES["web"]} publishes; refusing.')
+        if names_host_on(text, ADMIN_HOST) is not True:
+            raise InstallError('quillmd-cpt is an earlier HTTPS stage that names no admin host: --phase ingress moves '
+                               "admin.quillmd.com's :443 onto this revision's stage (both files in one act); run it "
+                               'instead. Nothing was written.')
+        replaced = {'sha256': current, 'recorded_by': recorded[0]}
+    found = read_coupling(vhost=state)
+    problem = coupling_problem(found, expected=('after',))
+    if problem:
+        raise InstallError(f'{problem}; nothing was written.', details={'coupling': found})
+    lineage = le_state()['live'].get(CERT_NAME) or {}
     if not (lineage.get('fullchain.pem') and lineage.get('privkey.pem')):
-        raise InstallError(f'The {DOMAIN} lineage is not present.')
+        raise InstallError(f'The {CERT_NAME} lineage is not present.')
+    web = running_web()
 
     def apply():
-        vhost_operation('replace', expected_sha256=http_sha,
-                        content=base64.b64encode(confs['https'].encode()).decode())
+        vhost_operation('replace', expected_sha256=current, content=base64.b64encode(confs['https'].encode()).decode())
 
     def undo():
         if vhost_state()['file_sha256'] == https_sha:
-            vhost_operation('replace', expected_sha256=https_sha,
-                            content=base64.b64encode(confs['http'].encode()).decode())
+            vhost_operation('replace', expected_sha256=https_sha, content=base64.b64encode(live).decode())
 
     def verify():
-        problems, evidence = https_checks(ctx)
+        problems, evidence = https_checks(ctx, web['revision'])
         redirect = probe('http', DOMAIN, '/', connect_ip='127.0.0.1')
         if redirect.get('status') != 301 or redirect.get('headers', {}).get('location') != [f'https://{DOMAIN}/']:
             problems.append(f'http://{DOMAIN}/ did not redirect to https')
-        acme = acme_probe(ctx, 'https-vhost')
-        if not acme['passed'] or not acme['probe_removed']:
-            problems.append('the ACME challenge path stopped serving (renewal would fail)')
+        acme = {host: acme_probe(ctx, 'https-vhost', host) for host in (DOMAIN, ADMIN_HOST)}
+        problems += acme_problems(acme)
         problems += ingress_checks(ctx, preflight)
         if problems:
             raise InstallError('; '.join(problems) + '.', details=evidence)
         return {**evidence, 'redirect': redirect, 'acme': acme}
-    already = state['file_sha256'] == https_sha
+    already = current == https_sha
     result = verify() if already else publish_vhost(ctx, apply, undo, verify)
     return {**result, 'vhost_sha256': https_sha, 'upstream_port': port, 'already_installed': already,
-            'summary': f'https://{DOMAIN}/ serves {ctx.revision[:12]}'}
+            'replaced': replaced, 'coupling': found,
+            'summary': f'https://{DOMAIN}/ and https://{ADMIN_HOST}/ served through {ctx.revision[:12]}\'s stage'}
+
+
+def write_intent(ctx, phase: str, record: dict) -> Path:
+    """A phase's write-ahead record (refutation R2 round 1, COTENANT-1, CERT-1, WAYBACK-2): what it is about to replace,
+    byte for byte, written (0600, fsynced) BEFORE anything changes, so a run killed between the change and its receipt
+    (SIGKILL, an OOM kill, a host reset, the door's ceiling) still leaves the way back on disk. Named intent-<phase>-*,
+    never matched by a receipt's glob."""
+    return write_private(ctx.receipts, f'intent-{phase}-{stamp()}.json',
+                         (json.dumps({'phase': f'{phase}-intent', **record}, indent=2, sort_keys=True) + '\n').encode())
+
+
+def unrecorded_ingress(ctx):
+    """(path, record) of this revision's newest ingress intent that no successful moved ingress receipt of this revision
+    was written after (refutation R2 rounds 1 and 2), or None. Only a recorded move resolves it: a failed receipt does not
+    (a completion refused before it reloaded writes one, and the move is still unrecorded). Whether it matters is read from
+    the files, not the receipts: only while the coupling is not the before state (unrecorded_ingress_problem; ingress's
+    completion and ingress-rollback check it so). A torn intent file is skipped: the intent is written and fsynced before
+    either file changes, so a run killed while writing it changed nothing (round 2, INTENT-7). Any stage: the stage may
+    have moved since (INTENT-1)."""
+    moved = latest_ingress_move(ctx)
+    for path in sorted(ctx.receipts.glob('intent-ingress-*.json'), reverse=True):
+        record = read_json_or_none(path)
+        if not (isinstance(record, dict) and record.get('revision') == ctx.revision):
+            continue
+        if moved is not None and written_after(moved[0], (path, record)) is not False:
+            return None  # the move was recorded after this intent (or the order cannot be told: a move is on record)
+        return path, record
+    return None
+
+
+def read_json_or_none(path):
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+
+
+def unrecorded_ingress_problem(ctx) -> str:
+    """'' unless an ingress of this revision changed the two files and its move is not recorded, the files not back in
+    the before state: then no phase may move the stage until ingress runs again and records the move (round 2,
+    INTENT-1, GUARDS-3)."""
+    pending = unrecorded_ingress(ctx)
+    if pending is None or read_coupling()['coupling'] == 'before':
+        return ''
+    return (f'an ingress of this revision changed the two files and stopped before it recorded the move '
+            f'({pending[0].name}): run --phase ingress again first; it completes and records the move')
+
+
+def latest_ingress_move(ctx, *, any_revision=False):
+    """(path, record) of the newest successful ingress receipt of this revision - of any revision with
+    ``any_revision`` - that moved admin.quillmd.com's :443 (its 'moved'; a rerun on the after state moves nothing), or
+    None."""
+    for path in sorted(ctx.receipts.glob('ingress-*.json'), reverse=True):
+        record = json.loads(path.read_text(encoding='utf-8'))
+        if (isinstance(record, dict) and record.get('phase') == 'ingress' and record.get('ok')
+                and (any_revision or record.get('revision') == ctx.revision)
+                and (record.get('details') or {}).get('moved') is True):
+            return path, record
+    return None
+
+
+def loopback_admin_answers(port) -> tuple:
+    """admin_answers of the web on 127.0.0.1:``port`` (Host admin.quillmd.com, as nginx will send it)."""
+    def fetch(path, method, keep_body):
+        return probe('http', ADMIN_HOST, path, port=port, connect_ip='127.0.0.1', method=method,
+                     headers={'X-Forwarded-Proto': 'https'}, timeout=5, keep_body=keep_body)
+    return admin_answers(fetch)
+
+
+def read_back_problems(quillmd, vhost) -> list:
+    """Both files read again after a two-file write (nginx_file_state): the quillmd vhost's sha256 ``quillmd`` and
+    quillmd-cpt's ``vhost``."""
+    available = nginx_file_state()['available']
+    found = {'quillmd': available.get('quillmd'), VHOST_NAME: available.get(VHOST_NAME)}
+    if found == {'quillmd': quillmd, VHOST_NAME: vhost}:
+        return []
+    return [f'the two files did not read back as written (quillmd {str(found["quillmd"])[:12]}, quillmd-cpt '
+            f'{str(found[VHOST_NAME])[:12]})']
+
+
+def phase_ingress(ctx) -> dict:
+    """admin.quillmd.com's :443 moved from the quillmd vhost onto quillmd-cpt in one act (D396 release 2; ops/INSTALL.md,
+    ingress): this revision's HTTPS stage - both hosts in one server block - for the port the running web publishes,
+    and the quillmd vhost without admin on its :443 line (quillmd_bytes), written by one root-helper operation in the
+    safe order (couple: quillmd-cpt first, the quillmd vhost second), validated together (nginx -t, no new warning),
+    reloaded once and verified; on any failure both are written back, the quillmd vhost first (decouple, which accepts
+    each partial state). It starts only from the before state of the coupling invariant, quillmd-cpt being the stage
+    the running web is served through - an HTTPS stage a successful receipt here recorded (or this revision renders),
+    proxying to the port that web publishes, or this revision's HTTP stage on a fresh host - and only when that web
+    already answers the admin host (release 1 of D396 on: serves_admin_host, then its own answers on the loopback port),
+    so the admin host is answered by the application from the reload on: no window. The receipt keeps the stage it
+    replaced, byte for byte, for ingress-rollback. On the after state with this revision's stage for the live port
+    already there it verifies and changes nothing."""
+    preflight = require_receipt(ctx, 'preflight')
+    require_receipt(ctx, 'cert')
+    state = vhost_state()
+    if not state['file_exists'] or state['file_sha256'] is None or state['link_target'] != VHOST_LINK_TARGET:
+        raise InstallError('quillmd-cpt is not the regular file and sites-enabled link this installer writes; nothing '
+                           'was written.')
+    current = state['file_sha256']
+    live = live_vhost_bytes()
+    if live is None or sha256(live) != current:
+        raise InstallError('quillmd-cpt changed while it was being read; nothing was written.')
+    renderings = vhost_renderings(ctx.revision)
+    known, recorded = renderings.get(current), recorded_vhosts(ctx).get(current)
+    web = running_web()
+    if known is not None and known['kind'] == 'http':
+        if latest_receipt(ctx.receipts, 'http-vhost', ctx.revision) is None:
+            raise InstallError(f'No successful --phase http-vhost receipt for this revision in {ctx.receipts}.')
+        if web['port'] is None:
+            raise InstallError(f'{SERVICES["web"]} publishes neither web port; nothing was written.')
+        port, source = web['port'], {'kind': 'http', 'port': None, 'recorded_by': ctx.revision}
+    elif (known or {}).get('kind') == 'https' or (recorded or (None, None))[1] == 'https':
+        port = live_web_port()  # the stage's upstream, which the running web must publish
+        source = {'kind': 'https', 'port': port, 'recorded_by': (recorded or (ctx.revision,))[0]}
+    else:
+        raise InstallError('quillmd-cpt holds content this installer did not write and no successful receipt here '
+                           'records; nothing was written.')
+    target = rendered_vhosts(ctx.revision, port)['https'].encode()
+    target_sha = sha256(target)
+    found = read_coupling(vhost=state)
+    already = found['coupling'] == 'after' and current == target_sha
+    if not already:
+        problem = coupling_problem(found, expected=('before',))
+        if problem:
+            raise InstallError(f'{problem}; nothing was written.', details={'coupling': found})
+        if names_host_on(target.decode('utf-8'), ADMIN_HOST) is not True:
+            raise InstallError("This revision's HTTPS stage names no admin host on 443; nothing was written.")
+        if not serves_admin_host(web['revision']):
+            raise InstallError(f'The running web, {str(web["revision"])[:12]}, does not answer the admin host (release 1 '
+                               'of D396 and later do): install one with an ordinary blue/green app first, then rerun; '
+                               'nothing was written.')
+        answer_problems, answers = loopback_admin_answers(port)
+        if answer_problems:
+            raise InstallError(f'The running web on {port} does not answer the admin host yet: '
+                               + '; '.join(answer_problems) + '. Nothing was written.', details={'answers': answers})
+        lineage = le_state()['live'].get(CERT_NAME) or {}
+        if not (lineage.get('fullchain.pem') and lineage.get('privkey.pem')):
+            raise InstallError(f'The {CERT_NAME} lineage is not present (run --phase cert first); nothing was written.')
+        quillmd_before = quillmd_vhost_bytes()
+        quillmd_after = quillmd_bytes(quillmd_before, 'after')
+        if sha256(quillmd_before) != QUILLMD_VHOST_BEFORE:
+            raise InstallError('The quillmd vhost changed while it was being read; nothing was written.')
+        drifted = ingress_checks(ctx, preflight)
+        if drifted:
+            raise InstallError(baseline_problem(drifted, 'nothing was written'), details={'baseline': drifted})
+
+    def apply():
+        vhost_operation('couple', expected_sha256=current, content=base64.b64encode(target).decode(),
+                        quillmd_content=base64.b64encode(quillmd_after).decode())
+
+    def undo():
+        vhost_operation('decouple', expected_sha256=target_sha, content=base64.b64encode(live).decode(),
+                        quillmd_content=base64.b64encode(quillmd_before).decode())
+
+    def verify():
+        problems, evidence = https_checks(ctx, web['revision'])
+        acme = {host: acme_probe(ctx, 'ingress', host) for host in (DOMAIN, ADMIN_HOST)}
+        problems += acme_problems(acme)
+        redirect = probe('http', DOMAIN, '/', connect_ip='127.0.0.1')
+        if redirect.get('status') != 301 or redirect.get('headers', {}).get('location') != [f'https://{DOMAIN}/']:
+            problems.append(f'http://{DOMAIN}/ did not redirect to https')
+        problems += ingress_checks(ctx, preflight)
+        problems += read_back_problems(QUILLMD_VHOST_AFTER, target_sha)
+        if problems:
+            raise InstallError('; '.join(problems) + '.', details={**evidence, 'acme': acme})
+        return {**evidence, 'acme': acme, 'redirect': redirect}
+    quillmd_pins = {'before': QUILLMD_VHOST_BEFORE, 'after': QUILLMD_VHOST_AFTER, 'line': QUILLMD_ADMIN_LINE_NUMBER}
+    if already:
+        pending = unrecorded_ingress(ctx)
+        if pending is None:
+            return {**verify(), 'moved': False, 'already_installed': True, 'vhost_sha256': target_sha,
+                    'upstream_port': port, 'web': web, 'coupling': found,
+                    'summary': f'admin.quillmd.com already served through {ctx.revision[:12]}\'s stage for {port}; '
+                               'verified, nothing written'}
+        # an ingress of this revision wrote the two files and stopped before any receipt (refutation R2 rounds 1 and 2):
+        # completed exactly as the move itself runs - co-tenant routing checked first, nginx tested against the warnings
+        # the intent recorded before the write, reloaded and verified, written back to the intent's stage on any failure
+        intent = pending[1]
+        if intent.get('vhost_sha256') != target_sha:  # round 2, INTENT-1: the stage moved since (an app or a switch-back)
+            found_web = intent.get('web') or {}
+            raise InstallError(f'An ingress of this revision stopped before it recorded its move ({pending[0].name}), '
+                               'for a stage that is no longer live: the stage moved since. Switch back until '
+                               f'{str(found_web.get("revision"))[:12]} serves on {intent.get("upstream_port")} with this '
+                               'revision\'s stage for that port, then rerun --phase ingress. Nothing was written.',
+                               details={'intent': str(pending[0])})
+        saved = base64.b64decode(intent['from']['b64'])
+        if sha256(saved) != intent['from']['sha256'] or names_host_on(saved.decode('utf-8', 'replace'), ADMIN_HOST):
+            raise InstallError('The intent\'s saved stage is not the one it names (or names the admin host); nothing was '
+                               'written.', details={'intent': str(pending[0])})
+        drifted = ingress_checks(ctx, preflight)  # round 2, INTENT-4: before the reload, as the move checks before it
+        if drifted:
+            raise InstallError(baseline_problem(drifted, 'nothing was reloaded'), details={'baseline': drifted})
+        tested = nginx_test()
+        known = set(intent.get('nginx_warnings_before') or [])  # round 2, INTENT-9: the move's own baseline
+        added = sorted(set(tested['warnings']) - known)
+        if not tested['ok'] or added:
+            raise InstallError(f'nginx -t on the files an interrupted ingress left failed or added warnings {added}; '
+                               'nothing was reloaded.', details={'intent': pending[0].name})
+        quillmd_back = quillmd_bytes(quillmd_vhost_bytes(), 'before')
+
+        def recovery_undo():
+            vhost_operation('decouple', expected_sha256=target_sha, content=base64.b64encode(saved).decode(),
+                            quillmd_content=base64.b64encode(quillmd_back).decode())
+        result = publish_vhost(ctx, lambda: None, recovery_undo, verify)
+        return {**result, 'moved': True, 'recovered': True, 'already_installed': True, 'vhost_sha256': target_sha,
+                'upstream_port': port, 'from': intent['from'], 'quillmd': quillmd_pins,
+                'web': intent.get('web') or web, 'web_now': web,  # round 2, INTENT-6: the web the move found
+                'coupling': found, 'intent': pending[0].name,
+                'summary': f'an interrupted ingress ({pending[0].name}) completed: reloaded, verified and recorded; '
+                           f'admin.quillmd.com served through {ctx.revision[:12]}\'s stage for {port}'}
+    source_record = {'sha256': current, **source, 'b64': base64.b64encode(live).decode()}
+    warnings_before = nginx_test()['warnings']  # recorded with the intent: a completion compares against these
+    intent = write_intent(ctx, 'ingress', {'revision': ctx.revision, 'vhost_sha256': target_sha, 'upstream_port': port,
+                                           'from': source_record, 'quillmd': quillmd_pins, 'web': web,
+                                           'nginx_warnings_before': warnings_before})
+    result = publish_vhost(ctx, apply, undo, verify)
+    return {**result, 'moved': True, 'already_installed': False, 'vhost_sha256': target_sha, 'upstream_port': port,
+            'from': source_record, 'intent': intent.name,
+            'quillmd': quillmd_pins, 'web': web, 'coupling': found, 'admin_answers': answers,
+            'summary': f'admin.quillmd.com moved onto quillmd-cpt ({ctx.revision[:12]}\'s stage for {port}, served by '
+                       f'{str(web["revision"])[:12]}); the quillmd vhost is the after state'}
+
+
+def caddy_notice() -> dict:
+    """QuillMD's Caddy answering admin.quillmd.com directly (CADDY_ADDRESS, SNI admin.quillmd.com; its certificate is
+    its own internal one, so not verified): a completed handshake and the answer it gives, by status and body sha256."""
+    found = probe('https', ADMIN_HOST, '/', port=CADDY_ADDRESS[1], connect_ip=CADDY_ADDRESS[0], verify=False,
+                  timeout=10, keep_body=True)
+    return {**{key: found.get(key) for key in ('status', 'error', 'body_sha256')},
+            'notice': QUILLMD_NOTICE_MARKER in (found.get('body') or b'')}
+
+
+def missing_stage_certificates(raw: bytes) -> list:
+    """The certificate files an HTTPS stage loads (ssl_certificate, ssl_certificate_key) that Let's Encrypt's live
+    directory does not hold, read through le_state (refutation R2 round 1, CERT-5); [] for a stage that loads none."""
+    paths = re.findall(r'^\s*ssl_certificate(?:_key)?\s+(\S+);', raw.decode('utf-8', 'replace'), re.M)
+    if not paths:
+        return []
+    live = le_state()['live']
+    missing = []
+    for path in paths:
+        match = re.fullmatch(r'/etc/letsencrypt/live/([^/]+)/([^/]+)', path)
+        if not match or not (live.get(match[1]) or {}).get(match[2]):
+            missing.append(path)
+    return missing
+
+
+def caddy_problem(caddy) -> str:
+    """'' when QuillMD's Caddy answers admin.quillmd.com with a deliberate state - its maintenance notice (503 with
+    QUILLMD_NOTICE_MARKER) or a 2xx or 3xx answer - else why giving admin back to it would serve an error (refutation R2
+    round 1, COTENANT-3: a completed handshake alone let a Caddy 502 pass, and verify then compared 502 with 502; round 2,
+    GUARDS-6: a 404 is an error page too)."""
+    status = caddy.get('status')
+    if caddy.get('error') or not status:
+        return f'did not complete a handshake and answer ({caddy.get("error")})'
+    if status == 503 and caddy.get('notice'):
+        return ''
+    if 200 <= status < 400:
+        return ''
+    return f'answered {status}' + (' without its maintenance notice' if status == 503 else '')
+
+
+def phase_ingress_rollback(ctx) -> dict:
+    """admin.quillmd.com's :443 given back to the quillmd vhost - QuillMD's Caddy notice - and quillmd-cpt given back
+    the stage this revision's ingress replaced, byte for byte, from its receipt (ops/INSTALL.md, ingress-rollback;
+    refutation INGRESS-2, INSTALLER-2, INGRESS-9): one root-helper operation, the quillmd vhost FIRST (decouple),
+    validated together, reloaded once, verified; on any failure both are written forward again (couple, which accepts
+    each partial state). It runs only while the web the ingress found serving - the revision its receipt recorded -
+    serves again on the port the saved stage proxies to (before app, or after a switch-back to that revision), with
+    this revision's HTTPS stage for that port live and the after state: the saved stage would otherwise send
+    cpt.quillmd.com to a port nothing answers, so it refuses and names switch-back. Before it writes anything it
+    completes a handshake with QuillMD's Caddy for admin.quillmd.com and reads its notice (caddy_notice); afterwards
+    cpt.quillmd.com/health/ must answer that web's revision (a fresh host's saved HTTP stage: cpt's :443 routes like an
+    unknown host again) and admin.quillmd.com, through nginx, the same notice with the quillmd.com lineage's
+    certificate. On the before state with the saved stage live it verifies and changes nothing."""
+    preflight = require_receipt(ctx, 'preflight')
+    coupled_now = read_coupling()
+    coupled = coupled_now['coupling']
+    if coupled not in ('before', 'after'):  # round 2, GUARDS-1, INTENT-2: no switch-back or rerun can pass meanwhile
+        raise InstallError(f'{coupling_problem(coupled_now)}; nothing was written. Recover that state first (ops/INSTALL.md, '
+                           'Recovery notes): neither this phase, nor a switch-back, nor a rerun of ingress can pass while '
+                           'it lasts.', details={'coupling': coupled_now})
+    pending = unrecorded_ingress(ctx)
+    if pending is not None and coupled == 'after':  # round 2, INTENT-3, INTENT-8, GUARDS-4: this revision's own first
+        raise InstallError(f'An ingress of this revision changed the two files and stopped before it recorded the '
+                           f'move ({pending[0].name}): run --phase ingress again first - it completes and records the '
+                           'move with the stage that intent saved, or says how to make that stage live again - then '
+                           'rerun this phase. Nothing was written.', details={'intent': str(pending[0])})
+    entry = latest_ingress_move(ctx)
+    newest = latest_ingress_move(ctx, any_revision=True)
+    if newest is not None and (entry is None or newest[0] != entry[0]) and coupled != 'before':
+        # the move to roll back was another revision's: its receipt holds the stage to give back, and only its installer
+        # can switch back to the web it found serving (check, round R2-2); a later revision's web stands between, so the
+        # way back runs through each revision's own switch-back first (refutation R2 round 1, WAYBACK-4)
+        mover = str(newest[1].get('revision'))
+        found_web = str(((newest[1].get('details') or {}).get('web') or {}).get('revision'))
+        raise InstallError(f'admin.quillmd.com was moved by revision {mover[:12]}\'s --phase ingress ({newest[0].name}), '
+                           'not by this revision\'s, and that receipt holds the stage to give back. The way back: switch '
+                           'back revision by revision, newest first, each with its own installer (--phase switch-back), '
+                           f'until {found_web[:12]} - the web that ingress found serving - serves; then run '
+                           f'{mover[:12]}\'s --phase ingress-rollback from its act checkout. Nothing was written.',
+                           details={'ingress_receipt': str(newest[0])})
+    if entry is None:
+        if coupled != 'before':
+            raise InstallError(f'No successful --phase ingress receipt in {ctx.receipts} records a move of '
+                               'admin.quillmd.com, yet the quillmd vhost and quillmd-cpt are not in the before state: '
+                               'this installer cannot tell what to give back. Nothing was written.')
+        raise InstallError(f'No successful --phase ingress receipt of this revision in {ctx.receipts} records a move of '
+                           'admin.quillmd.com; nothing to roll back.')
+    moved = entry[1]['details']
+    saved = base64.b64decode(moved['from']['b64'])
+    if sha256(saved) != moved['from']['sha256'] or names_host_on(saved.decode('utf-8', 'replace'), ADMIN_HOST):
+        raise InstallError('The ingress receipt\'s saved stage is not the one it names (or names the admin host); '
+                           'nothing was written.')
+    saved_sha, saved_kind, recorded_web = sha256(saved), moved['from']['kind'], moved['web']['revision']
+    state = vhost_state()
+    if not state['file_exists'] or state['file_sha256'] is None or state['link_target'] != VHOST_LINK_TARGET:
+        raise InstallError('quillmd-cpt is not the regular file and sites-enabled link this installer writes; nothing '
+                           'was written.')
+    found = read_coupling(vhost=state)
+    web = running_web()
+    saved_port = proxied_port(saved.decode('utf-8', 'replace')) if saved_kind == 'https' else None
+    if web['revision'] != recorded_web:
+        raise InstallError(f'ingress-rollback runs only while {str(recorded_web)[:12]}, the web this revision\'s ingress '
+                           f'found serving, serves again; the running web is {str(web["revision"])[:12]} on '
+                           f'{web["port"]}. Switch back to it first (--phase switch-back; revision by revision, newest '
+                           'first, each with its own installer), then rerun. Nothing was written.')
+    # the stage to give back: the saved one while that web serves on the port it proxies to; otherwise that revision's
+    # own stage rendered for the port it serves on now - trusted only when this installer renders the saved stage byte
+    # for byte (refutation R2 round 1, WAYBACK-3: an even number of app runs since the ingress leaves it on the other port)
+    give_back, give_kind, rendered_for = saved, saved_kind, None
+    if saved_kind == 'https' and web['port'] != saved_port:
+        if web['port'] is None:
+            raise InstallError(f'{SERVICES["web"]} publishes neither web port; nothing was written.')
+        if rendered_vhosts(recorded_web, saved_port)['https'].encode() != saved:
+            raise InstallError(f'{str(recorded_web)[:12]} serves on {web["port"]}, not on {saved_port} where the saved '
+                               'stage proxies, and this installer does not render the saved stage byte for byte, so it '
+                               f'cannot give back a stage for {web["port"]}. Nothing was written.')
+        give_back, rendered_for = rendered_vhosts(recorded_web, web['port'])['https'].encode(), web['port']
+        if names_host_on(give_back.decode('utf-8', 'replace'), ADMIN_HOST):
+            raise InstallError(f'{str(recorded_web)[:12]}\'s stage for {web["port"]} names the admin host; nothing was '
+                               'written.')
+    give_sha = sha256(give_back)
+    already = found['coupling'] == 'before' and state['file_sha256'] == give_sha
+    missing = missing_stage_certificates(give_back)
+    if missing:  # refutation R2 round 1, CERT-5: the way back loads the earlier lineage's files
+        raise InstallError(f'The stage to give back loads {", ".join(missing)}, which is not present: re-issue that '
+                           'lineage first, by hand (this installer\'s cert phase orders the cpt-studio lineage alone; '
+                           'ops/INSTALL.md, Recovery notes), then rerun. Nothing was written.', details={'missing': missing})
+    caddy = caddy_notice()
+    problem = caddy_problem(caddy)
+    if problem:
+        raise InstallError(f'QuillMD\'s Caddy {problem} for {ADMIN_HOST} on {CADDY_ADDRESS[0]}:{CADDY_ADDRESS[1]}: '
+                           'giving admin back to it would serve an error. Nothing was written.', details={'caddy': caddy})
+    port = web['port']
+    if not already:
+        problem = coupling_problem(found, expected=('after',))
+        if problem:
+            raise InstallError(f'{problem}; nothing was written.', details={'coupling': found})
+        if port is None or state['file_sha256'] != sha256(rendered_vhosts(ctx.revision, port)['https'].encode()):
+            raise InstallError(f'quillmd-cpt is not this revision\'s HTTPS stage for {port}, the port the running web '
+                               'publishes; nothing was written.')
+        live = live_vhost_bytes()
+        if live is None or sha256(live) != state['file_sha256']:
+            raise InstallError('quillmd-cpt changed while it was being read; nothing was written.')
+        quillmd_after = quillmd_vhost_bytes()
+        quillmd_before = quillmd_bytes(quillmd_after, 'before')
+        if sha256(quillmd_after) != QUILLMD_VHOST_AFTER:
+            raise InstallError('The quillmd vhost changed while it was being read; nothing was written.')
+        drifted = ingress_checks(ctx, preflight)
+        if drifted:
+            raise InstallError(baseline_problem(drifted, 'nothing was written'), details={'baseline': drifted})
+
+    def apply():
+        vhost_operation('decouple', expected_sha256=sha256(live), content=base64.b64encode(give_back).decode(),
+                        quillmd_content=base64.b64encode(quillmd_before).decode())
+
+    def undo():
+        vhost_operation('couple', expected_sha256=give_sha, content=base64.b64encode(live).decode(),
+                        quillmd_content=base64.b64encode(quillmd_after).decode())
+
+    def verify():
+        problems, evidence = [], {}
+        if give_kind == 'https':
+            served, observations = public_health(web['revision'])
+            evidence['cpt'] = observations[-3:]
+            if not served:
+                problems.append(f'https://{DOMAIN}/health/ did not serve revision {str(web["revision"])[:12]}')
+        else:  # a fresh host's HTTP stage: cpt's :443 is claimed by nothing again, as before the ingress
+            cpt = probe('https', DOMAIN, '/', connect_ip='127.0.0.1', verify=False, method='HEAD')
+            unmatched = probe('https', UNMATCHED_HOST, '/', connect_ip='127.0.0.1', verify=False, method='HEAD')
+            evidence['cpt'] = {'cpt': cpt, 'unmatched': unmatched}
+            if cpt.get('cert_sha256') != unmatched.get('cert_sha256'):
+                problems.append(f'{DOMAIN} does not route like an unknown host on 443 again')
+
+        def check():
+            answer = probe('https', ADMIN_HOST, '/', timeout=5)
+            same = (answer.get('status'), answer.get('body_sha256')) == (caddy['status'], caddy['body_sha256'])
+            return same and 'quillmd.com' in (answer.get('cert_names') or []), {
+                key: answer.get(key) for key in ('status', 'error', 'body_sha256', 'cert_names')}
+        notice, observations = poll(check, attempts=30, interval=0.25)
+        evidence['admin'] = observations[-3:]
+        if not notice:
+            problems.append(f'{ADMIN_HOST} did not answer QuillMD\'s Caddy notice with the quillmd.com certificate')
+        problems += ingress_checks(ctx, preflight)
+        problems += read_back_problems(QUILLMD_VHOST_BEFORE, give_sha)
+        if problems:
+            raise InstallError('; '.join(problems) + '.', details=evidence)
+        return evidence
+    record = {'vhost_sha256': give_sha, 'vhost_kind': give_kind, 'saved_sha256': saved_sha,
+              'rendered_for_port': rendered_for, 'caddy': caddy, 'web': web,
+              'ingress_receipt': entry[0].name, 'coupling': found}
+    if already:
+        tested = nginx_test()
+        if not tested['ok']:
+            raise InstallError('nginx -t does not pass on the files as they are; nothing was reloaded.')
+        nginx_reload()  # files already given back; a run killed before its reload left nginx on the after state
+        return {**verify(), **record, 'already_rolled_back': True, 'reloaded': True,
+                'summary': 'admin.quillmd.com already answered by the quillmd vhost; verified, nothing written'}
+    result = publish_vhost(ctx, apply, undo, verify)
+    return {**result, **record, 'already_rolled_back': False,
+            'quillmd': {'before': QUILLMD_VHOST_BEFORE, 'after': QUILLMD_VHOST_AFTER},
+            'summary': f'admin.quillmd.com given back to the quillmd vhost (QuillMD\'s notice); quillmd-cpt is the stage '
+                       f'the ingress replaced ({give_sha[:12]}{" re-rendered for " + str(rendered_for) if rendered_for else ""}), cpt.quillmd.com served by '
+                       f'{str(web["revision"])[:12]}'}
 
 
 def other_lineages(le: dict) -> tuple:
-    """Let's Encrypt state without this domain's own lineage, on both sides of any comparison: a reinstall's
-    preflight baseline already holds that lineage."""
-    return ({name: digest for name, digest in le['renewal'].items() if name != f'{DOMAIN}.conf'},
-            set(le['live']) - {DOMAIN})
+    """Let's Encrypt state without this installer's own lineages (CPT_LINEAGES: DOMAIN's, and cpt-studio, which both
+    hosts are served with), on both sides of any comparison: a reinstall's preflight baseline already holds them, and
+    the cert phase creates cpt-studio (refutation INSTALLER-3, INGRESS-7)."""
+    own = {f'{name}.conf' for name in CPT_LINEAGES}
+    return ({name: digest for name, digest in le['renewal'].items() if name not in own},
+            set(le['live']) - set(CPT_LINEAGES))
 
 
 def utc_moment(value):
@@ -6702,20 +7693,29 @@ def utc_moment(value):
 
 
 def phase_verify(ctx) -> dict:
+    """Everything compared with the newest preflight receipt (ops/INSTALL.md, verify). After the ingress it accepts the
+    coupled state, whichever side of the ingress that preflight was taken on (the act takes one after it, as the
+    baseline app reads): quillmd-cpt this revision's HTTPS stage for the port the running web publishes, the quillmd
+    vhost exactly the state that stage couples it to (the after state: it names admin.quillmd.com), every other file
+    as the baseline recorded it; admin.quillmd.com's :443 judged by https_checks, not as a co-tenant; neither CPT
+    lineage counted as another lineage; and both HTTP-01 routes proven (refutation INGRESS-7, INSTALLER-4)."""
     preflight = require_receipt(ctx, 'preflight')['details']
     image_id = installed_image(ctx)
     problems = []
     files = nginx_file_state()
-    if files['available'].get('quillmd') != QUILLMD_VHOST_SHA256:
-        problems.append('the quillmd vhost sha256 changed')
     # quillmd-cpt must be this revision's HTTPS stage for the port the running web publishes (blue/green alternates it).
     try:
         port = live_web_port()
     except InstallError as error:
         port = None
         problems.append(str(error))
-    expected_available = {**preflight['nginx_files']['available'],
-                          VHOST_NAME: sha256(rendered_vhosts(ctx.revision, port or WEB_PORT)['https'].encode())}
+    stage = rendered_vhosts(ctx.revision, port or WEB_PORT)['https']
+    coupled = QUILLMD_VHOST_AFTER if names_host_on(stage, ADMIN_HOST) else QUILLMD_VHOST_BEFORE
+    if files['available'].get('quillmd') != coupled:
+        problems.append(f'the quillmd vhost is not the {"after" if coupled == QUILLMD_VHOST_AFTER else "before"} state '
+                        'this revision\'s stage couples it to')
+    expected_available = {**preflight['nginx_files']['available'], 'quillmd': coupled,
+                          VHOST_NAME: sha256(stage.encode())}
     if files['available'] != expected_available:
         problems.append('sites-available differs from the baseline plus quillmd-cpt')
     if files['enabled'] != {**preflight['nginx_files']['enabled'], VHOST_NAME: VHOST_LINK_TARGET}:
@@ -6756,11 +7756,13 @@ def phase_verify(ctx) -> dict:
             problems.append(f'{name} is left beside the installed pair')
     https_problems, evidence = https_checks(ctx)
     problems += https_problems
+    acme = {host: acme_probe(ctx, 'verify', host) for host in (DOMAIN, ADMIN_HOST)}
+    problems += acme_problems(acme)
     foreign = foreign_uid_tasks(APP_UID, own_service_ids())
     if foreign:
         problems.append(f'uid {APP_UID} now runs {foreign} task(s) outside CPT Studio')
     appeared = sorted(set(now) - set(preflight['containers']) - {DB_CONTAINER, *SERVICES.values()})
-    details = {'evidence': evidence, 'containers_appeared_elsewhere': appeared, 'image_id': image_id,
+    details = {'evidence': evidence, 'acme': acme, 'containers_appeared_elsewhere': appeared, 'image_id': image_id,
                'web_port': port}
     if problems:
         raise InstallError(f'verify found {len(problems)} difference(s): ' + '; '.join(problems) + '.',
@@ -7039,7 +8041,13 @@ def phase_rollback_app(ctx) -> dict:
     this revision's own pair - a web or worker under the canonical names that carries another revision is refused,
     stopping nothing (it would stop the old web an undo had just put back in service). What this revision coded is
     never a reason to refuse: every arm that hands the rows to an older pair declares what is not carried back in its
-    receipt ('not_carried_back': coding_note) and goes on."""
+    receipt ('not_carried_back': coding_note) and goes on. While admin.quillmd.com is moved (the coupling invariant's
+    after state) it refuses, before stopping anything, to remove the pair quillmd-cpt proxies to: both hosts would be left
+    on a port nothing answers (refutation R2 round 1, WAYBACK-1); in a coupling neither before nor after it refuses
+    outright. The S4 'keep' layout's rollback is not this removal and is unaffected."""
+    problem = coupling_problem(read_coupling()) or unrecorded_ingress_problem(ctx)  # round 2, REFUSALS-2: the keep arm too
+    if problem:
+        raise InstallError(f'{problem}; nothing was stopped or removed.')
     keep = keep_layout(ctx)
     if keep is not None:
         return rollback_from_keep(ctx, keep)
@@ -7063,6 +8071,18 @@ def phase_rollback_app(ctx) -> dict:
                            'this revision\'s own pair, so nothing was stopped or removed. If an undo put the old pair '
                            'back, it serves as it should; read the last receipt\'s "left", then ops/INSTALL.md, '
                            'Recovery notes.', details={'revisions': others})
+    # refutation R2 round 1, WAYBACK-1: the routing refusal, after the pair is known to be this revision's own
+    found = read_coupling()
+    if found['coupling'] != 'before':
+        live = live_vhost_bytes()
+        served = proxied_port(live.decode('utf-8', 'replace')) if live is not None else None
+        web = {'port': published_port(pair['web']) if 'web' in pair else None}  # running or stopped
+        running = 'web' in pair and bool((pair['web'].get('State') or {}).get('Running'))
+        if found['coupling'] != 'after' or served is None or (running and web['port'] == served):
+            problem = coupling_problem(found, expected=('before',), remedy=AFTER_STATE_REMEDY)
+            raise InstallError(f'{problem}; nothing was stopped. While admin.quillmd.com is moved, the pair quillmd-cpt '
+                               f'proxies to ({served}) is never removed: keep it, or go back with --phase switch-back.',
+                               details={'coupling': found, 'proxied_port': served, 'web_port': web['port']})
     closed = put_back = None
     if pair:
         first = pair.get('web') or pair['worker']
@@ -7184,26 +8204,38 @@ def phase_rollback_app(ctx) -> dict:
 
 def recorded_vhosts(ctx) -> dict:
     """sha256 -> (revision, kind) of every vhost stage an earlier successful phase installed, any revision: the vhost
-    phases' stages, and the HTTPS stage a blue/green app or switch-back phase switched the upstream to."""
+    phases' stages, the HTTPS stage a blue/green app or switch-back phase switched the upstream to, the stage an ingress
+    wrote and the stage an ingress-rollback put back (its 'vhost_kind': the HTTP stage of a fresh host, else HTTPS;
+    refutation INSTALLER-11). The revision is the one whose phase wrote it."""
     found = {}
     for phase, kind, field in (('http-vhost', 'http', None), ('https-vhost', 'https', None),
-                               ('app', 'https', 'switch'), ('switch-back', 'https', 'switch')):
+                               ('app', 'https', 'switch'), ('switch-back', 'https', 'switch'),
+                               ('ingress', 'https', None), ('ingress-rollback', None, None)):
         for path in sorted(ctx.receipts.glob(f'{phase}-*.json')):
             record = json.loads(path.read_text(encoding='utf-8'))
             details = record.get('details') or {}
             digest = ((details.get(field) or {}).get('vhost_sha_after') if field else details.get('vhost_sha256'))
+            stage_kind = kind or details.get('vhost_kind')
             if (record.get('phase') == phase and record.get('ok') and isinstance(digest, str)
-                    and re.fullmatch(r'[0-9a-f]{64}', digest) and SHA_RE.fullmatch(str(record.get('revision')))):
-                found.setdefault(digest, (record['revision'], kind))
+                    and re.fullmatch(r'[0-9a-f]{64}', digest) and SHA_RE.fullmatch(str(record.get('revision')))
+                    and stage_kind in ('http', 'https')):
+                found.setdefault(digest, (record['revision'], stage_kind))
     return found
 
 
 def phase_rollback_vhost(ctx) -> dict:
     """Remove quillmd-cpt when it holds a stage this installer wrote: this revision's, or one an earlier
-    successful vhost receipt recorded (the documented republish after deploy/nginx changed). The removal is
-    undone with the exact bytes it removed, re-rendered from the revision that installed them."""
+    successful vhost receipt recorded. The removal is undone with the exact bytes it removed, re-rendered from the
+    revision that installed them. Only in the before state of the coupling invariant: while quillmd-cpt claims
+    admin.quillmd.com's :443 (the after state) a removal would leave nothing claiming it - admin would fall to a
+    co-tenant's default server and certificate - so it refuses and names ingress-rollback (refutation INSTALLER-1,
+    INGRESS-3)."""
     preflight = require_receipt(ctx, 'preflight')
     state = vhost_state()
+    found = read_coupling(vhost=state)
+    problem = coupling_problem(found, expected=('before',), remedy=AFTER_STATE_REMEDY)
+    if problem:
+        raise InstallError(f'{problem}; nothing was removed.', details={'coupling': found})
     if not state['file_exists'] and not state['link_exists']:
         return {'state': state, 'summary': 'quillmd-cpt already absent'}
     # Every stage this revision renders: HTTP, and HTTPS for either web port (blue/green alternates it).
@@ -7248,9 +8280,9 @@ PHASES = {
     'preflight': phase_preflight, 'secrets': phase_secrets, 'image': phase_image, 'db': phase_db,
     'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'license-note': phase_license_note,
     'provision': phase_provision, 'operators': phase_operators,
-    'http-vhost': phase_http_vhost, 'cert': phase_cert, 'https-vhost': phase_https_vhost,
+    'http-vhost': phase_http_vhost, 'cert': phase_cert, 'https-vhost': phase_https_vhost, 'ingress': phase_ingress,
     'verify': phase_verify, 'switch-back': phase_switch_back, 'rollback-app': phase_rollback_app,
-    'rollback-vhost': phase_rollback_vhost,
+    'rollback-vhost': phase_rollback_vhost, 'ingress-rollback': phase_ingress_rollback,
 }
 
 

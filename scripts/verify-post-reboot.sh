@@ -169,7 +169,10 @@ else
     note "🟢 preserved stack complete — $n_ok/$n_exp services running and healthy"
   fi
 fi
-for spec in "https://quillmd.com:200" "https://app.quillmd.com:503" "https://admin.quillmd.com:503"; do
+# admin.quillmd.com is CPT Studio's operator console from release 2 of the admin.quillmd.com move (D396; ruling
+# D395(c) changes this row in the same step): its anonymous answer is 302 to /login/. Before that release is installed
+# it is QuillMD's 503 notice, so a boot between the merge and the act reads it as bad - say so, do not "fix" it back.
+for spec in "https://quillmd.com:200" "https://app.quillmd.com:503" "https://admin.quillmd.com:302"; do
   url="${spec%:*}"; expected="${spec##*:}"
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url") || code=000
   [ "$code" = "$expected" ] && note "🟢 $url → $code (expected $expected)" || bad "$url → $code (expected $expected)"
