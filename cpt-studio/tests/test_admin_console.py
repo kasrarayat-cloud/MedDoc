@@ -3,6 +3,7 @@ workspaces, spending and the activity log. The gate (every new URL answers what 
 not an operator, before anything is read or written), each act and its refusals, the one-time password (shown once, in
 the POST's own answer, never stored, logged, audited or put in a URL), operator accounts left alone, nothing deleted,
 the spending figures against the console's own pricing, and the read-only activity log. Synthetic data only."""
+import random
 import re
 from datetime import timedelta
 from decimal import Decimal
@@ -954,7 +955,7 @@ class RefutationRoundSixTests(AdminCase):
 
     def test_every_allowed_character_reads_as_a_plain_letter_or_digit_or_nothing(self):
         allowed = [chr(point) for point in range(0x110000) if console.name_character_allowed(chr(point))]
-        self.assertEqual(len(allowed), 62 + 10 + 62)  # ASCII letters and digits, the marks, Latin-1's letters
+        self.assertEqual(len(allowed), 62 + 11 + 62 + 11)  # ASCII letters and digits, the marks, Latin-1's letters, the rest
         for ch in allowed:
             reading = console.name_reading(ch)
             self.assertRegex(reading, r'^[a-z0-9]*$', repr(ch))
@@ -966,3 +967,61 @@ class RefutationRoundSixTests(AdminCase):
                          .status_code, 303)
         self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': "St. Mary's Clinic", 'category': gi})
                          .status_code, 409)
+
+
+class RefutationRoundSevenTests(AdminCase):
+    """The repairs of refutation round 7 (DECISIONS D395), each pinned by the input that broke it."""
+
+    def test_a_modifier_letter_or_a_mark_in_a_stored_name_is_set_aside(self):
+        gi = self.ws.category
+        for stored, typed in (('St. Mary\u02bcs Clinic', 'St. Mary\u2019s Clinic'),
+                              ('Hawai\u02bbi Gastro Partners', "Hawai'i Gastro Partners"),
+                              ('South Cafe\u02ca Partners', 'South Cafe Partners'),
+                              ('West Cafe\u02c9 Partners', 'West Cafe Partners'),
+                              ('Upper Cafe\u0345 Partners', 'Upper Cafe Partners')):
+            with self.subTest(stored=repr(stored)):
+                Workspace.objects.create(name=stored, category=gi)  # as provisioning stores a name: exactly as given
+                response = self.ops.post('/ops/workspaces/new', {'name': typed, 'category': str(gi.pk)})
+                self.assertEqual(response.status_code, 409)
+                self.assertIn('A workspace with that name exists', page(response))
+
+    def test_the_characters_sentence_comes_before_the_spacing_sentence(self):
+        before = self.counts()
+        for typed in ('O\u0323\u0300yo\u0323\u0301 Specialist Hospital', '\u212aelvin Clinic', '\u212bngstr\u00f6m Clinic',
+                      '\u09ac\u09c7\u09be Clinic', '\u05d1\u05bc\u05b8 Clinic', 'Hawai\u02bbi Partners'):
+            with self.subTest(typed=repr(typed)):
+                response = self.ops.post('/ops/workspaces/new', {'name': typed, 'category': str(self.ws.category.pk)})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('Latin letters', page(response))
+                self.assertNotIn('single spaces between words', page(response))
+        self.assertEqual(self.counts(), before)
+
+    def test_the_western_european_letters_are_accepted_in_both_cases(self):
+        gi = str(self.ws.category.pk)
+        for name in ('Clinique du Sacr\u00e9-C\u0153ur', 'A\u0178 CHAMPAGNE CLINIC', 'Meddygfa T\u0177 Gwyn',
+                     '\u2018Ohana Clinic', '\u0160ibenik \u017dupa Clinic'):
+            with self.subTest(name=name):
+                self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': name, 'category': gi}).status_code, 303)
+        self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'Clinique du Sacre-Coeur', 'category': gi})
+                         .status_code, 409)  # reads alike
+        for point in range(0x110000):
+            ch = chr(point)
+            if console.name_character_allowed(ch) and ch.isalpha():
+                for other in (ch.upper(), ch.lower()):
+                    self.assertTrue(all(console.name_character_allowed(each) for each in other), repr(ch))
+
+    def test_whatever_is_accepted_is_stored_exactly_as_typed_in_accepted_characters(self):
+        rng = random.Random(20261123)
+        pool = ['A', 'b', 'e', 'C', 'l', 'i', 'n', 'c', '\u00e9', ' ', ' ', '-', '\u2019', '\u0152', '\u0178', '\u0301',
+                '\u00a0', '\u3000', '\t', '\u212a', '\u0131', '\u02bc', '\u0416', '\u0345', '\u0338']
+        accepted = 0
+        for number in range(400):
+            typed = ''.join(rng.choice(pool) for _ in range(rng.randint(1, 7))) + f' W{number}'
+            response = self.ops.post('/ops/workspaces/new', {'name': typed, 'category': str(self.ws.category.pk)})
+            self.assertIn(response.status_code, (303, 400, 409), repr(typed))
+            if response.status_code == 303:
+                accepted += 1
+                stored = Workspace.objects.get(pk=response['Location'].split('/ops/workspaces/')[1].split('?')[0]).name
+                self.assertEqual(stored, typed)
+                self.assertTrue(all(console.name_character_allowed(ch) for ch in stored), repr(stored))
+        self.assertGreater(accepted, 25)

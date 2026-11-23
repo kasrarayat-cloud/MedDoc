@@ -509,49 +509,65 @@ def base_letter(ch: str) -> str:
     return ch
 
 
+def _without_marks(text: str) -> str:
+    return ''.join(ch for ch in unicodedata.normalize('NFKD', text) if not unicodedata.category(ch).startswith('M'))
+
+
 def name_reading(name: str) -> str:
-    """How two workspace names are compared (refutations r2-r6): Unicode NFKC, case folded, accents set aside (NFKD, every
-    mark dropped) and each Latin letter read as its base letter (base_letter), then provisioning's letters and digits
-    (provision._read). So 'Caf\u00e9', 'CAFE' and 'Cafe\u0301' read alike, as do '\u00d8rsted' and 'O\u0338rsted', or
-    '\u00d0akovo' and '\u0110akovo'. Look-alike letters of other scripts are not compared (a written limit, as
-    provisioning's own)."""
-    folded = unicodedata.normalize('NFKD', unicodedata.normalize('NFKC', name).casefold())
-    return provision._read(''.join(base_letter(ch) for ch in folded if not unicodedata.category(ch).startswith('M')))
+    """How two workspace names are compared (refutations r2-r7): every mark dropped (NFKD) before case folding and after
+    it, so no mark becomes a letter (r7-1: case folding turns COMBINING GREEK YPOGEGRAMMENI into an iota); then letters
+    and digits only, a modifier letter (Unicode category Lm: an apostrophe, okina, prime or spacing accent written as a
+    letter) set aside with the punctuation (r7-1); each Latin letter read as its base letter (base_letter). So
+    'Caf\u00e9', 'CAFE' and 'Cafe\u0301' read alike, as do '\u00d8rsted' and 'O\u0338rsted', '\u00d0akovo' and
+    '\u0110akovo', or "Hawai'i" and 'Hawai\u02bbi'. Look-alike letters of other scripts are not compared (a written limit,
+    as provisioning's own)."""
+    folded = _without_marks(_without_marks(name).casefold())
+    return ''.join(base_letter(ch) for ch in folded
+                   if unicodedata.category(ch)[0] in 'LN' and unicodedata.category(ch) != 'Lm')
 
 
-# A workspace name's characters (refutations r2-r6): Latin letters - the basic ones and the accented letters of
-# Latin-1 (\u00c0 to \u00ff, the multiplication and division signs aside) - digits, single spaces and a few marks,
-# the typographic apostrophe among them. Every look-alike pair the rounds found (other scripts, styled letters, accents
-# typed apart, letters of one script that draw alike, right-to-left order) lies outside this set; within it every
-# letter reads as a plain one (name_reading), and a name is stored exactly as typed, the text provisioning finds a
-# workspace by. Names in other scripts, and Latin letters outside Latin-1, are a written limit.
-NAME_PUNCTUATION = " .,'\u2019&-/()"
+# A workspace name's characters (refutations r2-r7): Latin letters - the basic ones, the accented letters of Latin-1
+# (\u00c0 to \u00ff, the multiplication and division signs aside) and the other Western European ones (EXTRA_LETTERS:
+# the French, Welsh and Windows-1252 letters Latin-1 lacks; r7-3), so the set holds each of its letters in both cases -
+# digits, single spaces and a few marks, the typographic apostrophes among them. Every look-alike pair the rounds found
+# (other scripts, styled letters, accents typed apart, letters of one script that draw alike, right-to-left order) lies
+# outside this set; within it every letter reads as a plain one (name_reading), and a name is stored exactly as typed,
+# the text provisioning finds a workspace by. Names in other scripts, and other Latin letters, are a written limit.
+EXTRA_LETTERS = '\u0152\u0153\u0160\u0161\u017d\u017e\u0178\u0174\u0175\u0176\u0177'
+NAME_PUNCTUATION = " .,'\u2018\u2019&-/()"
+CHARACTERS_SENTENCE = ("A workspace name uses Latin letters, with the accents of Western European languages (such as "
+                       "\u00e9, \u00fc, \u00f1 or \u00f8), digits, spaces and . , ' & - / ( ) only. Type them from the "
+                       "keyboard: a look-alike pasted from elsewhere is refused.")
+SPACING_SENTENCE = ('Type the workspace name with single spaces between words, no space at either end, and each accented '
+                    'letter as one character.')
 
 
 def name_character_allowed(ch: str) -> bool:
-    return ((ch.isascii() and ch.isalnum()) or ch in NAME_PUNCTUATION
+    return ((ch.isascii() and ch.isalnum()) or ch in NAME_PUNCTUATION or ch in EXTRA_LETTERS
             or ('\u00c0' <= ch <= '\u00ff' and ch not in '\u00d7\u00f7'))
 
 
 def plain_name_problem(name: str, typed: str) -> str:
-    """Why ``typed`` cannot name a workspace, or nothing: it must be stored exactly as typed (``name`` is _field's stored
-    form, which must equal it), in the characters name_character_allowed accepts."""
+    """Why ``typed`` cannot name a workspace, or nothing. Its characters first (r7-2): each typed character must be one
+    name_character_allowed accepts, white space, or an accent typed apart, and what NFC composes from them must be
+    accepted characters or white space - else the characters sentence. Then it must be stored exactly as typed
+    (``name`` is _field's stored form) - else the spacing sentence: a run of spaces, a space at an end, other white space
+    or an accent typed apart from its letter."""
+    if (any(not (name_character_allowed(ch) or ch.isspace() or unicodedata.category(ch).startswith('M')) for ch in typed)
+            or not all(name_character_allowed(ch) or ch.isspace() for ch in unicodedata.normalize('NFC', typed))):
+        return CHARACTERS_SENTENCE
     if typed != name:
-        return ('Type the workspace name with single spaces between words, no space at either end, and each accented '
-                'letter as one character.')
-    if not all(name_character_allowed(ch) for ch in name):
-        return ("A workspace name uses Latin letters, with the accents of Western European languages (such as \u00e9, "
-                "\u00fc, \u00f1 or \u00f8), digits, spaces and . , ' & - / ( ) only.")
+        return SPACING_SENTENCE
     return ''
 
 
 def workspace_name_problem(name: str, category) -> str:
     """Why a new workspace cannot take ``name`` (already through plain_name_problem), or nothing. Provisioning's rules,
-    read the console's one way (name_reading: case and accents aside, letters and digits), which makes them stricter
-    (refutation r3, r3-2, r3-8): it names no other specialty (provision.SPECIALTIES), and no workspace of ANY specialty
-    reads alike - which covers provisioning's rule that no workspace of another specialty has it exactly - so no two
-    workspaces are told apart only by case, accents, spacing or punctuation (refutation r1, data-2, data-4, data-5; r2,
-    secure-2; r6)."""
+    read the console's one way (name_reading: case, accents and modifier letters aside, letters and digits), which makes
+    them stricter (refutation r3, r3-2, r3-8): it names no other specialty (provision.SPECIALTIES), and no workspace of
+    ANY specialty reads alike - which covers provisioning's rule that no workspace of another specialty has it exactly -
+    so no two workspaces are told apart only by case, accents, spacing or punctuation (refutation r1, data-2, data-4,
+    data-5; r2, secure-2; r6; r7)."""
     reading = name_reading(name)
     if not reading:
         return 'A workspace name needs at least one letter or digit.'

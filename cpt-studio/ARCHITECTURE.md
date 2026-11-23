@@ -340,9 +340,9 @@ byte-identical copies of the report's vendored fonts):
   URL, a redirect, a log or an audit row. No act changes an operator's account or records or ends a grant; nothing is
   deleted.
 - Workspaces (`/ops/workspaces`): each with its specialty, people and documents; a new one for an existing category,
-  its name stored exactly as typed in Latin letters (Latin-1's accents included), digits, single spaces and a few marks,
-  and compared with case, accents and punctuation aside (`console.name_reading`): it may read alike no other workspace
-  and no other specialty. Names in other scripts are refused (provisioning can still make such a workspace), and
+  its name stored exactly as typed in Latin letters (the Western European ones: Latin-1's, with Œ, Š, Ž, Ÿ and Welsh Ŵ,
+  Ŷ), digits, single spaces and a few marks, and compared with case, accents, modifier letters and punctuation aside
+  (`console.name_reading`): it may read alike no other workspace and no other specialty. Names in other scripts are refused (provisioning can still make such a workspace), and
   letters a font draws alike (I, l and 1; O and 0) are compared as written. A workspace's page lists its people with
   the same acts.
 - Spending (`/ops/spending`): sent coding runs priced by `jobs.run_cost` (the console's own figures) by UTC day,
