@@ -2,9 +2,10 @@
 figures-1): one reading for every console page - the Encounters list, an encounter's rounds and the Spending page - so a
 run never shows two different money figures.
 
-A run's known cost is its priced usage once it settled (succeeded or failed); a run that sent nothing, was cancelled, or
-was refused by the API before answering cost nothing. Every other run - still being sent, of unknown outcome, or settled
-with usage that cannot be priced - has no known cost and counts apart, at the worst case it was reserved at. That is
+A run's known cost is its priced usage once it settled (succeeded or failed); a run that sent nothing, was cancelled,
+calls nothing (a replay: no endpoint) or was refused by the API before answering cost nothing. Every other run - still
+being sent, of unknown outcome, or settled with usage that cannot be priced - has no known cost and counts apart, at the
+worst case it was reserved at. That is
 studio.jobs._held_cost's own reading of a run against the per-document ceiling, with its two parts kept apart (the tests
 hold the two readers to each other), apart from one choice for display: a reserved figure that is not a finite,
 non-negative amount reads as the whole ceiling, where _held_cost would pass it on.
@@ -34,6 +35,9 @@ def reserve(run) -> Decimal:
 def run_spend(run):
     """(cost, None) when the run's cost is known, else (None, its worst case)."""
     if run.state in (Run.NOT_SENT, Run.CANCELLED) or (run.state in SETTLED and not run.sent):
+        return Decimal(0), None
+    if not run.sent and not run.endpoint:
+        # a coder that calls nothing (a replay) bills nothing, whatever state a sweep left it in (refutation r3, r3-4)
         return Decimal(0), None
     if run.state in SETTLED:
         priced = jobs.run_cost(run)

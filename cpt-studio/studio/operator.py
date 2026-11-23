@@ -222,11 +222,17 @@ def _tokens(usage) -> dict:
 
 
 def run_view(run) -> dict:
+    """A run's card. Its cost is studio.spend's reading, its round's and the Spending page's own (refutation r3, r3-1):
+    the known cost, or none yet; beside it, what its stored usage prices at whenever that differs (a run in flight or of
+    unknown outcome, a replay, a run that sent nothing), and the worst case it was reserved at."""
     scope = run.scope if isinstance(run.scope, dict) else {}
-    cost = jobs.run_cost(run)
+    known, _worst = spend.run_spend(run)
+    priced = jobs.run_cost(run)
     return {'run': run, 'role': {jobs.READER: 'reader', jobs.CHECKER: 'checker'}.get(run.purpose, run.purpose),
             'fallback': bool(scope.get('fallback')), 'tokens': _tokens(run.usage),
-            'cost': pricing.usd(cost) if cost is not None else None, 'worst_usd': scope.get('worst_usd'),
+            'cost': pricing.usd(known) if known is not None else None,
+            'usage_priced': pricing.usd(priced) if priced is not None and priced != known else None,
+            'worst_usd': scope.get('worst_usd'),
             'counted_input_tokens': scope.get('input_tokens_counted'), 'stop_reason': scope.get('stop_reason'),
             'failure_kind': scope.get('failure_kind'), 'error_type': scope.get('error_type'),
             'can_reconcile': run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is None,

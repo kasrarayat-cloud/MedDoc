@@ -74,12 +74,18 @@ NAME_CHARS = 120  # User.display_name and Workspace.name hold 120
 HIDDEN_CATEGORIES = {'Cc', 'Cf', 'Cs', 'Co', 'Cn', 'Zl', 'Zp'}
 # and Unicode's Default_Ignorable_Code_Point characters in other categories - the Hangul fillers (letters that show nothing),
 # the combining grapheme joiner, the variation selectors - with every range of the property (refutation r2, secure-3)
-IGNORABLE_RANGES = ((0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5),
-                    (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x3164, 0x3164),
-                    (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3),
-                    (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF))
+IGNORABLE_RANGES = (('\u00ad', '\u00ad'), ('\u034f', '\u034f'), ('\u061c', '\u061c'), ('\u115f', '\u1160'),
+                    ('\u17b4', '\u17b5'), ('\u180b', '\u180f'), ('\u200b', '\u200f'), ('\u202a', '\u202e'),
+                    ('\u2060', '\u206f'), ('\u3164', '\u3164'), ('\ufe00', '\ufe0f'), ('\ufeff', '\ufeff'),
+                    ('\uffa0', '\uffa0'), ('\ufff0', '\ufff8'), ('\U0001bca0', '\U0001bca3'),
+                    ('\U0001d173', '\U0001d17a'), ('\U000e0000', '\U000e0fff'))
+# the variation selectors: kept directly after a visible character (an emoji's presentation, a name's ideographic
+# variant, Mongolian spelling), refused anywhere else (refutation r3, r3-5)
+SELECTOR_RANGES = (('\u180b', '\u180d'), ('\u180f', '\u180f'), ('\ufe00', '\ufe0f'), ('\U000e0100', '\U000e01ef'))
+# glyphs that draw nothing and are no white space (refutation r3, r3-6)
+BLANK_GLYPHS = {'\u2800', '\U0001d159', '\ufffc'}
 # the session stores whose sessions this console can list and end (refutation r2, secure-4)
-SESSION_STORES = ('django.contrib.sessions.backends.db', 'django.contrib.sessions.backends.cached_db')
+SESSION_STORES = ('django.contrib.sessions.backends.db',)  # cached_db can hold a session the table no longer has (r3-3)
 PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'  # no 0/o, 1/l/i: it is read aloud or copied by hand
 PASSWORD_GROUPS, PASSWORD_GROUP_CHARS = 4, 5  # 20 random characters (about 99 bits) in four groups
 PAGE_SIZE = 100
@@ -88,7 +94,7 @@ TOP_DOCUMENTS = 50
 OPERATOR_ACCOUNT = 'This is an operator account. Operator accounts are managed on the server, not here.'
 NO_WORKSPACE = 'This account belongs to no workspace. It is managed on the server, not here.'
 AGENT_OWNER = 'An automated agent can be a Reviewer or a Viewer, not an Owner.'
-NO_SESSION_STORE = ('This site keeps sessions where the console cannot end them, so access cannot be turned off or a '
+NO_SESSION_STORE = ('This site keeps sessions where the console cannot end them, so access cannot be changed or a '
                     'password reset here.')
 DONE = {
     'role': 'The role was changed.', 'same-role': 'The role was already that one: nothing changed.',
@@ -222,26 +228,42 @@ def _person(user_id):
 
 def hidden(ch) -> bool:
     """Whether ``ch`` cannot be seen or typed: a control, format, surrogate, private-use, unassigned or separator character,
-    or a default-ignorable one (HIDDEN_CATEGORIES, IGNORABLE_RANGES)."""
-    point = ord(ch)
-    return unicodedata.category(ch) in HIDDEN_CATEGORIES or any(low <= point <= high for low, high in IGNORABLE_RANGES)
+    a default-ignorable one or a blank glyph (HIDDEN_CATEGORIES, IGNORABLE_RANGES, BLANK_GLYPHS)."""
+    return (unicodedata.category(ch) in HIDDEN_CATEGORIES or ch in BLANK_GLYPHS
+            or any(low <= ch <= high for low, high in IGNORABLE_RANGES))
+
+
+def selector(ch) -> bool:
+    return any(low <= ch <= high for low, high in SELECTOR_RANGES)
+
+
+def hidden_in(value: str) -> bool:
+    """Whether ``value`` holds a character that cannot be seen or typed; a variation selector right after a visible
+    character is not one (it shapes that character)."""
+    previous = ''
+    for ch in value:
+        if ch in '\t\n\r':
+            previous = ''
+            continue
+        if hidden(ch) and not (selector(ch) and previous and not previous.isspace() and not hidden(previous)):
+            return True
+        previous = ch
+    return False
 
 
 def _field(request, name, *, limit=NAME_CHARS, required=False, label='This field') -> str:
-    """A text field as stored: in Unicode's NFKC form (so canonically and compatibly equal spellings are one spelling:
-    refutation r2, secure-2), runs of white space made one space, ends stripped; refused when it holds a character no
-    one can see or type (hidden), when it is too long, when a required one is empty, or when it holds no letter or
-    digit at all (refutation r1, data-4; r2, secure-3)."""
+    """A text field as stored: in Unicode's NFC form (a decomposed spelling and its composed one are one spelling; what
+    the operator typed is otherwise kept - refutation r3, r3-7), runs of white space made one space, ends stripped;
+    refused when it holds a character no one can see or type (hidden_in), when it is too long, when a required one is
+    empty, or when it holds no letter or digit at all (refutation r1, data-4; r2, secure-3). Names are COMPARED in the
+    NFKC caseless form (name_reading)."""
     value = request.POST.get(name, '')
     if not isinstance(value, str):
         value = ''
-    if any(hidden(ch) for ch in value if ch not in '\t\n\r'):
+    if hidden_in(value):
         raise Refused(f'{label} contains a character that cannot be seen or typed (a control, format, filler or '
                       f'unassigned character).')
-    value = ' '.join(unicodedata.normalize('NFKC', value).split())
-    if any(hidden(ch) for ch in value):
-        raise Refused(f'{label} contains a character that cannot be seen or typed (a control, format, filler or '
-                      f'unassigned character).')
+    value = ' '.join(unicodedata.normalize('NFC', value).split())
     if len(value) > limit:
         raise Refused(f'{label} can be at most {limit:,} characters.')
     if required and not value:
@@ -489,18 +511,17 @@ def name_reading(name: str) -> str:
 
 
 def workspace_name_problem(name: str, category) -> str:
-    """Why a new workspace cannot take ``name``, or nothing: provisioning's own rules (provision._new_name_problem: it
-    names no other specialty, read by its letters and digits, and no workspace of another specialty has it exactly), and
-    no workspace of any specialty reads alike - the same letters and digits, case aside - so no two workspaces are told
-    apart only by case, spacing or punctuation (refutation r1, data-2, data-4, data-5)."""
+    """Why a new workspace cannot take ``name``, or nothing. Provisioning's rules, read the console's one way
+    (name_reading: NFKC caseless, letters and digits), which makes them stricter (refutation r3, r3-2, r3-8): it names no
+    other specialty (provision.SPECIALTIES), and no workspace of ANY specialty reads alike - which covers provisioning's
+    rule that no workspace of another specialty has it exactly - so no two workspaces are told apart only by case,
+    spacing, punctuation or a compatibility spelling (refutation r1, data-2, data-4, data-5; r2, secure-2)."""
     reading = name_reading(name)
+    if not reading:
+        return 'A workspace name needs at least one letter or digit.'
     for other, (other_name, _) in provision.SPECIALTIES.items():
         if other != category.slug and name_reading(other_name) == reading:
             return f'{name!r} names the {other_name} specialty, and this workspace is {category.name}.'
-    problem = provision._new_name_problem(name, category.slug, category)
-    if problem:
-        return problem + provision._named_alike(name)
-    reading = name_reading(name)
     alike = sorted((each.name, each.category.name) for each in Workspace.objects.select_related('category')
                    if name_reading(each.name) == reading)
     if alike:

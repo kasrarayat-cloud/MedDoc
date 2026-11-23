@@ -2898,6 +2898,8 @@ async function probeOps(page, ctx, operator, anonymous, enc) {
     const nobody = await anonymous.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
     probes.push({ method: 'GET', path: shown, customer: customer.status(), anonymous: nobody.status() });
   }
+  // the own-id probes must have run: a session read that failed would drop them silently (refutation r3, r3-10)
+  const ownIds = { session: mine.status(), probed: realPaths.length };
   for (const where of OPS_POST_PATHS(fake)) {
     const customer = await page.request.post(`${ctx.base}${where}`, { form: { note: 'walk probe of the operator gate' }, maxRedirects: 0,
       timeout: UI_TIMEOUT_MS, headers: { 'X-CSRFToken': token, Origin: ctx.base, Referer: `${ctx.base}/` } });
@@ -2905,7 +2907,7 @@ async function probeOps(page, ctx, operator, anonymous, enc) {
   }
   const view = await operator.request.get(`${ctx.base}/ops/encounters/${enc.id}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
   const html = await view.text();
-  return { probes, operator: { status: view.status(), names: html.includes(enc.id) || html.includes(enc.title || '\u0000') } };
+  return { probes, ownIds, operator: { status: view.status(), names: html.includes(enc.id) || html.includes(enc.title || '\u0000') } };
 }
 
 function opsChecks(found) {
@@ -2916,6 +2918,9 @@ function opsChecks(found) {
     check('ops.anonymous_not_200', anonymous.length === 0, anonymous.length ? `answered 200 to nobody signed in: ${anonymous.join('; ')}` : 'no /ops/ path answers 200 to nobody signed in'),
     check('ops.operator_view', found.operator.status === 200 && found.operator.names,
       `GET /ops/encounters/<id> answered the operator ${found.operator.status}${found.operator.names ? ', naming the encounter' : ', not naming the encounter'}`),
+    check('ops.own_ids_probed', !!found.ownIds && found.ownIds.session === 200 && found.ownIds.probed === 4,
+      found.ownIds ? `the member's session answered ${found.ownIds.session}; ${found.ownIds.probed} of 4 probes by the member's own workspace and account ids ran`
+        : 'the probes by the member\'s own ids were not made'),
   ];
 }
 

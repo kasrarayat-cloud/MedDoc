@@ -40,7 +40,7 @@
   <tbody>
     {% if item.round.error %}<tr><th>Customer sentence</th><td>{{ item.round.error }}</td></tr>{% endif %}
     <tr><th>Queued / started / finished</th><td>{{ item.round.created_at|date:"Y-m-d H:i:s" }} / {{ item.round.started_at|date:"Y-m-d H:i:s"|default:"-" }} / {{ item.round.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</td></tr>
-    <tr><th>Cost (USD, estimated)</th><td class="mono">{{ item.cost }}{% if item.unpriced %} <span class="flag warn">{{ item.unpriced }} sent run(s) unpriced</span>{% endif %}</td></tr>
+    <tr><th>Cost (USD, estimated)</th><td class="mono">{{ item.cost }}{% if item.unpriced %} <span class="flag warn">{{ item.unpriced }} run(s) with no known cost yet</span>{% endif %}</td></tr>
     <tr><th>Context</th><td>date of service {{ item.service_date|default:"not given" }} · insurance {{ item.insurance|default:"unknown" }} · {{ item.answers|length }} answer(s)</td></tr>
     <tr><th>Revision</th><td class="mono">{{ item.round.revision_id }}</td></tr>
     {% if item.round.view_pdf_sha256 %}<tr><th>Converted PDF read</th><td class="mono">sha256 {{ item.round.view_pdf_sha256 }}</td></tr>{% endif %}
@@ -60,7 +60,7 @@
     <tbody>
       <tr><th>Model requested / returned</th><td class="mono">{{ view.run.requested_model }} / {{ view.run.returned_model|default:"-" }}</td></tr>
       <tr><th>Tokens</th><td class="mono">input {{ view.tokens.input_tokens|default:"-" }} · output {{ view.tokens.output_tokens|default:"-" }} · cache write {{ view.tokens.cache_creation_input_tokens|default:"-" }} · cache read {{ view.tokens.cache_read_input_tokens|default:"-" }}{% if view.tokens.iterations %} · {{ view.tokens.iterations }} iteration(s){% endif %}</td></tr>
-      <tr><th>Cost (USD, estimated)</th><td class="mono">{{ view.cost|default:"not priced" }} · worst case reserved {{ view.worst_usd|default:"-" }}{% if view.counted_input_tokens %} · input counted {{ view.counted_input_tokens }} tokens{% endif %}</td></tr>
+      <tr><th>Cost (USD, estimated)</th><td class="mono">{% if view.cost is not None %}{{ view.cost }}{% else %}not known yet{% endif %}{% if view.usage_priced %} · its stored usage prices at {{ view.usage_priced }}{% endif %} · worst case reserved {{ view.worst_usd|default:"-" }}{% if view.counted_input_tokens %} · input counted {{ view.counted_input_tokens }} tokens{% endif %}</td></tr>
       <tr><th>Latency</th><td class="mono">{% if view.run.latency_ms is not None %}{{ view.run.latency_ms }} ms{% else %}-{% endif %}</td></tr>
       <tr><th>Stop reason / failure</th><td class="mono">{{ view.stop_reason|default:"-" }} / {{ view.failure_kind|default:"-" }}{% if view.error_type %} ({{ view.error_type }}){% endif %}</td></tr>
       <tr><th>Request id / response id</th><td class="mono">{{ view.run.provider_request_id|default:"-" }} / {{ view.run.response_id|default:"-" }}</td></tr>

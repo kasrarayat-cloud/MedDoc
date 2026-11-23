@@ -43,7 +43,7 @@
       <td>{{ row.state_label }} <span class="muted mono">({{ row.encounter.state }})</span></td>
       <td class="num">{{ row.encounter.rounds_count }}</td>
       <td>{% if row.latest %}#{{ row.latest.number }} {{ row.latest.trigger }} · {{ row.latest.state }}{% if row.latest.failure_kind %} · <span class="flag bad">{{ row.latest.failure_kind }}</span>{% endif %}{% else %}<span class="muted">none (earlier review)</span>{% endif %}</td>
-      <td class="num mono">{{ row.cost|default:"" }}{% if row.unpriced %} <span class="flag warn">{{ row.unpriced }} unpriced</span>{% endif %}</td>
+      <td class="num mono">{{ row.cost|default:"" }}{% if row.unpriced %} <span class="flag warn">{{ row.unpriced }} with no known cost yet</span>{% endif %}</td>
       <td class="mono">{{ row.encounter.updated_at|date:"Y-m-d H:i:s" }}</td>
     </tr>
   {% empty %}

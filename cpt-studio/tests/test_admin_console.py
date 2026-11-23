@@ -637,23 +637,29 @@ class RefutationRoundTwoTests(AdminCase):
         enc = self.done(title='One reading')
         runs = list(Run.objects.filter(encounter=enc).order_by('created_at', 'pk'))
         base = runs[0]
-        cases = [(Run.SUCCEEDED, True, 200, base.usage, '0.5'), (Run.SUCCEEDED, True, 200, {}, '0.5'),
-                 (Run.SUCCEEDED, False, None, {}, '0.5'), (Run.FAILED, True, 429, {}, '0.5'),
-                 (Run.FAILED, True, 200, base.usage, '0.5'), (Run.FAILED, True, 500, {'input_tokens': 'x'}, '0.5'),
-                 (Run.UNKNOWN, True, None, base.usage, '0.5'), (Run.SENDING, False, None, {}, '0.5'),
-                 (Run.NOT_SENT, False, None, {}, '0.5'), (Run.CANCELLED, True, None, base.usage, '0.5'),
-                 (Run.UNKNOWN, True, None, {}, None)]
-        for state, sent, status, usage, worst in cases:
-            with self.subTest(state=state, sent=sent, status=status, usage=bool(usage), worst=worst):
+        live = 'https://api.anthropic.example/v1/messages'
+        cases = [(Run.SUCCEEDED, True, 200, base.usage, '0.5', live), (Run.SUCCEEDED, True, 200, {}, '0.5', live),
+                 (Run.SUCCEEDED, False, None, {}, '0.5', live), (Run.FAILED, True, 429, {}, '0.5', live),
+                 (Run.FAILED, True, 200, base.usage, '0.5', live), (Run.FAILED, True, 500, {'input_tokens': 'x'}, '0.5', live),
+                 (Run.UNKNOWN, True, None, base.usage, '0.5', live), (Run.SENDING, False, None, {}, '0.5', live),
+                 (Run.NOT_SENT, False, None, {}, '0.5', live), (Run.CANCELLED, True, None, base.usage, '0.5', live),
+                 (Run.UNKNOWN, True, None, {}, None, live), (Run.RESERVED, False, None, {}, '0.5', live),
+                 # a replay calls nothing: its worst case is 0, and a sweep may leave it unknown or sending (r3-4)
+                 (Run.UNKNOWN, False, None, base.usage, '0.000000', ''), (Run.SENDING, False, None, {}, '0.000000', ''),
+                 (Run.SUCCEEDED, False, None, base.usage, '0.000000', '')]
+        for state, sent, status, usage, worst, endpoint in cases:
+            with self.subTest(state=state, sent=sent, status=status, usage=bool(usage), worst=worst, endpoint=bool(endpoint)):
                 scope = {key: item for key, item in base.scope.items() if key != 'worst_usd'}
                 if worst is not None:
                     scope['worst_usd'] = worst
-                Run.objects.filter(pk=base.pk).update(state=state, sent=sent, http_status=status, usage=usage, scope=scope)
+                Run.objects.filter(pk=base.pk).update(state=state, sent=sent, http_status=status, usage=usage, scope=scope,
+                                                      endpoint=endpoint)
                 run = Run.objects.get(pk=base.pk)
                 cost, worst_case = spend.run_spend(run)
                 self.assertEqual(cost if cost is not None else worst_case, jobs._held_cost(run))
         # the encounter's round total and the Spending page agree on an unknown run: counted apart, not as its partial cost
-        Run.objects.filter(pk=base.pk).update(state=Run.UNKNOWN, sent=True, usage=base.usage, scope=base.scope)
+        Run.objects.filter(pk=base.pk).update(state=Run.UNKNOWN, sent=True, usage=base.usage, scope=base.scope,
+                                              endpoint='https://api.anthropic.example/v1/messages')
         round_cost, unpriced = operator.runs_cost(list(Run.objects.filter(encounter=enc)))
         figures = console.spending()
         self.assertEqual(unpriced, 1)
@@ -740,10 +746,16 @@ class RefutationRoundTwoTests(AdminCase):
         self.assertEqual(self.counts(), before)
         made = self.ops.post('/ops/workspaces/new', {'name': 'Ｖａｌｌｅｙ Clinic', 'category': str(gi.pk)})
         self.assertEqual(made.status_code, 303)
-        self.assertTrue(Workspace.objects.filter(name='Valley Clinic').exists())  # stored in its NFKC form
+        self.assertTrue(Workspace.objects.filter(name='Ｖａｌｌｅｙ Clinic').exists())  # stored as typed (NFC)
+        self.assertEqual(self.ops.post('/ops/workspaces/new', {'name': 'valley clinic', 'category': str(gi.pk)})
+                         .status_code, 409)  # read alike (NFKC caseless)
+        decomposed = self.ops.post('/ops/workspaces/new', {'name': 'Re\u0301sume\u0301 Health', 'category': str(gi.pk)})
+        self.assertEqual(decomposed.status_code, 303)
+        self.assertTrue(Workspace.objects.filter(name='R\u00e9sum\u00e9 Health').exists())  # NFC composes it
 
     def test_fillers_and_other_ignorable_characters_are_refused_in_names(self):
-        for name in ('ㅤ', 'SpineㅤCenter', 'ᅟNorth', 'Spine͏Center', 'Spine️', 'ﾠClinic'):
+        for name in ('\u3164', 'Spine\u3164Center', '\u115fNorth', 'Spine\u034fCenter', '\ufe0fSpine', 'Spine \ufe0fX',
+                     '\uffa0Clinic', 'Spine\u2800Center', '\u2800'):
             with self.subTest(name=repr(name)):
                 response = self.ops.post('/ops/workspaces/new', {'name': name, 'category': str(self.neuro.pk)})
                 self.assertEqual(response.status_code, 400)
@@ -752,3 +764,56 @@ class RefutationRoundTwoTests(AdminCase):
                                                              'name': name, 'role': 'viewer'})
                 self.assertEqual(response.status_code, 400)
         self.assertFalse(User.objects.filter(username='filler-test').exists())
+
+
+class RefutationRoundThreeTests(AdminCase):
+    """The repairs of refutation round 3 (DECISIONS D395), each pinned by the input that broke it."""
+
+    def test_an_encounter_rounds_cost_is_the_sum_of_its_cards_known_costs(self):
+        enc = self.done(title='Cards and round')
+        runs = list(Run.objects.filter(encounter=enc).order_by('created_at', 'pk'))
+        live = 'https://api.anthropic.example/v1/messages'
+        for changes in ({'state': Run.UNKNOWN, 'sent': True, 'endpoint': live},              # partial usage, no known cost
+                        {'state': Run.FAILED, 'sent': True, 'http_status': 529, 'usage': {}, 'endpoint': live},  # refused
+                        {'state': Run.SUCCEEDED, 'sent': False, 'endpoint': ''}):            # a replay
+            with self.subTest(changes=changes):
+                Run.objects.filter(pk=runs[0].pk).update(**changes)
+                text = page(self.ops.get(f'/ops/encounters/{enc.pk}'))
+                cells = re.findall(r'<tr><th>Cost \(USD, estimated\)</th><td class="mono">([^<]*)', text)
+                round_cell, cards = cells[0], cells[1:]
+                known = [Decimal(cell.split(' ')[0]) for cell in cards if not cell.startswith('not known yet')]
+                unknown = sum(1 for cell in cards if cell.startswith('not known yet'))
+                self.assertEqual(Decimal(round_cell.strip()), sum(known, Decimal(0)))
+                self.assertEqual(text.count('run(s) with no known cost yet'), 1 if unknown else 0)
+
+    def test_a_replay_left_unknown_by_a_sweep_costs_nothing_and_is_not_flagged(self):
+        from studio import operator, spend
+        enc = self.done(title='Replay swept')
+        run = Run.objects.filter(encounter=enc, purpose=jobs.READER).get()
+        Run.objects.filter(pk=run.pk).update(state=Run.UNKNOWN, sent=False, endpoint='',
+                                             scope={**run.scope, 'worst_usd': '0.000000'})
+        self.assertEqual(spend.run_spend(Run.objects.get(pk=run.pk)), (Decimal(0), None))
+        self.assertEqual(operator.runs_cost(list(Run.objects.filter(encounter=enc)))[1], 0)
+
+    def test_only_the_database_session_store_is_accepted(self):
+        self.assertEqual(console.SESSION_STORES, ('django.contrib.sessions.backends.db',))
+        with self.settings(SESSION_ENGINE='django.contrib.sessions.backends.cached_db'):
+            with self.assertRaises(console.Refused):
+                console.end_sessions(self.viewer)
+
+    def test_a_variation_selector_after_a_visible_character_is_kept(self):
+        made = self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'username': 'emoji-name',
+                                                  'name': 'Dr. Sun \u2600\ufe0f', 'role': 'viewer'})
+        self.assertEqual(made.status_code, 200)
+        self.assertEqual(User.objects.get(username='emoji-name').display_name, 'Dr. Sun \u2600\ufe0f')
+
+    def test_names_alike_are_listed_by_the_consoles_own_reading(self):
+        gi = self.ws.category
+        Workspace.objects.create(name='\uff2d\uff45\uff52\uff49\uff44\uff49\uff41\uff4e', category=self.neuro)
+        refused = self.ops.post('/ops/workspaces/new', {'name': 'Meridian', 'category': str(gi.pk)})
+        self.assertEqual(refused.status_code, 409)
+        self.assertIn('\uff2d\uff45\uff52\uff49\uff44\uff49\uff41\uff4e', page(refused))
+        self.assertNotIn('this run is for', page(refused))
+
+    def test_the_session_store_refusal_names_every_act_it_can_stop(self):
+        self.assertIn('access cannot be changed', console.NO_SESSION_STORE)

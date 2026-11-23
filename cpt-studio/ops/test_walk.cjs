@@ -1904,12 +1904,17 @@ test('the readers that run in the page are self-contained functions', () => {
 
 test('every /ops/ path is 404 to the customer and never 200 to nobody, and the operator reads the encounter', () => {
   const probes = [{ method: 'GET', path: '/ops/', customer: 404, anonymous: 302 }, { method: 'POST', path: '/ops/x', customer: 404 }];
-  assert.deepEqual(failed(walk.opsChecks({ probes, operator: { status: 200, names: true } })), []);
-  assert.deepEqual(failed(walk.opsChecks({ probes: [{ ...probes[0], customer: 200 }], operator: { status: 200, names: true } })),
+  const ownIds = { session: 200, probed: 4 };
+  assert.deepEqual(failed(walk.opsChecks({ probes, ownIds, operator: { status: 200, names: true } })), []);
+  assert.deepEqual(failed(walk.opsChecks({ probes: [{ ...probes[0], customer: 200 }], ownIds, operator: { status: 200, names: true } })),
     ['ops.customer_404']);
-  assert.deepEqual(failed(walk.opsChecks({ probes: [{ ...probes[0], anonymous: 200 }], operator: { status: 200, names: true } })),
+  assert.deepEqual(failed(walk.opsChecks({ probes: [{ ...probes[0], anonymous: 200 }], ownIds, operator: { status: 200, names: true } })),
     ['ops.anonymous_not_200']);
-  assert.deepEqual(failed(walk.opsChecks({ probes, operator: { status: 404, names: false } })), ['ops.operator_view']);
+  assert.deepEqual(failed(walk.opsChecks({ probes, ownIds, operator: { status: 404, names: false } })), ['ops.operator_view']);
+  // the probes by the member's own ids must have run: a failed session read fails the check (refutation r3, r3-10)
+  for (const broken of [{ session: 409, probed: 0 }, { session: 200, probed: 1 }, undefined]) {
+    assert.deepEqual(failed(walk.opsChecks({ probes, ownIds: broken, operator: { status: 200, names: true } })), ['ops.own_ids_probed']);
+  }
 });
 
 // The physician PDF report - the only report CPT Studio makes (owner direction 2026-11-21) - as exportPdf reads it
