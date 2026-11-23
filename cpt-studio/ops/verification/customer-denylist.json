@@ -42,6 +42,8 @@
      "source": "#trace\\b|/trace\\b"},
     {"id": "operator_url", "severity": "hard", "surfaces": ["dom", "json", "file", "bundle"],
      "source": "/ops/"},
+    {"id": "admin_host", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
+     "source": "(?<![a-z0-9.-])admin\\.quillmd\\.com(?![a-z0-9-])"},
     {"id": "sha256", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
      "source": "\\bsha-?256\\b"},
     {"id": "tool_call", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
@@ -177,6 +179,8 @@
     {"surface": "file", "text": "GPT 45 U/L, SGPT 52 U/L and ALT (GPT) within normal limits", "hits": []},
     {"surface": "dom", "text": "GPT 45 U/L", "hits": []},
     {"surface": "json", "text": "Three haikus, two sonnets and an opuscule", "hits": []},
-    {"surface": "dom", "text": "Erythema in the gastric corpus", "hits": []}
+    {"surface": "dom", "text": "Erythema in the gastric corpus", "hits": []},
+    {"surface": "dom", "text": "Open https://admin.quillmd.com/ to manage people.", "hits": ["admin_host"]},
+    {"surface": "dom", "text": "Doctors sign in at https://cpt.quillmd.com/login/.", "hits": []}
   ]
 }

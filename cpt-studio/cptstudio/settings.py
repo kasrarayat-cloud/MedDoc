@@ -30,7 +30,9 @@ SYNTHETIC_ONLY = True
 
 SECRET_KEY = _env('SECRET_KEY', required=True)
 DEBUG = False
-ALLOWED_HOSTS = ['cpt.quillmd.com', 'localhost', '127.0.0.1', 'testserver']
+# admin.quillmd.com serves the operator console alone (owner direction 2026-11-23, D396; studio.hosts chooses its urlconf)
+ADMIN_HOST = 'admin.quillmd.com'
+ALLOWED_HOSTS = ['cpt.quillmd.com', ADMIN_HOST, 'localhost', '127.0.0.1', 'testserver']
 CSRF_TRUSTED_ORIGINS = ['https://cpt.quillmd.com']
 RELEASE_SHA = _env('RELEASE_SHA', 'development-unrecorded')
 
@@ -54,6 +56,7 @@ MIDDLEWARE = [
     'studio.access.SecurityHeadersMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'studio.hosts.HostUrlconfMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',

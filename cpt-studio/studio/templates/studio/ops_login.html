@@ -1,0 +1,18 @@
+{% extends "studio/ops_base.html" %}{% load static %}
+{% block title %}Sign in{% endblock %}
+{% block head_extra %}<link rel="icon" href="{% static 'studio/favicon.svg' %}" type="image/svg+xml">{% endblock %}
+{% block topbar_links %}<span class="meta">Synthetic data only · release {{ release }}</span>{% endblock %}
+{% block content %}
+<section class="card signin" aria-labelledby="signin-title">
+  <h1 id="signin-title">Operator sign-in</h1>
+  <p class="lead">Platform operators sign in here to the CPT Studio console. Doctors sign in at <a href="https://cpt.quillmd.com/login/">cpt.quillmd.com/login/</a>.</p>
+  <form method="post" action="">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="fields single">
+      <label>Username <input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="150" required autofocus value="{{ username }}"></label>
+      <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+    </div>
+    <button type="submit">Sign in</button>
+  </form>
+</section>
+{% endblock %}

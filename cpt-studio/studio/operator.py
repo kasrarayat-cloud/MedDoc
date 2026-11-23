@@ -137,7 +137,9 @@ def operator_view(view):
     """Anyone who is not an operator gets exactly what an unknown URL gets - Django's 404 - before the method, the body,
     the CSRF token or the record is read; an operator gets the view. Django resolves a URL before CsrfViewMiddleware runs
     and an unknown URL stops there, so the global CSRF check is skipped here (csrf_exempt) and the same check
-    (csrf_protect) runs after the gate, for operators only; no operator URL is reached by appending a slash."""
+    (csrf_protect) runs after the gate, for operators only; no operator URL is reached by appending a slash. On the admin
+    host (admin.quillmd.com, D396) studio.hosts first sends a signed-out GET or HEAD to the operator sign-in; this gate
+    still answers everyone else, a signed-in account that is not an operator included."""
     protected = csrf_protect(view)
 
     @functools.wraps(view)

@@ -111,3 +111,52 @@ def index(request):
                                                      'specialty': membership.workspace.category.name})
     response.headers['Content-Security-Policy'] = INDEX_CSP
     return response
+
+
+# The admin host (admin.quillmd.com; owner direction 2026-11-23, DECISIONS D396; cptstudio.urls_admin).
+ADMIN_SIGN_IN_REFUSED = 'The username or password is not correct, or the account is not a platform operator.'
+
+
+def admin_home(request):
+    """admin.quillmd.com/: an operator goes to the console, anyone else to the operator sign-in - every method alike, so
+    a monitor's HEAD gets the same 302 as a browser's GET."""
+    return redirect('/ops/' if is_operator(request.user) else '/login/')
+
+
+def admin_ops_slash(request):
+    """admin.quillmd.com/ops goes to /ops/ (the full urlconf keeps /ops answering what /opsx answers)."""
+    return redirect('/ops/')
+
+
+@ensure_csrf_cookie
+def admin_login_view(request):
+    """The operator door on the admin host: login_view's form, CSRF, next rule and throttle, but only a platform operator
+    signs in here. Any other account - a doctor with the right password included - gets the same sentence as a wrong
+    password and no session, so this door never tells a doctor's password apart; its attempt is recorded as not
+    succeeded (LoginAttempt has no door column), which the shared throttle counts. An operator who is also a member signs
+    in as the operator: this host has no doctor app. next may only name a console page on this host."""
+    if request.method not in ('GET', 'POST'):
+        return HttpResponseNotAllowed(['GET', 'POST'])
+    next_url = request.POST.get('next') or request.GET.get('next') or '/ops/'
+    if not (next_url.startswith('/ops/') and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure())):
+        next_url = '/ops/'
+    error = ''
+    if request.method == 'POST':
+        submitted = request.POST.get('username', '').strip()[:150]
+        username = UNSTORABLE.sub('�', submitted)
+        password = request.POST.get('password', '')
+        client = UNSTORABLE.sub('�', _client(request))
+        if _throttled(username, client):
+            error = 'Too many failed attempts. Wait 15 minutes and try again.'
+        else:
+            user = authenticate(request, username=username, password=password) if username == submitted else None
+            operator = is_operator(user)
+            LoginAttempt.objects.create(username=username, client=client, succeeded=operator)
+            if operator:
+                login(request, user)
+                return redirect(next_url)
+            error = ADMIN_SIGN_IN_REFUSED
+    context = {'error': error, 'next': next_url, 'release': settings.RELEASE_SHA,
+               'username': UNSTORABLE.sub('�', request.POST.get('username', ''))[:150] if error else ''}
+    return render(request, 'studio/ops_login.html', context, status=200 if not error else 400)

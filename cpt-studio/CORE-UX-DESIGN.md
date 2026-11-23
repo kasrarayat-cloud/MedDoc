@@ -58,6 +58,11 @@ The earlier tables, the reviewer's chosen modifier among them, stay as legacy re
   `grant_operator` command from a reason file; no workspace role confers it. Everyone else gets exactly an unknown URL's
   404 under `/ops/`. An operator with no membership signs in on the usual page and lands on `/ops/`; one who is also a
   member signs in as the member.
+- The console's own address is admin.quillmd.com (owner direction 2026-11-23, D396): its sign-in admits operators only
+  (anyone else is refused exactly like a wrong password, with a pointer to the doctors' sign-in) and lands on `/ops/`,
+  an operator who is also a member included; a signed-out visitor to a console page there is sent to the sign-in and
+  back, never to an unexplained 404. That host serves no doctor app and no API. cpt.quillmd.com/ops/ keeps answering
+  operators while both addresses serve.
 - The operator console also runs CPT Studio (owner direction 2026-11-22, D395; `studio/console.py`): people and roles
   (add, reset a password shown once, change a role, access off and on; operator accounts and grants are never changed
   there), workspaces for an existing specialty, spending from the recorded usage, and the activity log. The doctor
