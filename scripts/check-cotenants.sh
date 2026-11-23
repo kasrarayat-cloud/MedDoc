@@ -37,7 +37,7 @@
 # comma-separated and each is a whole, named state - never a range: a row that
 # accepts "the notice or the console's sign-in" still goes red on a 502, a 200,
 # a 404, or a 503 that is not the notice. A two-state row exists only across a
-# move and is narrowed when it lands.
+# move and is narrowed when it lands (admin.quillmd.com's was, 2026-11-23).
 #
 # ⚠️ A FAILED HANDSHAKE IS A FINDING, NOT "NO RESPONSE". curl's certificate and
 # handshake failures (a wrong or expired certificate is exactly what a move can
@@ -68,7 +68,7 @@ EXPECTED=(
   "quillmd.com|200|the marketing site serves"
   "www.quillmd.com|200|the same site on the www host. MASTER.md STEP 0.6 names FIVE hosts and this table shipped with FOUR — the watched-set failure INSIDE the check written to cure watched-set failures. Keep every entry on ONE line: the floor is derived by cutting field 2, and a wrapped reason is parsed as extra expected codes. (The floor is now counted from the rows JUDGED, below.)"
   "app.quillmd.com|302|owner-authorized normal HTTPS account login; protected application requires an invited account"
-  "admin.quillmd.com|503~QuillMD administration is temporarily unavailable,302>https://admin.quillmd.com/login/|TWO DELIBERATE STATES ACROSS ONE MOVE (D396): 503 with the fresh rebuild's maintenance notice (public administration in maintenance; the rebuild's private admin stays on 127.0.0.1:9131); 302 to https://admin.quillmd.com/login/ is CPT Studio's operator console once release 2 of the admin.quillmd.com move is installed. Narrowed to the second when that release lands. Anything else - a 502, a 200, a 404, a 302 elsewhere, a 503 that is not the notice (CPT Studio's outage page) - is the finding."
+  "admin.quillmd.com|302>https://admin.quillmd.com/login/|CPT STUDIO'S OPERATOR CONSOLE (D396): since release 2 of the admin.quillmd.com move was installed on 2026-11-23 (docs/deploy-reports/20261123-cpt-studio-6ab8e503-ingress-install-and-live-check.md) the host answers 302 to its own sign-in. Anything else - QuillMD's old maintenance notice (a 503) included, a 302 elsewhere, a 502, a 200, a 404, CPT Studio's outage page - is the finding. The way back (the installer's ingress-rollback) restores the notice, and a PR restores this row's notice state with it."
   "pro.quillmd.com|410|DELIBERATELY RETIRED. The meddoc-pro CRM container was stopped (SIGTERM) on ~2026-08-04 and Caddy answers Gone. A change AWAY from 410 is the finding: either it started serving again, or a 502 is wearing its place."
 )
 

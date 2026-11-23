@@ -325,8 +325,9 @@ class CotenantScriptContractTests(TemporaryDirectoryTest):
         found = self.run_script(self.NOTICE, base=(*self.BASE[:3], 'pro.quillmd.com 200 -'))  # a co-tenant diverged
         self.assertEqual(found['returncode'], 1)
 
-    def test_without_the_skip_admin_has_two_deliberate_states_and_nothing_else(self):
-        for admin, code in ((self.NOTICE, 0), (f'302 https://{ADMIN}/login/', 0),
+    def test_without_the_skip_admin_answers_the_console_and_nothing_else(self):
+        # narrowed after release 2 was installed (2026-11-23): QuillMD's old notice is now a finding too
+        for admin, code in ((self.NOTICE, 1), (f'302 https://{ADMIN}/login/', 0),
                             ('302 https://app.quillmd.com/login/?next=/', 1), (f'302 https://{ADMIN}/ops/', 1),
                             ('502 -', 1), ('404 -', 1), ('200 -', 1),
                             # refutation R2 round 1, CHECKS-1, COTENANT-2: CPT Studio's own outage page is a 503 that is
