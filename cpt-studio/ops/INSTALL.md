@@ -1,4 +1,4 @@
-# Installing CPT Studio at cpt.quillmd.com
+# Installing CPT Studio at cpt.quillmd.com and admin.quillmd.com
 
 `ops/install.py` is a ruled-mutation installer. It refuses to run outside
 `scripts/run-ruled-mutation.sh`, so every phase is bound to a committed
@@ -23,8 +23,8 @@ run the next. Nothing here was executed by the session that wrote it.
 | passages | the CMS passage files the revision commits under `studio/reference/data/`, imported into `PassageSource`/`ReferencePassage` |
 | agent login | `/home/claude/.cpt-studio/agent-credentials.json` (0600, agent account only) |
 | operator accounts | `ops-agent` (automated agent) and `platform-operator` (human): no workspace membership, an operator grant (`manage grant_operator`); the agent's login `/home/claude/.cpt-studio/ops-agent-credentials.json` (0600, top-level `username` and `password`) |
-| ingress | NEW `/etc/nginx/sites-available/quillmd-cpt` + `sites-enabled` symlink. The `quillmd` vhost is never edited |
-| certificate | separate lineage `cpt.quillmd.com`, webroot `/var/www/certbot`, existing ACME account |
+| ingress | NEW `/etc/nginx/sites-available/quillmd-cpt` + `sites-enabled` symlink: one HTTPS server block for cpt.quillmd.com and admin.quillmd.com (D396). The `quillmd` vhost (QuillMD's) changes in one line alone - its :443 `server_name`, line 26, loses `admin.quillmd.com` in `ingress` and gets it back in `ingress-rollback` - under the coupling invariant (**The admin host and the coupling invariant**) |
+| certificate | lineage `cpt-studio` for cpt.quillmd.com and admin.quillmd.com, webroot `/var/www/certbot` for both, existing ACME account; the earlier lineage `cpt.quillmd.com` stays and keeps renewing, unused |
 
 Every Docker object carries `org.quillmd.cpt-studio=1` and a role label; the
 installer refuses to touch a same-named object without them.
@@ -82,9 +82,10 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | 8 | `license-note` | — | CPT Studio's own licence note on each imported reference source (`ReferenceSource.license_note`): exactly the old text replaced by the corrected one, nothing else; idempotent |
 | 9 | `provision` | `--owner-username <name>` (optional `--specialty`, `--agent-username`, display names, `--reset-passwords`) | a specialty's workspace (Gastroenterology unless `--specialty` names neurosurgery or orthopedic-surgery), owner and agent accounts; credentials files |
 | 9a | `operators` | optional `--reset-passwords` | the two platform-operator accounts (no membership), their grants and credentials files |
-| 10 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload |
-| 11 | `cert` | — | lineage `cpt.quillmd.com` |
-| 12 | `https-vhost` | — | `quillmd-cpt` replaced by the HTTPS stage; nginx reload |
+| 10 | `http-vhost` | — | `quillmd-cpt` (HTTP stage) + symlink; nginx reload (a fresh host; refused while `quillmd-cpt` claims admin's :443) |
+| 11 | `cert` | — | lineage `cpt-studio` for both hosts (on a fresh host after `http-vhost`, or on a served site) |
+| 12 | `ingress` | — | admin.quillmd.com's :443 moved onto `quillmd-cpt`: this revision's HTTPS stage and the `quillmd` vhost's line 26, one root-helper write, one nginx reload |
+| 12a | `https-vhost` | — | a later `deploy/nginx/` change republished: `quillmd-cpt` replaced in place by this revision's HTTPS stage (both stages name admin); nginx reload |
 | 13 | `verify` | — | nothing |
 
 `switch-back` returns to the pair this revision's last successful `app` replaced
@@ -124,7 +125,12 @@ cannot be closed, or the second read names a record (a request in flight when
 the worker stopped is then an unknown outcome), the pair is left stopped, not
 removed: start it, clear the records, rerun.
 `rollback-vhost` removes `quillmd-cpt` and its symlink (only if their bytes are
-this installer's) and reloads nginx; the certificate lineage is kept.
+this installer's) and reloads nginx; the certificate lineage is kept. It runs
+only while the `quillmd` vhost claims admin.quillmd.com's :443 (the before
+state): while `quillmd-cpt` does, a removal would leave admin claimed by
+nothing, so run `ingress-rollback` first. `ingress-rollback` gives
+admin.quillmd.com's :443 back to the `quillmd` vhost and `quillmd-cpt` the
+stage `ingress` replaced (**The admin host and the coupling invariant**).
 
 ### What each phase checks before and after
 
@@ -146,7 +152,14 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   is not a problem (the coder can then only be installed disabled), but a
   sources directory that is not root 0700, or a source that is not a root 0600
   regular file, is. Corti's source is no longer required, and no other source
-  is read. Any problem fails the phase.
+  is read. Since release 2 of the admin move it also records the coupling of
+  the `quillmd` vhost and `quillmd-cpt` (before or after is a baseline; any
+  other state is a problem), checks admin.quillmd.com's DNS (A `147.189.172.8`
+  only) and proves its HTTP-01 route (a probe file served for
+  `http://admin.quillmd.com/.well-known/acme-challenge/` through 127.0.0.1: the
+  `quillmd` vhost's :80 block), and requires that `scripts/check-cotenants.sh`,
+  told to skip admin.quillmd.com, judged no row for it. Any problem fails the
+  phase.
 - **secrets** generates the Django key and database password inside the root
   helper; the values never leave it. The set is `app.env` and `db.env`: Corti's
   source is no longer read and Corti's copy no longer written or checked (one
@@ -636,28 +649,188 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   refuse unless `--reset-passwords`, which rotates both. A grant that fails
   leaves the accounts and their files in place: rerun with `--reset-passwords`
   once it is fixed.
-- **http-vhost / https-vhost / rollback-vhost** validate with
-  `sudo -n /usr/sbin/nginx -t`, refuse any new nginx warning, reload with
-  `sudo -n /usr/bin/systemctl reload nginx`, then probe with bounded retries
-  (reloads are asynchronous). Any failed check restores the exact previous
-  file state, validates and reloads again. Co-tenant routing and app health
+- **http-vhost / https-vhost / ingress / ingress-rollback / rollback-vhost**
+  validate with `sudo -n /usr/sbin/nginx -t`, refuse any new nginx warning,
+  reload with `sudo -n /usr/bin/systemctl reload nginx`, then probe with bounded
+  retries (reloads are asynchronous). Any failed check restores the exact
+  previous file state - both files for `ingress` and `ingress-rollback`, in the
+  safe order - validates and reloads again. Co-tenant routing and app health
   must equal the preflight baseline. A stage this installer writes is the HTTP
   stage or the HTTPS stage for either web port (`cert`, `rollback-vhost` and
-  `verify` accept any of the three); `https-vhost` renders the HTTPS stage for
-  the port the running `cpt-studio-web` publishes (9150 on a fresh host), and
-  refuses an HTTPS stage for the other port.
+  `verify` accept any of the three). Since release 2 every HTTPS stage names
+  admin.quillmd.com, so one is written only by `ingress` (the first, with the
+  `quillmd` vhost's edit) or in place over another that names admin
+  (`https-vhost`, the blue/green switch); `http-vhost` and `rollback-vhost` run
+  in the before state alone. `https-vhost` renders the HTTPS stage for the port
+  the running `cpt-studio-web` publishes, and refuses an HTTPS stage for the
+  other port, the HTTP stage and an earlier stage that names no admin host
+  (both `ingress`'s).
 - **cert** requires exactly one existing ACME account and passes it with
   `--account`; certbot gets no `--agree-tos` or e-mail, so it cannot register
-  one. Other lineages' renewal configs must be byte-identical afterwards.
+  one, and no `--expand`. One order for cpt.quillmd.com and admin.quillmd.com
+  under `--cert-name cpt-studio`, webroot `/var/www/certbot` for both. On a
+  fresh host it needs this revision's `http-vhost` receipt; on a served site
+  none: `quillmd-cpt` must be the stage the running web is served through
+  (recorded by a successful receipt here, proxying to the port that web
+  publishes). DNS (A `147.189.172.8` only) and the HTTP-01 route (an ACME
+  probe) are checked for both names before certbot runs. Other lineages'
+  renewal configs must be byte-identical afterwards; neither CPT lineage
+  (`cpt.quillmd.com`, `cpt-studio`) counts as another.
 - **verify** compares everything with the preflight receipt and checks the
-  deployed containers' hardening and the HTTPS headers, including that a
-  request whose SNI is not `cpt.quillmd.com` is closed (444). `quillmd-cpt` must
-  be this revision's HTTPS stage for the port the running web publishes (it
-  alternates), and nothing an `app` parks or starts (`cpt-studio-web-next`,
+  deployed containers' hardening and the HTTPS headers. `quillmd-cpt` must be
+  this revision's HTTPS stage for the port the running web publishes (it
+  alternates) and the `quillmd` vhost exactly the state that stage couples
+  (after); a request for either host on a connection opened for
+  app.quillmd.com is answered 421 Misdirected Request, one for either host on
+  the other's connection is served, admin.quillmd.com is judged by the
+  own-host checks, and both HTTP-01 routes are proven. Nothing an `app` parks
+  or starts (`cpt-studio-web-next`,
   `*-previous`) may be left beside the pair. The containers'
   check (also run as each starts in `app`) includes their bind mounts: the web
   holds none, and the worker only the credentials files, read-only, at their
   worker paths.
+
+## The admin host and the coupling invariant (D396, release 2)
+
+admin.quillmd.com - the operator console's own host (owner direction
+2026-11-23, DECISIONS D396) - is served by the same `quillmd-cpt` server block
+as cpt.quillmd.com: one certificate (the `cpt-studio` lineage, which names
+exactly the two hosts), one upstream (the single `proxy_pass` the blue/green
+switch moves), and `Host $host` behind a guard that closes any other Host (444)
+and answers a TLS server name that is neither name with 421 Misdirected
+Request: a browser that reused a connection opened for another QuillMD name -
+whose certificate also covers admin.quillmd.com - retries on a fresh
+connection, where a 444 would have ended in an error page; a connection opened
+for either of the two serves both. The application has answered the admin host
+since release 1 (a revision whose tree holds `cptstudio/urls_admin.py` and
+`studio/hosts.py`). admin.quillmd.com's :80 stays the `quillmd` vhost's
+(QuillMD's file, its line 13): it answers admin's HTTP-01 challenge for both
+lineages that name admin, QuillMD's `quillmd.com` and `cpt-studio`.
+
+**The coupling invariant.** nginx loads `quillmd` before `quillmd-cpt`; a name
+both claim stays the first one's (with a `conflicting server name` warning),
+and a name neither claims falls to a co-tenant's default server and
+certificate. So the two files are coupled, and every state but two refuses:
+
+| state | `quillmd` vhost | `quillmd-cpt` | admin.quillmd.com :443 |
+|---|---|---|---|
+| before | `QUILLMD_VHOST_BEFORE` (`e9aa049d…`, the file as QuillMD keeps it) | names no admin host on 443, or is absent | QuillMD's Caddy notice |
+| after | `QUILLMD_VHOST_AFTER` (`b3ab6602…`): line 26 is `server_name quillmd.com www.quillmd.com;` | names admin.quillmd.com on 443 | CPT Studio |
+| both | before | names admin | still Caddy's (nginx keeps the `quillmd` vhost's): the only state between the two renames of the two-file write, never left by a phase |
+| anything else | | | refused by every phase and by the root helper |
+
+`preflight` takes before or after as a baseline and refuses any other;
+`verify` requires the state this revision's stage couples (after); the root
+helper reads it before every operation - refusing, before writing, a
+`quillmd-cpt` the `quillmd` vhost would not be coupled with - and after it,
+against the `quillmd` digest it read at the start. So `rollback-vhost` and
+`http-vhost` refuse in the after state (run `ingress-rollback` first), a
+blue/green switch moves between two stages that both name admin, and nothing
+but `ingress` and `ingress-rollback` writes the `quillmd` vhost - only between
+its two pinned states: line 26 replaced whole
+(`    server_name quillmd.com www.quillmd.com admin.quillmd.com;` and
+`    server_name quillmd.com www.quillmd.com;`), that full line asserted once at
+line 26, every other line - line 13, admin's HTTP-01 route, among them -
+byte-identical, and the result's sha256 the pinned value, all before anything
+is written. The after state's pin was derived from the live file, read only,
+by exactly that replacement.
+
+**The two-file write.** One root-helper operation holds both files. `couple`
+(`ingress`) checks that the `quillmd` vhost is the before state, its new
+content the after state and `quillmd-cpt` the stage expected, stages and
+fsyncs both files, then renames `quillmd-cpt` FIRST and the `quillmd` vhost
+SECOND; `decouple` (`ingress-rollback`, and the undo of `couple`) renames the
+`quillmd` vhost FIRST and `quillmd-cpt` SECOND. Either way the only state
+between the renames is both naming admin, which keeps admin on Caddy: no
+moment - and no state a stopped helper, or anyone's reload in between (the
+renewal deploy hook's, a co-tenant's), could publish - leaves admin claimed by
+nothing. Each operation accepts the other's partial state as its start and
+clears a staged file a stopped operation left, so an undo completes from
+wherever its operation stopped. `nginx -t` runs once both files are written (no
+new warning), then one reload, and both files' sha256 are read back.
+
+**ingress** runs after `cert`, while release 1 or later serves. It refuses,
+writing nothing, unless: the state is before; `quillmd-cpt` is the stage the
+running web is served through - an HTTPS stage a successful receipt in this
+receipts directory recorded (or this revision renders), proxying to the port
+that web publishes, or on a fresh host this revision's HTTP stage after its
+`http-vhost`; the running web serves the admin host - its revision is release 1
+or later, and on its loopback port it answers `/api/session` 404, an anonymous
+GET and HEAD of `/` 302 to exactly `/login/`, and the operator sign-in 200
+naming static files that answer 200, so the application answers admin from the
+reload on (no window); the `cpt-studio` lineage is present; and co-tenant
+routing and app.quillmd.com answer as the preflight baseline recorded. It
+writes this revision's HTTPS stage for that port and the `quillmd` vhost's
+after state (`couple`), then verifies through the public path - the own-host
+checks below for the running web's revision, both HTTP-01 routes (cpt's through
+`quillmd-cpt`'s :80, admin's through the `quillmd` vhost's), the
+`http://cpt.quillmd.com/` redirect, co-tenant routing and app.quillmd.com - and
+reads both files back; any failure writes both back (`decouple`). Its receipt
+records the stage it replaced byte for byte (`from`: sha256, kind, port, the
+revision whose receipt recorded it, base64), the stage it wrote
+(`vhost_sha256`), both `quillmd` pins and the web it found serving. Run again
+on the after state with this revision's stage live, it verifies and writes
+nothing (`moved: false`).
+
+**ingress-rollback** gives admin.quillmd.com's :443 back to the `quillmd`
+vhost and `quillmd-cpt` the stage that the newest successful `ingress` of this
+revision that moved admin replaced. It runs only while the web that ingress
+found serving - the revision its receipt recorded - serves again on the port
+the saved stage proxies to: before `app`, or after a `switch-back` to that
+revision. Otherwise the saved stage would send cpt.quillmd.com to a port
+nothing answers (the old web is removed once `app` succeeds), so it refuses and
+names `switch-back` first. It also needs the after state with this revision's
+HTTPS stage for that port live, and co-tenant routing as the baseline
+recorded. Before it writes anything it completes a TLS handshake with QuillMD's
+Caddy (`127.0.0.1:8443`, SNI admin.quillmd.com) and reads the notice it answers
+(a Caddy that lost its certificates would leave admin a raw 502). It writes the
+`quillmd` vhost's before state first, then the saved stage (`decouple`), and
+verifies: cpt.quillmd.com/health/ answers that web's revision (a fresh host's
+saved HTTP stage: cpt's :443 routes like an unknown host again),
+admin.quillmd.com through nginx answers Caddy's notice (the same status and
+body) with the `quillmd.com` lineage's certificate, co-tenant routing is
+unchanged, and both files read back; any failure writes both forward again
+(`couple`). Run again in the state it left, it verifies and writes nothing. The
+QuillMD-side checks the move changed to expect CPT Studio's answer on admin
+(`scripts/check-cotenants.sh` and the others) are QuillMD's: revert them to
+Caddy's notice in the same step.
+
+**The own-host checks.** admin.quillmd.com's :443 is the installer's own host:
+`routing_diff` leaves out the `https://admin.quillmd.com:443` keys (its :80
+stays a co-tenant route - QuillMD's block - watched like any other), and
+`scripts/check-cotenants.sh` is told not to judge it:
+`CPT_INSTALLER_SKIP_HOSTS=admin.quillmd.com`, the exact host, set by the
+installer itself (it never hands the script the operator's environment); the
+script counts its discrimination floor from the rows it judged, and a checkout
+whose script judged the host anyway (a row naming it with two codes) fails
+`preflight`. The installer judges the host positively instead - in `ingress`,
+`https-vhost`, every blue/green switch's verification and `verify`, through
+the public path: served with the `cpt-studio` certificate (exactly the two
+names, the certificate cpt.quillmd.com is served with) and the four policy
+headers once each; then, for a web whose revision serves the admin host,
+`/health/` for that revision, `/api/session` 404 (the doctors' urlconf answers
+401), an anonymous GET and HEAD of `/` 302 to exactly `/login/` (the doctors'
+urlconf: `/login/?next=/`), and the operator sign-in 200 naming static files
+that answer 200. A request for either host on a connection opened for
+app.quillmd.com is answered 421, and one for either host on a connection opened
+for the other is served. Before a switch the incoming web gives the same admin
+answers on its loopback port (`smoke_web`). All revision-aware: a revision
+before release 1 answers the admin host with Django's 400 (DisallowedHost),
+which is recorded and never a failure, and a `switch-back` to one says so in its
+summary. The operators phase writes the console's address as
+`https://admin.quillmd.com/ops/` (`operator_url`) and keeps
+`https://cpt.quillmd.com/ops/` (`operator_url_cpt`) while both hosts serve it.
+
+**The act's order (release 2).** `preflight`, `image`, `cert` (the
+`cpt-studio` lineage; ingress unchanged), `ingress` (both files for the live
+port; the running web is release 1 or later and already answers admin, so
+there is no window), `preflight` again (the post-ingress baseline `app` and
+`verify` read), the database check, `app` (blue/green: the live stage is now
+this revision's rendering), `verify`, the post-checks, the live check on both
+hosts. `verify` accepts the coupled state whichever side of the ingress its
+preflight was taken on: `sites-available` must be the baseline plus
+`quillmd-cpt` - this revision's stage for the live port - with the `quillmd`
+vhost exactly the after state, and neither CPT lineage counts as another.
 
 ## Reinstalling a new revision
 
@@ -672,11 +845,20 @@ repeat. A harness participant
 credentials source placed since the last `secrets` is copied by running
 `secrets` again (the three-file set reads `present`) before `app`. If `deploy/nginx/` changed between the revisions,
 `app` refuses the blue/green switch (it would change more than the upstream)
-and `verify` reports the vhost as different: republish with `rollback-vhost`,
-`http-vhost`, `cert` (a no-op for a lineage not yet due for renewal; it records
-the receipt `https-vhost` requires) and `https-vhost` under the new declaration
-- which takes the site down between the removal and the HTTPS stage (see
-**Known limits**).
+and `verify` reports the vhost as different. Under the coupling invariant the
+republish never removes `quillmd-cpt` (that would leave admin.quillmd.com's
+:443 claimed by nothing, and `rollback-vhost` refuses it): run `cert` (a no-op
+for a lineage not yet due for renewal; it records the receipt `https-vhost`
+requires), then `https-vhost` under the new declaration, which replaces in
+place the earlier revision's HTTPS stage - recorded by a successful receipt
+here, proxying to the port the running web publishes, and naming
+admin.quillmd.com as every stage since release 2 does - with this revision's
+for that port: the `quillmd` vhost stays the after state, one file is
+replaced in one reload, and both hosts are served throughout. Then `app`
+switches blue/green. Over an earlier stage that names no admin host (release
+1 and before) `https-vhost` refuses and names `ingress`, which moves admin in
+the same act. A template change that would stop naming admin.quillmd.com
+cannot be republished so (see **Known limits**).
 `rollback-vhost` removes a stage an earlier successful vhost receipt recorded
 (its digest), and a failed removal is restored to exactly the bytes that were
 live. A reinstall must therefore use the receipts directory of the install whose
@@ -805,6 +987,14 @@ interrupted (DECISIONS D247, F4); a `rollback-app` whose database refused
 before its close started says the close was not started, and that nothing was
 closed or set back. The availability record runs from B2 to the end.
 To come back to this revision, run `app` again.
+
+Since release 2 of the admin move the previous pair is judged on
+admin.quillmd.com too when its revision serves the admin host (release 1 and
+later): B2's smoke and B5's verification ask its admin answers. A previous
+revision before release 1 answers the admin host 400 - recorded, never a
+failure - and the summary says so: admin.quillmd.com answers that 400 until
+`ingress-rollback` gives admin back to the `quillmd` vhost (which needs the web
+its `ingress` found serving).
 
 ### Switching back to the pipeline before the Fable coding build
 
@@ -966,6 +1156,14 @@ from the publishers' PDFs through the earlier PDF reader, was removed with that
 reader; the committed passage files and their import are unchanged.
 
 ## Reinstalling an older revision
+
+**Since release 2 of the admin move (an accepted-capability loss, class
+b).** Every earlier revision's installer pins the `quillmd` vhost's before
+state alone, so from `ingress` until `ingress-rollback` it refuses every
+phase, its `switch-back` and `rollback-app` included. The way back to a
+revision before release 2 is this revision's `switch-back` (to the web its
+`ingress` found serving), then this revision's `ingress-rollback`, then the
+older installer.
 
 The Fable coding build's own reasons are above (**What still refuses**): an
 unknown coding outcome, and a stage the next worker cannot run still open after
@@ -1162,6 +1360,20 @@ recomputes every state.
 
 ## Recovery notes
 
+- Both the `quillmd` vhost and `quillmd-cpt` name admin.quillmd.com
+  (`preflight`, a phase or the root helper says the state is `both`): a
+  two-file write stopped between its renames and was killed outright, so its
+  own undo never ran. nginx keeps the `quillmd` vhost's admin (Caddy's notice,
+  with a `conflicting server name` warning), so nothing falls through, but
+  every phase refuses that state. Finish it by hand through the root helper,
+  either way: back - `quillmd-cpt` given the stage the `ingress` replaced (its
+  receipt's `from` when it wrote one; else that earlier revision's rendering
+  for the port, as its recording receipt names it, or the HTTP stage on a
+  fresh host) - or forward, the `quillmd` vhost given its after state; then
+  `sudo -n /usr/sbin/nginx -t`, one reload, and `preflight`. A
+  `.quillmd.new` or `.quillmd-cpt.new` left in `sites-available` is the
+  stopped operation's staged file; the root helper's two-file operations
+  clear it.
 - `*-previous` containers left by an interrupted `app`: to go back, run
   `rollback-app` first (it refuses while the new pair's records would be acted
   on, or shown, wrongly, as above; otherwise it closes what the new pair left
@@ -1294,6 +1506,26 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
 
 ## Known limits
 
+- admin.quillmd.com's HTTP-01 challenge is answered by QuillMD's :80 block:
+  the `cpt-studio` lineage renews by webroot for both names, and admin's
+  challenge is served by the `quillmd` vhost's :80 `server_name` (its line
+  13, QuillMD's file, which this installer never changes). If QuillMD drops
+  admin from that line or reroutes it, the next `cpt-studio` renewal fails for
+  both names - and with it cpt.quillmd.com's certificate at expiry, though the
+  unused `cpt.quillmd.com` lineage keeps renewing. `preflight`, `cert`,
+  `ingress`, `https-vhost` and `verify` each prove the route (an ACME probe
+  file served for `http://admin.quillmd.com/` through 127.0.0.1); between
+  installs nothing here watches it: a renewal dry run, or a monitor of the
+  served certificate's expiry, is the host monitoring's.
+- The installer's probes are HTTP/1.1, one connection per request: they stand
+  in for a browser's HTTP/2 connection reuse by sending one name's Host on a
+  connection opened for another (421 expected for a QuillMD name, service for
+  cpt.quillmd.com and admin.quillmd.com). The reuse itself is the act's live
+  check's to prove.
+- A checkout whose `scripts/check-cotenants.sh` judges admin.quillmd.com
+  despite `CPT_INSTALLER_SKIP_HOSTS` is refused by `preflight`; the installer
+  reads a judged row as one naming the host with two three-digit codes, so the
+  script must print a skipped host without them.
 - Data at rest is on the unencrypted root disk (docker volumes, nginx request
   buffering for uploads over 16 KiB). Acceptable only because the service is
   synthetic-only; real data would need an encrypted volume first.
@@ -1399,8 +1631,11 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
      vhost names 9151, its new web listens on 9150) - install forward with a
      blue/green installer instead.
   10. A `deploy/nginx/` change between revisions cannot ride the switch: `app`
-      refuses it and the republish (`rollback-vhost` … `https-vhost`) takes the
-      site down between the removal and the HTTPS stage.
+      refuses it. Since release 2 of the admin move the republish is
+      `https-vhost`'s in-place replace between two stages that both name
+      admin.quillmd.com, so nothing is taken down; a change that would stop
+      naming admin cannot be published so (it would need its own two-file act,
+      as `ingress-rollback` is).
   11. Which configuration nginx runs is read from `/proc`: the host master's
       worker processes (its pid file names it). An undo that cannot read them,
       or cannot prove a reload applied, treats nginx as possibly running the
