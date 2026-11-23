@@ -4135,3 +4135,44 @@ rebuild/ops/owner_normal_origin.py) changed in the same step.
 
 (d) "just release" is the owner's direction to install it: by the standing process (the merge, a rehearsal on a restored
 copy, the declaration committed before the act, the act through the ruled-act door, a live check, a report).
+
+### Owner direction, 2026-11-23 (738699b2) — the console moves to admin.quillmd.com now — DECISIONS D396
+
+After the admin dashboard was installed at cpt.quillmd.com/ops (#1512, #1513, #1514), the owner wrote, verbatim:
+
+> Not Found
+> The requested resource was not found on this server. i seen this errro on the specefic url you told me to check bhut
+> no problem jsut move to admin.quillmd.com and lemme walk into live one
+
+The address the release message gave, https://cpt.quillmd.com/ops with no trailing slash, answers 404 to everyone, an
+operator included (operator_view sets should_append_slash = False, so /ops answers what /opsx answers), and every /ops/
+path answers 404 to a visitor not signed in as an operator. The working route, https://cpt.quillmd.com/login/ as
+platform-operator, was given to the owner at once. The wrong instruction was the session's.
+
+The authority for the address is the owner's direction of 2026-11-22 (DECISIONS D392), verbatim: "also admin dashbaord
+is repalce to admin.quillmd.com if you see any old code on this url delete it with out any question". The D395 ruling
+above recorded the owner's choice to build at cpt.quillmd.com/ops first and move to admin.quillmd.com in a second release.
+
+Interpretation (session 738699b2):
+
+(a) The move is ordered now. admin.quillmd.com opens CPT Studio's sign-in; a platform operator signs in and lands in the
+console. cpt.quillmd.com is unchanged for doctors, and cpt.quillmd.com/ops/ keeps answering operators while both
+addresses serve (a later release may retire it).
+
+(b) "lemme walk into live one": on the admin host a signed-out visitor is sent to the sign-in page, never to an
+unexplained 404; the operator gate stays the security boundary for every console view on both hosts.
+
+(c) Two releases, as a design refutation before any code required (workflow wf_75dbe414-b35: five high findings against a
+one-release design): first the app learns the admin host with no change to the web front end, installed blue/green like
+any code release; then the web front end moves admin.quillmd.com onto an app that already answers it. A switch back from
+the second therefore lands on a revision that answers admin.
+
+(d) Nothing is deleted. The QuillMD Caddy's admin.quillmd.com notice stays as it is, unreachable once the front end stops
+forwarding admin there: it is the second release's rollback fallback. D392's authorization to delete old code on that
+URL is not used.
+
+(e) admin.quillmd.com stays in QuillMD's shared quillmd.com certificate, and its port-80 route (the ACME challenge path,
+then a redirect to https) is untouched, so that certificate keeps renewing for all five of its names. The QuillMD
+rebuild's private admin on 127.0.0.1:9131 is not on admin.quillmd.com and is not touched. QuillMD's own documents
+reserved admin.quillmd.com for the rebuild's future administrator site; the owner's directions give the name to CPT
+Studio's console, and the owner was told the rebuild's admin will need another name.
