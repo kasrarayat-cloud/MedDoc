@@ -22,8 +22,9 @@
 # behind it answers, and its host list does not even contain `pro.quillmd.com`.
 # This one asks the HTTP question and is deliberately separate.
 #
-# READ-ONLY. Issues HEAD requests. Writes nothing, mutates nothing, and never
-# touches a clinical route.
+# READ-ONLY. Issues HEAD requests (a GET for a row whose expectation reads the
+# body), writes nothing but one temporary file it removes, mutates nothing, and
+# never touches a clinical route.
 #
 # ⚠️ AN EXPECTATION CAN NAME THE REDIRECT OR THE BODY, AND A ROW CAN NAME MORE
 # THAN ONE DELIBERATE STATE (D396, the admin.quillmd.com move). `302>URL` means
@@ -38,10 +39,13 @@
 # a 404, or a 503 that is not the notice. A two-state row exists only across a
 # move and is narrowed when it lands.
 #
-# ⚠️ A FAILED HANDSHAKE IS A FINDING, NOT "NO RESPONSE". curl's TLS failures (a
-# wrong or expired certificate is exactly what a move can break) are red rows;
-# only a failure to resolve, connect or get an answer is "cannot tell" - and
-# every row is still probed, so one silent host never hides another's finding.
+# ⚠️ A FAILED HANDSHAKE IS A FINDING, NOT "NO RESPONSE". curl's certificate and
+# handshake failures (a wrong or expired certificate is exactly what a move can
+# break) are red rows; a failure to resolve, connect or get an answer - or a
+# fault of this machine's own TLS setup (no CA store, no crypto engine) - is
+# "cannot tell". Every row is still probed, so one silent host never hides
+# another's finding. A status curl printed is kept even when curl then failed
+# (a body over 64 KiB, a full disk): the answer arrived.
 #
 # ⚠️ CPT_INSTALLER_SKIP_HOSTS is how CPT Studio's installer tells this script not
 # to judge the one host it judges itself, admin.quillmd.com; the installer passes
@@ -62,7 +66,7 @@ set -uo pipefail
 # nobody remembering whether it was intended.
 EXPECTED=(
   "quillmd.com|200|the marketing site serves"
-  "www.quillmd.com|200|the same site on the www host. MASTER.md STEP 0.6 names FIVE hosts and this table shipped with FOUR — the watched-set failure INSIDE the check written to cure watched-set failures. Keep every entry on ONE line: the floor is derived by cutting field 2, and a wrapped reason is parsed as extra expected codes."
+  "www.quillmd.com|200|the same site on the www host. MASTER.md STEP 0.6 names FIVE hosts and this table shipped with FOUR — the watched-set failure INSIDE the check written to cure watched-set failures. Keep every entry on ONE line: the floor is derived by cutting field 2, and a wrapped reason is parsed as extra expected codes. (The floor is now counted from the rows JUDGED, below.)"
   "app.quillmd.com|302|owner-authorized normal HTTPS account login; protected application requires an invited account"
   "admin.quillmd.com|503~QuillMD administration is temporarily unavailable,302>https://admin.quillmd.com/login/|TWO DELIBERATE STATES ACROSS ONE MOVE (D396): 503 with the fresh rebuild's maintenance notice (public administration in maintenance; the rebuild's private admin stays on 127.0.0.1:9131); 302 to https://admin.quillmd.com/login/ is CPT Studio's operator console once release 2 of the admin.quillmd.com move is installed. Narrowed to the second when that release lands. Anything else - a 502, a 200, a 404, a 302 elsewhere, a 503 that is not the notice (CPT Studio's outage page) - is the finding."
   "pro.quillmd.com|410|DELIBERATELY RETIRED. The meddoc-pro CRM container was stopped (SIGTERM) on ~2026-08-04 and Caddy answers Gone. A change AWAY from 410 is the finding: either it started serving again, or a 502 is wearing its place."
@@ -71,8 +75,10 @@ EXPECTED=(
 have() { command -v "$1" >/dev/null 2>&1; }
 have curl || { echo "🟡 cannot tell — curl not installed"; exit 2; }
 
-# curl's exit codes for a TLS or certificate failure: a red row, never "no response"
-TLS_EXITS=' 35 51 53 54 58 59 60 64 66 77 80 82 83 90 91 '
+# curl's exit codes for the SERVER's certificate or handshake: a red row (35 handshake, 51 and 60 the certificate, 83
+# its issuer, 90 its pinned key, 91 its status). This machine's own TLS faults (53, 54, 58, 59, 64, 66, 77, 80, 82)
+# are "cannot tell", like a silent host: they say nothing about the co-tenant.
+TLS_EXITS=' 35 51 60 83 90 91 '
 
 # matches <alternatives> <status> <redirect_url> <body file>: one alternative names this state
 matches() {
@@ -99,7 +105,7 @@ for h in "${_skip_hosts[@]}"; do
   SKIP["$h"]=1
 done
 
-BODY="$(mktemp)"
+BODY="$(mktemp)" || { echo "🟡 cannot tell — no temporary file for a body (mktemp failed)."; exit 2; }
 trap 'rm -f "$BODY"' EXIT
 declare -a OBSERVED=() JUDGED=()
 findings=0; silent=0
@@ -116,27 +122,28 @@ for row in "${EXPECTED[@]}"; do
     *'~'*) answer="$(curl -s -m 12 --max-filesize 65536 -o "$BODY" -w '%{http_code} %{redirect_url}' "https://$host" 2>/dev/null)"; rc=$? ;;
     *) answer="$(curl -sI -o /dev/null -m 12 -w '%{http_code} %{redirect_url}' "https://$host" 2>/dev/null)"; rc=$? ;;
   esac
-  if [ "$rc" -ne 0 ] || ! [[ $answer =~ ^[0-9]{3}\  ]] || [ "${answer%% *}" = 000 ]; then
+  # the status curl printed stands whatever curl did after it; with none, a server TLS failure is red, anything else silent
+  if ! [[ $answer =~ ^[0-9]{3}\  ]] || [ "${answer%% *}" = 000 ]; then
     if [[ $TLS_EXITS == *" $rc "* ]]; then answer="tls "; else answer="000 "; fi
   fi
   got="${answer%% *}"; target="${answer#* }"
-  JUDGED+=("$want")
+  JUDGED+=("$want"); want_shown="${want// /_}"  # one word in the table, as CPT Studio's installer reads it
   case "$want" in
     *'>'*|*'~'*) OBSERVED+=("$got>$target"); shown="$got${target:+ → $target}" ;;
     *) OBSERVED+=("$got"); shown="$got" ;;
   esac
   if [ "$got" = 000 ]; then
     silent=$((silent + 1))
-    printf '  🟡 %-20s %-9s %s  (no response — network or DNS)\n' "$host" "$want" "$got"
+    printf '  🟡 %-20s %-9s %s  (no response — network, DNS or this machine'"'"'s TLS)\n' "$host" "$want_shown" "$got"
   elif [ "$got" = tls ]; then
     findings=$((findings + 1))
-    printf '  🔴 %-20s %-9s %s  (the TLS handshake failed: curl exit %s)\n' "$host" "$want" "$got" "$rc"
+    printf '  🔴 %-20s %-9s %s  (the TLS handshake failed: curl exit %s)\n' "$host" "$want_shown" "$got" "$rc"
     echo "     WHY $want WAS EXPECTED: $why"
   elif matches "$want" "$got" "$target" "$BODY"; then
-    printf '  🟢 %-20s %-9s %s\n' "$host" "$want" "$shown"
+    printf '  🟢 %-20s %-9s %s\n' "$host" "$want_shown" "$shown"
   else
     findings=$((findings + 1))
-    printf '  🔴 %-20s %-9s %s\n' "$host" "$want" "$shown"
+    printf '  🔴 %-20s %-9s %s\n' "$host" "$want_shown" "$shown"
     echo "     WHY $want WAS EXPECTED: $why"
   fi
 done
@@ -175,7 +182,7 @@ if [ "$distinct" -lt "$floor" ]; then
 fi
 
 if [ "$findings" -eq 0 ]; then
-  echo "🟢 every co-tenant answers its expected status ($distinct distinct codes — the probe discriminates)."
+  echo "🟢 every judged co-tenant answers its expected status ($distinct distinct codes — the probe discriminates)."
   exit 0
 fi
 echo "🔴 $findings co-tenant(s) diverged from the expected status. That is THE FINDING,"

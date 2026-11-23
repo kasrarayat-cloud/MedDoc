@@ -81,6 +81,14 @@ HOST_NGINX_AVAILABLE, HOST_NGINX_ENABLED = install.NGINX_AVAILABLE, install.NGIN
 def _guarded_coupling(quillmd_sha256=None, vhost=None):
     if install.NGINX_AVAILABLE != NO_NGINX / 'sites-available' or quillmd_sha256 is not None or vhost is not None:
         return REAL_READ_COUPLING(quillmd_sha256, vhost)
+    # the default follows the stage the test stands in (refutation R2 round 2, REFUSALS-5): a stage naming the admin host
+    # is the after state, as on a host; none (or no stage) the before state
+    try:
+        live = install.live_vhost_bytes()
+    except Exception:  # noqa: BLE001 - an unpatched read of NO_NGINX
+        live = None
+    if live and install.names_host_on(live.decode('utf-8', 'replace'), install.ADMIN_HOST):
+        return coupled('after')
     return coupled('before')
 
 

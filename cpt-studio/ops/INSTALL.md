@@ -813,11 +813,19 @@ stage it is about to replace, byte for byte, its sha, the quillmd pins and the
 web it found. A run killed outright between the write and its receipt (an OOM
 kill, a host reset, the door's ceiling: no undo runs, no receipt is written)
 therefore still leaves the way back on disk. Run `ingress` again: finding the
-after state with this revision's stage and an intent no moved receipt followed,
-it tests nginx against the preflight's warnings, reloads (nginx may still run
-what it loaded before the kill), verifies, and records the move with the
-intent's stage (`recovered`). Until then `ingress-rollback` refuses and names
-that rerun.
+after state with this revision's stage and an intent no recorded move followed,
+it completes the move exactly as the move runs - co-tenant routing checked
+first, nginx tested against the warnings the intent recorded before the write,
+reloaded (nginx may still run what it loaded before the kill), verified, and
+written back to the intent's stage on any failure - and records it with the
+intent's stage and the web the intent found (`recovered`). Only a recorded move
+resolves an intent; whether one matters is read from the files (the coupling
+not before). Until it is recorded, `app`, `https-vhost`, `switch-back` and
+`rollback-app` refuse and name the rerun, and so does `ingress-rollback`. If the
+stage moved since anyway (a phase run by hand), the rerun refuses and names the
+way: switch back until the web the intent found serves with this revision's
+stage for its port, then rerun `ingress`. A torn intent file changed nothing
+(it is written and fsynced before either file changes) and is skipped.
 
 **ingress-rollback's guards** (the R2 refutation, round 1). It runs only while
 the web the ingress found serving serves again, on either port: on the port the
@@ -826,10 +834,16 @@ saved stage proxies to it gives back the saved stage byte for byte; on the other
 own stage rendered for the port it serves on, and only when this installer
 renders the saved stage byte for byte. It refuses when the stage to give back
 loads certificate files Let's Encrypt's live directory does not hold (the
-saved stage loads the `cpt.quillmd.com` lineage: re-issue it first), and when
+saved stage loads the `cpt.quillmd.com` lineage: re-issue it by hand - this
+installer's cert phase orders the `cpt-studio` lineage alone), and when
 QuillMD's Caddy answers admin.quillmd.com with anything but a deliberate state -
-its maintenance notice (503 with QuillMD's sentence) or a status below 500 - so
-the way back never serves an error.
+its maintenance notice (503 with QuillMD's sentence) or a 2xx or 3xx answer -
+so the way back never serves an error. It checks in this order: a coupling
+neither before nor after refuses (recover it first: no switch-back or rerun can
+pass meanwhile); an unrecorded ingress of this revision names the rerun; a move
+of another revision names that way back. Run again in the state it left, it
+reloads nginx onto the files (a run killed before its reload left nginx on the
+after state) and verifies.
 
 **The own-host checks.** admin.quillmd.com's :443 is the installer's own host:
 `routing_diff` leaves out the `https://admin.quillmd.com:443` keys (its :80
@@ -1416,7 +1430,8 @@ recomputes every state.
   receipt's `from` when it wrote one; else that earlier revision's rendering
   for the port, as its recording receipt names it, or the HTTP stage on a
   fresh host) - or forward, the `quillmd` vhost given its after state; then
-  `sudo -n /usr/sbin/nginx -t`, one reload, and `preflight`. A
+  `sudo -n /usr/sbin/nginx -t`, one reload, and `preflight` - and, after a
+  forward finish, `ingress` again, which records the move from its intent. A
   `.quillmd.new` or `.quillmd-cpt.new` left in `sites-available` is the
   stopped operation's staged file; the root helper's two-file operations
   clear it.
@@ -1427,9 +1442,14 @@ recomputes every state.
   replaced stage byte for byte (`from.b64`) for a recovery by hand through the
   root helper.
 - `*-previous` containers left by an interrupted `app` while admin.quillmd.com
-  is moved: `rollback-app` refuses (it would leave quillmd-cpt naming both hosts
-  for a port nothing answers); keep the new pair, or give admin back first
-  (`ingress-rollback`, once the web the ingress found serves again).
+  is moved: `rollback-app` refuses to remove the pair quillmd-cpt proxies to
+  (both hosts would be left on a port nothing answers). Keep the new pair:
+  remove the parked pair by hand and run `app` again; then `switch-back` returns
+  the previous pair if it is wanted. Do not run `ingress-rollback` first.
+- The files in the before state while nginx may still run the after state (an
+  undo or a rollback killed before its reload): `ingress-rollback` run again
+  reloads nginx onto them; with no recorded move, reload by hand
+  (`sudo -n /usr/sbin/nginx -t`, then `systemctl reload nginx`) or run `ingress`.
 - `*-previous` containers left by an interrupted `app`: to go back, run
   `rollback-app` first (it refuses while the new pair's records would be acted
   on, or shown, wrongly, as above; otherwise it closes what the new pair left
@@ -1578,6 +1598,10 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   block at its end - leaves it in neither, and every phase here refuses until a
   CPT Studio release re-derives the pins from the file as it then is (line 26's
   edit and line 13's route still hold). Serving is not affected; installs wait.
+- A later revision whose template differs from the moving revision's must have
+  the mover's stage republished over its own (the mover's `https-vhost`) before
+  the mover's `switch-back`/`ingress-rollback` chain can pass; nothing automates
+  that step.
 - The cert phase runs certbot in a chroot where the renewal deploy hook
   (`renewal-hooks/deploy/reload-nginx.sh`) cannot reload nginx: certbot reports
   the hook's failure as a warning and exits 0. On a first order nothing loads

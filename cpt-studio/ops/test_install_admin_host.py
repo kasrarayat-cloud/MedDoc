@@ -13,6 +13,7 @@ import base64
 import hashlib
 import http.server
 import json
+import re
 import os
 import socket
 import subprocess
@@ -297,9 +298,10 @@ class CotenantScriptContractTests(TemporaryDirectoryTest):
                         'line="$(grep -m1 "^$host " "$STUB_SCENARIO")" || exit 7\n'
                         'read -r _h code target body <<< "$line"\n'
                         'case "$code" in exit:*) exit "${code#exit:}" ;; esac\n'
+                        'rc=0; case "$code" in *+*) rc="${code#*+}"; code="${code%%+*}" ;; esac\n'
                         '[ "$target" = - ] && target=""\n'
                         '[ -n "$out" ] && [ "$out" != /dev/null ] && printf "%s" "$body" > "$out"\n'
-                        'printf "%s %s" "$code" "$target"\n')
+                        'printf "%s %s" "$code" "$target"; exit "$rc"\n')
         curl.chmod(0o755)
 
     def run_script(self, admin, *, skip=True, base=BASE):
@@ -344,6 +346,20 @@ class CotenantScriptContractTests(TemporaryDirectoryTest):
         self.assertEqual(silent['returncode'], 2)
         both = self.run_script('exit:7', skip=False, base=(*self.BASE[:3], 'pro.quillmd.com 200 -'))
         self.assertEqual(both['returncode'], 1)
+
+    def test_a_status_curl_printed_stands_and_a_local_tls_fault_tells_nothing(self):
+        """refutation R2 round 2, QUILLMD-2, QUILLMD-6, REFUSALS-4: curl failing after the status line (a body over 64 KiB,
+        a full disk) keeps the status; this machine's own TLS fault is 'cannot tell', not a co-tenant finding; and the
+        installer reads the admin row's observed status from the real script's output"""
+        oversized = self.run_script('200+63 - big page', skip=False)
+        self.assertEqual(oversized['returncode'], 1)  # a 200 where the notice or the console was expected: red
+        self.assertIn('🔴 admin.quillmd.com', oversized['stdout'])
+        local = self.run_script('exit:77', skip=False)
+        self.assertEqual(local['returncode'], 2)
+        self.assertNotIn('🔴', local['stdout'])
+        rows = re.findall(r'^\s+[\U0001F7E2\U0001F534\U0001F7E1]\s+(\S+)\s+(\S+)\s+(\S+)',
+                          self.run_script(self.NOTICE, skip=False)['stdout'], re.M)
+        self.assertEqual({host: got for host, _want, got in rows}[ADMIN], '503')
 
     def test_the_skip_names_the_admin_host_alone(self):
         """refutation R2 round 1, CHECKS-6: nobody's variable silences a co-tenant"""
@@ -898,7 +914,8 @@ class IngressTests(TemporaryDirectoryTest):
         self.assertIsNone(error)
         self.assertEqual(world.files(), (world.after, rendered(9151)['https']))
         self.assertEqual((world.ops, world.renamed), (['couple'], [[install.VHOST_NAME, 'quillmd']]))
-        self.assertEqual((world.nginx_t, world.reloads), (['test', 'test'], 1))  # validated together, reloaded once
+        # the intent records nginx's warnings first, then the write is validated together and reloaded once
+        self.assertEqual((world.nginx_t, world.reloads), (['test', 'test', 'test'], 1))
         self.assertEqual((details['moved'], details['vhost_sha256'], details['upstream_port']),
                          (True, sha(rendered(9151)['https']), 9151))
         self.assertEqual({key: details['from'][key] for key in ('sha256', 'kind', 'port', 'recorded_by')},
@@ -1033,8 +1050,8 @@ class IngressTests(TemporaryDirectoryTest):
         world = self.served_world()
         details, error = world.run('ingress')
         self.assertIsNone(error)
-        for path in world.receipts.glob('ingress-*.json'):  # the move was another revision's
-            record = json.loads(path.read_text())
+        for path in [*world.receipts.glob('ingress-*.json'), *world.receipts.glob('intent-ingress-*.json')]:
+            record = json.loads(path.read_text())  # the move, and its intent, were another revision's
             record['revision'] = SERVING
             path.write_text(json.dumps(record))
         details, error = world.run('ingress-rollback')
@@ -1090,6 +1107,136 @@ class IngressTests(TemporaryDirectoryTest):
         self.assertIsNone(error)
         self.assertEqual(world.files(), (world.before, self.EARLIER))
 
+    def test_an_unrecorded_ingress_holds_every_phase_that_would_move_the_stage(self):
+        """refutation R2 round 2, INTENT-1, GUARDS-3: app, https-vhost, switch-back and rollback-app refuse while an ingress
+        that changed the two files has no receipt, naming the rerun; and a rerun whose stage moved names the way out"""
+        world = self.served_world()
+        self.run_killed_after_the_write(world)
+        args = SimpleNamespace(revision=REVISION, receipts=str(world.receipts), coding_mode='disabled', authorization_ref='',
+                               provider_mode='disabled')
+        patches = world.patches() + [mock.patch.object(install, 'installed_image', side_effect=AssertionError('started')),
+                                     mock.patch.object(install, 'keep_layout', side_effect=AssertionError('kept'))]
+        for patcher in patches:
+            patcher.start()
+        try:
+            for phase, function in (('app', install.phase_app), ('https-vhost', install.phase_https_vhost),
+                                    ('switch-back', install.phase_switch_back),
+                                    ('rollback-app', install.phase_rollback_app)):
+                with self.subTest(phase):
+                    with self.assertRaises(install.InstallError) as refused:
+                        function(install.Context(SimpleNamespace(**{**vars(args), 'phase': phase}), world.receipts))
+                    self.assertIn('stopped before it recorded the move', str(refused.exception))
+                    self.assertIn('run --phase ingress again first', str(refused.exception))
+        finally:
+            for patcher in reversed(patches):
+                patcher.stop()
+        (world.available / install.VHOST_NAME).write_text(rendered(9150)['https'])  # had the stage moved anyway
+        world.web_revision, world.web_port = REVISION, 9150
+        details, error = world.run('ingress')
+        self.assertIn('for a stage that is no longer live', str(error))
+        self.assertIn(f'Switch back until {SERVING[:12]} serves on 9151', str(error))
+
+    def test_a_completion_checks_routing_first_and_writes_back_on_a_failure(self):
+        """refutation R2 round 2, INTENT-4: the completion runs as the move does - routing drift refuses before any
+        reload, and a failed verification writes both files back to the intent's stage"""
+        world = self.served_world()
+        self.run_killed_after_the_write(world)
+        world.drift = ['https://quillmd.com:443@127.0.0.1']
+        reloads = world.reloads
+        details, error = world.run('ingress')
+        self.assertIn('nothing was reloaded', str(error))
+        self.assertEqual(world.reloads, reloads)
+        world.drift = []
+        world.https_problems = ['https://admin.quillmd.com/api/session answered 401']
+        details, error = world.run('ingress')
+        self.assertIn('answered 401', str(error))
+        self.assertEqual(world.files(), (world.before, self.EARLIER))  # written back, the quillmd vhost first
+
+    def test_a_completion_records_the_web_the_move_found(self):
+        """refutation R2 round 2, INTENT-6: the found web is the intent's, so ingress-rollback's web guard still holds"""
+        world = self.served_world()
+        self.run_killed_after_the_write(world)
+        world.web_revision = REVISION  # two apps since, back on the same port, this revision's web behind it
+        details, error = world.run('ingress')
+        self.assertIsNone(error)
+        self.assertEqual((details['web']['revision'], details['web_now']['revision']), (SERVING, REVISION))
+        details, error = world.run('ingress-rollback')
+        self.assertIn(f'runs only while {SERVING[:12]}', str(error))
+
+    def test_a_torn_intent_changed_nothing_and_is_skipped(self):
+        """refutation R2 round 2, INTENT-7: an intent is written and fsynced before the files change"""
+        world = self.served_world()
+        (world.receipts / 'intent-ingress-29991231T235959000000Z.json').write_text('{"revision": "aaa')
+        details, error = world.run('ingress')
+        self.assertIsNone(error)
+        self.assertTrue(details['moved'])
+        # the scans read it and pass it by: the newest intent here is torn, the move behind it recorded (the mutant M7
+        # survived a test whose flow never scanned)
+        details, error = world.run('ingress-rollback')
+        self.assertIsNone(error)
+        self.assertEqual(world.files(), (world.before, self.EARLIER))
+
+    def test_ingress_rollback_names_the_state_or_the_rerun_before_an_older_move(self):
+        """refutation R2 round 2, INTENT-2, GUARDS-1, INTENT-8, GUARDS-4: a half-written state is named as such (neither
+        a rerun nor a switch-back can pass), and a newer unrecorded ingress is named before an older recorded move"""
+        world = self.served_world()
+        world.run('ingress')
+        (world.available / 'quillmd').write_bytes(world.before)  # both claim admin
+        details, error = world.run('ingress-rollback')
+        self.assertIn('half way', str(error))
+        self.assertIn('Recover that state first', str(error))
+        (world.available / 'quillmd').write_bytes(world.after)
+        ctx = install.Context(SimpleNamespace(phase='ingress', revision=REVISION, receipts=str(world.receipts)),
+                              world.receipts)
+        install.write_intent(ctx, 'ingress', {'revision': REVISION, 'vhost_sha256': sha(rendered(9151)['https'])})
+        details, error = world.run('ingress-rollback')
+        self.assertIn('run --phase ingress again first', str(error))
+
+    def test_an_already_rolled_back_run_reloads_nginx_onto_the_files(self):
+        """refutation R2 round 2, INTENT-5: a rollback killed before its reload leaves nginx on the after state"""
+        world = self.served_world()
+        world.run('ingress')
+        world.run('ingress-rollback')
+        reloads = world.reloads
+        details, error = world.run('ingress-rollback')
+        self.assertIsNone(error)
+        self.assertEqual((details['already_rolled_back'], details['reloaded'], world.reloads), (True, True, reloads + 1))
+
+    def test_rollback_app_removes_a_stopped_pair_the_stage_proxies_to(self):
+        """refutation R2 round 2, REFUSALS-3: removing a stopped pair changes no routing, so the routing refusal stays
+        out of the way"""
+        world = self.served_world()
+        world.run('ingress')
+        world.web_revision = REVISION
+        stopped = lambda kind, name: ({**world.inspect(kind, name), 'State': {'Running': False}}
+                                      if world.inspect(kind, name) else None)
+        ctx = install.Context(SimpleNamespace(phase='rollback-app', revision=REVISION, receipts=str(world.receipts)),
+                              world.receipts)
+        patches = world.patches() + [mock.patch.object(install, 'keep_layout', return_value=None),
+                                     mock.patch.object(install, 'inspect', side_effect=stopped),
+                                     mock.patch.object(install, 'read_protected_env',
+                                                       side_effect=AssertionError('past the routing refusal'))]
+        for patcher in patches:
+            patcher.start()
+        try:
+            with self.assertRaisesRegex(AssertionError, 'past the routing refusal'):
+                install.phase_rollback_app(ctx)
+        finally:
+            for patcher in reversed(patches):
+                patcher.stop()
+
+    def test_the_way_backs_own_certificate_is_read_from_its_stage(self):
+        """refutation R2 round 2, GUARDS-5: the release-1 stage loads the cpt.quillmd.com lineage's files"""
+        stage = ('server {\n    listen 443 ssl;\n    ssl_certificate /etc/letsencrypt/live/cpt.quillmd.com/fullchain.pem;\n'
+                 '    ssl_certificate_key /etc/letsencrypt/live/cpt.quillmd.com/privkey.pem;\n}\n').encode()
+        with mock.patch.object(install, 'le_state', return_value={'live': {}}):
+            self.assertEqual(install.missing_stage_certificates(stage),
+                             ['/etc/letsencrypt/live/cpt.quillmd.com/fullchain.pem',
+                              '/etc/letsencrypt/live/cpt.quillmd.com/privkey.pem'])
+        with mock.patch.object(install, 'le_state', return_value={'live': {CPT: {'fullchain.pem': True,
+                                                                                    'privkey.pem': True}}}):
+            self.assertEqual(install.missing_stage_certificates(stage), [])
+
     def test_a_rerun_with_new_nginx_warnings_reloads_nothing(self):
         world = self.served_world()
         self.run_killed_after_the_write(world)
@@ -1128,7 +1275,7 @@ class IngressTests(TemporaryDirectoryTest):
 
     def test_ingress_rollback_gives_admin_back_only_to_a_deliberate_caddy_state(self):
         """refutation R2 round 1, COTENANT-3: a completed handshake is not enough - an error answer is refused"""
-        for state, said in (({'status': 200}, ''), ({'status': 302}, ''), ({'status': 404}, ''),
+        for state, said in (({'status': 200}, ''), ({'status': 302}, ''), ({'status': 404}, 'answered 404'),
                             ({'status': 503, 'notice': True}, ''), ({'status': 503, 'notice': False}, 'without'),
                             ({'status': 502}, 'answered 502'), ({'status': None, 'error': 'refused'}, 'handshake')):
             with self.subTest(state=state):
