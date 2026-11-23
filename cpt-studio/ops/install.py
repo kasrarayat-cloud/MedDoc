@@ -6922,7 +6922,8 @@ def phase_http_vhost(ctx) -> dict:
     state = vhost_state()
     if state['file_exists'] or state['link_exists']:
         if state['file_sha256'] != sha256(conf.encode()) or state['link_target'] != VHOST_LINK_TARGET:
-            raise InstallError('quillmd-cpt already exists and is not this HTTP stage; refusing.')
+            raise InstallError('quillmd-cpt already exists and is not this HTTP stage; refusing. While an HTTPS stage '
+                               "claims admin.quillmd.com's :443 (the after state), " + AFTER_STATE_REMEDY + '.')
     found = read_coupling(vhost=state)
     problem = coupling_problem(found, expected=('before',), remedy=AFTER_STATE_REMEDY)
     if problem:

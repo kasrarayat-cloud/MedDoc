@@ -908,7 +908,7 @@ class IngressTests(TemporaryDirectoryTest):
         for phase in ('rollback-vhost', 'http-vhost'):
             with self.subTest(phase):
                 details, error = world.run(phase)
-                self.assertRegex(str(error), 'ingress-rollback|not this HTTP stage')
+                self.assertIn('run --phase ingress-rollback first', str(error))
                 self.assertEqual((world.ops, world.files()[0]), (['couple'], world.after))
         # with quillmd-cpt gone too (by hand), the after state names nothing: http-vhost still refuses to write
         os.unlink(world.enabled / install.VHOST_NAME)
