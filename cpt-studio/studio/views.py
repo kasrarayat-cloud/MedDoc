@@ -14,10 +14,11 @@ from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
 from .access import SecurityHeadersMiddleware, active_membership
+from .hosts import is_console_page
 from .api import UNSTORABLE
 from .models import LoginAttempt
 from .operator import is_operator
@@ -111,3 +112,55 @@ def index(request):
                                                      'specialty': membership.workspace.category.name})
     response.headers['Content-Security-Policy'] = INDEX_CSP
     return response
+
+
+# The admin host (admin.quillmd.com; owner direction 2026-11-23, DECISIONS D396; cptstudio.urls_admin).
+ADMIN_SIGN_IN_REFUSED = 'The username or password is not correct, or the account is not a platform operator.'
+
+
+@csrf_exempt  # it reads no body and writes nothing: every method gets the redirect (refutation h1, gate-1)
+def admin_home(request):
+    """admin.quillmd.com/: an operator goes to the console, anyone else to the operator sign-in - every method alike, so
+    a monitor's HEAD gets the same 302 as a browser's GET (an unsafe request from another origin is refused first by
+    studio.hosts.foreign_origin)."""
+    return redirect('/ops/' if is_operator(request.user) else '/login/')
+
+
+@csrf_exempt  # a redirect only, as admin_home
+def admin_ops_slash(request):
+    """admin.quillmd.com/ops goes to /ops/ (the full urlconf keeps /ops answering what /opsx answers)."""
+    return redirect('/ops/')
+
+
+@ensure_csrf_cookie
+def admin_login_view(request):
+    """The operator door on the admin host: login_view's form, CSRF, next rule and throttle, but only a platform operator
+    signs in here. Any other account - a doctor with the right password included - gets the same sentence as a wrong
+    password and no session, so this door never tells a doctor's password apart; its attempt is recorded as not
+    succeeded (LoginAttempt has no door column), which the shared throttle counts. An operator who is also a member signs
+    in as the operator: this host has no doctor app. next may only name a console page on this host."""
+    if request.method not in ('GET', 'POST'):
+        return HttpResponseNotAllowed(['GET', 'POST'])
+    next_url = request.POST.get('next') or request.GET.get('next') or '/ops/'
+    if not (is_console_page(next_url) and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure())):
+        next_url = '/ops/'
+    error = ''
+    if request.method == 'POST':
+        submitted = request.POST.get('username', '').strip()[:150]
+        username = UNSTORABLE.sub('�', submitted)
+        password = request.POST.get('password', '')
+        client = UNSTORABLE.sub('�', _client(request))
+        if _throttled(username, client):
+            error = 'Too many failed attempts. Wait 15 minutes and try again.'
+        else:
+            user = authenticate(request, username=username, password=password) if username == submitted else None
+            operator = is_operator(user)
+            LoginAttempt.objects.create(username=username, client=client, succeeded=operator)
+            if operator:
+                login(request, user)
+                return redirect(next_url)
+            error = ADMIN_SIGN_IN_REFUSED
+    context = {'error': error, 'next': next_url, 'release': settings.RELEASE_SHA,
+               'username': UNSTORABLE.sub('�', request.POST.get('username', ''))[:150] if error else ''}
+    return render(request, 'studio/ops_login.html', context, status=200 if not error else 400)

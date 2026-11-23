@@ -6,7 +6,10 @@ by the ``grant_operator`` management command only, never over HTTP.
 
 Every URL under /ops/ answers anyone who is not an operator - signed out, a member of any role, the owner of any
 workspace, a revoked operator - exactly what an unknown URL answers (Django's 404), before the method, the body, the
-CSRF token or any record is read, so the surface's existence is not disclosed. An operator's read of an encounter page
+CSRF token or any record is read, so the surface's existence is not disclosed. On the console's own host,
+admin.quillmd.com (D396; studio.hosts), a signed-out request goes to the operator sign-in first - a GET or HEAD back to the
+page asked for (302), any other method to the console's front page (303) - and the 404 holds for every signed-in account
+that is not an operator. An operator's read of an encounter page
 or its original is audited as ``operator.viewed`` (never shown to customers: their activity is a fixed set of sentences,
 studio.customer). Vendor and model names, usage, costs, hashes and request ids are shown here; this is the record.
 
@@ -137,7 +140,10 @@ def operator_view(view):
     """Anyone who is not an operator gets exactly what an unknown URL gets - Django's 404 - before the method, the body,
     the CSRF token or the record is read; an operator gets the view. Django resolves a URL before CsrfViewMiddleware runs
     and an unknown URL stops there, so the global CSRF check is skipped here (csrf_exempt) and the same check
-    (csrf_protect) runs after the gate, for operators only; no operator URL is reached by appending a slash."""
+    (csrf_protect) runs after the gate, for operators only; no operator URL is reached by appending a slash. On the admin
+    host (admin.quillmd.com, D396) studio.hosts.signed_out_to_sign_in first sends any signed-out request to the operator
+    sign-in (a GET or HEAD back to the page, any other method to the front page with a 303); this gate answers every
+    signed-in account that is not an operator, there as on cpt.quillmd.com."""
     protected = csrf_protect(view)
 
     @functools.wraps(view)

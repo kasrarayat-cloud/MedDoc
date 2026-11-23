@@ -100,10 +100,12 @@
 
     form.inline { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin: 12px 0; }
     form.stack { display: grid; gap: 16px; margin: 12px 0; max-width: 560px; }
+    .card.signin { max-width: 480px; }
+    .fields.single { grid-template-columns: 1fr; }
     .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: end; margin: 12px 0; }
     label { display: grid; gap: 6px; font-weight: 600; font-size: 13px; color: var(--ink); }
     label .hint { font-weight: 400; color: var(--muted); }
-    input[type=text], select, textarea { width: 100%; min-height: 44px; padding: 10px 14px; border: 1px solid var(--control); border-radius: 8px; background: var(--white); color: var(--ink); font: 14px/1.45 var(--sans); }
+    input[type=text], input[type=password], select, textarea { width: 100%; min-height: 44px; padding: 10px 14px; border: 1px solid var(--control); border-radius: 8px; background: var(--white); color: var(--ink); font: 14px/1.45 var(--sans); }
     textarea { width: min(640px, 100%); min-height: 64px; }
     .hold textarea { width: 100%; }
     button, .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--ink); border-radius: 8px; background: var(--ink); color: var(--white); font: 600 14px/1.2 var(--sans); cursor: pointer; text-decoration: none; }
@@ -130,11 +132,13 @@
     }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
   </style>
+  {% block head_extra %}{% endblock %}
 </head>
 <body>
   <a class="skip" href="#main">Skip to the console</a>
   <header class="topbar">
     <a class="brand" href="/ops/">CPT Studio · Operator console</a>
+    {% block topbar_links %}
     <nav class="topnav" aria-label="Console">
       <a href="/ops/"{% if section == "encounters" %} aria-current="page"{% endif %}>Encounters</a>
       <a href="/ops/people"{% if section == "people" %} aria-current="page"{% endif %}>People</a>
@@ -144,6 +148,7 @@
     </nav>
     <span class="meta">Synthetic data only · release {{ release }}</span>
     <form method="post" action="/logout/">{% csrf_token %}<button class="signout" type="submit">Sign out</button></form>
+    {% endblock %}
   </header>
   <main id="main">
     {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
