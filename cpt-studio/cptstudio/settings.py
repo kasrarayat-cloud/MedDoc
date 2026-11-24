@@ -149,10 +149,6 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
 X_FRAME_OPTIONS = 'DENY'
 
-# Login throttling: attempts per (username, client) inside the window.
-LOGIN_THROTTLE_ATTEMPTS = 8
-LOGIN_THROTTLE_WINDOW_SECONDS = 15 * 60
-
 # --- Release 1: the security and HIPAA items (RELEASE-1-SPEC 3.2) -------------------------------------------------------
 # Every policy value here is a constant of the release, like the figures above: changing one is a release, which keeps
 # it reviewable. The owner decisions (RELEASE-1-SPEC section 8) stand at their recommended answers until the owner rules.
@@ -168,8 +164,9 @@ SESSION_ACTIVITY_WRITE_SECONDS = 60
 
 # B1, sign-in slows down instead of locking anyone out (OWNER DECISIONS D6, D23): the window; failures per (username,
 # address) that refuse that pair; failures per username before its delay starts, the delay's base (doubled per further
-# failure) and its ceiling; refused or failed attempts per address (an IPv6 /64) that refuse the address; how long a
-# device that signed in before skips the delay. They replace LOGIN_THROTTLE_* above, which today's sign-in reads.
+# failure) and its ceiling; failed attempts per address (an IPv6 /64) that refuse the address; how long a device or an
+# address that signed in before skips the delay. They replace the earlier LOGIN_THROTTLE_* lockout (removed in release 1:
+# nothing reads it; an older revision reads its own settings).
 SIGNIN_WINDOW_SECONDS = 15 * 60
 SIGNIN_PAIR_LIMIT = 10
 SIGNIN_USER_DELAY_AFTER = 5

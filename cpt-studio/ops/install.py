@@ -23,6 +23,7 @@ import getpass
 import hashlib
 import http.client
 import io
+import ipaddress
 import json
 import os
 import re
@@ -75,7 +76,7 @@ DB_CONTAINER = 'cpt-studio-db'
 SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
 # A stopped worker finishes the stage it is in (run_worker: each of its threads finishes its current job), which may be
 # inside a send. The Fable coding build's one stage (studio.jobs.stage_code, DECISIONS D351-D353) prepares the document
-# - a Word file is converted in a bounded child of at most 60 s (studio.fable.document.CONVERT_SECONDS) - then makes two
+# - a Word file is converted in a bounded child of at most 70 s (studio.fable.document.CONVERT_SECONDS) - then makes two
 # streamed sends one after the other, the reader's and the checker's, each of up to 96,000 output tokens at effort max:
 # about 1,000 s each at the slowest rate measured (studio.jobs.CODE_STALE_SECONDS' own reckoning), so one round can run
 # past 2,000 s and the 1,800 s of the pipeline before it would cut the checker's send into an UNKNOWN outcome. The stage
@@ -593,6 +594,8 @@ def parse_args(argv=None):
     parser.add_argument('--regrant', help='operators: grant this revoked account again (its declaration names it)')
     parser.add_argument('--command', choices=sorted(MANAGE_COMMANDS), help='manage: the ruled act to run')
     parser.add_argument('--username', help='manage: the account the act is for')
+    parser.add_argument('--address', help='manage clear-signin-failures: in place of --username, an IPv4 address or an '
+                                          'IPv6 address or /64 whose sign-in refusal to clear (B1)')
     parser.add_argument('--reason-file', help='manage: an absolute path to the reason, a short UTF-8 text file')
     parser.add_argument('--approved-by', help='manage dispose --dispose-step execute, or replay-ledger --execute: the '
                                               'approving person (D14)')
@@ -8159,7 +8162,9 @@ MANAGE_COMMANDS = {
     'grant-operator': {'command': 'grant_operator', 'needs': ('username', 'reason_file', 'by', 'review_by')},
     'issue-enrolment': {'command': 'issue_enrolment', 'needs': ('username', 'reason_file', 'by'), 'code': True},
     'reset-second-factor': {'command': 'reset_second_factor', 'needs': ('username', 'reason_file', 'by'), 'code': True},
-    'clear-signin-failures': {'command': 'clear_signin_failures', 'needs': ('username', 'reason_file', 'by')},
+    # B1: one username's delay and pair refusals (--username), or one network's refusal (--address: an IPv4 address,
+    # or an IPv6 address or /64), never both (manage_problem)
+    'clear-signin-failures': {'command': 'clear_signin_failures', 'needs': ('reason_file', 'by')},
     'require-password-change': {'command': 'require_password_change', 'needs': ('reason_file', 'by')},
     'dispose': {'command': 'dispose', 'needs': ('dispose_step', 'by'), 'files': True},
     'export-workspace': {'command': 'export_workspace', 'needs': ('workspace_id', 'reason_file', 'by'), 'files': True},
@@ -8188,8 +8193,8 @@ def manage_problem(args) -> str:
     for name in entry['needs']:
         if getattr(args, name, None) in (None, ''):
             return f'--command {args.command} needs --{name.replace("_", "-")}.'
-    for name in ('username', 'workspace_id', 'encounter_id', 'plan_id', 'review_by', 'approved_by', 'dispose_step',
-                 'all_human_accounts', 'reason_file', 'ledger_file', 'regrant', 'execute'):
+    for name in ('username', 'address', 'workspace_id', 'encounter_id', 'plan_id', 'review_by', 'approved_by',
+                 'dispose_step', 'all_human_accounts', 'reason_file', 'ledger_file', 'regrant', 'execute'):
         value = getattr(args, name, None)
         if value not in (None, '') and name not in entry['needs'] and not allowed_extra(args.command, name):
             return f'--{name.replace("_", "-")} is not used by --command {args.command}.'
@@ -8213,6 +8218,11 @@ def manage_problem(args) -> str:
     for name in ('reason_file', 'ledger_file'):
         if getattr(args, name, None) is not None and not Path(getattr(args, name)).is_absolute():
             return f'--{name.replace("_", "-")} must be an absolute path.'
+    if args.command == 'clear-signin-failures':
+        if bool(args.username) == bool(getattr(args, 'address', None)):
+            return '--command clear-signin-failures needs --username or --address (B1), not both.'
+        if getattr(args, 'address', None) is not None and address_problem(args.address):
+            return address_problem(args.address)
     if args.command == 'require-password-change' and bool(args.username) == bool(args.all_human_accounts):
         return '--command require-password-change needs --username or --all-human-accounts (D22), not both.'
     if args.command == 'dispose':
@@ -8253,7 +8263,22 @@ def allowed_extra(command, name) -> bool:
     return {('require-password-change', 'username'), ('require-password-change', 'all_human_accounts'),
             ('dispose', 'workspace_id'), ('dispose', 'encounter_id'), ('dispose', 'plan_id'),
             ('dispose', 'approved_by'), ('dispose', 'reason_file'), ('dispose', 'ledger_file'),
-            ('grant-operator', 'regrant'), ('dispose', 'execute')}.__contains__((command, name))
+            ('grant-operator', 'regrant'), ('dispose', 'execute'), ('clear-signin-failures', 'username'),
+            ('clear-signin-failures', 'address')}.__contains__((command, name))
+
+
+def address_problem(text) -> str:
+    """'' when ``text`` is what clear_signin_failures --address takes - an IPv4 address, or an IPv6 address or /64 - in
+    its canonical spelling, else the refusal."""
+    refusal = ('--address must be an IPv4 address, or an IPv6 address or /64, written canonically (for example '
+               '203.0.113.7 or 2001:db8:1:2::/64).')
+    try:
+        if '/' in text:
+            network = ipaddress.ip_network(text)  # strict: a prefix with host bits set is refused
+            return '' if network.version == 6 and network.prefixlen == 64 and str(network) == text else refusal
+        return '' if str(ipaddress.ip_address(text)) == text else refusal
+    except ValueError:
+        return refusal
 
 
 # What a manage act leaves for after its one-shot (refutation, installer lens A-3b): the one-shot's removal, the RAM
@@ -8307,8 +8332,11 @@ def install_in_progress() -> list:
 def manage_argv(ctx, args, entry) -> list:
     """The command line of the act (the installer's half of each command's contract; RAM-only files at MANAGE_MOUNT)."""
     command, reason = ['manage', entry['command']], ['--reason-file', f'{MANAGE_MOUNT}/reason']
-    if args.command in ('revoke-operator', 'clear-signin-failures'):
+    if args.command == 'revoke-operator':
         return [*command, '--username', args.username, *reason, '--by', args.by]
+    if args.command == 'clear-signin-failures':
+        who = ['--username', args.username] if args.username else ['--address', args.address]
+        return [*command, *who, *reason, '--by', args.by]
     if args.command == 'grant-operator':
         return [*command, '--username', args.username, *reason, '--by', args.by, '--authorization-ref',
                 authorization_of(ctx), '--review-by', args.review_by,

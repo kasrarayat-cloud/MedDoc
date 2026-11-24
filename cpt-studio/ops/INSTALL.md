@@ -1722,10 +1722,12 @@ declaration, with `--reason-file <file>` (RAM-only for the command) and
 
 | the state | what clears it |
 |---|---|
-| a sign-in delay on a username, or the refusal of one username from one address (B1) | wait: it ends within 15 minutes at most; or `--command clear-signin-failures --username <name>` |
+| a sign-in delay on a username (B1) | wait: it ends within 15 minutes at most; a device or a network the person signed in from before skips it; or `--command clear-signin-failures --username <name>` |
+| the refusal of one username from one address (B1) | wait 15 minutes; or `--command clear-signin-failures --username <name>`, or `--address <address>` for that address |
+| the refusal of a whole address (B1: too many failed sign-ins from one IPv4 address or one IPv6 /64, for example an office behind one address) | it ends 15 minutes after the last failed sign-in (a refused attempt no longer extends it); or at once with `--command clear-signin-failures --address <IPv4 address, or IPv6 address or /64>` |
 | the forced password change (B4: a password staff set, at its first sign-in) | the account page, `/account/`: its owner chooses a new password |
 | a member's staff-set password not replaced within 72 hours (B4, D31) | a reset in the console (People, the person's password): a new password and a new 72 hours; the clock is never extended |
-| the operator's staff-set password not replaced within 72 hours, or a setup code that expired (30 minutes) | `--command issue-enrolment --username <name>`: a new single-use setup code, kept root-only in `/etc/cpt-studio/operator-enrolment.json` and never printed, then the setup on admin.quillmd.com |
+| the operator's staff-set password not replaced within 72 hours, or a setup code that expired (30 minutes) or was claimed in another browser | `--command issue-enrolment --username <name>`: a new single-use setup code (it revokes an unfinished claim), kept root-only in `/etc/cpt-studio/operator-enrolment.json` and never printed, then the setup on admin.quillmd.com |
 | lost security keys | one of the recovery codes, at `/login/recovery` on admin.quillmd.com (printed once at enrolment; held sealed by the security officer, D20); otherwise `--command reset-second-factor --username <name>`, which marks the keys removed, voids the recovery codes, ends the account's sessions and issues a new setup code, kept as `issue-enrolment` keeps one, for enrolling again within 30 minutes |
 
 Losing both keys and every recovery code locks the console until that reset
@@ -1762,6 +1764,11 @@ release 1), run only through `--phase manage`, never over HTTP:
   planning that scope again (`--dispose-step plan` for its workspace or
   encounter) and executing that plan with two people. The ledger holds ids,
   counts and storage names (random ids), never a document's text or title.
+  **After a database restore, replay the ledger BEFORE the site is opened**
+  (web and worker stopped): a whole practice's replay destroys again everything
+  of that practice, including anything a member added to the restored copy, and
+  the replay's report counts such documents. A replay stopped by a signal
+  prints its record and exits 143 (SIGTERM) or 129 (SIGHUP).
 
 Every disposal step refuses while an install or switch-back is in progress (a
 `cpt-studio-web-next` or a `*-previous` container); only after that reading is

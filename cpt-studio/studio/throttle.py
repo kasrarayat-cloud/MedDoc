@@ -46,7 +46,7 @@ clear_address(key) deletes an address's - its failures, its refusals and the pai
 clear_signin_failures --address (address_key reads the address given). Each act writes its own SecurityEvent.
 LoginAttempt rows are never deleted here.
 
-The settings LOGIN_THROTTLE_* (today's lockout) are read by nothing here.
+The earlier LOGIN_THROTTLE_* lockout settings are gone (release 1); nothing reads them.
 """
 from __future__ import annotations
 

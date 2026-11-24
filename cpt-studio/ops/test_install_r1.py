@@ -552,6 +552,33 @@ class ManageArgumentTests(unittest.TestCase):
                 else:
                     self.assertIn(said, refused(*self.manage(*extra)))
 
+    def test_clear_signin_failures_takes_a_username_or_an_address_never_both(self):
+        # release 1, B1 (Lane 2's clear_signin_failures --address; integration): one network's refusal is cleared by
+        # its IPv4 address or its IPv6 address or /64, written canonically, as the command itself reads it
+        reason, by = ('--reason-file', '/srv/reason.txt'), ('--by', 'Ada Lovelace')
+        for address in ('203.0.113.7', '2001:db8:1:2::/64', '2001:db8::1'):
+            with self.subTest(accepted=address):
+                args = parse(*self.manage('--command', 'clear-signin-failures', '--address', address, *reason, *by))
+                argv = install.manage_argv(None, args, install.MANAGE_COMMANDS['clear-signin-failures'])
+                self.assertEqual(argv, ['manage', 'clear_signin_failures', '--address', address, '--reason-file',
+                                        f'{install.MANAGE_MOUNT}/reason', '--by', 'Ada Lovelace'])
+        args = parse(*self.manage('--command', 'clear-signin-failures', '--username', 'owner', *reason, *by))
+        self.assertEqual(install.manage_argv(None, args, install.MANAGE_COMMANDS['clear-signin-failures'])[2:4],
+                         ['--username', 'owner'])
+        refusals = {
+            'both': (('--username', 'owner', '--address', '203.0.113.7'), 'not both'),
+            'neither': ((), 'needs --username or --address'),
+            'a /64 with host bits': (('--address', '2001:db8:1:2::1/64'), '--address must be'),
+            'an IPv4 network': (('--address', '10.0.0.0/8'), '--address must be'),
+            'a non-canonical spelling': (('--address', '2001:DB8::1'), '--address must be'),
+            'not an address': (('--address', 'office'), '--address must be'),
+        }
+        for label, (extra, said) in refusals.items():
+            with self.subTest(refused=label):
+                self.assertIn(said, refused(*self.manage('--command', 'clear-signin-failures', *extra, *reason, *by)))
+        self.assertIn('not used by --command', refused(*self.manage('--command', 'revoke-operator', '--username',
+                                                                     'ops-agent', '--address', '203.0.113.7', *reason, *by)))
+
 
 class ManageWorld:
     """The host for --phase manage: one-shots recorded (with what their RAM-only files held), the root file a folder
@@ -1073,10 +1100,15 @@ class InstallDocR1Tests(unittest.TestCase):
         body = section(self.text, 'Emergency access (release 1, B8)')
         rows = [line for line in body.splitlines() if line.startswith('| ') and not line.startswith('| the state')
                 and not line.startswith('|---')]
-        self.assertEqual(len(rows), 5)
-        delay, forced, member, operator, keys = rows
+        self.assertEqual(len(rows), 7)
+        delay, pair, address, forced, member, operator, keys = rows
         self.assertIn('15 minutes at most', delay)
         self.assertIn('--command clear-signin-failures', delay)
+        # release 1 integration (Lane 2's B1): one username from one address, and a whole address, each have a way back
+        self.assertIn('--address', pair)
+        self.assertIn('--command clear-signin-failures --address', address)
+        self.assertIn('IPv6 /64', address)
+        self.assertIn('claimed in another browser', operator)
         self.assertIn('`/account/`', forced)
         self.assertIn('72 hours', member)
         self.assertIn('a reset in the console', member)
@@ -1399,3 +1431,43 @@ class MinorRepairTests(TemporaryDirectoryTest):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CrossLaneConstantTests(unittest.TestCase):
+    """Release 1 integration: two constants the installer holds as copies of another lane's, each held to its source so
+    the two can never drift apart unnoticed."""
+
+    APP = Path(__file__).resolve().parents[1]
+
+    def test_the_setup_code_shape_is_the_second_factors_own(self):
+        # Lane 2's studio/second_factor.py, read as source (it imports Django): the installer's setup codes must be the
+        # only shape its plain_code() reads from a --code-file
+        tree = ast.parse((self.APP / 'studio' / 'second_factor.py').read_text(encoding='utf-8'))
+        wanted, found = {'CODE_ALPHABET', 'CODE_GROUP', 'SETUP_CODE_GROUPS'}, {}
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in wanted:
+                    found[target.id] = ast.literal_eval(node.value)
+                elif isinstance(target, ast.Tuple) and isinstance(node.value, ast.Tuple):
+                    for name, value in zip(target.elts, node.value.elts):
+                        if isinstance(name, ast.Name) and name.id in wanted:
+                            found[name.id] = ast.literal_eval(value)
+        self.assertEqual(set(found), wanted)
+        self.assertEqual((install.CODE_ALPHABET, install.CODE_GROUP, install.SETUP_CODE_GROUPS),
+                         (found['CODE_ALPHABET'], found['CODE_GROUP'], found['SETUP_CODE_GROUPS']))
+        code = install.new_setup_code()
+        groups = code.split('-')
+        self.assertEqual((len(groups), {len(group) for group in groups}), (found['SETUP_CODE_GROUPS'], {found['CODE_GROUP']}))
+        self.assertTrue(set(code.replace('-', '')) <= set(found['CODE_ALPHABET']))
+
+    def test_the_converter_gets_time_to_finish_its_conversion(self):
+        # Lane 5's studio/converter_server.py loads no Django: its MIN_STOP_SECONDS is a running conversion plus the
+        # kill of what it started plus a margin, and docker stop must allow at least that
+        sys.path.insert(0, str(self.APP))
+        try:
+            from studio import converter_server
+        finally:
+            sys.path.remove(str(self.APP))
+        self.assertGreaterEqual(install.CONVERTER_STOP_SECONDS, converter_server.MIN_STOP_SECONDS)
