@@ -8177,9 +8177,16 @@ def operator_reason(ctx, username, kind) -> str:
             f'({door_of(ctx)["declaration_commit"]}).\n')
 
 
-# The lines a declaration names an act with (declaration_names; ops/INSTALL.md, operators): the words alone, or in
-# backticks, on a line of their own.
-DECLARED_LINE_FORMS = ('{words}', '`{words}`')
+# The one line a declaration approves a re-grant with (declaration_names; ops/INSTALL.md, operators): 'Approved: ' and
+# the words - in backticks or not - as the whole of a line that starts with it, outside any fenced block and any HTML
+# comment. Nothing else approves: refutation round 2, installer-3 found that a list of re-grants NOT approved holds
+# exactly the lines round 1 read as approval (the words alone on a line, under 'NOT approved:', in a fence, an indented
+# block, a comment), and any reading of the words around such a line would be a list of refusing phrases, which the
+# next wording passes. So a refusal, however its lines break, names nothing - and a declaration that also mentions the
+# words anywhere else approves nothing (fail closed: it says two things of one re-grant).
+REGRANT_APPROVAL_FORMS = ('Approved: {words}', 'Approved: `{words}`')
+DECLARATION_FENCES = ('```', '~~~')
+DECLARATION_COMMENT_RE = re.compile(r'<!--.*?(?:-->|\Z)', re.S)
 
 
 def door_of(ctx) -> dict:
@@ -8202,16 +8209,31 @@ def authorization_of(ctx) -> str:
 
 
 def declaration_names(ctx, words) -> bool:
-    """Whether the committed declaration this run is bound to names ``words`` (A6: a re-grant is named there): one of
-    its lines, split at line feeds and whitespace-trimmed, is exactly ``words`` or exactly ``words`` in backticks
-    (DECLARED_LINE_FORMS) - a line of its own, never a part of one (refutation round 1, installer-0: a substring test
-    read '--regrant alice' as naming '--regrant ali', and so did a sentence such as 'do not --regrant ali')."""
+    """Whether the committed declaration this run is bound to approves ``words`` (A6: a re-grant is approved there):
+    some line of it is exactly one of REGRANT_APPROVAL_FORMS (trailing white space aside) - not indented, not inside a
+    fenced block or an HTML comment - and the words are mentioned nowhere else in it. A mention is the words not
+    followed by a character a username may go on with, so '--regrant alice' is no mention of '--regrant ali' (refutation
+    round 1, installer-0) while 'do not --regrant ali.' is one."""
     try:
         text = (ROOT / door_of(ctx)['declaration']).read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError, ValueError):
         return False
-    forms = {form.format(words=words) for form in DECLARED_LINE_FORMS}
-    return any(line.strip() in forms for line in text.split('\n'))
+    approvals = {form.format(words=words) for form in REGRANT_APPROVAL_FORMS}
+    mention = re.compile(re.escape(words) + r'(?![a-z0-9_-])(?!\.[a-z0-9_.-])')
+    comments = [match.span() for match in DECLARATION_COMMENT_RE.finditer(text)]
+    approved, elsewhere, fenced, start = False, False, False, 0
+    for line in text.split('\n'):
+        fence = line.strip().startswith(DECLARATION_FENCES)
+        for found in mention.finditer(line):
+            at = start + found.start()
+            if (line.rstrip() in approvals and not fenced and not fence
+                    and not any(begin <= at < end for begin, end in comments)):
+                approved = True
+            else:
+                elsewhere = True
+        fenced = fenced != fence
+        start += len(line) + 1
+    return approved and not elsewhere
 
 
 def person_problem(value, flag) -> str:
@@ -8507,7 +8529,8 @@ def phase_operators(ctx) -> dict:
             if regrant != username or not declaration_names(ctx, f'--regrant {username}'):
                 raise InstallError(f'{username} was revoked as an operator, and a revoked grant stays revoked: '
                                    f'nothing was granted. To grant it again, run with --regrant {username} under a '
-                                   f'declaration that names "--regrant {username}".',
+                                   f'committed declaration with the line "Approved: --regrant {username}", which '
+                                   'names it nowhere else.',
                                    details={'accounts': outcome, 'check': before})
         problem = person_problem(by, '--by') or review_by_problem(review_by)
         if problem:
@@ -8936,7 +8959,8 @@ def read_ledger_file(path) -> bytes:
 def grant_problem(ctx, image_id, env) -> dict:
     """The account a manage grant-operator names, read (GRANT_CHECK) and judged before the act: it must exist; one any of
     whose grants was ever revoked - or whose answer does not say - is refused unless --regrant names it and the committed
-    declaration names "--regrant <username>" (A6; ADM-10 3(i); refutation, installer lens A-1). Returns what was read."""
+    declaration approves it, with the line "Approved: --regrant <username>" (declaration_names; A6; ADM-10 3(i);
+    refutation, installer lens A-1). Returns what was read."""
     args = ctx.args
     found = app_script(image_id, env, GRANT_CHECK, {'username': args.username}, what='Reading the account to grant')
     if not isinstance(found, dict) or found.get('exists') is not True:
@@ -8945,8 +8969,9 @@ def grant_problem(ctx, image_id, env) -> dict:
     if found.get('revoked') is not False:
         if args.regrant != args.username or not declaration_names(ctx, f'--regrant {args.username}'):
             raise InstallError(f'{args.username} was revoked as an operator, and a revoked grant stays revoked: nothing '
-                               f'was granted. To grant it again, run with --regrant {args.username} under a declaration '
-                               f'that names "--regrant {args.username}".', details={'grant_check': found})
+                               f'was granted. To grant it again, run with --regrant {args.username} under a committed '
+                               f'declaration with the line "Approved: --regrant {args.username}", which names it '
+                               'nowhere else.', details={'grant_check': found})
     elif args.regrant is not None:
         raise InstallError(f'--regrant {args.regrant}: that account was never revoked, so there is nothing to grant '
                            'again; nothing was granted.', details={'grant_check': found})

@@ -13,6 +13,8 @@ host guard; every Docker, root-helper and in-image call stood in. Synthetic data
   I2-4  switchback-1: the guide no longer says release 1's verify_login.py, scan_customer.py and walk pass against the
         pair before release 1 after a switch-back; it says why they fail closed and what to run instead.
   I2-5  installer-2: an option given more than once is refused before anything runs, the receipt naming it.
+  I2-6  installer-3: a re-grant is approved only by the line 'Approved: --regrant <name>' (outside a fence and a
+        comment), the words named nowhere else in the declaration; a refusal, however its lines break, approves nothing.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair_i2 -v
 """
@@ -666,6 +668,150 @@ class RepeatedOptionTests(TemporaryDirectoryTest):
                     self.assertEqual(install.repeated_options(argv, args), [option])
                 self.assertEqual(install.repeated_options([option, 'x', '--', option], args), [])
                 self.assertEqual(install.repeated_options([option, 'x'], args), [])
+
+
+# --- I2-6: the one line a declaration approves a re-grant with ------------------------------------------------------------
+
+# refutation round 2, installer-3: the lens's two declarations and the verifier's two - each refuses the re-grant of ali,
+# and each holds the words on a line of their own, which round 1 read as the approval
+REVISION_LINE = 'Revision ' + 'a' * 40 + '\n\n'
+NOT_APPROVED_LIST = (REVISION_LINE + 'Approved: `--regrant alice` (revoked by mistake on 2026-11-20).\n\n'
+                     'NOT approved - these accounts stay revoked, whoever asks for them:\n\n`--regrant ali`\n')
+REFUSED_IN_A_FENCE = (REVISION_LINE + 'The owner refuses the following re-grant (ali left the company; ADM-10):\n\n'
+                      '```\n--regrant ali\n```\n')
+UNDER_MUST_NOT_CHANGE = REVISION_LINE + '## Must not change\n\n    --regrant ali\n'
+IN_A_COMMENT = REVISION_LINE + '<!--\n--regrant ali\n-->\n'
+REFUSALS = {'the NOT approved list': NOT_APPROVED_LIST, 'a fence under a refusal': REFUSED_IN_A_FENCE,
+            'an indented block under Must not change': UNDER_MUST_NOT_CHANGE, 'an HTML comment': IN_A_COMMENT}
+APPROVAL = 'Approved: `--regrant ali`\n'
+
+
+class RegrantApprovalTests(TemporaryDirectoryTest):
+    def names(self, text, words='--regrant ali'):
+        import uuid
+        from types import SimpleNamespace
+        root = self.tmp / f'repo-{uuid.uuid4().hex[:8]}'
+        (root / 'docs').mkdir(parents=True)
+        (root / 'docs' / 'declaration.md').write_bytes(text.encode('utf-8'))
+        ctx = SimpleNamespace(door={'declaration': 'docs/declaration.md', 'declaration_commit': 'd' * 40})
+        with mock.patch.object(install, 'ROOT', root):
+            return install.declaration_names(ctx, words)
+
+    def test_a_refusal_however_its_lines_break_approves_nothing(self):
+        for label, text in REFUSALS.items():
+            with self.subTest(label):
+                self.assertIs(self.names(text), False)
+        # and the first declaration's approval of alice is a sentence, not the approval line: alice is not approved either
+        self.assertIs(self.names(NOT_APPROVED_LIST, '--regrant alice'), False)
+
+    def test_the_approval_line_approves_and_only_it(self):
+        for text in ('Approved: --regrant ali\n', APPROVAL, 'Approved: --regrant ali \t\n', 'Approved: --regrant ali',
+                     'x\r\nApproved: `--regrant ali`\r\ny\r\n',
+                     REVISION_LINE + 'The owner approves this re-grant (revoked by mistake on 2026-11-20).\n\n' + APPROVAL):
+            with self.subTest(approved=text):
+                self.assertIs(self.names(text), True)
+        both = 'Approved: --regrant alice\nApproved: --regrant ali\n'
+        self.assertIs(self.names(both, '--regrant alice'), True)
+        self.assertIs(self.names(both, '--regrant ali'), True)
+        # a name that starts with it is no mention of it, so its refusal leaves the approval standing
+        for other in ('NOT approved: --regrant alice\n', 'NOT approved: `--regrant ali.b`\n', 'not --regrant ali-x\n'):
+            with self.subTest(other=other):
+                self.assertIs(self.names(APPROVAL + other), True)
+
+    def test_an_approval_line_quoted_hidden_split_or_contradicted_approves_nothing(self):
+        for label, text in {
+                'the words alone (round 1)': '--regrant ali\n', 'in backticks alone (round 1)': '`--regrant ali`\n',
+                'indented': '    ' + APPROVAL, 'a list item': '- ' + APPROVAL, 'quoted': '> ' + APPROVAL,
+                'a heading': '# ' + APPROVAL, 'in a fence': '```\n' + APPROVAL + '```\n',
+                'in a tilde fence': '~~~\n' + APPROVAL + '~~~\n', 'in a comment': '<!--\n' + APPROVAL + '-->\n',
+                'in a one-line comment': '<!-- ' + APPROVAL.strip() + ' -->\n',
+                'in a comment never closed': '<!--\n' + APPROVAL, 'another case': 'approved: `--regrant ali`\n',
+                'more on its line': 'Approved: `--regrant ali` (no)\n', 'split over two lines': 'Approved:\n`--regrant ali`\n',
+                'refused in a list elsewhere': APPROVAL + '\nNOT approved:\n\n`--regrant ali`\n',
+                'refused in a sentence elsewhere': APPROVAL + 'Nobody may --regrant ali.\n',
+                'refused in a comment elsewhere': APPROVAL + '<!-- not --regrant ali -->\n',
+                'named in a fence elsewhere': APPROVAL + '```\n--regrant ali\n```\n',
+                'approved twice, once in a fence': APPROVAL + '```\n' + APPROVAL + '```\n'}.items():
+            with self.subTest(label):
+                self.assertIs(self.names(text), False)
+
+    def run_manage_grant(self, text):
+        """The real phase_manage grant-operator of ali, revoked, under the real declaration_names reading ``text``."""
+        world = r1.ManageWorld(self.tmp, grant={'exists': True, 'operator': False, 'revoked': True})
+        root = self.tmp / 'repo'
+        (root / r1.DECLARATION).parent.mkdir(parents=True, exist_ok=True)
+        (root / r1.DECLARATION).write_text(text, encoding='utf-8')
+        reason = self.tmp / 'reason.txt'
+        reason.write_bytes(b'Ticket 991: the owner decided the re-grant.\n')
+        args = r1.parse('--phase', 'manage', '--command', 'grant-operator', '--username', 'ali', '--regrant', 'ali',
+                        '--reason-file', str(reason), '--by', 'Ada Lovelace', '--review-by', r1.REVIEW_BY)
+        args.receipts = str(self.tmp)
+        ctx = install.Context(args, self.tmp)
+        ctx.door = {'declaration': r1.DECLARATION, 'declaration_commit': r1.COMMIT}
+        with mock.patch.multiple(install, ROOT=root, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                 require_db=mock.Mock(), oneshot=world.oneshot, inspect=world.inspect,
+                                 root_file=world.root, run_helper=world.run_helper, read_protected_env=mock.Mock(
+                                     return_value=f'CPT_STUDIO_SECRET_KEY={r1.SECRET_VALUE}\n'.encode()),
+                                 app_script=world.app_script):
+            try:
+                return install.phase_manage(ctx), None, world
+            except install.InstallError as error:
+                return None, error, world
+
+    def run_operators(self, text):
+        """The real phase_operators over platform-operator, revoked, run with --regrant platform-operator, under the real
+        declaration_names reading ``text`` (the second call site the verifier found)."""
+        from types import SimpleNamespace
+        from test_install_bluegreen import DECLARATION, OTHER_COMMIT, REVIEW_BY, FakeRootFile, operator_state
+        root, etc = self.tmp / 'operators-repo', self.tmp / 'operators-etc'
+        (root / DECLARATION).parent.mkdir(parents=True, exist_ok=True)
+        (root / DECLARATION).write_text(text.replace('--regrant ali', '--regrant platform-operator'), encoding='utf-8')
+        etc.mkdir(mode=0o700, exist_ok=True)
+        checks, commands = [], []
+
+        def app_script(image_id, env, body, params, **kwargs):
+            if body == install.OPERATOR_ACCOUNTS:
+                return {'accounts': {'platform-operator': 'kept'}}
+            assert body == install.OPERATOR_CHECK, body[:60]
+            checks.append(1)
+            return {'accounts': {'platform-operator': operator_state(operator=False, revoked=True) if len(checks) == 1
+                                 else operator_state()}}
+
+        def oneshot(image_id, command, env, **kwargs):
+            commands.append(command)
+            return SimpleNamespace(returncode=0, stdout=b'done\n', stderr=b'')
+        ctx = install.Context(SimpleNamespace(phase='operators', revision=r1.REVISION, receipts=str(self.tmp),
+                                              reset_passwords=None, by='Ada Lovelace', review_by=REVIEW_BY,
+                                              regrant='platform-operator'), self.tmp)
+        ctx.door = {'declaration': DECLARATION, 'declaration_commit': OTHER_COMMIT}
+        with mock.patch.multiple(install, ROOT=root, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                 require_db=mock.Mock(), read_protected_env=mock.Mock(return_value=b'K=' + b's' * 40 + b'\n'),
+                                 root_file=FakeRootFile(etc), app_script=app_script, oneshot=oneshot,
+                                 helper_stat=mock.Mock(return_value={install.LEGACY_OPERATOR_CREDENTIALS: {'exists': True}})):
+            try:
+                return install.phase_operators(ctx), None, commands
+            except install.InstallError as error:
+                return None, error, commands
+
+    def test_neither_call_site_grants_a_revoked_account_again_under_a_refusal(self):
+        for label, text in REFUSALS.items():
+            with self.subTest(manage=label):
+                details, error, world = self.run_manage_grant(text)
+                self.assertIn('stays revoked', str(error))
+                self.assertIn('the line "Approved: --regrant ali"', str(error))
+                self.assertEqual(world.acts(), [])
+            with self.subTest(operators=label):
+                details, error, commands = self.run_operators(text)
+                self.assertIn('stays revoked', str(error))
+                self.assertNotIn('grant_operator', [command[1] for command in commands])
+        # control: the approval line grants it again at both, and the command is told --regrant
+        details, error, world = self.run_manage_grant(REVISION_LINE + APPROVAL)
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(world.acts()[0][:2] + world.acts()[0][-1:], ['manage', 'grant_operator', '--regrant'])
+        details, error, commands = self.run_operators(REVISION_LINE + APPROVAL)
+        self.assertIsNone(error, error and str(error))
+        grant = [command for command in commands if command[1] == 'grant_operator']
+        self.assertEqual(grant[0][-1], '--regrant')
 
 
 if __name__ == '__main__':
