@@ -35,12 +35,15 @@ a committed declaration (A6):
                           rows_destroyed 'yes' (committed; a file, the folder or a count afterwards failed - every error
                           after the commit ends here, never as an escape) or 'unknown' (the commit's own answer was lost),
                           and files['remaining_names'] lists what was left. An interrupt after the commit (Ctrl-C, or a
-                          stop signal, which the dispose command makes raise) ends the same way - recorded 'failed' and
-                          its certificate printed, as far as that can be done - and then goes on as an interrupt; where
-                          even that cannot be done, the 'committed' row is the record. A transaction that rolled back
-                          writes nothing
-                          (NotDestroyed: nothing was destroyed). To finish a failed or interrupted disposal, remove what
-                          stopped it and plan the same scope again: the new plan takes in the files a run of the document
+                          stop signal, which the dispose command makes raise - as a KeyboardInterrupt, so a statement in
+                          flight is cancelled) ends the same way - recorded 'failed' and its certificate printed - and
+                          then goes on as an interrupt: one guard holds the transaction and every step after its commit,
+                          and an interrupt before the final event is sent is kept the same way. Where even that cannot
+                          be done - an interrupt while the final event is written, or a second one while the first is
+                          handled - the certificate says so as far as it can, and the 'committed' row is the record. A
+                          transaction that rolled back writes nothing (NotDestroyed: nothing was destroyed). To finish a
+                          failed or interrupted disposal, remove what stopped it and plan the same scope again: the new
+                          plan takes in the files a run of the document
                           left (leftover_names: those its failed run recorded, and those its plan named), and a destroyed
                           document may be planned again while any of its files remains or its last run did not complete.
     replay(ledger)        after a restore from a backup older than a disposal - run BEFORE the site is opened - the
@@ -647,6 +650,9 @@ class Outcome:
     committed: str = ''  # the id of the run's 'committed' DisposalEvent, written with the deletion
     step: str = 'files'  # the step after the commit under way
     encounter_ids: tuple = ()  # the documents the transaction destroyed (a whole practice: those it locked)
+    # the run's final DisposalEvent was sent to be written (_record): whether it was is then not known, and _run never
+    # sends it twice
+    recording: bool = False
 
     @property
     def complete(self) -> bool:
@@ -885,8 +891,10 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
     approved_by, authorization_ref and notes, for its 'committed' DisposalEvent - written in the same transaction, so
     nothing is destroyed without it. The caller checks the install. Once the commit is attempted: an Outcome (whatever
     failed afterwards is in it, an interrupt included), or CommitUnknown when the commit's own answer was lost; an error
-    before it rolls the transaction back and goes on as it is."""
-    marks = {'committing': False}
+    before it rolls the transaction back and goes on as it is. One guard holds the transaction, its commit and every
+    step after it, and the Outcome is made inside the transaction: from the commit's return to the guard nothing runs
+    (refutation dataloss-4), while an interrupt before the commit still rolls back and destroys nothing."""
+    marks = {'committing': False, 'committed': False}
     try:
         with transaction.atomic():
             with connection.cursor() as cursor:  # whatever this session set before: the deletes rely on deferral
@@ -921,12 +929,24 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
                 raise Refused('Rows in scope remained after the deletes; nothing was destroyed.')
             committed = DisposalEvent.objects.create(**_committed_fields(scope, deleted, tombstones, accounts, entries,
                                                                          record or {}))
+            outcome = Outcome(deleted=deleted, tombstones=tombstones, accounts=accounts, entries=entries,
+                              committed=str(committed.pk), encounter_ids=scope.encounter_ids)
             marks['committing'] = True  # the block's last statement: whatever raises from here on is the commit
-    except (Refused, IntegrityError):
-        raise  # refused, or refused by the database inside the block or at its commit: rolled back, nothing destroyed
-    except BaseException as exc:  # noqa: BLE001 - an error or an interrupt at the commit: its answer was lost
-        if not marks['committing']:
-            raise  # before the commit: rolled back, nothing destroyed - an error or an interrupt goes on as it is
+        marks['committed'] = True  # the commit returned: the rows are destroyed
+        _after_commit(scope, outcome)
+        return outcome
+    except BaseException as exc:  # noqa: BLE001 - one guard: before the commit, at it, and after it
+        if not marks['committing'] or (not marks['committed'] and isinstance(exc, (Refused, IntegrityError))):
+            # before the commit, or refused by the database at it: rolled back, nothing destroyed - a refusal, an error
+            # or an interrupt goes on as it is
+            raise
+        if marks['committed']:  # after the commit: _after_commit keeps every error, so an interrupt - kept for _run
+            if outcome.interrupted is None:
+                outcome.interrupted = exc
+            _problem(outcome, outcome.step, exc)
+            _count_left(scope, outcome)
+            return outcome
+        # an error or an interrupt at the commit: its answer was lost
         log.error('the commit of a disposal failed (%s): whether its rows were destroyed is not known',
                   type(exc).__name__)
         left = sorted(entry['name'] for entry in entries if entry['bytes'] is not None)  # no file was touched
@@ -935,16 +955,6 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
                                     remaining_names=left, files_remaining=len(left),
                                     interrupted=None if isinstance(exc, Exception) else exc,
                                     committed=str(committed.pk), encounter_ids=scope.encounter_ids)) from exc
-    outcome = Outcome(deleted=deleted, tombstones=tombstones, accounts=accounts, entries=entries,
-                      committed=str(committed.pk), encounter_ids=scope.encounter_ids)
-    try:
-        _after_commit(scope, outcome)
-    except BaseException as exc:  # noqa: BLE001 - the one guard after the commit for an interrupt: kept for _run
-        if outcome.interrupted is None:
-            outcome.interrupted = exc
-        _problem(outcome, outcome.step, exc)
-        _count_left(scope, outcome)
-    return outcome
 
 
 def _attempt(scope, **options) -> Outcome:
@@ -967,10 +977,21 @@ def _run(scope, record, **options):
     An interrupt after the commit (outcome.interrupted) is raised again once the run is recorded, carrying the run's
     certificate as ``disposal_certificate`` - the event's, or Unrecorded's text - for the command to print first.
     ``record`` goes to destroy too, for the 'committed' DisposalEvent it writes with the deletion: the record that
-    stands when the final event cannot be."""
-    outcome = _attempt(scope, record=record, **options)
+    stands when the final event cannot be. An interrupt that comes after the commit and before the final event was sent
+    to be written (refutation dataloss-4: _record's own first lines, outside its guard) is kept the same way, and the
+    event written then; one while it is written goes on with its certificate, never written twice (outcome.recording)."""
+    outcome = None
     try:
-        event = _record(scope, outcome, **record)
+        try:
+            outcome = _attempt(scope, record=record, **options)
+            event = _record(scope, outcome, **record)
+        except BaseException as exc:  # noqa: BLE001 - an interrupt between the commit and the final event is kept
+            if outcome is None or isinstance(exc, Exception) or outcome.recording:
+                raise  # nothing committed; Unrecorded or an error; or an interrupt while the event was written
+            if outcome.interrupted is None:
+                outcome.interrupted = exc
+            _problem(outcome, 'record', exc)
+            event = _record(scope, outcome, **record)
     except Unrecorded as exc:
         if outcome.interrupted is not None:
             outcome.interrupted.disposal_certificate = exc.text
@@ -1016,9 +1037,11 @@ def _event_fields(scope, outcome, *, reason, by, approved_by, authorization_ref,
 def _record(scope, outcome, **fields) -> DisposalEvent:
     """Write the run's final DisposalEvent; when it cannot be written, Unrecorded carries the certificate it would have
     had. An interrupt while it is written goes on carrying that certificate (``disposal_certificate``). Either way the
-    run's 'committed' DisposalEvent, written with the deletion, records the destruction."""
+    run's 'committed' DisposalEvent, written with the deletion, records the destruction. An interrupt before the event
+    is sent (outcome.recording) is _run's to keep."""
     values = _event_fields(scope, outcome, **fields)
     try:
+        outcome.recording = True  # from here whether the event is written is not known: _run never sends it twice
         return DisposalEvent.objects.create(**values)
     except Exception as exc:  # noqa: BLE001 - the destruction ran: its certificate is printed instead of lost
         log.error('the DisposalEvent of a disposal could not be written (%s)', type(exc).__name__)

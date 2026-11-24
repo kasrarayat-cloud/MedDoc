@@ -8,15 +8,20 @@
   its certificate, and the command still ends with 128 + the signal's number.
 - D3 (failclosed-6): an export whose 'exported' DisposalEvent cannot be written is removed, and the command says nothing
   was kept; a copy that cannot be removed is said to remain.
+- D4 (dataloss-4): a real SIGTERM at any line from the commit to the final DisposalEvent's INSERT leaves the run recorded
+  'failed' with its certificate printed; at any line before the commit it destroys and records nothing, as before.
 
 Synthetic practices only, on a test database and originals folders of the tests' own."""
 from __future__ import annotations
 
+import dis
 import hashlib
+import inspect
 import io
 import json
 import os
 import signal
+import sys
 import tempfile
 import threading
 import time
@@ -553,3 +558,151 @@ class UnrecordedExportTests(TransactionTestCase):
         record_bundle.discard_export(out)
         self.assertFalse(os.path.lexists(out))
         self.assertFalse(Event.objects.filter(stage=Event.EXPORTED).exists())
+
+
+# --- D4: a stop signal at any line between the commit and the run's record ---------------------------------------------
+
+SWEPT = (disposal.destroy, disposal._attempt, disposal._run, disposal._record, disposal._event_fields)
+
+
+def line_of(function, text) -> int:
+    """The line of ``function`` holding ``text`` (exactly one)."""
+    lines, start = inspect.getsourcelines(function)
+    found = [start + index for index, line in enumerate(lines) if text in line]
+    assert len(found) == 1, (function.__name__, text, found)
+    return found[0]
+
+
+def loop_lines(function) -> set:
+    """The lines of ``function`` holding a loop - here every one is a comprehension's, inlined in its frame (PEP 709).
+    The sweep takes such a line at its first line event only: a line event a loop's backward jump causes is where
+    CPython 3.12's line instrumentation raises an exception a trace hook throws at an offset the enclosing handlers do
+    not cover, so a with block's __exit__ never runs - which a real signal at that jump does not do (it is handled at
+    the jump, inside the handlers' range: 30 of 30 real signals ran __exit__, repair-d/exp/comprehension_signal2.py)."""
+    return {instruction.positions.lineno for instruction in dis.get_instructions(function)
+            if instruction.opname == 'FOR_ITER'}  # a loop's head (a with or except block's cleanup jumps back too)
+
+
+def traced(on_line):
+    """A sys.settrace hook calling ``on_line(name, line, occurrence)`` for every line event of SWEPT's functions."""
+    codes, seen = {function.__code__: function.__name__ for function in SWEPT}, {}
+
+    def local(frame, event, arg):
+        if event == 'line':
+            key = (codes[frame.f_code], frame.f_lineno)
+            seen[key] = seen.get(key, 0) + 1
+            on_line(*key, seen[key])
+        return local
+
+    def tracer(frame, event, arg):
+        return local if frame.f_code in codes else None
+    return tracer
+
+
+class StopSignalSweepTests(td.RepairCase, TestCase):
+    """D4, dataloss-4: the lens's probe - a real SIGTERM through the command's own handler, sent with os.kill from a
+    trace hook at a chosen line (nothing in studio.disposal patched) - at EVERY line event of destroy, _attempt, _run,
+    _record and _event_fields between the destruction's commit and the run's final INSERT: each run ends recorded
+    'failed' with its certificate printed (or, at the INSERT itself, with the certificate saying its event may not have
+    been written), the 'committed' row standing either way. And at every line event of destroy before the commit: the
+    transaction rolls back, nothing is destroyed or recorded, nothing is printed - an interrupt before the commit does
+    what it did. (The commit itself - the with block's exit, which a hook would interrupt before Django's __exit__ ran -
+    is not swept: it is the 'unknown' case the earlier rounds' tests pin.)"""
+
+    def one_document(self, number):
+        enc = f.encounter(self.ws, self.reviewer, title=f'ZZ-TITLE-MARKER sweep {number}')
+        f.upload(enc, self.reviewer, data=f.PDF_BYTES + f' sweep {number}'.encode(), filename='zz-file-marker.pdf')
+        plan = disposal.plan(disposal.document_scope(enc.pk), by='Synthetic Operator', reason='Synthetic: misfiled.')
+        return enc, plan
+
+    def run_plan(self, plan, tracer):
+        out, err, code = io.StringIO(), io.StringIO(), None
+        with td.installer_idle():
+            sys.settrace(tracer)
+            try:
+                call_command('dispose', '--execute', '--plan', str(plan.pk), '--by', 'Synthetic Operator',
+                             '--approved-by', 'Synthetic Approver', '--authorization-ref', td.AUTH, stdout=out, stderr=err)
+            except SystemExit as exc:
+                code = exc.code
+            finally:
+                sys.settrace(None)
+        return code, out.getvalue()
+
+    def points(self):
+        """(before the commit, between the commit and the final INSERT): the line events of an uninterrupted run."""
+        events = []
+        _, plan = self.one_document('recorded')
+        code, printed = self.run_plan(plan, traced(lambda *event: events.append(event)))
+        self.assertIsNone(code, printed)
+        loops = {function.__name__: loop_lines(function) for function in SWEPT}
+        events = [event for event in events if event[2] == 1 or event[1] not in loops[event[0]]]
+        exit_ = events.index(('destroy', line_of(disposal.destroy, 'with transaction.atomic():'), 2))
+        insert = events.index(('_record', line_of(disposal._record, 'DisposalEvent.objects.create(**values)'), 1))
+        return [event for event in events[:exit_] if event[0] == 'destroy'], events[exit_ + 1:insert + 1]
+
+    def interrupted_at(self, point, number):
+        enc, plan = self.one_document(number)
+        fired = []
+
+        def on_line(*event):
+            if event == point and not fired:
+                fired.append(event)
+                os.kill(os.getpid(), signal.SIGTERM)  # the command's handler raises Stopped here
+        code, printed = self.run_plan(plan, traced(on_line))
+        self.assertEqual(fired, [point])
+        self.assertEqual(code, 128 + signal.SIGTERM)
+        events = Event.objects.filter(encounter_ids__contains=[str(enc.pk)])
+        return enc, events, printed
+
+    def test_a_sigterm_at_any_line_between_the_commit_and_the_record_is_recorded(self):
+        _, after = self.points()
+        self.assertGreaterEqual(len(after), 10)
+        insert_line = line_of(disposal._record, 'DisposalEvent.objects.create(**values)')
+        for number, point in enumerate(after):
+            with self.subTest(point=point):
+                enc, events, printed = self.interrupted_at(point, number)
+                committed = events.get(stage=disposal.COMMITTED)  # the record that stands whatever follows
+                self.assertIn(f'DisposalEvent {committed.pk} (committed)', printed)
+                final = events.filter(stage__in=(Event.COMPLETED, Event.FAILED)).first()
+                if final is not None:
+                    self.assertEqual(final.stage, Event.FAILED)
+                    self.assertIn(f'Disposal {final.pk} (failed)', printed)
+                else:  # interrupted at the INSERT itself: whether it was written is not known, and that is printed
+                    self.assertEqual(point[:2], ('_record', insert_line))
+                    self.assertIn('NOT RECORDED (its DisposalEvent may not have been written', printed)
+                self.assertNotIn('ZZ-TITLE-MARKER', printed)
+
+    def test_a_sigterm_at_any_line_before_the_commit_destroys_and_records_nothing(self):
+        before, _ = self.points()
+        self.assertGreaterEqual(len(before), 10)
+        for number, point in enumerate(before):
+            with self.subTest(point=point):
+                enc, events, printed = self.interrupted_at(point, f'before {number}')
+                self.assertFalse(events.exclude(stage=Event.PLANNED).exists())
+                self.assertIsNone(models.Encounter._base_manager.get(pk=enc.pk).destroyed_at)
+                source = models.SourceFile.objects.get(encounter=enc)
+                self.assertTrue(storage.stored_path(source.storage_name).exists())
+                self.assertEqual(printed, '')
+
+    def test_a_ctrl_c_right_after_the_final_insert_never_writes_it_twice(self):
+        # the final INSERT runs, and the interrupt comes before create() returns: whether it was written is not known
+        # to the run, which must not send it again (outcome.recording) - the certificate says it may not have been
+        enc, plan = self.one_document('twice')
+        inserts = []
+
+        def interrupt_after_the_final_insert(execute, sql, params, many, context):
+            result = execute(sql, params, many, context)
+            if sql.startswith('INSERT INTO "studio_disposalevent"'):
+                inserts.append(sql)
+                if len(inserts) == 2:  # the first is the 'committed' row, the second the run's final one
+                    raise KeyboardInterrupt
+            return result
+        out = io.StringIO()
+        with td.installer_idle(), connection.execute_wrapper(interrupt_after_the_final_insert):
+            with self.assertRaises(KeyboardInterrupt):
+                call_command('dispose', '--execute', '--plan', str(plan.pk), '--by', 'Synthetic Operator',
+                             '--approved-by', 'Synthetic Approver', '--authorization-ref', td.AUTH, stdout=out)
+        events = Event.objects.filter(encounter_ids__contains=[str(enc.pk)])
+        self.assertEqual(len(inserts), 2)
+        self.assertEqual(events.filter(stage__in=(Event.COMPLETED, Event.FAILED)).count(), 1)
+        self.assertIn('NOT RECORDED (its DisposalEvent may not have been written', out.getvalue())
