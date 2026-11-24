@@ -1859,13 +1859,25 @@ release 1), run only through `--phase manage`, never over HTTP:
   and never undone. Any other non-zero exit is a failure, its ids-only output
   in the receipt too. The decision is made by
   planning that scope again (`--dispose-step plan` for its workspace or
-  encounter) and executing that plan with two people. The ledger holds ids,
-  counts and storage names (random ids), never a document's text or title.
+  encounter) and executing that plan with two people. The ledger, like every
+  destruction certificate, holds ids, counts, digests, storage names (random
+  ids) and the names of the two people, never a document's text or title, and
+  a reason only as `sha256:` with the sha256 of its text as the DisposalEvent
+  row keeps it (the reason file's text without leading and trailing white
+  space, so not the digest the receipt records for the file). Only the
+  database rows hold a reason's words; a row written back by a replay after a
+  restore holds the digest, so keep the reason files if their words must
+  outlive a restore.
   **After a database restore, replay the ledger BEFORE the site is opened**
   (web and worker stopped): a whole practice's replay destroys again everything
   of that practice, including anything a member added to the restored copy, and
   the replay's report counts such documents. A replay stopped by a signal
-  prints its record and exits 143 (SIGTERM) or 129 (SIGHUP).
+  prints its record and exits 143 (SIGTERM) or 129 (SIGHUP). So does a
+  destruction that a signal or Ctrl-C reaches after its commit: any statement
+  still running is cancelled first, and the run is recorded 'failed' with its
+  certificate. Only an interrupt while the final DisposalEvent is being written
+  leaves the 'committed' row as the record, with a certificate saying the final
+  event may not have been written.
 
 The first closure or destruction ends the way back to every revision before
 release 1: `switch-back` and `rollback-app` refuse to hand those rows to a
@@ -1883,7 +1895,10 @@ documents and manifests into a new folder of its own: the installer makes
 at `/run/cpt-export`, and the command makes `--out /run/cpt-export/<id>-<UTC>`
 inside it (Lane 4's command refuses a folder that exists; the files volume is
 read-only). Everything in it is then made root-only (folders 0700, files 0600);
-the receipt counts its files and bytes and never names one.
+the receipt counts its files and bytes and never names one. If the export's
+'exported' DisposalEvent cannot be written, the command removes the export and
+says nothing was kept (exit 1). If it cannot remove it, its error says a copy
+may remain; remove that folder by hand, as root, without reading it.
 Delivery to the practice is the termination runbook's step.
 
 **Restoring the database.** After any restore from a backup older than a
