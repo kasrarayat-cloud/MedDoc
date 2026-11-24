@@ -11,6 +11,7 @@ second_factor.setup_issued. The output names ids, counts and times only - the on
 exists to hand over.
 """
 import hashlib
+import unicodedata
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -20,27 +21,73 @@ from studio import request_meta, second_factor, security_events
 from studio.management.commands.grant_operator import reason_from
 from studio.models import User
 
-# What --by never is: a role, an account kind or a stand-in for nobody (C3: --by names a person, never a role).
+# What --by never is, in any spelling (C3: --by names a person, never a role; refutation r2, finding 7): a role, an
+# account kind, a system or an agent, or a stand-in for nobody. Compared as plain words (plain_words): case, width,
+# accents' composition, punctuation and spacing aside.
 ROLE_WORDS = frozenset({
-    'admin', 'administrator', 'agent', 'automated', 'automation', 'claude', 'cron', 'engineering lead', 'install',
-    'installer', 'me', 'n/a', 'na', 'nobody', 'none', 'operator', 'operators', 'ops', 'ops-agent', 'owner',
-    'platform operator', 'platform-operator', 'reviewer', 'root', 'security officer', 'security-officer', 'self',
-    'someone', 'system', 'tbd', 'unknown', 'user', 'viewer',
+    'admin', 'admins', 'administrator', 'administrators', 'agent', 'agents', 'ai', 'anon', 'anonymous', 'assistant',
+    'automated', 'automation', 'bot', 'bots', 'claude', 'cron', 'daemon', 'gid', 'guest', 'install', 'installer', 'me',
+    'myself', 'na', 'nobody', 'none', 'null', 'officer', 'operator', 'operators', 'ops', 'owner', 'owners', 'reviewer',
+    'root', 'script', 'security', 'self', 'server', 'service', 'someone', 'somebody', 'staff', 'superuser', 'support',
+    'sysadmin', 'sysadmins', 'system', 'systems', 'tbd', 'team', 'test', 'tester', 'uid', 'unknown', 'user', 'users',
+    'viewer',
 })
+# phrases that are roles though one of their words is not (compared with their spaces, and without them)
+ROLE_PHRASES = frozenset({'claude code', 'engineering lead', 'not applicable', 'n a', 'ops agent', 'platform operator',
+                          'security officer', 'on call'})
+FILLER_WORDS = frozenset({'a', 'account', 'an', 'and', 'behalf', 'by', 'for', 'my', 'of', 'on', 'our', 'the', 'this',
+                          'your'})
+NAME_CHARS = 120  # SecurityEvent.actor_label and OneTimeToken.created_by
+
+
+def name_as_recorded(value) -> str:
+    """--by as it is recorded and compared: Unicode NFKC (a composed and a decomposed accent, a full-width and an
+    ordinary letter, a no-break and an ordinary space are one spelling), every character no one can see or type removed
+    (studio.console.hidden), NFKC again, and runs of white space made one space - the normalisation of the two-person
+    rule's names (studio.disposal.name_as_recorded), so one person's name is one spelling in every ruled act."""
+    from studio.console import hidden  # here: the console is loaded only by an act that names a person
+    text = unicodedata.normalize('NFKC', str(value or ''))
+    text = ''.join(char for char in text if char.isspace() or not hidden(char))
+    return ' '.join(unicodedata.normalize('NFKC', text).split())
+
+
+def plain_words(name) -> list:
+    """A recorded name's words as ROLE_WORDS compares them: casefolded, every character that is not a letter or a digit
+    a space between words."""
+    return ''.join(char if unicodedata.category(char)[0] in 'LN' else ' ' for char in name.casefold()).split()
+
+
+def names_no_person(name) -> bool:
+    """Whether a recorded --by names no person: fewer than two letters (empty, punctuation, digits only); a role phrase
+    with or without its spaces, its plural or its article; or only role words, fillers and numbers ('the operator',
+    'Admins', 'Security_Officer', 'n/a.', 'uid 1000', 'system administrator')."""
+    if sum(1 for char in name if unicodedata.category(char).startswith('L')) < 2:
+        return True
+    words = plain_words(name)
+    stripped = list(words)
+    while stripped and stripped[0] in FILLER_WORDS:
+        stripped = stripped[1:]
+    if not stripped:
+        return True
+    roles = ROLE_WORDS | ROLE_PHRASES | {phrase.replace(' ', '') for phrase in ROLE_PHRASES}
+    for each in (words, stripped):
+        phrase = ' '.join(each)
+        if {phrase, phrase.replace(' ', ''), phrase[:-1] if phrase.endswith('s') else phrase} & roles:
+            return True
+    return all(word in ROLE_WORDS or word in FILLER_WORDS or word.isdigit() for word in words)
 
 
 def person(value):
-    """--by as recorded: the named person who runs the act - never empty, a role, an account kind or a uid."""
-    label = ' '.join(str(value or '').split())
-    if len(label) < 2:
-        raise CommandError('--by names the person who runs this act; nothing was recorded.')
-    if len(label) > 120:
-        raise CommandError('--by is at most 120 characters; nothing was recorded.')
-    if request_meta.UNSTORABLE.search(label) or any(ord(char) < 32 for char in label):
+    """--by as recorded (name_as_recorded): the named person who runs the act - never empty, a role, an account kind,
+    a system, an agent or a uid, in any spelling (names_no_person). CommandError otherwise; nothing is recorded."""
+    if request_meta.UNSTORABLE.search(str(value or '')):
         raise CommandError('--by holds a character that cannot be stored; nothing was recorded.')
-    plain = label.casefold().strip('[]() ')
-    if plain in ROLE_WORDS or plain.startswith('uid '):
-        raise CommandError('--by names a person, never a role or an account; nothing was recorded.')
+    label = name_as_recorded(value)
+    if len(label) > NAME_CHARS:
+        raise CommandError(f'--by is at most {NAME_CHARS} characters; nothing was recorded.')
+    if names_no_person(label):
+        raise CommandError('--by names the person who runs this act, never a role, an account or nobody; nothing was '
+                           'recorded.')
     return label
 
 

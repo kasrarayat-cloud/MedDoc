@@ -1324,3 +1324,48 @@ class CommandTests(TestCase):
             self.run_command('reset_second_factor', '--username', self.operator.username, '--reason-file',
                              reason_file(self), '--by', 'Platform Operator')
         self.assertEqual(second_factor.active_keys(self.operator).count(), 1)
+
+    # refutation r2, finding 7 (l2fa/test_probes.py P5): every spelling the probe got recorded, and more of its kind
+    NOBODY = ('[ ]', '()', '""', 'Operator.', 'the operator', 'Admins', 'sysadmin', 'superuser', 'Claude Code',
+              'ops agent', 'Security_Officer', 'n/a.', '<none>', 'bot', '1000', 'operator', 'root', 'uid 1000',
+              '[nobody]', 'op\u200berator', '\uff2f\uff30\uff25\uff32\uff21\uff34\uff2f\uff32', 'r\u00adoot', 'ROOT',
+              'Sys Admin', 'System Administrator', 'the ops-agent', 'N/A', 'Unknown', '-', 'x', 'A1', '1 2',
+              'claude-code', 'Platform-Operator', 'the operators', 'admin user', 'root account', 'on-call',
+              'Not applicable', 'installer', 'Engineering-Lead')
+
+    def test_by_names_a_person_in_any_spelling_and_is_recorded_as_one_spelling(self):
+        accepted, refused = [], []
+        for by in self.NOBODY:
+            try:
+                self.run_command('issue_enrolment', '--username', self.operator.username, '--reason-file',
+                                 reason_file(self), '--by', by)
+            except CommandError:
+                refused.append(by)
+            else:
+                accepted.append(by)
+        self.assertEqual(accepted, [])
+        self.assertFalse(models.OneTimeToken.objects.exists())
+        self.assertFalse(models.SecurityEvent.objects.exists())
+        for by, recorded in (('Synthetic Person', 'Synthetic Person'), ('Jos\u0065\u0301 Garc\u00eda', 'Jos\u00e9 Garc\u00eda'),
+                             ('\uff2a\uff4f \uff2c\uff49', 'Jo Li'), ('Ng\u200b Wei', 'Ng Wei'), ("Se\u00e1n  O'Brien", "Se\u00e1n O'Brien"),
+                             ('Claude Monet', 'Claude Monet'), ('Rob Root', 'Rob Root')):
+            with self.subTest(by=by):
+                self.run_command('issue_enrolment', '--username', self.operator.username, '--reason-file',
+                                 reason_file(self), '--by', by)
+                self.assertEqual(models.OneTimeToken.objects.latest('created_at').created_by, recorded)
+                self.assertEqual(models.SecurityEvent.objects.latest('created_at').actor_label, recorded)
+
+    def test_every_ruled_act_refuses_a_role_in_another_spelling(self):
+        member = f.member(f.workspace())
+        acts = (('issue_enrolment', '--username', self.operator.username),
+                ('reset_second_factor', '--username', self.operator.username),
+                ('clear_signin_failures', '--username', member.username),
+                ('require_password_change', '--username', member.username))
+        for act in acts:
+            for by in ('the operator', 'Security_Officer', '[ ]', 'uid 1000'):
+                with self.subTest(act=act[0], by=by), self.assertRaises(CommandError):
+                    self.run_command(*act, '--reason-file', reason_file(self), '--by', by)
+        self.assertFalse(models.SecurityEvent.objects.exists())
+        self.assertEqual(second_factor.active_keys(self.operator).count(), 1)
+        member.refresh_from_db()
+        self.assertIsNone(member.password_change_required_at)
