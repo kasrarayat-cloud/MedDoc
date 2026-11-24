@@ -779,9 +779,19 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   and the receipt keeps its sha256 and size, never its text. It is read through
   one descriptor that never follows a link, at most 4,096 bytes counted as read,
   and a file whose contents differ from the size it reports (`/proc`, `/sys`) is
-  refused. Every output is checked first: the setup code, the application's own
-  secret values and the reason's text (whole, or any line of 12 characters or
-  more) must not be in it (`assert_no_secret`), or nothing is kept. The receipt keeps the
+  refused. Once the act has run, its record is always kept (refutation round 1,
+  phileak-1 and dataloss-3: a destruction's certificate that repeated the plan's
+  reason was discarded with its log): every occurrence of the setup code, the
+  application's own secret values and the reason's text (whole, or any line of
+  12 characters or more, as written or as JSON writes it inside a string; a
+  shorter reason only where no letter or digit adjoins it, so no id or digest
+  is altered) is replaced by `[redacted by the installer]` before the log and
+  the receipt are written, and the receipt's `redacted` counts them by kind
+  (`secret`, `reason`), never a value; the summary says so, and a secret the
+  command printed is a FINDING. A setup code it printed is never kept (the
+  act's receipt fails, and the act runs again for a new code), and `provision`
+  never hands over a password it printed (the credentials files are
+  discarded; `--reset-passwords` sets new ones). The receipt keeps the
   command's stdout (ids and counts) and its log. Nothing that is not on the list
   runs. An act holds the receipts' lock for its whole run, as every phase does,
   so no install, `switch-back` or `rollback-app` can start while it runs (and

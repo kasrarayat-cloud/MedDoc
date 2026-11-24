@@ -756,23 +756,34 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         self.assertNotIn(code, json.dumps(details))
         for path in self.tmp.glob('*.log'):
             self.assertNotIn(code, path.read_text())
-        # a command that printed the code: nothing is kept, the staged code discarded
+        # a command that printed the code: no code is kept, the staged code discarded - and the act ran, so its record
+        # is kept with the code redacted (refutation round 1, phileak-1's class)
         again = self.tmp / 'again'
         again.mkdir()
         world = ManageWorld(again)
         world.output = lambda command: f'your code: {world.mounted["code"][0]}'.encode()
-        with self.assertRaisesRegex(install.InstallError, 'secret appeared'):
+        with self.assertRaisesRegex(install.InstallError, 'printed the setup code') as caught:
             world.run('--command', 'reset-second-factor', '--username', 'platform-operator', '--reason-file', 'REASON',
                       '--by', 'Ada Lovelace')
         self.assertEqual(list(world.etc.iterdir()), [])  # neither the code nor its staged copy
-        self.assertFalse([path for path in again.glob('*.log')])
+        printed = world.mounted['code'][0]
+        (log,) = again.glob('*.log')
+        self.assertNotIn(printed, log.read_text())
+        self.assertIn('[redacted by the installer]', log.read_text())
+        self.assertEqual(caught.exception.details['redacted'], {'secret': 1, 'reason': 0})
+        self.assertNotIn(printed, json.dumps(caught.exception.details))
 
-    def test_an_application_secret_printed_by_an_act_is_never_kept(self):
+    def test_an_application_secret_printed_by_an_act_is_never_kept_and_the_act_is_recorded(self):
+        # refutation round 1, phileak-1's class: the act ran, so its record is kept with the secret redacted, counted
         world = ManageWorld(self.tmp, output=f'settings: {SECRET_VALUE}'.encode())
-        with self.assertRaisesRegex(install.InstallError, 'secret appeared'):
-            world.run('--command', 'clear-signin-failures', '--username', 'owner', '--reason-file', 'REASON', '--by',
-                      'Ada Lovelace')
-        for path in self.tmp.glob('*.log'):
+        details = world.run('--command', 'clear-signin-failures', '--username', 'owner', '--reason-file', 'REASON',
+                            '--by', 'Ada Lovelace')
+        self.assertEqual(details['redacted'], {'secret': 1, 'reason': 0})
+        self.assertIn('FINDING: the command printed one', details['summary'])
+        self.assertNotIn(SECRET_VALUE, json.dumps(details))
+        logs = list(self.tmp.glob('*.log'))
+        self.assertEqual(len(logs), 1)
+        for path in logs:
             self.assertNotIn(SECRET_VALUE, path.read_text())
 
     def test_a_disposal_is_refused_while_an_install_or_switch_back_is_in_progress(self):
@@ -1379,15 +1390,18 @@ class ReceiptBeforeJournalTests(TemporaryDirectoryTest):
 class MinorRepairTests(TemporaryDirectoryTest):
     """Refutation, installer lens A-7: the five smaller findings."""
 
-    def test_a_command_that_echoes_its_reason_is_refused_and_nothing_kept(self):
+    def test_a_command_that_echoes_its_reason_is_kept_with_the_reason_redacted(self):
+        # refutation round 1, phileak-1: the act ran, so it is recorded - the reason never reaches its log or receipt
         reason = b'Ticket 4521.\nDr Smith asked to end access after the Jones complaint.\n'
         # the whole reason, or one of its lines (12 characters or more), echoed back
         for echoed in (b'revoked; reason: ' + reason, b'note: Dr Smith asked to end access after the Jones complaint.\n'):
             with self.subTest(echoed=echoed):
                 world = ManageWorld(self.tmp, output=lambda command, said=echoed: said)
-                with self.assertRaisesRegex(install.InstallError, 'secret appeared'):
-                    world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON',
-                              '--by', 'Ada Lovelace', reason=reason)
+                details = world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file',
+                                    'REASON', '--by', 'Ada Lovelace', reason=reason)
+                self.assertEqual(details['redacted'], {'secret': 0, 'reason': 1})
+                self.assertNotIn('Jones', json.dumps(details))
+                self.assertTrue(Path(details['log']).exists())
                 self.assertFalse([path for path in self.tmp.glob('*.log') if b'Jones' in path.read_bytes()])
         self.assertEqual(install.reason_values(b'Short.\nA longer second line here\n'),
                          ['Short.\nA longer second line here', 'A longer second line here'])

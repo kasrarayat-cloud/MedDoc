@@ -407,6 +407,75 @@ def assert_no_secret(outputs, values):
                 raise InstallError('A generated secret appeared in command output; nothing was recorded.')
 
 
+# Once an act has run, its record is never discarded for what its output holds (refutation round 1, phileak-1 and
+# dataloss-3: a disposal's certificate repeated the plan's reason, assert_no_secret refused the output after the
+# destruction had run, and no log or receipt kept the certificate). Each secret value - and each value of the reason
+# (reason_values) - is replaced by REDACTED_MARK before the log and the receipt are written, and the receipt counts how
+# many were (redact_output; never a value). A secret is replaced wherever it occurs (a long random value cannot occur by
+# chance); a value of the reason as written and as JSON writes it inside a string (a ledger line's), and one shorter than
+# REDACT_BOUNDED_BELOW only where no letter or digit adjoins it, so an id or a digest that happens to contain a short
+# reason is never altered.
+REDACTED_MARK = b'[redacted by the installer]'
+REDACT_BOUNDED_BELOW = 12
+_ALNUM = b'0-9A-Za-z'
+
+
+def redaction_forms(value) -> list:
+    """``value`` as written and as JSON writes it inside a string (escaped, ASCII or not), as UTF-8 bytes."""
+    forms = [value.encode('utf-8')]
+    for ascii_only in (True, False):
+        forms.append(json.dumps(value, ensure_ascii=ascii_only)[1:-1].encode('utf-8'))
+    return list(dict.fromkeys(form for form in forms if form))
+
+
+def redact_output(output: bytes, secrets=(), reasons=()) -> tuple:
+    """(``output`` with every secret and every value of the reason replaced by REDACTED_MARK, {'secret': how many
+    secret occurrences, 'reason': how many of the reason}) - in one pass, the longest value first, so no replacement is
+    read again."""
+    kinds = {}
+    for kind, values in (('reason', reasons), ('secret', secrets)):  # a secret's kind wins a value both name
+        for value in values:
+            if value:
+                for form in redaction_forms(value) if kind == 'reason' else [value.encode('utf-8')]:
+                    kinds[form] = kind
+    counts = {'secret': 0, 'reason': 0}
+    if not kinds or not output:
+        return output, counts
+    patterns = []
+    for form in sorted(kinds, key=len, reverse=True):
+        pattern = re.escape(form)
+        if kinds[form] == 'reason' and len(form) < REDACT_BOUNDED_BELOW:
+            if re.match(rb'[0-9A-Za-z]', form[:1]):
+                pattern = rb'(?<![' + _ALNUM + rb'])' + pattern
+            if re.match(rb'[0-9A-Za-z]', form[-1:]):
+                pattern += rb'(?![' + _ALNUM + rb'])'
+        patterns.append(pattern)
+
+    def replace(match):
+        counts[kinds.get(match.group(0), 'reason')] += 1
+        return REDACTED_MARK
+    return re.sub(b'|'.join(patterns), replace, output), counts
+
+
+def redaction_summary(redacted) -> str:
+    """The summary's clause for a receipt's 'redacted' ('' when nothing was): a secret printed is a FINDING."""
+    if not isinstance(redacted, dict) or not any(redacted.values()):
+        return ''
+    said = []
+    if redacted.get('reason'):
+        said.append(f'{redacted["reason"]} occurrence(s) of the reason')
+    if redacted.get('secret'):
+        said.append(f'{redacted["secret"]} of a secret (FINDING: the command printed one)')
+    return '; its output was kept with ' + ' and '.join(said) + ' redacted'
+
+
+def redaction_record(*counted) -> dict:
+    """The receipt's 'redacted' of one act: the occurrences replaced, by kind, summed over ``counted``
+    (redact_output's counts) - {} when there were none, so a receipt without the key had nothing redacted."""
+    total = {'secret': sum(c.get('secret', 0) for c in counted), 'reason': sum(c.get('reason', 0) for c in counted)}
+    return {'redacted': total} if any(total.values()) else {}
+
+
 # --- door, tree, arguments, receipts ---------------------------------------------
 
 def check_door(environ, revision) -> dict:
@@ -7912,11 +7981,25 @@ def phase_provision(ctx) -> dict:
         if reset:
             command.append('--reset-passwords')
         result = oneshot(image_id, command, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}', by=args.by)
-        assert_no_secret([result.stdout, result.stderr], [*passwords.values(), *env_values(env)])
-        log = ctx.log('provision', result.stdout + result.stderr)
+        # refutation round 1, phileak-1's class: the act ran, so its output is kept, every password and the
+        # application's secrets redacted; a password it printed is never handed over (the staged files are discarded)
+        hidden = [*passwords.values(), *env_values(env)]
+        stdout, stdout_counts = redact_output(result.stdout, hidden)
+        stderr, stderr_counts = redact_output(result.stderr, hidden)
+        log = ctx.log('provision', stdout + stderr)
+        redacted = redaction_record(stdout_counts, stderr_counts)
+        printed = [user for user in expected
+                   if passwords[user].encode() in result.stdout or passwords[user].encode() in result.stderr]
+        if printed:
+            raise InstallError(f'provision printed the password of {len(printed)} account(s) (exit '
+                               f'{result.returncode}), so no password was handed over: the credentials files were '
+                               f'discarded, and its output is kept in {log} with them redacted. Rerun with '
+                               '--reset-passwords for new ones.', details={'log': log, **redacted,
+                                                                           'exit': result.returncode})
         if result.returncode:
-            raise InstallError(f'provision failed (exit {result.returncode}); see {log}.')
-        outcome = provision_outcome(result.stdout.decode('utf-8', 'replace'), expected)
+            raise InstallError(f'provision failed (exit {result.returncode}); see {log}.',
+                               details={'log': log, **redacted})
+        outcome = provision_outcome(stdout.decode('utf-8', 'replace'), expected)
         if not reset and set(outcome.values()) != {'created'}:
             raise InstallError('An account already existed, so its password was not set; nothing was saved. '
                                'Rerun with --reset-passwords to rotate.')
@@ -7934,10 +8017,11 @@ def phase_provision(ctx) -> dict:
     finally:
         ram.__exit__(None, None, None)
     return {'accounts': outcome, 'specialty': specialty, 'root_credentials': f'{ETC_DIR}/{final}', 'checked': checked,
-            'agent_credentials': str(agent_credentials) if agent is not None else None, 'log': log,
+            'agent_credentials': str(agent_credentials) if agent is not None else None, 'log': log, **redacted,
             'reset_passwords': reset, 'require_password_change': True, 'by': args.by,
             'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())
-                       + ('' if agent is not None else '; no review agent (opt-in: --agent-username)')}
+                       + ('' if agent is not None else '; no review agent (opt-in: --agent-username)')
+                       + redaction_summary(redacted.get('redacted'))}
 
 
 # The operators phase's in-image scripts (run by `manage shell -c` in this revision's image, as app_script runs them).
@@ -8096,8 +8180,8 @@ def review_by_problem(value) -> str:
 
 
 def env_values(env: bytes) -> list:
-    """The values of a protected environment file's lines (validate_env_text's form), for assert_no_secret: the
-    application's secret key and database password must never appear in what a one-shot printed."""
+    """The values of a protected environment file's lines (validate_env_text's form), for redact_output: the
+    application's secret key and database password never reach a log or a receipt from what a one-shot printed."""
     values = []
     for line in env.decode('utf-8', 'replace').splitlines():
         name, sep, value = line.partition('=')
@@ -8253,7 +8337,9 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
     (issue_enrolment, or reset_second_factor, which issues a new one) as a RAM-only --code-file so that only its sha256
     reaches the database; committed root-only to /etc/cpt-studio/OPERATOR_ENROLMENT through the root helper (staged
     first, discarded if the command fails). The code never appears in an argument, the output kept, a log or a
-    receipt (assert_no_secret). {'command', 'exit', 'log', 'file', 'valid_seconds'}."""
+    receipt: the output is kept with it, the application's secrets and the reason redacted (redact_output; refutation
+    round 1, phileak-1's class: the act ran, so its record is kept), and a command that printed the code fails with
+    that record and no code kept. {'command', 'exit', 'log', 'file', 'valid_seconds'}."""
     code = new_setup_code()
     document = json.dumps({'service': 'cpt-studio', 'url': f'https://{ADMIN_HOST}/login/enrol', 'username': username,
                            'code': code, 'issued_at': utc_now(), 'valid_seconds': ENROLMENT_CODE_SECONDS,
@@ -8271,17 +8357,27 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
                     f'{MANAGE_MOUNT}/reason', '--by', by, *extra]
             result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
                              timeout=act_timeout(600), what=f'manage {command}', by=by)
-        assert_no_secret([result.stdout, result.stderr], [code, *env_values(env), *reason_values(reason)])
-        log = ctx.log(command.replace('_', '-'), result.stdout + result.stderr)
+        hidden = [code, *env_values(env)]
+        stdout, stdout_counts = redact_output(result.stdout, hidden, reason_values(reason))
+        stderr, stderr_counts = redact_output(result.stderr, hidden, reason_values(reason))
+        printed_code = code.encode() in result.stdout or code.encode() in result.stderr
+        log = ctx.log(command.replace('_', '-'), stdout + stderr)
+        record = {'command': command, 'exit': result.returncode, 'log': log,
+                  **redaction_record(stdout_counts, stderr_counts),
+                  'stdout': stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:]}
+        if printed_code:
+            raise InstallError(f'manage {command} printed the setup code (exit {result.returncode}), so no setup code '
+                               f'was kept: the act ran, and its output is kept in {log} with the code redacted. Run '
+                               'it again for a new code.', details=record)
         if result.returncode:
-            raise InstallError(f'manage {command} failed (exit {result.returncode}); see {log}. No setup code was kept.')
+            raise InstallError(f'manage {command} failed (exit {result.returncode}); see {log}. No setup code was '
+                               'kept.', details=record)
         root_file('commit', replace=True, **names)
         committed = True
     finally:
         if not committed:
             root_file('discard', sha256=sha256(document), **names)
-    return {'command': command, 'exit': result.returncode, 'log': log, 'file': f'{ETC_DIR}/{OPERATOR_ENROLMENT}',
-            'valid_seconds': ENROLMENT_CODE_SECONDS, 'stdout': result.stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:]}
+    return {**record, 'file': f'{ETC_DIR}/{OPERATOR_ENROLMENT}', 'valid_seconds': ENROLMENT_CODE_SECONDS}
 
 
 def legacy_operator_files() -> dict:
@@ -8360,8 +8456,11 @@ def phase_operators(ctx) -> dict:
                                         f'{MANAGE_MOUNT}/{username}.reason', '--by', by, '--authorization-ref',
                                         authorization_of(ctx), '--review-by', review_by, *again], env,
                              user=f'{os.getuid()}:{os.getgid()}', mounts=[mount], what='manage grant_operator', by=by)
-        assert_no_secret([result.stdout, result.stderr], env_values(env))
-        grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}', result.stdout + result.stderr)}
+        # refutation round 1, phileak-1's class: the grant ran, so its record is kept, the application's secrets redacted
+        stdout, stdout_counts = redact_output(result.stdout, env_values(env))
+        stderr, stderr_counts = redact_output(result.stderr, env_values(env))
+        grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}', stdout + stderr),
+                            **redaction_record(stdout_counts, stderr_counts)}
         if result.returncode:
             raise InstallError(f'manage grant_operator failed for {username} (see the log); the account is in place: '
                                'rerun --phase operators once it is fixed.', details={'accounts': outcome,
@@ -8716,7 +8815,8 @@ def phase_manage(ctx) -> dict:
     """One allow-listed ruled act (MANAGE_COMMANDS; release 1, A6) in a one-shot of the installed image, once this
     revision's migrations are applied. The reason (and a setup code) travel as RAM-only files; a disposal is refused
     while an install or switch-back is in progress; the receipt names the act, the reason's sha256 and size, who ran it
-    and the command's exit code and log - every output first passed by assert_no_secret, never a code."""
+    and the command's exit code and log - every output kept with the application's secrets and the reason redacted
+    (redact_output, counted in 'redacted'), never a code."""
     args = ctx.args
     entry = MANAGE_COMMANDS[args.command]
     image_id = installed_image(ctx)
@@ -8781,11 +8881,15 @@ def phase_manage(ctx) -> dict:
         if export:  # done or not, everything in it is made root-only
             record['export'].update(run_helper(H_SEAL_EXPORT, {'dir': PurePosixPath(EXPORTS_DIR).name,
                                                                'name': export}, mounts=[EXPORTS_MOUNT]))
-    output = result.stdout + result.stderr
-    # the application's own secrets, and the reason's text, never reach a log or a receipt (refutation A-7)
-    assert_no_secret([output], [*env_values(env), *reason_values(reason)])
-    record.update(exit=result.returncode, log=ctx.log(args.command, output), argv=argv,
-                  stdout=result.stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:])  # ids and counts only
+    # the application's own secrets, and the reason's text, never reach a log or a receipt (refutation A-7); and the act
+    # has run, so its record is never discarded for them either (refutation round 1, phileak-1 and dataloss-3): each is
+    # redacted before the log and the receipt are written, and the receipt counts them
+    hidden, reasons = env_values(env), reason_values(reason)
+    stdout, stdout_counts = redact_output(result.stdout, hidden, reasons)
+    stderr, stderr_counts = redact_output(result.stderr, hidden, reasons)
+    record.update(redaction_record(stdout_counts, stderr_counts))
+    record.update(exit=result.returncode, log=ctx.log(args.command, stdout + stderr), argv=argv,
+                  stdout=stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:])  # ids and counts only
     if (result.returncode == DISPOSE_DECISION_EXIT and args.command == 'dispose'
             and args.dispose_step == 'replay-ledger' and args.execute):
         # Lane 4: a replay exits DISPOSE_DECISION_EXIT when an entry needs a person's decision - one whose commit's
@@ -8795,7 +8899,8 @@ def phase_manage(ctx) -> dict:
         record['mode'] = DECISION_NEEDED
         return {**record, 'summary': f'dispose replay-ledger: {DECISION_NEEDED} (exit {result.returncode}): an entry '
                                      'whose outcome was unknown is left to a person - plan that scope again and '
-                                     'execute it with two people (ops/INSTALL.md, Disposal, returns and the ledger)'}
+                                     'execute it with two people (ops/INSTALL.md, Disposal, returns and the ledger)'
+                                     + redaction_summary(record.get('redacted'))}
     if result.returncode:
         raise InstallError(f'manage {entry["command"]} failed (exit {result.returncode}); see {record["log"]}.',
                            details=record)
@@ -8807,7 +8912,8 @@ def phase_manage(ctx) -> dict:
         done = record['mode']
     return {**record, 'summary': f'{args.command}' + (f' {args.dispose_step}' if args.command == 'dispose' else '')
                                  + (f' {args.username}' if args.username else '') + f': {done}'
-                                 + (f'; the export is root-only in {EXPORTS_DIR}/{export}' if export else '')}
+                                 + (f'; the export is root-only in {EXPORTS_DIR}/{export}' if export else '')
+                                 + redaction_summary(record.get('redacted'))}
 
 
 def acme_probe(ctx, label, host=DOMAIN) -> dict:

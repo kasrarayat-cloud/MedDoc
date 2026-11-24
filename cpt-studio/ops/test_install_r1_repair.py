@@ -14,6 +14,8 @@ never passed, without one). Synthetic data only.
       --workspace-id and --encounter-id), and --address is refused outside manage.
   I5  installer-2: the database's swap-off decision counts memory.swap.peak (memory peak plus swap peak), and skips the
       change when the swap peak cannot be read.
+  I6  phileak-1, dataloss-3 (the installer's half): once an act has run, a secret or the reason's text in its output
+      never discards its record - each is redacted before the log and the receipt are written, and counted.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair -v
 """
@@ -908,6 +910,162 @@ class DatabaseSwapPeakTests(TemporaryDirectoryTest):
 
     def test_the_cgroup_script_names_the_swap_peak(self):
         self.assertIn('memory.swap.peak', install.DB_CGROUP_FILES)
+
+
+# --- I6: an act that ran keeps its record, its secrets and the reason redacted -----------------------------------------
+
+# dataloss-3's input: the plan's reason, given again to execute; the certificate's ledger line repeats it
+PLAN_REASON = b'Misfiled upload: the document belongs to another practice (incident 4521).\n'
+CERTIFICATE_PLAN = '2f8fad5b-d9cb-469f-a165-70867728950e'
+
+
+def certificate(reason_text):
+    """A destruction certificate as `dispose --execute` prints it before builder D's repair: its ledger line (JSON)
+    carries the plan's reason."""
+    line = json.dumps({'event': 'completed', 'plan': CERTIFICATE_PLAN, 'reason': reason_text, 'rows': 12, 'files': 3},
+                      sort_keys=True)
+    return (f'Destruction certificate\nPlan {CERTIFICATE_PLAN}: completed\nRows destroyed: 12\nFiles remaining: 0\n'
+            f'Ledger line: {line}\n').encode()
+
+
+class RedactOutputTests(unittest.TestCase):
+    MARK = install.REDACTED_MARK
+
+    def test_a_secret_is_replaced_wherever_it_occurs_and_counted(self):
+        secret = 'S' * 48
+        out, counts = install.redact_output(f'a{secret}b {secret}\n'.encode(), [secret])
+        self.assertEqual(out, b'a' + self.MARK + b'b ' + self.MARK + b'\n')
+        self.assertEqual(counts, {'secret': 2, 'reason': 0})
+
+    def test_the_reason_as_written_and_as_json_writes_it_is_replaced(self):
+        reason = 'Dr M\u00fcller said "remove it"\nsecond line of the reason'
+        values = install.reason_values(reason.encode())
+        for shown in (reason, json.dumps(reason)[1:-1], json.dumps(reason, ensure_ascii=False)[1:-1],
+                      'second line of the reason'):
+            with self.subTest(shown=shown):
+                out, counts = install.redact_output(f'x {shown} y'.encode(), reasons=values)
+                self.assertEqual(out, b'x ' + self.MARK + b' y')
+                self.assertEqual(counts, {'secret': 0, 'reason': 1})
+
+    def test_a_short_reason_never_alters_an_id_or_a_digest_that_contains_it(self):
+        values = install.reason_values(b'dead')
+        digest = 'c0ffee' + 'dead' + 'beef' * 3
+        out, counts = install.redact_output(f'sha256 {digest}; reason: dead.'.encode(), reasons=values)
+        self.assertEqual(out, f'sha256 {digest}; reason: '.encode() + self.MARK + b'.')
+        self.assertEqual(counts['reason'], 1)
+
+    def test_one_pass_reads_no_replacement_again_and_nothing_given_changes_nothing(self):
+        out, counts = install.redact_output(b'redacted by the installer', reasons=['redacted by the installer'])
+        self.assertEqual((out, counts), (self.MARK, {'secret': 0, 'reason': 1}))
+        self.assertEqual(install.redact_output(b'plain', [], []), (b'plain', {'secret': 0, 'reason': 0}))
+        self.assertEqual(install.redact_output(b'plain', [''], ['']), (b'plain', {'secret': 0, 'reason': 0}))
+        self.assertEqual(install.redaction_record({'secret': 0, 'reason': 0}), {})
+        self.assertEqual(install.redaction_record({'secret': 1, 'reason': 0}, {'secret': 0, 'reason': 2}),
+                         {'redacted': {'secret': 1, 'reason': 2}})
+
+
+class ExecuteWithThePlansReasonTests(TemporaryDirectoryTest):
+    """phileak-1 and dataloss-3's input through the real phase_manage: execute given the plan's own reason file."""
+
+    def run_execute(self, output, *, exit_code=0):
+        import test_install_r1 as r1
+        world = r1.ManageWorld(self.tmp, output=output, exit_code=exit_code)
+        try:
+            return world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', r1.PLAN, '--by',
+                             'Ada Lovelace', '--approved-by', 'Grace Hopper', '--reason-file', 'REASON',
+                             reason=PLAN_REASON), None, world
+        except install.InstallError as error:
+            return None, error, world
+
+    def test_the_certificate_is_kept_in_the_log_and_the_receipt_with_the_reason_redacted(self):
+        reason_text = PLAN_REASON.decode().strip()
+        details, error, world = self.run_execute(certificate(reason_text))
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(world.acts()[0][:3], ['manage', 'dispose', '--execute'])
+        self.assertEqual(details['exit'], 0)
+        self.assertEqual(details['mode'], 'executed')
+        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 1})
+        self.assertIn('Destruction certificate', details['stdout'])
+        self.assertIn(f'Plan {CERTIFICATE_PLAN}: completed', details['stdout'])
+        self.assertIn('[redacted by the installer]', details['stdout'])
+        self.assertNotIn('incident 4521', json.dumps(details))
+        log = Path(details['log']).read_bytes()
+        self.assertIn(b'Destruction certificate', log)
+        self.assertNotIn(b'incident 4521', log)
+        self.assertIn('1 occurrence(s) of the reason', details['summary'])
+
+    def test_a_failed_act_keeps_its_certificate_too(self):
+        reason_text = PLAN_REASON.decode().strip()
+        details, error, world = self.run_execute(certificate(reason_text) + b'Files remaining: 1\n', exit_code=1)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('failed (exit 1)', str(error))
+        self.assertEqual(error.details['redacted'], {'secret': 0, 'reason': 1})
+        self.assertIn('Files remaining: 1', error.details['stdout'])
+        self.assertNotIn(b'incident 4521', Path(error.details['log']).read_bytes())
+
+    def test_the_receipt_main_writes_holds_the_certificate(self):
+        import test_install_r1 as r1
+        reason_text = PLAN_REASON.decode().strip()
+        receipts = self.tmp / 'receipts'
+        receipts.mkdir(mode=0o700)
+        reason = self.tmp / 'reason.txt'
+        reason.write_bytes(PLAN_REASON)
+        world = r1.ManageWorld(self.tmp, output=certificate(reason_text))
+        printed = io.StringIO()
+        with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                 require_db=mock.Mock(), oneshot=world.oneshot, inspect=world.inspect,
+                                 root_file=world.root, run_helper=world.run_helper, read_protected_env=mock.Mock(
+                                     return_value=f'CPT_STUDIO_SECRET_KEY={r1.SECRET_VALUE}\n'.encode()),
+                                 app_script=world.app_script,
+                                 check_door=mock.Mock(return_value={'declaration': r1.DECLARATION,
+                                                                    'declaration_commit': r1.COMMIT}),
+                                 check_tree=mock.Mock(return_value={'mode': 'exact'})), \
+                mock.patch('sys.stdout', printed):
+            code = install.main(['--phase', 'manage', '--revision', REVISION, '--receipts', str(receipts), '--command',
+                                 'dispose', '--dispose-step', 'execute', '--plan-id', r1.PLAN, '--by', 'Ada Lovelace',
+                                 '--approved-by', 'Grace Hopper', '--reason-file', str(reason)])
+        line = json.loads(printed.getvalue().strip().splitlines()[-1])
+        self.assertEqual((code, line['ok']), (0, True), line)
+        record = json.loads(Path(line['receipt']).read_text())
+        self.assertIn('Destruction certificate', record['details']['stdout'])
+        self.assertNotIn('incident 4521', Path(line['receipt']).read_text())
+        logs = [path for path in receipts.glob('*.log') if b'Destruction certificate' in path.read_bytes()]
+        self.assertEqual(len(logs), 1)
+        self.assertNotIn(b'incident 4521', logs[0].read_bytes())
+
+
+class ProvisionPrintedPasswordTests(TemporaryDirectoryTest):
+    def test_a_printed_password_is_never_handed_over_and_the_act_is_recorded(self):
+        from test_install import no_grants
+        args = SimpleNamespace(phase='provision', revision=REVISION, receipts=str(self.tmp), reset_passwords=None,
+                               owner_username='owner-gi', agent_username=None, owner_display_name='',
+                               agent_display_name='CPT Studio review agent', workspace_name='Gastroenterology',
+                               specialty='gastroenterology', by='Ada Lovelace')
+        finals, printed = [], []
+
+        def fake_root_file(op, **params):
+            finals.append(op)
+            return {'final_exists': False, 'staged_exists': False} if op == 'state' else {}
+
+        def fake_oneshot(image_id, command, env, **kwargs):
+            source = next(mount for mount in kwargs['mounts'] if 'owner-gi.pw' in mount).split('src=', 1)[1]
+            password = Path(source.split(',', 1)[0]).read_text()
+            printed.append(password)
+            out = f'created human account owner-gi (owner)\nusing password {password}\n'
+            return SimpleNamespace(returncode=0, stdout=out.encode(), stderr=b'')
+        with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                 require_db=mock.Mock(), read_protected_env=mock.Mock(return_value=b''),
+                                 root_file=fake_root_file, oneshot=fake_oneshot, app_script=no_grants), \
+                self.assertRaises(install.InstallError) as caught:
+            install.phase_provision(install.Context(args, self.tmp))
+        (password,) = printed
+        self.assertIn('printed the password of 1 account(s)', str(caught.exception))
+        self.assertEqual(finals, ['state', 'stage', 'discard'])  # never committed: no password handed over
+        self.assertEqual(caught.exception.details['redacted'], {'secret': 1, 'reason': 0})
+        log = Path(caught.exception.details['log']).read_text()
+        self.assertIn('created human account owner-gi (owner)', log)
+        self.assertNotIn(password, log)
+        self.assertNotIn(password, json.dumps(caught.exception.details))
 
 
 class SessionScriptImportTests(unittest.TestCase):
