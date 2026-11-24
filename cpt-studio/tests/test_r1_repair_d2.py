@@ -1,5 +1,5 @@
 """Release 1, integrated refutation round 2, repair builder d2: the stop signal in disposal, and the daily maintenance's
-record (D2-1 here; D2-2 follows).
+record.
 
 - D2-1 (disposal-0 to disposal-4, one class): from the moment a transaction that destroys or records begins to commit
   until the command's next safe point, a stop signal - SIGTERM, SIGHUP or Ctrl-C - is held by the command's own handler
@@ -12,6 +12,9 @@ record (D2-1 here; D2-2 follows).
   exit closes it, so what is read next is what committed. Then the class: close's commit, a plan's row, a replay's
   ledger rows and its next entry, a statement waiting on a lock after the commit, the files step, a signal after the
   run's steps, and the hold itself.
+- D2-2 (records-2): what the daily maintenance deletes and its maintenance.daily SecurityEvent commit together or neither
+  does - the rows in one transaction with it, the files once it has committed - and a run whose record cannot be written
+  is tried again an hour later in that worker, never at every tick.
 
 Synthetic practices only, on a test database and originals folders of the tests' own."""
 from __future__ import annotations
@@ -590,3 +593,153 @@ class HoldUnitTests(SimpleTestCase):
         finally:
             signal.signal(signal.SIGINT, before)
 
+
+# --- D2-2: the daily maintenance's record (records-2) ----------------------------------------------------------------------
+
+PLAIN = {**settings.STORAGES, 'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}}
+FAULT = 'r1repd2_refuse'
+
+
+@contextmanager
+def security_events_refused(where=None):
+    """New studio_securityevent rows (those matching ``where`` over NEW, or every one: a missing grant's shape) refused
+    inside PostgreSQL by a BEFORE INSERT trigger - the verifier's fault; no code under test is patched."""
+    with connection.cursor() as cursor:
+        cursor.execute(f"CREATE OR REPLACE FUNCTION {FAULT}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN "
+                       "RAISE EXCEPTION 'synthetic: permission denied' USING ERRCODE = '42501'; END $$")
+        cursor.execute(f'CREATE TRIGGER {FAULT} BEFORE INSERT ON studio_securityevent FOR EACH ROW'
+                       + (f' WHEN ({where})' if where else '') + f' EXECUTE FUNCTION {FAULT}()')
+    try:
+        yield
+    finally:
+        connection.close()  # a fresh connection: the refused run's one was closed by the tick
+        with connection.cursor() as cursor:
+            cursor.execute(f'DROP TRIGGER IF EXISTS {FAULT} ON studio_securityevent')
+            cursor.execute(f'DROP FUNCTION IF EXISTS {FAULT}()')
+
+
+class Clock:
+    """The worker's monotonic clock, moved by hand."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+@override_settings(STORAGES=PLAIN)
+class DailyRecordTests(TransactionTestCase):
+    """records-2 (refute-r2/verify/records-2): the verifier's input - an expired session written through the site's
+    store, a RateWindow row two days old, a sign-in row 35 days old whose name matches no account, an orphan file two
+    hours old - and the worker's own per-tick call, jobs._maintain, with maintenance.daily refused at the database."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name) / 'originals'
+        self.root.mkdir(mode=0o700)
+        work = Path(folder.name) / 'work'  # the stale conversion folders' place, as the worker's temporary folder
+        work.mkdir(mode=0o700)
+        override = override_settings(ORIGINALS_DIR=self.root)
+        override.enable()
+        self.addCleanup(override.disable)
+        patcher = mock.patch('tempfile.gettempdir', return_value=str(work))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def seed(self, tag):
+        user = models.User.objects.create_user(username=f'r1repd2-{tag}-{uuid.uuid4().hex[:6]}',
+                                               password='synthetic-pass-123!')
+        store = import_module(settings.SESSION_ENGINE).SessionStore()
+        store[SESSION_KEY] = str(user.pk)
+        store[BACKEND_SESSION_KEY] = 'django.contrib.auth.backends.ModelBackend'
+        store[HASH_SESSION_KEY] = user.get_session_auth_hash()
+        store.create()
+        Session.objects.filter(session_key=store.session_key).update(expire_date=timezone.now() - timedelta(days=1))
+        rate_key = f'r1repd2-old-{tag}-{uuid.uuid4().hex[:6]}'
+        models.RateWindow.objects.create(scope='signin.fail_user', key=rate_key, count=3,
+                                         window_start=timezone.now() - timedelta(days=2), last_at=timezone.now())
+        typed = f'r1repd2-typo-{tag}-{uuid.uuid4().hex[:6]}@example.invalid'
+        attempt = models.LoginAttempt.objects.create(username=typed, client='192.0.2.10', succeeded=False)
+        models.LoginAttempt.objects.filter(pk=attempt.pk).update(created_at=timezone.now() - timedelta(days=35))
+        folder = self.root / str(uuid.uuid4())
+        folder.mkdir(mode=0o700)
+        orphan = folder / str(uuid.uuid4())
+        orphan.write_bytes(b'synthetic orphan bytes')
+        past = time.time() - 2 * 3600
+        os.utime(orphan, (past, past))
+        return {'session': store.session_key, 'rate': rate_key, 'typed': typed, 'orphan': orphan}
+
+    def left(self, seed) -> dict:
+        return {'expired session': Session.objects.filter(session_key=seed['session']).exists(),
+                'old rate window': models.RateWindow.objects.filter(key=seed['rate']).exists(),
+                'typed name, as typed': models.LoginAttempt.objects.filter(username=seed['typed']).exists(),
+                'orphan file': seed['orphan'].exists()}
+
+    def assert_left(self, seed, expected):
+        self.assertEqual(self.left(seed), dict.fromkeys(self.left(seed), expected))
+
+    def daily_rows(self):
+        return models.SecurityEvent.objects.filter(event=maintenance.DAILY_EVENT)
+
+    def tick(self, state, clock):
+        """One maintenance tick of the worker's main thread, exactly as jobs.work's sweep calls it; whether it ran the
+        daily maintenance."""
+        with mock.patch.object(maintenance, 'run_daily', wraps=maintenance.run_daily) as daily:
+            jobs._maintain(state, clock)
+        return bool(daily.call_count)
+
+    def test_records_2_a_run_whose_record_is_refused_deletes_nothing_and_is_not_repeated_at_every_tick(self):
+        state, clock, seeds = {}, Clock(), []
+        with security_events_refused(f"NEW.event = '{maintenance.DAILY_EVENT}'"):
+            seeds.append(self.seed('first'))
+            with self.assertLogs('studio.jobs', 'ERROR') as logged:
+                self.assertTrue(self.tick(state, clock))
+            self.assertEqual([record.getMessage() for record in logged.records], ['the maintenance tick failed'])
+            self.assert_left(seeds[0], True)  # its record refused: nothing it would have deleted is gone
+            for minute in range(1, 4):  # the next ticks, one sweep apart: the run waits, and nothing is logged
+                clock.now += jobs.STALE_SWEEP_SECONDS
+                seeds.append(self.seed(f'minute {minute}'))
+                with self.assertNoLogs('studio.jobs', 'ERROR'):
+                    self.assertFalse(self.tick(state, clock))
+                self.assert_left(seeds[-1], True)
+            self.assertFalse(self.daily_rows().exists())
+        self.assertFalse(self.tick(state, clock))  # the refusal lifted: still within the hour
+        self.assert_left(seeds[0], True)
+        clock.now += maintenance.DUE_RETRY_SECONDS
+        self.assertTrue(self.tick(state, clock))  # an hour after the failure: run, with its record
+        for seed in seeds:
+            self.assert_left(seed, False)
+        data = self.daily_rows().get().data
+        self.assertEqual((data['sessions_cleared'], data['rate_windows_pruned'], data['signin_names_hashed'],
+                          data['sweep_orphans'], data['failed']), (4, 4, 4, 4, []))
+        clock.now += jobs.STALE_SWEEP_SECONDS
+        self.assertFalse(self.tick(state, clock))  # recorded: not due again for a day
+
+    def test_records_2_with_every_security_event_refused_nothing_is_deleted_either(self):
+        state, clock = {}, Clock()
+        with security_events_refused():
+            seed = self.seed('all refused')
+            with self.assertLogs('studio.jobs', 'ERROR'):
+                self.assertTrue(self.tick(state, clock))
+            self.assert_left(seed, True)
+            clock.now += jobs.STALE_SWEEP_SECONDS
+            self.assertFalse(self.tick(state, clock))
+        self.assertFalse(models.SecurityEvent.objects.exists())
+
+    def test_the_files_are_removed_only_once_the_record_has_committed(self):
+        seed = self.seed('order')
+        params = {key: value for key, value in connection.get_connection_params().items()
+                  if key not in ('cursor_factory', 'context')}
+        seen, real = [], storage.delete_stored
+        with psycopg.connect(**params, autocommit=True) as other:  # another session sees only what committed
+            def delete(name):
+                seen.append(other.execute('SELECT count(*) FROM studio_securityevent WHERE event = %s',
+                                          [maintenance.DAILY_EVENT]).fetchone()[0])
+                return real(name)
+            with mock.patch.object(storage, 'delete_stored', side_effect=delete):
+                counts = maintenance.run_daily()
+        self.assertEqual(seen, [1])  # the record was there before the orphan went
+        self.assert_left(seed, False)
+        self.assertEqual((counts['sweep_deleted'], counts['sweep_failed'], counts['failed']), (1, 0, []))
