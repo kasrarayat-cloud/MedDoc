@@ -14,7 +14,8 @@ record.
   run's steps, and the hold itself.
 - D2-2 (records-2): what the daily maintenance deletes and its maintenance.daily SecurityEvent commit together or neither
   does - the rows in one transaction with it, the files once it has committed - and a run whose record cannot be written
-  is tried again an hour later in that worker, never at every tick.
+  is tried again an hour later in that worker, never at every tick. Then (the lead's follow-up) what the files' removal
+  did goes in a record of its own after the commit, whose failure is logged and undoes nothing.
 
 Synthetic practices only, on a test database and originals folders of the tests' own."""
 from __future__ import annotations
@@ -41,7 +42,7 @@ from django.conf import settings
 from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_KEY
 from django.contrib.sessions.models import Session
 from django.core.management import CommandError, call_command
-from django.db import connection, transaction
+from django.db import DatabaseError, connection, transaction
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.postgresql.base import DatabaseWrapper as PostgresWrapper
 from django.db.models.query import QuerySet
@@ -50,6 +51,7 @@ from django.utils import timezone
 from psycopg import _connection_base, _cursor_base
 
 from studio import disposal, jobs, maintenance, models, storage
+from studio.fable import document as fable_document
 from studio.management.commands import dispose as dispose_cmd
 from tests import test_disposal as td
 from tests.support import coding as f
@@ -656,7 +658,7 @@ class DailyRecordTests(TransactionTestCase):
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name) / 'originals'
         self.root.mkdir(mode=0o700)
-        work = Path(folder.name) / 'work'  # the stale conversion folders' place, as the worker's temporary folder
+        work = self.work = Path(folder.name) / 'work'  # the stale conversion folders' place: the worker's temp folder
         work.mkdir(mode=0o700)
         override = override_settings(ORIGINALS_DIR=self.root)
         override.enable()
@@ -760,3 +762,40 @@ class DailyRecordTests(TransactionTestCase):
         self.assertEqual(seen, [1])  # the record was there before the orphan went
         self.assert_left(seed, False)
         self.assertEqual((counts['sweep_deleted'], counts['sweep_failed'], counts['failed']), (1, 0, []))
+
+    # --- what the files' removal did: a record of its own, after the commit (the lead's follow-up to records-2) ----------
+
+    def stale_work_folder(self):
+        folder = self.work / f'{fable_document.WORK_PREFIX}stale-{uuid.uuid4().hex[:6]}'
+        folder.mkdir(mode=0o700)
+        (folder / 'part').write_bytes(b'synthetic conversion part')
+        past = time.time() - 3 * 3600
+        os.utime(folder, (past, past))
+        return folder
+
+    def test_what_the_run_removed_after_its_commit_goes_in_a_record_of_its_own(self):
+        seed, stale = self.seed('removed'), self.stale_work_folder()
+        counts = maintenance.run_daily()
+        daily = self.daily_rows().get()
+        removed = models.SecurityEvent.objects.get(event=maintenance.REMOVED_EVENT)
+        self.assertEqual(removed.data, {'daily': str(daily.pk), 'sweep_deleted': 1, 'sweep_failed': 0,
+                                        'work_dirs_removed': 1, 'failed': []})  # ids, counts and step names only
+        self.assertGreaterEqual(removed.created_at, daily.created_at)
+        self.assertFalse(seed['orphan'].exists() or stale.exists())
+        self.assertEqual((counts['sweep_deleted'], counts['work_dirs_removed'], counts['failed']), (1, 1, []))
+
+    def test_a_removal_record_the_database_refuses_is_logged_and_undoes_nothing(self):
+        state, clock = {}, Clock()
+        seed = self.seed('removal refused')
+        with security_events_refused(f"NEW.event = '{maintenance.REMOVED_EVENT}'"):
+            with self.assertLogs('studio.maintenance', 'ERROR') as logged, self.assertNoLogs('studio.jobs', 'ERROR'):
+                self.assertTrue(self.tick(state, clock))
+        self.assertIn("the record of the daily maintenance's removed files could not be written (ProgrammingError)",
+                      [record.getMessage() for record in logged.records])
+        self.assertNotIn('due_failed_at', state)  # the tick did not fail
+        self.assert_left(seed, False)  # the committed run stands: its rows and its file removed
+        self.assertEqual(self.daily_rows().count(), 1)
+        self.assertFalse(models.SecurityEvent.objects.filter(event=maintenance.REMOVED_EVENT).exists())
+        clock.now += jobs.STALE_SWEEP_SECONDS
+        self.assertFalse(self.tick(state, clock))  # never tried again at the next tick: the day's run is recorded
+

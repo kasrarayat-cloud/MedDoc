@@ -14,7 +14,9 @@
                                        removed (OWNER DECISION D25: six years, so in practice none). One SecurityEvent
                                        maintenance.daily holds the counts, and the names of any step that failed: the
                                        rows go in one transaction with it, and the files once it has committed, so a
-                                       record that cannot be written leaves everything in place (refutation round 2).
+                                       record that cannot be written leaves everything in place (refutation round 2);
+                                       one more, maintenance.daily_files_removed, then holds what the files' removal
+                                       did.
     verify_originals()                 the integrity check (164.312(c)(1)): a sample of stored originals and converted
                                        PDFs read again and their sha256 checked; each mismatch, missing or unreadable
                                        file writes a SecurityEvent storage.original_mismatch (ids only), and the run one
@@ -62,6 +64,7 @@ VERIFY_SAMPLE = 200  # stored originals read again per weekly check, and as many
 LOCK_KEY = 0x4350544D4E54
 HASHED_NAME_PREFIX = 'hash:'  # no username can hold ':' (Django's username validator), so a hashed name is never one
 DAILY_EVENT = 'maintenance.daily'
+REMOVED_EVENT = 'maintenance.daily_files_removed'  # what the daily run removed once its record committed (run_daily)
 VERIFIED_EVENT = 'maintenance.originals_verified'
 MISMATCH_EVENT = 'storage.original_mismatch'
 SWEPT_EVENT = 'maintenance.orphans_swept'
@@ -200,11 +203,13 @@ def run_daily(now=None) -> dict:
     or rewrites - and the orphan sweep's dry run - in one transaction with that SecurityEvent, each step in a savepoint
     of its own, so a failing step rolls back alone; a record that cannot be written rolls every one of them back. What
     cannot be rolled back waits for that commit: the orphans the scan counted (sweep_orphans) are removed once the record
-    has committed, and so are the stale conversion folders (which the worker's tick removes every hour besides). The
-    answer holds those removals' counts too - sweep_deleted, sweep_failed (logged by type), work_dirs_removed - and the
-    names of steps that failed after the commit."""
+    has committed, and so are the stale conversion folders (which the worker's tick removes every hour besides). What
+    they removed and what failed - sweep_deleted, sweep_failed, work_dirs_removed and the steps' names - then go in one
+    more SecurityEvent, REMOVED_EVENT, naming the run's record (daily: its id), and in the answer. That record is written
+    after the commit: one that cannot be written is logged by type and never raised, so it neither undoes the committed
+    run nor makes the next tick run it again (the run is not due for a day)."""
     now = now or timezone.now()
-    counts, failed, orphans = {}, [], []
+    counts, failed, orphans, removed, removal_failed = {}, [], [], {}, []
     steps = (('session_links_pruned', lambda: session_store.prune_session_links(now)),
              ('sessions_cleared', lambda: clear_expired_sessions(now)),
              ('rate_windows_pruned', lambda: prune_rate_windows(now)),
@@ -226,17 +231,21 @@ def run_daily(now=None) -> dict:
                                if key not in ('deleted', 'failed')})
             else:
                 counts[name] = result
-        security_events.record(DAILY_EVENT, **counts, failed=list(failed))
+        daily = security_events.record(DAILY_EVENT, **counts, failed=list(failed))
     later = (('orphan_sweep', lambda: {f'sweep_{key}': value for key, value in remove_orphan_files(orphans).items()}),
              ('work_dirs_removed', lambda: {'work_dirs_removed': jobs.remove_stale_work_dirs(
                  older_than=STALE_WORK_DIR_SECONDS)}))
     for name, step in later:
         try:
-            counts.update(step())
-        except Exception as exc:  # noqa: BLE001 - after the record: logged by type, named in the answer
+            removed.update(step())
+        except Exception as exc:  # noqa: BLE001 - after the record: logged by type, named in the next one
             log.error('the daily maintenance step %s failed (%s)', name, type(exc).__name__)
-            failed.append(name)
-    return {**counts, 'failed': failed}
+            removal_failed.append(name)
+    try:
+        security_events.record(REMOVED_EVENT, daily=daily.pk, **removed, failed=removal_failed)
+    except Exception as exc:  # noqa: BLE001 - the run is committed: logged by type, never raised (see above)
+        log.error("the record of the daily maintenance's removed files could not be written (%s)", type(exc).__name__)
+    return {**counts, **removed, 'failed': failed + removal_failed}
 
 
 def _check(item, counts, kind):
