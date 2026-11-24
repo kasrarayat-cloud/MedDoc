@@ -685,5 +685,124 @@ def settings_number(name):
     raise LookupError(name)
 
 
+
+class CountsFallbackTests(unittest.TestCase):
+    """RELEASE-1-SPEC 1.3 (TEC-8 (5)): when install_counts cannot read the counts, its report never sends the operator
+    to a restored copy of live; it names the synthetic rehearsal of 6.4."""
+
+    def test_the_fallback_report_names_the_synthetic_rehearsal_and_no_restored_copy(self):
+        reports = []
+        with mock.patch.object(install, 'app_script', side_effect=install.InstallError('Counting failed (exit 1).')):
+            reports.append(install.install_counts('sha256:' + 'a' * 64, b''))
+        with mock.patch.object(install, 'app_script', return_value={'size': 'not counted'}):
+            reports.append(install.install_counts('sha256:' + 'a' * 64, b''))
+        for counted in reports:
+            self.assertFalse(counted['counted'])
+            self.assertEqual(len(counted['report']), 1)
+            said = counted['report'][0]
+            self.assertIn('synthetic rehearsal on the test instance (RELEASE-1-SPEC 6.4)', said)
+            self.assertIn('report them to the owner as not counted', said)
+            self.assertNotIn('restored dump', said)
+            self.assertNotRegex(said, r'read them on|before reporting')
+        self.assertTrue(reports[0]['report'][0].startswith('the install counts were not read: '))
+        self.assertTrue(reports[1]['report'][0].startswith('the install counts did not say what they read: '))
+        self.assertNotIn('restored dump', Path(install.__file__).read_text())
+
+
+
+LOCK_TIMEOUT_OUTPUT = (b'Applying studio.0017_r1_security...\n'
+                       b'psycopg.errors.LockNotAvailable: canceling statement due to lock timeout\n')
+
+
+class MigrateLockTimeoutTests(TemporaryDirectoryTest):
+    """RELEASE-1-SPEC 6.2: the migrate one-shot waits at most 5 s for a table's lock (PGOPTIONS, never the migration
+    files the gate reads) and is run again on a lock timeout alone, up to 3 more times."""
+
+    def run_bounded(self, answers):
+        calls, pauses = [], []
+
+        def oneshot(image_id, command, env_bytes, **kwargs):
+            calls.append((image_id, list(command), env_bytes, kwargs))
+            return answers.pop(0)
+        with mock.patch.object(install, 'oneshot', oneshot), \
+                mock.patch.object(install.time, 'sleep', side_effect=pauses.append):
+            done, output, attempts = install.migrate_bounded('sha256:' + 'a' * 64, b'ENV=1\n')
+        return done, output, attempts, calls, pauses
+
+    def answer(self, code=0, out=b'', err=b''):
+        return SimpleNamespace(returncode=code, stdout=out, stderr=err)
+
+    def test_the_one_shot_carries_a_5_s_lock_timeout_and_runs_once_when_it_succeeds(self):
+        done, output, attempts, calls, pauses = self.run_bounded([self.answer(0, b'Applying studio.0017... OK\n')])
+        self.assertEqual((done.returncode, attempts, pauses), (0, 1, []))
+        image, command, env_bytes, kwargs = calls[0]
+        self.assertEqual((command, env_bytes), (['migrate'], b'ENV=1\n'))
+        environment = kwargs['environment']
+        self.assertEqual(environment[-2:], ['-e', 'PGOPTIONS=-c lock_timeout=5s'])
+        self.assertEqual(environment[:-2], install.runtime_env('disabled', ''))  # every provider disabled, as before
+        self.assertIn(b'--- migrate attempt 1 (exit 0)', output)
+
+    def test_a_lock_timeout_is_tried_again_and_the_attempts_are_logged(self):
+        done, output, attempts, calls, pauses = self.run_bounded([
+            self.answer(1, err=LOCK_TIMEOUT_OUTPUT), self.answer(1, err=LOCK_TIMEOUT_OUTPUT), self.answer(0, b'OK\n')])
+        self.assertEqual((done.returncode, attempts, len(calls)), (0, 3, 3))
+        self.assertEqual(pauses, [install.MIGRATE_RETRY_PAUSE] * 2)
+        for number, code in ((1, 1), (2, 1), (3, 0)):
+            self.assertIn(f'--- migrate attempt {number} (exit {code})'.encode(), output)
+
+    def test_at_most_three_retries_then_the_failure_stands(self):
+        done, output, attempts, calls, pauses = self.run_bounded([self.answer(1, err=LOCK_TIMEOUT_OUTPUT)] * 5)
+        self.assertEqual((done.returncode, attempts, len(calls), len(pauses)), (1, 4, 4, 3))
+
+    def test_any_other_failure_is_never_retried(self):
+        for said in (b'django.db.utils.ProgrammingError: relation "studio_x" already exists\n',
+                     b'django.db.utils.OperationalError: connection refused\n', b''):
+            with self.subTest(said=said):
+                done, output, attempts, calls, pauses = self.run_bounded([self.answer(1, err=said), self.answer(0)])
+                self.assertEqual((done.returncode, attempts, len(calls), pauses), (1, 1, 1, []))
+
+    def test_the_lock_timeout_shapes_postgres_and_psycopg_print(self):
+        for said in (b'ERROR:  canceling statement due to lock timeout', b'psycopg.errors.LockNotAvailable',
+                     b'SQLSTATE 55P03'):
+            self.assertTrue(install.LOCK_TIMEOUT_RE.search(said), said)
+        self.assertIsNone(install.LOCK_TIMEOUT_RE.search(b'canceling statement due to statement timeout'))
+
+    def test_a_lock_timeout_set_inside_a_migration_would_be_refused_by_the_gate(self):
+        # why it is PGOPTIONS: RunSQL that does anything but set column defaults is not a safe operation
+        source = ('from django.db import migrations\n\n\nclass Migration(migrations.Migration):\n'
+                  '    dependencies = []\n    operations = [migrations.RunSQL("SET lock_timeout = 5000")]\n')
+        self.assertFalse(install.migration_verdict(source)['safe'])
+
+    def test_app_reports_a_lock_that_stayed_taken_and_records_the_attempts(self):
+        from test_install_bluegreen import BlueGreenWorld, run_app
+
+        class LockedWorld(BlueGreenWorld):
+            def __init__(self, tmp, timeouts):
+                super().__init__(tmp)
+                self.timeouts = timeouts
+
+            def oneshot(self, image_id, command, env_bytes, **kwargs):
+                if list(command) == ['migrate']:
+                    self.oneshots.append((image_id, list(command), dict(kwargs)))
+                    if self.timeouts:
+                        self.timeouts -= 1
+                        return SimpleNamespace(returncode=1, stdout=b'', stderr=LOCK_TIMEOUT_OUTPUT)
+                return super().oneshot(image_id, command, env_bytes, **kwargs)
+        with mock.patch.object(install.time, 'sleep'):
+            world = LockedWorld(self.tmp, timeouts=1)
+            details, error = run_app(world)
+            self.assertIsNone(error, error and str(error))
+            self.assertEqual(details['migrate_attempts'], 2)
+            log = Path(details['migrate_log']).read_bytes()
+            self.assertIn(b'--- migrate attempt 2 (exit 0)', log)
+            world = LockedWorld(self.tmp, timeouts=9)
+            details, error = run_app(world)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('a table\'s lock was not free within 5s, 4 times', str(error))
+        self.assertEqual(error.details, {'migrate_attempts': 4})
+        self.assertEqual([command for _, command, _ in world.oneshots if command == ['migrate']], [['migrate']] * 4)
+        self.assertEqual(world.acts('run', 'stop', 'rename', 'vhost'), [])  # nothing switched
+
+
 if __name__ == '__main__':
     unittest.main()

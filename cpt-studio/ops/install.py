@@ -4370,6 +4370,12 @@ def v1_rows_refusal(answer):
             'stored and retired with that instance, never deleted by the installer)')
 
 
+# What the owner is told when the counts could not be read (RELEASE-1-SPEC 1.3, TEC-8 (5)): never to read them on a
+# restored copy of live - live is never restored or copied for an install - but where the install was tried first.
+COUNTS_NOT_READ = ('report them to the owner as not counted; the install was tried first in the synthetic rehearsal on '
+                   'the test instance (RELEASE-1-SPEC 6.4), and no copy of live is restored to count them')
+
+
 def install_counts(image_id, env_bytes) -> dict:
     """The install counts of the Fable coding build (INSTALL_COUNTS, in this revision's image), with 'report' - the
     sentences the owner is told before the switch. NEVER a refusal: a read that fails, or an answer that does not say
@@ -4379,13 +4385,11 @@ def install_counts(image_id, env_bytes) -> dict:
                             what='Counting what the owner is told before the switch')
     except Exception as error:  # noqa: BLE001 — printed, never a refusal
         return {'counted': False, 'why': str(error) or type(error).__name__,
-                'report': ['the install counts were not read: read them on the test instance\'s restored dump before '
-                           'reporting to the owner']}
+                'report': [f'the install counts were not read: {COUNTS_NOT_READ}']}
     problem = counts_problem(answer)
     if problem:
         return {'counted': False, 'why': problem, 'answer': answer,
-                'report': ['the install counts did not say what they read: read them on the test instance\'s restored '
-                           'dump before reporting to the owner']}
+                'report': [f'the install counts did not say what they read: {COUNTS_NOT_READ}']}
     return {'counted': True, **answer, 'report': counts_report(answer)}
 
 
@@ -6698,6 +6702,34 @@ def check_credential_parsing(image_id, env, mode, live, interpreter='disabled', 
                                output=output if credential_free([output], [CODER['name']]) else b'')
 
 
+# Release 1 (RELEASE-1-SPEC 6.2): the migrate one-shot waits at most MIGRATE_LOCK_TIMEOUT for a table's lock, so an
+# ALTER TABLE never queues behind a long transaction - holding every later reader of that table behind itself - for
+# longer than that. It is libpq's PGOPTIONS in the one-shot's environment: the migration files, which migration_verdict
+# reads, are untouched (a RunSQL setting it would be refused there). Django applies each migration in a transaction of
+# its own on PostgreSQL (none of this app's sets atomic = False), so an attempt the timeout cancels leaves that
+# migration unapplied, and the one-shot is run again, up to MIGRATE_LOCK_RETRIES more times, after MIGRATE_RETRY_PAUSE
+# seconds. Any other failure is not retried.
+MIGRATE_LOCK_TIMEOUT = '5s'
+MIGRATE_LOCK_RETRIES = 3
+MIGRATE_RETRY_PAUSE = 10
+LOCK_TIMEOUT_RE = re.compile(rb'canceling statement due to lock timeout|LockNotAvailable|\b55P03\b')
+
+
+def migrate_bounded(image_id, env_bytes) -> tuple:
+    """(the last migrate one-shot, every attempt's output joined, the attempts made): migrate with a lock timeout,
+    again on a lock timeout alone (MIGRATE_LOCK_RETRIES)."""
+    environment = [*runtime_env('disabled', ''), '-e', f'PGOPTIONS=-c lock_timeout={MIGRATE_LOCK_TIMEOUT}']
+    outputs = []
+    for attempt in range(1, MIGRATE_LOCK_RETRIES + 2):
+        done = oneshot(image_id, ['migrate'], env_bytes, environment=environment)
+        output = done.stdout + done.stderr
+        outputs.append(f'--- migrate attempt {attempt} (exit {done.returncode})\n'.encode() + output)
+        if not done.returncode or not LOCK_TIMEOUT_RE.search(output) or attempt > MIGRATE_LOCK_RETRIES:
+            return done, b''.join(outputs), attempt
+        time.sleep(MIGRATE_RETRY_PAUSE)
+    raise AssertionError('unreachable')
+
+
 def phase_app(ctx) -> dict:
     """The Fable coding build's app phase (DECISIONS D351-D353): the new pair runs the Fable coder in the mode
     --coding-mode gives (live on the live install, under --authorization-ref) and every earlier provider disabled -
@@ -6724,10 +6756,14 @@ def phase_app(ctx) -> dict:
     check_credential_files('disabled', [], coding=mode)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
     check_credential_parsing(image_id, env, 'disabled', [], coding=mode)
-    migrate = oneshot(image_id, ['migrate'], env)
-    migrate_log = ctx.log('migrate', migrate.stdout + migrate.stderr)
+    migrate, migrate_output, attempts = migrate_bounded(image_id, env)
+    migrate_log = ctx.log('migrate', migrate_output)
     if migrate.returncode:
-        raise InstallError(f'Migrations failed (exit {migrate.returncode}); see {migrate_log}.')
+        timed_out = bool(LOCK_TIMEOUT_RE.search(migrate.stdout + migrate.stderr))
+        raise InstallError(f'Migrations failed (exit {migrate.returncode}'
+                           + (f'; a table\'s lock was not free within {MIGRATE_LOCK_TIMEOUT}, {attempts} times: a long '
+                              'transaction holds it - try again once it has ended' if timed_out else '')
+                           + f'); see {migrate_log}.', details={'migrate_attempts': attempts})
     # The open stages of a kind this revision's worker does not run - every kind of the pipeline before the Fable coding
     # build, and any a newer revision added - are read and recorded, never refused on (an earlier revision's worker, which
     # claims a job of any kind, ended on one: refutation r1, migrate-3). This revision's worker claims only the kinds of
@@ -6747,11 +6783,12 @@ def phase_app(ctx) -> dict:
     # Amendment 1, 9.5: the install counts, read-only, before the switch, printed into this receipt - never a refusal.
     counts = install_counts(image_id, env)
     try:
-        return _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnable, v1, counts)
+        result = _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnable, v1, counts)
     except InstallError as error:  # the receipt of a failure after the read carries the counts too
         if error.details is None or isinstance(error.details, dict):
             error.details = {**(error.details or {}), 'install_counts': counts}
         raise
+    return {**result, 'migrate_attempts': attempts}  # each attempt's output is in migrate_log
 
 
 def _app_after_counts(ctx, image_id, env, mode, reference, migrate_log, unrunnable, v1, counts) -> dict:

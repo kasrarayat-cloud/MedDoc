@@ -334,7 +334,15 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   revision's HTTPS stage that this revision does not render for its port
   (`deploy/nginx/` changed) is refused for blue/green: the switch would change
   more than its upstream (see **Reinstalling a new revision**).
-  It migrates with a one-shot container first, then reads (and records as
+  It migrates with a one-shot container first. Since release 1 (spec 6.2) that
+  one-shot waits at most 5 s for a table's lock (`PGOPTIONS=-c
+  lock_timeout=5s`: the migration files the image gate reads are untouched), so
+  an `ALTER TABLE` never queues behind a long transaction with every later
+  reader of that table queued behind it; Django applies each migration in a
+  transaction of its own, so a timed-out attempt leaves that migration
+  unapplied, and the one-shot is run again after 10 s, up to three more times
+  (the receipt's `migrate_attempts`; every attempt's output is in the migrate
+  log). Any other failure is not retried. It then reads (and records as
   `unrunnable_stages`, never refusing on them) the stages of a kind this
   revision's worker does not run - every kind of the pipeline before the Fable
   coding build - that are queued, running, or cancelled as their encounter's
