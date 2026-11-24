@@ -17,12 +17,16 @@ host guard; every Docker, root-helper and in-image call stood in. Synthetic data
         comment), the words named nowhere else in the declaration; a refusal, however its lines break, approves nothing.
   I2-7  installer-5: a reason too short or too plain to be redacted without touching ids and counts is refused
         before the act: in words, the whole text and each line of 12 characters or more.
+  I2-8  installer-1: once an act answered, oneshot looks for no leftover, so nothing there takes its record;
+        installer-4: the RAM folder's root wipe runs in a session of its own, so a signal to the installer's
+        process group (the door's ceiling) never stops it, and a held signal over a failed wipe says both.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair_i2 -v
 """
 import hashlib
 import io
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -870,6 +874,245 @@ class ReasonInWordsTests(TemporaryDirectoryTest):
         self.assertIn('in words', install.reason_words_problem(b'abcdefghijkl mnop\n'))  # two words
         self.assertIn('one word', install.reason_words_problem(b'one two three\nabcdefghijklmnop\n'))
         self.assertEqual(install.reason_words_problem(b'one two three\nabcdefghijk\n'), '')  # 11: never redacted alone
+
+
+# --- I2-8: an act's record outlives oneshot's leftover check; the RAM folder's wipe outlives a signal to the group -------
+
+REAL_ONESHOT = install.oneshot
+CERTIFICATE = (b'Destruction certificate\nPlan 2f8fad5b-d9cb-469f-a165-70867728950e: completed\nRun by: Ada Lovelace; '
+               b'approved by: Grace Hopper\nRows destroyed: 12\nFiles remaining: 0\n')
+
+
+class RealOneshotWorld(r1.ManageWorld):
+    """ManageWorld whose one-shots are the REAL install.oneshot over a stood-in `docker run` (docker_run, for
+    install.run), the act answering its certificate; the leftover check of the act's own one-shot answers ``failure``."""
+
+    def __init__(self, tmp, *, failure=None, **kwargs):
+        super().__init__(tmp, **kwargs)
+        self.failure, self.looked_for, self.acted, self.runs = failure, [], set(), []
+        self.oneshot = REAL_ONESHOT
+
+    def docker_run(self, argv, *, input=None, timeout=60, check=True, quiet=False, env=None):
+        self.runs.append(list(argv))
+        if 'migrate' in argv:
+            return mock.Mock(returncode=0, stdout=b'', stderr=b'')
+        self.acted.add(argv[argv.index('--name') + 1])
+        return mock.Mock(returncode=0, stdout=CERTIFICATE, stderr=b'')
+
+    def inspect(self, kind, name):
+        if name in self.acted:
+            self.looked_for.append(name)
+            if self.failure is not None:
+                raise self.failure
+            return None
+        return super().inspect(kind, name)
+
+
+class OneshotAnswerTests(TemporaryDirectoryTest):
+    def test_an_act_that_answered_is_never_looked_for_again(self):
+        answer = mock.Mock(returncode=0, stdout=CERTIFICATE, stderr=b'')
+        for label, failure in (('a daemon error', install.InstallError('docker container inspect x failed (exit 1).')),
+                               ('a SIGTERM', install.Interrupted('SIGTERM')), ('a Ctrl-C', KeyboardInterrupt())):
+            with self.subTest(label):
+                looked = []
+
+                def inspect(kind, name, failure=failure):
+                    looked.append(name)
+                    raise failure
+                with mock.patch.object(install, 'run', return_value=answer), mock.patch.object(install, 'inspect', inspect):
+                    try:
+                        result = REAL_ONESHOT('sha256:' + 'c' * 64, ['manage', 'dispose', '--execute'], b'K=1\n',
+                                              what='manage dispose')
+                    except KeyboardInterrupt:  # unittest would stop the whole run on it: a failure of this test
+                        self.fail('the act answered, and a Ctrl-C in the leftover check took its answer away')
+                self.assertIs(result, answer)
+                self.assertEqual(looked, [])
+
+    def test_one_that_gave_no_answer_is_still_looked_for_and_removed(self):
+        leftover = {'Id': 'oneshot-1', 'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: 'oneshot'}}}
+        for label, failure in (('a timeout', install.InstallError('docker run did not finish within 600 s.')),
+                               ('a SIGTERM', install.Interrupted('SIGTERM'))):
+            with self.subTest(label):
+                removed = []
+                with mock.patch.object(install, 'run', side_effect=failure), \
+                        mock.patch.object(install, 'inspect', return_value=leftover), \
+                        mock.patch.object(install, 'docker', lambda *args, **kwargs: removed.append(args)), \
+                        self.assertRaises(type(failure)):
+                    REAL_ONESHOT('sha256:' + 'c' * 64, ['manage', 'dispose', '--execute'], b'K=1\n')
+                self.assertEqual(removed, [('rm', '--force', 'oneshot-1')])
+
+    def test_through_the_manage_phase_the_destruction_certificate_is_kept(self):
+        # installer-1's input: --dispose-step execute through the real phase_manage and the real oneshot; the act answers
+        # its certificate, then the leftover check of its one-shot would fail (a daemon error) or be interrupted
+        for label, failure in (('a daemon error', install.InstallError('docker container inspect x failed (exit 1).')),
+                               ('a SIGTERM', install.Interrupted('SIGTERM'))):
+            with self.subTest(label):
+                folder = self.tmp / label.replace(' ', '-')
+                folder.mkdir(mode=0o700)
+                world = RealOneshotWorld(folder, failure=failure)
+                with mock.patch.object(install, 'run', world.docker_run):
+                    details = world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', r1.PLAN,
+                                        '--by', 'Ada Lovelace', '--approved-by', 'Grace Hopper')
+                self.assertEqual((details['exit'], details['mode']), (0, 'executed'))
+                self.assertEqual(details['stdout'], CERTIFICATE.decode())
+                self.assertEqual(Path(details['log']).read_bytes(), CERTIFICATE)
+                self.assertEqual(world.looked_for, [])
+                self.assertEqual(len(world.acted), 1)
+
+
+# The stand-in docker CLI of the real-process test: a root helper's run reads its source from stdin; the RAM folder's
+# wipe starts after WIPE_DELAY seconds (a container's start), in which the signal lands; nothing installs a handler, so a
+# SIGTERM ends it as one ends a CLI that has not armed its own. Paths are written in when the test writes it.
+FAKE_CLI = r'''#!@PYTHON@ -I
+import json, os, sys, time
+SHM, WORK, WIPE_DELAY = @SHM@, @WORK@, 2.0
+args = sys.argv[1:]
+
+
+def done(code=0, out=b''):
+    sys.stdout.buffer.write(out)
+    sys.stdout.flush()
+    sys.exit(code)
+
+
+if args[:1] == ['run']:
+    if any(part.startswith('org.quillmd.cpt-studio.helper=') for part in args):
+        source = sys.stdin.buffer.read().decode()
+        if 'os.unlink(full)' in source:  # H_RAM_WIPE
+            open(os.path.join(WORK, 'wipe-started'), 'w').close()
+            time.sleep(WIPE_DELAY)
+            exec(compile(source.replace("'/host-shm/'", repr(SHM + '/')), 'wipe', 'exec'), {})
+            done()
+        if 'os.chown(path, P[' in source:  # H_RAM_GIVE: handed over (not root here: no chown)
+            done(out=json.dumps({'given': 1, 'uid': 10150}).encode() + b'\n')
+        done(out=b'{}\n')
+    if 'migrate' in args:
+        done()
+    done(out=b'Plan 7c9e6679-4521-40de-944b-e07fc1f90ae7 for practice: nothing was changed.\n')
+if args[:2] == ['container', 'inspect']:
+    sys.stderr.write('Error: No such container: ' + args[-1] + '\n')
+    done(code=1)
+done()
+'''
+# The child: the real install.main for a files act (--dispose-step plan: its folder is handed over, so the root helper
+# wipes it), under test_install's host guard, install.DOCKER pointed at the stand-in.
+RUNNER = r'''import os, sys
+from pathlib import Path
+from unittest import mock
+sys.path.insert(0, @OPS@)
+import install
+import test_install
+test_install.guard_host()
+install.DOCKER = @FAKE@
+SHM = Path(@SHM@)
+
+
+def ram_init(ram, prefix, *, owner=None):
+    ram.path = SHM / f'{prefix}{install.secrets.token_hex(16)}'
+    os.mkdir(ram.path, 0o700)
+    ram.owner, ram.given = owner, False
+
+
+door = {'declaration': 'docs/foundation/mutations/x.md', 'declaration_commit': 'd' * 40, 'declaration_sha256': '0' * 64}
+with mock.patch.multiple(install, check_door=lambda environ, revision: dict(door),
+                         check_tree=lambda revision, commit: {'mode': 'exact'},
+                         installed_image=lambda ctx: 'sha256:' + 'c' * 64, require_db=lambda: None,
+                         read_protected_env=lambda path, keys: b'CPT_STUDIO_SECRET_KEY=' + b'z' * 50 + b'\n'), \
+        mock.patch.object(install.RamFiles, '__init__', ram_init):
+    code = install.main(['--phase', 'manage', '--revision', 'a' * 40, '--receipts', @RECEIPTS@, '--command', 'dispose',
+                         '--dispose-step', 'plan', '--workspace-id', '0f8fad5b-d9cb-469f-a165-70867728950e',
+                         '--reason-file', @REASON@, '--by', 'Ada Lovelace'])
+sys.exit(code)
+'''
+
+
+class SignalToTheGroupDuringTheWipeTests(TemporaryDirectoryTest):
+    def test_a_sigterm_to_the_installers_process_group_never_leaves_the_reason_in_the_ram_folder(self):
+        # installer-4's input: the door's ceiling is `timeout` without --foreground, which signals the whole process
+        # group - the installer and the docker CLI running the root helper's wipe, whose start the signal lands in
+        import signal as signals
+        import subprocess
+        import time
+        work, shm, receipts = self.tmp, self.tmp / 'shm', self.tmp / 'receipts'
+        shm.mkdir(mode=0o700)
+        reason = work / 'reason.txt'
+        reason.write_bytes(b'Ticket 4521: Dr Example asked us to remove the practice of Example Clinic.\n')
+        fake = work / 'fake-docker-cli'
+        fake.write_text(FAKE_CLI.replace('@PYTHON@', sys.executable).replace('@SHM@', repr(str(shm)))
+                        .replace('@WORK@', repr(str(work))))
+        fake.chmod(0o700)
+        runner = work / 'runner.py'
+        runner.write_text(RUNNER.replace('@OPS@', repr(str(Path(__file__).resolve().parent)))
+                          .replace('@FAKE@', repr(str(fake))).replace('@SHM@', repr(str(shm)))
+                          .replace('@RECEIPTS@', repr(str(receipts))).replace('@REASON@', repr(str(reason))))
+        child = subprocess.Popen([sys.executable, '-B', str(runner)], start_new_session=True,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            deadline = time.monotonic() + 60
+            while not (work / 'wipe-started').exists():
+                self.assertIsNone(child.poll(), child.stderr.read().decode()[-2000:] if child.poll() is not None else '')
+                self.assertLess(time.monotonic(), deadline, 'the wipe never started')
+                time.sleep(0.02)
+            self.assertEqual(os.getpgid(child.pid), child.pid)  # its own group: this test's is never signalled
+            os.killpg(child.pid, signals.SIGTERM)
+            out, err = child.communicate(timeout=60)
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.communicate()
+        self.assertEqual(child.returncode, 143, err.decode()[-2000:])
+        self.assertEqual(list(shm.iterdir()), [], 'the RAM folder, and the reason in it, were left')
+        (path,) = receipts.glob('manage-*.json')
+        record = json.loads(path.read_text(encoding='utf-8'))
+        self.assertEqual((record['ok'], record['interrupted']), (False, 'SIGTERM'))
+        self.assertEqual(record['details']['mode'], 'dry run')  # the act ran, and its record is kept beside the signal
+        for found in [*shm.rglob('*'), *receipts.rglob('*')]:
+            if found.is_file():
+                self.assertNotIn(b'Dr Example', found.read_bytes())
+
+
+class SignalHeldOverAFailedWipeTests(TemporaryDirectoryTest):
+    def test_a_wipe_that_fails_while_a_signal_is_held_is_said_beside_the_interrupt(self):
+        # the deferral raises the held signal from the wipe's failure: the receipt says both, and that a folder may be left
+        import signal as signals
+        from test_install import FakeOwnership, run_body
+        shm, owner = self.tmp / 'shm', FakeOwnership()
+        shm.mkdir(mode=0o700)
+        reason = self.tmp / 'reason.txt'
+        reason.write_bytes(b'Ticket 4521: the practice asked to end access.\n')
+
+        def ram_init(ram, prefix, *, owner=None):
+            ram.path = shm / f'{prefix}{install.secrets.token_hex(16)}'
+            ram.path.mkdir(mode=0o700)
+            ram.owner, ram.given = owner, False
+
+        def run_helper(body, params, *, mounts, **kwargs):
+            if body is install.H_RAM_WIPE:
+                assert signals.getsignal(signals.SIGTERM) is install.interrupt, 'refusing to signal without the hold'
+                os.kill(os.getpid(), signals.SIGTERM)
+                raise install.InstallError('Root helper refused: the RAM folder holds something that is not a file; '
+                                           'nothing was removed')
+            return run_body(body, params, {'/host-shm': str(shm)}, fake_os=owner)
+
+        def oneshot(image_id, command, env, **kwargs):
+            return mock.Mock(returncode=0, stdout=b'' if 'migrate' in command else b'Plan recorded.\n', stderr=b'')
+        with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                 require_db=mock.Mock(), oneshot=oneshot, inspect=mock.Mock(return_value=None),
+                                 run_helper=run_helper, read_protected_env=mock.Mock(return_value=b'K=' + b's' * 40 + b'\n'),
+                                 check_door=mock.Mock(return_value={'declaration': 'docs/d.md',
+                                                                    'declaration_commit': 'd' * 40}),
+                                 check_tree=mock.Mock(return_value={'mode': 'exact'})), \
+                mock.patch.object(install.RamFiles, '__init__', ram_init), mock.patch('sys.stdout', io.StringIO()):
+            code = install.main(['--phase', 'manage', '--revision', r1.REVISION, '--receipts', str(self.tmp / 'receipts'),
+                                 '--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE,
+                                 '--reason-file', str(reason), '--by', 'Ada Lovelace'])
+        (path,) = (self.tmp / 'receipts').glob('manage-*.json')
+        record = json.loads(path.read_text(encoding='utf-8'))
+        self.assertEqual((code, record['interrupted']), (143, 'SIGTERM'))
+        after = record['details']['after_act']
+        self.assertIn('Root helper refused: the RAM folder holds something that is not a file', after)
+        self.assertIn('a /dev/shm/cpt-studio-* folder may be left', after)
+        self.assertEqual(record['details']['stdout'], 'Plan recorded.\n')  # the act's record, kept
 
 
 if __name__ == '__main__':

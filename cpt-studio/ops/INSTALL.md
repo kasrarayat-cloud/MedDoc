@@ -811,7 +811,12 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   ever take its record away: when its RAM folder's wipe or an export's seal
   fails, the receipt fails with the act's record (its exit, its log, its
   output) and says what did not finish, and a signal or a Ctrl-C there is
-  recorded beside it (a setup code is then not kept). The receipt keeps the
+  recorded beside it (a setup code is then not kept). Nor does the one-shot's
+  own leftover check: it runs only when the run gave no answer (a timeout, an
+  interrupt) - once the act answered, `docker run --rm` has removed its
+  container (the CLI waits for the removal, and answers 125 when it cannot), so
+  no daemon error or signal there can take the answer away (refutation round
+  2, installer-1). The receipt keeps the
   command's stdout (ids and counts) and its log. A reason must be in words, so
   that its redaction can never touch an id or a count: its text 12 characters
   or more that are not white space and three words or more (as the release's
@@ -830,9 +835,18 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   its undo run, and its receipt says `interrupted` (exit 143, or 129). One that
   lands while the RAM files are being wiped - or a Ctrl-C there - is acted on
   once the wipe has finished (refutation round 1, installer-3: it had stopped
-  the wipe and left the reason in `/dev/shm`); only the door's SIGKILL, 15 s
-  after its SIGTERM, or a `kill -9` can still leave a
-  `/dev/shm/cpt-studio-<word>-<32 hex>` folder, which holds the act's RAM-only
+  the wipe and left the reason in `/dev/shm`). The root helper's wipe of a
+  folder handed to the application's uid runs in a session of its own, so a
+  signal sent to the installer's whole process group never reaches the
+  docker CLI running it - the door's ceiling is `timeout`, which signals the
+  group, its SIGKILL too (refutation round 2, installer-4: that CLI died
+  before the wipe began and left the reason). A wipe that fails while a
+  signal is held is said beside the interrupt (`details.after_act`), with the
+  folder it may leave. Only a SIGKILL (the door's, 15 s after its SIGTERM, or
+  a `kill -9`) can still leave a `/dev/shm/cpt-studio-<word>-<32 hex>`
+  folder - one that lands before the root helper's wipe has begun, during the
+  installer's own wipe of a folder it never handed over, or on the wipe's own
+  CLI - which holds the act's RAM-only
   files (the reason, a code): overwrite and remove it as root (the root-via-
   docker path), never read it. Every
   phase's receipt is written before its journal (A13), so an interrupt while the

@@ -483,6 +483,12 @@ def raise_after_act(error, record, what):
                            f'but what follows the act did not finish: {said}. If it was the RAM folder\'s wipe, a '
                            f'/dev/shm/cpt-studio-* folder may be left: overwrite and remove it as root, never read it.',
                            details={**record, 'after_act': said}) from error
+    cause = error.__cause__  # signals_deferred raises a held signal from what its body raised: a wipe that failed
+    if isinstance(cause, Exception):  # (refutation round 2, installer-4: the receipt had said neither)
+        record = {**record, 'after_act': f'{str(cause) or type(cause).__name__}; then the {str(error) or "Ctrl-C"} held '
+                                         'meanwhile was acted on. If it was the RAM folder\'s wipe, a '
+                                         '/dev/shm/cpt-studio-* folder may be left: overwrite and remove it as root, '
+                                         'never read it.'}
     error.details = record
     raise error
 
@@ -1022,17 +1028,19 @@ def helper_source(body: str, params: dict) -> str:
     return HELPER_PRELUDE + f'P=json.loads(base64.b64decode({payload!r}))\n' + body
 
 
-def run_helper(body, params, *, mounts, network='none', timeout=60, sensitive=False, journal_run=True) -> dict:
+def run_helper(body, params, *, mounts, network='none', timeout=60, sensitive=False, journal_run=True,
+               own_session=False) -> dict:
     """Run fixed helper code as root; return its final JSON line. ``sensitive`` drops stderr. Release 1 (A13): each run
     is one line of the one-shot journal (its name and exit code, never a value or its output) - except the journal's own
-    write (``journal_run`` False), which the receipt records instead."""
+    write (``journal_run`` False), which the receipt records instead. ``own_session``: its docker CLI runs in a session
+    of its own, which no signal sent to the installer's process group reaches (the RAM folder's wipe: RamFiles)."""
     token = secrets.token_hex(12)
     name = f'cpt-studio-helper-{token}'
     source = helper_source(body, params).encode()
     proc = None
     try:
         proc = subprocess.run(helper_argv(name, token, mounts, network, time.time() + timeout), input=source,
-                              capture_output=True, timeout=timeout + 15, env=COMMAND_ENV)
+                              capture_output=True, timeout=timeout + 15, env=COMMAND_ENV, start_new_session=own_session)
     except subprocess.TimeoutExpired:
         pass
     finally:
@@ -3153,9 +3161,14 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
         return result
     finally:
         journal('oneshot', what or oneshot_label(command), 'timeout' if result is None else result.returncode, by=by)
-        leftover = inspect('container', name)
-        if leftover is not None and owned(leftover, 'oneshot'):
-            docker('rm', '--force', leftover['Id'], check=False)
+        # refutation round 2, installer-1: a leftover is looked for only when the run gave no answer (a timeout, an
+        # interrupt). Once the act answered, `docker run --rm` has removed its container - the CLI waits for the
+        # removal, and answers 125 when it fails - and a daemon error or a signal in this check replaced the return,
+        # so the act's answer, and its whole record, were lost after it ran
+        if result is None:
+            leftover = inspect('container', name)
+            if leftover is not None and owned(leftover, 'oneshot'):
+                docker('rm', '--force', leftover['Id'], check=False)
 
 
 def oneshot_label(command) -> str:
@@ -8432,10 +8445,13 @@ class RamFiles:
 
     def __exit__(self, *exc):
         # refutation round 1, installer-3: a SIGTERM, SIGHUP or Ctrl-C that lands while the folder is wiped is acted on
-        # once the wipe has finished (signals_deferred), never in the middle of it, which left the reason in /dev/shm
+        # once the wipe has finished (signals_deferred), never in the middle of it, which left the reason in /dev/shm.
+        # Round 2, installer-4: that holds the signal in this process only, and the door's ceiling (`timeout`, which
+        # signals the whole process group) also reached the docker CLI running the wipe, which died before the wipe
+        # began: so that CLI runs in a session of its own (own_session), which a signal to the group never reaches
         with signals_deferred():
             if self.given:
-                run_helper(H_RAM_WIPE, {'name': self.path.name}, mounts=[SHM_MOUNT])
+                run_helper(H_RAM_WIPE, {'name': self.path.name}, mounts=[SHM_MOUNT], own_session=True)
                 return False
             for path in self.path.iterdir():
                 path.write_bytes(b'\0' * max(64, path.stat().st_size))
