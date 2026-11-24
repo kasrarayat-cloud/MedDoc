@@ -809,7 +809,17 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   Release 1 also reads: the database's own cgroup (no swap) and its two log
   settings (`SHOW`, through `docker exec`: verify starts no one-shot); the
   converter of this revision, sealed and healthy; and the TLS policy (A4) -
-  recorded as findings, never a failure (D27).
+  recorded as findings, never a failure (D27). `/health/` is judged by the
+  revision it expects (B7): through nginx a revision whose health view answers
+  the digest - read from its tree, as the converter is - must answer
+  `release_digest` alone (an answer with its release means B7 is not in force,
+  and is refused), and an older revision - the pair before release 1, after a
+  switch-back - its release; the web's own port answers the release either way.
+  After a switch-back to that pair, `verify --revision <its revision>` passes,
+  and so do the walk (`--release <its revision>`: it reads B7 from that tree)
+  and `verify_login.py` and `scan_customer.py`, which read the cookie names the
+  server sets - the plain ones before release 1, the `__Host-` ones from it -
+  never the scheme's.
 
 ## The admin host and the coupling invariant (D396, release 2)
 

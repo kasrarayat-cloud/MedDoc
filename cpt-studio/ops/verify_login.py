@@ -113,10 +113,21 @@ def check(check_id: str, severity: str, ok: bool, reason: str) -> dict:
 
 
 def cookie_names(origin: str) -> tuple[str, str]:
-    """(session cookie, CSRF cookie) the server at ``origin`` sets: the __Host- names on https (release 1, B6), the
-    plain names on a loopback http test server - cptstudio/settings.py's names with and without HTTPS."""
+    """(session cookie, CSRF cookie) a release-1 server at ``origin`` sets: the __Host- names on https (B6), the plain
+    names on a loopback http test server - cptstudio/settings.py's names with and without HTTPS."""
     prefix = HOST_PREFIX if urlsplit(origin).scheme == 'https' else ''
     return prefix + SESSION_COOKIE, prefix + CSRF_COOKIE
+
+
+def served_cookie_names(jar: dict, origin: str) -> tuple[str, str]:
+    """(session cookie, CSRF cookie) as the server named them in what it set (refutation, rollback lens B-9): after a
+    switch-back to a revision before release 1 the site answers https with the plain names, so the scheme cannot tell.
+    The __Host- pair when the server set its __Host- CSRF cookie, the plain pair when it set the plain one; when it set
+    neither, the names a release-1 server at ``origin`` would set (cookie_names)."""
+    for prefix in (HOST_PREFIX, ''):
+        if prefix + CSRF_COOKIE in jar:
+            return prefix + SESSION_COOKIE, prefix + CSRF_COOKIE
+    return cookie_names(origin)
 
 
 # --- inputs -----------------------------------------------------------------------------------------------------------
@@ -482,16 +493,17 @@ def forced_change(origin: str, status: int | None, target: str | None) -> bool:
 def sign_in_and_out(transport: Transport, origin: str, username: str, password: str, workspace: str) -> dict:
     """The five requests and their checks: {'checks', 'session', 'signed_in', 'error', 'state'}. 'state' is
     'password_change_required' when the account must choose its own password first (B4): recorded, never changed."""
-    session_cookie, csrf_cookie = cookie_names(origin)
     checks, jar, out = [], {}, {'session': None, 'signed_in': False, 'error': None, 'state': None}
     try:
         page = transport.send('GET', LOGIN_PATH, headers=_headers(origin, 'text/html'))
         apply_cookies(jar, page.set_cookies)
+        # the names the server serving now sets: release 1's __Host- names, or an earlier revision's after a switch-back
+        session_cookie, csrf_cookie = served_cookie_names(jar, origin)
         hidden, problems = login_form(read_page(page.body), origin) if page.status == 200 else (None, [])
         if page.status != 200:
             problems = [f'GET {LOGIN_PATH} answered HTTP {page.status}']
         if csrf_cookie not in jar:
-            problems.append(f'no CSRF cookie ({csrf_cookie}) was set')
+            problems.append(f'no CSRF cookie ({HOST_PREFIX}{CSRF_COOKIE} or {CSRF_COOKIE}) was set')
         checks.append(check('login.form', 'hard', not problems, '; '.join(problems)
                             or f'the sign-in form, its CSRF token and the {csrf_cookie} cookie'))
         if problems:
@@ -543,7 +555,7 @@ def sign_in_and_out(transport: Transport, origin: str, username: str, password: 
 def sign_out(transport: Transport, origin: str, jar: dict, session: str, checks: list) -> str | None:
     """POST /logout/ with the CSRF token the sign-in rotated, then GET /api/session with the session cookie the
     sign-in set, replayed: it must be refused. Returns the first request error, if any."""
-    session_cookie, csrf_cookie = cookie_names(origin)
+    session_cookie, csrf_cookie = served_cookie_names(jar, origin)
     error = None
     try:
         answer = transport.send('POST', LOGOUT_PATH, body=urlencode([(CSRF_FIELD, jar.get(csrf_cookie, ''))]).encode(),

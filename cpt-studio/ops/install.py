@@ -2418,17 +2418,41 @@ def release_digest(revision) -> str:
     return sha256((HEALTH_DIGEST_PREFIX + str(revision)).encode())[:16]
 
 
-def health_ok(body, revision) -> bool:
-    """Whether a /health/ answer is a healthy ``revision``: 'release' equal to it, or 'release_digest' equal to its
-    digest (B7: the shape a release-1 web answers through nginx) - whichever the answer carries, and each it carries;
-    an answer that names neither is refused, as is one whose two disagree."""
+# B7 is a revision's own (refutation, rollback lens B-8): it is in force exactly when the revision's health view answers
+# the digest - its tree's studio/views.py names 'release_digest' - read as has_converter reads the converter. Cached:
+# a revision's tree never changes.
+HEALTH_DIGEST_FILE = f'{APP}/studio/views.py'
+HEALTH_DIGEST_MARK = b'release_digest'
+_HEALTH_DIGEST_SEEN = {}
+
+
+def has_health_digest(revision) -> bool:
+    """Whether ``revision``'s web answers /health/ through nginx with 'release_digest' and no 'release' (B7). A revision
+    this checkout cannot read is refused, never taken for an older one (fail closed)."""
+    if revision in _HEALTH_DIGEST_SEEN:
+        return _HEALTH_DIGEST_SEEN[revision]
+    if not SHA_RE.fullmatch(str(revision)):
+        raise InstallError(f'Cannot tell whether {str(revision)[:40]!r} answers the health digest: it is not a '
+                           '40-character revision.')
+    done = run(['git', '-C', str(ROOT), 'cat-file', '-p', f'{revision}:{HEALTH_DIGEST_FILE}'], check=False, quiet=True)
+    if done.returncode:
+        raise InstallError(f'Cannot tell whether {revision[:12]} answers the health digest: this checkout cannot read '
+                           f'its {HEALTH_DIGEST_FILE}. Fetch it into the act checkout, then rerun.')
+    _HEALTH_DIGEST_SEEN[revision] = HEALTH_DIGEST_MARK in done.stdout
+    return _HEALTH_DIGEST_SEEN[revision]
+
+
+def health_ok(body, revision, *, through_nginx=False) -> bool:
+    """Whether a /health/ answer is a healthy ``revision`` (B7; refutation, rollback lens B-8). Through nginx a revision
+    that has B7 (has_health_digest) answers 'release_digest' equal to its digest and no 'release' - a release-bearing
+    answer means B7 is not in force, and is refused; an older revision (R0, a switch-back's target) answers 'release'
+    and no digest. A direct probe of the web's own port (wait_service) answers 'release' whatever the revision."""
     if not (isinstance(body, dict) and body.get('status') == 'ok' and body.get('service') == 'cpt-studio'
             and body.get('data_mode') == 'synthetic-only' and body.get('database') == 'ok'):
         return False
-    release, digest = body.get('release'), body.get('release_digest')
-    if release is None and digest is None:
-        return False
-    return (release is None or release == revision) and (digest is None or digest == release_digest(revision))
+    if through_nginx and has_health_digest(revision):
+        return 'release' not in body and body.get('release_digest') == release_digest(revision)
+    return 'release_digest' not in body and body.get('release') == revision
 
 
 def health_release(body):
@@ -8636,7 +8660,7 @@ def public_health(revision) -> tuple:
     different revisions."""
     def check():
         result = probe('https', DOMAIN, '/health/', timeout=3)
-        return result.get('status') == 200 and health_ok(result.get('json'), revision), {
+        return result.get('status') == 200 and health_ok(result.get('json'), revision, through_nginx=True), {
             'status': result.get('status'), 'error': result.get('error')}
     return poll(check, attempts=30, interval=0.25)
 
@@ -8672,7 +8696,7 @@ def admin_checks(revision) -> tuple:
     evidence = {'observations': observations[-3:],
                 'edge': {key: edge.get(key) for key in ('status', 'error', 'cert_sha256', 'cert_names', 'headers')}}
     if serves_admin_host(revision):
-        if not (edge.get('status') == 200 and health_ok(edge.get('json'), revision)):
+        if not (edge.get('status') == 200 and health_ok(edge.get('json'), revision, through_nginx=True)):
             problems.append(f'https://{ADMIN_HOST}/health/ did not serve revision {revision[:12]}')
 
         def fetch(path, method, keep_body):
@@ -8722,7 +8746,7 @@ def https_checks(ctx, revision=None) -> tuple:
     for (sni, host), answer in cross.items():
         if host == ADMIN_HOST and not serving:
             continue  # recorded: an older web answers the admin host 400
-        if not (answer.get('status') == 200 and health_ok(answer.get('json'), expected)):
+        if not (answer.get('status') == 200 and health_ok(answer.get('json'), expected, through_nginx=True)):
             problems.append(f'a request for {host} on a connection opened for {sni} was answered '
                             f'{answer.get("status") or answer.get("error")}, not {expected[:12]}\'s /health/')
     return problems, {'observations': observations[-3:], 'final': final, 'admin': admin,

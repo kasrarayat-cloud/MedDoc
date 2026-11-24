@@ -825,12 +825,48 @@ class HostCookieTests(unittest.TestCase):
         self.assertEqual(checks.get('login.signed_in'), 'pass', out['checks'])
         self.assertTrue(out['signed_in'])
         self.assertEqual(checks.get('logout.cookie_cleared'), 'pass')  # the sign-out deleted the __Host- cookie
-        # a server that set only the plain name over https has not signed the scan in
-        plain = FakeTransport('cptstudio_session')
-        out = sc.run(plain, origin, USERNAME, PASSWORD, [], False, 0, None)
+        # a server whose session cookie is not the one its CSRF cookie names has not signed the scan in
+        mixed = FakeTransport('cptstudio_session')
+        out = sc.run(mixed, origin, USERNAME, PASSWORD, [], False, 0, None)
         self.assertEqual({item['id']: item['status'] for item in out['checks']}, {'login.signed_in': 'fail'})
         self.assertFalse(out['signed_in'])
-        self.assertEqual(plain.sent, [('GET', '/login/'), ('POST', '/login/')])
+        self.assertEqual(mixed.sent, [('GET', '/login/'), ('POST', '/login/')])
+
+    def test_after_a_switch_back_the_plain_names_over_https_are_read(self):
+        # refutation, rollback lens B-9: a revision before release 1 sets cptstudio_csrf and cptstudio_session over
+        # https; the scan reads the names the server set, never the scheme's
+        origin = 'https://cpt.example.test'
+        form = ('<html><body><form class="login-form" method="post" action="">'
+                '<input type="hidden" name="csrfmiddlewaretoken" value="t0k3n"><input name="username">'
+                '<input name="password" type="password"><button type="submit">Sign in</button></form></body></html>')
+
+        class R0Transport:
+            def send(self, method, path, *, headers, body=None, read_body=True):
+                if (method, path) == ('GET', '/login/'):
+                    return sc.login.Response(200, None, ['cptstudio_csrf=t0k3n; Path=/; Secure'], 'text/html',
+                                             form.encode())
+                if (method, path) == ('POST', '/login/'):
+                    return sc.login.Response(302, '/', ['cptstudio_session=s0; HttpOnly; Path=/; Secure'], 'text/html',
+                                             b'')
+                if (method, path) == ('POST', '/logout/'):
+                    return sc.login.Response(302, '/login/', ['cptstudio_session=""; Max-Age=0; Path=/'], 'text/html',
+                                             b'')
+                return sc.login.Response(401, None, [], 'application/json', b'{}')
+
+        class FakeScanner:
+            def __init__(self, transport, origin, jar):
+                self.checks, self.hits = [], {'json': [], 'header': [], 'file': [], 'bundle': []}
+
+            def bundle(self, base):
+                return None
+
+            def json_get(self, where, base):
+                return sc.login.Response(401, None, [], 'application/json', b'{}'), None
+        with unittest.mock.patch.object(sc, 'Scanner', FakeScanner):
+            out = sc.run(R0Transport(), origin, USERNAME, PASSWORD, [], False, 0, None)
+        checks = {item['id']: item['status'] for item in out['checks']}
+        self.assertEqual((checks.get('login.signed_in'), checks.get('logout.cookie_cleared')), ('pass', 'pass'))
+        self.assertTrue(out['signed_in'])
 
 
 if __name__ == '__main__':

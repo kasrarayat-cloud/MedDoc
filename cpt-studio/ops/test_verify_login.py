@@ -611,16 +611,35 @@ class TlsTests(Base):
         self.assertEqual(sorted(stub.log[3]['cookies']), ['__Host-cptstudio_csrf', '__Host-cptstudio_session'])
         self.assertEqual(sorted(stub.log[4]['cookies']), ['__Host-cptstudio_session'])
 
-    def test_an_https_server_that_sets_the_plain_names_is_refused(self):
-        # a server that does not set the __Host- names over https is not the release the tool verifies
+    def test_an_https_server_that_sets_the_plain_names_is_read_by_them_after_a_switch_back(self):
+        # refutation, rollback lens B-9: after a switch-back to a revision before release 1, the site answers https
+        # with the plain names; the tool reads the names the server sets, never the scheme's
         stub = self.tls_stub('loopback')
         stub.session_cookie, stub.csrf_cookie = 'cptstudio_session', 'cptstudio_csrf'
         with mock.patch.dict(os.environ, {'SSL_CERT_FILE': str(self.certs / 'loopback.pem')}):
             code, out, err, evidence, text = self.run_tool(stub.base)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.requests(stub), EXPECTED)
+        self.assertEqual(sorted(stub.log[3]['cookies']), ['cptstudio_csrf', 'cptstudio_session'])
+        self.assertIn('the cptstudio_csrf cookie', evidence['checks'][0]['reason'])
+
+    def test_a_server_that_sets_no_csrf_cookie_is_refused(self):
+        stub = self.tls_stub('loopback')
+        stub.behaviour['csrf_cookie'] = False
+        with mock.patch.dict(os.environ, {'SSL_CERT_FILE': str(self.certs / 'loopback.pem')}):
+            code, out, err, evidence, text = self.run_tool(stub.base)
         self.assertEqual(code, 1)
         self.assertEqual(self.failed(evidence), ['login.form'])
-        self.assertIn('__Host-cptstudio_csrf', evidence['checks'][0]['reason'])
-        self.assertEqual(self.requests(stub), ['GET /login/'])
+        self.assertIn('no CSRF cookie (__Host-cptstudio_csrf or cptstudio_csrf) was set', evidence['checks'][0]['reason'])
+
+    def test_the_names_read_are_the_ones_the_server_set(self):
+        self.assertEqual(vl.served_cookie_names({'__Host-cptstudio_csrf': 'x'}, 'https://cpt.quillmd.com'),
+                         ('__Host-cptstudio_session', '__Host-cptstudio_csrf'))
+        self.assertEqual(vl.served_cookie_names({'cptstudio_csrf': 'x'}, 'https://cpt.quillmd.com'),
+                         ('cptstudio_session', 'cptstudio_csrf'))
+        self.assertEqual(vl.served_cookie_names({}, 'https://cpt.quillmd.com'),
+                         ('__Host-cptstudio_session', '__Host-cptstudio_csrf'))
+        self.assertEqual(vl.served_cookie_names({}, 'http://127.0.0.1:8123'), ('cptstudio_session', 'cptstudio_csrf'))
 
 
 class PureCheckTests(unittest.TestCase):

@@ -110,6 +110,18 @@ def _guarded_has_converter(revision):
     return revision in CONVERTER_REVISIONS
 
 
+# Release 1 (B7; refutation, rollback lens B-8): whether a revision answers /health/ through nginx with the digest is
+# read from its git tree (install.has_health_digest). Under the guard a test revision has B7 exactly when a test puts it
+# in DIGEST_REVISIONS (empty: every world answers its release, as every revision before B7 does); the real function is
+# REAL_HAS_HEALTH_DIGEST, tested on its own.
+REAL_HAS_HEALTH_DIGEST = install.has_health_digest
+DIGEST_REVISIONS = set()
+
+
+def _guarded_has_health_digest(revision):
+    return revision in DIGEST_REVISIONS
+
+
 # Release 1 (A13): main() appends the phase's one-shot journal to the host's /var/log/cpt-studio through a root helper
 # at the end of every phase. Under the guard it is kept in JOURNALS_FLUSHED instead (the real flush, REAL_FLUSH_JOURNAL,
 # is tested on its own with its helper stood in for).
@@ -141,7 +153,8 @@ def guard_host():
                mock.patch.multiple(install, NGINX_AVAILABLE=NO_NGINX / 'sites-available',
                                    NGINX_ENABLED=NO_NGINX / 'sites-enabled', read_coupling=_guarded_coupling,
                                    has_converter=_guarded_has_converter, flush_journal=_guarded_flush_journal,
-                                   tls_policy_report=_guarded_tls_policy_report),
+                                   tls_policy_report=_guarded_tls_policy_report,
+                                   has_health_digest=_guarded_has_health_digest),
                mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': str(
                    2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN)})]
     for patcher in patches:

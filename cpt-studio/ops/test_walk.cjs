@@ -2042,6 +2042,36 @@ test('the public /health/ answers the release digest through nginx and never the
     { status: 200, shape: 'release_digest', value: digest, also_release: false });
 });
 
+test('after a switch-back the walk reads the revision served: R0 answers its release through nginx (B7, B-9)', () => {
+  const r0 = 'b'.repeat(40);
+  const r1 = 'a'.repeat(40);
+  const health = json => ({ status: 200, json: { status: 'ok', service: 'cpt-studio', database: 'ok', ...json } });
+  // --release R0, a revision before B7 (main reads that from its tree): its release, through nginx
+  assert.deepEqual(failed(walk.healthChecks(health({ release: r0 }), BASE, r0, false)), []);
+  // (an answer out of its shape fails both checks: it cannot name the revision either)
+  assert.deepEqual(failed(walk.healthChecks(health({ release_digest: walk.healthDigest(r0) }), BASE, r0, false)),
+    ['health.release_hidden', 'health.release_matches']);
+  // --release R1, which has B7: the digest alone - its release through nginx means B7 is not in force
+  assert.deepEqual(failed(walk.healthChecks(health({ release_digest: walk.healthDigest(r1) }), BASE, r1, true)), []);
+  assert.deepEqual(failed(walk.healthChecks(health({ release: r1 }), BASE, r1, true)),
+    ['health.release_hidden', 'health.release_matches']);
+  // and the answer must name --release whichever shape it takes
+  assert.deepEqual(failed(walk.healthChecks(health({ release: r1 }), BASE, r0, false)), ['health.release_matches']);
+  // the tree decides: this checkout's HEAD reads, a revision it cannot read is a usage error
+  const head = childProcess.execFileSync('git', ['-C', __dirname, 'rev-parse', 'HEAD']).toString().trim();
+  assert.equal(typeof walk.releaseAnswersDigest(head), 'boolean');
+  assert.throws(() => walk.releaseAnswersDigest('e'.repeat(40)), error => error instanceof walk.UsageError
+    && /cannot tell whether --release eeeeeeeeeeee answers the health digest/.test(error.message));
+});
+
+test('the CSRF cookie is read by the name the server set: __Host- over https, or R0\'s plain one (B6, B-9)', () => {
+  const jar = (...names) => names.map(name => ({ name, value: 'x' }));
+  assert.equal(walk.servedCsrfName(jar('__Host-cptstudio_csrf'), BASE), '__Host-cptstudio_csrf');
+  assert.equal(walk.servedCsrfName(jar('cptstudio_csrf', 'other'), BASE), 'cptstudio_csrf');
+  assert.equal(walk.servedCsrfName(jar(), BASE), '__Host-cptstudio_csrf');
+  assert.equal(walk.servedCsrfName(jar(), 'http://127.0.0.1:8000'), 'cptstudio_csrf');
+});
+
 // The physician PDF report - the only report CPT Studio makes (owner direction 2026-11-21) - as exportPdf reads it
 // (readDocument, then pdfPageLines, each page's lines joined): every page opens with the running header the server's
 // report draws, its status and the synthetic line, then the page's own lines. The pages and their wording are the

@@ -73,27 +73,86 @@ class HealthDigestTests(unittest.TestCase):
         self.assertRegex(install.release_digest(REVISION), r'^[0-9a-f]{16}$')
         self.assertNotEqual(install.release_digest(REVISION), install.release_digest(OTHER))
 
-    def test_health_ok_accepts_either_shape_and_refuses_a_wrong_or_missing_build(self):
+    def test_health_ok_reads_the_shape_the_revision_answers_on_each_path(self):
+        # refutation, rollback lens B-8: health_ok accepted 'release == revision' through nginx for a revision that has
+        # B7 - an answer that means B7 is not in force. Now the revision decides (has_health_digest, from its tree).
         digest = install.release_digest(REVISION)
-        self.assertTrue(install.health_ok(healthy(release=REVISION), REVISION))  # the loopback port, an older web
-        self.assertTrue(install.health_ok(healthy(release_digest=digest), REVISION))  # through nginx, release 1
-        self.assertTrue(install.health_ok(healthy(release=REVISION, release_digest=digest), REVISION))
-        for label, body in (('another release', healthy(release=OTHER)),
-                            ('another digest', healthy(release_digest=install.release_digest(OTHER))),
-                            ('a release given as a digest', healthy(release_digest=REVISION)),
-                            ('a digest given as a release', healthy(release=digest)),
-                            ('no build at all', healthy()),
-                            ('the two disagree', healthy(release=REVISION, release_digest=install.release_digest(OTHER))),
-                            ('a sick database', {**healthy(release_digest=digest), 'database': 'unavailable'}),
-                            ('not an object', [healthy(release=REVISION)])):
-            with self.subTest(label):
-                self.assertFalse(install.health_ok(body, REVISION))
+        with mock.patch.object(test_install, 'DIGEST_REVISIONS', {REVISION}):
+            # through nginx, a B7 revision: the digest alone
+            self.assertTrue(install.health_ok(healthy(release_digest=digest), REVISION, through_nginx=True))
+            for label, body in (('its release (B7 not in force)', healthy(release=REVISION)),
+                                ('both', healthy(release=REVISION, release_digest=digest)),
+                                ('another digest', healthy(release_digest=install.release_digest(OTHER))),
+                                ('a release given as a digest', healthy(release_digest=REVISION)),
+                                ('no build at all', healthy()),
+                                ('a sick database', {**healthy(release_digest=digest), 'database': 'unavailable'}),
+                                ('not an object', [healthy(release_digest=digest)])):
+                with self.subTest(label):
+                    self.assertFalse(install.health_ok(body, REVISION, through_nginx=True))
+            # its own port, directly (wait_service, the container's check): the release
+            self.assertTrue(install.health_ok(healthy(release=REVISION), REVISION))
+            self.assertFalse(install.health_ok(healthy(release_digest=digest), REVISION))
+        # an older revision - R0, a switch-back's target - answers its release on both paths, never a digest
+        for through in (True, False):
+            with self.subTest(through_nginx=through):
+                self.assertTrue(install.health_ok(healthy(release=OTHER), OTHER, through_nginx=through))
+                self.assertFalse(install.health_ok(healthy(release_digest=install.release_digest(OTHER)), OTHER,
+                                                   through_nginx=through))
+                self.assertFalse(install.health_ok(healthy(release=REVISION), OTHER, through_nginx=through))
+
+    def test_https_checks_pass_r0_after_a_switch_back_and_r1_only_with_its_digest(self):
+        # refutation, rollback lens B-8/B-9: verify against R0 after a switch-back, and R1 after the second switch
+        policy = {name: [value] for name, value in install.POLICY_HEADERS}
+
+        def edge(health):
+            def probe(scheme, host, path='/', *, headers=None, **kwargs):
+                if host == install.APP_HEALTH_HOST:
+                    return {'status': 421, 'headers': policy, 'cert_names': install.ADMIN_CERT_NAMES}
+                if path == '/health/':
+                    return {'status': 200, 'json': dict(health), 'headers': policy,
+                            'cert_names': install.ADMIN_CERT_NAMES}
+                raise AssertionError((scheme, host, path))
+            return probe
+        r0, r1 = OTHER, REVISION
+        cases = ((r1, healthy(release=r1), False), (r1, healthy(release_digest=install.release_digest(r1)), True),
+                 (r0, healthy(release=r0), True), (r0, healthy(release_digest=install.release_digest(r0)), False))
+        for revision, answer, passes in cases:
+            with self.subTest(revision=revision[:4], answer=sorted(answer)), \
+                    mock.patch.object(test_install, 'DIGEST_REVISIONS', {r1}), \
+                    mock.patch.multiple(install, probe=edge(answer), serves_admin_host=lambda revision: False,
+                                        time=mock.Mock(sleep=lambda seconds: None)):
+                problems, _ = install.https_checks(mock.Mock(revision=revision), revision)
+                health = [problem for problem in problems if '/health/' in problem]
+                self.assertEqual(not health, passes, problems)
+
+    def test_has_health_digest_reads_the_revisions_tree_and_refuses_one_it_cannot_read(self):
+        has = test_install.REAL_HAS_HEALTH_DIGEST
+        answers = {f'{REVISION}:{install.HEALTH_DIGEST_FILE}': b"    return JsonResponse({'release_digest': d})\n",
+                   f'{OTHER}:{install.HEALTH_DIGEST_FILE}': b"    return JsonResponse({'release': r})\n"}
+
+        def fake_run(argv, **kwargs):
+            data = answers.get(argv[-1])
+            return SimpleNamespace(returncode=0 if data is not None else 128, stdout=data or b'', stderr=b'')
+        with mock.patch.object(install, 'run', fake_run), mock.patch.dict(install._HEALTH_DIGEST_SEEN, clear=True):
+            self.assertTrue(has(REVISION))
+            self.assertFalse(has(OTHER))
+            with self.assertRaisesRegex(install.InstallError, 'cannot read'):
+                has('e' * 40)
+            with self.assertRaisesRegex(install.InstallError, 'not a 40-character'):
+                has('HEAD')
 
     def test_the_public_path_and_the_availability_record_read_the_digest(self):
         digest = install.release_digest(REVISION)
-        with mock.patch.object(install, 'probe', return_value={'status': 200, 'json': healthy(release_digest=digest)}):
+        with mock.patch.object(test_install, 'DIGEST_REVISIONS', {REVISION}), \
+                mock.patch.object(install, 'probe', return_value={'status': 200, 'json': healthy(release_digest=digest)}):
             passed, observations = install.public_health(REVISION)
         self.assertTrue(passed)
+        # a B7 revision answering its release through nginx is refused there (B7 not in force)
+        with mock.patch.object(test_install, 'DIGEST_REVISIONS', {REVISION}), \
+                mock.patch.object(install, 'probe', return_value={'status': 200, 'json': healthy(release=REVISION)}), \
+                mock.patch.object(install.time, 'sleep'):
+            passed, observations = install.public_health(REVISION)
+        self.assertFalse(passed)
         recorder = install.AvailabilityRecorder(check=lambda: {'status': 200, 'json': healthy(release_digest=digest)})
         recorder.sample()
         recorder.check = lambda: {'status': 200, 'json': healthy(release=OTHER)}

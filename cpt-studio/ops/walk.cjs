@@ -85,6 +85,7 @@
  * cpt-studio-walk-evidence@2 - release 1 dropped the operator's credentials and added the operator gate's control and
  * /health/): per document its result (pass or fail), the reasons of every failed check, and every check. Exit 0 when every document and run check passed, 1 when anything failed, 2 on a usage error before any upload.
  */
+const childProcess = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -214,6 +215,14 @@ function checkedOrigin(value, name) {
     throw new UsageError(`--${name} may be plain http only on the loopback: the password would cross a network in clear`);
   }
   return url.origin;
+}
+
+// The CSRF cookie's name as the server serving now set it (``jar``: the context's cookies for that origin): the __Host-
+// one when it is there, else the plain one when that is (an earlier revision after a switch-back), else the name a
+// release-1 server at ``origin`` sets.
+function servedCsrfName(jar, origin) {
+  const names = new Set((jar || []).map(cookie => cookie.name));
+  return [`${HOST_PREFIX}${CSRF_COOKIE}`, CSRF_COOKIE].find(name => names.has(name)) || cookieNames(origin).csrf;
 }
 
 // The admin host's origin for a base URL whose host starts with 'cpt.' (https://cpt.quillmd.com ->
@@ -2956,8 +2965,11 @@ async function exportPdf(page, ctx, enc, kind, outDir) {
 async function probeOps(page, ctx, anonymous, enc) {
   const probes = [];
   const fake = crypto.randomUUID();  // POSTs name an encounter that does not exist: a broken gate changes nothing
-  const csrf = cookieNames(ctx.base).csrf;  // the __Host- name on https (B6)
-  const token = ((await page.context().cookies(ctx.base)).find(cookie => cookie.name === csrf) || {}).value || '';
+  // the CSRF cookie by the name the server set (refutation, rollback lens B-9): release 1's __Host- name over https
+  // (B6), or an earlier revision's plain one after a switch-back
+  const jar = await page.context().cookies(ctx.base);
+  const csrf = servedCsrfName(jar, ctx.base);
+  const token = (jar.find(cookie => cookie.name === csrf) || {}).value || '';
   for (const where of OPS_GET_PATHS(enc.id)) {
     const customer = await page.request.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
     const nobody = await anonymous.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
@@ -3077,19 +3089,48 @@ function healthRecord(found) {
     also_release: shape === 'release_digest' && 'release' in json };
 }
 
-// B7: through nginx (an https base URL) /health/ answers 200 with a 16-hex release digest and no release; a loopback base
-// URL may be the web's own port, which answers the release (either shape, one of them). With --release the digest must
-// be that revision's (or the release that revision).
-function healthChecks(found, base, release = null) {
+// The repository this walk runs from (cpt-studio/ops/walk.cjs), whose git tree says whether --release answers /health/
+// with the digest (B7): its health view names 'release_digest' - as ops/install.py's has_health_digest reads it.
+const REPO = path.resolve(__dirname, '..', '..');
+const HEALTH_DIGEST_FILE = 'cpt-studio/studio/views.py';
+
+function releaseAnswersDigest(release) {
+  let text;
+  try {
+    text = childProcess.execFileSync('git', ['-C', REPO, 'cat-file', '-p', `${release}:${HEALTH_DIGEST_FILE}`],
+      { stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 });
+  } catch {
+    throw new UsageError(`cannot tell whether --release ${release.slice(0, 12)} answers the health digest: this checkout `
+      + `cannot read its ${HEALTH_DIGEST_FILE}`);
+  }
+  return text.includes('release_digest');
+}
+
+// B7 (refutation, rollback lens B-9: decided by the revision served, not the scheme alone): through nginx (an https base
+// URL) a revision that has B7 answers 200 with a 16-hex release digest and no release, and one before it - R0 after a
+// switch-back - its release; a loopback base URL may be the web's own port, which answers the release. With --release,
+// ``digestExpected`` is whether that revision has B7 (main reads it from the tree: releaseAnswersDigest) and the answer
+// must name it; a caller that cannot tell (undefined) accepts either shape that names it. Without --release, through
+// nginx the digest alone (release 1's own walk).
+function healthChecks(found, base, release = null, digestExpected = undefined) {
   const seen = healthRecord(found);
   const proxied = new URL(base).protocol === 'https:';
   const digest = seen.shape === 'release_digest' && HEALTH_DIGEST.test(seen.value || '') && !seen.also_release;
-  const direct = !proxied && seen.shape === 'release' && !!seen.value;
-  const shaped = seen.status === 200 && (digest || direct);
+  const plain = seen.shape === 'release' && !!seen.value;
+  let wanted;  // the shapes this answer may take
+  if (!proxied) wanted = { digest: true, plain: true };
+  else if (release === null || digestExpected === true) wanted = { digest: true, plain: false };
+  else if (digestExpected === false) wanted = { digest: false, plain: true };
+  else wanted = { digest: true, plain: true };
+  const shaped = seen.status === 200 && ((digest && wanted.digest) || (plain && wanted.plain));
+  const expectation = !proxied ? '' : (wanted.digest && wanted.plain ? ' (the release or its digest are expected)'
+    : wanted.digest ? ' (through nginx: a 16-hex release_digest and no release are expected)'
+      : ' (through nginx, a revision before B7: its release and no digest are expected)');
   const checks = [check('health.release_hidden', shaped, seen.status !== 200 ? `GET /health/ answered ${seen.status}`
-    : shaped ? (digest ? 'GET /health/ answers the release digest and no release' : 'GET /health/ answers the release (the web\'s own port)')
+    : shaped ? (digest ? 'GET /health/ answers the release digest and no release'
+      : `GET /health/ answers the release (${proxied ? 'a revision before B7' : 'the web\'s own port'})`)
       : `GET /health/ answered ${seen.also_release ? 'the release beside its digest' : `${seen.shape}${seen.value ? ` ${seen.value}` : ''}`}`
-        + (proxied ? ' (through nginx: a 16-hex release_digest and no release are expected)' : ''))];
+        + expectation)];
   if (release !== null) {
     const expected = seen.shape === 'release' ? release : healthDigest(release);
     checks.push(check('health.release_matches', shaped && seen.value === expected,
@@ -3344,6 +3385,8 @@ async function main(argv) {
     }
     docs = documentsOf(opts.docs, opts);
     creds = loadCredentials(opts.credentials, 'credentials file');
+    // whether --release has B7, from this checkout's tree: an unreadable revision is a usage error (fail closed)
+    opts.releaseDigest = opts.release === null ? undefined : releaseAnswersDigest(opts.release);
     if (fs.existsSync(path.join(opts.out, 'evidence.json'))) throw new UsageError(`${opts.out} already holds evidence.json; use a fresh --out directory`);
     denylist();
     contract();
@@ -3396,7 +3439,7 @@ async function main(argv) {
       : 'GET /api/session carries every key customer-contract.json lists and nothing else'));
     const health = await probeHealth(ctx, anonymous);
     evidence.health = healthRecord(health);
-    evidence.run_checks.push(...healthChecks(health, opts.baseUrl, opts.release));
+    evidence.run_checks.push(...healthChecks(health, opts.baseUrl, opts.release, opts.releaseDigest));
     // the operator gate's positive control (A11) before any upload: no operator signs in
     evidence.control = await probeControl(ctx, anonymous, door, creds);
     const control = controlChecks(evidence.control, ctx.admin);
@@ -3455,7 +3498,7 @@ module.exports = {
   servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportPdf, pdfPageLines, REPORT_STATUS, RUNNING_LINES,
   exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,
   checkedOrigin, adminOriginOf, cookieNames, controlChecks, redirectsToOpsSignIn, OPS_SIGN_IN, REFUSED_SENTENCE, CSRF_FIELD,
-  healthDigest, healthRecord, healthChecks, HEALTH_DIGEST_PREFIX, stayIfAsked,
+  healthDigest, healthRecord, healthChecks, HEALTH_DIGEST_PREFIX, stayIfAsked, servedCsrfName, releaseAnswersDigest,
   evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
 };
 
