@@ -875,14 +875,24 @@ class LoginAttemptQuerySet(models.QuerySet):
     def latest_sign_ins(self, usernames) -> dict:
         """{username: the time of its latest successful sign-in} for each name in ``usernames`` that has one: its newest
         succeeded row alone, one index lookup a name (studio_login_name_signed_in) - what customer.last_sign_ins answers
-        by aggregating every succeeded row of each name."""
-        latest = {}
-        for name in sorted(set(usernames)):
-            last = (self.filter(succeeded=True, username=name).order_by('-created_at')
-                    .values_list('created_at', flat=True).first())
-            if last is not None:
-                latest[name] = last
-        return latest
+        by aggregating every succeeded row of each name. Every name in ONE statement (refutation round 2 of release 1,
+        phi-0: a query a name cost a round trip each), so the read costs one statement whatever the number of names
+        and whatever the rows one name holds."""
+        from django.db import connections  # here: the one read in this module that names its connection
+        names = sorted({str(name) for name in usernames})
+        if not names:
+            return {}
+        database = connections[self.db]
+        quote, meta = database.ops.quote_name, self.model._meta
+        table = quote(meta.db_table)
+        username, created_at, succeeded = (quote(meta.get_field(field).column)
+                                           for field in ('username', 'created_at', 'succeeded'))
+        with database.cursor() as cursor:
+            cursor.execute(f'SELECT wanted.name, (SELECT attempt.{created_at} FROM {table} AS attempt '
+                           f'WHERE attempt.{succeeded} AND attempt.{username} = wanted.name '
+                           f'ORDER BY attempt.{created_at} DESC LIMIT 1) '
+                           f'FROM unnest(%s::text[]) AS wanted(name)', [names])
+            return {name: last for name, last in cursor.fetchall() if last is not None}
 
     def signed_in_clients(self, username, since, limit=None) -> set:
         """The clients (addresses) of ``username``'s newest successful sign-ins at or after ``since``, at most ``limit``

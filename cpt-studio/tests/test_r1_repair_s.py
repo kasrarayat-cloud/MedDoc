@@ -601,13 +601,20 @@ class SignInRowsTests(TestCase):
                 self.assertIn('studio_login_upper_name_time', plan)
 
     def test_the_latest_sign_ins_read_one_row_a_name_and_answer_as_before(self):
+        from django.db.models import Max
         names = [self.owner.username, self.colleague.username, 'never-signed-in']
-        self.assertEqual(models.LoginAttempt.objects.latest_sign_ins(names), customer.last_sign_ins(names))
-        for sql in self.sql_of(lambda: models.LoginAttempt.objects.latest_sign_ins(names), 'LIMIT 1'):
-            with self.subTest(sql=sql[-80:]):
-                plan = self.plan(sql, analyze=True)
-                self.assertIn('studio_login_name_signed_in', plan)
-                self.assertNotRegex(plan, r'actual time=\S+ rows=(?:[2-9]|\d{2,}) ')  # at most one row a name
+        shipped = dict(models.LoginAttempt.objects.filter(succeeded=True, username__in=names).values('username')
+                       .annotate(last=Max('created_at')).values_list('username', 'last'))  # every succeeded row
+        self.assertEqual(models.LoginAttempt.objects.latest_sign_ins(names), shipped)
+        self.assertEqual(customer.last_sign_ins(names), shipped)
+        # every name in one statement (refutation round 2, phi-0), each name's lookup one row of the partial index
+        (sql,) = self.sql_of(lambda: models.LoginAttempt.objects.latest_sign_ins(names), 'LIMIT 1')
+        plan = self.plan(sql, analyze=True)
+        scans = [line for line in plan.splitlines() if re.search(r'Scan.* on studio_loginattempt', line)]
+        self.assertTrue(scans, plan)
+        for line in scans:
+            self.assertIn('studio_login_name_signed_in', line)
+            self.assertNotRegex(line, r'actual time=\S+ rows=(?:[2-9]|\d{2,}) ')  # at most one row a name
 
     def test_the_known_addresses_read_at_most_their_limit_of_rows(self):
         since = timezone.now() - timedelta(days=settings.KNOWN_DEVICE_DAYS)

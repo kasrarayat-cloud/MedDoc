@@ -4,18 +4,24 @@ read repeated over midnight), each pinned by its finding's own input (refute-r2/
 phi-3         a member's list read repeated just after midnight UTC was counted on the previous day's record, so the new
               day's reads page said 'No read recorded for this choice'. A repeat is now counted only on a record of its
               own UTC day - the day the reads page files a read under.
+phi-0         GET /api/members ran one LoginAttempt query per membership (about 1 ms each). The practice's last sign-ins
+              are now one statement, one index lookup a name, whatever the membership count and the rows a name holds.
 
 Synthetic accounts, practices, titles and rows only."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.db import connection
+from django.db.models import Max
+from django.test import Client, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from studio import models, read_audit
+from studio import customer, models, read_audit
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
@@ -112,3 +118,83 @@ class ListRepeatDayTests(TestCase):
         self.assertEqual((repeat.repeats, repeat.last_at), (2, noon + timedelta(seconds=40)))
         self.assertIn('read again 2 times by this sign-in, the last at 2026-11-21 12:00:40',
                       self.page('?day=2026-11-21'))
+
+
+# --- phi-0: the practice's last sign-ins in one statement -----------------------------------------------------------------
+
+def shipped_last_sign_ins(usernames) -> dict:
+    """3048931b5's customer.last_sign_ins, verbatim: one aggregate over every succeeded row of the names - the answer the
+    members list must still give."""
+    return dict(models.LoginAttempt.objects.filter(succeeded=True, username__in=list(usernames)).values('username')
+                .annotate(last=Max('created_at')).values_list('username', 'last'))
+
+
+def explain(sql, *, analyze=False):
+    with connection.cursor() as cursor:
+        cursor.execute(('EXPLAIN (ANALYZE, BUFFERS OFF) ' if analyze else 'EXPLAIN ') + sql)
+        return '\n'.join(row[0] for row in cursor.fetchall())
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class MembersLastSignInTests(TestCase):
+    """The finding's input: GET /api/members by a practice's owner, for practices of 5 and 60 memberships."""
+
+    def practice(self, size):
+        ws = f.workspace(f'Synthetic practice A2 members {size}')
+        owner = f.member(ws, role=models.Membership.OWNER)
+        people = [owner, *(f.member(ws) for _ in range(size - 1))]
+        now = timezone.now()
+        rows = []
+        for index, person in enumerate(people[:-1]):  # the last person never signed in
+            rows += [models.LoginAttempt(username=person.username, client='203.0.113.9', succeeded=True, door='cpt',
+                                         outcome=models.LoginAttempt.SIGNED_IN) for _ in range(3)]
+            rows.append(models.LoginAttempt(username=person.username, client='192.0.2.9', succeeded=False, door='cpt',
+                                            outcome=models.LoginAttempt.WRONG_PASSWORD))  # never a sign-in
+        models.LoginAttempt.objects.bulk_create(rows, batch_size=2000)
+        with connection.cursor() as cursor:  # each row at its own time over the last 30 days; the failures newest
+            cursor.execute("UPDATE studio_loginattempt SET created_at = %s - (id %% 997) * interval '43 minutes' "
+                           "- (CASE WHEN succeeded THEN interval '1 hour' ELSE interval '0' END)", [now])
+        client = Client(HTTP_HOST='cpt.quillmd.com')
+        client.force_login(owner)
+        ops.mark_signed_in(client, door='cpt')
+        return client, people
+
+    def members(self, client):
+        with CaptureQueriesContext(connection) as seen:
+            answer = client.get('/api/members')
+        self.assertEqual(answer.status_code, 200)
+        statements = [item['sql'] for item in seen.captured_queries if 'studio_loginattempt' in item['sql']]
+        return answer.json()['members'], statements
+
+    def test_the_members_list_reads_its_last_sign_ins_in_one_statement_whatever_the_practice_size(self):
+        for size in (5, 60):
+            with self.subTest(size=size):
+                client, people = self.practice(size)
+                members, statements = self.members(client)
+                self.assertEqual(len(statements), 1, statements)
+                expected = shipped_last_sign_ins(person.username for person in people)
+                self.assertEqual(len(expected), size - 1)
+                self.assertEqual({row['username']: row['last_sign_in'] for row in members},
+                                 {person.username: customer.iso(expected.get(person.username)) for person in people})
+                self.assertIsNone(next(row for row in members if row['username'] == people[-1].username)['last_sign_in'])
+
+    def test_that_statement_reads_one_row_a_name_by_its_index_however_many_rows_a_name_holds(self):
+        client, people = self.practice(5)
+        owner = people[0]
+        models.LoginAttempt.objects.bulk_create(  # the owner's own sign-ins hold most of the table (avail-5's shape)
+            [models.LoginAttempt(username=owner.username, client=f'203.0.113.{index % 200}', succeeded=True,
+                                 door='cpt', outcome=models.LoginAttempt.SIGNED_IN) for index in range(20_000)],
+            batch_size=5000)
+        with connection.cursor() as cursor:
+            cursor.execute('ANALYZE studio_loginattempt')
+        members, (sql,) = self.members(client)
+        self.assertEqual(len(members), 5)
+        plan = explain(sql, analyze=True)
+        self.assertNotIn('Seq Scan on studio_loginattempt', plan)
+        scans = [line for line in plan.splitlines() if re.search(r'Scan.* on studio_loginattempt', line)]
+        self.assertTrue(scans, plan)
+        for line in scans:  # each name's lookup: the newest succeeded row alone, by the partial index
+            self.assertIn('studio_login_name_signed_in', line)
+            self.assertRegex(line, r'actual time=\S+ rows=[01] loops=5\)', plan)
+        self.assertEqual(customer.last_sign_ins([owner.username, 'never-signed-in', owner.username]),
+                         shipped_last_sign_ins([owner.username]))
