@@ -1313,6 +1313,28 @@ class ReplayFileAndWordingTests(RepairCase, TestCase):
         self.assertIsNone(models.Encounter.objects.get(pk=self.a_word.pk).destroyed_at)
 
 
+    def test_an_interrupted_replay_prints_what_it_did_and_a_second_replay_finishes(self):
+        ledger, entries, _ = self.two_destroyed_and_restored()
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(storage, 'delete_stored', side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt), installer_idle():  # Ctrl-C in the first entry's file phase
+            call_command('dispose', '--replay-ledger', str(ledger), '--execute', '--by', 'Synthetic Operator',
+                         '--approved-by', 'Synthetic Approver', '--authorization-ref', AUTH, stdout=out, stderr=err)
+        failed = Event.objects.get(stage=Event.FAILED, notes__startswith=f'replay={entries[0]};')
+        self.assertEqual(failed.counts['problems'], ['files: KeyboardInterrupt'])
+        self.assertIn(f'Disposal {failed.pk} (failed)', out.getvalue())  # its certificate, in the report
+        self.assertIn(f'The replay stopped at ledger entry {entries[0]}: it was interrupted after its commit (its '
+                      'certificate above says what it did and left); no entry was carried out again before it; 1 later '
+                      'entry was not attempted. Replay the ledger again to go on', err.getvalue())
+        self.assertIsNone(models.Encounter.objects.get(pk=self.a_word.pk).destroyed_at)  # not attempted
+        output, error = self.replay(ledger)  # again: the file the interrupt left, and the second entry
+        self.assertIsNone(error, output)
+        for enc in (self.a_note, self.a_word):
+            self.assertFalse(models.SourceRevision.objects.filter(encounter=enc).exists())
+        self.assertEqual(len(failed.files['remaining_names']), 1)
+        self.assertFalse(storage.stored_path(failed.files['remaining_names'][0]).exists())
+
+
 class ClosedElsewhereTests(RepairCase, TestCase):
     def test_an_account_whose_other_practices_are_all_closed_ends_with_the_disposal(self):
         # round 2, finding 5 (the lens's probe R5): B destroyed first - A still open, so the reviewer was kept - then A:
