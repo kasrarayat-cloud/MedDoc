@@ -11,11 +11,16 @@ A2  The console's activity list shows no CPT code and no line of any document: t
 A3  Second-factor failures sent with the account's own known-device cookie are counted apart from every other request's,
     so someone holding the operator's password alone cannot use up the attempts of the operator's own browser: its key,
     its recovery codes and its step-up keep working. Each pending sign-in keeps its own limit.
+A4  The signed-in pages of the second factor - the recovery codes setup ends on, and the step-up's key and recovery code
+    pages - arm the console's idle timer (ops_session.js) as every console page does: the sign-out form, and the
+    session's seconds on the body.
 """
 from __future__ import annotations
 
 import io
 import json
+import shutil
+import subprocess
 import tempfile
 import uuid
 from contextlib import contextmanager
@@ -541,3 +546,131 @@ class OwnDeviceSecondFactorTests(TestCase):
                     browser = a3_browser(A3_THIEF, cookie)
                     password_step(browser, self.operator)
                     self.assertEqual(browser.post('/login/second-factor/options').status_code, 429)
+
+
+# --- A4: the signed-in second-factor pages arm the console's timer (auth-1) -------------------------------------------
+
+A4_SIGN_OUT_FORM = '<form method="post" action="/logout/">'
+A4_STATIC = Path(__file__).resolve().parent.parent / 'studio' / 'static' / 'studio'
+# ops_session.js run on a rendered page, in a vm: the page's own sign-out form and body data-*, a clock that only the
+# harness moves, and a fetch that never answers well (so no ping moves the deadline). It prints what the timer did.
+A4_HARNESS = r"""
+'use strict';
+const fs = require('node:fs');
+const vm = require('node:vm');
+const [script, page] = process.argv.slice(2);
+const html = fs.readFileSync(page, 'utf8');
+const hasForm = /<form[^>]*action="\/logout\/"/.test(html);
+const body = (/<body([^>]*)>/.exec(html) || [])[1] || '';
+const dataset = {};
+for (const [, name, value] of body.matchAll(/data-([a-z-]+)="([^"]*)"/g)) {
+  dataset[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = value;
+}
+const start = Date.parse('2026-11-24T12:00:00Z');
+const clock = { now: start, timers: [] };
+const result = { form: hasForm, dataset, armed: 0, pings: 0, submittedAt: null, action: null, cleared: false };
+const form = hasForm ? { attributes: { action: '/logout/' }, setAttribute(key, value) { this.attributes[key] = value; },
+  submit() { result.submittedAt = (clock.now - start) / 1000; result.action = this.attributes.action; },
+  addEventListener() {}, querySelector: () => ({ value: 'token' }) } : null;
+const main = { replaceChildren() { result.cleared = true; } };
+const element = () => ({ setAttribute() {}, append() {}, addEventListener() {}, querySelector: () => ({}),
+  showModal() { this.open = true; }, close() { this.open = false; }, open: false });
+const document = { body: { dataset, append() {} }, hidden: false, activeElement: null, createElement: element,
+  querySelector: selector => (selector === 'form[action="/logout/"]' ? form : null), querySelectorAll: () => [],
+  getElementById: id => (id === 'main' ? main : null), addEventListener() {} };
+const sandbox = { document, console, FormData: class { append() {} }, BroadcastChannel: undefined,
+  window: { location: { assign() {} }, addEventListener() {}, localStorage: undefined },
+  Date: class extends Date { static now() { return clock.now; } },
+  setTimeout: (run, ms) => { const timer = { at: clock.now + ms, run }; clock.timers.push(timer); return timer; },
+  clearTimeout: timer => { const at = clock.timers.indexOf(timer); if (at >= 0) clock.timers.splice(at, 1); },
+  fetch: async () => { result.pings += 1; return { status: 502, ok: false, json: async () => null }; } };
+vm.runInNewContext(fs.readFileSync(script, 'utf8'), sandbox);
+result.armed = clock.timers.length;
+(async () => {
+  const end = start + 3600 * 1000;
+  for (;;) {
+    await new Promise(resolve => setImmediate(resolve));
+    const due = clock.timers.filter(timer => timer.at <= end).sort((a, b) => a.at - b.at)[0];
+    if (!due) break;
+    clock.timers.splice(clock.timers.indexOf(due), 1);
+    clock.now = Math.max(clock.now, due.at);
+    due.run();
+  }
+  console.log(JSON.stringify(result));
+})();
+"""
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class SignedInSecondFactorPagesTimerTests(TestCase):
+    """A4: the recovery codes page and the step-up pages are signed-in console pages, and arm the timer."""
+
+    def setUp(self):
+        self.operator = f.user('a4-operator')
+        ops.grant(self.operator)
+
+    def assert_armed(self, body, label):
+        self.assertTrue('src="/static/studio/ops_session.js"' in body, f'{label}: ops_session.js is not loaded')
+        self.assertTrue(A4_SIGN_OUT_FORM in body, f'{label}: no sign-out form, which ops_session.js arms on')
+        for name in ('data-idle-seconds="', 'data-cap-seconds="', 'data-warning-seconds="', 'data-session="'):
+            self.assertTrue(name in body, f'{label}: no {name} on the page')
+        self.assertFalse('data-session=""' in body, f'{label}: an empty session tag')
+
+    def codes_page(self):
+        self.operator.set_unusable_password()
+        self.operator.save()
+        _token, code = second_factor.issue_setup_code(self.operator, 'Synthetic Person')
+        client = Client(HTTP_HOST=ADMIN)
+        self.assertEqual(setup_first_step(client, code).status_code, 303)
+        page = setup_key_step(client, Authenticator())
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(client.session.get('_auth_user_id'), str(self.operator.pk))
+        return page.content.decode()
+
+    def test_the_recovery_codes_page_arms_the_timer(self):
+        body = self.codes_page()
+        self.assertEqual(body.count('<li>'), settings.RECOVERY_CODE_COUNT)
+        self.assert_armed(body, 'the recovery codes page')
+        idle = settings.SESSION_IDLE_OPERATOR_SECONDS
+        self.assertTrue(f'data-idle-seconds="{idle}"' in body, 'the session was signed in just now')
+        self.assertTrue(f'content="{idle + 10};url=/login/?reason=idle"' in body, 'and without script, the refresh')
+
+    def test_the_step_up_pages_arm_the_timer(self):
+        add_key(self.operator)
+        second_factor.new_recovery_codes(self.operator)
+        client = ops.admin_client(self.operator)
+        for address in ('/login/second-factor?next=/ops/security', '/login/recovery?next=/ops/security'):
+            with self.subTest(address):
+                answer = client.get(address)
+                self.assertEqual(answer.status_code, 200)
+                self.assert_armed(answer.content.decode(), address)
+
+    def test_a_pending_sign_in_s_pages_are_not_signed_in_and_load_no_timer(self):
+        add_key(self.operator)
+        client = Client(HTTP_HOST=ADMIN)
+        self.assertEqual(password_step(client, self.operator).status_code, 302)
+        for address in ('/login/second-factor', '/login/recovery'):
+            with self.subTest(address):
+                body = client.get(address).content.decode()
+                self.assertFalse('ops_session.js' in body, f'{address}: a timer on a page signed in as nobody')
+                self.assertFalse(A4_SIGN_OUT_FORM in body, f'{address}: a sign-out form for nobody')
+
+    def test_ops_session_js_signs_the_codes_page_out_at_the_idle_limit(self):
+        node = shutil.which('node')
+        if node is None:
+            self.skipTest('node is not installed; the timer is run by node')
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        page, harness = Path(folder.name) / 'codes.html', Path(folder.name) / 'harness.cjs'
+        page.write_text(self.codes_page(), encoding='utf-8')
+        harness.write_text(A4_HARNESS, encoding='utf-8')
+        run = subprocess.run([node, str(harness), str(A4_STATIC / 'ops_session.js'), str(page)], capture_output=True,
+                             text=True, timeout=60, check=False)
+        self.assertEqual(run.returncode, 0, run.stderr[-2000:])
+        seen = json.loads(run.stdout.strip().splitlines()[-1])
+        self.assertTrue(seen['form'])
+        self.assertGreaterEqual(seen['armed'], 1, 'a timer is armed at load')
+        self.assertGreaterEqual(seen['pings'], 1, 'and the first ping is sent')
+        self.assertEqual((seen['submittedAt'], seen['action'], seen['cleared']),
+                         (settings.SESSION_IDLE_OPERATOR_SECONDS, '/logout/?reason=idle', True),
+                         'at the idle limit the screen is cleared and the sign-out form submitted')

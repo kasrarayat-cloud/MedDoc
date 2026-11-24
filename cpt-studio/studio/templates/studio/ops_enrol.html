@@ -2,7 +2,10 @@
 {% block title %}Set up the console{% endblock %}
 {% block head_extra %}<link rel="icon" href="{% static 'studio/favicon.svg' %}" type="image/svg+xml">
   <script src="/static/studio/ops_second_factor.js" defer></script>{% endblock %}
-{% block topbar_links %}<span class="meta">Synthetic data only</span>{% endblock %}
+{% block topbar_links %}<span class="meta">Synthetic data only</span>
+    {# signed in (the recovery codes setup ends on, a step-up): the sign-out form ops_session.js arms its idle #}
+    {# timer on, as on every console page (release 1 repair round 1, auth-1) #}
+    {% if user.is_authenticated %}<form method="post" action="/logout/">{% csrf_token %}<button class="signout" type="submit">Sign out</button></form>{% endif %}{% endblock %}
 {% block content %}
 <section class="card signin" aria-labelledby="enrol-title">
 {% if step == 'codes' %}

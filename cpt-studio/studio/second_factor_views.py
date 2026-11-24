@@ -256,6 +256,9 @@ def _finish_enrolment(request, user, claim):
         sessions.prepare_sign_in(request, door=request_meta.ADMIN, sign_in_ref=door.sign_in_ref)
         login(request, user)
         request.session[request_meta.SESSION_SECOND_FACTOR_AT] = request_meta.epoch_seconds()
+    # the codes are shown signed in: the page arms the console's idle timer from the session just opened, as every
+    # signed-in console page does from the session policy's own (studio.sessions.page_config; auth-1)
+    request.cpt_page = sessions.page_config(request)
     return render(request, 'studio/ops_enrol.html', {'step': 'codes', 'codes': codes, 'label': key.label})
 
 
