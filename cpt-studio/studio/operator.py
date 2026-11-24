@@ -150,10 +150,39 @@ def clean_review_by(value, today=None):
     return value
 
 
-def grant(user, reason, granted_by, *, authorization_ref=None, review_by=None):
+REGRANT_REFUSED = ("This account's operator access was revoked before: a new grant needs an explicit regrant "
+                   '(grant_operator --regrant), which the installer passes only when its committed declaration names '
+                   'the regrant.')
+
+# The installer's two platform-operator accounts (ops/install.py OPERATOR_ACCOUNTS_SPEC; tests/test_provision.py holds
+# the two lists equal). Provisioning never makes either a member of a practice or sets its password.
+INSTALLER_OPERATOR_USERNAMES = frozenset({'ops-agent', 'platform-operator'})
+
+
+def was_revoked(user) -> bool:
+    """Whether any operator grant of ``user`` was ever revoked (an OperatorRevocation row exists)."""
+    return models.OperatorRevocation.objects.filter(grant__user_id=user.pk).exists()
+
+
+def operator_account_reason(username) -> str:
+    """Why ``username`` is an operator's account, which provisioning refuses in every role (release 1, the installer
+    lens) - or ''. Either it is named in the installer's operator accounts (letter case and outer space aside), or it is
+    an account that holds an operator grant no revocation ended."""
+    name = str(username or '').strip()
+    if name.casefold() in INSTALLER_OPERATOR_USERNAMES:
+        return "it is one of the installer's operator accounts"
+    user = models.User.objects.filter(username=name).first()
+    if user is not None and active_grant(user) is not None:
+        return 'it holds an operator grant'
+    return ''
+
+
+def grant(user, reason, granted_by, *, authorization_ref=None, review_by=None, regrant=False):
     """Record a grant for ``user`` (the management command's one write) with the approval it rests on and the date it
     must be reviewed by, and a SecurityEvent operator.granted. (grant, created): an operator who already holds a grant
     keeps it and nothing is written. An automated account is refused (ValueError) - operator power is for people only.
+    An account whose operator access was ever revoked is refused (ValueError REGRANT_REFUSED) unless ``regrant`` is
+    true; a regrant is recorded on its SecurityEvent (regrant: true).
 
     grant_operator requires the approval, the review date and the named person who runs it (release 1, C3) and is the
     only path that records a grant outside the tests; here both are checked when given (tests.support.operator, Lane 1's
@@ -163,13 +192,17 @@ def grant(user, reason, granted_by, *, authorization_ref=None, review_by=None):
     existing = active_grant(user)
     if existing is not None:
         return existing, False
+    revoked_before = was_revoked(user)
+    if revoked_before and not regrant:
+        raise ValueError(REGRANT_REFUSED)
     reason = clean_reason(reason)
     reference = clean_authorization_ref(authorization_ref) if authorization_ref is not None else None
     review = clean_review_by(review_by) if review_by is not None else None
     label = str(granted_by or '')[:120]
     record = models.OperatorGrant.objects.create(user=user, reason=reason, granted_by=label,
                                                  authorization_ref=reference, review_by=review)
-    security_events.record('operator.granted', actor_label=label, subject=user, grant=record.pk, review_by=review)
+    security_events.record('operator.granted', actor_label=label, subject=user, grant=record.pk, review_by=review,
+                           **({'regrant': True} if revoked_before else {}))
     return record, True
 
 

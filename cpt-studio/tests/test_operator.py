@@ -77,7 +77,7 @@ class GrantTests(TestCase):
         self.assertFalse(operator.is_operator(user))
         user.is_active = False
         user.save()
-        ops.grant(user)
+        operator.grant(user, 'Synthetic test: granted again after its revocation.', 'tests', regrant=True)  # explicit
         self.assertFalse(operator.is_operator(user), 'an inactive account is never an operator')
 
     def test_is_operator_reads_no_membership(self):
@@ -199,6 +199,38 @@ class GrantTests(TestCase):
                 call_command('revoke_operator', username=username, reason_file=str(self.reason), by='Synthetic Admin',
                              stdout=_out())
         self.assertEqual(models.OperatorRevocation.objects.count(), 1)
+
+    def test_a_revoked_account_is_granted_again_only_with_regrant_and_the_regrant_is_recorded(self):
+        user = f.user('olga')
+        self.grant_command('olga')
+        call_command('revoke_operator', username='olga', reason_file=str(self.reason), by='Synthetic Admin',
+                     stdout=_out())
+        with self.assertRaises(CommandError) as refused:  # anyone who runs grant_operator: refused
+            self.grant_command('olga')
+        self.assertIn('--regrant', str(refused.exception))
+        self.assertIn('Nothing was recorded.', str(refused.exception))
+        with self.assertRaises(ValueError):  # and the function itself
+            operator.grant(user, 'Synthetic regrant without the flag.', 'Synthetic Admin')
+        self.assertEqual(models.OperatorGrant.objects.filter(user=user).count(), 1)
+        self.assertFalse(operator.is_operator(user))
+        out = _out()
+        call_command('grant_operator', username='olga', reason_file=str(self.reason), by='Synthetic Admin',
+                     authorization_ref='docs/foundation/deploys/synthetic-regrant.md@0123abcd',
+                     review_by=(timezone.localdate() + timedelta(days=30)).isoformat(), regrant=True, stdout=out)
+        self.assertIn('Granted operator access again to olga', out.getvalue())
+        self.assertIn('a regrant', out.getvalue())
+        self.assertTrue(operator.is_operator(user))
+        self.assertEqual(models.OperatorGrant.objects.filter(user=user).count(), 2)  # a new grant row; the old stays
+        events = list(models.SecurityEvent.objects.filter(event='operator.granted').order_by('created_at', 'pk'))
+        self.assertEqual([event.data.get('regrant') for event in events], [None, True])
+
+    def test_regrant_changes_nothing_for_an_account_never_revoked_or_still_granted(self):
+        user = f.user('pete')
+        self.grant_command('pete', regrant=True)  # never revoked: an ordinary first grant
+        self.assertEqual(models.SecurityEvent.objects.get(event='operator.granted').data.get('regrant'), None)
+        self.grant_command('pete', regrant=True)  # still granted: it keeps its grant, nothing is written
+        self.assertEqual(models.OperatorGrant.objects.filter(user=user).count(), 1)
+        self.assertEqual(models.SecurityEvent.objects.filter(event='operator.granted').count(), 1)
 
     def test_revoke_operator_requires_a_named_person(self):
         user = f.user('gina')

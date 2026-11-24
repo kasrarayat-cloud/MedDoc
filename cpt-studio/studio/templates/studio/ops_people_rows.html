@@ -55,6 +55,7 @@
             </form>
             <form method="post" action="/ops/people/{{ row.person.pk }}/unlock">{% csrf_token %}
               <input type="hidden" name="back" value="{{ back }}">
+              <label>Requested by <input type="text" name="requested_by" required maxlength="120" autocomplete="off"></label>
               <button type="submit" class="secondary">Clear sign-in delay</button>
             </form>
           </div>

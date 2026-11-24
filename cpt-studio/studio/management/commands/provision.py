@@ -29,6 +29,12 @@ role it had before (C3 item 5). With --require-password-change, every person's a
 (a new one, or any with --reset-passwords) must choose its own at the first sign-in, within
 STAFF_PASSWORD_UNUSED_SECONDS: password_change_required_at starts that clock (B4). An automated account is never
 flagged (B4 step 6): it exists for the release walk.
+
+An operator's account is refused in every role - the owner, the agent and the reviewer - before anything is read or
+written (release 1, the installer lens; studio.operator.operator_account_reason). That covers an account named in the
+installer's operator accounts (ops/install.py OPERATOR_ACCOUNTS_SPEC), whether or not it exists yet, and an account
+that holds an operator grant. So provisioning never makes an operator a member of a practice and never sets an
+operator's password, and the installer has no operator password to write anywhere.
 """
 from pathlib import Path
 
@@ -38,7 +44,7 @@ from django.db import connection, transaction
 
 from django.utils import timezone
 
-from studio import audit, models
+from studio import audit, models, operator
 from studio.management.commands.grant_operator import by_label
 
 # Each specialty's category: slug -> (name, profiles_version). Gastroenterology keeps the identity studio/gi/profiles.py
@@ -146,6 +152,12 @@ class Command(BaseCommand):
         # released when this run commits or fails
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_xact_lock(%s)', [PROVISION_LOCK])
+        for flag in ('owner_username', 'agent_username', 'reviewer_username'):
+            why = operator.operator_account_reason(options[flag]) if options[flag] else ''
+            if why:
+                raise CommandError(f'Account {options[flag]} is a CPT Studio operator account ({why}): provisioning '
+                                   f'never makes an operator a member of a practice or sets its password; nothing was '
+                                   f'changed.')
         category, _ = models.Category.objects.get_or_create(
             slug=slug, defaults={'name': name, 'profiles_version': profiles_version})
         if category.profiles_version != profiles_version:

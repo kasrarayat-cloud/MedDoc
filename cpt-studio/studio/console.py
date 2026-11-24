@@ -1025,20 +1025,22 @@ def throttle():
 @requires_recent_second_factor()
 def unlock_sign_in(request, user_id):
     """Clear the person's sign-in delay (throttle.clear_failures), with a SecurityEvent signin.delay_cleared and an audit
-    row in each of their workspaces. Refused, as every act here, for an operator's account or one with no workspace (the
-    server's clear-signin-failures clears those)."""
+    row in each of their workspaces carrying who at the practice asked for it (Requested by: clearing a delay changes who
+    can sign in, so it is asked and recorded as every access act's is). Refused, as every act here, for an operator's
+    account or one with no workspace (the server's clear-signin-failures clears those)."""
     person = _person(user_id)
     memberships = []
     try:
         with transaction.atomic():
             person = User.objects.select_for_update().get(pk=person.pk)
             memberships = _changeable(person)
+            requested_by = _requested_by(request)
             cleared = throttle().clear_failures(person.username)
             counted = {'cleared': cleared} if isinstance(cleared, int) and not isinstance(cleared, bool) else {}
             security_events.record('signin.delay_cleared', actor=request.user, subject=person, **counted)
             for workspace in _workspaces_of(memberships):
                 audit.record(workspace, 'operator.signin_cleared', actor=request.user, user=str(person.pk),
-                             username=person.username, **counted)
+                             username=person.username, requested_by=requested_by, **counted)
     except Refused as exc:
         return _refused(request, exc, _back(request, memberships)[1])
     return see_other(f'{_back(request, memberships)[0]}?done=unlocked')

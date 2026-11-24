@@ -1,5 +1,6 @@
 """manage.py provision: the owner, the review agent and a human reviewer (owner decision 2026-10-28, a doctor's
 demonstration account). Passwords come from files and are never printed."""
+import ast
 import io
 import os
 import tempfile
@@ -8,9 +9,10 @@ from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.conf import settings
 from django.test import TestCase
 
-from studio import models
+from studio import models, operator
 
 OWNER_PASSWORD = 'owner-Pass-0rd-for-tests-9184'
 AGENT_PASSWORD = 'agent-Pass-0rd-for-tests-7731'
@@ -96,6 +98,96 @@ class ProvisionTests(TestCase):
         with self.assertRaisesMessage(CommandError, 'different actor kind'):
             self.run_command('--reviewer-username', 'agent1', '--reviewer-password-file', self.secret('r', REVIEWER_PASSWORD))
         self.assertEqual(models.User.objects.get(username='agent1').actor_kind, models.User.AGENT)
+
+
+class OperatorAccountTests(TestCase):
+    """Release 1, the installer lens: provisioning refuses an operator's account in every role before it reads or
+    writes anything, and so never makes an operator a member of a practice or sets, or lets anything write, an
+    operator's password. An operator's account is one named in the installer's operator accounts (whether or not it
+    exists yet) or one that holds an operator grant."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.password = self.secret('p', OWNER_PASSWORD)
+
+    def secret(self, name, value):
+        path = Path(self.dir.name) / name
+        path.write_text(value + '\n', encoding='utf-8')
+        return str(path)
+
+    def state(self):
+        return (models.User.objects.count(), models.Membership.objects.count(), models.Workspace.objects.count(),
+                models.AuditEvent.objects.count(), list(models.User.objects.order_by('pk').values_list('password', flat=True)))
+
+    def refused(self, *args):
+        out = io.StringIO()
+        with self.assertRaises(CommandError) as raised:
+            call_command('provision', *args, stdout=out)
+        message = str(raised.exception)
+        self.assertIn('operator account', message)
+        self.assertIn('nothing was changed', message)
+        for text in (message, out.getvalue()):  # no password is ever written, refused or not
+            self.assertNotIn(OWNER_PASSWORD, text)
+        return message
+
+    def operator_account(self, username, kind=models.User.HUMAN):
+        user = models.User.objects.create(username=username, actor_kind=kind, display_name=username)
+        user.set_password('synthetic-operator-Pass-0rd-4471')
+        user.save()
+        if kind == models.User.HUMAN:
+            operator.grant(user, 'Synthetic test grant: an operator account for the provisioning refusal.', 'tests')
+        return user
+
+    def test_the_installers_operator_is_never_made_an_owner_and_its_password_is_never_set(self):
+        user = self.operator_account('platform-operator')
+        before = self.state()
+        message = self.refused('--owner-username', 'platform-operator', '--owner-password-file', self.password,
+                               '--reset-passwords')
+        self.assertIn("installer's operator accounts", message)
+        self.assertEqual(self.state(), before)  # no workspace, membership, audit row or password change
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('synthetic-operator-Pass-0rd-4471'))
+        self.assertFalse(models.Membership.objects.filter(user=user).exists())
+
+    def test_the_installers_operator_names_are_refused_before_the_accounts_exist_and_in_every_role(self):
+        before = self.state()
+        for args in (('--owner-username', 'platform-operator', '--owner-password-file', self.password),
+                     ('--owner-username', 'Platform-Operator ', '--owner-password-file', self.password),
+                     ('--owner-username', 'owner1', '--owner-password-file', self.password,
+                      '--agent-username', 'ops-agent', '--agent-password-file', self.password),
+                     ('--owner-username', 'owner1', '--owner-password-file', self.password,
+                      '--reviewer-username', 'platform-operator', '--reviewer-password-file', self.password)):
+            with self.subTest(args=args):
+                self.refused(*args)
+        self.assertEqual(self.state(), before)  # neither account was created, nor owner1, nor any workspace
+
+    def test_any_account_holding_an_operator_grant_is_refused_in_every_role(self):
+        self.operator_account('dr-ops')
+        before = self.state()
+        for args in (('--owner-username', 'dr-ops', '--owner-password-file', self.password, '--reset-passwords'),
+                     ('--owner-username', 'owner1', '--owner-password-file', self.password,
+                      '--reviewer-username', 'dr-ops', '--reviewer-password-file', self.password)):
+            with self.subTest(args=args):
+                self.assertIn('holds an operator grant', self.refused(*args))
+        self.assertEqual(self.state(), before)
+
+    def test_an_account_whose_grant_was_revoked_is_no_operator_here(self):
+        user = self.operator_account('former-ops')
+        operator.revoke(user, 'Synthetic test: revoked before provisioning.', 'Synthetic Admin')
+        call_command('provision', '--owner-username', 'former-ops', '--owner-password-file', self.password,
+                     '--reset-passwords', stdout=io.StringIO())
+        self.assertEqual(models.Membership.objects.get(user=user).role, models.Membership.OWNER)
+
+    def test_the_names_are_the_installers_own(self):
+        """INSTALLER_OPERATOR_USERNAMES is ops/install.py's OPERATOR_ACCOUNTS_SPEC, read as source (never imported):
+        an operator account the installer adds that provisioning does not know fails here."""
+        source = (Path(settings.BASE_DIR) / 'ops' / 'install.py').read_text(encoding='utf-8')
+        specs = [node.value for node in ast.parse(source).body if isinstance(node, ast.Assign)
+                 and any(isinstance(target, ast.Name) and target.id == 'OPERATOR_ACCOUNTS_SPEC' for target in node.targets)]
+        self.assertEqual(len(specs), 1)
+        names = {username for username, _kind, _label in ast.literal_eval(specs[0])}
+        self.assertEqual(names, set(operator.INSTALLER_OPERATOR_USERNAMES))
 
 
 class ProvisionRecordTests(TestCase):

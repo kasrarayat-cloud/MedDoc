@@ -1153,7 +1153,8 @@ class RequestedByTests(AdminCase):
                 (f'/ops/people/{self.viewer.pk}/password', {}),
                 (f'/ops/people/{self.viewer.pk}/access', {'access': 'off', 'membership': str(member.pk)}),
                 (f'/ops/people/{self.viewer.pk}/access', {'access': 'off', 'scope': 'everywhere'}),
-                ('/ops/workspaces/new', {'name': 'Asked Partners', 'category': str(self.neuro.pk)})]
+                ('/ops/workspaces/new', {'name': 'Asked Partners', 'category': str(self.neuro.pk)}),
+                (f'/ops/people/{self.viewer.pk}/unlock', {})]  # clearing a delay changes who can sign in
         before = self.counts()
         for url, body in acts:
             for answer in ('', '   ', '​', '---'):
@@ -1162,18 +1163,21 @@ class RequestedByTests(AdminCase):
                     self.assertEqual(response.status_code, 400)
                     self.assertIn('Requested by', page(response))
         self.assertEqual(self.counts(), before)
+        self.assertFalse(models.SecurityEvent.objects.filter(event='signin.delay_cleared').exists())
 
     def test_the_requested_by_is_stored_on_each_acts_audit_row(self):
         member = self.membership(self.viewer)
         self.ops.post(f'/ops/people/{self.viewer.pk}/role', {'membership': str(member.pk), 'role': 'reviewer',
                                                              'requested_by': 'Front desk, Dr. Lee\'s office'})
         self.ops.post(f'/ops/people/{self.viewer.pk}/password', {'requested_by': 'Ticket 77'})
+        self.ops.post(f'/ops/people/{self.viewer.pk}/unlock', {'requested_by': 'Ticket 79'})
         self.ops.post(f'/ops/people/{self.viewer.pk}/access', {'access': 'off', 'membership': str(member.pk),
                                                                'requested_by': 'Ticket 78'})
         rows = {event.event: event.data['requested_by'] for event in models.AuditEvent.objects.filter(
             event__startswith='operator.')}
         self.assertEqual(rows, {'operator.role_changed': 'Front desk, Dr. Lee\'s office',
-                                'operator.password_reset': 'Ticket 77', 'operator.access_off': 'Ticket 78'})
+                                'operator.password_reset': 'Ticket 77', 'operator.signin_cleared': 'Ticket 79',
+                                'operator.access_off': 'Ticket 78'})
         self.assertIn('requested_by Ticket 77', page(self.ops.get('/ops/activity')))
 
 
@@ -1243,8 +1247,8 @@ class UnlockTests(AdminCase):
         event = models.SecurityEvent.objects.get(event='signin.delay_cleared')
         self.assertEqual((event.subject_id, event.actor_id, event.data), (self.reviewer.pk, self.operator_user.pk,
                                                                            {'cleared': 3}))
-        self.assertEqual(models.AuditEvent.objects.get(event='operator.signin_cleared').data['username'],
-                         self.reviewer.username)
+        cleared = models.AuditEvent.objects.get(event='operator.signin_cleared')
+        self.assertEqual((cleared.data['username'], cleared.data['requested_by']), (self.reviewer.username, REQUESTED_BY))
         self.assertIn('The sign-in delay was cleared.', page(self.ops.get(response['Location'])))
 
     def test_a_throttle_answer_that_is_no_count_is_not_recorded(self):

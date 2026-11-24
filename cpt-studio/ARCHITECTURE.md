@@ -278,9 +278,12 @@ stored, listed and downloadable as records, and none is made again (`exports.FOR
 Release 1 (C5): a request for a report that is still current (made from the latest round, no decision on that round
 since; `customer.export_current`, the page's own rule) returns the stored copy - 200, one `export.reused` audit row -
 instead of rendering another, and a new decision makes the next request render a fresh one. The lock is the document's
-row alone (`select_for_update(of=('self',))`). Reports are limited to 10 per member in 10 minutes and 60 per practice
-in an hour, uploads to 30 per member in 10 minutes (`studio.rate`; 429 `rate_limited` with `Retry-After`; the first
-refusal of a window writes a `SecurityEvent`). Encrypting `ExportArtifact.content` (F1's reports half) is release 1b
+row alone (`select_for_update(of=('self',))`). Reports made are limited to 10 per member in 10 minutes and 60 per
+practice in an hour, and uploads to 30 per member in 10 minutes (`studio.rate`; 429 `rate_limited` with `Retry-After`;
+the first refusal of a window writes a `SecurityEvent`). Only a report actually made counts (lead ruling 2026-11-24).
+`exports.create` answers a current stored copy from a read without a lock, before anything is counted. It calls the
+API's `charge` only when it is about to render a new report, outside any transaction, so the counter is never held under
+the document's lock. A refusal (409) is never counted. Encrypting `ExportArtifact.content` (F1's reports half) is release 1b
 (D402): not built.
 
 The physician PDF is made from the snapshot every customer export has been made from (`exports.snapshot`):
@@ -377,9 +380,14 @@ no encounter, so the customer's activity never shows them.
   password-only session, a session from the cpt door or one from before release 1 gets the same 404 on the admin host.
 - *Operators are people* (C3): `is_operator` refuses an automated account whatever grant row it has; `grant_operator`
   refuses one and requires `--authorization-ref`, `--review-by` (at most 12 months away) and `--by` (a person, never a
-  role); `revoke_operator` requires `--by`, and a revocation ends every session of the account. Each grant and revocation
-  writes a `SecurityEvent` (`operator.granted`, `operator.revoked`). The Operators card shows each grant's approval and
-  review date and flags the overdue ones.
+  role); `revoke_operator` requires `--by`, and a revocation ends every session of the account. An account whose access
+  was ever revoked is granted again only with `--regrant` (`operator.grant(regrant=True)`); the installer passes it only
+  when its committed declaration names the regrant, and the `operator.granted` event of a regrant says `regrant: true`.
+  Each grant and revocation writes a `SecurityEvent` (`operator.granted`, `operator.revoked`). The Operators card shows
+  each grant's approval and review date and flags the overdue ones. `provision` refuses an operator's account in every
+  role (owner, agent, reviewer) before it writes anything. An operator's account is one named in the installer's
+  `OPERATOR_ACCOUNTS_SPEC` (`operator.INSTALLER_OPERATOR_USERNAMES`; a test holds the two equal) or one holding a grant.
+  So provisioning never makes an operator a member or sets an operator's password.
 - *Every read is recorded first* (C1, `studio.read_audit`): the front page (`ops.list`), a document's page
   (`ops.detail`, every view), the opening of its content (`ops.content_open`), its original (`ops.original`), a
   practice's page (`ops.workspace`), spending (`ops.spending`), the activity (`ops.activity`) and the reads page
@@ -394,7 +402,8 @@ no encounter, so the customer's activity never shows them.
   `CONTENT_GRANT_SECONDS` in that session only; without it the original answers 403. The original downloads as
   `encounter-<reference>.<extension>`; a Word document's is its converted PDF, the Word file only with `format=original`
   (C6). Retry, reconcile and the holds work from the metadata.
-- *Access acts* ask "Requested by" (the practice's contact or a ticket reference; stored on the act's audit row) and the
+- *Access acts*, Clear sign-in delay included, ask "Requested by" (the practice's contact or a ticket reference;
+  stored on the act's audit row) and the
   key again within `SECOND_FACTOR_STEP_UP_SECONDS` (B2 step 5). The access switch is the membership's - this practice
   only - by default; "Turn off everywhere" (the account) stays apart. Add-person and reset set
   `password_change_required_at` (B4). Clear sign-in delay (`ops/people/<id>/unlock`) calls Lane 2's

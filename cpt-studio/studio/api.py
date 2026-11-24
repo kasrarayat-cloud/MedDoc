@@ -400,7 +400,8 @@ def create_report(request, encounter_id):
     or 200 the stored copy when that report is still current (exports.create, release 1 C5: 400 for any format but the
     PDF, the only one made since 2026-11-21; 409 when that round is not the latest; 503 when the PDF cannot be made,
     nothing stored). Any member may (owner decision D8: viewers keep making reports), within the member's and the
-    practice's limits (429)."""
+    practice's limits (429), which count only the reports actually made: a stored copy answered again counts toward
+    none (lead ruling 2026-11-24)."""
     data = _payload(request)
     encounter, _ = scoped_encounter(request.user, encounter_id)
     kind, fmt, round_number = data.get('kind'), data.get('fmt'), data.get('round')
@@ -408,12 +409,16 @@ def create_report(request, encounter_id):
         raise ApiError(400, exports.FORMAT_REQUIRED)
     if type(round_number) is not int or round_number < 1:
         raise ApiError(400, exports.ROUND_REQUIRED)
-    _limited(request, EXPORT_MEMBER_SCOPE, request.user.pk, settings.EXPORT_LIMIT_PER_MEMBER,
-             workspace_id=encounter.workspace_id)
-    _limited(request, EXPORT_WORKSPACE_SCOPE, encounter.workspace_id, settings.EXPORT_LIMIT_PER_WORKSPACE,
-             workspace_id=encounter.workspace_id)
+
+    def charge():
+        """A report about to be made counts toward the member's and the practice's limits; a reused one never does
+        (exports.create calls this only on the made path)."""
+        _limited(request, EXPORT_MEMBER_SCOPE, request.user.pk, settings.EXPORT_LIMIT_PER_MEMBER,
+                 workspace_id=encounter.workspace_id)
+        _limited(request, EXPORT_WORKSPACE_SCOPE, encounter.workspace_id, settings.EXPORT_LIMIT_PER_WORKSPACE,
+                 workspace_id=encounter.workspace_id)
     try:
-        export = exports.create(encounter, request.user, kind, fmt, round_number=round_number)
+        export = exports.create(encounter, request.user, kind, fmt, round_number=round_number, charge=charge)
     except exports.NotReady as exc:
         raise ApiError(409, exc.message, blockers=exc.blockers)
     except exports.NotMade as exc:

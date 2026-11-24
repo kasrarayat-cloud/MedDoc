@@ -31,9 +31,11 @@ response may never carry; the browser walk (`ops/walk.cjs`) holds the deployed s
   not be recorded, so nothing was shown."}` and nothing else. A document or report of another practice answers the
   same `404` as a missing one, and the attempt is recorded as refused. The page's poll of a document being coded
   (`X-CPT-Poll: 1`) is recorded at most once a minute per sign-in. `HEAD` is answered `405` by these reads.
-- **Limits** (release 1, C5): 10 reports per member in 10 minutes and 60 per practice in an hour, 30 uploads per member
-  in 10 minutes. Over a limit any of them answers `429 {"error": "rate_limited", "retry_after": <seconds>}` with the
-  same number in `Retry-After`; the page words it itself.
+- **Limits** (release 1, C5): 10 reports made per member in 10 minutes and 60 per practice in an hour, 30 uploads per
+  member in 10 minutes. Only a report actually made counts. The stored copy answered again (200) counts toward no limit
+  and is never refused by one, and neither is a refused request. Over a limit, any of these calls answers
+  `429 {"error": "rate_limited", "retry_after": <seconds>}`, with the same number in `Retry-After`; the page words it
+  itself.
 - **A destroyed document** (release 1, D1) is in no list or count, and its routes answer `404`.
 
 ## Vocabularies
@@ -180,7 +182,9 @@ latest."); the line already has a decision (409: revoke it first); a `needs_answ
 `{"kind": "draft|approved", "fmt": "pdf", "round": 2}` - `round` is the round number the page shows ->
 `201 {id, kind, fmt, filename, generated_at, download_url, current}`, or `200` with the same shape when a report of that
 round, kind and format is still current (made from the latest round, no decision on it since): the stored copy is
-returned, not made again, and an `export.reused` audit row records the request (release 1, C5). The file is named
+returned, not made again, and an `export.reused` audit row records the request (release 1, C5). The stored copy
+counts toward no limit. The PDF itself is recorded as a read when it is downloaded (`member.report_download`). The file
+is named
 `CPT-Studio-<kind>-r<round>-<UTC time>.pdf`. The PDF is the only report made (owner direction 2026-11-21). Refused: a
 kind that is not one, or any format but `pdf` (400 "Choose a draft or an approved PDF report."); no round named (400); `round` is not the latest round's number (409 "This coding
 review has changed. Reload to see the latest.", `details` empty - checked before readiness, so a page left open never

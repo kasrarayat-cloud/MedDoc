@@ -10,11 +10,14 @@ operator whatever grant row it has (studio.operator.is_operator). Every grant re
                             its commit (the installer's manage phase passes "<declaration>@<commit>"; ADM-13)
     --review-by YYYY-MM-DD  the date the grant must be reviewed by: not past, at most 12 months away (ADM-8)
     --by NAME               the named person who records the grant - never a role (named_person)
+    --regrant               grant again an account whose operator access was revoked; without it such an account is
+                            refused (the installer passes it only when its committed declaration names the regrant)
 
-All five are required. An account that already holds a grant keeps it: nothing is written and the command says so. A
-username that does not exist, an inactive or automated account, an empty or unreadable reason file, a missing or
-malformed approval or review date, or a role given as --by is refused and nothing is recorded. Each grant writes a
-SecurityEvent operator.granted (studio.security_events).
+The first five are required. An account that already holds a grant keeps it: nothing is written and the command
+says so. A username that does not exist, an inactive or automated account, an empty or unreadable reason file, a missing
+or malformed approval or review date, a role given as --by, or an account whose access was revoked, without --regrant,
+is refused and nothing is recorded. Each grant writes a SecurityEvent operator.granted (studio.security_events), with
+regrant: true for a regrant.
 """
 import os
 import re
@@ -106,6 +109,9 @@ class Command(BaseCommand):
         parser.add_argument('--review-by', required=True, help='the date the grant must be reviewed by, YYYY-MM-DD, at '
                                                                'most 12 months away')
         parser.add_argument('--by', required=True, help='the named person who records the grant (never a role)')
+        parser.add_argument('--regrant', action='store_true',
+                            help='grant again an account whose operator access was revoked (the installer passes it '
+                                 'only when its committed declaration names the regrant)')
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -119,11 +125,13 @@ class Command(BaseCommand):
         try:
             reference = operator.clean_authorization_ref(options['authorization_ref'])
             review_by = operator.clean_review_by(options['review_by'])
-            record, created = operator.grant(user, reason, by, authorization_ref=reference, review_by=review_by)
+            again = operator.was_revoked(user)
+            record, created = operator.grant(user, reason, by, authorization_ref=reference, review_by=review_by,
+                                             regrant=options['regrant'])
         except ValueError as exc:
             raise CommandError(f'{exc} Nothing was recorded.' if not str(exc).endswith('recorded.') else str(exc))
         if created:
-            self.stdout.write(f'Granted operator access to {user.username} (grant {record.pk}; review by '
-                              f'{record.review_by.isoformat()}).')
+            self.stdout.write(f'Granted operator access {"again " if again else ""}to {user.username} (grant '
+                              f'{record.pk}; review by {record.review_by.isoformat()}{"; a regrant" if again else ""}).')
         else:
             self.stdout.write(f'{user.username} already holds operator access (grant {record.pk}); nothing was recorded.')
