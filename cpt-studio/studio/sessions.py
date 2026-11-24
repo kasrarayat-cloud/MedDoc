@@ -2,11 +2,13 @@
 writes into its session, and the session policy every signed-in request meets.
 
 end_sessions(user, keep_session_key=None)
-    every live session of ``user`` ended at once - studio.console's own function, moved here unchanged (with the
-    refusal it answers, Refused, and the session stores it can end, SESSION_STORES) so every lane can end sessions
-    without importing the console: the console's acts (access off, a password reset), a revocation (C3), a password
-    change (B4, keeping the session that made it), sign out everywhere (B4) and a practice's disposal (D1). The console
-    imports all four back, so studio.console.end_sessions and console.Refused are these.
+    every live session of ``user`` ended at once - studio.console's own function, moved here (with the refusal it
+    answers, Refused, and the session stores it can end, SESSION_STORES) so every lane can end sessions without
+    importing the console: the console's acts (access off, a password reset), a revocation (C3), a password change (B4,
+    keeping the session that made it), sign out everywhere (B4) and a practice's disposal (D1). The console imports all
+    four back, so studio.console.end_sessions and console.Refused are these. Besides the sessions signed in as the
+    account it ends the anonymous ones waiting on it - a pending sign-in at the admin door, a setup under way - so a
+    password change or a sign-out everywhere drops a sign-in made with the old password (refutation r2, finding 11).
 
 Every sign-in writes the session keys of studio.request_meta (the contract between the lanes, RELEASE-1-SPEC section 5):
 SESSION_DOOR (the door it was made at), SESSION_AUTH_AT and SESSION_LAST_ACTIVE (now) and SESSION_SIGN_IN_REF (the sign-in's
@@ -77,6 +79,10 @@ FORCED_CHANGE_ALLOWED = frozenset({ACCOUNT_PATH, LOGOUT_PATH, '/logout/everywher
 FORCED_CHANGE_ALLOWED_ADMIN = frozenset({'/login/second-factor', '/login/second-factor/options', '/login/recovery'})
 OLD_COOKIE_NAMES = ('cptstudio_session', 'cptstudio_csrf')  # the names before release 1 (B6)
 ACTOR_HEADER = 'X-CPT-Actor'
+# the session keys of an anonymous session that waits on an account (studio.second_factor reads them by these names):
+# a checked password waiting for its key, and a setup under way; end_sessions ends them with the account's sessions
+PENDING_SIGN_IN_KEY, SETUP_KEY = 'cpt_2fa_pending', 'cpt_enrol'
+WAITING_KEYS = (PENDING_SIGN_IN_KEY, SETUP_KEY)
 REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
 
@@ -88,13 +94,22 @@ class Refused(Exception):
         self.status = status
 
 
+def waits_on(data, user_id) -> bool:
+    """Whether a session's ``data`` is signed in as the account ``user_id``, or waits on it: a checked password waiting
+    for its key (PENDING_SIGN_IN_KEY) or a setup under way (SETUP_KEY), each naming the account in 'user'."""
+    if str(data.get('_auth_user_id', '')) == user_id:
+        return True
+    return any(isinstance(data.get(name), dict) and str(data[name].get('user', '')) == user_id for name in WAITING_KEYS)
+
+
 def end_sessions(user, keep_session_key=None) -> int:
-    """End every live session signed in as ``user``: an open session ends at once and can never come back, whatever
-    happens to the account later (refutation r1, gate-1). The sessions are read from the database table (the db store
-    only, SESSION_STORES; any other store is refused - r2, secure-4; r3, r3-3), live ones only (an expired session signs
-    nobody in - r2, secure-5), and each is deleted through its store. Sessions are sign-in state, not records. The
-    number ended. ``keep_session_key``, when given, names the one session left signed in (B4: a password changed on
-    /account/ keeps the session that changed it and ends the others)."""
+    """End every live session signed in as ``user``, and every one waiting on it (waits_on: a pending sign-in at the
+    admin door, a setup under way - refutation r2, finding 11): an open session ends at once and can never come back,
+    whatever happens to the account later (refutation r1, gate-1). The sessions are read from the database table (the
+    db store only, SESSION_STORES; any other store is refused - r2, secure-4; r3, r3-3), live ones only (an expired
+    session signs nobody in - r2, secure-5), and each is deleted through its store. Sessions are sign-in state, not
+    records. The number ended. ``keep_session_key``, when given, names the one session left signed in (B4: a password
+    changed on /account/ keeps the session that changed it and ends the others)."""
     if settings.SESSION_ENGINE not in SESSION_STORES:
         raise Refused(NO_SESSION_STORE, 409)
     store = import_module(settings.SESSION_ENGINE).SessionStore
@@ -107,7 +122,7 @@ def end_sessions(user, keep_session_key=None) -> int:
             data = session.get_decoded()
         except Exception:  # noqa: BLE001 - a session that cannot be read signs nobody in
             continue
-        if isinstance(data, dict) and str(data.get('_auth_user_id', '')) == str(user.pk):
+        if isinstance(data, dict) and waits_on(data, str(user.pk)):
             store(session_key=session.session_key).delete()
             ended += 1
     return ended

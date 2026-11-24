@@ -671,6 +671,71 @@ class FreshSessionTests(TestCase):
 
 
 @override_settings(STORAGES=PLAIN_STATIC)
+class PendingPasswordTests(TestCase):
+    """A sign-in waiting for its key is bound to the password it checked: a password change, or a sign-out everywhere,
+    ends it, and one changed any other way still refuses it (refutation r2, finding 11; bypass/byp_keep.py)."""
+
+    NEW = 'a fresh synthetic passphrase only I know'
+
+    def setUp(self):
+        self.operator, self.key = enrolled_operator()
+        self.codes = second_factor.new_recovery_codes(self.operator)
+
+    def waiting(self):
+        client = admin_client()
+        self.assertEqual(password_step(client, self.operator)['Location'], '/login/second-factor')
+        return client
+
+    def test_a_password_change_ends_the_sign_ins_waiting_with_the_old_password(self):
+        with Clock() as clock:
+            here = admin_client()
+            self.assertEqual(sign_in(here, self.operator, self.key).status_code, 302)
+            by_key, by_code = self.waiting(), self.waiting()  # someone who knows the old password, twice
+            waiting = [client.cookies[settings.SESSION_COOKIE_NAME].value for client in (by_key, by_code)]
+            clock.advance(30)
+            changed = here.post('/account/', {'current_password': PASSWORD, 'new_password': self.NEW,
+                                              'new_password_again': self.NEW})
+            self.assertEqual(changed.status_code, 302)
+            self.assertEqual(changed['Location'], '/account/?done=changed')
+            for key in waiting:
+                self.assertFalse(Session.objects.filter(session_key=key).exists(), 'a pending sign-in outlived the change')
+            self.assertEqual(models.SecurityEvent.objects.get(event='password.changed').data['sessions_ended'], 2)
+            self.assertEqual(by_key.post('/login/second-factor/options').status_code, 403)
+            used = by_code.post('/login/recovery', {'code': self.codes[0]})
+            self.assertEqual((used.status_code, used['Location']), (302, '/login/'))
+            for client in (by_key, by_code):
+                self.assertIsNone(signed_in_as(client))
+            self.assertEqual(second_factor.recovery_codes_left(self.operator), settings.RECOVERY_CODE_COUNT)
+            self.assertEqual(signed_in_as(here), str(self.operator.pk))  # the session that made the change stays
+
+    def test_a_sign_out_everywhere_ends_the_sign_ins_waiting_too(self):
+        here = admin_client()
+        self.assertEqual(sign_in(here, self.operator, self.key).status_code, 302)
+        waiting = self.waiting()
+        key = waiting.cookies[settings.SESSION_COOKIE_NAME].value
+        self.assertEqual(here.post('/logout/everywhere')['Location'], '/login/')
+        self.assertFalse(Session.objects.filter(session_key=key).exists())
+        self.assertEqual(models.SecurityEvent.objects.get(event='sessions.ended_everywhere').data['sessions_ended'], 2)
+
+    def test_a_password_changed_without_ending_any_session_still_refuses_the_old_sign_in(self):
+        by_key = self.waiting()
+        options = options_of(by_key)  # its challenge, asked for while the old password was still the account's
+        by_code = self.waiting()
+        self.operator.set_password(self.NEW)  # a change that ended no session
+        self.operator.save()
+        answer = by_key.post('/login/second-factor', {'credential': json.dumps(self.key.assertion(options))})
+        self.assertIsNone(signed_in_as(by_key), 'the old password signed in')
+        self.assertEqual((answer.status_code, answer['Location']), (302, '/login/'))
+        used = by_code.post('/login/recovery', {'code': self.codes[0]})
+        self.assertIsNone(signed_in_as(by_code), 'the old password signed in')
+        self.assertEqual((used.status_code, used['Location']), (302, '/login/'))
+        self.assertEqual(second_factor.recovery_codes_left(self.operator), settings.RECOVERY_CODE_COUNT)
+        # the new password waits for the key as before
+        fresh = admin_client()
+        self.assertEqual(sign_in(fresh, self.operator, self.key, password=self.NEW)['Location'], '/ops/')
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
 class PendingFailureTests(TestCase):
     """A pending sign-in's failures are counted per its reference in the database, so no copy of its session outlives
     them, and its attempt is settled once (refutation r2, finding 2; l2fa/test_race_failures.py)."""

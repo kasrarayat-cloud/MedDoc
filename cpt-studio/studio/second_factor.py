@@ -65,6 +65,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponseRedirect
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 from webauthn import (generate_authentication_options, generate_registration_options, options_to_json,
                       verify_authentication_response, verify_registration_response)
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url, parse_client_data_json
@@ -164,9 +165,9 @@ def safe_next(target) -> str:
 
 # --- the ceremony ---------------------------------------------------------------------------------------------------------
 
-PENDING = 'cpt_2fa_pending'  # the anonymous session's checked password, waiting for its key
+PENDING = sessions.PENDING_SIGN_IN_KEY  # the anonymous session's checked password, waiting for its key
 CHALLENGE = 'cpt_2fa_challenge'  # the one challenge the session's next key response must sign
-ENROLMENT = 'cpt_enrol'  # the setup code a session presented, until its first key is registered
+ENROLMENT = sessions.SETUP_KEY  # the setup code a session presented, until its first key is registered
 SIGN_IN, STEP_UP, ENROL, ADD = 'sign_in', 'step_up', 'enrol', 'add'  # what a challenge is for
 CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
 CODE_GROUP = 5
@@ -523,15 +524,17 @@ def begin(request, user, sign_in_ref, next_url):
     else:
         request.session.flush()
     request.session[PENDING] = {'user': str(user.pk), 'at': request_meta.epoch_seconds(), 'ref': str(sign_in_ref),
-                                'next': safe_next(next_url)}
+                                'next': safe_next(next_url), 'pw': user.get_session_auth_hash()}
     request.session[request_meta.SESSION_SIGN_IN_REF] = str(sign_in_ref)  # the second step's records carry it
 
 
 def pending(request):
     """(the account, the state) of the session's checked password waiting for its key, or (None, None): none, one older
     than SECOND_FACTOR_PENDING_SECONDS, one whose own failures reached SECOND_FACTOR_ATTEMPTS (counted in the database,
-    so every copy of the session sees them: refutation r2, finding 2), or one whose account is no longer an active human
-    operator."""
+    so every copy of the session sees them: refutation r2, finding 2), one whose account is no longer an active human
+    operator, or one whose password changed after it was checked: the pending sign-in carries the account's session
+    auth hash (Django's keyed hash of the stored password hash, as a signed-in session does), so neither a key nor a
+    recovery code completes a sign-in made with a password that is no longer the account's."""
     state = request.session.get(PENDING)
     if not isinstance(state, dict) or not isinstance(state.get('ref'), str):
         return None, None
@@ -554,6 +557,9 @@ def pending(request):
         return None, None
     if not is_human_operator(user):
         drop_pending(request)
+        return None, None
+    if not constant_time_compare(str(state.get('pw') or ''), user.get_session_auth_hash()):
+        drop_pending(request)  # the password it checked has changed since (refutation r2, finding 11)
         return None, None
     return user, state
 
