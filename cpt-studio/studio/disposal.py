@@ -35,12 +35,15 @@ a committed declaration (A6):
                           rows_destroyed 'yes' (committed; a file, the folder or a count afterwards failed - every error
                           after the commit ends here, never as an escape) or 'unknown' (the commit's own answer was lost),
                           and files['remaining_names'] lists what was left. An interrupt after the commit (Ctrl-C, or a
-                          stop signal, which the dispose command makes raise - as a KeyboardInterrupt, so a statement in
-                          flight is cancelled) ends the same way - recorded 'failed' and its certificate printed - and
-                          then goes on as an interrupt: one guard holds the transaction and every step after its commit,
-                          and an interrupt before the final event is sent is kept the same way. Where even that cannot
-                          be done - an interrupt while the final event is written, or a second one while the first is
-                          handled - the certificate says so as far as it can, and the 'committed' row is the record. A
+                          stop signal) ends the same way - recorded 'failed' and its certificate printed - and then goes
+                          on as an interrupt: one guard holds the transaction and every step after its commit, and an
+                          interrupt before the final event is sent is kept the same way. Under the dispose command a
+                          stop signal or Ctrl-C is never raised from the commit on (STOP_SIGNAL_HOLD, refutation round
+                          2): the commit and the run's record go to their end, the steps after the commit stop at the
+                          next one (the statement in flight cancelled, the step's problem recorded), and the command then
+                          ends with the signal's status; each certificate and ledger line names only what committed.
+                          Where an interrupt still comes while the final event is written (raised by anything but those
+                          signals) the certificate says so as far as it can, and the 'committed' row is the record. A
                           transaction that rolled back writes nothing (NotDestroyed: nothing was destroyed). To finish a
                           failed or interrupted disposal, remove what stopped it and plan the same scope again: the new
                           plan takes in the files a run of the document
@@ -85,6 +88,7 @@ import os
 import re
 import unicodedata
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as dt_timezone
 
@@ -93,6 +97,7 @@ from django.db import IntegrityError, connection, transaction
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
+from psycopg import pq
 
 from . import console, jobs, models, sessions, storage
 from .maintenance import hashed_signin_name
@@ -172,6 +177,93 @@ class Refused(Exception):
     def __init__(self, *reasons):
         super().__init__(' '.join(reasons))
         self.reasons = list(reasons)
+
+
+# --- a stop signal held while a commit runs (release 1 refutation round 2, disposal-0 to disposal-4) ----------------------
+
+STOP_CANCEL_SECONDS = 5.0  # how long the cancel request for a statement in flight may take (psycopg's own, on Ctrl-C)
+
+
+class StopSignalHold:
+    """The dispose command's stop signals - SIGTERM, SIGHUP and Ctrl-C (studio.management.commands.dispose) - held where
+    raising one left a record naming what never committed, or none: raised inside Django's Atomic.__exit__ or psycopg's
+    commit, an interrupt became another error, left the transaction open under the records written next, or left libpq
+    busy for every later statement (refutation round 2, disposal-0 to disposal-4).
+
+        hold()          a transaction that destroys or records begins to commit - destroy's, close's, a plan's row, a
+                        replay's ledger rows: from here the first stop signal is kept, not raised, so the commit and the
+                        run's record go to their end, until the command's next safe point. Once a run committed, nothing
+                        releases it before the command has recorded and printed what the run did.
+        cancelling()    after a destruction's commit, while its files are removed, its VACUUM (ANALYZE) runs and its
+                        counts are taken: a stop signal also cancels the statement in flight - a cancel request, so the
+                        statement ends on an error the step records and the connection answers again - and the steps left
+                        are skipped (``pending``), so a stop is never held for long. Never around a statement that writes.
+        safe_point()    one of the command's own: a kept stop signal is raised there, before a replay's next ledger entry
+                        and once the command printed everything; with none, a signal raises where the command is again,
+                        until the next hold().
+        keep()          the command's handler asks it first: whether the signal was kept.
+
+    Armed by the command alone (reset): a caller of this module that is not the command holds nothing."""
+
+    def __init__(self):
+        self.reset(armed=False)
+
+    def reset(self, *, armed):
+        self.armed, self.holding, self.cancels, self.pending, self._cancelling = armed, False, False, None, False
+
+    def hold(self) -> bool:
+        """From here a stop signal is kept (see the class); True, so a commit's mark can be this very call."""
+        if self.armed:
+            self.holding = True
+        return True
+
+    @contextmanager
+    def cancelling(self):
+        """While the body runs, a stop signal also cancels the statement in flight (see the class)."""
+        before, self.cancels = self.cancels, True
+        try:
+            yield
+        finally:
+            self.cancels = before
+
+    def keep(self, interrupt) -> bool:
+        """The command's handler: True when ``interrupt`` (the stop signal's) is kept - the first one, acted on at the
+        command's next safe point - and the statement in flight cancelled where cancelling() says so; False when the
+        handler raises it where the command is."""
+        if not (self.armed and self.holding):
+            return False
+        if self.pending is None:
+            self.pending = interrupt
+        if self.cancels and not self._cancelling:
+            self._cancelling = True
+            try:
+                _cancel_statement_in_flight()
+            finally:
+                self._cancelling = False
+        return True
+
+    def safe_point(self) -> None:
+        """One of the command's safe points: a stop signal kept since the last hold() is raised here; with none, from here
+        a signal raises where the command is."""
+        self.holding = False
+        interrupt, self.pending = self.pending, None
+        if interrupt is not None:
+            raise interrupt
+
+
+STOP_SIGNAL_HOLD = StopSignalHold()
+
+
+def _cancel_statement_in_flight() -> None:
+    """A cancel request for the statement this thread's connection has in flight, if one is (as psycopg sends on
+    Ctrl-C): the statement ends on an error result, read as one, so the connection answers again - nothing is raised
+    through psycopg. Never raises: a statement that is not cancelled runs to its end, and the stop waits for it."""
+    try:
+        raw = connection.connection
+        if raw is not None and raw.pgconn.transaction_status == pq.TransactionStatus.ACTIVE:
+            raw.cancel_safe(timeout=STOP_CANCEL_SECONDS)
+    except Exception:  # noqa: BLE001 - see above
+        pass
 
 
 # --- who, why and under which authority ------------------------------------------------------------------------------------
@@ -565,10 +657,12 @@ def close(workspace_id, *, by, reason, authorization_ref='') -> DisposalEvent:
             raise Refused(f'The practice was already closed at {iso_time(workspace.closed_at)}; nothing was recorded.')
         now = timezone.now()
         models.Workspace.objects.filter(pk=workspace.pk).update(closed_at=now)
-        return DisposalEvent.objects.create(
+        event = DisposalEvent.objects.create(
             stage=DisposalEvent.CLOSED, scope=WORKSPACE, workspace_id=workspace.pk, reason=reason, run_by=by,
             authorization_ref=authorization_ref,
             counts={'documents': Encounter._base_manager.filter(workspace_id=workspace.pk).count()})
+        STOP_SIGNAL_HOLD.hold()  # it begins to commit: a stop signal from here waits until the command printed it
+    return event
 
 
 def plan(scope, *, by, reason, authorization_ref='') -> DisposalEvent:
@@ -587,6 +681,7 @@ def plan(scope, *, by, reason, authorization_ref='') -> DisposalEvent:
     if reasons:
         raise Refused(*reasons)
     entries = manifest(names)
+    STOP_SIGNAL_HOLD.hold()  # its row is written (and commits): a stop signal from here waits until the command printed it
     return DisposalEvent.objects.create(
         stage=DisposalEvent.PLANNED, scope=scope.kind, workspace_id=scope.workspace_id,
         encounter_ids=[str(pk) for pk in scope.encounter_ids],
@@ -778,10 +873,13 @@ def _remove_files(scope, outcome) -> None:
     """After the commit: delete every file of the manifest - each on its own, so one that cannot be removed never keeps
     the others - sync each folder, check that none remains, and for a whole practice that its folder is empty, then
     remove it. What is left is counted and named in ``outcome``. An error of any step but a file's own deletion goes on
-    to the one guard in _after_commit."""
+    to the one guard in _after_commit. A stop signal held (STOP_SIGNAL_HOLD) stops the deletions at the next file: the
+    files not deleted are counted as left, for a new plan of the scope to take in."""
     names = [entry['name'] for entry in outcome.entries]
     folders = set()
     for name in names:
+        if STOP_SIGNAL_HOLD.pending is not None:
+            break
         folders.add(storage.stored_path(name).parent)
         try:
             if storage.delete_stored(name):
@@ -848,7 +946,9 @@ def _after_commit(scope, outcome) -> None:
     rows are gone, so nothing here escapes the record: an error is recorded in ``outcome`` and the next step goes on; an
     interrupt (Ctrl-C, a stop signal: any BaseException) is not caught here but by destroy's guard, which records it and
     keeps it in ``outcome.interrupted`` for _run to raise again once the run is recorded; one kept already (by
-    _count_left) skips the steps left. Either way the run ends 'failed', with what is known."""
+    _count_left) skips the steps left. Either way the run ends 'failed', with what is known. A stop signal destroy holds
+    from its commit on (STOP_SIGNAL_HOLD: it cancelled the statement in flight) is one too, recorded as the problem of the
+    step it came in."""
     def files():
         _remove_files(scope, outcome)
 
@@ -868,6 +968,10 @@ def _after_commit(scope, outcome) -> None:
             _problem(outcome, step, exc)
             if step == 'files':
                 _count_left(scope, outcome)
+        stop = STOP_SIGNAL_HOLD.pending
+        if stop is not None and outcome.interrupted is None:
+            outcome.interrupted = stop
+            _problem(outcome, step, stop)
 
 
 def _committed_fields(scope, deleted, tombstones, accounts, entries, record) -> dict:
@@ -894,7 +998,10 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
     before it rolls the transaction back and goes on as it is. One guard holds the transaction, its commit and every
     step after it, and the Outcome is made inside the transaction: from the commit's return to the guard nothing runs
     (refutation dataloss-4), while an interrupt before the commit still rolls back and destroys nothing - one at the
-    very start of the block's __exit__ too, before its body began the commit: the guard closes the block itself."""
+    very start of the block's __exit__ too, before its body began the commit: the guard closes the block itself. Under
+    the dispose command no stop signal comes there: the block's last statement holds them (STOP_SIGNAL_HOLD, refutation
+    round 2), so the commit, its Outcome and the run's record go to their end, and the steps after the commit stop at
+    the next one, the statement in flight cancelled."""
     marks = {'committing': False, 'committed': False}
     block, depth = transaction.atomic(), len(connection.atomic_blocks)
     try:
@@ -933,9 +1040,11 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
                                                                          record or {}))
             outcome = Outcome(deleted=deleted, tombstones=tombstones, accounts=accounts, entries=entries,
                               committed=str(committed.pk), encounter_ids=scope.encounter_ids)
-            marks['committing'] = True  # the block's last statement: whatever raises from here on is the commit
+            # the block's last statement: whatever raises from here on is the commit, and no stop signal does
+            marks['committing'] = STOP_SIGNAL_HOLD.hold()
         marks['committed'] = True  # the commit returned: the rows are destroyed
-        _after_commit(scope, outcome)
+        with STOP_SIGNAL_HOLD.cancelling():
+            _after_commit(scope, outcome)
         return outcome
     except BaseException as exc:  # noqa: BLE001 - one guard: before the commit, at it, and after it
         if len(connection.atomic_blocks) > depth:
@@ -988,28 +1097,34 @@ def _run(scope, record, **options):
     ``record`` goes to destroy too, for the 'committed' DisposalEvent it writes with the deletion: the record that
     stands when the final event cannot be. An interrupt that comes after the commit and before the final event was sent
     to be written (refutation dataloss-4: _record's own first lines, outside its guard) is kept the same way, and the
-    event written then; one while it is written goes on with its certificate, never written twice (outcome.recording)."""
+    event written then; one while it is written goes on with its certificate, never written twice (outcome.recording).
+    However the run ends, stop signals are held again (STOP_SIGNAL_HOLD, refutation round 2) - destroy holds them from
+    its commit on - so the record's certificate and a replay's report are printed whole; a signal that came after the
+    run's steps changes nothing in its record and is acted on at the command's next safe point."""
     outcome = None
     try:
         try:
-            outcome = _attempt(scope, record=record, **options)
-            event = _record(scope, outcome, **record)
-        except BaseException as exc:  # noqa: BLE001 - an interrupt between the commit and the final event is kept
-            if outcome is None or isinstance(exc, Exception) or outcome.recording:
-                raise  # nothing committed; Unrecorded or an error; or an interrupt while the event was written
-            if outcome.interrupted is None:
-                outcome.interrupted = exc
-            _problem(outcome, 'record', exc)
-            event = _record(scope, outcome, **record)
-    except Unrecorded as exc:
+            try:
+                outcome = _attempt(scope, record=record, **options)
+                event = _record(scope, outcome, **record)
+            except BaseException as exc:  # noqa: BLE001 - an interrupt between the commit and the final event is kept
+                if outcome is None or isinstance(exc, Exception) or outcome.recording:
+                    raise  # nothing committed; Unrecorded or an error; or an interrupt while the event was written
+                if outcome.interrupted is None:
+                    outcome.interrupted = exc
+                _problem(outcome, 'record', exc)
+                event = _record(scope, outcome, **record)
+        except Unrecorded as exc:
+            if outcome.interrupted is not None:
+                outcome.interrupted.disposal_certificate = exc.text
+                raise outcome.interrupted
+            raise
         if outcome.interrupted is not None:
-            outcome.interrupted.disposal_certificate = exc.text
+            outcome.interrupted.disposal_certificate = certificate(event)
             raise outcome.interrupted
-        raise
-    if outcome.interrupted is not None:
-        outcome.interrupted.disposal_certificate = certificate(event)
-        raise outcome.interrupted
-    return event, outcome
+        return event, outcome
+    finally:
+        STOP_SIGNAL_HOLD.hold()
 
 
 def _event_fields(scope, outcome, *, reason, by, approved_by, authorization_ref, notes) -> dict:
@@ -1332,7 +1447,9 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
     commit did happen), by a later entry that carried out its scope, or when nothing of it remains. A whole-practice
     entry destroys the practice again AS A WHOLE - any document added to the restored copy after the disposal too,
     counted as ``added`` - so after a restore the replay must run before the site is opened. An interrupt stops the
-    replay too, and goes on carrying the report as ``disposal_report``."""
+    replay too, and goes on carrying the report as ``disposal_report``: under the dispose command a stop signal is held
+    from the commit of the ledger's rows and of each entry's destruction (STOP_SIGNAL_HOLD, refutation round 2) and acted
+    on before the next entry begins, which is then 'interrupted' with nothing of it destroyed."""
     entries = read_ledger(lines)
     if execute_it:
         runner, approver = two_people(by, approved_by)
@@ -1379,11 +1496,13 @@ def replay(lines, *, execute_it=False, by='', approved_by='', authorization_ref=
         raise Refused(*reasons)
     with transaction.atomic():
         restored = sum(_insert_entry(entry) for entry in entries)
+        STOP_SIGNAL_HOLD.hold()  # the ledger's rows begin to commit: a stop signal from here waits for the next entry
     report = {'ledger_rows_restored': restored, 'items': items, 'stopped': None}
     for index, item in enumerate(items):
         if not item['needed']:
             continue
         try:
+            STOP_SIGNAL_HOLD.safe_point()  # a stop signal held since the last commit stops the replay here
             item['event'], item['outcome'] = _run(item['scope'], dict(
                 reason=item['reason'], by=runner, approved_by=approver, authorization_ref=authorization_ref,
                 notes=f'replay={item["entry"]}'), holds_only=True, close=True)
