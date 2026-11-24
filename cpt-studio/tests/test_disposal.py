@@ -508,6 +508,16 @@ class RefusalTests(PracticeCase, TestCase):
         with installer_idle():
             self.refused(*self.execute_args(plan), expect='already carried out')
 
+    def test_a_destroyed_documents_tombstone_starts_no_coding(self):
+        self.command(*self.plan_args(encounter=self.a_note.pk))
+        self.execute(Event.objects.get(stage=Event.PLANNED))
+        tomb = models.Encounter.objects.get(pk=self.a_note.pk)
+        with self.assertRaisesMessage(jobs.Refused, jobs.DESTROYED_MESSAGE):
+            jobs.start_round(tomb, tomb.current_revision, Round.RETRY, self.owner)  # what Review again reaches
+        answer = self.client_for(self.owner).post(f'/api/encounters/{tomb.pk}/retry')
+        self.assertEqual(answer.status_code, 409)  # refused, never a server error
+        self.assertFalse(Job.objects.filter(encounter=tomb).exists())
+
     def test_a_destroyed_document_is_not_planned_again(self):
         self.command(*self.plan_args(encounter=self.a_note.pk))
         self.execute(Event.objects.get(stage=Event.PLANNED))

@@ -67,6 +67,7 @@ RECONCILE_FIRST = 'Whether the last coding finished is not known yet. It can run
 # Release 1, D1: a practice closed by `dispose --close` (Workspace.closed_at) starts no new coding; reading stays on.
 CLOSED_MESSAGE = 'This practice is closed, so no coding can be started. Its documents can still be read.'
 CLOSED_JOB_ERROR = 'The practice was closed before this stage started; nothing was sent.'
+DESTROYED_MESSAGE = 'This document was destroyed; nothing of it can be coded.'
 FAILURE_TEXT = {
     UNREADABLE: 'The coding result could not be read. Try again.',
     CEILING: 'This document reached its spending limit.',
@@ -169,6 +170,8 @@ def start_round(encounter, revision, trigger, by):
         raise ValueError(f'{trigger!r} is not a coding round trigger.')
     with transaction.atomic():
         locked = _locked(encounter)
+        if locked.destroyed_at is not None:  # a tombstone (D1): no revision is left to code
+            raise Refused(DESTROYED_MESSAGE)
         if revision.encounter_id != locked.pk:
             raise ValueError('The revision belongs to another encounter.')
         if practice_closed(locked.workspace_id):
