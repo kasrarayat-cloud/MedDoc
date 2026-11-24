@@ -34,8 +34,16 @@ signed-in request, before the view runs:
   - while the account must choose a new password (User.password_change_required_at; B4, item 3) every request but
     those FORCED_CHANGE_ALLOWED lets through is refused: the API answers 403 {"error": "password_change_required"},
     a page is sent to /account/?required=1;
-  - anything that is not marked a poll (X-CPT-Poll: 1, request_meta.is_poll) is the person's activity: it moves
-    SESSION_LAST_ACTIVE, written at most once every SESSION_ACTIVITY_WRITE_SECONDS. A poll never does.
+  - the request is marked to count as the person's activity when it is not marked a poll (X-CPT-Poll: 1,
+    request_meta.is_poll) and not a frame's load (Sec-Fetch-Dest iframe, frame, embed or object: the review page's
+    viewer of the original, which the page loads by itself). It counts once its answer is known, and only an answer
+    under 400 does (refutation r2, finding 17): a request the server refused - a CSRF failure, a method not allowed, a
+    page not found - moves nothing. Counting moves SESSION_LAST_ACTIVE, written at most once every
+    SESSION_ACTIVITY_WRITE_SECONDS; the activity ping records its own before it answers.
+  - Recorded, not repaired (refutation r2, finding 19): anything that sends a signed-in request - the ping included - at
+    least once within the idle limit keeps the session alive until its cap. The server cannot tell a person from a
+    script acting with the person's session; the cap (SESSION_MAX_*_SECONDS) bounds it, and the page's own timer is
+    for the person at the screen.
 And on the way out: a signed-in response carries X-CPT-Actor: <the sign-in reference> (A2: nginx logs it and strips
 it); a response to a sign-in sets the known-device cookie; and a browser that still sends the cookies of their names
 before release 1 (cptstudio_session, cptstudio_csrf - other names than this site's under HTTPS, B6) is told to delete
@@ -79,6 +87,7 @@ FORCED_CHANGE_ALLOWED = frozenset({ACCOUNT_PATH, LOGOUT_PATH, '/logout/everywher
 FORCED_CHANGE_ALLOWED_ADMIN = frozenset({'/login/second-factor', '/login/second-factor/options', '/login/recovery'})
 OLD_COOKIE_NAMES = ('cptstudio_session', 'cptstudio_csrf')  # the names before release 1 (B6)
 ACTOR_HEADER = 'X-CPT-Actor'
+FRAME_DESTINATIONS = frozenset({'iframe', 'frame', 'embed', 'object'})  # Sec-Fetch-Dest of a load the page itself makes
 # the session keys of an anonymous session that waits on an account (studio.second_factor reads them by these names):
 # a checked password waiting for its key, and a setup under way; end_sessions ends them with the account's sessions
 PENDING_SIGN_IN_KEY, SETUP_KEY = 'cpt_2fa_pending', 'cpt_enrol'
@@ -215,6 +224,12 @@ def note_activity(request, now=None):
         request.session[request_meta.SESSION_LAST_ACTIVE] = now
 
 
+def automatic(request) -> bool:
+    """Whether the request is one the page makes by itself, never the person's activity: a poll (X-CPT-Poll: 1), or a
+    frame's load (Sec-Fetch-Dest; a browser that sends none counts it, as before)."""
+    return request_meta.is_poll(request) or request.META.get('HTTP_SEC_FETCH_DEST', '') in FRAME_DESTINATIONS
+
+
 def _is_api(request):
     return request.path.startswith('/api/') or request.path == ACTIVITY_PATH
 
@@ -290,12 +305,14 @@ class SessionPolicyMiddleware:
             if request.method in ('GET', 'HEAD'):
                 return HttpResponseRedirect(FORCED_CHANGE_PAGE)
             return _see_other(FORCED_CHANGE_PAGE)
-        if not request_meta.is_poll(request):
-            note_activity(request, now)
+        request.cpt_counts = not automatic(request)  # the person's activity once the answer is known (finish)
         return None
 
     def finish(self, request, response):
         """The response's way out (see the module)."""
+        if getattr(request, 'cpt_counts', False) and response.status_code < 400 \
+                and getattr(getattr(request, 'user', None), 'is_authenticated', False):
+            note_activity(request)  # still signed in after the view (a sign-out or a session ended counts nothing)
         if not hasattr(response, 'set_cookie'):
             return response
         reason = getattr(request, 'cpt_signed_out', None) or _page_sign_out_reason(request)

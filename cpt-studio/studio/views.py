@@ -303,13 +303,17 @@ def logout_everywhere(request):
 
 
 def activity_ping(request):
-    """POST: the person is active on the page (B5): the session policy has already moved the session's last activity;
-    the answer says how long the session has before it idles out and before its cap, and the warning's lead."""
+    """POST: the person is active on the page (B5): the ping records the session's activity itself - it has passed the
+    CSRF check and will be answered 200 - unless it is marked a poll (X-CPT-Poll: 1: a tab checking which session it is
+    in, which is no one's activity); the answer says how long the session has before it idles out and before its
+    cap, and the warning's lead."""
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
     if not request.user.is_authenticated:
         return JsonResponse({**sessions.SIGNED_OUT, 'reason': getattr(request, 'cpt_signed_out', None)
                              or sessions.EXPIRED}, status=401)
+    if not request_meta.is_poll(request):
+        sessions.note_activity(request)
     idle, cap = sessions.remaining(request)
     return JsonResponse({'idle_seconds': idle, 'cap_seconds': cap,
                          'warning_seconds': settings.SESSION_IDLE_WARNING_SECONDS})

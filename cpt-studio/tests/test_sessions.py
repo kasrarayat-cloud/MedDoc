@@ -200,6 +200,29 @@ class IdleAndCapTests(TestCase):
                     self.assertEqual(pinged.post('/session/activity').status_code, 200, step)
             self.assertEqual(ended_after, 930)  # the first poll past 900 seconds without activity
 
+    def test_a_request_the_server_refuses_or_the_page_makes_by_itself_never_counts_as_activity(self):
+        # refutation r2, finding 17 (bypass/byp_health_csrf.py): the activity counts once the answer is known, under 400
+        lead = settings.SESSION_IDLE_MEMBER_SECONDS - 120
+        cases = [('head', '/session/activity', {}, 405), ('options', '/session/activity', {}, 405),
+                 ('get', '/session/activity', {}, 405), ('get', '/logout/everywhere', {}, 405),
+                 ('get', f'/api/encounters/{uuid.uuid4()}', {}, 404), ('post', '/session/activity', {}, 403),
+                 ('post', '/account/', {}, 403),  # the CSRF check refuses both
+                 ('get', '/account/', {'HTTP_SEC_FETCH_DEST': 'iframe'}, 200),  # a frame's load: the page's own
+                 ('get', '/api/session', {'HTTP_X_CPT_POLL': '1'}, 200)]  # a poll
+        for method, path_, headers, status in cases:
+            with self.subTest(method=method, path=path_), Clock() as clock:
+                _, client = member_client(enforce_csrf_checks=True)
+                clock.advance(lead)
+                self.assertEqual(getattr(client, method)(path_, **headers).status_code, status)
+                clock.advance(lead)  # 1,560 s since the last activity, unless that request counted
+                self.assertEqual(client.get('/api/session', HTTP_X_CPT_POLL='1').status_code, 401)
+        with Clock() as clock:  # the control: an answered request of the person's counts
+            _, client = member_client(enforce_csrf_checks=True)
+            clock.advance(lead)
+            self.assertEqual(client.get('/account/').status_code, 200)
+            clock.advance(lead)
+            self.assertEqual(client.get('/api/session', HTTP_X_CPT_POLL='1').status_code, 200)
+
     def test_the_cap_ends_a_session_at_eight_hours_even_with_steady_activity(self):
         with Clock() as clock:
             _, client = member_client()
