@@ -451,8 +451,8 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         # that bind a context and an assessment to the inventory they were made from, read safe
         # release 1 (RELEASE-1-SPEC 3.1): 0017 adds eight tables, twelve nullable columns and an index, read safe (its
         # reasons: ops/test_install.py ReleaseOneMigrationTests)
-        # refutation round 1 of release 1: 0018 adds two tables, seven non-unique indexes and a constraint on a table it
-        # creates, read safe (its reasons: tests/test_r1_repair_s.py StoreContractTests)
+        # refutation rounds 1 and 2 of release 1: 0018 adds two tables, a nullable column, ten non-unique indexes and a
+        # constraint on a table it creates, read safe (its reasons: tests/test_r1_repair_s.py StoreContractTests)
         self.assertEqual(sorted(migrations['after_baseline']), ['0006_services_completeness_second_review',
                                                                 '0007_harness_participants_retrieval', MIGRATION_0008,
                                                                 '0009_cux_review', '0010_cux_operator', '0011_cux_flow',
