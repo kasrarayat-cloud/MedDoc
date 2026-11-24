@@ -184,27 +184,43 @@ def sync_links(session_key, links, now=None) -> None:
         cap_account_sessions(account, kind, keep_session_key=session_key, now=now)
 
 
+def _delete_sessions_in_key_order(session_keys) -> int:
+    """Delete the sessions ``session_keys`` and their links in a fixed number of statements, however many they are:
+    their rows locked first, in session key order (SELECT ... ORDER BY session_key FOR UPDATE: the one order every end
+    of sessions takes them in), then one DELETE of the rows and one of their links. Inside the caller's transaction,
+    which holds the account's row lock. The number of sessions deleted."""
+    keys = sorted(set(session_keys))
+    if not keys:
+        return 0
+    rows = _session_model().objects.filter(session_key__in=keys)
+    locked = list(rows.select_for_update().order_by('session_key').values_list('session_key', flat=True))
+    if locked:
+        _session_model().objects.filter(session_key__in=locked).delete()
+    _link_model().objects.filter(session_key__in=keys).delete()
+    return len(locked)
+
+
 def _end_beyond_the_limit(session_keys, link, now) -> int:
-    """End - in session key order - each of ``session_keys`` (live sessions beyond the cap's limit) whose data still
-    names ``link`` ((kind, account)), except a pending sign-in that can still complete (pending_can_complete: kept), and
-    remove the link of each whose data no longer names it. Inside the cap's transaction, which holds the account's row
-    lock. The number ended."""
+    """End each of ``session_keys`` (live sessions beyond the cap's limit) whose data still names ``link`` ((kind,
+    account)), except a pending sign-in that can still complete (pending_can_complete: kept), all at once in session key
+    order (_delete_sessions_in_key_order), and remove the link of each whose data no longer names it. Inside the cap's
+    transaction, which holds the account's row lock. The number ended."""
     if not session_keys:
         return 0
     kind, account = link
     data_of = {row.session_key: row.get_decoded()
                for row in _live_sessions(now).filter(session_key__in=session_keys)}
     moment = request_meta.epoch_seconds(now)
-    ended, unlinked = 0, []
-    for session_key in sorted(session_keys):
+    ending, unlinked = [], []
+    for session_key in session_keys:
         data = data_of.get(session_key)
         if data is None or link not in account_links(data):
             unlinked.append(session_key)
         elif kind == PENDING and pending_can_complete(data.get(PENDING_SIGN_IN_KEY), moment):
             continue
         else:
-            SessionStore(session_key=session_key)._delete_row_and_links(session_key)
-            ended += 1
+            ending.append(session_key)
+    ended = _delete_sessions_in_key_order(ending)
     if unlinked:
         _link_model().objects.filter(session_key__in=unlinked, account_id=account, kind=kind).delete()
     return ended
@@ -252,8 +268,9 @@ def cap_account_sessions(account, kind, *, keep_session_key=None, now=None) -> i
 def end_account_sessions(account, keep_session_key=None, now=None) -> int:
     """End every live session that names ``account`` - signed in as it or waiting on it - except ``keep_session_key``,
     reading only that account's links (see the module): the account's row lock first, then its live sessions in one
-    query, each one's data read again, each deleted through the store in session key order, in one transaction; then
-    the account's links whose session is gone, expired or no longer names it are removed. The number ended."""
+    query, each one's data read again, and those that name it deleted together in session key order
+    (_delete_sessions_in_key_order), in one transaction; then the account's links whose session is gone, expired or no
+    longer names it are removed. The number ended."""
     account = account_of(account)
     if account is None:
         return 0
@@ -263,13 +280,13 @@ def end_account_sessions(account, keep_session_key=None, now=None) -> int:
     with transaction.atomic(using=router.db_for_write(model)):
         lock_accounts([account])
         keys = set(links.values_list('session_key', flat=True)) - {keep_session_key}
-        ended, stale = 0, []
-        for session in _live_sessions(now).filter(session_key__in=keys).order_by('session_key'):
+        ending, stale = [], []
+        for session in _live_sessions(now).filter(session_key__in=keys):
             if any(linked == account for _, linked in account_links(session.get_decoded())):
-                SessionStore(session_key=session.session_key)._delete_row_and_links(session.session_key)
-                ended += 1
+                ending.append(session.session_key)
             else:
                 stale.append(session.session_key)
+        ended = _delete_sessions_in_key_order(ending)
         if stale:
             links.filter(session_key__in=stale).delete()
         # the account's links whose session is gone or expired (the kept session is live: never here)

@@ -498,6 +498,13 @@ class LockOrderRaceTests(TransactionTestCase):
         self.assertFalse(first.is_alive() or second.is_alive())
         return errors
 
+    def assertChangeAnswered(self, change):  # noqa: N802 - an assertion, named as unittest's are
+        """The password change was answered: 302 to the account page, or 400 when the act served after it (a sign-out
+        everywhere, an access off) ended its new session before its own answer could save it - Django's
+        SessionInterrupted, as at 3048931b (the records-0 verifier); the change itself was made either way."""
+        self.assertIsNone(change.error)
+        self.assertIn((change.status, change.location), {(302, '/account/?done=changed'), (400, None)})
+
     def test_a_password_change_and_a_sign_out_everywhere_at_once(self):
         """records-0: the change is held right after deleting the other session's row; the other session's sign-out
         everywhere is sent meanwhile. The shipped code: the ender deleted the changer's own session first and waited on
@@ -510,7 +517,7 @@ class LockOrderRaceTests(TransactionTestCase):
         ender = Worker('ender', lambda: by_key[other_key].post('/logout/everywhere'))
         errors = self.race(change, other_key, ender)
         self.assertEqual(errors, [])
-        self.assertEqual((change.status, change.location, change.error), (302, '/account/?done=changed', None))
+        self.assertChangeAnswered(change)
         self.assertEqual((ender.status, ender.location, ender.error), (302, '/login/', None))
         member.refresh_from_db()
         self.assertTrue(member.check_password(NEW_PASSWORD))
@@ -535,7 +542,7 @@ class LockOrderRaceTests(TransactionTestCase):
                                                       **{client_contract.WSGI_KEY: client_contract.VERSION}))
         errors = self.race(change, other_key, toggle)
         self.assertEqual(errors, [])
-        self.assertEqual((change.status, change.location, change.error), (302, '/account/?done=changed', None))
+        self.assertChangeAnswered(change)
         self.assertEqual((toggle.status, toggle.error), (200, None))
         member.refresh_from_db()
         self.assertTrue(member.check_password(NEW_PASSWORD))
@@ -581,7 +588,15 @@ def live_keys(user):
 
 LOCK = re.compile(r'FROM "studio_user" .*FOR NO KEY UPDATE')
 SESSION_WRITE = re.compile(r'^\s*(INSERT INTO|UPDATE|DELETE FROM) "django_session"')
-SESSION_DELETE = re.compile(r'DELETE FROM "django_session" WHERE .*IN \(\'([a-z0-9]+)\'\)')
+SESSION_DELETE = re.compile(r'^\s*DELETE FROM "django_session" WHERE')
+# the sessions an end takes, locked in key order before any is deleted (session_store._delete_sessions_in_key_order)
+SESSIONS_LOCKED = re.compile(r'^SELECT "django_session"\."session_key"(?: AS "session_key")? FROM "django_session" '
+                             r'WHERE .* ORDER BY (?:1|"django_session"\."session_key") ASC FOR UPDATE$')
+
+
+def deleted_keys(found):
+    """The session keys the DELETE statements of ``found`` name, in statement order."""
+    return [key for sql in found if SESSION_DELETE.search(sql) for key in re.findall(r"'([0-9a-z]{32})'", sql)]
 
 
 def statements(function):
@@ -621,6 +636,16 @@ class LockOrderStatementTests(TestCase):
         self.assertIsNotNone(write, 'no session row was written or deleted')
         self.assertLess(lock, write)
 
+    def assert_ends_in_key_order(self, found, keys):
+        """``keys`` - and no other session - were locked in key order and then deleted in one statement, after it."""
+        taken, deleted = first_index(found, SESSIONS_LOCKED), first_index(found, SESSION_DELETE)
+        self.assertIsNotNone(taken, 'the sessions were not locked in key order before they were deleted')
+        self.assertIsNotNone(deleted, 'no session was deleted')
+        self.assertLess(taken, deleted)
+        self.assertEqual(re.findall(r"'([0-9a-z]{32})'", found[taken]), sorted(keys))
+        self.assertEqual(sorted(deleted_keys(found)), sorted(keys))
+        self.assertEqual(sum(1 for sql in found if SESSION_DELETE.search(sql)), 1)  # however many they are
+
     def test_a_store_write_that_adds_a_link_takes_the_accounts_lock_before_the_sessions_row(self):
         member = f.member(f.workspace())
         found = statements(lambda: store_session(signed_in_data(member)))
@@ -655,19 +680,16 @@ class LockOrderStatementTests(TestCase):
                         cursor.execute('SET LOCAL enable_indexscan = off')
                         cursor.execute('SET LOCAL enable_bitmapscan = off')
                 found = statements(lambda: self.assertEqual(sessions.end_sessions(member), 8))
-                self.assert_locked_before(found, SESSION_WRITE)
-                self.assertEqual([match.group(1) for sql in found for match in SESSION_DELETE.finditer(sql)], keys)
+                self.assert_locked_before(found, SESSIONS_LOCKED)  # the account, then the sessions in key order
+                self.assert_ends_in_key_order(found, keys)
 
     @override_settings(SESSION_LIVE_PER_ACCOUNT=3)
     def test_the_cap_locks_first_and_ends_in_key_order(self):
         member = f.member(f.workspace())
         keys = seeded(member, 6, descending=False)  # the cap meets them newest first: the reverse of key order
         found = statements(lambda: store_session(signed_in_data(member)))
-        ended = [match.group(1) for sql in found for match in SESSION_DELETE.finditer(sql)]
-        self.assertEqual(len(ended), 4)
-        self.assertEqual(ended, sorted(ended))
         self.assert_locked_before(found, SESSION_WRITE)
-        self.assertEqual(len(set(keys) - set(ended)), 2)
+        self.assert_ends_in_key_order(found, keys[:4])  # the oldest four; the two newest fill the limit
 
 
 # --- S2-4: the session tag carries nothing the customer scan reads --------------------------------------------------------
