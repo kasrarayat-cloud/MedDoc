@@ -5,6 +5,9 @@ folder records the mutation that undoes each repair and the test it fails.
 - C1 (coding-0): no ratio of inflated to stored size is held against a part. Generated Word tables (no w14:paraId, a
   border on every cell) deflate more than 100 times, and the code before release 1 converts them; the absolute limits,
   the bounded reader and the bounded child's limits still hold.
+- C5 (coding-4): a field's type is read from its live instruction text; text a tracked change deleted counts only when
+  nothing live names a type. Every shape below was converted from the base revision's package by a real LibreOffice
+  (24.2, measured by builder C; lo/lo_fields*.out in the builder's folder), and each test follows what it rendered.
 
 Synthetic bytes only, every package built here; no LibreOffice, no network, no provider."""
 import io
@@ -17,10 +20,11 @@ from django.test import SimpleTestCase, override_settings
 
 from studio.fable import document, docx_package
 from studio.models import SourceRevision
-from tests.test_fable_document import (CONVERTED, DANGEROUS, DOCX, FULL_NAMESPACES, NAMESPACES, PLAIN_PACKAGE, TEXT,
-                                       WORD_MAIN, _echo_package, complex_field, content_types, legacy_safe_package,
+from tests.test_fable_document import (BEGIN, CONVERTED, DANGEROUS, DOCX, END, FULL_NAMESPACES, NAMESPACES,
+                                       PLAIN_PACKAGE, SEPARATE, TEXT, WORD_MAIN, _echo_package, complex_field,
+                                       content_types, document_xml, full_package, instruction, legacy_safe_package,
                                        lying, override, paragraph, parts_of, private_tempdir, relationship,
-                                       relationships, word_package)
+                                       relationships, shown, word_package)
 
 MIB = 1024 * 1024
 
@@ -188,3 +192,122 @@ class GeneratedTableTests(SimpleTestCase):
         package, counts = docx_package._safe_package(removed)
         self.assertEqual(counts['fields'], 1)
         self.assertNotIn(b'secret', parts_of(package)['word/media/picture.png'])
+
+
+# --- C5: a field's type from its live instruction text ---------------------------------------------------------------
+TRACKED = 'w:author="Synthetic Editor" w:date="2026-11-24T00:00:00Z"'
+
+
+def deleted_instruction(text, *, element='delInstrText', container='del', number=1):
+    """``text`` as a tracked change deletes field code: a run of w:delInstrText inside a w:del (or as asked)."""
+    run = f'<w:r><w:{element} xml:space="preserve">{text}</w:{element}></w:r>'
+    return f'<w:{container} w:id="{number}" {TRACKED}>{run}</w:{container}>' if container else run
+
+
+def inserted(content, number=2):
+    return f'<w:ins w:id="{number}" {TRACKED}>{content}</w:ins>'
+
+
+def tracked_field(*instruction_content, result='2'):
+    """A live field (begin, the instruction given, separate, the result ``result``, end)."""
+    return BEGIN + ''.join(instruction_content) + SEPARATE + shown(result) + END
+
+
+def wholly_deleted_field(text):
+    """A field deleted whole: every mark and its instruction inside one w:del, its result deleted text."""
+    return (f'<w:del w:id="9" {TRACKED}>' + BEGIN + f'<w:r><w:delInstrText xml:space="preserve">{text}</w:delInstrText>'
+            '</w:r>' + SEPARATE + '<w:r><w:delText>2</w:delText></w:r>' + END + '</w:del>')
+
+
+INCLUDE_SECRET_TEXT = ' INCLUDETEXT "c:\\\\synthetic\\\\secret-text.docx" '
+
+
+class LiveFieldTypeTests(SimpleTestCase):
+    """C5 (coding-4): a PAGE field whose instruction held a tracked deletion of 'LINK' lost its instruction, so a
+    header's live page number became the stored one; LibreOffice renders the base's package of it as a live page
+    number. The type is read from the live instruction text, in both directions."""
+
+    def assert_kept_byte_for_byte(self, data):
+        package, removed = docx_package._safe_package(data)
+        self.assertEqual(package, legacy_safe_package(data))
+        self.assertEqual(removed, {'fields': 0, 'objects': 0, 'controls': 0, 'chunks': 0})
+
+    def assert_neutralised(self, data, part='word/document.xml'):
+        package, removed = docx_package._safe_package(data)
+        self.assertEqual(removed['fields'], 1)
+        xml = parts_of(package)[part].decode('utf-8')
+        self.assertNotIn('fldChar', xml)
+        for gone in ('secret', 'LINK', 'INCLUDETEXT'):
+            self.assertNotIn(gone, xml)
+        return xml
+
+    def test_a_kept_type_whose_instruction_holds_a_deleted_removed_type_passes_byte_for_byte(self):
+        finding = tracked_field(deleted_instruction(' LINK x '), inserted(instruction(' PAGE ')))
+        cases = {
+            # the lens's input, in the body and in a header, where its page number shows on every page
+            'deleted LINK, inserted PAGE': word_package(TEXT + paragraph(finding)),
+            'the same in a header': full_package(TEXT, header=paragraph(shown('Page '), finding)),
+            'deleted INCLUDETEXT of a file, inserted PAGE': word_package(TEXT + paragraph(tracked_field(
+                deleted_instruction(INCLUDE_SECRET_TEXT), inserted(instruction(' PAGE '))))),
+            'deleted LINK, then a live PAGE with no w:ins': word_package(TEXT + paragraph(tracked_field(
+                deleted_instruction(' LINK x '), instruction(' PAGE ')))),
+            'inserted PAGE, then deleted INCLUDETEXT': word_package(TEXT + paragraph(tracked_field(
+                inserted(instruction(' PAGE ')), deleted_instruction(INCLUDE_SECRET_TEXT)))),
+            'a type split by a deletion: deleted PA, live GE (LibreOffice reads GE)': word_package(TEXT + paragraph(
+                tracked_field(deleted_instruction(' PA'), instruction('GE ')))),
+            'moved away (w:moveFrom) LINK, live PAGE': word_package(TEXT + paragraph(tracked_field(
+                deleted_instruction(' LINK x ', container='moveFrom'), instruction(' PAGE ')))),
+            'deleted plain text LINK, live PAGE': word_package(TEXT + paragraph(tracked_field(
+                deleted_instruction(' LINK x ', element='delText'), instruction(' PAGE ')))),
+            # the verifier's shapes: Word's own split of an edited code, and a date over a deleted INCLUDETEXT, in a
+            # footer
+            'live space, deleted LINK, inserted PAGE, live MERGEFORMAT': full_package(TEXT, footer=paragraph(
+                shown('Page '), tracked_field(instruction(' '), deleted_instruction('LINK x'),
+                                              inserted(instruction('PAGE')), instruction(' \\* MERGEFORMAT ')))),
+            'a live DATE over a deleted INCLUDETEXT': full_package(TEXT, footer=paragraph(tracked_field(
+                deleted_instruction(INCLUDE_SECRET_TEXT), inserted(instruction(' DATE \\@ "yyyy-MM-dd" '))))),
+        }
+        for label, data in cases.items():
+            with self.subTest(label):
+                self.assert_kept_byte_for_byte(data)
+
+    def test_a_removed_type_in_the_live_text_is_neutralised_whatever_was_deleted(self):
+        cases = {
+            'deleted PAGE, inserted LINK': tracked_field(deleted_instruction(' PAGE '),
+                                                         inserted(instruction(' LINK x '))),
+            'deleted PAGE, inserted INCLUDETEXT': tracked_field(deleted_instruction(' PAGE '),
+                                                                inserted(instruction(INCLUDE_SECRET_TEXT))),
+            # LibreOffice reads a w:instrText inside a deletion, and a w:delInstrText outside one, as live code
+            'w:instrText inside a deletion reading LINK, live PAGE': tracked_field(
+                deleted_instruction(' LINK x ', element='instrText'), instruction(' PAGE ')),
+            'w:delInstrText outside any deletion reading LINK': tracked_field(
+                deleted_instruction(' LINK x ', container=None)),
+            'live INCLUDETEXT beside a deleted PAGE in a w:moveFrom': tracked_field(
+                deleted_instruction(' PAGE ', container='moveFrom'), instruction(INCLUDE_SECRET_TEXT)),
+        }
+        for label, field in cases.items():
+            with self.subTest(label):
+                xml = self.assert_neutralised(word_package(TEXT + paragraph(field)))
+                self.assertIn('<w:t xml:space="preserve">2</w:t>', xml)  # the result the reader sees stays
+
+    def test_deleted_text_names_the_type_when_nothing_live_does(self):
+        # LibreOffice reads a deleted instruction when nothing else is left of it: a field deleted whole, or one whose
+        # whole instruction is a deletion (both rendered as live page numbers when they read PAGE)
+        for label, field in (('a field deleted whole', wholly_deleted_field(' PAGE ')),
+                             ('a live field whose whole instruction is a deletion',
+                              tracked_field(deleted_instruction(' PAGE '))),
+                             ('white space live, the type deleted', tracked_field(
+                                 instruction(' '), deleted_instruction(' PAGE ')))):
+            with self.subTest(f'{label}, PAGE: kept'):
+                self.assert_kept_byte_for_byte(word_package(TEXT + paragraph(field)))
+        for label, field in (('a field deleted whole', wholly_deleted_field(' LINK x ')),
+                             ('a live field whose whole instruction is a deletion',
+                              tracked_field(deleted_instruction(INCLUDE_SECRET_TEXT))),
+                             ('white space live, the type deleted', tracked_field(
+                                 instruction(' '), deleted_instruction(' LINK x ')))):
+            with self.subTest(f'{label}, a removed type: neutralised'):
+                package, removed = docx_package._safe_package(word_package(TEXT + paragraph(field)))
+                self.assertEqual(removed['fields'], 1)
+                xml = document_xml(package)
+                for gone in ('fldChar', 'secret', 'LINK', 'INCLUDETEXT'):
+                    self.assertNotIn(gone, xml)

@@ -28,11 +28,12 @@ before it waits on it, so the parent's finally kills that group as well as the c
   referenced.
 - Field instructions and embedded content LibreOffice could act on are removed (E2), in every part that holds them: the
   instruction of each field of a type in FIELD_INSTRUCTIONS_REMOVED (and of any field whose type its own text does not
-  spell), keeping the result the reader sees; w:object (its preview picture kept), w:control and w:altChunk, with the
-  parts only they named, and their Overrides in the content types. Each part is edited by byte ranges of its own
-  bytes, never written out again, and a part with nothing to remove passes through byte for byte: a Word file with none
-  of these features gives exactly the package it gave before release 1. A formula ('=' first) is never removed. What
-  was removed is reported as counts only.
+  spell), keeping the result the reader sees - a field's type read from its live instruction text, text a tracked
+  change deleted counting only when nothing live names a type (_Field); w:object (its preview picture kept), w:control
+  and w:altChunk, with the parts only they named, and their Overrides in the content types. Each part is edited by byte
+  ranges of its own bytes, never written out again, and a part with nothing to remove passes through byte for byte: a
+  Word file with none of these features gives exactly the package it gave before release 1. A formula ('=' first) is
+  never removed. What was removed is reported as counts only.
 - The zip is rebuilt from the parts as read, in their order, so LibreOffice reads exactly what was checked. Nothing else
   of any part is changed: the document's text, pictures and layout are LibreOffice's to read as written.
 """
@@ -414,12 +415,15 @@ def _names(*local_names):
 
 # The roles of the few elements E2 reads (an element's name is 'namespace local'); every other element is read past
 # with one dictionary lookup.
-_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE = range(9)
+_FLDCHAR, _FLDSIMPLE, _OBJECT, _CONTROL, _ALTCHUNK, _POINTER, _TEXT, _SYMBOL, _SPACE, _DELETION = range(10)
 _ROLES = {name: role for role, local_names in (
     (_FLDCHAR, ('fldChar',)), (_FLDSIMPLE, ('fldSimple',)), (_OBJECT, ('object',)), (_CONTROL, ('control',)),
     (_ALTCHUNK, ('altChunk',)), (_POINTER, ('objectEmbed', 'objectLink')),
-    (_TEXT, ('instrText', 'delInstrText', 't', 'delText')), (_SYMBOL, ('sym',)), (_SPACE, ('tab', 'ptab', 'br', 'cr')))
+    (_TEXT, ('instrText', 'delInstrText', 't', 'delText')), (_SYMBOL, ('sym',)), (_SPACE, ('tab', 'ptab', 'br', 'cr')),
+    (_DELETION, ('del', 'moveFrom')))
     for name in _names(*local_names)}
+# Text a tracked change deleted: these elements inside a w:del or w:moveFrom (repair round 1, C5: see _Field).
+_DELETED_TEXT = _names('delInstrText', 'delText')
 # What points at an embedded or linked object: inside a w:object it goes with the object; anywhere else on its own.
 _ROLES['urn:schemas-microsoft-com:office:office OLEObject'] = _POINTER
 _CONTAINERS = (_OBJECT, _CONTROL, _ALTCHUNK, _POINTER)  # removed whole (an object but for its preview)
@@ -427,8 +431,9 @@ _OBJECTS, _DRAWINGS, _FLDDATAS = _names('object'), _names('drawing'), _names('fl
 # How a reader might assemble a field's instruction - from all its text, from the instruction elements only, from the
 # text not deleted, or from w:instrText alone - and whether a symbol's character, a tab or a break counts in it. The
 # type is read in each, and a field any reading finds removed is removed, so no reader's view of an instruction is
-# wider than this one's. A field Word wrote reads the same in all four.
-_READINGS = ((_names('instrText', 'delInstrText', 't', 'delText'), True), (_names('instrText', 'delInstrText'), False),
+# wider than this one's. A field Word wrote reads the same in all four. In each, text a tracked change deleted counts
+# only when the live text names no type (_Field).
+_READINGS =((_names('instrText', 'delInstrText', 't', 'delText'), True), (_names('instrText', 'delInstrText'), False),
              (_names('instrText', 't'), True), (_names('instrText'), False))
 # the attributes as WordprocessingML qualifies them, and unqualified: a reader lenient about the prefix must not see a
 # field here missed
@@ -518,28 +523,51 @@ def _symbol_character(attrs) -> str:
 
 class _Field:
     """A complex field (w:fldChar begin ... separate ... end) while it is read: its marks with the open elements around
-    each, and its type in each of the _READINGS as far as its own instruction has named it."""
+    each, and its type in each of the _READINGS as far as its own instruction has named it.
+
+    A field's type is read from its live instruction text (repair round 1, C5: the L-CODING lens's coding-4, a PAGE
+    field whose instruction holds a tracked deletion of 'LINK' was neutralised). Text a tracked change deleted - a
+    w:delInstrText or w:delText inside a w:del or w:moveFrom - is read apart, and counts only when the live text names
+    no type: a field deleted whole, or whose whole instruction is a deletion. That is how LibreOffice reads it, measured
+    on a real LibreOffice (24.2): it renders the base's 'deleted LINK, inserted PAGE' as a live page number, a deleted
+    'PA' before a live 'GE' as GE, and a w:moveFrom like a w:del; it reads a deleted instruction when nothing else is
+    left of it, a w:delInstrText outside any deletion, and a w:instrText inside one - so those count as here."""
     __slots__ = ('begin', 'begin_chain', 'separates', 'end', 'readings', 'decided', 'in_instruction')
 
     def __init__(self, begin, chain):
         self.begin, self.begin_chain, self.separates, self.end = begin, chain, [], None
-        self.readings = [_Reading() for _ in _READINGS]
+        self.readings = [[_Reading(), None] for _ in _READINGS]  # [live, deleted (made when deleted text comes)]
         self.decided, self.in_instruction = False, True
 
-    def feed(self, text, name=None):
-        """Text of the instruction: in a text element ``name``, or (None) a symbol's character, a tab or a break."""
-        for (kinds, run_content), reading in zip(_READINGS, self.readings):
-            if not reading.done and (name in kinds if name is not None else run_content):
-                reading.feed(text)
-        self.decided = all(reading.done for reading in self.readings)
+    def feed(self, text, name=None, deleted=False):
+        """Text of the instruction: in a text element ``name`` (``deleted``: a tracked change deleted it), or (None) a
+        symbol's character, a tab or a break."""
+        for (kinds, run_content), pair in zip(_READINGS, self.readings):
+            live = pair[0]
+            if name is None:
+                if run_content and not live.done:
+                    live.feed(text)
+            elif name in kinds:
+                if not deleted:
+                    if not live.done:
+                        live.feed(text)
+                elif live.state == _Reading.BEFORE:  # deleted text counts only while nothing live names a type
+                    if pair[1] is None:
+                        pair[1] = _Reading()
+                    if not pair[1].done:
+                        pair[1].feed(text)
+        self.decided = all(pair[0].done for pair in self.readings)
 
     def nested(self):
-        for reading in self.readings:
-            reading.nested()
-        self.decided = all(reading.done for reading in self.readings)
+        for live, deleted in self.readings:
+            live.nested()
+            if deleted is not None:
+                deleted.nested()
+        self.decided = all(pair[0].done for pair in self.readings)
 
     def removed(self) -> bool:
-        return any(reading.removed() for reading in self.readings)
+        return any((live if live.state != _Reading.BEFORE or deleted is None else deleted).removed()
+                   for live, deleted in self.readings)
 
 
 class _PartReader:
@@ -552,9 +580,9 @@ class _PartReader:
         self.raw, self.deadline, self.editable = raw, deadline, editable
         self.stack, self.fields, self.edits, self.declared, self.references = [], [], [], [], []
         self.removed = dict.fromkeys(_REMOVED_KINDS, 0)
-        self.elements = self.instructions = self.containers = 0
+        self.elements = self.instructions = self.containers = self.deletions = 0  # deletions: open w:del, w:moveFrom
         self.text_field = self.text_name = self.parser = None
-        self.nested_removal = False
+        self.nested_removal = self.text_deleted = False
 
     def read(self):
         parser = self.parser = expat.ParserCreate(namespace_separator=' ')
@@ -633,7 +661,10 @@ class _PartReader:
         elif role == _TEXT:
             if open_type:
                 self.text_field, self.text_name = field, element[_NAME]
+                self.text_deleted = bool(self.deletions) and element[_NAME] in _DELETED_TEXT
                 self.parser.CharacterDataHandler = self._text
+        elif role == _DELETION:
+            self.deletions += 1
         elif open_type:  # a symbol stands for its character, a tab or a break for white space
             field.feed(_symbol_character(attrs) if role == _SYMBOL else ' ')
 
@@ -652,6 +683,8 @@ class _PartReader:
             if self.text_field is not None:
                 self.text_field = None
                 self.parser.CharacterDataHandler = None
+        elif role == _DELETION:
+            self.deletions -= 1
         elif role == _FLDCHAR:
             field = self.fields[-1] if self.fields else None
             if field is not None and field.end is not None and field.end[0] is element:
@@ -681,7 +714,7 @@ class _PartReader:
     def _text(self, data):
         field = self.text_field
         if field is not None and not field.decided:
-            field.feed(data, self.text_name)
+            field.feed(data, self.text_name, self.text_deleted)
 
     # the removals
     def _edit(self, start, end, replacement=b''):
