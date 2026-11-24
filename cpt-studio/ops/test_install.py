@@ -117,6 +117,15 @@ REAL_FLUSH_JOURNAL = install.flush_journal
 JOURNALS_FLUSHED = []
 
 
+# Release 1 (A4): https-vhost and verify probe the host's TLS listener with openssl (which the guard refuses). Under the
+# guard they record this stand-in; the real report, REAL_TLS_POLICY_REPORT, is tested on its own with its probe stood in.
+REAL_TLS_POLICY_REPORT = install.tls_policy_report
+
+
+def _guarded_tls_policy_report():
+    return {'findings': [], 'probes': {}, 'stood_in': 'the test host guard runs no openssl'}
+
+
 def _guarded_flush_journal():
     lines = list(install.JOURNAL['lines'])
     install.JOURNAL.update(lines=[], overflow=0)
@@ -131,7 +140,8 @@ def guard_host():
                mock.patch.object(socket, 'create_connection', _guarded_connect),
                mock.patch.multiple(install, NGINX_AVAILABLE=NO_NGINX / 'sites-available',
                                    NGINX_ENABLED=NO_NGINX / 'sites-enabled', read_coupling=_guarded_coupling,
-                                   has_converter=_guarded_has_converter, flush_journal=_guarded_flush_journal),
+                                   has_converter=_guarded_has_converter, flush_journal=_guarded_flush_journal,
+                                   tls_policy_report=_guarded_tls_policy_report),
                mock.patch.dict(os.environ, {'RULED_ACT_MAX_SECS': str(
                    2 * install.STOP_SECONDS['worker'] + install.WORKER_PHASE_MARGIN)})]
     for patcher in patches:
@@ -638,8 +648,9 @@ class ArgumentTests(unittest.TestCase):
         args = self.parse('--phase', 'switch-back', '--provider-mode', 'disabled', '--coding-mode', 'live',
                           '--authorization-ref', 'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
         self.assertEqual((args.provider_mode, args.coding_mode), ('disabled', 'live'))
-        args = self.parse('--phase', 'provision', '--owner-username', 'owner')
-        self.assertEqual((args.agent_username, args.workspace_name), ('review-agent', 'Gastroenterology'))
+        # release 1 (A6): a review agent is opt-in (none unless named), and provisioning names who ran it (C3)
+        args = self.parse('--phase', 'provision', '--owner-username', 'owner', '--by', 'Ada Lovelace')
+        self.assertEqual((args.agent_username, args.workspace_name, args.by), (None, 'Gastroenterology', 'Ada Lovelace'))
         self.assertEqual(self.parse('--phase', 'reference', '--pfs-zip', '/x/a.zip', '--mue-zip', '/x/b.zip',
                                     '--pfs-retrieved-at', '2026-10-23T20:59:00Z',
                                     '--mue-retrieved-at', '2026-10-23T21:01:44+00:00').phase, 'reference')
@@ -2135,15 +2146,20 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
             install.parse_args([*self.BASE, *extra])
         self.assertEqual(caught.exception.code, 2)
 
-    def test_the_specialty_sets_the_workspace_and_agent_defaults(self):
-        args = self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--specialty', 'neurosurgery')
-        self.assertEqual((args.specialty, args.workspace_name, args.agent_username),
-                         ('neurosurgery', 'Neurosurgery', 'review-agent-neuro'))
-        args = self.parse('--phase', 'provision', '--owner-username', 'owner-ortho', '--specialty', 'orthopedic-surgery')
-        self.assertEqual((args.workspace_name, args.agent_username), ('Orthopedic Surgery', 'review-agent-ortho'))
-        args = self.parse('--phase', 'provision', '--owner-username', 'owner')
+    def test_the_specialty_sets_the_workspace_default_and_no_agent(self):
+        # release 1 (A6; TEC-4 (5), ORG-20 (5)): no review agent unless --agent-username names one
+        by = ('--by', 'Ada Lovelace')
+        args = self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--specialty', 'neurosurgery', *by)
+        self.assertEqual((args.specialty, args.workspace_name, args.agent_username), ('neurosurgery', 'Neurosurgery', None))
+        args = self.parse('--phase', 'provision', '--owner-username', 'owner-ortho', '--specialty', 'orthopedic-surgery',
+                          *by)
+        self.assertEqual((args.workspace_name, args.agent_username), ('Orthopedic Surgery', None))
+        args = self.parse('--phase', 'provision', '--owner-username', 'owner', '--agent-username', 'review-agent', *by)
         self.assertEqual((args.specialty, args.workspace_name, args.agent_username),
                          ('gastroenterology', 'Gastroenterology', 'review-agent'))
+        # provisioning names the person who ran it (C3), never a role
+        self.refused('--phase', 'provision', '--owner-username', 'owner')
+        self.refused('--phase', 'provision', '--owner-username', 'owner', '--by', 'operator')
 
     def test_the_specialty_is_refused_outside_provision_and_when_unknown(self):
         self.refused('--phase', 'preflight', '--specialty', 'neurosurgery')
@@ -2151,16 +2167,18 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
 
     def test_the_installer_passes_the_workspace_name_as_typed(self):
         # refutation N4-1-2, N4-1-3: an existing workspace is found exactly as typed and the credentials file names it
+        by = ('--by', 'Ada Lovelace')
         for name in ('Spine Center', 'GI  Demo', ' Spine Center'):
             with self.subTest(name=name):
-                args = self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name)
+                args = self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name,
+                                  *by)
                 self.assertEqual(args.workspace_name, name)
         # absent: the specialty's name; explicitly empty (an unset shell variable): refused (refutation N6-1-4)
         self.assertEqual(self.parse('--phase', 'provision', '--owner-username', 'owner-neuro', '--specialty',
-                                    'neurosurgery').workspace_name, 'Neurosurgery')
+                                    'neurosurgery', *by).workspace_name, 'Neurosurgery')
         for name in ('', '  '):
             with self.subTest(name=name):
-                self.refused('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name)
+                self.refused('--phase', 'provision', '--owner-username', 'owner-neuro', '--workspace-name', name, *by)
 
     def test_each_specialty_has_its_own_credentials_files(self):
         self.assertEqual(install.credentials_files('gastroenterology'),
@@ -2190,7 +2208,7 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
         args = SimpleNamespace(phase='provision', revision=REVISION, receipts=str(self.tmp), reset_passwords=None,
                                owner_username='owner-neuro', agent_username='review-agent-neuro',
                                owner_display_name='', agent_display_name='CPT Studio review agent',
-                               workspace_name='Neurosurgery', specialty='neurosurgery')
+                               workspace_name='Neurosurgery', specialty='neurosurgery', by='Ada Lovelace')
         ctx = install.Context(args, self.tmp)
         finals, commands = [], []
 
@@ -2221,6 +2239,44 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
         self.assertFalse((home / 'agent-credentials.json').exists())  # Gastroenterology's file is never touched
         self.assertEqual(outcome['specialty'], 'neurosurgery')
         self.assertTrue(outcome['root_credentials'].endswith('/initial-credentials-neurosurgery.json'))
+        # release 1: the owner's password is one staff set, replaced at the first sign-in (B4), and the run names who
+        # ran it (C3)
+        self.assertIn('--require-password-change', commands[0])
+        self.assertIn('--by=Ada Lovelace', commands[0])
+
+    def test_without_an_agent_username_no_agent_account_or_file_is_made(self):
+        # release 1 (A6; TEC-4 (5), ORG-20 (5)): the review agent is opt-in
+        home = self.tmp / 'home'
+        home.mkdir(mode=0o700)
+        args = SimpleNamespace(phase='provision', revision=REVISION, receipts=str(self.tmp), reset_passwords=None,
+                               owner_username='owner', agent_username=None, owner_display_name='',
+                               agent_display_name='CPT Studio review agent', workspace_name='Gastroenterology',
+                               specialty='gastroenterology', by='Ada Lovelace')
+        staged, commands = {}, []
+
+        def fake_root_file(op, **params):
+            if op == 'stage':
+                staged['content'] = json.loads(base64.b64decode(params['content']))
+            return {'final_exists': False, 'staged_exists': False} if op == 'state' else {}
+
+        def fake_oneshot(image_id, command, env, **kwargs):
+            commands.append((command, kwargs))
+            return SimpleNamespace(returncode=0, stdout=b'created human account owner (owner)\n', stderr=b'')
+        with mock.patch.object(install, 'installed_image', return_value='sha256:' + 'c' * 64), \
+                mock.patch.object(install, 'require_db'), \
+                mock.patch.object(install, 'read_protected_env', return_value=b''), \
+                mock.patch.object(install, 'AGENT_CREDENTIALS', home / 'agent-credentials.json'), \
+                mock.patch.object(install, 'root_file', fake_root_file), \
+                mock.patch.object(install, 'oneshot', fake_oneshot):
+            outcome = install.phase_provision(install.Context(args, self.tmp))
+        (command, kwargs), = commands
+        self.assertFalse([part for part in command if part.startswith('--agent')])
+        self.assertEqual(len(kwargs['mounts']), 1)  # the owner's password file alone
+        self.assertIn('--require-password-change', command)
+        self.assertEqual(list(home.iterdir()), [])  # no agent file
+        self.assertEqual([account['username'] for account in staged['content']['accounts']], ['owner'])
+        self.assertEqual((outcome['accounts'], outcome['agent_credentials']), ({'owner': 'created'}, None))
+        self.assertIn('no review agent', outcome['summary'])
 
 
 

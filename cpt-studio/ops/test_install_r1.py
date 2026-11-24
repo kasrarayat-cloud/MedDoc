@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import stat
 import sys
 import unittest
 from pathlib import Path
@@ -16,7 +17,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import TemporaryDirectoryTest, guard_host, release_host  # noqa: E402
+from test_install import FakeOwnership, TemporaryDirectoryTest, guard_host, release_host, run_body  # noqa: E402
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 REVISION = 'a' * 40
@@ -335,6 +336,353 @@ class StatementLoggingTests(TemporaryDirectoryTest):
         self.assertEqual(args[:4], ('exec', install.DB_CONTAINER, 'sh', '-c'))
         for name in install.DB_CGROUP_FILES:
             self.assertIn(name, args[4])
+
+
+
+REVIEW_BY = (__import__('datetime').date.today() + __import__('datetime').timedelta(days=90)).isoformat()
+WORKSPACE = '7a1c2e9b-4d3f-4b8a-9c6d-0e1f2a3b4c5d'
+PLAN = '1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9'
+DECLARATION = 'docs/foundation/mutations/x.md'
+COMMIT = 'd' * 40
+SECRET_VALUE = 'S' * 48
+
+
+class ManageArgumentTests(unittest.TestCase):
+    """A6: --phase manage runs one allow-listed act, each with the arguments it needs and no other."""
+
+    def manage(self, *extra):
+        return ('--phase', 'manage', *extra)
+
+    def test_a_command_not_on_the_allowlist_is_refused(self):
+        self.assertEqual(sorted(install.MANAGE_COMMANDS), sorted([
+            'revoke-operator', 'grant-operator', 'issue-enrolment', 'reset-second-factor', 'clear-signin-failures',
+            'require-password-change', 'dispose', 'export-workspace']))
+        for command in ('provision', 'shell', 'migrate', 'flush', 'createsuperuser', 'grant_operator', 'loaddata'):
+            with self.subTest(command=command):
+                self.assertIn('invalid choice', refused(*self.manage('--command', command, '--by', 'Ada Lovelace')))
+        self.assertIn('needs --command', refused(*self.manage()))
+
+    def test_each_act_needs_its_arguments_and_takes_no_other(self):
+        reason = ('--reason-file', '/srv/reason.txt')
+        by = ('--by', 'Ada Lovelace')
+        accepted = [
+            ('--command', 'revoke-operator', '--username', 'ops-agent', *reason, *by),
+            ('--command', 'grant-operator', '--username', 'platform-operator', *reason, *by, '--review-by', REVIEW_BY),
+            ('--command', 'issue-enrolment', '--username', 'platform-operator', *reason, *by),
+            ('--command', 'reset-second-factor', '--username', 'platform-operator', *reason, *by),
+            ('--command', 'clear-signin-failures', '--username', 'owner', *reason, *by),
+            ('--command', 'require-password-change', '--all-human-accounts', *reason, *by),
+            ('--command', 'require-password-change', '--username', 'owner', *reason, *by),
+            ('--command', 'dispose', '--dispose-step', 'close', '--workspace-id', WORKSPACE, *reason, *by),
+            ('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', WORKSPACE, *by),
+            ('--command', 'dispose', '--dispose-step', 'plan', '--encounter-id', PLAN, *reason, *by),
+            ('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by, '--approved-by', 'Grace Hopper',
+             *reason),
+            ('--command', 'dispose', '--dispose-step', 'ledger', *by),
+            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *reason, *by),
+            ('--command', 'export-workspace', '--workspace-id', WORKSPACE, *reason, *by),
+        ]
+        for extra in accepted:
+            with self.subTest(accepted=extra):
+                self.assertEqual(parse(*self.manage(*extra)).command, extra[1])
+        refusals = {
+            'no --by': (('--command', 'revoke-operator', '--username', 'ops-agent', *reason), 'needs --by'),
+            'a role as --by': (('--command', 'revoke-operator', '--username', 'ops-agent', *reason, '--by', 'operator'),
+                               'names a role'),
+            'no reason': (('--command', 'revoke-operator', '--username', 'ops-agent', *by), 'needs --reason-file'),
+            'a relative reason': (('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'r.txt',
+                                   *by), 'absolute'),
+            'a grant without review date': (('--command', 'grant-operator', '--username', 'x-op', *reason, *by),
+                                            'needs --review-by'),
+            'a review date past': (('--command', 'grant-operator', '--username', 'x-op', *reason, *by, '--review-by',
+                                    '2020-01-01'), 'after today'),
+            'both kinds of require': (('--command', 'require-password-change', '--username', 'owner',
+                                       '--all-human-accounts', *reason, *by), 'not both'),
+            'neither kind of require': (('--command', 'require-password-change', *reason, *by), 'needs --username'),
+            'one person runs and approves': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN,
+                                              *by, '--approved-by', 'ada lovelace', *reason), 'differ'),
+            'an execute without a plan': (('--command', 'dispose', '--dispose-step', 'execute', *by, '--approved-by',
+                                           'Grace Hopper', *reason), '--plan-id'),
+            'an execute without a reason': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by,
+                                             '--approved-by', 'Grace Hopper'), 'needs --reason-file'),
+            'an approver outside execute': (('--command', 'dispose', '--dispose-step', 'close', '--workspace-id',
+                                             WORKSPACE, *reason, *by, '--approved-by', 'Grace Hopper'),
+                                            'belong to --dispose-step execute'),
+            'a replay without its ledger': (('--command', 'dispose', '--dispose-step', 'replay-ledger', *reason, *by),
+                                            '--ledger-file'),
+            'a ledger file elsewhere': (('--command', 'dispose', '--dispose-step', 'ledger', '--ledger-file',
+                                         '/srv/ledger.json', *by), '--ledger-file'),
+            'an unknown step': (('--command', 'dispose', '--dispose-step', 'purge', *by), 'invalid choice'),
+            'a workspace that is not a UUID': (('--command', 'export-workspace', '--workspace-id', 'Gastroenterology',
+                                                *reason, *by), 'UUID'),
+            'an argument the act does not use': (('--command', 'revoke-operator', '--username', 'ops-agent', *reason,
+                                                  *by, '--workspace-id', WORKSPACE), 'not used by --command'),
+            'a manage argument on another phase': (('--command', 'revoke-operator',), None),
+        }
+        for label, (extra, said) in refusals.items():
+            with self.subTest(label):
+                if said is None:
+                    self.assertIn('not used by --phase verify', refused('--phase', 'verify', *extra))
+                else:
+                    self.assertIn(said, refused(*self.manage(*extra)))
+
+
+class ManageWorld:
+    """The host for --phase manage: one-shots recorded (with what their RAM-only files held), the root file a folder
+    standing in for /etc/cpt-studio, containers by name."""
+
+    def __init__(self, tmp, *, output=b'done\n', exit_code=0, containers=()):
+        self.tmp, self.output, self.exit_code = tmp, output, exit_code
+        self.etc = tmp / 'etc'
+        self.etc.mkdir(mode=0o700, exist_ok=True)
+        self.oneshots, self.mounted, self.containers = [], {}, set(containers)
+        from test_install_bluegreen import FakeRootFile
+        self.root = FakeRootFile(self.etc)
+        self.helpers, self.owner = [], FakeOwnership()
+        self.export_files = {}  # what the command writes into its --out folder: {name: bytes}
+
+    def oneshot(self, image_id, command, env, **kwargs):
+        self.oneshots.append((command, kwargs))
+        if command == ['manage', 'migrate', '--check']:
+            return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+        for mount in kwargs.get('mounts', ()):
+            if mount.startswith('type=bind') and not mount.endswith(f'dst={install.EXPORT_MOUNT}'):
+                source = mount.split('src=', 1)[1].split(',', 1)[0]
+                self.mounted[Path(source).name] = (Path(source).read_text(), stat.S_IMODE(os.stat(source).st_mode),
+                                                   stat.S_IMODE(os.stat(Path(source).parent).st_mode))
+        for mount in kwargs.get('mounts', ()):
+            if mount.endswith(f'dst={install.EXPORT_MOUNT}'):  # the command writes its export into the folder
+                folder = Path(mount.split('src=', 1)[1].split(',', 1)[0].replace(install.EXPORTS_DIR,
+                                                                                    str(self.tmp / 'var-lib' /
+                                                                                        'cpt-studio-exports')))
+                for name, data in self.export_files.items():
+                    (folder / name).parent.mkdir(parents=True, exist_ok=True)
+                    (folder / name).write_bytes(data)
+        output = self.output(command) if callable(self.output) else self.output
+        return SimpleNamespace(returncode=self.exit_code, stdout=output, stderr=b'')
+
+    def inspect(self, kind, name):
+        return {'Id': name} if name in self.containers else None
+
+    def run_helper(self, body, params, *, mounts, **kwargs):
+        """The export folder's two helpers, their bodies run here on a temporary /var/lib."""
+        assert mounts == [install.EXPORTS_MOUNT], mounts
+        var_lib = self.tmp / 'var-lib'
+        var_lib.mkdir(exist_ok=True)
+        self.helpers.append(body)
+        answer = run_body(body, params, {'/host-var-lib': str(var_lib)}, fake_os=self.owner)
+        if answer.get('error'):
+            raise install.InstallError(f'Root helper refused: {answer["error"]}')
+        return answer
+
+    def run(self, *extra, reason=b'Ticket 4521: the practice asked to end access.\n', ledger=b'{"ledger": []}\n'):
+        path = self.tmp / 'reason.txt'
+        path.write_bytes(reason)
+        (self.tmp / 'ledger.json').write_bytes(ledger)
+        argv = ['--phase', 'manage', *extra]
+        argv = [str(path) if part == 'REASON' else str(self.tmp / 'ledger.json') if part == 'LEDGER' else part
+                for part in argv]
+        args = parse(*argv)
+        args.receipts = str(self.tmp)
+        ctx = install.Context(args, self.tmp)
+        ctx.door = {'declaration': DECLARATION, 'declaration_commit': COMMIT}
+        with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                 require_db=mock.Mock(), oneshot=self.oneshot, inspect=self.inspect,
+                                 root_file=self.root, run_helper=self.run_helper, read_protected_env=mock.Mock(
+                                     return_value=f'CPT_STUDIO_SECRET_KEY={SECRET_VALUE}\n'.encode())):
+            return install.phase_manage(ctx)
+
+    def acts(self):
+        return [command for command, _ in self.oneshots if command != ['manage', 'migrate', '--check']]
+
+
+class ManagePhaseTests(TemporaryDirectoryTest):
+    """A6: the command lines the allow-listed acts are given, their RAM-only files, and receipts that hold no secret."""
+
+    def test_revoke_operator_runs_the_command_with_its_reason_as_a_ram_only_file(self):
+        world = ManageWorld(self.tmp)
+        details = world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON',
+                            '--by', 'Ada Lovelace')
+        self.assertEqual(world.acts(), [['manage', 'revoke_operator', '--username', 'ops-agent', '--reason-file',
+                                         '/run/cpt-manage/reason', '--by', 'Ada Lovelace']])
+        text, mode, folder = world.mounted['reason']
+        self.assertEqual((text, mode, folder), ('Ticket 4521: the practice asked to end access.\n', 0o600, 0o700))
+        command, kwargs = world.oneshots[-1]
+        self.assertEqual(kwargs['user'], f'{os.getuid()}:{os.getgid()}')
+        self.assertEqual(kwargs['what'], 'manage revoke_operator')
+        self.assertEqual(kwargs['by'], 'Ada Lovelace')
+        self.assertTrue(all(mount.startswith('type=bind,src=/dev/shm/') for mount in kwargs['mounts']))
+        # the receipt keeps the reason's digest and size, never its text
+        self.assertEqual(details['reason'], {'sha256': hashlib.sha256(b'Ticket 4521: the practice asked to end access.\n')
+                                             .hexdigest(), 'bytes': 47})
+        self.assertNotIn('Ticket 4521', json.dumps(details))
+        self.assertFalse(list(Path('/dev/shm').glob('cpt-studio-manage-*')))
+
+    def test_grant_operator_names_the_declaration_and_the_review_date(self):
+        world = ManageWorld(self.tmp)
+        world.run('--command', 'grant-operator', '--username', 'second-operator', '--reason-file', 'REASON', '--by',
+                  'Ada Lovelace', '--review-by', REVIEW_BY)
+        self.assertEqual(world.acts(), [['manage', 'grant_operator', '--username', 'second-operator', '--reason-file',
+                                         '/run/cpt-manage/reason', '--by', 'Ada Lovelace', '--authorization-ref',
+                                         f'{DECLARATION}@{COMMIT}', '--review-by', REVIEW_BY]])
+
+    def test_issue_enrolment_keeps_the_code_root_only_and_never_in_output_argv_or_receipt(self):
+        world = ManageWorld(self.tmp)
+        details = world.run('--command', 'issue-enrolment', '--username', 'platform-operator', '--reason-file', 'REASON',
+                            '--by', 'Ada Lovelace')
+        code = json.loads((world.etc / install.OPERATOR_ENROLMENT).read_text())['code']
+        self.assertEqual(world.mounted['code'][:2], (code, 0o600))
+        self.assertEqual(world.acts(), [['manage', 'issue_enrolment', '--username', 'platform-operator', '--code-file',
+                                         '/run/cpt-manage/code', '--reason-file', '/run/cpt-manage/reason', '--by',
+                                         'Ada Lovelace']])
+        self.assertNotIn(code, json.dumps(details))
+        for path in self.tmp.glob('*.log'):
+            self.assertNotIn(code, path.read_text())
+        # a command that printed the code: nothing is kept, the staged code discarded
+        again = self.tmp / 'again'
+        again.mkdir()
+        world = ManageWorld(again)
+        world.output = lambda command: f'your code: {world.mounted["code"][0]}'.encode()
+        with self.assertRaisesRegex(install.InstallError, 'secret appeared'):
+            world.run('--command', 'reset-second-factor', '--username', 'platform-operator', '--reason-file', 'REASON',
+                      '--by', 'Ada Lovelace')
+        self.assertEqual(list(world.etc.iterdir()), [])  # neither the code nor its staged copy
+        self.assertFalse([path for path in again.glob('*.log')])
+
+    def test_an_application_secret_printed_by_an_act_is_never_kept(self):
+        world = ManageWorld(self.tmp, output=f'settings: {SECRET_VALUE}'.encode())
+        with self.assertRaisesRegex(install.InstallError, 'secret appeared'):
+            world.run('--command', 'clear-signin-failures', '--username', 'owner', '--reason-file', 'REASON', '--by',
+                      'Ada Lovelace')
+        for path in self.tmp.glob('*.log'):
+            self.assertNotIn(SECRET_VALUE, path.read_text())
+
+    def test_a_disposal_is_refused_while_an_install_or_switch_back_is_in_progress(self):
+        for leftover in (install.INCOMING_WEB, 'cpt-studio-web-previous', 'cpt-studio-worker-previous'):
+            with self.subTest(leftover=leftover):
+                world = ManageWorld(self.tmp, containers=[leftover])
+                with self.assertRaisesRegex(install.InstallError, 'in progress'):
+                    world.run('--command', 'dispose', '--dispose-step', 'close', '--workspace-id', WORKSPACE,
+                              '--reason-file', 'REASON', '--by', 'Ada Lovelace')
+                self.assertEqual(world.acts(), [])  # no one-shot, so nothing was told the switch is idle
+
+    def test_a_disposal_is_told_the_switch_is_idle_only_after_the_check_and_runs_with_the_files_volume(self):
+        world = ManageWorld(self.tmp, output=f'disposal {PLAN}: 12 rows, 3 files\n'.encode())
+        details = world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, '--by',
+                            'Ada Lovelace', '--approved-by', 'Grace Hopper', '--reason-file', 'REASON')
+        command, kwargs = world.oneshots[-1]
+        self.assertEqual(command, ['manage', 'dispose', '--execute', '--plan', PLAN, '--by', 'Ada Lovelace',
+                                   '--approved-by', 'Grace Hopper', '--reason-file', '/run/cpt-manage/reason',
+                                   '--authorization-ref', f'{DECLARATION}@{COMMIT}'])
+        self.assertIn('CPT_STUDIO_SWITCH_STATE=idle', kwargs['environment'])
+        self.assertIn('CPT_STUDIO_PROVIDER_MODE=disabled', kwargs['environment'])
+        self.assertNotIn('user', kwargs)  # the application's own uid: the files are its own
+        self.assertIn(f'type=volume,src={install.FILES_VOLUME},dst={install.STATE_DIR}', kwargs['mounts'])  # read-write
+        text, mode, folder = world.mounted['reason']
+        self.assertEqual((mode, folder), (0o644, 0o711))  # readable by that uid; a reason, never a secret
+        self.assertEqual(details['stdout'], f'disposal {PLAN}: 12 rows, 3 files\n')  # ids and counts, in the receipt
+        self.assertEqual(details['step'], 'execute')
+        # no other act is ever told the switch is idle
+        world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON', '--by',
+                  'Ada Lovelace')
+        self.assertNotIn('environment', world.oneshots[-1][1])
+
+    def test_each_dispose_step_has_its_command_line(self):
+        world = ManageWorld(self.tmp)
+        authority = ['--authorization-ref', f'{DECLARATION}@{COMMIT}']
+        steps = {
+            ('close', '--workspace-id', WORKSPACE, '--reason-file', 'REASON'):
+                ['--close', '--workspace', WORKSPACE, '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace',
+                 *authority],
+            ('plan', '--workspace-id', WORKSPACE): ['--plan', '--workspace', WORKSPACE, '--by', 'Ada Lovelace', *authority],
+            ('plan', '--encounter-id', PLAN): ['--plan', '--encounter', PLAN, '--by', 'Ada Lovelace', *authority],
+            ('ledger',): ['--ledger', '--by', 'Ada Lovelace', *authority],
+            ('replay-ledger', '--ledger-file', 'LEDGER', '--reason-file', 'REASON'):
+                ['--replay-ledger', '/run/cpt-manage/ledger', '--reason-file', '/run/cpt-manage/reason', '--by',
+                 'Ada Lovelace', *authority],
+        }
+        for (step, *extra), expected in steps.items():
+            with self.subTest(step=step, extra=extra):
+                details = world.run('--command', 'dispose', '--dispose-step', step, *extra, '--by', 'Ada Lovelace')
+                command, kwargs = world.oneshots[-1]
+                self.assertEqual(command, ['manage', 'dispose', *expected])
+                self.assertIn('CPT_STUDIO_SWITCH_STATE=idle', kwargs['environment'])
+        # the replayed ledger travelled as a RAM-only file, its digest in the receipt, never its text
+        self.assertEqual(world.mounted['ledger'][0], '{"ledger": []}\n')
+        self.assertEqual(details['ledger'], {'sha256': hashlib.sha256(b'{"ledger": []}\n').hexdigest(), 'bytes': 15})
+
+    def test_an_export_is_written_into_a_new_folder_that_is_then_root_only(self):
+        world = ManageWorld(self.tmp, output=f'exported {WORKSPACE}: 2 documents\n'.encode())
+        world.export_files = {'manifest.json': b'{}', 'documents/one/record.json': b'{"x": 1}'}
+        details = world.run('--command', 'export-workspace', '--workspace-id', WORKSPACE, '--reason-file', 'REASON',
+                            '--by', 'Ada Lovelace')
+        command, kwargs = world.oneshots[-1]
+        self.assertEqual(command, ['manage', 'export_workspace', '--workspace', WORKSPACE, '--out', '/run/cpt-export',
+                                   '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace',
+                                   '--authorization-ref', f'{DECLARATION}@{COMMIT}'])
+        self.assertNotIn('environment', kwargs)  # an export is told nothing about the switch
+        self.assertIn(f'type=volume,src={install.FILES_VOLUME},dst={install.STATE_DIR},readonly', kwargs['mounts'])
+        folder = details['export']['folder']
+        self.assertRegex(folder, rf'^{install.EXPORTS_DIR}/{WORKSPACE}-\d{{8}}T\d+Z$')
+        self.assertIn(f'type=bind,src={folder},dst={install.EXPORT_MOUNT}', kwargs['mounts'])
+        self.assertEqual(world.helpers, [install.H_EXPORT_DIR, install.H_SEAL_EXPORT])
+        self.assertEqual((details['export']['files'], details['export']['folders'], details['export']['bytes']), (2, 3, 10))
+        # everything in it is root's: the folders 0700 and the files 0600; the base folder too
+        local = self.tmp / 'var-lib' / 'cpt-studio-exports'
+        for path in [local, *local.rglob('*')]:
+            self.assertEqual(world.owner.owners.get(str(path)), (0, 0), path)
+            self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o700 if path.is_dir() else 0o600, path)
+        self.assertEqual(details['stdout'], f'exported {WORKSPACE}: 2 documents\n')
+        self.assertNotIn('record.json', json.dumps(details))  # counted, never named
+
+    def test_an_export_that_fails_is_sealed_root_only_too_and_a_link_in_it_refuses(self):
+        world = ManageWorld(self.tmp, exit_code=1)
+        world.export_files = {'partial.json': b'{'}
+        with self.assertRaisesRegex(install.InstallError, 'failed'):
+            world.run('--command', 'export-workspace', '--workspace-id', WORKSPACE, '--reason-file', 'REASON', '--by',
+                      'Ada Lovelace')
+        self.assertEqual(world.helpers, [install.H_EXPORT_DIR, install.H_SEAL_EXPORT])
+        (partial,) = (self.tmp / 'var-lib' / 'cpt-studio-exports').rglob('partial.json')
+        self.assertEqual(stat.S_IMODE(os.stat(partial).st_mode), 0o600)
+        # a link the command left refuses the seal, and nothing is changed
+        folder = self.tmp / 'var-lib' / 'cpt-studio-exports' / 'linked'
+        folder.mkdir()
+        (folder / 'outside').symlink_to('/etc')
+        world2 = ManageWorld(self.tmp)
+        with self.assertRaisesRegex(install.InstallError, 'neither a folder nor a regular file'):
+            world2.run_helper(install.H_SEAL_EXPORT, {'dir': 'cpt-studio-exports', 'name': 'linked'},
+                              mounts=[install.EXPORTS_MOUNT])
+
+    def test_require_password_change_for_every_human_account(self):
+        world = ManageWorld(self.tmp)
+        world.run('--command', 'require-password-change', '--all-human-accounts', '--reason-file', 'REASON', '--by',
+                  'Ada Lovelace')
+        self.assertEqual(world.acts(), [['manage', 'require_password_change', '--all-human-accounts', '--reason-file',
+                                         '/run/cpt-manage/reason', '--by', 'Ada Lovelace']])
+
+    def test_a_failed_act_fails_the_phase_and_a_bad_reason_file_runs_nothing(self):
+        world = ManageWorld(self.tmp, exit_code=3)
+        with self.assertRaisesRegex(install.InstallError, 'failed \\(exit 3\\)'):
+            world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON', '--by',
+                      'Ada Lovelace')
+        for reason in (b'', b'   \n', b'\xff\xfe', b'x' * 5000):
+            with self.subTest(reason=reason[:8]):
+                world = ManageWorld(self.tmp)
+                with self.assertRaises(install.InstallError):
+                    world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON',
+                              '--by', 'Ada Lovelace', reason=reason)
+                self.assertEqual(world.acts(), [])
+
+    def test_the_enrolment_code_lifetime_is_the_settings_one(self):
+        self.assertEqual(install.ENROLMENT_CODE_SECONDS, ast.literal_eval(str(settings_number('ENROLMENT_CODE_SECONDS'))))
+
+
+def settings_number(name):
+    """A module-level number of cptstudio/settings.py (simple arithmetic allowed; nothing imported)."""
+    for node in ast.parse((APP_ROOT / 'cptstudio' / 'settings.py').read_text(encoding='utf-8')).body:
+        if isinstance(node, ast.Assign) and any(getattr(target, 'id', None) == name for target in node.targets):
+            return eval(compile(ast.Expression(node.value), 'settings', 'eval'), {'__builtins__': {}})  # noqa: S307
+    raise LookupError(name)
 
 
 if __name__ == '__main__':

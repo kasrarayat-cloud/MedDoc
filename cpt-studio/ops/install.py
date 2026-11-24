@@ -219,12 +219,11 @@ INITIAL_CREDENTIALS = 'initial-credentials.json'
 AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/agent-credentials.json')
 # The specialties a workspace may be provisioned for (owner direction 2026-11-22, DECISIONS D390), as manage.py
 # provision names them. Gastroenterology keeps its credentials files; each other specialty has its own pair, so
-# provisioning one never touches another's, and its own review agent (one login serves one workspace until a switcher
-# exists).
+# provisioning one never touches another's. A review agent is opt-in since release 1 (A6): --agent-username names one
+# (the names earlier installs gave them were review-agent, review-agent-neuro and review-agent-ortho; one login serves
+# one workspace until a switcher exists).
 SPECIALTY_NAMES = {'gastroenterology': 'Gastroenterology', 'neurosurgery': 'Neurosurgery',
                    'orthopedic-surgery': 'Orthopedic Surgery'}
-SPECIALTY_AGENTS = {'gastroenterology': 'review-agent', 'neurosurgery': 'review-agent-neuro',
-                    'orthopedic-surgery': 'review-agent-ortho'}
 
 
 def credentials_files(specialty: str) -> tuple:
@@ -232,12 +231,11 @@ def credentials_files(specialty: str) -> tuple:
     if specialty == 'gastroenterology':
         return INITIAL_CREDENTIALS, AGENT_CREDENTIALS
     return f'initial-credentials-{specialty}.json', AGENT_CREDENTIALS.with_name(f'agent-credentials-{specialty}.json')
-# The operators phase's two platform-operator accounts (ops/INSTALL.md, operators): no workspace membership, a grant
-# from `manage grant_operator`. The agent's login is a user file like AGENT_CREDENTIALS; the human's is root-only.
-OPERATOR_ACCOUNTS_SPEC = (('ops-agent', 'agent', 'CPT Studio operations agent'),
-                          ('platform-operator', 'human', 'CPT Studio platform operator'))
-OPERATOR_CREDENTIALS = 'operator-credentials.json'
-OPS_AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/ops-agent-credentials.json')
+# The operators phase's platform-operator account (ops/INSTALL.md, operators): no workspace membership, a grant from
+# `manage grant_operator`. Release 1 (RELEASE-1-SPEC A6; TEC-4, AUTH-1): the human operator ALONE - no automated account
+# is an operator again (the release walk needs none: A11), and no operator login is written to a file (TEC-16 (2)): the
+# operator sets a password with a single-use setup code instead (phase_operators, issue_setup_code).
+OPERATOR_ACCOUNTS_SPEC = (('platform-operator', 'human', 'CPT Studio platform operator'),)
 
 NGINX_AVAILABLE = Path('/etc/nginx/sites-available')
 NGINX_ENABLED = Path('/etc/nginx/sites-enabled')
@@ -526,11 +524,19 @@ PHASE_ARGUMENTS = {
     'owner_username': {'provision'}, 'owner_display_name': {'provision'}, 'agent_username': {'provision'},
     'agent_display_name': {'provision'}, 'workspace_name': {'provision'}, 'specialty': {'provision'},
     'reset_passwords': {'provision', 'operators'},
+    # release 1 (A6): the operators phase's grant and re-grant, provisioning's --by, and the manage phase's ruled acts
+    'by': {'provision', 'operators', 'manage'}, 'review_by': {'operators', 'manage'}, 'regrant': {'operators'},
+    'command': {'manage'}, 'username': {'manage'}, 'reason_file': {'manage'}, 'approved_by': {'manage'},
+    'workspace_id': {'manage'}, 'encounter_id': {'manage'}, 'dispose_step': {'manage'}, 'plan_id': {'manage'},
+    'all_human_accounts': {'manage'}, 'ledger_file': {'manage'},
 }
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description='CPT Studio ruled-mutation installer (one phase per run).')
+    # no abbreviations: an option is named in full or refused (release 1: '--encounter' must never be taken for
+    # '--encounter-id', nor any other prefix for an option of a ruled act)
+    parser = argparse.ArgumentParser(description='CPT Studio ruled-mutation installer (one phase per run).',
+                                     allow_abbrev=False)
     parser.add_argument('--phase', required=True, choices=list(PHASES))
     parser.add_argument('--revision', required=True)
     parser.add_argument('--receipts', required=True)
@@ -566,6 +572,22 @@ def parse_args(argv=None):
     parser.add_argument('--specialty', choices=sorted(SPECIALTY_NAMES),
                         help='provision: the workspace\'s specialty (default gastroenterology; D390)')
     parser.add_argument('--reset-passwords', action='store_true', default=None)
+    # release 1 (A6): who runs an act (a person, never a role), a grant's review date, a re-grant of a revoked
+    # operator, and the manage phase's allow-listed ruled acts (MANAGE_COMMANDS)
+    parser.add_argument('--by', help='provision, operators, manage: the person who runs this act (never a role)')
+    parser.add_argument('--review-by', help='operators, manage grant-operator: the date the grant is reviewed by')
+    parser.add_argument('--regrant', help='operators: grant this revoked account again (its declaration names it)')
+    parser.add_argument('--command', choices=sorted(MANAGE_COMMANDS), help='manage: the ruled act to run')
+    parser.add_argument('--username', help='manage: the account the act is for')
+    parser.add_argument('--reason-file', help='manage: an absolute path to the reason, a short UTF-8 text file')
+    parser.add_argument('--approved-by', help='manage dispose --dispose-step execute: the approving person (D14)')
+    parser.add_argument('--workspace-id', help='manage dispose, export-workspace: the practice (a UUID)')
+    parser.add_argument('--encounter-id', help='manage dispose --dispose-step plan: one document (a UUID)')
+    parser.add_argument('--dispose-step', choices=DISPOSE_STEPS, help='manage dispose: the step')
+    parser.add_argument('--ledger-file', help='manage dispose --dispose-step replay-ledger: the ledger to replay')
+    parser.add_argument('--plan-id', help='manage dispose --dispose-step execute: the plan to carry out (a UUID)')
+    parser.add_argument('--all-human-accounts', action='store_true', default=None,
+                        help='manage require-password-change: every human account (D22; never an automated one)')
     args = parser.parse_args(argv)
     problem = argument_problem(args)
     if problem:
@@ -575,7 +597,7 @@ def parse_args(argv=None):
     # --interpreter-mode and --coding-mode stay None when they are not given (interpreter_mode and coding_mode read that
     # as disabled); app refuses to run without an explicit --coding-mode (argument_problem)
     args.specialty = args.specialty or 'gastroenterology'
-    args.agent_username = args.agent_username or SPECIALTY_AGENTS[args.specialty]
+    # release 1 (A6; TEC-4 (5), ORG-20 (5)): a review agent is opt-in - created only when --agent-username names one
     args.agent_display_name = args.agent_display_name or 'CPT Studio review agent'
     args.owner_display_name = args.owner_display_name or ''
     # an absent name is the specialty's; an explicit empty one is refused (argument_problem), never read as absent: an
@@ -617,6 +639,22 @@ def argument_problem(args) -> str:
             problem = retrieved_at_problem(value)
             if problem:
                 return problem
+    if args.phase == 'manage':
+        problem = manage_problem(args)
+        if problem:
+            return problem
+    if args.phase == 'operators':
+        for name in ('by',):
+            if getattr(args, name, None) is not None:
+                problem = person_problem(getattr(args, name), '--by')
+                if problem:
+                    return problem
+        if getattr(args, 'review_by', None) is not None:
+            problem = review_by_problem(args.review_by)
+            if problem:
+                return problem
+        if getattr(args, 'regrant', None) is not None and not USERNAME_RE.fullmatch(args.regrant):
+            return f'--regrant must match {USERNAME_RE.pattern}.'
     if args.phase in ('app', 'switch-back'):
         coding = getattr(args, 'coding_mode', None)
         if args.phase == 'app' and coding is None:
@@ -650,12 +688,15 @@ def argument_problem(args) -> str:
     if args.phase == 'provision':
         if not args.owner_username:
             return '--phase provision needs --owner-username.'
-        agent = args.agent_username or SPECIALTY_AGENTS[args.specialty or 'gastroenterology']
-        for value in (args.owner_username, agent):
+        agent = args.agent_username  # release 1 (A6): opt-in, no default
+        for value in (args.owner_username, *([agent] if agent is not None else [])):
             if not USERNAME_RE.fullmatch(value):
                 return f'Username {value!r} must match {USERNAME_RE.pattern}.'
         if args.owner_username == agent:
             return 'The owner and agent usernames must differ.'
+        problem = person_problem(args.by, '--by')  # C3: provisioning records who ran it
+        if problem:
+            return problem
         if args.workspace_name is not None and not args.workspace_name.split():
             return '--workspace-name is empty.'
         for value in (args.owner_display_name, args.agent_display_name, args.workspace_name):
@@ -809,6 +850,7 @@ class Context:
         self.receipts = receipts
         self.stamp = stamp()
         self._logs = 0
+        self.door = None  # main's check_door record: the declaration this run is bound to (door_of)
 
     def log(self, label, data: bytes) -> str:
         self._logs += 1
@@ -7349,37 +7391,49 @@ def provision_outcome(stdout: str, expected: dict) -> dict:
 
 
 def phase_provision(ctx) -> dict:
+    """A specialty's workspace, its owner and - only when --agent-username names one (release 1, A6; TEC-4 (5), ORG-20
+    (5)) - a review agent. Passwords are made here and travel to the one-shot as RAM-only files; the owner's login is
+    the root-only initial credentials file, an agent's (when there is one) this user's 0600 file. The owner's password is
+    one staff set, so provision is given --require-password-change (B4): the owner chooses a new one at the first
+    sign-in, within STAFF_PASSWORD_UNUSED_SECONDS. --by names the person who ran it (C3)."""
     args, reset = ctx.args, bool(ctx.args.reset_passwords)
     image_id = installed_image(ctx)
     require_db()
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
     specialty = getattr(args, 'specialty', None) or 'gastroenterology'
     final, agent_credentials = credentials_files(specialty)
+    agent = getattr(args, 'agent_username', None) or None
     names = {'final': final}
     state = root_file('state', **names)
     agent_staged = agent_credentials.with_name(f'.{agent_credentials.name}.new')
     if state['staged_exists'] or agent_staged.exists():
         raise InstallError(f'Staged credentials from an interrupted run exist ({ETC_DIR}/.{final}.new or {agent_staged}); '
                            f'resolve them by hand first.')
-    if not reset and (state['final_exists'] or agent_credentials.exists()):
-        raise InstallError(f'Credentials files already exist ({ETC_DIR}/{final}, {agent_credentials}); use '
-                           f'--reset-passwords to rotate them - for this specialty\'s accounts only: the installer keeps '
-                           f'one workspace per specialty.')
-    expected = {args.owner_username: ('human', 'owner'), args.agent_username: ('agent', 'reviewer')}
-    passwords = {args.owner_username: secrets.token_urlsafe(24), args.agent_username: secrets.token_urlsafe(24)}
+    if not reset and (state['final_exists'] or (agent is not None and agent_credentials.exists())):
+        raise InstallError(f'Credentials files already exist ({ETC_DIR}/{final}'
+                           + (f', {agent_credentials}' if agent is not None else '') + '); use --reset-passwords to '
+                           'rotate them - for this specialty\'s accounts only: the installer keeps one workspace per '
+                           'specialty.')
+    expected = {args.owner_username: ('human', 'owner')}
+    if agent is not None:
+        expected[agent] = ('agent', 'reviewer')
+    passwords = {user: secrets.token_urlsafe(24) for user in expected}
     accounts = [{'username': user, 'actor_kind': kind, 'role': role, 'password': passwords[user]}
                 for user, (kind, role) in expected.items()]
     root_bytes = json.dumps(credentials_document(ctx, accounts), indent=2).encode()
-    agent_bytes = json.dumps(credentials_document(ctx, accounts[1:]), indent=2).encode()
-    agent_credentials.parent.mkdir(mode=0o700, exist_ok=True)
-    folder = agent_credentials.parent.lstat()
-    if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != os.getuid() or stat.S_IMODE(folder.st_mode) != 0o700:
-        raise InstallError(f'{agent_credentials.parent} must be a directory owned by this user with mode 0700.')
+    agent_bytes = (json.dumps(credentials_document(ctx, [item for item in accounts if item['username'] == agent]),
+                              indent=2).encode() if agent is not None else None)
+    if agent is not None:
+        agent_credentials.parent.mkdir(mode=0o700, exist_ok=True)
+        folder = agent_credentials.parent.lstat()
+        if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != os.getuid() or stat.S_IMODE(folder.st_mode) != 0o700:
+            raise InstallError(f'{agent_credentials.parent} must be a directory owned by this user with mode 0700.')
     # Password files live in RAM only (/dev/shm) and are wiped whatever happens.
     scratch = Path(tempfile.mkdtemp(prefix='cpt-studio-provision-', dir='/dev/shm'))
     try:
         root_file('stage', content=base64.b64encode(root_bytes).decode(), **names)
-        write_private(agent_staged.parent, agent_staged.name, agent_bytes)
+        if agent is not None:
+            write_private(agent_staged.parent, agent_staged.name, agent_bytes)
         mounts = []
         for user in expected:
             write_private(scratch, f'{user}.pw', passwords[user].encode())
@@ -7388,13 +7442,17 @@ def phase_provision(ctx) -> dict:
         # as that name (refutation N7-1-7)
         command = ['manage', 'provision', '--specialty', specialty, f'--workspace-name={args.workspace_name}',
                    '--owner-username', args.owner_username, f'--owner-display-name={args.owner_display_name}',
-                   '--owner-password-file', f'/run/cpt-provision/{args.owner_username}.pw',
-                   '--agent-username', args.agent_username, f'--agent-display-name={args.agent_display_name}',
-                   '--agent-password-file', f'/run/cpt-provision/{args.agent_username}.pw']
+                   '--owner-password-file', f'/run/cpt-provision/{args.owner_username}.pw']
+        if agent is not None:
+            command += ['--agent-username', agent, f'--agent-display-name={args.agent_display_name}',
+                        '--agent-password-file', f'/run/cpt-provision/{agent}.pw']
+        # release 1: the password is one staff set, which the owner replaces at the first sign-in (B4), and the run
+        # names who ran it (C3)
+        command += ['--require-password-change', f'--by={args.by}']
         if reset:
             command.append('--reset-passwords')
-        result = oneshot(image_id, command, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}')
-        assert_no_secret([result.stdout, result.stderr], passwords.values())
+        result = oneshot(image_id, command, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}', by=args.by)
+        assert_no_secret([result.stdout, result.stderr], [*passwords.values(), *env_values(env)])
         log = ctx.log('provision', result.stdout + result.stderr)
         if result.returncode:
             raise InstallError(f'provision failed (exit {result.returncode}); see {log}.')
@@ -7403,11 +7461,12 @@ def phase_provision(ctx) -> dict:
             raise InstallError('An account already existed, so its password was not set; nothing was saved. '
                                'Rerun with --reset-passwords to rotate.')
         root_file('commit', replace=reset, **names)
-        if reset:
-            os.replace(agent_staged, agent_credentials)
-        else:
-            os.link(agent_staged, agent_credentials)
-            agent_staged.unlink()
+        if agent is not None:
+            if reset:
+                os.replace(agent_staged, agent_credentials)
+            else:
+                os.link(agent_staged, agent_credentials)
+                agent_staged.unlink()
     except BaseException:
         root_file('discard', sha256=sha256(root_bytes), **names)
         agent_staged.unlink(missing_ok=True)
@@ -7418,19 +7477,21 @@ def phase_provision(ctx) -> dict:
             path.unlink()
         scratch.rmdir()
     return {'accounts': outcome, 'specialty': specialty, 'root_credentials': f'{ETC_DIR}/{final}',
-            'agent_credentials': str(agent_credentials), 'log': log, 'reset_passwords': reset,
-            'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())}
+            'agent_credentials': str(agent_credentials) if agent is not None else None, 'log': log,
+            'reset_passwords': reset, 'require_password_change': True, 'by': args.by,
+            'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())
+                       + ('' if agent is not None else '; no review agent (opt-in: --agent-username)')}
 
 
 # The operators phase's in-image scripts (run by `manage shell -c` in this revision's image, as app_script runs them).
-# OPERATOR_ACCOUNTS creates each platform-operator account with NO workspace membership - an operator's access is the
-# grant alone (studio.operator), never a workspace role - or keeps it; it refuses, changing nothing, an account that
-# exists with another actor kind or holds any membership (a member account is never made an operator by the installer).
-# A password is set from its mounted RAM-only file when the account is created, or for every account with reset; no
-# value is printed. One transaction: a refusal leaves every account as it was.
+# Release 1 (RELEASE-1-SPEC A6; TEC-4, TEC-16 (2)): the human platform operator alone, and no operator password is ever
+# written to a file. OPERATOR_ACCOUNTS creates each OPERATOR_ACCOUNTS_SPEC account with NO workspace membership - an
+# operator's access is the grant alone (studio.operator), never a workspace role - and an UNUSABLE password, or keeps
+# it as it is; with reset (--reset-passwords) it makes the existing password unusable. Either way the operator then
+# sets a password, with a single-use setup code the installer issues, on admin.quillmd.com (B2, B4). It refuses,
+# changing nothing, an account that exists with another actor kind or holds any membership (a member account is never
+# made an operator by the installer). No value is printed. One transaction: a refusal leaves every account as it was.
 OPERATOR_ACCOUNTS = '''
-from pathlib import Path
-from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from studio import models
 done = {}
@@ -7446,17 +7507,15 @@ with transaction.atomic():
             raise SystemExit('account ' + spec['username'] + ' holds a workspace membership, so the installer does '
                              'not make it an operator; nothing was changed')
         if created or P['reset']:
-            password = Path(spec['password_file']).read_text(encoding='utf-8').strip()
-            if not password:
-                raise SystemExit('a password file is empty; nothing was changed')
-            validate_password(password, user)
-            user.set_password(password)
+            user.set_unusable_password()
             user.save()
         done[spec['username']] = 'created' if created else ('reset' if P['reset'] else 'kept')
 print(ANSWER + json.dumps({'accounts': done}))
 '''
-# Read back after the grants: each account an operator by studio.operator.is_operator (the grant, never a membership),
-# with no membership, of its actor kind.
+# Read before and after the grants: each account's operator state by studio.operator.is_operator (the grant, never a
+# membership), its memberships, actor kind and whether it is active, and - release 1 (A6; ADM-10 3(i)) - whether any
+# grant of it was ever revoked: a revoked account stays revoked unless a run passes --regrant under a declaration that
+# names that grant.
 OPERATOR_CHECK = '''
 from studio import models
 from studio.operator import is_operator
@@ -7464,150 +7523,565 @@ found = {}
 for username in P['usernames']:
     user = models.User.objects.get(username=username)
     found[username] = {'operator': bool(is_operator(user)), 'memberships': user.memberships.count(),
-                       'actor_kind': user.actor_kind, 'active': user.is_active}
+                       'actor_kind': user.actor_kind, 'active': user.is_active,
+                       'revoked': models.OperatorRevocation.objects.filter(grant__user=user).exists()}
 print(ANSWER + json.dumps({'accounts': found}))
 '''
-
-
-def operator_document(ctx, username, kind, password) -> dict:
-    """One operator account's login: top-level username and password (what the verification tools read). The console's
-    address is the admin host's (D396; refutation INSTALLER-11); cpt.quillmd.com/ops/ is kept beside it while both
-    hosts serve the console."""
-    return {'service': 'cpt-studio', 'url': f'https://{DOMAIN}/', 'operator_url': f'https://{ADMIN_HOST}/ops/',
-            'operator_url_cpt': f'https://{DOMAIN}/ops/',
-            'synthetic_only': True, 'revision': ctx.revision, 'created_at': utc_now(), 'username': username,
-            'password': password, 'actor_kind': kind, 'access': 'platform operator: an operator grant, no workspace '
-                                                                'membership'}
-
-
-def operator_granted_by() -> str:
-    """Who records the operator grants (grant_operator --by): this installer and the host login that ran it. Passed
-    explicitly (refutation r2, L6-2): the one-shot runs as this user's uid so it can read the 0600 reason file, and the
-    image has no passwd entry for it, where the command's own default once looked the login up and failed."""
-    try:
-        login = getpass.getuser()
-    except Exception:  # noqa: BLE001 — no passwd entry here either: the uid says who
-        login = f'uid {os.getuid()}'
-    return f'ops/install.py --phase operators ({login})'[:120]
+# Release 1 (A6, B2): the single-use setup code an operator enrols with - generated here, handed to the application's
+# command as a RAM-only file (only its sha256 reaches the database), kept root-only in OPERATOR_ENROLMENT through the
+# root helper, never printed, logged or put in a receipt. ENROLMENT_CODE_SECONDS is cptstudio/settings.py's (a test pins
+# the two). Today's operator password file (LEGACY_OPERATOR_CREDENTIALS) and ops-agent's login (LEGACY_AGENT_LOGIN) are
+# no longer written; one left on the host stays untouched and is reported: deleting either is the owner's decision
+# (D11, D12).
+OPERATOR_ENROLMENT = 'operator-enrolment.json'
+ENROLMENT_CODE_SECONDS = 1800
+LEGACY_OPERATOR_CREDENTIALS = f'{ETC_DIR}/operator-credentials.json'
+LEGACY_AGENT_LOGIN = Path('/home/claude/.cpt-studio/ops-agent-credentials.json')
+MANAGE_MOUNT = '/run/cpt-manage'  # where a ruled act's RAM-only reason and code files are mounted
+REASON_LIMIT = 4096
+# A --by name is a person, never a role (C3): the words a role would be named by are refused here too.
+ROLE_WORDS = frozenset({'operator', 'operators', 'admin', 'administrator', 'root', 'installer', 'agent', 'ops-agent',
+                        'system', 'owner', 'reviewer', 'viewer', 'platform-operator'})
+UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 
 
 def operator_reason(ctx, username, kind) -> str:
     return (f'Platform-operator diagnostics access for the CPT Studio {kind} account {username} (owner directive '
             '2026-11-03, section 2: operator diagnostics stay available to authenticated platform operators and are '
             'never conferred by a workspace role). Granted by ops/install.py --phase operators for revision '
-            f'{ctx.revision} under the ruled-mutation declaration '
-            f'{os.environ.get("RULED_MUTATION_DECLARATION", "")} ({os.environ.get("RULED_MUTATION_DECL_COMMIT", "")}).'
-            '\n')
+            f'{ctx.revision} under the ruled-mutation declaration {door_of(ctx)["declaration"]} '
+            f'({door_of(ctx)["declaration_commit"]}).\n')
+
+
+def door_of(ctx) -> dict:
+    """The declaration this run is bound to - main's check_door record, else (a phase called directly) the door's two
+    variables."""
+    door = getattr(ctx, 'door', None)
+    if isinstance(door, dict) and door.get('declaration') and door.get('declaration_commit'):
+        return door
+    return {'declaration': os.environ.get('RULED_MUTATION_DECLARATION', ''),
+            'declaration_commit': os.environ.get('RULED_MUTATION_DECL_COMMIT', '')}
+
+
+def authorization_of(ctx) -> str:
+    """The approval a grant rests on (C3; ADM-13): '<declaration>@<its commit>', the committed ruled-act declaration
+    this run is bound to."""
+    door = door_of(ctx)
+    if not door['declaration'] or not SHA_RE.fullmatch(door['declaration_commit']):
+        raise InstallError('A grant names its approval - the declaration this run is bound to - and none is known.')
+    return f'{door["declaration"]}@{door["declaration_commit"]}'
+
+
+def declaration_names(ctx, words) -> bool:
+    """Whether the committed declaration this run is bound to names ``words`` (A6: a re-grant is named there)."""
+    try:
+        return words in (ROOT / door_of(ctx)['declaration']).read_text(encoding='utf-8')
+    except (OSError, UnicodeDecodeError, ValueError):
+        return False
+
+
+def person_problem(value, flag) -> str:
+    """'' when ``value`` names a person (C3: --by and --approved-by name people, never a role), else the refusal."""
+    if not value or not value.strip():
+        return f'{flag} must name the person who runs this act.'
+    if not DISPLAY_RE.fullmatch(value) or len(value) > 80:
+        return f'{flag} may use letters, digits, spaces and .,\'()- only (80 at most).'
+    if value.strip().casefold() in ROLE_WORDS:
+        return f'{flag} names a role ({value.strip()!r}), not a person.'
+    return ''
+
+
+def review_by_problem(value) -> str:
+    """'' when ``value`` is a review date (C3: an ISO date after today, at most 12 months away), else the refusal."""
+    try:
+        date = dt.date.fromisoformat(value or '')
+    except ValueError:
+        return '--review-by must be a date, YYYY-MM-DD.'
+    today = dt.datetime.now(dt.timezone.utc).date()
+    if not today < date <= today + dt.timedelta(days=366):
+        return '--review-by must be after today and at most 12 months away.'
+    return ''
+
+
+def env_values(env: bytes) -> list:
+    """The values of a protected environment file's lines (validate_env_text's form), for assert_no_secret: the
+    application's secret key and database password must never appear in what a one-shot printed."""
+    values = []
+    for line in env.decode('utf-8', 'replace').splitlines():
+        name, sep, value = line.partition('=')
+        if sep and value:
+            values.append(value)
+    return values
+
+
+def read_reason_file(path) -> bytes:
+    """A ruled act's reason (A6): a regular file, never a link, of UTF-8 text, not empty, at most REASON_LIMIT bytes. Its
+    bytes go to the command as a RAM-only file; the receipt keeps its sha256 and size, never its text."""
+    given = Path(path or '')
+    if not given.is_absolute():
+        raise InstallError('--reason-file must be an absolute path.')
+    try:
+        info = os.lstat(given)
+    except OSError:
+        raise InstallError('--reason-file cannot be read.') from None
+    if not stat.S_ISREG(info.st_mode) or info.st_size > REASON_LIMIT:
+        raise InstallError(f'--reason-file must be a regular file of at most {REASON_LIMIT} bytes.')
+    data = given.read_bytes()
+    try:
+        text = data.decode('utf-8')
+    except UnicodeDecodeError:
+        raise InstallError('--reason-file is not UTF-8 text.') from None
+    if not text.strip():
+        raise InstallError('--reason-file is empty.')
+    return data
+
+
+class RamFiles:
+    """A RAM-only folder under /dev/shm for a ruled act's files, wiped and removed whatever happens. ``shared`` makes
+    it readable by the one-shot's own uid (10150) - a folder 0711 and files 0644 under a random name - for a reason
+    file only, never a secret; otherwise it is private (0700, files 0600) to this user."""
+
+    def __init__(self, prefix, *, shared=False):
+        self.path = Path(tempfile.mkdtemp(prefix=prefix, dir='/dev/shm'))
+        self.shared = shared
+        if shared:
+            os.chmod(self.path, 0o711)
+
+    def add(self, name, data: bytes, destination) -> str:
+        written = write_private(self.path, name, data)
+        if self.shared:
+            os.chmod(written, 0o644)
+        return f'type=bind,src={written},dst={destination},readonly'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        for path in self.path.iterdir():
+            path.write_bytes(b'\0' * max(64, path.stat().st_size))
+            path.unlink()
+        self.path.rmdir()
+        return False
+
+
+def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra=()) -> dict:
+    """A6/B2: a single-use setup code for ``username`` - generated here; passed to the application's ``command``
+    (issue_enrolment, or reset_second_factor, which issues a new one) as a RAM-only --code-file so that only its sha256
+    reaches the database; committed root-only to /etc/cpt-studio/OPERATOR_ENROLMENT through the root helper (staged
+    first, discarded if the command fails). The code never appears in an argument, the output kept, a log or a
+    receipt (assert_no_secret). {'command', 'exit', 'log', 'file', 'valid_seconds'}."""
+    code = secrets.token_urlsafe(24)
+    document = json.dumps({'service': 'cpt-studio', 'url': f'https://{ADMIN_HOST}/login/enrol', 'username': username,
+                           'code': code, 'issued_at': utc_now(), 'valid_seconds': ENROLMENT_CODE_SECONDS,
+                           'revision': ctx.revision, 'synthetic_only': True}, indent=2).encode()
+    names = {'final': OPERATOR_ENROLMENT, 'staged': f'.{OPERATOR_ENROLMENT}.new'}
+    if root_file('state', **names)['staged_exists']:
+        raise InstallError(f'A staged {OPERATOR_ENROLMENT} from an interrupted run exists; resolve it by hand first.')
+    root_file('stage', content=base64.b64encode(document).decode(), **names)
+    committed = False
+    try:
+        with RamFiles('cpt-studio-manage-') as ram:
+            mounts = [ram.add('code', code.encode(), f'{MANAGE_MOUNT}/code'),
+                      ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')]
+            argv = ['manage', command, '--username', username, '--code-file', f'{MANAGE_MOUNT}/code', '--reason-file',
+                    f'{MANAGE_MOUNT}/reason', '--by', by, *extra]
+            result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
+                             what=f'manage {command}', by=by)
+        assert_no_secret([result.stdout, result.stderr], [code, *env_values(env)])
+        log = ctx.log(command.replace('_', '-'), result.stdout + result.stderr)
+        if result.returncode:
+            raise InstallError(f'manage {command} failed (exit {result.returncode}); see {log}. No setup code was kept.')
+        root_file('commit', replace=True, **names)
+        committed = True
+    finally:
+        if not committed:
+            root_file('discard', sha256=sha256(document), **names)
+    return {'command': command, 'exit': result.returncode, 'log': log, 'file': f'{ETC_DIR}/{OPERATOR_ENROLMENT}',
+            'valid_seconds': ENROLMENT_CODE_SECONDS, 'stdout': result.stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:]}
+
+
+def legacy_operator_files() -> dict:
+    """D11, D12: the operator password file and ops-agent's login today's installer wrote - left untouched (deleting a
+    credential is the owner's decision) and reported: {'path': 'present' | 'absent' | 'not read'}."""
+    found = {}
+    try:
+        stat_answer = helper_stat([LEGACY_OPERATOR_CREDENTIALS])
+        entry = stat_answer.get(LEGACY_OPERATOR_CREDENTIALS) if isinstance(stat_answer, dict) else None
+        found[LEGACY_OPERATOR_CREDENTIALS] = ('not read' if not isinstance(entry, dict)
+                                             else 'present' if entry.get('exists') else 'absent')
+    except InstallError:
+        found[LEGACY_OPERATOR_CREDENTIALS] = 'not read'
+    found[str(LEGACY_AGENT_LOGIN)] = 'present' if os.path.lexists(LEGACY_AGENT_LOGIN) else 'absent'
+    return found
 
 
 def phase_operators(ctx) -> dict:
-    """The two platform-operator accounts (ops/INSTALL.md, operators): ops-agent, an automated agent (the verification
-    tools' operator session), and platform-operator, a human - each with no workspace membership and an operator grant.
-    Passwords are made and kept as the initial credentials are (phase_provision): generated here, travelling only as
-    RAM-only files under /dev/shm into one-shots of this revision's image, never in argv, output or receipts. The agent's
-    login is this user's 0600 OPS_AGENT_CREDENTIALS (top-level username and password); the human's is the root-only 0600
-    /etc/cpt-studio/operator-credentials.json, written through the root helper. Both files are committed once the
-    accounts hold their passwords; each account is then granted by the application's own command, `manage
-    grant_operator --username U --reason-file F`, and read back (OPERATOR_CHECK): an operator, with no membership."""
-    reset = bool(ctx.args.reset_passwords)
+    """The human platform operator (ops/INSTALL.md, operators; release 1, A6): OPERATOR_ACCOUNTS_SPEC holds no
+    automated account, and no operator password is written to a file. The account is created with no workspace
+    membership and an unusable password - or kept as it is; --reset-passwords makes its password unusable - and is then
+    granted by the application's own command, `manage grant_operator` with --by (a person), --review-by and the
+    declaration as its --authorization-ref (C3), when it is not an operator already. An account any of whose grants was
+    revoked is never granted again unless the run passes --regrant <username> and the declaration names that re-grant.
+    It is read back (OPERATOR_CHECK): an active human operator with no membership. An account created or reset then gets
+    a single-use setup code (issue_setup_code): the operator sets a password and enrols a security key with it on
+    admin.quillmd.com (B2, B4)."""
+    args = ctx.args
+    reset, regrant = bool(getattr(args, 'reset_passwords', None)), getattr(args, 'regrant', None)
+    by, review_by = getattr(args, 'by', None), getattr(args, 'review_by', None)
     image_id = installed_image(ctx)
     require_db()
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
     # Refutation r2, L6-2: the operator grant is this revision's table (migration 0010), so the phase refuses -
-    # creating no account and no file - until the app phase has applied this revision's migrations.
+    # creating no account - until the app phase has applied this revision's migrations.
     pending = oneshot(image_id, ['manage', 'migrate', '--check'], env, timeout=120)
     if pending.returncode:
         raise InstallError(f'This revision\'s migrations are not all applied (manage migrate --check exited '
-                           f'{pending.returncode}): run --phase app first. No account or file was created.')
-    names = {'final': OPERATOR_CREDENTIALS, 'staged': f'.{OPERATOR_CREDENTIALS}.new'}
-    state = root_file('state', **names)
-    agent_staged = OPS_AGENT_CREDENTIALS.with_name(f'.{OPS_AGENT_CREDENTIALS.name}.new')
-    if state['staged_exists'] or agent_staged.exists():
-        raise InstallError('Staged operator credentials from an interrupted run exist; resolve them by hand first.')
-    if not reset and (state['final_exists'] or OPS_AGENT_CREDENTIALS.exists()):
-        raise InstallError('Operator credentials files already exist; use --reset-passwords to rotate them.')
+                           f'{pending.returncode}): run --phase app first. No account was created.')
     spec = {username: (kind, display) for username, kind, display in OPERATOR_ACCOUNTS_SPEC}
-    passwords = {username: secrets.token_urlsafe(24) for username in spec}
-    documents = {username: json.dumps(operator_document(ctx, username, kind, passwords[username]), indent=2).encode()
-                 for username, (kind, _) in spec.items()}
-    agent = next(username for username, (kind, _) in spec.items() if kind == 'agent')
-    human = next(username for username, (kind, _) in spec.items() if kind == 'human')
-    OPS_AGENT_CREDENTIALS.parent.mkdir(mode=0o700, exist_ok=True)
-    folder = OPS_AGENT_CREDENTIALS.parent.lstat()
-    if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != os.getuid() or stat.S_IMODE(folder.st_mode) != 0o700:
-        raise InstallError(f'{OPS_AGENT_CREDENTIALS.parent} must be a directory owned by this user with mode 0700.')
-    user = f'{os.getuid()}:{os.getgid()}'
-    committed = False
-    # Password and reason files live in RAM only (/dev/shm) and are wiped whatever happens.
-    scratch = Path(tempfile.mkdtemp(prefix='cpt-studio-operators-', dir='/dev/shm'))
-    try:
-        root_file('stage', content=base64.b64encode(documents[human]).decode(), **names)
-        write_private(agent_staged.parent, agent_staged.name, documents[agent])
-        mounts, accounts = [], []
-        for username, (kind, display) in spec.items():
-            write_private(scratch, f'{username}.pw', passwords[username].encode())
-            mounts.append(f'type=bind,src={scratch / (username + ".pw")},dst=/run/cpt-operators/{username}.pw,readonly')
-            accounts.append({'username': username, 'kind': kind, 'display_name': display,
-                             'password_file': f'/run/cpt-operators/{username}.pw'})
-        try:
-            answer = app_script(image_id, env, OPERATOR_ACCOUNTS, {'accounts': accounts, 'reset': reset},
-                                what='Creating the operator accounts', mounts=mounts, user=user)
-        except InstallError as error:
-            assert_no_secret([error.output, str(error).encode()], passwords.values())
-            raise
-        outcome = answer.get('accounts') if isinstance(answer, dict) else None
-        if not isinstance(outcome, dict) or sorted(outcome) != sorted(spec):
-            raise InstallError('The operator accounts script did not name both accounts; nothing was saved.')
-        if not reset and set(outcome.values()) != {'created'}:
-            raise InstallError('An operator account already existed, so its password was not set; nothing was saved. '
-                               'Rerun with --reset-passwords to rotate.', details={'accounts': outcome})
-        root_file('commit', replace=reset, **names)
-        if reset:
-            os.replace(agent_staged, OPS_AGENT_CREDENTIALS)
-        else:
-            os.link(agent_staged, OPS_AGENT_CREDENTIALS)
-            agent_staged.unlink()
-        committed = True
-        grants, granted_by = {}, operator_granted_by()
-        for username, (kind, _) in spec.items():
-            write_private(scratch, f'{username}.reason', operator_reason(ctx, username, kind).encode())
+    if regrant is not None and regrant not in spec:
+        raise InstallError(f'--regrant names {regrant!r}, which is not an operator account of this installer.')
+    answer = app_script(image_id, env, OPERATOR_ACCOUNTS, {'reset': reset, 'accounts': [
+        {'username': username, 'kind': kind, 'display_name': display} for username, (kind, display) in spec.items()]},
+        what='Creating the operator accounts')
+    outcome = answer.get('accounts') if isinstance(answer, dict) else None
+    if not isinstance(outcome, dict) or sorted(outcome) != sorted(spec):
+        raise InstallError('The operator accounts script did not name every account.', details={'answer': answer})
+    before = app_script(image_id, env, OPERATOR_CHECK, {'usernames': sorted(spec)}, what='Reading the operator accounts')
+    before = before.get('accounts') if isinstance(before, dict) else None
+    if not isinstance(before, dict) or sorted(before) != sorted(spec):
+        raise InstallError('The operator accounts did not read back.', details={'accounts': outcome, 'check': before})
+    grants = {}
+    for username, (kind, _) in spec.items():
+        if before[username].get('operator') is True:
+            grants[username] = 'already an operator'
+            continue
+        if before[username].get('revoked') is not False:
+            # revoked stays revoked (A6; ADM-10 3(i)), and an answer that does not say is never read as "not revoked"
+            if regrant != username or not declaration_names(ctx, f'--regrant {username}'):
+                raise InstallError(f'{username} was revoked as an operator, and a revoked grant stays revoked: '
+                                   f'nothing was granted. To grant it again, run with --regrant {username} under a '
+                                   f'declaration that names "--regrant {username}".',
+                                   details={'accounts': outcome, 'check': before})
+        problem = person_problem(by, '--by') or review_by_problem(review_by)
+        if problem:
+            raise InstallError(f'Granting {username} needs --by (the person running it) and --review-by (C3): '
+                               f'{problem} Nothing was granted.', details={'accounts': outcome})
+        with RamFiles('cpt-studio-operators-') as ram:
+            mount = ram.add(f'{username}.reason', operator_reason(ctx, username, kind).encode(),
+                            f'{MANAGE_MOUNT}/{username}.reason')
             result = oneshot(image_id, ['manage', 'grant_operator', '--username', username, '--reason-file',
-                                        f'/run/cpt-operators/{username}.reason', '--by', granted_by], env, user=user,
-                             mounts=[f'type=bind,src={scratch / (username + ".reason")},'
-                                     f'dst=/run/cpt-operators/{username}.reason,readonly'])
-            assert_no_secret([result.stdout, result.stderr], passwords.values())
-            grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}',
-                                                                          result.stdout + result.stderr)}
-        failed = [username for username, grant in grants.items() if grant['exit']]
-        if failed:
-            raise InstallError(f'manage grant_operator failed for {", ".join(failed)} (see the logs); the accounts and '
-                               'their credentials files are in place, so rerun --phase operators --reset-passwords '
-                               'once it is fixed.', details={'accounts': outcome, 'grants': grants})
-        check = app_script(image_id, env, OPERATOR_CHECK, {'usernames': sorted(spec)},
-                           what='Reading the operator accounts back')
-        found = check.get('accounts') if isinstance(check, dict) else None
-        problems = [username for username, (kind, _) in spec.items()
-                    if not isinstance(found, dict) or not isinstance(found.get(username), dict)
-                    or found[username].get('operator') is not True or found[username].get('memberships') != 0
-                    or found[username].get('actor_kind') != kind or found[username].get('active') is not True]
-        if problems:
-            raise InstallError(f'{", ".join(problems)} did not read back as an active operator with no membership; '
-                               'the accounts and their credentials files are in place.',
-                               details={'accounts': outcome, 'grants': grants, 'check': found})
-    except BaseException:
-        if not committed:
-            root_file('discard', sha256=sha256(documents[human]), **names)
-            agent_staged.unlink(missing_ok=True)
-        raise
-    finally:
-        for path in scratch.iterdir():
-            path.write_bytes(b'\0' * 64)
-            path.unlink()
-        scratch.rmdir()
-    return {'accounts': outcome, 'grants': grants, 'check': found, 'reset_passwords': reset,
-            'operator_credentials': f'{ETC_DIR}/{OPERATOR_CREDENTIALS}', 'agent_credentials': str(OPS_AGENT_CREDENTIALS),
+                                        f'{MANAGE_MOUNT}/{username}.reason', '--by', by, '--authorization-ref',
+                                        authorization_of(ctx), '--review-by', review_by], env,
+                             user=f'{os.getuid()}:{os.getgid()}', mounts=[mount], what='manage grant_operator', by=by)
+        assert_no_secret([result.stdout, result.stderr], env_values(env))
+        grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}', result.stdout + result.stderr)}
+        if result.returncode:
+            raise InstallError(f'manage grant_operator failed for {username} (see the log); the account is in place: '
+                               'rerun --phase operators once it is fixed.', details={'accounts': outcome,
+                                                                                    'grants': grants})
+    check = app_script(image_id, env, OPERATOR_CHECK, {'usernames': sorted(spec)}, what='Reading the operator accounts')
+    found = check.get('accounts') if isinstance(check, dict) else None
+    problems = [username for username, (kind, _) in spec.items()
+                if not isinstance(found, dict) or not isinstance(found.get(username), dict)
+                or found[username].get('operator') is not True or found[username].get('memberships') != 0
+                or found[username].get('actor_kind') != kind or found[username].get('active') is not True]
+    if problems:
+        raise InstallError(f'{", ".join(problems)} did not read back as an active operator with no membership.',
+                           details={'accounts': outcome, 'grants': grants, 'check': found})
+    codes = {}
+    for username, state in outcome.items():
+        if state in ('created', 'reset'):
+            problem = person_problem(by, '--by')
+            if problem:
+                raise InstallError(f'{username} has no usable password until its setup code is issued, which names who '
+                                   f'issued it: {problem} Run --phase manage --command issue-enrolment.',
+                                   details={'accounts': outcome, 'grants': grants})
+            codes[username] = issue_setup_code(
+                ctx, image_id, env, username, command='issue_enrolment', by=by,
+                reason=f'The setup code of {username}, {state} by ops/install.py --phase operators (A6).\n'.encode())
+    return {'accounts': outcome, 'grants': grants, 'check': found, 'reset_passwords': reset, 'setup_codes': codes,
+            'legacy_files': legacy_operator_files(),
             'summary': 'operator accounts ' + ', '.join(f'{username} {state}' for username, state in outcome.items())
-                       + '; granted and read back as operators with no membership'}
+                       + '; read back as operators with no membership; no password written to a file'
+                       + (f'; setup code kept root-only for {", ".join(codes)}' if codes else '')}
+
+
+# --- the manage phase: one allow-listed ruled act (release 1, A6) ----------------------------------------------------
+# Each runs one management command in a one-shot of the installed image, through the ruled-mutation door, with its reason
+# (and the setup code an enrolment or a second-factor reset issues) as RAM-only files under /dev/shm. The commands are
+# the application's (Lanes 2, 3 and 4 of release 1); this table is the installer's half of their contract: the
+# arguments each takes from the operator, and the command line each is given. Nothing else runs.
+MANAGE_COMMANDS = {
+    'revoke-operator': {'command': 'revoke_operator', 'needs': ('username', 'reason_file', 'by')},
+    'grant-operator': {'command': 'grant_operator', 'needs': ('username', 'reason_file', 'by', 'review_by')},
+    'issue-enrolment': {'command': 'issue_enrolment', 'needs': ('username', 'reason_file', 'by'), 'code': True},
+    'reset-second-factor': {'command': 'reset_second_factor', 'needs': ('username', 'reason_file', 'by'), 'code': True},
+    'clear-signin-failures': {'command': 'clear_signin_failures', 'needs': ('username', 'reason_file', 'by')},
+    'require-password-change': {'command': 'require_password_change', 'needs': ('reason_file', 'by')},
+    'dispose': {'command': 'dispose', 'needs': ('dispose_step', 'by'), 'files': True},
+    'export-workspace': {'command': 'export_workspace', 'needs': ('workspace_id', 'reason_file', 'by'), 'files': True},
+}
+MANAGE_ARGUMENTS = ('command', 'username', 'reason_file', 'by', 'review_by', 'approved_by', 'workspace_id',
+                    'encounter_id', 'dispose_step', 'plan_id', 'all_human_accounts', 'ledger_file')
+# dispose's steps (Lane 4's command, D1): close the practice, plan (a dry run), execute a plan (run by one named person and
+# approved by another), print the ledger (the MAC-signed list of disposals, keyed by the application's SECRET_KEY), and
+# replay a ledger after a database restore, so destroyed data stays destroyed
+DISPOSE_STEPS = ('close', 'plan', 'execute', 'ledger', 'replay-ledger')
+DISPOSE_REASON_REQUIRED = ('close', 'execute', 'replay-ledger')
+LEDGER_LIMIT = 1024 * 1024
+# D2: a practice's export is written into a NEW folder of its own under EXPORTS_DIR on the host (root 0700), which the
+# one-shot writes as the application's user; afterwards the root helper makes everything in it root-only. [TO CONFIRM
+# the path on this host.]
+EXPORTS_DIR = '/var/lib/cpt-studio-exports'
+EXPORT_MOUNT = '/run/cpt-export'
+STDOUT_KEPT = 16000  # characters of an act's stdout a receipt keeps (ids and counts only; the log keeps all of it)
+
+
+def manage_problem(args) -> str:
+    """'' when the manage phase's arguments make one allow-listed act, else the refusal (argument_problem)."""
+    entry = MANAGE_COMMANDS.get(args.command or '')
+    if entry is None:
+        return f'--phase manage needs --command, one of {", ".join(MANAGE_COMMANDS)}.'
+    for name in entry['needs']:
+        if getattr(args, name, None) in (None, ''):
+            return f'--command {args.command} needs --{name.replace("_", "-")}.'
+    for name in ('username', 'workspace_id', 'encounter_id', 'plan_id', 'review_by', 'approved_by', 'dispose_step',
+                 'all_human_accounts', 'reason_file', 'ledger_file'):
+        value = getattr(args, name, None)
+        if value not in (None, '') and name not in entry['needs'] and not allowed_extra(args.command, name):
+            return f'--{name.replace("_", "-")} is not used by --command {args.command}.'
+    if args.username is not None and not USERNAME_RE.fullmatch(args.username):
+        return f'--username must match {USERNAME_RE.pattern}.'
+    for name in ('workspace_id', 'encounter_id', 'plan_id'):
+        value = getattr(args, name, None)
+        if value is not None and not UUID_RE.fullmatch(value):
+            return f'--{name.replace("_", "-")} must be a lowercase UUID.'
+    for name in ('by', 'approved_by'):
+        if getattr(args, name, None) is not None:
+            problem = person_problem(getattr(args, name), f'--{name.replace("_", "-")}')
+            if problem:
+                return problem
+    if args.review_by is not None:
+        problem = review_by_problem(args.review_by)
+        if problem:
+            return problem
+    for name in ('reason_file', 'ledger_file'):
+        if getattr(args, name, None) is not None and not Path(getattr(args, name)).is_absolute():
+            return f'--{name.replace("_", "-")} must be an absolute path.'
+    if args.command == 'require-password-change' and bool(args.username) == bool(args.all_human_accounts):
+        return '--command require-password-change needs --username or --all-human-accounts (D22), not both.'
+    if args.command == 'dispose':
+        step = args.dispose_step
+        if step not in DISPOSE_STEPS:
+            return f'--dispose-step must be one of {", ".join(DISPOSE_STEPS)}.'
+        if step in DISPOSE_REASON_REQUIRED and not args.reason_file:
+            return f'--dispose-step {step} needs --reason-file.'
+        if step in ('close', 'plan') and not (args.workspace_id or (step == 'plan' and args.encounter_id)):
+            return f'--dispose-step {step} needs --workspace-id' + (' or --encounter-id.' if step == 'plan' else '.')
+        if step == 'close' and args.encounter_id:
+            return '--dispose-step close closes a whole practice: --encounter-id is not used.'
+        if step == 'execute':
+            if not (args.plan_id and args.approved_by):
+                return '--dispose-step execute needs --plan-id and --approved-by.'
+            if args.approved_by.strip().casefold() == (args.by or '').strip().casefold():
+                return ('The person who approves a disposal is not the one who runs it (D14): --by and --approved-by '
+                        'differ.')
+        elif args.plan_id or args.approved_by:
+            return '--plan-id and --approved-by belong to --dispose-step execute.'
+        if (step == 'replay-ledger') != bool(args.ledger_file):
+            return '--ledger-file is the ledger --dispose-step replay-ledger replays, and only it takes one.'
+        if step in ('ledger', 'replay-ledger') and (args.workspace_id or args.encounter_id):
+            return f'--dispose-step {step} reads the whole ledger: no --workspace-id or --encounter-id.'
+    return ''
+
+
+def allowed_extra(command, name) -> bool:
+    """The arguments a command takes beyond those it needs (MANAGE_COMMANDS 'needs')."""
+    return {('require-password-change', 'username'), ('require-password-change', 'all_human_accounts'),
+            ('dispose', 'workspace_id'), ('dispose', 'encounter_id'), ('dispose', 'plan_id'),
+            ('dispose', 'approved_by'), ('dispose', 'reason_file'), ('dispose', 'ledger_file')}.__contains__((command, name))
+
+
+def install_in_progress() -> list:
+    """The containers an install or switch-back leaves while it runs (switch_problems' names): their presence refuses a
+    disposal (D1; INSTALL.md: the installer assumes no row is ever deleted)."""
+    return [name for name in (INCOMING_WEB, SERVICES['web'] + '-previous', SERVICES['worker'] + '-previous')
+            if inspect('container', name) is not None]
+
+
+def manage_argv(ctx, args, entry) -> list:
+    """The command line of the act (the installer's half of each command's contract; RAM-only files at MANAGE_MOUNT)."""
+    command, reason = ['manage', entry['command']], ['--reason-file', f'{MANAGE_MOUNT}/reason']
+    if args.command in ('revoke-operator', 'clear-signin-failures'):
+        return [*command, '--username', args.username, *reason, '--by', args.by]
+    if args.command == 'grant-operator':
+        return [*command, '--username', args.username, *reason, '--by', args.by, '--authorization-ref',
+                authorization_of(ctx), '--review-by', args.review_by]
+    if args.command == 'require-password-change':
+        who = ['--username', args.username] if args.username else ['--all-human-accounts']
+        return [*command, *who, *reason, '--by', args.by]
+    if args.command == 'export-workspace':
+        return [*command, '--workspace', args.workspace_id, '--out', EXPORT_MOUNT, *reason, '--by', args.by,
+                '--authorization-ref', authorization_of(ctx)]
+    if args.command == 'dispose':
+        step, authority = args.dispose_step, ['--authorization-ref', authorization_of(ctx)]
+        given = reason if args.reason_file else []
+        if step == 'close':
+            return [*command, '--close', '--workspace', args.workspace_id, *given, '--by', args.by, *authority]
+        if step == 'plan':
+            scope = (['--workspace', args.workspace_id] if args.workspace_id else []) + (
+                ['--encounter', args.encounter_id] if args.encounter_id else [])
+            return [*command, '--plan', *scope, *given, '--by', args.by, *authority]
+        if step == 'execute':
+            return [*command, '--execute', '--plan', args.plan_id, '--by', args.by, '--approved-by', args.approved_by,
+                    *given, *authority]
+        if step == 'ledger':
+            return [*command, '--ledger', *given, '--by', args.by, *authority]
+        return [*command, '--replay-ledger', f'{MANAGE_MOUNT}/ledger', *given, '--by', args.by, *authority]
+    raise InstallError(f'--command {args.command} has no command line here.')
+
+
+# D2: a practice's export folder - made new (never reused) under EXPORTS_DIR, root 0700, the folder itself the
+# application's user's for the one-shot to write; then, export done or not, everything in it made root-only (folders
+# 0700, files 0600) and counted - never named in a receipt. A link or anything but a folder or a regular file in it
+# refuses, and nothing is changed.
+H_EXPORT_DIR = '''
+base = '/host-var-lib/' + P['dir']
+try:
+    i = os.lstat(base)
+except FileNotFoundError:
+    os.mkdir(base, 0o700)
+    os.chown(base, 0, 0)
+    os.chmod(base, 0o700)
+    i = os.lstat(base)
+if not (stat.S_ISDIR(i.st_mode) and i.st_uid == 0 and i.st_gid == 0 and stat.S_IMODE(i.st_mode) == 0o700):
+    R = {'error': '/var/lib/' + P['dir'] + ' is not a root-owned 0700 directory'}
+else:
+    path = os.path.join(base, P['name'])
+    os.mkdir(path, 0o700)
+    os.chown(path, P['uid'], P['uid'])
+    os.chmod(path, 0o700)
+    R = {'made': P['name']}
+print(json.dumps(R))
+'''
+H_SEAL_EXPORT = '''
+path = os.path.join('/host-var-lib/' + P['dir'], P['name'])
+entries, odd = [], 0
+for top, folders, names in os.walk(path):
+    entries.append((top, True))
+    for name in folders + names:
+        full = os.path.join(top, name)
+        mode = os.lstat(full).st_mode
+        if stat.S_ISLNK(mode) or not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+            odd += 1
+        elif stat.S_ISREG(mode):
+            entries.append((full, False))
+if odd:
+    R = {'error': str(odd) + ' entr' + ('y is' if odd == 1 else 'ies are') + ' neither a folder nor a regular file; nothing was changed'}
+else:
+    size = 0
+    for full, folder in entries:
+        os.chown(full, 0, 0)
+        os.chmod(full, 0o700 if folder else 0o600)
+        size += 0 if folder else os.lstat(full).st_size
+    R = {'sealed': P['name'], 'folders': sum(1 for _, folder in entries if folder),
+         'files': sum(1 for _, folder in entries if not folder), 'bytes': size}
+print(json.dumps(R))
+'''
+EXPORTS_MOUNT = 'type=bind,src=/var/lib,dst=/host-var-lib'
+
+
+def read_ledger_file(path) -> bytes:
+    """The ledger a replay re-applies (D1): a regular file, never a link, at most LEDGER_LIMIT bytes, UTF-8. Its MAC is
+    the command's to check (keyed by the application's SECRET_KEY, so a restore keeps the same key)."""
+    given = Path(path or '')
+    try:
+        info = os.lstat(given)
+    except OSError:
+        raise InstallError('--ledger-file cannot be read.') from None
+    if not given.is_absolute() or not stat.S_ISREG(info.st_mode) or info.st_size > LEDGER_LIMIT:
+        raise InstallError(f'--ledger-file must be an absolute path to a regular file of at most {LEDGER_LIMIT} bytes.')
+    data = given.read_bytes()
+    try:
+        data.decode('utf-8')
+    except UnicodeDecodeError:
+        raise InstallError('--ledger-file is not UTF-8 text.') from None
+    return data
+
+
+def phase_manage(ctx) -> dict:
+    """One allow-listed ruled act (MANAGE_COMMANDS; release 1, A6) in a one-shot of the installed image, once this
+    revision's migrations are applied. The reason (and a setup code) travel as RAM-only files; a disposal is refused
+    while an install or switch-back is in progress; the receipt names the act, the reason's sha256 and size, who ran it
+    and the command's exit code and log - every output first passed by assert_no_secret, never a code."""
+    args = ctx.args
+    entry = MANAGE_COMMANDS[args.command]
+    image_id = installed_image(ctx)
+    require_db()
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    pending = oneshot(image_id, ['manage', 'migrate', '--check'], env, timeout=120)
+    if pending.returncode:
+        raise InstallError(f'This revision\'s migrations are not all applied (manage migrate --check exited '
+                           f'{pending.returncode}): run --phase app first. Nothing was run.')
+    environment = None
+    if args.command == 'dispose':
+        busy = install_in_progress()
+        if busy:
+            raise InstallError(f'An install or switch-back is in progress ({", ".join(busy)}), and the installer assumes '
+                               'no row is deleted during one: nothing was disposed of (RELEASE-1-SPEC D1).')
+        # only now, the reading above made: Lane 4's dispose refuses unless it is told no switch is in progress (this
+        # phase holds the receipts' lock, so no install starts on them while it runs)
+        environment = runtime_env('disabled', '') + ['-e', 'CPT_STUDIO_SWITCH_STATE=idle']
+    reason = read_reason_file(args.reason_file) if args.reason_file else None
+    ledger = read_ledger_file(args.ledger_file) if getattr(args, 'ledger_file', None) else None
+    record = {'command': args.command, 'by': args.by, 'username': args.username,
+              'reason': ({'sha256': sha256(reason), 'bytes': len(reason)} if reason is not None else None)}
+    if args.command == 'dispose':
+        record.update(step=args.dispose_step, ledger=({'sha256': sha256(ledger), 'bytes': len(ledger)}
+                                                      if ledger is not None else None))
+    if entry.get('code'):
+        record['setup_code'] = issue_setup_code(ctx, image_id, env, args.username, command=entry['command'], by=args.by,
+                                                reason=reason)
+        return {**record, 'summary': f'{args.command} {args.username}: done; the setup code is kept root-only in '
+                                     f'{ETC_DIR}/{OPERATOR_ENROLMENT}, valid {ENROLMENT_CODE_SECONDS // 60} minutes'}
+    argv = manage_argv(ctx, args, entry)
+    files = entry.get('files')
+    export = None
+    if args.command == 'export-workspace':  # D2: a new folder of its own, root-only on the host
+        export = f'{args.workspace_id}-{stamp()}'
+        run_helper(H_EXPORT_DIR, {'dir': PurePosixPath(EXPORTS_DIR).name, 'name': export, 'uid': APP_UID},
+                   mounts=[EXPORTS_MOUNT])
+        record['export'] = {'folder': f'{EXPORTS_DIR}/{export}'}
+    try:
+        with RamFiles('cpt-studio-manage-', shared=bool(files)) as ram:
+            mounts = [ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')] if reason is not None else []
+            if ledger is not None:
+                mounts.append(ram.add('ledger', ledger, f'{MANAGE_MOUNT}/ledger'))
+            if files:
+                # a disposal deletes files (read-write); an export reads them and writes its own folder - as the
+                # application's user, whose files they are
+                mounts.append(f'type=volume,src={FILES_VOLUME},dst={STATE_DIR}' + (',readonly' if export else ''))
+                if export:
+                    mounts.append(f'type=bind,src={EXPORTS_DIR}/{export},dst={EXPORT_MOUNT}')
+                result = oneshot(image_id, argv, env, mounts=mounts, timeout=3600, what=f'manage {entry["command"]}',
+                                 by=args.by, **({'environment': environment} if environment else {}))
+            else:
+                result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}', timeout=600,
+                                 what=f'manage {entry["command"]}', by=args.by)
+    finally:
+        if export:  # done or not, everything in it is made root-only
+            record['export'].update(run_helper(H_SEAL_EXPORT, {'dir': PurePosixPath(EXPORTS_DIR).name,
+                                                               'name': export}, mounts=[EXPORTS_MOUNT]))
+    output = result.stdout + result.stderr
+    assert_no_secret([output], env_values(env))  # the application's own secrets never reach a log or a receipt
+    record.update(exit=result.returncode, log=ctx.log(args.command, output), argv=argv,
+                  stdout=result.stdout.decode('utf-8', 'replace')[-STDOUT_KEPT:])  # ids and counts only
+    if result.returncode:
+        raise InstallError(f'manage {entry["command"]} failed (exit {result.returncode}); see {record["log"]}.',
+                           details=record)
+    return {**record, 'summary': f'{args.command}' + (f' {args.dispose_step}' if args.command == 'dispose' else '')
+                                 + (f' {args.username}' if args.username else '') + ': done'
+                                 + (f'; the export is root-only in {EXPORTS_DIR}/{export}' if export else '')}
 
 
 def acme_probe(ctx, label, host=DOMAIN) -> dict:
@@ -7901,6 +8375,103 @@ def https_checks(ctx, revision=None) -> tuple:
                                      for (sni, host), answer in cross.items()}}
 
 
+# --- release 1 (A4): what the shared TLS listener actually negotiates for CPT's names ----------------------------------
+# The HTTPS stage sets AES-GCM suites only (ssl_ciphers, ssl_conf_command Ciphersuites), but CPT shares the 443 listener
+# with co-tenant server blocks, and whether a non-default block's TLS settings apply once SNI has chosen it is the TLS
+# library's business. So it is measured: the host's openssl, against 127.0.0.1:443 with each name as the server name,
+# offers one family at a time that the policy refuses, and each must end in an alert FROM THE SERVER - a client that
+# cannot offer the family ("no ciphers available") never counts as a refusal (TEC-18 (2)); and a default client must
+# negotiate an AES-GCM suite. A difference is a finding: https-vhost records it without undoing the publish, and verify
+# reports it (owner decision D27); the fix is CPT's own nginx on the new server.
+OPENSSL = '/usr/bin/openssl'
+TLS_REFUSED_PROBES = (
+    ('TLSv1.3 ChaCha20', ('-tls1_3', '-ciphersuites', 'TLS_CHACHA20_POLY1305_SHA256')),
+    ('TLSv1.2 ChaCha20', ('-tls1_2', '-cipher', 'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305')),
+    ('TLSv1.2 ARIA-GCM', ('-tls1_2', '-cipher', 'ECDHE-ECDSA-ARIA256-GCM-SHA384:ECDHE-ECDSA-ARIA128-GCM-SHA256:'
+                                               'ECDHE-ARIA256-GCM-SHA384:ECDHE-ARIA128-GCM-SHA256')),
+    ('TLSv1.2 Camellia', ('-tls1_2', '-cipher', 'ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA128-SHA256:'
+                                               'ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-RSA-CAMELLIA128-SHA256')),
+    ('TLSv1.2 AES-CBC-SHA', ('-tls1_2', '-cipher', 'ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA:'
+                                                  'ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:'
+                                                  'ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256')),
+    ('TLSv1.1', ('-tls1_1', '-cipher', 'DEFAULT@SECLEVEL=0')),
+    ('TLSv1.0', ('-tls1', '-cipher', 'DEFAULT@SECLEVEL=0')),
+)
+TLS_NEGOTIATED_RE = re.compile(r'New, (\S+), Cipher is (\S+)')
+TLS_SESSION_CIPHER_RE = re.compile(r'^\s*Cipher\s*:\s*(\S+)\s*$', re.M)
+# the client refused to offer: never the server's refusal (TEC-18 (2))
+TLS_CLIENT_SIDE_RE = re.compile(r'(?i)no ciphers available|no protocols available|no cipher match|'
+                                r'unsupported protocol|unknown option|error with command|bad cipher')
+# an alert the server sent ("SSL alert number N" names the alert received from the peer)
+TLS_SERVER_ALERT_RE = re.compile(r'(?i)(?:sslv3|tlsv1) alert [a-z ]+|SSL alert number \d+')
+TLS_APPROVED_RE = re.compile(r'(?:ECDHE-(?:ECDSA|RSA)-AES(?:128|256)-GCM-SHA(?:256|384)|TLS_AES_(?:128|256)_GCM_SHA(?:256|384))')
+
+
+def tls_probe_verdict(returncode, output) -> dict:
+    """What one `openssl s_client` run says (A4): {'verdict': 'accepted' (with 'protocol' and 'cipher'), 'refused'
+    (the server sent an alert), 'client' (the client could not offer what was asked: never a refusal) or 'unknown'}.
+    A cipher actually negotiated wins over everything; a client-side failure over an alert."""
+    text = output.decode('utf-8', 'replace') if isinstance(output, bytes) else str(output)
+    found = TLS_NEGOTIATED_RE.search(text)
+    session = TLS_SESSION_CIPHER_RE.search(text)
+    cipher = found.group(2) if found else (session.group(1) if session else None)
+    if cipher and cipher not in ('(NONE)', '0000'):
+        return {'verdict': 'accepted', 'protocol': found.group(1) if found else None, 'cipher': cipher}
+    client = TLS_CLIENT_SIDE_RE.search(text)
+    if client:
+        return {'verdict': 'client', 'why': client.group(0).lower()}
+    alert = TLS_SERVER_ALERT_RE.search(text)
+    if alert:
+        return {'verdict': 'refused', 'alert': alert.group(0).lower()}
+    return {'verdict': 'unknown', 'exit': returncode}
+
+
+def tls_probe(host, options) -> dict:
+    """One `openssl s_client` run against this host's nginx (127.0.0.1:443) with ``host`` as the server name and
+    ``options`` (a protocol and a cipher family), judged by tls_probe_verdict; openssl missing, a timeout or anything
+    else that keeps it from answering is 'unknown', never a pass."""
+    try:
+        done = run([OPENSSL, 's_client', '-connect', '127.0.0.1:443', '-servername', host, *options], input=b'',
+                   timeout=20, check=False)
+    except (InstallError, OSError) as error:
+        return {'verdict': 'unknown', 'why': (str(error) or type(error).__name__)[:200]}
+    return tls_probe_verdict(done.returncode, done.stdout + done.stderr)
+
+
+def tls_policy_problems(hosts=(DOMAIN, ADMIN_HOST), probe=None) -> tuple:
+    """(findings, probes) of the TLS policy for each of ``hosts`` (A4): a default client must negotiate an AES-GCM suite,
+    and each TLS_REFUSED_PROBES family must end in the server's alert - 'accepted' is a suite outside the policy, and
+    'client' or 'unknown' a probe that could not tell, which is never counted as a refusal. Never raises."""
+    probe = probe or tls_probe
+    findings, probes = [], {}
+    for host in hosts:
+        seen = probes[host] = {}
+        default = seen['default'] = probe(host, ())
+        if default.get('verdict') != 'accepted' or not TLS_APPROVED_RE.fullmatch(str(default.get('cipher'))):
+            findings.append(f'{host}: a default client did not negotiate an AES-GCM suite ({default.get("verdict")}'
+                            + (f', {default.get("cipher")}' if default.get('cipher') else '') + ')')
+        for label, options in TLS_REFUSED_PROBES:
+            answer = seen[label] = probe(host, options)
+            if answer.get('verdict') == 'accepted':
+                findings.append(f'{host}: {label} negotiated {answer.get("cipher")} ({answer.get("protocol")}), '
+                                'outside the policy')
+            elif answer.get('verdict') != 'refused':
+                findings.append(f'{host}: the {label} probe could not tell ({answer.get("verdict")}: '
+                                f'{answer.get("why") or answer.get("exit")}); a refusal the client made is never '
+                                'counted as the server\'s')
+    return findings, probes
+
+
+def tls_policy_report() -> dict:
+    """tls_policy_problems as a receipt records it (A4; D27): {'findings', 'probes'}. Never raises: a failure to probe is
+    itself a finding."""
+    try:
+        findings, probes = tls_policy_problems()
+    except Exception as error:  # noqa: BLE001 - recorded, never an undo or a refusal
+        findings, probes = [f'the TLS probes did not run ({type(error).__name__})'], {}
+    return {'findings': findings, 'probes': probes}
+
+
 def running_web() -> dict:
     """The running cpt-studio-web this installer started: {'id', 'image', 'revision', 'port'}; refused otherwise."""
     web = inspect('container', SERVICES['web'])
@@ -7983,12 +8554,15 @@ def phase_https_vhost(ctx) -> dict:
         problems += ingress_checks(ctx, preflight)
         if problems:
             raise InstallError('; '.join(problems) + '.', details=evidence)
-        return {**evidence, 'redirect': redirect, 'acme': acme}
+        # release 1 (A4): what the shared listener negotiates is recorded, never a reason to undo the publish (D27)
+        return {**evidence, 'redirect': redirect, 'acme': acme, 'tls_policy': tls_policy_report()}
     already = current == https_sha
     result = verify() if already else publish_vhost(ctx, apply, undo, verify)
+    tls = (result.get('tls_policy') or {}).get('findings') or []
     return {**result, 'vhost_sha256': https_sha, 'upstream_port': port, 'already_installed': already,
             'replaced': replaced, 'coupling': found,
-            'summary': f'https://{DOMAIN}/ and https://{ADMIN_HOST}/ served through {ctx.revision[:12]}\'s stage'}
+            'summary': f'https://{DOMAIN}/ and https://{ADMIN_HOST}/ served through {ctx.revision[:12]}\'s stage'
+                       + (f'; TLS policy: {len(tls)} finding(s) recorded (D27)' if tls else '; TLS policy as set')}
 
 
 def write_intent(ctx, phase: str, record: dict) -> Path:
@@ -8515,6 +9089,7 @@ def phase_verify(ctx) -> dict:
             problems.append(f'{name} is left beside the installed pair')
     https_problems, evidence = https_checks(ctx)
     problems += https_problems
+    tls = tls_policy_report()  # A4: a finding, reported, never a failure of verify (D27)
     acme = {host: acme_probe(ctx, 'verify', host) for host in (DOMAIN, ADMIN_HOST)}
     problems += acme_problems(acme)
     foreign = foreign_uid_tasks(APP_UID, own_service_ids())
@@ -8522,11 +9097,12 @@ def phase_verify(ctx) -> dict:
         problems.append(f'uid {APP_UID} now runs {foreign} task(s) outside CPT Studio')
     appeared = sorted(set(now) - set(preflight['containers']) - {DB_CONTAINER, CONVERTER, *SERVICES.values()})
     details = {'evidence': evidence, 'acme': acme, 'containers_appeared_elsewhere': appeared, 'image_id': image_id,
-               'web_port': port, 'database': db_evidence, 'converter': converter}
+               'web_port': port, 'database': db_evidence, 'converter': converter, 'tls_policy': tls}
     if problems:
         raise InstallError(f'verify found {len(problems)} difference(s): ' + '; '.join(problems) + '.',
                            details={**details, 'problems': problems})
-    return {**details, 'summary': f'installed {ctx.revision[:12]} verified; co-tenants and app.quillmd.com unchanged'}
+    return {**details, 'summary': f'installed {ctx.revision[:12]} verified; co-tenants and app.quillmd.com unchanged'
+                                  + (f'; TLS policy: {len(tls["findings"])} finding(s) (D27)' if tls['findings'] else '')}
 
 
 def keep_layout(ctx):
@@ -9038,7 +9614,7 @@ def phase_rollback_vhost(ctx) -> dict:
 PHASES = {
     'preflight': phase_preflight, 'secrets': phase_secrets, 'image': phase_image, 'db': phase_db,
     'converter': phase_converter, 'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'license-note': phase_license_note,
-    'provision': phase_provision, 'operators': phase_operators,
+    'provision': phase_provision, 'operators': phase_operators, 'manage': phase_manage,
     'http-vhost': phase_http_vhost, 'cert': phase_cert, 'https-vhost': phase_https_vhost, 'ingress': phase_ingress,
     'verify': phase_verify, 'switch-back': phase_switch_back, 'rollback-app': phase_rollback_app,
     'rollback-vhost': phase_rollback_vhost, 'ingress-rollback': phase_ingress_rollback,
@@ -9067,6 +9643,7 @@ def main(argv=None) -> int:
     journal_begin(args.phase)
     try:
         record['door'] = check_door(os.environ, args.revision)
+        ctx.door = record['door']
         journal_begin(args.phase, record['door'])
         record['door']['ceiling'] = check_door_ceiling(os.environ, args.phase)
         record['tree'] = check_tree(args.revision, record['door']['declaration_commit'])

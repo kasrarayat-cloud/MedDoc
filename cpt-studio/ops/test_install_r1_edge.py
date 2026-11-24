@@ -10,9 +10,12 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
+import test_install  # noqa: E402
 from test_install import guard_host, release_host, rendered, statements  # noqa: E402
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -350,6 +353,131 @@ class CookieNameTests(unittest.TestCase):
         self.assertEqual(flags, [['cptstudio_session', 'secure', 'httponly', 'samesite=strict'],
                                  ['__Host-cptstudio_session', 'secure', 'httponly', 'samesite=strict'],
                                  ['~', 'secure', 'samesite=strict']])  # the catch-all last: nginx applies the first match
+
+
+
+# Recorded shapes of `openssl s_client` (OpenSSL 3.x) - synthetic transcripts, no host was probed.
+ACCEPTED_12 = b"""CONNECTED(00000003)
+---
+Certificate chain
+ 0 s:CN = cpt.quillmd.com
+---
+New, TLSv1.2, Cipher is ECDHE-ECDSA-AES256-GCM-SHA384
+Server public key is 256 bit
+SSL-Session:
+    Protocol  : TLSv1.2
+    Cipher    : ECDHE-ECDSA-AES256-GCM-SHA384
+---
+DONE
+"""
+ACCEPTED_13 = b"""CONNECTED(00000003)
+---
+New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384
+Server public key is 256 bit
+---
+DONE
+"""
+ACCEPTED_CBC = b"""CONNECTED(00000003)
+New, TLSv1.2, Cipher is ECDHE-ECDSA-AES128-SHA
+    Cipher    : ECDHE-ECDSA-AES128-SHA
+"""
+REFUSED_CIPHER = b"""CONNECTED(00000003)
+40A7C0B5A47F0000:error:0A000410:SSL routines:ssl3_read_bytes:sslv3 alert handshake failure:../ssl/record/rec_layer_s3.c:1584:SSL alert number 40
+---
+no peer certificate available
+---
+New, (NONE), Cipher is (NONE)
+Secure Renegotiation IS NOT supported
+"""
+REFUSED_VERSION = b"""CONNECTED(00000003)
+40A7C0B5A47F0000:error:0A00042E:SSL routines:ssl3_read_bytes:tlsv1 alert protocol version:../ssl/record/rec_layer_s3.c:1584:SSL alert number 70
+New, (NONE), Cipher is (NONE)
+"""
+CLIENT_NO_CIPHERS = b"""CONNECTED(00000003)
+40D7B1F6E37F0000:error:0A0000B5:SSL routines:ssl_cipher_list_to_bytes:no ciphers available:../ssl/statem/statem_clnt.c:3889:No ciphers enabled for max supported SSL/TLS version
+---
+New, (NONE), Cipher is (NONE)
+"""
+CLIENT_NO_PROTOCOLS = b"""CONNECTED(00000003)
+40E7B1F6E37F0000:error:0A0000BF:SSL routines:tls_setup_handshake:no protocols available:../ssl/statem/statem_lib.c:104:
+New, (NONE), Cipher is (NONE)
+"""
+REFUSED_BUT_CLIENT_SAID_NO_CIPHERS = REFUSED_CIPHER + b"40D7:error:0A0000B5:SSL routines::no ciphers available\n"
+
+
+class TlsProbeTests(unittest.TestCase):
+    """A4: the probe parser on recorded openssl outputs - a refusal counts only when the SERVER sent it."""
+
+    def test_accepted_refused_and_client_side_shapes(self):
+        verdict = install.tls_probe_verdict
+        self.assertEqual(verdict(0, ACCEPTED_12), {'verdict': 'accepted', 'protocol': 'TLSv1.2',
+                                                   'cipher': 'ECDHE-ECDSA-AES256-GCM-SHA384'})
+        self.assertEqual(verdict(0, ACCEPTED_13)['cipher'], 'TLS_AES_256_GCM_SHA384')
+        self.assertEqual(verdict(1, REFUSED_CIPHER)['verdict'], 'refused')
+        self.assertEqual(verdict(1, REFUSED_VERSION)['verdict'], 'refused')
+        self.assertEqual(verdict(1, b'connect:errno=111\n')['verdict'], 'unknown')
+        self.assertEqual(verdict(1, b'')['verdict'], 'unknown')
+
+    def test_a_client_that_could_not_offer_is_never_a_refusal(self):
+        for label, output in (('no ciphers', CLIENT_NO_CIPHERS), ('no protocols', CLIENT_NO_PROTOCOLS),
+                              ('both an alert and a client failure', REFUSED_BUT_CLIENT_SAID_NO_CIPHERS)):
+            with self.subTest(label):
+                self.assertEqual(install.tls_probe_verdict(1, output)['verdict'], 'client')
+
+    def test_the_policy_needs_aes_gcm_by_default_and_every_family_refused_by_the_server(self):
+        def probe_with(answers):
+            def probe(host, options):
+                return install.tls_probe_verdict(0, answers.get(tuple(options), REFUSED_CIPHER))
+            return probe
+        good = {(): ACCEPTED_12}
+        findings, probes = install.tls_policy_problems(probe=probe_with(good))
+        self.assertEqual(findings, [])
+        self.assertEqual(sorted(probes), sorted([install.DOMAIN, install.ADMIN_HOST]))
+        self.assertEqual(sorted(probes[install.DOMAIN]), sorted(['default', *[label for label, _ in
+                                                                             install.TLS_REFUSED_PROBES]]))
+        cbc = dict(install.TLS_REFUSED_PROBES)['TLSv1.2 AES-CBC-SHA']
+        findings, _ = install.tls_policy_problems(probe=probe_with({**good, tuple(cbc): ACCEPTED_CBC}))
+        self.assertEqual(len(findings), 2)  # one per host
+        self.assertIn('TLSv1.2 AES-CBC-SHA negotiated ECDHE-ECDSA-AES128-SHA', findings[0])
+        # a family the client could not offer is a finding, never a pass (TEC-18 (2))
+        chacha = dict(install.TLS_REFUSED_PROBES)['TLSv1.3 ChaCha20']
+        findings, _ = install.tls_policy_problems(probe=probe_with({**good, tuple(chacha): CLIENT_NO_CIPHERS}))
+        self.assertTrue(findings and all('could not tell' in finding for finding in findings))
+        # a default client that negotiates something else is a finding
+        findings, _ = install.tls_policy_problems(probe=probe_with({(): ACCEPTED_CBC}))
+        self.assertTrue(all('did not negotiate an AES-GCM suite' in finding for finding in findings))
+
+    def test_each_refused_family_is_offered_alone_and_the_old_protocols_at_seclevel_0(self):
+        families = dict(install.TLS_REFUSED_PROBES)
+        self.assertEqual(sorted(families), sorted(['TLSv1.3 ChaCha20', 'TLSv1.2 ChaCha20', 'TLSv1.2 ARIA-GCM',
+                                                   'TLSv1.2 Camellia', 'TLSv1.2 AES-CBC-SHA', 'TLSv1.1', 'TLSv1.0']))
+        for label, options in install.TLS_REFUSED_PROBES:
+            offered = ' '.join(options)
+            self.assertIsNone(install.TLS_APPROVED_RE.search(offered), label)  # never a suite the policy allows
+            if label in ('TLSv1.1', 'TLSv1.0'):
+                self.assertIn('@SECLEVEL=0', offered)
+
+    def test_a_probe_runs_the_hosts_openssl_against_the_local_listener_and_an_error_is_unknown(self):
+        calls = []
+
+        def fake_run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            return SimpleNamespace(returncode=0, stdout=ACCEPTED_12, stderr=b'')
+        with mock.patch.object(install, 'run', fake_run):
+            self.assertEqual(install.tls_probe('cpt.quillmd.com', ('-tls1_2',))['verdict'], 'accepted')
+        argv, kwargs = calls[0]
+        self.assertEqual(argv, [install.OPENSSL, 's_client', '-connect', '127.0.0.1:443', '-servername',
+                                'cpt.quillmd.com', '-tls1_2'])
+        self.assertEqual((kwargs['input'], kwargs['check']), (b'', False))
+        with mock.patch.object(install, 'run', side_effect=FileNotFoundError('openssl')):
+            self.assertEqual(install.tls_probe('cpt.quillmd.com', ())['verdict'], 'unknown')
+        # under the host guard a real probe is refused outright: no test reaches this host's listener
+        self.assertIn('openssl', test_install.HOST_COMMANDS)
+
+    def test_the_report_records_findings_and_never_raises(self):
+        with mock.patch.object(install, 'tls_policy_problems', side_effect=RuntimeError('boom')):
+            report = test_install.REAL_TLS_POLICY_REPORT()
+        self.assertEqual(report, {'findings': ['the TLS probes did not run (RuntimeError)'], 'probes': {}})
 
 
 if __name__ == '__main__':

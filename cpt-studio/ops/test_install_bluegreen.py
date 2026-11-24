@@ -1597,14 +1597,20 @@ class SwitchBackArgumentTests(ArgumentTestCase):
 class OperatorsArgumentTests(ArgumentTestCase):
     def test_the_phases_are_in_the_table(self):
         self.assertIs(install.PHASES['operators'], install.phase_operators)
+        self.assertIs(install.PHASES['manage'], install.phase_manage)  # release 1 (A6): the door for ruled acts
         # the Fable coding build has no reassess phase: its command, reassess_retained, read the retained responses of
         # the removed deterministic layer (DECISIONS D351)
         self.assertNotIn('reassess', install.PHASES)
 
-    def test_operators_takes_only_reset_passwords(self):
+    def test_operators_takes_reset_passwords_and_a_grants_people_and_date(self):
         self.assertIsNone(self.parse('--phase', 'operators').reset_passwords)
         self.assertTrue(self.parse('--phase', 'operators', '--reset-passwords').reset_passwords)
-        for extra in (('--owner-username', 'owner'), ('--provider-mode', 'disabled'), ('--encounter', ENCOUNTER)):
+        args = self.parse('--phase', 'operators', '--by', 'Ada Lovelace', '--review-by', REVIEW_BY, '--regrant',
+                          'platform-operator')
+        self.assertEqual((args.by, args.review_by, args.regrant), ('Ada Lovelace', REVIEW_BY, 'platform-operator'))
+        for extra in (('--owner-username', 'owner'), ('--provider-mode', 'disabled'), ('--encounter-id', ENCOUNTER),
+                      ('--by', 'operator'), ('--by', 'Root'), ('--review-by', '2020-01-01'), ('--review-by', '2099-01-01'),
+                      ('--review-by', 'tomorrow'), ('--regrant', 'Platform Operator'), ('--command', 'dispose')):
             with self.subTest(extra=extra):
                 self.refused('--phase', 'operators', *extra)
 
@@ -1639,149 +1645,191 @@ class FakeRootFile:
         raise AssertionError(op)
 
 
+REVIEW_BY = (dt.date.today() + dt.timedelta(days=180)).isoformat()
+DECLARATION = 'docs/foundation/mutations/x.md'
+
+
+def operator_state(**overrides):
+    return {'operator': True, 'memberships': 0, 'actor_kind': 'human', 'active': True, 'revoked': False, **overrides}
+
+
 class OperatorsPhaseTests(TemporaryDirectoryTest):
+    """Release 1 (A6): the human operator alone, an unusable password and a setup code in place of any password file,
+    a grant by a named person tied to the declaration, and revoked stays revoked."""
+
     def setUp(self):
         super().setUp()
-        self.etc, self.home = self.tmp / 'etc', self.tmp / 'home'
+        self.etc = self.tmp / 'etc'
         self.etc.mkdir(mode=0o700)
-        self.home.mkdir(mode=0o700)
-        os.chmod(self.home, 0o700)
-        self.agent_file = self.home / 'ops-agent-credentials.json'
         self.root = FakeRootFile(self.etc)
         self.scripts, self.oneshots, self.mounted = [], [], {}
         self.accounts_answer = None
-        self.check_answer = None
-        self.grant_exit = {}
+        self.before = {'platform-operator': operator_state(operator=False)}
+        self.after = {'platform-operator': operator_state()}
+        self.exits = {}
         self.migrate_exit = 0
+        self.declaration_text = f'revision {REVISION}\n'
+        self.written = []
 
     def app_script(self, image_id, env, body, params, *, what, mounts=(), user=None, **kwargs):
         self.scripts.append((body, params, list(mounts), user))
         if body == install.OPERATOR_ACCOUNTS:
-            for mount in mounts:  # what the container would read: the RAM-only password files, still there
-                source = mount.split('src=', 1)[1].split(',', 1)[0]
-                self.mounted[Path(source).name] = Path(source).read_text()
             return self.accounts_answer or {'accounts': {spec['username']: 'reset' if params['reset'] else 'created'
                                                          for spec in params['accounts']}}
-        if body == install.OPERATOR_CHECK:
-            return self.check_answer or {'accounts': {
-                'ops-agent': {'operator': True, 'memberships': 0, 'actor_kind': 'agent', 'active': True},
-                'platform-operator': {'operator': True, 'memberships': 0, 'actor_kind': 'human', 'active': True}}}
+        if body == install.OPERATOR_CHECK:  # read before the grants, then after them, in each run
+            self.checks_this_run += 1
+            return {'accounts': self.before if self.checks_this_run == 1 else self.after}
         raise AssertionError('unexpected script')
 
     def oneshot(self, image_id, command, env, **kwargs):
         self.oneshots.append((command, kwargs))
         if command == ['manage', 'migrate', '--check']:  # refute-r2 L6-2: the phase's first act
             return SimpleNamespace(returncode=self.migrate_exit, stdout=b'', stderr=b'')
-        source = kwargs['mounts'][0].split('src=', 1)[1].split(',', 1)[0]
-        self.mounted[Path(source).name] = Path(source).read_text()
-        return SimpleNamespace(returncode=self.grant_exit.get(command[3], 0), stdout=b'granted\n', stderr=b'')
+        for mount in kwargs.get('mounts', ()):  # what the container would read: the RAM-only files, still there
+            source = mount.split('src=', 1)[1].split(',', 1)[0]
+            self.mounted[Path(source).name] = (Path(source).read_text(), stat.S_IMODE(os.stat(source).st_mode))
+        return SimpleNamespace(returncode=self.exits.get(command[1], 0), stdout=b'done\n', stderr=b'')
 
-    def run_phase(self, reset=None):
+    def run_phase(self, reset=None, *, by='Ada Lovelace', review_by=REVIEW_BY, regrant=None):
         ctx = install.Context(SimpleNamespace(phase='operators', revision=REVISION, receipts=str(self.tmp),
-                                              reset_passwords=reset), self.tmp)
+                                              reset_passwords=reset, by=by, review_by=review_by, regrant=regrant),
+                              self.tmp)
+        ctx.door = {'declaration': DECLARATION, 'declaration_commit': OTHER_COMMIT}
+        self.checks_this_run = 0
+        real_write = install.write_private
+
+        def write_private(directory, name, data):
+            self.written.append(str(Path(directory) / name))
+            return real_write(directory, name, data)
         with mock.patch.multiple(install, installed_image=mock.Mock(return_value=IMAGE), require_db=mock.Mock(),
-                                 read_protected_env=mock.Mock(return_value=b''), root_file=self.root,
-                                 app_script=self.app_script, oneshot=self.oneshot,
-                                 OPS_AGENT_CREDENTIALS=self.agent_file), \
-                mock.patch.dict(os.environ, {'RULED_MUTATION_DECLARATION': 'docs/foundation/mutations/x.md',
-                                             'RULED_MUTATION_DECL_COMMIT': OTHER_COMMIT}):
+                                 read_protected_env=mock.Mock(return_value=b'CPT_STUDIO_SECRET_KEY=' + b's' * 40 + b'\n'),
+                                 root_file=self.root, app_script=self.app_script, oneshot=self.oneshot,
+                                 write_private=write_private, helper_stat=mock.Mock(return_value={
+                                     install.LEGACY_OPERATOR_CREDENTIALS: {'exists': True}}),
+                                 declaration_names=lambda ctx, words: words in self.declaration_text):
             return install.phase_operators(ctx)
 
-    def test_both_accounts_are_created_granted_and_read_back_with_their_logins_saved(self):
+    def commands(self):
+        return [command for command, _ in self.oneshots]
+
+    def test_the_spec_holds_the_human_operator_alone_and_no_agent_login_is_written(self):
+        self.assertEqual(install.OPERATOR_ACCOUNTS_SPEC, (('platform-operator', 'human', 'CPT Studio platform operator'),))
+        self.assertFalse([kind for _, kind, _ in install.OPERATOR_ACCOUNTS_SPEC if kind != 'human'])
+        for gone in ('OPS_AGENT_CREDENTIALS', 'OPERATOR_CREDENTIALS', 'operator_document', 'operator_granted_by'):
+            self.assertFalse(hasattr(install, gone), gone)
         details = self.run_phase()
-        agent = json.loads(self.agent_file.read_text())
-        human = json.loads((self.etc / install.OPERATOR_CREDENTIALS).read_text())
-        self.assertEqual((agent['username'], agent['actor_kind']), ('ops-agent', 'agent'))
-        self.assertEqual((human['username'], human['actor_kind']), ('platform-operator', 'human'))
-        self.assertEqual(stat.S_IMODE(self.agent_file.stat().st_mode), 0o600)
-        self.assertEqual(stat.S_IMODE((self.etc / install.OPERATOR_CREDENTIALS).stat().st_mode), 0o600)
-        self.assertGreaterEqual(len(agent['password']), 32)
-        self.assertNotEqual(agent['password'], human['password'])
-        # the console's own host (D396, refutation INSTALLER-11), and cpt.quillmd.com/ops/ kept while both serve it
-        self.assertEqual((agent['operator_url'], agent['operator_url_cpt']),
-                         ('https://admin.quillmd.com/ops/', 'https://cpt.quillmd.com/ops/'))
-        self.assertEqual((human['operator_url'], human['operator_url_cpt']),
-                         ('https://admin.quillmd.com/ops/', 'https://cpt.quillmd.com/ops/'))
-        # the passwords reached the accounts script only as the mounted RAM-only files, never as parameters
+        # nothing was written under the agent user's home, and no login file anywhere: the RAM-only reason and code
+        # files under /dev/shm and the staged setup code are all
+        self.assertFalse([path for path in self.written if 'ops-agent' in path or '.cpt-studio' in path])
+        self.assertFalse([path for path in self.written if not path.startswith(('/dev/shm/', str(self.etc)))
+                          and not (path.startswith(str(self.tmp)) and path.endswith('.log'))])  # the receipts' logs
+        self.assertEqual(sorted(path.name for path in self.etc.iterdir()), [install.OPERATOR_ENROLMENT])
+        self.assertEqual(details['legacy_files'], {install.LEGACY_OPERATOR_CREDENTIALS: 'present',
+                                                   str(install.LEGACY_AGENT_LOGIN): 'present'
+                                                   if install.LEGACY_AGENT_LOGIN.exists() else 'absent'})
+
+    def test_a_new_account_gets_an_unusable_password_a_grant_by_a_person_and_a_setup_code(self):
+        details = self.run_phase()
         body, params, mounts, user = self.scripts[0]
-        self.assertEqual(params['accounts'], [
-            {'username': 'ops-agent', 'kind': 'agent', 'display_name': 'CPT Studio operations agent',
-             'password_file': '/run/cpt-operators/ops-agent.pw'},
-            {'username': 'platform-operator', 'kind': 'human', 'display_name': 'CPT Studio platform operator',
-             'password_file': '/run/cpt-operators/platform-operator.pw'}])
-        self.assertEqual((self.mounted['ops-agent.pw'], self.mounted['platform-operator.pw']),
-                         (agent['password'], human['password']))
-        self.assertTrue(all(mount.startswith('type=bind,src=/dev/shm/') and mount.endswith(',readonly')
-                            for mount in mounts))
-        self.assertEqual(user, f'{os.getuid()}:{os.getgid()}')
-        # this revision's migrations checked first; each account granted by the application's own command, by its
-        # contract, with who records it given explicitly (refute-r2 L6-2: the one-shot's uid has no passwd entry)
-        by = install.operator_granted_by()
-        self.assertTrue(by.startswith('ops/install.py --phase operators ('), by)
-        self.assertEqual([command for command, _ in self.oneshots], [
-            ['manage', 'migrate', '--check'],
-            ['manage', 'grant_operator', '--username', 'ops-agent', '--reason-file',
-             '/run/cpt-operators/ops-agent.reason', '--by', by],
-            ['manage', 'grant_operator', '--username', 'platform-operator', '--reason-file',
-             '/run/cpt-operators/platform-operator.reason', '--by', by]])
-        self.assertIn('owner directive 2026-11-03, section 2', self.mounted['ops-agent.reason'])
-        self.assertIn(REVISION, self.mounted['platform-operator.reason'])
-        self.assertEqual(self.scripts[1][0], install.OPERATOR_CHECK)
-        self.assertEqual(self.scripts[1][1], {'usernames': ['ops-agent', 'platform-operator']})
-        # nothing of either password in the receipt's details, and the RAM files are gone
-        flat = json.dumps(details)
-        self.assertNotIn(agent['password'], flat)
-        self.assertNotIn(human['password'], flat)
-        self.assertEqual(details['accounts'], {'ops-agent': 'created', 'platform-operator': 'created'})
+        self.assertEqual(body, install.OPERATOR_ACCOUNTS)
+        self.assertEqual(params, {'reset': False, 'accounts': [
+            {'username': 'platform-operator', 'kind': 'human', 'display_name': 'CPT Studio platform operator'}]})
+        self.assertEqual(mounts, [])  # no password travels at all
+        self.assertIn('set_unusable_password()', install.OPERATOR_ACCOUNTS)
+        self.assertNotIn('password_file', install.OPERATOR_ACCOUNTS)
+        commands = self.commands()
+        self.assertEqual(commands[0], ['manage', 'migrate', '--check'])
+        self.assertEqual(commands[1], ['manage', 'grant_operator', '--username', 'platform-operator', '--reason-file',
+                                       '/run/cpt-manage/platform-operator.reason', '--by', 'Ada Lovelace',
+                                       '--authorization-ref', f'{DECLARATION}@{OTHER_COMMIT}', '--review-by', REVIEW_BY])
+        self.assertEqual(commands[2], ['manage', 'issue_enrolment', '--username', 'platform-operator', '--code-file',
+                                       '/run/cpt-manage/code', '--reason-file', '/run/cpt-manage/reason', '--by',
+                                       'Ada Lovelace'])
+        # the code: a private RAM-only file for the command, root-only in operator-enrolment.json, nowhere else
+        enrolment = json.loads((self.etc / install.OPERATOR_ENROLMENT).read_text())
+        code = enrolment['code']
+        self.assertEqual(self.mounted['code'], (code, 0o600))
+        self.assertGreaterEqual(len(code), 32)
+        self.assertEqual((enrolment['username'], enrolment['valid_seconds'], enrolment['url']),
+                         ('platform-operator', 1800, 'https://admin.quillmd.com/login/enrol'))
+        self.assertEqual(stat.S_IMODE((self.etc / install.OPERATOR_ENROLMENT).stat().st_mode), 0o600)
+        self.assertNotIn(code, json.dumps(details))
+        self.assertNotIn(code, ' '.join(' '.join(command) for command in commands))
+        for path in self.tmp.glob('*.log'):
+            self.assertNotIn(code, path.read_text())
+        self.assertEqual(details['accounts'], {'platform-operator': 'created'})
+        self.assertEqual(details['setup_codes']['platform-operator']['file'],
+                         f'{install.ETC_DIR}/{install.OPERATOR_ENROLMENT}')
+        self.assertEqual(self.oneshots[2][1]['user'], f'{os.getuid()}:{os.getgid()}')
+        self.assertFalse(list(Path('/dev/shm').glob('cpt-studio-manage-*')))
         self.assertFalse(list(Path('/dev/shm').glob('cpt-studio-operators-*')))
-        self.assertEqual([op for op, *_ in self.root.calls], ['state', 'stage', 'commit'])
-        self.assertTrue(all(final == install.OPERATOR_CREDENTIALS for _, final, _ in self.root.calls))
 
-    def test_existing_logins_are_kept_without_reset_and_rotated_with_it(self):
-        self.run_phase()
-        first = json.loads(self.agent_file.read_text())['password']
-        with self.assertRaisesRegex(install.InstallError, 'use --reset-passwords'):
-            self.run_phase()
-        self.assertEqual(len(self.scripts), 2)  # the refusal ran nothing
+    def test_an_existing_operator_is_kept_and_nothing_is_granted_or_issued(self):
+        self.accounts_answer = {'accounts': {'platform-operator': 'kept'}}
+        self.before = {'platform-operator': operator_state()}
+        details = self.run_phase(by=None, review_by=None)
+        self.assertEqual(self.commands(), [['manage', 'migrate', '--check']])
+        self.assertEqual(details['grants'], {'platform-operator': 'already an operator'})
+        self.assertEqual(details['setup_codes'], {})
+        self.assertFalse(list(self.etc.iterdir()))
+
+    def test_reset_makes_the_password_unusable_and_issues_a_new_setup_code(self):
+        self.before = {'platform-operator': operator_state()}
         details = self.run_phase(reset=True)
-        self.assertNotEqual(json.loads(self.agent_file.read_text())['password'], first)
-        self.assertEqual(details['accounts'], {'ops-agent': 'reset', 'platform-operator': 'reset'})
-        self.assertTrue(self.scripts[2][1]['reset'])
+        self.assertTrue(self.scripts[0][1]['reset'])
+        self.assertEqual(details['accounts'], {'platform-operator': 'reset'})
+        self.assertEqual([command[1] for command in self.commands()], ['migrate', 'issue_enrolment'])
 
-    def test_an_account_that_already_existed_saves_nothing_without_reset(self):
-        self.accounts_answer = {'accounts': {'ops-agent': 'created', 'platform-operator': 'kept'}}
-        with self.assertRaisesRegex(install.InstallError, 'already existed'):
+    def test_a_revoked_account_is_not_granted_again_unless_the_declaration_names_the_regrant(self):
+        self.before = {'platform-operator': operator_state(operator=False, revoked=True)}
+        with self.assertRaisesRegex(install.InstallError, 'revoked grant stays revoked'):
             self.run_phase()
-        self.assertFalse(self.agent_file.exists())
-        self.assertFalse((self.etc / install.OPERATOR_CREDENTIALS).exists())
-        self.assertFalse(list(self.etc.iterdir()))  # the staged root file was discarded
-        self.assertEqual([command for command, _ in self.oneshots], [['manage', 'migrate', '--check']])  # no grant
+        self.assertEqual(self.commands(), [['manage', 'migrate', '--check']])  # no grant, no code
+        with self.assertRaisesRegex(install.InstallError, 'revoked grant stays revoked'):
+            self.run_phase(regrant='platform-operator')  # --regrant alone is not enough
+        self.assertNotIn('grant_operator', [command[1] for command in self.commands()])
+        self.declaration_text += 'grant: --regrant platform-operator (approved by the owner)\n'
+        self.oneshots.clear()
+        self.scripts.clear()
+        details = self.run_phase(regrant='platform-operator')
+        self.assertEqual([command[1] for command in self.commands()], ['migrate', 'grant_operator', 'issue_enrolment'])
+        self.assertEqual(details['grants']['platform-operator']['exit'], 0)
+        # an answer that does not say whether it was revoked is never read as "not revoked"
+        self.before = {'platform-operator': {**operator_state(operator=False), 'revoked': None}}
+        self.oneshots.clear()
+        self.scripts.clear()
+        with self.assertRaisesRegex(install.InstallError, 'revoked grant stays revoked'):
+            self.run_phase()
 
-    def test_staged_leftovers_or_a_loose_directory_refuse_before_anything_runs(self):
-        (self.etc / f'.{install.OPERATOR_CREDENTIALS}.new').write_text('{}')
-        with self.assertRaisesRegex(install.InstallError, 'interrupted run'):
-            self.run_phase()
-        (self.etc / f'.{install.OPERATOR_CREDENTIALS}.new').unlink()
-        os.chmod(self.home, 0o755)
-        with self.assertRaisesRegex(install.InstallError, 'mode 0700'):
-            self.run_phase()
-        self.assertEqual(self.scripts, [])
-        self.assertEqual({tuple(command) for command, _ in self.oneshots}, {('manage', 'migrate', '--check')})
+    def test_a_grant_needs_a_person_and_a_review_date(self):
+        for by, review_by in ((None, REVIEW_BY), ('Ada Lovelace', None), ('operator', REVIEW_BY)):
+            with self.subTest(by=by, review_by=review_by):
+                self.oneshots.clear()
+                self.scripts.clear()
+                with self.assertRaisesRegex(install.InstallError, 'needs --by'):
+                    self.run_phase(by=by, review_by=review_by)
+                self.assertNotIn('grant_operator', [command[1] for command in self.commands()])
 
-    def test_a_grant_that_fails_or_an_account_that_does_not_read_back_fails_the_phase(self):
-        self.grant_exit = {'platform-operator': 2}
-        with self.assertRaisesRegex(install.InstallError, 'grant_operator failed for platform-operator') as caught:
+    def test_a_failing_grant_or_code_or_read_back_fails_the_phase_and_keeps_no_code(self):
+        self.exits = {'grant_operator': 2}
+        with self.assertRaisesRegex(install.InstallError, 'grant_operator failed for platform-operator'):
             self.run_phase()
-        self.assertIn('--reset-passwords', str(caught.exception))
-        self.assertTrue(self.agent_file.exists())  # the logins match the accounts: they stay
-        self.grant_exit = {}
-        for answer in ({'operator': False, 'memberships': 0, 'actor_kind': 'agent', 'active': True},
-                       {'operator': True, 'memberships': 1, 'actor_kind': 'agent', 'active': True},
-                       {'operator': True, 'memberships': 0, 'actor_kind': 'human', 'active': True}):
-            self.check_answer = {'accounts': {'ops-agent': answer, 'platform-operator': {
-                'operator': True, 'memberships': 0, 'actor_kind': 'human', 'active': True}}}
-            with self.subTest(answer=answer), self.assertRaisesRegex(install.InstallError, 'ops-agent did not read back'):
-                self.run_phase(reset=True)
+        self.exits = {'issue_enrolment': 1}
+        with self.assertRaisesRegex(install.InstallError, 'issue_enrolment failed'):
+            self.run_phase()
+        self.assertFalse(list(self.etc.iterdir()))  # the staged code was discarded: none is kept that was not issued
+        self.exits = {}
+        for answer in (operator_state(operator=False), operator_state(memberships=1), operator_state(actor_kind='agent'),
+                       operator_state(active=False)):
+            self.after = {'platform-operator': answer}
+            with self.subTest(answer=answer), self.assertRaisesRegex(install.InstallError, 'did not read back'):
+                self.run_phase()
+
+    def test_migrations_pending_refuse_before_any_account(self):
+        self.migrate_exit = 1
+        with self.assertRaisesRegex(install.InstallError, 'run --phase app first. No account was created'):
+            self.run_phase()
+        self.assertEqual((self.scripts, self.commands()), ([], [['manage', 'migrate', '--check']]))
 
     def test_the_in_image_scripts_compile_and_never_print_a_password(self):
         for body in (install.OPERATOR_ACCOUNTS, install.OPERATOR_CHECK):
@@ -1791,6 +1839,7 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
         self.assertIn('user.memberships.exists()', install.OPERATOR_ACCOUNTS)
         self.assertNotIn('Membership', install.OPERATOR_ACCOUNTS)  # it never creates one
         self.assertIn('from studio.operator import is_operator', install.OPERATOR_CHECK)
+        self.assertIn('OperatorRevocation.objects.filter(grant__user=user)', install.OPERATOR_CHECK)
 
 
 # --- the in-image scripts on a real database (CI's disposable PostgreSQL; skipped, never passed, without one) -----------
@@ -1799,60 +1848,52 @@ from test_install_harness2 import DatabaseTest, run_in_image  # noqa: E402
 
 
 class OperatorAccountsOnTheDatabaseTests(DatabaseTest):
-    """OPERATOR_ACCOUNTS as `manage shell -c` runs it, on real rows: no membership, refusals change nothing."""
+    """OPERATOR_ACCOUNTS and OPERATOR_CHECK as `manage shell -c` runs them, on real rows: no membership, an unusable
+    password, refusals change nothing, and a revocation read back."""
 
-    def specs(self, folder, passwords):
-        found = []
-        for (username, kind, display), password in zip(install.OPERATOR_ACCOUNTS_SPEC, passwords):
-            path = Path(folder) / f'{username}.pw'
-            path.write_text(password + '\n')
-            found.append({'username': username, 'kind': kind, 'display_name': display, 'password_file': str(path)})
-        return found
+    def specs(self):
+        return [{'username': username, 'kind': kind, 'display_name': display}
+                for username, kind, display in install.OPERATOR_ACCOUNTS_SPEC]
 
-    def setUp(self):
-        super().setUp()
-        import tempfile
-        self._folder = tempfile.TemporaryDirectory()
-        self.addCleanup(self._folder.cleanup)
-        self.folder = self._folder.name
-
-    def test_accounts_are_created_with_no_membership_then_kept_or_reset(self):
+    def test_the_account_is_created_with_no_membership_and_no_usable_password_then_kept_or_reset(self):
         from studio import models
-        first = ['synthetic-operator-pass-0123456789-A', 'synthetic-operator-pass-0123456789-B']
-        answer = run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, first), 'reset': False})
-        self.assertEqual(answer, {'accounts': {'ops-agent': 'created', 'platform-operator': 'created'}})
-        for (username, kind, display), password in zip(install.OPERATOR_ACCOUNTS_SPEC, first):
-            user = models.User.objects.get(username=username)
-            self.assertEqual((user.actor_kind, user.display_name, user.memberships.count()), (kind, display, 0))
-            self.assertTrue(user.check_password(password))
-        second = ['synthetic-operator-pass-9876543210-C', 'synthetic-operator-pass-9876543210-D']
-        kept = run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, second), 'reset': False})
-        self.assertEqual(kept, {'accounts': {'ops-agent': 'kept', 'platform-operator': 'kept'}})
-        self.assertTrue(models.User.objects.get(username='ops-agent').check_password(first[0]))
-        reset = run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, second), 'reset': True})
-        self.assertEqual(reset, {'accounts': {'ops-agent': 'reset', 'platform-operator': 'reset'}})
-        self.assertTrue(models.User.objects.get(username='platform-operator').check_password(second[1]))
-        self.assertFalse(models.Membership.objects.filter(user__username__in=['ops-agent', 'platform-operator'])
-                         .exists())
+        answer = run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(), 'reset': False})
+        self.assertEqual(answer, {'accounts': {'platform-operator': 'created'}})
+        user = models.User.objects.get(username='platform-operator')
+        self.assertEqual((user.actor_kind, user.memberships.count(), user.has_usable_password()), ('human', 0, False))
+        user.set_password('synthetic-operator-pass-0123456789-A')
+        user.save()
+        kept = run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(), 'reset': False})
+        self.assertEqual(kept, {'accounts': {'platform-operator': 'kept'}})
+        self.assertTrue(models.User.objects.get(username='platform-operator').check_password(
+            'synthetic-operator-pass-0123456789-A'))  # an existing operator keeps the password it has
+        reset = run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(), 'reset': True})
+        self.assertEqual(reset, {'accounts': {'platform-operator': 'reset'}})
+        self.assertFalse(models.User.objects.get(username='platform-operator').has_usable_password())
 
-    def test_a_member_account_or_another_kind_is_refused_and_nothing_changes(self):
+    def test_a_member_account_or_another_kind_is_refused_and_a_revocation_is_read_back(self):
         from studio import models
         category, _ = models.Category.objects.get_or_create(slug='synthetic-ops', defaults={
             'name': 'Synthetic', 'profiles_version': 'synthetic@1'})
         workspace = models.Workspace.objects.create(name='Synthetic ops', category=category)
         member = models.User.objects.create(username='platform-operator', actor_kind='human')
         models.Membership.objects.create(user=member, workspace=workspace, role=models.Membership.OWNER)
-        passwords = ['synthetic-operator-pass-0123456789-E', 'synthetic-operator-pass-0123456789-F']
         with self.assertRaisesRegex(SystemExit, 'holds a workspace membership'):
-            run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, passwords), 'reset': True})
-        self.assertFalse(models.User.objects.filter(username='ops-agent').exists())  # rolled back with it
+            run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(), 'reset': True})
         self.assertEqual(models.User.objects.get(pk=member.pk).password, member.password)  # its password untouched
         models.Membership.objects.filter(user=member).delete()
         member.actor_kind = 'agent'
         member.save()
         with self.assertRaisesRegex(SystemExit, 'another actor kind'):
-            run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, passwords), 'reset': True})
-
+            run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(), 'reset': True})
+        member.actor_kind = 'human'
+        member.save()
+        grant = models.OperatorGrant.objects.create(user=member, reason='synthetic', granted_by='Ada Lovelace')
+        found = run_in_image(install.OPERATOR_CHECK, {'usernames': ['platform-operator']})['accounts']['platform-operator']
+        self.assertFalse(found['revoked'])
+        models.OperatorRevocation.objects.create(grant=grant, reason='synthetic', revoked_by='Ada Lovelace')
+        found = run_in_image(install.OPERATOR_CHECK, {'usernames': ['platform-operator']})['accounts']['platform-operator']
+        self.assertEqual((found['revoked'], found['operator']), (True, False))
 
 
 # --- what INSTALL.md says ---------------------------------------------------------------------------------------------------
@@ -1889,10 +1930,9 @@ class InstallDocTests(unittest.TestCase):
         self.says('`127.0.0.1:9150` or `127.0.0.1:9151` → 8000', self.said)
         self.says('| 9a | `operators` |', self.said)
         self.assertNotIn('`reassess`', self.said)  # the phase is gone (DECISIONS D351)
-        self.says('ops-agent-credentials.json` (0600, top-level `username` and `password`)', self.said)
-        self.says('`operator-credentials.json` (root 0600', self.said)
-        self.assertEqual(str(install.OPS_AGENT_CREDENTIALS), '/home/claude/.cpt-studio/ops-agent-credentials.json')
-        self.assertEqual(install.OPERATOR_CREDENTIALS, 'operator-credentials.json')
+        # release 1 (A6): no operator login file is written; the setup code is kept root-only
+        self.says('`operator-enrolment.json` (root 0600', self.said)
+        self.assertEqual(install.OPERATOR_ENROLMENT, 'operator-enrolment.json')
 
     def test_switching_back_and_the_recovery_notes(self):
         switch = self.between('## Switching back', '## Reinstalling an older revision')
