@@ -614,11 +614,17 @@ class LockOrderStatementTests(TestCase):
     """The order itself, statement by statement: the account's row lock comes before any session row is written or
     deleted, and sessions are deleted in key order whatever plan the database chooses."""
 
+    def assert_locked_before(self, found, pattern):
+        """The account's row lock was taken, before the first statement ``pattern`` matches."""
+        lock, write = first_index(found, LOCK), first_index(found, pattern)
+        self.assertIsNotNone(lock, 'no account row lock was taken')
+        self.assertIsNotNone(write, 'no session row was written or deleted')
+        self.assertLess(lock, write)
+
     def test_a_store_write_that_adds_a_link_takes_the_accounts_lock_before_the_sessions_row(self):
         member = f.member(f.workspace())
         found = statements(lambda: store_session(signed_in_data(member)))
-        self.assertIsNotNone(first_index(found, LOCK))
-        self.assertLess(first_index(found, LOCK), first_index(found, SESSION_WRITE))
+        self.assert_locked_before(found, SESSION_WRITE)
         key = store_session(signed_in_data(member))
         store = session_store.SessionStore(key)
         store.load()
@@ -626,7 +632,7 @@ class LockOrderStatementTests(TestCase):
         self.assertIsNone(first_index(statements(store.save), LOCK))  # a save that adds no link takes none
         store[sessions.PENDING_SIGN_IN_KEY] = pending_data(member)[sessions.PENDING_SIGN_IN_KEY]
         found = statements(store.save)  # a link added to a session already written
-        self.assertLess(first_index(found, LOCK), first_index(found, SESSION_WRITE))
+        self.assert_locked_before(found, SESSION_WRITE)
 
     def test_a_delete_of_a_linked_session_and_a_sign_ins_cycle_key_take_the_lock_before_the_old_row(self):
         operator = f.user('s2-cycle-operator')
@@ -635,9 +641,7 @@ class LockOrderStatementTests(TestCase):
         store.load()
         store.pop(sessions.PENDING_SIGN_IN_KEY)  # complete_sign_in drops the pending state before login()'s cycle_key
         found = statements(store.cycle_key)
-        deleted = first_index(found, re.compile(r'DELETE FROM "django_session"'))
-        self.assertIsNotNone(deleted)
-        self.assertLess(first_index(found, LOCK), deleted)
+        self.assert_locked_before(found, re.compile(r'DELETE FROM "django_session"'))
         anonymous = store_session({'synthetic': 1})
         self.assertIsNone(first_index(statements(session_store.SessionStore(anonymous).delete), LOCK))
 
@@ -651,7 +655,7 @@ class LockOrderStatementTests(TestCase):
                         cursor.execute('SET LOCAL enable_indexscan = off')
                         cursor.execute('SET LOCAL enable_bitmapscan = off')
                 found = statements(lambda: self.assertEqual(sessions.end_sessions(member), 8))
-                self.assertLess(first_index(found, LOCK), first_index(found, SESSION_WRITE))
+                self.assert_locked_before(found, SESSION_WRITE)
                 self.assertEqual([match.group(1) for sql in found for match in SESSION_DELETE.finditer(sql)], keys)
 
     @override_settings(SESSION_LIVE_PER_ACCOUNT=3)
@@ -662,7 +666,7 @@ class LockOrderStatementTests(TestCase):
         ended = [match.group(1) for sql in found for match in SESSION_DELETE.finditer(sql)]
         self.assertEqual(len(ended), 4)
         self.assertEqual(ended, sorted(ended))
-        self.assertLess(first_index(found, LOCK), first_index(found, SESSION_WRITE))
+        self.assert_locked_before(found, SESSION_WRITE)
         self.assertEqual(len(set(keys) - set(ended)), 2)
 
 
