@@ -18,6 +18,7 @@ never passed, without one). Synthetic data only.
       never discards its record - each is redacted before the log and the receipt are written, and counted.
   I7  dataloss-1: a receipt says whether an act's stdout was cut and how long it was; the ledger step keeps the ledger
       whole in a log of its own and records its sha256, size and line count.
+  I8  installer-5 (judged no defect; the one call): the app phase's converter precondition holds the seal too.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair -v
 """
@@ -1129,6 +1130,34 @@ class LedgerKeptWholeTests(TemporaryDirectoryTest):
         self.assertIs(details['ledger_printed']['redacted'], True)
         self.assertIn('no longer verifies: print it again without --reason-file', details['summary'])
         self.assertNotIn(b'Ticket 4521', Path(details['ledger_printed']['log']).read_bytes())
+
+
+# --- I8: the app phase's converter precondition holds the seal --------------------------------------------------------
+
+class AppConverterSealTests(TemporaryDirectoryTest):
+    def test_an_unsealed_converter_refuses_the_app_phase_before_anything_starts(self):
+        from test_install_converter import ConverterWorld, converter_container
+        # installer-5's input: labelled, this revision and image, running and healthy - and on cpt-studio-net, with
+        # the files volume and the application's secret names in its environment
+        unsealed = converter_container(**{
+            'HostConfig.NetworkMode': install.NETWORK,
+            'Config.Env': ['CPT_STUDIO_SECRET_KEY=synthetic', 'CPT_STUDIO_DB_PASSWORD=synthetic'],
+            'Mounts': [{'Type': 'volume', 'Name': install.CONVERT_VOLUME, 'Destination': install.CONVERT_DIR},
+                       {'Type': 'volume', 'Name': install.FILES_VOLUME, 'Destination': install.STATE_DIR}]})
+        world = ConverterWorld(self.tmp, converter=unsealed)
+        details, error = run_app(world)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn("its network is 'cpt-studio-net', not none", str(error))
+        self.assertIn('not the convert volume alone', str(error))
+        self.assertIn('CPT_STUDIO_DB_PASSWORD, CPT_STUDIO_SECRET_KEY', str(error))
+        self.assertIn('run --phase converter first', str(error))
+        self.assertEqual(world.acts('run', 'stop', 'rename', 'oneshot', 'vhost'), [])
+
+    def test_the_sealed_converter_passes(self):
+        from test_install_converter import ConverterWorld
+        world = ConverterWorld(self.tmp)
+        details, error = run_app(world)
+        self.assertIsNone(error, error and str(error))
 
 
 class SessionScriptImportTests(unittest.TestCase):

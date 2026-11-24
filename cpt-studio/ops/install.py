@@ -7132,9 +7132,12 @@ def phase_app(ctx) -> dict:
         raise InstallError(f'{problem}; nothing was started.')
     image_id = installed_image(ctx)
     # release 1 (A7): a revision that has the converter starts a worker that requires it, so it must already run,
-    # healthy, from this revision's image - before anything changes
+    # healthy, from this revision's image, and sealed as phase_converter starts it (refutation round 1, installer-5) -
+    # before anything changes
     if has_converter(ctx.revision):
-        problem = converter_problem(image_id, ctx.revision)
+        problem = converter_problem(image_id, ctx.revision) or '; '.join(
+            f'{CONVERTER}: {each}' for each in service_problems(inspect('container', CONVERTER) or {}, 'converter',
+                                                                image_id))
         if problem:
             raise InstallError(f'{problem}: run --phase converter first. Nothing was started.')
     require_db()
