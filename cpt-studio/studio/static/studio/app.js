@@ -45,6 +45,9 @@ const SESSION_CHANNEL = 'cpt-studio-session';  // the tabs of this browser share
 const ACCOUNT_REQUIRED_URL = '/account/?required=1';
 const WORD_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const WORD_ORIGINAL_TEXT = 'The original Word file can contain links and embedded content. Download it anyway?';
+const DOWNLOAD_ADDRESS_MS = 60000;  // how long the address of a file saved from the page's own bytes is kept
+const FRAME_LIMIT_TEXT = 'The document could not be shown: too many requests in a short time. Wait a minute, then open it again.';
+const FRAME_REFUSED_TEXT = 'The document could not be shown. Open it again to try once more.';
 const ROLE_LABELS = { owner: 'Owner', reviewer: 'Reviewer', viewer: 'Viewer' };
 // a code the server answers for the page to act on (signed_out, password_change_required, rate_limited), never a
 // sentence to show
@@ -2027,7 +2030,8 @@ function askMemberAccess(button) {
 // C6: the Word file itself is downloaded only once the member has read why it is not the default.
 function askWordOriginal(address) {
   if (!/^\/api\/encounters\/[0-9a-f-]{36}\/original\?format=original$/i.test(String(address))) return;
-  askConfirm({ title: 'Download the Word file?', text: WORD_ORIGINAL_TEXT, action: 'Download it anyway', run: () => startDownload(address, '') });
+  askConfirm({ title: 'Download the Word file?', text: WORD_ORIGINAL_TEXT, action: 'Download it anyway',
+    run: () => saveDownload(address, '').catch(error => toast(error.message)) });
 }
 
 async function showList(name, serial) {
@@ -3340,7 +3344,23 @@ function noteFrameLoad(event) {
   }
   loadedPages.set(frame, page || UNREADABLE);
   watchFrameInput(page);
+  if (state.viewer?.frame === frame) noteRefusedFrame(frame);
   if (state.framePassage?.frame === frame) paintFrame(frame);
+}
+
+// The browser's own viewer of a PDF, framed where the page cannot draw it, shows whatever the server answered - the front
+// door's refusal (429) too, which reads as a broken document. Its own load says the answer, and anything but 200 is said
+// under the viewer in plain words (refutation r2, finding 21).
+function noteRefusedFrame(frame) {
+  let status;
+  try {
+    status = frame.contentWindow.performance.getEntriesByType('navigation')[0]?.responseStatus;
+  } catch {
+    status = undefined;
+  }
+  if (!Number.isInteger(status) || status === 0 || status === 200) return;
+  frame.dataset.refused = String(status);
+  setMarkNote(status === 429 ? FRAME_LIMIT_TEXT : FRAME_REFUSED_TEXT, true);
 }
 
 // Input inside a frame of the page - a wheel, a key, a touch in the viewer's framed text - is the member's input as much
@@ -3878,6 +3898,71 @@ function startDownload(url, filename) {
   link.remove();
 }
 
+// A file the page downloads for the member - an export just made, an earlier one, the original - is fetched first, so a
+// refusal (the front door's limit, 429; a session that ended; any answer but 2xx) is seen and said in plain words instead
+// of going unread to the browser's downloads while the page says the file is downloading (refutation r2, finding 21).
+// It is then saved from the answer's bytes, a Blob - which the browser may keep on disk, so a file up to the bundle limit
+// is not held in the page twice - under its own name. The address goes a minute later, or when the page leaves
+// (releaseObjectUrls). Resolves once the browser has the file; rejects with an ApiError that says why it has not.
+async function saveDownload(url, filename) {
+  let response;
+  try {
+    response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+  } catch {
+    throw new ApiError(OFFLINE_TEXT);
+  }
+  if (response.status === 401 || (response.redirected && new URL(response.url).pathname.startsWith('/login'))) {
+    sessionEnded('expired');
+    throw new ApiError('Your session has ended. Sign in again.', 401);
+  }
+  if (!response.ok) throw new ApiError(await downloadRefusal(response), response.status);
+  const address = URL.createObjectURL(await response.blob());
+  if (!(state.objectUrls instanceof Set)) state.objectUrls = new Set();
+  state.objectUrls.add(address);
+  startDownload(address, typeof filename === 'string' && filename ? filename : savedName(response));
+  const timer = setTimeout(() => {
+    if (!state.objectUrls?.delete(address)) return;
+    try {
+      URL.revokeObjectURL(address);
+    } catch {
+      // already gone
+    }
+  }, DOWNLOAD_ADDRESS_MS);
+  timer?.unref?.();  // (a timer of the page in a browser; under Node's tests it keeps nothing waiting)
+}
+
+// What a refused download says: the server's own sentence where it answered one, the wait at the front door's limit
+// (429, from its Retry-After), else a plain sentence of the answer.
+async function downloadRefusal(response) {
+  const data = (response.headers.get('Content-Type') || '').includes('application/json') ? await response.json().catch(() => null) : null;
+  if (response.status === 429 && !data) return rateLimitText({ retry_after: Number(response.headers.get('Retry-After')) });
+  return errorText(response.status, data);
+}
+
+// The name the server gave the file (Content-Disposition), else 'download'.
+function savedName(response) {
+  const header = response.headers.get('Content-Disposition') || '';
+  const encoded = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim());
+    } catch {
+      // fall back to the plain name
+    }
+  }
+  const plain = /filename\s*=\s*"([^"]+)"/i.exec(header) || /filename\s*=\s*([^;]+)/i.exec(header);
+  return plain ? plain[1].trim() : 'download';
+}
+
+// A download link the member clicks (an earlier export, the original) goes the same way: fetched first, a refusal said.
+function saveLinked(link) {
+  const address = link.getAttribute('href') || '';
+  saveDownload(address, link.getAttribute('download') || '').catch(error => {
+    if (link.closest?.('#exportDialog') && $('#exportDialog')?.open) showError('exportError', error.message);
+    else toast(error.message);
+  });
+}
+
 // POST reports {kind, fmt, round}: the round the export dialog was opened on. While it runs every option waits and the
 // one chosen says it is being prepared, as the status does; the file is said to be ready, and downloaded, only once the
 // server has made it (201). The options then come back - the one just used a moment later (holdMade) - and the dialog
@@ -3930,13 +4015,24 @@ function generateReport(kind, fmt) {
       return;
     }
     state.making = null;
-    startDownload(safeDownloadUrl(report.download_url), report.filename);
     if (state.exporting) {
       state.exporting.ready = same();
       $('#exportStatus').textContent = same() ? readyText(fmt, report.filename) : exportStatusText(dialogDoc(state.exporting));
     }
     holdMade({ encounter: exporting.encounter, kind, fmt });
     drawExportOptions([kind, fmt]);
+    try {
+      await saveDownload(safeDownloadUrl(report.download_url), report.filename);
+    } catch (error) {
+      // made, but not downloaded (refutation r2, finding 21): the dialog never says it is; the file is listed among the
+      // downloads once the page has read the document again, to try again
+      if (state.exporting?.encounter === exporting.encounter) {
+        state.exporting.ready = false;
+        $('#exportStatus').textContent = exportStatusText(dialogDoc(state.exporting));
+      }
+      if (shown()) showError('exportError', error.message);
+      else if (error.status !== 401) toast(error.message);
+    }
   }).then(() => (refused ? rereadAfterRefusal(exporting.encounter) : undefined));
 }
 
@@ -4305,6 +4401,15 @@ function onClick(event) {
     askWordOriginal(word.dataset.wordOriginal);
     return;
   }
+  const linked = target.closest('a[download]');
+  if (linked && !(event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)) {
+    const href = linked.getAttribute('href') || '';
+    if (safeDownloadUrl(href) || safeOriginalUrl(href)) {
+      event.preventDefault();
+      saveLinked(linked);
+      return;
+    }
+  }
   const report = target.closest('[data-export-kind]');
   if (report) {
     // the second (or third) click of one gesture - a double click - is not a choice of its own
@@ -4435,6 +4540,8 @@ if (typeof module === 'object' && module.exports) {
     buildPages, frameHolds, noteFrameLoad, watchFrameInput, markInFrame, paintFrame,
     csrfCookieName, csrfValue, signedOutReason, loginAddress, idleStep, idleWarningText, rateLimitText, teamMembers, memberRow,
     teamList, teamView, downloadLinks, showTeam, setMemberAccess, askConfirm, confirmChosen, askWordOriginal, clearScreen,
+    saveDownload, downloadRefusal, savedName, saveLinked, noteRefusedFrame, FRAME_LIMIT_TEXT, FRAME_REFUSED_TEXT,
+    generateReport, readyText, startDownload,
     goToLogin, goToAccount, sendActivity, adoptDeadline, scheduleIdle, signOutIdle, receiveSession, shareSession, noteInput,
     pageSession, armFromPage, applySessionAnswer, checkSession, sessionEnded, leaveSignedOut, capFirst, capWarningText,
     showIdleWarning, hideIdleWarning, closeCapWarning, startIdleWatch, IDLE_TEXT, CAP_TEXT, RETRY_MS, DEFAULT_IDLE_SECONDS,

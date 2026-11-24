@@ -221,10 +221,11 @@ function fakeElement(extra = {}) {
   };
 }
 
-function response({ status = 200, body = {}, type = 'application/json', redirected = false, url = '/' } = {}) {
+function response({ status = 200, body = {}, type = 'application/json', redirected = false, url = '/', headers = {} } = {}) {
+  const named = Object.fromEntries(Object.entries({ 'content-type': type, ...headers }).map(([name, value]) => [name.toLowerCase(), value]));
   return {
     status, ok: status >= 200 && status < 300, redirected, url: `http://studio.test${url}`,
-    headers: { get: name => (name.toLowerCase() === 'content-type' ? type : null) },
+    headers: { get: name => named[name.toLowerCase()] ?? null },
     json: async () => (typeof body === 'string' ? JSON.parse(body) : body),
   };
 }
@@ -253,9 +254,14 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
     calls.push({ url, method: init.method, headers: init.headers, body: init.body, credentials: init.credentials, cache: init.cache });
     const session = method === 'GET' && url === '/api/session';
     const index = answers.findIndex(answer => (answer.match ? answer.match(method, url) : !session));
-    if (index >= 0) return response(answers.splice(index, 1)[0]);
-    return response(session ? { status: 200, body: fixture('session.json') } : { status: 201, body: {} });
+    const answer = index >= 0 ? answers.splice(index, 1)[0] : session ? { status: 200, body: fixture('session.json') } : { status: 201, body: {} };
+    // the bytes of a file the page saves (saveDownload): a Blob that names the address it came from
+    return Object.assign(response(answer), { blob: async () => Object.assign(new Blob([JSON.stringify(answer.body ?? {})]), { source: url }) });
   };
+  // the address a saved file gets names the file the page fetched, so a test reads which file the member was given
+  const objectUrls = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  URL.createObjectURL = blob => blob?.source || 'blob:test';
+  URL.revokeObjectURL = () => {};
   global.location = { hash: '', assign(url) { calls.push({ assign: url }); } };
   global.window = { scrollY: 0, scrollTo() {}, matchMedia: () => ({ matches: false }) };
   const kept = ['doc', 'session', 'route', 'routeSerial', 'review', 'answers', 'leaving', 'outdated', 'docKey', 'viewerKey', 'selectedQuote', 'clock', 'reconnecting', 'ack',
@@ -266,6 +272,7 @@ async function withPage({ elements = {}, answers = [] } = {}, fn) {
     await fn({ calls, element });
   } finally {
     await new Promise(resolve => setImmediate(resolve));
+    Object.assign(URL, { createObjectURL: objectUrls.create, revokeObjectURL: objectUrls.revoke });
     clearTimeout(app.idle.timer);
     Object.assign(app.idle, idleBefore);
     clearTimeout(app.state.madeTimer);
@@ -5180,7 +5187,9 @@ test('C6: the Word file is downloaded only after its warning, as ?format=origina
     assert.equal(app.WORD_ORIGINAL_TEXT, 'The original Word file can contain links and embedded content. Download it anyway?');
     assert.deepEqual(calls.filter(call => call.download), [], 'nothing before the member chooses');
     app.confirmChosen();
-    assert.deepEqual(calls.filter(call => call.download), [{ download: address, filename: '' }]);
+    await settle(() => calls.some(call => call.download));
+    assert.deepEqual(calls.filter(call => call.url === address).map(call => call.method ?? 'GET'), ['GET'], 'fetched first');
+    assert.deepEqual(calls.filter(call => call.download), [{ download: address, filename: 'download' }]);
     // an address of any other shape is never downloaded
     for (const bad of ['https://evil.test/x?format=original', `/api/encounters/${UUID}/original`, '/api/reports/x/download?format=original']) {
       element('#confirmDialog').open = false;
@@ -5501,4 +5510,88 @@ test('B5: input inside the viewer\'s frame is the member\'s input, and the focus
     assert.equal(dialog.open, false);
     assert.deepEqual(focused, ['frame', 'frame document']);
   });
+});
+
+// --- refutation r2, finding 21: a refused download is seen and said ---------------------------------------------------
+
+test('A download refused at the front door is said in plain words, and the export never says the file is downloading', async () => {
+  const session = fixture('session.json');
+  const reviewed = fixture('encounter-reviewed.json');
+  const address = `/api/encounters/${reviewed.id}`;
+  const report = { id: 'f6100000-0000-4000-8000-0000000000c1', kind: 'approved', fmt: 'pdf', filename: 'CPT-Studio-approved-r2-20261124T120000.pdf',
+    generated_at: '2026-11-24T12:00:00Z', download_url: '/api/reports/f6100000-0000-4000-8000-0000000000c1/download', current: true };
+  const limited = { match: (method, url) => url === report.download_url, status: 429, type: 'text/html', body: '<html>429 Too Many Requests</html>', headers: { 'Retry-After': '120' } };
+  await withPage({ answers: [{ match: (method, url) => method === 'POST' && url === `${address}/reports`, status: 201, body: report }, limited] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 41, docKey: '', viewerKey: app.viewerKey(reviewed) });
+    click('[data-action]', { action: 'export' });
+    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'pdf' });
+    await settle(() => element('#exportError').textContent !== '');
+    assert.equal(element('#exportError').textContent, 'Too many requests in a short time. Wait 2 minutes and try again.');
+    assert.equal(element('#exportError').hidden, false);
+    assert.deepEqual(calls.filter(call => call.download), [], 'nothing was handed to the browser\'s downloads');
+    assert.equal(calls.filter(call => call.url === report.download_url).length, 1, 'fetched first');
+    assert.notEqual(element('#exportStatus').textContent, app.readyText('pdf', report.filename));
+    assert.doesNotMatch(element('#exportStatus').textContent, /Downloading/);
+  });
+  // the same file, answered: saved from its own bytes, and the status says it is downloading
+  await withPage({ answers: [{ match: (method, url) => method === 'POST' && url === `${address}/reports`, status: 201, body: report }] }, async ({ calls, element }) => {
+    Object.assign(app.state, { session, doc: reviewed, route: { name: 'doc', id: reviewed.id }, routeSerial: 42, docKey: '', viewerKey: app.viewerKey(reviewed) });
+    click('[data-action]', { action: 'export' });
+    click('[data-export-kind]', { exportKind: 'approved', exportFmt: 'pdf' });
+    await settle(() => calls.some(call => call.download));
+    assert.deepEqual(calls.filter(call => call.download), [{ download: report.download_url, filename: report.filename }]);
+    assert.equal(element('#exportStatus').textContent, app.readyText('pdf', report.filename));
+    assert.equal(element('#exportError').hidden ?? true, true);
+  });
+});
+
+test('A saved file is the answer\'s own bytes, under a page address the page lets go of; a link is fetched first too', async () => {
+  const original = `/api/encounters/${UUID}/original`;
+  await withPage({ answers: [{ match: (method, url) => url === original, status: 200, type: 'application/pdf', body: {}, headers: { 'Content-Disposition': 'attachment; filename="synthetic-original.pdf"' } }] }, async ({ calls }) => {
+    URL.createObjectURL = blob => {
+      assert.ok(blob instanceof Blob, 'the bytes are a Blob');
+      return 'blob:https://cpt.test/0b6f6a2e';
+    };
+    await app.saveDownload(original, '');
+    assert.deepEqual(calls.filter(call => call.download), [{ download: 'blob:https://cpt.test/0b6f6a2e', filename: 'synthetic-original.pdf' }]);
+    assert.ok(app.state.objectUrls.has('blob:https://cpt.test/0b6f6a2e'), 'let go of when the page leaves');
+  });
+  // a link of the page - an earlier export, the original - is fetched first; a refusal is said
+  const refused = { match: (method, url) => url === original, status: 404, body: { error: 'This document is not available.' } };
+  await withPage({ answers: [refused] }, async ({ calls, element }) => {
+    let prevented = false;
+    const link = fakeElement({ getAttribute: name => ({ href: original, download: '' }[name] ?? null), closest: () => null });
+    app.onClick({ target: { closest: wanted => (wanted === 'a[download]' ? link : null) }, preventDefault() { prevented = true; } });
+    assert.equal(prevented, true, 'the browser does not download it unread');
+    await settle(() => element('#toast').textContent !== '');
+    assert.equal(element('#toast').textContent, 'This document is not available.');
+    assert.deepEqual(calls.filter(call => call.download), []);
+  });
+  assert.equal(app.savedName(response({ headers: { 'Content-Disposition': "attachment; filename*=UTF-8''r%C3%A9sum%C3%A9.pdf" } })), 'résumé.pdf');
+  assert.equal(app.savedName(response({})), 'download');
+});
+
+test('The framed viewer of a PDF says when the server refused the document it was to show', () => {
+  const marks = [];
+  const note = fakeElement();
+  const saved = global.document;
+  try {
+    global.document = { querySelector: selector => (selector === '#viewerMark' ? note : null) };
+    const framed = status => ({ tagName: 'IFRAME', dataset: {}, contentDocument: null,
+      contentWindow: { performance: { getEntriesByType: () => [{ responseStatus: status }] } } });
+    const limited = framed(429);
+    app.noteRefusedFrame(limited);
+    marks.push(note.textContent);
+    assert.equal(limited.dataset.refused, '429');
+    note.textContent = '';
+    app.noteRefusedFrame(framed(503));
+    marks.push(note.textContent);
+    note.textContent = '';
+    app.noteRefusedFrame(framed(200));
+    marks.push(note.textContent);
+    assert.deepEqual(marks, [app.FRAME_LIMIT_TEXT, app.FRAME_REFUSED_TEXT, ''], 'an answer of 200 says nothing');
+    assert.equal(note.classList.contains('is-missing'), true, 'said as the viewer says what it could not do');
+  } finally {
+    global.document = saved;
+  }
 });
