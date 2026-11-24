@@ -423,6 +423,21 @@ def wait_until(predicate, timeout=30.0):
     return False
 
 
+def deadlocks_counted():
+    """PostgreSQL's own count of the deadlocks it detected in this database (pg_stat_database.deadlocks)."""
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_stat_clear_snapshot()')
+        cursor.execute('SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()')
+        return cursor.fetchone()[0]
+
+
+def assert_no_deadlock(test, before):
+    """No deadlock was detected since ``before``: a worker's backend reports its count as it exits, so a change is
+    waited for a moment before the count is believed unchanged."""
+    wait_until(lambda: deadlocks_counted() != before, timeout=1.5)
+    test.assertEqual(deadlocks_counted(), before, 'PostgreSQL detected a deadlock between the two acts')
+
+
 @contextmanager
 def held_right_after_deleting(session_key, worker):
     """Hold ``worker``'s request right after it deletes the row of ``session_key``, with every lock it holds then: an
@@ -486,6 +501,7 @@ class LockOrderRaceTests(TransactionTestCase):
                     .values_list('session_key', flat=True))
 
     def race(self, first, held_key, second):
+        before = deadlocks_counted()
         with server_errors() as errors, held_right_after_deleting(held_key, first) as release:
             first.start()
             self.assertTrue(wait_until(lambda: wait_of(first) == ('Lock', 'advisory')), 'the first never reached the hold')
@@ -496,6 +512,7 @@ class LockOrderRaceTests(TransactionTestCase):
             first.join(60)
             second.join(60)
         self.assertFalse(first.is_alive() or second.is_alive())
+        assert_no_deadlock(self, before)
         return errors
 
     def assertChangeAnswered(self, change):  # noqa: N802 - an assertion, named as unittest's are
@@ -826,6 +843,7 @@ class GlobalLockOrderRaceTests(TransactionTestCase):
         super().tearDown()
 
     def race(self, first, table, row_id, second):
+        before = deadlocks_counted()
         with server_errors() as errors, held_right_after_updating(table, row_id, first) as release:
             first.start()
             self.assertTrue(wait_until(lambda: wait_of(first) == ('Lock', 'advisory')), 'the first never reached the hold')
@@ -837,6 +855,7 @@ class GlobalLockOrderRaceTests(TransactionTestCase):
             first.join(90)
             second.join(90)
         self.assertFalse(first.is_alive() or second.is_alive())
+        assert_no_deadlock(self, before)
         return errors
 
     def practice(self, name):
@@ -945,3 +964,146 @@ class GlobalLockOrderRaceTests(TransactionTestCase):
         self.assertFalse(member.is_active)  # no other practice: closed with it
         self.assertEqual(live_keys(member), set())
         self.assertTrue(models.AuditEvent.objects.filter(workspace=practice, event='member.access_off').exists())
+
+
+@contextmanager
+def held_right_after_writing(table, event, column, value, worker):
+    """Hold ``worker``'s act right after its ``event`` (INSERT or UPDATE) of a row of ``table`` whose ``column`` is
+    ``value``, with every lock it holds then (an AFTER row trigger runs at the end of its statement, every row of it
+    written): the gate of held_right_after_updating, for any of these columns."""
+    assert (table, column) in {('studio_secondfactorcredential', 'user_id'),
+                               ('studio_secondfactorrecoverycode', 'user_id')}, (table, column)
+    assert event in ('INSERT', 'UPDATE'), event
+    assert re.fullmatch(r'[0-9a-f-]+', str(value)), value
+    assert WORKER_NAME.fullmatch(worker.name), worker.name
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_advisory_lock(%s)', [GATE])
+        cursor.execute('CREATE OR REPLACE FUNCTION r2s2_gate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN '
+                       f"IF current_setting('application_name') = '{worker.name}' THEN "
+                       f'PERFORM pg_advisory_lock_shared({GATE}); PERFORM pg_advisory_unlock_shared({GATE}); '
+                       'END IF; RETURN NULL; END $$')
+        cursor.execute(f'CREATE TRIGGER r2s2_gate AFTER {event} ON {table} FOR EACH ROW '
+                       f"WHEN (NEW.{column} = '{value}') EXECUTE FUNCTION r2s2_gate()")
+    released = []
+
+    def release():
+        if not released:
+            released.append(True)
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_unlock(%s)', [GATE])
+    try:
+        yield release
+    finally:
+        release()
+        with connection.cursor() as cursor:
+            cursor.execute(f'DROP TRIGGER IF EXISTS r2s2_gate ON {table}')
+            cursor.execute('DROP FUNCTION IF EXISTS r2s2_gate()')
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ResetLockOrderRaceTests(TransactionTestCase):
+    """The server's reset of a lost factor (keys removed, recovery codes voided, sessions ended, setup codes revoked)
+    against the two acts that change the same credentials: setup's key step (the claim, a setup code row, then the
+    account's recovery codes) and a recovery-code sign-in (the codes, then the pending sign-in's row). All three take the
+    account first now. Each pair is held as the others: the first right after its write, the second until it waits."""
+
+    def tearDown(self):
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM pg_trigger WHERE tgname LIKE 'r2s2%%'")
+            self.assertEqual(cursor.fetchone()[0], 0)
+        super().tearDown()
+
+    def race(self, first, table, event, value, second):
+        before = deadlocks_counted()
+        with server_errors() as errors, held_right_after_writing(table, event, 'user_id', value, first) as release:
+            first.start()
+            self.assertTrue(wait_until(lambda: wait_of(first) == ('Lock', 'advisory')), 'the first never reached the hold')
+            second.start()
+            self.assertTrue(wait_until(lambda: getattr(second, 'status', None) is not None or getattr(second, 'done', False)
+                                       or getattr(second, 'error', None) is not None or wait_of(second)[0] == 'Lock'),
+                            'the second act neither finished nor waited on a lock')
+            release()
+            first.join(90)
+            second.join(90)
+        self.assertFalse(first.is_alive() or second.is_alive())
+        assert_no_deadlock(self, before)
+        return errors
+
+    @staticmethod
+    def operator_with_codes(name):
+        operator = f.user(name)
+        ops.grant(operator)
+        return operator, second_factor.new_recovery_codes(operator)
+
+    def assert_reset_kept(self, operator):
+        """What the reset leaves: no key, no unused recovery code, one live setup code - its own."""
+        self.assertFalse(second_factor.active_keys(operator).exists())
+        self.assertEqual(second_factor.recovery_codes_left(operator), 0)
+        self.assertEqual(models.OneTimeToken.objects.filter(
+            user=operator, purpose=models.OneTimeToken.OPERATOR_SETUP, used_at__isnull=True,
+            revoked_at__isnull=True).count(), 1)
+
+    def test_the_servers_reset_and_setups_key_step_at_once(self):
+        """The pre-existing cycle: setup's key step held right after it stored the new key (holding its claim); the
+        reset sent meanwhile voids the account's recovery codes and revokes its unused claims."""
+        from tests.test_second_factor import Authenticator
+        operator, _ = self.operator_with_codes('r2s2-finish-operator')  # codes of an earlier setup: both acts void them
+        _token, code = second_factor.issue_setup_code(operator, 'Synthetic Person')
+        browser = admin_client(raise_request_exception=False)
+        started = browser.post('/login/enrol', {'step': 'code', 'code': code, 'new_password': NEW_PASSWORD,
+                                                'new_password_again': NEW_PASSWORD})
+        self.assertEqual((started.status_code, started['Location']), (303, '/login/enrol'))
+        credential = json.dumps(Authenticator().register(options_of(browser, '/login/enrol/options')))
+        finish = Worker('finish', lambda: browser.post('/login/enrol', {'step': 'key', 'label': 'Synthetic key',
+                                                                       'credential': credential}))
+        reset = Call('reset', lambda: second_factor.reset(operator, 'Synthetic Person'))
+        errors = self.race(finish, 'studio_secondfactorcredential', 'INSERT', operator.pk, reset)
+        self.assertEqual(errors, [])
+        self.assertIsNone(finish.error)
+        # the setup finished first (its codes shown, 200) - or its answer met its session ended by the reset served after
+        # it, before the answer's own save (400, Django's SessionInterrupted): the setup was made either way
+        self.assertIn(finish.status, (200, 400))
+        self.assertTrue(models.SecurityEvent.objects.filter(subject_id=operator.pk, event='second_factor.enrolled')
+                        .exists())
+        self.assertTrue(models.SecondFactorCredential.objects.filter(user=operator, removed_at__isnull=False).exists())
+        self.assertEqual((reset.done, reset.error), (True, None))
+        self.assert_reset_kept(operator)  # served after it, the reset removed the new key and voided the new codes
+        self.assertNotEqual(browser.get('/ops/').status_code, 200)  # and ended setup's sign-in
+
+    def test_a_recovery_code_sign_in_and_the_servers_reset_the_recovery_first(self):
+        """The recovery held right after it used its code up (holding the account's codes); the reset sent meanwhile."""
+        operator, codes = self.operator_with_codes('r2s2-recovery-first')
+        from tests.test_second_factor import add_key
+        add_key(operator)
+        waiting = Client(HTTP_HOST=ADMIN, raise_request_exception=False)
+        self.assertEqual(password_step(waiting, operator)['Location'], '/login/second-factor')
+        recover = Worker('recover', lambda: waiting.post('/login/recovery', {'code': codes[0]}))
+        reset = Call('reset', lambda: second_factor.reset(operator, 'Synthetic Person'))
+        errors = self.race(recover, 'studio_secondfactorrecoverycode', 'UPDATE', operator.pk, reset)
+        self.assertEqual(errors, [])
+        self.assertIsNone(recover.error)
+        # signed in first (302 /ops/) - or its answer met its session ended by the reset served after it (400,
+        # SessionInterrupted): the code was used and the sign-in made either way
+        self.assertIn((recover.status, recover.location), {(302, '/ops/'), (400, None)})
+        self.assertTrue(models.SecurityEvent.objects.filter(subject_id=operator.pk,
+                                                            event='second_factor.recovery_used').exists())
+        self.assertEqual((reset.done, reset.error), (True, None))
+        self.assert_reset_kept(operator)
+        self.assertNotEqual(waiting.get('/ops/').status_code, 200)  # the reset, served after it, ended that sign-in
+
+    def test_a_recovery_code_sign_in_and_the_servers_reset_the_reset_first(self):
+        """The reset held right after it voided the account's codes (holding them); the recovery sent meanwhile."""
+        operator, codes = self.operator_with_codes('r2s2-reset-first')
+        from tests.test_second_factor import add_key
+        add_key(operator)
+        waiting = Client(HTTP_HOST=ADMIN, raise_request_exception=False)
+        self.assertEqual(password_step(waiting, operator)['Location'], '/login/second-factor')
+        reset = Call('reset', lambda: second_factor.reset(operator, 'Synthetic Person'))
+        recover = Worker('recover', lambda: waiting.post('/login/recovery', {'code': codes[0]}))
+        errors = self.race(reset, 'studio_secondfactorrecoverycode', 'UPDATE', operator.pk, recover)
+        self.assertEqual(errors, [])
+        self.assertEqual((reset.done, reset.error), (True, None))
+        self.assertIsNone(recover.error)
+        self.assertNotEqual((recover.status, recover.location), (302, '/ops/'))  # the code was void by then: refused
+        self.assert_reset_kept(operator)
+        self.assertNotEqual(waiting.get('/ops/').status_code, 200)

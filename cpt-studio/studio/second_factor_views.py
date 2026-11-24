@@ -144,6 +144,7 @@ def recovery(request):
             completed = False
             # the code used up, its record and what it completes: one act
             with factor.new_sign_in_only_if_kept(request), transaction.atomic():
+                session_store.lock_accounts([user.pk])  # the account first: the lock order (studio.session_store)
                 used = factor.use_recovery_code(user, request.POST.get('code', ''))
                 if used:
                     security_events.record('second_factor.recovery_used', actor=user, subject=user, request=request,
@@ -153,6 +154,9 @@ def recovery(request):
                     else:
                         factor.refresh(request)
                         completed = True
+                    # the session and its link written before the commit, so an end of the account's sessions
+                    # served after this act (the server's reset waiting on the account) ends this sign-in too
+                    request.session.save()
             if used:
                 if not completed:
                     return redirect(f'{SIGN_IN_PAGE}?reason=key')  # its attempt was settled meanwhile
@@ -250,6 +254,7 @@ def _finish_enrolment(request, user, claim):
     checked = factor.checked_registration(request, user, request.POST.get('credential', ''),
                                           request.POST.get('label', ''), factor.ENROL)
     with factor.new_sign_in_only_if_kept(request), transaction.atomic():
+        session_store.lock_accounts([user.pk])  # the account first: the lock order (studio.session_store)
         try:
             claim = OneTimeToken.objects.select_for_update().get(
                 pk=claim.pk, user=user, purpose=factor.SETUP_CLAIM_PURPOSE, used_at__isnull=True,
@@ -268,6 +273,7 @@ def _finish_enrolment(request, user, claim):
         sessions.prepare_sign_in(request, door=request_meta.ADMIN, sign_in_ref=door.sign_in_ref)
         login(request, user)
         request.session[request_meta.SESSION_SECOND_FACTOR_AT] = request_meta.epoch_seconds()
+        request.session.save()  # with its link, before the commit: an end of the account's sessions after it sees it
     # the codes are shown signed in: the page arms the console's idle timer from the session just opened, as every
     # signed-in console page does from the session policy's own (studio.sessions.page_config; auth-1)
     request.cpt_page = sessions.page_config(request)
