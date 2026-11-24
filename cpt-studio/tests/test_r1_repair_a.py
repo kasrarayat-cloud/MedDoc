@@ -336,19 +336,24 @@ class ActWithItsRecordTests(TransactionTestCase):
         client = Client(HTTP_HOST=ADMIN, raise_request_exception=False)
         self.assertEqual(setup_first_step(client, code).status_code, 303)
         key = Authenticator()
-        answer = self.refused_answer(refused_rows(SECURITY_EVENT_TABLE, "NEW.event = 'second_factor.enrolled'"),
-                                     lambda: setup_key_step(client, key))
-        self.assertNotIn('<li>', answer.content.decode())
-        self.assertFalse(models.SecondFactorCredential.objects.filter(user=operator).exists())
-        self.assertFalse(models.SecondFactorRecoveryCode.objects.filter(user=operator).exists())
-        claim = models.OneTimeToken.objects.get(purpose=second_factor.SETUP_CLAIM_PURPOSE)
-        self.assertIsNone(claim.used_at, 'the setup can still be finished')
-        self.assertIsNone(client.session.get('_auth_user_id'), 'not signed in')
-        self.assertFalse(models.LoginAttempt.objects.exists())
-        self.assertEqual(security_events('second_factor.enrolled'), 0)
+        enrolled = "NEW.event = 'second_factor.enrolled'"
+        # refused at the statement, and at the commit - after the key, the codes, the record and the sign-in ran
+        for refusal in (refused_rows(SECURITY_EVENT_TABLE, enrolled),
+                        refused_rows(SECURITY_EVENT_TABLE, enrolled, at_commit=True)):
+            answer = self.refused_answer(refusal, lambda: setup_key_step(client, key))
+            self.assertNotIn('<li>', answer.content.decode())
+            self.assertIsNone(answer.cookies.get(throttle.device_cookie_name()), 'no known-device cookie')
+            self.assertFalse(models.SecondFactorCredential.objects.filter(user=operator).exists())
+            self.assertFalse(models.SecondFactorRecoveryCode.objects.filter(user=operator).exists())
+            claim = models.OneTimeToken.objects.get(purpose=second_factor.SETUP_CLAIM_PURPOSE)
+            self.assertIsNone(claim.used_at, 'the setup can still be finished')
+            self.assertIsNone(client.session.get('_auth_user_id'), 'not signed in')
+            self.assertFalse(models.LoginAttempt.objects.exists())
+            self.assertEqual(security_events('second_factor.enrolled'), 0)
         # the control: the setup is finished with a new challenge, signed in, its ten codes shown once
         done = setup_key_step(client, key)
         self.assertEqual(done.status_code, 200)
+        self.assertTrue(done.cookies[throttle.device_cookie_name()].value, 'a kept setup sets the device cookie')
         self.assertEqual(done.content.decode().count('<li>'), settings.RECOVERY_CODE_COUNT)
         self.assertEqual(second_factor.recovery_codes_left(operator), settings.RECOVERY_CODE_COUNT)
         self.assertEqual(client.session.get('_auth_user_id'), str(operator.pk))
@@ -365,7 +370,8 @@ class ActWithItsRecordTests(TransactionTestCase):
         self.assertEqual(password_step(client, operator).status_code, 302)
         # refused at the statement, and at the commit - after the code, the record and the sign-in itself ran
         for refusal in (refused_rows(SECURITY_EVENT_TABLE), refused_rows(SECURITY_EVENT_TABLE, at_commit=True)):
-            self.refused_answer(refusal, lambda: client.post('/login/recovery', {'code': codes[0]}))
+            answer = self.refused_answer(refusal, lambda: client.post('/login/recovery', {'code': codes[0]}))
+            self.assertIsNone(answer.cookies.get(throttle.device_cookie_name()), 'no known-device cookie')
             self.assertEqual(second_factor.recovery_codes_left(operator), settings.RECOVERY_CODE_COUNT)
             self.assertIsNone(client.session.get('_auth_user_id'))
             self.assertEqual(models.LoginAttempt.objects.get().outcome, models.LoginAttempt.SECOND_FACTOR_PENDING)
@@ -374,6 +380,7 @@ class ActWithItsRecordTests(TransactionTestCase):
         # the control: the same code, the record written, signs in once
         used = client.post('/login/recovery', {'code': codes[0]})
         self.assertEqual((used.status_code, used['Location']), (302, '/ops/'))
+        self.assertTrue(used.cookies[throttle.device_cookie_name()].value, 'a kept sign-in sets the device cookie')
         self.assertEqual(second_factor.recovery_codes_left(operator), settings.RECOVERY_CODE_COUNT - 1)
         self.assertEqual(models.LoginAttempt.objects.get().outcome, models.LoginAttempt.SIGNED_IN)
         self.assertEqual(security_events('second_factor.recovery_used'), 1)

@@ -65,6 +65,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+from contextlib import contextmanager
 import json
 import math
 import re
@@ -692,6 +693,20 @@ def complete_sign_in(request, user, state) -> bool:
     login(request, user)
     request.session[request_meta.SESSION_SECOND_FACTOR_AT] = request_meta.epoch_seconds()
     return True
+
+
+@contextmanager
+def new_sign_in_only_if_kept(request):
+    """Around a transaction that may sign the request in (a recovery code's, setup's key step): when it raises - a
+    record refused at its statement or at the COMMIT, after login() ran - the sign-in it made is rolled back, and the
+    mark login() left for studio.sessions (request.cpt_new_sign_in: set the known-device cookie and the actor header on
+    the answer) goes with it, so the failed answer gives the browser no known-device cookie (release 1 repair round 1,
+    failclosed-5 and -7). Put it outside transaction.atomic(), so a failed commit passes through it."""
+    try:
+        yield
+    except BaseException:
+        request.__dict__.pop('cpt_new_sign_in', None)
+        raise
 
 
 def refresh(request):

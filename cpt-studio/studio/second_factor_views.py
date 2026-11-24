@@ -142,7 +142,8 @@ def recovery(request):
         error = factor.too_many(user, request)
         if not error:
             completed = False
-            with transaction.atomic():  # the code used up, its record and what it completes: one act
+            # the code used up, its record and what it completes: one act
+            with factor.new_sign_in_only_if_kept(request), transaction.atomic():
                 used = factor.use_recovery_code(user, request.POST.get('code', ''))
                 if used:
                     security_events.record('second_factor.recovery_used', actor=user, subject=user, request=request,
@@ -245,7 +246,7 @@ def _finish_enrolment(request, user, claim):
     can be finished with a new challenge (the codes are shown only once all of it is kept)."""
     checked = factor.checked_registration(request, user, request.POST.get('credential', ''),
                                           request.POST.get('label', ''), factor.ENROL)
-    with transaction.atomic():
+    with factor.new_sign_in_only_if_kept(request), transaction.atomic():
         try:
             claim = OneTimeToken.objects.select_for_update().get(
                 pk=claim.pk, user=user, purpose=factor.SETUP_CLAIM_PURPOSE, used_at__isnull=True,
