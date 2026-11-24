@@ -1990,7 +1990,10 @@ Delivery to the practice is the termination runbook's step.
 **Restoring the database.** After any restore from a backup older than a
 disposal, replay the ledger before the site serves again
 (`--dispose-step replay-ledger --execute --approved-by <another person>`,
-after a dry run without `--execute`). The ledger's MAC is keyed by the
+after a dry run without `--execute`), with the pair stopped, never removed:
+the replay reads the stopped pair's revision (above), and with no pair at all
+it is refused. On a host with no pair (a fresh server), install the revision
+with `app` before `https-vhost` opens the site, then replay. The ledger's MAC is keyed by the
 application's `CPT_STUDIO_SECRET_KEY` (`/etc/cpt-studio/app.env`), so a restore
 must keep the same secret key: with another key the ledger cannot be verified,
 and destroyed data could come back.
