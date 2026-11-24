@@ -120,11 +120,13 @@ class GateTests(AdminCase):
                  f'/ops/people/{self.viewer.pk}/access', '/ops/workspaces/new']
         callers = {'anonymous': Client(), 'reviewer': self.client_for(self.reviewer),
                    'owner': self.client_for(self.owner), 'viewer': self.client_for(self.viewer)}
-        unknown = Client().get('/opsx/nothing-here')
         before = self.counts()
         body = {'workspace': str(self.ws.pk), 'username': 'intruder-made', 'role': 'owner', 'name': 'X',
                 'membership': str(self.membership(self.viewer).pk), 'access': 'off', 'category': str(self.neuro.pk)}
         for name, caller in callers.items():
+            # what an unknown URL answers this same caller: release 1's session policy (studio.sessions) reads a
+            # signed-in caller's session before every view, so its unknown-URL answer carries Vary: Cookie too
+            unknown = caller.get('/opsx/nothing-here')
             for url in gets + posts:
                 for method in ('GET', 'POST'):
                     with self.subTest(caller=name, method=method, url=url):
