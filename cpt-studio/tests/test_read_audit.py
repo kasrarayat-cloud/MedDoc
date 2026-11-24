@@ -281,6 +281,18 @@ class ConsoleReadTests(ConsoleReadCase):
         self.assertEqual(Record.objects.get(view=read_audit.OPS_READS).filters,
                          {'account': None, 'workspace': None, 'kind': None, 'day': None, 'before': None})
 
+    def test_head_is_served_by_no_console_read_so_nothing_goes_unrecorded(self):
+        self.open_content(self.text)
+        for kind, (method, path, _body) in self.console_reads().items():
+            if method != 'get':
+                continue
+            before = Record.objects.count()
+            with self.subTest(kind=kind):
+                answer = self.ops.head(path)
+                self.assertEqual((answer.status_code, answer.content), (405, b''))
+                self.assertNotIn('Content-Disposition', answer)
+                self.assertEqual(Record.objects.count(), before)
+
     def test_a_refusal_answering_a_practices_page_records_that_read_first(self):
         answer = self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'back': str(self.ws.pk),
                                                    'username': 'X', 'role': 'viewer',

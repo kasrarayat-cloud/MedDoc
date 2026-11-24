@@ -23,6 +23,8 @@ export.reused audit row records it - so clicks stop piling up copies of PHI; a n
 a fresh one. The lock is the document's row alone (select_for_update(of=('self',))), so a report being made blocks no
 other work in its practice. How many reports a member and a practice may ask for is studio.api's limit.
 
+Release 1b, not built here (D402): F1's reports half - sealing ExportArtifact.content with studio.file_crypto.
+
 Readiness: a draft needs the latest round done; the approved report needs a code of it approved (customer.readiness, the
 rule the page shows). A request names the round the page shows (FIX-SPEC-2 section 5): one that is not the latest is
 refused as changed, so a page left open never downloads a round its member did not see. An export made from an earlier

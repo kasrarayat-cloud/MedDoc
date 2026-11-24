@@ -25,6 +25,16 @@ response may never carry; the browser walk (`ops/walk.cjs`) holds the deployed s
 - **Responses** are `Cache-Control: no-store`. Timestamps are UTC ISO 8601 with `Z`, to the second.
 - **What a customer never sees**: a vendor or model name, tokens, costs, hashes, run or request ids, the word provider,
   or anything under `/ops/` (the platform-operator console, which answers a customer 404).
+- **Every read of a document is recorded** (release 1, C1): the list, a document, its in-page view, its download and a
+  report's download each write an access record - who, which practice and documents, when, from which address, sign-in
+  and request - before the answer leaves. When that record cannot be written the answer is `503 {"error": "This could
+  not be recorded, so nothing was shown."}` and nothing else. A document or report of another practice answers the
+  same `404` as a missing one, and the attempt is recorded as refused. The page's poll of a document being coded
+  (`X-CPT-Poll: 1`) is recorded at most once a minute per sign-in. `HEAD` is answered `405` by these reads.
+- **Limits** (release 1, C5): 10 reports per member in 10 minutes and 60 per practice in an hour, 30 uploads per member
+  in 10 minutes. Over a limit any of them answers `429 {"error": "rate_limited", "retry_after": <seconds>}` with the
+  same number in `Retry-After`; the page words it itself.
+- **A destroyed document** (release 1, D1) is in no list or count, and its routes answer `404`.
 
 ## Vocabularies
 
@@ -48,10 +58,13 @@ response may never carry; the browser walk (`ops/walk.cjs`) holds the deployed s
 ```json
 {"user": {"id": "...", "label": "...", "initials": "AB", "actor_kind": "human|agent"},
  "workspace": {"id": "...", "name": "...", "specialty": "Gastroenterology|Neurosurgery|Orthopedic Surgery"},
- "role": "owner|reviewer|viewer", "can_review": true,
+ "role": "owner|reviewer|viewer", "can_review": true, "can_manage_team": false,
  "acknowledgement": "<the exact text an approval must send back>",
  "counts": {"documents": 3, "queue": 1}}
 ```
+
+`can_manage_team` is true for an owner with access (release 1, C4; owner decision D15): the page then offers the Team
+panel (`/api/members`).
 
 `counts.queue` is the documents waiting on a member (questions to answer, codes to review or approve). An agent's
 acknowledgement says it is an automated agent.
@@ -165,7 +178,9 @@ latest."); the line already has a decision (409: revoke it first); a `needs_answ
 ### `POST /api/encounters/<id>/reports` (any member)
 
 `{"kind": "draft|approved", "fmt": "pdf", "round": 2}` - `round` is the round number the page shows ->
-`201 {id, kind, fmt, filename, generated_at, download_url, current}`, the file named
+`201 {id, kind, fmt, filename, generated_at, download_url, current}`, or `200` with the same shape when a report of that
+round, kind and format is still current (made from the latest round, no decision on it since): the stored copy is
+returned, not made again, and an `export.reused` audit row records the request (release 1, C5). The file is named
 `CPT-Studio-<kind>-r<round>-<UTC time>.pdf`. The PDF is the only report made (owner direction 2026-11-21). Refused: a
 kind that is not one, or any format but `pdf` (400 "Choose a draft or an approved PDF report."); no round named (400); `round` is not the latest round's number (409 "This coding
 review has changed. Reload to see the latest.", `details` empty - checked before readiness, so a page left open never
@@ -199,7 +214,11 @@ The approved report lists only the lines whose current decision is an approval a
 
 ### `GET /api/encounters/<id>/original` and `?view=1`
 
-Without `view`: the uploaded original as an attachment, exactly as stored (`404` for a paste). With `view=1`: what the
+Without `view`: the upload as an attachment, exactly as stored (`404` for a paste) - except a Word document, whose
+download is the PDF its coding review read, the file the in-page view shows (release 1, C6). The Word file itself comes
+only with `?format=original`, which the page asks for after warning that it can contain links and embedded content; a
+Word document with no converted PDF yet answers the plain download `409` with `details.original_url`, and serves its
+Word file only by that address. Each download is recorded with the format it served. With `view=1`: what the
 in-page viewer shows (the PDF or text, the pasted text, or a Word document's converted PDF), `Content-Disposition:
 inline`, `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: frame-ancestors 'self'`. A stored file that no longer
 matches its sha256 answers `409`. The review page fetches a PDF view itself (same origin, the session's cookie) and
@@ -218,3 +237,27 @@ unchanged by it.
 The stored export, byte for byte, as an attachment with its format's content type, `Cache-Control: no-store` and no
 hash header; `404` outside the caller's workspaces. An export is never made again on download: one made from an earlier
 round, or before a later decision, is served exactly as it was made and listed with `current: false`.
+
+### `GET /api/members` (owners only)
+
+Release 1, C4 (owner decision D15). `{"members": [member]}`, everyone with a membership in the owner's practice -
+automated and operator-added accounts included - each:
+
+```json
+{"id": "...", "name": "Dr. Maya Rivera", "login": "mrivera", "role": "owner|reviewer|viewer", "active": true,
+ "account_active": true, "kind": "person|automated", "last_sign_in": "2026-11-24T10:00:00Z",
+ "must_change_password": false, "you": false, "can_change": true}
+```
+
+`active` is the person's access to this practice; `account_active` is false when CPT Studio turned the account off
+everywhere (only CPT Studio turns it on). `last_sign_in` is the latest successful sign-in (null for none);
+`must_change_password` says a password staff set has not yet been replaced. `can_change` is false for the owner's own
+row and for the practice's last active owner. No password or hash is ever sent. A reviewer or viewer is answered `403`.
+
+### `POST /api/members/<id>/access` (owners only)
+
+`{"active": false|true}` -> `200 {"member": member}`. It turns that person's access to this practice off or on
+(the membership's, never the account's: a person in another practice keeps it). Refused: a body without a boolean
+`active` (400), a reviewer or viewer (403), someone of another practice (404), the owner's own access or the practice's
+last active owner (409). A person left with no active membership is signed out everywhere, and loses the practice at
+their next request. Each change is an audit row naming the owner (`member.access_off`, `member.access_on`).
