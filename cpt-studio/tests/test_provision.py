@@ -187,7 +187,15 @@ class OperatorAccountTests(TestCase):
                  and any(isinstance(target, ast.Name) and target.id == 'OPERATOR_ACCOUNTS_SPEC' for target in node.targets)]
         self.assertEqual(len(specs), 1)
         names = {username for username, _kind, _label in ast.literal_eval(specs[0])}
-        self.assertEqual(names, set(operator.INSTALLER_OPERATOR_USERNAMES))
+        # release 1, A6 (Lane 6): the installer now makes only the human operator, and names every operator account it
+        # ever made in OPERATOR_NAMES - the spec's names plus the retired ops-agent - which provisioning refuses too
+        retired = [node.value for node in ast.parse(source).body if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name) and target.id == 'OPERATOR_NAMES' for target in node.targets)]
+        self.assertEqual(len(retired), 1)
+        extras = {item.value for node in ast.walk(retired[0]) if isinstance(node, ast.Set)
+                  for item in node.elts if isinstance(item, ast.Constant)}
+        self.assertEqual(extras, {'ops-agent'})
+        self.assertEqual(names | extras, set(operator.INSTALLER_OPERATOR_USERNAMES))
 
 
 class ProvisionRecordTests(TestCase):

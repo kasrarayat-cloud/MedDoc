@@ -59,8 +59,10 @@ class ConsoleHostCase(TestCase):
                 'reason': 'support_request', 'reference': 'SYNTHETIC-1001', 'back': ''}
 
     def with_token(self, client):
-        """``client`` holding a CSRF cookie, and the token a form of the site would carry for it."""
-        client.get('/login/', HTTP_HOST=CPT)  # the sign-in page sets the CSRF cookie (ensure_csrf_cookie)
+        """``client`` holding a CSRF cookie, and the token a form of the site would carry for it. Read on the admin host,
+        the session's own door: Lane 2's session policy (B3's door half) ends a session the moment it is carried to the
+        other door, so a token fetched on cpt.quillmd.com would sign the session out before the request under test."""
+        client.get('/account/', HTTP_HOST=ADMIN)  # the account page's form sets the CSRF cookie and reads no PHI
         return client.cookies[settings.CSRF_COOKIE_NAME].value
 
     def counts(self):
@@ -84,11 +86,14 @@ class DoctorsHostTests(ConsoleHostCase):
         for route in CONSOLE_ROUTES:
             path = self.concrete(route)
             for method in ('get', 'head', 'post'):
-                # a fresh admin-door session per request, its cookie carried to cpt.quillmd.com
-                client = ops.admin_client(self.operator, enforce_csrf_checks=True)
-                token = self.with_token(client)
-                unknown = getattr(client, method)(UNKNOWN, HTTP_HOST=CPT)
                 with self.subTest(route=route, method=method):
+                    # what an unknown URL answers the same caller: its own fresh admin-door session carried to cpt
+                    probe = ops.admin_client(self.operator, enforce_csrf_checks=True)
+                    self.with_token(probe)
+                    unknown = getattr(probe, method)(UNKNOWN, HTTP_HOST=CPT)
+                    # a fresh, valid admin-door session per request, its cookie carried to cpt.quillmd.com
+                    client = ops.admin_client(self.operator, enforce_csrf_checks=True)
+                    token = self.with_token(client)
                     self.assertEqual(client.session[request_meta.SESSION_DOOR], request_meta.ADMIN)
                     if method == 'post':
                         answer = client.post(path, self.fields(token), HTTP_HOST=CPT)
@@ -98,8 +103,12 @@ class DoctorsHostTests(ConsoleHostCase):
                     self.assertEqual(answer.content, unknown.content)
                     self.assertEqual(answer.get('Content-Type'), unknown.get('Content-Type'))
                     self.assertEqual(answer.get('Vary'), unknown.get('Vary'))
-                    # a client's X-Forwarded-Host chooses nothing (USE_X_FORWARDED_HOST stays unset)
-                    forwarded = getattr(client, method)(path, HTTP_HOST=CPT, HTTP_X_FORWARDED_HOST=ADMIN)
+                    # release 1, B3's door half (Lane 2): the session carried to the other door is ended
+                    self.assertNotIn('_auth_user_id', client.session)
+                    # a client's X-Forwarded-Host chooses nothing (USE_X_FORWARDED_HOST stays unset), for a valid session
+                    other = ops.admin_client(self.operator, enforce_csrf_checks=True)
+                    self.with_token(other)
+                    forwarded = getattr(other, method)(path, HTTP_HOST=CPT, HTTP_X_FORWARDED_HOST=ADMIN)
                     self.assertEqual(forwarded.status_code, 404)
         self.assertEqual(self.counts(), before)
         self.assertFalse(models.User.objects.filter(username='coverage-person').exists())
@@ -148,11 +157,20 @@ class AdminHostTests(ConsoleHostCase):
             'a malformed second factor': {**ops.sign_in_markers(request_meta.ADMIN, second_factor=False),
                                           request_meta.SESSION_SECOND_FACTOR_AT: 'yes'},
         }
+        # release 1, B3's door half and B5 (Lane 2): a session with no door markers, or opened at the cpt door, is ended
+        # by the session policy on the admin host, and the admin host sends a signed-out visitor to its sign-in page;
+        # a session of the admin door whose second-factor time is not usable stays signed in and meets the gate's 404
+        ended = {'no markers', 'the cpt door', 'the cpt door with a second-factor time'}
         for label, markers in cases.items():
             client = session_at(self.operator, ADMIN, **markers)
             with self.subTest(label):
-                self.assertEqual(client.get('/ops/').status_code, 404)
-                self.assertEqual(client.get(self.concrete('ops/encounters/<uuid:encounter_id>')).status_code, 404)
+                for path in ('/ops/', self.concrete('ops/encounters/<uuid:encounter_id>')):
+                    answer = client.get(path)
+                    if label in ended:
+                        self.assertEqual((answer.status_code, answer['Location'].split('?')[0]), (302, '/login/'))
+                        self.assertNotIn('_auth_user_id', client.session)
+                    else:
+                        self.assertEqual(answer.status_code, 404)
         valid = session_at(self.operator, ADMIN, **ops.sign_in_markers(request_meta.ADMIN))
         self.assertEqual(valid.get('/ops/').status_code, 200)  # the control: the admin door's own markers
 

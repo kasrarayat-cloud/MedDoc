@@ -938,8 +938,8 @@ class EnrolmentTests(TestCase):
         rows = list(models.SecondFactorRecoveryCode.objects.filter(user=self.operator, used_at__isnull=True))
         self.assertEqual(len(rows), settings.RECOVERY_CODE_COUNT)
         self.assertFalse(any(code.replace('-', '') in row.code_hash for row in rows for code in codes))
-        self.assertEqual(sorted(models.SecurityEvent.objects.values_list('event', flat=True)),
-                         ['password.changed', 'second_factor.enrolled'])
+        self.assertEqual(sorted(models.SecurityEvent.objects.exclude(event='operator.granted').values_list('event', flat=True)),
+                         ['password.changed', 'second_factor.enrolled'])  # setUp's grant writes operator.granted (C3)
         self.assertEqual(models.LoginAttempt.objects.get().outcome, 'signed_in')
         # and the next sign-in is the password, then this key
         self.assertEqual(sign_in(admin_client(), self.operator, key, password=self.NEW)['Location'], '/ops/')
@@ -1291,7 +1291,7 @@ class CommandTests(TestCase):
         with self.assertRaises(CommandError):
             self.run_command('issue_enrolment', '--username', self.operator.username, '--reason-file', reason_file(self))
         self.assertFalse(models.OneTimeToken.objects.exists())
-        self.assertFalse(models.SecurityEvent.objects.exists())
+        self.assertFalse(models.SecurityEvent.objects.exclude(event='operator.granted').exists())  # setUp's grant (C3)
 
     def test_reset_second_factor_runs_end_to_end(self):
         second_factor.new_recovery_codes(self.operator)
@@ -1350,7 +1350,7 @@ class CommandTests(TestCase):
                 accepted.append(by)
         self.assertEqual(accepted, [])
         self.assertFalse(models.OneTimeToken.objects.exists())
-        self.assertFalse(models.SecurityEvent.objects.exists())
+        self.assertFalse(models.SecurityEvent.objects.exclude(event='operator.granted').exists())  # setUp's grant (C3)
         for by, recorded in (('Synthetic Person', 'Synthetic Person'), ('Jos\u0065\u0301 Garc\u00eda', 'Jos\u00e9 Garc\u00eda'),
                              ('\uff2a\uff4f \uff2c\uff49', 'Jo Li'), ('Ng\u200b Wei', 'Ng Wei'), ("Se\u00e1n  O'Brien", "Se\u00e1n O'Brien"),
                              ('Claude Monet', 'Claude Monet'), ('Rob Root', 'Rob Root')):
@@ -1370,7 +1370,7 @@ class CommandTests(TestCase):
             for by in ('the operator', 'Security_Officer', '[ ]', 'uid 1000'):
                 with self.subTest(act=act[0], by=by), self.assertRaises(CommandError):
                     self.run_command(*act, '--reason-file', reason_file(self), '--by', by)
-        self.assertFalse(models.SecurityEvent.objects.exists())
+        self.assertFalse(models.SecurityEvent.objects.exclude(event='operator.granted').exists())  # setUp's grant (C3)
         self.assertEqual(second_factor.active_keys(self.operator).count(), 1)
         member.refresh_from_db()
         self.assertIsNone(member.password_change_required_at)

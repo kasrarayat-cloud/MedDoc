@@ -47,8 +47,10 @@ class GateTests(ConsoleCase):
         callers = {'anonymous': Client(), 'reviewer': self.client_for(self.reviewer),
                    'owner': self.client_for(owner), 'viewer': self.client_for(self.viewer)}
         urls = self.urls()
-        unknown = Client().get('/opsx/nothing-here')
         for name, caller in callers.items():
+            # what an unknown URL answers this same caller: release 1's session policy (studio.sessions) reads a
+            # signed-in caller's session before every view, so its unknown-URL answer carries Vary: Cookie too
+            unknown = caller.get('/opsx/nothing-here')
             for method in ('GET', 'POST'):
                 for url in urls[method] + urls['GET' if method == 'POST' else 'POST']:
                     with self.subTest(caller=name, method=method, url=url):
@@ -330,6 +332,11 @@ class MinimumNecessaryTests(ConsoleCase):
             open_content(self.ops, self.marked)
         within = start + timedelta(seconds=settings.CONTENT_GRANT_SECONDS - 1)
         after = start + timedelta(seconds=settings.CONTENT_GRANT_SECONDS + 1)
+        # release 1, B5 (Lane 2): an operator idle for SESSION_IDLE_OPERATOR_SECONDS is signed out before the grant ends,
+        # so this operator keeps working in between; the grant's own end is what the test measures
+        working = start + timedelta(seconds=settings.SESSION_IDLE_OPERATOR_SECONDS - 100)
+        with mock.patch.object(timezone, 'now', return_value=working):
+            self.assertEqual(self.ops.get('/ops/').status_code, 200)
         with mock.patch.object(timezone, 'now', return_value=within):
             self.assertIn(self.TITLE, self.ops.get(f'/ops/encounters/{self.marked.pk}').content.decode())
             self.assertEqual(self.ops.get(f'/ops/encounters/{self.marked.pk}/original').status_code, 200)

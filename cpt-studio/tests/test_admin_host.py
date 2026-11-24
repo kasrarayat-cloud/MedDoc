@@ -396,8 +396,12 @@ class ConsolePagesTests(AdminHostCase):
                 self.assertEqual(page.status_code, 200)
                 body = page.content.decode()
                 self.assertIn('src="/static/studio/ops_session.js"', body)  # B5: the console signs itself out
-                self.assertIn('<noscript><meta http-equiv="refresh" content="610;url=/login/?reason=idle"></noscript>',
-                              body)
+                # the refresh is the session's remaining idle time plus ten seconds, so it counts down from 610 by the
+                # seconds this test has spent since the last activity write (SESSION_ACTIVITY_WRITE_SECONDS)
+                refresh = re.search(r'<noscript><meta http-equiv="refresh" content="(\d+);url=/login/\?reason=idle">'
+                                    r'</noscript>', body)
+                self.assertIsNotNone(refresh)
+                self.assertTrue(610 - settings.SESSION_ACTIVITY_WRITE_SECONDS <= int(refresh.group(1)) <= 610)
 
     def test_no_console_page_renders_on_cpt_once_its_gate_is_in(self):
         on_cpt = ops.client(self.operator, HTTP_HOST=CPT)  # a cpt-door operator session, as no door makes any more

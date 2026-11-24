@@ -255,8 +255,14 @@ def operator_view(view):
 
     @functools.wraps(view)
     def wrapper(request, *args, **kwargs):
+        # release 1 (Lanes 2 and 3 combined): the session policy (studio.sessions.SessionPolicyMiddleware) reads the
+        # session before every view, so an unknown URL's answer already carries what that read brings (Vary: Cookie, or
+        # the session cookie's deletion when the policy ended a session carried to the other door). When the policy read
+        # it, the gate leaves the session exactly as the policy left it; only a read that is the gate's own is undone.
+        read_before = getattr(getattr(request, 'session', None), 'accessed', False)
         if not may_use_console(request):
-            _as_an_unknown_url(request)
+            if not read_before:
+                _as_an_unknown_url(request)
             raise Http404()
         return protected(request, *args, **kwargs)
     wrapper.csrf_exempt = True  # the CSRF check is the operator's, after the gate (csrf_protect above)
