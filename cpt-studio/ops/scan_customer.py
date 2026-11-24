@@ -856,7 +856,8 @@ def run(transport, origin: str, username: str, password: str, encounters: list, 
         answer = transport.send('POST', login.LOGIN_PATH, body=urlencode(fields).encode('utf-8'), headers=login._headers(
             origin, 'text/html', login.cookie_header(jar), form=True, referer=f'{origin}{login.LOGIN_PATH}'))
         login.apply_cookies(jar, answer.set_cookies)
-        session = jar.get(login.SESSION_COOKIE)
+        # the session cookie's name as the server at ``origin`` sets it: the __Host- one over https (release 1, B6)
+        session = jar.get(login.cookie_names(origin)[0])
         out['checks'].append(login.check('login.signed_in', 'hard', answer.status in (302, 303) and bool(session),
                                          f'POST {login.LOGIN_PATH} answered HTTP {answer.status}' + ('' if session else '; no session cookie was set')))
         if not session:

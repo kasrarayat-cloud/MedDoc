@@ -2,21 +2,38 @@
 'use strict';
 /*
  * The browser walk of the Fable coding build (DECISIONS D351-D353; the build specification, sections 6, 7 and 11): a
- * running CPT Studio (the deployed site or a local one) driven through the CUSTOMER page with synthetic documents, with
- * a separate PLATFORM-OPERATOR session beside it as the positive control of the operator gate. It replaces the
- * earlier browser verifier, which was bound to the earlier customer contract.
+ * running CPT Studio (the deployed site or a local one) driven through the CUSTOMER page with synthetic documents. It
+ * replaces the earlier browser verifier, which was bound to the earlier customer contract.
  *
- *   node ops/walk.cjs --base-url https://cpt.quillmd.com --credentials agent.json --operator-credentials ops-agent.json \
+ *   node ops/walk.cjs --base-url https://cpt.quillmd.com --credentials agent.json \
  *     --docs DIR_OR_FILE --out EVIDENCE_DIR [--deadline-seconds 1800] [--allow-live-provider] \
- *     [--service-date YYYY-MM-DD] [--insurance medicare|medicaid|commercial|unknown] [--workspace NAME]
+ *     [--service-date YYYY-MM-DD] [--insurance medicare|medicaid|commercial|unknown] [--workspace NAME] \
+ *     [--admin-url https://admin.quillmd.com] [--release <40-hex revision>]
+ *
+ * Release 1 (RELEASE-1-SPEC A11; TEC-1 (c), TEC-4 (4), TEC-16 (5)): no automated account holds operator power, and an
+ * operator signs in with a security key on admin.quillmd.com only, so the walk signs in NO operator. Its positive
+ * control of the operator gate needs no operator power (a broken instrument and a closed door read the same, so the
+ * control comes first, and the walk refuses to upload unless it passes): an anonymous GET of the admin host's /ops/
+ * answers 302 to /login/?next=%2Fops%2F (the route exists and the gate tells signed-out from signed-in); an anonymous
+ * GET of the customer host's /ops/ answers 404; and the walk's own member, signing in at the admin host's door with its
+ * own username and password, is refused - the refusal sentence, and no session - since that door admits operators
+ * alone. That refusal is recorded as one failed sign-in of the member's username, which release 1's sign-in slow-down
+ * counts (B1: a delay after five failures of one username in 15 minutes), so walks repeated inside 15 minutes add up.
+ * The customer session's 404 on every console path (GET, and POST with a valid CSRF token) is the per-document
+ * probe below. The walk no longer proves an operator can read a document page (owner decision D10: the Django suite
+ * covers it, and the owner checks it by hand after enrolment). --admin-url names the admin host's origin (default: the
+ * base URL's host with its leading 'cpt.' read as 'admin.'; a base URL of another host - a loopback one - needs it). The
+ * cookie names are the __Host- ones on https (B6). The public /health/ is held to the release digest it answers through
+ * nginx in place of the release (B7: 16 hex characters and no release; a loopback base URL straight to the web's port
+ * answers the release); --release names the revision the digest (or the release) must then be.
  *
  * --workspace names the workspace the account must be signed in to (its name as the session serves it, for example
  * Neurosurgery): with several specialty workspaces (owner direction 2026-11-22, D390) a credentials file for the wrong
  * one would otherwise walk the wrong specialty without a word, so a session in another workspace stops the walk.
  *
- * --credentials and --operator-credentials each name a private JSON file (no group or other access, checked on the
- * descriptor that is read) holding a flat {"username", "password"}: the customer account (an agent reviewer of a
- * synthetic workspace) and a platform operator. They are read by path; no password is ever printed or written, also
+ * --credentials names a private JSON file (no group or other access, checked on the descriptor that is read) holding a
+ * flat {"username", "password"}: the customer account (an agent reviewer of a synthetic workspace). It is read by
+ * path; no password is ever printed or written, also
  * where a server would echo it back. --docs names one synthetic document or a directory of them (.txt, .pdf, .docx, in
  * name order). Each upload carries a service date (--service-date, else the "Date of service:" or "Date of procedure:"
  * line of a .txt document's own text; a document with neither is refused before anything is uploaded) and an insurance
@@ -52,8 +69,8 @@
  * row's Undo, the page's request naming the round shown, the line, its code and the id of the decision it undoes (the
  * one the page showed), and the line - that line only - open again; a 390x844 viewport with no horizontal scroll; every
  * /ops/ path 404 to the customer (GET, and POST with
- * a valid CSRF token for an encounter id that does not exist, so a broken gate changes nothing), never 200 to nobody
- * signed in, and 200 to the operator (the positive control: a broken instrument and a closed door read the same). Every
+ * a valid CSRF token for an encounter id that does not exist, so a broken gate changes nothing) and never 200 to nobody
+ * signed in (the positive control, release 1's, is the run check above: no operator session). Every
  * customer API JSON body and header the page or the walk received (the downloads' answers aside) and every DOM text
  * node and wording attribute are scanned with ops/verification/customer-denylist.json (vendor and model names, tokens,
  * credits, sha256, request ids, /ops/ links ...); a string that is the document's own text or one of its quotes is not
@@ -63,8 +80,8 @@
  *
  * Nothing is retried. A failure is recorded and the walk goes on with the next document. A file named STOP in the
  * evidence directory stops the walk before the next upload. Everything is written to EVIDENCE_DIR/evidence.json (schema
- * cpt-studio-walk-evidence@1): per document its result (pass or fail), the reasons of every failed check, and every
- * check. Exit 0 when every document and run check passed, 1 when anything failed, 2 on a usage error before any upload.
+ * cpt-studio-walk-evidence@2 - release 1 dropped the operator's credentials and added the operator gate's control and
+ * /health/): per document its result (pass or fail), the reasons of every failed check, and every check. Exit 0 when every document and run check passed, 1 when anything failed, 2 on a usage error before any upload.
  */
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -74,7 +91,7 @@ const zlib = require('node:zlib');
 
 const PLAYWRIGHT = process.env.CPT_VERIFY_PLAYWRIGHT
   || '/opt/meddoc-pro/.worktrees/private-os-isolation/rebuild/.runtime/browser-deps/node_modules/playwright';
-const EVIDENCE_SCHEMA = 'cpt-studio-walk-evidence@1';
+const EVIDENCE_SCHEMA = 'cpt-studio-walk-evidence@2';
 // studio/client_contract.py VERSION, with app.js and ops/verify_login.py (tests/test_cux_client_contract.py pins them).
 const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-24' };
 const VIEWPORTS = { desktop: { width: 1440, height: 1000 }, mobile: { width: 390, height: 844 } };
@@ -94,7 +111,24 @@ const WALK_ANSWER = 'Not documented in this synthetic note.';
 const WALK_NOTE = 'agent-executed synthetic review (walk)';
 const DATE_LINE = /\bdate of (?:service|procedure)\s*:\s*(\d{4}-\d{2}-\d{2})\b/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const CSRF_COOKIE = 'cptstudio_csrf';  // cptstudio/settings.py CSRF_COOKIE_NAME; the page sends it as X-CSRFToken
+// cptstudio/settings.py CSRF_COOKIE_NAME: the __Host- name under HTTPS (release 1, B6), the plain one on a loopback http
+// server (cookieNames); the page sends it as X-CSRFToken. The session cookie likewise.
+const CSRF_COOKIE = 'cptstudio_csrf';
+const SESSION_COOKIE = 'cptstudio_session';
+const HOST_PREFIX = '__Host-';
+// cptstudio/settings.py HEALTH_DIGEST_PREFIX (release 1, B7): /health/ through nginx answers the first 16 hex characters
+// of sha256(HEALTH_DIGEST_PREFIX + the release) in place of the release.
+const HEALTH_DIGEST_PREFIX = 'cpt-studio-release:';
+// The admin door's refusal (studio/views.py's wrong-password sentence, which both doors share): a member is refused
+// there with it, and no session (release 1, A11's control).
+const REFUSED_SENTENCE = /the username or password is not correct/i;
+// The operator gate's positive control (A11): studio.hosts.signed_out_to_sign_in's answer to a GET of the admin host's
+// /ops/ by nobody signed in; and the CSRF token of the admin door's form, which the member's refused sign-in posts.
+const OPS_SIGN_IN = '/login/?next=%2Fops%2F';
+const CSRF_FIELD = /name="csrfmiddlewaretoken" value="([^"]+)"/;
+// /health/'s release digest (B7) and a revision --release may name
+const HEALTH_DIGEST = /^[0-9a-f]{16}$/;
+const REVISION = /^[0-9a-f]{40}$/;
 // ops/verify_login.py MAX_CREDENTIALS_BYTES: a larger credentials file is refused.
 const MAX_CREDENTIALS_BYTES = 64 * 1024;
 // The Playwright debug logs that carry a call's parameters or the browser protocol, so a typed password.
@@ -119,9 +153,9 @@ const MAX_SHAPE_PROBLEMS = 60;  // ops/scan_customer.py shape_problems' bound
 // a label that carries the session's acknowledgement; saving is offered once it is ticked (static/studio/app.js).
 const REVIEW_DIALOG = { dialog: '#reviewDialog', label: '#reviewAcknowledgement', box: '#reviewAckBox',
   note: '#reviewNote', save: '#saveReview' };
-const USAGE = 'usage: walk.cjs --base-url URL --credentials FILE --operator-credentials FILE --docs DIR_OR_FILE --out DIR '
+const USAGE = 'usage: walk.cjs --base-url URL --credentials FILE --docs DIR_OR_FILE --out DIR '
   + '[--deadline-seconds N] [--allow-live-provider] [--service-date YYYY-MM-DD] '
-  + '[--insurance medicare|medicaid|commercial|unknown] [--workspace NAME]';
+  + '[--insurance medicare|medicaid|commercial|unknown] [--workspace NAME] [--admin-url URL]';
 
 class UsageError extends Error {}
 
@@ -163,6 +197,39 @@ function isLoopback(host) {
   return host === 'localhost' || host === '[::1]' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host);
 }
 
+// The origin --<name> gives: http(s), no user name or password, and plain http only on the loopback - a password is
+// typed into the page and posted to the admin door, never over plain http off the loopback (ops/verify_login.py's rule).
+function checkedOrigin(value, name) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new UsageError(`--${name} is not a URL: ${value}`);
+  }
+  if (!['https:', 'http:'].includes(url.protocol)) throw new UsageError(`--${name} must be http(s)`);
+  if (url.username || url.password) throw new UsageError(`--${name} must not carry a user name or password`);
+  if (url.protocol === 'http:' && !isLoopback(url.hostname)) {
+    throw new UsageError(`--${name} may be plain http only on the loopback: the password would cross a network in clear`);
+  }
+  return url.origin;
+}
+
+// The admin host's origin for a base URL whose host starts with 'cpt.' (https://cpt.quillmd.com ->
+// https://admin.quillmd.com), else null.
+function adminOriginOf(base) {
+  const url = new URL(base);
+  if (!url.hostname.startsWith('cpt.') || url.hostname.length <= 'cpt.'.length) return null;
+  url.hostname = `admin.${url.hostname.slice('cpt.'.length)}`;
+  return url.origin;
+}
+
+// The session and CSRF cookie names the server at ``origin`` sets (cptstudio/settings.py): the __Host- names under
+// HTTPS (release 1, B6), the plain ones on a loopback http server.
+function cookieNames(origin) {
+  const prefix = new URL(origin).protocol === 'https:' ? HOST_PREFIX : '';
+  return { session: `${prefix}${SESSION_COOKIE}`, csrf: `${prefix}${CSRF_COOKIE}` };
+}
+
 function validDate(value) {
   if (!ISO_DATE.test(value)) return false;
   const moment = new Date(`${value}T00:00:00Z`);
@@ -183,10 +250,10 @@ function warn(id, reason, data) {
 
 function parseArgs(argv) {
   const flags = new Set(['allow-live-provider']);
-  const values = new Set(['base-url', 'credentials', 'operator-credentials', 'docs', 'out', 'deadline-seconds',
-    'service-date', 'insurance', 'workspace']);
+  const values = new Set(['base-url', 'credentials', 'docs', 'out', 'deadline-seconds', 'service-date', 'insurance',
+    'workspace', 'admin-url', 'release']);
   const opts = { deadlineSeconds: DEFAULT_DEADLINE_SECONDS, allowLiveProvider: false, serviceDate: null,
-    insurance: 'commercial', workspace: null };
+    insurance: 'commercial', workspace: null, adminUrl: null, release: null };
   for (let i = 0; i < argv.length; i += 1) {
     if (!argv[i].startsWith('--')) throw new UsageError(`unexpected argument ${argv[i]}`);
     const [name, inline] = argv[i].slice(2).split(/=(.*)/s);
@@ -201,22 +268,22 @@ function parseArgs(argv) {
       throw new UsageError(`unknown option --${name}`);
     }
   }
-  for (const name of ['baseUrl', 'credentials', 'operatorCredentials', 'docs', 'out']) {
+  for (const name of ['baseUrl', 'credentials', 'docs', 'out']) {
     if (!opts[name]) throw new UsageError(`missing --${name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}`);
   }
-  let url;
-  try {
-    url = new URL(opts.baseUrl);
-  } catch {
-    throw new UsageError(`--base-url is not a URL: ${opts.baseUrl}`);
+  opts.baseUrl = checkedOrigin(opts.baseUrl, 'base-url');
+  // the operator gate's control signs the member in at the admin door (A11): its origin is given, or read from the base
+  opts.adminUrl = opts.adminUrl === null ? adminOriginOf(opts.baseUrl) : checkedOrigin(opts.adminUrl, 'admin-url');
+  if (opts.adminUrl === null) {
+    throw new UsageError('--admin-url is needed: the operator gate\'s control reads the admin host, and --base-url\'s host '
+      + 'does not start with "cpt."');
   }
-  if (!['https:', 'http:'].includes(url.protocol)) throw new UsageError('--base-url must be http(s)');
-  if (url.username || url.password) throw new UsageError('--base-url must not carry a user name or password');
-  // a password is typed into the page: never over plain http off the loopback (ops/verify_login.py's rule)
-  if (url.protocol === 'http:' && !isLoopback(url.hostname)) {
-    throw new UsageError('--base-url may be plain http only on the loopback: the password would cross a network in clear');
+  if (new URL(opts.adminUrl).host === new URL(opts.baseUrl).host) {
+    throw new UsageError('--admin-url must name the admin host, not --base-url\'s');
   }
-  opts.baseUrl = url.origin;
+  if (opts.release !== null && !REVISION.test(opts.release)) {
+    throw new UsageError('--release must be a revision written as 40 lowercase hex characters');
+  }
   opts.deadlineSeconds = Number(opts.deadlineSeconds);
   if (!Number.isInteger(opts.deadlineSeconds) || opts.deadlineSeconds < MIN_DEADLINE_SECONDS) {
     throw new UsageError(`--deadline-seconds must be an integer of at least ${MIN_DEADLINE_SECONDS}`);
@@ -2873,10 +2940,11 @@ async function exportPdf(page, ctx, enc, kind, outDir) {
   return result;
 }
 
-async function probeOps(page, ctx, operator, anonymous, enc) {
+async function probeOps(page, ctx, anonymous, enc) {
   const probes = [];
   const fake = crypto.randomUUID();  // POSTs name an encounter that does not exist: a broken gate changes nothing
-  const token = ((await page.context().cookies(ctx.base)).find(cookie => cookie.name === CSRF_COOKIE) || {}).value || '';
+  const csrf = cookieNames(ctx.base).csrf;  // the __Host- name on https (B6)
+  const token = ((await page.context().cookies(ctx.base)).find(cookie => cookie.name === csrf) || {}).value || '';
   for (const where of OPS_GET_PATHS(enc.id)) {
     const customer = await page.request.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
     const nobody = await anonymous.get(`${ctx.base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
@@ -2905,9 +2973,117 @@ async function probeOps(page, ctx, operator, anonymous, enc) {
       timeout: UI_TIMEOUT_MS, headers: { 'X-CSRFToken': token, Origin: ctx.base, Referer: `${ctx.base}/` } });
     probes.push({ method: 'POST', path: where.replace(fake, '<unknown id>'), customer: customer.status() });
   }
-  const view = await operator.request.get(`${ctx.base}/ops/encounters/${enc.id}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
-  const html = await view.text();
-  return { probes, ownIds, operator: { status: view.status(), names: html.includes(enc.id) || html.includes(enc.title || '\u0000') } };
+  // no operator reads the encounter any more (A11; owner decision D10: the Django suite covers the operator page)
+  return { probes, ownIds, csrf: { cookie: csrf, found: token !== '' } };
+}
+
+// The operator gate's positive control (release 1, A11; TEC-1 (c), TEC-4 (4), TEC-16 (5)), which needs no operator
+// power: nobody signed in is sent from the admin host's /ops/ to its sign-in (the route exists and the gate tells
+// signed-out from signed-in), and gets 404 from the doctors' host's /ops/; and the walk's own member, signing in at the
+// admin door - a context of its own, holding no cookie of the customer session - is refused with the sentence and no
+// session, since that door admits operators alone. Statuses, booleans and redirect targets only: no body, no cookie and
+// no password is kept. Each probe the member's sign-in makes counts as one failed sign-in of its username (B1).
+async function probeControl(ctx, anonymous, door, creds) {
+  const get = async (request, url) => {
+    const response = await request.get(url, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+    return { status: response.status(), location: response.headers().location ?? null };
+  };
+  const found = { admin_anonymous: await get(anonymous, `${ctx.admin}/ops/`), cpt_anonymous: await get(anonymous, `${ctx.base}/ops/`) };
+  const member = { form: null, token: false, status: null, sentence: false, session: null, after: null };
+  found.member_at_admin = member;
+  const form = await door.get(`${ctx.admin}/login/`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+  member.form = form.status();
+  const token = CSRF_FIELD.exec(await form.text());
+  member.token = token !== null;
+  if (member.form !== 200 || !token) return found;
+  const answer = await door.post(`${ctx.admin}/login/`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS,
+    form: { csrfmiddlewaretoken: token[1], next: '/ops/', username: creds.username, password: creds.password },
+    headers: { Origin: ctx.admin, Referer: `${ctx.admin}/login/` } });
+  member.status = answer.status();
+  member.sentence = REFUSED_SENTENCE.test(await answer.text());
+  const names = new Set([cookieNames(ctx.admin).session, SESSION_COOKIE]);
+  member.session = (await door.storageState()).cookies.some(cookie => names.has(cookie.name));
+  member.after = await get(door, `${ctx.admin}/ops/`);
+  return found;
+}
+
+// Whether ``answer`` is the admin gate's 302 to its sign-in, back to /ops/ (OPS_SIGN_IN), on ``origin``.
+function redirectsToOpsSignIn(answer, origin) {
+  if (!answer || answer.status !== 302 || typeof answer.location !== 'string') return false;
+  let target;
+  try {
+    target = new URL(answer.location, `${origin}/ops/`);
+  } catch {
+    return false;
+  }
+  return target.origin === origin && `${target.pathname}${target.search}` === OPS_SIGN_IN;
+}
+
+function controlChecks(found, admin) {
+  const shown = answer => (answer ? `${answer.status}${answer.location ? ` to ${answer.location}` : ''}` : 'nothing');
+  const member = found.member_at_admin || {};
+  const refused = member.form === 200 && member.token === true && Number.isInteger(member.status)
+    && !(member.status >= 300 && member.status < 400) && member.sentence === true && member.session === false
+    && redirectsToOpsSignIn(member.after, admin);
+  return [
+    check('control.admin_gate', redirectsToOpsSignIn(found.admin_anonymous, admin),
+      `GET ${admin}/ops/ answered nobody signed in ${shown(found.admin_anonymous)} (302 to ${OPS_SIGN_IN} is expected)`),
+    check('control.cpt_console_404', !!found.cpt_anonymous && found.cpt_anonymous.status === 404,
+      `GET /ops/ answered nobody signed in ${shown(found.cpt_anonymous)} on the doctors' host (404 is expected)`),
+    check('control.member_refused_at_admin', refused, member.form !== 200 || !member.token
+      ? `GET ${admin}/login/ answered ${member.form ?? 'nothing'}${member.token ? '' : ', with no CSRF token in its form'}`
+      : `the member's own username and password at ${admin}/login/: answered ${member.status}, `
+        + `${member.sentence ? 'with' : 'without'} the refusal sentence, ${member.session ? 'and SET A SESSION' : 'no session'}; `
+        + `GET /ops/ then answered ${shown(member.after)} (302 to ${OPS_SIGN_IN} is expected)`),
+  ];
+}
+
+// /health/ (release 1, B7) as nobody signed in reads it.
+async function probeHealth(ctx, anonymous) {
+  const response = await anonymous.get(`${ctx.base}/health/`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
+  let json = null;
+  try {
+    json = JSON.parse(await response.text());
+  } catch {
+    json = null;
+  }
+  return { status: response.status(), json };
+}
+
+// The release digest /health/ answers through nginx for ``release`` (studio.views.health, HEALTH_DIGEST_PREFIX).
+function healthDigest(release) {
+  return crypto.createHash('sha256').update(`${HEALTH_DIGEST_PREFIX}${release}`).digest('hex').slice(0, 16);
+}
+
+// What /health/ told nobody signed in: {status, shape, value} - shape 'release_digest' (through nginx), 'release' (the
+// web's own port) or 'neither'.
+function healthRecord(found) {
+  const json = found && isObject(found.json) ? found.json : {};
+  const shape = 'release_digest' in json ? 'release_digest' : ('release' in json ? 'release' : 'neither');
+  return { status: found ? found.status : null, shape, value: shape === 'neither' ? null : String(json[shape]).slice(0, 80),
+    also_release: shape === 'release_digest' && 'release' in json };
+}
+
+// B7: through nginx (an https base URL) /health/ answers 200 with a 16-hex release digest and no release; a loopback base
+// URL may be the web's own port, which answers the release (either shape, one of them). With --release the digest must
+// be that revision's (or the release that revision).
+function healthChecks(found, base, release = null) {
+  const seen = healthRecord(found);
+  const proxied = new URL(base).protocol === 'https:';
+  const digest = seen.shape === 'release_digest' && HEALTH_DIGEST.test(seen.value || '') && !seen.also_release;
+  const direct = !proxied && seen.shape === 'release' && !!seen.value;
+  const shaped = seen.status === 200 && (digest || direct);
+  const checks = [check('health.release_hidden', shaped, seen.status !== 200 ? `GET /health/ answered ${seen.status}`
+    : shaped ? (digest ? 'GET /health/ answers the release digest and no release' : 'GET /health/ answers the release (the web\'s own port)')
+      : `GET /health/ answered ${seen.also_release ? 'the release beside its digest' : `${seen.shape}${seen.value ? ` ${seen.value}` : ''}`}`
+        + (proxied ? ' (through nginx: a 16-hex release_digest and no release are expected)' : ''))];
+  if (release !== null) {
+    const expected = seen.shape === 'release' ? release : healthDigest(release);
+    checks.push(check('health.release_matches', shaped && seen.value === expected,
+      `/health/ ${seen.value === expected ? 'names' : 'does not name'} --release ${release.slice(0, 12)}`
+        + (seen.shape === 'release_digest' ? ` (its digest is ${expected})` : '')));
+  }
+  return checks;
 }
 
 function opsChecks(found) {
@@ -2916,8 +3092,10 @@ function opsChecks(found) {
   return [
     check('ops.customer_404', open.length === 0, open.length ? `answered the customer: ${open.join('; ')}` : `${found.probes.length} /ops/ probe(s), each 404`),
     check('ops.anonymous_not_200', anonymous.length === 0, anonymous.length ? `answered 200 to nobody signed in: ${anonymous.join('; ')}` : 'no /ops/ path answers 200 to nobody signed in'),
-    check('ops.operator_view', found.operator.status === 200 && found.operator.names,
-      `GET /ops/encounters/<id> answered the operator ${found.operator.status}${found.operator.names ? ', naming the encounter' : ', not naming the encounter'}`),
+    // the POSTs carried the session's CSRF token: without it a 404 could be CSRF's refusal, not the gate's
+    check('ops.csrf_token', !found.csrf || found.csrf.found === true, found.csrf && !found.csrf.found
+      ? `the session holds no ${found.csrf.cookie} cookie, so the POST probes carried no CSRF token`
+      : 'the POST probes carried the session\'s CSRF token'),
     check('ops.own_ids_probed', !!found.ownIds && found.ownIds.session === 200 && found.ownIds.probed === 4,
       found.ownIds ? `the member's session answered ${found.ownIds.session}; ${found.ownIds.probed} of 4 probes by the member's own workspace and account ids ran`
         : 'the probes by the member\'s own ids were not made'),
@@ -3110,7 +3288,7 @@ async function verifyDocument(page, ctx, sessions, doc) {
       add(check('viewport.390', record.viewport.scroll_width <= record.viewport.client_width + 1,
         `at 390x844 the page is ${record.viewport.scroll_width} px wide in a ${record.viewport.client_width} px viewport`));
     });
-    await step('ops', async () => add(...opsChecks(await probeOps(page, ctx, sessions.operator, sessions.anonymous, enc))));
+    await step('ops', async () => add(...opsChecks(await probeOps(page, ctx, sessions.anonymous, enc))));
     record.encounter = summarize(enc);
   }
   add(...checkScan('scan.json', [...ctx.hits.json, ...ctx.hits.header], 'the customer API bodies and headers'),
@@ -3146,7 +3324,6 @@ async function main(argv) {
   let opts;
   let docs;
   let creds;
-  let operator;
   try {
     opts = parseArgs(argv);
     if (debugMayLog(process.env.DEBUG)) {
@@ -3154,8 +3331,6 @@ async function main(argv) {
     }
     docs = documentsOf(opts.docs, opts);
     creds = loadCredentials(opts.credentials, 'credentials file');
-    operator = loadCredentials(opts.operatorCredentials, 'operator credentials file');
-    if (operator.username === creds.username) throw new UsageError('the operator account must not be the customer account');
     if (fs.existsSync(path.join(opts.out, 'evidence.json'))) throw new UsageError(`${opts.out} already holds evidence.json; use a fresh --out directory`);
     denylist();
     contract();
@@ -3166,29 +3341,29 @@ async function main(argv) {
   }
   fs.mkdirSync(opts.out, { recursive: true });
   const evidenceFile = path.join(opts.out, 'evidence.json');
-  const forms = [...new Set([...secretForms(creds.password), ...secretForms(operator.password)])].sort((a, b) => b.length - a.length);
+  const forms = [...new Set(secretForms(creds.password))].sort((a, b) => b.length - a.length);
   const print = text => process.stdout.write(scrubSecret(text, forms));
   const { chromium, request: playwrightRequest } = require(PLAYWRIGHT);
   const evidence = {
     schema: EVIDENCE_SCHEMA, run_id: `walk-${isoNow().replace(/[-:.]/g, '')}-${crypto.randomBytes(4).toString('hex')}`,
-    started_at: isoNow(), finished_at: null, base_url: opts.baseUrl, synthetic_only: true,
+    started_at: isoNow(), finished_at: null, base_url: opts.baseUrl, admin_url: opts.adminUrl, synthetic_only: true,
     options: { deadline_seconds: opts.deadlineSeconds, allow_live_provider: opts.allowLiveProvider, service_date: opts.serviceDate,
-      insurance: opts.insurance, workspace: opts.workspace, docs: path.resolve(opts.docs) },
+      insurance: opts.insurance, workspace: opts.workspace, release: opts.release, docs: path.resolve(opts.docs) },
     environment: { node: process.version, playwright: require(path.join(PLAYWRIGHT, 'package.json')).version, browser: null,
       denylist: denylist().schema, contract: contract().schema },
     credentials: { username: creds.username, file_mode: creds.mode },
-    operator_credentials: { username: operator.username, file_mode: operator.mode },
-    session: null, run_checks: [], documents: [], summary: null, run_error: null,
+    session: null, health: null, control: null, run_checks: [], documents: [], summary: null, run_error: null,
   };
   const browser = await chromium.launch({ headless: true });
   evidence.environment.browser = browser.version();
   const context = await browser.newContext({ acceptDownloads: true, viewport: VIEWPORTS.desktop });
   const page = await context.newPage();
   page.setDefaultTimeout(UI_TIMEOUT_MS);
-  const ctx = { base: opts.baseUrl, out: opts.out, deadlineSeconds: opts.deadlineSeconds, scan: null, hits: null, session: null };
+  const ctx = { base: opts.baseUrl, admin: opts.adminUrl, out: opts.out, deadlineSeconds: opts.deadlineSeconds, scan: null,
+    hits: null, session: null };
   page.on('response', response => { captureResponse(response, ctx).catch(() => {}); });
-  const operatorContext = await browser.newContext({ viewport: VIEWPORTS.desktop });
   const anonymous = await playwrightRequest.newContext();
+  const door = await playwrightRequest.newContext();  // the member at the admin door: no cookie of the customer session
   try {
     await signIn(page, opts.baseUrl, creds);
     const session = await page.request.get(`${opts.baseUrl}/api/session`, { headers: { Accept: 'application/json', ...CLIENT_HEADERS } });
@@ -3206,11 +3381,17 @@ async function main(argv) {
     evidence.run_checks.push(check('contract.session', sessionShape.length === 0, sessionShape.length
       ? `${sessionShape.length} difference(s) from customer-contract.json: ${describeProblems(sessionShape)}`
       : 'GET /api/session carries every key customer-contract.json lists and nothing else'));
-    const operatorPage = await operatorContext.newPage();
-    await signIn(operatorPage, opts.baseUrl, operator);
-    const control = await operatorContext.request.get(`${opts.baseUrl}/ops/`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS });
-    evidence.run_checks.push(check('ops.operator_control', control.status() === 200, `GET /ops/ answered the operator ${control.status()}`));
-    if (control.status() !== 200) throw new Error('refusing to upload: the operator session cannot read /ops/, so no 404 the customer is answered there could be believed');
+    const health = await probeHealth(ctx, anonymous);
+    evidence.health = healthRecord(health);
+    evidence.run_checks.push(...healthChecks(health, opts.baseUrl, opts.release));
+    // the operator gate's positive control (A11) before any upload: no operator signs in
+    evidence.control = await probeControl(ctx, anonymous, door, creds);
+    const control = controlChecks(evidence.control, ctx.admin);
+    evidence.run_checks.push(...control);
+    const open = control.filter(item => item.status === 'fail').map(item => item.id);
+    if (open.length) {
+      throw new Error(`refusing to upload: the operator gate's control did not pass (${open.join(', ')}), so no 404 the customer is answered could be believed`);
+    }
     for (const doc of docs) {
       if (stopRequested(opts.out)) {
         evidence.run_error = 'stopped: a STOP file is present in the evidence directory; no further upload was made';
@@ -3220,7 +3401,7 @@ async function main(argv) {
       ctx.docDir = path.join(opts.out, safeName(doc.title));
       fs.mkdirSync(ctx.docDir, { recursive: true });
       print(`${doc.name} ... `);
-      const record = await verifyDocument(page, ctx, { operator: { request: operatorContext.request }, anonymous }, doc);
+      const record = await verifyDocument(page, ctx, { anonymous }, doc);
       evidence.documents.push(record);
       writeEvidence(evidenceFile, evidence, forms);
       print(`${record.result}${record.reasons.length ? ` [${record.reasons.slice(0, 4).join(' | ')}]` : ''}\n`);
@@ -3230,6 +3411,7 @@ async function main(argv) {
     print(`run stopped: ${evidence.run_error}\n`);
   } finally {
     await anonymous.dispose().catch(() => {});
+    await door.dispose().catch(() => {});
     await browser.close();
     evidence.finished_at = isoNow();
     const passed = evidence.documents.filter(doc => doc.result === 'pass').length;
@@ -3258,6 +3440,8 @@ module.exports = {
   pngBlocks, measureSeen, pagesToRead, readPdfPages, documentReading, redrawChecks, chooseQuotes,
   servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportPdf, pdfPageLines, REPORT_STATUS, RUNNING_LINES,
   exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,
+  checkedOrigin, adminOriginOf, cookieNames, controlChecks, redirectsToOpsSignIn, OPS_SIGN_IN, REFUSED_SENTENCE, CSRF_FIELD,
+  healthDigest, healthRecord, healthChecks, HEALTH_DIGEST_PREFIX,
   evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
 };
 
