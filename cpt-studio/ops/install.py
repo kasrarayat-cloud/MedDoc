@@ -1082,6 +1082,11 @@ KEPT_LOG_FORMATS = {
         # gunicorn's access line in release 1's format (deploy/gunicorn.conf.py: A2)
         rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
         rf'\d{{3}} (?:\d+|-) \d+ms (?:[0-9a-f]{{32}}|-) (?:{_UUID}|-)',
+        # and in the format before it (36e550ab's deploy/gunicorn.conf.py: no request id, no actor), which the retired
+        # web of the release-1 install and of any switch-back to such a revision wrote (refutation round 1,
+        # installer-6): its address, path, status, size and time, nothing more
+        rf'\[\d\d/[A-Z][a-z]{{2}}/\d{{4}}:\d\d:\d\d:\d\d [+-]\d{{4}}\] {_ADDRESS} "{_METHOD} {_PATH} HTTP/\d(?:\.\d)?" '
+        rf'\d{{3}} (?:\d+|-) \d+ms',
         # gunicorn's own life cycle
         r'\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4}\] \[\d+\] \[(?:INFO|WARNING|ERROR|CRITICAL)\] '
         r'(?:Starting gunicorn [\d.]+|Listening at: http://0\.0\.0\.0:8000 \(\d+\)|Using worker: sync|'

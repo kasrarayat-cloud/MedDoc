@@ -19,6 +19,7 @@ never passed, without one). Synthetic data only.
   I7  dataloss-1: a receipt says whether an act's stdout was cut and how long it was; the ledger step keeps the ledger
       whole in a log of its own and records its sha256, size and line count.
   I8  installer-5 (judged no defect; the one call): the app phase's converter precondition holds the seal too.
+  I9  installer-6: the ids-only copy of a retired web keeps the access line of the format before release 1 too.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair -v
 """
@@ -1158,6 +1159,74 @@ class AppConverterSealTests(TemporaryDirectoryTest):
         world = ConverterWorld(self.tmp)
         details, error = run_app(world)
         self.assertIsNone(error, error and str(error))
+
+
+# --- I9: the access line of the format before release 1 is kept ids only ---------------------------------------------
+
+ACCESS_ID = '0f8fad5b-d9cb-469f-a165-70867728950e'
+
+
+class OlderAccessLineTests(unittest.TestCase):
+    STAMP = '2026-11-24T14:56:09.123456789Z '
+
+    def kept(self, line):
+        return install.ids_only_lines('web', (self.STAMP + line).encode())
+
+    def test_the_older_formats_access_line_is_kept_as_release_1s_is(self):
+        # installer-6's input: R0's access_log_format, as gunicorn renders it
+        for line in (f'[24/Nov/2026:14:56:09 +0000] 203.0.113.9 "GET /api/encounters/{ACCESS_ID} HTTP/1.1" 200 512 7ms',
+                     '[24/Nov/2026:14:56:10 +0000] - "POST /login/ HTTP/1.0" 302 - 15ms',
+                     '[24/Nov/2026:14:56:11 +0000] 2001:db8::1 "HEAD /health/ HTTP/1.1" 200 0 1ms',
+                     f'[24/Nov/2026:14:56:12 +0000] 203.0.113.9 "GET /api/encounters/{ACCESS_ID} HTTP/1.1" 200 512 7ms '
+                     f'0123456789abcdef0123456789abcdef {ACCESS_ID}'):  # release 1's, as before
+            with self.subTest(line=line):
+                kept, dropped = self.kept(line)
+                self.assertEqual((len(kept), dropped), (1, 0))
+
+    def test_nothing_more_than_its_fields_is_kept(self):
+        for line in ('[24/Nov/2026:14:56:09 +0000] 203.0.113.9 "GET /api/encounters/?q=Jones HTTP/1.1" 200 512 7ms',
+                     '[24/Nov/2026:14:56:09 +0000] 203.0.113.9 "GET /api/encounters/jones-notes HTTP/1.1" 200 512 7ms',
+                     '[24/Nov/2026:14:56:09 +0000] 203.0.113.9 "GET /health/ HTTP/1.1" 200 512 7ms Dr Jones',
+                     '[24/Nov/2026:14:56:09 +0000] Jones "GET /health/ HTTP/1.1" 200 512 7ms',
+                     '[24/Nov/2026:14:56:09 +0000] 203.0.113.9 "GET /health/ HTTP/1.1" 200 512 7ms 0123456789abcdef0123456789abcdef',
+                     '[24/Nov/2026:14:56:09 +0000] 203.0.113.9 "GET /health/ HTTP/1.1" 200 512'):
+            with self.subTest(line=line):
+                kept, dropped = self.kept(line)
+                self.assertEqual((kept, dropped), ([], 1))
+
+    def test_a_line_gunicorn_renders_with_the_older_revisions_own_format_is_kept(self):
+        try:
+            from gunicorn.config import Config
+            from gunicorn.glogging import Logger
+        except ImportError:
+            raise unittest.SkipTest('gunicorn is not installed here')
+        found = install.run(['git', '-C', str(REPO_ROOT), 'show', f'{R0_REVISION}:cpt-studio/deploy/gunicorn.conf.py'],
+                            check=False)
+        if found.returncode:
+            raise unittest.SkipTest(f'{R0_REVISION[:12]} is not in this clone')
+        namespace = {}
+        exec(compile(found.stdout.decode(), 'gunicorn.conf.py', 'exec'), namespace)  # its settings: plain assignments
+        config = Config()
+        config.set('access_log_format', namespace['access_log_format'])
+        environ = {'REQUEST_METHOD': 'GET', 'RAW_URI': f'/api/encounters/{ACCESS_ID}?view=1',
+                   'PATH_INFO': f'/api/encounters/{ACCESS_ID}', 'QUERY_STRING': 'view=1', 'SERVER_PROTOCOL': 'HTTP/1.1',
+                   'REMOTE_ADDR': '172.18.0.1', 'HTTP_X_FORWARDED_FOR': '203.0.113.9'}
+        request = SimpleNamespace(headers=[('X-FORWARDED-FOR', '203.0.113.9')])
+        response = SimpleNamespace(status='200 OK', response_length=512, sent=512,
+                                   headers=[('Content-Type', 'application/json')])
+        line = namespace['access_log_format'] % Logger(config).atoms(response, request, environ,
+                                                                    dt.timedelta(milliseconds=7))
+        self.assertNotIn('view=1', line)
+        kept, dropped = self.kept(line)
+        self.assertEqual((len(kept), dropped), (1, 0), line)
+
+    def test_the_older_format_is_the_one_its_revision_configures(self):
+        r0 = R0_REVISION
+        found = install.run(['git', '-C', str(REPO_ROOT), 'show', f'{r0}:cpt-studio/deploy/gunicorn.conf.py'], check=False)
+        if found.returncode:
+            raise unittest.SkipTest(f'{r0[:12]} is not in this clone')
+        self.assertIn("access_log_format = '%(t)s %({x-forwarded-for}i)s \"%(m)s %(U)s %(H)s\" %(s)s %(B)s %(M)sms'",
+                      found.stdout.decode())
 
 
 class SessionScriptImportTests(unittest.TestCase):

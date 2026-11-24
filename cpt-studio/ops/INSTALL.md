@@ -468,7 +468,11 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   undo's incoming web or new worker (S1, S3, S4), a switch-back's, rollback-app's
   pair - its log is kept ids only in `/var/log/cpt-studio/containers/` (the receipt's
   `logs_kept`: a file name, its sha256 and the lines kept and dropped, never a
-  line); a copy that fails removes nothing, and the receipt says so. A static
+  line); a copy that fails removes nothing, and the receipt says so. A web's
+  access lines are kept in release 1's format and in the one before it (no
+  request id or actor: the web this install retires, and one a `switch-back`
+  to such a revision started), each its address, path, status, size and time
+  only (refutation round 1, installer-6). A static
   file's name in a kept path is written `static-file` (its content hash and
   extension kept): its name part could carry free text. The failure note an
   undo writes into the receipts folder (`*-incoming-web-failed.log`,
