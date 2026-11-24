@@ -12,7 +12,13 @@ The checks, in order, all before Argon2 runs (Door.refusal):
   (d) known device: a valid device cookie for this username (device_cookie_name(): signed with django.core.signing,
       salt 'cpt-device', holding the account's id, a random id and the issue date - never a session; HttpOnly, Secure
       under HTTPS, SameSite=Strict, Path=/; KNOWN_DEVICE_DAYS long; set on every successful sign-in by
-      studio.sessions.SessionPolicyMiddleware) skips (c), never (a) or (b).
+      studio.sessions.SessionPolicyMiddleware) skips (c), never (a) or (b);
+  (e) known address: an attempt from a client key - an IPv4 address, or an IPv6 /64 - from which this username signed
+      in within KNOWN_DEVICE_DAYS (a LoginAttempt that succeeded, older rows included) skips (c) too, never (a) or (b):
+      someone else's failures, sent from anywhere for as long as they like, cannot keep a doctor out of the office
+      they sign in from (refutation r2, finding 8). A doctor on a new network without the device cookie still waits
+      while someone keeps the delay armed: the delay never exceeds SIGNIN_DELAY_MAX_SECONDS, and clear_signin_failures
+      is the way back.
 The window is SIGNIN_WINDOW_SECONDS. The refusal sentence is the same whether or not the account exists (USER_REFUSAL;
 CLIENT_REFUSAL for (a)), and every refusal is answered before the password hasher runs (AUTH-3, L-AVAIL).
 
@@ -217,6 +223,15 @@ class Door:
         except (ValidationError, ValueError):
             return False
 
+    def known_address(self) -> bool:
+        """Whether this username signed in from this client key - this IPv4 address, or this IPv6 address's /64 - within
+        KNOWN_DEVICE_DAYS (check e): any LoginAttempt of the name that succeeded, an older release's rows included (they
+        carry succeeded alone), its client read as a client key (key_of_address)."""
+        since = timezone.now() - timedelta(days=settings.KNOWN_DEVICE_DAYS)
+        addresses = (LoginAttempt.objects.filter(username=self.username, succeeded=True, created_at__gte=since)
+                     .values_list('client', flat=True).distinct())
+        return any(key_of_address(address) == self.client_key for address in addresses)
+
     def refusal(self) -> str:
         """The sentence that refuses this attempt before any password is checked, or '' when it may go on. A refusal is
         counted per minute, per username key and per address key."""
@@ -231,7 +246,8 @@ class Door:
             return self._refuse(PAIR, _wait_below(pair_rows, settings.SIGNIN_PAIR_LIMIT, now))
         failures, last = failures_of(self.username, now)
         wait = delay_seconds(failures)
-        if wait and last is not None and now < last + timedelta(seconds=wait) and not self.known_device():
+        if wait and last is not None and now < last + timedelta(seconds=wait) and not self.known_device() \
+                and not self.known_address():
             return self._refuse(USERNAME, (last + timedelta(seconds=wait) - now).total_seconds(), failures=failures)
         return ''
 

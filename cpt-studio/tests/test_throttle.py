@@ -28,7 +28,7 @@ from tests.test_second_factor import ADMIN, CPT, Clock, add_key, key_step
 
 PASSWORD = 'synthetic-pass-123!'  # tests.support.coding.user's
 WRONG = 'not-the-password'
-ADDRESS_A, ADDRESS_B = '198.51.100.7', '203.0.113.20'
+ADDRESS_A, ADDRESS_B, ADDRESS_C = '198.51.100.7', '203.0.113.20', '192.0.2.30'
 
 
 def attempt(username, password=PASSWORD, *, address=ADDRESS_A, host=CPT, client=None):
@@ -56,10 +56,10 @@ class ThrottleCase(TestCase):
 class DelayTests(ThrottleCase):
     def test_tier_one_six_five_wrong_passwords_from_one_address_then_the_right_one_from_another(self):
         # the acceptance test: the right password from address B succeeds only after the delay - and at once with the
-        # device cookie of an earlier sign-in from that browser
+        # device cookie of an earlier sign-in from that browser (made from a third address, so B is a new address)
         with Clock() as clock:
             usual = Client(HTTP_HOST=CPT)
-            self.assertEqual(attempt('owner', address=ADDRESS_B, client=usual).status_code, 302)  # leaves the cookie
+            self.assertEqual(attempt('owner', address=ADDRESS_C, client=usual).status_code, 302)  # leaves the cookie
             self.assertIn(throttle.device_cookie_name(), usual.cookies)
             usual.post('/logout/')
             for _ in range(settings.SIGNIN_USER_DELAY_AFTER):
@@ -155,6 +155,67 @@ class DelayTests(ThrottleCase):
             self.assertEqual((verify.call_count, encode.call_count), (0, 0))
             attempt('somebody', WRONG, address='192.0.2.55')  # the control: a checked attempt hashes
             self.assertGreater(verify.call_count + encode.call_count, 0)
+
+
+class KnownAddressTests(ThrottleCase):
+    """A known address skips the username delay, never the pair or the address limit (refutation r2, finding 8; the
+    lead's ruling; lockout/probes/lockprobe/test_p2_rearm.py)."""
+
+    OFFICE = '192.0.2.44'
+    POLLERS = ['198.51.100.%d' % number for number in range(1, 6)]
+
+    def test_a_poller_on_five_addresses_for_six_hours_never_keeps_the_doctor_out_of_the_office(self):
+        # someone sends a wrong password for 'owner' every 5 s for 6 h from five addresses, re-arming the delay at each
+        # lapse; every half hour the doctor signs in from the office (where they signed in before) on a browser with no
+        # device cookie, and at the same moment from a network never used before
+        with Clock() as clock:
+            start = clock.moment
+            self.assertEqual(attempt('owner', address=self.OFFICE).status_code, 302)  # a browser since cleared
+            office, elsewhere, checked = [], [], 0
+            for second in range(5, 6 * 60 * 60 + 1, 5):
+                clock.moment = start + timedelta(seconds=second)
+                poll = sentence(attempt('owner', WRONG, address=self.POLLERS[(second // 5) % 5]))
+                checked += views.SIGN_IN_REFUSED in poll
+                self.assertNotIn('from this network', poll)
+                if second % 1800 == 0:
+                    office.append(attempt('owner', address=self.OFFICE).status_code)
+                    elsewhere.append(sentence(attempt('owner', address=f'203.0.113.{second // 1800}')))
+            self.assertEqual(office, [302] * 12, 'the doctor at the office signs in on the first try, every time')
+            # the written limit: on a new network, without the device cookie, the doctor still waits while the poller
+            # keeps the delay armed - never longer than the ceiling at a time; clear_signin_failures is the way back
+            self.assertTrue(all('Too many attempts. Wait' in answer for answer in elsewhere))
+            # the poller reached the password check only when the delay had lapsed: a few times a window, never 4,320
+            self.assertLess(checked, 6 * 4 * 10)
+
+    def test_what_makes_an_address_known(self):
+        with Clock() as clock:
+            for _ in range(settings.SIGNIN_USER_DELAY_AFTER):
+                attempt('owner', WRONG, address=ADDRESS_A)
+            known = lambda address: attempt('owner', address=address).status_code == 302  # noqa: E731
+            rows = [  # (username, client, succeeded, outcome, days ago)
+                ('owner', '2001:db8:1:2::1', True, 'signed_in', 1),  # its /64 is known: 2001:db8:1:2::99 below
+                ('owner', '192.0.2.81', True, None, 3),  # an older release's row: succeeded alone
+                ('owner', '192.0.2.82', True, 'signed_in', settings.KNOWN_DEVICE_DAYS + 1),  # too long ago
+                ('owner', '192.0.2.83', False, 'wrong_password', 1),  # a failure from there is no sign-in
+                ('somebody-else', '192.0.2.84', True, 'signed_in', 1),  # another name's sign-in
+            ]
+            for username, client, succeeded, outcome, days in rows:
+                row = models.LoginAttempt.objects.create(username=username, client=client, succeeded=succeeded,
+                                                         outcome=outcome, door='cpt' if outcome else None)
+                models.LoginAttempt.objects.filter(pk=row.pk).update(created_at=clock.moment - timedelta(days=days))
+            self.assertTrue(known('2001:db8:1:2::99'))
+            self.assertTrue(known('192.0.2.81'))
+            for address in ('192.0.2.82', '192.0.2.83', '192.0.2.84', '2001:db8:1:3::1'):
+                with self.subTest(address=address):
+                    self.assertFalse(known(address))
+
+    def test_a_known_address_never_skips_the_pair_or_the_address_limit(self):
+        self.assertEqual(attempt('owner', address=self.OFFICE).status_code, 302)
+        for _ in range(settings.SIGNIN_PAIR_LIMIT):
+            self.assertIn(views.SIGN_IN_REFUSED, sentence(attempt('owner', WRONG, address=self.OFFICE)))
+        pair = attempt('owner', address=self.OFFICE)  # the right password, from the known address: the pair refuses
+        self.assertEqual(pair.status_code, 400)
+        self.assertIn('Too many attempts', sentence(pair))
 
 
 class CrossDoorTests(ThrottleCase):
