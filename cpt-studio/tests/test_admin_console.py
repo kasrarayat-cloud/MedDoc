@@ -1328,6 +1328,26 @@ class ForcedChangeTests(AdminCase):
     """Release 1, B4 step 3: the console's add-person and reset start the clock of a staff-set password; each reset
     starts a new one."""
 
+    def test_a_reset_after_the_72_hours_lets_the_person_sign_in_to_the_forced_change(self):
+        # needs Lane 2's sign-in (studio/throttle.py and views.py: the 72-hour refusal and the forced change); fails on Lane 3's branch alone
+        flagged = timezone.now()
+        User.objects.filter(pk=self.reviewer.pk).update(password_change_required_at=flagged)  # a staff-set password
+        later = flagged + timedelta(hours=73)  # its 72 hours ran out: it no longer signs in
+        with mock.patch.object(timezone, 'now', return_value=later):
+            console_session = ActsClient(ops.admin_client(self.operator_user))  # the second factor, at the moved clock
+            reset = console_session.post(f'/ops/people/{self.reviewer.pk}/password', {})  # the real console reset
+            self.assertEqual(reset.status_code, 200)
+            password = shown_password(reset)
+            self.reviewer.refresh_from_db()
+            self.assertEqual(self.reviewer.password_change_required_at, later)  # a new clock, in the reset's own save
+            doctor = Client(HTTP_HOST='cpt.quillmd.com')
+            signed = doctor.post('/login/', {'username': self.reviewer.username, 'password': password})
+            self.assertEqual(signed.status_code, 302)  # signed in: never the wrong-password refusal
+            landing = signed['Location']
+            if not landing.startswith('/account/'):
+                landing = doctor.get(landing).get('Location', landing)  # the session policy sends it to the change
+            self.assertEqual(landing, '/account/?required=1')
+
     def test_a_reset_starts_a_new_clock_and_the_page_says_so(self):
         first = timezone.now() - timedelta(hours=10)
         User.objects.filter(pk=self.viewer.pk).update(password_change_required_at=first)
