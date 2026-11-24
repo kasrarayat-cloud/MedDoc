@@ -469,6 +469,22 @@ def redaction_summary(redacted) -> str:
     return '; its output was kept with ' + ' and '.join(said) + ' redacted'
 
 
+def raise_after_act(error, record, what):
+    """An act ran (``record`` holds its exit, its log and its output), and what follows it - its RAM folder's wipe, an
+    export's seal - failed or was interrupted: the record is never lost to that (refutation round 1, phileak-1's class,
+    builder D's point: once the act ran, nothing may make its record vanish). A failure is raised as an InstallError
+    carrying the record; a signal or a Ctrl-C is raised as itself, the record in its ``details``, which main writes into
+    the receipt beside the interrupt."""
+    if isinstance(error, Exception):
+        said = str(error) or type(error).__name__
+        raise InstallError(f'{what} ran (exit {record.get("exit")}) and its record is kept (its log: {record.get("log")}), '
+                           f'but what follows the act did not finish: {said}. If it was the RAM folder\'s wipe, a '
+                           f'/dev/shm/cpt-studio-* folder may be left: overwrite and remove it as root, never read it.',
+                           details={**record, 'after_act': said}) from error
+    error.details = record
+    raise error
+
+
 def redaction_record(*counted) -> dict:
     """The receipt's 'redacted' of one act: the occurrences replaced, by kind, summed over ``counted``
     (redact_output's counts) - {} when there were none, so a receipt without the key had nothing redacted."""
@@ -7972,6 +7988,7 @@ def phase_provision(ctx) -> dict:
             raise InstallError(f'{agent_credentials.parent} must be a directory owned by this user with mode 0700.')
     # Password files live in RAM only (/dev/shm: RamFiles) and are wiped whatever happens.
     ram = RamFiles('cpt-studio-provision-')
+    completed, after_act = False, None
     try:
         root_file('stage', content=base64.b64encode(root_bytes).decode(), **names)
         if agent is not None:
@@ -8020,18 +8037,27 @@ def phase_provision(ctx) -> dict:
             else:
                 os.link(agent_staged, agent_credentials)
                 agent_staged.unlink()
+        completed = True
     except BaseException:
         root_file('discard', sha256=sha256(root_bytes), **names)
         agent_staged.unlink(missing_ok=True)
         raise
     finally:
-        ram.__exit__(None, None, None)
-    return {'accounts': outcome, 'specialty': specialty, 'root_credentials': f'{ETC_DIR}/{final}', 'checked': checked,
-            'agent_credentials': str(agent_credentials) if agent is not None else None, 'log': log, **redacted,
-            'reset_passwords': reset, 'require_password_change': True, 'by': args.by,
-            'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())
-                       + ('' if agent is not None else '; no review agent (opt-in: --agent-username)')
-                       + redaction_summary(redacted.get('redacted'))}
+        try:
+            ram.__exit__(None, None, None)
+        except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the act ran and
+            if not completed:  # its files were handed over, a wipe that failed or was interrupted keeps its record
+                raise
+            after_act = error
+    record = {'accounts': outcome, 'specialty': specialty, 'root_credentials': f'{ETC_DIR}/{final}', 'checked': checked,
+              'agent_credentials': str(agent_credentials) if agent is not None else None, 'log': log, **redacted,
+              'exit': result.returncode, 'reset_passwords': reset, 'require_password_change': True, 'by': args.by,
+              'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())
+                         + ('' if agent is not None else '; no review agent (opt-in: --agent-username)')
+                         + redaction_summary(redacted.get('redacted'))}
+    if after_act is not None:
+        raise_after_act(after_act, record, 'provision')
+    return record
 
 
 # The operators phase's in-image scripts (run by `manage shell -c` in this revision's image, as app_script runs them).
@@ -8361,15 +8387,20 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
     if root_file('state', **names)['staged_exists']:
         raise InstallError(f'A staged {OPERATOR_ENROLMENT} from an interrupted run exists; resolve it by hand first.')
     root_file('stage', content=base64.b64encode(document).decode(), **names)
-    committed = False
+    committed, result, after_act = False, None, None
     try:
-        with RamFiles('cpt-studio-manage-') as ram:
-            mounts = [ram.add('code', code.encode(), f'{MANAGE_MOUNT}/code'),
-                      ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')]
-            argv = ['manage', command, '--username', username, '--code-file', f'{MANAGE_MOUNT}/code', '--reason-file',
-                    f'{MANAGE_MOUNT}/reason', '--by', by, *extra]
-            result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
-                             timeout=act_timeout(600), what=f'manage {command}', by=by)
+        try:
+            with RamFiles('cpt-studio-manage-') as ram:
+                mounts = [ram.add('code', code.encode(), f'{MANAGE_MOUNT}/code'),
+                          ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')]
+                argv = ['manage', command, '--username', username, '--code-file', f'{MANAGE_MOUNT}/code',
+                        '--reason-file', f'{MANAGE_MOUNT}/reason', '--by', by, *extra]
+                result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
+                                 timeout=act_timeout(600), what=f'manage {command}', by=by)
+        except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the act ran, a
+            if result is None:  # wipe that failed or was interrupted keeps its record; the code is never kept
+                raise
+            after_act = error
         hidden = [code, *env_values(env)]
         stdout, stdout_counts = redact_output(result.stdout, hidden, reason_values(reason))
         stderr, stderr_counts = redact_output(result.stderr, hidden, reason_values(reason))
@@ -8377,6 +8408,8 @@ def issue_setup_code(ctx, image_id, env, username, *, command, by, reason, extra
         log = ctx.log(command.replace('_', '-'), stdout + stderr)
         record = {'command': command, 'exit': result.returncode, 'log': log,
                   **redaction_record(stdout_counts, stderr_counts), **kept_stdout(stdout)}
+        if after_act is not None:  # its RAM folder (which holds the code) was not wiped: the code is not kept
+            raise_after_act(after_act, {**record, 'setup_code_kept': False}, f'manage {command}')
         if printed_code:
             raise InstallError(f'manage {command} printed the setup code (exit {result.returncode}), so no setup code '
                                f'was kept: the act ran, and its output is kept in {log} with the code redacted. Run '
@@ -8458,21 +8491,31 @@ def phase_operators(ctx) -> dict:
         if problem:
             raise InstallError(f'Granting {username} needs --by (the person running it) and --review-by (C3): '
                                f'{problem} Nothing was granted.', details={'accounts': outcome})
-        with RamFiles('cpt-studio-operators-') as ram:
-            mount = ram.add(f'{username}.reason', operator_reason(ctx, username, kind).encode(),
-                            f'{MANAGE_MOUNT}/{username}.reason')
-            # a re-grant the run and its declaration approved (above) is said to the command, which refuses a
-            # revoked account without it (Lane 3's grant)
-            again = ['--regrant'] if before[username].get('revoked') is not False else []
-            result = oneshot(image_id, ['manage', 'grant_operator', '--username', username, '--reason-file',
-                                        f'{MANAGE_MOUNT}/{username}.reason', '--by', by, '--authorization-ref',
-                                        authorization_of(ctx), '--review-by', review_by, *again], env,
-                             user=f'{os.getuid()}:{os.getgid()}', mounts=[mount], what='manage grant_operator', by=by)
+        result, after_act = None, None
+        try:
+            with RamFiles('cpt-studio-operators-') as ram:
+                mount = ram.add(f'{username}.reason', operator_reason(ctx, username, kind).encode(),
+                                f'{MANAGE_MOUNT}/{username}.reason')
+                # a re-grant the run and its declaration approved (above) is said to the command, which refuses a
+                # revoked account without it (Lane 3's grant)
+                again = ['--regrant'] if before[username].get('revoked') is not False else []
+                result = oneshot(image_id, ['manage', 'grant_operator', '--username', username, '--reason-file',
+                                            f'{MANAGE_MOUNT}/{username}.reason', '--by', by, '--authorization-ref',
+                                            authorization_of(ctx), '--review-by', review_by, *again], env,
+                                 user=f'{os.getuid()}:{os.getgid()}', mounts=[mount], what='manage grant_operator',
+                                 by=by)
+        except BaseException as error:  # noqa: BLE001 — refutation round 1 (builder D's point): once the grant ran, a
+            if result is None:  # wipe that failed or was interrupted keeps its record
+                raise
+            after_act = error
         # refutation round 1, phileak-1's class: the grant ran, so its record is kept, the application's secrets redacted
         stdout, stdout_counts = redact_output(result.stdout, env_values(env))
         stderr, stderr_counts = redact_output(result.stderr, env_values(env))
         grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}', stdout + stderr),
                             **redaction_record(stdout_counts, stderr_counts)}
+        if after_act is not None:
+            raise_after_act(after_act, {'accounts': outcome, 'grants': grants, 'exit': result.returncode,
+                                        'log': grants[username]['log']}, f'manage grant_operator for {username}')
         if result.returncode:
             raise InstallError(f'manage grant_operator failed for {username} (see the log); the account is in place: '
                                'rerun --phase operators once it is fixed.', details={'accounts': outcome,
@@ -8527,16 +8570,20 @@ MANAGE_ARGUMENTS = ('command', 'username', 'reason_file', 'by', 'review_by', 'ap
 # approved by another), print the ledger (the MAC-signed list of disposals, keyed by the application's SECRET_KEY), and
 # replay a ledger after a database restore, so destroyed data stays destroyed
 DISPOSE_STEPS = ('close', 'plan', 'execute', 'ledger', 'replay-ledger')
-DISPOSE_REASON_REQUIRED = ('close', 'execute', 'replay-ledger')
+# The steps whose command reads a reason (studio/management/commands/dispose.py reads --reason-file at --close and
+# --plan, and refuses either without one; --execute carries out the plan with the plan's own reason, and --ledger and
+# --replay-ledger read none): each requires --reason-file, and every other step refuses it (refutation round 1, builder
+# D's point on installer-1's rule: execute and replay-ledger required a file their command never read).
+DISPOSE_REASON_REQUIRED = ('close', 'plan')
 # What each dispose step passes to the command (manage_argv) beyond --command, --dispose-step and --by - and so the only
 # arguments it takes: any other is refused before anything runs, so what was typed is what ran (refutation round 1,
 # installer-1: execute took --workspace-id and --encounter-id, then dropped them from the command line).
 DISPOSE_STEP_ARGUMENTS = {
     'close': ('workspace_id', 'reason_file'),
     'plan': ('workspace_id', 'encounter_id', 'reason_file'),
-    'execute': ('plan_id', 'approved_by', 'reason_file'),
-    'ledger': ('reason_file',),
-    'replay-ledger': ('ledger_file', 'execute', 'approved_by', 'reason_file'),
+    'execute': ('plan_id', 'approved_by'),
+    'ledger': (),
+    'replay-ledger': ('ledger_file', 'execute', 'approved_by'),
 }
 DISPOSE_ARGUMENTS = ('workspace_id', 'encounter_id', 'plan_id', 'approved_by', 'reason_file', 'ledger_file', 'execute')
 LEDGER_LIMIT = 1024 * 1024
@@ -8605,6 +8652,9 @@ def manage_problem(args) -> str:
             return f'--dispose-step {step} needs --workspace-id' + (' or --encounter-id.' if step == 'plan' else '.')
         if step == 'close' and args.encounter_id:
             return '--dispose-step close closes a whole practice: --encounter-id is not used.'
+        if step == 'plan' and args.workspace_id and args.encounter_id:  # the command refuses both, so does this
+            return ('--dispose-step plan takes --workspace-id (a whole practice) or --encounter-id (one document), not '
+                    'both.')
         if args.execute and step != 'replay-ledger':
             return ('--execute belongs to --dispose-step replay-ledger (a replay is a dry run without it); '
                     '--dispose-step execute carries out a plan.')
@@ -8735,14 +8785,15 @@ def manage_argv(ctx, args, entry) -> list:
             scope = (['--workspace', args.workspace_id] if args.workspace_id else []) + (
                 ['--encounter', args.encounter_id] if args.encounter_id else [])
             return [*command, '--plan', *scope, *given, '--by', args.by, *authority]
+        # execute, ledger and replay-ledger read no reason (DISPOSE_REASON_REQUIRED), so none is passed to them
         if step == 'execute':
             return [*command, '--execute', '--plan', args.plan_id, '--by', args.by, '--approved-by', args.approved_by,
-                    *given, *authority]
+                    *authority]
         if step == 'ledger':
-            return [*command, '--ledger', *given, '--by', args.by, *authority]
+            return [*command, '--ledger', '--by', args.by, *authority]
         # without --execute Lane 4's replay is a dry run; with it, two named people carry it out
         execute = ['--execute', '--approved-by', args.approved_by] if args.execute else []
-        return [*command, '--replay-ledger', f'{MANAGE_MOUNT}/ledger', *execute, *given, '--by', args.by, *authority]
+        return [*command, '--replay-ledger', f'{MANAGE_MOUNT}/ledger', *execute, '--by', args.by, *authority]
     raise InstallError(f'--command {args.command} has no command line here.')
 
 
@@ -8878,6 +8929,9 @@ def phase_manage(ctx) -> dict:
         run_helper(H_EXPORT_DIR, {'dir': PurePosixPath(EXPORTS_DIR).name, 'name': export, 'uid': APP_UID},
                    mounts=[EXPORTS_MOUNT])
         record['export'] = {'folder': f'{EXPORTS_DIR}/{export}', 'out': f'{EXPORTS_DIR}/{export}/{export}'}
+    # refutation round 1 (builder D's point): once the act ran, what follows it - the RAM folder's wipe, the export's
+    # seal - never takes its record with it; the record is written below, then that failure or interrupt is raised
+    result, after_act = None, None
     try:
         with RamFiles('cpt-studio-manage-', owner=(APP_UID, APP_UID) if files else None) as ram:
             mounts = [ram.add('reason', reason, f'{MANAGE_MOUNT}/reason')] if reason is not None else []
@@ -8896,10 +8950,19 @@ def phase_manage(ctx) -> dict:
             else:
                 result = oneshot(image_id, argv, env, mounts=mounts, user=f'{os.getuid()}:{os.getgid()}',
                                  timeout=act_timeout(600), what=f'manage {entry["command"]}', by=args.by)
+    except BaseException as error:  # noqa: BLE001 — raised again below, with the act's record when it ran
+        if result is None:  # the act gave no answer, or never ran: there is no record of it to keep
+            raise
+        after_act = error
     finally:
         if export:  # done or not, everything in it is made root-only
-            record['export'].update(run_helper(H_SEAL_EXPORT, {'dir': PurePosixPath(EXPORTS_DIR).name,
-                                                               'name': export}, mounts=[EXPORTS_MOUNT]))
+            try:
+                record['export'].update(run_helper(H_SEAL_EXPORT, {'dir': PurePosixPath(EXPORTS_DIR).name,
+                                                                   'name': export}, mounts=[EXPORTS_MOUNT]))
+            except BaseException as error:  # noqa: BLE001 — as the wipe's, once the act ran
+                if result is None:
+                    raise
+                after_act = after_act or error
     # the application's own secrets, and the reason's text, never reach a log or a receipt (refutation A-7); and the act
     # has run, so its record is never discarded for them either (refutation round 1, phileak-1 and dataloss-3): each is
     # redacted before the log and the receipt are written, and the receipt counts them
@@ -8919,6 +8982,8 @@ def phase_manage(ctx) -> dict:
     else:
         log = ctx.log(args.command, stdout + stderr)
     record.update(exit=result.returncode, log=log, argv=argv, **kept_stdout(stdout))  # ids and counts only
+    if after_act is not None:
+        raise_after_act(after_act, record, f'manage {entry["command"]}')
     if (result.returncode == DISPOSE_DECISION_EXIT and args.command == 'dispose'
             and args.dispose_step == 'replay-ledger' and args.execute):
         # Lane 4: a replay exits DISPOSE_DECISION_EXIT when an entry needs a person's decision - one whose commit's
@@ -8937,8 +9002,9 @@ def phase_manage(ctx) -> dict:
     if record.get('ledger_printed'):
         printed = record['ledger_printed']
         done = (f'read; the ledger ({printed["lines"]} line(s), sha256 {printed["sha256"][:12]}) is kept whole in '
-                f'{printed["log"]}' + ('; a value in it was redacted, so the line holding it no longer verifies: print '
-                                       'it again without --reason-file' if printed['redacted'] else ''))
+                f'{printed["log"]}' + ('; FINDING: a secret it printed was redacted, so the line holding it no longer '
+                                       'verifies - print the ledger again once that is fixed (the database\'s own '
+                                       'is unchanged)' if printed['redacted'] else ''))
     elif args.command == 'dispose' and record['mode'] == 'dry run':  # a dry run never reads as done
         done = ('dry run, nothing was changed' + ('; to replay it, run again with --execute and --approved-by'
                                                    if args.dispose_step == 'replay-ledger' else ''))
@@ -10605,10 +10671,12 @@ def main(argv=None) -> int:
         record.update(ok=False, error=f'unexpected {type(error).__name__}; see failure log')
         record['failure_log'] = ctx.log('failure', traceback.format_exc().encode())
     except Interrupted as error:  # the phase's cleanup has run; the receipt says what stopped it
-        record.update(ok=False, interrupted=str(error), error=f'interrupted by {error} before the phase finished')
+        record.update(ok=False, interrupted=str(error), error=f'interrupted by {error} before the phase finished',
+                      **({'details': error.details} if getattr(error, 'details', None) is not None else {}))
         code = 128 + getattr(signal, str(error), signal.SIGTERM)
-    except KeyboardInterrupt:
-        record.update(ok=False, interrupted='SIGINT', error='interrupted (Ctrl-C) before the phase finished')
+    except KeyboardInterrupt as error:  # an act that ran keeps its record (raise_after_act) beside the interrupt
+        record.update(ok=False, interrupted='SIGINT', error='interrupted (Ctrl-C) before the phase finished',
+                      **({'details': error.details} if getattr(error, 'details', None) is not None else {}))
         raise
     finally:
         record.setdefault('ok', False)

@@ -487,14 +487,14 @@ class ManageArgumentTests(unittest.TestCase):
             ('--command', 'clear-signin-failures', '--username', 'owner', *reason, *by),
             ('--command', 'require-password-change', '--all-human-accounts', *reason, *by),
             ('--command', 'require-password-change', '--username', 'owner', *reason, *by),
+            # refutation round 1 (builder D's point): a reason exactly where the command reads one - close and plan
             ('--command', 'dispose', '--dispose-step', 'close', '--workspace-id', WORKSPACE, *reason, *by),
-            ('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', WORKSPACE, *by),
+            ('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', WORKSPACE, *reason, *by),
             ('--command', 'dispose', '--dispose-step', 'plan', '--encounter-id', PLAN, *reason, *by),
-            ('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by, '--approved-by', 'Grace Hopper',
-             *reason),
+            ('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by, '--approved-by', 'Grace Hopper'),
             ('--command', 'dispose', '--dispose-step', 'ledger', *by),
-            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *reason, *by),
-            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *reason, *by,
+            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *by),
+            ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', '/srv/ledger.json', *by,
              '--execute', '--approved-by', 'Grace Hopper'),
             ('--command', 'export-workspace', '--workspace-id', WORKSPACE, *reason, *by),
         ]
@@ -516,30 +516,41 @@ class ManageArgumentTests(unittest.TestCase):
                                        '--all-human-accounts', *reason, *by), 'not both'),
             'neither kind of require': (('--command', 'require-password-change', *reason, *by), 'needs --username'),
             'one person runs and approves': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN,
-                                              *by, '--approved-by', 'ada lovelace', *reason), 'differ'),
+                                              *by, '--approved-by', 'ada lovelace'), 'differ'),
             'an execute without a plan': (('--command', 'dispose', '--dispose-step', 'execute', *by, '--approved-by',
-                                           'Grace Hopper', *reason), '--plan-id'),
-            'an execute without a reason': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by,
-                                             '--approved-by', 'Grace Hopper'), 'needs --reason-file'),
+                                           'Grace Hopper'), '--plan-id'),
+            # refutation round 1 (builder D's point): the command reads a reason at close and plan, and no other step
+            'a plan without a reason': (('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', WORKSPACE,
+                                         *by), 'needs --reason-file'),
+            'a close without a reason': (('--command', 'dispose', '--dispose-step', 'close', '--workspace-id',
+                                          WORKSPACE, *by), 'needs --reason-file'),
+            'an execute with a reason': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, *by,
+                                          '--approved-by', 'Grace Hopper', *reason),
+                                         '--reason-file is not used by --dispose-step execute'),
+            'a ledger with a reason': (('--command', 'dispose', '--dispose-step', 'ledger', *by, *reason),
+                                       '--reason-file is not used by --dispose-step ledger'),
+            'a replay with a reason': (('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file',
+                                        '/srv/ledger.json', *by, *reason),
+                                       '--reason-file is not used by --dispose-step replay-ledger'),
             'an approver outside execute': (('--command', 'dispose', '--dispose-step', 'close', '--workspace-id',
                                              WORKSPACE, *reason, *by, '--approved-by', 'Grace Hopper'),
                                             'belong to --dispose-step execute'),
             # refutation, installer lens A-5b: a replay that destroys data again is carried out by two named people
             'a replay carried out by one person': (('--command', 'dispose', '--dispose-step', 'replay-ledger',
-                                                    '--ledger-file', '/srv/ledger.json', *reason, *by, '--execute'),
+                                                    '--ledger-file', '/srv/ledger.json', *by, '--execute'),
                                                    'replay-ledger --execute needs --approved-by'),
             'a replay run and approved by one person': (('--command', 'dispose', '--dispose-step', 'replay-ledger',
-                                                         '--ledger-file', '/srv/ledger.json', *reason, *by,
+                                                         '--ledger-file', '/srv/ledger.json', *by,
                                                          '--execute', '--approved-by', 'ADA LOVELACE'), 'differ'),
             'an approver of a dry run': (('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file',
-                                          '/srv/ledger.json', *reason, *by, '--approved-by', 'Grace Hopper'),
+                                          '/srv/ledger.json', *by, '--approved-by', 'Grace Hopper'),
                                          'replay-ledger --execute'),
             '--execute outside a replay': (('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN,
-                                            *by, '--approved-by', 'Grace Hopper', *reason, '--execute'),
+                                            *by, '--approved-by', 'Grace Hopper', '--execute'),
                                            '--execute belongs to --dispose-step replay-ledger'),
             '--execute on another act': (('--command', 'revoke-operator', '--username', 'ops-agent', *reason, *by,
                                           '--execute'), 'not used by --command revoke-operator'),
-            'a replay without its ledger': (('--command', 'dispose', '--dispose-step', 'replay-ledger', *reason, *by),
+            'a replay without its ledger': (('--command', 'dispose', '--dispose-step', 'replay-ledger', *by),
                                             '--ledger-file'),
             'a ledger file elsewhere': (('--command', 'dispose', '--dispose-step', 'ledger', '--ledger-file',
                                          '/srv/ledger.json', *by), '--ledger-file'),
@@ -797,18 +808,25 @@ class ManagePhaseTests(TemporaryDirectoryTest):
 
     def test_a_disposal_is_told_the_switch_is_idle_only_after_the_check_and_runs_with_the_files_volume(self):
         world = ManageWorld(self.tmp, output=f'disposal {PLAN}: 12 rows, 3 files\n'.encode())
+        # refutation round 1 (builder D's point): execute reads no reason (the plan's own is used): none is given
         details = world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, '--by',
-                            'Ada Lovelace', '--approved-by', 'Grace Hopper', '--reason-file', 'REASON')
+                            'Ada Lovelace', '--approved-by', 'Grace Hopper')
         command, kwargs = world.oneshots[-1]
         self.assertEqual(command, ['manage', 'dispose', '--execute', '--plan', PLAN, '--by', 'Ada Lovelace',
-                                   '--approved-by', 'Grace Hopper', '--reason-file', '/run/cpt-manage/reason',
+                                   '--approved-by', 'Grace Hopper',
                                    '--authorization-ref', f'{DECLARATION}@{COMMIT}'])
         self.assertIn('CPT_STUDIO_SWITCH_STATE=idle', kwargs['environment'])
         self.assertIn('CPT_STUDIO_PROVIDER_MODE=disabled', kwargs['environment'])
         self.assertNotIn('user', kwargs)  # the application's own uid: the files are its own
         self.assertIn(f'type=volume,src={install.FILES_VOLUME},dst={install.STATE_DIR}', kwargs['mounts'])  # read-write
+        self.assertEqual(details['stdout'], f'disposal {PLAN}: 12 rows, 3 files\n')  # ids and counts, in the receipt
+        self.assertEqual(details['step'], 'execute')
         # refutation, installer lens A-3c: 0600 in 0700, handed to that uid by the root helper - never readable by
-        # another local user - and wiped by it afterwards
+        # another local user - and wiped by it afterwards: a disposal step that reads a reason (plan; close alike)
+        world.helpers.clear()
+        world.run('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', WORKSPACE, '--reason-file',
+                  'REASON', '--by', 'Ada Lovelace')
+        command, kwargs = world.oneshots[-1]
         text, mode, folder = world.mounted['reason']
         self.assertEqual((mode, folder), (0o600, 0o700))
         source = next(mount for mount in kwargs['mounts'] if 'dst=/run/cpt-manage/reason,' in mount)
@@ -819,8 +837,6 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         self.assertEqual([body for body in world.helpers if body in (install.H_RAM_GIVE, install.H_RAM_WIPE)],
                          [install.H_RAM_GIVE, install.H_RAM_WIPE])
         self.assertFalse(Path(path).parent.exists())
-        self.assertEqual(details['stdout'], f'disposal {PLAN}: 12 rows, 3 files\n')  # ids and counts, in the receipt
-        self.assertEqual(details['step'], 'execute')
         # no other act is ever told the switch is idle
         world.run('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON', '--by',
                   'Ada Lovelace')
@@ -833,16 +849,19 @@ class ManagePhaseTests(TemporaryDirectoryTest):
             ('close', '--workspace-id', WORKSPACE, '--reason-file', 'REASON'):
                 ['--close', '--workspace', WORKSPACE, '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace',
                  *authority],
-            ('plan', '--workspace-id', WORKSPACE): ['--plan', '--workspace', WORKSPACE, '--by', 'Ada Lovelace', *authority],
-            ('plan', '--encounter-id', PLAN): ['--plan', '--encounter', PLAN, '--by', 'Ada Lovelace', *authority],
+            # refutation round 1 (builder D's point): the reason reaches the command exactly where it reads one
+            ('plan', '--workspace-id', WORKSPACE, '--reason-file', 'REASON'):
+                ['--plan', '--workspace', WORKSPACE, '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace',
+                 *authority],
+            ('plan', '--encounter-id', PLAN, '--reason-file', 'REASON'):
+                ['--plan', '--encounter', PLAN, '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace',
+                 *authority],
             ('ledger',): ['--ledger', '--by', 'Ada Lovelace', *authority],
-            ('replay-ledger', '--ledger-file', 'LEDGER', '--reason-file', 'REASON'):
-                ['--replay-ledger', '/run/cpt-manage/ledger', '--reason-file', '/run/cpt-manage/reason', '--by',
-                 'Ada Lovelace', *authority],
-            ('replay-ledger', '--ledger-file', 'LEDGER', '--reason-file', 'REASON', '--execute', '--approved-by',
-             'Grace Hopper'):
+            ('replay-ledger', '--ledger-file', 'LEDGER'):
+                ['--replay-ledger', '/run/cpt-manage/ledger', '--by', 'Ada Lovelace', *authority],
+            ('replay-ledger', '--ledger-file', 'LEDGER', '--execute', '--approved-by', 'Grace Hopper'):
                 ['--replay-ledger', '/run/cpt-manage/ledger', '--execute', '--approved-by', 'Grace Hopper',
-                 '--reason-file', '/run/cpt-manage/reason', '--by', 'Ada Lovelace', *authority],
+                 '--by', 'Ada Lovelace', *authority],
         }
         modes = {'close': 'executed', 'plan': 'dry run', 'ledger': 'read'}
         for (step, *extra), expected in steps.items():
@@ -871,8 +890,8 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         # Lane 4's contract: --replay-ledger --execute exits 3 when an entry's commit outcome was unknown and nothing
         # else failed; every other non-zero exit is a failure
         said = b'replayed 7 of 8 entries; entry 3f2a0c1e-0000-4000-8000-000000000003 needs a decision\n'
-        replay = ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER', '--reason-file',
-                  'REASON', '--by', 'Ada Lovelace')
+        replay = ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file', 'LEDGER', '--by',
+                  'Ada Lovelace')
         world = ManageWorld(self.tmp, output=said, exit_code=3)
         details = world.run(*replay, '--execute', '--approved-by', 'Grace Hopper')
         self.assertEqual(install.DISPOSE_DECISION_EXIT, 3)
@@ -897,7 +916,7 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         world = ManageWorld(self.tmp, exit_code=3)
         with self.assertRaisesRegex(install.InstallError, 'failed'):
             world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', PLAN, '--by', 'Ada Lovelace',
-                      '--approved-by', 'Grace Hopper', '--reason-file', 'REASON')
+                      '--approved-by', 'Grace Hopper')
 
     def test_an_export_is_written_into_a_new_folder_that_is_then_root_only(self):
         world = ManageWorld(self.tmp, output=f'exported {WORKSPACE}: 2 documents\n'.encode())

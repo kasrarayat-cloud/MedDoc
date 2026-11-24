@@ -795,7 +795,11 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   command printed is a FINDING. A setup code it printed is never kept (the
   act's receipt fails, and the act runs again for a new code), and `provision`
   never hands over a password it printed (the credentials files are
-  discarded; `--reset-passwords` sets new ones). The receipt keeps the
+  discarded; `--reset-passwords` sets new ones). Nor does what follows the act
+  ever take its record away: when its RAM folder's wipe or an export's seal
+  fails, the receipt fails with the act's record (its exit, its log, its
+  output) and says what did not finish, and a signal or a Ctrl-C there is
+  recorded beside it (a setup code is then not kept). The receipt keeps the
   command's stdout (ids and counts) and its log. Nothing that is not on the list
   runs. An act holds the receipts' lock for its whole run, as every phase does,
   so no install, `switch-back` or `rollback-app` can start while it runs (and
@@ -1816,18 +1820,21 @@ release 1), run only through `--phase manage`, never over HTTP:
   <file> --by <person>` closes a practice (uploads and coding stop; reading
   stays on until the practice confirms it received its data);
 - `--dispose-step plan` (`--workspace-id`, or `--encounter-id` for one
-  document) is a dry run that records what would be destroyed;
+  document, never both) `--reason-file <file> --by <person>` is a dry run
+  that records what would be destroyed;
 - `--dispose-step execute --plan-id <id> --by <person> --approved-by <another
-  person> --reason-file <file>` carries out a plan under a day old: two
-  different named people run and approve it (D14). It takes nothing else: a
+  person>` carries out a plan under a day old: two different named people run
+  and approve it (D14), under the plan's own reason. It takes nothing else: a
   `--workspace-id` or `--encounter-id` is refused before anything runs, since
   the plan's own scope is what is destroyed (refutation round 1, installer-1).
   Every step takes exactly what it passes to the command - `close`
-  `--workspace-id --reason-file`, `plan` `--workspace-id` and/or
-  `--encounter-id` (and `--reason-file`), `ledger` `--reason-file`,
-  `replay-ledger` `--ledger-file --reason-file` (and `--execute
-  --approved-by`), each with `--by` - and refuses any other, so what was
-  typed is what ran;
+  `--workspace-id --reason-file`, `plan` `--workspace-id` or `--encounter-id`
+  and `--reason-file`, `execute` `--plan-id --approved-by`, `ledger` nothing
+  more, `replay-ledger` `--ledger-file` (and `--execute --approved-by`), each
+  with `--by` - and refuses any other, so what was typed is what ran. A
+  reason is required exactly where the command reads one, `close` and `plan`,
+  and refused everywhere else (refutation round 1: `execute` and
+  `replay-ledger` had required one their command never read);
 - `--dispose-step ledger` prints the ledger - the MAC-signed list of every
   disposal - into a log file of its own in the receipts folder
   (`manage-<UTC>-NN-dispose-ledger.log`; the receipt's `ledger_printed` names
@@ -1837,10 +1844,10 @@ release 1), run only through `--phase manage`, never over HTTP:
   output (its `stdout_cut` and `stdout_chars` say whether it was cut and how
   long it was), so it is never the copy to keep (refutation round 1,
   dataloss-1: a cut copy was refused, or replayed without the oldest
-  disposals). A `--reason-file` is optional here; one that a ledger line
-  repeats is redacted there, and that line no longer verifies - the summary
-  says so: print the ledger again without it;
-- `--dispose-step replay-ledger --ledger-file <file> --reason-file <file>` is,
+  disposals). A secret the command printed in it is redacted there, and that
+  line no longer verifies: the summary says so (a FINDING), and the ledger is
+  printed again once that is fixed;
+- `--dispose-step replay-ledger --ledger-file <file>` is,
   on its own, a dry run that changes nothing (the receipt's `mode` says `dry
   run`, and its summary never says done); with `--execute --approved-by
   <another person>` it re-applies the ledger after a database restore, so

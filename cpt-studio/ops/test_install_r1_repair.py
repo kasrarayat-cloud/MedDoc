@@ -770,9 +770,8 @@ ARGUMENT_FLAGS = {'workspace_id': ('--workspace-id', WORKSPACE), 'encounter_id':
 # each argument's trace on the command line manage_argv builds (the RAM-only files are mounted, never named as typed)
 ARGUMENT_TRACES = {'workspace_id': WORKSPACE, 'encounter_id': DOCUMENT, 'plan_id': PLAN, 'approved_by': 'Grace Hopper',
                    'reason_file': '--reason-file', 'ledger_file': '--replay-ledger', 'execute': '--execute'}
-STEP_BASE = {'close': ('workspace_id', 'reason_file'), 'plan': ('workspace_id',),
-             'execute': ('plan_id', 'approved_by', 'reason_file'), 'ledger': (),
-             'replay-ledger': ('ledger_file', 'reason_file')}
+STEP_BASE = {'close': ('workspace_id', 'reason_file'), 'plan': ('workspace_id', 'reason_file'),
+             'execute': ('plan_id', 'approved_by'), 'ledger': (), 'replay-ledger': ('ledger_file',)}
 
 
 class ManageArgumentTests(unittest.TestCase):
@@ -812,19 +811,40 @@ class ManageArgumentTests(unittest.TestCase):
                     self.assertIn(ARGUMENT_FLAGS[name][0], refusal)
 
     def test_what_each_step_takes_reaches_its_command_line(self):
-        combinations = {'close': [()], 'plan': [(), ('encounter_id',), ('reason_file',)],
-                        'execute': [()], 'ledger': [(), ('reason_file',)],
+        combinations = {'close': [()], 'plan': [()], 'execute': [()], 'ledger': [()],
                         'replay-ledger': [(), ('execute', 'approved_by')]}
-        for step, extras in combinations.items():
-            for extra in extras:
-                names = (*STEP_BASE[step], *extra)
-                with self.subTest(step=step, names=names):
-                    args, refusal = self.parse(self.argv(step, names))
+        cases = [(step, (*STEP_BASE[step], *extra)) for step, extras in combinations.items() for extra in extras]
+        cases.append(('plan', ('encounter_id', 'reason_file')))  # one document
+        for step, names in cases:
+            with self.subTest(step=step, names=names):
+                args, refusal = self.parse(self.argv(step, names))
+                self.assertIsNotNone(args, refusal)
+                ctx = SimpleNamespace(args=args, door={'declaration': 'docs/d.md', 'declaration_commit': 'd' * 40})
+                argv = install.manage_argv(ctx, args, install.MANAGE_COMMANDS['dispose'])
+                for name in names:
+                    self.assertIn(ARGUMENT_TRACES[name], argv, f'{name} was dropped')
+                # the reason reaches the command exactly where it reads one (refutation round 1, builder D's point)
+                self.assertEqual('--reason-file' in argv, step in ('close', 'plan'))
+
+    def test_the_reason_is_required_exactly_where_the_command_reads_it(self):
+        # studio/management/commands/dispose.py reads --reason-file at --close and --plan, and refuses either without one
+        self.assertEqual(install.DISPOSE_REASON_REQUIRED, ('close', 'plan'))
+        for step in install.DISPOSE_STEPS:
+            with self.subTest(step=step):
+                base = tuple(name for name in STEP_BASE[step] if name != 'reason_file')
+                args, refusal = self.parse(self.argv(step, base))
+                if step in install.DISPOSE_REASON_REQUIRED:
+                    self.assertIsNone(args)
+                    self.assertIn(f'--dispose-step {step} needs --reason-file', refusal)
+                    self.assertIn('reason_file', install.DISPOSE_STEP_ARGUMENTS[step])
+                else:
                     self.assertIsNotNone(args, refusal)
-                    ctx = SimpleNamespace(args=args, door={'declaration': 'docs/d.md', 'declaration_commit': 'd' * 40})
-                    argv = install.manage_argv(ctx, args, install.MANAGE_COMMANDS['dispose'])
-                    for name in names:
-                        self.assertIn(ARGUMENT_TRACES[name], argv, f'{name} was dropped')
+                    args, refusal = self.parse(self.argv(step, (*base, 'reason_file')))
+                    self.assertIsNone(args)
+                    self.assertIn(f'--reason-file is not used by --dispose-step {step}', refusal)
+        args, refusal = self.parse(self.argv('plan', ('workspace_id', 'encounter_id', 'reason_file')))
+        self.assertIsNone(args)
+        self.assertIn('not both', refusal)
 
     def test_address_is_refused_by_every_phase_but_manage(self):
         for phase, extra in (('operators', ()), ('provision', ('--owner-username', 'dr-owner', '--by', 'Ada Lovelace')),
@@ -933,18 +953,20 @@ class DatabaseSwapPeakTests(TemporaryDirectoryTest):
 
 # --- I6: an act that ran keeps its record, its secrets and the reason redacted -----------------------------------------
 
-# dataloss-3's input: the plan's reason, given again to execute; the certificate's ledger line repeats it
+# dataloss-3's input: the plan's reason, given again to execute; before builder D's repair the certificate's ledger line
+# repeated it, and since it the certificate names the reason by its digest alone (sha256:<hex>)
 PLAN_REASON = b'Misfiled upload: the document belongs to another practice (incident 4521).\n'
 CERTIFICATE_PLAN = '2f8fad5b-d9cb-469f-a165-70867728950e'
 
 
-def certificate(reason_text):
-    """A destruction certificate as `dispose --execute` prints it before builder D's repair: its ledger line (JSON)
-    carries the plan's reason."""
-    line = json.dumps({'event': 'completed', 'plan': CERTIFICATE_PLAN, 'reason': reason_text, 'rows': 12, 'files': 3},
-                      sort_keys=True)
-    return (f'Destruction certificate\nPlan {CERTIFICATE_PLAN}: completed\nRows destroyed: 12\nFiles remaining: 0\n'
-            f'Ledger line: {line}\n').encode()
+def certificate(reason_text=None, *, approved_by='Grace Hopper'):
+    """A destruction certificate as `dispose --execute` prints it: with ``reason_text``, the shape before builder D's
+    repair (its ledger line carries the reason); without, the shape since (the reason's sha256 alone)."""
+    reason = reason_text if reason_text is not None else 'sha256:' + hashlib.sha256(PLAN_REASON).hexdigest()
+    line = json.dumps({'event': 'completed', 'plan': CERTIFICATE_PLAN, 'reason': reason, 'rows': 12, 'files': 3,
+                       'approved_by': approved_by}, sort_keys=True)
+    return (f'Destruction certificate\nPlan {CERTIFICATE_PLAN}: completed\nRun by: Ada Lovelace; approved by: '
+            f'{approved_by}\nRows destroyed: 12\nFiles remaining: 0\nLedger line: {line}\n').encode()
 
 
 class RedactOutputTests(unittest.TestCase):
@@ -984,52 +1006,73 @@ class RedactOutputTests(unittest.TestCase):
 
 
 class ExecuteWithThePlansReasonTests(TemporaryDirectoryTest):
-    """phileak-1 and dataloss-3's input through the real phase_manage: execute given the plan's own reason file."""
+    """phileak-1 and dataloss-3 through the real phase_manage: execute given the plan's own reason file is refused
+    before anything runs (the command never reads one: the plan's own reason is used), and once an act has run nothing
+    in its output makes its record vanish (refutation round 1, builder D's point: a reason line that the output happens
+    to repeat - 'Grace Hopper', the approver's own name - is redacted, never a lost certificate)."""
 
-    def run_execute(self, output, *, exit_code=0):
+    def world(self, output, *, exit_code=0):
         import test_install_r1 as r1
-        world = r1.ManageWorld(self.tmp, output=output, exit_code=exit_code)
-        try:
-            return world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', r1.PLAN, '--by',
-                             'Ada Lovelace', '--approved-by', 'Grace Hopper', '--reason-file', 'REASON',
-                             reason=PLAN_REASON), None, world
-        except install.InstallError as error:
-            return None, error, world
+        return r1, r1.ManageWorld(self.tmp, output=output, exit_code=exit_code)
 
-    def test_the_certificate_is_kept_in_the_log_and_the_receipt_with_the_reason_redacted(self):
-        reason_text = PLAN_REASON.decode().strip()
-        details, error, world = self.run_execute(certificate(reason_text))
-        self.assertIsNone(error, error and str(error))
+    def test_execute_given_the_plans_reason_file_is_refused_before_anything_runs(self):
+        r1, world = self.world(certificate(PLAN_REASON.decode().strip()))
+        execute = ('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', r1.PLAN, '--by', 'Ada Lovelace',
+                   '--approved-by', 'Grace Hopper')
+        with self.assertRaises(SystemExit):
+            world.run(*execute, '--reason-file', 'REASON', reason=PLAN_REASON)
+        self.assertEqual(world.oneshots, [])  # nothing ran, so nothing was destroyed
+        self.assertIn('--reason-file is not used by --dispose-step execute',
+                      r1.refused('--phase', 'manage', *execute, '--reason-file', '/r'))
+
+    def test_the_certificate_is_kept_whole_with_the_plans_reason_as_its_digest(self):
+        r1, world = self.world(certificate())
+        details = world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', r1.PLAN, '--by',
+                            'Ada Lovelace', '--approved-by', 'Grace Hopper')
         self.assertEqual(world.acts()[0][:3], ['manage', 'dispose', '--execute'])
+        self.assertEqual((details['exit'], details['mode']), (0, 'executed'))
+        self.assertNotIn('redacted', details)  # no reason given, no secret printed: nothing touched
+        self.assertEqual(details['stdout'], certificate().decode())
+        self.assertEqual(Path(details['log']).read_bytes(), certificate())
+
+    def test_a_reason_line_the_output_happens_to_repeat_never_discards_the_record(self):
+        # builder D's example: a reason file whose line is just the approver's name, which the act's output also says
+        r1, world = self.world(certificate())
+        details = world.run('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE,
+                            '--reason-file', 'REASON', '--by', 'Ada Lovelace', reason=b'Grace Hopper\n')
         self.assertEqual(details['exit'], 0)
-        self.assertEqual(details['mode'], 'executed')
-        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 1})
-        self.assertIn('Destruction certificate', details['stdout'])
+        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 2})  # the text line and the ledger line's value
         self.assertIn(f'Plan {CERTIFICATE_PLAN}: completed', details['stdout'])
-        self.assertIn('[redacted by the installer]', details['stdout'])
-        self.assertNotIn('incident 4521', json.dumps(details))
+        self.assertIn('Rows destroyed: 12', details['stdout'])
+        self.assertNotIn('Grace Hopper', details['stdout'])
         log = Path(details['log']).read_bytes()
         self.assertIn(b'Destruction certificate', log)
-        self.assertNotIn(b'incident 4521', log)
-        self.assertIn('1 occurrence(s) of the reason', details['summary'])
+        self.assertNotIn(b'Grace Hopper', log)
+        self.assertIn('2 occurrence(s) of the reason', details['summary'])
+
+    def test_the_shape_before_builder_ds_repair_is_kept_with_the_reason_redacted(self):
+        reason_text = PLAN_REASON.decode().strip()
+        r1, world = self.world(certificate(reason_text))
+        details = world.run('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE,
+                            '--reason-file', 'REASON', '--by', 'Ada Lovelace', reason=PLAN_REASON)
+        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 1})
+        self.assertIn('Destruction certificate', details['stdout'])
+        self.assertNotIn('incident 4521', json.dumps(details))
+        self.assertNotIn(b'incident 4521', Path(details['log']).read_bytes())
 
     def test_a_failed_act_keeps_its_certificate_too(self):
-        reason_text = PLAN_REASON.decode().strip()
-        details, error, world = self.run_execute(certificate(reason_text) + b'Files remaining: 1\n', exit_code=1)
-        self.assertIsInstance(error, install.InstallError)
-        self.assertIn('failed (exit 1)', str(error))
-        self.assertEqual(error.details['redacted'], {'secret': 0, 'reason': 1})
-        self.assertIn('Files remaining: 1', error.details['stdout'])
-        self.assertNotIn(b'incident 4521', Path(error.details['log']).read_bytes())
+        r1, world = self.world(certificate() + b'Files remaining: 1\n', exit_code=1)
+        with self.assertRaisesRegex(install.InstallError, 'failed \\(exit 1\\)') as caught:
+            world.run('--command', 'dispose', '--dispose-step', 'execute', '--plan-id', r1.PLAN, '--by',
+                      'Ada Lovelace', '--approved-by', 'Grace Hopper')
+        self.assertIn('Files remaining: 1', caught.exception.details['stdout'])
+        self.assertIn(b'Destruction certificate', Path(caught.exception.details['log']).read_bytes())
 
     def test_the_receipt_main_writes_holds_the_certificate(self):
         import test_install_r1 as r1
-        reason_text = PLAN_REASON.decode().strip()
         receipts = self.tmp / 'receipts'
         receipts.mkdir(mode=0o700)
-        reason = self.tmp / 'reason.txt'
-        reason.write_bytes(PLAN_REASON)
-        world = r1.ManageWorld(self.tmp, output=certificate(reason_text))
+        world = r1.ManageWorld(self.tmp, output=certificate())
         printed = io.StringIO()
         with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
                                  require_db=mock.Mock(), oneshot=world.oneshot, inspect=world.inspect,
@@ -1042,15 +1085,129 @@ class ExecuteWithThePlansReasonTests(TemporaryDirectoryTest):
                 mock.patch('sys.stdout', printed):
             code = install.main(['--phase', 'manage', '--revision', REVISION, '--receipts', str(receipts), '--command',
                                  'dispose', '--dispose-step', 'execute', '--plan-id', r1.PLAN, '--by', 'Ada Lovelace',
-                                 '--approved-by', 'Grace Hopper', '--reason-file', str(reason)])
+                                 '--approved-by', 'Grace Hopper'])
         line = json.loads(printed.getvalue().strip().splitlines()[-1])
         self.assertEqual((code, line['ok']), (0, True), line)
         record = json.loads(Path(line['receipt']).read_text())
-        self.assertIn('Destruction certificate', record['details']['stdout'])
-        self.assertNotIn('incident 4521', Path(line['receipt']).read_text())
+        self.assertEqual(record['details']['stdout'], certificate().decode())
         logs = [path for path in receipts.glob('*.log') if b'Destruction certificate' in path.read_bytes()]
         self.assertEqual(len(logs), 1)
-        self.assertNotIn(b'incident 4521', logs[0].read_bytes())
+
+
+class AfterTheActTests(TemporaryDirectoryTest):
+    """Refutation round 1 (builder D's point, phileak-1's class): once an act ran, what follows it - its RAM folder's
+    wipe, an export's seal - failing never takes the act's record with it: the receipt's error carries the record (its
+    exit, its log, its output), and says what did not finish."""
+
+    def failing_world(self, failing_body, output):
+        import test_install_r1 as r1
+
+        class World(r1.ManageWorld):
+            def run_helper(world, body, params, *, mounts, **kwargs):
+                answer = super().run_helper(body, params, mounts=mounts, **kwargs)  # it ran (nothing is left behind)
+                if body is failing_body:
+                    raise install.InstallError('A root helper failed with exit 1.')
+                return answer
+        return r1, World(self.tmp, output=output)
+
+    def test_a_wipe_that_fails_after_a_destruction_keeps_its_certificate(self):
+        r1, world = self.failing_world(install.H_RAM_WIPE, certificate())
+        with self.assertRaises(install.InstallError) as caught:
+            world.run('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE,
+                      '--reason-file', 'REASON', '--by', 'Ada Lovelace')
+        details = caught.exception.details
+        self.assertIn('ran (exit 0) and its record is kept', str(caught.exception))
+        self.assertIn('A root helper failed with exit 1.', str(caught.exception))
+        self.assertEqual(details['stdout'], certificate().decode())
+        self.assertEqual(Path(details['log']).read_bytes(), certificate())
+        self.assertEqual(details['after_act'], 'A root helper failed with exit 1.')
+
+    def test_an_export_whose_seal_fails_keeps_its_record(self):
+        r1, world = self.failing_world(install.H_SEAL_EXPORT, b'exported 2 documents\n')
+        with self.assertRaises(install.InstallError) as caught:
+            world.run('--command', 'export-workspace', '--workspace-id', r1.WORKSPACE, '--reason-file', 'REASON',
+                      '--by', 'Ada Lovelace')
+        self.assertEqual(caught.exception.details['stdout'], 'exported 2 documents\n')
+        self.assertIn('what follows the act did not finish', str(caught.exception))
+
+    def test_a_code_act_whose_wipe_fails_keeps_its_record_and_no_code(self):
+        import test_install_r1 as r1
+        world = r1.ManageWorld(self.tmp, output=b'reset the second factor of platform-operator\n')
+        real_exit = install.RamFiles.__exit__
+
+        def exit_then_fail(ram, *exc):
+            real_exit(ram, *exc)  # wiped: nothing is left in /dev/shm by this test
+            raise install.InstallError('the RAM folder could not be wiped (synthetic)')
+        with mock.patch.object(install.RamFiles, '__exit__', exit_then_fail), \
+                self.assertRaises(install.InstallError) as caught:
+            world.run('--command', 'reset-second-factor', '--username', 'platform-operator', '--reason-file',
+                      'REASON', '--by', 'Ada Lovelace')
+        details = caught.exception.details
+        self.assertEqual((details['exit'], details['setup_code_kept']), (0, False))
+        self.assertIn('reset the second factor', details['stdout'])
+        self.assertEqual(list(world.etc.iterdir()), [])  # the code was never committed
+
+    def test_provision_whose_wipe_fails_after_the_hand_over_keeps_its_record(self):
+        from test_install import no_grants
+        args = SimpleNamespace(phase='provision', revision=REVISION, receipts=str(self.tmp), reset_passwords=None,
+                               owner_username='owner-gi', agent_username=None, owner_display_name='',
+                               agent_display_name='CPT Studio review agent', workspace_name='Gastroenterology',
+                               specialty='gastroenterology', by='Ada Lovelace')
+        finals = []
+        real_exit = install.RamFiles.__exit__
+
+        def exit_then_fail(ram, *exc):
+            real_exit(ram, *exc)
+            raise install.InstallError('the RAM folder could not be wiped (synthetic)')
+
+        def fake_root_file(op, **params):
+            finals.append(op)
+            return {'final_exists': False, 'staged_exists': False} if op == 'state' else {}
+
+        def fake_oneshot(image_id, command, env, **kwargs):
+            return SimpleNamespace(returncode=0, stdout=b'created human account owner-gi (owner)\n', stderr=b'')
+        with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                 require_db=mock.Mock(), read_protected_env=mock.Mock(return_value=b''),
+                                 root_file=fake_root_file, oneshot=fake_oneshot, app_script=no_grants), \
+                mock.patch.object(install.RamFiles, '__exit__', exit_then_fail), \
+                self.assertRaises(install.InstallError) as caught:
+            install.phase_provision(install.Context(args, self.tmp))
+        self.assertEqual(finals, ['state', 'stage', 'commit'])  # handed over before the wipe failed
+        details = caught.exception.details
+        self.assertEqual(details['accounts'], {'owner-gi': 'created'})
+        self.assertIn('provision ran (exit 0) and its record is kept', str(caught.exception))
+        self.assertTrue(Path(details['log']).exists())
+
+    def test_an_operators_grant_whose_wipe_fails_keeps_its_record(self):
+        from test_install_bluegreen import OperatorsPhaseTests
+        harness = OperatorsPhaseTests('test_the_spec_holds_the_human_operator_alone_and_no_agent_login_is_written')
+        harness.setUp()  # its own temporary folder, removed by its tearDown
+        self.addCleanup(harness.tearDown)
+        real_exit = install.RamFiles.__exit__
+
+        def exit_then_fail(ram, *exc):
+            real_exit(ram, *exc)  # wiped: nothing is left in /dev/shm by this test
+            if ram.path.name.startswith('cpt-studio-operators-'):
+                raise install.InstallError('the RAM folder could not be wiped (synthetic)')
+            return False
+        with mock.patch.object(install.RamFiles, '__exit__', exit_then_fail), \
+                self.assertRaises(install.InstallError) as caught:
+            harness.run_phase()
+        details = caught.exception.details
+        self.assertEqual(details['grants']['platform-operator']['exit'], 0)
+        self.assertTrue(Path(details['grants']['platform-operator']['log']).exists())
+        self.assertIn('manage grant_operator for platform-operator ran (exit 0) and its record is kept',
+                      str(caught.exception))
+
+    def test_a_signal_during_the_wipe_keeps_the_acts_record_beside_the_interrupt(self):
+        import signal as signals
+        case = SignalDuringWipeTests('test_a_ctrl_c_during_the_wipe_too')
+        case.tmp = self.tmp
+        exit_code, record, seen, shm = case.run_main(signals.SIGTERM)
+        self.assertEqual((exit_code, record['interrupted']), (143, 'SIGTERM'))
+        self.assertEqual(record['details']['stdout'], 'Plan 1 recorded: 3 rows.\n')
+        self.assertEqual(record['details']['exit'], 0)
+        self.assertFalse(seen['folder'].exists())
 
 
 class ProvisionPrintedPasswordTests(TemporaryDirectoryTest):
@@ -1136,9 +1293,8 @@ class LedgerKeptWholeTests(TemporaryDirectoryTest):
         self.assertEqual((other['stdout_cut'], other['stdout_chars']), (False, len('revoked ops-agent\n')))
         self.assertNotIn('ledger_printed', other)
 
-    def test_a_reason_redacted_from_stderr_alone_leaves_the_ledger_verifiable(self):
+    def test_a_secret_in_stderr_alone_leaves_the_ledger_whole_and_verifiable(self):
         import test_install_r1 as r1
-        reason = b'Ticket 4521: the practice asked to end access.\n'
         ledger = synthetic_ledger(lines=2, width=300)
 
         class World(r1.ManageWorld):
@@ -1146,25 +1302,30 @@ class LedgerKeptWholeTests(TemporaryDirectoryTest):
                 answer = super().oneshot(image_id, command, env, **kwargs)
                 if command[:2] == ['manage', 'dispose']:
                     return SimpleNamespace(returncode=0, stdout=ledger,
-                                           stderr=b'warning: Ticket 4521: the practice asked to end access.\n')
+                                           stderr=f'warning: settings {r1.SECRET_VALUE}\n'.encode())
                 return answer
-        details = World(self.tmp).run('--command', 'dispose', '--dispose-step', 'ledger', '--by', 'Ada Lovelace',
-                                      '--reason-file', 'REASON', reason=reason)
-        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 1})
+        details = World(self.tmp).run('--command', 'dispose', '--dispose-step', 'ledger', '--by', 'Ada Lovelace')
+        self.assertEqual(details['redacted'], {'secret': 1, 'reason': 0})
         self.assertIs(details['ledger_printed']['redacted'], False)
         self.assertEqual(Path(details['ledger_printed']['log']).read_bytes(), ledger)
         self.assertNotIn('no longer verifies', details['summary'])
-        self.assertNotIn(b'Ticket 4521', Path(details['stderr_log']).read_bytes())
+        self.assertNotIn(r1.SECRET_VALUE.encode(), Path(details['stderr_log']).read_bytes())
 
-    def test_a_ledger_line_that_repeats_a_given_reason_is_said_to_no_longer_verify(self):
-        reason = b'Ticket 4521: the practice asked to end access.\n'
+    def test_a_secret_printed_in_the_ledger_is_a_finding_that_says_the_line_no_longer_verifies(self):
+        import test_install_r1 as r1
         ledger = synthetic_ledger(lines=2, width=300).replace(b'"stage": "completed"',
-                                                              b'"reason": "Ticket 4521: the practice asked to end '
-                                                              b'access.", "stage": "completed"', 1)
-        details = self.run_ledger(ledger, '--reason-file', 'REASON', reason=reason)
+                                                              f'"stage": "{r1.SECRET_VALUE}"'.encode(), 1)
+        details = self.run_ledger(ledger)
         self.assertIs(details['ledger_printed']['redacted'], True)
-        self.assertIn('no longer verifies: print it again without --reason-file', details['summary'])
-        self.assertNotIn(b'Ticket 4521', Path(details['ledger_printed']['log']).read_bytes())
+        self.assertIn('FINDING: a secret it printed was redacted, so the line holding it no longer verifies',
+                      details['summary'])
+        self.assertNotIn(r1.SECRET_VALUE.encode(), Path(details['ledger_printed']['log']).read_bytes())
+
+    def test_the_ledger_step_takes_no_reason(self):
+        import test_install_r1 as r1
+        self.assertIn('--reason-file is not used by --dispose-step ledger',
+                      r1.refused('--phase', 'manage', '--command', 'dispose', '--dispose-step', 'ledger', '--by',
+                                 'Ada Lovelace', '--reason-file', '/r'))
 
 
 # --- I8: the app phase's converter precondition holds the seal --------------------------------------------------------
