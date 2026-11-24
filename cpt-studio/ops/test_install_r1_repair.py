@@ -344,6 +344,17 @@ class SwapSessionTests(TemporaryDirectoryTest):
         self.assertIn('it may have ended every session', str(error))
         self.assertTrue(error.details['sessions_ended']['started_at'])
 
+    def test_a_container_not_ours_is_left_to_parks_own_refusal(self):
+        foreign = {'Id': 'other-1', 'Image': 'sha256:' + 'e' * 64, 'State': {'Running': False},
+                   'Config': {'Labels': {}}, 'HostConfig': {}}
+        ctx = install.Context(SimpleNamespace(phase='app', revision=REVISION), self.tmp)
+        with mock.patch.object(install, 'inspect', side_effect=lambda kind, name: foreign if name == WEB else None), \
+                mock.patch.object(install, 'has_session_policy', test_install.REAL_HAS_SESSION_POLICY), \
+                mock.patch.object(install, 'docker') as docker, \
+                self.assertRaisesRegex(install.InstallError, 'is not a CPT Studio web container'):
+            install.swap_services(ctx, IMAGE, b'', 'disabled', '')
+        docker.assert_not_called()
+
     def test_a_later_release_swaps_with_no_session_ended(self):
         world = self.world()
         world.pre_policy = set()
@@ -1124,6 +1135,26 @@ class LedgerKeptWholeTests(TemporaryDirectoryTest):
                           'Ada Lovelace')
         self.assertEqual((other['stdout_cut'], other['stdout_chars']), (False, len('revoked ops-agent\n')))
         self.assertNotIn('ledger_printed', other)
+
+    def test_a_reason_redacted_from_stderr_alone_leaves_the_ledger_verifiable(self):
+        import test_install_r1 as r1
+        reason = b'Ticket 4521: the practice asked to end access.\n'
+        ledger = synthetic_ledger(lines=2, width=300)
+
+        class World(r1.ManageWorld):
+            def oneshot(world, image_id, command, env, **kwargs):
+                answer = super().oneshot(image_id, command, env, **kwargs)
+                if command[:2] == ['manage', 'dispose']:
+                    return SimpleNamespace(returncode=0, stdout=ledger,
+                                           stderr=b'warning: Ticket 4521: the practice asked to end access.\n')
+                return answer
+        details = World(self.tmp).run('--command', 'dispose', '--dispose-step', 'ledger', '--by', 'Ada Lovelace',
+                                      '--reason-file', 'REASON', reason=reason)
+        self.assertEqual(details['redacted'], {'secret': 0, 'reason': 1})
+        self.assertIs(details['ledger_printed']['redacted'], False)
+        self.assertEqual(Path(details['ledger_printed']['log']).read_bytes(), ledger)
+        self.assertNotIn('no longer verifies', details['summary'])
+        self.assertNotIn(b'Ticket 4521', Path(details['stderr_log']).read_bytes())
 
     def test_a_ledger_line_that_repeats_a_given_reason_is_said_to_no_longer_verify(self):
         reason = b'Ticket 4521: the practice asked to end access.\n'
