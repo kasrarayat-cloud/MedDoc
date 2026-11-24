@@ -1051,7 +1051,24 @@ class AccessRecord(ImmutableModel):
     class Meta:
         ordering = ['created_at']
         indexes = [models.Index(fields=['workspace_id', 'created_at'], name='studio_access_ws_time'),
-                   models.Index(fields=['actor_id', 'created_at'], name='studio_access_actor_time')]
+                   models.Index(fields=['actor_id', 'created_at'], name='studio_access_actor_time'),
+                   # refutation round 1 (avail-3): the console's reads page, newest first - unfiltered, by day and by
+                   # page (studio_access_time), and by kind, a rare kind included (studio_access_view_time)
+                   models.Index(fields=['created_at', 'id'], name='studio_access_time'),
+                   models.Index(fields=['view', 'created_at', 'id'], name='studio_access_view_time')]
+
+
+class AccessRecordRepeat(models.Model):
+    """How many more times one member's list read was made again (refutation round 1 of release 1, avail-3; migration
+    0018): a served member.list read that repeats one of the same sign-in, account, address, practice, count and filters,
+    written within READ_AUDIT_LIST_REPEAT_SECONDS, writes no AccessRecord of its own - it adds one to ``repeats`` here and
+    moves ``last_at`` (studio.read_audit.record), so one session listing again and again grows the trail by at most one
+    record a window. AccessRecord stays append-only: its count of repeats lives here, keyed by the record's id - a plain
+    value, as every id of the record tables is. Counts and times only."""
+    id = models.BigAutoField(primary_key=True)
+    record_id = models.UUIDField(unique=True)  # the member.list AccessRecord this counts for
+    repeats = models.PositiveIntegerField(default=0)
+    last_at = models.DateTimeField()  # the latest repeat
 
 
 class SecurityEvent(ImmutableModel):

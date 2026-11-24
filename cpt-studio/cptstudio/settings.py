@@ -201,6 +201,9 @@ RECOVERY_CODE_COUNT = 10
 
 # C1: a member's poll of a document writes at most one read record per session and document in this many seconds.
 READ_AUDIT_DETAIL_DEDUPE_SECONDS = 60
+# Refutation round 1 (avail-3): a member's list read that repeats one of the same session (and address, practice, count
+# and filters) made within this many seconds is counted on that record (AccessRecordRepeat) instead of writing its own.
+READ_AUDIT_LIST_REPEAT_SECONDS = 60
 # C2 (OWNER DECISION D24): how long an operator's opening of one document's content lasts, in that session only.
 CONTENT_GRANT_SECONDS = 15 * 60
 # C5 and D2 (OWNER DECISION D8): (requests, per seconds) - report creations per member and per practice, uploads per

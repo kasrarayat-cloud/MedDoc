@@ -14,6 +14,7 @@ import sys
 import tempfile
 import uuid
 from datetime import timedelta
+from datetime import timezone as dt_timezone
 from importlib import import_module
 from pathlib import Path
 from unittest import mock
@@ -24,11 +25,12 @@ from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_K
 from django.contrib.sessions.backends import db as django_db_store
 from django.contrib.sessions.backends.base import SessionBase
 from django.contrib.sessions.models import Session
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.test import Client, SimpleTestCase, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from studio import client_contract, maintenance, models, request_meta, sessions
+from studio import client_contract, maintenance, models, read_audit, request_meta, sessions
 from studio.migrations import __path__ as MIGRATIONS
 from tests.support import coding as f
 from tests.support import operator as ops
@@ -398,3 +400,117 @@ class StoreContractTests(SimpleTestCase):
             with self.subTest(engine=engine), self.settings(SESSION_ENGINE=engine):
                 with self.assertRaises(sessions.Refused):
                     sessions.end_sessions(mock.Mock(pk=uuid.uuid4()))
+
+
+# --- avail-3: the read records - bounded growth per session, and the reads page on an index -----------------------------
+
+from tests.test_read_audit import TITLE_MARKER, ReadCase, member_client  # noqa: E402 - the read records' own fixtures
+
+LIST = '/api/encounters'
+
+
+class ListRepeatTests(ReadCase):
+    """The finding's input: one member's GET /api/encounters again and again. One session listing the same practice's
+    list again within READ_AUDIT_LIST_REPEAT_SECONDS adds no row: its record counts the repeats and the latest time."""
+
+    def lists(self):
+        return self.rows(view=read_audit.MEMBER_LIST)
+
+    def at(self, start, seconds):
+        return mock.patch.object(timezone, 'now', return_value=start + timedelta(seconds=seconds))
+
+    def test_one_session_listing_again_and_again_is_one_record_with_a_count(self):
+        start = timezone.now()
+        for second in range(0, 50, 10):  # five reads in 40 seconds
+            with self.at(start, second):
+                self.assertEqual(self.member.get(LIST).status_code, 200)
+        (first,) = self.lists()
+        repeat = models.AccessRecordRepeat.objects.get(record_id=first.pk)
+        self.assertEqual((repeat.repeats, repeat.last_at, first.as_of), (4, start + timedelta(seconds=40), start))
+        # what an auditor reads: who, the practice, how many rows, from when to when, how many times
+        self.assertEqual((first.actor_id, first.workspace_id, first.count, first.outcome),
+                         (self.reviewer.pk, self.ws.pk, self.ws.encounters.count(), read_audit.SERVED))
+        with self.at(start, 61):  # past the window: a record of its own
+            self.member.get(LIST)
+        self.assertEqual(len(self.lists()), 2)
+
+    def test_anything_new_in_a_list_read_is_a_record_of_its_own(self):
+        start = timezone.now()
+        with self.at(start, 0):
+            self.member.get(LIST)
+        with self.at(start, 1):
+            member_client(self.reviewer).get(LIST)  # another session of the same person
+            self.member.get(LIST, REMOTE_ADDR='198.51.100.9')  # the same session from another address
+            member_client(self.viewer).get(LIST)  # another person
+        f.encounter(self.ws, self.reviewer, title=f'{TITLE_MARKER} one more synthetic note')
+        with self.at(start, 2):
+            self.member.get(LIST)  # the practice's list changed: another count
+        self.assertEqual(len(self.lists()), 5)
+        self.assertFalse(models.AccessRecordRepeat.objects.exists())
+
+    def test_every_detail_view_and_download_read_still_writes_its_own_record(self):
+        start = timezone.now()
+        reads = self.reads()
+        for second in range(3):
+            with self.at(start, second):
+                for kind, url in reads.items():
+                    self.assertEqual(self.member.get(url).status_code, 200, kind)
+        for kind in reads:
+            with self.subTest(kind=kind):
+                self.assertEqual(len(self.rows(view=kind)), 1 if kind == read_audit.MEMBER_LIST else 3)
+
+    def test_a_repeat_whose_count_cannot_be_written_serves_nothing(self):
+        self.assertEqual(self.member.get(LIST).status_code, 200)
+
+        class CountFails:
+            ops = connection.ops
+
+            def cursor(self):
+                raise DatabaseError('synthetic count failure')
+        with mock.patch.object(read_audit, 'connection', CountFails()):
+            answer = self.member.get(LIST)
+        self.assertEqual((answer.status_code, answer.json()['error']), (503, read_audit.NOT_RECORDED))
+        self.assertNotIn(TITLE_MARKER.encode(), answer.content)
+        self.assertEqual(self.member.get(LIST).status_code, 200)  # the control: counted again
+        self.assertEqual(models.AccessRecordRepeat.objects.get().repeats, 1)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ReadsPageIndexTests(TestCase):
+    """The finding's other half: the console's reads page read the whole table unfiltered, by kind and by day. Each of
+    its views now reads an index, a rare kind's included."""
+
+    def window_query(self, path):
+        with CaptureQueriesContext(connection) as seen:
+            self.assertEqual(self.ops.get(path).status_code, 200)
+        found = [item['sql'] for item in seen.captured_queries if 'FROM "studio_accessrecord"' in item['sql']
+                 and 'ORDER BY "studio_accessrecord"."created_at" DESC' in item['sql'] and 'LIMIT 101' in item['sql']]
+        self.assertEqual(len(found), 1, path)
+        return found[0]
+
+    def plan(self, sql):
+        with connection.cursor() as cursor:
+            cursor.execute('EXPLAIN ' + sql)
+            return '\n'.join(row[0] for row in cursor.fetchall())
+
+    def test_every_view_of_the_reads_page_reads_an_index_not_the_table(self):
+        ws = f.workspace()
+        member = f.member(ws)
+        kinds = [read_audit.MEMBER_LIST] * 19 + [read_audit.MEMBER_DETAIL]
+        models.AccessRecord.objects.bulk_create([models.AccessRecord(
+            host='cpt', view=kinds[index % 20], actor_id=member.pk, actor_kind='human', actor_role='reviewer',
+            workspace_id=ws.pk, count=3, outcome=read_audit.SERVED) for index in range(20_000)], batch_size=5000)
+        operator = f.user('reads-auditor')
+        self.ops = ops.admin_client(operator)
+        self.ops.get('/ops/activity/reads')  # an ops.reads row: the rare kind
+        with connection.cursor() as cursor:
+            cursor.execute('ANALYZE studio_accessrecord')
+        newest = models.AccessRecord.objects.order_by('-created_at', '-pk')[150]
+        cursor_text = f'{newest.created_at.astimezone(dt_timezone.utc):%Y%m%dT%H%M%S.%fZ}~{newest.pk}'
+        today = timezone.now().date().isoformat()
+        for query in ('', '?kind=member.list', '?kind=ops.reads', f'?day={today}', '?day=2001-01-01',
+                      f'?kind=ops.reads&day={today}', f'?before={cursor_text}'):
+            with self.subTest(query=query):
+                plan = self.plan(self.window_query('/ops/activity/reads' + query))
+                self.assertNotIn('Seq Scan on studio_accessrecord', plan)
+                self.assertIn('studio_access', plan)

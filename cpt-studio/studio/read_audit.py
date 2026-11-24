@@ -6,6 +6,14 @@ BEFORE any byte of PHI is produced.
         writes one AccessRecord and answers it - or raises NotRecorded, and the caller serves nothing: a read whose row
         cannot be written answers 503 NOT_RECORDED with no PHI (fail closed; RELEASE-1-SPEC 2.2). An argument outside
         the contract (an unknown view kind, typed text in the filters) raises ValueError before anything is written.
+        One exception, bounding what one session adds (refutation round 1 of release 1, avail-3): a served member.list
+        read that repeats a served member.list row of the same sign-in, account, role, host, address, practice, count
+        and filters written within READ_AUDIT_LIST_REPEAT_SECONDS writes no row of its own - it is counted on that row
+        (AccessRecordRepeat: one more repeat, the latest time), in the same savepoint, and answers that row; a count
+        that cannot be written refuses the read like any row. The list holds the whole practice with no paging, so the
+        row and its count say exactly what was shown: the practice's documents at each read from as_of to the count's
+        latest time, by that session, from that address. Every detail, view, download, report and bundle read, and
+        every refused read, still writes its own row.
     detail_seen_recently(request, encounter_id)
         whether this sign-in already has a served member.detail row for the document within
         READ_AUDIT_DETAIL_DEDUPE_SECONDS: a poll (studio.request_meta.is_poll) then writes no new row (TEC-9 (4)); every
@@ -27,11 +35,11 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from . import request_meta
-from .models import AccessRecord, Membership
+from .models import AccessRecord, AccessRecordRepeat, Membership
 
 # The kinds of read (C1's table, the reads page of its item 9, and D2's bundle).
 MEMBER_LIST, MEMBER_DETAIL, MEMBER_INLINE, MEMBER_DOWNLOAD = 'member.list', 'member.detail', 'member.inline', 'member.download'
@@ -133,9 +141,37 @@ def record(request, *, view, workspace_id=None, encounter_ids=(), export_id=None
         with transaction.atomic():  # a savepoint: a failed write leaves the caller's transaction usable for its 503
             fields.update(request_meta.request_fields(request))  # reads the session: inside, so its failure refuses too
             fields['actor_role'] = _role(user, view, fields['workspace_id'])
+            repeated = _counted_list_repeat(fields)
+            if repeated is not None:
+                return repeated
             return AccessRecord.objects.create(**fields)
     except Exception as exc:  # noqa: BLE001 - whatever stopped the write, the read is not served
         raise NotRecorded(NOT_RECORDED) from exc
+
+
+def _counted_list_repeat(fields):
+    """The served member.list row the read ``fields`` repeats (see the module), with this repeat counted on it, or None
+    when the read is no such repeat and writes its own row."""
+    if fields['view'] != MEMBER_LIST or fields['outcome'] != SERVED or fields.get('sign_in_ref') is None:
+        return None
+    now = timezone.now()
+    first = (AccessRecord.objects.filter(
+        actor_id=fields['actor_id'], sign_in_ref=fields['sign_in_ref'], view=MEMBER_LIST, outcome=SERVED,
+        actor_role=fields['actor_role'], host=fields['host'], client=fields.get('client', ''),
+        workspace_id=fields['workspace_id'], count=fields['count'], filters=fields['filters'],
+        created_at__gte=now - timedelta(seconds=settings.READ_AUDIT_LIST_REPEAT_SECONDS), created_at__lte=now)
+        .order_by('-created_at', '-pk').first())
+    if first is None:
+        return None
+    quote = connection.ops.quote_name
+    table = quote(AccessRecordRepeat._meta.db_table)
+    record, repeats, last_at = (quote(AccessRecordRepeat._meta.get_field(name).column)
+                                for name in ('record_id', 'repeats', 'last_at'))
+    with connection.cursor() as cursor:  # one statement: two repeats at the same moment are both counted
+        cursor.execute(f'INSERT INTO {table} ({record}, {repeats}, {last_at}) VALUES (%s, 1, %s) '
+                       f'ON CONFLICT ({record}) DO UPDATE SET {repeats} = {table}.{repeats} + 1, '
+                       f'{last_at} = GREATEST({table}.{last_at}, EXCLUDED.{last_at})', [first.pk, now])
+    return first
 
 
 def detail_seen_recently(request, encounter_id) -> bool:
