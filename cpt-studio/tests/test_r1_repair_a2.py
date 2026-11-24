@@ -351,19 +351,19 @@ class KnownAddressTests(TestCase):
 
     def test_another_address_of_the_offices_ipv6_slash_64_is_known_and_another_slash_64_is_not(self):
         office, sibling = '2001:db8:1:2::5', '2001:db8:1:2:abcd:ef01:2345:6789'  # one /64, two addresses
-        for made, home_count in ((keyed_attempt, 1500), (older_attempt, 999)):
-            with self.subTest(made=made.__name__, home_count=home_count):
-                self.seed(office, 30, home_count, made=made, home='2001:db8:77:1::9')
-                self.arm()
-                self.assert_signs_in(sibling)
-                self.assert_delayed('2001:db8:1:3::5')  # the next /64
-                self.assert_delayed('2001:db8:1::5')  # 2001:db8:1:0::/64, whose text shares the office's start
-        # the limit kept for rows written before release 1 (no key): another address of an IPv6 /64 is found among the
-        # name's newest OLDER_SIGN_INS_READ of them, as on the revision before this repair; the same address always
-        self.seed(office, 30, models.LoginAttempt.OLDER_SIGN_INS_READ, made=older_attempt, home='2001:db8:77:1::9')
+        self.seed(office, 30, 1500, home='2001:db8:77:1::9')
+        self.arm()
+        self.assert_signs_in(sibling)
+        self.assert_delayed('2001:db8:1:3::5')  # the next /64
+        self.assert_delayed('2001:db8:1::5')  # 2001:db8:1:0::/64, whose text shares the office's start
+        # a row an older revision wrote carries no key: it is found by its own address, at any age in the window and
+        # behind any number of newer rows; another address of its /64 is not (the one thing this read leaves out), and
+        # is again from the /64's first sign-in that release 1 records
+        self.seed(office, 30, 1500, made=older_attempt, home='2001:db8:77:1::9')
         self.arm()
         self.assert_delayed(sibling)
         self.assert_signs_in(office)
+        self.assert_signs_in(sibling)
 
     def test_an_ipv4_mapped_address_is_its_ipv4_address_both_ways(self):
         for made in (keyed_attempt, older_attempt):
@@ -437,34 +437,32 @@ class KnownAddressTests(TestCase):
         models.LoginAttempt.objects.bulk_create(rows, batch_size=5000)
         with connection.cursor() as cursor:
             cursor.execute('ANALYZE studio_loginattempt')
-        key, by_address, by_time = 'studio_login_name_key_ok', 'studio_login_name_keyless', 'studio_login_keyless_time'
+        key, by_address = 'studio_login_name_key_ok', 'studio_login_name_keyless'
         cases = (  # (address, known, [(index, rows read)] of each statement)
             ('198.51.100.7', True, [(key, 1)]),  # a row release 1 wrote
             (OFFICE, True, [(key, 0), (by_address, 1)]),  # an older revision's row, by its address
             ('::ffff:203.0.113.21', True, [(key, 0), (by_address, 1)]),  # the same, IPv4-mapped
-            ('2001:db8:1:2::77', True, [(key, 0), (by_address, 0), (by_time, 2)]),  # an older row of the /64
-            (NEVER_USED, False, [(key, 0), (by_address, 0)]),  # IPv4: every spelling read, nothing more
-            ('2001:db8:9:9::1', False, [(key, 0), (by_address, 0), (by_time, 2)]))
+            ('2001:db8:1:2::5', True, [(key, 0), (by_address, 1)]),  # an older revision's IPv6 row, its own address
+            ('2001:db8:1:2::77', False, [(key, 0), (by_address, 0)]),  # another address of that /64
+            (NEVER_USED, False, [(key, 0), (by_address, 0)]),
+            ('2001:db8:9:9::1', False, [(key, 0), (by_address, 0)]))
         for address, known, expected in cases:
             with self.subTest(address=address):
                 self.assertEqual(self.reads(address, known), expected)
 
-    def test_an_older_revisions_rows_are_read_within_their_bound_however_many(self):
+    def test_an_older_revisions_rows_are_read_by_one_lookup_however_many(self):
         # avail-5's shape, written as an older revision writes rows (no key): 20,000 of the doctor's own sign-ins from
-        # one IPv6 /64, and the office (IPv4, and another IPv6 /64) signed in from before all of them
+        # one IPv6 /64 and the office (IPv4, and another IPv6 /64) signed in from before all of them; each read is one
+        # equality lookup that reads at most one row
         rows = [older_attempt(self.name, OFFICE), older_attempt(self.name, '2001:db8:1:2::5')]
         rows += [older_attempt(self.name, f'2001:db8:77:1::{index % 500 + 1:x}') for index in range(20_000)]
         models.LoginAttempt.objects.bulk_create(rows, batch_size=5000)
         with connection.cursor() as cursor:
             cursor.execute('ANALYZE studio_loginattempt')
-        bound = models.LoginAttempt.OLDER_SIGN_INS_READ
-        self.assertEqual(self.reads(OFFICE, True)[1:], [('studio_login_name_keyless', 1)])  # IPv4: exact, any age
-        self.assertEqual(self.reads(NEVER_USED, False)[1:], [('studio_login_name_keyless', 0)])
-        self.assertEqual(self.reads('2001:db8:77:1::abc', True)[1:],
-                         [('studio_login_name_keyless', 0), ('studio_login_keyless_time', bound)])
-        # an IPv6 /64 the doctor's newest older rows do not hold: never more than the bound read - the limit this read
-        # had before, kept for rows written before release 1, which release 1 never adds to (refutation round 2)
-        self.assertEqual(self.reads('2001:db8:1:2::9', False)[1:],
-                         [('studio_login_name_keyless', 0), ('studio_login_keyless_time', bound)])
+        by_address = 'studio_login_name_keyless'
+        for address, known in ((OFFICE, True), (NEVER_USED, False), ('2001:db8:1:2::5', True),
+                               ('2001:db8:77:1::1f4', True), ('2001:db8:77:1::abc', False), ('2001:db8:1:2::9', False)):
+            with self.subTest(address=address):
+                self.assertEqual(self.reads(address, known)[1:], [(by_address, int(known))])
         models.LoginAttempt.objects.bulk_create([keyed_attempt(self.name, '2001:db8:1:2::abcd')])  # one sign-in now
         self.assertEqual(self.reads('2001:db8:1:2::9', True), [('studio_login_name_key_ok', 1)])

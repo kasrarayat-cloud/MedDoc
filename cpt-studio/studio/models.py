@@ -897,32 +897,23 @@ class LoginAttemptQuerySet(models.QuerySet):
     def signed_in_from(self, username, client_key, since, *, client='') -> bool:
         """Whether ``username`` signed in successfully from the client key ``client_key`` - an IPv4 address, or an IPv6
         address's /64 (studio.request_meta.client_key) - at or after ``since`` (``client``: the address the key was read
-        from). Exact for every row release 1 writes, however many times the name signed in (refutation round 2 of
-        release 1, regression-1: a read of the name's newest 1,000 sign-ins left an older address out), and every read
-        bounded:
-        - a row release 1 writes carries its client's key (LoginAttempt.client_key): one lookup finds any address of the
-          key (studio_login_name_key_ok);
-        - a row an older revision wrote carries none. One lookup finds it by the texts the key is stored as
-          (LoginAttempt.spellings_of: ``client`` itself, and an IPv4 address as nginx writes it, plain or IPv4-mapped),
-          which are all of an IPv4 key's (studio_login_name_keyless). An IPv6 /64's other addresses are no list of
-          texts, so for one the name's newest OLDER_SIGN_INS_READ such rows are read and each client read as a key, as
-          this read was bounded before (studio_login_keyless_time): another address of a /64, written by an older
-          revision behind more than that many newer rows of the name it wrote, is the one row left out.
-        Release 1 adds no row to the last two indexes: they hold an older revision's rows alone."""
+        from). However many times the name signed in (refutation round 2 of release 1, regression-1: a read of the
+        name's newest 1,000 sign-ins left an older address out), each read is one equality lookup of one partial index,
+        so neither its cost nor its answer depends on how many rows the name holds:
+        - a row release 1 writes carries its client's key (LoginAttempt.client_key): any address of the key - every
+          address of an IPv6 /64 - is found (studio_login_name_key_ok);
+        - a row an older revision wrote carries none, and is found by the texts the key is stored as (spellings_of):
+          ``client`` itself, and an IPv4 key as nginx writes it, plain or IPv4-mapped - all of an IPv4 key's texts
+          (studio_login_name_keyless, which holds those rows alone: no row release 1 writes enters it). An IPv6 /64's
+          other addresses are no list of texts, so an older revision's row is found by its own address only."""
         if not client_key:
             return False
         signed_in = self.filter(username=username, succeeded=True, created_at__gte=since)
         if signed_in.filter(client_key=client_key).exists():
             return True
-        older = signed_in.filter(client_key__isnull=True)
         spellings = [text for text in dict.fromkeys(self.model.spellings_of(client_key, client))
                      if self.model.key_of(text) == client_key]
-        if spellings and older.filter(client__in=spellings).exists():
-            return True
-        if not client_key.endswith('/64'):
-            return False
-        newest = older.order_by('-created_at').values_list('client', flat=True)[:self.model.OLDER_SIGN_INS_READ]
-        return any(self.model.key_of(text) == client_key for text in newest)
+        return bool(spellings) and signed_in.filter(client_key__isnull=True, client__in=spellings).exists()
 
 
 class LoginAttempt(models.Model):
@@ -950,9 +941,6 @@ class LoginAttempt(models.Model):
     # default (migration 0018): the rows an older revision inserts leave it NULL, and are read by their client
     # (LoginAttemptQuerySet.signed_in_from).
     client_key = models.CharField(max_length=64, null=True, blank=True)
-    # an older revision's successful sign-ins of a name read newest first for an IPv6 /64 they carry no key for
-    # (LoginAttemptQuerySet.signed_in_from): the bound the known-address read had before (refutation round 1, avail-5)
-    OLDER_SIGN_INS_READ = 1_000
 
     objects = LoginAttemptQuerySet.as_manager()
 
@@ -967,11 +955,16 @@ class LoginAttempt(models.Model):
 
     @staticmethod
     def spellings_of(client_key, client='') -> list:
-        """Texts a stored client is read from for ``client_key``: ``client`` itself, and for an IPv4 key the address as
-        nginx's $remote_addr writes it - plain, or IPv4-mapped on a dual-stack listener (::ffff:a.b.c.d) - and as
-        Python's ipaddress writes the mapped address. The caller keeps those whose key is ``client_key``."""
+        """Texts a stored client is read from for ``client_key``: ``client`` itself and its canonical spelling, and for
+        an IPv4 key the address as nginx's $remote_addr writes it - plain, or IPv4-mapped on a dual-stack listener
+        (::ffff:a.b.c.d) - and as Python's ipaddress writes the mapped address. The caller keeps those whose key is
+        ``client_key``."""
         import ipaddress
         texts = [str(client or '')]
+        try:
+            texts.append(str(ipaddress.ip_address(texts[0])))
+        except ValueError:
+            pass
         try:
             address = ipaddress.IPv4Address(str(client_key or ''))
         except ValueError:
@@ -1001,14 +994,12 @@ class LoginAttempt(models.Model):
                    models.Index(fields=['sign_in_ref'], condition=Q(outcome='second_factor_pending'),
                                 name='studio_login_pending_ref'),
                    # refutation round 2 (regression-1): a name's sign-ins from one client key, one lookup however many
-                   # the name made; and those an older revision wrote, which carry no key, by their address and newest
-                   # first (LoginAttemptQuerySet.signed_in_from). No row release 1 writes is held by the last two.
+                   # the name made; and those an older revision wrote, which carry no key, by their address
+                   # (LoginAttemptQuerySet.signed_in_from). No row release 1 writes is held by the second.
                    models.Index(fields=['username', 'client_key', 'created_at'],
                                 condition=Q(succeeded=True, client_key__isnull=False), name='studio_login_name_key_ok'),
                    models.Index(fields=['username', 'client', 'created_at'],
-                                condition=Q(succeeded=True, client_key__isnull=True), name='studio_login_name_keyless'),
-                   models.Index(fields=['username', 'created_at'], condition=Q(succeeded=True, client_key__isnull=True),
-                                name='studio_login_keyless_time')]
+                                condition=Q(succeeded=True, client_key__isnull=True), name='studio_login_name_keyless')]
 
 
 class WorkerBeat(models.Model):

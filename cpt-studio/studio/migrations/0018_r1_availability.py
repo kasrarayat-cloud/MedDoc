@@ -8,10 +8,10 @@
 # installed nowhere, so this migration is amended rather than followed): an index of the pending rows' sign-in
 # reference, which the admin door's key step reads and settles by (phi-1); and LoginAttempt.client_key, a nullable
 # column with no database default (an older revision's inserts leave it NULL), with an index of the succeeded rows that
-# carry one and two of those that do not (by address, and by time), so a known address is one lookup however many times
-# the name signed in (regression-1); no row release 1 writes enters the last two. The tables these indexes are built on
-# are small on the live host (synthetic data), so each CREATE INDEX holds its lock for moments; ADD COLUMN of a nullable
-# column with no default rewrites no row.
+# carry one and another of those that do not, so a known address is one lookup however many times the name signed in
+# (regression-1); no row release 1 writes enters the second. The tables these indexes are built on are small on the
+# live host (synthetic data), so each CREATE INDEX holds its lock for moments; ADD COLUMN of a nullable column with no
+# default rewrites no row.
 
 import django.db.models.functions.text
 from django.db import migrations, models
@@ -83,10 +83,6 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name='loginattempt',
             index=models.Index(condition=models.Q(('client_key__isnull', True), ('succeeded', True)), fields=['username', 'client', 'created_at'], name='studio_login_name_keyless'),
-        ),
-        migrations.AddIndex(
-            model_name='loginattempt',
-            index=models.Index(condition=models.Q(('client_key__isnull', True), ('succeeded', True)), fields=['username', 'created_at'], name='studio_login_keyless_time'),
         ),
         migrations.AddIndex(
             model_name='sessionaccountlink',
