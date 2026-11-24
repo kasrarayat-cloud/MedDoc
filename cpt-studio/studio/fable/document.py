@@ -96,7 +96,7 @@ def prepare(revision, *, converter=None, reader=read_original) -> Document:
         data = reader(source)
     except (OriginalCorrupted, OSError) as exc:
         raise DocumentError(STORAGE, STORAGE_TEXT, type(exc).__name__) from None
-    title = source.original_name or 'document'
+    title = source.original_name or 'document'  # E4, a neutral title (OWNER DECISION D17), is release 1b: kept as is
     if source.media_type == PDF:
         return _pdf_document('pdf', title, data, source.sha256)
     if source.media_type == DOCX:
