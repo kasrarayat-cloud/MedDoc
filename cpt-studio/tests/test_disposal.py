@@ -22,7 +22,7 @@ from django.contrib.sessions.models import Session
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import CommandError, call_command
 from django.db import OperationalError, connection, transaction
-from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from studio import audit, disposal, intake, jobs, maintenance, models, storage
@@ -1336,9 +1336,18 @@ class ReplayFileAndWordingTests(RepairCase, TestCase):
 
 
 class ClosedElsewhereTests(RepairCase, TestCase):
-    def test_an_account_whose_other_practices_are_all_closed_ends_with_the_disposal(self):
-        # round 2, finding 5 (the lens's probe R5): B destroyed first - A still open, so the reviewer was kept - then A:
-        # B's membership, in a practice closed and destroyed, kept the account alive with its password and a session
+    """Round 2, finding 5, and the lead's ruling on it: an account is kept while it holds a membership, active or not, in
+    another practice not yet destroyed - open, or closed with no completed disposal of the whole practice, whose reading
+    stays on until then (D1 step 1) - and the disposal of the last of them ends it."""
+
+    def plan_practice(self, ws):
+        self.command('--plan', '--workspace', str(ws.pk), '--by', 'Synthetic Operator',
+                     '--reason-file', reason_file(self.scratch.name))
+        return Event.objects.filter(stage=Event.PLANNED).latest('created_at')
+
+    def test_an_account_whose_other_practices_are_all_destroyed_ends_with_the_last_disposal(self):
+        # the lens's probe R5: B destroyed first - A still open, so the reviewer was kept - then A: B's membership, in a
+        # practice closed and destroyed, kept the account alive with its password and a session
         self.seed()
         _, error = self.carry_out(self.close_and_plan(self.other_ws))
         self.assertIsNone(error)
@@ -1352,6 +1361,39 @@ class ClosedElsewhereTests(RepairCase, TestCase):
         self.assertFalse(self.client.login(username=self.reviewer.username, password='synthetic-pass-123!'))
         last = Event.objects.filter(stage=Event.COMPLETED).latest('created_at')
         self.assertEqual((last.counts['accounts_kept'], last.counts['accounts_off']), (0, 4))
+
+    def test_a_closed_practice_not_yet_destroyed_keeps_the_account_and_its_reading(self):
+        # the lead's ruling: A destroyed while the person's B is closed but not destroyed - the account is kept, and it
+        # still reads B; B's own disposal then ends it
+        self.seed()
+        self.command('--close', '--workspace', str(self.other_ws.pk), '--by', 'Synthetic Operator',
+                     '--reason-file', reason_file(self.scratch.name))
+        _, error = self.carry_out(self.close_and_plan(self.ws))
+        self.assertIsNone(error)
+        self.reviewer.refresh_from_db()
+        self.assertTrue(self.reviewer.is_active and self.reviewer.has_usable_password())
+        self.assertEqual(Event.objects.get(stage=Event.COMPLETED).counts['accounts_kept'], 1)
+        client = Client()
+        self.assertTrue(client.login(username=self.reviewer.username, password='synthetic-pass-123!'))
+        self.assertEqual(client.get(f'/api/encounters/{self.b_note.pk}').status_code, 200)  # reading stays on in B
+        self.assertEqual(client.get(f'/api/encounters/{self.b_note.pk}/original').status_code, 200)
+        _, error = self.carry_out(self.plan_practice(self.other_ws))  # B destroyed: the last of them
+        self.assertIsNone(error)
+        self.reviewer.refresh_from_db()
+        self.assertFalse(self.reviewer.is_active or self.reviewer.has_usable_password())
+        self.assertFalse(Client().login(username=self.reviewer.username, password='synthetic-pass-123!'))
+
+    def test_an_open_practice_keeps_the_account_whatever_the_ledger_says(self):
+        # a restore brings a destroyed practice back open before a replay reaches it: an open practice is never taken
+        # for a destroyed one, though its 'completed' disposal is in the ledger
+        self.seed()
+        _, error = self.carry_out(self.close_and_plan(self.other_ws))
+        self.assertIsNone(error)
+        models.Workspace.objects.filter(pk=self.other_ws.pk).update(closed_at=None)  # open again, as a restore brings it
+        _, error = self.carry_out(self.close_and_plan(self.ws))
+        self.assertIsNone(error)
+        self.reviewer.refresh_from_db()
+        self.assertTrue(self.reviewer.is_active and self.reviewer.has_usable_password())
 
 
 class DotDotNameTests(RepairCase, TestCase):

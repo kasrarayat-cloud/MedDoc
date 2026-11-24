@@ -19,10 +19,10 @@ a committed declaration (A6):
                           is needed, and they are checked before the commit (SET CONSTRAINTS ALL IMMEDIATE); the Encounter
                           rows stay as tombstones (title and values blanked, pointers null, destroyed_at set), beside the
                           audit rows, which hold no PHI (OWNER DECISION D25, recommended: kept); for a whole practice the
-                          memberships are turned off, every account with no membership in another practice still open
-                          and no operator grant gets an unusable password, is made inactive and has its sessions ended,
-                          and the names on its sign-in rows are replaced by keyed hashes (user rows stay: audit rows name
-                          them). After the
+                          memberships are turned off, every account with no membership in another practice not yet
+                          destroyed (open, or closed with no completed disposal of the whole practice) and no operator
+                          grant gets an unusable password, is made inactive and has its sessions ended, and the names on
+                          its sign-in rows become keyed hashes (user rows stay: audit rows name them). After the
                           commit the files in scope are deleted, their folder synced and checked empty; VACUUM (ANALYZE)
                           runs on the tables touched (never VACUUM FULL on this host: it locks each table); the counts
                           prove nothing in scope remains; and a DisposalEvent 'completed' (or 'failed') is written. The
@@ -75,6 +75,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.apps import apps
 from django.db import IntegrityError, connection, transaction
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
@@ -615,17 +616,21 @@ def _tombstone(scope, now) -> int:
 
 
 def _close_accounts(workspace_id) -> dict:
-    """A whole practice's people (module docstring): memberships off; every account that holds no membership in another
-    practice that is still open (Workspace.closed_at unset) - active or turned off: a practice turns a person's access
-    off by its membership alone (C4), and turning it on again must still work - and no operator grant is made unusable
-    and inactive, its sessions ended and the names on its sign-in rows hashed. A closed practice keeps no account: once
-    every practice of a person is closed, the disposal of any of them ends the account."""
+    """A whole practice's people (module docstring): memberships off; every account that holds no membership - active or
+    turned off: a practice turns a person's access off by its membership alone (C4), and turning it on again must still
+    work - in another practice not yet destroyed, and no operator grant, is made unusable and inactive, its sessions
+    ended and the names on its sign-in rows hashed. Destroyed: closed, with a completed disposal of the whole practice
+    (a DisposalEvent 'completed' of scope 'workspace'). An open practice, or a closed one not yet destroyed - whose
+    reading stays on until then (D1 step 1) - keeps the account; the disposal of the last of them ends it."""
     memberships = models.Membership.objects.filter(workspace_id=workspace_id)
     users = list(models.User.objects.filter(memberships__workspace_id=workspace_id).distinct().order_by('pk'))
     off = memberships.filter(active=True).update(active=False)
+    destroyed = DisposalEvent.objects.filter(stage=DisposalEvent.COMPLETED, scope=WORKSPACE,
+                                             workspace_id=OuterRef('workspace_id'))
+    standing = Q(workspace__closed_at__isnull=True) | ~Exists(destroyed)  # another practice not yet destroyed
     closed, kept, ended = [], 0, 0
     for user in users:
-        elsewhere = models.Membership.objects.filter(user_id=user.pk, workspace__closed_at__isnull=True).exclude(
+        elsewhere = models.Membership.objects.filter(standing, user_id=user.pk).exclude(
             workspace_id=workspace_id).exists()
         operator = models.OperatorGrant.objects.filter(user_id=user.pk, revocation__isnull=True).exists()
         if elsewhere or operator:
