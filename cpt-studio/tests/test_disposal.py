@@ -1758,11 +1758,27 @@ class LookAlikeRoundThreeTests(SimpleTestCase):
                  ("O'Brien", 'O\u1fbfBrien'), ("O'Brien", 'O\u00b4Brien'), ('Anne-Marie Dupont', 'Anne\u02d7Marie Dupont'),
                  ('Lukasz Nowak', '\u0141ukasz Nowak'), ('Soren Holm', 'S\u00f8ren Holm'),
                  ('Dorde Petrovic', '\u0110or\u0111e Petrovi\u0107'), ('Hana Hel', '\u0126ana \u0126el'),
-                 ('Dorde Petrovic', '\u00d0or\u0111e Petrovic'))
+                 ('Dorde Petrovic', '\u00d0or\u0111e Petrovic'),
+                 ("O'Brien", 'O\uff40Brien'), ("O'Brien", 'O\u1fefBrien'))  # unlisted, NFKC makes them a listed apostrophe
         for runner, approver in pairs:
             with self.subTest(runner=ascii(runner), approver=ascii(approver)):
                 with self.assertRaisesMessage(disposal.Refused, 'two different people'):
                     disposal.two_people(runner, approver)
+
+    def test_names_recorded_alike_are_compared_alike(self):
+        # the lens's U+00B4 / U+1FFD pair, as a principle: the key is a function of the recorded name, so two spellings
+        # recorded alike - each character beside its NFKC form - are always one person
+        differ = []
+        for code in range(0x20, 0x30000):
+            ch = chr(code)
+            twin = unicodedata.normalize('NFKC', ch)
+            if twin == ch or unicodedata.category(ch) in ('Cs', 'Co', 'Cn'):
+                continue
+            first, second = f'O{ch}Brien', f'O{twin}Brien'
+            if (disposal.name_as_recorded(first) == disposal.name_as_recorded(second)
+                    and disposal.comparison_key(first) != disposal.comparison_key(second)):
+                differ.append(f'U+{code:04X}')
+        self.assertEqual(differ, [])
 
     def test_two_people_still_pass(self):
         for runner, approver in (("Pat O'Brien", "Pat O'Bryan"), ('Lukasz Nowak', 'Lucas Nowak'),
