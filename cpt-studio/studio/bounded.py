@@ -9,6 +9,12 @@ fork, not an interpreter start), and returns its pickled result. The parent kill
 child's address space may grow only by ``memory_bytes`` beyond what it inherited. The child never touches the database:
 only Django-free functions may be passed, and it leaves with ``os._exit`` so no parent cleanup (an inherited database
 socket, atexit handlers) runs in it.
+
+A child's work may start processes in sessions of their own - LibreOffice, for a Word conversion (release 1, E1) -
+which killing the child does not kill. The work tells the parent each such process group on a second pipe before it
+waits on it (``report_group``), and that it killed one itself (``group_ended``). The parent's ``finally`` kills the
+child, reads every report the child wrote, then kills each group reported and not ended, timeout or not, and waits
+briefly for it to be gone.
 """
 import logging
 import os
@@ -25,6 +31,8 @@ READ_CHUNK = 1 << 20
 # address space, so pickling the answer there failed too and the child exited without one (round 7 bounded:6: the
 # stage then said it "failed unexpectedly" instead of naming the memory limit).
 MEMORY_PAYLOAD = pickle.dumps(('memory', None))
+GROUP_GONE_SECONDS = 2  # how long the parent waits for a killed process group to be gone before it moves on
+_GROUPS_FD = None  # in a bounded child only: the write end of the pipe of process-group reports
 
 
 class Overrun(Exception):
@@ -35,15 +43,33 @@ class Overrun(Exception):
         self.reason = reason
 
 
+def report_group(pgid):
+    """In a bounded child: process group ``pgid`` (a session the work started) is running. Call it before waiting on
+    the group: the parent then kills it after the child, whatever the child does next. A no-op outside a child."""
+    _tell(b'+', pgid)
+
+
+def group_ended(pgid):
+    """In a bounded child: the work killed process group ``pgid`` itself, so the parent need not (a no-op outside)."""
+    _tell(b'-', pgid)
+
+
+def _tell(sign, pgid):
+    if _GROUPS_FD is not None:
+        os.write(_GROUPS_FD, sign + str(int(pgid)).encode('ascii') + b'\n')
+
+
 def _address_space_bytes():
     """The current virtual size of this process (the first field of /proc/self/statm, in pages)."""
     with open('/proc/self/statm', 'rb') as handle:
         return int(handle.read().split()[0]) * os.sysconf('SC_PAGE_SIZE')
 
 
-def _child(write_fd, fn, args, memory_bytes):
+def _child(write_fd, groups_fd, fn, args, memory_bytes):
+    global _GROUPS_FD
     status = 0
     try:
+        _GROUPS_FD = groups_fd
         limit = _address_space_bytes() + memory_bytes
         resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
         try:
@@ -65,22 +91,32 @@ def _child(write_fd, fn, args, memory_bytes):
 
 
 def run_bounded(fn, *args, seconds, memory_bytes):
-    """``fn(*args)`` in a forked child; raises Overrun past ``seconds`` or past ``memory_bytes`` of growth."""
+    """``fn(*args)`` in a forked child; raises Overrun past ``seconds`` or past ``memory_bytes`` of growth. Every
+    process group the child reported (report_group) and did not end is killed before this returns or raises."""
     read_fd, write_fd = os.pipe()
+    groups_read, groups_write = os.pipe()
     pid = os.fork()
     if pid == 0:
         os.close(read_fd)
-        _child(write_fd, fn, args, memory_bytes)
+        os.close(groups_read)
+        _child(write_fd, groups_write, fn, args, memory_bytes)
     os.close(write_fd)
+    os.close(groups_write)
     deadline = time.monotonic() + seconds
-    chunks, finished = [], False
+    chunks, reports, finished = [], bytearray(), False
+    watched = [read_fd, groups_read]
     try:
         while not finished:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise Overrun('time')
-            ready, _, _ = select.select([read_fd], [], [], remaining)
-            if ready:
+            ready, _, _ = select.select(watched, [], [], remaining)
+            if groups_read in ready:
+                report = os.read(groups_read, READ_CHUNK)
+                reports += report
+                if not report:
+                    watched.remove(groups_read)
+            if read_fd in ready:
                 chunk = os.read(read_fd, READ_CHUNK)
                 chunks.append(chunk)
                 finished = not chunk
@@ -91,6 +127,9 @@ def run_bounded(fn, *args, seconds, memory_bytes):
         except ProcessLookupError:
             pass
         os.waitpid(pid, 0)
+        reports += _drained(groups_read)  # the child is gone: everything it reported is in the pipe now
+        os.close(groups_read)
+        _kill_groups(reports)
     data = b''.join(chunks)
     if not data:
         raise RuntimeError('The bounded child exited without a result.')
@@ -101,3 +140,42 @@ def run_bounded(fn, *args, seconds, memory_bytes):
         log.error('bounded child failed:\n%s', value)
         raise RuntimeError('The bounded child failed; the error was logged.')
     return value
+
+
+def _drained(fd) -> bytes:
+    """What is left to read on ``fd``, without waiting (a process the child started could still hold its write end)."""
+    os.set_blocking(fd, False)
+    found = bytearray()
+    try:
+        while True:
+            chunk = os.read(fd, READ_CHUNK)
+            if not chunk:
+                break
+            found += chunk
+    except BlockingIOError:
+        pass
+    return bytes(found)
+
+
+def _kill_groups(reports):
+    """Kills (SIGKILL) every process group ``reports`` names as started and not as ended, then waits up to
+    GROUP_GONE_SECONDS for each to be gone. Never this process's own group, nor 0 or 1."""
+    started, ended = [], set()
+    for line in bytes(reports).split(b'\n'):
+        if len(line) > 1 and line[:1] in (b'+', b'-') and line[1:].isdigit():
+            (started.append if line[:1] == b'+' else ended.add)(int(line[1:]))
+    own = os.getpgrp()
+    for pgid in dict.fromkeys(started):
+        if pgid in ended or pgid <= 1 or pgid == own:
+            continue
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            continue
+        gone_by = time.monotonic() + GROUP_GONE_SECONDS
+        while time.monotonic() < gone_by:
+            try:
+                os.killpg(pgid, 0)
+            except (ProcessLookupError, PermissionError):
+                break
+            time.sleep(0.01)
