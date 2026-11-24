@@ -12,6 +12,7 @@ host guard; every Docker, root-helper and in-image call stood in. Synthetic data
         skipped (the keep layout's new web keeps serving; the removal leaves the pair stopped, not removed).
   I2-4  switchback-1: the guide no longer says release 1's verify_login.py, scan_customer.py and walk pass against the
         pair before release 1 after a switch-back; it says why they fail closed and what to run instead.
+  I2-5  installer-2: an option given more than once is refused before anything runs, the receipt naming it.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair_i2 -v
 """
@@ -549,6 +550,122 @@ class SwitchBackVerificationGuideTests(unittest.TestCase):
         contract = (self.OPS / 'verification' / 'customer-contract.json').read_text(encoding='utf-8')
         self.assertIn('"can_manage_team"', contract)
         self.assertIn('(`can_manage_team`)', said)
+
+
+# --- I2-5: an option given more than once ---------------------------------------------------------------------------------
+
+class RepeatedOptionTests(TemporaryDirectoryTest):
+    def main(self, *extra, phase='manage'):
+        """install.main for ``extra`` (REASON / LEDGER stand for real files), the host stood in as ManageWorld does and
+        the door and tree checks answered: (exit code, the receipt, the world, the door check's mock)."""
+        world = r1.ManageWorld(self.tmp)
+        (self.tmp / 'reason.txt').write_bytes(b'Ticket 4521: the practice asked to end access.\n')
+        (self.tmp / 'reason-2.txt').write_bytes(b'Ticket 4522: the other practice asked to end access.\n')
+        (self.tmp / 'ledger.json').write_bytes(b'{"ledger": []}\n')
+        receipts = self.tmp / 'receipts'
+        argv = ['--phase', phase, '--revision', r1.REVISION, '--receipts', str(receipts)]
+        argv += [str(self.tmp / 'reason.txt') if part == 'REASON' else str(self.tmp / 'reason-2.txt')
+                 if part == 'REASON2' else str(self.tmp / 'ledger.json') if part == 'LEDGER' else part for part in extra]
+        door = mock.Mock(return_value={'declaration': r1.DECLARATION, 'declaration_commit': r1.COMMIT,
+                                       'declaration_sha256': '0' * 64})
+        printed, locks, real_open = io.StringIO(), [], install.os.open
+
+        def tracking_open(path, flags, mode=0o777, *, dir_fd=None):  # main() keeps <receipts>/.lock open, as a process
+            fd = real_open(path, flags, mode, dir_fd=dir_fd)  # does until it exits: closed after each run here
+            if str(path).endswith('/.lock'):
+                locks.append(fd)
+            return fd
+        try:
+            with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
+                                     require_db=mock.Mock(), oneshot=world.oneshot, inspect=world.inspect,
+                                     root_file=world.root, run_helper=world.run_helper, read_protected_env=mock.Mock(
+                                         return_value=f'CPT_STUDIO_SECRET_KEY={r1.SECRET_VALUE}\n'.encode()),
+                                     app_script=world.app_script, check_door=door,
+                                     check_tree=mock.Mock(return_value={'mode': 'exact'})), \
+                    mock.patch.object(install.os, 'open', tracking_open), \
+                    mock.patch('sys.stdout', printed), mock.patch('sys.stderr', io.StringIO()):
+                code = install.main(argv)
+        finally:
+            for fd in locks:
+                install.os.close(fd)
+        (path,) = receipts.glob(f'{phase}-*.json')
+        record = json.loads(path.read_text(encoding='utf-8'))
+        path.unlink()
+        return code, record, world, door
+
+    # the finding's three inputs and the verifier's three (the shape of a command line edited from an earlier one)
+    REPEATED = {
+        '--workspace-id': ('--command', 'dispose', '--dispose-step', 'close', '--workspace-id', r1.WORKSPACE,
+                           '--reason-file', 'REASON', '--by', 'Ada Lovelace', '--workspace-id',
+                           '9b2e7c41-3f6d-4c8a-b1e5-6a7d8c9e0f12'),
+        '--encounter-id': ('--command', 'dispose', '--dispose-step', 'plan', '--encounter-id', r1.PLAN, '--reason-file',
+                           'REASON', '--by', 'Ada Lovelace', '--encounter-id', '9b2e7c41-3f6d-4c8a-b1e5-6a7d8c9e0f12'),
+        '--username': ('--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', 'REASON', '--by',
+                       'Ada Lovelace', '--username', 'platform-operator'),
+        '--dispose-step': ('--command', 'dispose', '--dispose-step', 'plan', '--workspace-id', r1.WORKSPACE,
+                           '--reason-file', 'REASON', '--by', 'Ada Lovelace', '--dispose-step', 'close'),
+        '--reason-file': ('--command', 'dispose', '--dispose-step', 'close', '--workspace-id', r1.WORKSPACE,
+                          '--reason-file', 'REASON', '--by', 'Ada Lovelace', '--reason-file', 'REASON2'),
+        '--command': ('--command', 'export-workspace', '--workspace-id', r1.WORKSPACE, '--reason-file', 'REASON',
+                      '--by', 'Ada Lovelace', '--command', 'dispose', '--dispose-step', 'close'),
+    }
+
+    def test_an_option_given_twice_is_refused_before_anything_runs_and_the_receipt_names_it(self):
+        for option, extra in self.REPEATED.items():
+            with self.subTest(option=option):
+                code, record, world, door = self.main(*extra)
+                self.assertEqual((code, record['ok']), (1, False))
+                self.assertIn(f'{option} given more than once', record['error'])
+                self.assertIn('nothing was run', record['error'])
+                self.assertEqual(record['details'], {'given_more_than_once': [option]})
+                self.assertEqual(world.oneshots, [])  # not even the migration check
+                door.assert_not_called()  # before the door: nothing at all ran
+        # control: the same command lines, each option once, run
+        once = self.REPEATED['--workspace-id'][:-2]
+        code, record, world, door = self.main(*once)
+        self.assertEqual((code, record['ok']), (0, True), record.get('error'))
+        self.assertEqual(world.acts()[0][:4], ['manage', 'dispose', '--close', '--workspace'])
+
+    def test_the_equals_form_a_flag_and_another_phase_are_refused_too(self):
+        for label, phase, extra, option in (
+                ('--name=value', 'manage', ('--command', 'dispose', '--dispose-step', 'close',
+                                            f'--workspace-id={r1.WORKSPACE}', '--reason-file', 'REASON', '--by',
+                                            'Ada Lovelace', '--workspace-id', '9b2e7c41-3f6d-4c8a-b1e5-6a7d8c9e0f12'),
+                 '--workspace-id'),
+                ('a flag', 'manage', ('--command', 'dispose', '--dispose-step', 'replay-ledger', '--ledger-file',
+                                      'LEDGER', '--execute', '--approved-by', 'Grace Hopper', '--by', 'Ada Lovelace',
+                                      '--execute'), '--execute'),
+                ('the same value twice', 'manage', ('--command', 'revoke-operator', '--username', 'ops-agent',
+                                                    '--reason-file', 'REASON', '--by', 'Ada Lovelace', '--by',
+                                                    'Ada Lovelace'), '--by'),
+                ('another phase', 'app', ('--coding-mode', 'disabled', '--coding-mode', 'disabled'), '--coding-mode')):
+            with self.subTest(label):
+                code, record, world, door = self.main(*extra, phase=phase)
+                self.assertEqual((code, record['ok']), (1, False))
+                self.assertEqual(record['details'], {'given_more_than_once': [option]})
+                self.assertEqual(world.oneshots, [])
+                door.assert_not_called()
+
+    def test_every_option_is_counted_whichever_it_is(self):
+        # a census over every option the parser has, read from the parser itself: each named '--' and its destination
+        seen = {}
+        real = install.argparse.ArgumentParser.parse_args
+
+        def parse_args(parser, *args, **kwargs):
+            seen['parser'] = parser
+            return real(parser, *args, **kwargs)
+        with mock.patch.object(install.argparse.ArgumentParser, 'parse_args', parse_args), \
+                mock.patch('sys.stderr', io.StringIO()), mock.patch.object(install, 'argument_problem', return_value=''):
+            args = install.parse_args(['--revision', r1.REVISION, '--receipts', '/r', '--phase', 'verify'])
+        options = [option for action in seen['parser']._actions for option in action.option_strings
+                   if option.startswith('--') and option != '--help']
+        self.assertEqual(sorted(options), sorted('--' + name.replace('_', '-') for name in vars(args)))
+        for option in options:
+            with self.subTest(option=option):
+                for argv in ([option, 'x', option, 'y'], [f'{option}=x', option, 'y'], [option, option]):
+                    self.assertEqual(install.repeated_options(argv, args), [option])
+                self.assertEqual(install.repeated_options([option, 'x', '--', option], args), [])
+                self.assertEqual(install.repeated_options([option, 'x'], args), [])
 
 
 if __name__ == '__main__':

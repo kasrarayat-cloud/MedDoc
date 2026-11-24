@@ -715,6 +715,23 @@ def parse_args(argv=None):
     return args
 
 
+def repeated_options(argv, args) -> list:
+    """The options ``argv`` gives more than once, sorted (refutation round 2, installer-2: argparse keeps an option's
+    last value and drops the others without a word, so a command line edited from an earlier one closed the practice
+    named last, for good, and the first was in no receipt). Each is '--' and its destination with '-' for '_', as
+    parse_args names every option, counted as '--name value' or '--name=value', up to a bare '--' (argparse reads no
+    value that starts with '--' as a value, so none is counted for another option)."""
+    names = {'--' + name.replace('_', '-') for name in vars(args)}
+    counts = {}
+    for token in argv:
+        if token == '--':
+            break
+        name = str(token).split('=', 1)[0]
+        if name in names:
+            counts[name] = counts.get(name, 0) + 1
+    return sorted(name for name, count in counts.items() if count > 1)
+
+
 # Release 1 (RELEASE-1-SPEC A8; VEN-8): no way back to a vendor that has no BAA. The earlier pipelines' live modes - Corti
 # (--provider-mode), the harness participants Astra (OpenAI) and the old Fable participant, and the Gemini-era interpreter
 # - are refused in app and in switch-back, so an earlier pair is started only with no provider of those (disabled, or the
@@ -10791,6 +10808,12 @@ def main(argv=None) -> int:
     journal_begin(args.phase)
     handlers = {each: signal.signal(each, interrupt) for each in (signal.SIGTERM, signal.SIGHUP)}
     try:
+        # refutation round 2, installer-2: an option given twice is refused before anything runs, the receipt naming it
+        repeated = repeated_options(sys.argv[1:] if argv is None else list(argv), args)
+        if repeated:
+            raise InstallError(f'{", ".join(repeated)} given more than once: the installer would run with the last '
+                               'value of each and drop the others without a word, so nothing was run. Give each option '
+                               'once.', details={'given_more_than_once': repeated})
         record['door'] = check_door(os.environ, args.revision)
         ctx.door = record['door']
         journal_begin(args.phase, record['door'])

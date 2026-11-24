@@ -54,7 +54,12 @@ bash scripts/run-ruled-mutation.sh --declaration "$DECL" -- \
 The tree must be clean, and HEAD must be the revision or a descendant that
 changed nothing under `cpt-studio/` or the ruled-mutation door (so a docs-only
 commit carrying the declaration is accepted). The declaration must name the
-revision and carry no unfilled revision placeholder.
+revision and carry no unfilled revision placeholder. Every option is given
+once: one given twice (as `--name value` or `--name=value`) is refused before
+anything runs, the receipt's `given_more_than_once` naming it (refutation round
+2, installer-2: the last value had run and the first was dropped without a
+word - a command line edited from an earlier one closed the practice named
+last, for good).
 
 **The door's ceiling.** The door kills what it runs after `RULED_ACT_MAX_SECS`
 of wall clock (`scripts/lib/run-watched.sh`; by default as long as one worker's
