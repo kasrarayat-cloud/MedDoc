@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import tempfile
+import threading
 from datetime import datetime, timedelta, timezone as dt_timezone
 from importlib import import_module
 from pathlib import Path
@@ -25,8 +26,9 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.models import Session
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import connection
 from django.http import Http404, HttpResponse
-from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
+from django.test import Client, RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from webauthn.helpers import bytes_to_base64url
 
@@ -467,6 +469,156 @@ class SignInTests(TestCase):
         self.assertNotRegex(html, r'\son[a-z]+=')
 
 
+def twin_of(client):
+    """A second browser holding a copy of ``client``'s session as it is now: two requests that loaded the same session
+    row before either saved it (refutation r2, findings 1 and 2)."""
+    store = import_module(settings.SESSION_ENGINE).SessionStore
+    data = store(session_key=client.cookies[settings.SESSION_COOKIE_NAME].value).load()
+    twin = store()
+    for name, value in data.items():
+        twin[name] = value
+    twin.save()
+    other = Client(HTTP_HOST=client.defaults.get('HTTP_HOST', ADMIN))
+    other.cookies[settings.SESSION_COOKIE_NAME] = twin.session_key
+    return other
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ChallengeTests(TestCase):
+    """A challenge serves one response, whatever the response and however many copies of the session ask (refutation
+    r2, findings 1 and 3)."""
+
+    def setUp(self):
+        self.operator, self.key = enrolled_operator()
+
+    def test_one_assertion_sent_from_two_copies_of_a_pending_session_signs_in_once(self):
+        first = admin_client()
+        password_step(first, self.operator)
+        signed = json.dumps(self.key.assertion(options_of(first), count=0))  # a counter that stays 0, as many keys keep it
+        second = twin_of(first)  # the second request loaded the session before the first saved it
+        done = first.post('/login/second-factor', {'credential': signed})
+        late = second.post('/login/second-factor', {'credential': signed})
+        self.assertEqual((done.status_code, done['Location']), (302, '/ops/'))
+        self.assertEqual(late.status_code, 400)
+        self.assertIn(second_factor.NO_CHALLENGE, late.content.decode())
+        self.assertIsNone(signed_in_as(second))
+        signed_in = [row for row in Session.objects.all() if row.get_decoded().get('_auth_user_id') == str(self.operator.pk)]
+        self.assertEqual(len(signed_in), 1)
+        self.assertEqual(list(models.LoginAttempt.objects.values_list('outcome', flat=True)), ['signed_in'])
+
+    def test_one_assertion_sent_from_two_copies_of_a_signed_in_session_steps_up_once(self):
+        client = admin_client()
+        with Clock() as clock:
+            password_step(client, self.operator)
+            self.assertEqual(key_step(client, self.key, count=0).status_code, 302)  # a counter that stays 0
+            clock.advance(settings.SECOND_FACTOR_STEP_UP_SECONDS + 60)
+            signed = json.dumps(self.key.assertion(options_of(client), count=0))
+            twin = twin_of(client)
+            self.assertEqual(client.post('/login/second-factor', {'credential': signed}).status_code, 302)
+            late = twin.post('/login/second-factor', {'credential': signed})
+            self.assertEqual(late.status_code, 400)
+            self.assertIn(second_factor.NO_CHALLENGE, late.content.decode())
+            self.assertEqual(twin.session[request_meta.SESSION_SECOND_FACTOR_AT], NOW, 'the copy was not stepped up')
+            self.assertEqual(client.session[request_meta.SESSION_SECOND_FACTOR_AT], NOW + clock_seconds(clock))
+
+    def test_a_challenge_is_used_up_in_the_database_before_the_response_is_read(self):
+        client = admin_client()
+        password_step(client, self.operator)
+        options = options_of(client)
+        token = models.OneTimeToken.objects.get(purpose=second_factor.CHALLENGE_PURPOSE)
+        self.assertEqual((token.user_id, token.used_at), (self.operator.pk, None))
+        self.assertNotIn(options['challenge'], str(list(models.OneTimeToken.objects.values())))  # its digest only
+        twin = twin_of(client)
+        self.assertEqual(client.post('/login/second-factor', {'credential': 'not a response'}).status_code, 400)
+        token.refresh_from_db()
+        self.assertIsNotNone(token.used_at, 'a refused response used the challenge up')
+        replay = twin.post('/login/second-factor', {'credential': json.dumps(self.key.assertion(options, count=0))})
+        self.assertEqual(replay.status_code, 400)
+        self.assertIn(second_factor.NO_CHALLENGE, replay.content.decode())
+        self.assertIsNone(signed_in_as(twin))
+
+    def test_a_challenge_is_used_only_in_the_sign_in_it_was_made_for(self):
+        first, other = admin_client(), admin_client()
+        password_step(first, self.operator)
+        password_step(other, self.operator)
+        options = options_of(first)
+        # the session of another pending sign-in of the same account, holding this challenge: its own reference differs
+        state = session_of(other)
+        state[second_factor.CHALLENGE] = session_of(first)[second_factor.CHALLENGE]
+        state.save()
+        answer = other.post('/login/second-factor', {'credential': json.dumps(self.key.assertion(options, count=0))})
+        self.assertEqual(answer.status_code, 400)
+        self.assertIn(second_factor.NO_CHALLENGE, answer.content.decode())
+        self.assertIsNone(signed_in_as(other))
+
+    def test_a_credential_id_the_database_cannot_hold_is_the_ordinary_refusal_and_counts(self):
+        cases = {'a NUL in the id': lambda good: {**good, 'id': good['id'] + '\u0000'},
+                 'a NUL in rawId': lambda good: {**good, 'rawId': good['rawId'] + '\u0000'},
+                 'a character outside base64url': lambda good: {**good, 'id': good['id'] + '='},
+                 'an id longer than any credential id': lambda good: {**good, 'id': 'A' * 1401, 'rawId': 'A' * 1401},
+                 'an empty id': lambda good: {**good, 'id': ''}}
+        for label, bad in cases.items():
+            with self.subTest(label):
+                models.RateWindow.objects.filter(scope__startswith='second_factor.').delete()
+                client = Client(HTTP_HOST=ADMIN, raise_request_exception=False)
+                password_step(client, self.operator)
+                options = options_of(client)
+                good = self.key.assertion(options, count=0)
+                answer = client.post('/login/second-factor', {'credential': json.dumps(bad(good))})
+                self.assertEqual(answer.status_code, 400)
+                self.assertIn(second_factor.NOT_VERIFIED, answer.content.decode())
+                self.assertEqual(second_factor.attempts_left(self.operator), settings.SECOND_FACTOR_ATTEMPTS - 1,
+                                 'the refusal is counted')
+                replay = client.post('/login/second-factor', {'credential': json.dumps(good)})
+                self.assertEqual(replay.status_code, 400)  # the challenge went with the refused answer
+                self.assertIn(second_factor.NO_CHALLENGE, replay.content.decode())
+                self.assertIsNone(signed_in_as(client))
+
+
+def clock_seconds(clock):
+    return int((clock.moment - MOMENT).total_seconds())
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ChallengeRaceTests(TransactionTestCase):
+    """The same race over two real database connections, as the refutation's probe ran it (refutation r2, finding 1;
+    l2fa/test_race.py): two requests with one session cookie and one signed assertion both load the session, then meet
+    at the challenge's single use (a barrier just before it). One signs in; the other is refused."""
+
+    def test_two_requests_at_the_same_moment_sign_in_once(self):
+        operator, key = enrolled_operator()
+        first = admin_client()
+        password_step(first, operator)
+        signed = json.dumps(key.assertion(options_of(first), count=0))
+        second = Client(HTTP_HOST=ADMIN)
+        second.cookies[settings.SESSION_COOKIE_NAME] = first.cookies[settings.SESSION_COOKIE_NAME].value
+        barrier = threading.Barrier(2, timeout=30)
+        original = second_factor._challenge_digest
+
+        def digest_once_both_have_loaded(*args):
+            barrier.wait()
+            return original(*args)
+
+        answers = {}
+
+        def post(name, client):
+            try:
+                answers[name] = client.post('/login/second-factor', {'credential': signed})
+            finally:
+                connection.close()
+
+        with mock.patch.object(second_factor, '_challenge_digest', side_effect=digest_once_both_have_loaded):
+            threads = [threading.Thread(target=post, args=pair) for pair in (('first', first), ('second', second))]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(60)
+        self.assertEqual(sorted(answer.status_code for answer in answers.values()), [302, 400])
+        signed_in = [row for row in Session.objects.all() if row.get_decoded().get('_auth_user_id') == str(operator.pk)]
+        self.assertEqual(len(signed_in), 1)
+        self.assertEqual(list(models.LoginAttempt.objects.values_list('outcome', flat=True)), ['signed_in'])
+
+
 @override_settings(STORAGES=PLAIN_STATIC)
 class EnrolmentTests(TestCase):
     """Setup with a code issued on the server (B2, item 3): the code, a new password, then the first key."""
@@ -620,7 +772,8 @@ class EnrolmentTests(TestCase):
         stored = every_record()
         self.assertNotIn(code, stored)
         self.assertNotIn(plain, stored)
-        self.assertEqual(models.OneTimeToken.objects.get().token_sha256, hashlib.sha256(plain.encode()).hexdigest())
+        self.assertEqual(models.OneTimeToken.objects.get(purpose=models.OneTimeToken.OPERATOR_SETUP).token_sha256,
+                         hashlib.sha256(plain.encode()).hexdigest())
 
 
 @override_settings(STORAGES=PLAIN_STATIC)

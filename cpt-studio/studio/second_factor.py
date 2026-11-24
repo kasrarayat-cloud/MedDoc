@@ -49,6 +49,7 @@ import functools
 import hashlib
 import json
 import math
+import re
 import secrets
 from datetime import timedelta
 from urllib.parse import urlencode, urlsplit
@@ -57,6 +58,7 @@ from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404, HttpResponseRedirect
 from django.utils import timezone
 from webauthn import (generate_authentication_options, generate_registration_options, options_to_json,
@@ -172,6 +174,9 @@ TRANSPORTS = frozenset(item.value for item in AuthenticatorTransport)
 REMOVED_BY_RESET = 'reset on the server'
 REMOVED_BY_OPERATOR = 'removed by the operator'
 MAX_RESPONSE_CHARS = 64 * 1024  # a key's response, as JSON: far more than any authenticator sends
+CHALLENGE_PURPOSE = 'webauthn_challenge'  # OneTimeToken.purpose of a challenge's single use (a plain column)
+# a credential id as a response names it: base64url, at most SecondFactorCredential.credential_id's 1400 characters
+CREDENTIAL_ID = re.compile(r'[A-Za-z0-9_-]{1,1400}')
 
 
 class Refused(Exception):
@@ -204,13 +209,43 @@ def _descriptor(key):
     return PublicKeyCredentialDescriptor(id=base64url_to_bytes(key.credential_id), transports=transports or None)
 
 
+def _flow(request, purpose) -> str:
+    """What a challenge is bound to besides its account and its purpose: the pending sign-in's reference (SIGN_IN), the
+    enrolment's claim (ENROL), else the signed-in session's sign-in reference (STEP_UP, ADD); '' when there is none."""
+    session = request.session
+    if purpose in (SIGN_IN, ENROL):
+        state = session.get(PENDING if purpose == SIGN_IN else ENROLMENT)
+        return str(state.get('ref' if purpose == SIGN_IN else 'claim') or '') if isinstance(state, dict) else ''
+    return str(session.get(request_meta.SESSION_SIGN_IN_REF) or '')
+
+
+def _challenge_digest(user, purpose, flow, challenge) -> str:
+    """The sha256 a challenge's single use is kept under (CHALLENGE_PURPOSE): of the account, the purpose, the flow and
+    the challenge, so a challenge is used up only in the flow it was made for."""
+    return hashlib.sha256(b'\n'.join([b'cpt-studio-webauthn-challenge', str(user.pk).encode('ascii'),
+                                      purpose.encode('ascii'), flow.encode('utf-8'), challenge])).hexdigest()
+
+
 def _store_challenge(request, user, purpose, challenge):
+    """The session keeps the challenge (CHALLENGE); the database keeps its single use, as a OneTimeToken of
+    CHALLENGE_PURPOSE that _take_challenge uses up. The account's used or expired challenges are deleted: they open
+    nothing, and they are not records."""
+    now = _now()
+    OneTimeToken.objects.filter(user=user, purpose=CHALLENGE_PURPOSE).filter(
+        Q(used_at__isnull=False) | Q(revoked_at__isnull=False) | Q(expires_at__lte=now)).delete()
+    OneTimeToken.objects.create(user=user, purpose=CHALLENGE_PURPOSE, created_by=purpose,
+                                token_sha256=_challenge_digest(user, purpose, _flow(request, purpose), challenge),
+                                expires_at=now + timedelta(seconds=settings.SECOND_FACTOR_PENDING_SECONDS))
     request.session[CHALLENGE] = {'c': bytes_to_base64url(challenge), 'at': request_meta.epoch_seconds(),
                                   'for': purpose, 'u': str(user.pk)}
 
 
 def _take_challenge(request, user, purpose) -> bytes:
-    """The session's challenge for ``user`` and ``purpose``, taken out of the session (used once), or Refused."""
+    """The session's challenge for ``user`` and ``purpose``, used up, or Refused. It is taken out of the session, and its
+    single use is taken in the database with one UPDATE ... WHERE used_at IS NULL, before the response is even read: of
+    two requests that loaded the same session at the same moment, one gets the challenge and the other is refused, and a
+    response that is refused, or that fails in any other way, has used it up all the same (refutation r2, finding 1).
+    It is called outside any transaction a refusal rolls back."""
     stored = request.session.pop(CHALLENGE, None)
     if not isinstance(stored, dict) or stored.get('for') != purpose or stored.get('u') != str(user.pk):
         raise Refused(NO_CHALLENGE)
@@ -218,11 +253,21 @@ def _take_challenge(request, user, purpose) -> bytes:
     age = request_meta.epoch_seconds() - at if isinstance(at, int) and not isinstance(at, bool) else -1
     if not 0 <= age <= settings.SECOND_FACTOR_PENDING_SECONDS or not isinstance(stored.get('c'), str):
         raise Refused(NO_CHALLENGE)
-    return base64url_to_bytes(stored['c'])
+    challenge = base64url_to_bytes(stored['c'])
+    now = _now()
+    used = OneTimeToken.objects.filter(
+        token_sha256=_challenge_digest(user, purpose, _flow(request, purpose), challenge), user=user,
+        purpose=CHALLENGE_PURPOSE, used_at__isnull=True, revoked_at__isnull=True, expires_at__gt=now).update(used_at=now)
+    if used != 1:
+        raise Refused(NO_CHALLENGE)
+    return challenge
 
 
 def parse_response(raw) -> dict:
-    """A key's response as the page sends it (JSON text), as a dict, or Refused."""
+    """A key's response as the page sends it (JSON text), as a dict, or Refused. Its credential id (and rawId, when
+    given) must be base64url of the length a credential id can have (CREDENTIAL_ID) before anything looks it up: a NUL
+    or any other character the database cannot hold is the ordinary refusal, never a server error (refutation r2,
+    finding 3)."""
     if isinstance(raw, dict):
         data = raw
     else:
@@ -233,6 +278,9 @@ def parse_response(raw) -> dict:
         except ValueError:
             raise Refused(NOT_VERIFIED) from None
     if not isinstance(data, dict) or not isinstance(data.get('id'), str) or not isinstance(data.get('response'), dict):
+        raise Refused(NOT_VERIFIED)
+    if not CREDENTIAL_ID.fullmatch(data['id']) or ('rawId' in data and not (
+            isinstance(data['rawId'], str) and CREDENTIAL_ID.fullmatch(data['rawId']))):
         raise Refused(NOT_VERIFIED)
     return data
 
@@ -306,8 +354,9 @@ def registration_options(request, user, purpose) -> dict:
     return json.loads(options_to_json(options))
 
 
-def verify_registration(request, user, raw, label, purpose):
-    """The new key that answered the session's challenge, stored for ``user``, or Refused."""
+def checked_registration(request, user, raw, label, purpose) -> dict:
+    """The new key that answered the session's challenge, checked but not stored yet (store_key stores it), or Refused.
+    The challenge is used up first (_take_challenge), so this runs outside the transaction that stores the key."""
     challenge = _take_challenge(request, user, purpose)
     data = parse_response(raw)
     _refuse_cross_origin(data)
@@ -322,14 +371,22 @@ def verify_registration(request, user, raw, label, purpose):
     credential_id = bytes_to_base64url(verified.credential_id)
     if len(credential_id) > SecondFactorCredential._meta.get_field('credential_id').max_length:
         raise Refused(NOT_VERIFIED)
-    if SecondFactorCredential.objects.filter(credential_id=credential_id).exists():
-        raise Refused('This security key is already set up.')
     transports = data['response'].get('transports')
     transports = [item for item in transports if item in TRANSPORTS][:8] if isinstance(transports, list) else []
-    return SecondFactorCredential.objects.create(
-        user=user, rp_id=settings.WEBAUTHN_RP_ID, label=label, credential_id=credential_id,
-        public_key=verified.credential_public_key, sign_count=verified.sign_count, transports=transports,
-        aaguid=str(verified.aaguid or '')[:36])
+    return {'label': label, 'credential_id': credential_id, 'public_key': verified.credential_public_key,
+            'sign_count': verified.sign_count, 'transports': transports, 'aaguid': str(verified.aaguid or '')[:36]}
+
+
+def store_key(user, checked):
+    """Store for ``user`` the key checked_registration answered, or Refused when that authenticator is already set up."""
+    if SecondFactorCredential.objects.filter(credential_id=checked['credential_id']).exists():
+        raise Refused('This security key is already set up.')
+    return SecondFactorCredential.objects.create(user=user, rp_id=settings.WEBAUTHN_RP_ID, **checked)
+
+
+def verify_registration(request, user, raw, label, purpose):
+    """The new key that answered the session's challenge, stored for ``user``, or Refused."""
+    return store_key(user, checked_registration(request, user, raw, label, purpose))
 
 
 def remove_key(user, key_id):

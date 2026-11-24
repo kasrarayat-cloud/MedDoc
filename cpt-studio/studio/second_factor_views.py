@@ -203,16 +203,18 @@ def _start_enrolment(request):
 
 
 def _finish_enrolment(request, user, token):
-    """The second step: the first key. The page that shows the recovery codes once, or Refused. The setup code is
-    locked while its key is registered, so two answers sent at once cannot both use it."""
+    """The second step: the first key. The page that shows the recovery codes once, or Refused. The key is checked
+    first, which uses its challenge up outside any transaction (a refused answer has used it too); the setup code is
+    then locked while the key is stored, so two answers sent at once cannot both use it."""
+    checked = factor.checked_registration(request, user, request.POST.get('credential', ''),
+                                          request.POST.get('label', ''), factor.ENROL)
     with transaction.atomic():
         try:
             token = OneTimeToken.objects.select_for_update().get(
                 pk=token.pk, user=user, used_at__isnull=True, revoked_at__isnull=True, expires_at__gt=timezone.now())
         except OneTimeToken.DoesNotExist:
             raise factor.Refused(SETUP_EXPIRED) from None
-        key = factor.verify_registration(request, user, request.POST.get('credential', ''),
-                                         request.POST.get('label', ''), factor.ENROL)
+        key = factor.store_key(user, checked)
         token.used_at = timezone.now()
         token.save(update_fields=['used_at'])
         codes = factor.new_recovery_codes(user)
