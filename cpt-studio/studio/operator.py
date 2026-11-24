@@ -255,9 +255,11 @@ def _methods(*allowed):
 
 
 def _encounter(encounter_id):
+    """The encounter a console route names; 404 for none, and for a disposal's tombstone (release 1, D1: nothing of
+    it is left to show)."""
     try:
         return models.Encounter.objects.select_related('workspace', 'created_by', 'current_revision').get(
-            pk=encounter_id)
+            pk=encounter_id, destroyed_at__isnull=True)
     except (models.Encounter.DoesNotExist, ValueError, TypeError, ValidationError):
         raise Http404()
 
@@ -549,10 +551,12 @@ def _refused(encounter, code):
 @_methods('GET')
 @read_audit.phi_read(read_audit.OPS_LIST)
 def index(request):
-    """Every workspace's documents, most recently updated first (at most LIST_LIMIT), each by its short reference -
-    recorded as ops.list with the documents shown - and the standing holds."""
+    """Every open workspace's documents, most recently updated first (at most LIST_LIMIT), each by its short reference
+    - recorded as ops.list with the documents shown - and the standing holds. A destroyed document's tombstone and the
+    documents of a closed practice are left out (release 1, D1: a closed practice drops out of the routine lists)."""
     rows = []
-    encounters = (models.Encounter.objects.select_related('workspace').defer('title', 'user_values')
+    listed = models.Encounter.objects.filter(destroyed_at__isnull=True, workspace__closed_at__isnull=True)
+    encounters = (listed.select_related('workspace').defer('title', 'user_values')
                   .annotate(rounds_count=Count('rounds')).order_by('-updated_at')[:LIST_LIMIT])
     for encounter in encounters:
         latest = state.latest_round(encounter)
@@ -563,7 +567,8 @@ def index(request):
     read_audit.record(request, view=read_audit.OPS_LIST, encounter_ids=[row['encounter'].pk for row in rows],
                       count=len(rows))
     return render(request, 'studio/ops_index.html', {
-        'rows': rows, 'total': models.Encounter.objects.count(), 'limit': LIST_LIMIT, 'holds': holds_view(),
+        'rows': rows, 'total': listed.count(), 'limit': LIST_LIMIT, 'holds': holds_view(),
+        'closed': models.Workspace.objects.filter(closed_at__isnull=False).count(),
         'error': ERRORS.get(request.GET.get('error', '')), 'done': DONE.get(request.GET.get('done', '')),
         'release': settings.RELEASE_SHA, 'mode': settings.CODING_MODE, 'section': 'encounters'})
 

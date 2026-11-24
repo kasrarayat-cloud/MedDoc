@@ -6,7 +6,7 @@
   {% for row in rows %}
     <tr>
       <td><strong>{{ row.person.label }}</strong><br><span class="muted mono">{{ row.person.username }}</span>{% if row.person.password_change_required_at %}<br><span class="flag warn">must choose a new password</span>{% endif %}</td>
-      {% if not hide_workspace %}<td><a href="/ops/workspaces/{{ row.workspace.pk }}">{{ row.workspace.name }}</a><br><span class="muted">{{ row.workspace.category.name }}</span></td>{% endif %}
+      {% if not hide_workspace %}<td><a href="/ops/workspaces/{{ row.workspace.pk }}">{{ row.workspace.name }}</a><br><span class="muted">{{ row.workspace.category.name }}</span>{% if row.workspace.closed_at %} <span class="flag">closed</span>{% endif %}</td>{% endif %}
       <td>{{ row.role_label }}</td>
       <td>{% if row.membership.active %}<span class="chip ok">On here</span>{% else %}<span class="chip bad">Off here</span>{% endif %}{% if not row.person.is_active %}<br><span class="chip bad">Off everywhere</span>{% endif %}</td>
       <td class="mono">{% if row.person.last_login %}{{ row.person.last_login|date:"Y-m-d H:i" }} UTC{% else %}never{% endif %}</td>

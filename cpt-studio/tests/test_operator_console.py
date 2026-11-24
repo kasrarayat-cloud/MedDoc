@@ -376,6 +376,49 @@ class MinimumNecessaryTests(ConsoleCase):
         self.assertEqual(answer.status_code, 403)
         self.assertFalse(models.AccessRecord.objects.filter(view='ops.content_open').exists())
 
+
+class ClosedAndDestroyedTests(ConsoleCase):
+    """Release 1, D1 (Lane 4's disposal): a destroyed document's tombstone is in no console list and its routes answer
+    404; a closed practice drops out of the console's routine lists - its documents leave the front page - while its
+    records stay."""
+
+    def test_the_front_page_leaves_out_tombstones_and_closed_practices(self):
+        gone = self.encounter(title='Synthetic destroyed note')
+        models.Encounter.objects.filter(pk=gone.pk).update(destroyed_at=timezone.now(), state='destroyed', title='')
+        closed_note = r.f.encounter(self.other_ws, self.outsider, title='Synthetic note of a closed practice')
+        r.f.paste(closed_note, self.outsider)
+        models.Workspace.objects.filter(pk=self.other_ws.pk).update(closed_at=timezone.now())
+        page = self.ops.get('/ops/').content.decode()
+        self.assertIn(str(self.enc.pk)[:8], page)
+        self.assertNotIn(str(gone.pk)[:8], page)
+        self.assertNotIn(str(closed_note.pk)[:8], page)
+        self.assertIn('The documents of 1 closed workspace are left out.', page)
+        self.assertEqual(models.AccessRecord.objects.get(view='ops.list').encounter_ids, [str(self.enc.pk)])
+        # a closed practice's document keeps its page (reading stays on until the practice confirms receipt)
+        self.assertEqual(self.ops.get(f'/ops/encounters/{closed_note.pk}').status_code, 200)
+
+    def test_every_console_route_of_a_tombstone_answers_404(self):
+        gone = self.encounter(title='Synthetic destroyed note')
+        models.Encounter.objects.filter(pk=gone.pk).update(destroyed_at=timezone.now(), state='destroyed', title='')
+        for method, path, body in (('get', f'/ops/encounters/{gone.pk}', None),
+                                   ('get', f'/ops/encounters/{gone.pk}/original', None),
+                                   ('post', f'/ops/encounters/{gone.pk}/content',
+                                    {'reason': 'support_request', 'reference': 'SR-1'}),
+                                   ('post', f'/ops/encounters/{gone.pk}/retry', {}),
+                                   ('post', f'/ops/encounters/{gone.pk}/reconcile', {'run': '', 'note': 'x' * 20})):
+            with self.subTest(path=path, method=method):
+                answer = getattr(self.ops, method)(path, body) if body is not None else getattr(self.ops, method)(path)
+                self.assertEqual(answer.status_code, 404)
+        self.assertFalse(models.AccessRecord.objects.filter(encounter_ids__contains=[str(gone.pk)]).exists())
+
+    def test_the_activity_keeps_a_tombstones_events_with_no_link_to_it(self):
+        gone = self.encounter(title='Synthetic destroyed note')
+        models.Encounter.objects.filter(pk=gone.pk).update(destroyed_at=timezone.now(), state='destroyed', title='')
+        page = self.ops.get('/ops/activity').content.decode()
+        self.assertIn(f'<span class="mono">{str(gone.pk)[:8]}</span> <span class="flag">destroyed</span>', page)
+        self.assertNotIn(f'href="/ops/encounters/{gone.pk}"', page)
+        self.assertIn(f'href="/ops/encounters/{self.enc.pk}"', page)
+
 def open_content(client, encounter, reason='support_request', reference='SR-2026-0042'):
     """Open ``encounter``'s content in ``client``'s session (release 1, C2), as the page's form does."""
     answer = client.post(f'/ops/encounters/{encounter.pk}/content', {'reason': reason, 'reference': reference})

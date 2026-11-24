@@ -204,7 +204,8 @@ def _people_context(**extra) -> dict:
         rows=membership_rows(Membership.objects.all(), operators),
         unplaced=list(User.objects.exclude(pk__in=members).exclude(pk__in=operators).order_by('username')),
         operators=operator_rows(),
-        workspaces=list(Workspace.objects.select_related('category').order_by('name', 'pk')),
+        # the add form's choice: open practices only (a closed one drops out of the routine lists, D1 step 1)
+        workspaces=list(Workspace.objects.filter(closed_at__isnull=True).select_related('category').order_by('name', 'pk')),
         **extra)
 
 
@@ -226,7 +227,7 @@ def operator_rows(today=None) -> list:
 
 def _workspace_context(workspace, **extra) -> dict:
     return _context('workspaces', workspace=workspace, rows=membership_rows(workspace.memberships.all(), operator_ids()),
-                    documents=workspace.encounters.count(), **extra)
+                    documents=workspace.encounters.filter(destroyed_at__isnull=True).count(), **extra)
 
 
 def _workspace(workspace_id):
@@ -538,14 +539,19 @@ def _set_account_access(request, person, memberships, active, requested_by) -> s
 # --- workspaces --------------------------------------------------------------------------------------------------------
 
 def _workspaces_context(**extra) -> dict:
-    rows = (Workspace.objects.select_related('category')
-            .annotate(people=Count('memberships', distinct=True),
-                      active_people=Count('memberships', distinct=True,
-                                          filter=Q(memberships__active=True, memberships__user__is_active=True)),
-                      documents=Count('encounters', distinct=True))
-            .order_by('name', 'pk'))
-    return _context('workspaces', workspaces=list(rows), categories=list(Category.objects.order_by('name', 'pk')),
-                    **extra)
+    """The practices, open ones first and the closed ones apart (release 1, D1 step 1: a closed practice drops out of
+    the routine lists; its people keep reading until it confirms receipt), with their counts; a destroyed document's
+    tombstone is not counted."""
+    rows = list(Workspace.objects.select_related('category')
+                .annotate(people=Count('memberships', distinct=True),
+                          active_people=Count('memberships', distinct=True,
+                                              filter=Q(memberships__active=True, memberships__user__is_active=True)),
+                          documents=Count('encounters', distinct=True,
+                                          filter=Q(encounters__destroyed_at__isnull=True)))
+                .order_by('name', 'pk'))
+    return _context('workspaces', workspaces=[row for row in rows if row.closed_at is None],
+                    closed=[row for row in rows if row.closed_at is not None],
+                    categories=list(Category.objects.order_by('name', 'pk')), **extra)
 
 
 # Latin letters whose Unicode name gives no single base letter, read as the letters they stand for
@@ -735,8 +741,8 @@ def spending(now=None) -> dict:
             .select_related('encounter', 'encounter__workspace', 'encounter__workspace__category')
             # the document by its id alone: no title is read (release 1, C2), the page names it by its reference
             .only('id', 'usage', 'scope', 'state', 'http_status', 'sent', 'endpoint', 'created_at', 'started_at', 'encounter',
-                  'encounter__workspace', 'encounter__workspace__name', 'encounter__workspace__category',
-                  'encounter__workspace__category__name')
+                  'encounter__destroyed_at', 'encounter__workspace', 'encounter__workspace__name',
+                  'encounter__workspace__category', 'encounter__workspace__category__name')
             .order_by('created_at', 'pk'))
     total, recent = _bucket(), _bucket()
     days, workspaces_seen, documents = {}, {}, {}
@@ -755,8 +761,9 @@ def spending(now=None) -> dict:
             entry = workspaces_seen.setdefault(workspace.pk, {'workspace': workspace, 'documents': set(), **_bucket()})
             entry['documents'].add(run.encounter_id)
             _add(entry, spent)
-            _add(documents.setdefault(run.encounter_id, {'encounter': run.encounter,
-                                                          'reference': str(run.encounter_id)[:8], **_bucket()}), spent)
+            if run.encounter.destroyed_at is None:  # a disposal's tombstone is never listed (D1)
+                _add(documents.setdefault(run.encounter_id, {'encounter': run.encounter,
+                                                              'reference': str(run.encounter_id)[:8], **_bucket()}), spent)
         # the most each document may have cost first: its known cost and the worst case of its runs with no known cost
         # (money-4; the page shows both parts on each row: r2, figures-3)
         by_document = sorted(documents.values(), key=lambda item: (-(item['cost'] + item['worst']), -item['unpriced'],
@@ -862,13 +869,17 @@ def activity(request):
     query = '&'.join(part for part in (f'workspace={chosen_workspace.pk}' if chosen_workspace else '',
                                        f'kind={kind}' if kind else '') if part)
     rows = window[:PAGE_SIZE]
+    destroyed = set(models.Encounter.objects.filter(
+        pk__in={row.encounter_id for row in rows if row.encounter_id}, destroyed_at__isnull=False).values_list(
+        'pk', flat=True))
     read_audit.record(request, view=read_audit.OPS_ACTIVITY,
                       workspace_id=chosen_workspace.pk if chosen_workspace else None,
                       encounter_ids=list(dict.fromkeys(row.encounter_id for row in rows if row.encounter_id)),
                       count=len(rows), filters={'workspace': chosen_workspace.pk if chosen_workspace else None,
                                                 'kind': kind or None, 'before': before or None})
     return render(request, 'studio/ops_activity.html', _context(
-        'activity', rows=[describe(event) for event in rows], earlier=bool(before), unreadable=events is None,
+        'activity', rows=[{**describe(event), 'destroyed': event.encounter_id in destroyed} for event in rows],
+        earlier=bool(before), unreadable=events is None,
         older=cursor_of(rows[-1]) if len(window) > PAGE_SIZE else '', query=query,
         kinds=[(key, label) for key, (label, _names) in KINDS.items()], kind=kind, chosen_workspace=chosen_workspace,
         workspaces=list(Workspace.objects.order_by('name', 'pk')), tab='actions'))

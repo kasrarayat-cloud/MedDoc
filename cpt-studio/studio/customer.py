@@ -183,11 +183,17 @@ def _with_rounds(queryset):
     return queryset.annotate(has_round=Exists(Round.objects.filter(encounter_id=OuterRef('pk'))))
 
 
+def live(queryset):
+    """``queryset`` of encounters without the tombstones a disposal leaves (release 1, D1: an Encounter row whose
+    destroyed_at is set keeps no PHI and is shown nowhere - not listed, not counted, its routes answer 404)."""
+    return queryset.filter(destroyed_at__isnull=True)
+
+
 def session_json(user, membership) -> dict:
     """GET /api/session: who is signed in, the workspace, the role, the approval attestation and the counts (every
     document, and those waiting on a member: questions to answer, codes to review or to approve)."""
     workspace = membership.workspace
-    encounters = workspace.encounters.all()
+    encounters = live(workspace.encounters.all())
     queue = _with_rounds(encounters).filter(has_round=True, state__in=QUEUE_STATES).count()
     return {'user': {'id': str(user.pk), 'label': user.label(), 'initials': initials(user),
                      'actor_kind': user.actor_kind},
@@ -230,7 +236,7 @@ def document_kind(encounter) -> str:
 
 def list_rows(membership) -> list:
     """GET /api/encounters: the workspace's encounters, newest first."""
-    rows = _with_rounds(membership.workspace.encounters.select_related('current_revision')).order_by('-created_at')
+    rows = _with_rounds(live(membership.workspace.encounters.select_related('current_revision'))).order_by('-created_at')
     out = []
     for encounter in rows:
         value = stored_state(encounter, encounter.has_round)

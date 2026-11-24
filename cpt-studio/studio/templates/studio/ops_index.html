@@ -32,7 +32,7 @@
 {% endif %}
 
 <h2>Encounters</h2>
-<p class="muted">Each document is named by its short reference, never its title or file name: its page opens on its metadata, and its content opens with a reason.</p>
+<p class="muted">Each document is named by its short reference, never its title or file name: its page opens on its metadata, and its content opens with a reason.{% if closed %} The documents of {{ closed }} closed workspace{{ closed|pluralize }} are left out.{% endif %}</p>
 <div class="table-card scroll">
 <table>
   <thead><tr><th>Reference</th><th>Workspace</th><th>State</th><th class="num">Rounds</th><th>Latest round</th><th class="num">Latest round cost (USD)</th><th>Created</th><th>Updated</th></tr></thead>

@@ -51,7 +51,17 @@ REVIEWER_ONLY = 'Your role in this workspace cannot change documents or decision
 ROLE_REFUSED = 'Your role cannot do that.'
 NOT_SAVED = 'This change could not be saved. Reload the page and try again.'
 # The coding pipeline's refusals a member may read as they are (studio.jobs: fixed sentences); any other is NOT_SAVED.
-JOB_REFUSALS = frozenset({jobs.BUSY_MESSAGE, jobs.RETRY_NOTHING, jobs.RECONCILE_FIRST})
+# Release 1 adds Lane 4's (D1): a closed practice's and a destroyed document's sentences. They are read by name, so this
+# module imports on a tree where studio.jobs does not define them yet; a name it does not define adds nothing.
+JOB_REFUSAL_NAMES = ('BUSY_MESSAGE', 'RETRY_NOTHING', 'RECONCILE_FIRST', 'CLOSED_MESSAGE', 'DESTROYED_MESSAGE')
+
+
+def job_refusals() -> frozenset:
+    """The sentences of JOB_REFUSAL_NAMES that studio.jobs defines, read when a refusal is answered."""
+    return frozenset(getattr(jobs, name) for name in JOB_REFUSAL_NAMES if isinstance(getattr(jobs, name, None), str))
+
+
+JOB_REFUSALS = job_refusals()  # as studio.jobs defines them at import
 VIEW_CSP = "frame-ancestors 'self'"  # the in-page view of the original: framed by CPT Studio's own page only
 
 
@@ -81,7 +91,7 @@ def api_view(view=None, *, contract=True):
         except decisions.Refused as exc:
             return JsonResponse({'error': exc.message, 'details': {}}, status=exc.status)
         except jobs.Refused as exc:
-            message = str(exc) if str(exc) in JOB_REFUSALS else NOT_SAVED
+            message = str(exc) if str(exc) in job_refusals() else NOT_SAVED
             return JsonResponse({'error': message, 'details': {}}, status=409)
         except Http404:
             return JsonResponse({'error': 'Not found.'}, status=404)
@@ -120,9 +130,10 @@ def _refused_read(request, view, **fields):
 
 def _scoped(request, encounter_id, view):
     """(encounter, membership) as access.scoped_encounter gives them; a document that exists in a practice the caller
-    is no active member of is answered the same 404, with a refused row of ``view``."""
+    is no active member of is answered the same 404, with a refused row of ``view``; a destroyed document's tombstone is
+    answered 404 too (D1)."""
     try:
-        return scoped_encounter(request.user, encounter_id)
+        encounter, membership = scoped_encounter(request.user, encounter_id)
     except Http404:
         try:
             found = models.Encounter.objects.only('pk', 'workspace_id').get(pk=encounter_id)
@@ -130,6 +141,9 @@ def _scoped(request, encounter_id, view):
             raise Http404() from None
         _refused_read(request, view, workspace_id=found.workspace_id, encounter_ids=[found.pk])
         raise Http404() from None
+    if encounter.destroyed_at is not None:  # a disposal's tombstone (D1): nothing of it is left to show
+        raise Http404()
+    return encounter, membership
 
 
 def _payload(request) -> dict:

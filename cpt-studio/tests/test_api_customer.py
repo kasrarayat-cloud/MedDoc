@@ -16,6 +16,7 @@ from unittest import mock
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
+from django.utils import timezone
 
 from studio import api, client_contract, customer, decisions, exports, jobs, models, state, storage
 from studio.fable import document as fable_document
@@ -635,6 +636,44 @@ class WordDownloadTests(ApiCase):
                                  (200, 'application/pdf', f.PDF_BYTES))
                 self.assertEqual(answer['Content-Disposition'], 'attachment; filename="synthetic-note.pdf"')
         self.assertEqual(self.formats(enc), ['original', 'original'])
+
+
+class TombstoneTests(ApiCase):
+    """Release 1, D1 (Lane 4's disposal): a destroyed document stays as a tombstone row with no PHI - never listed or
+    counted, and every read of it answers 404. Lane 4's refusal sentences for a closed practice and a destroyed document
+    reach the member as they are."""
+
+    def tombstone(self):
+        enc = self.encounter(title='Synthetic note that was destroyed')
+        models.Encounter.objects.filter(pk=enc.pk).update(destroyed_at=timezone.now(), state='destroyed', title='')
+        return enc
+
+    def test_a_tombstone_is_not_listed_or_counted_and_its_reads_answer_404(self):
+        kept = self.encounter(title='Synthetic note that stays')
+        gone = self.tombstone()
+        listed = [row['id'] for row in self.get_json('/api/encounters')['encounters']]
+        self.assertEqual(listed, [str(kept.pk)])
+        self.assertEqual(self.get_json('/api/session')['counts'], {'documents': 1, 'queue': 0})
+        for url in (f'/api/encounters/{gone.pk}', f'/api/encounters/{gone.pk}/original',
+                    f'/api/encounters/{gone.pk}/original?view=1'):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertFalse(models.AccessRecord.objects.filter(encounter_ids__contains=[str(gone.pk)]).exists())
+
+    def test_lane_4s_refusal_sentences_are_read_by_name(self):
+        self.assertEqual(api.JOB_REFUSAL_NAMES[-2:], ('CLOSED_MESSAGE', 'DESTROYED_MESSAGE'))
+        for name in ('CLOSED_MESSAGE', 'DESTROYED_MESSAGE'):
+            if isinstance(getattr(jobs, name, None), str):  # once Lane 4's studio/jobs.py is in the tree
+                self.assertIn(getattr(jobs, name), api.job_refusals())
+        enc = self.encounter(title='Synthetic note in a closed practice')
+        closed = 'This workspace is closed: synthetic sentence.'
+        with mock.patch.object(jobs, 'CLOSED_MESSAGE', closed, create=True), \
+                mock.patch.object(decisions, 'retry', side_effect=jobs.Refused(closed)):
+            answer = self.post_json(f'/api/encounters/{enc.pk}/retry')
+        self.assertEqual((answer.status_code, answer.json()['error']), (409, closed))
+        with mock.patch.object(decisions, 'retry', side_effect=jobs.Refused('A sentence jobs never defined.')):
+            answer = self.post_json(f'/api/encounters/{enc.pk}/retry')
+        self.assertEqual(answer.json()['error'], api.NOT_SAVED)
 
 class ImportGraphTests(TestCase):
     def test_the_url_conf_loads_no_module_of_the_earlier_pipeline(self):

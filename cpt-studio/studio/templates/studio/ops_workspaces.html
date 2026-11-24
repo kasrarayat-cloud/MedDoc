@@ -19,6 +19,23 @@
 </table>
 </div>
 
+{% if closed %}
+<h2>Closed workspaces</h2>
+<p class="muted">A closed workspace takes no new documents and no coding. Its people still read their documents until the practice confirms it received its data.</p>
+<div class="table-card scroll">
+<table>
+  <thead><tr><th>Workspace</th><th>Specialty</th><th class="num">People with access</th><th class="num">Documents</th><th>Closed</th></tr></thead>
+  <tbody>
+  {% for item in closed %}
+    <tr><td><a href="/ops/workspaces/{{ item.pk }}">{{ item.name }}</a></td><td>{{ item.category.name }}</td>
+        <td class="num">{{ item.active_people }}</td><td class="num">{{ item.documents }}</td>
+        <td class="mono">{{ item.closed_at|date:"Y-m-d" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
 <section class="card" aria-labelledby="create-title">
   <h2 id="create-title">Create a workspace</h2>
   <p class="muted">Choose one of the specialties the coding review supports. Add its people after you create it. A workspace is not renamed or deleted here.</p>

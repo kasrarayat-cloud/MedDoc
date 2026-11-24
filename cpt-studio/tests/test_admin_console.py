@@ -1291,3 +1291,32 @@ class ForcedChangeTests(AdminCase):
         self.viewer.refresh_from_db()
         self.assertGreater(self.viewer.password_change_required_at, first)
         self.assertIn('must choose a new password at the first sign-in, within 72 hours', page(response))
+
+
+
+class ClosedPracticeTests(AdminCase):
+    """Release 1, D1 step 1: a closed practice drops out of the console's routine lists - the Workspaces list shows it
+    apart and the add form no longer offers it - and a destroyed document's tombstone is neither counted nor listed."""
+
+    def test_a_closed_practice_is_listed_apart_and_offered_to_no_add_form(self):
+        Workspace.objects.filter(pk=self.other_ws.pk).update(closed_at=timezone.now())
+        text = page(self.ops.get('/ops/workspaces'))
+        self.assertIn('Closed workspaces', text)
+        self.assertLess(text.index('Gastroenterology'), text.index('Closed workspaces'))
+        self.assertGreater(text.index('Another practice'), text.index('Closed workspaces'))
+        people = page(self.ops.get('/ops/people'))
+        self.assertNotIn(f'<option value="{self.other_ws.pk}">', people)
+        self.assertIn(f'<option value="{self.ws.pk}">', people)
+        self.assertIn('<span class="flag">closed</span>', people)  # its members' rows stay, marked
+        self.assertEqual(self.ops.get(f'/ops/workspaces/{self.other_ws.pk}').status_code, 200)
+
+    def test_a_tombstone_is_not_counted_or_listed(self):
+        priced = self.done(title='Synthetic priced note')
+        gone = self.done(title='Synthetic destroyed note')
+        models.Encounter.objects.filter(pk=gone.pk).update(destroyed_at=timezone.now(), state='destroyed', title='')
+        figures = console.spending()
+        self.assertEqual([row['encounter'].pk for row in figures['documents']], [priced.pk])
+        self.assertEqual(figures['total']['runs'], Run.objects.filter(purpose__in=jobs.PURPOSES, sent=True).count())
+        # the practice's row: 4 people with access, 4 people, 1 document (the tombstone is not counted)
+        self.assertIn('<td class="num">4</td><td class="num">4</td><td class="num">1</td>',
+                      page(self.ops.get('/ops/workspaces')))
