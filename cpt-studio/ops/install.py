@@ -531,7 +531,8 @@ PHASE_ARGUMENTS = {
     'agent_display_name': {'provision'}, 'workspace_name': {'provision'}, 'specialty': {'provision'},
     'reset_passwords': {'provision', 'operators'},
     # release 1 (A6): the operators phase's grant and re-grant, provisioning's --by, and the manage phase's ruled acts
-    'by': {'provision', 'operators', 'manage'}, 'review_by': {'operators', 'manage'}, 'regrant': {'operators'},
+    'by': {'provision', 'operators', 'manage'}, 'review_by': {'operators', 'manage'},
+    'regrant': {'operators', 'manage'},
     'command': {'manage'}, 'username': {'manage'}, 'reason_file': {'manage'}, 'approved_by': {'manage'},
     'workspace_id': {'manage'}, 'encounter_id': {'manage'}, 'dispose_step': {'manage'}, 'plan_id': {'manage'},
     'all_human_accounts': {'manage'}, 'ledger_file': {'manage'},
@@ -7579,6 +7580,19 @@ for username in P['usernames']:
                        'revoked': models.OperatorRevocation.objects.filter(grant__user=user).exists()}
 print(ANSWER + json.dumps({'accounts': found}))
 '''
+# The account a manage grant-operator names (refutation, installer lens A-1): whether it exists, is an operator now,
+# and whether any of its grants was ever revoked - read before the act, so the door holds A6's rule as the operators
+# phase does: a revoked account stays revoked unless --regrant names it and the declaration names that re-grant.
+GRANT_CHECK = '''
+from studio import models
+from studio.operator import is_operator
+user = models.User.objects.filter(username=P['username']).first()
+found = {'exists': user is not None}
+if user is not None:
+    found.update(operator=bool(is_operator(user)),
+                 revoked=models.OperatorRevocation.objects.filter(grant__user=user).exists())
+print(ANSWER + json.dumps(found))
+'''
 # Release 1 (A6, B2): the single-use setup code an operator enrols with - generated here, handed to the application's
 # command as a RAM-only file (only its sha256 reaches the database), kept root-only in OPERATOR_ENROLMENT through the
 # root helper, never printed, logged or put in a receipt. ENROLMENT_CODE_SECONDS is cptstudio/settings.py's (a test pins
@@ -7821,9 +7835,12 @@ def phase_operators(ctx) -> dict:
         with RamFiles('cpt-studio-operators-') as ram:
             mount = ram.add(f'{username}.reason', operator_reason(ctx, username, kind).encode(),
                             f'{MANAGE_MOUNT}/{username}.reason')
+            # a re-grant the run and its declaration approved (above) is said to the command, which refuses a
+            # revoked account without it (Lane 3's grant)
+            again = ['--regrant'] if before[username].get('revoked') is not False else []
             result = oneshot(image_id, ['manage', 'grant_operator', '--username', username, '--reason-file',
                                         f'{MANAGE_MOUNT}/{username}.reason', '--by', by, '--authorization-ref',
-                                        authorization_of(ctx), '--review-by', review_by], env,
+                                        authorization_of(ctx), '--review-by', review_by, *again], env,
                              user=f'{os.getuid()}:{os.getgid()}', mounts=[mount], what='manage grant_operator', by=by)
         assert_no_secret([result.stdout, result.stderr], env_values(env))
         grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}', result.stdout + result.stderr)}
@@ -7898,12 +7915,14 @@ def manage_problem(args) -> str:
         if getattr(args, name, None) in (None, ''):
             return f'--command {args.command} needs --{name.replace("_", "-")}.'
     for name in ('username', 'workspace_id', 'encounter_id', 'plan_id', 'review_by', 'approved_by', 'dispose_step',
-                 'all_human_accounts', 'reason_file', 'ledger_file'):
+                 'all_human_accounts', 'reason_file', 'ledger_file', 'regrant'):
         value = getattr(args, name, None)
         if value not in (None, '') and name not in entry['needs'] and not allowed_extra(args.command, name):
             return f'--{name.replace("_", "-")} is not used by --command {args.command}.'
     if args.username is not None and not USERNAME_RE.fullmatch(args.username):
         return f'--username must match {USERNAME_RE.pattern}.'
+    if getattr(args, 'regrant', None) is not None and args.regrant != args.username:
+        return '--regrant names the account --command grant-operator grants (--username).'
     for name in ('workspace_id', 'encounter_id', 'plan_id'):
         value = getattr(args, name, None)
         if value is not None and not UUID_RE.fullmatch(value):
@@ -7951,7 +7970,8 @@ def allowed_extra(command, name) -> bool:
     """The arguments a command takes beyond those it needs (MANAGE_COMMANDS 'needs')."""
     return {('require-password-change', 'username'), ('require-password-change', 'all_human_accounts'),
             ('dispose', 'workspace_id'), ('dispose', 'encounter_id'), ('dispose', 'plan_id'),
-            ('dispose', 'approved_by'), ('dispose', 'reason_file'), ('dispose', 'ledger_file')}.__contains__((command, name))
+            ('dispose', 'approved_by'), ('dispose', 'reason_file'), ('dispose', 'ledger_file'),
+            ('grant-operator', 'regrant')}.__contains__((command, name))
 
 
 def install_in_progress() -> list:
@@ -7968,7 +7988,8 @@ def manage_argv(ctx, args, entry) -> list:
         return [*command, '--username', args.username, *reason, '--by', args.by]
     if args.command == 'grant-operator':
         return [*command, '--username', args.username, *reason, '--by', args.by, '--authorization-ref',
-                authorization_of(ctx), '--review-by', args.review_by]
+                authorization_of(ctx), '--review-by', args.review_by,
+                *(['--regrant'] if getattr(args, 'regrant', None) else [])]
     if args.command == 'require-password-change':
         who = ['--username', args.username] if args.username else ['--all-human-accounts']
         return [*command, *who, *reason, '--by', args.by]
@@ -8061,6 +8082,26 @@ def read_ledger_file(path) -> bytes:
     return data
 
 
+def grant_problem(ctx, image_id, env) -> dict:
+    """The account a manage grant-operator names, read (GRANT_CHECK) and judged before the act: it must exist; one any of
+    whose grants was ever revoked - or whose answer does not say - is refused unless --regrant names it and the committed
+    declaration names "--regrant <username>" (A6; ADM-10 3(i); refutation, installer lens A-1). Returns what was read."""
+    args = ctx.args
+    found = app_script(image_id, env, GRANT_CHECK, {'username': args.username}, what='Reading the account to grant')
+    if not isinstance(found, dict) or found.get('exists') is not True:
+        raise InstallError(f'{args.username} is not an account here (or did not read back): nothing was granted.',
+                           details={'grant_check': found})
+    if found.get('revoked') is not False:
+        if args.regrant != args.username or not declaration_names(ctx, f'--regrant {args.username}'):
+            raise InstallError(f'{args.username} was revoked as an operator, and a revoked grant stays revoked: nothing '
+                               f'was granted. To grant it again, run with --regrant {args.username} under a declaration '
+                               f'that names "--regrant {args.username}".', details={'grant_check': found})
+    elif args.regrant is not None:
+        raise InstallError(f'--regrant {args.regrant}: that account was never revoked, so there is nothing to grant '
+                           'again; nothing was granted.', details={'grant_check': found})
+    return found
+
+
 def phase_manage(ctx) -> dict:
     """One allow-listed ruled act (MANAGE_COMMANDS; release 1, A6) in a one-shot of the installed image, once this
     revision's migrations are applied. The reason (and a setup code) travel as RAM-only files; a disposal is refused
@@ -8076,6 +8117,8 @@ def phase_manage(ctx) -> dict:
         raise InstallError(f'This revision\'s migrations are not all applied (manage migrate --check exited '
                            f'{pending.returncode}): run --phase app first. Nothing was run.')
     environment = None
+    if args.command == 'grant-operator':
+        record_grant = grant_problem(ctx, image_id, env)
     if args.command == 'dispose':
         busy = install_in_progress()
         if busy:
@@ -8088,6 +8131,8 @@ def phase_manage(ctx) -> dict:
     ledger = read_ledger_file(args.ledger_file) if getattr(args, 'ledger_file', None) else None
     record = {'command': args.command, 'by': args.by, 'username': args.username,
               'reason': ({'sha256': sha256(reason), 'bytes': len(reason)} if reason is not None else None)}
+    if args.command == 'grant-operator':
+        record['grant_check'] = record_grant
     if args.command == 'dispose':
         record.update(step=args.dispose_step, ledger=({'sha256': sha256(ledger), 'bytes': len(ledger)}
                                                       if ledger is not None else None))

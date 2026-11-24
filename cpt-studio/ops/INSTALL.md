@@ -714,7 +714,10 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   the installed image, through the door, once `manage migrate --check` passes:
   `revoke-operator` and `clear-signin-failures` (`--username --reason-file
   --by`), `grant-operator` (also `--review-by`; the declaration is passed as
-  `--authorization-ref <declaration>@<commit>`), `issue-enrolment` and
+  `--authorization-ref <declaration>@<commit>`; the account is read first, and
+  one any of whose grants was ever revoked is refused unless the run passes
+  `--regrant <name>` and the declaration names `--regrant <name>` - as in
+  **operators** - and the command is then told `--regrant`), `issue-enrolment` and
   `reset-second-factor` (`--username --reason-file --by`; each issues a new
   setup code, kept as **operators** keeps one), `require-password-change`
   (`--username` or `--all-human-accounts`, D22; never an automated account),

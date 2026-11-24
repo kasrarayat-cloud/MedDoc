@@ -1794,6 +1794,8 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
         details = self.run_phase(regrant='platform-operator')
         self.assertEqual([command[1] for command in self.commands()], ['migrate', 'grant_operator', 'issue_enrolment'])
         self.assertEqual(details['grants']['platform-operator']['exit'], 0)
+        # the approved re-grant is said to the command, which refuses a revoked account without it (Lane 3's grant)
+        self.assertEqual(self.commands()[1][-1], '--regrant')
         # an answer that does not say whether it was revoked is never read as "not revoked"
         self.before = {'platform-operator': {**operator_state(operator=False), 'revoked': None}}
         self.oneshots.clear()

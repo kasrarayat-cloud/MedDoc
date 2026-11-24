@@ -431,8 +431,11 @@ class ManageWorld:
     """The host for --phase manage: one-shots recorded (with what their RAM-only files held), the root file a folder
     standing in for /etc/cpt-studio, containers by name."""
 
-    def __init__(self, tmp, *, output=b'done\n', exit_code=0, containers=()):
+    def __init__(self, tmp, *, output=b'done\n', exit_code=0, containers=(), grant=None, declared=()):
         self.tmp, self.output, self.exit_code = tmp, output, exit_code
+        # what GRANT_CHECK reads of a grant-operator's account, and the words the committed declaration names
+        self.grant = {'exists': True, 'operator': False, 'revoked': False} if grant is None else grant
+        self.declared, self.scripts = tuple(declared), []
         self.etc = tmp / 'etc'
         self.etc.mkdir(mode=0o700, exist_ok=True)
         self.oneshots, self.mounted, self.containers = [], {}, set(containers)
@@ -464,6 +467,11 @@ class ManageWorld:
     def inspect(self, kind, name):
         return {'Id': name} if name in self.containers else None
 
+    def app_script(self, image_id, env, body, params, **kwargs):
+        self.scripts.append((body, params))
+        assert body is install.GRANT_CHECK, body[:60]
+        return self.grant
+
     def run_helper(self, body, params, *, mounts, **kwargs):
         """The export folder's two helpers, their bodies run here on a temporary /var/lib."""
         assert mounts == [install.EXPORTS_MOUNT], mounts
@@ -489,7 +497,9 @@ class ManageWorld:
         with mock.patch.multiple(install, installed_image=mock.Mock(return_value='sha256:' + 'c' * 64),
                                  require_db=mock.Mock(), oneshot=self.oneshot, inspect=self.inspect,
                                  root_file=self.root, run_helper=self.run_helper, read_protected_env=mock.Mock(
-                                     return_value=f'CPT_STUDIO_SECRET_KEY={SECRET_VALUE}\n'.encode())):
+                                     return_value=f'CPT_STUDIO_SECRET_KEY={SECRET_VALUE}\n'.encode()),
+                                 app_script=self.app_script,
+                                 declaration_names=lambda ctx, words: words in self.declared):
             return install.phase_manage(ctx)
 
     def acts(self):
@@ -525,6 +535,37 @@ class ManagePhaseTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts(), [['manage', 'grant_operator', '--username', 'second-operator', '--reason-file',
                                          '/run/cpt-manage/reason', '--by', 'Ada Lovelace', '--authorization-ref',
                                          f'{DECLARATION}@{COMMIT}', '--review-by', REVIEW_BY]])
+        self.assertEqual(world.scripts, [(install.GRANT_CHECK, {'username': 'second-operator'})])
+
+    def test_a_revoked_account_is_not_granted_again_at_the_door_unless_the_declaration_names_the_regrant(self):
+        # refutation, installer lens A-1: the door held no revocation rule - ops-agent, revoked, was granted again
+        grant = ['--command', 'grant-operator', '--username', 'ops-agent', '--reason-file', 'REASON', '--by',
+                 'Ada Lovelace', '--review-by', REVIEW_BY]
+        for state in ({'exists': True, 'operator': False, 'revoked': True}, {'exists': True, 'operator': False},
+                      {'exists': True, 'revoked': None}, ['not', 'a', 'dict'], {'exists': False}, {}):
+            for extra, declared in (((), ()), (('--regrant', 'ops-agent'), ()), ((), ('--regrant ops-agent',))):
+                with self.subTest(state=state, extra=extra, declared=declared):
+                    world = ManageWorld(self.tmp, grant=state, declared=declared)
+                    with self.assertRaises(install.InstallError) as caught:
+                        world.run(*grant, *extra)
+                    self.assertEqual(world.acts(), [])  # nothing granted
+                    self.assertRegex(str(caught.exception), 'stays revoked|is not an account here')
+        # both given: the run names the re-grant and its declaration does - and the command is told
+        world = ManageWorld(self.tmp, grant={'exists': True, 'operator': False, 'revoked': True},
+                            declared=('--regrant ops-agent',))
+        details = world.run(*grant, '--regrant', 'ops-agent')
+        self.assertEqual(world.acts()[0][-1], '--regrant')
+        self.assertEqual(details['grant_check'], {'exists': True, 'operator': False, 'revoked': True})
+        # a --regrant for an account that was never revoked, or for another account, is refused
+        world = ManageWorld(self.tmp, declared=('--regrant ops-agent',))
+        with self.assertRaisesRegex(install.InstallError, 'never revoked'):
+            world.run(*grant, '--regrant', 'ops-agent')
+        self.assertEqual(world.acts(), [])
+        self.assertIn('--regrant names the account', refused('--phase', 'manage', *[
+            '/r' if part == 'REASON' else part for part in grant], '--regrant', 'platform-operator'))
+        self.assertIn('--regrant is not used by --command revoke-operator', refused(
+            '--phase', 'manage', '--command', 'revoke-operator', '--username', 'ops-agent', '--reason-file', '/r',
+            '--by', 'Ada Lovelace', '--regrant', 'ops-agent'))
 
     def test_issue_enrolment_keeps_the_code_root_only_and_never_in_output_argv_or_receipt(self):
         world = ManageWorld(self.tmp)
