@@ -18,6 +18,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from studio import disposal, models, record_bundle
+from studio.storage import OriginalCorrupted
 
 
 class Command(BaseCommand):
@@ -49,6 +50,9 @@ class Command(BaseCommand):
             summary = record_bundle.export_practice(workspace, options['out'])
         except record_bundle.ExportRefused as exc:
             raise CommandError(f'{exc} Nothing was written.')
+        except (OriginalCorrupted, OSError) as exc:  # the half-written folder is already gone (export_practice)
+            raise CommandError(f'A stored file could not be read back unchanged, or lies outside the practice\'s folder '
+                               f'({type(exc).__name__}); the export was abandoned and nothing was kept.')
         event = models.DisposalEvent.objects.create(
             stage=models.DisposalEvent.EXPORTED, scope=models.DisposalEvent.WORKSPACE, workspace_id=workspace.pk,
             encounter_ids=summary['encounter_ids'],

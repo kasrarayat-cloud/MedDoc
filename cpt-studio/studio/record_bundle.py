@@ -36,7 +36,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from . import customer, models, state
-from .storage import read_original
+from .storage import OriginalCorrupted, read_original
 
 FORMAT = 'cpt-studio-record-bundle@1'
 PRACTICE_FORMAT = 'cpt-studio-practice-export@1'
@@ -92,19 +92,30 @@ def record_json(encounter, membership, *, now=None) -> dict:
 
 # --- the files of a document --------------------------------------------------------------------------------------------
 
+def own_file(encounter, name) -> str:
+    """``name`` when it lies in the document's own practice's folder (<its workspace id>/...), else OriginalCorrupted:
+    a row of one practice that names another practice's file is a corrupted or crafted row, and that file's bytes are
+    never read for it, let alone served."""
+    if not isinstance(name, str) or name.split('/', 1)[0] != str(encounter.workspace_id):
+        raise OriginalCorrupted('A stored file of this document lies outside its practice\'s folder.')
+    return name
+
+
 def document_files(encounter, *, every_report=False) -> list:
     """[(path in the bundle, bytes)] of ``encounter``'s files: its original (read and sha256-checked by
     storage.read_original; the pasted text for a paste), the converted PDF of a Word document, and the latest report PDF
     (with ``every_report``, every stored export as stored). storage.OriginalCorrupted or OSError when a stored file
-    cannot be read back unchanged."""
+    cannot be read back unchanged, or lies outside the document's practice's folder (own_file)."""
     files = []
     source = customer.original_file(encounter)
     if source is not None:
+        own_file(encounter, source.storage_name)
         files.append((f'original/{customer.safe_name(source.original_name)}', read_original(source)))
         view = customer.converted_view(encounter) if source.media_type == customer.DOCX else None
         if view is not None:
             stem = (source.original_name or 'document').rsplit('.', 1)[0]
-            data = read_original(SimpleNamespace(storage_name=view.view_pdf_storage_name, sha256=view.view_pdf_sha256))
+            data = read_original(SimpleNamespace(storage_name=own_file(encounter, view.view_pdf_storage_name),
+                                                 sha256=view.view_pdf_sha256))
             files.append((f'converted/{customer.safe_name(f"{stem}.pdf", "document.pdf")}', data))
     else:
         pasted = customer.view_content(encounter)  # a paste is viewed as its text: the document itself

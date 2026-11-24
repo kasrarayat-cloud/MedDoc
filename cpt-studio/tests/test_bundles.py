@@ -24,10 +24,11 @@ from pathlib import Path
 from unittest import mock
 
 from django.core.management import CommandError, call_command
+from django.db import connection
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from studio import audit, bundle_api, jobs, models, rate, read_audit, record_bundle
+from studio import audit, bundle_api, jobs, models, rate, read_audit, record_bundle, storage
 from studio.fable import document as fable_document
 from tests.support import coding as f
 from tests.support import rounds
@@ -255,6 +256,53 @@ class IsolationTests(BundleCase, TestCase):
         record = json.loads(files['record.json'])
         self.assertEqual(len(record['rounds']), 2)
         self.assertEqual(sum(len(round_['decisions']) for round_ in record['rounds']), 2)
+
+
+@override_settings(STORAGES={'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                             'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+class ForeignFolderTests(BundleCase, TestCase):
+    """Finding 6 (refute-lane4, data loss P8): a row of practice A that names a file in practice B's folder - a corrupted
+    or crafted row - never puts B's bytes into A's bundle or export."""
+
+    def crafted(self):
+        word = self.word(marker='W')
+        foreign = self.coded(ws=self.other_ws, member=self.outsider, marker='FAR')
+        source = foreign.files.get()
+        Round.objects.filter(encounter=word).update(view_pdf_storage_name=source.storage_name,
+                                                    view_pdf_sha256=source.sha256)
+        return word, source
+
+    def test_a_bundle_never_serves_a_file_named_in_another_practices_folder(self):
+        word, source = self.crafted()
+        answer = self.get_bundle(word)
+        self.assertEqual(answer.status_code, 409)
+        self.assertNotIn(storage.stored_path(source.storage_name).read_bytes(), answer.content)
+        self.assertNotIn(b'ZZ-TEXT-MARKER-FAR', answer.content)
+        self.assertFalse(Access.objects.exists())  # nothing was served, so nothing was recorded as served
+        membership = models.Membership.objects.get(user=self.reviewer, workspace=self.ws)
+        with self.assertRaises(storage.OriginalCorrupted):
+            record_bundle.bundle(models.Encounter.objects.get(pk=word.pk), membership)
+
+    def test_an_original_named_in_another_practices_folder_is_refused_too(self):
+        note = self.coded(marker='MINE')
+        name, digest, _ = storage.store_original(self.other_ws.pk, b'%PDF-1.7 ZZ-TEXT-MARKER-FAR %%EOF', 'far.pdf')
+        with connection.cursor() as cursor:  # SourceFile refuses updates through the ORM: a crafted row
+            cursor.execute('UPDATE studio_sourcefile SET storage_name = %s, sha256 = %s WHERE encounter_id = %s',
+                           [name, digest, note.pk])
+        answer = self.get_bundle(note)
+        self.assertEqual(answer.status_code, 409)
+        self.assertNotIn(b'ZZ-TEXT-MARKER-FAR', answer.content)
+
+    def test_a_practice_export_with_such_a_row_is_abandoned_and_keeps_nothing(self):
+        self.crafted()
+        with tempfile.TemporaryDirectory() as scratch:
+            reason = Path(scratch) / 'reason.txt'
+            reason.write_text('Synthetic: the practice asked for its data.', encoding='utf-8')
+            with self.assertRaisesMessage(CommandError, "lies outside the practice's folder"):
+                call_command('export_workspace', '--workspace', str(self.ws.pk), '--out', str(Path(scratch) / 'out'),
+                             '--by', 'Synthetic Operator', '--reason-file', str(reason), stdout=io.StringIO())
+            self.assertFalse((Path(scratch) / 'out').exists())
+        self.assertFalse(models.DisposalEvent.objects.exists())
 
 
 # --- a whole practice -------------------------------------------------------------------------------------------------------
