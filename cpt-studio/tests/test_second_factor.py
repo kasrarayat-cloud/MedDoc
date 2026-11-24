@@ -620,6 +620,52 @@ class ChallengeRaceTests(TransactionTestCase):
 
 
 @override_settings(STORAGES=PLAIN_STATIC)
+class NextTests(TestCase):
+    """Where a finished second factor goes is a path of the admin host alone (refutation r2, finding 5;
+    l2fa/test_probes.py P1: a step-up's next of '///ops/people' was answered Location: ///ops/people, which a browser
+    reads as https://ops/people)."""
+
+    LEAVING = ('///ops/people', '//ops/people', '////ops/people', '/\\ops/people', '\\/ops/people', '/\t/ops/people',
+               '/ops/people\n', '/ops/people\r\nX-Injected: 1', ' /ops/people', '\t/ops/people', '/ops/people\x00',
+               '/ops/\u200bpeople', 'https://admin.quillmd.com/ops/people', 'http://ops/people', '//admin.quillmd.com/ops/',
+               'ops/people', '/login/', '/ops/../login/', '')
+
+    def test_safe_next_keeps_only_a_path_of_this_host(self):
+        for target in self.LEAVING:
+            with self.subTest(target=target):
+                self.assertEqual(second_factor.safe_next(target, ADMIN), '/ops/')
+        for target in ('/ops/people', '/ops/activity?kind=people', '/account/'):
+            with self.subTest(target=target):
+                self.assertEqual(second_factor.safe_next(target, ADMIN), target)
+
+    def test_a_step_up_by_key_or_by_recovery_code_never_leaves_the_host(self):
+        operator, key = enrolled_operator()
+        codes = second_factor.new_recovery_codes(operator)
+        client = admin_client()
+        self.assertEqual(sign_in(client, operator, key).status_code, 302)
+        for target in ('///ops/people', '/\\ops/people', '/ops/people\r\nX-Injected: 1'):
+            with self.subTest(target=target):
+                page = client.get('/login/second-factor', {'next': target})
+                self.assertEqual(page.status_code, 200)
+                hidden = __import__('re').search(r'name="next" value="([^"]*)"', page.content.decode()).group(1)
+                self.assertEqual(hidden, '/ops/')  # the hidden next the form sends back
+                back = key_step(client, key, next_url=target)
+                self.assertEqual((back.status_code, back['Location']), (302, '/ops/'))
+        used = client.post('/login/recovery?next=///ops/people', {'code': codes[0], 'next': '///ops/people'})
+        self.assertEqual((used.status_code, used['Location']), (302, '/ops/'))
+        back = key_step(client, key, next_url='/ops/people')
+        self.assertEqual((back.status_code, back['Location']), (302, '/ops/people'))  # a console page stays
+
+    def test_the_sign_in_s_next_never_leaves_the_host_either(self):
+        operator, key = enrolled_operator()
+        client = admin_client()
+        answer = password_step(client, operator, next_url='///ops/people')
+        self.assertEqual(answer['Location'], '/login/second-factor')
+        self.assertEqual(client.session[second_factor.PENDING]['next'], '/ops/')
+        self.assertEqual(key_step(client, key)['Location'], '/ops/')
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
 class FreshSessionTests(TestCase):
     """A password checked at the admin door ends the session it was posted in, and its sign-in waits for the key in a
     fresh one (refutation r2, finding 4; l2fa/test_probes.py P2 and test_p2_own.py)."""

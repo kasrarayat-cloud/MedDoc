@@ -178,7 +178,7 @@ def admin_login_view(request):
     if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()},
                                            require_https=request.is_secure()):
         next_url = '/ops/'
-    next_url = second_factor.safe_next(next_url)
+    next_url = second_factor.safe_next(next_url, request.get_host())
     error = ''
     if request.method == 'POST':
         submitted = request.POST.get('username', '').strip()[:150]

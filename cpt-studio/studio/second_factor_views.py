@@ -61,9 +61,12 @@ def _who(request):
 
 
 def _next_of(request, state):
+    """Where a finished second factor goes: the pending sign-in's own next, or the step-up's ?next=, as safe_next keeps
+    it - a path of this host alone naming a console page or the account page (refutation r2, finding 5)."""
+    host = request.get_host()
     if state is not None:
-        return factor.safe_next(state.get('next'))
-    return factor.safe_next(request.POST.get('next') or request.GET.get('next'))
+        return factor.safe_next(state.get('next'), host)
+    return factor.safe_next(request.POST.get('next') or request.GET.get('next'), host)
 
 
 def _page(request, template, context, error=''):

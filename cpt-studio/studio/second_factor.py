@@ -55,6 +55,7 @@ import json
 import math
 import re
 import secrets
+import unicodedata
 from datetime import datetime, timedelta, timezone as dt_timezone
 from urllib.parse import urlencode, urlsplit
 
@@ -66,6 +67,7 @@ from django.db.models import Q
 from django.http import Http404, HttpResponseRedirect
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
+from django.utils.http import url_has_allowed_host_and_scheme
 from webauthn import (generate_authentication_options, generate_registration_options, options_to_json,
                       verify_authentication_response, verify_registration_response)
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url, parse_client_data_json
@@ -154,13 +156,27 @@ def step_up_location(next_url) -> str:
     return f'{STEP_UP_PATH}?{urlencode({"next": next_url})}'
 
 
-def safe_next(target) -> str:
-    """Where a finished second factor goes: ``target`` when it is a console page of the admin host or the account page,
-    else the console's front page."""
+def safe_next(target, host=None) -> str:
+    """Where a finished second factor goes: ``target`` when it is a path of this site alone (local_path) that names a
+    console page of the admin host or the account page, else the console's front page."""
     target = str(target or '')
+    if not local_path(target, host):
+        return CONSOLE_FRONT
     if target == ACCOUNT_PAGE or hosts.is_console_page(target):
         return target
     return CONSOLE_FRONT
+
+
+def local_path(target, host=None) -> bool:
+    """Whether ``target`` is a path of this site and nothing else: exactly one leading '/', not followed by '/' or a
+    backslash; no backslash, control, format or other invisible character anywhere (Unicode category C); and accepted
+    by Django's url_has_allowed_host_and_scheme with no host but ``host``. A browser reads '///ops/people' as the host
+    'ops' (refutation r2, finding 5), and '/\\ops' or a tab inside the slashes the same way."""
+    if not isinstance(target, str) or not target.startswith('/') or target[1:2] in ('/', '\\'):
+        return False
+    if any(char == '\\' or unicodedata.category(char)[0] == 'C' for char in target):
+        return False
+    return url_has_allowed_host_and_scheme(target, allowed_hosts={host} if host else set(), require_https=False)
 
 
 # --- the ceremony ---------------------------------------------------------------------------------------------------------
@@ -524,7 +540,7 @@ def begin(request, user, sign_in_ref, next_url):
     else:
         request.session.flush()
     request.session[PENDING] = {'user': str(user.pk), 'at': request_meta.epoch_seconds(), 'ref': str(sign_in_ref),
-                                'next': safe_next(next_url), 'pw': user.get_session_auth_hash()}
+                                'next': safe_next(next_url, request.get_host()), 'pw': user.get_session_auth_hash()}
     request.session[request_meta.SESSION_SIGN_IN_REF] = str(sign_in_ref)  # the second step's records carry it
 
 
