@@ -635,6 +635,9 @@ class RollbackRemovalDisposalTests(TemporaryDirectoryTest):
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
 
         def coded(image_id, env_bytes, body, params, **kwargs):
+            if body == install.END_EVERY_SESSION:  # repair round 2, sessions-2: no pair parked, or one before the
+                calls.append(('end_sessions', params['to_revision']))  # session policy: ended before the removal
+                return {'ended': 1, 'event': EVENT_ID}
             assert body == install.CODING_MADE, body[:60]
             return {'coding': {'encounters': [], 'created': [], 'rounds': 0, 'answers': 0,
                                'decisions': {'approve': 0, 'reject': 0, 'revoke': 0}, 'approved': 0,

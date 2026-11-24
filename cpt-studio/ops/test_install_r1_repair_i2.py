@@ -6,6 +6,10 @@ host guard; every Docker, root-helper and in-image call stood in. Synthetic data
   I2-2  switchback-0: a dispose step that changes rows (close, execute, a replay with --execute) runs only while the
         pair under the canonical names has disposal (read as the switch-back's refusal reads it); the dry runs and the
         ledger stay open; an install or switch in progress still refuses every step.
+  I2-3  sessions-2: rollback-app ends every session (END_EVERY_SESSION, with the switch-back's receipt fields) before
+        an older web without the session policy can serve again - in the S4 keep layout before the switch back, in the
+        removal before the pair is removed (the parked pair without the policy, or none parked); a failed end is never
+        skipped (the keep layout's new web keeps serving; the removal leaves the pair stopped, not removed).
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair_i2 -v
 """
@@ -304,6 +308,211 @@ class ServingDisposalTests(TemporaryDirectoryTest):
                     details, error = self.dispose(world, extra)
                     self.assertIn('in progress', str(error))
                     self.assertEqual(world.acts(), [])
+
+
+# --- I2-3: rollback-app ends every session before an older web without the session policy serves again ---------------
+
+EVENT_ID = '0f8fad5b-d9cb-469f-a165-70867728950e'
+
+
+class RollbackKeepSessionTests(TemporaryDirectoryTest):
+    """rollback-app in the S4 keep layout switches the upstream back to the old web (return_to_old_web)."""
+
+    def keep(self):
+        """The S4 keep layout (round 1's KeepLayoutDisposalTests' own): this revision's incoming web serves on 9151,
+        its worker stopped, the old worker parked; the old web (OLD) runs on 9150 with no traffic."""
+        from test_install_bluegreen import WORKER
+        from test_install_r2 import World, named
+        from test_install_bluegreen import run_app
+
+        class KeepSessionWorld(World):
+            session_answer = {'ended': 3, 'event': EVENT_ID}
+
+            def app_script(self, image_id, env_bytes, body, params, **kwargs):
+                if body == install.END_EVERY_SESSION:
+                    self.act('end_sessions', image_id, params['from_revision'], params['to_revision'])
+                    if isinstance(self.session_answer, BaseException):
+                        raise self.session_answer
+                    return self.done(dict(self.session_answer))
+                return super().app_script(image_id, env_bytes, body, params, **kwargs)
+        world = KeepSessionWorld(self.tmp)
+        world.unhealthy.add(WORKER)
+        world.close_answer = named({'e1': ['member_answer']})
+        details, failure = run_app(world)
+        self.assertIn('the new web keeps serving on 9151', str(failure))
+        world.unhealthy.discard(WORKER)
+        world.close_answer = named({})
+        world.inflight = {}
+        world.events.clear()
+        world.closes.clear()
+        return world
+
+    def rollback(self, world, pre_policy):
+        import test_install
+        from test_install_r2 import run_rollback_app
+        with mock.patch.object(test_install, 'PRE_SESSION_POLICY_REVISIONS', set(pre_policy)):
+            return run_rollback_app(world)
+
+    def test_every_session_is_ended_before_the_switch_back_to_a_web_without_the_policy(self):
+        from test_install_bluegreen import IMAGE, NEXT, OLD, OLD_IMAGE, REVISION
+        world = self.keep()
+        details, failure = self.rollback(world, (OLD,))
+        self.assertIsNone(failure, failure and str(failure))
+        self.assertEqual(details['outcome'], 'switched')
+        acts = world.acts('close', 'end_sessions', 'put_back', 'vhost', 'reload', 'drain')
+        ended = acts.index(('end_sessions', IMAGE, REVISION, OLD))
+        self.assertEqual(acts[0][0], 'close')                              # the first close, then the end,
+        self.assertEqual(acts[ended + 1:ended + 3], [('put_back', OLD_IMAGE), ('vhost', 'replace', 9150)])
+        self.assertEqual(world.acts('end_sessions'), [('end_sessions', IMAGE, REVISION, OLD)])  # once
+        # the receipt's fields are a switch-back's (B4)
+        record = details['sessions_ended']
+        self.assertEqual((record['ended'], record['event'], record['from_revision'], record['to_revision']),
+                         (3, EVENT_ID, REVISION, OLD))
+        self.assertTrue(record['started_at'])
+        self.assertIn('every session ended (3', details['summary'])
+        self.assertNotIn(NEXT, world.containers)
+
+    def test_between_two_revisions_with_the_policy_no_session_is_ended(self):
+        world = self.keep()
+        details, failure = self.rollback(world, ())
+        self.assertIsNone(failure, failure and str(failure))
+        self.assertEqual(world.acts('end_sessions'), [])
+        self.assertNotIn('sessions_ended', details)
+
+    def test_an_end_that_fails_keeps_this_revisions_web_serving_and_says_it_may_have_ended_them(self):
+        from test_install_bluegreen import NEXT, OLD
+        world = self.keep()
+        world.session_answer = install.InstallError('Ending every session failed (exit 1).')
+        details, failure = self.rollback(world, (OLD,))
+        self.assertIsInstance(failure, install.InstallError)
+        message = str(failure)
+        self.assertIn('the end of every session did not finish (Ending every session failed (exit 1).)', message)
+        self.assertIn('the new web keeps serving on 9151', message)
+        self.assertIn('it may have ended every session', message)
+        self.assertEqual(world.acts('vhost', 'reload'), [])  # never the old web over sessions it would read again
+        self.assertEqual((world.nginx_port, world.containers[NEXT]['running']), (9151, True))
+        self.assertTrue(failure.details['sessions_ended']['started_at'])
+        self.assertEqual(failure.details['outcome'], 'kept')
+
+    def test_a_policy_that_cannot_be_read_refuses_before_anything_is_stopped(self):
+        from test_install_bluegreen import OLD
+        world = self.keep()
+        before = world.names()
+        cannot = install.InstallError(f'Cannot tell whether {OLD[:12]} has release 1\'s session policy: this checkout '
+                                      'cannot read that revision.')
+        with mock.patch.object(install, 'has_session_policy', side_effect=cannot):
+            details, failure = self.rollback(world, (OLD,))
+        self.assertIn('Nothing was stopped or removed.', str(failure))
+        self.assertEqual(world.names(), before)
+        self.assertEqual(world.acts('stop', 'close', 'end_sessions', 'vhost'), [])
+
+
+class RollbackRemovalSessionTests(TemporaryDirectoryTest):
+    """rollback-app's removal of this revision's pair: what runs next is the parked pair, or not known."""
+
+    REVISION, OLD, LATER = 'a' * 40, 'b' * 40, 'c' * 40
+    IMAGE, OLD_IMAGE = 'sha256:' + 'c' * 64, 'sha256:' + 'd' * 64
+
+    def containers(self, parked=None):
+        def container(role, image, revision, running=True):
+            return {'Id': f'{role}-{revision[:4]}', 'Image': image, 'Created': '2026-11-01T12:00:00.000000Z',
+                    'State': {'Running': running},
+                    'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: role,
+                                          install.REVISION_LABEL: revision}}}
+        live = {install.SERVICES[role]: container(role, self.IMAGE, self.REVISION) for role in ('web', 'worker')}
+        if parked is not None:
+            live.update({install.SERVICES[role] + '-previous': container(role, self.OLD_IMAGE, parked, running=False)
+                         for role in ('web', 'worker')})
+        return live
+
+    def run_phase(self, live, *, pre_policy=('b' * 40,), session_answer=None, rm_fails=None):
+        import test_install
+        calls = []
+
+        def fake_docker(*args, **kwargs):
+            calls.append(args[:3])
+            if args[0] == 'rm':
+                if rm_fails is not None:
+                    raise rm_fails
+                for name in [name for name, c in live.items() if c['Id'] == args[-1]]:
+                    del live[name]
+            if args[0] == 'stop':
+                for name in [name for name in live if name == args[-1]]:
+                    live[name]['State']['Running'] = False
+            return mock.Mock(returncode=0, stdout=b'', stderr=b'')
+
+        def in_image(image_id, env_bytes, body, params, **kwargs):
+            if body == install.END_EVERY_SESSION:
+                calls.append(('end_sessions', image_id, params['from_revision'], params['to_revision']))
+                if isinstance(session_answer, BaseException):
+                    raise session_answer
+                return {'ended': 2, 'event': EVENT_ID}
+            assert body == install.CODING_MADE, body[:60]
+            return {'coding': {'encounters': [], 'created': [], 'rounds': 0, 'answers': 0,
+                               'decisions': {'approve': 0, 'reject': 0, 'revoke': 0}, 'approved': 0,
+                               'exports': {'draft': 0, 'approved': 0}}}
+        ctx = install.Context(mock.Mock(phase='rollback-app', revision=self.REVISION), self.tmp)
+        with mock.patch.multiple(install, inspect=lambda kind, name: live.get(name), docker=fake_docker,
+                                 read_protected_env=mock.Mock(return_value=b''), require_db=mock.Mock(),
+                                 undo_hazards=mock.Mock(return_value={}),
+                                 close_undone_stages=mock.Mock(return_value={'closed': 0, 'kinds': [], 'hazards': {},
+                                                                             'relabel': []}),
+                                 put_back_states=mock.Mock(return_value={'encounters': 0, 'changed': {}}),
+                                 stage_kinds_of=mock.Mock(return_value=list(install.COMMON_STAGE_KINDS)),
+                                 app_script=in_image, keep_container_log=mock.Mock(return_value={'kept': 0})), \
+                mock.patch.object(test_install, 'PRE_SESSION_POLICY_REVISIONS', set(pre_policy)):
+            try:
+                return install.phase_rollback_app(ctx), None, calls
+            except install.InstallError as error:
+                return None, error, calls
+
+    def test_every_session_is_ended_before_the_pair_is_removed_when_what_runs_next_lacks_the_policy(self):
+        for parked, to_revision, said in ((self.OLD, self.OLD, f'{self.REVISION[:12]} and {self.OLD[:12]} do not share'),
+                                          (None, None, 'the revision that runs after')):
+            with self.subTest(parked=parked):
+                details, error, calls = self.run_phase(self.containers(parked))
+                self.assertIsNone(error, error and str(error))
+                names = [call[0] for call in calls]
+                end = calls.index(('end_sessions', self.IMAGE, self.REVISION, to_revision))
+                self.assertEqual(names[:2], ['stop', 'stop'])  # the pair is stopped first: no sign-in follows the end
+                self.assertNotIn('rm', names[:end])  # and it is removed only after the end
+                self.assertIn('rm', names[end:])
+                record = details['sessions_ended']
+                self.assertEqual((record['ended'], record['event'], record['to_revision']), (2, EVENT_ID, to_revision))
+                self.assertIn(said, details['summary'])
+
+    def test_a_parked_pair_with_the_policy_ends_none(self):
+        details, error, calls = self.run_phase(self.containers(self.LATER))
+        self.assertIsNone(error, error and str(error))
+        self.assertFalse([call for call in calls if call[0] == 'end_sessions'])
+        self.assertNotIn('sessions_ended', details)
+
+    def test_an_end_that_fails_leaves_the_pair_stopped_and_not_removed(self):
+        for failure in (install.InstallError('Ending every session failed (exit 1).'), KeyboardInterrupt()):
+            with self.subTest(failure=type(failure).__name__):
+                live = self.containers(None)
+                details, error, calls = self.run_phase(live, session_answer=failure)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn('Web and worker stopped, not removed: the end of every session did not finish', str(error))
+                self.assertIn('it may have ended every session', str(error))
+                self.assertFalse([call for call in calls if call[0] == 'rm'])
+                self.assertEqual(sorted(live), [install.SERVICES['web'], install.SERVICES['worker']])
+                self.assertTrue(error.details['sessions_ended']['started_at'])
+
+    def test_a_removal_that_fails_after_the_end_says_every_session_was_ended(self):
+        details, error, calls = self.run_phase(self.containers(None),
+                                               rm_fails=install.InstallError('docker rm failed (exit 1).'))
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('Every session was ended (2; SecurityEvent sessions.ended_at_install)', str(error))
+        self.assertEqual(error.details['sessions_ended']['ended'], 2)
+
+    def test_a_parked_pair_whose_policy_cannot_be_read_refuses_before_anything_is_stopped(self):
+        cannot = install.InstallError(f'Cannot tell whether {self.OLD[:12]} has release 1\'s session policy: this '
+                                      'checkout cannot read that revision.')
+        with mock.patch.object(install, 'has_session_policy', side_effect=cannot):
+            details, error, calls = self.run_phase(self.containers(self.OLD))
+        self.assertIn('Nothing was stopped or removed.', str(error))
+        self.assertEqual(calls, [])
 
 
 if __name__ == '__main__':

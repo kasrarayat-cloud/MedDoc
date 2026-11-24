@@ -1143,7 +1143,11 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
             closed.update(kinds=kinds, reason=reason)
             return {'closed': 2, 'kinds': ['astra', 'fable'], 'hazards': {}, 'relabel': []}
         names = {install.SERVICES[role]: role for role in ('web', 'worker')}
+        ended = []
         def counted(image_id, env_bytes, body, params, **kwargs):  # the declared note, read in this image
+            if body == install.END_EVERY_SESSION:  # refutation round 2, sessions-2: no pair is parked, so the next
+                ended.append((image_id, dict(params)))  # is not known, and every session is ended first
+                return {'ended': 2, 'event': '0f8fad5b-d9cb-469f-a165-70867728950e'}
             self.assertEqual((image_id, body), (IMAGE, install.CODING_MADE))
             return {'coding': {'encounters': [], 'created': [], 'rounds': 0, 'answers': 0,
                                'decisions': {'approve': 0, 'reject': 0, 'revoke': 0}, 'approved': 0,
@@ -1162,6 +1166,9 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
         # refutation, installer lens A-2: rollback-app removes the pair that served the site - each log kept first
         removals = [call for call in calls if call[0] in ('keep-log', 'rm')]
         self.assertEqual([call[0] for call in removals], ['keep-log', 'rm', 'keep-log', 'rm'])
+        self.assertEqual([(image, params['from_revision'], params['to_revision']) for image, params in ended],
+                         [(IMAGE, REVISION, None)])
+        self.assertEqual(details['sessions_ended']['ended'], 2)
         self.assertEqual(details['not_carried_back']['note'],
                          'this revision coded no encounter: there is nothing of its own to carry back, and the earlier '
                          f'revision shows its own records only; {install.FOUR_TABLES_KEPT}')

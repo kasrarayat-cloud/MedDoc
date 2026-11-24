@@ -108,7 +108,10 @@ a worker of different images, it refuses and stops nothing: which web serves, an
 whose records to read, cannot be told from the names. It removes only this
 revision's own pair: a web or worker under the canonical names that carries
 another revision - the old pair an undo put back - is refused, and nothing is
-stopped.) It keeps the database,
+stopped.) When the web that serves next has no session policy - in the keep
+layout the old web, in the removal the parked pair, or a pair not known when
+none is parked - it ends every session first (refutation round 2,
+sessions-2: **Known limits**), as a `switch-back` does at B4. It keeps the database,
 volumes, images and secrets, and needs the database to be running. First, with
 the pair's own image, it reads the records their revision made that an older
 revision would act on, or show, wrongly (listed under **Reinstalling an older
@@ -2078,12 +2081,25 @@ LibreOffice runs from `/usr/bin` and `/usr/lib/libreoffice`.
   and at a `switch-back`'s B4 to one, every `django_session` row is deleted
   with one SecurityEvent `sessions.ended_at_install` (a count and the two
   revisions). An `app` or `switch-back` between two revisions that both have
-  the policy ends none. Left (refutation round 1, rollback-3's window): a
-  sign-in on the older web in the seconds between S2's end and the end of S5's
-  drain keeps its row; it signs nobody in on release 1 (its cookie's name is
-  not read), and the next `switch-back` ends it at B4. `rollback-app` ends no
-  session: after one that returns an older web, a sign-in made on that web in
-  those seconds is valid there again until its own 8-hour limit.
+  the policy ends none. A sign-in on the older web in the seconds between S2's
+  end and the end of S5's drain (refutation round 1, rollback-3's window) keeps
+  its row: it signs nobody in on release 1 (its cookie's name is not read), and
+  release 1's sign-out everywhere cannot find it (it reads only the rows
+  release 1 linked to the account: refutation round 2, sessions-2). Every way
+  back to the older web through this installer ends it first: a `switch-back`
+  at B4, and `rollback-app` (sessions-2) - in the S4 keep layout before it
+  switches the upstream back, and in its removal of this revision's pair before
+  the pair is removed, when the parked pair has no session policy or none is
+  parked (what runs next is then not known) - with the same receipt fields
+  (`sessions_ended`) and SecurityEvent. A failed end is never skipped: the keep
+  layout's new web keeps serving, the removal leaves the pair stopped and not
+  removed, and `rollback-app` is run again. Left: an `app`'s own undo at S3 or
+  S4 returns the older web within seconds of S2's end without ending them
+  again, and `rollback-app` in the back layout (which such an undo can leave)
+  finds the older web already serving and ends none; a sign-in made on it in
+  those seconds stays valid there until its own 8-hour limit. So does one under
+  an older revision that its own installer puts back over release 1 without
+  `rollback-app` (it predates the policy).
 - Release 1b, not in this release: least-privilege database roles (A10; the app
   connects as the bootstrap superuser), the weekly dependency scan (A12), the
   malware scan's phase (D5) and stored-file encryption's installer side (F1:

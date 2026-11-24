@@ -5301,6 +5301,10 @@ def sessions_summary(sessions) -> str:
     """'; every session ended (12): ...' for a receipt's summary ('' when none was ended)."""
     if not isinstance(sessions, dict) or not isinstance(sessions.get('ended'), int):
         return ''
+    if sessions.get('to_revision') is None:  # rollback-app's removal with no parked pair: what runs next is not known
+        return (f'; every session ended ({sessions["ended"]}: the revision that runs after '
+                f'{str(sessions.get("from_revision"))[:12]} is not known, and one before release 1 has no session '
+                'policy)')
     return (f'; every session ended ({sessions["ended"]}: {str(sessions.get("from_revision"))[:12]} and '
             f'{str(sessions.get("to_revision"))[:12]} do not share release 1\'s session policy)')
 
@@ -10240,6 +10244,11 @@ def rollback_from_keep(ctx, keep) -> dict:
     if refusal:
         raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was stopped or removed.',
                            details={'disposal': disposed})
+    try:  # refutation round 2, sessions-2: decided before anything is stopped, from both revisions' trees
+        ends_sessions = sessions_end_needed(ctx.revision, old_revision)
+    except InstallError as error:
+        raise InstallError(f'{error} Nothing was stopped or removed.') from error
+    sessions = {}
     baseline = own_baseline()
     parked_worker = keep['parked_worker']
     previous = {'image': (parked_worker or keep['web'])['Image'], 'revision': old_revision}
@@ -10271,10 +10280,27 @@ def rollback_from_keep(ctx, keep) -> dict:
             # revision coded that is not carried back (coding_note)
             base = coding_note(image_id, env, ctx.revision)
             record['not_carried_back'] = with_update_note(base, [first])
-            message, _, outcome = return_to_old_web(
-                ctx, cause, image_id=image_id, env_bytes=env, preflight=baseline, live=live, idle=idle,
-                old_revision=old_revision, previous=previous, parked_worker=parked, kinds=kinds, reason=reason,
-                first=first, first_at=first_at, details=record)
+            ended = None
+            if ends_sessions:
+                # refutation round 2, sessions-2: the old web reads its own rows again once it serves - a sign-in made
+                # on it in the seconds of the switch to this revision that this revision could not end (its sign-out
+                # everywhere reads only its own) - so every session is ended first, as a switch-back's B4 does before
+                # B5; one that does not finish leaves this revision's web serving, never the old one over them
+                record['sessions_ended'] = sessions
+                try:
+                    end_every_session(image_id, env, ctx.revision, old_revision, sessions)
+                except Exception as error:  # noqa: BLE001 — an interrupt goes on to the handler below, which says it
+                    ended = str(error) or type(error).__name__
+            if ended is None:
+                message, _, outcome = return_to_old_web(
+                    ctx, cause, image_id=image_id, env_bytes=env, preflight=baseline, live=live, idle=idle,
+                    old_revision=old_revision, previous=previous, parked_worker=parked, kinds=kinds, reason=reason,
+                    first=first, first_at=first_at, details=record)
+            else:
+                message, outcome = (f'{cause}: the end of every session did not finish ({ended}), so nothing more was '
+                                    f'done: {keep_note(live, idle)}. Rerun --phase rollback-app once it can end them.'
+                                    + kept_serving(image_id, env, [first], record)), \
+                    'kept'
             if record.get('stages_closed_after_drain') is not None:
                 record['not_carried_back'] = with_update_note(base, [first, record['stages_closed_after_drain']])
             if outcome == 'kept':  # refutation 6b-r1 P2: the old web served nothing, so the note was handed to none
@@ -10287,18 +10313,21 @@ def rollback_from_keep(ctx, keep) -> dict:
         raise InstallError(f'{cause}: {str(failure) or type(failure).__name__}; read "left" in this receipt, then '
                            'ops/INSTALL.md, Recovery notes.'
                            + (f' The close was started and gave no answer: it '
-                              f'{possibly_set_back(record["close_started_at"])}.' if unanswered else ''),
+                              f'{possibly_set_back(record["close_started_at"])}.' if unanswered else '')
+                           + sessions_ended_said(sessions),
                            details={**record, 'availability': stop_recorder(recorder),
                                     'left': left_summary()}) from failure
     if outcome != 'switched' or record.get('incoming_left'):
-        raise InstallError(message, details={**record, 'outcome': outcome, 'left': left_summary()})
+        raise InstallError(message + sessions_ended_said(sessions),
+                           details={**record, 'outcome': outcome, 'left': left_summary()})
     availability = record['availability']
     note = (record.get('not_carried_back') or {}).get('note')
     return {**record, 'outcome': outcome, 'message': message,
             'summary': f'switched back to {old_revision[:12]} on {live} (the S4 keep layout): '
                        f'{availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200; {removal_summary(record, keep)}; database, '
-                       'volumes, images and secrets kept' + (f'; {note}' if note else '')}
+                       'volumes, images and secrets kept' + (f'; {note}' if note else '')
+                       + sessions_summary(record.get('sessions_ended'))}
 
 
 def rollback_back(ctx, keep) -> dict:
@@ -10463,6 +10492,15 @@ def phase_rollback_app(ctx) -> dict:
         if refusal:
             raise InstallError(f'{refusal[:1].upper()}{refusal[1:]}; nothing was stopped or removed.',
                                details={'disposal': disposed})
+        # refutation round 2, sessions-2: so may neither be handed a session this revision could not end - a sign-in
+        # made on an older web in the seconds of the switch to this revision, which its sign-out everywhere never
+        # reads and the older web honours again - so every session is ended before the pair is removed, when the
+        # parked pair has no session policy or none is parked (fail closed: the next is not known)
+        try:
+            ends_sessions = parked_next is None or sessions_end_needed(ctx.revision, parked_next)
+        except InstallError as error:
+            raise InstallError(f'{error} Nothing was stopped or removed.') from error
+    sessions = {}
     for role in pair:
         stop_service_container(SERVICES[role], role)
     if pair:
@@ -10528,6 +10566,16 @@ def phase_rollback_app(ctx) -> dict:
                                + '. Rerun --phase rollback-app.' + set_back_clause([closed]),
                                details={'stages_closed': closed, 'states_put_back': put_back}) from error
         made = with_update_note(base, [closed])
+        if ends_sessions:  # the pair is stopped and nothing else serves: no sign-in can follow the end
+            try:
+                end_every_session(first['Image'], env, ctx.revision, parked_next, sessions)
+            except BaseException as error:  # noqa: BLE001 — an interrupt is said too; nothing is removed
+                raise InstallError(f'Web and worker stopped, not removed: the end of every session did not finish '
+                                   f'({str(error) or type(error).__name__}), and no earlier pair may serve over '
+                                   'the sessions it would honour again. Rerun --phase rollback-app once it can end '
+                                   'them.' + sessions_ended_said(sessions) + set_back_clause([closed]),
+                                   details={'stages_closed': closed, 'states_put_back': put_back,
+                                            'not_carried_back': made, 'sessions_ended': sessions}) from error
     else:
         made = None
     removed = {}
@@ -10540,8 +10588,16 @@ def phase_rollback_app(ctx) -> dict:
         changed = (put_back or {}).get('changed')
         parts = _undo_parts([closed]) if closed is not None else None
         if not changed and not (closed is not None and (parts is None or parts[1])):
+            if sessions.get('started_at'):  # refutation round 2, sessions-2: the receipt says they were ended
+                ended_record = {'stages_closed': closed, 'not_carried_back': made, 'sessions_ended': sessions}
+                if not isinstance(error, Exception):
+                    error.details = ended_record
+                    raise
+                raise InstallError(f'{str(error) or type(error).__name__}: rerun --phase rollback-app.'
+                                   + sessions_ended_said(sessions), details=ended_record) from error
             raise
-        details = {'stages_closed': closed, 'states_put_back': put_back, 'not_carried_back': made}
+        details = {'stages_closed': closed, 'states_put_back': put_back, 'not_carried_back': made,
+                   **sessions_ended_of(sessions)}
         states = (f'; before it, the list states of {len(changed)} encounter(s) were put back to what the older '
                   'revision derives, which this revision labels otherwise' if changed else '')
         # refutation 6b-r2 F1 (DECISIONS D247): the message offers to keep this revision, so the saves the close set
@@ -10557,12 +10613,12 @@ def phase_rollback_app(ctx) -> dict:
                                                                'set back were put back (reapplied)')
         raise InstallError(f'{str(error) or type(error).__name__}{states}: rerun --phase rollback-app; or, to keep '
                            'this revision, rerun --phase app' + (', which recomputes them' if changed else '') + '.'
-                           + said, details=details) from error
+                           + said + sessions_ended_said(sessions), details=details) from error
     parked = [name + '-previous' for name in SERVICES.values() if inspect('container', name + '-previous')]
     return {'removed': removed, 'stages_closed': closed, 'states_put_back': put_back, 'parked_left_in_place': parked,
-            'not_carried_back': made,
+            'not_carried_back': made, **sessions_ended_of(sessions),
             'summary': 'web and worker removed after closing their open stages; database, volumes, images and '
-                       'secrets kept' + (f'; {made["note"]}' if made else '')}
+                       'secrets kept' + (f'; {made["note"]}' if made else '') + sessions_summary(sessions)}
 
 
 def recorded_vhosts(ctx) -> dict:
