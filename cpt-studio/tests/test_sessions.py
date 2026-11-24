@@ -1,9 +1,11 @@
-"""studio.sessions (release 1; RELEASE-1-SPEC 3.3): ending an account's sessions, moved from the console with an optional
-session to keep (B4), and SessionPolicyMiddleware, which Lane 1 leaves a pass-through that binds the request for the
-records (studio.request_meta.bound). Lane 2 fills the policy in (B3, B4, B5, B6, A2) and owns this file from then on: its
-tests of the idle limit, the cap and the door join these. Synthetic data only."""
+"""studio.sessions (release 1; RELEASE-1-SPEC 3.3, B3, B5, B6, A2): ending an account's sessions (moved from the console,
+with one session to keep for B4), the keys every sign-in writes into its session, and SessionPolicyMiddleware - the idle
+limit and the cap (B5), the door a session is bound to (B3), the deletion of the cookies' old names (B6), X-CPT-Actor
+(A2) and the binding of every request for the records (C1). The forced password change's gate is tests/test_account.py's.
+The clock is patched (tests.test_second_factor.Clock), so no test waits. Synthetic data only."""
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import timedelta
 from importlib import import_module
@@ -15,10 +17,11 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import path
 from django.utils import timezone
 
-from studio import console, request_meta, sessions
+from studio import console, models, request_meta, sessions
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
+from tests.test_second_factor import ADMIN, CPT, MOMENT, NOW, Clock
 
 REQUEST_ID = '0123456789abcdef0123456789abcdef'
 
@@ -125,3 +128,304 @@ class EndSessionsTests(TestCase):
             with self.assertRaises(sessions.Refused) as refused:
                 sessions.end_sessions(self.user, keep_session_key='x')
         self.assertEqual((str(refused.exception), refused.exception.status), (sessions.NO_SESSION_STORE, 409))
+
+
+# --- the policy (Lane 2) ------------------------------------------------------------------------------------------------
+
+def member_client(ws=None, **kwargs):
+    """A member signed in now (a test client's own sign-in: studio.sessions writes the cpt door's keys)."""
+    user = f.member(ws or f.workspace())
+    client = Client(**kwargs)
+    client.force_login(user)
+    return user, client
+
+
+def session_row(client):
+    return Session.objects.filter(session_key=client.session.session_key)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class SignInKeysTests(TestCase):
+    def test_every_login_writes_the_keys_of_a_sign_in_and_never_a_second_factor(self):
+        with Clock():
+            _, client = member_client()
+            session = client.session
+            self.assertEqual([session[name] for name in (request_meta.SESSION_DOOR, request_meta.SESSION_AUTH_AT,
+                                                         request_meta.SESSION_LAST_ACTIVE)], ['cpt', NOW, NOW])
+            uuid.UUID(session[request_meta.SESSION_SIGN_IN_REF])
+            self.assertNotIn(request_meta.SESSION_SECOND_FACTOR_AT, session)
+            # the doors name their own door and the attempt's reference: the session's is its LoginAttempt's
+            user = f.member(f.workspace())
+            door = Client()
+            self.assertEqual(door.post('/login/', {'username': user.username, 'password': 'synthetic-pass-123!'})
+                             .status_code, 302)
+            attempt = models.LoginAttempt.objects.get(username=user.username)
+            self.assertEqual(door.session[request_meta.SESSION_SIGN_IN_REF], str(attempt.sign_in_ref))
+            self.assertEqual(door.session[request_meta.SESSION_DOOR], 'cpt')
+
+    def test_a_new_sign_in_drops_an_earlier_second_factor(self):
+        operator = f.user('dual-role')
+        client = ops.admin_client(operator)
+        self.assertIn(request_meta.SESSION_SECOND_FACTOR_AT, client.session)
+        client.force_login(operator)  # the same account signs in again on this browser
+        self.assertNotIn(request_meta.SESSION_SECOND_FACTOR_AT, client.session)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class IdleAndCapTests(TestCase):
+    """B5: a session ends after its idle limit or its cap, before the view runs."""
+
+    def test_after_the_idle_limit_the_api_answers_401_and_the_session_row_is_gone(self):
+        with Clock() as clock:
+            _, kept = member_client()
+            _, idle = member_client()
+            clock.advance(settings.SESSION_IDLE_MEMBER_SECONDS)  # exactly the limit: still signed in
+            self.assertEqual(kept.get('/api/session').status_code, 200)
+            clock.advance(1)
+            answer = idle.get('/api/session')  # 901 seconds since its last activity
+            self.assertEqual((answer.status_code, answer.json()), (401, {'error': 'signed_out', 'reason': 'idle'}))
+            self.assertFalse(session_row(idle).exists())
+            self.assertEqual(idle.get('/api/session').status_code, 401)  # and it never comes back
+
+    def test_polls_never_keep_a_session_alive_and_the_ping_does(self):
+        with Clock() as clock:
+            _, polled = member_client()
+            _, pinged = member_client()
+            ended_after = None
+            for step in range(1, 41):  # every 30 seconds for 20 minutes
+                clock.advance(30)
+                if polled.get('/api/session', HTTP_X_CPT_POLL='1').status_code == 401 and ended_after is None:
+                    ended_after = step * 30
+                self.assertEqual(pinged.get('/api/session', HTTP_X_CPT_POLL='1').status_code, 200, step)
+                if step % 2 == 0:
+                    self.assertEqual(pinged.post('/session/activity').status_code, 200, step)
+            self.assertEqual(ended_after, 930)  # the first poll past 900 seconds without activity
+
+    def test_a_request_the_server_refuses_or_the_page_makes_by_itself_never_counts_as_activity(self):
+        # refutation r2, finding 17 (bypass/byp_health_csrf.py): the activity counts once the answer is known, under 400
+        lead = settings.SESSION_IDLE_MEMBER_SECONDS - 120
+        cases = [('head', '/session/activity', {}, 405), ('options', '/session/activity', {}, 405),
+                 ('get', '/session/activity', {}, 405), ('get', '/logout/everywhere', {}, 405),
+                 ('get', f'/api/encounters/{uuid.uuid4()}', {}, 404), ('post', '/session/activity', {}, 403),
+                 ('post', '/account/', {}, 403),  # the CSRF check refuses both
+                 ('get', '/account/', {'HTTP_SEC_FETCH_DEST': 'iframe'}, 200),  # a frame's load: the page's own
+                 ('get', '/api/session', {'HTTP_X_CPT_POLL': '1'}, 200)]  # a poll
+        for method, path_, headers, status in cases:
+            with self.subTest(method=method, path=path_), Clock() as clock:
+                _, client = member_client(enforce_csrf_checks=True)
+                clock.advance(lead)
+                self.assertEqual(getattr(client, method)(path_, **headers).status_code, status)
+                clock.advance(lead)  # 1,560 s since the last activity, unless that request counted
+                self.assertEqual(client.get('/api/session', HTTP_X_CPT_POLL='1').status_code, 401)
+        with Clock() as clock:  # the control: an answered request of the person's counts
+            _, client = member_client(enforce_csrf_checks=True)
+            clock.advance(lead)
+            self.assertEqual(client.get('/account/').status_code, 200)
+            clock.advance(lead)
+            self.assertEqual(client.get('/api/session', HTTP_X_CPT_POLL='1').status_code, 200)
+
+    def test_the_cap_ends_a_session_at_eight_hours_even_with_steady_activity(self):
+        with Clock() as clock:
+            _, client = member_client()
+            for _ in range(settings.SESSION_MAX_MEMBER_SECONDS // 600):  # something done every ten minutes
+                clock.advance(600)
+                self.assertEqual(client.get('/api/session').status_code, 200)
+            clock.advance(1)
+            answer = client.get('/api/session')
+            self.assertEqual(answer.status_code, 401)
+            self.assertEqual(answer.json(), {'error': 'signed_out', 'reason': 'expired'})
+            self.assertFalse(session_row(client).exists())
+
+    def test_an_operator_is_signed_out_after_601_seconds_on_the_admin_host(self):
+        with Clock() as clock:
+            kept = ops.admin_client(f.user('operator-kept'))
+            idle = ops.admin_client(f.user('operator-idle'))
+            clock.advance(settings.SESSION_IDLE_OPERATOR_SECONDS)
+            self.assertEqual(kept.get('/ops/').status_code, 200)
+            clock.advance(1)
+            answer = idle.get('/ops/')
+            self.assertEqual(answer.status_code, 302)
+            self.assertEqual(answer['Location'], '/login/?next=%2Fops%2F&reason=idle')
+            self.assertFalse(session_row(idle).exists())
+            page = idle.get(answer['Location']).content.decode()
+            self.assertIn(f'You were signed out after {settings.SESSION_IDLE_OPERATOR_SECONDS // 60} minutes without '
+                          'activity.', page)
+
+    def test_a_session_from_before_release_one_is_refused(self):
+        for strip in (request_meta.SESSION_KEYS, (request_meta.SESSION_AUTH_AT,), (request_meta.SESSION_SIGN_IN_REF,)):
+            with self.subTest(strip=strip):
+                _, api = member_client()
+                session = api.session
+                for name in strip:
+                    session.pop(name, None)
+                session.save()
+                answer = api.get('/api/session')
+                self.assertEqual((answer.status_code, answer.json()), (401, {'error': 'signed_out', 'reason': 'expired'}))
+                self.assertFalse(Session.objects.filter(session_key=session.session_key).exists())
+        _, page = member_client()
+        session = page.session
+        for name in request_meta.SESSION_KEYS:
+            session.pop(name, None)
+        session.save()
+        answer = page.get('/')
+        self.assertEqual((answer.status_code, answer['Location']), (302, '/login/?next=%2F&reason=expired'))
+        self.assertIn('Your session has ended. Sign in again.', page.get(answer['Location']).content.decode())
+
+    def test_a_timestamp_from_the_future_is_no_timestamp_of_this_release(self):
+        with Clock() as clock:
+            _, client = member_client()
+        with Clock(MOMENT - timedelta(minutes=1)):  # the clock went back: the session's keys are of no past moment
+            self.assertEqual(client.get('/api/session').status_code, 401)
+
+    def test_the_last_activity_is_written_at_most_once_a_minute_and_never_by_a_poll(self):
+        with Clock() as clock:
+            _, client = member_client()
+            last = lambda: client.session[request_meta.SESSION_LAST_ACTIVE]  # noqa: E731
+            clock.advance(30)
+            client.get('/api/session')
+            self.assertEqual(last(), NOW)
+            clock.advance(31)
+            client.get('/api/session')
+            self.assertEqual(last(), NOW + 61)
+            clock.advance(200)
+            client.get('/api/session', HTTP_X_CPT_POLL='1')
+            self.assertEqual(last(), NOW + 61)
+
+    def test_the_ping_answers_the_time_left(self):
+        with Clock() as clock:
+            _, client = member_client()
+            clock.advance(30)
+            answer = client.post('/session/activity')
+            self.assertEqual(answer.json(), {'idle_seconds': settings.SESSION_IDLE_MEMBER_SECONDS - 30,
+                                             'cap_seconds': settings.SESSION_MAX_MEMBER_SECONDS - 30,
+                                             'warning_seconds': settings.SESSION_IDLE_WARNING_SECONDS,
+                                             'session': sessions.session_tag(type('R', (), {'session': client.session})())})
+            clock.advance(60)
+            self.assertEqual(client.post('/session/activity').json()['idle_seconds'], settings.SESSION_IDLE_MEMBER_SECONDS)
+        anonymous = Client().post('/session/activity')
+        self.assertEqual((anonymous.status_code, anonymous.json()['error']), (401, 'signed_out'))
+        self.assertEqual(Client().get('/session/activity').status_code, 405)
+
+    def test_the_page_s_own_sign_out_after_inactivity_lands_on_the_sentence(self):
+        _, client = member_client()
+        answer = client.post('/logout/?reason=idle')
+        self.assertEqual((answer.status_code, answer['Location']), (302, '/login/?reason=idle'))
+        self.assertIsNone(client.session.get('_auth_user_id'))
+        _, plain = member_client()
+        self.assertEqual(plain.post('/logout/')['Location'], '/login/')
+        self.assertIn('You were signed out after 15 minutes without activity.', Client().get('/login/?reason=idle')
+                      .content.decode())
+
+
+def body_data(page):
+    """The data-* attributes of a page's <body>."""
+    body = re.search(r'<body[^>]*>', page.content.decode()).group(0)
+    return dict(re.findall(r'data-([a-z-]+)="([^"]*)"', body))
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class PageConfigTests(TestCase):
+    """A signed-in page is given its session's seconds and its tag, so its timer is armed at load (refutation r2,
+    findings 13, 14 and 16; studio.sessions.page_config)."""
+
+    def test_the_doctors_page_carries_its_session_s_seconds_and_tag(self):
+        with Clock() as clock:
+            _, client = member_client()
+            clock.advance(100)
+            page = client.get('/')
+            data = body_data(page)
+            self.assertEqual((data['idle-seconds'], data['cap-seconds'], data['warning-seconds']),
+                             (str(settings.SESSION_IDLE_MEMBER_SECONDS - 100), str(settings.SESSION_MAX_MEMBER_SECONDS - 100),
+                              str(settings.SESSION_IDLE_WARNING_SECONDS)))  # as they stood before this request counted
+            tag = data['session']
+            self.assertRegex(tag, r'^[0-9a-f]{32}$')
+            self.assertNotIn(client.session[request_meta.SESSION_SIGN_IN_REF], page.content.decode())
+            self.assertEqual(client.post('/session/activity').json()['session'], tag)
+            _, other = member_client()
+            self.assertNotEqual(other.post('/session/activity').json()['session'], tag)
+
+    def test_a_console_page_carries_them_too_and_its_refresh_without_script_follows_the_session(self):
+        with Clock() as clock:
+            console_client = ops.admin_client(f.user('operator-page'))
+            session = console_client.session  # signed in almost eight hours ago: five minutes before the cap
+            session[request_meta.SESSION_AUTH_AT] = NOW - (settings.SESSION_MAX_OPERATOR_SECONDS - 300)
+            session.save()
+            clock.advance(30)
+            page = console_client.get('/ops/')
+            data = body_data(page)
+            self.assertEqual((data['idle-seconds'], data['cap-seconds']),
+                             (str(settings.SESSION_IDLE_OPERATOR_SECONDS - 30), '270'))
+            self.assertRegex(data['session'], r'^[0-9a-f]{32}$')
+            self.assertIn('<meta http-equiv="refresh" content="280;url=/login/?reason=idle">', page.content.decode())
+        sign_in_page = Client(HTTP_HOST=ADMIN).get('/login/')
+        self.assertEqual(body_data(sign_in_page), {})  # a page of nobody's session carries none
+
+    def test_a_ping_marked_a_poll_asks_and_records_no_activity(self):
+        with Clock() as clock:
+            _, client = member_client()
+            clock.advance(200)
+            asked = client.post('/session/activity', HTTP_X_CPT_POLL='1').json()
+            self.assertEqual(asked['idle_seconds'], settings.SESSION_IDLE_MEMBER_SECONDS - 200)
+            self.assertEqual(client.session[request_meta.SESSION_LAST_ACTIVE], NOW)
+            self.assertEqual(client.post('/session/activity').json()['idle_seconds'], settings.SESSION_IDLE_MEMBER_SECONDS)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class DoorTests(TestCase):
+    """B3: a session is bound to the door it was opened at."""
+
+    def test_a_session_taken_to_the_other_host_is_ended(self):
+        operator = f.user('platform-operator')
+        admin = ops.admin_client(operator)
+        on_cpt = Client(HTTP_HOST=CPT)
+        on_cpt.cookies = admin.cookies
+        answer = on_cpt.get('/api/session')
+        self.assertEqual((answer.status_code, answer.json()['reason']), (401, 'expired'))
+        self.assertEqual(admin.get('/ops/').status_code, 302)  # the session is gone for its own host too
+        _, cpt = member_client(HTTP_HOST=CPT)
+        on_admin = Client(HTTP_HOST=ADMIN)
+        on_admin.cookies = cpt.cookies
+        answer = on_admin.get('/ops/people')
+        self.assertEqual((answer.status_code, answer['Location']), (302, '/login/?next=%2Fops%2Fpeople&reason=expired'))
+        self.assertEqual(cpt.get('/api/session').status_code, 401)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class CookieAndHeaderTests(TestCase):
+    HTTPS_NAMES = dict(SESSION_COOKIE_NAME='__Host-cptstudio_session', CSRF_COOKIE_NAME='__Host-cptstudio_csrf',
+                       SESSION_COOKIE_SECURE=True, CSRF_COOKIE_SECURE=True)
+
+    def test_the_old_cookie_names_are_deleted_under_https(self):
+        with self.settings(**self.HTTPS_NAMES):
+            client = Client()
+            client.cookies['cptstudio_session'] = 'a-session-before-release-one'
+            client.cookies['cptstudio_csrf'] = 'a-token-before-release-one'
+            answer = client.get('/login/', secure=True)
+        for name in sessions.OLD_COOKIE_NAMES:
+            with self.subTest(name=name):
+                self.assertIn(name, answer.cookies)
+                cookie = answer.cookies[name]
+                self.assertEqual((cookie.value, cookie['max-age'], cookie['path']), ('', 0, '/'))
+                self.assertTrue(cookie['secure'])
+        self.assertIn('__Host-cptstudio_csrf', answer.cookies)
+        # without HTTPS the plain names are this site's own: never deleted
+        _, plain = member_client()
+        answer = plain.get('/api/session')
+        self.assertNotIn(settings.SESSION_COOKIE_NAME, answer.cookies)
+        self.assertEqual(answer.status_code, 200)
+
+    def test_a_signed_in_response_names_its_sign_in_and_an_anonymous_one_nothing(self):
+        _, client = member_client()
+        answer = client.get('/api/session')
+        self.assertEqual(answer[sessions.ACTOR_HEADER], client.session[request_meta.SESSION_SIGN_IN_REF])
+        self.assertNotIn(sessions.ACTOR_HEADER, Client().get('/login/'))
+        self.assertNotIn(sessions.ACTOR_HEADER, Client().get('/api/session'))
+        user = f.member(f.workspace())
+        signed = Client().post('/login/', {'username': user.username, 'password': 'synthetic-pass-123!'})
+        attempt = models.LoginAttempt.objects.get(username=user.username)
+        self.assertEqual(signed[sessions.ACTOR_HEADER], str(attempt.sign_in_ref))
+
+    def test_a_request_without_a_session_cookie_never_reads_a_session(self):
+        unknown = Client().get('/r1-no-such-route')
+        self.assertIsNone(unknown.get('Vary'))  # an unknown URL to a stranger, as before release 1
+        self.assertEqual(Client().get('/health/').status_code, 200)

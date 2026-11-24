@@ -35,6 +35,23 @@ const OUTDATED_TEXT = 'CPT Studio was updated — reload the page to continue.';
 // line of it, is no longer the latest): nothing was recorded, and the page has read the document again.
 const CHANGED_TEXT = 'This coding review has changed, so nothing was recorded. The page now shows the latest.';
 const OFFLINE_TEXT = 'The server could not be reached. Check the connection and try again.';
+// Release 1 (RELEASE-1-SPEC B4 to B6, C4 to C6): the sign-in state the page keeps up with, the practice's team, the plain
+// sentence of a limit and the download of a Word document.
+const POLL_HEADER = 'X-CPT-Poll';  // the document poll and the refresh on return carry it: neither is the member's activity
+const ACTIVITY_URL = '/session/activity';
+const ACTIVITY_EVERY_MS = 60000;  // the activity ping goes at most once a minute, while there is input
+const ACTIVITY_INPUTS = ['pointerdown', 'keydown', 'wheel', 'scroll', 'touchstart'];
+const SESSION_CHANNEL = 'cpt-studio-session';  // the tabs of this browser share one idle timer
+const ACCOUNT_REQUIRED_URL = '/account/?required=1';
+const WORD_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const WORD_ORIGINAL_TEXT = 'The original Word file can contain links and embedded content. Download it anyway?';
+const DOWNLOAD_ADDRESS_MS = 60000;  // how long the address of a file saved from the page's own bytes is kept
+const FRAME_LIMIT_TEXT = 'The document could not be shown: too many requests in a short time. Wait a minute, then open it again.';
+const FRAME_REFUSED_TEXT = 'The document could not be shown. Open it again to try once more.';
+const ROLE_LABELS = { owner: 'Owner', reviewer: 'Reviewer', viewer: 'Viewer' };
+// a code the server answers for the page to act on (signed_out, password_change_required, rate_limited), never a
+// sentence to show
+const MACHINE_WORD = /^[a-z][a-z0-9_]*$/;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;', '`': '&#x60;' };
 
@@ -114,7 +131,7 @@ const INSURANCE_VALUES = new Set(INSURANCE_CHOICES.map(([value]) => value));
 const INSURANCE_SHOWN = { medicare: 'Medicare', medicaid: 'Medicaid', commercial: 'Commercial or other' };
 const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text' };
 const TRIGGER_TEXT = { answers: 'after your answers', retry: 'after a retry' };
-const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review' };
+const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review', team: 'Team' };
 const LIST_HEADER = '<div class="list-header"><span>DOCUMENT</span><span>STATUS</span><span class="date-header">SERVICE DATE</span><span></span></div>';
 
 // --- pure helpers ----------------------------------------------------------------
@@ -238,7 +255,8 @@ function isClientOutdated(status, data) {
 // status. Never the status code or a technical payload.
 function errorText(status, data) {
   const served = typeof data?.error === 'string' ? data.error.trim() : '';
-  if (served) return served;
+  if (status === 429) return served && !MACHINE_WORD.test(served) ? served : rateLimitText(data);
+  if (served && !MACHINE_WORD.test(served)) return served;
   if (status === 400) return 'This could not be saved. Check the form and try again.';
   if (status === 403) return 'This action is not allowed for your account, or the page is out of date. Reload the page and try again.';
   if (status === 404) return 'Not found, or not in your workspace.';
@@ -246,6 +264,88 @@ function errorText(status, data) {
   if (status === 413) return 'The file is too large. Choose a file up to 15 MB.';
   if (status === 429) return 'Too many attempts in a short time. Wait a moment and try again.';
   return 'Something went wrong on our side. Nothing was changed by this attempt; try again in a moment.';
+}
+
+// C5: a limit the server counts (429 {"error": "rate_limited", "retry_after": seconds}) in plain words.
+function rateLimitText(data) {
+  const seconds = Number(data?.retry_after);
+  if (!Number.isFinite(seconds) || seconds <= 0) return 'Too many requests in a short time. Wait a moment and try again.';
+  if (seconds <= 60) return 'Too many requests in a short time. Wait a minute and try again.';
+  return `Too many requests in a short time. Wait ${Math.ceil(seconds / 60)} minutes and try again.`;
+}
+
+// B6: under HTTPS the site's cookies carry the __Host- prefix (cptstudio/settings.py) and only that name is read, so a
+// cookie of the name before release 1, left in this browser, never wins; without HTTPS, the plain name.
+function csrfCookieName(protocol) {
+  return protocol === 'https:' ? '__Host-cptstudio_csrf' : 'cptstudio_csrf';
+}
+
+// B5: why the server signed the member out ({"error": "signed_out", "reason": "idle" | "expired"}): idle when it says
+// so, else expired - a session that ended for any other reason is simply over.
+function signedOutReason(data) {
+  return data?.error === 'signed_out' && data.reason === 'idle' ? 'idle' : 'expired';
+}
+
+// The sign-in page, saying why, and coming back to the page the member was on.
+function loginAddress(reason, hash) {
+  return `/login/?${new URLSearchParams({ reason, next: `/${hash || ''}` })}`;
+}
+
+// B5: the shared idle timer's next step at `now` (ms): 'out' at or after the deadline the tabs share, 'warn' inside the
+// warning's lead before it, 'wait' until then; `in` is how long until the step after it, `left` how long until the end.
+function idleStep(deadline, warningMs, now) {
+  if (!Number.isFinite(deadline) || deadline <= 0) return { step: 'wait', in: null, left: null };
+  if (now >= deadline) return { step: 'out', in: 0, left: 0 };
+  if (now >= deadline - warningMs) return { step: 'warn', in: deadline - now, left: deadline - now };
+  return { step: 'wait', in: deadline - warningMs - now, left: deadline - now };
+}
+
+function idleWarningText(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  return `You will be signed out in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
+// C4: the practice's team as GET /api/members serves it to an owner: {"members": [{id, label, username, role, active,
+// actor_kind, last_sign_in, password_change_required}]}; a row without an id of its own is never drawn.
+function teamMembers(data) {
+  return objects(data?.members).filter(member => typeof member.id === 'string' && UUID.test(member.id));
+}
+
+function memberRow(member, selfId) {
+  const self = member.id === selfId;
+  const label = text(member.label) || text(member.username) || 'Unnamed account';
+  const detail = [lookup(ROLE_LABELS, member.role, 'Member'), member.actor_kind === 'agent' ? 'Automated account' : 'Person', text(member.username)]
+    .filter(Boolean).join(' · ');
+  const access = member.active === true ? badge('green', 'Access on') : badge('gray', 'Access off');
+  const password = member.password_change_required === true ? badge('amber', 'Must choose a password') : '';
+  const signIn = formatTimestamp(member.last_sign_in) || 'Never signed in';
+  const id = escapeHtml(member.id);
+  const action = self ? '<span class="card-empty">You</span>'
+    : member.active === true ? `<button type="button" class="button secondary" data-member-access="off" data-member="${id}" data-label="${escapeHtml(label)}">Turn off</button>`
+      : `<button type="button" class="button secondary" data-member-access="on" data-member="${id}" data-label="${escapeHtml(label)}">Turn on</button>`;
+  return `<div class="document-row team-row" data-member-row="${id}"><span class="doc-row-main"><span class="doc-file-icon">${icon('shield')}</span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span></span><span>${access}${password}</span><span class="doc-row-date">${escapeHtml(signIn)}</span><span>${action}</span></div>`;
+}
+
+const TEAM_HEADER = '<div class="list-header"><span>PERSON</span><span>ACCESS</span><span class="date-header">LAST SIGN-IN</span><span></span></div>';
+
+function teamList(members, selfId) {
+  if (members === null) return `${TEAM_HEADER}<p class="empty-state">Loading the team…</p>`;
+  return TEAM_HEADER + (members.length ? members.map(member => memberRow(member, selfId)).join('') : '<p class="empty-state">Nobody else has access to this practice.</p>');
+}
+
+function teamView() {
+  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">YOUR PRACTICE</span><h1>Team.</h1><p>Everyone with access to this practice's documents. Turning a person off ends their access to this practice only, at their next step; their other practices are not changed. Adding people and changing roles is done by CPT Studio on the practice's request.</p></div></div><div class="document-list" id="teamList">${teamList(null, '')}</div></section>`;
+}
+
+// C6: a Word document downloads as the PDF the coding review read; the Word file itself only after a warning, as
+// ?format=original, and so does the original of a Word document not yet converted. A PDF or a text downloads as before.
+function downloadLinks(part) {
+  const original = safeOriginalUrl(part?.original_url);
+  if (!original) return '';
+  const plain = label => `<a class="viewer-download" id="downloadOriginal" href="${escapeHtml(original)}" download>${icon('download')}${label}</a>`;
+  if (part.media_type !== WORD_MEDIA_TYPE) return plain('Download original');
+  const word = `<button type="button" class="viewer-download meta-link" id="downloadWord" data-word-original="${escapeHtml(`${original}?format=original`)}">${icon('download')}Download the Word file</button>`;
+  return part.converted === true ? plain('Download PDF') + word : word;
 }
 
 // A version-4 UUID from 16 random bytes: the key one upload attempt carries, so a retried attempt whose answer was
@@ -1147,6 +1247,9 @@ const state = {
   // the PDF viewer of the document shown (browser wiring), the PDF library once it is asked for and how many times it has
   // been asked for (a failed load is tried again at fresh addresses), and the passage of a text document being marked
   viewer: null, pdfLibrary: null, pdfAttempt: 0, framePassage: null,
+  // release 1: what the confirmation dialog runs on Continue (askConfirm), and the object addresses the page made, which
+  // it lets go of when it signs out (clearScreen)
+  confirming: null, objectUrls: new Set(),
 };
 
 function uiState(overrides = {}) {
@@ -1284,7 +1387,7 @@ function viewerPanel(doc) {
     + '<button type="button" class="zoom-button zoom-fit" data-zoom="fit">Fit width</button></span>' : '';
   const note = kind === 'pdf' && part.converted === true ? `<p class="viewer-note">${icon('info')}<span>${escapeHtml(CONVERTED_NOTE)}</span></p>` : '';
   const meta = [lookup(KIND_LABELS, part.kind, ''), Number.isInteger(part.size) && part.size > 0 ? formatSize(part.size) : ''].filter(Boolean).join(' · ');
-  const download = original ? `<a class="viewer-download" id="downloadOriginal" href="${escapeHtml(original)}" download>${icon('download')}Download original</a>` : '';
+  const download = original ? downloadLinks(part) : '';
   return `<section class="viewer-panel${kind === 'none' ? ' no-view' : ''}" aria-labelledby="viewerTitle"><div class="viewer-toolbar">${icon('file')}<h2 id="viewerTitle">Original document</h2><span class="viewer-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>${page}${zoom}</div>${frame}${marked}${note}<div class="viewer-bottom"><span>${escapeHtml(meta || 'Original as received')}</span>${download}</div></section>`;
 }
 
@@ -1637,13 +1740,23 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 function csrfValue() {
-  return readCookie(document.cookie, 'cptstudio_csrf') || $('input[name="csrfmiddlewaretoken"]')?.value || '';
+  const cookieName = csrfCookieName(globalThis.location?.protocol);
+  return readCookie(document.cookie, cookieName) || $('input[name="csrfmiddlewaretoken"]')?.value || '';
 }
 
-function goToLogin() {
+function goToLogin(reason = 'expired') {
   if (state.leaving) return;
   state.leaving = true;
-  location.assign(`/login/?next=${encodeURIComponent(`/${location.hash}`)}`);
+  clearScreen();
+  location.assign(loginAddress(reason, location.hash));
+}
+
+// B4: a password staff set must be replaced before anything else opens (403 {"error": "password_change_required"}).
+function goToAccount() {
+  if (state.leaving) return;
+  state.leaving = true;
+  clearScreen();
+  location.assign(ACCOUNT_REQUIRED_URL);
 }
 
 function showUpdateNotice() {
@@ -1654,9 +1767,10 @@ function showUpdateNotice() {
 }
 
 // One call to the customer API. A change the server accepts with no body reads as an empty answer; a read must be JSON.
-async function api(path, { method = 'GET', json, form } = {}) {
+async function api(path, { method = 'GET', json, form, poll = false } = {}) {
   const headers = { Accept: 'application/json', [CLIENT_HEADER]: CLIENT_VERSION };
   let body;
+  if (poll) headers[POLL_HEADER] = '1';
   if (method !== 'GET') headers['X-CSRFToken'] = csrfValue();
   if (json !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -1670,12 +1784,17 @@ async function api(path, { method = 'GET', json, form } = {}) {
   } catch {
     throw new ApiError(OFFLINE_TEXT);
   }
+  const isJson = (response.headers.get('Content-Type') || '').includes('application/json');
   if (response.status === 401 || (response.redirected && new URL(response.url).pathname.startsWith('/login'))) {
-    goToLogin();
+    const answer = isJson ? await response.json().catch(() => null) : null;
+    sessionEnded(signedOutReason(answer));  // every tab of the session is told (B5)
     throw new ApiError('Your session has ended. Sign in again.', 401);
   }
-  const isJson = (response.headers.get('Content-Type') || '').includes('application/json');
   const data = isJson ? await response.json().catch(() => null) : null;
+  if (response.status === 403 && data?.error === 'password_change_required') {
+    goToAccount();
+    throw new ApiError('Choose a new password to continue.', 403, data);
+  }
   if (isClientOutdated(response.status, data)) {
     showUpdateNotice();
     throw new ApiError(OUTDATED_TEXT, 409, data);
@@ -1786,6 +1905,8 @@ function renderSession(session) {
   $('#profileRole').textContent = lookup({ owner: 'Owner', reviewer: 'Reviewer', viewer: 'Viewer' }, session.role, 'Member');
   setCount('#documentsCount', session.counts?.documents);
   setCount('#queueCount', session.counts?.queue);
+  const team = $('#teamNav');
+  if (team) team.hidden = session.can_manage_team !== true;
 }
 
 async function loadSession() {
@@ -1846,7 +1967,71 @@ function route() {
     $('#main').innerHTML = howItWorksView();
     return undefined;
   }
+  if (next.name === 'team') return showTeam(serial);
   return showList(next.name, serial);
+}
+
+// C4: the owners' Team panel. A reviewer or viewer who opens it is told it is the owners'; any change reads the team again.
+async function showTeam(serial) {
+  $('#main').innerHTML = teamView();
+  let data;
+  try {
+    data = await api('/api/members');
+  } catch (error) {
+    if (serial !== state.routeSerial) return;
+    const sentence = error.status === 403 || error.status === 404 ? 'Only the practice\'s owners see the team.' : `The team could not be loaded. ${error.message}`;
+    $('#teamList').innerHTML = `${TEAM_HEADER}<p class="empty-state">${escapeHtml(sentence)}</p>`;
+    return;
+  }
+  if (serial !== state.routeSerial) return;
+  $('#teamList').innerHTML = teamList(teamMembers(data), state.session?.user?.id || '');
+}
+
+async function setMemberAccess(id, active, button) {
+  if (!UUID.test(String(id))) return;
+  setBusy(button, true);
+  try {
+    await api(`/api/members/${encodeURIComponent(id)}/access`, { method: 'POST', json: { active } });
+    toast(active ? 'Access turned on.' : 'Access turned off.');
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(button, false);
+  }
+  if (state.route?.name === 'team') await showTeam(state.routeSerial);
+}
+
+// One confirmation at a time (#confirmDialog): its Continue runs `run`, its Cancel or Close runs nothing.
+function askConfirm({ title, text: body, action, run }) {
+  state.confirming = run;
+  $('#confirmTitle').textContent = title;
+  $('#confirmText').textContent = body;
+  $('#confirmGo').textContent = action;
+  openDialog('confirmDialog');
+}
+
+function confirmChosen() {
+  const run = state.confirming;
+  state.confirming = null;
+  closeDialog('confirmDialog');
+  if (typeof run === 'function') run();
+}
+
+function askMemberAccess(button) {
+  const active = button.dataset.memberAccess === 'on';
+  const id = button.dataset.member;
+  if (active) return setMemberAccess(id, true, button);
+  askConfirm({ title: `Turn off ${button.dataset.label || 'this person'}'s access?`,
+    text: 'They can no longer open this practice\'s documents, from their next step. Their other practices are not changed, and you can turn their access on again here.',
+    action: 'Turn off', run: () => setMemberAccess(id, false, button) });
+  return undefined;
+}
+
+// C6: the Word file itself is downloaded only once the member has read why it is not the default.
+function askWordOriginal(address) {
+  if (!/^\/api\/encounters\/[0-9a-f-]{36}\/original\?format=original$/i.test(String(address))) return;
+  askConfirm({ title: 'Download the Word file?', text: WORD_ORIGINAL_TEXT, action: 'Download it anyway',
+    run: () => saveDownload(address, '').catch(error => toast(error.message)) });
 }
 
 async function showList(name, serial) {
@@ -1909,13 +2094,13 @@ function setReconnecting(on) {
 // Reads can answer out of order (a poll, the read after an act, the read after a download): one that answers after a
 // read asked later than it was shown is older than what the page shows, and changes nothing - nor does its failure.
 // Each read shown draws an open export dialog again (redrawExportDialog).
-async function loadDocument(id, serial, silent) {
+async function loadDocument(id, serial, silent, poll = false) {
   clearTimeout(state.poll.timer);
   const read = ++state.reads.asked;
   const older = () => read < state.reads.applied;
   let doc;
   try {
-    doc = await api(`/api/encounters/${encodeURIComponent(id)}`);
+    doc = await api(`/api/encounters/${encodeURIComponent(id)}`, { poll });
   } catch (error) {
     if (serial !== state.routeSerial || state.outdated || older()) return;
     if (silent && state.doc) {
@@ -1957,18 +2142,19 @@ function schedulePoll(serial) {
   const delay = pollDelay(state.poll.count, state.poll.errors);
   state.poll.count += 1;
   const id = state.doc.id;
-  state.poll.timer = setTimeout(() => loadDocument(id, serial, true), delay);
+  state.poll.timer = setTimeout(() => loadDocument(id, serial, true, true), delay);
 }
 
-async function refreshDocument() {
+async function refreshDocument({ poll = false } = {}) {
   if (state.route?.name !== 'doc') return;
   state.poll.count = 0;
   state.poll.errors = 0;
-  await loadDocument(state.route.id, state.routeSerial, true);
+  await loadDocument(state.route.id, state.routeSerial, true, poll);
 }
 
+// the refresh on return to the tab or on reconnecting is a poll: it never counts as the member's activity (B5)
 function refreshIfWaiting() {
-  if (state.route?.name === 'doc' && shouldPoll(state.doc) && !document.hidden) refreshDocument();
+  if (state.route?.name === 'doc' && shouldPoll(state.doc) && !document.hidden) refreshDocument({ poll: true });
 }
 
 // Where the focus was, so a redraw can put it back: the element's id, the code row it sits in (its line and its code),
@@ -2394,9 +2580,12 @@ function startWorker(viewer, address) {
 // Downloads the document the viewer shows (A5): its view address, same origin with the browser's default credentials,
 // read chunk by chunk - each chunk calls `moved`, which restarts the stall timer - into one array of bytes. An answer that
 // is not 2xx, a fetch that fails and a body that breaks off all reject (the 'download' reason); so does an abort (the
-// viewer closed, or framed for another reason).
+// viewer closed, or framed for another reason). The download is the page's own request, whatever drew the viewer - a
+// poll's redraw included - so it is marked a poll: never the member's activity (B5; refutation r2, finding 18). The
+// member's own act that opened the document has counted already; a frame's load (the browser's own viewer) is never
+// counted by the server either (studio.sessions.automatic).
 async function downloadDocument(view, signal, moved) {
-  const response = await fetch(view, { credentials: 'same-origin', signal });
+  const response = await fetch(view, { credentials: 'same-origin', signal, headers: { [POLL_HEADER]: '1' } });
   if (!response.ok) throw new Error(`The document's download was answered ${response.status}.`);
   const chunks = [];
   let size = 0;
@@ -3154,7 +3343,36 @@ function noteFrameLoad(event) {
     page = null;
   }
   loadedPages.set(frame, page || UNREADABLE);
+  watchFrameInput(page);
+  if (state.viewer?.frame === frame) noteRefusedFrame(frame);
   if (state.framePassage?.frame === frame) paintFrame(frame);
+}
+
+// The browser's own viewer of a PDF, framed where the page cannot draw it, shows whatever the server answered - the front
+// door's refusal (429) too, which reads as a broken document. Its own load says the answer, and anything but 200 is said
+// under the viewer in plain words (refutation r2, finding 21).
+function noteRefusedFrame(frame) {
+  let status;
+  try {
+    status = frame.contentWindow.performance.getEntriesByType('navigation')[0]?.responseStatus;
+  } catch {
+    status = undefined;
+  }
+  if (!Number.isInteger(status) || status === 0 || status === 200) return;
+  frame.dataset.refused = String(status);
+  setMarkNote(status === 429 ? FRAME_LIMIT_TEXT : FRAME_REFUSED_TEXT, true);
+}
+
+// Input inside a frame of the page - a wheel, a key, a touch in the viewer's framed text - is the member's input as much
+// as on the page itself (B5; refutation r2, finding 15): each document a frame loads gets the page's own listeners. A
+// document this page cannot read (another origin, the browser's own viewer of a PDF) has none to give.
+function watchFrameInput(page) {
+  if (!page || typeof page.addEventListener !== 'function') return;
+  try {
+    for (const type of ACTIVITY_INPUTS) page.addEventListener(type, noteInput, { capture: true, passive: true });
+  } catch {
+    // a document that refuses listeners: the page's own input still counts
+  }
 }
 
 // Whether the text frame holds the document this page asked for: 'waiting' until the frame's current document has had
@@ -3680,6 +3898,71 @@ function startDownload(url, filename) {
   link.remove();
 }
 
+// A file the page downloads for the member - an export just made, an earlier one, the original - is fetched first, so a
+// refusal (the front door's limit, 429; a session that ended; any answer but 2xx) is seen and said in plain words instead
+// of going unread to the browser's downloads while the page says the file is downloading (refutation r2, finding 21).
+// It is then saved from the answer's bytes, a Blob - which the browser may keep on disk, so a file up to the bundle limit
+// is not held in the page twice - under its own name. The address goes a minute later, or when the page leaves
+// (releaseObjectUrls). Resolves once the browser has the file; rejects with an ApiError that says why it has not.
+async function saveDownload(url, filename) {
+  let response;
+  try {
+    response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+  } catch {
+    throw new ApiError(OFFLINE_TEXT);
+  }
+  if (response.status === 401 || (response.redirected && new URL(response.url).pathname.startsWith('/login'))) {
+    sessionEnded('expired');
+    throw new ApiError('Your session has ended. Sign in again.', 401);
+  }
+  if (!response.ok) throw new ApiError(await downloadRefusal(response), response.status);
+  const address = URL.createObjectURL(await response.blob());
+  if (!(state.objectUrls instanceof Set)) state.objectUrls = new Set();
+  state.objectUrls.add(address);
+  startDownload(address, typeof filename === 'string' && filename ? filename : savedName(response));
+  const timer = setTimeout(() => {
+    if (!state.objectUrls?.delete(address)) return;
+    try {
+      URL.revokeObjectURL(address);
+    } catch {
+      // already gone
+    }
+  }, DOWNLOAD_ADDRESS_MS);
+  timer?.unref?.();  // (a timer of the page in a browser; under Node's tests it keeps nothing waiting)
+}
+
+// What a refused download says: the server's own sentence where it answered one, the wait at the front door's limit
+// (429, from its Retry-After), else a plain sentence of the answer.
+async function downloadRefusal(response) {
+  const data = (response.headers.get('Content-Type') || '').includes('application/json') ? await response.json().catch(() => null) : null;
+  if (response.status === 429 && !data) return rateLimitText({ retry_after: Number(response.headers.get('Retry-After')) });
+  return errorText(response.status, data);
+}
+
+// The name the server gave the file (Content-Disposition), else 'download'.
+function savedName(response) {
+  const header = response.headers.get('Content-Disposition') || '';
+  const encoded = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim());
+    } catch {
+      // fall back to the plain name
+    }
+  }
+  const plain = /filename\s*=\s*"([^"]+)"/i.exec(header) || /filename\s*=\s*([^;]+)/i.exec(header);
+  return plain ? plain[1].trim() : 'download';
+}
+
+// A download link the member clicks (an earlier export, the original) goes the same way: fetched first, a refusal said.
+function saveLinked(link) {
+  const address = link.getAttribute('href') || '';
+  saveDownload(address, link.getAttribute('download') || '').catch(error => {
+    if (link.closest?.('#exportDialog') && $('#exportDialog')?.open) showError('exportError', error.message);
+    else toast(error.message);
+  });
+}
+
 // POST reports {kind, fmt, round}: the round the export dialog was opened on. While it runs every option waits and the
 // one chosen says it is being prepared, as the status does; the file is said to be ready, and downloaded, only once the
 // server has made it (201). The options then come back - the one just used a moment later (holdMade) - and the dialog
@@ -3732,14 +4015,338 @@ function generateReport(kind, fmt) {
       return;
     }
     state.making = null;
-    startDownload(safeDownloadUrl(report.download_url), report.filename);
     if (state.exporting) {
       state.exporting.ready = same();
       $('#exportStatus').textContent = same() ? readyText(fmt, report.filename) : exportStatusText(dialogDoc(state.exporting));
     }
     holdMade({ encounter: exporting.encounter, kind, fmt });
     drawExportOptions([kind, fmt]);
+    try {
+      await saveDownload(safeDownloadUrl(report.download_url), report.filename);
+    } catch (error) {
+      // made, but not downloaded (refutation r2, finding 21): the dialog never says it is; the file is listed among the
+      // downloads once the page has read the document again, to try again
+      if (state.exporting?.encounter === exporting.encounter) {
+        state.exporting.ready = false;
+        $('#exportStatus').textContent = exportStatusText(dialogDoc(state.exporting));
+      }
+      if (shown()) showError('exportError', error.message);
+      else if (error.status !== 401) toast(error.message);
+    }
   }).then(() => (refused ? rereadAfterRefusal(exporting.encounter) : undefined));
+}
+
+// --- automatic sign-out after inactivity, and at the session's cap (B5) -------------------------------------------
+// The server ends a session idle longer than its limit, or older than its cap (studio.sessions); the page keeps one timer
+// with it, shared by the tabs of this browser that show the same session (BroadcastChannel, else localStorage events;
+// every access in try/catch), so an idle tab never signs out a tab in use. The timer is armed the moment the page loads,
+// from the seconds the server put on the page (data-idle-seconds, data-cap-seconds, data-warning-seconds;
+// studio.sessions.page_config), so it never waits on a ping that may fail (refutation r2, finding 13). Input sends the
+// activity ping at most once a minute - one that failed is tried again on input after RETRY_MS, the deadline standing
+// meanwhile - and the ping's answer is the server's own remaining time, so the timer never drifts from the session. The
+// deadline is the earlier of the idle end and the session's cap (finding 16). A warning comes SESSION_IDLE_WARNING_SECONDS
+// before it: before the idle end with a button that sends the ping, before the cap with a sentence to send or copy what
+// is typed, since the cap cannot be moved. When the warning closes the focus goes back where it was, into the viewer's
+// frame too (finding 15). At the end the page closes the viewer, lets go of its object addresses, empties #main and every
+// dialog, and submits the sign-out form. Answers typed and not sent are lost then: the warning is their protection (no
+// drafts are kept, because a draft would put a document's text in the browser's storage).
+// Every message between tabs names its session (data-session: a per-sign-in value, which the ping answers too), and a
+// tab acts on its own session's news only. A message of another session - the browser was signed in again, or the
+// message is stale - makes the tab ask the server which session it is in (the ping marked a poll: no activity), and a
+// tab whose session is no longer the browser's leaves. A 401, in whichever tab meets it, is told to every tab of the
+// session, and each clears its screen (finding 14).
+const DEFAULT_IDLE_SECONDS = 900;  // the doctors' limit, for a page the server gave no seconds (it always gives them)
+const RETRY_MS = 15000;  // a ping that failed is tried again on the next input after this
+const IDLE_TEXT = 'CPT Studio signs you out after a while without activity, and clears the screen. Answers you have typed and not sent are lost when it does.';
+const CAP_TEXT = 'This session has reached its time limit. CPT Studio clears the screen and signs you out when it ends. Send or copy anything you are typing now: you will need to sign in again.';
+const idle = {
+  deadline: 0, idleEnd: 0, capEnd: 0, warningMs: 120000, lastPing: 0, pinging: null, checking: null, timer: 0,
+  channel: null, gone: false, started: false, session: '', capClosed: 0, returnFocus: null,
+};
+
+function seconds(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+// The seconds the server put on the page (studio.sessions.page_config), each null when it is absent or no number, and
+// the page's session tag ('' when absent).
+function pageSession(dataset) {
+  const data = dataset || {};
+  const number = value => (typeof value === 'string' && value.trim() !== '' ? seconds(value) : null);
+  return { idle: number(data.idleSeconds), cap: number(data.capSeconds), warning: number(data.warningSeconds),
+    session: typeof data.session === 'string' ? data.session : '' };
+}
+
+// The timer armed from the page's own seconds, before any ping answers: it is never unarmed.
+function armFromPage(now = Date.now()) {
+  const config = pageSession(typeof document === 'object' ? document.body?.dataset : null);
+  idle.session = config.session;
+  adoptDeadline(now + (config.idle ?? DEFAULT_IDLE_SECONDS) * 1000, config.warning === null ? null : config.warning * 1000,
+    false, config.cap === null ? null : now + config.cap * 1000);
+}
+
+function releaseObjectUrls() {
+  for (const address of state.objectUrls || []) {
+    try {
+      URL.revokeObjectURL(address);
+    } catch {
+      // already gone
+    }
+  }
+  state.objectUrls = new Set();
+}
+
+// Everything the page shows of the workspace goes: the viewer, its addresses, #main, every dialog, the notices.
+function clearScreen() {
+  stopPolling();
+  stopTicker();
+  closeViewer();
+  releaseObjectUrls();
+  closeDocumentDialogs();
+  state.doc = null;
+  state.docKey = '';
+  state.viewerKey = '';
+  const main = $('#main');
+  if (main) main.innerHTML = '';
+  for (const dialog of $$('dialog')) {
+    if (dialog.open) dialog.close();
+    dialog.replaceChildren?.();
+  }
+  const notice = $('#toast');
+  if (notice) notice.textContent = '';
+}
+
+// Every message names this tab's session.
+function shareSession(message) {
+  const data = { ...message, session: idle.session, at: Date.now() };
+  try {
+    if (idle.channel) {
+      idle.channel.postMessage(data);
+      return;
+    }
+  } catch {
+    // fall through to the storage events
+  }
+  try {
+    localStorage.setItem(SESSION_CHANNEL, JSON.stringify(data));
+  } catch {
+    // no storage here: this tab keeps its own timer
+  }
+}
+
+// A tab's news: acted on when it is of this tab's session; any other makes this tab ask the server which session it is
+// in, never adopt it.
+function receiveSession(message) {
+  if (!message || typeof message !== 'object' || idle.gone) return;
+  if (message.session !== idle.session) {
+    checkSession();
+    return;
+  }
+  if (message.type === 'deadline') adoptDeadline(Number(message.deadline), Number(message.warningMs), false, Number(message.cap));
+  else if (message.type === 'signed-out') leaveSignedOut(message.reason === 'idle' ? 'idle' : 'expired');
+}
+
+function openSessionChannel() {
+  try {
+    idle.channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel(SESSION_CHANNEL) : null;
+    if (idle.channel) idle.channel.onmessage = event => receiveSession(event.data);
+  } catch {
+    idle.channel = null;
+  }
+  try {
+    window.addEventListener('storage', event => {
+      if (event.key !== SESSION_CHANNEL || !event.newValue) return;
+      try {
+        receiveSession(JSON.parse(event.newValue));
+      } catch {
+        // not a message of this page
+      }
+    });
+  } catch {
+    // no storage events here
+  }
+}
+
+// The idle end only moves later (the server's last activity only moves forward) and the cap only comes closer; the
+// deadline is the earlier of the two. Another tab's news never shortens this one's idle time.
+function adoptDeadline(deadline, warningMs, share = true, cap = null) {
+  if (Number.isFinite(warningMs) && warningMs > 0) idle.warningMs = warningMs;
+  let moved = false;
+  if (Number.isFinite(deadline) && deadline > idle.idleEnd) {
+    idle.idleEnd = deadline;
+    moved = true;
+  }
+  if (Number.isFinite(cap) && cap > 0 && (!idle.capEnd || cap < idle.capEnd)) {
+    idle.capEnd = cap;
+    moved = true;
+  }
+  if (!moved) return;
+  idle.deadline = idle.capEnd ? Math.min(idle.idleEnd, idle.capEnd) : idle.idleEnd;
+  if (share) shareSession({ type: 'deadline', deadline: idle.idleEnd, cap: idle.capEnd, warningMs: idle.warningMs });
+  scheduleIdle();
+}
+
+// The answer of the ping, or of a re-check: a tab of another session than the browser's leaves; else the server's own
+// remaining time moves the timer.
+function applySessionAnswer(data, share) {
+  const tag = typeof data?.session === 'string' ? data.session : '';
+  if (tag && idle.session && tag !== idle.session) {
+    leaveSignedOut('expired');
+    return;
+  }
+  const left = seconds(data?.idle_seconds);
+  const cap = seconds(data?.cap_seconds);
+  const lead = seconds(data?.warning_seconds);
+  const now = Date.now();
+  if (left !== null) adoptDeadline(now + left * 1000, lead === null ? null : lead * 1000, share, cap === null ? null : now + cap * 1000);
+}
+
+function sendActivity() {
+  if (idle.gone) return Promise.resolve();
+  if (idle.pinging) return idle.pinging;
+  idle.lastPing = Date.now();
+  idle.pinging = (async () => {
+    try {
+      applySessionAnswer(await api(ACTIVITY_URL, { method: 'POST', json: {} }), true);
+    } catch (error) {
+      // a 401 has already signed the page out; any other failure keeps the deadline this page has, and the next input
+      // after RETRY_MS tries again
+      if (error?.status !== 401) idle.lastPing = Date.now() - ACTIVITY_EVERY_MS + RETRY_MS;
+    } finally {
+      idle.pinging = null;
+    }
+  })();
+  return idle.pinging;
+}
+
+// Which session this tab is in, asked of the server without counting as activity: the ping marked a poll.
+function checkSession() {
+  if (idle.gone) return Promise.resolve();
+  if (idle.checking) return idle.checking;
+  idle.checking = (async () => {
+    try {
+      applySessionAnswer(await api(ACTIVITY_URL, { method: 'POST', json: {}, poll: true }), false);
+    } catch {
+      // a 401 has already signed the page out; offline, the timer stands
+    } finally {
+      idle.checking = null;
+    }
+  })();
+  return idle.checking;
+}
+
+function noteInput() {
+  if (idle.gone || idle.pinging) return;
+  if (Date.now() - idle.lastPing >= ACTIVITY_EVERY_MS) sendActivity();
+}
+
+// Whether the session's cap comes before its idle end: the warning then says so, and the page signs out as expired.
+function capFirst() {
+  return Boolean(idle.capEnd) && idle.capEnd <= idle.idleEnd;
+}
+
+function capWarningText(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  return `Your session ends in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
+function showIdleWarning(left) {
+  const dialog = $('#idleDialog');
+  if (!dialog) return;
+  const cap = capFirst();
+  const title = $('#idleTitle');
+  if (title) title.textContent = cap ? capWarningText(left) : idleWarningText(left);
+  const copy = $('#idleText');
+  if (copy) copy.textContent = cap ? CAP_TEXT : IDLE_TEXT;
+  const stay = $('#idleStay');
+  if (stay) stay.hidden = cap;
+  const close = $('#idleClose');
+  if (close) close.hidden = !cap;
+  if (dialog.open) return;
+  const active = document.activeElement;
+  idle.returnFocus = active && active !== document.body ? active : null;
+  dialog.showModal();
+}
+
+// The warning closes, and the focus goes back where it was - into the viewer's frame too, so the next key scrolls it.
+function hideIdleWarning() {
+  const dialog = $('#idleDialog');
+  if (!dialog?.open) return;
+  dialog.close();
+  const back = idle.returnFocus;
+  idle.returnFocus = null;
+  if (!back || back.isConnected === false || typeof back.focus !== 'function') return;
+  try {
+    back.focus({ preventScroll: true });
+    if (back.tagName === 'IFRAME') back.contentWindow?.focus();
+  } catch {
+    // gone meanwhile
+  }
+}
+
+// The cap's warning, read: closed until the end, which no ping moves.
+function closeCapWarning() {
+  idle.capClosed = idle.capEnd;
+  hideIdleWarning();
+}
+
+function scheduleIdle() {
+  clearTimeout(idle.timer);
+  if (idle.gone) return;
+  const next = idleStep(idle.deadline, idle.warningMs, Date.now());
+  if (next.step === 'out') {
+    signOutIdle(capFirst() ? 'expired' : 'idle');
+    return;
+  }
+  if (next.step === 'warn' && !(capFirst() && idle.capClosed === idle.capEnd)) showIdleWarning(next.left);
+  else hideIdleWarning();
+  if (next.in === null) return;
+  idle.timer = setTimeout(scheduleIdle, next.step === 'warn' ? Math.min(1000, next.in) : Math.max(1000, next.in));
+}
+
+// Another tab of this session signed out, or the server said the session is over: this one clears its screen and goes to
+// the sign-in page too.
+function leaveSignedOut(reason) {
+  if (idle.gone) return;
+  idle.gone = true;
+  clearTimeout(idle.timer);
+  goToLogin(reason);
+}
+
+// The server answered this tab 401: every tab of the session is told, and this one leaves, whatever its timer did.
+function sessionEnded(reason) {
+  if (!idle.gone) shareSession({ type: 'signed-out', reason });
+  idle.gone = true;
+  clearTimeout(idle.timer);
+  goToLogin(reason);
+}
+
+function signOutIdle(reason = 'idle') {
+  if (idle.gone) return;
+  idle.gone = true;
+  clearTimeout(idle.timer);
+  shareSession({ type: 'signed-out', reason });
+  state.leaving = true;
+  clearScreen();
+  const form = $('#signoutForm');
+  if (!form) return;
+  form.setAttribute('action', `/logout/?reason=${reason === 'expired' ? 'expired' : 'idle'}`);
+  form.submit?.();
+}
+
+function startIdleWatch() {
+  if (idle.started) return;
+  idle.started = true;
+  armFromPage();
+  openSessionChannel();
+  for (const type of ACTIVITY_INPUTS) document.addEventListener(type, noteInput, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleIdle(); });
+  $('#signoutForm')?.addEventListener('submit', () => {
+    if (!idle.gone) shareSession({ type: 'signed-out', reason: 'expired' });
+    idle.gone = true;
+  });
+  sendActivity();
 }
 
 function hasFiles(event) {
@@ -3784,6 +4391,25 @@ function onClick(event) {
     handleDecision(decision.dataset.decision, decision.dataset.line, decision);
     return;
   }
+  const access = target.closest('[data-member-access]');
+  if (access) {
+    askMemberAccess(access);
+    return;
+  }
+  const word = target.closest('[data-word-original]');
+  if (word) {
+    askWordOriginal(word.dataset.wordOriginal);
+    return;
+  }
+  const linked = target.closest('a[download]');
+  if (linked && !(event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)) {
+    const href = linked.getAttribute('href') || '';
+    if (safeDownloadUrl(href) || safeOriginalUrl(href)) {
+      event.preventDefault();
+      saveLinked(linked);
+      return;
+    }
+  }
   const report = target.closest('[data-export-kind]');
   if (report) {
     // the second (or third) click of one gesture - a double click - is not a choice of its own
@@ -3803,6 +4429,9 @@ function onClick(event) {
     retry: () => progressAction('retry', action),
     reload: () => location.reload(),
     'reload-view': route,
+    confirm: confirmChosen,
+    'stay-signed-in': () => sendActivity(),
+    'idle-close': () => closeCapWarning(),
   })[action.dataset.action]?.();
 }
 
@@ -3884,6 +4513,7 @@ function boot() {
   window.addEventListener('offline', () => { if (shouldPoll(state.doc)) setReconnecting(true); });
   document.addEventListener('visibilitychange', refreshIfWaiting);
   window.matchMedia('(max-width:760px)').addEventListener('change', closeNavigation);
+  startIdleWatch();
   loadSession().then(route);
 }
 
@@ -3907,7 +4537,16 @@ if (typeof module === 'object' && module.exports) {
     PDF_IMPORT, mountViewer, closeViewer, showPdfQuote, frameQuote, fallbackViewer, clearViewerMark, drawPage, releasePage,
     paintPage, layoutPages, zoomViewer, renderDocument, PDF_VIEW, ZOOM_STEPS, ZOOM_FIT,
     continuesDrawing, keepsEdge, NUMBER_SEPARATORS, libraryWatchdog, startWorker, downloadDocument, scrollToQuote, relayoutPages,
-    buildPages, frameHolds, noteFrameLoad, markInFrame, paintFrame,
+    buildPages, frameHolds, noteFrameLoad, watchFrameInput, markInFrame, paintFrame,
+    csrfCookieName, csrfValue, signedOutReason, loginAddress, idleStep, idleWarningText, rateLimitText, teamMembers, memberRow,
+    teamList, teamView, downloadLinks, showTeam, setMemberAccess, askConfirm, confirmChosen, askWordOriginal, clearScreen,
+    saveDownload, downloadRefusal, savedName, saveLinked, noteRefusedFrame, FRAME_LIMIT_TEXT, FRAME_REFUSED_TEXT,
+    generateReport, readyText, startDownload,
+    goToLogin, goToAccount, sendActivity, adoptDeadline, scheduleIdle, signOutIdle, receiveSession, shareSession, noteInput,
+    pageSession, armFromPage, applySessionAnswer, checkSession, sessionEnded, leaveSignedOut, capFirst, capWarningText,
+    showIdleWarning, hideIdleWarning, closeCapWarning, startIdleWatch, IDLE_TEXT, CAP_TEXT, RETRY_MS, DEFAULT_IDLE_SECONDS,
+    idle, POLL_HEADER, ACTIVITY_URL, ACTIVITY_EVERY_MS, ACTIVITY_INPUTS, WORD_ORIGINAL_TEXT, SESSION_CHANNEL, ROUTE_TITLES, schedulePoll,
+    refreshIfWaiting, renderSession,
   };
 }
 if (typeof document !== 'undefined') boot();

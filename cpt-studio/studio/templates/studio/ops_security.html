@@ -1,0 +1,41 @@
+{% extends "studio/ops_base.html" %}
+{% block title %}Security keys{% endblock %}
+{% block head_extra %}<script src="/static/studio/ops_second_factor.js" defer></script>{% endblock %}
+{% block content %}
+<h1>Security keys</h1>
+<p class="lead">The keys and passkeys that open this console for you, as the second step after your password. Adding or removing one asks for a key again. Lost every key? The reset is done on the server, never here.</p>
+<div class="table-card scroll">
+  <table>
+    <thead><tr><th>Key</th><th>Added</th><th>Last used</th><th></th></tr></thead>
+    <tbody>
+    {% for key in keys %}
+      <tr>
+        <td>{{ key.label }}</td>
+        <td>{{ key.created_at|date:"j M Y, H:i" }} UTC</td>
+        <td>{% if key.last_used_at %}{{ key.last_used_at|date:"j M Y, H:i" }} UTC{% else %}Not used yet{% endif %}</td>
+        <td>{% if last_key %}<span class="muted">The last key cannot be removed</span>{% else %}<form method="post" action="/ops/security">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="key" value="{{ key.pk }}"><button class="danger" type="submit">Remove</button></form>{% endif %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4">No key is set up.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="muted">{{ codes_left }} recovery code{{ codes_left|pluralize }} left.</p>
+<section class="card" aria-labelledby="add-title">
+  <h2 id="add-title">Add a key</h2>
+  {% if recent %}
+  <form class="stack" method="post" action="/ops/security" data-ceremony="create" data-options="/ops/security">{% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <input type="hidden" name="credential" value="">
+    <label>Name of the key <span class="hint">(for you: "Spare key", "Laptop")</span><input type="text" name="label" maxlength="60" autocomplete="off"></label>
+    <button type="submit">Register a new key</button>
+  </form>
+  <p class="muted" data-status role="status"></p>
+  {% else %}
+  <p>Adding or removing a key asks for your key first.</p>
+  <p><a class="button" href="{{ step_up }}">Confirm with your key</a></p>
+  {% endif %}
+</section>
+<p><a href="/account/">Change your password</a></p>
+{% endblock %}
