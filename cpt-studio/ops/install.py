@@ -3134,6 +3134,12 @@ def db_args() -> list:
             POSTGRES_IMAGE, *[part for name, value in DB_LOG_SETTINGS for part in ('-c', f'{name}={value}')]]
 
 
+# A one-shot whose run timed out is sent its own SIGTERM and this long to record before it is removed (builder d2's
+# point, repair round 2: a dispose stopped so records its run 'failed'; a command with no handler of its own - the
+# entrypoint execs python as PID 1, which ignores a SIGTERM it does not handle - is removed when the time is up).
+ONESHOT_STOP_SECONDS = 10
+
+
 def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UID}', timeout=600,
             network=None, credentials=False, participant_files=(), environment=None, interpreter_file=False,
             coding_file=False, what=None, by=''):
@@ -3155,10 +3161,13 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
             '--no-healthcheck', '--log-driver=none', '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=oneshot',
             *hardening('768m', 128, '256m', user=user), '--env-file', '/dev/stdin', *environment,
             *[part for mount in mounts for part in ('--mount', mount)], image_id, *command]
-    result = None
+    result, timed_out = None, False
     try:
         result = run(argv, input=env_bytes, timeout=timeout, check=False)
         return result
+    except InstallError:  # with check=False, run raises one only for its own timeout
+        timed_out = True
+        raise
     finally:
         journal('oneshot', what or oneshot_label(command), 'timeout' if result is None else result.returncode, by=by)
         # refutation round 2, installer-1: a leftover is looked for only when the run gave no answer (a timeout, an
@@ -3168,6 +3177,12 @@ def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UI
         if result is None:
             leftover = inspect('container', name)
             if leftover is not None and owned(leftover, 'oneshot'):
+                if timed_out:  # its own SIGTERM first; never after an interrupt, where the door's SIGKILL follows
+                    try:  # its SIGTERM by 15 s, which the RAM folder's wipe and the receipt need
+                        docker('stop', '--time', str(ONESHOT_STOP_SECONDS), leftover['Id'], check=False,
+                               timeout=ONESHOT_STOP_SECONDS + 30)
+                    except InstallError:  # the stop's own timeout: the removal below forces it
+                        pass
                 docker('rm', '--force', leftover['Id'], check=False)
 
 

@@ -816,7 +816,11 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   interrupt) - once the act answered, `docker run --rm` has removed its
   container (the CLI waits for the removal, and answers 125 when it cannot), so
   no daemon error or signal there can take the answer away (refutation round
-  2, installer-1). The receipt keeps the
+  2, installer-1). A one-shot whose run timed out is first sent its own
+  SIGTERM, with 10 s to record (a disposal then records its run 'failed'),
+  then removed; one interrupted is removed at once, since the door's SIGKILL
+  follows its SIGTERM by 15 s, which the RAM folder's wipe and the receipt
+  need. The receipt keeps the
   command's stdout (ids and counts) and its log. A reason must be in words, so
   that its redaction can never touch an id or a count: its text 12 characters
   or more that are not white space and three words or more (as the release's

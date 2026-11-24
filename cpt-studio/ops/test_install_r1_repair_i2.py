@@ -929,17 +929,39 @@ class OneshotAnswerTests(TemporaryDirectoryTest):
                 self.assertEqual(looked, [])
 
     def test_one_that_gave_no_answer_is_still_looked_for_and_removed(self):
+        # builder d2's point (the lead's addition): one that timed out is first sent its own SIGTERM, with
+        # ONESHOT_STOP_SECONDS to record (a dispose records its run 'failed'); one interrupted is removed at once - the
+        # door's SIGKILL follows its SIGTERM by 15 s, which the RAM folder's wipe and the receipt need
         leftover = {'Id': 'oneshot-1', 'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: 'oneshot'}}}
-        for label, failure in (('a timeout', install.InstallError('docker run did not finish within 600 s.')),
-                               ('a SIGTERM', install.Interrupted('SIGTERM'))):
+        stop = ('stop', '--time', str(install.ONESHOT_STOP_SECONDS), 'oneshot-1')
+        for label, failure, expected in (
+                ('a timeout', install.InstallError('docker run did not finish within 600 s.'),
+                 [stop, ('rm', '--force', 'oneshot-1')]),
+                ('a SIGTERM', install.Interrupted('SIGTERM'), [('rm', '--force', 'oneshot-1')])):
             with self.subTest(label):
-                removed = []
+                calls = []
                 with mock.patch.object(install, 'run', side_effect=failure), \
                         mock.patch.object(install, 'inspect', return_value=leftover), \
-                        mock.patch.object(install, 'docker', lambda *args, **kwargs: removed.append(args)), \
-                        self.assertRaises(type(failure)):
+                        mock.patch.object(install, 'docker', lambda *args, **kwargs: calls.append((args, kwargs))), \
+                        self.assertRaises(type(failure)) as caught:
                     REAL_ONESHOT('sha256:' + 'c' * 64, ['manage', 'dispose', '--execute'], b'K=1\n')
-                self.assertEqual(removed, [('rm', '--force', 'oneshot-1')])
+                self.assertIs(caught.exception, failure)
+                self.assertEqual([args for args, _ in calls], expected)
+                self.assertTrue(all(kwargs.get('check') is False for _, kwargs in calls))
+        self.assertEqual(install.ONESHOT_STOP_SECONDS, 10)
+        # a stop that does not finish itself never replaces the act's own failure, and the removal still follows
+        calls, timeout = [], install.InstallError('docker run did not finish within 600 s.')
+
+        def docker(*args, **kwargs):
+            calls.append(args)
+            if args[0] == 'stop':
+                raise install.InstallError('docker stop did not finish within 40 s.')
+        with mock.patch.object(install, 'run', side_effect=timeout), \
+                mock.patch.object(install, 'inspect', return_value=leftover), mock.patch.object(install, 'docker', docker), \
+                self.assertRaises(install.InstallError) as caught:
+            REAL_ONESHOT('sha256:' + 'c' * 64, ['manage', 'migrate', '--check'], b'K=1\n')
+        self.assertIs(caught.exception, timeout)
+        self.assertEqual(calls, [stop, ('rm', '--force', 'oneshot-1')])
 
     def test_through_the_manage_phase_the_destruction_certificate_is_kept(self):
         # installer-1's input: --dispose-step execute through the real phase_manage and the real oneshot; the act answers
