@@ -544,6 +544,8 @@ PHASE_ARGUMENTS = {
     'command': {'manage'}, 'username': {'manage'}, 'reason_file': {'manage'}, 'approved_by': {'manage'},
     'workspace_id': {'manage'}, 'encounter_id': {'manage'}, 'dispose_step': {'manage'}, 'plan_id': {'manage'},
     'all_human_accounts': {'manage'}, 'ledger_file': {'manage'}, 'execute': {'manage'},
+    # refutation round 1, installer-1's class: --address (clear-signin-failures') was refused by no other phase
+    'address': {'manage'},
 }
 
 
@@ -8402,6 +8404,17 @@ MANAGE_ARGUMENTS = ('command', 'username', 'reason_file', 'by', 'review_by', 'ap
 # replay a ledger after a database restore, so destroyed data stays destroyed
 DISPOSE_STEPS = ('close', 'plan', 'execute', 'ledger', 'replay-ledger')
 DISPOSE_REASON_REQUIRED = ('close', 'execute', 'replay-ledger')
+# What each dispose step passes to the command (manage_argv) beyond --command, --dispose-step and --by - and so the only
+# arguments it takes: any other is refused before anything runs, so what was typed is what ran (refutation round 1,
+# installer-1: execute took --workspace-id and --encounter-id, then dropped them from the command line).
+DISPOSE_STEP_ARGUMENTS = {
+    'close': ('workspace_id', 'reason_file'),
+    'plan': ('workspace_id', 'encounter_id', 'reason_file'),
+    'execute': ('plan_id', 'approved_by', 'reason_file'),
+    'ledger': ('reason_file',),
+    'replay-ledger': ('ledger_file', 'execute', 'approved_by', 'reason_file'),
+}
+DISPOSE_ARGUMENTS = ('workspace_id', 'encounter_id', 'plan_id', 'approved_by', 'reason_file', 'ledger_file', 'execute')
 LEDGER_LIMIT = 1024 * 1024
 # D2: a practice's export is written into a NEW folder of its own under EXPORTS_DIR on the host (root 0700), which the
 # one-shot writes as the application's user; afterwards the root helper makes everything in it root-only. [TO CONFIRM
@@ -8481,6 +8494,12 @@ def manage_problem(args) -> str:
             return '--ledger-file is the ledger --dispose-step replay-ledger replays, and only it takes one.'
         if step in ('ledger', 'replay-ledger') and (args.workspace_id or args.encounter_id):
             return f'--dispose-step {step} reads the whole ledger: no --workspace-id or --encounter-id.'
+        unused = [name for name in DISPOSE_ARGUMENTS
+                  if getattr(args, name, None) not in (None, '') and name not in DISPOSE_STEP_ARGUMENTS[step]]
+        if unused:
+            return (f'--{unused[0].replace("_", "-")} is not used by --dispose-step {step}, which takes '
+                    + ', '.join(f'--{name.replace("_", "-")}' for name in ('by', *DISPOSE_STEP_ARGUMENTS[step]))
+                    + ': nothing was run.')
     return ''
 
 

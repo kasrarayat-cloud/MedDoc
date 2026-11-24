@@ -10,6 +10,8 @@ never passed, without one). Synthetic data only.
       or a document destroyed; refused before anything starts or stops, and again at the switch-back's B4.
   I3  installer-0: a re-grant is approved only by a line of the committed declaration that is exactly
       `--regrant <username>` (optionally in backticks), whitespace-trimmed.
+  I4  installer-1: every manage step refuses an argument it does not pass to its command (dispose execute's
+      --workspace-id and --encounter-id), and --address is refused outside manage.
 
 Run from cpt-studio/:  python3 -B -m unittest ops.test_install_r1_repair -v
 """
@@ -731,6 +733,101 @@ class RegrantAtTheDoorTests(TemporaryDirectoryTest):
         self.assertIsNone(error, error and str(error))
         self.assertEqual(world.acts()[0][:2], ['manage', 'grant_operator'])
         self.assertEqual(world.acts()[0][-1], '--regrant')
+
+
+# --- I4: what was typed is what ran ---------------------------------------------------------------------------------
+
+WORKSPACE = '0f8fad5b-d9cb-469f-a165-70867728950e'
+DOCUMENT = '1f8fad5b-d9cb-469f-a165-70867728950e'
+PLAN = '2f8fad5b-d9cb-469f-a165-70867728950e'
+ARGUMENT_FLAGS = {'workspace_id': ('--workspace-id', WORKSPACE), 'encounter_id': ('--encounter-id', DOCUMENT),
+                  'plan_id': ('--plan-id', PLAN), 'approved_by': ('--approved-by', 'Grace Hopper'),
+                  'reason_file': ('--reason-file', '/r'), 'ledger_file': ('--ledger-file', '/l'),
+                  'execute': ('--execute', None)}
+# each argument's trace on the command line manage_argv builds (the RAM-only files are mounted, never named as typed)
+ARGUMENT_TRACES = {'workspace_id': WORKSPACE, 'encounter_id': DOCUMENT, 'plan_id': PLAN, 'approved_by': 'Grace Hopper',
+                   'reason_file': '--reason-file', 'ledger_file': '--replay-ledger', 'execute': '--execute'}
+STEP_BASE = {'close': ('workspace_id', 'reason_file'), 'plan': ('workspace_id',),
+             'execute': ('plan_id', 'approved_by', 'reason_file'), 'ledger': (),
+             'replay-ledger': ('ledger_file', 'reason_file')}
+
+
+class ManageArgumentTests(unittest.TestCase):
+    def argv(self, step, names):
+        argv = ['--revision', REVISION, '--receipts', '/nonexistent/receipts', '--phase', 'manage', '--command',
+                'dispose', '--dispose-step', step, '--by', 'Ada Lovelace']
+        for name in names:
+            flag, value = ARGUMENT_FLAGS[name]
+            argv += [flag] if value is None else [flag, value]
+        return argv
+
+    def parse(self, argv):
+        stderr = io.StringIO()
+        with mock.patch('sys.stderr', stderr):
+            try:
+                return install.parse_args(argv), ''
+            except SystemExit:
+                return None, stderr.getvalue().strip().splitlines()[-1]
+
+    def test_execute_refuses_a_workspace_or_a_document_it_never_passes(self):
+        for name in ('workspace_id', 'encounter_id'):
+            with self.subTest(name=name):
+                args, refusal = self.parse(self.argv('execute', ('plan_id', 'approved_by', 'reason_file', name)))
+                self.assertIsNone(args, f'{name} was accepted')
+                self.assertIn(f'{ARGUMENT_FLAGS[name][0]} is not used by --dispose-step execute', refusal)
+                self.assertIn('nothing was run', refusal)
+
+    def test_every_dispose_step_refuses_every_argument_it_does_not_pass(self):
+        self.assertEqual(set(install.DISPOSE_STEP_ARGUMENTS), set(install.DISPOSE_STEPS))
+        for step, allowed in install.DISPOSE_STEP_ARGUMENTS.items():
+            for name in install.DISPOSE_ARGUMENTS:
+                if name in allowed:
+                    continue
+                with self.subTest(step=step, name=name):
+                    args, refusal = self.parse(self.argv(step, (*STEP_BASE[step], name)))
+                    self.assertIsNone(args, f'{step} took {name}')
+                    self.assertIn(ARGUMENT_FLAGS[name][0], refusal)
+
+    def test_what_each_step_takes_reaches_its_command_line(self):
+        combinations = {'close': [()], 'plan': [(), ('encounter_id',), ('reason_file',)],
+                        'execute': [()], 'ledger': [(), ('reason_file',)],
+                        'replay-ledger': [(), ('execute', 'approved_by')]}
+        for step, extras in combinations.items():
+            for extra in extras:
+                names = (*STEP_BASE[step], *extra)
+                with self.subTest(step=step, names=names):
+                    args, refusal = self.parse(self.argv(step, names))
+                    self.assertIsNotNone(args, refusal)
+                    ctx = SimpleNamespace(args=args, door={'declaration': 'docs/d.md', 'declaration_commit': 'd' * 40})
+                    argv = install.manage_argv(ctx, args, install.MANAGE_COMMANDS['dispose'])
+                    for name in names:
+                        self.assertIn(ARGUMENT_TRACES[name], argv, f'{name} was dropped')
+
+    def test_address_is_refused_by_every_phase_but_manage(self):
+        for phase, extra in (('operators', ()), ('provision', ('--owner-username', 'dr-owner', '--by', 'Ada Lovelace')),
+                             ('preflight', ()), ('verify', ())):
+            with self.subTest(phase=phase):
+                args, refusal = self.parse(['--revision', REVISION, '--receipts', '/nonexistent/receipts', '--phase',
+                                            phase, *extra, '--address', '203.0.113.7'])
+                self.assertIsNone(args)
+                self.assertIn(f'--address is not used by --phase {phase}', refusal)
+        args, refusal = self.parse(['--revision', REVISION, '--receipts', '/nonexistent/receipts', '--phase', 'manage',
+                                    '--command', 'clear-signin-failures', '--address', '203.0.113.7', '--reason-file',
+                                    '/r', '--by', 'Ada Lovelace'])
+        self.assertIsNotNone(args, refusal)
+
+    def test_every_parser_argument_is_bound_to_the_phases_that_use_it(self):
+        parser_names = {'pfs_zip', 'mue_zip', 'pfs_retrieved_at', 'mue_retrieved_at', 'coding_mode', 'authorization_ref',
+                        'provider_mode', 'astra_mode', 'fable_mode', 'interpreter_mode', 'owner_username',
+                        'owner_display_name', 'agent_username', 'agent_display_name', 'workspace_name', 'specialty',
+                        'reset_passwords', 'by', 'review_by', 'regrant', 'command', 'username', 'address',
+                        'reason_file', 'approved_by', 'execute', 'workspace_id', 'encounter_id', 'dispose_step',
+                        'ledger_file', 'plan_id', 'all_human_accounts'}
+        with mock.patch('sys.stderr', io.StringIO()), mock.patch.object(install, 'argument_problem', return_value=''):
+            args = install.parse_args(['--revision', REVISION, '--receipts', '/r', '--phase', 'verify'])
+        given = set(vars(args)) - {'phase', 'revision', 'receipts'}
+        self.assertEqual(given, parser_names)
+        self.assertEqual(sorted(given - set(install.PHASE_ARGUMENTS)), [])
 
 
 class SessionScriptImportTests(unittest.TestCase):

@@ -1793,7 +1793,15 @@ release 1), run only through `--phase manage`, never over HTTP:
   document) is a dry run that records what would be destroyed;
 - `--dispose-step execute --plan-id <id> --by <person> --approved-by <another
   person> --reason-file <file>` carries out a plan under a day old: two
-  different named people run and approve it (D14);
+  different named people run and approve it (D14). It takes nothing else: a
+  `--workspace-id` or `--encounter-id` is refused before anything runs, since
+  the plan's own scope is what is destroyed (refutation round 1, installer-1).
+  Every step takes exactly what it passes to the command - `close`
+  `--workspace-id --reason-file`, `plan` `--workspace-id` and/or
+  `--encounter-id` (and `--reason-file`), `ledger` `--reason-file`,
+  `replay-ledger` `--ledger-file --reason-file` (and `--execute
+  --approved-by`), each with `--by` - and refuses any other, so what was
+  typed is what ran;
 - `--dispose-step ledger` prints the ledger - the MAC-signed list of every
   disposal - into the receipt; keep it with the receipts;
 - `--dispose-step replay-ledger --ledger-file <file> --reason-file <file>` is,
