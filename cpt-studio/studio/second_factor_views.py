@@ -154,20 +154,20 @@ def recovery(request):
 # --- setup with a code issued on the server ---------------------------------------------------------------------------
 
 def _enrolment(request):
-    """(the account, the live setup code) the session presented, or (None, None)."""
+    """(the account, the live setup claim) of the setup this session claimed with its code, or (None, None)."""
     state = request.session.get(factor.ENROLMENT)
     if not isinstance(state, dict):
         return None, None
     try:
         user = User.objects.get(pk=state.get('user'), is_active=True)
-    except (User.DoesNotExist, ValueError, TypeError):
+    except (User.DoesNotExist, ValueError, TypeError, ValidationError):
         request.session.pop(factor.ENROLMENT, None)
         return None, None
-    token = factor.live_setup_token(state.get('token'), user)
-    if token is None or not factor.is_human_operator(user):
+    claim = factor.live_claim(state.get('claim'), user)
+    if claim is None or not factor.is_human_operator(user):
         request.session.pop(factor.ENROLMENT, None)
         return None, None
-    return user, token
+    return user, claim
 
 
 def _code_refused(request):
@@ -180,52 +180,61 @@ def _code_refused(request):
 
 
 def _start_enrolment(request):
-    """The first step: the setup code and the new password. The refusal sentence, or '' once the password is set."""
+    """The first step: the setup code and the new password. The refusal sentence, or '' once the password is set. The
+    code is used up here, in the transaction that sets the password (factor.claim_setup_code): a second browser with
+    the same code - at the same moment or later - is refused like a used code, and only this session, in a fresh session
+    key, holds the claim that finishes the setup (refutation r2, finding 6)."""
     refused = _code_refused(request)
     if refused:
         return refused
     token = factor.setup_token(request.POST.get('code', ''))
-    if token is None:
-        rate.hit(factor.SETUP_CODE_SCOPE, request_meta.client_key(request), window_seconds=settings.SIGNIN_WINDOW_SECONDS)
-        return SETUP_CODE_REFUSED
-    user = token.user
-    new, again = request.POST.get('new_password', ''), request.POST.get('new_password_again', '')
-    if new != again:
-        return 'The two new passwords are not the same.'
-    try:
-        validate_password(new, user)
-    except ValidationError as exc:
-        return ' '.join(exc.messages)
-    user.set_password(new)
-    user.password_changed_at = timezone.now()
-    user.password_change_required_at = None
-    user.save(update_fields=['password', 'password_changed_at', 'password_change_required_at'])
-    ended = sessions.end_sessions(user)
-    security_events.record('password.changed', actor=user, subject=user, request=request, door=request_meta.ADMIN,
-                           stage='setup', sessions_ended=ended, token=token.pk)
-    request.session[factor.ENROLMENT] = {'token': str(token.pk), 'user': str(user.pk)}
-    return ''
+    if token is not None:
+        user = token.user
+        new, again = request.POST.get('new_password', ''), request.POST.get('new_password_again', '')
+        if new != again:
+            return 'The two new passwords are not the same.'
+        try:
+            validate_password(new, user)
+        except ValidationError as exc:
+            return ' '.join(exc.messages)
+        with transaction.atomic():
+            claim = factor.claim_setup_code(token)
+            if claim is not None:
+                user.set_password(new)
+                user.password_changed_at = timezone.now()
+                user.password_change_required_at = None
+                user.save(update_fields=['password', 'password_changed_at', 'password_change_required_at'])
+        if claim is not None:
+            ended = sessions.end_sessions(user)
+            security_events.record('password.changed', actor=user, subject=user, request=request,
+                                   door=request_meta.ADMIN, stage='setup', sessions_ended=ended, token=token.pk)
+            request.session.flush()  # the claim lives in a session of its own, under a new key
+            request.session[factor.ENROLMENT] = {'claim': str(claim.pk), 'token': str(token.pk), 'user': str(user.pk)}
+            return ''
+    rate.hit(factor.SETUP_CODE_SCOPE, request_meta.client_key(request), window_seconds=settings.SIGNIN_WINDOW_SECONDS)
+    return SETUP_CODE_REFUSED
 
 
-def _finish_enrolment(request, user, token):
+def _finish_enrolment(request, user, claim):
     """The second step: the first key. The page that shows the recovery codes once, or Refused. The key is checked
-    first, which uses its challenge up outside any transaction (a refused answer has used it too); the setup code is
-    then locked while the key is stored, so two answers sent at once cannot both use it."""
+    first, which uses its challenge up outside any transaction (a refused answer has used it too); the setup's claim is
+    then locked and used up while the key is stored, so two answers sent at once cannot both finish it."""
     checked = factor.checked_registration(request, user, request.POST.get('credential', ''),
                                           request.POST.get('label', ''), factor.ENROL)
     with transaction.atomic():
         try:
-            token = OneTimeToken.objects.select_for_update().get(
-                pk=token.pk, user=user, used_at__isnull=True, revoked_at__isnull=True, expires_at__gt=timezone.now())
+            claim = OneTimeToken.objects.select_for_update().get(
+                pk=claim.pk, user=user, purpose=factor.SETUP_CLAIM_PURPOSE, used_at__isnull=True,
+                revoked_at__isnull=True, expires_at__gt=timezone.now())
         except OneTimeToken.DoesNotExist:
             raise factor.Refused(SETUP_EXPIRED) from None
         key = factor.store_key(user, checked)
-        token.used_at = timezone.now()
-        token.save(update_fields=['used_at'])
+        claim.used_at = timezone.now()
+        claim.save(update_fields=['used_at'])
         codes = factor.new_recovery_codes(user)
-    request.session.pop(factor.ENROLMENT, None)
+    token = request.session.pop(factor.ENROLMENT, {}).get('token')
     security_events.record('second_factor.enrolled', actor=user, subject=user, request=request, key=key.pk,
-                           token=token.pk, recovery_codes=len(codes))
+                           token=token, claim=claim.pk, recovery_codes=len(codes))
     door = throttle.Door(request, request_meta.ADMIN, user.get_username())
     door.record(LoginAttempt.SIGNED_IN)  # setup ends signed in, with the key just made as the second factor
     sessions.prepare_sign_in(request, door=request_meta.ADMIN, sign_in_ref=door.sign_in_ref)
@@ -240,7 +249,7 @@ def enrol(request):
         return HttpResponseNotAllowed(['GET', 'POST'])
     if request.user.is_authenticated:
         return redirect(KEYS_PAGE)  # a signed-in operator adds keys on the keys page
-    user, token = _enrolment(request)
+    user, claim = _enrolment(request)
     error = ''
     if request.method == 'POST':
         step = request.POST.get('step')
@@ -249,16 +258,16 @@ def enrol(request):
                 error = SETUP_EXPIRED
             else:
                 try:
-                    return _finish_enrolment(request, user, token)
+                    return _finish_enrolment(request, user, claim)
                 except factor.Refused as refused:
                     error = str(refused)
         else:
             error = _start_enrolment(request)
             if not error:
                 return _see_other(ENROL_PAGE)
-            user, token = None, None
+            user, claim = None, None
     context = {'step': 'key' if user is not None else 'code', 'min_length': settings.PASSWORD_MIN_LENGTH,
-               'expires_at': token.expires_at if token is not None else None}
+               'expires_at': claim.expires_at if claim is not None else None}
     return _page(request, 'studio/ops_enrol.html', context, error)
 
 

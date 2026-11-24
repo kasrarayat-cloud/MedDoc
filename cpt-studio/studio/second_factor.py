@@ -40,6 +40,8 @@ every credential row records its relying-party id)
     use_recovery_code  a recovery code stands in for a key once: stored as Django's make_password hash.
     issue_setup_code / setup_token  setup needs a single-use code issued on the server (OneTimeToken OPERATOR_SETUP, valid
         ENROLMENT_CODE_SECONDS, stored as its sha256 only; issuing one revokes the account's earlier unused ones).
+    claim_setup_code / live_claim  the setup's first step uses the code up at once and gives its session a claim
+        (SETUP_CLAIM_PURPOSE, ENROLMENT_CODE_SECONDS) that the second step uses up with the first key.
     registration_options / verify_registration  a new key, from a setup code (enrolment) or from the keys page.
     new_recovery_codes  RECOVERY_CODE_COUNT codes, shown once; the earlier unused ones are voided.
     reset(user, ...)  the server's reset of lost keys (B2, item 7): keys removed, recovery codes voided, sessions ended, a
@@ -62,6 +64,7 @@ from urllib.parse import urlencode, urlsplit
 from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponseRedirect
@@ -183,7 +186,7 @@ def local_path(target, host=None) -> bool:
 
 PENDING = sessions.PENDING_SIGN_IN_KEY  # the anonymous session's checked password, waiting for its key
 CHALLENGE = 'cpt_2fa_challenge'  # the one challenge the session's next key response must sign
-ENROLMENT = sessions.SETUP_KEY  # the setup code a session presented, until its first key is registered
+ENROLMENT = sessions.SETUP_KEY  # the setup a session claimed with its code, until its first key is registered
 SIGN_IN, STEP_UP, ENROL, ADD = 'sign_in', 'step_up', 'enrol', 'add'  # what a challenge is for
 CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
 CODE_GROUP = 5
@@ -197,6 +200,7 @@ REMOVED_BY_RESET = 'reset on the server'
 REMOVED_BY_OPERATOR = 'removed by the operator'
 MAX_RESPONSE_CHARS = 64 * 1024  # a key's response, as JSON: far more than any authenticator sends
 CHALLENGE_PURPOSE = 'webauthn_challenge'  # OneTimeToken.purpose of a challenge's single use (a plain column)
+SETUP_CLAIM_PURPOSE = 'operator_setup_claim'  # OneTimeToken.purpose of a setup a session claimed with its code
 # a credential id as a response names it: base64url, at most SecondFactorCredential.credential_id's 1400 characters
 CREDENTIAL_ID = re.compile(r'[A-Za-z0-9_-]{1,1400}')
 
@@ -454,8 +458,9 @@ def code_digest(plain) -> str:
 
 def issue_setup_code(user, by, code=None):
     """(the OneTimeToken, the code as shown) of a new setup code for ``user``, issued by the person ``by``: ``code`` when
-    the caller made one (the installer's), else a new one. The account's earlier unused codes are revoked. ValueError
-    when ``code`` is not a setup code."""
+    the caller made one (the installer's), else a new one. The account's earlier unused codes are revoked, and so is
+    any setup a session claimed with one and has not finished (claim_setup_code). ValueError when ``code`` is not a
+    setup code."""
     if code is None:
         plain = plain_code(new_code(SETUP_CODE_GROUPS), SETUP_CODE_GROUPS)
     else:
@@ -464,8 +469,8 @@ def issue_setup_code(user, by, code=None):
             raise ValueError(f'A setup code is {SETUP_CODE_GROUPS} groups of {CODE_GROUP} letters and digits.')
     now = _now()
     with transaction.atomic():
-        OneTimeToken.objects.filter(user=user, purpose=OneTimeToken.OPERATOR_SETUP, used_at__isnull=True,
-                                    revoked_at__isnull=True).update(revoked_at=now)
+        OneTimeToken.objects.filter(user=user, purpose__in=(OneTimeToken.OPERATOR_SETUP, SETUP_CLAIM_PURPOSE),
+                                    used_at__isnull=True, revoked_at__isnull=True).update(revoked_at=now)
         token = OneTimeToken.objects.create(
             user=user, purpose=OneTimeToken.OPERATOR_SETUP, token_sha256=code_digest(plain), created_by=str(by)[:120],
             expires_at=now + timedelta(seconds=settings.ENROLMENT_CODE_SECONDS))
@@ -485,15 +490,31 @@ def setup_token(typed):
     return token
 
 
-def live_setup_token(token_id, user):
-    """The setup code a session presented, if it is still live and still ``user``'s, else None."""
+def claim_setup_code(token):
+    """The setup's first step uses ``token`` - a live setup code - up, in one UPDATE ... WHERE used_at IS NULL, and
+    answers the claim that lets this one session finish the setup: a OneTimeToken of SETUP_CLAIM_PURPOSE, live for
+    ENROLMENT_CODE_SECONDS, which the second step uses up when the first key is stored. None when another request used
+    the code first: two browsers holding one code cannot both choose the password (refutation r2, finding 6). Runs in
+    the caller's transaction, which sets the password with it."""
+    now = _now()
+    used = OneTimeToken.objects.filter(pk=token.pk, purpose=OneTimeToken.OPERATOR_SETUP, used_at__isnull=True,
+                                       revoked_at__isnull=True, expires_at__gt=now).update(used_at=now)
+    if used != 1:
+        return None
+    return OneTimeToken.objects.create(user=token.user, purpose=SETUP_CLAIM_PURPOSE, created_by=token.created_by,
+                                       token_sha256=hashlib.sha256(secrets.token_bytes(32)).hexdigest(),
+                                       expires_at=now + timedelta(seconds=settings.ENROLMENT_CODE_SECONDS))
+
+
+def live_claim(claim_id, user):
+    """The setup claim a session holds (claim_setup_code), if it is still live and still ``user``'s, else None."""
     try:
-        token = OneTimeToken.objects.select_related('user').get(pk=token_id, user=user)
-    except (OneTimeToken.DoesNotExist, ValueError, TypeError):
+        claim = OneTimeToken.objects.get(pk=claim_id, user=user, purpose=SETUP_CLAIM_PURPOSE)
+    except (OneTimeToken.DoesNotExist, ValueError, TypeError, ValidationError):
         return None
-    if token.used_at or token.revoked_at or token.expires_at <= _now() or token.purpose != OneTimeToken.OPERATOR_SETUP:
+    if claim.used_at or claim.revoked_at or claim.expires_at <= _now():
         return None
-    return token
+    return claim
 
 
 def new_recovery_codes(user):

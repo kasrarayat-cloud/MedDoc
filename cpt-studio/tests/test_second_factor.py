@@ -33,7 +33,7 @@ from django.utils import timezone
 from webauthn.helpers import bytes_to_base64url
 
 from cptstudio import urls as customer_urls
-from studio import models, request_meta, second_factor, throttle
+from studio import models, request_meta, second_factor, second_factor_views, throttle
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
@@ -979,18 +979,86 @@ class EnrolmentTests(TestCase):
         self.assertEqual(answer.status_code, 400)
         self.assertFalse(models.SecondFactorCredential.objects.exists())
 
-    def test_a_code_used_meanwhile_registers_no_key(self):
-        # a second answer sent at once (or a code used up in another browser) between the two steps: no key is added
+    def test_a_claim_used_or_revoked_meanwhile_registers_no_key(self):
+        # a second answer sent at once that finished first, or a new code issued meanwhile: no key is added
+        for label, change in (('used', {'used_at': timezone.now()}), ('revoked', {'revoked_at': timezone.now()})):
+            with self.subTest(label):
+                self.token, self.code = second_factor.issue_setup_code(self.operator, 'Synthetic Person')
+                client = admin_client()
+                self.assertEqual(self.start(client).status_code, 303)
+                options = options_of(client, '/login/enrol/options')
+                claim = models.OneTimeToken.objects.get(purpose=second_factor.SETUP_CLAIM_PURPOSE, used_at__isnull=True,
+                                                        revoked_at__isnull=True)
+                models.OneTimeToken.objects.filter(pk=claim.pk).update(**change)
+                answer = client.post('/login/enrol', {'step': 'key', 'label': 'Late key',
+                                                      'credential': json.dumps(Authenticator().register(options))})
+                self.assertEqual(answer.status_code, 400)
+                self.assertFalse(models.SecondFactorCredential.objects.exists())
+                self.assertFalse(models.SecondFactorRecoveryCode.objects.exists())
+                self.assertIsNone(signed_in_as(client))
+
+    def test_two_answers_at_once_finish_the_setup_once(self):
+        # both answers found the claim live; the other one stored its key and used the claim while this one was being
+        # checked: the claim is locked and read again before a key is stored, so this one stores nothing
         client = admin_client()
         self.assertEqual(self.start(client).status_code, 303)
         options = options_of(client, '/login/enrol/options')
-        models.OneTimeToken.objects.filter(pk=self.token.pk).update(used_at=timezone.now())
-        answer = client.post('/login/enrol', {'step': 'key', 'label': 'Late key',
-                                              'credential': json.dumps(Authenticator().register(options))})
+        original = second_factor.checked_registration
+
+        def checked_while_the_other_finished(*args, **kwargs):
+            checked = original(*args, **kwargs)
+            models.OneTimeToken.objects.filter(purpose=second_factor.SETUP_CLAIM_PURPOSE).update(used_at=timezone.now())
+            return checked
+
+        with mock.patch.object(second_factor, 'checked_registration', side_effect=checked_while_the_other_finished):
+            answer = client.post('/login/enrol', {'step': 'key', 'label': 'Second key',
+                                                  'credential': json.dumps(Authenticator().register(options))})
         self.assertEqual(answer.status_code, 400)
+        self.assertIn(second_factor_views.SETUP_EXPIRED, answer.content.decode())
         self.assertFalse(models.SecondFactorCredential.objects.exists())
         self.assertFalse(models.SecondFactorRecoveryCode.objects.exists())
         self.assertIsNone(signed_in_as(client))
+
+    def test_one_code_sets_the_password_once_from_two_browsers(self):
+        first, second = admin_client(), admin_client()
+        mine, theirs = 'first new password only I know', 'second new password nobody chose'
+        self.assertEqual(self.start(first, password=mine).status_code, 303)
+        again = self.start(second, password=theirs)  # the same code, in another browser
+        self.assertEqual(again.status_code, 400)
+        self.assertIn('This setup code cannot be used', again.content.decode())
+        self.operator.refresh_from_db()
+        self.assertTrue(self.operator.check_password(mine))
+        self.assertFalse(self.operator.check_password(theirs))
+        self.token.refresh_from_db()
+        self.assertIsNotNone(self.token.used_at, 'the first step used the code up')
+        self.assertNotIn(second_factor.ENROLMENT, second.session)
+        self.assertEqual(second.post('/login/enrol/options').status_code, 403)
+        self.assertEqual(models.SecurityEvent.objects.filter(event='password.changed').count(), 1)
+        # the first browser finishes the setup with its claim, once
+        self.assertIn('Register your security key', first.get('/login/enrol').content.decode())
+        key = Authenticator()
+        self.assertEqual(self.finish(first, key).status_code, 200)
+        claim = models.OneTimeToken.objects.get(purpose=second_factor.SETUP_CLAIM_PURPOSE)
+        self.assertIsNotNone(claim.used_at)
+        self.assertEqual(models.SecondFactorCredential.objects.get().credential_id, key.id)
+
+    def test_the_claim_lasts_the_setup_code_s_time_and_starts_in_a_fresh_session(self):
+        with Clock() as clock:
+            self.token, self.code = second_factor.issue_setup_code(self.operator, 'Synthetic Person')  # on this clock
+            client = admin_client()
+            before = client.get('/login/enrol')
+            anonymous = client.cookies[settings.SESSION_COOKIE_NAME].value if settings.SESSION_COOKIE_NAME in client.cookies else ''
+            self.assertEqual(before.status_code, 200)
+            self.assertEqual(self.start(client).status_code, 303)
+            self.assertNotEqual(client.cookies[settings.SESSION_COOKIE_NAME].value, anonymous)
+            claim = models.OneTimeToken.objects.get(purpose=second_factor.SETUP_CLAIM_PURPOSE)
+            self.assertEqual(claim.expires_at, clock.moment + timedelta(seconds=settings.ENROLMENT_CODE_SECONDS))
+            self.assertEqual((claim.user_id, claim.created_by), (self.operator.pk, 'Synthetic Person'))
+            clock.advance(settings.ENROLMENT_CODE_SECONDS + 1)
+            self.assertEqual(client.post('/login/enrol/options').status_code, 403)
+            late = client.post('/login/enrol', {'step': 'key', 'credential': '{}', 'label': 'x'})
+            self.assertEqual(late.status_code, 400)
+            self.assertIn(second_factor_views.SETUP_EXPIRED, late.content.decode())
 
     def test_wrong_codes_are_counted_and_refused_for_the_window(self):
         client = admin_client()
