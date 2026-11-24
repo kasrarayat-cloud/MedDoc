@@ -14,6 +14,14 @@ ceremony. The browser side is static/studio/ops_second_factor.js (navigator.cred
 
 Every view keeps Django's CSRF check; every refusal is a fixed sentence. Nothing here logs or records a code, a key or a
 password: the security events hold ids and counts.
+
+Every act here and its SecurityEvent are one transaction (release 1 repair round 1, failclosed-2 to -5 and -7): setup's
+first step (the code used up, the claim, the password, the other sessions ended) with password.changed; setup's key
+step (the key, the claim used, the recovery codes, the sign-in) with second_factor.enrolled; a key added or removed with
+its key_added or key_removed; a recovery code used up, with the sign-in or step-up it completes, with recovery_used. A
+record the database refuses raises out of the transaction: nothing of the act is kept, and the request fails (a server
+error, whose answer saves no session, so the browser keeps the state it had and can try again). A challenge is still
+used up before, and outside, the transaction that stores a key: a refused answer has used it all the same.
 """
 from django.conf import settings
 from django.contrib.auth import login
@@ -84,7 +92,7 @@ def second_factor(request):
     next_url = _next_of(request, state)
     error = ''
     if request.method == 'POST':
-        error = factor.too_many(user)
+        error = factor.too_many(user, request)
         if not error:
             try:
                 factor.verify_key(request, user, request.POST.get('credential', ''), purpose)
@@ -103,7 +111,7 @@ def second_factor(request):
     return _page(request, 'studio/ops_second_factor.html', {
         'mode': 'key', 'next': next_url, 'step_up': purpose == factor.STEP_UP, 'has_keys': keys,
         'no_keys': '' if keys else NO_KEYS, 'codes_left': factor.recovery_codes_left(user),
-        'attempts_left': factor.attempts_left(user, state)}, error)
+        'attempts_left': factor.attempts_left(user, state, request)}, error)
 
 
 def second_factor_options(request):
@@ -113,7 +121,7 @@ def second_factor_options(request):
     user, state, purpose = _who(request)
     if user is None:
         return JsonResponse({'error': factor.NO_CHALLENGE}, status=403)
-    refused = factor.too_many(user)
+    refused = factor.too_many(user, request)
     if refused:
         return JsonResponse({'error': refused}, status=429)
     if not factor.active_keys(user).exists():
@@ -131,24 +139,30 @@ def recovery(request):
     next_url = _next_of(request, state)
     error = ''
     if request.method == 'POST':
-        error = factor.too_many(user)
+        error = factor.too_many(user, request)
         if not error:
-            if factor.use_recovery_code(user, request.POST.get('code', '')):
-                left = factor.recovery_codes_left(user)
-                security_events.record('second_factor.recovery_used', actor=user, subject=user, request=request,
-                                       stage=purpose, codes_left=left)
-                if purpose == factor.SIGN_IN:
-                    if not factor.complete_sign_in(request, user, state):
-                        return redirect(f'{SIGN_IN_PAGE}?reason=key')  # its attempt was settled meanwhile
-                else:
-                    factor.refresh(request)
+            completed = False
+            # the code used up, its record and what it completes: one act
+            with factor.new_sign_in_only_if_kept(request), transaction.atomic():
+                used = factor.use_recovery_code(user, request.POST.get('code', ''))
+                if used:
+                    security_events.record('second_factor.recovery_used', actor=user, subject=user, request=request,
+                                           stage=purpose, codes_left=factor.recovery_codes_left(user))
+                    if purpose == factor.SIGN_IN:
+                        completed = factor.complete_sign_in(request, user, state)
+                    else:
+                        factor.refresh(request)
+                        completed = True
+            if used:
+                if not completed:
+                    return redirect(f'{SIGN_IN_PAGE}?reason=key')  # its attempt was settled meanwhile
                 return redirect(next_url)
             error = RECOVERY_REFUSED
             if factor.note_failure(request, user, state, kind='recovery'):
                 return redirect(f'{SIGN_IN_PAGE}?reason=key')
     return _page(request, 'studio/ops_second_factor.html', {
         'mode': 'recovery', 'next': next_url, 'codes_left': factor.recovery_codes_left(user),
-        'step_up': purpose == factor.STEP_UP, 'attempts_left': factor.attempts_left(user, state)}, error)
+        'step_up': purpose == factor.STEP_UP, 'attempts_left': factor.attempts_left(user, state, request)}, error)
 
 
 # --- setup with a code issued on the server ---------------------------------------------------------------------------
@@ -170,12 +184,17 @@ def _enrolment(request):
     return user, claim
 
 
-def _code_refused(request):
-    """The refusal when this address has used up its wrong setup codes for the window (5, SECOND_FACTOR_ATTEMPTS), else ''."""
+def _setup_code_place(request):
+    """Take this attempt's place among the address's wrong setup codes of the window (SECOND_FACTOR_ATTEMPTS per
+    SIGNIN_WINDOW_SECONDS) BEFORE its code is looked up: one atomic hit, whose own count says where the attempt stands,
+    so codes sent at the same moment never get more lookups than codes sent one after another (release 1 repair round
+    1, the class of auth-2). The refusal when there is none left - the place given back at once, so a refusal never
+    counts - else ''. A wrong code keeps its place as its count; a live code gives it back."""
     window = settings.SIGNIN_WINDOW_SECONDS
-    used = rate.count(factor.SETUP_CODE_SCOPE, request_meta.client_key(request), since=rate.window_start(window))
-    if used < settings.SECOND_FACTOR_ATTEMPTS:
+    key = request_meta.client_key(request)
+    if rate.hit(factor.SETUP_CODE_SCOPE, key, window_seconds=window) <= settings.SECOND_FACTOR_ATTEMPTS:
         return ''
+    throttle.give_back(factor.SETUP_CODE_SCOPE, key)
     return factor.TOO_MANY.format(wait=throttle.wait_words(window))
 
 
@@ -184,11 +203,12 @@ def _start_enrolment(request):
     code is used up here, in the transaction that sets the password (factor.claim_setup_code): a second browser with
     the same code - at the same moment or later - is refused like a used code, and only this session, in a fresh session
     key, holds the claim that finishes the setup (refutation r2, finding 6)."""
-    refused = _code_refused(request)
+    refused = _setup_code_place(request)
     if refused:
         return refused
     token = factor.setup_token(request.POST.get('code', ''))
     if token is not None:
+        throttle.give_back(factor.SETUP_CODE_SCOPE, request_meta.client_key(request))  # a live code is no wrong one
         user = token.user
         new, again = request.POST.get('new_password', ''), request.POST.get('new_password_again', '')
         if new != again:
@@ -197,31 +217,36 @@ def _start_enrolment(request):
             validate_password(new, user)
         except ValidationError as exc:
             return ' '.join(exc.messages)
-        with transaction.atomic():
+        with transaction.atomic():  # the code used up, the claim, the password, the sessions ended and the record
             claim = factor.claim_setup_code(token)
             if claim is not None:
                 user.set_password(new)
                 user.password_changed_at = timezone.now()
                 user.password_change_required_at = None
                 user.save(update_fields=['password', 'password_changed_at', 'password_change_required_at'])
+                ended = sessions.end_sessions(user)
+                security_events.record('password.changed', actor=user, subject=user, request=request,
+                                       door=request_meta.ADMIN, stage='setup', sessions_ended=ended, token=token.pk)
         if claim is not None:
-            ended = sessions.end_sessions(user)
-            security_events.record('password.changed', actor=user, subject=user, request=request,
-                                   door=request_meta.ADMIN, stage='setup', sessions_ended=ended, token=token.pk)
             request.session.flush()  # the claim lives in a session of its own, under a new key
             request.session[factor.ENROLMENT] = {'claim': str(claim.pk), 'token': str(token.pk), 'user': str(user.pk)}
             return ''
-    rate.hit(factor.SETUP_CODE_SCOPE, request_meta.client_key(request), window_seconds=settings.SIGNIN_WINDOW_SECONDS)
-    return SETUP_CODE_REFUSED
+        # another request used the live code first: this one counts as a wrong code, after it was given its place back
+        rate.hit(factor.SETUP_CODE_SCOPE, request_meta.client_key(request),
+                 window_seconds=settings.SIGNIN_WINDOW_SECONDS)
+    return SETUP_CODE_REFUSED  # a wrong code: the place it took is its count
 
 
 def _finish_enrolment(request, user, claim):
     """The second step: the first key. The page that shows the recovery codes once, or Refused. The key is checked
     first, which uses its challenge up outside any transaction (a refused answer has used it too); the setup's claim is
-    then locked and used up while the key is stored, so two answers sent at once cannot both finish it."""
+    then locked and used up while the key is stored, so two answers sent at once cannot both finish it. The key, the
+    claim used, the recovery codes, the record second_factor.enrolled, the sign-in's LoginAttempt and the sign-in are
+    one transaction, the record before the sign-in: a record the database refuses keeps none of them, and the setup
+    can be finished with a new challenge (the codes are shown only once all of it is kept)."""
     checked = factor.checked_registration(request, user, request.POST.get('credential', ''),
                                           request.POST.get('label', ''), factor.ENROL)
-    with transaction.atomic():
+    with factor.new_sign_in_only_if_kept(request), transaction.atomic():
         try:
             claim = OneTimeToken.objects.select_for_update().get(
                 pk=claim.pk, user=user, purpose=factor.SETUP_CLAIM_PURPOSE, used_at__isnull=True,
@@ -232,14 +257,17 @@ def _finish_enrolment(request, user, claim):
         claim.used_at = timezone.now()
         claim.save(update_fields=['used_at'])
         codes = factor.new_recovery_codes(user)
-    token = request.session.pop(factor.ENROLMENT, {}).get('token')
-    security_events.record('second_factor.enrolled', actor=user, subject=user, request=request, key=key.pk,
-                           token=token, claim=claim.pk, recovery_codes=len(codes))
-    door = throttle.Door(request, request_meta.ADMIN, user.get_username())
-    door.record(LoginAttempt.SIGNED_IN)  # setup ends signed in, with the key just made as the second factor
-    sessions.prepare_sign_in(request, door=request_meta.ADMIN, sign_in_ref=door.sign_in_ref)
-    login(request, user)
-    request.session[request_meta.SESSION_SECOND_FACTOR_AT] = request_meta.epoch_seconds()
+        token = request.session.pop(factor.ENROLMENT, {}).get('token')
+        security_events.record('second_factor.enrolled', actor=user, subject=user, request=request, key=key.pk,
+                               token=token, claim=claim.pk, recovery_codes=len(codes))
+        door = throttle.Door(request, request_meta.ADMIN, user.get_username())
+        door.record(LoginAttempt.SIGNED_IN)  # setup ends signed in, with the key just made as the second factor
+        sessions.prepare_sign_in(request, door=request_meta.ADMIN, sign_in_ref=door.sign_in_ref)
+        login(request, user)
+        request.session[request_meta.SESSION_SECOND_FACTOR_AT] = request_meta.epoch_seconds()
+    # the codes are shown signed in: the page arms the console's idle timer from the session just opened, as every
+    # signed-in console page does from the session policy's own (studio.sessions.page_config; auth-1)
+    request.cpt_page = sessions.page_config(request)
     return render(request, 'studio/ops_enrol.html', {'step': 'codes', 'codes': codes, 'label': key.label})
 
 
@@ -314,15 +342,19 @@ def keys(request):
         if action == 'options':
             return JsonResponse(factor.registration_options(request, user, factor.ADD))
         if action == 'add':
-            key = factor.verify_registration(request, user, request.POST.get('credential', ''),
-                                             request.POST.get('label', ''), factor.ADD)
-            security_events.record('second_factor.key_added', actor=user, subject=user, request=request, key=key.pk,
-                                   keys=factor.active_keys(user).count())
+            # the challenge is used up first, outside the transaction; then the key and its record, together
+            checked = factor.checked_registration(request, user, request.POST.get('credential', ''),
+                                                  request.POST.get('label', ''), factor.ADD)
+            with transaction.atomic():
+                key = factor.store_key(user, checked)
+                security_events.record('second_factor.key_added', actor=user, subject=user, request=request,
+                                       key=key.pk, keys=factor.active_keys(user).count())
             return _see_other(f'{KEYS_PAGE}?done=added')
         if action == 'remove':
-            key = factor.remove_key(user, request.POST.get('key', ''))
-            security_events.record('second_factor.key_removed', actor=user, subject=user, request=request, key=key.pk,
-                                   keys=factor.active_keys(user).count())
+            with transaction.atomic():  # the key removed and its record, together
+                key = factor.remove_key(user, request.POST.get('key', ''))
+                security_events.record('second_factor.key_removed', actor=user, subject=user, request=request,
+                                       key=key.pk, keys=factor.active_keys(user).count())
             return _see_other(f'{KEYS_PAGE}?done=removed')
     except factor.Refused as refused:
         if action == 'options':

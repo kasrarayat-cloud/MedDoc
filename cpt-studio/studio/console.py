@@ -166,9 +166,12 @@ EVENT_LABELS = {
 }
 DECISION_LABELS = {models.CodeDecision.APPROVE: 'Approved', models.CodeDecision.REJECT: 'Rejected',
                    models.CodeDecision.REVOKE: 'Decision undone'}
-# The event data shown beside an event, in this order, by name (ids are kept for the operator's record elsewhere).
-DETAIL_KEYS = ('number', 'line', 'code', 'kind', 'fmt', 'count', 'purpose', 'state', 'username', 'role', 'from', 'to',
-               'name', 'category', 'view', 'scope', 'sessions_ended', 'requested_by', 'by')
+# The event data shown beside an event, in this order, by name (ids are kept for the operator's record elsewhere). No
+# line and no code (release 1 repair round 1, bypass-0 and phileak-3): a decision's code and line - and an earlier
+# version's answered detail's code - are the document's content, which its own page shows only with a content grant
+# (studio.operator, C2), and this list is every practice's, read with no reason.
+DETAIL_KEYS = ('number', 'kind', 'fmt', 'count', 'purpose', 'state', 'username', 'role', 'from', 'to', 'name', 'category',
+               'view', 'scope', 'sessions_ended', 'requested_by', 'by')
 
 
 # --- reading -------------------------------------------------------------------------------------------------------

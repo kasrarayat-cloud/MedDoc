@@ -36,13 +36,25 @@ every credential row records its relying-party id)
     note_failure  a wrong key or recovery code counts per account in RateWindow (SECOND_FACTOR_ATTEMPTS per
         SECOND_FACTOR_PENDING_SECONDS) and per pending sign-in (its reference, from its start); at either limit a pending
         sign-in is dropped - in every copy of the session, since pending() reads its count - and recorded as
-        second_factor_failed, with one SecurityEvent.
+        second_factor_failed, with one SecurityEvent. The per-account count is two counts (failure_scope; release 1
+        repair round 1, auth-0): a request carrying this account's own valid known-device cookie spends and reads
+        FAILED_KNOWN_DEVICE_SCOPE, every other request FAILED_SCOPE. So someone holding the password alone, who can
+        fill the shared count every window from anywhere, never uses up the attempts of the operator's own browser,
+        whose key, recovery codes and step-up keep working. A request without that cookie - a new browser, another
+        account's cookie, a forged or expired one - shares FAILED_SCOPE, as every request did before; someone who also
+        holds the device cookie can spend the device's count too (the cookie is HttpOnly, Secure and SameSite=Strict,
+        and it opens nothing: the password and a key or code are still needed). Each pending sign-in keeps its own
+        limit, whichever count its requests spend.
     use_recovery_code  a recovery code stands in for a key once: stored as Django's make_password hash.
     issue_setup_code / setup_token  setup needs a single-use code issued on the server (OneTimeToken OPERATOR_SETUP, valid
         ENROLMENT_CODE_SECONDS, stored as its sha256 only; issuing one revokes the account's earlier unused ones).
     claim_setup_code / live_claim  the setup's first step uses the code up at once and gives its session a claim
         (SETUP_CLAIM_PURPOSE, ENROLMENT_CODE_SECONDS) that the second step uses up with the first key.
-    registration_options / verify_registration  a new key, from a setup code (enrolment) or from the keys page.
+    registration_options / checked_registration / store_key  a new key, from a setup code (enrolment) or from the keys
+        page: checked first, its challenge used up outside any transaction, then stored by store_key inside the
+        caller's transaction, beside the act's SecurityEvent (release 1 repair round 1, failclosed-2 and -5). Every act
+        here that changes a key or a code - store_key, remove_key, use_recovery_code, new_recovery_codes,
+        claim_setup_code - is written in the transaction of its caller, which writes the act's record in it too.
     new_recovery_codes  RECOVERY_CODE_COUNT codes, shown once; the earlier unused ones are voided.
     reset(user, ...)  the server's reset of lost keys (B2, item 7): keys removed, recovery codes voided, sessions ended, a
         new setup code issued. No console path resets an operator's own factor.
@@ -53,6 +65,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+from contextlib import contextmanager
 import json
 import math
 import re
@@ -191,7 +204,8 @@ SIGN_IN, STEP_UP, ENROL, ADD = 'sign_in', 'step_up', 'enrol', 'add'  # what a ch
 CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
 CODE_GROUP = 5
 SETUP_CODE_GROUPS, RECOVERY_CODE_GROUPS = 5, 3  # about 124 and 74 bits
-FAILED_SCOPE = 'second_factor.failed'  # wrong keys and recovery codes, per account
+FAILED_SCOPE = 'second_factor.failed'  # wrong keys and recovery codes, per account, but for its own known devices
+FAILED_KNOWN_DEVICE_SCOPE = 'second_factor.failed_known_device'  # the same, from requests with its known-device cookie
 PENDING_FAILED_SCOPE = 'second_factor.failed_sign_in'  # the same, per pending sign-in (its reference)
 SETUP_CODE_SCOPE = 'second_factor.setup_code'  # wrong setup codes, per address
 LABEL_CHARS = 60  # SecondFactorCredential.label
@@ -410,11 +424,6 @@ def store_key(user, checked):
     return SecondFactorCredential.objects.create(user=user, rp_id=settings.WEBAUTHN_RP_ID, **checked)
 
 
-def verify_registration(request, user, raw, label, purpose):
-    """The new key that answered the session's challenge, stored for ``user``, or Refused."""
-    return store_key(user, checked_registration(request, user, raw, label, purpose))
-
-
 def remove_key(user, key_id):
     """Remove one of ``user``'s keys (the row stays, marked removed); the last key cannot be removed. The key."""
     with transaction.atomic():
@@ -614,18 +623,31 @@ def pending_failures(state) -> int:
     return rate.count(PENDING_FAILED_SCOPE, state['ref'], since=rate.window_start(window, started))
 
 
-def attempts_left(user, state=None) -> int:
-    """The second-factor attempts ``user`` has left: per account in this window, and for a pending sign-in (``state``)
-    its own too, whichever is fewer."""
-    used = rate.count(FAILED_SCOPE, user.pk, since=rate.window_start(settings.SECOND_FACTOR_PENDING_SECONDS))
+def failure_scope(request, user) -> str:
+    """The per-account count of second-factor failures ``request`` spends and reads (see the module; auth-0):
+    FAILED_KNOWN_DEVICE_SCOPE when it carries ``user``'s own valid known-device cookie (throttle.device_user_id: signed,
+    at most KNOWN_DEVICE_DAYS old, naming this account), else FAILED_SCOPE - no request, no cookie, another account's,
+    a forged or an expired one."""
+    cookies = getattr(request, 'COOKIES', None) or {}
+    owner = throttle.device_user_id(cookies.get(throttle.device_cookie_name()))
+    return FAILED_KNOWN_DEVICE_SCOPE if owner is not None and owner == user.pk else FAILED_SCOPE
+
+
+def attempts_left(user, state=None, request=None) -> int:
+    """The second-factor attempts ``user`` has left: per account in this window - the count ``request`` spends
+    (failure_scope; FAILED_SCOPE when no request is given) - and for a pending sign-in (``state``) its own too,
+    whichever is fewer."""
+    used = rate.count(failure_scope(request, user), user.pk,
+                      since=rate.window_start(settings.SECOND_FACTOR_PENDING_SECONDS))
     if state is not None:
         used = max(used, pending_failures(state))
     return max(0, settings.SECOND_FACTOR_ATTEMPTS - used)
 
 
-def too_many(user) -> str:
-    """The refusal sentence when ``user`` has no second-factor attempt left in this window, else ''."""
-    if attempts_left(user) > 0:
+def too_many(user, request=None) -> str:
+    """The refusal sentence when ``user`` has no second-factor attempt left in this window - in the count ``request``
+    spends (failure_scope) - else ''."""
+    if attempts_left(user, request=request) > 0:
         return ''
     window = settings.SECOND_FACTOR_PENDING_SECONDS
     ends = rate.window_start(window) + timedelta(seconds=window)
@@ -636,8 +658,11 @@ def note_failure(request, user, state=None, *, kind='key') -> bool:
     """A wrong key or recovery code of ``user`` (``state``: a pending sign-in's, else a step-up's): counted per account,
     and for a pending sign-in per its reference too - each an atomic hit, the limit read after it. At the limit a pending
     sign-in is dropped and its attempt becomes second_factor_failed, with one SecurityEvent (written by the one request
-    whose update settled it). Whether it was dropped."""
-    count = rate.hit(FAILED_SCOPE, user.pk, window_seconds=settings.SECOND_FACTOR_PENDING_SECONDS)
+    whose update settled it). Whether it was dropped. The per-account count is the one ``request`` spends
+    (failure_scope: the account's own known devices apart from every other request)."""
+    scope = failure_scope(request, user)
+    known_device = scope == FAILED_KNOWN_DEVICE_SCOPE
+    count = rate.hit(scope, user.pk, window_seconds=settings.SECOND_FACTOR_PENDING_SECONDS)
     if state is not None:
         rate.hit(PENDING_FAILED_SCOPE, state['ref'], window_seconds=settings.SECOND_FACTOR_PENDING_SECONDS)
         failures = pending_failures(state)
@@ -645,12 +670,12 @@ def note_failure(request, user, state=None, *, kind='key') -> bool:
             drop_pending(request)
             if throttle.settle_second_factor(request, state['ref'], signed_in=False):
                 security_events.record('second_factor.failed', subject=user, request=request, stage=SIGN_IN, kind=kind,
-                                       failures=failures, attempt_ref=state['ref'])
+                                       failures=failures, attempt_ref=state['ref'], known_device=known_device)
             return True
         return False
     if count == settings.SECOND_FACTOR_ATTEMPTS:
         security_events.record('second_factor.failed', subject=user, request=request, stage=STEP_UP, kind=kind,
-                               failures=count)
+                               failures=count, known_device=known_device)
     return False
 
 
@@ -668,6 +693,20 @@ def complete_sign_in(request, user, state) -> bool:
     login(request, user)
     request.session[request_meta.SESSION_SECOND_FACTOR_AT] = request_meta.epoch_seconds()
     return True
+
+
+@contextmanager
+def new_sign_in_only_if_kept(request):
+    """Around a transaction that may sign the request in (a recovery code's, setup's key step): when it raises - a
+    record refused at its statement or at the COMMIT, after login() ran - the sign-in it made is rolled back, and the
+    mark login() left for studio.sessions (request.cpt_new_sign_in: set the known-device cookie and the actor header on
+    the answer) goes with it, so the failed answer gives the browser no known-device cookie (release 1 repair round 1,
+    failclosed-5 and -7). Put it outside transaction.atomic(), so a failed commit passes through it."""
+    try:
+        yield
+    except BaseException:
+        request.__dict__.pop('cpt_new_sign_in', None)
+        raise
 
 
 def refresh(request):
