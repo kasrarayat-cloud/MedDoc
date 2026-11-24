@@ -346,5 +346,146 @@ class JournalFlushAndRetentionTests(TemporaryDirectoryTest):
         self.assertEqual(json.loads(test_install.JOURNALS_FLUSHED[-1][0])['phase'], 'verify')
 
 
+
+# A failing container's output as Docker gives it: a traceback, then a DETAIL line that holds document text.
+SEEDED_MARKER = b'ZZ-TEXT-MARKER'
+SEEDED_LOGS = (b'2026-11-24T10:00:00.000000000Z Traceback (most recent call last):\n',
+               b'2026-11-24T10:00:00.100000000Z psycopg.errors.UniqueViolation: duplicate key\n'
+               b'2026-11-24T10:00:00.200000000Z DETAIL:  Key (title)=(ZZ-TEXT-MARKER colonoscopy, Jane Doe) already '
+               b'exists.\n')
+
+
+def seeded(world):
+    """``world`` whose docker logs answers SEEDED_LOGS for every container."""
+    real = world.docker
+
+    def docker(*args, **kwargs):
+        if args[0] == 'logs':
+            world.act('logs', args[-1])
+            return SimpleNamespace(returncode=0, stdout=SEEDED_LOGS[0], stderr=SEEDED_LOGS[1])
+        return real(*args, **kwargs)
+    world.docker = docker
+    return world
+
+
+def removed_without_a_copy(events) -> list:
+    kept, out = set(), []
+    for event in events:
+        if event[0] == 'keep-log':
+            kept.add(event[1])
+        elif event[0] == 'rm' and event[1] not in kept:
+            out.append(event[1])
+    return out
+
+
+class UndoPathLogTests(TemporaryDirectoryTest):
+    """Refutation, installer lens A-2: an undo kept the failed container's last 40 raw lines in the receipts folder -
+    a seeded DETAIL line holding document text survived - and removed containers with no ids-only copy."""
+
+    def world(self, cls, label):
+        folder = self.tmp / label
+        folder.mkdir()
+        return seeded(cls(folder))
+
+    def test_an_undo_keeps_no_raw_line_in_the_receipts_folder(self):
+        import test_install_r2 as r2
+        for label, world, role in (('s1', self.world(BlueGreenWorld, 's1'), 'web'),
+                                   ('s4', self.world(r2.World, 's4'), 'worker')):
+            with self.subTest(label):
+                world.unhealthy.add(install.INCOMING_WEB if label == 's1' else WORKER)
+                details, error = run_app(world)
+                self.assertIsInstance(error, install.InstallError)
+                logs = list(world.tmp.glob('*.log'))
+                self.assertTrue(logs)
+                self.assertEqual([path.name for path in logs if SEEDED_MARKER in path.read_bytes()], [])
+                tails = [path for path in logs if path.name.endswith(('-incoming-web-failed.log', '-worker-failed.log'))]
+                self.assertTrue(tails, [path.name for path in logs])
+                for path in tails:
+                    text = path.read_text()
+                    self.assertTrue(text.startswith('# the last 200 lines of '), text[:80])
+                    self.assertIn('0 kept, 3 dropped', text)
+
+    def test_every_removal_on_every_undo_path_keeps_its_ids_only_copy_first(self):
+        import test_install_r2 as r2
+        cases = []
+        world = self.world(BlueGreenWorld, 's1')
+        world.unhealthy.add(install.INCOMING_WEB)
+        cases.append(('S1', world, run_app))
+        world = self.world(BlueGreenWorld, 's3')
+        world.fail[('https', 9151)] = install.InstallError('https://cpt.quillmd.com/health/ did not serve it')
+        cases.append(('S3 after the reload', world, run_app))
+        world = self.world(r2.World, 's4')
+        world.unhealthy.add(WORKER)
+        cases.append(('S4', world, run_app))
+        world = seeded(r2.switched_back_world(self.tmp / 'sb' if (self.tmp / 'sb').mkdir() is None else None))
+        world.fail[('https', 9150)] = install.InstallError('https://cpt.quillmd.com/health/ did not serve it')
+        cases.append(('switch-back', world, r2.run_switch_back))
+        for label, world, run in cases:
+            with self.subTest(label):
+                details, error = run(world)
+                self.assertIsInstance(error, install.InstallError)
+                removals = [event for event in world.events if event[0] == 'rm']
+                self.assertTrue(removals, f'{label}: nothing was removed')
+                self.assertEqual(removed_without_a_copy(world.events), [])
+
+    def test_the_in_place_swap_undo_keeps_ids_only_tails_and_copies_before_it_removes(self):
+        names = {install.SERVICES['web']: 'web', install.SERVICES['worker']: 'worker'}
+        live = {name: {'Id': f'old-{role}', 'Image': OLD_IMAGE, 'State': {'Running': True},
+                       'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: role, install.REVISION_LABEL: OLD}}}
+                for name, role in names.items()}
+        events = []
+
+        def fake_docker(*args, **kwargs):
+            events.append((args[0], args[-1]))
+            if args[0] == 'rename':
+                live[args[2]] = live.pop(args[1])
+            elif args[0] == 'run':
+                name = args[args.index('--name') + 1]
+                live[name] = {'Id': f'new-{names[name]}', 'Image': IMAGE, 'State': {'Running': True},
+                              'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: names[name],
+                                                    install.REVISION_LABEL: REVISION}}}
+            elif args[0] == 'rm':
+                live.pop(next(name for name, c in live.items() if c['Id'] == args[-1]))
+            elif args[0] == 'logs':
+                return SimpleNamespace(returncode=0, stdout=SEEDED_LOGS[0], stderr=SEEDED_LOGS[1])
+            return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+
+        def keep(container, role, revision=None):
+            events.append(('keep-log', container['Id']))
+            return {'kept': 0}
+
+        def wait(role, revision, image_id, **kwargs):
+            if role == 'worker':
+                raise install.InstallError('cpt-studio-worker did not become ready')
+            return {'id': 'new-web'}
+        ctx = install.Context(SimpleNamespace(phase='app', revision=REVISION), self.tmp)
+        with mock.patch.multiple(install, inspect=lambda kind, name: live.get(name), docker=fake_docker,
+                                 wait_service=wait, keep_container_log=keep, stage_kinds_of=mock.Mock(return_value=[]),
+                                 close_undone_stages=mock.Mock(return_value={'closed': 0, 'kinds': [], 'hazards': {},
+                                                                             'relabel': []}),
+                                 put_back_states=mock.Mock(return_value={'encounters': 0, 'changed': {}})), \
+                self.assertRaises(install.InstallError):
+            install.swap_services(ctx, IMAGE, b'', 'disabled', '')
+        self.assertEqual([path.name for path in self.tmp.glob('*.log') if SEEDED_MARKER in path.read_bytes()], [])
+        removed = [event[1] for event in events if event[0] == 'rm']
+        self.assertEqual(sorted(removed), ['new-web', 'new-worker'])
+        for container in removed:  # each copy made before its removal
+            self.assertLess(events.index(('keep-log', container)), events.index(('rm', container)))
+        self.assertEqual(sorted(c['Id'] for c in live.values()), ['old-web', 'old-worker'])  # the old pair is back
+
+    def test_a_removal_whose_copy_fails_leaves_the_container_in_place(self):
+        container = {'Id': 'w' * 64, 'Image': IMAGE, 'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: 'worker',
+                                                                            install.REVISION_LABEL: REVISION}}}
+        calls = []
+        with mock.patch.object(install, 'inspect', return_value=container), \
+                mock.patch.object(install, 'docker', side_effect=lambda *a, **k: calls.append(a) or SimpleNamespace(
+                    returncode=0, stdout=b'', stderr=b'')), \
+                mock.patch.object(install, 'keep_container_log',
+                                  side_effect=install.InstallError('the copy could not be written')), \
+                self.assertRaisesRegex(install.InstallError, 'could not be written'):
+            install.remove_service_container(install.SERVICES['worker'], 'worker')
+        self.assertEqual([call[0] for call in calls], ['stop'])  # stopped, never removed
+
+
 if __name__ == '__main__':
     unittest.main()

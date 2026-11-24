@@ -441,12 +441,17 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   remove the parked pair (`*-previous`) by hand if it is left - keeping its log
   first (**Recovery notes**, a parked container's log) - then rerun `app`,
   which recomputes them; if they were, only the parked pair is left to keep and
-  remove. Release 1 (A13): before the parked pair is removed, each container's
-  log is kept ids only in `/var/log/cpt-studio/containers/` (the receipt's
+  remove. Release 1 (A13): before any container is removed - the parked pair, an
+  undo's incoming web or new worker (S1, S3, S4), a switch-back's, rollback-app's
+  pair - its log is kept ids only in `/var/log/cpt-studio/containers/` (the receipt's
   `logs_kept`: a file name, its sha256 and the lines kept and dropped, never a
   line); a copy that fails removes nothing, and the receipt says so. A static
   file's name in a kept path is written `static-file` (its content hash and
-  extension kept): its name part could carry free text.
+  extension kept): its name part could carry free text. The failure note an
+  undo writes into the receipts folder (`*-incoming-web-failed.log`,
+  `*-worker-failed.log`) holds the container's last 200 lines ids only, with
+  how many were dropped - never a raw line, so a traceback's document text never
+  reaches it.
   An installer killed outright writes no receipt: rerun `app` (see **Recovery
   notes**).
   **A blue/green step that fails, or is interrupted (Ctrl-C), never stops the

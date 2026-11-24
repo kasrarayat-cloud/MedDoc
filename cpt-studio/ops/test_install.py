@@ -2063,7 +2063,8 @@ class ServiceReplacementTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'wait_service', fake_wait), \
                 mock.patch.object(install, 'close_undone_stages',
                                   return_value={'closed': 0, 'hazards': {}, 'relabel': []}), \
-                self.assertRaises(install.InstallError):
+                mock.patch.object(install, 'keep_container_log', return_value={'kept': 0}), \
+                self.assertRaises(install.InstallError):  # release 1 (A13): each removal keeps its log first
             install.replace_services(ctx, 'new', b'', 'disabled', '')
         self.assertEqual({name: container['Id'] for name, container in live.items()},
                          {'cpt-studio-web': 'old-web', 'cpt-studio-worker': 'old-worker'})

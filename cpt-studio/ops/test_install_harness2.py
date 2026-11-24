@@ -319,6 +319,7 @@ class PeerStagesOnUndoTests(TemporaryDirectoryTest):
                                  docker=docker, read_protected_env=mock.Mock(return_value=b''),
                                  require_db=mock.Mock(), undo_hazards=mock.Mock(return_value={}),
                                  app_script=script, close_undone_stages=close,
+                                 keep_container_log=mock.Mock(return_value={'kept': 0}),  # A13, before each rm
                                  put_back_states=mock.Mock(return_value={'encounters': 0, 'changed': {}})):
             details = install.phase_rollback_app(install.Context(SimpleNamespace(phase='rollback-app',
                                                                                  revision=REVISION), self.tmp))
@@ -367,6 +368,7 @@ class PeerStagesOnUndoTests(TemporaryDirectoryTest):
         with mock.patch.multiple(install, inspect=mock.Mock(side_effect=lambda kind, name: live.get(name)),
                                  docker=docker, wait_service=wait, close_undone_stages=close,
                                  app_script=mock.Mock(return_value={'known': parked_kinds, 'stuck': 0, 'kinds': []}),
+                                 keep_container_log=mock.Mock(return_value={'kept': 0}),  # A13, before each rm
                                  put_back_states=mock.Mock(return_value={'encounters': 0, 'changed': {}})), \
                 self.assertRaises(install.InstallError):
             install.replace_services(ctx, IMAGE, b'', 'disabled', '', {'astra': 'live', 'fable': 'live'})

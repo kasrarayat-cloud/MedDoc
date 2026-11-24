@@ -295,7 +295,8 @@ class StopTimeoutTests(unittest.TestCase):
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
         worker = {'Id': 'w', 'Image': 'old', 'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: 'worker'}}}
         with mock.patch.object(install, 'docker', fake_docker), \
-                mock.patch.object(install, 'inspect', side_effect=[None, worker, worker, worker]):
+                mock.patch.object(install, 'inspect', side_effect=[None, worker, worker, worker]), \
+                mock.patch.object(install, 'keep_container_log', return_value={'kept': 0}):  # A13, before its rm
             install.park('worker')
             install.remove_service_container(install.SERVICES['worker'], 'worker')
             install.stop_service_container(install.SERVICES['worker'], 'worker')
@@ -1133,6 +1134,11 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
                 live.pop('web' if 'web' in args[2] else 'worker', None)
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
 
+        def keep(container, role, revision=None):  # A13: the ids-only copy, made before its removal
+            calls.append(('keep-log', container['Id']))
+            assert role in live, f'the {role} log was kept after its removal'
+            return {'kept': 0, 'dropped': 0}
+
         def close(image_id, env_bytes, since, revision, reason, kinds):
             closed.update(kinds=kinds, reason=reason)
             return {'closed': 2, 'kinds': ['astra', 'fable'], 'hazards': {}, 'relabel': []}
@@ -1149,9 +1155,13 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'undo_hazards', return_value={}), \
                 mock.patch.object(install, 'close_undone_stages', close), \
                 mock.patch.object(install, 'app_script', counted), \
+                mock.patch.object(install, 'keep_container_log', keep), \
                 mock.patch.object(install, 'put_back_states', return_value={'encounters': 0, 'changed': {}}):
             details = install.phase_rollback_app(install.Context(SimpleNamespace(phase='rollback-app',
                                                                                  revision=REVISION), self.tmp))
+        # refutation, installer lens A-2: rollback-app removes the pair that served the site - each log kept first
+        removals = [call for call in calls if call[0] in ('keep-log', 'rm')]
+        self.assertEqual([call[0] for call in removals], ['keep-log', 'rm', 'keep-log', 'rm'])
         self.assertEqual(details['not_carried_back']['note'],
                          'this revision coded no encounter: there is nothing of its own to carry back, and the earlier '
                          f'revision shows its own records only; {install.FOUR_TABLES_KEPT}')

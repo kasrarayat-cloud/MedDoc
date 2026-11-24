@@ -3915,13 +3915,18 @@ def park(role):
 
 
 def remove_service_container(name, role):
+    """Stop and remove the ``role`` container ``name``, its log first kept ids only (A13: keep_container_log) - on every
+    path that removes one: an undo at S1, S3 or S4, a switch-back's, rollback-app's (refutation, installer lens A-2).
+    A copy that fails raises and leaves the container in place, stopped. Its copy's record, or None when it is gone."""
     container = inspect('container', name)
     if container is None:
-        return
+        return None
     if not owned(container, role):
         raise InstallError(f'{name} is not a CPT Studio {role} container; refusing to remove it.')
     docker('stop', '--time', str(STOP_SECONDS[role]), name, check=False, timeout=STOP_SECONDS[role] + 60)
+    kept = keep_container_log(container, role)
     docker('rm', '--force', container['Id'], timeout=60)
+    return kept
 
 
 def stop_service_container(name, role):
@@ -4684,10 +4689,7 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
     except BaseException as failure:
         for role in reversed(launched):
             name = SERVICES[role]
-            container = inspect('container', name)
-            if container is not None and owned(container, role):
-                tail = docker('logs', '--tail', '40', name, check=False, timeout=30)
-                ctx.log(f'{role}-failed', tail.stdout[-8192:] + tail.stderr[-8192:])
+            log_tail(ctx, name, role, f'{role}-failed')  # ids only (refutation A-2)
             stop_service_container(name, role)
         closed, put_back, hold_worker = None, None, False
         if launched and any(parked.values()):
@@ -5307,11 +5309,19 @@ def serving_summary() -> dict:
     return summary
 
 
+LOG_TAIL_LINES = 200
+
+
 def log_tail(ctx, name, role, label):
+    """A failed container's last lines, for the receipts folder: ids only (ids_only_lines) - a traceback or a DETAIL line
+    that can hold document text is dropped and counted, never copied (refutation, installer lens A-2: the raw last 40
+    lines were kept there)."""
     container = inspect('container', name)
     if container is not None and owned(container, role):
-        tail = docker('logs', '--tail', '40', name, check=False, timeout=30)
-        ctx.log(label, tail.stdout[-8192:] + tail.stderr[-8192:])
+        tail = docker('logs', '--timestamps', '--tail', str(LOG_TAIL_LINES), name, check=False, timeout=30)
+        kept, dropped = ids_only_lines(role, tail.stdout, tail.stderr)
+        ctx.log(label, (f'# the last {LOG_TAIL_LINES} lines of {name}, ids only: {len(kept)} kept, {dropped} dropped '
+                        '(ops/INSTALL.md, A13)\n' + ''.join(line + '\n' for line in kept)).encode())
 
 
 def retire_live_web(old_id) -> dict:
