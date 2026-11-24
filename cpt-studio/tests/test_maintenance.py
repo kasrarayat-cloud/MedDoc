@@ -458,7 +458,10 @@ class WorkerTickTests(TransactionTestCase):
 
         def should_stop():
             return len(calls) >= 2 or time.monotonic() > deadline
-        with mock.patch.object(maintenance, 'tick', side_effect=recorded):
+        # the worker's start removes every conversion folder of the system's temporary folder, which a full suite's
+        # modules share while they run side by side: patched out here (WorkFolderTests proves the clean-up itself)
+        with mock.patch.object(maintenance, 'tick', side_effect=recorded), \
+                mock.patch.object(jobs, 'remove_stale_work_dirs', return_value=0):
             jobs.work(should_stop, poll_seconds=0.05, threads=1, clock=clock)
         return calls
 
