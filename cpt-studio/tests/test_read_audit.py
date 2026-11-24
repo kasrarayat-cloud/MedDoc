@@ -223,3 +223,116 @@ class ActivityQueryTests(ReadCase):
             self.assertIn(f"'{name}'", reads[0])
         self.assertNotIn("'export.reused'", reads[0])
         self.assertTrue(activity)
+
+
+class ConsoleReadCase(ReadCase):
+    def setUp(self):
+        super().setUp()
+        self.operator_user = f.user('platform-operator')
+        self.ops = ops.admin_client(self.operator_user, HTTP_X_REQUEST_ID=REQUEST_ID)
+
+    def open_content(self, encounter):
+        answer = self.ops.post(f'/ops/encounters/{encounter.pk}/content', {'reason': 'failed_processing',
+                                                                           'reference': 'INC-7'})
+        self.assertEqual(answer.status_code, 303)
+
+    def console_reads(self):
+        """Every console read, with the kind it records: (method, path, body)."""
+        return {
+            read_audit.OPS_LIST: ('get', '/ops/', None),
+            read_audit.OPS_WORKSPACE: ('get', f'/ops/workspaces/{self.ws.pk}', None),
+            read_audit.OPS_SPENDING: ('get', '/ops/spending', None),
+            read_audit.OPS_ACTIVITY: ('get', '/ops/activity', None),
+            read_audit.OPS_DETAIL: ('get', f'/ops/encounters/{self.text.pk}', None),
+            read_audit.OPS_CONTENT_OPEN: ('post', f'/ops/encounters/{self.text.pk}/content',
+                                          {'reason': 'practice_check', 'reference': 'REQ-12'}),
+            read_audit.OPS_ORIGINAL: ('get', f'/ops/encounters/{self.text.pk}/original', None),
+            read_audit.OPS_READS: ('get', '/ops/activity/reads', None),
+        }
+
+
+class ConsoleReadTests(ConsoleReadCase):
+    def test_each_console_read_writes_exactly_one_row(self):
+        self.open_content(self.text)
+        for kind, (method, path, body) in self.console_reads().items():
+            with self.subTest(kind=kind):
+                before = Record.objects.filter(view=kind).count()
+                answer = getattr(self.ops, method)(path, body) if body else getattr(self.ops, method)(path)
+                self.assertIn(answer.status_code, (200, 303))
+                self.assertEqual(Record.objects.filter(view=kind).count(), before + 1)
+                row = Record.objects.filter(view=kind).latest('created_at')
+                self.assertEqual((row.actor_id, row.actor_role, row.host, row.outcome, row.request_id),
+                                 (self.operator_user.pk, 'operator', 'admin', read_audit.SERVED, REQUEST_ID))
+                self.assertEqual(row.sign_in_ref, uuid.UUID(self.ops.session[request_meta.SESSION_SIGN_IN_REF]))
+
+    def test_the_rows_name_what_each_page_showed(self):
+        self.open_content(self.text)
+        for _kind, (method, path, body) in self.console_reads().items():
+            getattr(self.ops, method)(path, body) if body else getattr(self.ops, method)(path)
+        listed = Record.objects.get(view=read_audit.OPS_LIST)
+        self.assertEqual(set(listed.encounter_ids), {str(self.enc.pk), str(self.text.pk)})
+        self.assertEqual((listed.count, listed.workspace_id), (2, None))
+        self.assertEqual(Record.objects.get(view=read_audit.OPS_WORKSPACE).workspace_id, self.ws.pk)
+        self.assertEqual(Record.objects.get(view=read_audit.OPS_SPENDING).encounter_ids, [str(self.enc.pk)])
+        opened = Record.objects.filter(view=read_audit.OPS_CONTENT_OPEN).latest('created_at')
+        self.assertEqual((opened.reason, opened.encounter_ids), ('practice_check: REQ-12', [str(self.text.pk)]))
+        original = Record.objects.get(view=read_audit.OPS_ORIGINAL)
+        self.assertEqual((original.encounter_ids, original.filters), ([str(self.text.pk)], {'format': 'original'}))
+        self.assertEqual(Record.objects.get(view=read_audit.OPS_READS).filters,
+                         {'account': None, 'workspace': None, 'kind': None, 'day': None, 'before': None})
+
+    def test_a_refusal_answering_a_practices_page_records_that_read_first(self):
+        answer = self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'back': str(self.ws.pk),
+                                                   'username': 'X', 'role': 'viewer',
+                                                   'requested_by': 'Synthetic ticket 7'})
+        self.assertEqual(answer.status_code, 400)
+        self.assertEqual(Record.objects.filter(view=read_audit.OPS_WORKSPACE, workspace_id=self.ws.pk).count(), 1)
+        with write_fails():
+            again = self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'back': str(self.ws.pk),
+                                                      'username': 'X', 'role': 'viewer',
+                                                      'requested_by': 'Synthetic ticket 7'})
+        self.assertEqual((again.status_code, again.content.decode()), (503, read_audit.NOT_RECORDED))
+
+    def test_the_reads_page_lists_rows_by_account_practice_kind_and_day(self):
+        self.member.get('/api/encounters')
+        self.member.get(f'/api/encounters/{self.enc.pk}')
+        member_client(self.outsider).get(f'/api/encounters/{self.enc.pk}')  # refused
+        page = self.ops.get('/ops/activity/reads').content.decode()
+        for text in ('member.list · cpt', 'member.detail · cpt', 'chip bad">Refused', str(self.enc.pk)[:8],
+                     self.reviewer.username, self.outsider.username, REQUEST_ID):
+            with self.subTest(text=text):
+                self.assertIn(text, page)
+        self.assertNotIn(TITLE_MARKER, page)
+        only = self.ops.get(f'/ops/activity/reads?account={self.outsider.pk}').content.decode()
+        self.assertIn('chip bad">Refused', only)
+        self.assertNotIn('member.list · cpt', only)
+        kind = self.ops.get('/ops/activity/reads?kind=member.list').content.decode()
+        self.assertIn('member.list · cpt', kind)
+        self.assertNotIn('chip bad">Refused', kind)
+        today = timezone.now().date().isoformat()
+        self.assertIn(str(self.enc.pk)[:8], self.ops.get(f'/ops/activity/reads?day={today}').content.decode())
+        self.assertNotIn(str(self.enc.pk)[:8], self.ops.get('/ops/activity/reads?day=2001-01-01').content.decode())
+        self.assertEqual(self.ops.get('/ops/activity/reads?day=2001-13-40&kind=x&account=y').status_code, 200)
+        # opening the page is itself recorded, with what it was asked for
+        asked = Record.objects.filter(view=read_audit.OPS_READS, filters__account=str(self.outsider.pk)).get()
+        self.assertEqual(asked.filters['kind'], None)
+
+
+class ConsoleFailClosedTests(ConsoleReadCase):
+    def test_a_console_read_whose_row_cannot_be_written_answers_503_and_shows_nothing(self):
+        self.open_content(self.text)
+        reads = self.console_reads()
+        with write_fails():
+            for kind, (method, path, body) in reads.items():
+                with self.subTest(kind=kind):
+                    answer = getattr(self.ops, method)(path, body) if body else getattr(self.ops, method)(path)
+                    self.assertEqual((answer.status_code, answer.content.decode()), (503, read_audit.NOT_RECORDED))
+                    self.assertNotIn('Content-Disposition', answer)
+
+    def test_content_whose_opening_cannot_be_recorded_stays_closed(self):
+        with write_fails():
+            answer = self.ops.post(f'/ops/encounters/{self.text.pk}/content', {'reason': 'failed_processing',
+                                                                               'reference': 'INC-7'})
+        self.assertEqual(answer.status_code, 503)
+        self.assertEqual(self.ops.get(f'/ops/encounters/{self.text.pk}/original').status_code, 403)
+        self.assertNotIn(TITLE_MARKER, self.ops.get(f'/ops/encounters/{self.text.pk}').content.decode())

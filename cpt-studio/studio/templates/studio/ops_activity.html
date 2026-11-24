@@ -6,6 +6,7 @@
 <nav class="tabs" aria-label="Activity">
   <a href="/ops/activity"{% if tab == "actions" %} aria-current="page"{% endif %}>Actions</a>
   <a href="/ops/activity/sign-ins"{% if tab == "sign-ins" %} aria-current="page"{% endif %}>Sign-ins</a>
+  <a href="/ops/activity/reads"{% if tab == "reads" %} aria-current="page"{% endif %}>Reads</a>
 </nav>
 
 {% if tab == "actions" %}
@@ -27,7 +28,7 @@
         <td>{{ row.event.workspace.name }}</td>
         <td>{% if row.event.actor %}{{ row.event.actor.label }}{% else %}<span class="muted">CPT Studio</span>{% endif %}</td>
         <td>{{ row.what }}<br><span class="muted mono">{{ row.event.event }}</span></td>
-        <td>{% if row.event.encounter %}<a href="/ops/encounters/{{ row.event.encounter.pk }}">{{ row.event.encounter.title }}</a>{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td>{% if row.reference %}<a class="mono" href="/ops/encounters/{{ row.event.encounter_id }}">{{ row.reference }}</a>{% else %}<span class="muted">-</span>{% endif %}</td>
         <td class="mono">{{ row.details }}</td></tr>
   {% empty %}
     <tr><td colspan="6" class="muted">Nothing recorded{% if chosen_workspace or kind %} for this choice{% endif %}.</td></tr>

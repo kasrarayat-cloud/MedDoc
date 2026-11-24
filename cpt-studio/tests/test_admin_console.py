@@ -381,8 +381,11 @@ class SpendingTests(AdminCase):
         self.assertEqual(sum(row['cost'] for row in figures['documents']), expected)
         text = page(self.ops.get('/ops/spending'))
         self.assertIn(console.dollars(expected), text)
-        self.assertIn('Priced note one', text)
+        self.assertIn(str(first.pk)[:8], text)  # release 1, C2: a document by its short reference, never its title
+        self.assertNotIn('Priced note', text)
         self.assertIn('whose cost is not known', text)
+        shown = models.AccessRecord.objects.get(view='ops.spending')  # C1: the documents shown
+        self.assertEqual((set(shown.encounter_ids), shown.count), ({str(first.pk), str(second.pk)}, 2))
 
     def test_a_run_older_than_the_window_counts_in_the_total_only(self):
         self.done(title='Old note')
@@ -406,13 +409,18 @@ class ActivityTests(AdminCase):
         enc = self.done(title='Activity note')
         self.ops.post('/ops/people/add', {'workspace': str(self.other_ws.pk), 'username': 'other-viewer', 'role': 'viewer'})
         text = page(self.ops.get('/ops/activity'))
-        for words in ('Document added', 'Coding review finished', 'Person added', 'Activity note', 'Another practice'):
+        for words in ('Document added', 'Coding review finished', 'Person added', str(enc.pk)[:8], 'Another practice'):
             with self.subTest(words=words):
                 self.assertIn(words, text)
+        self.assertNotIn('Activity note', text)  # release 1, C2: the document by its short reference, never its title
         self.assertLess(text.index('Person added'), text.index('Document added'))  # newest first
         only_other = page(self.ops.get(f'/ops/activity?workspace={self.other_ws.pk}'))
         self.assertIn('Person added', only_other)
-        self.assertNotIn('Activity note', only_other)
+        self.assertNotIn(str(enc.pk)[:8], only_other)
+        read = models.AccessRecord.objects.filter(view='ops.activity').order_by('created_at')
+        self.assertIn(str(enc.pk), read.first().encounter_ids)  # C1: the documents its rows named
+        self.assertEqual(read.last().filters, {'workspace': str(self.other_ws.pk), 'kind': None, 'before': None})
+        self.assertEqual(read.last().workspace_id, self.other_ws.pk)
         decisions = page(self.ops.get('/ops/activity?kind=operator'))
         self.assertIn('Person added', decisions)
         self.assertNotIn('Document added', decisions)
@@ -613,8 +621,8 @@ class RefutationRoundOneTests(AdminCase):
 
     def test_a_refusal_marks_the_page_it_answers_in_the_navigation(self):
         held = self.ops.post('/ops/holds/release', {'note': 'Nothing stands, so this is refused.'})
-        self.assertEqual(held.status_code, 409)
-        self.assertIn('<a href="/ops/" aria-current="page">Encounters</a>', page(held))
+        self.assertEqual((held.status_code, held['Location']), (303, '/ops/?error=no-hold'))  # release 1, C1
+        self.assertIn('<a href="/ops/" aria-current="page">Encounters</a>', page(self.ops.get(held['Location'])))
         back = self.ops.post('/ops/people/add', {'workspace': str(self.ws.pk), 'back': str(self.ws.pk), 'username': 'X',
                                                  'role': 'viewer'})
         self.assertIn('<a href="/ops/workspaces" aria-current="page">Workspaces</a>', page(back))

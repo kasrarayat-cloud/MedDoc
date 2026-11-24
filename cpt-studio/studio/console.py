@@ -55,7 +55,7 @@ from django.utils import timezone
 from django.views.decorators.common import no_append_slash
 from django.views.decorators.csrf import csrf_exempt
 
-from . import audit, jobs, models, spend
+from . import audit, jobs, models, read_audit, spend
 from .fable import pricing
 from .management.commands import provision
 from .operator import _methods as methods
@@ -299,6 +299,7 @@ def _back(request, memberships=()):
 
 def _refused(request, exc, workspace=None):
     if workspace is not None:
+        read_audit.record(request, view=read_audit.OPS_WORKSPACE, workspace_id=workspace.pk)  # C1, as workspace_page
         return render(request, 'studio/ops_workspace.html', _workspace_context(workspace, error=str(exc)),
                       status=exc.status)
     return render(request, 'studio/ops_people.html', _people_context(error=str(exc)), status=exc.status)
@@ -591,8 +592,11 @@ def create_workspace(request):
 
 @operator_view
 @methods('GET')
+@read_audit.phi_read(read_audit.OPS_WORKSPACE)
 def workspace_page(request, workspace_id):
+    """One practice's page: its people, with the acts on them, and the add form - recorded as ops.workspace."""
     workspace = _workspace(workspace_id)
+    read_audit.record(request, view=read_audit.OPS_WORKSPACE, workspace_id=workspace.pk)
     return render(request, 'studio/ops_workspace.html',
                   _workspace_context(workspace, done=DONE.get(request.GET.get('done', ''))))
 
@@ -643,9 +647,10 @@ def spending(now=None) -> dict:
     first_day = now.astimezone(dt_timezone.utc).date() - timedelta(days=SPENDING_DAYS - 1)
     runs = (Run.objects.filter(Q(sent=True) | Q(state__in=IN_FLIGHT), purpose__in=jobs.PURPOSES)
             .select_related('encounter', 'encounter__workspace', 'encounter__workspace__category')
+            # the document by its id alone: no title is read (release 1, C2), the page names it by its reference
             .only('id', 'usage', 'scope', 'state', 'http_status', 'sent', 'endpoint', 'created_at', 'started_at', 'encounter',
-                  'encounter__title', 'encounter__workspace', 'encounter__workspace__name',
-                  'encounter__workspace__category', 'encounter__workspace__category__name')
+                  'encounter__workspace', 'encounter__workspace__name', 'encounter__workspace__category',
+                  'encounter__workspace__category__name')
             .order_by('created_at', 'pk'))
     total, recent = _bucket(), _bucket()
     days, workspaces_seen, documents = {}, {}, {}
@@ -664,7 +669,8 @@ def spending(now=None) -> dict:
             entry = workspaces_seen.setdefault(workspace.pk, {'workspace': workspace, 'documents': set(), **_bucket()})
             entry['documents'].add(run.encounter_id)
             _add(entry, spent)
-            _add(documents.setdefault(run.encounter_id, {'encounter': run.encounter, **_bucket()}), spent)
+            _add(documents.setdefault(run.encounter_id, {'encounter': run.encounter,
+                                                          'reference': str(run.encounter_id)[:8], **_bucket()}), spent)
         # the most each document may have cost first: its known cost and the worst case of its runs with no known cost
         # (money-4; the page shows both parts on each row: r2, figures-3)
         by_document = sorted(documents.values(), key=lambda item: (-(item['cost'] + item['worst']), -item['unpriced'],
@@ -685,8 +691,14 @@ def spending(now=None) -> dict:
 
 @operator_view
 @methods('GET')
+@read_audit.phi_read(read_audit.OPS_SPENDING)
 def spending_page(request):
-    return render(request, 'studio/ops_spending.html', _context('spending', **spending()))
+    """The coding runs' estimated cost by day, practice and document - recorded as ops.spending with the documents
+    shown."""
+    figures = spending()
+    shown = [item['encounter'].pk for item in figures['documents']]
+    read_audit.record(request, view=read_audit.OPS_SPENDING, encounter_ids=shown, count=len(shown))
+    return render(request, 'studio/ops_spending.html', _context('spending', **figures))
 
 
 # --- activity ----------------------------------------------------------------------------------------------------------
@@ -732,13 +744,18 @@ def describe(event) -> dict:
         if value is None or value == '' or not isinstance(value, (str, int, float)):
             continue
         details.append(f'{key} {value}')
-    return {'event': event, 'what': what, 'details': ' · '.join(details)}
+    # a document by its short reference, never its title (release 1, C2)
+    return {'event': event, 'what': what, 'details': ' · '.join(details),
+            'reference': str(event.encounter_id)[:8] if event.encounter_id else ''}
 
 
 @operator_view
 @methods('GET')
+@read_audit.phi_read(read_audit.OPS_ACTIVITY)
 def activity(request):
-    events = models.AuditEvent.objects.select_related('workspace', 'encounter', 'actor')
+    """Every audit event of every practice, newest first, by practice and kind, in pages - recorded as ops.activity
+    with the documents its rows name, its filters and its cursor."""
+    events = models.AuditEvent.objects.select_related('workspace', 'actor')  # the document by its id alone (C2)
     chosen_workspace = None
     wanted = request.GET.get('workspace', '')
     if wanted:
@@ -759,6 +776,11 @@ def activity(request):
     query = '&'.join(part for part in (f'workspace={chosen_workspace.pk}' if chosen_workspace else '',
                                        f'kind={kind}' if kind else '') if part)
     rows = window[:PAGE_SIZE]
+    read_audit.record(request, view=read_audit.OPS_ACTIVITY,
+                      workspace_id=chosen_workspace.pk if chosen_workspace else None,
+                      encounter_ids=list(dict.fromkeys(row.encounter_id for row in rows if row.encounter_id)),
+                      count=len(rows), filters={'workspace': chosen_workspace.pk if chosen_workspace else None,
+                                                'kind': kind or None, 'before': before or None})
     return render(request, 'studio/ops_activity.html', _context(
         'activity', rows=[describe(event) for event in rows], earlier=bool(before), unreadable=events is None,
         older=cursor_of(rows[-1]) if len(window) > PAGE_SIZE else '', query=query,
@@ -791,11 +813,79 @@ def sign_ins(request):
 
 # --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
 
-# R1 stub: Lane 3 replaces this (C1)
-@csrf_exempt
-@no_append_slash
-def reads(request, *args, **kwargs):
-    raise Http404()
+# --- the reads (release 1, C1 item 9) ---------------------------------------------------------------------------------
+# The activity review (ADM-5, ADM-11): every recorded read of PHI - by members and operators, served and refused - by
+# account, practice, kind and day, newest first, in pages by position. Opening it is itself recorded (ops.reads).
+
+READ_KINDS = {
+    read_audit.MEMBER_LIST: 'Document list', read_audit.MEMBER_DETAIL: 'Document',
+    read_audit.MEMBER_INLINE: 'Document viewed in the page', read_audit.MEMBER_DOWNLOAD: 'Document downloaded',
+    read_audit.MEMBER_REPORT_DOWNLOAD: 'Report downloaded', read_audit.MEMBER_BUNDLE_DOWNLOAD: 'Bundle downloaded',
+    read_audit.OPS_LIST: 'Console: every document', read_audit.OPS_WORKSPACE: 'Console: a practice',
+    read_audit.OPS_SPENDING: 'Console: spending', read_audit.OPS_ACTIVITY: 'Console: activity',
+    read_audit.OPS_DETAIL: "Console: a document's page", read_audit.OPS_CONTENT_OPEN: "Console: a document's content opened",
+    read_audit.OPS_ORIGINAL: 'Console: an original downloaded', read_audit.OPS_READS: 'Console: these reads',
+}
+DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
+DOCUMENTS_SHOWN = 8  # a row names at most this many documents by reference, and counts the rest
+
+
+def _chosen(model, value):
+    """The row of ``model`` a filter names by id, or None (no filter, or one that names nothing)."""
+    if not value:
+        return None
+    try:
+        return model.objects.filter(pk=uuid.UUID(str(value))).first()
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+@operator_view
+@methods('GET')
+@read_audit.phi_read(read_audit.OPS_READS)
+def reads(request):
+    rows = models.AccessRecord.objects.all()
+    account = _chosen(User, request.GET.get('account', ''))
+    workspace = _chosen(Workspace, request.GET.get('workspace', ''))
+    kind = request.GET.get('kind', '')
+    kind = kind if kind in READ_KINDS else ''
+    day = request.GET.get('day', '')
+    day = day if isinstance(day, str) and DATE_RE.fullmatch(day) else ''
+    try:
+        start = datetime.strptime(day, '%Y-%m-%d').replace(tzinfo=dt_timezone.utc) if day else None
+    except ValueError:
+        start, day = None, ''
+    if account is not None:
+        rows = rows.filter(actor_id=account.pk)
+    if workspace is not None:
+        rows = rows.filter(workspace_id=workspace.pk)
+    if kind:
+        rows = rows.filter(view=kind)
+    if start is not None:
+        rows = rows.filter(created_at__gte=start, created_at__lt=start + timedelta(days=1))
+    rows, before = _older_than(rows, request)
+    window = list(rows.order_by('-created_at', '-pk')[:PAGE_SIZE + 1]) if rows is not None else []
+    shown = window[:PAGE_SIZE]
+    filters = {'account': account.pk if account else None, 'workspace': workspace.pk if workspace else None,
+               'kind': kind or None, 'day': day or None, 'before': before or None}
+    read_audit.record(request, view=read_audit.OPS_READS, workspace_id=workspace.pk if workspace else None,
+                      count=len(shown), filters=filters)
+    people = {person.pk: person for person in User.objects.filter(pk__in={row.actor_id for row in shown})}
+    practices = dict(Workspace.objects.filter(pk__in={row.workspace_id for row in shown if row.workspace_id})
+                     .values_list('pk', 'name'))
+    query = '&'.join(f'{name}={value}' for name, value in (
+        ('account', account.pk if account else ''), ('workspace', workspace.pk if workspace else ''), ('kind', kind),
+        ('day', day)) if value)
+    return render(request, 'studio/ops_activity_reads.html', _context(
+        'activity', tab='reads', unreadable=rows is None, earlier=bool(before),
+        older=cursor_of(shown[-1]) if len(window) > PAGE_SIZE else '', query=query,
+        rows=[{'row': row, 'person': people.get(row.actor_id), 'practice': practices.get(row.workspace_id),
+               'kind': READ_KINDS.get(row.view, row.view),
+               'documents': [(str(item), str(item)[:8]) for item in row.encounter_ids[:DOCUMENTS_SHOWN]],
+               'more': max(0, len(row.encounter_ids) - DOCUMENTS_SHOWN)} for row in shown],
+        kinds=list(READ_KINDS.items()), kind=kind, day=day, chosen_account=account, chosen_workspace=workspace,
+        accounts=list(User.objects.filter(pk__in=models.AccessRecord.objects.values('actor_id')).order_by('username')),
+        workspaces=list(Workspace.objects.order_by('name', 'pk'))))
 
 
 # R1 stub: Lane 3 replaces this (B1)
