@@ -2047,9 +2047,9 @@ test('the evidence says per document pass or fail with the reasons of every fail
 });
 
 test('the walk names the current customer build and refuses to upload unless paid requests are accepted', () => {
-  assert.deepEqual(walk.CLIENT_HEADERS, { 'X-CPT-Studio-Client': 'customer-2026-11-22' });
+  assert.deepEqual(walk.CLIENT_HEADERS, { 'X-CPT-Studio-Client': 'customer-2026-11-24' });
   const source = fs.readFileSync(path.join(__dirname, 'walk.cjs'), 'utf8');
-  assert.ok(source.includes("const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-22' };"));
+  assert.ok(source.includes("const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-24' };"));
   assert.ok(source.includes('chromium.launch({ headless: true })'));
   const session = { can_review: true, acknowledgement: 'I reviewed this code against the document.' };
   assert.deepEqual(walk.sessionProblems(session, { allowLiveProvider: true }), []);

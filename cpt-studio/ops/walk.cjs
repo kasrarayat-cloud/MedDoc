@@ -76,7 +76,7 @@ const PLAYWRIGHT = process.env.CPT_VERIFY_PLAYWRIGHT
   || '/opt/meddoc-pro/.worktrees/private-os-isolation/rebuild/.runtime/browser-deps/node_modules/playwright';
 const EVIDENCE_SCHEMA = 'cpt-studio-walk-evidence@1';
 // studio/client_contract.py VERSION, with app.js and ops/verify_login.py (tests/test_cux_client_contract.py pins them).
-const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-22' };
+const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-24' };
 const VIEWPORTS = { desktop: { width: 1440, height: 1000 }, mobile: { width: 390, height: 844 } };
 const UI_TIMEOUT_MS = 30000;
 const POLL_MS = 3000;

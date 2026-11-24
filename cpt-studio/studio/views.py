@@ -10,10 +10,11 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import connection
-from django.http import HttpResponseNotAllowed, JsonResponse
+from django.http import Http404, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.common import no_append_slash
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
@@ -22,6 +23,8 @@ from .hosts import is_console_page
 from .api import UNSTORABLE
 from .models import LoginAttempt
 from .operator import is_operator
+# the client's address: moved to studio.request_meta (release 1, RELEASE-1-SPEC 3.3); the alias keeps every caller
+from .request_meta import client_address as _client
 
 
 INDEX_CSP = SecurityHeadersMiddleware.CSP.replace("frame-ancestors 'none'", "frame-src 'self'; frame-ancestors 'none'")
@@ -39,16 +42,6 @@ def health(request):
     return JsonResponse({'status': 'ok' if status == 200 else 'degraded', 'service': 'cpt-studio',
                          'data_mode': 'synthetic-only', 'release': settings.RELEASE_SHA, 'database': database},
                         status=status)
-
-
-def _client(request):
-    # Behind the loopback proxy the real client is in X-Forwarded-For, which
-    # nginx REPLACES with $remote_addr; never trust it otherwise.
-    if settings.SECURE_PROXY_SSL_HEADER:
-        forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
-        if forwarded:
-            return forwarded[:64]
-    return request.META.get('REMOTE_ADDR', '')[:64]
 
 
 def _throttled(username, client):
@@ -164,3 +157,26 @@ def admin_login_view(request):
     context = {'error': error, 'next': next_url, 'release': settings.RELEASE_SHA,
                'username': UNSTORABLE.sub('�', request.POST.get('username', ''))[:150] if error else ''}
     return render(request, 'studio/ops_login.html', context, status=200 if not error else 400)
+
+
+# --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
+
+# R1 stub: Lane 2 replaces this (B4)
+@csrf_exempt
+@no_append_slash
+def account_security(request, *args, **kwargs):
+    raise Http404()
+
+
+# R1 stub: Lane 2 replaces this (B4)
+@csrf_exempt
+@no_append_slash
+def logout_everywhere(request, *args, **kwargs):
+    raise Http404()
+
+
+# R1 stub: Lane 2 replaces this (B5)
+@csrf_exempt
+@no_append_slash
+def activity_ping(request, *args, **kwargs):
+    raise Http404()

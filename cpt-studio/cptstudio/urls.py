@@ -1,12 +1,17 @@
 from django.urls import path
 
-from studio import api, console, operator, views
+from studio import api, bundle_api, console, operator, second_factor_views, views
 
 urlpatterns = [
     path('', views.index, name='index'),
     path('health/', views.health, name='health'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
+    # Release 1's routes (RELEASE-1-SPEC 3.4) are marked R1 with their item; each view began as a stub answering
+    # Django's 404 that its lane replaces. The account and session routes are on both hosts (cptstudio.urls_admin).
+    path('account/', views.account_security),  # R1: B4
+    path('logout/everywhere', views.logout_everywhere),  # R1: B4
+    path('session/activity', views.activity_ping),  # R1: B5
     # The customer API (BUILD-SPEC 6; studio.api, its payloads studio.customer's).
     path('api/session', api.session),
     path('api/encounters', api.encounters),
@@ -19,6 +24,9 @@ urlpatterns = [
     path('api/encounters/<uuid:encounter_id>/reports', api.create_report),
     path('api/encounters/<uuid:encounter_id>/original', api.original),
     path('api/reports/<uuid:report_id>/download', api.download_report),
+    path('api/encounters/<uuid:encounter_id>/bundle', bundle_api.encounter_bundle),  # R1: D2
+    path('api/members', api.members),  # R1: C4
+    path('api/members/<uuid:user_id>/access', api.member_access),  # R1: C4
     # The platform-operator console (BUILD-SPEC 9; studio.operator): every URL answers Django's 404 to anyone without an
     # operator grant.
     path('ops/', operator.index),
@@ -26,6 +34,7 @@ urlpatterns = [
     path('ops/encounters/<uuid:encounter_id>/original', operator.original),
     path('ops/encounters/<uuid:encounter_id>/reconcile', operator.reconcile),
     path('ops/encounters/<uuid:encounter_id>/retry', operator.retry),
+    path('ops/encounters/<uuid:encounter_id>/content', operator.content_open),  # R1: C2
     path('ops/holds/release', operator.release_holds),
     # The console's controls (owner direction 2026-11-22, D395; studio.console), behind the same gate.
     path('ops/people', console.people),
@@ -33,10 +42,13 @@ urlpatterns = [
     path('ops/people/<uuid:user_id>/role', console.set_role),
     path('ops/people/<uuid:user_id>/password', console.reset_password),
     path('ops/people/<uuid:user_id>/access', console.set_access),
+    path('ops/people/<uuid:user_id>/unlock', console.unlock_sign_in),  # R1: B1
     path('ops/workspaces', console.workspaces),
     path('ops/workspaces/new', console.create_workspace),
     path('ops/workspaces/<uuid:workspace_id>', console.workspace_page),
     path('ops/spending', console.spending_page),
     path('ops/activity', console.activity),
     path('ops/activity/sign-ins', console.sign_ins),
+    path('ops/activity/reads', console.reads),  # R1: C1
+    path('ops/security', second_factor_views.keys),  # R1: B2
 ]

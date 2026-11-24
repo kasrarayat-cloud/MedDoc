@@ -1,4 +1,4 @@
-"""The customer contract (BUILD-SPEC 6; client contract customer-2026-11-22): every payload the customer page reads,
+"""The customer contract (BUILD-SPEC 6; client contract customer-2026-11-24): every payload the customer page reads,
 built from stored rows on each request.
 
 - session_json: GET /api/session.

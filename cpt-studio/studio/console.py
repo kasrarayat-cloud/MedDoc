@@ -43,17 +43,17 @@ import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import ROUND_HALF_UP, Context, Decimal, InvalidOperation, Overflow, localcontext
-from importlib import import_module
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
+from django.views.decorators.common import no_append_slash
+from django.views.decorators.csrf import csrf_exempt
 
 from . import audit, jobs, models, spend
 from .fable import pricing
@@ -61,6 +61,10 @@ from .management.commands import provision
 from .operator import _methods as methods
 from .operator import _see_other as see_other
 from .operator import operator_view
+# end_sessions, the refusal it answers and the stores it can end live in studio.sessions (release 1, RELEASE-1-SPEC
+# 3.3), so every lane can end sessions without the console; imported back, so console.end_sessions and console.Refused
+# are those
+from .sessions import NO_SESSION_STORE, SESSION_STORES, Refused, end_sessions  # noqa: F401 (re-exported)
 
 User, Membership, Workspace, Category, Run = (models.User, models.Membership, models.Workspace, models.Category,
                                               models.ProviderRun)
@@ -82,8 +86,6 @@ IGNORABLE_RANGES = (('\u00ad', '\u00ad'), ('\u034f', '\u034f'), ('\u061c', '\u06
                     ('\U0001d173', '\U0001d17a'), ('\U000e0000', '\U000e0fff'))
 # glyphs that draw nothing and are no white space (refutation r3, r3-6)
 BLANK_GLYPHS = {'\u2800', '\U0001d159', '\ufffc'}
-# the session stores whose sessions this console can list and end (refutation r2, secure-4)
-SESSION_STORES = ('django.contrib.sessions.backends.db',)  # cached_db can hold a session the table no longer has (r3-3)
 PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'  # no 0/o, 1/l/i: it is read aloud or copied by hand
 PASSWORD_GROUPS, PASSWORD_GROUP_CHARS = 4, 5  # 20 random characters (about 99 bits) in four groups
 PAGE_SIZE = 100
@@ -92,8 +94,6 @@ TOP_DOCUMENTS = 50
 OPERATOR_ACCOUNT = 'This is an operator account. Operator accounts are managed on the server, not here.'
 NO_WORKSPACE = 'This account belongs to no workspace. It is managed on the server, not here.'
 AGENT_OWNER = 'An automated agent can be a Reviewer or a Viewer, not an Owner.'
-NO_SESSION_STORE = ('This site keeps sessions where the console cannot end them, so access cannot be changed or a '
-                    'password reset here.')
 DONE = {
     'role': 'The role was changed.', 'same-role': 'The role was already that one: nothing changed.',
     'off': 'Access was turned off. The person can no longer sign in, and every open session has ended.',
@@ -151,14 +151,6 @@ DECISION_LABELS = {models.CodeDecision.APPROVE: 'Approved', models.CodeDecision.
 # The event data shown beside an event, in this order, by name (ids are kept for the operator's record elsewhere).
 DETAIL_KEYS = ('number', 'line', 'code', 'kind', 'fmt', 'count', 'purpose', 'state', 'username', 'role', 'from', 'to',
                'name', 'category', 'view', 'sessions_ended')
-
-
-class Refused(Exception):
-    """An act the console declines, with the sentence the operator reads and the status it answers."""
-
-    def __init__(self, message, status=400):
-        super().__init__(message)
-        self.status = status
 
 
 # --- reading -------------------------------------------------------------------------------------------------------
@@ -276,27 +268,6 @@ def new_password(user) -> str:
             continue
         return candidate
     raise RuntimeError('No generated password passed the password validators.')
-
-
-def end_sessions(user) -> int:
-    """End every live session signed in as ``user``: an open session ends at once and can never come back, whatever
-    happens to the account later (refutation r1, gate-1). The sessions are read from the database table (the db store
-    only, SESSION_STORES; any other store is refused - r2, secure-4; r3, r3-3), live ones only (an expired session signs
-    nobody in - r2, secure-5), and each is deleted through its store. Sessions are sign-in state, not records. The
-    number ended."""
-    if settings.SESSION_ENGINE not in SESSION_STORES:
-        raise Refused(NO_SESSION_STORE, 409)
-    store = import_module(settings.SESSION_ENGINE).SessionStore
-    ended = 0
-    for session in Session.objects.filter(expire_date__gt=timezone.now()).iterator(chunk_size=200):
-        try:
-            data = session.get_decoded()
-        except Exception:  # noqa: BLE001 - a session that cannot be read signs nobody in
-            continue
-        if isinstance(data, dict) and str(data.get('_auth_user_id', '')) == str(user.pk):
-            store(session_key=session.session_key).delete()
-            ended += 1
-    return ended
 
 
 def _lock():
@@ -816,3 +787,19 @@ def sign_ins(request):
         query=f'result={result}' if result else '', result=result, tab='sign-ins',
         throttle_attempts=settings.LOGIN_THROTTLE_ATTEMPTS,
         throttle_minutes=settings.LOGIN_THROTTLE_WINDOW_SECONDS // 60))
+
+
+# --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
+
+# R1 stub: Lane 3 replaces this (C1)
+@csrf_exempt
+@no_append_slash
+def reads(request, *args, **kwargs):
+    raise Http404()
+
+
+# R1 stub: Lane 3 replaces this (B1)
+@csrf_exempt
+@no_append_slash
+def unlock_sign_in(request, *args, **kwargs):
+    raise Http404()

@@ -39,7 +39,7 @@ links, retrieval logs and rule ids out of every customer screen, API response an
 
 Every body and header is scanned with ops/verification/customer-denylist.json (the browser walk ops/walk.cjs reads the
 same list, and this module's tests run its vectors) and every payload is held to ops/verification/customer-contract.json
-- the Fable coding build's customer contract (client contract customer-2026-11-22); the Django suite holds the server to
+- the Fable coding build's customer contract (client contract customer-2026-11-24); the Django suite holds the server to
 the same file through this module's readers (tests/test_api_customer.py). A string that is one of the encounter's own
 quotations - the passages of its document its codes cite - is not scanned. --operator-json DIR adds an operator view's
 own identifiers, read by the paths the denylist names (deny_value_paths; files <encounter id>.json and, optionally,

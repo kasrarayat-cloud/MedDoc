@@ -45,7 +45,8 @@ from django.db.models import Count
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.common import no_append_slash
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 
 from . import audit, jobs, models, spend, state
 from .fable import pricing
@@ -421,3 +422,12 @@ def release_holds(request):
     if not released:
         return _index_page(request, error='No hold was standing.', status=409)
     return _see_other('/ops/?done=released')
+
+
+# --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
+
+# R1 stub: Lane 3 replaces this (C2)
+@csrf_exempt
+@no_append_slash
+def content_open(request, *args, **kwargs):
+    raise Http404()

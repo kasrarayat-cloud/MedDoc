@@ -1,4 +1,4 @@
-"""The customer API (BUILD-SPEC 6; client contract customer-2026-11-22): the contract's keys exactly (held to
+"""The customer API (BUILD-SPEC 6; client contract customer-2026-11-24): the contract's keys exactly (held to
 ops/verification/customer-contract.json by the shipped reader, ops/scan_customer.py, and to the spec's own key lists),
 the one export format a request may name (the PDF: studio.exports.FORMATS since the owner's direction of 2026-11-21, one
 sentence refusing any other; the contract's fmt still lists csv and txt for the exports stored before it),
@@ -214,7 +214,7 @@ class ContractTests(ApiCase):
             response = self.client.get('/api/session', HTTP_X_CPT_STUDIO_CLIENT=earlier)
             self.assertEqual((response.status_code, response.json()), (409, client_contract.OUTDATED))
         self.assertEqual(Client().get('/api/session').status_code, 401)
-        self.assertEqual(client_contract.VERSION, 'customer-2026-11-22')
+        self.assertEqual(client_contract.VERSION, 'customer-2026-11-24')
 
 
 class TenancyAndRoleTests(ApiCase):

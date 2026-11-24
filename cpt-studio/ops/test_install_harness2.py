@@ -447,13 +447,16 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         # Gemini migration (2026-11-09, S05): 0014 adds the persisted event inventory and the interpreter hold and its
         # release - three new tables, an index and a constraint on a table it creates - and three nullable columns
         # that bind a context and an assessment to the inventory they were made from, read safe
+        # release 1 (RELEASE-1-SPEC 3.1): 0017 adds eight tables, twelve nullable columns and an index, read safe (its
+        # reasons: ops/test_install.py ReleaseOneMigrationTests)
         self.assertEqual(sorted(migrations['after_baseline']), ['0006_services_completeness_second_review',
                                                                 '0007_harness_participants_retrieval', MIGRATION_0008,
                                                                 '0009_cux_review', '0010_cux_operator', '0011_cux_flow',
                                                                 '0012_cux_worker_beat',
                                                                 '0013_completion_answer_binding',
                                                                 '0014_event_inventory',
-                                                                '0015_inventory_appraisal', '0016_fable_coding'])
+                                                                '0015_inventory_appraisal', '0016_fable_coding',
+                                                                '0017_r1_security'])
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
         self.assertEqual(migrations['after_baseline']['0013_completion_answer_binding'],
                          {'safe': True, 'why': ['memberanswer.question: NOT NULL with a database default (db_default)',

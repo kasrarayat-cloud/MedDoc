@@ -56,6 +56,11 @@ class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     actor_kind = models.CharField(max_length=8, choices=[(HUMAN, 'Human'), (AGENT, 'Automated agent')], default=HUMAN)
     display_name = models.CharField(max_length=120, blank=True)
+    # Release 1, B4: when a password staff set (the console's add-person and reset, provisioning, the ruled act) must
+    # be replaced by its owner - the clock of STAFF_PASSWORD_UNUSED_SECONDS starts here - and when the owner last chose
+    # one. Both nullable with no database default (migration 0017), so an older release's rows leave them NULL.
+    password_change_required_at = models.DateTimeField(null=True, blank=True)
+    password_changed_at = models.DateTimeField(null=True, blank=True)
 
     def label(self):
         name = self.display_name or self.get_username()
@@ -80,6 +85,9 @@ class Workspace(models.Model):
     category = models.ForeignKey(Category, on_delete=models.PROTECT)
     synthetic_only = models.BooleanField(default=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Release 1, D1: when the practice was closed (dispose --close): no new upload or coding, reading stays on. Nullable
+    # with no database default (migration 0017), so an older release's rows leave it NULL.
+    closed_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -125,6 +133,9 @@ class Encounter(models.Model):
     # member answers with this encounter instead of making a second one (intake.find_upload). Null for rows made before
     # it existed and for uploads that sent none; unique per member where set.
     client_key = models.UUIDField(null=True, blank=True, editable=False)
+    # Release 1, D1: when the document's PHI was destroyed; the row stays as the tombstone the audit rows still name.
+    # Nullable with no database default (migration 0017), so an older release's rows leave it NULL.
+    destroyed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -621,6 +632,10 @@ class OperatorGrant(ImmutableModel):
     reason = models.TextField()
     granted_by = models.CharField(max_length=120)  # the label of whoever ran the command (its own words)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Release 1, C3: the approval the grant rests on (for example a committed ruling's path) and the date it must be
+    # reviewed by. Nullable with no database default (migration 0017): an older release's grants leave them NULL.
+    authorization_ref = models.CharField(max_length=200, null=True, blank=True)
+    review_by = models.DateField(null=True, blank=True)
 
     class Meta:
         ordering = ['created_at']
@@ -715,6 +730,12 @@ class AuditEvent(ImmutableModel):
     event = models.CharField(max_length=60)
     data = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Release 1, C1: the request that caused the event - the client's address, the sign-in reference and nginx's
+    # request id (studio.request_meta.request_fields). Rows the worker writes, and an older release's, leave them NULL
+    # (migration 0017: nullable with no database default).
+    client = models.CharField(max_length=64, null=True, blank=True)
+    sign_in_ref = models.UUIDField(null=True, blank=True)
+    request_id = models.CharField(max_length=64, null=True, blank=True)
 
     class Meta:
         ordering = ['created_at']
@@ -847,14 +868,29 @@ class ReferencePassage(models.Model):
 
 
 class LoginAttempt(models.Model):
+    # Release 1, B1: the door an attempt was made at (studio.request_meta.CPT or ADMIN) and its outcome. ``outcome`` is
+    # a plain column with no choices, so a new outcome needs no migration (the installer's gate refuses AlterField).
+    # ``succeeded`` stays, because the older release reads it: true only for SIGNED_IN.
+    SIGNED_IN, SECOND_FACTOR_PENDING, SECOND_FACTOR_FAILED = 'signed_in', 'second_factor_pending', 'second_factor_failed'
+    WRONG_PASSWORD, UNKNOWN_ACCOUNT, NO_ACCESS, PASSWORD_EXPIRED = (
+        'wrong_password', 'unknown_account', 'no_access', 'password_expired')
+    OUTCOMES = (SIGNED_IN, SECOND_FACTOR_PENDING, WRONG_PASSWORD, UNKNOWN_ACCOUNT, NO_ACCESS, PASSWORD_EXPIRED,
+                SECOND_FACTOR_FAILED)
     id = models.BigAutoField(primary_key=True)
     username = models.CharField(max_length=150)
     client = models.CharField(max_length=64)
     succeeded = models.BooleanField()
     created_at = models.DateTimeField(auto_now_add=True)
+    # Nullable with no database default (migration 0017): the rows an older release inserts leave them NULL, which the
+    # new code reads as an attempt of unknown door and outcome.
+    door = models.CharField(max_length=8, null=True, blank=True)
+    outcome = models.CharField(max_length=24, null=True, blank=True)
+    sign_in_ref = models.UUIDField(null=True, blank=True)  # the session's reference (request_meta.sign_in_ref)
 
     class Meta:
-        indexes = [models.Index(fields=['username', 'client', 'created_at'])]
+        indexes = [models.Index(fields=['username', 'client', 'created_at']),
+                   # release 1 (AUTH-6): the per-address count reads this, not the whole table
+                   models.Index(fields=['client', 'created_at'], name='studio_login_client_time')]
 
 
 class WorkerBeat(models.Model):
@@ -978,3 +1014,163 @@ class ExportArtifact(ImmutableModel):
 
     class Meta:
         ordering = ['created_at']
+
+
+# --- release 1: the security and HIPAA records (RELEASE-1-SPEC 3.1; migration 0017, new tables and nullable columns) ---
+# The three record tables (AccessRecord, SecurityEvent, DisposalEvent) are append-only, and every id in them is a plain
+# value, never a foreign key: the trail outlives the destruction of a practice's PHI and never holds it hostage
+# (FLOW-11 (5)). They carry ids, counts, hashes and fixed words, never document text, titles, file names, answers or
+# passwords (studio/audit.py).
+
+class AccessRecord(ImmutableModel):
+    """One read of PHI (release 1, C1): who read it (the account, its kind and role), where (the host and the kind of
+    view, studio.read_audit.VIEW_KINDS), what (the practice, the documents or the report, a count, the time of a list,
+    its filters and cursor), why (an operator's reason), whether it was served or refused, and from which address,
+    sign-in and request. Written by studio.read_audit.record BEFORE any byte of PHI is produced; a read whose row cannot
+    be written serves nothing."""
+    SERVED, REFUSED = 'served', 'refused'
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    host = models.CharField(max_length=8)  # studio.request_meta.CPT or ADMIN
+    view = models.CharField(max_length=40)  # one of studio.read_audit.VIEW_KINDS
+    actor_id = models.UUIDField()
+    actor_kind = models.CharField(max_length=8)  # human | agent
+    actor_role = models.CharField(max_length=16, blank=True)  # owner | reviewer | viewer | operator, or ''
+    workspace_id = models.UUIDField(null=True, blank=True)
+    encounter_ids = models.JSONField(default=list)  # document ids, as UUID strings
+    export_id = models.UUIDField(null=True, blank=True)
+    count = models.PositiveIntegerField(null=True, blank=True)
+    as_of = models.DateTimeField(null=True, blank=True)
+    filters = models.JSONField(default=dict)  # filter names, ids and cursors only, never typed text
+    reason = models.TextField(blank=True)
+    outcome = models.CharField(max_length=8)  # SERVED | REFUSED
+    client = models.CharField(max_length=64, blank=True)
+    sign_in_ref = models.UUIDField(null=True, blank=True)
+    request_id = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [models.Index(fields=['workspace_id', 'created_at'], name='studio_access_ws_time'),
+                   models.Index(fields=['actor_id', 'created_at'], name='studio_access_actor_time')]
+
+
+class SecurityEvent(ImmutableModel):
+    """A security act that belongs to no workspace (release 1; AuditEvent requires one, ORG-4 (d)): an operator granted
+    or revoked, a second factor enrolled, reset or failed, a sign-in delay cleared, holds released. Written by
+    studio.security_events.record; ``data`` holds ids and counts only."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    event = models.CharField(max_length=60)
+    actor_id = models.UUIDField(null=True, blank=True)
+    actor_label = models.CharField(max_length=120, blank=True)  # a named person for a server act (--by), else ''
+    subject_id = models.UUIDField(null=True, blank=True)
+    workspace_id = models.UUIDField(null=True, blank=True)
+    data = models.JSONField(default=dict)
+    client = models.CharField(max_length=64, blank=True)
+    sign_in_ref = models.UUIDField(null=True, blank=True)
+    request_id = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [models.Index(fields=['event', 'created_at'], name='studio_security_event_time')]
+
+
+class RateWindow(models.Model):
+    """A bounded counter (release 1): the hits of one (scope, key) in one fixed window, counted by studio.rate.hit's
+    atomic upsert - refused sign-in attempts per minute, report, upload and bundle limits, wrong current passwords and
+    second-factor attempts. ``key`` is a keyed hash, an address or prefix, or an account's or practice's id, never a
+    typed name (studio.rate refuses anything else). Rows older than a day are pruned by the daily maintenance (D3)."""
+    id = models.BigAutoField(primary_key=True)
+    scope = models.CharField(max_length=40)
+    key = models.CharField(max_length=128)
+    window_start = models.DateTimeField()
+    count = models.PositiveIntegerField(default=0)
+    last_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['scope', 'key', 'window_start'], name='one_rate_window')]
+
+
+class SecondFactorCredential(models.Model):
+    """A WebAuthn credential - a security key or a passkey - of an account (release 1, B2). ``rp_id`` records the
+    relying party it was made for (settings.WEBAUTHN_RP_ID, the admin host exactly), so keys for another host can be
+    added later without a migration. A removed key keeps its row (``removed_at``)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='second_factor_credentials')
+    rp_id = models.CharField(max_length=253)
+    label = models.CharField(max_length=60)
+    credential_id = models.CharField(max_length=1400, unique=True)  # base64url; a credential id is at most 1023 bytes
+    public_key = models.BinaryField()
+    sign_count = models.PositiveBigIntegerField(default=0)  # WebAuthn's counter is 32-bit unsigned
+    transports = models.JSONField(default=list)
+    aaguid = models.CharField(max_length=36, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    removed_at = models.DateTimeField(null=True, blank=True)
+    removed_reason = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class SecondFactorRecoveryCode(models.Model):
+    """One recovery code of an account (release 1, B2): stored as Django's make_password hash, used once."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='second_factor_recovery_codes')
+    code_hash = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+
+class OneTimeToken(models.Model):
+    """A single-use code issued on the server (release 1): an operator's setup code now (B2, OPERATOR_SETUP), set-password
+    links later (D13). Stored as its sha256 only; used, revoked or expired, it opens nothing. ``purpose`` is a plain
+    column with no choices, so a new purpose needs no migration."""
+    OPERATOR_SETUP = 'operator_setup'
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='one_time_tokens')
+    purpose = models.CharField(max_length=32)
+    token_sha256 = models.CharField(max_length=64, unique=True)
+    created_by = models.CharField(max_length=120)  # the named person who issued it (a server act's --by)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+
+class DisposalEvent(ImmutableModel):
+    """One stage of returning or destroying a document's or a whole practice's data (release 1, D1 and D2): planned,
+    completed, failed, closed or exported, with counts per table, file counts, the manifest's digest, who ran and who
+    approved it, and the authorization. The ledger that is re-applied after a restore (D1, item 10)."""
+    PLANNED, COMPLETED, FAILED, CLOSED, EXPORTED = 'planned', 'completed', 'failed', 'closed', 'exported'
+    STAGES = (PLANNED, COMPLETED, FAILED, CLOSED, EXPORTED)
+    DOCUMENT, WORKSPACE = 'document', 'workspace'  # its scope: one document, or a whole practice
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    stage = models.CharField(max_length=12)
+    scope = models.CharField(max_length=12)
+    workspace_id = models.UUIDField()
+    encounter_ids = models.JSONField(default=list)
+    counts = models.JSONField(default=dict)  # table -> rows
+    files = models.JSONField(default=dict)  # file counts
+    manifest_digest = models.CharField(max_length=64, blank=True)
+    reason = models.TextField(blank=True)
+    run_by = models.CharField(max_length=120, blank=True)
+    approved_by = models.CharField(max_length=120, blank=True)
+    authorization_ref = models.CharField(max_length=200, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class FileKey(models.Model):
+    """A practice's data key for its stored files (release 1, F1): 32 random bytes, kept only wrapped by the
+    key-encryption key (studio.file_crypto), which never enters the database. Destroying it (``destroyed_at``, the
+    wrapped key overwritten) crypto-erases the practice's sealed files."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace_id = models.UUIDField(unique=True)
+    key_version = models.PositiveIntegerField(default=1)
+    wrapped_key = models.BinaryField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    destroyed_at = models.DateTimeField(null=True, blank=True)

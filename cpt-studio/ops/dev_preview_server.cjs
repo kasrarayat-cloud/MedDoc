@@ -4,7 +4,7 @@
 // Serves studio/templates/studio/*.html rendered as plain HTML (only the template tags those files use are supported;
 // anything else fails loudly), the files in studio/static/studio/ (the PDF library's as its manifest lists them, with
 // exactly the headers the site sends for them, its own policy included), and a
-// mock of the customer JSON API (client contract customer-2026-11-22) backed by the hand-made customer fixtures in
+// mock of the customer JSON API (client contract customer-2026-11-24) backed by the hand-made customer fixtures in
 // tests/fixtures/customer/. Binds 127.0.0.1 on the port given as --port=N, else on the first free port in 9170-9179.
 // A decision names the coding review the page shows and a line of it, as the server takes it ({round, line, code,
 // action, acknowledgement, note}, and for an Undo the decision it undoes: {..., decision}): a round that is not the

@@ -1,4 +1,4 @@
-"""The customer JSON API (BUILD-SPEC 6; client contract customer-2026-11-22). Session auth; CSRF enforced on every POST by
+"""The customer JSON API (BUILD-SPEC 6; client contract customer-2026-11-24). Session auth; CSRF enforced on every POST by
 the middleware; every response no-store (access.SecurityHeadersMiddleware).
 
 Every handler resolves the caller's ACTIVE membership first and scopes every row through it, so another workspace's
@@ -32,6 +32,8 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
+from django.views.decorators.common import no_append_slash
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from . import client_contract, customer, decisions, exports, intake, jobs, models
@@ -334,3 +336,19 @@ def original(request, encounter_id):
     response = HttpResponse(data, content_type=source.media_type)
     response['Content-Disposition'] = f'attachment; filename="{customer.safe_name(source.original_name)}"'
     return response  # no hash header for a customer (the operator's download carries it)
+
+
+# --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
+
+# R1 stub: Lane 3 replaces this (C4)
+@csrf_exempt
+@no_append_slash
+def members(request, *args, **kwargs):
+    raise Http404()
+
+
+# R1 stub: Lane 3 replaces this (C4)
+@csrf_exempt
+@no_append_slash
+def member_access(request, *args, **kwargs):
+    raise Http404()

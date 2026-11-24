@@ -305,17 +305,17 @@ class SignInTests(Base):
         self.assertIn('login demo-reviewer at http://127.0.0.1', out)
 
     def test_every_request_names_the_fable_coding_builds_customer_page(self):
-        # the client contract of the Fable coding build's second fix pass (customer-2026-11-22, FIX-SPEC-2 section 5: an
-        # Undo names its decision, a download its round; studio/client_contract.py VERSION, pinned equal by
-        # tests/test_cux_client_contract.py): a call naming another build is answered 409 client_outdated
-        self.assertEqual((vl.CLIENT_HEADER, vl.CLIENT_VERSION), ('X-CPT-Studio-Client', 'customer-2026-11-22'))
+        # the client contract of release 1 (customer-2026-11-24, RELEASE-1-SPEC 3.6; studio/client_contract.py VERSION,
+        # pinned equal by tests/test_cux_client_contract.py): a call naming another build is answered 409
+        # client_outdated
+        self.assertEqual((vl.CLIENT_HEADER, vl.CLIENT_VERSION), ('X-CPT-Studio-Client', 'customer-2026-11-24'))
         stub = self.stub()
         code, out, err, evidence, _ = self.run_tool(stub.base)
         self.assertEqual(code, 0, out + err)
         self.assertEqual(len(stub.log), 5)
         for entry in stub.log:
             with self.subTest(request=f'{entry["method"]} {entry["path"]}'):
-                self.assertEqual(entry['headers'].get('X-CPT-Studio-Client'), 'customer-2026-11-22')
+                self.assertEqual(entry['headers'].get('X-CPT-Studio-Client'), 'customer-2026-11-24')
 
     def test_each_hard_check_fails_on_the_broken_server_shape_it_exists_for(self):
         cases = [
@@ -656,8 +656,10 @@ class ContractTests(unittest.TestCase):
 
     def test_cookie_names_and_the_csrf_field(self):
         settings = self.read('cptstudio', 'settings.py')
-        self.assertIn(f"SESSION_COOKIE_NAME = '{vl.SESSION_COOKIE}'", settings)
-        self.assertIn(f"CSRF_COOKIE_NAME = '{vl.CSRF_COOKIE}'", settings)
+        # release 1 (B6): under HTTPS the settings give both cookies the __Host- prefix; without HTTPS (the loopback
+        # port, the tests) they keep these names. Which name this tool reads on the public site is Lane 6's (A11).
+        self.assertIn(f"SESSION_COOKIE_NAME = '__Host-{vl.SESSION_COOKIE}' if HTTPS else '{vl.SESSION_COOKIE}'", settings)
+        self.assertIn(f"CSRF_COOKIE_NAME = '__Host-{vl.CSRF_COOKIE}' if HTTPS else '{vl.CSRF_COOKIE}'", settings)
         self.assertIn("CSRF_TRUSTED_ORIGINS = ['https://cpt.quillmd.com']", settings)
         self.assertNotIn('CSRF_USE_SESSIONS', settings)  # the token is the cookie's, so GET /login/ writes no row
         self.assertNotIn('SESSION_SAVE_EVERY_REQUEST', settings)
