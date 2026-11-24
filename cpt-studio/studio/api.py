@@ -28,9 +28,10 @@ answer when it cannot be), and a read of another practice's document or report i
 """
 import functools
 import json
+import math
 import re
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -39,8 +40,8 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, read_audit, request_meta
-from . import sessions
+from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, rate, read_audit, request_meta
+from . import security_events, sessions
 from .access import active_membership, scoped_encounter
 from .fable.document import STORAGE_TEXT
 from .storage import OriginalCorrupted
@@ -76,6 +77,46 @@ class ApiError(Exception):
         self.status, self.message, self.details = status, message, details
 
 
+# --- the limits (release 1, C5; owner decision D8) --------------------------------------------------------------------
+# Reports and uploads cost a web worker's time and keep copies of PHI, so each is counted per member - and reports per
+# practice too - in fixed windows (studio.rate: the counter is written outside any transaction, so a refused request
+# still counts). Over a limit the answer is 429 {"error": "rate_limited", "retry_after": s} with Retry-After: s, and the
+# first refusal of a window writes one SecurityEvent <what>.rate_limited (ids and counts). nginx's zones are the outer
+# bound (A1). Lane 4's bundle limit (D2) answers the same shape under its own scope, bundle.member.
+
+RATE_LIMITED = 'rate_limited'
+EXPORT_MEMBER_SCOPE, EXPORT_WORKSPACE_SCOPE, UPLOAD_MEMBER_SCOPE = 'export.member', 'export.workspace', 'upload.member'
+
+
+class RateLimited(Exception):
+    """Over a limit: answered 429 with the seconds until the window ends."""
+
+    def __init__(self, retry_after):
+        super().__init__(RATE_LIMITED)
+        self.retry_after = retry_after
+
+
+def retry_after(window_seconds, now=None) -> int:
+    """Whole seconds until the current window of ``window_seconds`` ends (at least 1)."""
+    now = now or timezone.now()
+    end = rate.window_start(window_seconds, now) + timedelta(seconds=window_seconds)
+    return max(1, math.ceil((end - now).total_seconds()))
+
+
+def _limited(request, scope, key, limit, *, workspace_id):
+    """Count one more of ``scope`` for ``key`` (an account's or a practice's id); RateLimited when that goes over
+    ``limit`` - (how many, window seconds), a settings constant - and on the first refusal of the window one SecurityEvent
+    <what>.rate_limited naming the account and the practice."""
+    allowed, window_seconds = limit
+    hits = rate.hit(scope, key, window_seconds=window_seconds)
+    if hits <= allowed:
+        return
+    if hits == allowed + 1:
+        security_events.record(f'{scope.split(".")[0]}.rate_limited', actor=request.user, subject=request.user,
+                               workspace_id=workspace_id, scope=scope, limit=allowed, window_seconds=window_seconds)
+    raise RateLimited(retry_after(window_seconds))
+
+
 def api_view(view=None, *, contract=True):
     """A customer API view: sign-in required (401), and - unless ``contract`` is False (a download or the in-page view, a
     browser navigation that sends no header of the page's) - the page build the client contract names (409
@@ -91,6 +132,10 @@ def api_view(view=None, *, contract=True):
             return JsonResponse(client_contract.OUTDATED, status=409)
         try:
             return view(request, *args, **kwargs)
+        except RateLimited as exc:  # release 1, C5: the contract's rate_limited answer
+            response = JsonResponse({'error': RATE_LIMITED, 'retry_after': exc.retry_after}, status=429)
+            response['Retry-After'] = str(exc.retry_after)
+            return response
         except ApiError as exc:
             return JsonResponse({'error': exc.message, 'details': exc.details}, status=exc.status)
         except decisions.Refused as exc:
@@ -245,6 +290,8 @@ def encounters(request):
         raise ApiError(400, 'Provide either a file or pasted text.')
     service_date = _service_date(request.POST.get('service_date'))
     insurance = _insurance(request.POST.get('insurance'))
+    _limited(request, UPLOAD_MEMBER_SCOPE, request.user.pk, settings.UPLOAD_LIMIT_PER_MEMBER,
+             workspace_id=membership.workspace_id)  # C5: before the file is read, stored or queued
     if upload is not None:
         if upload.size > settings.MAX_UPLOAD_BYTES:
             raise ApiError(400, f'The file is larger than {settings.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.')
@@ -349,9 +396,11 @@ def retry(request, encounter_id):
 @require_POST
 @api_view
 def create_report(request, encounter_id):
-    """{kind: draft|approved, fmt: pdf, round: the round number the page shows} -> 201 the export as the page lists it
-    (exports.create: 400 for any format but the PDF, the only one made since 2026-11-21; 409 when that round is not the
-    latest; 503 when the PDF cannot be made, nothing stored)."""
+    """{kind: draft|approved, fmt: pdf, round: the round number the page shows} -> 201 the export as the page lists it,
+    or 200 the stored copy when that report is still current (exports.create, release 1 C5: 400 for any format but the
+    PDF, the only one made since 2026-11-21; 409 when that round is not the latest; 503 when the PDF cannot be made,
+    nothing stored). Any member may (owner decision D8: viewers keep making reports), within the member's and the
+    practice's limits (429)."""
     data = _payload(request)
     encounter, _ = scoped_encounter(request.user, encounter_id)
     kind, fmt, round_number = data.get('kind'), data.get('fmt'), data.get('round')
@@ -359,13 +408,17 @@ def create_report(request, encounter_id):
         raise ApiError(400, exports.FORMAT_REQUIRED)
     if type(round_number) is not int or round_number < 1:
         raise ApiError(400, exports.ROUND_REQUIRED)
+    _limited(request, EXPORT_MEMBER_SCOPE, request.user.pk, settings.EXPORT_LIMIT_PER_MEMBER,
+             workspace_id=encounter.workspace_id)
+    _limited(request, EXPORT_WORKSPACE_SCOPE, encounter.workspace_id, settings.EXPORT_LIMIT_PER_WORKSPACE,
+             workspace_id=encounter.workspace_id)
     try:
         export = exports.create(encounter, request.user, kind, fmt, round_number=round_number)
     except exports.NotReady as exc:
         raise ApiError(409, exc.message, blockers=exc.blockers)
     except exports.NotMade as exc:
         raise ApiError(503, exc.message)
-    return JsonResponse(customer.report_json(export, export.round_id), status=201)
+    return JsonResponse(customer.report_json(export, export.round_id), status=200 if export.reused else 201)
 
 
 @require_GET

@@ -17,6 +17,12 @@ again. ExportArtifact.fmt's declared choices name only txt and csv; they are not
 would be a field migration the installer refuses. A PDF that cannot be made is refused (NotMade) before anything is
 stored: no empty or partial file is ever saved or served.
 
+Release 1, C5: a request for a report that is still current by the page's own rule (customer.export_current: made from
+the latest round, no decision on that round after it) returns the stored copy instead of rendering another - one
+export.reused audit row records it - so clicks stop piling up copies of PHI; a new decision makes the next request render
+a fresh one. The lock is the document's row alone (select_for_update(of=('self',))), so a report being made blocks no
+other work in its practice. How many reports a member and a practice may ask for is studio.api's limit.
+
 Readiness: a draft needs the latest round done; the approved report needs a code of it approved (customer.readiness, the
 rule the page shows). A request names the round the page shows (FIX-SPEC-2 section 5): one that is not the latest is
 refused as changed, so a page left open never downloads a round its member did not see. An export made from an earlier
@@ -123,15 +129,28 @@ def render_pdf(snap, encounter, round_) -> bytes:
 
 # --- making and serving an export ------------------------------------------------------------------------------------------
 
+def current_export(encounter, round_, kind, fmt):
+    """The latest stored export of ``round_`` of this kind and format when it is still current
+    (customer.export_current), or None. Its bytes are not read: the caller lists it."""
+    latest = (Export.objects.filter(encounter_id=encounter.pk, round_id=round_.pk, kind=kind, fmt=fmt)
+              .defer('content').order_by('-created_at', '-pk').first())
+    if latest is None or not customer.export_current(latest, round_.pk, customer.last_decision_at(round_.pk)):
+        return None
+    return latest
+
+
 def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact:
     """Make and store one export of the latest round, which must be round ``round_number`` - the one the page shows
-    (any active member of the workspace may; the caller has scoped the encounter to the member), as a PDF. ValueError for
-    an unknown kind or any format but the PDF; decisions.Refused (409, changed) for another round; NotReady when it is
-    not available now; NotMade when the PDF cannot be made (nothing stored)."""
+    (any active member of the workspace may; the caller has scoped the encounter to the member), as a PDF - or, when
+    one of that round, kind and format is still current, return it (``reused`` true on the answer, export.reused
+    recorded). ValueError for an unknown kind or any format but the PDF; decisions.Refused (409, changed) for another
+    round; NotReady when it is not available now; NotMade when the PDF cannot be made (nothing stored)."""
     if kind not in KINDS or fmt not in FORMATS:
         raise ValueError(FORMAT_REQUIRED)
     with transaction.atomic():
-        locked = models.Encounter.objects.select_for_update().select_related('workspace').get(pk=encounter.pk)
+        # the document's row alone: never its practice's, so a report being made blocks no other work there (UP-4)
+        locked = models.Encounter.objects.select_for_update(of=('self',)).select_related('workspace').get(
+            pk=encounter.pk)
         round_ = state.latest_round(locked)
         if round_ is None or round_.number != round_number:
             raise decisions.Refused(409, decisions.ROUND_CHANGED)
@@ -141,6 +160,12 @@ def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact
             raise NotReady(NOTHING_YET, ready['blockers'])
         if kind == APPROVED and not ready['approved']:
             raise NotReady(APPROVED_NOT_YET, ready['blockers'])
+        stored = current_export(locked, round_, kind, fmt)
+        if stored is not None:
+            audit.record(locked.workspace, 'export.reused', encounter=locked, actor=user, export=str(stored.pk),
+                         round=str(round_.pk), number=round_.number, kind=kind, fmt=fmt)
+            stored.reused = True
+            return stored
         now = timezone.now()
         snap = snapshot(locked, round_, current, kind, user, now)
         content = render_pdf(snap, locked, round_)
@@ -150,6 +175,7 @@ def create(encounter, user, kind, fmt, *, round_number) -> models.ExportArtifact
             content=content, sha256=hashlib.sha256(content).hexdigest(), created_by=user)
         audit.record(locked.workspace, 'export.created', encounter=locked, actor=user, export=str(export.pk),
                      round=str(round_.pk), number=round_.number, kind=kind, fmt=fmt)
+    export.reused = False
     return export
 
 

@@ -598,10 +598,22 @@ def approved_lines(round_, current) -> list:
             and current[row['line']].action == models.CodeDecision.APPROVE]
 
 
+def export_current(export, latest_round_id, last_decision_at=None) -> bool:
+    """Whether ``export`` is current: made from the latest round, and no decision on that round recorded after it. The
+    page's rule, and the rule a request for the same report reuses a stored copy by (release 1, C5: studio.exports)."""
+    return export.round_id == latest_round_id and (last_decision_at is None or last_decision_at <= export.created_at)
+
+
+def last_decision_at(round_id):
+    """When the latest decision on round ``round_id`` was recorded, or None."""
+    return models.CodeDecision.objects.filter(round_id=round_id).order_by('-created_at').values_list(
+        'created_at', flat=True).first()
+
+
 def report_json(export, latest_round_id, last_decision_at=None) -> dict:
     """One export as the page lists it; ``current`` while it was made from the latest round and no decision on that
     round was recorded after it (an earlier one is still listed and served as stored, marked earlier)."""
-    current = export.round_id == latest_round_id and (last_decision_at is None or last_decision_at <= export.created_at)
+    current = export_current(export, latest_round_id, last_decision_at)
     return {'id': str(export.pk), 'kind': export.kind, 'fmt': export.fmt, 'filename': export.filename,
             'generated_at': iso(export.created_at), 'download_url': f'/api/reports/{export.pk}/download',
             'current': current}
@@ -610,12 +622,8 @@ def report_json(export, latest_round_id, last_decision_at=None) -> dict:
 def reports_json(encounter, round_) -> list:
     exports = Export.objects.filter(encounter_id=encounter.pk).order_by('-created_at', '-pk').only(
         'pk', 'kind', 'fmt', 'filename', 'created_at', 'round_id')
-    last_decision_at = None
-    if round_ is not None:
-        last = models.CodeDecision.objects.filter(round_id=round_.pk).order_by('-created_at').values_list(
-            'created_at', flat=True).first()
-        last_decision_at = last
-    return [report_json(export, round_.pk if round_ is not None else None, last_decision_at) for export in exports]
+    decided = last_decision_at(round_.pk) if round_ is not None else None
+    return [report_json(export, round_.pk if round_ is not None else None, decided) for export in exports]
 
 
 # --- the activity ------------------------------------------------------------------------------------------------------------
