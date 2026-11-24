@@ -7,7 +7,11 @@ a modified original is detected rather than served.
 
 A read takes only a name of the exact shape store_original writes (STORAGE_NAME_RE), never through a symbolic link and
 never outside its folder; a reader acting for one practice reads only that practice's own files (own_path, the one test
-every such reader and the disposal apply; release 1).
+every such reader and the disposal apply; release 1). What that protects against: a crafted or corrupted ROW naming
+another practice's file, and symbolic links. What it does not: a hard link, or a copy, made by someone who can write to
+the store - a residual, recorded (refutation round 3). No link-count check is made, deliberately: a hard-link snapshot
+backup on the same filesystem would then refuse every read, and whoever can write to the store can copy the bytes
+anyway.
 
 A file whose write or read-back check fails is removed at once (release 1, D3): a failed store never leaves a file that
 no row names. The deletion helpers below are the store's only other way to remove a file, and every caller is one of
@@ -119,7 +123,8 @@ def _named(storage_name):
 def _checked_path(match) -> Path:
     """The path of a matched name: neither its folder nor the file a symbolic link (lstat), the folder directly in the
     store, and the file's resolved path inside the folder's resolved path; StoreRefused otherwise. A path that does not
-    exist passes (reading it then fails as a missing file)."""
+    exist passes (reading it then fails as a missing file). A hard link is a regular file to these checks: it passes
+    (the module docstring says why, and what that leaves)."""
     root = root_path()
     folder = root / match.group(1)
     path = folder / match.group(2)
@@ -142,7 +147,9 @@ def own_path(workspace_id, storage_name) -> Path:
     the exact shape store_original writes (STORAGE_NAME_RE) whose folder is this practice's id, then _checked_path - no
     symbolic link, and the resolved path inside the practice's own resolved folder. StoreRefused otherwise, before
     anything of another practice is touched; OSError when the folder cannot be looked at. A row of one practice that
-    names any other file is a corrupted or crafted row: nothing outside the practice's folder is reached through it."""
+    names any other file is a corrupted or crafted row: nothing outside the practice's folder is reached through it. It
+    protects against such a row and against symbolic links - not against a hard link or a copy put in the folder by
+    someone who can write to the store (the module docstring: a residual)."""
     try:
         practice = str(uuid.UUID(str(workspace_id)))
     except (TypeError, ValueError, AttributeError):

@@ -8,24 +8,34 @@ installer's --phase manage with a committed declaration (A6); never an HTTP rout
     dispose --execute --plan <plan id> --by <name> --approved-by <name> --authorization-ref R
         the plan carried out by two different people, and the destruction certificate printed for the receipt. A run
         that did not complete is recorded 'failed' with what it left, prints a certificate saying so and ends with an
-        error; one interrupted after its commit (Ctrl-C) is recorded and printed the same way before the interrupt goes
-        on. To finish it, remove what stopped it and plan the same scope again (a destroyed document may be planned
-        again while any of its files remains or its last run did not complete): the new plan takes in what was left.
+        error; one interrupted after its commit (Ctrl-C, or a stop signal: SIGTERM and SIGHUP raise while the command
+        runs) is recorded and printed the same way before the interrupt goes on - a stop signal ends the command with
+        128 + its number. Whatever happens after the commit, the destruction's 'committed' DisposalEvent, written in its
+        own transaction, records it. To finish a run, remove what stopped it and plan the same scope again (a destroyed
+        document may be planned again while any of its files remains or its last run did not complete): the new plan
+        takes in what was left.
     dispose --ledger
         every DisposalEvent as a signed ledger line, to keep beside the backups.
     dispose --replay-ledger FILE [--execute --by <name> --approved-by <name> --authorization-ref R]
-        after a restore from an older backup: what the ledger's disposals whose rows were destroyed ('completed', and
-        'failed' with rows destroyed 'yes') would destroy again (a dry run), or, with --execute, every entry's refusals
-        checked first, then the ledger's missing rows written back and those disposals carried out again, entry by
-        entry. A 'failed' entry whose rows destroyed is 'unknown' is never carried out again: it is listed as a
-        person's decision, and the person who decides to destroy it plans the same scope again and carries the plan
-        out - the later entry that run writes is the one a replay carries out, and it marks the first decided.
+        after a restore from an older backup, BEFORE the site is opened: what the ledger's disposals whose rows were
+        destroyed ('committed', 'completed', and 'failed' with rows destroyed 'yes') would destroy again (a dry run),
+        or, with --execute, every entry's refusals checked first, then the ledger's missing rows written back and those
+        disposals carried out again, entry by entry. A whole practice is destroyed again as a whole: a document added
+        to the restored copy after the disposal is destroyed too, and counted. A 'failed' entry whose rows destroyed is
+        'unknown' is never carried out again: unless its own 'committed' entry shows its commit happened, it is listed
+        as a person's decision, and the person who decides to destroy it plans the same scope again and carries the
+        plan out - the later entry that run writes is the one a replay carries out, and it marks the first decided.
+        Exit status: 0 when everything was carried out; 3 (DECISION_EXIT) when the only thing left is an entry that
+        needs a person's decision; any other non-zero status for a real failure.
 
 The reason is read from a file, never argv. Every line printed holds ids, counts, digests, fixed words, storage names
 (random ids) and the names of the people who ran and approved the act; never a title, a file's own name, an answer or
 document text. A refusal writes nothing and ends with an error saying nothing was destroyed - which is said only when it
 is true: a replay that stops after it destroyed something says what it destroyed.
 """
+import signal
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -33,12 +43,44 @@ from django.core.management.base import BaseCommand, CommandError
 from studio import disposal
 
 MODES = ('close', 'plan', 'execute', 'ledger', 'replay_ledger')
+DECISION_EXIT = 3  # a replay whose only open item is an entry that needs a person's decision (Lane 6's contract)
+STOP_SIGNALS = ('SIGTERM', 'SIGHUP')
 INTERRUPTED_TEXT = ("Interrupted once the destruction's commit was attempted: the certificate above records what it did "
                     'and what it left. To finish it, plan the same scope again and carry that plan out.')
 DECIDE_TEXT = ("  whether its rows were destroyed is not known (its commit's answer was lost), so it is not carried out "
                'again: a person decides. To destroy what of it remains, plan it again (dispose --plan) and carry that '
                'plan out; a later replay carries out that run.')
 CARRIED_OUT = (disposal.DisposalEvent.COMPLETED, disposal.DisposalEvent.FAILED, 'unrecorded')
+
+
+class Stopped(BaseException):
+    """A stop signal (SIGTERM: docker stop, a supervisor; SIGHUP: the terminal went away) raised where the command was,
+    as Ctrl-C raises KeyboardInterrupt, so a destruction under way records what it did before the command ends - with
+    128 + the signal's number, as a shell reports a process that signal ended."""
+
+    def __init__(self, signum):
+        super().__init__(signal.Signals(signum).name)
+        self.signum = signum
+
+
+def _stop(signum, frame):
+    raise Stopped(signum)
+
+
+@contextmanager
+def stop_signals_raise():
+    """While the command runs, SIGTERM and SIGHUP raise Stopped instead of ending the process where it stands (in the
+    main thread only: no other can set a signal handler); the handlers before are put back afterwards."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = {number: signal.signal(number, _stop)
+                for number in (getattr(signal, name, None) for name in STOP_SIGNALS) if number is not None}
+    try:
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
 
 
 def _reason(path):
@@ -69,22 +111,26 @@ class Command(BaseCommand):
                             help='The ruled act this rests on (the committed declaration and its commit).')
 
     def handle(self, *args, **options):
-        try:
-            self._handle(options)
-        except disposal.Refused as exc:  # raised only before anything was destroyed (studio.disposal)
-            raise CommandError('Refused, nothing was destroyed: ' + ' '.join(exc.reasons))
-        except disposal.NotDestroyed as exc:
-            raise CommandError(str(exc))
-        except disposal.Unrecorded as exc:
-            self.stdout.write(exc.text)
-            raise CommandError('The destruction ran, but its DisposalEvent could not be written: the certificate above is '
-                               'its only record. Keep it with the receipt.')
-        except BaseException as exc:  # an interrupt after a destruction's commit brings its record: printed, then on
-            certificate = getattr(exc, 'disposal_certificate', '')
-            if certificate and getattr(exc, 'disposal_report', None) is None:
-                self.stdout.write(certificate)
-                self.stderr.write(INTERRUPTED_TEXT)
-            raise
+        with stop_signals_raise():
+            try:
+                self._handle(options)
+            except disposal.Refused as exc:  # raised only before anything was destroyed (studio.disposal)
+                raise CommandError('Refused, nothing was destroyed: ' + ' '.join(exc.reasons))
+            except disposal.NotDestroyed as exc:
+                raise CommandError(str(exc))
+            except disposal.Unrecorded as exc:
+                self.stdout.write(exc.text)
+                raise CommandError("The destruction ran, but its final DisposalEvent could not be written: its "
+                                   "'committed' DisposalEvent (named above) records the destruction, and the "
+                                   'certificate above what happened to its files. Keep it with the receipt.')
+            except BaseException as exc:  # an interrupt after a destruction's commit brings its record: printed first
+                certificate = getattr(exc, 'disposal_certificate', '')
+                if certificate and getattr(exc, 'disposal_report', None) is None:
+                    self.stdout.write(certificate)
+                    self.stderr.write(INTERRUPTED_TEXT)
+                if isinstance(exc, Stopped):
+                    raise SystemExit(128 + exc.signum) from exc
+                raise
 
     def _mode(self, options):
         plan = options['plan']
@@ -177,8 +223,8 @@ class Command(BaseCommand):
             problems.append(f'{len(undecided)} ledger entr{"y needs" if len(undecided) == 1 else "ies need"} a person\'s '
                             f'decision ({", ".join(undecided)}): nothing of {"it" if len(undecided) == 1 else "them"} was '
                             'carried out again (see above).')
-        if problems:
-            raise CommandError(' '.join(problems))
+        if problems:  # exit 3 when a decision is all that is left; any other failure is a failure (1)
+            raise CommandError(' '.join(problems), returncode=1 if failed else DECISION_EXIT)
 
     def _report(self, report, options):
         """The replay's report, entry by entry (ids, counts and statuses; certificates)."""
@@ -199,9 +245,18 @@ class Command(BaseCommand):
             if item['status'] == disposal.DECIDE:
                 self.stdout.write(DECIDE_TEXT)
             elif item['status'] == disposal.DECIDED:
-                self.stdout.write("  its commit's answer was lost; " + (
-                    f'ledger entry {item["decided_by"]}, a later run of the same scope, decided it'
-                    if item['decided_by'] else 'nothing of its scope remains'))
+                self.stdout.write(
+                    f"  its commit's answer was lost, but its own 'committed' entry {item['decided_by']} shows the commit "
+                    'happened' if item.get('own_commit') else "  its commit's answer was lost; " + (
+                        f'ledger entry {item["decided_by"]}, a later run of the same scope, decided it'
+                        if item['decided_by'] else 'nothing of its scope remains'))
+            if item.get('added'):
+                count = item['added']
+                done = options['execute'] and item['status'] in CARRIED_OUT
+                verb = (('was' if count == 1 else 'were') + ' also destroyed' if done
+                        else 'would also be destroyed' if not options['execute']
+                        else ('is' if count == 1 else 'are') + ' in its scope too')
+                self.stdout.write(f'  {count} document{"" if count == 1 else "s"} added after the disposal {verb}')
             if item['error']:
                 self.stdout.write(f'  stopped here: {item["error"]}')
             if item['event'] is not None:
@@ -215,8 +270,8 @@ class Command(BaseCommand):
         items = report['items']
         stopped = next(item for item in items if item['entry'] == report['stopped'])
         done = sum(item is not stopped and item['status'] in CARRIED_OUT for item in items)
-        own = {'unrecorded': 'it was carried out again, but its DisposalEvent could not be written (its certificate '
-                             'above is its only record)',
+        own = {'unrecorded': "it was carried out again, but its final DisposalEvent could not be written (its "
+                             "'committed' one and the certificate above are its record)",
                'refused': 'it was refused, and nothing of it was destroyed',
                'not destroyed': 'it rolled back, and nothing of it was destroyed',
                'error': 'it stopped on an error (logged), and whether it destroyed anything is not known',

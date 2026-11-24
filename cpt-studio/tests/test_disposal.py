@@ -7,7 +7,10 @@ import hashlib
 import io
 import json
 import os
+import signal
 import stat
+import subprocess
+import sys
 import tempfile
 import unicodedata
 import uuid
@@ -18,6 +21,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from django.apps import apps
+from django.conf import settings
 from django.contrib.sessions.models import Session
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import CommandError, call_command
@@ -27,6 +31,7 @@ from django.utils import timezone
 
 from studio import audit, disposal, intake, jobs, maintenance, models, storage
 from studio.fable import document as fable_document
+from studio.management.commands import dispose as dispose_cmd
 from tests.support import coding as f
 from tests.support import rounds
 
@@ -346,11 +351,13 @@ class PracticeDisposalTests(PracticeCase, TestCase):
         sessions = {('django_session', session.session_key) for session in Session.objects.all()
                     if str(session.get_decoded().get('_auth_user_id')) in {str(user.pk) for user in closing}}
         self.assertTrue(logins and sessions)
-        b_files, before = folder_digests(self.other_ws.pk), snapshot()
+        b_files, before, names = folder_digests(self.other_ws.pk), snapshot(), disposal.scope_files(scope)
         output = self.execute(plan)
         after = snapshot()
         completed = Event.objects.get(stage=Event.COMPLETED)
-        expected = (in_scope | logins | sessions | {(models.DisposalEvent._meta.db_table, completed.pk)}
+        committed = Event.objects.get(stage=disposal.COMMITTED)
+        expected = (in_scope | logins | sessions | {(models.DisposalEvent._meta.db_table, completed.pk),
+                                                    (models.DisposalEvent._meta.db_table, committed.pk)}
                     | {(models.Encounter._meta.db_table, pk) for pk in scope.encounter_ids}
                     | {(models.Membership._meta.db_table, pk) for pk in models.Membership.objects.filter(
                         workspace=self.ws).values_list('pk', flat=True)}
@@ -374,13 +381,16 @@ class PracticeDisposalTests(PracticeCase, TestCase):
         hashed = maintenance.hashed_signin_name(self.owner.username)
         self.assertEqual(models.LoginAttempt.objects.filter(username=hashed).count(), 2)
         self.assertEqual(sorted(Event.objects.values_list('stage', flat=True)),
-                         sorted([Event.CLOSED, Event.PLANNED, Event.COMPLETED]))
+                         sorted([Event.CLOSED, Event.PLANNED, disposal.COMMITTED, Event.COMPLETED]))
         self.assertEqual((completed.run_by, completed.approved_by, completed.scope, completed.workspace_id),
                          ('Synthetic Operator', 'Synthetic Approver', Event.WORKSPACE, self.ws.pk))
         self.assertEqual(completed.counts['deleted'], plan.counts['rows'])
         self.assertEqual((completed.files['files'], completed.files['deleted'], completed.files['remaining']),
                          (plan.files['files'], plan.files['files'], 0))
-        self.assertEqual(completed.notes, f'plan={plan.pk}; vacuum=skipped')  # a test case runs in a transaction
+        # the 'committed' row, written in the deletion's own transaction; a test case runs in one, so no VACUUM
+        self.assertEqual(completed.notes, f'plan={plan.pk}; committed={committed.pk}; vacuum=skipped')
+        self.assertEqual((committed.notes, committed.counts['deleted'], committed.files['names']),
+                         (f'plan={plan.pk}; rows committed', completed.counts['deleted'], names))
         self.assertIn('CPT Studio destruction certificate', output)
         for text in disposal.CANNOT_REACH:
             self.assertIn(text, output)
@@ -548,9 +558,12 @@ class DocumentDisposalTests(PracticeCase, TestCase):
         self.assertEqual(len(names), 1)  # its original (a PDF has no converted copy)
         before, word_files = snapshot(), folder_digests(self.ws.pk)
         output = self.execute(plan)
-        completed = Event.objects.get(stage=Event.COMPLETED)
+        completed, committed = Event.objects.get(stage=Event.COMPLETED), Event.objects.get(stage=disposal.COMMITTED)
         self.assertEqual(changed_rows(before, snapshot()),
-                         in_scope | {(Event._meta.db_table, completed.pk), (models.Encounter._meta.db_table, self.a_note.pk)})
+                         in_scope | {(Event._meta.db_table, completed.pk), (Event._meta.db_table, committed.pk),
+                                     (models.Encounter._meta.db_table, self.a_note.pk)})
+        self.assertEqual((committed.notes, committed.files['names'], committed.encounter_ids),
+                         (f'plan={plan.pk}; rows committed', names, [str(self.a_note.pk)]))
         word_files.pop(names[0].split('/')[1])
         self.assertEqual(folder_digests(self.ws.pk), word_files)  # the practice's other files, byte for byte
         self.assertIsNone(models.Workspace.objects.get(pk=self.ws.pk).closed_at)  # the practice stays open
@@ -591,7 +604,8 @@ class CommittedDisposalTests(TransactionTestCase):
             call_command('dispose', '--execute', '--plan', str(plan.pk), '--by', 'Synthetic Operator',
                          '--approved-by', 'Synthetic Approver', '--authorization-ref', 'synthetic@0000000', stdout=out)
         completed = Event.objects.get(stage=Event.COMPLETED)
-        self.assertEqual(completed.notes, f'plan={plan.pk}; vacuum=done')
+        committed = Event.objects.get(stage=disposal.COMMITTED)
+        self.assertEqual(completed.notes, f'plan={plan.pk}; committed={committed.pk}; vacuum=done')
         (tables,), _ = vacuum.call_args
         self.assertEqual(set(tables), set(disposal.touched_tables(disposal.workspace_scope(self.ws.pk))))
         self.assertFalse(storage.workspace_folder(self.ws.pk).exists())
@@ -647,7 +661,8 @@ class LedgerTests(PracticeCase, TestCase):
     def test_the_ledger_prints_every_disposal_event_signed(self):
         ledger = self.destroyed_with_ledger()
         entries = disposal.read_ledger(ledger.read_text().splitlines())
-        self.assertEqual([entry['stage'] for entry in entries], [Event.CLOSED, Event.PLANNED, Event.COMPLETED])
+        self.assertEqual([entry['stage'] for entry in entries],
+                         [Event.CLOSED, Event.PLANNED, disposal.COMMITTED, Event.COMPLETED])
         self.assertEqual({entry['id'] for entry in entries}, {str(pk) for pk in Event.objects.values_list('pk', flat=True)})
         for marker in MARKERS:
             self.assertNotIn(marker, ledger.read_text())
@@ -673,13 +688,13 @@ class LedgerTests(PracticeCase, TestCase):
         before = snapshot()
         dry = self.command('--replay-ledger', str(ledger))
         self.assertIn('Dry run: nothing was changed', dry)
-        self.assertIn('Ledger rows missing: 3', dry)
+        self.assertIn('Ledger rows missing: 4', dry)  # closed, planned, committed, completed
         self.assertEqual(changed_rows(before, snapshot()), set())
         self.assertTrue(stored.exists())
         with installer_idle():
             output = self.command('--replay-ledger', str(ledger), '--execute', '--by', 'Synthetic Operator',
                                   '--approved-by', 'Synthetic Approver', '--authorization-ref', 'synthetic@0000000')
-        self.assertIn('Ledger rows restored: 3', output)
+        self.assertIn('Ledger rows restored: 4', output)
         for entry in original:  # written back exactly: their own ids and times
             row = Event.objects.get(pk=entry['id'])
             self.assertEqual(disposal._entry(row), entry)
@@ -890,14 +905,40 @@ class FailedRunTests(RepairCase, TestCase):
     def test_an_event_that_cannot_be_written_leaves_its_certificate_as_the_record(self):
         self.seed()
         plan = self.plan_document(self.a_note)
-        with mock.patch.object(Event.objects, 'create', side_effect=RuntimeError('synthetic: the database went away')):
+        real = Event.objects.create
+
+        def create(**values):
+            if values.get('stage') in (Event.COMPLETED, Event.FAILED):
+                raise RuntimeError('synthetic: the database went away')
+            return real(**values)
+        with mock.patch.object(Event.objects, 'create', side_effect=create):
             output, error = self.carry_out(plan)
-        self.assertIn('its only record', error)
+        committed = Event.objects.get(stage=disposal.COMMITTED)  # the record written with the deletion stands
+        self.assertIn("its 'committed' DisposalEvent (named above) records the destruction", error)
         self.assertIn('NOT RECORDED', output)
+        self.assertIn(f'DisposalEvent {committed.pk} (committed)', output)
         self.assertIn('Rows destroyed: yes', output)
         self.assertFalse(models.SourceRevision.objects.filter(encounter=self.a_note).exists())
         for marker in MARKERS:
             self.assertNotIn(marker, output)
+
+    def test_a_destruction_whose_record_cannot_be_written_destroys_nothing(self):
+        # round 3: the 'committed' DisposalEvent is written in the deletion's own transaction - both, or neither
+        self.seed()
+        plan = self.plan_document(self.a_note)
+        before = snapshot()
+        real = Event.objects.create
+
+        def create(**values):
+            if values.get('stage') == disposal.COMMITTED:
+                raise RuntimeError('synthetic: the record cannot be written')
+            return real(**values)
+        with mock.patch.object(Event.objects, 'create', side_effect=create):
+            output, error = self.carry_out(plan)
+        self.assertIn('stopped before its commit (RuntimeError)', error)
+        self.assertIn('nothing was destroyed', error)
+        self.assertEqual(changed_rows(before, snapshot()), set())  # rolled back with it: no deletion without its record
+        self.assertTrue(storage.stored_path(self.a_note.files.get().storage_name).exists())
 
 
 class ReplayTruthTests(RepairCase, TestCase):
@@ -1112,7 +1153,7 @@ class InterruptTests(InterruptCase, TestCase):
             self.assertNotIn(marker, output)
         ledger = self.ledger_file()
         self.assertEqual([json.loads(line)['entry']['stage'] for line in ledger.read_text().splitlines()],
-                         ['planned', 'failed'])
+                         ['planned', 'committed', 'failed'])
         again = self.plan_document(enc)  # planned again, for the file the interrupt left
         self.assertEqual(again.files['files'], 1)
         output, error = self.carry_out(again)
@@ -1163,9 +1204,10 @@ class InterruptTests(InterruptCase, TestCase):
         with self.interrupt_on_second_delete(calls), mock.patch.object(Event.objects, 'create', side_effect=create):
             output, errors, escaped = self.execute_interrupted(plan)
         self.assertIsInstance(escaped, KeyboardInterrupt)
-        self.assertIn('NOT RECORDED', output)  # the certificate is its only record
+        self.assertIn('NOT RECORDED', output)  # the certificate, beside the 'committed' row
         self.assertIn(f'Files remaining, by storage name: {calls[1]}', output)
-        self.assertFalse(Event.objects.exclude(stage=Event.PLANNED).exists())
+        self.assertFalse(Event.objects.exclude(stage__in=(Event.PLANNED, disposal.COMMITTED)).exists())
+        self.assertTrue(Event.objects.filter(stage=disposal.COMMITTED).exists())
         again = self.plan_document(enc)  # its plan named the file the interrupt left, though no row does any more
         self.assertEqual((again.files['files'], again.files['names']), (1, [calls[1]]))
         _, error = self.carry_out(again)
@@ -1185,7 +1227,7 @@ class InterruptTests(InterruptCase, TestCase):
             return real(**values)
         with mock.patch.object(Event.objects, 'create', side_effect=create):
             _, error = self.carry_out(self.plan_document(enc))
-        self.assertIn('its only record', error)
+        self.assertIn("its 'committed' DisposalEvent (named above) records the destruction", error)
         record = self.plan_document(enc)  # nothing of it remains, but its run left no event: planned again
         self.assertEqual((record.files['files'], sum(record.counts['rows'].values())), (0, 0))
         output, error = self.carry_out(record)
@@ -1299,14 +1341,15 @@ class ReplayFileAndWordingTests(RepairCase, TestCase):
         ledger, entries, _ = self.two_destroyed_and_restored()
         real = Event.objects.create
 
-        def create(**values):
-            if str(values.get('notes', '')).startswith('replay='):
+        def create(**values):  # the replayed run's final event (its 'committed' one is written)
+            if str(values.get('notes', '')).startswith('replay=') and values.get('stage') != disposal.COMMITTED:
                 raise RuntimeError('synthetic: the event cannot be written')
             return real(**values)
         with mock.patch.object(Event.objects, 'create', side_effect=create):
             output, error = self.replay(ledger)
-        self.assertIn(f'The replay stopped at ledger entry {entries[0]}: it was carried out again, but its '
-                      'DisposalEvent could not be written', error)
+        self.assertIn(f'The replay stopped at ledger entry {entries[0]}: it was carried out again, but its final '
+                      "DisposalEvent could not be written (its 'committed' one and the certificate above are its "
+                      'record)', error)
         self.assertIn('no entry was carried out again before it; 1 later entry was not attempted', error)
         self.assertIn('NOT RECORDED', output)
         self.assertIsNotNone(models.Encounter._base_manager.get(pk=self.a_note.pk).destroyed_at)
@@ -1442,3 +1485,287 @@ class LookAlikeNameTests(SimpleTestCase):
         cyrillic = '\u0410\u043d\u043d\u0430 \u041b\u0438'  # one script throughout
         self.assertEqual(disposal.two_people(cyrillic, 'Ann Lee'), (cyrillic, 'Ann Lee'))
         self.assertEqual(disposal.two_people('Ayd\u0131n Kaya', 'Aylin Kaya'), ('Ayd\u0131n Kaya', 'Aylin Kaya'))
+
+
+# --- repair round 3 (refute-lane4 round 3) -------------------------------------------------------------------------------
+
+@contextmanager
+def answer_lost(failure):
+    """destroy's transaction - the first transaction.atomic - commits (here: its savepoint is released), and then the
+    answer to its COMMIT is lost: ``failure`` is raised (the lens's 'unknown' whose commit did happen)."""
+    real, calls = transaction.atomic, {'n': 0}
+
+    @contextmanager
+    def kept():
+        with real():
+            yield
+        raise failure
+
+    def atomic(*args, **kwargs):
+        calls['n'] += 1
+        return kept() if calls['n'] == 1 else real(*args, **kwargs)
+    with mock.patch.object(transaction, 'atomic', side_effect=atomic):
+        yield
+
+
+class RecordAtomicTests(InterruptCase, TestCase):
+    """Round 3, item 1: a destruction that committed always leaves its record - the 'committed' DisposalEvent written in
+    the deletion's own transaction - whatever interrupts what follows, and after a restore the replay destroys the
+    document again every time. The lens's interrupt points, each in turn."""
+
+    def destroyed_again_after_a_restore(self, enc):
+        ledger = self.ledger_file()
+        self.assertIn(disposal.COMMITTED, [json.loads(line)['entry']['stage'] for line in ledger.read_text().splitlines()])
+        self.forget_the_ledger()
+        self.restore_document(enc, 'R')
+        output, error = self.replay(ledger)
+        self.assertIsNone(error, output)
+        self.assertIsNotNone(models.Encounter._base_manager.get(pk=enc.pk).destroyed_at)
+        self.assertFalse(models.SourceRevision.objects.filter(encounter=enc).exists())
+        self.assertEqual(Event.objects.filter(stage=disposal.COMMITTED, notes__startswith='replay=').count(), 1)
+
+    def test_a_ctrl_c_while_the_final_event_is_written(self):
+        # the lens's probe (C2-record): the rows were gone, the ledger held only 'planned', the replay brought it back
+        self.seed()
+        enc = self.a_note
+        plan = self.plan_document(enc)
+        real = Event.objects.create
+
+        def create(**values):
+            if values.get('stage') in (Event.COMPLETED, Event.FAILED):
+                raise KeyboardInterrupt  # Ctrl-C while the run's final INSERT is in flight
+            return real(**values)
+        with mock.patch.object(Event.objects, 'create', side_effect=create):
+            output, errors, escaped = self.execute_interrupted(plan)
+        self.assertIsInstance(escaped, KeyboardInterrupt)
+        committed = Event.objects.get(stage=disposal.COMMITTED)
+        self.assertEqual(committed.notes, f'plan={plan.pk}; rows committed')
+        self.assertIn('NOT RECORDED (its DisposalEvent may not have been written', output)  # printed, best effort
+        self.assertIn(f'DisposalEvent {committed.pk} (committed)', output)
+        self.destroyed_again_after_a_restore(enc)
+
+    def test_a_second_ctrl_c_while_the_first_is_handled(self):
+        # the lens's probe (C2-double): the second interrupt came while the first one's left-overs were counted
+        self.seed()
+        enc, calls = self.a_word, []
+        with self.interrupt_on_second_delete(calls), \
+                mock.patch.object(disposal, '_left_on_disk', side_effect=KeyboardInterrupt):
+            output, errors, escaped = self.execute_interrupted(self.plan_document(enc))
+        self.assertIsInstance(escaped, KeyboardInterrupt)
+        failed = Event.objects.get(stage=Event.FAILED)
+        self.assertEqual(failed.counts['problems'], ['files: KeyboardInterrupt', 'counts: KeyboardInterrupt'])
+        self.assertEqual(sorted(failed.files['remaining_names']), sorted(calls))  # what could not be checked is left
+        self.assertIn(f'Disposal {failed.pk} (failed)', output)
+        self.destroyed_again_after_a_restore(enc)
+
+    def test_an_error_then_a_ctrl_c_while_counting(self):
+        # the lens's probe (C2-error-then-ctrl-c)
+        self.seed()
+        enc = self.a_word
+        with mock.patch.object(storage, 'sync_folder', side_effect=OSError('synthetic: EIO on fsync')), \
+                mock.patch.object(disposal, '_left_on_disk', side_effect=KeyboardInterrupt):
+            output, errors, escaped = self.execute_interrupted(self.plan_document(enc))
+        self.assertIsInstance(escaped, KeyboardInterrupt)
+        failed = Event.objects.get(stage=Event.FAILED)
+        self.assertEqual(failed.counts['problems'], ['files: OSError', 'counts: KeyboardInterrupt'])
+        self.assertIn('vacuum=not run', failed.notes)  # interrupted: the steps left were skipped
+        self.assertIn(f'Disposal {failed.pk} (failed)', output)
+        self.destroyed_again_after_a_restore(enc)
+
+    def test_a_ctrl_c_during_the_count_of_the_audit_rows_kept(self):
+        # the lens's probe (C2-count): the record's first query, outside every guard
+        self.seed()
+        enc = self.a_note
+        real_filter = models.AuditEvent.objects.filter
+
+        class Interrupting:
+            def count(self):
+                raise KeyboardInterrupt
+
+        def audit_filter(*args, **kwargs):
+            return Interrupting() if 'encounter_id__in' in kwargs else real_filter(*args, **kwargs)
+        with mock.patch.object(models.AuditEvent.objects, 'filter', side_effect=audit_filter):
+            output, errors, escaped = self.execute_interrupted(self.plan_document(enc))
+        self.assertIsInstance(escaped, KeyboardInterrupt)
+        failed = Event.objects.get(stage=Event.FAILED)  # recorded, then the interrupt went on
+        self.assertEqual((failed.counts['problems'], failed.counts['audit_rows_kept']), (['counts: KeyboardInterrupt'], None))
+        self.assertIn(f'Disposal {failed.pk} (failed)', output)
+        self.destroyed_again_after_a_restore(enc)
+
+
+# a child process: `dispose --execute` of one plan, against the test database, and a real stop signal it sends itself -
+# while the files are being removed, or the moment the commit has returned (the lens's sigterm_driver.py)
+CHILD = r"""
+import os, signal, sys, time
+import django
+django.setup()
+from django.core.management import call_command
+from studio import disposal, storage
+number = getattr(signal, sys.argv[2])
+if sys.argv[3] == 'files':
+    real = storage.delete_stored
+    def delete(name):
+        os.kill(os.getpid(), number)
+        time.sleep(5)
+        return real(name)
+    storage.delete_stored = delete
+else:
+    real = disposal._after_commit
+    def after_commit(scope, outcome):
+        os.kill(os.getpid(), number)
+        time.sleep(5)
+        return real(scope, outcome)
+    disposal._after_commit = after_commit
+call_command('dispose', '--execute', '--plan', sys.argv[1], '--by', 'Synthetic Operator', '--approved-by',
+             'Synthetic Approver', '--authorization-ref', 'docs/foundation/mutations/synthetic-disposal.md@0000000')
+"""
+
+
+class StopSignalTests(TransactionTestCase):
+    """Round 3, item 1: the dispose command makes SIGTERM and SIGHUP raise, so a destruction a stop signal reaches after
+    its commit records what it did and prints its certificate, and the command ends with 128 + the signal's number. A
+    real signal, in a child process against this test database."""
+
+    def setUp(self):
+        self.state = tempfile.TemporaryDirectory()
+        self.addCleanup(self.state.cleanup)
+        override = override_settings(ORIGINALS_DIR=Path(self.state.name) / 'originals')
+        override.enable()
+        self.addCleanup(override.disable)
+
+    def child(self, plan, name, where):
+        env = {**os.environ, 'CPT_STUDIO_DB_NAME': connection.settings_dict['NAME'],
+               'CPT_STUDIO_STATE_DIR': self.state.name, 'CPT_STUDIO_SWITCH_STATE': disposal.SWITCH_IDLE,
+               'DJANGO_SETTINGS_MODULE': 'cptstudio.settings', 'PYTHONPATH': str(settings.BASE_DIR)}
+        return subprocess.run([sys.executable, '-B', '-c', CHILD, str(plan.pk), name, where], env=env,
+                              cwd=str(settings.BASE_DIR), capture_output=True, text=True, timeout=180)
+
+    def stopped(self, name, where):
+        ws = f.workspace('Synthetic stop-signal practice')
+        member = f.member(ws)
+        enc = f.encounter(ws, member, title='ZZ-TITLE-MARKER stop signal')
+        f.upload(enc, member)
+        plan = disposal.plan(disposal.document_scope(enc.pk), by='Synthetic Operator', reason='Synthetic: misfiled.')
+        done = self.child(plan, name, where)
+        self.assertEqual(done.returncode, 128 + getattr(signal, name), done.stderr[-600:])
+        committed = Event.objects.get(stage=disposal.COMMITTED)
+        failed = Event.objects.get(stage=Event.FAILED)
+        self.assertEqual(failed.counts['problems'], ['files: Stopped'])  # dispose_cmd.Stopped, raised by the handler
+        self.assertIn(f'Disposal {failed.pk} (failed)', done.stdout)  # its certificate, printed first
+        self.assertIn(f'DisposalEvent {committed.pk} (committed)', done.stdout)
+        self.assertNotIn('ZZ-TITLE-MARKER', done.stdout)
+        # a restore from a backup older than the disposal, then the ledger replayed
+        ledger = Path(self.state.name) / 'ledger.jsonl'
+        ledger.write_text('\n'.join(disposal.ledger_lines()), encoding='utf-8')
+        with connection.cursor() as cursor:
+            cursor.execute('DELETE FROM studio_disposalevent')
+        models.Encounter.objects.filter(pk=enc.pk).update(title='ZZ-TITLE-MARKER restored', destroyed_at=None,
+                                                          state='reviewed')
+        f.upload(models.Encounter.objects.get(pk=enc.pk), member, data=f.PDF_BYTES + b' restored')
+        with installer_idle():
+            call_command('dispose', '--replay-ledger', str(ledger), '--execute', '--by', 'Synthetic Operator',
+                         '--approved-by', 'Synthetic Approver', '--authorization-ref', AUTH, stdout=io.StringIO())
+        self.assertIsNotNone(models.Encounter._base_manager.get(pk=enc.pk).destroyed_at)
+        self.assertFalse(models.SourceRevision.objects.filter(encounter_id=enc.pk).exists())
+
+    def test_a_real_sigterm_while_the_files_are_removed(self):
+        self.stopped('SIGTERM', 'files')
+
+    def test_a_real_sighup_the_moment_the_commit_returned(self):
+        # the lens's window (sigterm_driver.py): before the file phase's own steps begin
+        self.stopped('SIGHUP', 'commit')
+
+
+class ReplayRoundThreeTests(InterruptCase, TestCase):
+    """Round 3, items 1, 4 and 5: an 'unknown' run whose commit did happen is decided by its own 'committed' entry; a
+    whole-practice replay counts the documents it destroys that its entry never covered; and the exit status of a replay
+    that leaves only a person's decision is 3, while a real failure is another non-zero status."""
+
+    def replay_error(self, ledger):
+        try:
+            with installer_idle():
+                call_command('dispose', '--replay-ledger', str(ledger), '--execute', '--by', 'Synthetic Operator',
+                             '--approved-by', 'Synthetic Approver', '--authorization-ref', AUTH, stdout=io.StringIO())
+        except CommandError as exc:
+            return exc
+        return None
+
+    def test_an_unknown_run_whose_commit_happened_is_decided_by_its_committed_entry(self):
+        self.seed()
+        enc = self.a_note
+        with answer_lost(OperationalError('synthetic: the answer to COMMIT was lost')):
+            _, error = self.carry_out(self.plan_document(enc))
+        self.assertIn('did not complete', error)
+        failed, committed = Event.objects.get(stage=Event.FAILED), Event.objects.get(stage=disposal.COMMITTED)
+        self.assertEqual(failed.counts['rows_destroyed'], 'unknown')
+        self.assertIn(f'committed={committed.pk}', failed.notes)
+        ledger = self.ledger_file()
+        self.forget_the_ledger()
+        self.restore_document(enc, 'R')
+        output, error = self.replay(ledger)
+        self.assertIsNone(error, output)  # nothing left for a person to decide
+        self.assertIn(f"its commit's answer was lost, but its own 'committed' entry {committed.pk} shows the commit "
+                      'happened', output)
+        self.assertIsNotNone(models.Encounter._base_manager.get(pk=enc.pk).destroyed_at)
+
+    def test_a_whole_practice_replay_counts_the_documents_added_after_the_disposal(self):
+        # the lead's ruling on the lens's claim 3: the practice is destroyed again as a whole - made visible
+        self.seed()
+        _, error = self.carry_out(self.close_and_plan(self.ws))
+        self.assertIsNone(error)
+        ledger = self.ledger_file()
+        self.forget_the_ledger()
+        models.Workspace.objects.filter(pk=self.ws.pk).update(closed_at=None)  # the restored copy, opened too early
+        self.restore_document(self.a_note, 'R')
+        fresh = f.encounter(self.ws, self.owner, title='ZZ-TITLE-MARKER added after the restore')
+        f.upload(fresh, self.owner, data=f.PDF_BYTES + b' after the restore', filename='zz-file-marker-new.pdf')
+        dry, error = self.dispose_command('--replay-ledger', str(ledger))
+        self.assertIsNone(error)
+        self.assertIn('1 document added after the disposal would also be destroyed', dry)
+        output, error = self.replay(ledger)
+        self.assertIsNone(error, output)
+        self.assertIn('1 document added after the disposal was also destroyed', output)
+        self.assertIsNotNone(models.Encounter._base_manager.get(pk=fresh.pk).destroyed_at)
+
+    def test_a_replay_left_with_only_a_decision_exits_3_and_a_real_failure_otherwise(self):
+        self.seed()
+        with commit_lost(OperationalError('synthetic: connection closed')):  # rolled back: 'unknown'
+            self.carry_out(self.plan_document(self.a_word))
+        _, error = self.carry_out(self.plan_document(self.a_note))
+        self.assertIsNone(error)
+        ledger = self.ledger_file()
+        self.forget_the_ledger()
+        self.restore_document(self.a_note, 'R')
+        with read_only(storage.workspace_folder(self.ws.pk)):  # the note's replay cannot remove its file: a failure
+            failure = self.replay_error(ledger)
+        self.assertIn('did not complete', str(failure))
+        self.assertIn("needs a person's decision", str(failure))
+        self.assertNotIn(failure.returncode, (0, dispose_cmd.DECISION_EXIT))  # a real failure is never 3
+        decision = self.replay_error(ledger)  # again: the note finished, only the decision is left
+        self.assertIn("needs a person's decision", str(decision))
+        self.assertEqual(decision.returncode, dispose_cmd.DECISION_EXIT)
+        self.assertEqual(dispose_cmd.DECISION_EXIT, 3)
+
+
+class LookAlikeRoundThreeTests(SimpleTestCase):
+    """Round 3, item 2: NFKC first, then the apostrophe and dash variants, then the marks, then the letters with a
+    stroke - so the lens's pairs are each one person."""
+
+    def test_the_lenss_pairs_are_each_one_person(self):
+        pairs = (('O\u00b4Brien', 'O\u1ffdBrien'),  # U+00B4 and GREEK OXIA: byte-identical once recorded
+                 ('O\u00b4Brien', 'O \u0301Brien'),  # the same name typed as a space and a combining acute: NFKC first
+                 ("O'Brien", 'O\ua78bBrien'), ("O'Brien", 'O\u0384Brien'), ("O'Brien", 'O\u02caBrien'),
+                 ("O'Brien", 'O\u1fbfBrien'), ("O'Brien", 'O\u00b4Brien'), ('Anne-Marie Dupont', 'Anne\u02d7Marie Dupont'),
+                 ('Lukasz Nowak', '\u0141ukasz Nowak'), ('Soren Holm', 'S\u00f8ren Holm'),
+                 ('Dorde Petrovic', '\u0110or\u0111e Petrovi\u0107'), ('Hana Hel', '\u0126ana \u0126el'),
+                 ('Dorde Petrovic', '\u00d0or\u0111e Petrovic'))
+        for runner, approver in pairs:
+            with self.subTest(runner=ascii(runner), approver=ascii(approver)):
+                with self.assertRaisesMessage(disposal.Refused, 'two different people'):
+                    disposal.two_people(runner, approver)
+
+    def test_two_people_still_pass(self):
+        for runner, approver in (("Pat O'Brien", "Pat O'Bryan"), ('Lukasz Nowak', 'Lucas Nowak'),
+                                 ('Soren Holm', 'Sara Holm')):
+            with self.subTest(runner=runner, approver=approver):
+                self.assertEqual(disposal.two_people(runner, approver), (runner, approver))
