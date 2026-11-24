@@ -42,7 +42,11 @@ every credential row records its relying-party id)
         ENROLMENT_CODE_SECONDS, stored as its sha256 only; issuing one revokes the account's earlier unused ones).
     claim_setup_code / live_claim  the setup's first step uses the code up at once and gives its session a claim
         (SETUP_CLAIM_PURPOSE, ENROLMENT_CODE_SECONDS) that the second step uses up with the first key.
-    registration_options / verify_registration  a new key, from a setup code (enrolment) or from the keys page.
+    registration_options / checked_registration / store_key  a new key, from a setup code (enrolment) or from the keys
+        page: checked first, its challenge used up outside any transaction, then stored by store_key inside the
+        caller's transaction, beside the act's SecurityEvent (release 1 repair round 1, failclosed-2 and -5). Every act
+        here that changes a key or a code - store_key, remove_key, use_recovery_code, new_recovery_codes,
+        claim_setup_code - is written in the transaction of its caller, which writes the act's record in it too.
     new_recovery_codes  RECOVERY_CODE_COUNT codes, shown once; the earlier unused ones are voided.
     reset(user, ...)  the server's reset of lost keys (B2, item 7): keys removed, recovery codes voided, sessions ended, a
         new setup code issued. No console path resets an operator's own factor.
@@ -408,11 +412,6 @@ def store_key(user, checked):
     if SecondFactorCredential.objects.filter(credential_id=checked['credential_id']).exists():
         raise Refused('This security key is already set up.')
     return SecondFactorCredential.objects.create(user=user, rp_id=settings.WEBAUTHN_RP_ID, **checked)
-
-
-def verify_registration(request, user, raw, label, purpose):
-    """The new key that answered the session's challenge, stored for ``user``, or Refused."""
-    return store_key(user, checked_registration(request, user, raw, label, purpose))
 
 
 def remove_key(user, key_id):

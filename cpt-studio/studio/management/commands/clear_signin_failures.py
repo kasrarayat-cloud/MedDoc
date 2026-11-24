@@ -14,12 +14,21 @@ naming the address's client key.
 
 LoginAttempt rows are never deleted. The reason is read from a file and recorded as its digest; --by names the person
 who runs the act. The output names ids and counts only.
+
+The rows deleted and the act's SecurityEvent are one transaction (release 1 repair round 1, failclosed-1): a record the
+database refuses deletes nothing, and the act ends in a CommandError that names the error's type alone, so the
+installer's receipt says the act failed and the delay, or the address's refusal, is still there.
 """
 from django.core.management.base import BaseCommand, CommandError
+from django.db import DatabaseError, transaction
 
 from studio import security_events, throttle
 from studio.management.commands.grant_operator import reason_from
 from studio.management.commands.issue_enrolment import account_of, person, reason_digest
+
+
+# the act and its record could not be written together: nothing was deleted (the error's type, never its text)
+CLEARED_NOTHING = 'The database refused the act or its record ({kind}); nothing was cleared and nothing was recorded.'
 
 
 class Command(BaseCommand):
@@ -41,13 +50,22 @@ class Command(BaseCommand):
             except ValueError:
                 raise CommandError('--address is an IPv4 address, or an IPv6 address or /64 prefix; nothing was '
                                    'recorded.') from None
-            deleted = throttle.clear_address(key)
-            security_events.record('signin.address_cleared', actor_label=by, address=key, rows_deleted=deleted,
-                                   reason_sha256=reason_digest(reason), reason_chars=len(reason))
+            try:
+                with transaction.atomic():
+                    deleted = throttle.clear_address(key)
+                    security_events.record('signin.address_cleared', actor_label=by, address=key,
+                                           rows_deleted=deleted, reason_sha256=reason_digest(reason),
+                                           reason_chars=len(reason))
+            except DatabaseError as exc:
+                raise CommandError(CLEARED_NOTHING.format(kind=type(exc).__name__)) from None
             self.stdout.write(f'Sign-in refusals of the address cleared: {deleted} counter row(s) deleted.')
             return
         user = account_of(options['username'])
-        deleted = throttle.clear_failures(user.get_username())
-        security_events.record('signin.delay_cleared', actor_label=by, subject=user, rows_deleted=deleted,
-                               reason_sha256=reason_digest(reason), reason_chars=len(reason))
+        try:
+            with transaction.atomic():
+                deleted = throttle.clear_failures(user.get_username())
+                security_events.record('signin.delay_cleared', actor_label=by, subject=user, rows_deleted=deleted,
+                                       reason_sha256=reason_digest(reason), reason_chars=len(reason))
+        except DatabaseError as exc:
+            raise CommandError(CLEARED_NOTHING.format(kind=type(exc).__name__)) from None
         self.stdout.write(f'Sign-in delay of account {user.pk} cleared: {deleted} counter row(s) deleted.')

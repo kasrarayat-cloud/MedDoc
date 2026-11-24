@@ -28,7 +28,7 @@ from django.contrib.auth import authenticate, login, logout, update_session_auth
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.db import connection
+from django.db import connection, transaction
 from django.http import HttpResponse, HttpResponseNotAllowed, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -225,7 +225,14 @@ def _change_password(request, user):
     """Change ``user``'s password from the account page's form; the refusal sentence, or '' once changed. The place
     among the window's SIGNIN_USER_DELAY_AFTER wrong current passwords is taken before any hashing, in one atomic hit
     (throttle.reserve), so guesses sent in parallel from one session never get more checks than that (refutation r2,
-    finding 10); a right current password gives its place back."""
+    finding 10); a right current password gives its place back.
+
+    The change and its records are one transaction (release 1 repair round 1, failclosed-0): the new password, the
+    other sessions ended, this session's new key, the SecurityEvent password.changed and the AuditEvent of each
+    workspace. A record the database refuses raises out of it and changes nothing - the old password still signs in
+    and every session stays - and the request fails (a server error, whose answer saves no session). The other
+    sessions are ended before this one's key changes, so a store the console cannot end (sessions.Refused) is refused
+    before anything else is touched."""
     if not throttle.reserve(ACCOUNT_SCOPE, user.pk, settings.SIGNIN_USER_DELAY_AFTER):
         return TOO_MANY_WRONG.format(wait=throttle.wait_words(settings.SIGNIN_WINDOW_SECONDS))
     current = request.POST.get('current_password', '')
@@ -242,16 +249,17 @@ def _change_password(request, user):
         validate_password(new, user)
     except ValidationError as exc:
         return ' '.join(exc.messages)
-    user.set_password(new)
-    user.password_changed_at = timezone.now()
-    user.password_change_required_at = None
-    user.save(update_fields=['password', 'password_changed_at', 'password_change_required_at'])
-    update_session_auth_hash(request, user)  # this session stays signed in (it gets a new key)
-    ended = sessions.end_sessions(user, keep_session_key=request.session.session_key)
-    security_events.record('password.changed', actor=user, subject=user, request=request,
-                           door=request_meta.host_kind(request), sessions_ended=ended)
-    for membership in user.memberships.select_related('workspace').order_by('created_at', 'pk'):
-        audit.record(membership.workspace, 'member.password_changed', actor=user, user=str(user.pk))
+    with transaction.atomic():
+        user.set_password(new)
+        user.password_changed_at = timezone.now()
+        user.password_change_required_at = None
+        user.save(update_fields=['password', 'password_changed_at', 'password_change_required_at'])
+        ended = sessions.end_sessions(user, keep_session_key=request.session.session_key)
+        update_session_auth_hash(request, user)  # this session stays signed in (it gets a new key)
+        security_events.record('password.changed', actor=user, subject=user, request=request,
+                               door=request_meta.host_kind(request), sessions_ended=ended)
+        for membership in user.memberships.select_related('workspace').order_by('created_at', 'pk'):
+            audit.record(membership.workspace, 'member.password_changed', actor=user, user=str(user.pk))
     return ''
 
 
