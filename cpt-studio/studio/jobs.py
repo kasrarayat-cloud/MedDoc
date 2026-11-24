@@ -596,9 +596,17 @@ def _worst_case(round_, purpose, request, coder):
     free token count counted them, the send's worst case - every attempt the request may make, its server-side
     fallback's included). A coder that calls the API must count the request: when the count cannot be had, nothing is
     sent and the round fails busy, for a human retry; no estimate stands in (a PDF is billed by its pages, which its
-    bytes do not bound). A coder that calls nothing (a replay, endpoint '') bills nothing: (None, 0)."""
+    bytes do not bound). A coder that calls nothing (a replay, endpoint '') bills nothing: (None, 0).
+
+    The count is itself a disclosure: it hands the whole request, the document included, to the provider's token-count
+    endpoint (release 1, D4; ORG-9 (6), ORG-13 (7)). So the AuditEvent provider.counting - the document, the round, the
+    purpose and the request's sha256, never its content - is written BEFORE the count is asked for, for every coder that
+    has an endpoint; a record that cannot be written raises, and nothing is counted or sent. Nothing about the request
+    changes: the count is handed the same object as before."""
     if not coder.endpoint:
         return None, Decimal(0)
+    audit.record(round_.encounter.workspace, 'provider.counting', encounter=round_.encounter, round=str(round_.pk),
+                 purpose=purpose, request_sha256=request.sha256)
     counted = _counted_input(coder, request)
     if counted is None:
         log.warning('round %s: the %s request could not be counted; nothing was sent', round_.pk, purpose)

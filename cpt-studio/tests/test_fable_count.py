@@ -12,10 +12,12 @@ from types import SimpleNamespace
 from unittest import mock
 
 import anthropic
+from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import jobs, models
 from studio.fable import client, pricing, prompts
+from studio.fable import document as fable_document
 from tests.support import coding as f
 from tests.test_fable_client import request, status_error
 
@@ -116,7 +118,9 @@ class CountingCoder(f.FakeCoder):
         return self.counted
 
 
-class SpendCheckTests(TestCase):
+class CountCase(TestCase):
+    """A synthetic workspace, member and large uploaded document, on an originals directory of its own."""
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -149,6 +153,8 @@ class SpendCheckTests(TestCase):
         return {'reader': f.succeeded(f.reader_message(f.reader_result([f.code('45385', 'ready')]))),
                 'checker': f.succeeded(f.checker_message(f.checker_result([f.review('45385', 'agree', line='L1')])))}
 
+
+class SpendCheckTests(CountCase):
     def test_a_counted_send_is_held_to_its_counted_worst_case(self):
         coder = CountingCoder(20_000, **self.answers())
         with override_settings(DOCUMENT_CEILING_USD='10'):  # the 3 MB document's bytes would say more than 11 dollars
@@ -201,3 +207,112 @@ class SpendCheckTests(TestCase):
 def replayed(message):
     """A replay's outcome of ``message``: it was not sent."""
     return client.message_outcome(message, sent=False)
+
+
+# --- release 1, D4: a token count is a disclosure, recorded before it is made ---------------------------------------------
+
+def _worst_case_before_d4(round_, purpose, request, coder):
+    """studio.jobs._worst_case exactly as it was before release 1's D4 (Lane 1's head, bd7587cc3): the reference the
+    byte-identity test hands the same request to, so the request the count receives is proven unchanged by the record."""
+    if not coder.endpoint:
+        return None, Decimal(0)
+    counted = jobs._counted_input(coder, request)
+    if counted is None:
+        jobs.log.warning('round %s: the %s request could not be counted; nothing was sent', round_.pk, purpose)
+        jobs.audit.record(round_.encounter.workspace, 'provider.count_failed', encounter=round_.encounter,
+                          round=str(round_.pk), purpose=purpose)
+        jobs._fail(round_, jobs.BUSY)
+    return counted, pricing.worst_case_usd(counted, request.params['max_tokens'], attempts=request.attempts)
+
+
+class RecordingCountCoder(CountingCoder):
+    """A counting coder that reads, at the moment each count is asked for, the provider.counting rows the database holds
+    for that request: what a count call can see is what was written before it."""
+
+    def __init__(self, counted, **answers):
+        super().__init__(counted, **answers)
+        self.seen_at_count = []
+
+    def count_input_tokens(self, request):
+        rows = list(models.AuditEvent.objects.filter(event='provider.counting', data__request_sha256=request.sha256)
+                    .values_list('data', flat=True))
+        self.seen_at_count.append((request.sha256, rows))
+        return super().count_input_tokens(request)
+
+
+class CountRecordTests(CountCase):
+    """D4 (ORG-9 (6), ORG-13 (7)): the worker hands the whole request, the document included, to the provider's token
+    count before each send, which is a disclosure to the subcontractor; jobs._worst_case writes the AuditEvent
+    provider.counting (document, round, purpose, the request's sha256) BEFORE the count runs, for every coder with an
+    endpoint, and nothing about what is sent changes."""
+
+    def test_the_count_record_is_written_before_the_count_is_asked_for(self):
+        coder = RecordingCountCoder(20_000, **self.answers())
+        round_ = self.run_round(coder)
+        self.assertEqual(round_.state, Round.DONE)
+        self.assertEqual(len(coder.seen_at_count), 2)  # the reader's count, then the checker's
+        for (sha256, rows), purpose, (_, sent) in zip(coder.seen_at_count, (jobs.READER, jobs.CHECKER), coder.calls):
+            with self.subTest(purpose=purpose):
+                self.assertEqual(sha256, sent.sha256)
+                self.assertEqual(rows, [{'round': str(round_.pk), 'purpose': purpose, 'request_sha256': sent.sha256}])
+        events = models.AuditEvent.objects.filter(event='provider.counting').order_by('created_at', 'pk')
+        self.assertEqual([(event.workspace_id, event.encounter_id, event.actor_id, event.actor_kind) for event in events],
+                         [(self.ws.pk, self.enc.pk, None, 'system')] * 2)
+        # each count's record precedes its send's record (provider.sending), in the order they were written
+        names = list(models.AuditEvent.objects.filter(encounter=self.enc, event__startswith='provider.')
+                     .order_by('created_at', 'pk').values_list('event', flat=True))
+        self.assertEqual(names, ['provider.counting', 'provider.sending', 'provider.finished'] * 2)
+
+    def test_a_coder_that_calls_nothing_records_no_count(self):
+        reader = replayed(f.reader_message(f.reader_result([f.code('45385', 'ready')])))
+        checker = replayed(f.checker_message(f.checker_result([f.review('45385', 'agree', line='L1')])))
+        coder = f.FakeCoder(reader=reader, checker=checker)
+        coder.endpoint = ''  # a replay: no endpoint, so no count and no disclosure
+        round_ = self.run_round(coder)
+        self.assertEqual(round_.state, Round.DONE)
+        self.assertEqual(coder.counts, [])
+        self.assertFalse(models.AuditEvent.objects.filter(event='provider.counting').exists())
+
+    def test_a_count_whose_record_cannot_be_written_is_never_made(self):
+        coder = RecordingCountCoder(20_000, **self.answers())
+        real = jobs.audit.record
+
+        def record(workspace, event, **data):
+            if event == 'provider.counting':
+                raise RuntimeError('synthetic: the audit row could not be written')
+            return real(workspace, event, **data)
+        with mock.patch.object(jobs.audit, 'record', side_effect=record):
+            round_ = self.run_round(coder)
+        self.assertEqual(round_.state, Round.FAILED)
+        self.assertEqual((coder.seen_at_count, coder.calls), ([], []))  # nothing counted, nothing sent
+        self.assertFalse(Run.objects.filter(encounter=self.enc).exists())
+
+    def test_the_request_handed_to_the_count_is_byte_identical_to_the_one_built_before_d4(self):
+        coder = RecordingCountCoder(20_000, **self.answers())
+        round_ = self.run_round(coder)
+        self.assertEqual(round_.state, Round.DONE)
+        reader_counted = coder.counted_requests[0]
+        # 1. the same request, built from the same inputs by the function the stage calls, untouched by D4
+        document = fable_document.prepare(self.rev)
+        built = client.build_request(system=prompts.READER_SYSTEM, document=document,
+                                     instruction=prompts.reader_instruction(round_.context),
+                                     effort=settings.CODING_EFFORT)
+        for label, value in (('params', lambda r: r.params), ('stored', lambda r: r.stored),
+                             ('count body', client.count_params)):
+            with self.subTest(label=label):
+                self.assertEqual(client.canonical(value(reader_counted)), client.canonical(value(built)))
+        self.assertEqual((reader_counted.sha256, reader_counted.attempts), (built.sha256, built.attempts))
+        # 2. the code path before D4 and the one after, on the same request: the count receives the same object, the
+        # same bytes, and gives the same figures
+        before, after = RecordingCountCoder(20_000), RecordingCountCoder(20_000)
+        old = _worst_case_before_d4(round_, jobs.READER, built, before)
+        new = jobs._worst_case(round_, jobs.READER, built, after)
+        self.assertEqual(old, new)
+        self.assertIs(before.counted_requests[0], built)
+        self.assertIs(after.counted_requests[0], built)
+        self.assertEqual(client.canonical(client.count_params(before.counted_requests[0])),
+                         client.canonical(client.count_params(after.counted_requests[0])))
+        # and only the new path left its record, before its count
+        self.assertEqual(before.seen_at_count[0][1], after.seen_at_count[0][1][:-1])
+        self.assertEqual(after.seen_at_count[0][1][-1], {'round': str(round_.pk), 'purpose': jobs.READER,
+                                                         'request_sha256': built.sha256})
