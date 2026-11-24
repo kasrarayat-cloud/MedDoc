@@ -42,7 +42,9 @@
  *
  * Per document, through the page: New document -> the file, the service date, the insurance and the synthetic
  * attestation -> Start; then GET /api/encounters/<id> is polled until progress.phase is done, failed or stopped (each
- * wait bounded by --deadline-seconds). On done: the JSON against ops/verification/customer-contract.json, the contract
+ * wait bounded by --deadline-seconds; since release 1 polls are not activity (B5), so each poll answers the page's idle
+ * dialog with #idleStay when it shows, as a member who is there would, and the evidence counts it as idle_stays). On
+ * done: the JSON against ops/verification/customer-contract.json, the contract
  * of section 6 that ops/scan_customer.py and the Django suite read too (every key it lists and no other, each value of
  * its type, at every depth - every customer JSON the page or the walk read on the session, list and encounter routes,
  * at every phase), and beside it the code statuses, each code's allowed actions by its status and decision, and the
@@ -2674,6 +2676,16 @@ async function uploadDocument(page, ctx, doc) {
   return { status: response.status(), id: typeof json?.id === 'string' ? json.id : null };
 }
 
+// Release 1 (B5): polls are not activity, so the page raises #idleDialog after about 13 minutes without input and signs
+// the session out at 15 - and a coding wait can be longer. Each poll of a wait answers the dialog when it shows, with
+// #idleStay, as a member who is there would; ctx.idleStays counts the answers (the evidence's idle_stays).
+async function stayIfAsked(page, ctx) {
+  if (!(await page.locator('#idleDialog').isVisible().catch(() => false))) return false;
+  await page.locator('#idleStay').click({ timeout: UI_TIMEOUT_MS });
+  ctx.idleStays = (ctx.idleStays || 0) + 1;
+  return true;
+}
+
 // Poll the encounter until its phase settles (done, failed or stopped) - for a round after ``after`` when it is given.
 async function waitForRound(page, ctx, id, record, after = null) {
   const deadlineAt = Date.now() + ctx.deadlineSeconds * 1000;
@@ -2696,6 +2708,7 @@ async function waitForRound(page, ctx, id, record, after = null) {
       throw new Error(`GET /api/encounters/${id} answered ${answer.status || answer.error} ${MAX_POLL_ERRORS} times`);
     }
     if (Date.now() > deadlineAt) throw new Error(`the round did not finish within ${ctx.deadlineSeconds} s (phases ${record.phases.join(' > ')})`);
+    await stayIfAsked(page, ctx);  // a wait longer than the page's idle limit (B5)
     await new Promise(resolve => setTimeout(resolve, POLL_MS));
   }
 }
@@ -3352,7 +3365,7 @@ async function main(argv) {
     environment: { node: process.version, playwright: require(path.join(PLAYWRIGHT, 'package.json')).version, browser: null,
       denylist: denylist().schema, contract: contract().schema },
     credentials: { username: creds.username, file_mode: creds.mode },
-    session: null, health: null, control: null, run_checks: [], documents: [], summary: null, run_error: null,
+    session: null, health: null, control: null, idle_stays: 0, run_checks: [], documents: [], summary: null, run_error: null,
   };
   const browser = await chromium.launch({ headless: true });
   evidence.environment.browser = browser.version();
@@ -3360,7 +3373,7 @@ async function main(argv) {
   const page = await context.newPage();
   page.setDefaultTimeout(UI_TIMEOUT_MS);
   const ctx = { base: opts.baseUrl, admin: opts.adminUrl, out: opts.out, deadlineSeconds: opts.deadlineSeconds, scan: null,
-    hits: null, session: null };
+    hits: null, session: null, idleStays: 0 };
   page.on('response', response => { captureResponse(response, ctx).catch(() => {}); });
   const anonymous = await playwrightRequest.newContext();
   const door = await playwrightRequest.newContext();  // the member at the admin door: no cookie of the customer session
@@ -3413,6 +3426,7 @@ async function main(argv) {
     await anonymous.dispose().catch(() => {});
     await door.dispose().catch(() => {});
     await browser.close();
+    evidence.idle_stays = ctx.idleStays;
     evidence.finished_at = isoNow();
     const passed = evidence.documents.filter(doc => doc.result === 'pass').length;
     evidence.summary = { documents: evidence.documents.length, selected: docs.length, passed,
@@ -3441,7 +3455,7 @@ module.exports = {
   servedRow, decisionRequestProblems, approvalProblems, undo, undoRequestProblems, undoProblems, exportPdf, pdfPageLines, REPORT_STATUS, RUNNING_LINES,
   exportRequestProblems, activityNaming, opsChecks, exportChecks, summarize, documentResult,
   checkedOrigin, adminOriginOf, cookieNames, controlChecks, redirectsToOpsSignIn, OPS_SIGN_IN, REFUSED_SENTENCE, CSRF_FIELD,
-  healthDigest, healthRecord, healthChecks, HEALTH_DIGEST_PREFIX,
+  healthDigest, healthRecord, healthChecks, HEALTH_DIGEST_PREFIX, stayIfAsked,
   evidenceProblems, writeEvidence, sessionProblems, stopRequested, main,
 };
 

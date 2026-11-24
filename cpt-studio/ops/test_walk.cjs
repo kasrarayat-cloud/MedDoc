@@ -1999,6 +1999,28 @@ test('the operator gate\'s control needs no operator: the admin gate, the doctor
   assert.equal(walk.CSRF_FIELD.exec('<input type="hidden" name="csrfmiddlewaretoken" value="t0k3n">')[1], 't0k3n');
 });
 
+test('a wait answers the page\'s idle dialog with #idleStay, and nothing else (B5)', async () => {
+  const clicked = [];
+  const pageWith = visible => ({ locator: selector => ({
+    isVisible: async () => selector === '#idleDialog' && visible,
+    click: async () => { clicked.push(selector); },
+  }) });
+  const ctx = { idleStays: 0 };
+  assert.equal(await walk.stayIfAsked(pageWith(false), ctx), false);
+  assert.deepEqual([clicked, ctx.idleStays], [[], 0]);
+  assert.equal(await walk.stayIfAsked(pageWith(true), ctx), true);
+  assert.equal(await walk.stayIfAsked(pageWith(true), ctx), true);
+  assert.deepEqual([clicked, ctx.idleStays], [['#idleStay', '#idleStay'], 2]);
+  // a page whose dialog cannot be read is simply not answered: the wait goes on
+  const broken = { locator: () => ({ isVisible: async () => { throw new Error('page closed'); }, click: async () => {} }) };
+  assert.equal(await walk.stayIfAsked(broken, ctx), false);
+  // every poll of a round's wait looks for it, and the evidence counts the answers
+  const source = fs.readFileSync(path.join(__dirname, 'walk.cjs'), 'utf8');
+  const wait = source.slice(source.indexOf('async function waitForRound'), source.indexOf('// The encounter view, once'));
+  assert.ok(wait.includes('await stayIfAsked(page, ctx);'));
+  assert.ok(source.includes('evidence.idle_stays = ctx.idleStays;'));
+});
+
 test('the public /health/ answers the release digest through nginx and never the release (B7)', () => {
   const release = 'c'.repeat(40);
   const digest = walk.healthDigest(release);

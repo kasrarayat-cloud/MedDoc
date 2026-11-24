@@ -1659,23 +1659,23 @@ recomputes every state.
 
 Practices never need the operator to read their own documents: members
 download originals and reports themselves, and a complete per-document bundle
-(`api/encounters/<id>/bundle`). The operator gets back into a locked console from
-the server, by ruled acts through `--phase manage` under a committed
-declaration:
+(`api/encounters/<id>/bundle`). Each locked state below is cleared by one
+recorded act - a ruled act through `--phase manage` runs under a committed
+declaration, with `--reason-file <file>` (RAM-only for the command) and
+`--by <person>` (a person, never a role):
 
-- a sign-in delay on a name: `--command clear-signin-failures --username <name>
-  --reason-file <file> --by <person>`;
-- lost security keys: `--command reset-second-factor --username <name>
-  --reason-file <file> --by <person>` (it removes the keys, voids the recovery
-  codes, ends the account's sessions and issues a new setup code, kept in
-  `/etc/cpt-studio/operator-enrolment.json`), then enrol again on
-  admin.quillmd.com within 30 minutes;
-- a setup code that expired: `--command issue-enrolment` (the same arguments);
-- the recovery codes, printed once at enrolment and held sealed by the
-  security officer (D20), stand in for a key at `/login/recovery`.
+| the state | what clears it |
+|---|---|
+| a sign-in delay on a username, or the refusal of one username from one address (B1) | wait: it ends within 15 minutes at most; or `--command clear-signin-failures --username <name>` |
+| the forced password change (B4: a password staff set, at its first sign-in) | the account page, `/account/`: its owner chooses a new password |
+| a member's staff-set password not replaced within 72 hours (B4, D31) | a reset in the console (People, the person's password): a new password and a new 72 hours; the clock is never extended |
+| the operator's staff-set password not replaced within 72 hours, or a setup code that expired (30 minutes) | `--command issue-enrolment --username <name>`: a new single-use setup code, kept root-only in `/etc/cpt-studio/operator-enrolment.json` and never printed, then the setup on admin.quillmd.com |
+| lost security keys | one of the recovery codes, at `/login/recovery` on admin.quillmd.com (printed once at enrolment; held sealed by the security officer, D20); otherwise `--command reset-second-factor --username <name>`, which marks the keys removed, voids the recovery codes, ends the account's sessions and issues a new setup code, kept as `issue-enrolment` keeps one, for enrolling again within 30 minutes |
 
-When the site itself is down, the existing `switch-back` returns the previous
-pair (**Switching back**); on the new server, a restore from backup.
+Losing both keys and every recovery code locks the console until that reset
+from the server, by design. When the site itself is down, the existing
+`switch-back` returns the previous pair (**Switching back**); on the new
+server, a restore from backup.
 
 ## Disposal, returns and the ledger (release 1, D1, D2)
 

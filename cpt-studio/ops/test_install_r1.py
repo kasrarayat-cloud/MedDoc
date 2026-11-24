@@ -804,5 +804,60 @@ class MigrateLockTimeoutTests(TemporaryDirectoryTest):
         self.assertEqual(world.acts('run', 'stop', 'rename', 'vhost'), [])  # nothing switched
 
 
+
+INSTALL_MD = Path(__file__).resolve().parent / 'INSTALL.md'
+
+
+def section(text, heading):
+    """The body of the ``## heading`` section of INSTALL.md, up to the next ## heading."""
+    start = text.index(f'## {heading}\n')
+    following = text.find('\n## ', start + 3)
+    return text[start:following if following != -1 else len(text)]
+
+
+class InstallDocR1Tests(unittest.TestCase):
+    """INSTALL.md's release-1 sections: what the operator reads when something is locked, a disposal, a restore."""
+
+    def setUp(self):
+        self.text = INSTALL_MD.read_text(encoding='utf-8')
+
+    def test_emergency_access_names_the_act_that_clears_each_locked_state(self):
+        body = section(self.text, 'Emergency access (release 1, B8)')
+        rows = [line for line in body.splitlines() if line.startswith('| ') and not line.startswith('| the state')
+                and not line.startswith('|---')]
+        self.assertEqual(len(rows), 5)
+        delay, forced, member, operator, keys = rows
+        self.assertIn('15 minutes at most', delay)
+        self.assertIn('--command clear-signin-failures', delay)
+        self.assertIn('`/account/`', forced)
+        self.assertIn('72 hours', member)
+        self.assertIn('a reset in the console', member)
+        self.assertIn('--command issue-enrolment', operator)
+        self.assertIn('never printed', operator)
+        self.assertIn('`/login/recovery`', keys)
+        self.assertIn('--command reset-second-factor', keys)
+        self.assertIn('voids the recovery codes', keys)
+        self.assertIn('--by <person>', body)
+
+    def test_the_ledger_is_replayed_after_a_restore_under_the_same_secret_key(self):
+        body = section(self.text, 'Disposal, returns and the ledger (release 1, D1, D2)')
+        for said in ('--dispose-step ledger', '--dispose-step replay-ledger', 'MAC-signed list of every',
+                     'must keep the same secret key', 'CPT_STUDIO_SWITCH_STATE=idle', '--approved-by',
+                     '/var/lib/cpt-studio-exports/'):
+            self.assertIn(said, body)
+        recovery = section(self.text, 'Recovery notes')
+        self.assertIn('.operator-enrolment.json.new', recovery)
+        self.assertNotIn('.ops-agent-credentials.json.new', recovery)
+
+    def test_the_rehearsal_is_synthetic_and_the_release_1b_notes_are_recorded(self):
+        self.assertIn('synthetic data only (RELEASE-1-SPEC 6.4): live is never restored', ' '.join(self.text.split()))
+        self.assertNotIn('rehearsal on a restored copy of live', ' '.join(self.text.split()))
+        limits = ' '.join(section(self.text, 'Known limits').split())
+        self.assertIn('gunicorn runs no Django system checks, so F1\'s key check, `studio.E101`, would not stop the web '
+                      'container', limits)
+        for later in ('(A10;', '(A12)', 'malware scan', 'D21, an accepted capability loss'):
+            self.assertIn(later, limits)
+
+
 if __name__ == '__main__':
     unittest.main()
