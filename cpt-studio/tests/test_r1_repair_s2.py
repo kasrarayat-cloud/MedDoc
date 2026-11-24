@@ -423,6 +423,21 @@ def wait_until(predicate, timeout=30.0):
     return False
 
 
+def deadlocks_counted():
+    """PostgreSQL's own count of the deadlocks it detected in this database (pg_stat_database.deadlocks)."""
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_stat_clear_snapshot()')
+        cursor.execute('SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()')
+        return cursor.fetchone()[0]
+
+
+def assert_no_deadlock(test, before):
+    """No deadlock was detected since ``before``: a worker's backend reports its count as it exits, so a change is
+    waited for a moment before the count is believed unchanged."""
+    wait_until(lambda: deadlocks_counted() != before, timeout=1.5)
+    test.assertEqual(deadlocks_counted(), before, 'PostgreSQL detected a deadlock between the two acts')
+
+
 @contextmanager
 def held_right_after_deleting(session_key, worker):
     """Hold ``worker``'s request right after it deletes the row of ``session_key``, with every lock it holds then: an
@@ -486,6 +501,7 @@ class LockOrderRaceTests(TransactionTestCase):
                     .values_list('session_key', flat=True))
 
     def race(self, first, held_key, second):
+        before = deadlocks_counted()
         with server_errors() as errors, held_right_after_deleting(held_key, first) as release:
             first.start()
             self.assertTrue(wait_until(lambda: wait_of(first) == ('Lock', 'advisory')), 'the first never reached the hold')
@@ -496,6 +512,7 @@ class LockOrderRaceTests(TransactionTestCase):
             first.join(60)
             second.join(60)
         self.assertFalse(first.is_alive() or second.is_alive())
+        assert_no_deadlock(self, before)
         return errors
 
     def assertChangeAnswered(self, change):  # noqa: N802 - an assertion, named as unittest's are
@@ -826,6 +843,7 @@ class GlobalLockOrderRaceTests(TransactionTestCase):
         super().tearDown()
 
     def race(self, first, table, row_id, second):
+        before = deadlocks_counted()
         with server_errors() as errors, held_right_after_updating(table, row_id, first) as release:
             first.start()
             self.assertTrue(wait_until(lambda: wait_of(first) == ('Lock', 'advisory')), 'the first never reached the hold')
@@ -837,6 +855,7 @@ class GlobalLockOrderRaceTests(TransactionTestCase):
             first.join(90)
             second.join(90)
         self.assertFalse(first.is_alive() or second.is_alive())
+        assert_no_deadlock(self, before)
         return errors
 
     def practice(self, name):
@@ -995,6 +1014,7 @@ class ResetLockOrderRaceTests(TransactionTestCase):
         super().tearDown()
 
     def race(self, first, table, event, value, second):
+        before = deadlocks_counted()
         with server_errors() as errors, held_right_after_writing(table, event, 'user_id', value, first) as release:
             first.start()
             self.assertTrue(wait_until(lambda: wait_of(first) == ('Lock', 'advisory')), 'the first never reached the hold')
@@ -1006,6 +1026,7 @@ class ResetLockOrderRaceTests(TransactionTestCase):
             first.join(90)
             second.join(90)
         self.assertFalse(first.is_alive() or second.is_alive())
+        assert_no_deadlock(self, before)
         return errors
 
     @staticmethod
