@@ -92,7 +92,7 @@ def second_factor(request):
     next_url = _next_of(request, state)
     error = ''
     if request.method == 'POST':
-        error = factor.too_many(user)
+        error = factor.too_many(user, request)
         if not error:
             try:
                 factor.verify_key(request, user, request.POST.get('credential', ''), purpose)
@@ -111,7 +111,7 @@ def second_factor(request):
     return _page(request, 'studio/ops_second_factor.html', {
         'mode': 'key', 'next': next_url, 'step_up': purpose == factor.STEP_UP, 'has_keys': keys,
         'no_keys': '' if keys else NO_KEYS, 'codes_left': factor.recovery_codes_left(user),
-        'attempts_left': factor.attempts_left(user, state)}, error)
+        'attempts_left': factor.attempts_left(user, state, request)}, error)
 
 
 def second_factor_options(request):
@@ -121,7 +121,7 @@ def second_factor_options(request):
     user, state, purpose = _who(request)
     if user is None:
         return JsonResponse({'error': factor.NO_CHALLENGE}, status=403)
-    refused = factor.too_many(user)
+    refused = factor.too_many(user, request)
     if refused:
         return JsonResponse({'error': refused}, status=429)
     if not factor.active_keys(user).exists():
@@ -139,7 +139,7 @@ def recovery(request):
     next_url = _next_of(request, state)
     error = ''
     if request.method == 'POST':
-        error = factor.too_many(user)
+        error = factor.too_many(user, request)
         if not error:
             completed = False
             with transaction.atomic():  # the code used up, its record and what it completes: one act
@@ -161,7 +161,7 @@ def recovery(request):
                 return redirect(f'{SIGN_IN_PAGE}?reason=key')
     return _page(request, 'studio/ops_second_factor.html', {
         'mode': 'recovery', 'next': next_url, 'codes_left': factor.recovery_codes_left(user),
-        'step_up': purpose == factor.STEP_UP, 'attempts_left': factor.attempts_left(user, state)}, error)
+        'step_up': purpose == factor.STEP_UP, 'attempts_left': factor.attempts_left(user, state, request)}, error)
 
 
 # --- setup with a code issued on the server ---------------------------------------------------------------------------

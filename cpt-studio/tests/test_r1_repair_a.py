@@ -8,6 +8,9 @@ A1  A security act whose SecurityEvent cannot be written does not happen. Postgr
     written (the non-vacuity control).
 A2  The console's activity list shows no CPT code and no line of any document: the document's own page keeps them
     closed until a reason is given (C2), and the list spans every practice. What the list shows otherwise stays.
+A3  Second-factor failures sent with the account's own known-device cookie are counted apart from every other request's,
+    so someone holding the operator's password alone cannot use up the attempts of the operator's own browser: its key,
+    its recovery codes and its step-up keep working. Each pending sign-in keeps its own limit.
 """
 from __future__ import annotations
 
@@ -16,6 +19,7 @@ import json
 import tempfile
 import uuid
 from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -29,7 +33,8 @@ from studio import audit, console, models, rate, second_factor, throttle
 from tests.support import coding as f
 from tests.support import operator as ops
 from tests.test_frontend import PLAIN_STATIC
-from tests.test_second_factor import ADMIN, CPT, PASSWORD, Authenticator, add_key, options_of, password_step
+from tests.test_second_factor import (ADMIN, CPT, MOMENT, PASSWORD, Authenticator, Clock, add_key, enrolled_operator,
+                                      key_step, options_of, password_step)
 
 SECURITY_EVENT_TABLE = models.SecurityEvent._meta.db_table
 AUDIT_EVENT_TABLE = models.AuditEvent._meta.db_table
@@ -365,7 +370,7 @@ class ActWithItsRecordTests(TransactionTestCase):
         self.assertEqual(security_events('second_factor.recovery_used'), 1)
 
 
-# --- A2: the activity list (bypass-0, phileak-3) -------------------------------------------------------------------------
+# --- A2: the activity list (bypass-0, phileak-3) ----------------------------------------------------------------------
 
 A2_CODES = ('45385', '45380')
 
@@ -412,3 +417,127 @@ class ActivityListWithoutContentTests(TestCase):
                          'username synthetic-person · from reviewer · to owner · requested_by Ticket 4417')
         self.assertNotIn('line', console.DETAIL_KEYS)
         self.assertNotIn('code', console.DETAIL_KEYS)
+
+
+# --- A3: the operator's own device keeps its second factor (auth-0) ---------------------------------------------------
+
+A3_OWN, A3_THIEF = '203.0.113.10', '198.51.100.7'
+
+
+def a3_browser(address, device=None):
+    """A browser at the admin host from ``address``, holding the known-device cookie ``device`` when given."""
+    client = Client(HTTP_HOST=ADMIN, REMOTE_ADDR=address)
+    if device is not None:
+        client.cookies[throttle.device_cookie_name()] = device
+    return client
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class OwnDeviceSecondFactorTests(TestCase):
+    """A3: the per-account count of second-factor failures is two counts - the account's own known devices', and every
+    other request's. The window is SECOND_FACTOR_PENDING_SECONDS, fixed; the clock is the tests' own."""
+
+    def setUp(self):
+        self.operator, self.key = enrolled_operator('a3-operator')
+        self.window = settings.SECOND_FACTOR_PENDING_SECONDS
+
+    def own_device(self):
+        """The operator's ordinary sign-in from the usual address, then a sign-out: the known-device cookie it set."""
+        own = a3_browser(A3_OWN)
+        answer = key_step(own, self.key) if password_step(own, self.operator).status_code == 302 else None
+        self.assertEqual((answer.status_code, answer.get('Location')), (302, '/ops/'))
+        device = own.cookies[throttle.device_cookie_name()].value
+        own.post('/logout/')
+        return device
+
+    def fill_the_account_count(self):
+        """What the holder of the password alone does in a window: the password, then empty answers until the pending
+        sign-in is dropped. Every one of them is a failure of its pending sign-in."""
+        thief = a3_browser(A3_THIEF)
+        self.assertEqual(password_step(thief, self.operator).status_code, 302)
+        answers = [thief.post('/login/second-factor', {'credential': ''})
+                   for _ in range(settings.SECOND_FACTOR_ATTEMPTS)]
+        self.assertEqual([item.status_code for item in answers[:-1]], [400] * (settings.SECOND_FACTOR_ATTEMPTS - 1))
+        self.assertEqual((answers[-1].status_code, answers[-1].get('Location')), (302, '/login/?reason=key'))
+        return thief
+
+    def test_the_operator_s_own_device_signs_in_with_its_key_window_after_window(self):
+        with Clock(MOMENT) as clock:
+            device = self.own_device()
+            for window in range(1, 4):
+                clock.moment = MOMENT + timedelta(seconds=self.window * window + 1)
+                self.fill_the_account_count()
+                clock.advance(60)
+                own = a3_browser(A3_OWN, device)
+                self.assertEqual(password_step(own, self.operator).status_code, 302)
+                options = own.post('/login/second-factor/options')
+                self.assertEqual(options.status_code, 200, f'window {window}: the operator\'s own key is refused')
+                signed = own.post('/login/second-factor',
+                                  {'credential': json.dumps(self.key.assertion(options.json()))})
+                self.assertEqual((signed.status_code, signed.get('Location')), (302, '/ops/'), f'window {window}')
+                own.post('/logout/')
+                # every other request still shares the count the password's holder used up: a browser with no cookie
+                stranger = a3_browser(A3_THIEF)
+                self.assertEqual(password_step(stranger, self.operator).status_code, 302)
+                self.assertEqual(stranger.post('/login/second-factor/options').status_code, 429)
+        outcomes = sorted(models.LoginAttempt.objects.values_list('outcome', flat=True))
+        self.assertEqual(outcomes.count(models.LoginAttempt.SIGNED_IN), 4)
+        self.assertEqual(outcomes.count(models.LoginAttempt.SECOND_FACTOR_FAILED), 3, 'each pending sign-in its limit')
+
+    def test_the_operator_s_own_recovery_code_works_too(self):
+        codes = second_factor.new_recovery_codes(self.operator)
+        with Clock(MOMENT) as clock:
+            device = self.own_device()
+            clock.moment = MOMENT + timedelta(seconds=self.window + 1)
+            self.fill_the_account_count()
+            own = a3_browser(A3_OWN, device)
+            password_step(own, self.operator)
+            used = own.post('/login/recovery', {'code': codes[0]})
+            self.assertEqual((used.status_code, used.get('Location')), (302, '/ops/'))
+            self.assertEqual(second_factor.recovery_codes_left(self.operator), settings.RECOVERY_CODE_COUNT - 1)
+
+    def test_the_signed_in_operator_steps_up_with_the_key_too(self):
+        with Clock(MOMENT) as clock:
+            own = a3_browser(A3_OWN)
+            password_step(own, self.operator)
+            self.assertEqual(key_step(own, self.key).get('Location'), '/ops/')  # signed in, the device cookie set
+            # the next window, the key older than the step-up allows, and the count filled by the password's holder
+            clock.moment = MOMENT + timedelta(seconds=self.window + 61)
+            self.fill_the_account_count()
+            self.assertEqual(own.post('/ops/security', {'action': 'options'}).json()['error'], 'step_up')
+            options = own.post('/login/second-factor/options')
+            self.assertEqual(options.status_code, 200, 'the signed-in operator can present the key')
+            back = own.post('/login/second-factor', {'credential': json.dumps(self.key.assertion(options.json())),
+                                                     'next': '/ops/security'})
+            self.assertEqual((back.status_code, back.get('Location')), (302, '/ops/security'))
+            self.assertEqual(own.post('/ops/security', {'action': 'options'}).status_code, 200)
+
+    def test_the_two_counts_are_apart_both_ways_and_the_device_s_own_still_limits(self):
+        with Clock(MOMENT) as clock:
+            device = self.own_device()
+            clock.moment = MOMENT + timedelta(seconds=self.window + 1)
+            own = a3_browser(A3_OWN, device)
+            password_step(own, self.operator)
+            for _ in range(settings.SECOND_FACTOR_ATTEMPTS):
+                key_step(own, self.key, origin='https://x.example')  # wrong answers from the operator's own browser
+            again = a3_browser(A3_OWN, device)
+            password_step(again, self.operator)
+            self.assertEqual(again.post('/login/second-factor/options').status_code, 429, 'the device\'s own limit')
+            elsewhere = a3_browser(A3_THIEF)
+            password_step(elsewhere, self.operator)
+            self.assertEqual(elsewhere.post('/login/second-factor/options').status_code, 200,
+                             'the other count is apart')
+
+    def test_a_cookie_of_another_account_or_a_forged_one_counts_with_every_other_request(self):
+        doctor = f.member(f.workspace('Synthetic practice A3'))
+        others = {'another account\'s cookie': throttle.device_cookie_value(doctor.pk),
+                  'a forged cookie': throttle.device_cookie_value(self.operator.pk)[:-2] + 'xx',
+                  'no cookie': None}
+        with Clock(MOMENT + timedelta(seconds=1)):
+            self.own_device()
+            self.fill_the_account_count()
+            for label, cookie in others.items():
+                with self.subTest(label):
+                    browser = a3_browser(A3_THIEF, cookie)
+                    password_step(browser, self.operator)
+                    self.assertEqual(browser.post('/login/second-factor/options').status_code, 429)
