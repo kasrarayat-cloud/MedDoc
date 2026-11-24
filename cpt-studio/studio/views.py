@@ -220,15 +220,18 @@ def _wrong_passwords(user):
 
 
 def _change_password(request, user):
-    """Change ``user``'s password from the account page's form; the refusal sentence, or '' once changed."""
-    if _wrong_passwords(user) >= settings.SIGNIN_USER_DELAY_AFTER:  # refused for the window, before any hashing
+    """Change ``user``'s password from the account page's form; the refusal sentence, or '' once changed. The place
+    among the window's SIGNIN_USER_DELAY_AFTER wrong current passwords is taken before any hashing, in one atomic hit
+    (throttle.reserve), so guesses sent in parallel from one session never get more checks than that (refutation r2,
+    finding 10); a right current password gives its place back."""
+    if not throttle.reserve(ACCOUNT_SCOPE, user.pk, settings.SIGNIN_USER_DELAY_AFTER):
         return TOO_MANY_WRONG.format(wait=throttle.wait_words(settings.SIGNIN_WINDOW_SECONDS))
     current = request.POST.get('current_password', '')
     new = request.POST.get('new_password', '')
     again = request.POST.get('new_password_again', '')
     if not user.check_password(current):
-        rate.hit(ACCOUNT_SCOPE, user.pk, window_seconds=throttle.MINUTE)
-        return WRONG_CURRENT
+        return WRONG_CURRENT  # its place stays: it is this wrong password's count
+    throttle.give_back(ACCOUNT_SCOPE, user.pk)
     if new != again:
         return NOT_THE_SAME
     if new == current:

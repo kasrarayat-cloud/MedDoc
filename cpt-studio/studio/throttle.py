@@ -25,7 +25,9 @@ The window is SIGNIN_WINDOW_SECONDS. The refusal sentence is the same whether or
 CLIENT_REFUSAL for (a)), and every refusal is answered before the password hasher runs (AUTH-3, L-AVAIL).
 
 The counts live in RateWindow rows (studio.rate), one per minute: failures per username, per pair and per address, and
-refusals per username and per address. A username is only ever counted as its keyed hash (user_key), never as typed
+refusals per username and per address. The pair's and the address's places are taken before the password is checked,
+one atomic hit each (reserve), and given back unless the attempt fails, so attempts sent at the same moment never pass a
+limit together (refutation r2, finding 10); the username's failure is counted after the check. A username is only ever counted as its keyed hash (user_key), never as typed
 text, and a pair as the keyed hash of both (pair_key). A refusal is counted, never hidden (AUTH-9): the first refusal of
 a minute writes one SecurityEvent signin.throttled holding ids and counts - per username for (b) and (c), per address
 for (a) - and refused_in() answers the console's "N refused in the last hour".
@@ -58,7 +60,7 @@ from types import SimpleNamespace
 from django.conf import settings
 from django.core import signing
 from django.core.exceptions import ValidationError
-from django.db.models import Max, Sum
+from django.db.models import F, Max, Sum
 from django.utils import timezone
 
 from . import rate, request_meta, security_events
@@ -229,6 +231,30 @@ def clear_address(key) -> int:
     return deleted
 
 
+def reserve(scope, key, limit, now=None) -> bool:
+    """Take one place of (scope, key)'s ``limit`` in the sign-in window BEFORE a password is checked, and answer whether
+    it is within the limit. The place is one atomic hit (rate.hit), whose own count says where this attempt stands, so
+    two attempts sent at the same moment can never both take the last place (refutation r2, finding 10). A place over
+    the limit is given back at once, so a refusal never counts; the caller gives back one that turns out not to be a
+    failure (give_back)."""
+    now = now or timezone.now()
+    start = rate.window_start(MINUTE, now)
+    earlier = sum(count for window, count in _rows(scope, key, _since(now)) if window < start)
+    if earlier + rate.hit(scope, key, window_seconds=MINUTE) > limit:
+        give_back(scope, key)
+        return False
+    return True
+
+
+def give_back(scope, key):
+    """Give back one place of (scope, key) taken by reserve: its newest window's count goes down by one, never below
+    zero."""
+    newest = (RateWindow.objects.filter(scope=scope, key=key, count__gt=0).order_by('-window_start')
+              .values_list('pk', flat=True).first())
+    if newest is not None:
+        RateWindow.objects.filter(pk=newest, count__gt=0).update(count=F('count') - 1)
+
+
 class Door:
     """One sign-in attempt at one door (``door``: request_meta.CPT or ADMIN) for one typed ``username`` (as the
     LoginAttempt stores it: at most 150 characters, unstorable ones replaced)."""
@@ -240,6 +266,7 @@ class Door:
         self.user_key = user_key(username)
         self.pair_key = pair_key(username, self.client_key)
         self.sign_in_ref = uuid.uuid4()  # this attempt's reference: its LoginAttempt's, and its session's if it signs in
+        self.reserved = []  # the (scope, key) places refusal() took for this attempt, before its password is checked
 
     def account(self):
         """The account the typed name names exactly, or None."""
@@ -265,22 +292,35 @@ class Door:
         return any(key_of_address(address) == self.client_key for address in addresses)
 
     def refusal(self) -> str:
-        """The sentence that refuses this attempt before any password is checked, or '' when it may go on. A refusal is
-        counted per minute, per username key and per address key."""
+        """The sentence that refuses this attempt before any password is checked, or '' when it may go on. The address's
+        and the pair's places are taken first (reserve: one atomic hit each, so attempts sent at the same moment can
+        never all pass a limit one place short - refutation r2, finding 10); record() keeps them as this attempt's
+        failure, or gives them back. A refused attempt gives back what it took, and is counted per minute, per
+        username key and per address key."""
         now = timezone.now()
         since = _since(now)
-        client_rows = _rows(FAIL_CLIENT, self.client_key, since)  # checked failures only: a refusal never counts here
-        if sum(count for _, count in client_rows) >= settings.SIGNIN_CLIENT_LIMIT:
+        if not reserve(FAIL_CLIENT, self.client_key, settings.SIGNIN_CLIENT_LIMIT, now):
+            client_rows = _rows(FAIL_CLIENT, self.client_key, since)  # checked failures only: a refusal never counts
             return self._refuse(ADDRESS, _wait_below(client_rows, settings.SIGNIN_CLIENT_LIMIT, now))
-        pair_rows = _rows(FAIL_PAIR, self.pair_key, since)
-        if sum(count for _, count in pair_rows) >= settings.SIGNIN_PAIR_LIMIT:
-            return self._refuse(PAIR, _wait_below(pair_rows, settings.SIGNIN_PAIR_LIMIT, now))
+        self.reserved.append((FAIL_CLIENT, self.client_key))
+        if not reserve(FAIL_PAIR, self.pair_key, settings.SIGNIN_PAIR_LIMIT, now):
+            self.give_back()
+            return self._refuse(PAIR, _wait_below(_rows(FAIL_PAIR, self.pair_key, since), settings.SIGNIN_PAIR_LIMIT,
+                                                  now))
+        self.reserved.append((FAIL_PAIR, self.pair_key))
         failures, last = failures_of(self.username, now)
         wait = delay_seconds(failures)
         if wait and last is not None and now < last + timedelta(seconds=wait) and not self.known_device() \
                 and not self.known_address():
+            self.give_back()
             return self._refuse(USERNAME, (last + timedelta(seconds=wait) - now).total_seconds(), failures=failures)
         return ''
+
+    def give_back(self):
+        """Give back every place refusal() took for this attempt."""
+        for scope, key in self.reserved:
+            give_back(scope, key)
+        self.reserved = []
 
     def _refuse(self, check, wait, *, failures=None):
         refused_name = rate.hit(REFUSED_USER, self.user_key, window_seconds=MINUTE)
@@ -316,12 +356,20 @@ class Door:
         return user if outcome == success else None
 
     def record(self, outcome):
-        """Write this attempt's LoginAttempt with ``outcome``; a failure is counted toward (a) to (c)."""
+        """Write this attempt's LoginAttempt with ``outcome``; a failure is counted toward (a) to (c): the places
+        refusal() took are its address's and its pair's failure (an attempt that took none - setup's sign-in - is
+        counted there now), and its username's is counted here. Any other outcome gives the places back."""
         LoginAttempt.objects.create(username=self.username, client=self.client,
                                     succeeded=outcome == LoginAttempt.SIGNED_IN, door=self.door, outcome=outcome,
                                     sign_in_ref=self.sign_in_ref)
         if outcome in FAILURES:
-            count_failure(self.username, self.client_key)
+            rate.hit(FAIL_USER, self.user_key, window_seconds=MINUTE)
+            for scope, key in ((FAIL_PAIR, self.pair_key), (FAIL_CLIENT, self.client_key)):
+                if (scope, key) not in self.reserved:
+                    rate.hit(scope, key, window_seconds=MINUTE)
+            self.reserved = []
+        else:
+            self.give_back()
 
 
 def settle_second_factor(request, sign_in_ref, *, signed_in) -> int:

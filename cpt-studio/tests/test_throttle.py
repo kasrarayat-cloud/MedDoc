@@ -8,6 +8,7 @@ import io
 import ipaddress
 import json
 import tempfile
+import threading
 import uuid
 from datetime import timedelta
 from pathlib import Path
@@ -18,7 +19,8 @@ from django.contrib.auth.hashers import Argon2PasswordHasher
 from django.core import signing
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import Client, TestCase, override_settings
+from django.db import connections as db_connections
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 
 from studio import models, rate, throttle, views
 from tests.support import coding as f
@@ -254,6 +256,116 @@ class AddressLimitTests(ThrottleCase):
             self.assertEqual(answers, ['network'] * 3 + ['in'])
             self.assertGreater(throttle.refused_in('owner'), 0)  # refusals are still counted, for the Sign-ins page
             self.assertGreater(rate.count(throttle.REFUSED_CLIENT, self.OFFICE, since=rate.window_start(60, start)), 0)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
+class ConcurrentAttemptTests(TransactionTestCase):
+    """Attempts sent at the same moment, over real connections, meet the pair limit, the address limit and the account
+    page's wrong-password limit one at a time: each takes its place in one atomic hit before any password is checked
+    (refutation r2, finding 10; lockout/probes/lockprobe/test_p7_keys_concurrency.py, bypass/byp_race.py). A barrier
+    holds every request at the door until all of them are there."""
+
+    def setUp(self):
+        self.ws = f.workspace()
+        self.owner = f.user('owner')
+        models.Membership.objects.create(user=self.owner, workspace=self.ws, role=models.Membership.OWNER)
+
+    def burst(self, target, function, calls):
+        """Run ``calls`` (callables) on threads that all wait at ``target.function`` until each has reached it."""
+        barrier = threading.Barrier(len(calls), timeout=30)
+        original = getattr(target, function)
+
+        def at_once(*args, **kwargs):
+            barrier.wait()
+            return original(*args, **kwargs)
+
+        results = [None] * len(calls)
+
+        def run(index, call):
+            try:
+                results[index] = call()
+            finally:
+                db_connections.close_all()
+
+        with mock.patch.object(target, function, at_once):
+            threads = [threading.Thread(target=run, args=pair) for pair in enumerate(calls)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(60)
+        return results
+
+    @override_settings(SIGNIN_USER_DELAY_AFTER=10 ** 6, SIGNIN_CLIENT_LIMIT=10 ** 6)
+    def test_six_attempts_at_once_one_place_short_of_the_pair_limit_check_one_password(self):
+        for _ in range(settings.SIGNIN_PAIR_LIMIT - 1):
+            throttle.count_failure('owner', ADDRESS_A)
+        answers = self.burst(throttle.Door, 'refusal', [lambda: sentence(attempt('owner', 'guess'))] * 6)
+        self.assertEqual(sum(views.SIGN_IN_REFUSED in answer for answer in answers), 1)
+        self.assertEqual(sum('Too many attempts' in answer for answer in answers), 5)
+        self.assertEqual(models.LoginAttempt.objects.count(), 1)
+        pair = models.RateWindow.objects.filter(scope=throttle.FAIL_PAIR, key=throttle.pair_key('owner', ADDRESS_A))
+        self.assertEqual(sum(pair.values_list('count', flat=True)), settings.SIGNIN_PAIR_LIMIT)
+
+    @override_settings(SIGNIN_USER_DELAY_AFTER=10 ** 6, SIGNIN_PAIR_LIMIT=10 ** 6)
+    def test_six_attempts_at_once_one_place_short_of_the_address_limit_check_one_password(self):
+        for index in range(settings.SIGNIN_CLIENT_LIMIT - 1):
+            throttle.count_failure(f'colleague-{index}', ADDRESS_A)
+        names = [f'guess-{index}' for index in range(6)]
+        answers = self.burst(throttle.Door, 'refusal', [lambda name=name: sentence(attempt(name, 'guess')) for name in names])
+        self.assertEqual(sum(views.SIGN_IN_REFUSED in answer for answer in answers), 1)
+        self.assertEqual(sum('from this network' in answer for answer in answers), 5)
+        self.assertEqual(models.LoginAttempt.objects.count(), 1)
+        self.assertEqual(rate.count(throttle.FAIL_CLIENT, ADDRESS_A, since=rate.window_start(60)),
+                         settings.SIGNIN_CLIENT_LIMIT)
+
+    def test_sixteen_wrong_current_passwords_at_once_get_five_checks_and_then_none(self):
+        member = f.member(self.ws)
+        client = Client(HTTP_HOST=CPT)
+        self.assertEqual(client.post('/login/', {'username': member.username, 'password': PASSWORD}).status_code, 302)
+        cookie = client.cookies[settings.SESSION_COOKIE_NAME].value
+        new = 'a fresh synthetic passphrase only I know'
+
+        def guess(current):
+            def post():
+                other = Client(HTTP_HOST=CPT)
+                other.cookies[settings.SESSION_COOKIE_NAME] = cookie
+                answer = other.post('/account/', {'current_password': current, 'new_password': new,
+                                                  'new_password_again': new})
+                body = answer.content.decode()
+                return ('changed' if answer.status_code == 302 else 'wrong' if views.WRONG_CURRENT in body
+                        else 'held' if 'Too many wrong passwords' in body else f'other {answer.status_code}')
+            return post
+
+        first = self.burst(views, '_change_password', [guess(f'wrong-guess-{index}') for index in range(16)])
+        self.assertEqual(sorted(first), ['held'] * 11 + ['wrong'] * 5)
+        # the right password hidden in a second burst, the window's places already taken: nothing is checked
+        second = self.burst(views, '_change_password', [guess(f'wrong-guess-b{index}') for index in range(15)]
+                            + [guess(PASSWORD)])
+        self.assertEqual(second, ['held'] * 16)
+        member.refresh_from_db()
+        self.assertTrue(member.check_password(PASSWORD))
+        self.assertEqual(views._wrong_passwords(member), settings.SIGNIN_USER_DELAY_AFTER)
+
+
+class PlaceTests(ThrottleCase):
+    """A place taken before the password check is the attempt's failure when it fails, and given back otherwise."""
+
+    def test_a_right_password_and_a_refusal_give_their_places_back(self):
+        for _ in range(3):
+            attempt('owner', WRONG, address=ADDRESS_A)
+        counted = lambda scope, key: rate.count(scope, key, since=rate.window_start(60))  # noqa: E731
+        pair = throttle.pair_key('owner', ADDRESS_A)
+        self.assertEqual((counted(throttle.FAIL_PAIR, pair), counted(throttle.FAIL_CLIENT, ADDRESS_A)), (3, 3))
+        self.assertEqual(attempt('owner', address=ADDRESS_A).status_code, 302)  # signed in: no failure
+        attempt('owner', host=ADMIN, address=ADDRESS_A)  # no_access at the admin door: no failure either
+        self.assertEqual((counted(throttle.FAIL_PAIR, pair), counted(throttle.FAIL_CLIENT, ADDRESS_A)), (3, 3))
+        for _ in range(2):
+            attempt('owner', WRONG, address=ADDRESS_A)
+        refused = attempt('owner', address=ADDRESS_B)  # the username delay: refused, its places given back
+        self.assertIn('Too many attempts', sentence(refused))
+        self.assertEqual(counted(throttle.FAIL_CLIENT, ADDRESS_B), 0)
+        self.assertEqual(counted(throttle.FAIL_PAIR, throttle.pair_key('owner', ADDRESS_B)), 0)
+        self.assertEqual(counted(throttle.FAIL_PAIR, pair), 5)
 
 
 class CrossDoorTests(ThrottleCase):
