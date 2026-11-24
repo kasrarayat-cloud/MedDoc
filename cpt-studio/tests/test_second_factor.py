@@ -620,6 +620,57 @@ class ChallengeRaceTests(TransactionTestCase):
 
 
 @override_settings(STORAGES=PLAIN_STATIC)
+class FreshSessionTests(TestCase):
+    """A password checked at the admin door ends the session it was posted in, and its sign-in waits for the key in a
+    fresh one (refutation r2, finding 4; l2fa/test_probes.py P2 and test_p2_own.py)."""
+
+    def setUp(self):
+        self.b, self.b_key = enrolled_operator('operator-b')
+        self.a, self.a_key = enrolled_operator('operator-a')
+
+    def check_fresh_pending(self, client, before, user):
+        self.assertIsNone(signed_in_as(client), 'the signed-in session went on')
+        self.assertNotEqual(client.cookies[settings.SESSION_COOKIE_NAME].value, before)
+        self.assertFalse(Session.objects.filter(session_key=before).exists())
+        session = client.session
+        attempt = models.LoginAttempt.objects.filter(username=user.username).latest('pk')
+        self.assertEqual(attempt.outcome, 'second_factor_pending')
+        self.assertEqual((session[second_factor.PENDING]['user'], session[second_factor.PENDING]['ref']),
+                         (str(user.pk), str(attempt.sign_in_ref)))
+        self.assertEqual(session[request_meta.SESSION_SIGN_IN_REF], str(attempt.sign_in_ref))
+        for name in (request_meta.SESSION_SECOND_FACTOR_AT, request_meta.SESSION_DOOR, request_meta.SESSION_AUTH_AT):
+            self.assertNotIn(name, session)
+        page = client.get('/ops/security')
+        self.assertEqual(page.status_code, 302)  # the keys page is the sign-in's again, never the signed-in one's
+        self.assertNotIn('X-CPT-Actor', page)
+
+    def test_another_operator_s_password_posted_in_a_signed_in_session_ends_it(self):
+        client = admin_client()
+        self.assertEqual(sign_in(client, self.b, self.b_key).status_code, 302)
+        before = client.cookies[settings.SESSION_COOKIE_NAME].value
+        answer = password_step(client, self.a)
+        self.assertEqual((answer.status_code, answer['Location']), (302, '/login/second-factor'))
+        self.check_fresh_pending(client, before, self.a)
+        # and the second step signs A in, in a session of its own
+        self.assertEqual(key_step(client, self.a_key).status_code, 302)
+        self.assertEqual(signed_in_as(client), str(self.a.pk))
+
+    def test_the_own_password_posted_again_ends_the_signed_in_session_too(self):
+        client = admin_client()
+        self.assertEqual(sign_in(client, self.b, self.b_key).status_code, 302)
+        before = client.cookies[settings.SESSION_COOKIE_NAME].value
+        self.assertEqual(password_step(client, self.b)['Location'], '/login/second-factor')
+        self.check_fresh_pending(client, before, self.b)
+
+    def test_an_anonymous_session_is_flushed_before_its_sign_in_waits(self):
+        client = admin_client()
+        password_step(client, self.a)
+        first = client.cookies[settings.SESSION_COOKIE_NAME].value
+        password_step(client, self.b)  # the same browser, another password: the earlier pending sign-in goes
+        self.check_fresh_pending(client, first, self.b)
+
+
+@override_settings(STORAGES=PLAIN_STATIC)
 class PendingFailureTests(TestCase):
     """A pending sign-in's failures are counted per its reference in the database, so no copy of its session outlives
     them, and its attempt is settled once (refutation r2, finding 2; l2fa/test_race_failures.py)."""

@@ -20,9 +20,9 @@ The gate
 The ceremony (py_webauthn 3.0.1; the relying party is settings.WEBAUTHN_RP_ID - the admin host exactly, never quillmd.com,
 which sibling sites share - and the origin settings.WEBAUTHN_ORIGIN; user verification 'preferred', attestation 'none';
 every credential row records its relying-party id)
-    begin(request, user, sign_in_ref, next_url)  a checked password waits for its key: the ANONYMOUS session holds
-        PENDING = {the account, when, the sign-in's reference, where to go} for SECOND_FACTOR_PENDING_SECONDS. login()
-        is not called: a password alone opens nothing.
+    begin(request, user, sign_in_ref, next_url)  a checked password waits for its key: the session it was posted in
+        ends (signed out, or flushed) and a fresh ANONYMOUS session holds PENDING = {the account, when, the sign-in's
+        reference, where to go} for SECOND_FACTOR_PENDING_SECONDS. login() is not called: a password alone opens nothing.
     authentication_options / verify_key  a signed challenge for the account's own keys: the challenge lives in the
         session (CHALLENGE) and is used once - taken out of the session and used up in the database (a OneTimeToken of
         CHALLENGE_PURPOSE, bound to the account, the purpose and the flow, used with one conditional UPDATE) before
@@ -59,7 +59,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 from urllib.parse import urlencode, urlsplit
 
 from django.conf import settings
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
 from django.db.models import Q
@@ -513,8 +513,15 @@ def use_recovery_code(user, typed) -> bool:
 # --- the second step of the admin door ---------------------------------------------------------------------------------
 
 def begin(request, user, sign_in_ref, next_url):
-    """A checked password at the admin door: the anonymous session waits for ``user``'s key (see the module)."""
-    request.session.pop(CHALLENGE, None)
+    """A checked password at the admin door: the session it was posted in ends - a signed-in one is signed out
+    (logout()), an anonymous one is flushed - and a fresh anonymous session, under a new key, waits for ``user``'s key
+    (see the module). Nothing of an earlier session - its sign-in, its reference, its second factor - carries into the
+    pending sign-in, and the pending sign-in's reference is never written into a signed-in session (refutation r2,
+    finding 4)."""
+    if getattr(getattr(request, 'user', None), 'is_authenticated', False):
+        logout(request)
+    else:
+        request.session.flush()
     request.session[PENDING] = {'user': str(user.pk), 'at': request_meta.epoch_seconds(), 'ref': str(sign_in_ref),
                                 'next': safe_next(next_url)}
     request.session[request_meta.SESSION_SIGN_IN_REF] = str(sign_in_ref)  # the second step's records carry it
