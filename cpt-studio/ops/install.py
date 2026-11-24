@@ -243,6 +243,9 @@ def credentials_files(specialty: str) -> tuple:
 # is an operator again (the release walk needs none: A11), and no operator login is written to a file (TEC-16 (2)): the
 # operator sets a password with a single-use setup code instead (phase_operators, issue_setup_code).
 OPERATOR_ACCOUNTS_SPEC = (('platform-operator', 'human', 'CPT Studio platform operator'),)
+# Every operator account name this installer has made, today's and an earlier install's (ops-agent, revoked by a ruled
+# act): none is ever provisioned as a practice's owner or agent (refutation, installer lens A-4).
+OPERATOR_NAMES = frozenset({name for name, _, _ in OPERATOR_ACCOUNTS_SPEC} | {'ops-agent'})
 
 NGINX_AVAILABLE = Path('/etc/nginx/sites-available')
 NGINX_ENABLED = Path('/etc/nginx/sites-enabled')
@@ -706,6 +709,12 @@ def argument_problem(args) -> str:
                 return f'Username {value!r} must match {USERNAME_RE.pattern}.'
         if args.owner_username == agent:
             return 'The owner and agent usernames must differ.'
+        # refutation, installer lens A-4: an operator account is never a practice's owner or agent - its password
+        # would then be written to a credentials file (phase_provision also refuses one that holds or held a grant)
+        for value in (args.owner_username, *([agent] if agent is not None else [])):
+            if value in OPERATOR_NAMES:
+                return (f'{value} is an operator account: an operator is never a practice\'s owner or agent, and its '
+                        'password is never written to a file.')
         problem = person_problem(args.by, '--by')  # C3: provisioning records who ran it
         if problem:
             return problem
@@ -7448,6 +7457,38 @@ def provision_outcome(stdout: str, expected: dict) -> dict:
     return outcome
 
 
+# The accounts a provision names (refutation, installer lens A-4): whether each exists and whether it holds or ever
+# held an operator grant - read before any password is set, so an operator account is never a practice's owner or
+# agent, and its password never reaches a credentials file.
+PROVISION_CHECK = '''
+from studio import models
+found = {}
+for username in P['usernames']:
+    user = models.User.objects.filter(username=username).first()
+    found[username] = {'exists': user is not None,
+                       'grants': models.OperatorGrant.objects.filter(user=user).count() if user is not None else 0}
+print(ANSWER + json.dumps({'accounts': found}))
+'''
+
+
+def provision_problem(image_id, env, usernames) -> dict:
+    """PROVISION_CHECK's reading of ``usernames``, refused when any holds or held an operator grant, or does not read
+    back (fail closed)."""
+    answer = app_script(image_id, env, PROVISION_CHECK, {'usernames': sorted(usernames)},
+                        what='Reading the accounts to provision')
+    found = answer.get('accounts') if isinstance(answer, dict) else None
+    if not isinstance(found, dict) or sorted(found) != sorted(usernames) or not all(
+            isinstance(state, dict) and type(state.get('grants')) is int for state in found.values()):
+        raise InstallError('The accounts to provision did not read back; no password was set.',
+                           details={'check': found})
+    operators = sorted(name for name, state in found.items() if state['grants'])
+    if operators:
+        raise InstallError(f'{", ".join(operators)} holds or held an operator grant: an operator is never a practice\'s '
+                           'owner or agent, and its password is never written to a file. No password was set.',
+                           details={'check': found})
+    return found
+
+
 def phase_provision(ctx) -> dict:
     """A specialty's workspace, its owner and - only when --agent-username names one (release 1, A6; TEC-4 (5), ORG-20
     (5)) - a review agent. Passwords are made here and travel to the one-shot as RAM-only files; the owner's login is
@@ -7475,6 +7516,9 @@ def phase_provision(ctx) -> dict:
     expected = {args.owner_username: ('human', 'owner')}
     if agent is not None:
         expected[agent] = ('agent', 'reviewer')
+    if set(expected) & OPERATOR_NAMES:  # argument_problem refused these already; never through another path either
+        raise InstallError('An operator account is never a practice\'s owner or agent; nothing was provisioned.')
+    checked = provision_problem(image_id, env, list(expected))
     passwords = {user: secrets.token_urlsafe(24) for user in expected}
     accounts = [{'username': user, 'actor_kind': kind, 'role': role, 'password': passwords[user]}
                 for user, (kind, role) in expected.items()]
@@ -7486,16 +7530,13 @@ def phase_provision(ctx) -> dict:
         folder = agent_credentials.parent.lstat()
         if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != os.getuid() or stat.S_IMODE(folder.st_mode) != 0o700:
             raise InstallError(f'{agent_credentials.parent} must be a directory owned by this user with mode 0700.')
-    # Password files live in RAM only (/dev/shm) and are wiped whatever happens.
-    scratch = Path(tempfile.mkdtemp(prefix='cpt-studio-provision-', dir='/dev/shm'))
+    # Password files live in RAM only (/dev/shm: RamFiles) and are wiped whatever happens.
+    ram = RamFiles('cpt-studio-provision-')
     try:
         root_file('stage', content=base64.b64encode(root_bytes).decode(), **names)
         if agent is not None:
             write_private(agent_staged.parent, agent_staged.name, agent_bytes)
-        mounts = []
-        for user in expected:
-            write_private(scratch, f'{user}.pw', passwords[user].encode())
-            mounts.append(f'type=bind,src={scratch / (user + ".pw")},dst=/run/cpt-provision/{user}.pw,readonly')
+        mounts = [ram.add(f'{user}.pw', passwords[user].encode(), f'/run/cpt-provision/{user}.pw') for user in expected]
         # a name is one item, '--option=value', so a name the installer accepted that starts with '-' reaches provision
         # as that name (refutation N7-1-7)
         command = ['manage', 'provision', '--specialty', specialty, f'--workspace-name={args.workspace_name}',
@@ -7530,11 +7571,8 @@ def phase_provision(ctx) -> dict:
         agent_staged.unlink(missing_ok=True)
         raise
     finally:
-        for path in scratch.iterdir():
-            path.write_bytes(b'\0' * 64)
-            path.unlink()
-        scratch.rmdir()
-    return {'accounts': outcome, 'specialty': specialty, 'root_credentials': f'{ETC_DIR}/{final}',
+        ram.__exit__(None, None, None)
+    return {'accounts': outcome, 'specialty': specialty, 'root_credentials': f'{ETC_DIR}/{final}', 'checked': checked,
             'agent_credentials': str(agent_credentials) if agent is not None else None, 'log': log,
             'reset_passwords': reset, 'require_password_change': True, 'by': args.by,
             'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())

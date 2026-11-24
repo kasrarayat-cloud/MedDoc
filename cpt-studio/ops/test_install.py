@@ -2131,6 +2131,12 @@ class MainTests(TemporaryDirectoryTest):
 
 
 
+def no_grants(image_id, env, body, params, **kwargs):
+    """PROVISION_CHECK as the application answers it for accounts that hold no operator grant."""
+    assert body is install.PROVISION_CHECK, body[:60]
+    return {'accounts': {name: {'exists': False, 'grants': 0} for name in params['usernames']}}
+
+
 class SpecialtyProvisionTests(TemporaryDirectoryTest):
     """Owner direction 2026-11-22 (D390): a Neurosurgery or Orthopedic Surgery workspace is provisioned the GI way, with
     its own credentials files and review agent, so provisioning one specialty never touches another's; Gastroenterology
@@ -2225,7 +2231,8 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \
                 mock.patch.object(install, 'AGENT_CREDENTIALS', home / 'agent-credentials.json'), \
                 mock.patch.object(install, 'root_file', fake_root_file), \
-                mock.patch.object(install, 'oneshot', fake_oneshot):
+                mock.patch.object(install, 'oneshot', fake_oneshot), \
+                mock.patch.object(install, 'app_script', side_effect=no_grants):
             outcome = install.phase_provision(ctx)
         self.assertEqual({final for _, final in finals}, {'initial-credentials-neurosurgery.json'})
         self.assertEqual([op for op, _ in finals], ['state', 'stage', 'commit'])
@@ -2243,6 +2250,38 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
         # ran it (C3)
         self.assertIn('--require-password-change', commands[0])
         self.assertIn('--by=Ada Lovelace', commands[0])
+
+    def test_an_operator_account_is_never_a_practices_owner_or_agent_and_its_password_never_written(self):
+        # refutation, installer lens A-4: platform-operator was accepted as --owner-username, and its new password
+        # written to initial-credentials-*.json
+        by = ('--by', 'Ada Lovelace')
+        for name in sorted(install.OPERATOR_NAMES):
+            with self.subTest(name=name):
+                self.refused('--phase', 'provision', '--owner-username', name, *by)
+                self.refused('--phase', 'provision', '--owner-username', 'owner', '--agent-username', name, *by)
+        self.assertEqual(install.OPERATOR_NAMES, {'platform-operator', 'ops-agent'})
+        # an account that holds or held a grant under another name: refused before any password is set or file staged
+        home = self.tmp / 'home'
+        home.mkdir(mode=0o700)
+        args = SimpleNamespace(phase='provision', revision=REVISION, receipts=str(self.tmp), reset_passwords=True,
+                               owner_username='second-operator', agent_username=None, owner_display_name='',
+                               agent_display_name='', workspace_name='Neurosurgery', specialty='neurosurgery',
+                               by='Ada Lovelace')
+        for answer in ({'accounts': {'second-operator': {'exists': True, 'grants': 1}}},
+                       {'accounts': {'second-operator': {'exists': True}}}, {'accounts': {}}, None):
+            with self.subTest(answer=answer):
+                ops, commands = [], []
+                with mock.patch.object(install, 'installed_image', return_value='sha256:' + 'c' * 64), \
+                        mock.patch.object(install, 'require_db'), \
+                        mock.patch.object(install, 'read_protected_env', return_value=b''), \
+                        mock.patch.object(install, 'AGENT_CREDENTIALS', home / 'agent-credentials.json'), \
+                        mock.patch.object(install, 'root_file', lambda op, **kw: ops.append(op) or {
+                            'final_exists': True, 'staged_exists': False}), \
+                        mock.patch.object(install, 'oneshot', lambda *a, **k: commands.append(a)), \
+                        mock.patch.object(install, 'app_script', return_value=answer), \
+                        self.assertRaisesRegex(install.InstallError, 'operator grant|did not read back'):
+                    install.phase_provision(install.Context(args, self.tmp))
+                self.assertEqual((ops, commands), (['state'], []))  # nothing staged, no password set
 
     def test_without_an_agent_username_no_agent_account_or_file_is_made(self):
         # release 1 (A6; TEC-4 (5), ORG-20 (5)): the review agent is opt-in
@@ -2267,7 +2306,8 @@ class SpecialtyProvisionTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \
                 mock.patch.object(install, 'AGENT_CREDENTIALS', home / 'agent-credentials.json'), \
                 mock.patch.object(install, 'root_file', fake_root_file), \
-                mock.patch.object(install, 'oneshot', fake_oneshot):
+                mock.patch.object(install, 'oneshot', fake_oneshot), \
+                mock.patch.object(install, 'app_script', side_effect=no_grants):
             outcome = install.phase_provision(install.Context(args, self.tmp))
         (command, kwargs), = commands
         self.assertFalse([part for part in command if part.startswith('--agent')])

@@ -664,7 +664,12 @@ stage `ingress` replaced (**The admin host and the coupling invariant**).
   names one (no default; no agent file otherwise); the owner's password is one
   staff set, so `provision` is given `--require-password-change` (the owner
   chooses a new password at the first sign-in, within 72 hours, after which an
-  unchanged one stops working); and `--by` names the person who ran it.
+  unchanged one stops working); and `--by` names the person who ran it. An
+  operator account is never a practice's owner or agent: `platform-operator`
+  and `ops-agent` are refused as either name, and the accounts named are read
+  first - one that holds or ever held an operator grant is refused before any
+  password is set or any file staged, so an operator's password never reaches a
+  credentials file.
   `--specialty neurosurgery` or `--specialty orthopedic-surgery` (owner direction
   2026-11-22, D390) provisions that specialty's own workspace (named after it
   unless `--workspace-name` says otherwise), with a review agent when
