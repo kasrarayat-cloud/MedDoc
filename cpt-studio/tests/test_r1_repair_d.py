@@ -4,6 +4,8 @@
   only as its digest - in every ledger entry and certificate, so in no receipt or log - while the DisposalEvent rows keep
   its text; a replay's own events name the digest; a ledger is read line by line on the newline alone; a person's name
   holding a line break is refused.
+- D2 (dataloss-2): a real SIGTERM or SIGHUP while a statement after the commit waits on a lock is recorded 'failed' with
+  its certificate, and the command still ends with 128 + the signal's number.
 
 Synthetic practices only, on a test database and originals folders of the tests' own."""
 from __future__ import annotations
@@ -11,14 +13,22 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import signal
+import tempfile
+import threading
+import time
 from pathlib import Path
 from unittest import mock
 
+import psycopg
 from django.core.management import call_command
-from django.test import SimpleTestCase, TestCase
+from django.db import connection
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 
 from studio import disposal, models, storage
+from studio.management.commands import dispose as dispose_cmd
 from tests import test_disposal as td
+from tests.support import coding as f
 
 Event = models.DisposalEvent
 # the lens's reason (phileak-0): the misfiled-document case D1 is built for, naming the document's patient
@@ -251,3 +261,115 @@ class OneLineNameTests(SimpleTestCase):
     def test_other_white_space_is_still_one_space_and_names_pass(self):
         self.assertEqual(disposal.person('Ada\tLovelace  '), 'Ada Lovelace')
         self.assertEqual(disposal.two_people('Ada Lovelace', 'Grace Hopper'), ('Ada Lovelace', 'Grace Hopper'))
+
+
+# --- D2: a real stop signal while a statement after the commit waits on a lock -------------------------------------------
+
+@override_settings(SESSION_ENGINE='django.contrib.sessions.backends.db')
+class StopSignalDuringAStatementTests(TransactionTestCase):
+    """D2, dataloss-2: the lens's run - one document planned, `dispose --execute` in this process under the command's own
+    handlers, and when its VACUUM (ANALYZE) starts another session holds a lock it waits for, as an autovacuum or an
+    ANALYZE would. Once the VACUUM is seen waiting (pg_stat_activity, never a timer), a real SIGTERM or SIGHUP goes to
+    the main thread. The statement is cancelled, the run is recorded 'failed' with its certificate, and the command ends
+    with 128 + the signal's number. The control: Ctrl-C (SIGINT), which psycopg always cancelled for."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        override = override_settings(ORIGINALS_DIR=Path(folder.name) / 'originals')
+        override.enable()
+        self.addCleanup(override.disable)
+        self.ws = f.workspace('Synthetic stop-signal practice')
+        self.member = f.member(self.ws)
+        self.enc = f.encounter(self.ws, self.member, title='ZZ-TITLE-MARKER vacuum')
+        f.upload(self.enc, self.member, data=f.PDF_BYTES + b' vacuum', filename='zz-file-marker.pdf')
+
+    def session(self, **options):
+        params = {key: value for key, value in connection.get_connection_params().items()
+                  if key not in ('cursor_factory', 'context')}
+        return psycopg.connect(**params, **options)
+
+    def interrupted_during_the_vacuum(self, signum):
+        """(exit, what was printed, stderr, the run's final DisposalEvent or None, whether the signal went)."""
+        plan = disposal.plan(disposal.document_scope(self.enc.pk), by='Synthetic Operator', reason='Synthetic: misfiled.')
+        names = list(models.SourceFile.objects.filter(encounter=self.enc).values_list('storage_name', flat=True))
+        with connection.cursor() as cursor:  # no timeout ends the wait: only the signal, or the lock's release
+            cursor.execute('SET lock_timeout = 0')
+            cursor.execute('SET statement_timeout = 0')
+        holder, watcher = self.session(), self.session(autocommit=True)
+        main, sent, done = threading.get_ident(), [], threading.Event()
+
+        def signal_once_it_waits():
+            deadline = time.monotonic() + 90
+            while not done.is_set() and time.monotonic() < deadline:
+                waiting = watcher.execute(
+                    "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = "
+                    "'Lock' AND query LIKE 'VACUUM (ANALYZE)%'").fetchone()[0]
+                if waiting:
+                    sent.append(signum)
+                    signal.pthread_kill(main, signum)
+                    return
+                time.sleep(0.02)
+            holder.rollback()  # never seen waiting: the lock goes, so the run cannot hang
+
+        watching = threading.Thread(target=signal_once_it_waits, daemon=True)
+
+        def lock_first(execute, sql, params, many, context):
+            if sql.startswith('VACUUM') and watching.ident is None:
+                holder.execute('LOCK TABLE studio_sourcefile IN SHARE UPDATE EXCLUSIVE MODE')  # held until rollback
+                watching.start()
+            return execute(sql, params, many, context)
+
+        late = []  # a signal after the command put its handlers back is recorded here, never fatal to the run
+        before = {number: signal.signal(number, lambda n, frame: late.append(n))
+                  for number in (signal.SIGTERM, signal.SIGHUP)}
+        before[signal.SIGINT] = signal.signal(signal.SIGINT, signal.default_int_handler)  # Ctrl-C, as in a terminal
+        out, err, code = io.StringIO(), io.StringIO(), None
+        try:
+            with td.installer_idle(), connection.execute_wrapper(lock_first):
+                call_command('dispose', '--execute', '--plan', str(plan.pk), '--by', 'Synthetic Operator',
+                             '--approved-by', 'Synthetic Approver', '--authorization-ref', td.AUTH, stdout=out,
+                             stderr=err)
+        except SystemExit as exc:
+            code = exc.code
+        except KeyboardInterrupt:
+            code = 'KeyboardInterrupt'
+        finally:
+            done.set()
+            if watching.ident is not None:
+                watching.join(timeout=120)
+            holder.rollback()
+            holder.close()
+            watcher.close()
+            for number, handler in before.items():
+                signal.signal(number, handler)
+        connection.close()  # the run's own connection, as it was left: a fresh one reads what was recorded
+        self.assertEqual(late, [])
+        final = Event.objects.filter(stage__in=(Event.COMPLETED, Event.FAILED)).first()
+        left = [name for name in names if storage.stored_path(name).exists()]
+        self.assertEqual(left, [])  # the files went before the VACUUM began
+        return code, out.getvalue(), err.getvalue(), final, sent
+
+    def assert_recorded(self, signum, expected_exit, raised_as):
+        code, printed, errors, final, sent = self.interrupted_during_the_vacuum(signum)
+        self.assertEqual(sent, [signum])  # the control: the signal went while the VACUUM waited
+        self.assertEqual(code, expected_exit)
+        self.assertEqual(sorted(Event.objects.values_list('stage', flat=True)),
+                         sorted([Event.PLANNED, disposal.COMMITTED, Event.FAILED]))
+        self.assertIsNotNone(final)
+        self.assertEqual(final.counts['problems'], [f'vacuum: {raised_as}'])
+        self.assertIsInstance(final.counts['audit_rows_kept'], int)  # the count after the interrupt ran
+        self.assertIn('vacuum=not run', final.notes)
+        self.assertTrue(printed.startswith('CPT Studio destruction: NOT COMPLETE'), printed[:200])
+        self.assertIn(f'Disposal {final.pk} (failed)', printed)
+        self.assertIn(dispose_cmd.INTERRUPTED_TEXT, errors)
+        self.assertNotIn('ZZ-TITLE-MARKER', printed)
+
+    def test_a_real_sigterm_while_the_vacuum_waits_on_a_lock(self):
+        self.assert_recorded(signal.SIGTERM, 128 + signal.SIGTERM, 'Stopped')
+
+    def test_a_real_sighup_while_the_vacuum_waits_on_a_lock(self):
+        self.assert_recorded(signal.SIGHUP, 128 + signal.SIGHUP, 'Stopped')
+
+    def test_control_ctrl_c_while_the_vacuum_waits_on_a_lock(self):
+        self.assert_recorded(signal.SIGINT, 'KeyboardInterrupt', 'KeyboardInterrupt')

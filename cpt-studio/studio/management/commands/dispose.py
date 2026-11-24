@@ -54,10 +54,15 @@ DECIDE_TEXT = ("  whether its rows were destroyed is not known (its commit's ans
 CARRIED_OUT = (disposal.DisposalEvent.COMPLETED, disposal.DisposalEvent.FAILED, 'unrecorded')
 
 
-class Stopped(BaseException):
+class Stopped(KeyboardInterrupt):
     """A stop signal (SIGTERM: docker stop, a supervisor; SIGHUP: the terminal went away) raised where the command was,
     as Ctrl-C raises KeyboardInterrupt, so a destruction under way records what it did before the command ends - with
-    128 + the signal's number, as a shell reports a process that signal ended."""
+    128 + the signal's number, as a shell reports a process that signal ended (handle turns it into that exit).
+
+    A KeyboardInterrupt itself (refutation dataloss-2), because psycopg cancels the statement in flight - a VACUUM
+    waiting for a lock, a count - only for one: after any other exception libpq is left with that statement still
+    running, every later statement of the run fails ('another command is already in progress'), and the run's 'failed'
+    DisposalEvent could not be written. Cancelled, the connection answers again, and the run is recorded."""
 
     def __init__(self, signum):
         super().__init__(signal.Signals(signum).name)
