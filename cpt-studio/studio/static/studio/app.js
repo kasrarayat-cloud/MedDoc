@@ -2576,9 +2576,12 @@ function startWorker(viewer, address) {
 // Downloads the document the viewer shows (A5): its view address, same origin with the browser's default credentials,
 // read chunk by chunk - each chunk calls `moved`, which restarts the stall timer - into one array of bytes. An answer that
 // is not 2xx, a fetch that fails and a body that breaks off all reject (the 'download' reason); so does an abort (the
-// viewer closed, or framed for another reason).
+// viewer closed, or framed for another reason). The download is the page's own request, whatever drew the viewer - a
+// poll's redraw included - so it is marked a poll: never the member's activity (B5; refutation r2, finding 18). The
+// member's own act that opened the document has counted already; a frame's load (the browser's own viewer) is never
+// counted by the server either (studio.sessions.automatic).
 async function downloadDocument(view, signal, moved) {
-  const response = await fetch(view, { credentials: 'same-origin', signal });
+  const response = await fetch(view, { credentials: 'same-origin', signal, headers: { [POLL_HEADER]: '1' } });
   if (!response.ok) throw new Error(`The document's download was answered ${response.status}.`);
   const chunks = [];
   let size = 0;

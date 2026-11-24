@@ -4901,7 +4901,7 @@ test('the PDF library is named on the page as same-origin static modules, and no
   assert.match(bundle, /\n\s+worker: viewer\.worker,\n/);
   // the viewer downloads the view address itself (A5) and the library is opened on its bytes, with no eval, no WebAssembly,
   // no XFA and the page drawn on the main thread
-  assert.match(bundle, /await fetch\(view, \{ credentials: 'same-origin', signal \}\)/);
+  assert.match(bundle, /await fetch\(view, \{ credentials: 'same-origin', signal, headers: \{ \[POLL_HEADER\]: '1' \} \}\)/);
   assert.match(bundle, /library\.getDocument\(\{\n\s+data, isEvalSupported: false, enableXfa: false, useWasm: false,/);
   assert.ok(!/getDocument\(\{[^}]*\burl:/.test(bundle), 'the library is given no address to fetch');
   assert.match(bundle, /disableWorkerRendering: true/);
@@ -4996,6 +4996,14 @@ test('B5: the document poll and the refresh on return carry X-CPT-Poll; a read t
   const bundle = fs.readFileSync(BUNDLE, 'utf8');
   assert.match(bundle, /state\.poll\.timer = setTimeout\(\(\) => loadDocument\(id, serial, true, true\), delay\);/);
   assert.match(bundle, /refreshDocument\(\{ poll: true \}\)/);
+  // the viewer's download of the document it shows - after a poll's redraw too - is the page's own: a poll
+  // (refutation r2, finding 18)
+  const view = `/api/encounters/${UUID}/original?view=1`;
+  await withSignedInPage({ answers: [{ match: (method, url) => url === view, status: 200, type: 'application/pdf', body: {} }] }, async ({ calls }) => {
+    await app.downloadDocument(view, undefined, () => {}).catch(() => {});
+    const download = calls.find(call => call.url === view);
+    assert.equal(download.headers['X-CPT-Poll'], '1');
+  });
 });
 
 test('B5: the shared idle timer warns before the end, then signs out; its sentences and its reasons', () => {
