@@ -43,7 +43,7 @@ from datetime import timezone as dt_timezone
 from types import SimpleNamespace
 from typing import NamedTuple, Optional
 
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, Max, OuterRef
 from django.utils import timezone
 
 from . import decisions, jobs, models, state
@@ -199,8 +199,44 @@ def session_json(user, membership) -> dict:
                      'actor_kind': user.actor_kind},
             'workspace': {'id': str(workspace.pk), 'name': workspace.name, 'specialty': workspace.category.name},
             'role': membership.role, 'can_review': bool(membership.can_review),
+            # release 1, C4 (D15): an owner sees the team and turns a person's access to this practice off or on
+            'can_manage_team': membership.role == models.Membership.OWNER and bool(membership.active),
             'acknowledgement': decisions.acknowledgement_for(user),
             'counts': {'documents': encounters.count(), 'queue': queue}}
+
+
+# --- the team (release 1, C4) -----------------------------------------------------------------------------------------
+# GET api/members, for a practice's owners (D15): everyone with a membership in the practice - automated and
+# operator-added accounts included - by name and the name they sign in with, their role, whether their access here is on
+# (and whether CPT Studio turned their account off everywhere), their kind, their last sign-in and whether their password
+# must still be changed. Never a password, a hash or another practice's person. ``can_change`` says whether this owner may
+# switch that person's access here: never their own, and never the practice's last active owner off.
+
+def member_json(row, last_sign_in, *, you, sole_owner) -> dict:
+    """One membership as the Team panel shows it (the contract's member type)."""
+    person = row.user
+    return {'id': str(person.pk), 'name': person.display_name or person.username, 'login': person.username,
+            'role': row.role, 'active': bool(row.active), 'account_active': bool(person.is_active),
+            'kind': 'automated' if person.actor_kind == models.User.AGENT else 'person',
+            'last_sign_in': iso(last_sign_in), 'must_change_password': person.password_change_required_at is not None,
+            'you': you, 'can_change': not you and not (sole_owner and row.active and row.role == models.Membership.OWNER)}
+
+
+def last_sign_ins(usernames) -> dict:
+    """{username: the time of its latest successful sign-in} (a LoginAttempt that signed in: B1's signed_in, and the
+    rows an older release wrote with succeeded true)."""
+    return dict(models.LoginAttempt.objects.filter(succeeded=True, username__in=list(usernames)).values('username')
+                .annotate(last=Max('created_at')).values_list('username', 'last'))
+
+
+def members_json(membership, user) -> list:
+    """GET api/members: the practice's memberships, by the name each signs in with."""
+    rows = list(models.Membership.objects.filter(workspace_id=membership.workspace_id).select_related('user')
+                .order_by('user__username', 'pk'))
+    last = last_sign_ins(row.user.username for row in rows)
+    owners = sum(1 for row in rows if row.role == models.Membership.OWNER and row.active)
+    return [member_json(row, last.get(row.user.username), you=row.user_id == user.pk, sole_owner=owners <= 1)
+            for row in rows]
 
 
 def _values(encounter) -> dict:

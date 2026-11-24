@@ -24,7 +24,7 @@ from tests.support import coding as f
 from tests.support import rounds as r
 
 Round = models.CodingRound
-SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'acknowledgement', 'counts'}
+SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'can_manage_team', 'acknowledgement', 'counts'}
 ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'insurance', 'created_at', 'kind'}
 ENCOUNTER_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document',
                   'context', 'progress', 'round', 'codes', 'questions', 'answers', 'notes', 'readiness', 'reports',

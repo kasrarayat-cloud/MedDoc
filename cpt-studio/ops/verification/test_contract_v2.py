@@ -61,7 +61,8 @@ class ContractTests(unittest.TestCase):
             elif isinstance(node, list):
                 for value in node:
                     yield from refs(value)
-        named = set(refs({key: CONTRACT[key] for key in ('types', 'session', 'list', 'encounter')}))
+        named = set(refs({key: CONTRACT[key] for key in ('types', 'session', 'list', 'encounter', 'members',
+                                                          'member_access', 'rate_limited')}))
         self.assertTrue(named)
         self.assertLessEqual(named, set(CONTRACT['types']))
 
@@ -80,6 +81,26 @@ class ContractTests(unittest.TestCase):
         self.assertIn(f"CLIENT_HEADER, CLIENT_VERSION = 'X-CPT-Studio-Client', '{version}'", login)
         walk = (OPS / 'walk.cjs').read_text(encoding='utf-8')
         self.assertIn(f"const CLIENT_HEADERS = {{ 'X-CPT-Studio-Client': '{version}' }};", walk)
+
+    def test_release_one_adds_the_team_and_the_limit_answer(self):
+        # RELEASE-1-SPEC C4 and C5: the session's can_manage_team, GET api/members and POST api/members/<id>/access (the
+        # shapes Lane 2's Team panel is built against) and the 429 answer, each exactly these keys
+        self.assertEqual(CONTRACT['session']['keys']['can_manage_team'], 'boolean')
+        member = CONTRACT['types']['member']['keys']
+        self.assertEqual(sorted(member), sorted(['id', 'name', 'login', 'role', 'active', 'account_active', 'kind',
+                                                 'last_sign_in', 'must_change_password', 'you', 'can_change']))
+        self.assertEqual(member['kind'], {'enum': ['person', 'automated']})
+        self.assertEqual(member['last_sign_in'], 'iso?')
+        self.assertEqual(CONTRACT['members'], {'keys': {'members': {'items': {'ref': 'member'}}}})
+        self.assertEqual(CONTRACT['member_access'], {'keys': {'member': {'ref': 'member'}}})
+        self.assertEqual(CONTRACT['rate_limited'], {'keys': {'error': {'enum': ['rate_limited']},
+                                                             'retry_after': 'integer'}})
+        # the person's sign-in name is keyed login: username is a key no customer payload may carry (the denylist)
+        denylist = json.loads((HERE / 'customer-denylist.json').read_text(encoding='utf-8'))
+        self.assertIn('username', denylist['forbidden_keys'])
+        self.assertFalse(set(member) & set(denylist['forbidden_keys']))
+        self.assertEqual(sc.shape_problems({'error': 'rate_limited', 'retry_after': 42}, CONTRACT['rate_limited']), [])
+        self.assertTrue(sc.shape_problems({'error': 'rate_limited'}, CONTRACT['rate_limited']))
 
     def test_a_vendor_or_a_machinery_key_in_a_customer_payload_is_a_hit(self):
         # the denylist reads every key and every value of what the contract serves

@@ -34,13 +34,13 @@ from datetime import date
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
-from django.views.decorators.common import no_append_slash
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from . import client_contract, customer, decisions, exports, intake, jobs, models, read_audit, request_meta
+from . import audit, client_contract, customer, decisions, exports, intake, jobs, models, read_audit, request_meta
+from . import sessions
 from .access import active_membership, scoped_encounter
 from .fable.document import STORAGE_TEXT
 from .storage import OriginalCorrupted
@@ -48,6 +48,11 @@ from .storage import OriginalCorrupted
 # PostgreSQL text cannot hold NUL, and a lone surrogate cannot be encoded at all.
 UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
 REVIEWER_ONLY = 'Your role in this workspace cannot change documents or decisions.'
+# release 1, C4: the team (owners only, D15)
+OWNERS_ONLY = 'Only an owner of this workspace can see and change its team.'
+OWN_ACCESS = 'You cannot turn off your own access. Ask another owner of the workspace, or CPT Studio.'
+LAST_OWNER = 'The workspace must keep an owner with access, so this owner stays on.'
+ACTIVE_REQUIRED = 'Send active: true or false.'
 ROLE_REFUSED = 'Your role cannot do that.'
 NOT_SAVED = 'This change could not be saved. Reload the page and try again.'
 # The coding pipeline's refusals a member may read as they are (studio.jobs: fixed sentences); any other is NOT_SAVED.
@@ -430,17 +435,75 @@ def original(request, encounter_id):
     return response  # no hash header for a customer (the operator's download carries it)
 
 
-# --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
+# --- the team (release 1, C4; owner decision D15) --------------------------------------------------------------------
 
-# R1 stub: Lane 3 replaces this (C4)
-@csrf_exempt
-@no_append_slash
-def members(request, *args, **kwargs):
-    raise Http404()
+def _owner(request):
+    """The caller's active membership when it is an owner's; ApiError 403 OWNERS_ONLY otherwise."""
+    membership = active_membership(request.user)
+    if membership.role != models.Membership.OWNER or not membership.active:
+        raise ApiError(403, OWNERS_ONLY)
+    return membership
 
 
-# R1 stub: Lane 3 replaces this (C4)
-@csrf_exempt
-@no_append_slash
-def member_access(request, *args, **kwargs):
-    raise Http404()
+@require_GET
+@api_view
+def members(request):
+    """GET api/members -> {members: [member]} (customer.members_json), for an owner of the practice."""
+    membership = _owner(request)
+    return JsonResponse({'members': customer.members_json(membership, request.user)})
+
+
+@require_POST
+@api_view
+def member_access(request, user_id):
+    """POST api/members/<user>/access {active: false|true} -> {member}: that person's access to this practice
+    (Membership.active, never the account's is_active), for an owner; refused for the owner's own membership and for
+    the practice's last active owner. A person left with no active membership is signed out everywhere. Each change
+    writes an AuditEvent member.access_off or member.access_on naming the owner, which the practice's activity shows;
+    the person loses the practice at their next request (access.active_membership is read on every one)."""
+    data = _payload(request)
+    active = data.get('active')
+    if not isinstance(active, bool):
+        raise ApiError(400, ACTIVE_REQUIRED)
+    membership = _owner(request)
+    target = _set_member_access(membership, user_id, active, request.user)
+    owners = models.Membership.objects.filter(workspace_id=membership.workspace_id, role=models.Membership.OWNER,
+                                              active=True).count()
+    return JsonResponse({'member': customer.member_json(
+        target, customer.last_sign_ins([target.user.username]).get(target.user.username), you=False,
+        sole_owner=owners <= 1)})
+
+
+def _set_member_access(owner_membership, user_id, active, actor):
+    """Set ``user_id``'s access to ``owner_membership``'s practice, decided under one lock on the practice's memberships
+    (every one, in id order), so two owners turning each other off at once leave the practice an active owner: the one
+    decided second finds the other already off and is refused as the last active owner. The membership changed (or
+    found already so)."""
+    try:
+        with transaction.atomic():
+            rows = list(models.Membership.objects.select_for_update(of=('self',)).select_related('user')
+                        .filter(workspace_id=owner_membership.workspace_id).order_by('pk'))
+            target = next((row for row in rows if str(row.user_id) == str(user_id)), None)
+            if target is None:
+                raise Http404()
+            if target.pk == owner_membership.pk:
+                raise ApiError(409, OWN_ACCESS)
+            if (not active and target.role == models.Membership.OWNER and target.active
+                    and not any(row.role == models.Membership.OWNER and row.active and row.pk != target.pk
+                                for row in rows)):
+                raise ApiError(409, LAST_OWNER)
+            mine = next((row for row in rows if row.pk == owner_membership.pk), None)
+            if mine is None or not mine.active or mine.role != models.Membership.OWNER:
+                raise ApiError(403, OWNERS_ONLY)  # no longer an owner with access, by the time the lock was held
+            if target.active == active:
+                return target
+            models.Membership.objects.filter(pk=target.pk).update(active=active)
+            target.active = active
+            values = {}
+            if not active and not models.Membership.objects.filter(user_id=target.user_id, active=True).exists():
+                values['sessions_ended'] = sessions.end_sessions(target.user)
+            audit.record(owner_membership.workspace, f'member.access_{"on" if active else "off"}', actor=actor,
+                         user=str(target.user_id), membership=str(target.pk), role=target.role, **values)
+            return target
+    except sessions.Refused:
+        raise ApiError(409, NOT_SAVED)
