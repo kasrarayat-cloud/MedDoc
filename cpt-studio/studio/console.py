@@ -48,19 +48,19 @@ from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
-from django.views.decorators.common import no_append_slash
-from django.views.decorators.csrf import csrf_exempt
 
-from . import audit, jobs, models, read_audit, spend
+from . import audit, jobs, models, rate, read_audit, security_events, spend
 from .fable import pricing
 from .management.commands import provision
 from .operator import _methods as methods
 from .operator import _see_other as see_other
 from .operator import operator_view
+# release 1, B2 step 5: the acts that change who can see what ask for the key again (studio.second_factor)
+from .second_factor import requires_recent_second_factor
 # end_sessions, the refusal it answers and the stores it can end live in studio.sessions (release 1, RELEASE-1-SPEC
 # 3.3), so every lane can end sessions without the console; imported back, so console.end_sessions and console.Refused
 # are those
@@ -96,11 +96,20 @@ NO_WORKSPACE = 'This account belongs to no workspace. It is managed on the serve
 AGENT_OWNER = 'An automated agent can be a Reviewer or a Viewer, not an Owner.'
 DONE = {
     'role': 'The role was changed.', 'same-role': 'The role was already that one: nothing changed.',
-    'off': 'Access was turned off. The person can no longer sign in, and every open session has ended.',
-    'on': 'Access was turned on again. The person signs in again with their password; no earlier session comes back.',
+    'off': ('Access to this workspace was turned off. The person no longer reaches its documents, and if it was their '
+            'only workspace every open session has ended.'),
+    'on': 'Access to this workspace was turned on again.',
+    'off-everywhere': 'Access was turned off everywhere. The person can no longer sign in, and every open session has ended.',
+    'on-everywhere': ('Access was turned on again. The person signs in again with their password; no earlier session '
+                      'comes back.'),
     'same-access': 'Access was already that way: nothing changed.',
     'created': 'The workspace was created. Add its people below.',
+    'unlocked': 'The sign-in delay was cleared. The person can sign in again at once.',
 }
+# Release 1, C3 (ADM-14 (7)): every act that changes access asks who at the practice requested it - the practice's
+# contact or a ticket reference, never patient details - and stores it on the act's audit row.
+REQUESTED_BY_CHARS = 120
+ACCESS_SCOPES = ('practice', 'everywhere')  # C4 item 4: the per-practice switch by default; "everywhere" apart
 # The activity log's kinds (GET /ops/activity?kind=...): each a set of audit event names, or a prefix.
 KINDS = {
     'documents': ('Documents added', ('encounter.created',)),
@@ -111,6 +120,7 @@ KINDS = {
     'answers': ('Answers', ('answers.recorded',)),
     'downloads': ('Reports made', ('export.created',)),
     'operator': ('Operator acts', 'operator.'),
+    'team': ("Owners' team changes", 'member.'),
 }
 EVENT_LABELS = {
     'encounter.created': 'Document added',
@@ -132,6 +142,11 @@ EVENT_LABELS = {
     'operator.access_off': 'Access turned off',
     'operator.access_on': 'Access turned on',
     'operator.workspace_created': 'Workspace created',
+    'operator.signin_cleared': 'Sign-in delay cleared',
+    # release 1: the practice's own acts (C4) and a report asked for again (C5)
+    'member.access_off': 'Access turned off by an owner',
+    'member.access_on': 'Access turned on by an owner',
+    'export.reused': 'Report asked for again (the stored copy)',
     'account.provisioned': 'Account set up on the server',
     # the earlier pipeline's events (ARCHITECTURE.md 5.11: its records stay and are shown as they are)
     'assessment.created': 'Review made (earlier version)',
@@ -150,7 +165,7 @@ DECISION_LABELS = {models.CodeDecision.APPROVE: 'Approved', models.CodeDecision.
                    models.CodeDecision.REVOKE: 'Decision undone'}
 # The event data shown beside an event, in this order, by name (ids are kept for the operator's record elsewhere).
 DETAIL_KEYS = ('number', 'line', 'code', 'kind', 'fmt', 'count', 'purpose', 'state', 'username', 'role', 'from', 'to',
-               'name', 'category', 'view', 'sessions_ended')
+               'name', 'category', 'view', 'scope', 'sessions_ended', 'requested_by', 'by')
 
 
 # --- reading -------------------------------------------------------------------------------------------------------
@@ -188,11 +203,25 @@ def _people_context(**extra) -> dict:
         'people',
         rows=membership_rows(Membership.objects.all(), operators),
         unplaced=list(User.objects.exclude(pk__in=members).exclude(pk__in=operators).order_by('username')),
-        operators=[{'person': grant_row.user, 'since': grant_row.created_at}
-                   for grant_row in models.OperatorGrant.objects.filter(revocation__isnull=True)
-                   .select_related('user').order_by('created_at', 'pk')],
+        operators=operator_rows(),
         workspaces=list(Workspace.objects.select_related('category').order_by('name', 'pk')),
         **extra)
+
+
+def operator_rows(today=None) -> list:
+    """The Operators card (release 1, C3 item 4; ADM-8): every grant no revocation ended, with the approval it rests on
+    and its review date - flagged when the date has passed or none was recorded (a grant made before release 1), for
+    the periodic access review - and an automated account flagged as holding no power (is_operator refuses it)."""
+    today = today or timezone.localdate()
+    rows = []
+    for grant_row in (models.OperatorGrant.objects.filter(revocation__isnull=True).select_related('user')
+                      .order_by('created_at', 'pk')):
+        rows.append({'person': grant_row.user, 'since': grant_row.created_at, 'granted_by': grant_row.granted_by,
+                     'authorization_ref': grant_row.authorization_ref, 'review_by': grant_row.review_by,
+                     'overdue': grant_row.review_by is not None and grant_row.review_by < today,
+                     'unreviewed': grant_row.review_by is None or not grant_row.authorization_ref,
+                     'automated': grant_row.user.actor_kind != User.HUMAN})
+    return rows
 
 
 def _workspace_context(workspace, **extra) -> dict:
@@ -256,6 +285,12 @@ def _field(request, name, *, limit=NAME_CHARS, required=False, label='This field
     return value
 
 
+def _requested_by(request) -> str:
+    """Who at the practice asked for an act that changes access (release 1, C3; ADM-14 (7)): the practice's contact or a
+    ticket reference, required, as _field stores a name - never patient details, which the form says."""
+    return _field(request, 'requested_by', limit=REQUESTED_BY_CHARS, required=True, label='Requested by')
+
+
 def new_password(user) -> str:
     """A password for ``user`` from the secrets module, in four groups of five unambiguous characters, that the site's
     password validators accept for this account."""
@@ -310,7 +345,8 @@ def _password_page(request, person, workspace, made, password):
     console page (studio.access.SecurityHeadersMiddleware)."""
     return render(request, 'studio/ops_password.html',
                   _context('workspaces' if workspace is not None else 'people', person=person, workspace=workspace,
-                           made=made, password=password))
+                           made=made, password=password,
+                           change_hours=settings.STAFF_PASSWORD_UNUSED_SECONDS // 3600))  # release 1, B4 step 5
 
 
 def _workspaces_of(memberships) -> list:
@@ -328,8 +364,11 @@ def people(request):
 
 @operator_view
 @methods('POST')
+@requires_recent_second_factor()
 def add_person(request):
-    """A new person: an account (human) in one workspace with a role, its password generated and answered once."""
+    """A new person: an account (human) in one workspace with a role, its password generated and answered once - to be
+    replaced by the person at the first sign-in, within STAFF_PASSWORD_UNUSED_SECONDS (release 1, B4:
+    password_change_required_at starts the clock). Who at the practice asked for it is required and recorded (C3)."""
     workspace, came_from = None, None
     try:
         try:
@@ -337,6 +376,7 @@ def add_person(request):
         except (Workspace.DoesNotExist, ValueError, TypeError, ValidationError):
             raise Refused('Choose the workspace the person works in.')
         came_from = workspace if request.POST.get('back', '') == str(workspace.pk) else None
+        requested_by = _requested_by(request)
         username = request.POST.get('username', '')
         username = username.strip() if isinstance(username, str) else ''
         if not username:
@@ -347,7 +387,8 @@ def add_person(request):
         role = request.POST.get('role', '')
         if role not in ROLES:
             raise Refused('Choose a role: Owner, Reviewer or Viewer.')
-        person = User(username=username, display_name=name, actor_kind=User.HUMAN)
+        person = User(username=username, display_name=name, actor_kind=User.HUMAN,
+                      password_change_required_at=timezone.now())
         password = new_password(person)
         person.set_password(password)
         try:
@@ -358,7 +399,7 @@ def add_person(request):
                 person.save()
                 Membership.objects.create(user=person, workspace=workspace, role=role)
                 audit.record(workspace, 'operator.member_added', actor=request.user, user=str(person.pk),
-                             username=username, role=role)
+                             username=username, role=role, requested_by=requested_by)
         except IntegrityError:
             raise Refused('That username is taken. Choose another.', 409)
     except Refused as exc:
@@ -368,21 +409,26 @@ def add_person(request):
 
 @operator_view
 @methods('POST')
+@requires_recent_second_factor()
 def reset_password(request, user_id):
-    """A new password for the person, generated and answered once; every stored session of theirs is ended."""
+    """A new password for the person, generated and answered once, to be replaced at the first sign-in within
+    STAFF_PASSWORD_UNUSED_SECONDS (release 1, B4: a reset starts a new clock); every stored session of theirs is ended.
+    Who at the practice asked for it is required and recorded (C3)."""
     person = _person(user_id)
     memberships = []
     try:
         with transaction.atomic():
             person = User.objects.select_for_update().get(pk=person.pk)
             memberships = _changeable(person)
+            requested_by = _requested_by(request)
             password = new_password(person)
             person.set_password(password)
-            person.save(update_fields=['password'])
+            person.password_change_required_at = timezone.now()
+            person.save(update_fields=['password', 'password_change_required_at'])
             ended = end_sessions(person)
             for workspace in _workspaces_of(memberships):
                 audit.record(workspace, 'operator.password_reset', actor=request.user, user=str(person.pk),
-                             username=person.username, sessions_ended=ended)
+                             username=person.username, sessions_ended=ended, requested_by=requested_by)
     except Refused as exc:
         return _refused(request, exc, _back(request, memberships)[1])
     return _password_page(request, person, _back(request, memberships)[1], 'reset', password)
@@ -390,15 +436,18 @@ def reset_password(request, user_id):
 
 @operator_view
 @methods('POST')
+@requires_recent_second_factor()
 def set_role(request, user_id):
     """The role of one of the person's memberships (owner, reviewer or viewer; an automated agent is never made an owner:
-    provisioning keeps a workspace's owner a human - refutation r1, data-7)."""
+    provisioning keeps a workspace's owner a human - refutation r1, data-7). Who at the practice asked for it is required
+    and recorded (C3)."""
     person = _person(user_id)
     memberships = []
     try:
         with transaction.atomic():
             person = User.objects.select_for_update().get(pk=person.pk)
             memberships = _changeable(person)
+            requested_by = _requested_by(request)
             target = next((item for item in memberships if str(item.pk) == request.POST.get('membership', '')), None)
             if target is None:
                 raise Refused('That workspace membership is not this person\'s.', 404)
@@ -413,7 +462,7 @@ def set_role(request, user_id):
                 previous = target.role
                 Membership.objects.filter(pk=target.pk).update(role=role)
                 audit.record(target.workspace, 'operator.role_changed', actor=request.user, user=str(person.pk),
-                             username=person.username, **{'from': previous, 'to': role})
+                             username=person.username, requested_by=requested_by, **{'from': previous, 'to': role})
                 done = 'role'
     except Refused as exc:
         return _refused(request, exc, _back(request, memberships)[1])
@@ -422,34 +471,68 @@ def set_role(request, user_id):
 
 @operator_view
 @methods('POST')
+@requires_recent_second_factor()
 def set_access(request, user_id):
-    """The person's access off (the account's is_active: sign-in refused, and every stored session of theirs ended at
-    once) or on again (they sign in again with their password). Nothing is deleted but sign-in state."""
+    """The person's access to one workspace off or on - by default, the membership's own switch (release 1, C4 item 4:
+    this practice only; when the person then holds no other active membership, every stored session of theirs ends) -
+    or, with scope everywhere, the account's (is_active: sign-in refused, and every stored session of theirs ended at
+    once; on again, they sign in with their password). Who at the practice asked for it is required and recorded (C3).
+    Nothing is deleted but sign-in state."""
     person = _person(user_id)
     memberships = []
     try:
         wanted = request.POST.get('access', '')
         if wanted not in ('off', 'on'):
             raise Refused('Choose whether access is turned off or on.')
+        scope = request.POST.get('scope', '') or ACCESS_SCOPES[0]
+        if scope not in ACCESS_SCOPES:
+            raise Refused('Choose whether access changes in this workspace or everywhere.')
         with transaction.atomic():
             person = User.objects.select_for_update().get(pk=person.pk)
             memberships = _changeable(person)
+            requested_by = _requested_by(request)
             active = wanted == 'on'
-            if person.is_active == active:
-                done = 'same-access'
+            if scope == 'everywhere':
+                done = _set_account_access(request, person, memberships, active, requested_by)
             else:
-                # every session ends both ways: off, so none goes on; on, so none made by a sign-in that raced the
-                # off act (it read the account active before the act committed) comes back (refutation r2, secure-1)
-                values = {'sessions_ended': end_sessions(person)}
-                person.is_active = active
-                person.save(update_fields=['is_active'])
-                for workspace in _workspaces_of(memberships):
-                    audit.record(workspace, f'operator.access_{wanted}', actor=request.user, user=str(person.pk),
-                                 username=person.username, **values)
-                done = wanted
+                target = next((item for item in memberships if str(item.pk) == request.POST.get('membership', '')), None)
+                if target is None:
+                    raise Refused('That workspace membership is not this person\'s.', 404)
+                done = _set_membership_access(request, person, memberships, target, active, requested_by)
     except Refused as exc:
         return _refused(request, exc, _back(request, memberships)[1])
     return see_other(f'{_back(request, memberships)[0]}?done={done}')
+
+
+def _set_membership_access(request, person, memberships, target, active, requested_by) -> str:
+    """One membership's access (Membership.active), audited in its workspace; every session of the person ends when
+    access goes off and no other active membership is left. The notice's key."""
+    if target.active == active:
+        return 'same-access'
+    Membership.objects.filter(pk=target.pk).update(active=active)
+    others = any(item.active and item.pk != target.pk for item in memberships)
+    values = {'sessions_ended': end_sessions(person)} if not active and not others else {}
+    wanted = 'on' if active else 'off'
+    audit.record(target.workspace, f'operator.access_{wanted}', actor=request.user, user=str(person.pk),
+                 username=person.username, scope='practice', membership=str(target.pk), requested_by=requested_by,
+                 **values)
+    return wanted
+
+
+def _set_account_access(request, person, memberships, active, requested_by) -> str:
+    """The account's own access (is_active), audited in each of its workspaces; every session ends both ways: off, so
+    none goes on; on, so none made by a sign-in that raced the off act (it read the account active before the act
+    committed) comes back (refutation r2, secure-1). The notice's key."""
+    if person.is_active == active:
+        return 'same-access'
+    values = {'sessions_ended': end_sessions(person)}
+    person.is_active = active
+    person.save(update_fields=['is_active'])
+    wanted = 'on' if active else 'off'
+    for workspace in _workspaces_of(memberships):
+        audit.record(workspace, f'operator.access_{wanted}', actor=request.user, user=str(person.pk),
+                     username=person.username, scope='everywhere', requested_by=requested_by, **values)
+    return f'{wanted}-everywhere'
 
 
 # --- workspaces --------------------------------------------------------------------------------------------------------
@@ -565,9 +648,12 @@ def workspaces(request):
 
 @operator_view
 @methods('POST')
+@requires_recent_second_factor()
 def create_workspace(request):
-    """A workspace for a specialty that exists (a Category row: what the page and the report show it as)."""
+    """A workspace for a specialty that exists (a Category row: what the page and the report show it as). Who asked for
+    it is required and recorded (release 1, C3)."""
     try:
+        requested_by = _requested_by(request)
         name = _field(request, 'name', required=True, label='The workspace name')
         typed = request.POST.get('name', '')
         plain = plain_name_problem(name, typed if isinstance(typed, str) else '')
@@ -584,7 +670,7 @@ def create_workspace(request):
                 raise Refused(problem, 409)
             workspace = Workspace.objects.create(name=name, category=category)
             audit.record(workspace, 'operator.workspace_created', actor=request.user, name=name,
-                         category=category.slug)
+                         category=category.slug, requested_by=requested_by)
     except Refused as exc:
         return render(request, 'studio/ops_workspaces.html', _workspaces_context(error=str(exc)), status=exc.status)
     return see_other(f'/ops/workspaces/{workspace.pk}?done=created')
@@ -804,11 +890,37 @@ def sign_ins(request):
     rows = window[:PAGE_SIZE]
     accounts = set(User.objects.filter(username__in={row.username for row in rows}).values_list('username', flat=True))
     return render(request, 'studio/ops_activity.html', _context(
-        'activity', attempts=[{'attempt': row, 'known': row.username in accounts} for row in rows],
+        'activity', attempts=[{'attempt': row, 'known': row.username in accounts,
+                               'outcome': OUTCOME_LABELS.get(row.outcome or '', '')} for row in rows],
         earlier=bool(before), unreadable=attempts is None, older=cursor_of(rows[-1]) if len(window) > PAGE_SIZE else '',
-        query=f'result={result}' if result else '', result=result, tab='sign-ins',
-        throttle_attempts=settings.LOGIN_THROTTLE_ATTEMPTS,
-        throttle_minutes=settings.LOGIN_THROTTLE_WINDOW_SECONDS // 60))
+        query=f'result={result}' if result else '', result=result, tab='sign-ins', refused_last_hour=refused_last_hour(),
+        delay_after=settings.SIGNIN_USER_DELAY_AFTER, delay_base=settings.SIGNIN_DELAY_BASE_SECONDS,
+        delay_max_minutes=settings.SIGNIN_DELAY_MAX_SECONDS // 60, pair_limit=settings.SIGNIN_PAIR_LIMIT,
+        client_limit=settings.SIGNIN_CLIENT_LIMIT, window_minutes=settings.SIGNIN_WINDOW_SECONDS // 60))
+
+
+# B1 step 4's outcomes, as the page names them (an attempt an older release recorded has none: its result is shown)
+OUTCOME_LABELS = {
+    models.LoginAttempt.SIGNED_IN: 'Signed in',
+    models.LoginAttempt.SECOND_FACTOR_PENDING: 'Password right, key not yet given',
+    models.LoginAttempt.SECOND_FACTOR_FAILED: 'Key or recovery code refused',
+    models.LoginAttempt.WRONG_PASSWORD: 'Wrong password',
+    models.LoginAttempt.UNKNOWN_ACCOUNT: 'No such account',
+    models.LoginAttempt.NO_ACCESS: 'Right password, no access at this door',
+    models.LoginAttempt.PASSWORD_EXPIRED: 'A staff-set password not replaced in time',
+}
+# B1 step 5: the throttle counts every attempt it refuses - before any password is checked, so none of them is a
+# LoginAttempt row - per minute in RateWindow, by address under this scope (and by username under another). The page
+# sums the last hour's windows (Lane 2's studio.throttle writes them).
+SIGNIN_REFUSED_SCOPE = 'signin.refused.client'
+
+
+def refused_last_hour(now=None) -> int:
+    """How many sign-in attempts the throttle refused in the last hour (the windows of SIGNIN_REFUSED_SCOPE that start
+    in it)."""
+    since = (now or timezone.now()) - timedelta(hours=1)
+    return models.RateWindow.objects.filter(scope=SIGNIN_REFUSED_SCOPE, window_start__gte=since).aggregate(
+        total=Sum('count'))['total'] or 0
 
 
 # --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
@@ -888,8 +1000,37 @@ def reads(request):
         workspaces=list(Workspace.objects.order_by('name', 'pk'))))
 
 
-# R1 stub: Lane 3 replaces this (B1)
-@csrf_exempt
-@no_append_slash
-def unlock_sign_in(request, *args, **kwargs):
-    raise Http404()
+# --- clearing a sign-in delay (release 1, B1 step 8) ------------------------------------------------------------------
+# B1's throttle counts a username's failures by its keyed hash (rate.key_hash('signin-user:' + username.casefold()));
+# clearing the delay deletes every RateWindow row of that key, in any scope, and writes a SecurityEvent signin.cleared
+# naming the account. LoginAttempt rows are never deleted. The server's clear-signin-failures does the same (Lane 2).
+
+SIGNIN_USER_KEY_PREFIX = 'signin-user:'
+
+
+def signin_user_key(username) -> str:
+    """The key B1's throttle counts a username by (RELEASE-1-SPEC B1 step 1)."""
+    return rate.key_hash(SIGNIN_USER_KEY_PREFIX + str(username).casefold())
+
+
+@operator_view
+@methods('POST')
+@requires_recent_second_factor()
+def unlock_sign_in(request, user_id):
+    """Clear the person's sign-in delay: their username's RateWindow rows deleted, a SecurityEvent signin.cleared and an
+    audit row in each of their workspaces. Refused, as every act here, for an operator's account or one with no
+    workspace (the server's clear-signin-failures clears those)."""
+    person = _person(user_id)
+    memberships = []
+    try:
+        with transaction.atomic():
+            person = User.objects.select_for_update().get(pk=person.pk)
+            memberships = _changeable(person)
+            cleared, _ = models.RateWindow.objects.filter(key=signin_user_key(person.username)).delete()
+            security_events.record('signin.cleared', actor=request.user, subject=person, rate_rows=cleared)
+            for workspace in _workspaces_of(memberships):
+                audit.record(workspace, 'operator.signin_cleared', actor=request.user, user=str(person.pk),
+                             username=person.username, count=cleared)
+    except Refused as exc:
+        return _refused(request, exc, _back(request, memberships)[1])
+    return see_other(f'{_back(request, memberships)[0]}?done=unlocked')

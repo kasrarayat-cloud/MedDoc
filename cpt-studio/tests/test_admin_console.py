@@ -38,13 +38,32 @@ def shown_password(response) -> str:
     return match.group(1).strip()
 
 
+REQUESTED_BY = 'Synthetic practice contact, ticket 1042'
+
+
+class ActsClient:
+    """The operator's client as the console's forms post (release 1, C3): every form that changes access carries a
+    Requested by, so each POST here sends one unless it names its own; ``raw`` is the client itself."""
+
+    def __init__(self, client, requested_by=REQUESTED_BY):
+        self.raw, self.requested_by = client, requested_by
+
+    def post(self, path, data=None, *args, **kwargs):
+        if data is None or (isinstance(data, dict) and 'requested_by' not in data):
+            data = {**(data or {}), 'requested_by': self.requested_by}
+        return self.raw.post(path, data, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self.raw, name)
+
+
 @override_settings(STORAGES=PLAIN_STATIC)
 class AdminCase(r.CustomerCase, TestCase):
     def setUp(self):
         super().setUp()
         self.owner = r.f.member(self.ws, role=Membership.OWNER)
         self.operator_user = r.f.user('platform-operator')
-        self.ops = ops.admin_client(self.operator_user)
+        self.ops = ActsClient(ops.admin_client(self.operator_user))
         self.neuro = models.Category.objects.create(slug='neurosurgery', name='Neurosurgery',
                                                     profiles_version='synthetic@1')
 
@@ -150,16 +169,23 @@ class PeopleTests(AdminCase):
         events = list(models.AuditEvent.objects.order_by('created_at', 'pk')[before:])
         self.assertEqual([(e.event, e.workspace_id, e.encounter_id, e.actor_id) for e in events],
                          [('operator.member_added', self.ws.pk, None, self.operator_user.pk)])
-        self.assertEqual(events[0].data, {'user': str(person.pk), 'username': 'dr.rivera', 'role': 'reviewer'})
+        self.assertEqual(events[0].data, {'user': str(person.pk), 'username': 'dr.rivera', 'role': 'reviewer',
+                                          'requested_by': REQUESTED_BY})
         self.assertNotIn(password, repr([e.data for e in models.AuditEvent.objects.all()]))
+        # release 1, B4: the password the console showed must be replaced at the first sign-in, within 72 hours
+        self.assertIsNotNone(person.password_change_required_at)
+        self.assertIn('Dr. Maya Rivera must choose a new password at the first sign-in, within 72 hours', page(response))
         # the password is on this page only: the People page afterwards does not carry it
         self.assertNotIn(password, page(self.ops.get('/ops/people')))
-        # the person signs in through the real sign-in page and lands in the doctor app's workspace
+        # the person signs in through the real sign-in page and lands in the doctor app's workspace - or, once the
+        # session policy enforces the forced change (Lane 2, B4), on its refusal, which names nothing else
         doctor = Client()
         signed = doctor.post('/login/', {'username': 'dr.rivera', 'password': password})
         self.assertEqual(signed.status_code, 302)
         session = doctor.get('/api/session')
-        self.assertEqual(session.status_code, 200)
+        self.assertIn(session.status_code, (200, 403))
+        if session.status_code == 403:
+            self.assertEqual(session.json(), {'error': 'password_change_required'})
 
     def test_adding_a_person_refuses_and_records_nothing(self):
         before = self.counts()
@@ -235,7 +261,7 @@ class PeopleTests(AdminCase):
         self.assertEqual(member.role, 'reviewer')
         event = models.AuditEvent.objects.get(event='operator.role_changed')
         self.assertEqual(event.data, {'user': str(self.viewer.pk), 'username': self.viewer.username,
-                                      'from': 'viewer', 'to': 'reviewer'})
+                                      'from': 'viewer', 'to': 'reviewer', 'requested_by': REQUESTED_BY})
         self.assertIn('The role was changed.', page(self.ops.get(response['Location'])))
         # the same role again changes and records nothing
         again = self.ops.post(f'/ops/people/{self.viewer.pk}/role', {'membership': str(member.pk), 'role': 'reviewer'})
@@ -269,11 +295,11 @@ class PeopleTests(AdminCase):
         self.assertEqual(self.ops.post(f'/ops/people/{UUID}/role', {'role': 'owner'}).status_code, 404)
         self.assertEqual(self.counts(), before)
 
-    def test_turning_access_off_stops_sign_in_and_ends_sessions_and_on_restores_it(self):
+    def test_turning_access_off_everywhere_stops_sign_in_and_ends_sessions_and_on_restores_it(self):
         session = self.client_for(self.reviewer)
         self.assertEqual(session.get('/api/session').status_code, 200)
-        response = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off'})
-        self.assertEqual((response.status_code, response['Location']), (303, '/ops/people?done=off'))
+        response = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off', 'scope': 'everywhere'})
+        self.assertEqual((response.status_code, response['Location']), (303, '/ops/people?done=off-everywhere'))
         self.reviewer.refresh_from_db()
         self.assertFalse(self.reviewer.is_active)
         self.assertNotEqual(session.get('/api/session').status_code, 200)
@@ -283,10 +309,10 @@ class PeopleTests(AdminCase):
         self.assertEqual(models.AuditEvent.objects.get(event='operator.access_off').data['sessions_ended'], 1)
         # nothing deleted: the account and its membership stay
         self.assertTrue(Membership.objects.filter(user=self.reviewer, active=True).exists())
-        same = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off'})
+        same = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off', 'scope': 'everywhere'})
         self.assertEqual(same['Location'], '/ops/people?done=same-access')
-        back_on = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'on'})
-        self.assertEqual(back_on['Location'], '/ops/people?done=on')
+        back_on = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'on', 'scope': 'everywhere'})
+        self.assertEqual(back_on['Location'], '/ops/people?done=on-everywhere')
         # the session opened before access was turned off never comes back: the person signs in again
         self.assertNotEqual(session.get('/api/session').status_code, 200)
         signed = Client().post('/login/', {'username': self.reviewer.username, 'password': 'synthetic-pass-123!'})
@@ -295,6 +321,10 @@ class PeopleTests(AdminCase):
                               .order_by('created_at', 'pk').values_list('event', flat=True)),
                          ['operator.access_off', 'operator.access_on'])
         self.assertEqual(self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'maybe'}).status_code, 400)
+        self.assertEqual(self.ops.post(f'/ops/people/{self.reviewer.pk}/access',
+                                       {'access': 'off', 'scope': 'galaxy'}).status_code, 400)
+        self.assertEqual({event.data['scope'] for event in models.AuditEvent.objects.filter(
+            event__startswith='operator.access_')}, {'everywhere'})
 
     def test_the_customer_activity_never_shows_an_operator_act(self):
         enc = self.done(title='Synthetic note for the activity check')
@@ -324,7 +354,8 @@ class WorkspaceTests(AdminCase):
         self.assertTrue(created.synthetic_only)
         event = models.AuditEvent.objects.get(event='operator.workspace_created')
         self.assertEqual((event.workspace_id, event.data), (created.pk, {'name': 'Spine Partners',
-                                                                         'category': 'neurosurgery'}))
+                                                                         'category': 'neurosurgery',
+                                                                         'requested_by': REQUESTED_BY}))
         text = page(self.ops.get(response['Location']))
         self.assertIn('The workspace was created. Add its people below.', text)
         self.assertIn('Neurosurgery', text)
@@ -708,7 +739,7 @@ class RefutationRoundTwoTests(AdminCase):
 
     def test_turning_access_on_ends_a_session_made_while_it_was_off(self):
         from importlib import import_module
-        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off'})
+        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off', 'scope': 'everywhere'})
         # a sign-in that raced the off act leaves a session written after the act's scan (r2, secure-1)
         store = import_module(settings.SESSION_ENGINE).SessionStore()
         store['_auth_user_id'] = str(self.reviewer.pk)
@@ -716,7 +747,7 @@ class RefutationRoundTwoTests(AdminCase):
         store['_auth_user_hash'] = self.reviewer.get_session_auth_hash()
         store.create()
         self.assertEqual(self.sessions_of(self.reviewer), 1)
-        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'on'})
+        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'on', 'scope': 'everywhere'})
         self.assertEqual(self.sessions_of(self.reviewer), 0)
         self.assertEqual(models.AuditEvent.objects.get(event='operator.access_on').data['sessions_ended'], 1)
         replay = Client()
@@ -729,7 +760,7 @@ class RefutationRoundTwoTests(AdminCase):
         store['_auth_user_id'] = str(self.reviewer.pk)
         store.create()
         Session.objects.filter(session_key=store.session_key).update(expire_date=timezone.now() - timedelta(days=1))
-        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off'})
+        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off', 'scope': 'everywhere'})
         self.assertEqual(models.AuditEvent.objects.get(event='operator.access_off').data['sessions_ended'], 0)
 
     def test_a_session_store_the_console_cannot_end_refuses_the_acts(self):
@@ -741,7 +772,9 @@ class RefutationRoundTwoTests(AdminCase):
         # an act whose sessions cannot be ended changes nothing at all (the refusal comes inside its transaction)
         before = self.counts()
         with mock.patch.object(console, 'end_sessions', side_effect=console.Refused(console.NO_SESSION_STORE, 409)):
-            for url, body in ((f'/ops/people/{self.viewer.pk}/access', {'access': 'off'}),
+            for url, body in ((f'/ops/people/{self.viewer.pk}/access',
+                               {'access': 'off', 'membership': str(self.membership(self.viewer).pk)}),
+                              (f'/ops/people/{self.viewer.pk}/access', {'access': 'off', 'scope': 'everywhere'}),
                               (f'/ops/people/{self.viewer.pk}/password', {})):
                 with self.subTest(url=url):
                     response = self.ops.post(url, body)
@@ -1036,3 +1069,225 @@ class RefutationRoundSevenTests(AdminCase):
                 self.assertEqual(stored, typed)
                 self.assertTrue(all(console.name_character_allowed(ch) for ch in stored), repr(stored))
         self.assertGreater(accepted, 25)
+
+
+class StepUpTests(AdminCase):
+    """Release 1, B2 step 5: every console act that changes who can see what asks for the key again when the session's
+    second factor is older than SECOND_FACTOR_STEP_UP_SECONDS - the browser goes to the second-factor page with the form's
+    page as next, and the act is not done (the form is never replayed)."""
+
+    def acts(self):
+        member = self.membership(self.viewer)
+        return [
+            ('/ops/people/add', {'workspace': str(self.ws.pk), 'username': 'step-up-person', 'role': 'viewer'}),
+            (f'/ops/people/{self.viewer.pk}/role', {'membership': str(member.pk), 'role': 'reviewer'}),
+            (f'/ops/people/{self.viewer.pk}/password', {}),
+            (f'/ops/people/{self.viewer.pk}/access', {'access': 'off', 'membership': str(member.pk)}),
+            (f'/ops/people/{self.viewer.pk}/access', {'access': 'off', 'scope': 'everywhere'}),
+            ('/ops/workspaces/new', {'name': 'Step Up Partners', 'category': str(self.neuro.pk)}),
+            (f'/ops/people/{self.viewer.pk}/unlock', {}),
+        ]
+
+    def test_an_act_six_minutes_after_the_key_goes_to_the_step_up_and_changes_nothing(self):
+        later = timezone.now() + timedelta(seconds=settings.SECOND_FACTOR_STEP_UP_SECONDS + 60)
+        before = self.counts()
+        with mock.patch.object(timezone, 'now', return_value=later):
+            for url, body in self.acts():
+                with self.subTest(url=url, body=body):
+                    answer = self.ops.post(url, body, HTTP_REFERER='http://admin.quillmd.com/ops/people')
+                    self.assertEqual((answer.status_code, answer['Location']),
+                                     (303, '/login/second-factor?next=%2Fops%2Fpeople'))
+            self.assertEqual(self.ops.get('/ops/people').status_code, 200)  # reading needs no step-up
+        self.assertEqual(self.counts(), before)
+        self.assertFalse(models.SecurityEvent.objects.filter(event='signin.cleared').exists())
+
+    def test_within_five_minutes_of_the_key_the_act_is_done(self):
+        within = timezone.now() + timedelta(seconds=settings.SECOND_FACTOR_STEP_UP_SECONDS - 30)
+        member = self.membership(self.viewer)
+        with mock.patch.object(timezone, 'now', return_value=within):
+            answer = self.ops.post(f'/ops/people/{self.viewer.pk}/role', {'membership': str(member.pk), 'role': 'reviewer'})
+        self.assertEqual((answer.status_code, answer['Location']), (303, '/ops/people?done=role'))
+
+
+class RequestedByTests(AdminCase):
+    """Release 1, C3 item 5 (ADM-14 (7)): every act that changes access asks who at the practice requested it, refuses an
+    empty answer, and stores it on the act's audit row."""
+
+    def test_each_act_refuses_an_empty_requested_by_and_records_nothing(self):
+        member = self.membership(self.viewer)
+        acts = [('/ops/people/add', {'workspace': str(self.ws.pk), 'username': 'asked-person', 'role': 'viewer'}),
+                (f'/ops/people/{self.viewer.pk}/role', {'membership': str(member.pk), 'role': 'reviewer'}),
+                (f'/ops/people/{self.viewer.pk}/password', {}),
+                (f'/ops/people/{self.viewer.pk}/access', {'access': 'off', 'membership': str(member.pk)}),
+                (f'/ops/people/{self.viewer.pk}/access', {'access': 'off', 'scope': 'everywhere'}),
+                ('/ops/workspaces/new', {'name': 'Asked Partners', 'category': str(self.neuro.pk)})]
+        before = self.counts()
+        for url, body in acts:
+            for answer in ('', '   ', '​', '---'):
+                with self.subTest(url=url, requested_by=answer):
+                    response = self.ops.post(url, {**body, 'requested_by': answer})
+                    self.assertEqual(response.status_code, 400)
+                    self.assertIn('Requested by', page(response))
+        self.assertEqual(self.counts(), before)
+
+    def test_the_requested_by_is_stored_on_each_acts_audit_row(self):
+        member = self.membership(self.viewer)
+        self.ops.post(f'/ops/people/{self.viewer.pk}/role', {'membership': str(member.pk), 'role': 'reviewer',
+                                                             'requested_by': 'Front desk, Dr. Lee\'s office'})
+        self.ops.post(f'/ops/people/{self.viewer.pk}/password', {'requested_by': 'Ticket 77'})
+        self.ops.post(f'/ops/people/{self.viewer.pk}/access', {'access': 'off', 'membership': str(member.pk),
+                                                               'requested_by': 'Ticket 78'})
+        rows = {event.event: event.data['requested_by'] for event in models.AuditEvent.objects.filter(
+            event__startswith='operator.')}
+        self.assertEqual(rows, {'operator.role_changed': 'Front desk, Dr. Lee\'s office',
+                                'operator.password_reset': 'Ticket 77', 'operator.access_off': 'Ticket 78'})
+        self.assertIn('requested_by Ticket 77', page(self.ops.get('/ops/activity')))
+
+
+class PracticeAccessTests(AdminCase):
+    """Release 1, C4 item 4: the console's switch is the membership's, this practice only, by default; "Turn off
+    everywhere" (the account's is_active) stays apart."""
+
+    def test_access_off_here_closes_this_workspace_only_and_ends_sessions_when_it_was_the_only_one(self):
+        session = self.client_for(self.reviewer)
+        member = self.membership(self.reviewer)
+        response = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off', 'membership': str(member.pk)})
+        self.assertEqual((response.status_code, response['Location']), (303, '/ops/people?done=off'))
+        member.refresh_from_db()
+        self.reviewer.refresh_from_db()
+        self.assertEqual((member.active, self.reviewer.is_active), (False, True))
+        self.assertEqual(self.sessions_of(self.reviewer), 0)  # it was their only workspace
+        self.assertNotEqual(session.get('/api/session').status_code, 200)
+        event = models.AuditEvent.objects.get(event='operator.access_off')
+        self.assertEqual((event.workspace_id, event.data['scope'], event.data['membership'], event.data['sessions_ended']),
+                         (self.ws.pk, 'practice', str(member.pk), 1))
+        on = self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'on', 'membership': str(member.pk)})
+        self.assertEqual(on['Location'], '/ops/people?done=on')
+        member.refresh_from_db()
+        self.assertTrue(member.active)
+        signed = Client().post('/login/', {'username': self.reviewer.username, 'password': 'synthetic-pass-123!'})
+        self.assertEqual(signed.status_code, 302)
+
+    def test_a_person_in_two_practices_keeps_the_other_one_and_their_session(self):
+        Membership.objects.create(user=self.reviewer, workspace=self.other_ws, role=Membership.VIEWER)
+        session = self.client_for(self.reviewer)
+        here = Membership.objects.get(user=self.reviewer, workspace=self.ws)
+        self.ops.post(f'/ops/people/{self.reviewer.pk}/access', {'access': 'off', 'membership': str(here.pk)})
+        self.assertEqual(self.sessions_of(self.reviewer), 1)
+        self.assertEqual(session.get('/api/session').json()['workspace']['id'], str(self.other_ws.pk))
+        self.assertTrue(User.objects.get(pk=self.reviewer.pk).is_active)
+        self.assertNotIn('sessions_ended', models.AuditEvent.objects.get(event='operator.access_off').data)
+
+    def test_the_practice_switch_needs_one_of_the_persons_memberships(self):
+        other = self.membership(self.outsider)
+        before = self.counts()
+        for body in ({'access': 'off'}, {'access': 'off', 'membership': str(other.pk)},
+                     {'access': 'off', 'membership': 'x'}):
+            with self.subTest(body=body):
+                self.assertEqual(self.ops.post(f'/ops/people/{self.reviewer.pk}/access', body).status_code, 404)
+        self.assertEqual(self.counts(), before)
+
+    def test_the_people_page_offers_both_switches(self):
+        text = page(self.ops.get('/ops/people'))
+        self.assertIn('Turn access off in this workspace', text)
+        self.assertIn('Turn off everywhere', text)
+        self.assertIn('Clear sign-in delay', text)
+        self.assertIn('No patient details.', text)
+
+
+class UnlockTests(AdminCase):
+    """Release 1, B1 step 8: Clear sign-in delay deletes the username's RateWindow rows (any scope) and writes a
+    SecurityEvent; sign-in records are never deleted."""
+
+    def test_clearing_a_delay_deletes_the_names_counters_and_records_it(self):
+        from studio import rate
+        key = console.signin_user_key(self.reviewer.username)
+        self.assertEqual(key, rate.key_hash('signin-user:' + self.reviewer.username.casefold()))
+        rate.hit('signin.failed.user', key, window_seconds=900)
+        rate.hit('signin.refused.user', key, window_seconds=60)
+        other_key = console.signin_user_key(self.viewer.username)
+        rate.hit('signin.failed.user', other_key, window_seconds=900)
+        rate.hit('signin.refused.client', '198.51.100.7', window_seconds=60)
+        Client().post('/login/', {'username': self.reviewer.username, 'password': 'wrong-password-123'})
+        attempts = models.LoginAttempt.objects.count()
+        response = self.ops.post(f'/ops/people/{self.reviewer.pk}/unlock', {'back': str(self.ws.pk)})
+        self.assertEqual((response.status_code, response['Location']), (303, f'/ops/workspaces/{self.ws.pk}?done=unlocked'))
+        self.assertFalse(models.RateWindow.objects.filter(key=key).exists())
+        self.assertEqual(models.RateWindow.objects.filter(key__in=[other_key, '198.51.100.7']).count(), 2)
+        self.assertEqual(models.LoginAttempt.objects.count(), attempts)  # never deleted
+        event = models.SecurityEvent.objects.get(event='signin.cleared')
+        self.assertEqual((event.subject_id, event.actor_id, event.data), (self.reviewer.pk, self.operator_user.pk,
+                                                                           {'rate_rows': 2}))
+        self.assertEqual(models.AuditEvent.objects.get(event='operator.signin_cleared').data['count'], 2)
+        self.assertIn('The sign-in delay was cleared.', page(self.ops.get(response['Location'])))
+
+    def test_an_operators_account_is_cleared_on_the_server_only(self):
+        other = r.f.user('second-operator')
+        ops.grant(other)
+        answer = self.ops.post(f'/ops/people/{other.pk}/unlock', {})
+        self.assertEqual(answer.status_code, 409)
+        self.assertFalse(models.SecurityEvent.objects.filter(event='signin.cleared').exists())
+
+
+class OperatorsCardTests(AdminCase):
+    """Release 1, C3 item 4 (ADM-8): the Operators card shows each grant's approval and review date, and flags the
+    overdue ones and the grants with none for the periodic access review."""
+
+    def test_each_grant_shows_its_approval_and_review_date_and_the_overdue_are_flagged(self):
+        reviewed = r.f.user('reviewed-operator')
+        models.OperatorGrant.objects.create(user=reviewed, reason='Synthetic grant.', granted_by='Synthetic Admin',
+                                            authorization_ref='docs/foundation/rulings/synthetic-1.md',
+                                            review_by=timezone.localdate() + timedelta(days=30))
+        overdue = r.f.user('overdue-operator')
+        models.OperatorGrant.objects.create(user=overdue, reason='Synthetic grant.', granted_by='Synthetic Admin',
+                                            authorization_ref='docs/foundation/rulings/synthetic-2.md',
+                                            review_by=timezone.localdate() - timedelta(days=1))
+        agent = r.f.user('ops-agent')
+        User.objects.filter(pk=agent.pk).update(actor_kind=User.AGENT)
+        models.OperatorGrant.objects.create(user=agent, reason='Synthetic grant from before release 1.',
+                                            granted_by='synthetic installer')
+        rows = {row['person'].username: row for row in console.operator_rows()}
+        self.assertEqual((rows['reviewed-operator']['overdue'], rows['reviewed-operator']['unreviewed']), (False, False))
+        self.assertEqual(rows['overdue-operator']['overdue'], True)
+        self.assertEqual((rows['ops-agent']['unreviewed'], rows['ops-agent']['automated']), (True, True))
+        text = page(self.ops.get('/ops/people'))
+        for fragment in ('docs/foundation/rulings/synthetic-1.md', 'overdue', 'none recorded',
+                         'automated account: holds no operator power', 'by Synthetic Admin'):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+
+class SignInsPageTests(AdminCase):
+    """Release 1, B1 steps 4 and 5: the Sign-ins page names each attempt's door and outcome, and how many attempts the
+    throttle refused in the last hour (they reach no password check, so they are counted, not listed)."""
+
+    def test_the_refused_count_and_the_outcomes(self):
+        from studio import rate
+        for _ in range(3):
+            rate.hit(console.SIGNIN_REFUSED_SCOPE, '198.51.100.7', window_seconds=60)
+        rate.hit(console.SIGNIN_REFUSED_SCOPE, '2001:db8:1:2::/64', window_seconds=60)
+        old = rate.window_start(60, timezone.now() - timedelta(hours=2))
+        models.RateWindow.objects.create(scope=console.SIGNIN_REFUSED_SCOPE, key='198.51.100.8', window_start=old,
+                                         count=40, last_at=old)
+        models.LoginAttempt.objects.create(username=self.reviewer.username, client='198.51.100.7', succeeded=False,
+                                           door='admin', outcome=models.LoginAttempt.NO_ACCESS)
+        self.assertEqual(console.refused_last_hour(), 4)
+        text = page(self.ops.get('/ops/activity/sign-ins'))
+        self.assertIn('4 attempts refused by the throttle in the last hour', text)
+        self.assertIn('Right password, no access at this door', text)
+        self.assertIn('<td>admin</td>', text)
+        self.assertIn('Nobody is locked out.', text)
+
+
+class ForcedChangeTests(AdminCase):
+    """Release 1, B4 step 3: the console's add-person and reset start the clock of a staff-set password; each reset
+    starts a new one."""
+
+    def test_a_reset_starts_a_new_clock_and_the_page_says_so(self):
+        first = timezone.now() - timedelta(hours=10)
+        User.objects.filter(pk=self.viewer.pk).update(password_change_required_at=first)
+        response = self.ops.post(f'/ops/people/{self.viewer.pk}/password', {})
+        self.assertEqual(response.status_code, 200)
+        self.viewer.refresh_from_db()
+        self.assertGreater(self.viewer.password_change_required_at, first)
+        self.assertIn('must choose a new password at the first sign-in, within 72 hours', page(response))

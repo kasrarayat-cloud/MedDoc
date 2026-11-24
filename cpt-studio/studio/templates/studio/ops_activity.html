@@ -43,18 +43,20 @@
   </label>
   <button type="submit" class="secondary">Show</button>
 </form>
-<p class="muted">After {{ throttle_attempts }} refused attempts within {{ throttle_minutes }} minutes, a username is refused until the oldest of them is {{ throttle_minutes }} minutes old. A name that is no account is not shown: it can be a password typed into the username box.</p>
+<p class="muted">Nobody is locked out. After {{ delay_after }} failed attempts for a username, each further try waits longer, from {{ delay_base }} seconds doubling to at most {{ delay_max_minutes }} minutes, and a device that signed in before skips the wait. An address with {{ client_limit }} refused or failed attempts in {{ window_minutes }} minutes, or one username from one address with {{ pair_limit }}, is refused. To end a delay at once, use Clear sign-in delay on People. A name that is no account is not shown: it can be a password typed into the username box.</p>
+<p class="notice{% if refused_last_hour %} warn{% endif %}">{{ refused_last_hour }} attempt{{ refused_last_hour|pluralize }} refused by the throttle in the last hour, before any password was checked.</p>
 <div class="table-card scroll">
 <table>
-  <thead><tr><th>When (UTC)</th><th>Username</th><th>Result</th><th>From</th></tr></thead>
+  <thead><tr><th>When (UTC)</th><th>Username</th><th>Result</th><th>Door</th><th>From</th></tr></thead>
   <tbody>
   {% for item in attempts %}
     <tr><td class="mono">{{ item.attempt.created_at|date:"Y-m-d H:i:s" }}</td>
         <td>{% if item.known %}<span class="mono">{{ item.attempt.username }}</span>{% else %}<span class="muted">a name that is no account</span>{% endif %}</td>
-        <td>{% if item.attempt.succeeded %}<span class="chip ok">Signed in</span>{% else %}<span class="chip bad">Refused</span>{% endif %}</td>
+        <td>{% if item.attempt.succeeded %}<span class="chip ok">Signed in</span>{% else %}<span class="chip bad">Refused</span>{% endif %}{% if item.outcome and not item.attempt.succeeded %}<br><span class="muted">{{ item.outcome }}</span>{% endif %}</td>
+        <td>{{ item.attempt.door|default:"" }}</td>
         <td class="mono">{{ item.attempt.client }}</td></tr>
   {% empty %}
-    <tr><td colspan="4" class="muted">No sign-in attempt recorded{% if result %} for this choice{% endif %}.</td></tr>
+    <tr><td colspan="5" class="muted">No sign-in attempt recorded{% if result %} for this choice{% endif %}.</td></tr>
   {% endfor %}
   </tbody>
 </table>
