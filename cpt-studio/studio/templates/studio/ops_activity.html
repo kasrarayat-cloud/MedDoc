@@ -44,7 +44,7 @@
   <button type="submit" class="secondary">Show</button>
 </form>
 <p class="muted">Nobody is locked out. After {{ delay_after }} failed attempts for a username, each further try waits longer, from {{ delay_base }} seconds doubling to at most {{ delay_max_minutes }} minutes, and a device that signed in before skips the wait. An address with {{ client_limit }} refused or failed attempts in {{ window_minutes }} minutes, or one username from one address with {{ pair_limit }}, is refused. To end a delay at once, use Clear sign-in delay on People. A name that is no account is not shown: it can be a password typed into the username box.</p>
-<p class="notice{% if refused_last_hour %} warn{% endif %}">{{ refused_last_hour }} attempt{{ refused_last_hour|pluralize }} refused by the throttle in the last hour, before any password was checked.</p>
+{% if refused %}<p class="notice warn">Refused by the slowdown in the last hour, before any password was checked: {% for name, count in refused %}<span class="mono">{{ name }}</span> {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %}.</p>{% else %}<p class="muted">The slowdown refused none of these accounts' attempts in the last hour.</p>{% endif %}
 <div class="table-card scroll">
 <table>
   <thead><tr><th>When (UTC)</th><th>Username</th><th>Result</th><th>Door</th><th>From</th></tr></thead>

@@ -244,15 +244,14 @@ Release 1, C4 (owner decision D15). `{"members": [member]}`, everyone with a mem
 automated and operator-added accounts included - each:
 
 ```json
-{"id": "...", "name": "Dr. Maya Rivera", "login": "mrivera", "role": "owner|reviewer|viewer", "active": true,
- "account_active": true, "kind": "person|automated", "last_sign_in": "2026-11-24T10:00:00Z",
- "must_change_password": false, "you": false, "can_change": true}
+{"id": "...", "label": "Dr. Maya Rivera", "username": "mrivera", "role": "owner|reviewer|viewer", "active": true,
+ "actor_kind": "human|agent", "last_sign_in": "2026-11-24T10:00:00Z", "password_change_required": false}
 ```
 
-`active` is the person's access to this practice; `account_active` is false when CPT Studio turned the account off
-everywhere (only CPT Studio turns it on). `last_sign_in` is the latest successful sign-in (null for none);
-`must_change_password` says a password staff set has not yet been replaced. `can_change` is false for the owner's own
-row and for the practice's last active owner. No password or hash is ever sent. A reviewer or viewer is answered `403`.
+`active` is the person's access to this practice (the membership's: the switch an owner turns). `last_sign_in` is the
+latest successful sign-in (null for none); `password_change_required` says a password staff set has not yet been
+replaced. No password or hash is ever sent. A reviewer or viewer is answered `403`. `username` is a key the customer
+denylist forbids in every other payload; a reader of this one exempts it.
 
 ### `POST /api/members/<id>/access` (owners only)
 

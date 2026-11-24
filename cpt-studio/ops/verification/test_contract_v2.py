@@ -87,18 +87,18 @@ class ContractTests(unittest.TestCase):
         # shapes Lane 2's Team panel is built against) and the 429 answer, each exactly these keys
         self.assertEqual(CONTRACT['session']['keys']['can_manage_team'], 'boolean')
         member = CONTRACT['types']['member']['keys']
-        self.assertEqual(sorted(member), sorted(['id', 'name', 'login', 'role', 'active', 'account_active', 'kind',
-                                                 'last_sign_in', 'must_change_password', 'you', 'can_change']))
-        self.assertEqual(member['kind'], {'enum': ['person', 'automated']})
+        self.assertEqual(sorted(member), sorted(['id', 'label', 'username', 'role', 'active', 'actor_kind', 'last_sign_in',
+                                                 'password_change_required']))
+        self.assertEqual(member['actor_kind'], {'enum': ['human', 'agent']})
         self.assertEqual(member['last_sign_in'], 'iso?')
         self.assertEqual(CONTRACT['members'], {'keys': {'members': {'items': {'ref': 'member'}}}})
         self.assertEqual(CONTRACT['member_access'], {'keys': {'member': {'ref': 'member'}}})
         self.assertEqual(CONTRACT['rate_limited'], {'keys': {'error': {'enum': ['rate_limited']},
                                                              'retry_after': 'integer'}})
-        # the person's sign-in name is keyed login: username is a key no customer payload may carry (the denylist)
+        # the member's username key (the lead's shape, which Lane 2's Team panel reads) is the one key of the type the
+        # denylist forbids elsewhere: a reader of this payload exempts it, and nothing else of it is forbidden
         denylist = json.loads((HERE / 'customer-denylist.json').read_text(encoding='utf-8'))
-        self.assertIn('username', denylist['forbidden_keys'])
-        self.assertFalse(set(member) & set(denylist['forbidden_keys']))
+        self.assertEqual(set(member) & set(denylist['forbidden_keys']), {'username'})
         self.assertEqual(sc.shape_problems({'error': 'rate_limited', 'retry_after': 42}, CONTRACT['rate_limited']), [])
         self.assertTrue(sc.shape_problems({'error': 'rate_limited'}, CONTRACT['rate_limited']))
 

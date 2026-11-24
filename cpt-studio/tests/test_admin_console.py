@@ -5,6 +5,8 @@ the POST's own answer, never stored, logged, audited or put in a URL), operator 
 the spending figures against the console's own pricing, and the read-only activity log. Synthetic data only."""
 import random
 import re
+import sys
+import types
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -39,6 +41,36 @@ def shown_password(response) -> str:
 
 
 REQUESTED_BY = 'Synthetic practice contact, ticket 1042'
+THROTTLE_FILE = Path(settings.BASE_DIR) / 'studio' / 'throttle.py'
+
+
+def throttle_stub(refused=None, cleared=0):
+    """A stand-in for Lane 2's studio.throttle (release 1, B1), which this lane's branch does not hold: the console calls
+    clear_failures(username) (answering ``cleared``) and refused_in(username) (``refused``'s count for it, else 0), the
+    lead's contract of 2026-11-24. Every call is recorded in ``calls``."""
+    module = types.ModuleType(console.THROTTLE_MODULE)
+    module.calls = []
+
+    def clear_failures(username):
+        module.calls.append(('clear_failures', username))
+        return cleared
+
+    def refused_in(username):
+        module.calls.append(('refused_in', username))
+        return (refused or {}).get(username, 0)
+    module.clear_failures, module.refused_in = clear_failures, refused_in
+    return module
+
+
+def use_throttle(case, module=None):
+    """Make ``module`` (a stub) studio.throttle for the test - or, with none given, a stub only while the tree has no
+    studio/throttle.py of its own (this lane's branch alone), so the pages that read it render."""
+    if module is None and THROTTLE_FILE.exists():
+        return None
+    patcher = mock.patch.dict(sys.modules, {console.THROTTLE_MODULE: module or throttle_stub()})
+    patcher.start()
+    case.addCleanup(patcher.stop)
+    return sys.modules[console.THROTTLE_MODULE]
 
 
 class ActsClient:
@@ -64,6 +96,7 @@ class AdminCase(r.CustomerCase, TestCase):
         self.owner = r.f.member(self.ws, role=Membership.OWNER)
         self.operator_user = r.f.user('platform-operator')
         self.ops = ActsClient(ops.admin_client(self.operator_user))
+        use_throttle(self)
         self.neuro = models.Category.objects.create(slug='neurosurgery', name='Neurosurgery',
                                                     profiles_version='synthetic@1')
 
@@ -1196,37 +1229,37 @@ class PracticeAccessTests(AdminCase):
 
 
 class UnlockTests(AdminCase):
-    """Release 1, B1 step 8: Clear sign-in delay deletes the username's RateWindow rows (any scope) and writes a
-    SecurityEvent; sign-in records are never deleted."""
+    """Release 1, B1 step 8: Clear sign-in delay calls Lane 2's throttle.clear_failures(username) and writes the
+    SecurityEvent signin.delay_cleared (the lead's contract); sign-in records are never deleted."""
 
-    def test_clearing_a_delay_deletes_the_names_counters_and_records_it(self):
-        from studio import rate
-        key = console.signin_user_key(self.reviewer.username)
-        self.assertEqual(key, rate.key_hash('signin-user:' + self.reviewer.username.casefold()))
-        rate.hit('signin.failed.user', key, window_seconds=900)
-        rate.hit('signin.refused.user', key, window_seconds=60)
-        other_key = console.signin_user_key(self.viewer.username)
-        rate.hit('signin.failed.user', other_key, window_seconds=900)
-        rate.hit('signin.refused.client', '198.51.100.7', window_seconds=60)
+    def test_clearing_a_delay_calls_the_throttle_and_records_it(self):
+        stub = use_throttle(self, throttle_stub(cleared=3))
         Client().post('/login/', {'username': self.reviewer.username, 'password': 'wrong-password-123'})
         attempts = models.LoginAttempt.objects.count()
         response = self.ops.post(f'/ops/people/{self.reviewer.pk}/unlock', {'back': str(self.ws.pk)})
         self.assertEqual((response.status_code, response['Location']), (303, f'/ops/workspaces/{self.ws.pk}?done=unlocked'))
-        self.assertFalse(models.RateWindow.objects.filter(key=key).exists())
-        self.assertEqual(models.RateWindow.objects.filter(key__in=[other_key, '198.51.100.7']).count(), 2)
+        self.assertEqual(stub.calls, [('clear_failures', self.reviewer.username)])
         self.assertEqual(models.LoginAttempt.objects.count(), attempts)  # never deleted
-        event = models.SecurityEvent.objects.get(event='signin.cleared')
+        event = models.SecurityEvent.objects.get(event='signin.delay_cleared')
         self.assertEqual((event.subject_id, event.actor_id, event.data), (self.reviewer.pk, self.operator_user.pk,
-                                                                           {'rate_rows': 2}))
-        self.assertEqual(models.AuditEvent.objects.get(event='operator.signin_cleared').data['count'], 2)
+                                                                           {'cleared': 3}))
+        self.assertEqual(models.AuditEvent.objects.get(event='operator.signin_cleared').data['username'],
+                         self.reviewer.username)
         self.assertIn('The sign-in delay was cleared.', page(self.ops.get(response['Location'])))
 
+    def test_a_throttle_answer_that_is_no_count_is_not_recorded(self):
+        use_throttle(self, throttle_stub(cleared=None))
+        self.ops.post(f'/ops/people/{self.reviewer.pk}/unlock', {})
+        self.assertEqual(models.SecurityEvent.objects.get(event='signin.delay_cleared').data, {})
+
     def test_an_operators_account_is_cleared_on_the_server_only(self):
+        stub = use_throttle(self, throttle_stub())
         other = r.f.user('second-operator')
         ops.grant(other)
         answer = self.ops.post(f'/ops/people/{other.pk}/unlock', {})
         self.assertEqual(answer.status_code, 409)
-        self.assertFalse(models.SecurityEvent.objects.filter(event='signin.cleared').exists())
+        self.assertEqual(stub.calls, [])
+        self.assertFalse(models.SecurityEvent.objects.filter(event='signin.delay_cleared').exists())
 
 
 class OperatorsCardTests(AdminCase):
@@ -1258,25 +1291,37 @@ class OperatorsCardTests(AdminCase):
 
 
 class SignInsPageTests(AdminCase):
-    """Release 1, B1 steps 4 and 5: the Sign-ins page names each attempt's door and outcome, and how many attempts the
-    throttle refused in the last hour (they reach no password check, so they are counted, not listed)."""
+    """Release 1, B1 steps 4 and 5: the Sign-ins page names each attempt's door and outcome, the attempts Lane 2's
+    slowdown refused in the last hour for each account on it (throttle.refused_in: they reach no password check, so they
+    are counted, not listed), and the new rule - a slowdown, never a lock; nothing reads LOGIN_THROTTLE_* any more."""
 
-    def test_the_refused_count_and_the_outcomes(self):
-        from studio import rate
-        for _ in range(3):
-            rate.hit(console.SIGNIN_REFUSED_SCOPE, '198.51.100.7', window_seconds=60)
-        rate.hit(console.SIGNIN_REFUSED_SCOPE, '2001:db8:1:2::/64', window_seconds=60)
-        old = rate.window_start(60, timezone.now() - timedelta(hours=2))
-        models.RateWindow.objects.create(scope=console.SIGNIN_REFUSED_SCOPE, key='198.51.100.8', window_start=old,
-                                         count=40, last_at=old)
+    def test_the_refused_counts_the_outcomes_and_the_rule(self):
+        stub = use_throttle(self, throttle_stub(refused={self.reviewer.username: 4}))
         models.LoginAttempt.objects.create(username=self.reviewer.username, client='198.51.100.7', succeeded=False,
                                            door='admin', outcome=models.LoginAttempt.NO_ACCESS)
-        self.assertEqual(console.refused_last_hour(), 4)
+        models.LoginAttempt.objects.create(username=self.viewer.username, client='198.51.100.8', succeeded=True,
+                                           door='cpt', outcome=models.LoginAttempt.SIGNED_IN)
+        models.LoginAttempt.objects.create(username='no-such-account', client='198.51.100.9', succeeded=False)
         text = page(self.ops.get('/ops/activity/sign-ins'))
-        self.assertIn('4 attempts refused by the throttle in the last hour', text)
+        self.assertIn(f'Refused by the slowdown in the last hour, before any password was checked: '
+                      f'<span class="mono">{self.reviewer.username}</span> 4.', text)
+        self.assertEqual(sorted(name for call, name in stub.calls if call == 'refused_in'),
+                         sorted([self.reviewer.username, self.viewer.username]))  # accounts only, never a stray name
         self.assertIn('Right password, no access at this door', text)
         self.assertIn('<td>admin</td>', text)
         self.assertIn('Nobody is locked out.', text)
+
+    def test_with_nothing_refused_the_page_says_so(self):
+        use_throttle(self, throttle_stub())
+        models.LoginAttempt.objects.create(username=self.reviewer.username, client='198.51.100.7', succeeded=True)
+        self.assertIn("The slowdown refused none of these accounts' attempts in the last hour.",
+                      page(self.ops.get('/ops/activity/sign-ins')))
+
+    def test_nothing_in_the_console_reads_the_old_lockout_settings(self):
+        for path in (Path(settings.BASE_DIR) / 'studio' / 'console.py',
+                     Path(settings.BASE_DIR) / 'studio' / 'templates' / 'studio' / 'ops_activity.html'):
+            with self.subTest(path=path.name):
+                self.assertNotIn('LOGIN_THROTTLE', path.read_text(encoding='utf-8'))
 
 
 class ForcedChangeTests(AdminCase):

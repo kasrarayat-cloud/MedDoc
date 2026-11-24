@@ -503,7 +503,7 @@ def _owner(request):
 def members(request):
     """GET api/members -> {members: [member]} (customer.members_json), for an owner of the practice."""
     membership = _owner(request)
-    return JsonResponse({'members': customer.members_json(membership, request.user)})
+    return JsonResponse({'members': customer.members_json(membership)})
 
 
 @require_POST
@@ -520,11 +520,8 @@ def member_access(request, user_id):
         raise ApiError(400, ACTIVE_REQUIRED)
     membership = _owner(request)
     target = _set_member_access(membership, user_id, active, request.user)
-    owners = models.Membership.objects.filter(workspace_id=membership.workspace_id, role=models.Membership.OWNER,
-                                              active=True).count()
     return JsonResponse({'member': customer.member_json(
-        target, customer.last_sign_ins([target.user.username]).get(target.user.username), you=False,
-        sole_owner=owners <= 1)})
+        target, customer.last_sign_ins([target.user.username]).get(target.user.username))})
 
 
 def _set_member_access(owner_membership, user_id, active, actor):

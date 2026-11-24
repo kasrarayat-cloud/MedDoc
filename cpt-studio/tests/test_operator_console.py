@@ -14,6 +14,7 @@ from django.utils import timezone
 from studio import jobs, models, operator
 from tests.support import operator as ops
 from tests.support import rounds as r
+from tests.test_admin_console import use_throttle
 
 Run, Round = models.ProviderRun, models.CodingRound
 
@@ -25,6 +26,7 @@ class ConsoleCase(r.CustomerCase, TestCase):
         self.round = Round.objects.get(encounter=self.enc)
         self.operator_user = r.f.user('platform-operator')
         self.ops = ops.admin_client(self.operator_user)
+        use_throttle(self)  # the Sign-ins page reads Lane 2's studio.throttle (a stub while this tree has none)
 
     def urls(self):
         run = Run.objects.filter(encounter=self.enc).first()

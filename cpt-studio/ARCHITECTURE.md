@@ -397,9 +397,10 @@ no encounter, so the customer's activity never shows them.
 - *Access acts* ask "Requested by" (the practice's contact or a ticket reference; stored on the act's audit row) and the
   key again within `SECOND_FACTOR_STEP_UP_SECONDS` (B2 step 5). The access switch is the membership's - this practice
   only - by default; "Turn off everywhere" (the account) stays apart. Add-person and reset set
-  `password_change_required_at` (B4). Clear sign-in delay (`ops/people/<id>/unlock`) deletes the username's
-  `RateWindow` rows and writes `signin.cleared`; sign-in rows are never deleted. The Sign-ins page names each attempt's
-  door and outcome and counts the attempts the throttle refused in the last hour.
+  `password_change_required_at` (B4). Clear sign-in delay (`ops/people/<id>/unlock`) calls Lane 2's
+  `throttle.clear_failures(username)` and writes `signin.delay_cleared`; sign-in rows are never deleted. The Sign-ins
+  page names each attempt's door and outcome, states the rule (a slowdown, never a lock) and shows, for each account on
+  it, the attempts the slowdown refused in the last hour (`throttle.refused_in(username)`).
 - *Disposal* (D1, Lane 4): a destroyed document's tombstone is in no list and its routes answer 404; a closed practice
   drops out of the front page and the add form, and the Workspaces page lists it apart.
 

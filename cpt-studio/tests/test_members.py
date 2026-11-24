@@ -22,8 +22,8 @@ from tests.support import rounds as r
 
 Membership, User = models.Membership, models.User
 CPT = 'cpt.quillmd.com'
-MEMBER_KEYS = {'id', 'name', 'login', 'role', 'active', 'account_active', 'kind', 'last_sign_in', 'must_change_password',
-               'you', 'can_change'}
+# the shape Lane 2's Team panel reads (the lead's contract of 2026-11-24)
+MEMBER_KEYS = {'id', 'label', 'username', 'role', 'active', 'actor_kind', 'last_sign_in', 'password_change_required'}
 
 
 def signed_in(user):
@@ -66,26 +66,29 @@ class ListTests(MembersCase):
         answer = signed_in(self.owner).get('/api/members')
         self.assertEqual(answer.status_code, 200)
         self.assertEqual(self.sc.shape_problems(answer.json(), self.sc.CONTRACT['members']), [])
-        rows = {row['login']: row for row in answer.json()['members']}
+        rows = {row['username']: row for row in answer.json()['members']}
         self.assertEqual(set(rows), {self.owner.username, self.reviewer.username, self.viewer.username,
                                      self.agent.username, operator_added.username})  # never another practice's
         for row in rows.values():
             self.assertEqual(set(row), MEMBER_KEYS)
-        self.assertEqual((rows[self.agent.username]['kind'], rows[self.reviewer.username]['kind']), ('automated', 'person'))
+        self.assertEqual((rows[self.agent.username]['actor_kind'], rows[self.reviewer.username]['actor_kind']),
+                         ('agent', 'human'))
+        self.assertEqual(rows[self.agent.username]['label'], 'Reviewbot (automated agent)')
         self.assertEqual(rows[self.viewer.username]['active'], False)
-        self.assertEqual(rows[self.reviewer.username]['must_change_password'], True)
-        self.assertEqual(rows[self.owner.username]['must_change_password'], False)
+        self.assertEqual(rows[self.reviewer.username]['password_change_required'], True)
+        self.assertEqual(rows[self.owner.username]['password_change_required'], False)
         latest.refresh_from_db()
         self.assertEqual(rows[self.reviewer.username]['last_sign_in'],
                          iso(latest.created_at))
         self.assertIsNone(rows[self.viewer.username]['last_sign_in'])
-        self.assertEqual((rows[self.owner.username]['you'], rows[self.owner.username]['can_change']), (True, False))
-        self.assertEqual(rows[self.reviewer.username]['can_change'], True)
         body = answer.content.decode()
         for secret in ('pbkdf2', 'argon2', '"password"', self.outsider.username, 'synthetic-pass-123!'):
             self.assertNotIn(secret, body)
-        self.assertEqual([hit for hit in self.sc.scan_json(answer.json(), self.sc.scan_context())
-                          if hit['severity'] == 'hard'], [])
+        # the customer scanner's reading: nothing but the username key, which its denylist forbids in other payloads
+        # and this one carries by the contract (a reader of this payload must exempt it: Lane 6, scan and walk)
+        hits = [hit for hit in self.sc.scan_json(answer.json(), self.sc.scan_context()) if hit['severity'] == 'hard']
+        self.assertEqual({(hit['id'], hit['where'].rsplit('.', 1)[-1]) for hit in hits}, {('forbidden_key', 'username')})
+        self.assertEqual(len(hits), len(rows))
 
     def test_reviewers_viewers_and_strangers_are_refused(self):
         for label, user in (('reviewer', self.reviewer), ('viewer', self.viewer), ('agent', self.agent)):
@@ -112,7 +115,7 @@ class AccessTests(MembersCase):
         answer = self.access(signed_in(self.owner), self.reviewer, False)
         self.assertEqual(answer.status_code, 200)
         self.assertEqual(self.sc.shape_problems(answer.json(), self.sc.CONTRACT['member_access']), [])
-        self.assertEqual((answer.json()['member']['login'], answer.json()['member']['active']),
+        self.assertEqual((answer.json()['member']['username'], answer.json()['member']['active']),
                          (self.reviewer.username, False))
         self.assertFalse(Membership.objects.get(user=self.reviewer).active)
         self.assertTrue(User.objects.get(pk=self.reviewer.pk).is_active)  # never the account itself
@@ -226,11 +229,11 @@ class LastSignInTests(MembersCase):
     def test_an_old_sign_in_of_another_account_with_the_same_name_in_another_case_is_not_read(self):
         models.LoginAttempt.objects.create(username=self.reviewer.username.upper(), client='198.51.100.7',
                                            succeeded=True)
-        row = {item['login']: item for item in signed_in(self.owner).get('/api/members').json()['members']}
+        row = {item['username']: item for item in signed_in(self.owner).get('/api/members').json()['members']}
         self.assertIsNone(row[self.reviewer.username]['last_sign_in'])
         old = timezone.now() - timedelta(days=400)
         attempt = models.LoginAttempt.objects.create(username=self.reviewer.username, client='198.51.100.7',
                                                      succeeded=True)
         models.LoginAttempt.objects.filter(pk=attempt.pk).update(created_at=old)
-        row = {item['login']: item for item in signed_in(self.owner).get('/api/members').json()['members']}
+        row = {item['username']: item for item in signed_in(self.owner).get('/api/members').json()['members']}
         self.assertEqual(row[self.reviewer.username]['last_sign_in'], iso(old))

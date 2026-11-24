@@ -291,6 +291,19 @@ class LoginTests(TestCase):
                 self.assertEqual(client.get('/api/session').status_code, 404)  # no workspace of their own
         self.assertEqual(ops.admin_client(user).get('/ops/').status_code, 200)  # the console is the admin host's
 
+    def test_an_operator_without_a_membership_is_refused_at_the_doctors_door(self):
+        # needs Lane 2's B3 door half (bda98ab84, studio/views.py): the cpt door admits members only
+        user = f.user('platform-operator')
+        ops.grant(user)
+        response = Client(HTTP_HOST='cpt.quillmd.com').post('/login/', {'username': 'platform-operator',
+                                                                        'password': 'synthetic-pass-123!'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('The username or password is not correct.', response.content.decode())  # the wrong-password answer
+        self.assertNotIn(settings.SESSION_COOKIE_NAME, response.cookies)  # no session is opened
+        attempt = models.LoginAttempt.objects.get(username='platform-operator')
+        self.assertEqual((attempt.door, attempt.outcome, attempt.succeeded), ('cpt', 'no_access', False))
+        self.assertEqual(ops.client(user, HTTP_HOST='cpt.quillmd.com').get('/').status_code, 404)  # no workspace here
+
     def test_an_automated_account_signs_in_to_no_console(self):
         agent = f.user('ops-agent', actor_kind=models.User.AGENT)
         models.OperatorGrant.objects.create(user=agent, reason='Synthetic grant from before release 1.',

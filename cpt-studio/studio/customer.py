@@ -207,19 +207,17 @@ def session_json(user, membership) -> dict:
 
 # --- the team (release 1, C4) -----------------------------------------------------------------------------------------
 # GET api/members, for a practice's owners (D15): everyone with a membership in the practice - automated and
-# operator-added accounts included - by name and the name they sign in with, their role, whether their access here is on
-# (and whether CPT Studio turned their account off everywhere), their kind, their last sign-in and whether their password
-# must still be changed. Never a password, a hash or another practice's person. ``can_change`` says whether this owner may
-# switch that person's access here: never their own, and never the practice's last active owner off.
+# operator-added accounts included - by label and username, their role, whether their access here is on (the
+# membership's: the switch an owner turns), their kind, their last sign-in and whether their password must still be
+# changed: the shape Lane 2's Team panel reads (the lead's contract of 2026-11-24). Never a password, a hash or another
+# practice's person. The owner's own row and the last active owner are refused by the act itself (api.member_access).
 
-def member_json(row, last_sign_in, *, you, sole_owner) -> dict:
+def member_json(row, last_sign_in) -> dict:
     """One membership as the Team panel shows it (the contract's member type)."""
     person = row.user
-    return {'id': str(person.pk), 'name': person.display_name or person.username, 'login': person.username,
-            'role': row.role, 'active': bool(row.active), 'account_active': bool(person.is_active),
-            'kind': 'automated' if person.actor_kind == models.User.AGENT else 'person',
-            'last_sign_in': iso(last_sign_in), 'must_change_password': person.password_change_required_at is not None,
-            'you': you, 'can_change': not you and not (sole_owner and row.active and row.role == models.Membership.OWNER)}
+    return {'id': str(person.pk), 'label': person.label(), 'username': person.username, 'role': row.role,
+            'active': bool(row.active), 'actor_kind': person.actor_kind, 'last_sign_in': iso(last_sign_in),
+            'password_change_required': person.password_change_required_at is not None}
 
 
 def last_sign_ins(usernames) -> dict:
@@ -229,14 +227,12 @@ def last_sign_ins(usernames) -> dict:
                 .annotate(last=Max('created_at')).values_list('username', 'last'))
 
 
-def members_json(membership, user) -> list:
+def members_json(membership) -> list:
     """GET api/members: the practice's memberships, by the name each signs in with."""
     rows = list(models.Membership.objects.filter(workspace_id=membership.workspace_id).select_related('user')
                 .order_by('user__username', 'pk'))
     last = last_sign_ins(row.user.username for row in rows)
-    owners = sum(1 for row in rows if row.role == models.Membership.OWNER and row.active)
-    return [member_json(row, last.get(row.user.username), you=row.user_id == user.pk, sole_owner=owners <= 1)
-            for row in rows]
+    return [member_json(row, last.get(row.user.username)) for row in rows]
 
 
 def _values(encounter) -> dict:

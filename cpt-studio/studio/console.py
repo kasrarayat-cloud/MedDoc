@@ -37,6 +37,7 @@ reads alike no other workspace's.
 """
 from __future__ import annotations
 
+import importlib
 import re
 import secrets
 import unicodedata
@@ -48,12 +49,12 @@ from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
 
-from . import audit, jobs, models, rate, read_audit, security_events, spend
+from . import audit, jobs, models, read_audit, security_events, spend
 from .fable import pricing
 from .management.commands import provision
 from .operator import _methods as methods
@@ -902,11 +903,15 @@ def sign_ins(request):
     window = list(attempts.order_by('-created_at', '-pk')[:PAGE_SIZE + 1]) if attempts is not None else []
     rows = window[:PAGE_SIZE]
     accounts = set(User.objects.filter(username__in={row.username for row in rows}).values_list('username', flat=True))
+    # B1 step 5: the attempts the slowdown refused (they reach no password check, so they are counted, not listed), for
+    # each account on this page (a name that is no account is never shown)
+    refused = {name: throttle().refused_in(name) for name in sorted(accounts)}
     return render(request, 'studio/ops_activity.html', _context(
         'activity', attempts=[{'attempt': row, 'known': row.username in accounts,
                                'outcome': OUTCOME_LABELS.get(row.outcome or '', '')} for row in rows],
         earlier=bool(before), unreadable=attempts is None, older=cursor_of(rows[-1]) if len(window) > PAGE_SIZE else '',
-        query=f'result={result}' if result else '', result=result, tab='sign-ins', refused_last_hour=refused_last_hour(),
+        query=f'result={result}' if result else '', result=result, tab='sign-ins',
+        refused=[(name, count) for name, count in refused.items() if count],
         delay_after=settings.SIGNIN_USER_DELAY_AFTER, delay_base=settings.SIGNIN_DELAY_BASE_SECONDS,
         delay_max_minutes=settings.SIGNIN_DELAY_MAX_SECONDS // 60, pair_limit=settings.SIGNIN_PAIR_LIMIT,
         client_limit=settings.SIGNIN_CLIENT_LIMIT, window_minutes=settings.SIGNIN_WINDOW_SECONDS // 60))
@@ -922,18 +927,7 @@ OUTCOME_LABELS = {
     models.LoginAttempt.NO_ACCESS: 'Right password, no access at this door',
     models.LoginAttempt.PASSWORD_EXPIRED: 'A staff-set password not replaced in time',
 }
-# B1 step 5: the throttle counts every attempt it refuses - before any password is checked, so none of them is a
-# LoginAttempt row - per minute in RateWindow, by address under this scope (and by username under another). The page
-# sums the last hour's windows (Lane 2's studio.throttle writes them).
-SIGNIN_REFUSED_SCOPE = 'signin.refused.client'
 
-
-def refused_last_hour(now=None) -> int:
-    """How many sign-in attempts the throttle refused in the last hour (the windows of SIGNIN_REFUSED_SCOPE that start
-    in it)."""
-    since = (now or timezone.now()) - timedelta(hours=1)
-    return models.RateWindow.objects.filter(scope=SIGNIN_REFUSED_SCOPE, window_start__gte=since).aggregate(
-        total=Sum('count'))['total'] or 0
 
 
 # --- release 1's routes (RELEASE-1-SPEC 3.4): each a stub answering Django's 404 until its lane replaces it -------
@@ -1014,36 +1008,37 @@ def reads(request):
 
 
 # --- clearing a sign-in delay (release 1, B1 step 8) ------------------------------------------------------------------
-# B1's throttle counts a username's failures by its keyed hash (rate.key_hash('signin-user:' + username.casefold()));
-# clearing the delay deletes every RateWindow row of that key, in any scope, and writes a SecurityEvent signin.cleared
-# naming the account. LoginAttempt rows are never deleted. The server's clear-signin-failures does the same (Lane 2).
+# Lane 2's studio.throttle owns the slowdown: clear_failures(username) clears a username's delay (its RateWindow
+# counters; LoginAttempt rows are never deleted) and refused_in(username) is how many of its attempts the slowdown refused
+# lately (B1 step 5). The console calls them by name, when used, so it imports on a tree without that module; the act
+# writes the SecurityEvent signin.delay_cleared (the lead's contract of 2026-11-24).
+THROTTLE_MODULE = 'studio.throttle'
 
-SIGNIN_USER_KEY_PREFIX = 'signin-user:'
 
-
-def signin_user_key(username) -> str:
-    """The key B1's throttle counts a username by (RELEASE-1-SPEC B1 step 1)."""
-    return rate.key_hash(SIGNIN_USER_KEY_PREFIX + str(username).casefold())
+def throttle():
+    """Lane 2's studio.throttle (B1), imported when used."""
+    return importlib.import_module(THROTTLE_MODULE)
 
 
 @operator_view
 @methods('POST')
 @requires_recent_second_factor()
 def unlock_sign_in(request, user_id):
-    """Clear the person's sign-in delay: their username's RateWindow rows deleted, a SecurityEvent signin.cleared and an
-    audit row in each of their workspaces. Refused, as every act here, for an operator's account or one with no
-    workspace (the server's clear-signin-failures clears those)."""
+    """Clear the person's sign-in delay (throttle.clear_failures), with a SecurityEvent signin.delay_cleared and an audit
+    row in each of their workspaces. Refused, as every act here, for an operator's account or one with no workspace (the
+    server's clear-signin-failures clears those)."""
     person = _person(user_id)
     memberships = []
     try:
         with transaction.atomic():
             person = User.objects.select_for_update().get(pk=person.pk)
             memberships = _changeable(person)
-            cleared, _ = models.RateWindow.objects.filter(key=signin_user_key(person.username)).delete()
-            security_events.record('signin.cleared', actor=request.user, subject=person, rate_rows=cleared)
+            cleared = throttle().clear_failures(person.username)
+            counted = {'cleared': cleared} if isinstance(cleared, int) and not isinstance(cleared, bool) else {}
+            security_events.record('signin.delay_cleared', actor=request.user, subject=person, **counted)
             for workspace in _workspaces_of(memberships):
                 audit.record(workspace, 'operator.signin_cleared', actor=request.user, user=str(person.pk),
-                             username=person.username, count=cleared)
+                             username=person.username, **counted)
     except Refused as exc:
         return _refused(request, exc, _back(request, memberships)[1])
     return see_other(f'{_back(request, memberships)[0]}?done=unlocked')
