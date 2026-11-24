@@ -99,7 +99,7 @@ from django.utils import timezone
 from django.utils.crypto import salted_hmac
 from psycopg import pq
 
-from . import console, jobs, models, sessions, storage
+from . import console, jobs, models, session_store, sessions, storage
 from .maintenance import hashed_signin_name
 
 log = logging.getLogger(__name__)
@@ -1009,6 +1009,8 @@ def destroy(scope, *, expected=None, holds_only=False, close=False, record=None)
             with connection.cursor() as cursor:  # whatever this session set before: the deletes rely on deferral
                 cursor.execute('SET CONSTRAINTS ALL DEFERRED')
             if scope.kind == WORKSPACE:
+                session_store.lock_accounts(  # the practice's accounts first: the session store's lock order
+                    models.Membership.objects.filter(workspace_id=scope.workspace_id).values_list('user_id', flat=True))
                 models.Workspace.objects.select_for_update().filter(pk=scope.workspace_id).first()
                 if close:
                     models.Workspace.objects.filter(pk=scope.workspace_id, closed_at__isnull=True).update(

@@ -1312,12 +1312,14 @@ class SessionAccountLink(models.Model):
     it, so ending one account's sessions reads that account's rows and never the whole django_session table. The session
     key and the account are plain values, never foreign keys: the revision before release 1 deletes django_session rows
     and the installer deletes all of them at a forward, and neither may be refused or need to know of this table; a row
-    either leaves behind names a session that is gone, which every reader re-checks, and the daily maintenance removes."""
-    SIGNED_IN, PENDING, SETUP = 'signed_in', 'pending', 'setup'
+    either leaves behind names a session that is gone, which every reader re-checks, and the daily maintenance removes.
+    A signed-in session's kind names the door it was opened at (repair round 2 of release 1, sessions-1): SIGNED_IN at the
+    cpt door (or at none), SIGNED_IN_ADMIN at the admin door, so the cap of one door's sign-ins never ends the other's."""
+    SIGNED_IN, SIGNED_IN_ADMIN, PENDING, SETUP = 'signed_in', 'signed_admin', 'pending', 'setup'
     id = models.BigAutoField(primary_key=True)
     session_key = models.CharField(max_length=40)  # django_session.session_key
     account_id = models.UUIDField()
-    kind = models.CharField(max_length=12)  # SIGNED_IN | PENDING | SETUP
+    kind = models.CharField(max_length=12)  # SIGNED_IN | SIGNED_IN_ADMIN | PENDING | SETUP (no choices: no migration)
     created_at = models.DateTimeField()  # when the session first named the account this way: the cap ends the oldest
 
     class Meta:

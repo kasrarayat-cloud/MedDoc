@@ -164,10 +164,14 @@ SESSION_MAX_MEMBER_SECONDS = 8 * 60 * 60  # today's 8 hours (SESSION_COOKIE_AGE)
 SESSION_MAX_OPERATOR_SECONDS = 8 * 60 * 60
 SESSION_IDLE_WARNING_SECONDS = 2 * 60
 SESSION_ACTIVITY_WRITE_SECONDS = 60
-# Refutation round 1 (avail-0): the live sessions one account holds of each kind - signed in, a checked password waiting
-# for its key at the admin door, a setup under way (studio.session_store). A new one beyond it ends that account's oldest
-# of the same kind, so one account's own sign-ins cannot grow the session table without bound, and a pending sign-in -
-# made with a password alone - never ends a signed-in session.
+# Refutation round 1 (avail-0): the live sessions one account holds of each kind - signed in at the cpt door, signed in at
+# the admin door (each door its own kind: repair round 2, sessions-1), a checked password waiting for its key at the admin
+# door, a setup under way (studio.session_store). A new one beyond it ends that account's oldest of the same kind, so one
+# account's own sign-ins cannot grow the session table without bound, a pending sign-in - made with a password alone -
+# never ends a signed-in session, and one door's sign-ins never end the other door's. A pending sign-in that can still
+# complete (no older than SECOND_FACTOR_PENDING_SECONDS) is never ended by it and still counts toward it (repair round 2,
+# sessions-0): one account's live pending sign-ins are at most this many plus those made in the last
+# SECOND_FACTOR_PENDING_SECONDS, which only the sign-in rate bounds (nginx's cpt_signin zone and the web workers' Argon2).
 SESSION_LIVE_PER_ACCOUNT = 20
 
 # B1, sign-in slows down instead of locking anyone out (OWNER DECISIONS D6, D23): the window; failures per (username,

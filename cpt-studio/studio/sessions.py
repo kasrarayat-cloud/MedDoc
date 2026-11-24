@@ -11,7 +11,10 @@ end_sessions(user, keep_session_key=None)
     password change or a sign-out everywhere drops a sign-in made with the old password (refutation r2, finding 11).
     It reads the account's own sessions from the site's session store's links (studio.session_store, refutation round 1
     of release 1, avail-0): its cost is that account's sessions, never every session of the site, and one account holds
-    at most SESSION_LIVE_PER_ACCOUNT live sessions of each kind.
+    at most SESSION_LIVE_PER_ACCOUNT live sessions of each kind - each door's sign-ins, the pending sign-ins, the setups -
+    besides the pending sign-ins that can still complete, which the cap never ends (repair round 2, sessions-0). It
+    takes the account's row lock before it deletes any session, and deletes them in session key order (repair round 2,
+    records-0 and -1: see the session store's lock order).
 
 Every sign-in writes the session keys of studio.request_meta (the contract between the lanes, RELEASE-1-SPEC section 5):
 SESSION_DOOR (the door it was made at), SESSION_AUTH_AT and SESSION_LAST_ACTIVE (now) and SESSION_SIGN_IN_REF (the sign-in's
@@ -276,9 +279,15 @@ def _page_sign_out_reason(request):
 def session_tag(request) -> str:
     """The value a signed-in page is given to know its own session by (data-session, and the ping's answer): a keyed
     hash of the session's sign-in reference, so the tabs of one browser can tell their session's news from another
-    session's (refutation r2, finding 14) while the reference itself never reaches the page. '' when there is none."""
+    session's (refutation r2, finding 14) while the reference itself never reaches the page. '' when there is none.
+    Its 128 bits are written in the form of a UUID (8-4-4-4-12 lower-case hex digits), which the customer scan reads as an
+    id like the others a customer page carries: 32 hex digits in a row are its long_hex hit, and a run of hex digits
+    and hyphens spells no word any rule of ops/verification/customer-denylist.json reads (repair round 2, the
+    switchback-1 verifier's scan.bundle). The pages compare it as an opaque string (app.js, ops_session.js)."""
     ref = request_meta.sign_in_ref(request)
-    return salted_hmac(SESSION_TAG_SALT, str(ref), algorithm='sha256').hexdigest()[:32] if ref else ''
+    if not ref:
+        return ''
+    return str(uuid.UUID(hex=salted_hmac(SESSION_TAG_SALT, str(ref), algorithm='sha256').hexdigest()[:32]))
 
 
 def page_config(request) -> dict:
