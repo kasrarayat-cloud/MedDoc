@@ -9,6 +9,9 @@ end_sessions(user, keep_session_key=None)
     four back, so studio.console.end_sessions and console.Refused are these. Besides the sessions signed in as the
     account it ends the anonymous ones waiting on it - a pending sign-in at the admin door, a setup under way - so a
     password change or a sign-out everywhere drops a sign-in made with the old password (refutation r2, finding 11).
+    It reads the account's own sessions from the site's session store's links (studio.session_store, refutation round 1
+    of release 1, avail-0): its cost is that account's sessions, never every session of the site, and one account holds
+    at most SESSION_LIVE_PER_ACCOUNT live sessions of each kind.
 
 Every sign-in writes the session keys of studio.request_meta (the contract between the lanes, RELEASE-1-SPEC section 5):
 SESSION_DOOR (the door it was made at), SESSION_AUTH_AT and SESSION_LAST_ACTIVE (now) and SESSION_SIGN_IN_REF (the sign-in's
@@ -65,15 +68,16 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from django.conf import settings
 from django.contrib.auth import logout
 from django.contrib.auth.signals import user_logged_in
-from django.contrib.sessions.models import Session
 from django.http import HttpResponseRedirect, JsonResponse
-from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
-from . import request_meta, throttle
+from . import request_meta, session_store, throttle
 
-# the session stores whose sessions this console can list and end (refutation r2, secure-4)
-SESSION_STORES = ('django.contrib.sessions.backends.db',)  # cached_db can hold a session the table no longer has (r3-3)
+# the session stores whose sessions this console can list and end (refutation r2, secure-4): the site's own, which is
+# Django's database store with the links that find one account's sessions (refutation round 1, avail-0). cached_db can
+# hold a session the table no longer has (r3-3); Django's plain database store keeps no links, so its sessions could be
+# found only by reading every session of the site - the cost avail-0 removed - and it is refused like any other.
+SESSION_STORES = ('studio.session_store',)
 NO_SESSION_STORE = ('This site keeps sessions where the console cannot end them, so access cannot be changed or a '
                     'password reset here.')
 
@@ -97,8 +101,9 @@ ACTOR_HEADER = 'X-CPT-Actor'
 SESSION_TAG_SALT = 'studio.sessions.session_tag'
 FRAME_DESTINATIONS = frozenset({'iframe', 'frame', 'embed', 'object'})  # Sec-Fetch-Dest of a load the page itself makes
 # the session keys of an anonymous session that waits on an account (studio.second_factor reads them by these names):
-# a checked password waiting for its key, and a setup under way; end_sessions ends them with the account's sessions
-PENDING_SIGN_IN_KEY, SETUP_KEY = 'cpt_2fa_pending', 'cpt_enrol'
+# a checked password waiting for its key, and a setup under way; end_sessions ends them with the account's sessions.
+# Defined by the session store, which indexes them (studio.session_store).
+PENDING_SIGN_IN_KEY, SETUP_KEY = session_store.PENDING_SIGN_IN_KEY, session_store.SETUP_KEY
 WAITING_KEYS = (PENDING_SIGN_IN_KEY, SETUP_KEY)
 REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
@@ -113,36 +118,27 @@ class Refused(Exception):
 
 def waits_on(data, user_id) -> bool:
     """Whether a session's ``data`` is signed in as the account ``user_id``, or waits on it: a checked password waiting
-    for its key (PENDING_SIGN_IN_KEY) or a setup under way (SETUP_KEY), each naming the account in 'user'."""
-    if str(data.get('_auth_user_id', '')) == user_id:
-        return True
-    return any(isinstance(data.get(name), dict) and str(data[name].get('user', '')) == user_id for name in WAITING_KEYS)
+    for its key (PENDING_SIGN_IN_KEY) or a setup under way (SETUP_KEY), each naming the account in 'user'. An account
+    id is read as the session store indexes it (session_store.account_links) - as django.contrib.auth and the second
+    factor read it - so a spelling of the id they would accept is never one this misses."""
+    account = session_store.account_of(user_id)
+    return account is not None and any(linked == account for _, linked in session_store.account_links(data))
 
 
 def end_sessions(user, keep_session_key=None) -> int:
     """End every live session signed in as ``user``, and every one waiting on it (waits_on: a pending sign-in at the
     admin door, a setup under way - refutation r2, finding 11): an open session ends at once and can never come back,
-    whatever happens to the account later (refutation r1, gate-1). The sessions are read from the database table (the
-    db store only, SESSION_STORES; any other store is refused - r2, secure-4; r3, r3-3), live ones only (an expired
-    session signs nobody in - r2, secure-5), and each is deleted through its store. Sessions are sign-in state, not
-    records. The number ended. ``keep_session_key``, when given, names the one session left signed in (B4: a password
-    changed on /account/ keeps the session that changed it and ends the others)."""
+    whatever happens to the account later (refutation r1, gate-1). The sessions are the site's session store's (only
+    SESSION_STORES; any other store is refused - r2, secure-4; r3, r3-3), found by the account's own links rather than by
+    reading every session of the site (refutation round 1 of release 1, avail-0), live ones only (an expired session
+    signs nobody in - r2, secure-5), each one's data read again, and each deleted through the store
+    (session_store.end_account_sessions). A session whose data names the account but has no link is never signed in
+    with: the store refuses it when it is loaded. Sessions are sign-in state, not records. The number ended.
+    ``keep_session_key``, when given, names the one session left signed in (B4: a password changed on /account/ keeps
+    the session that changed it and ends the others)."""
     if settings.SESSION_ENGINE not in SESSION_STORES:
         raise Refused(NO_SESSION_STORE, 409)
-    store = import_module(settings.SESSION_ENGINE).SessionStore
-    ended = 0
-    live = Session.objects.filter(expire_date__gt=timezone.now())
-    if keep_session_key is not None:
-        live = live.exclude(session_key=keep_session_key)
-    for session in live.iterator(chunk_size=200):
-        try:
-            data = session.get_decoded()
-        except Exception:  # noqa: BLE001 - a session that cannot be read signs nobody in
-            continue
-        if isinstance(data, dict) and waits_on(data, str(user.pk)):
-            store(session_key=session.session_key).delete()
-            ended += 1
-    return ended
+    return import_module(settings.SESSION_ENGINE).end_account_sessions(user.pk, keep_session_key)
 
 
 # --- the keys a sign-in writes ------------------------------------------------------------------------------------------

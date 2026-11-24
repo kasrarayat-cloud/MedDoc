@@ -890,10 +890,13 @@ class RefutationRoundThreeTests(AdminCase):
         self.assertEqual(operator.runs_cost(list(Run.objects.filter(encounter=enc)))[1], 0)
 
     def test_only_the_database_session_store_is_accepted(self):
-        self.assertEqual(console.SESSION_STORES, ('django.contrib.sessions.backends.db',))
-        with self.settings(SESSION_ENGINE='django.contrib.sessions.backends.cached_db'):
-            with self.assertRaises(console.Refused):
-                console.end_sessions(self.viewer)
+        # the site's own database store, which keeps the links that find one account's sessions (refutation round 1 of
+        # release 1, avail-0); Django's plain database store keeps none, so it is refused like cached_db
+        self.assertEqual(console.SESSION_STORES, ('studio.session_store',))
+        for engine in ('django.contrib.sessions.backends.cached_db', 'django.contrib.sessions.backends.db'):
+            with self.subTest(engine=engine), self.settings(SESSION_ENGINE=engine):
+                with self.assertRaises(console.Refused):
+                    console.end_sessions(self.viewer)
 
     def test_a_variation_selector_is_refused_everywhere(self):
         # one between a letter and its accent would make a second workspace drawn like the first (r4-1, r4-3)

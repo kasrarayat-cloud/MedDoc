@@ -4,7 +4,10 @@
                                        counted (a dry run), or removed with ``delete``. Only SourceFile.storage_name and
                                        CodingRound.view_pdf_storage_name name files (the converted PDF a Word document's
                                        viewer shows is a named file and always kept). Counts only, never a name.
-    run_daily()                        the daily maintenance: expired sessions cleared (clearsessions), RateWindow rows
+    run_daily()                        the daily maintenance: the session store's links whose session is gone or expired
+                                       removed (studio.session_store; refutation round 1, avail-0: the links the revision
+                                       before release 1 or the installer leave when they delete sessions), expired
+                                       sessions cleared (clearsessions), RateWindow rows
                                        older than a day removed, sign-in names that match no account replaced by their
                                        keyed hash after 30 days (B1; the row stays), the orphan sweep (deleting), stale
                                        conversion folders removed, and LoginAttempt rows older than the retention
@@ -38,7 +41,7 @@ from django.db import connection
 from django.db.models import Exists, F, OuterRef
 from django.utils import timezone
 
-from . import jobs, models, rate, security_events, storage
+from . import jobs, models, rate, security_events, session_store, storage
 
 log = logging.getLogger(__name__)
 
@@ -173,7 +176,8 @@ def run_daily(now=None) -> dict:
     maintenance.daily holds every count and the names of the steps that failed (their errors are logged by type)."""
     now = now or timezone.now()
     counts, failed = {}, []
-    steps = (('sessions_cleared', lambda: clear_expired_sessions(now)),
+    steps = (('session_links_pruned', lambda: session_store.prune_session_links(now)),
+             ('sessions_cleared', lambda: clear_expired_sessions(now)),
              ('rate_windows_pruned', lambda: prune_rate_windows(now)),
              ('signin_names_hashed', lambda: hash_unmatched_signin_names(now)),
              ('orphan_sweep', lambda: sweep_orphan_files(delete=True, now=now)),

@@ -1177,3 +1177,24 @@ class FileKey(models.Model):
     wrapped_key = models.BinaryField()
     created_at = models.DateTimeField(auto_now_add=True)
     destroyed_at = models.DateTimeField(null=True, blank=True)
+
+
+class SessionAccountLink(models.Model):
+    """One way a session names an account (refutation round 1 of release 1, avail-0; migration 0018): signed in as it, or
+    waiting on it - a checked password waiting for its key at the admin door, a setup under way. Written by the site's
+    session store (studio.session_store) in the transaction that saves the session, and removed in the one that deletes
+    it, so ending one account's sessions reads that account's rows and never the whole django_session table. The session
+    key and the account are plain values, never foreign keys: the revision before release 1 deletes django_session rows
+    and the installer deletes all of them at a forward, and neither may be refused or need to know of this table; a row
+    either leaves behind names a session that is gone, which every reader re-checks, and the daily maintenance removes."""
+    SIGNED_IN, PENDING, SETUP = 'signed_in', 'pending', 'setup'
+    id = models.BigAutoField(primary_key=True)
+    session_key = models.CharField(max_length=40)  # django_session.session_key
+    account_id = models.UUIDField()
+    kind = models.CharField(max_length=12)  # SIGNED_IN | PENDING | SETUP
+    created_at = models.DateTimeField()  # when the session first named the account this way: the cap ends the oldest
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['session_key', 'account_id', 'kind'],
+                                               name='one_session_account_kind')]
+        indexes = [models.Index(fields=['account_id', 'kind', 'created_at'], name='studio_session_link_account')]
