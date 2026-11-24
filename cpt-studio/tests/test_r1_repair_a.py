@@ -61,16 +61,21 @@ A1_REASON = 'Synthetic ruled act for a test: the act needs its record.'
 # --- the database's refusal -------------------------------------------------------------------------------------------
 
 @contextmanager
-def refused_rows(table, where=None):
+def refused_rows(table, where=None, *, at_commit=False):
     """While the block runs, PostgreSQL refuses every new row of ``table`` - only the rows matching the SQL condition
-    ``where`` over NEW, when it is given - with a BEFORE INSERT trigger that raises. Dropped afterwards, always."""
+    ``where`` over NEW, when it is given - with a BEFORE INSERT trigger that raises, or, ``at_commit``, a deferred
+    constraint trigger that raises at the COMMIT, after every statement succeeded. Dropped afterwards, always."""
     name = f'{REFUSAL_PREFIX}refuse_{table}'
     condition = f' WHEN ({where})' if where else ''
     with connection.cursor() as cursor:
         cursor.execute(f"CREATE OR REPLACE FUNCTION {name}() RETURNS trigger LANGUAGE plpgsql AS $$ "
                        f"BEGIN RAISE EXCEPTION 'r1repa: % refused', TG_TABLE_NAME; END $$")
-        cursor.execute(f'CREATE TRIGGER {name} BEFORE INSERT ON {table} FOR EACH ROW{condition} '
-                       f'EXECUTE FUNCTION {name}()')
+        if at_commit:
+            cursor.execute(f'CREATE CONSTRAINT TRIGGER {name} AFTER INSERT ON {table} DEFERRABLE INITIALLY DEFERRED '
+                           f'FOR EACH ROW{condition} EXECUTE FUNCTION {name}()')
+        else:
+            cursor.execute(f'CREATE TRIGGER {name} BEFORE INSERT ON {table} FOR EACH ROW{condition} '
+                           f'EXECUTE FUNCTION {name}()')
     try:
         yield
     finally:
@@ -189,6 +194,7 @@ class ActWithItsRecordTests(TransactionTestCase):
         refusals = {
             'the security event, by a trigger': lambda: refused_rows(SECURITY_EVENT_TABLE),
             'the security event, by a constraint': lambda: refused_by_check(SECURITY_EVENT_TABLE),
+            'the security event, at the commit': lambda: refused_rows(SECURITY_EVENT_TABLE, at_commit=True),
             'the practice\'s audit row alone': lambda: refused_rows(AUDIT_EVENT_TABLE,
                                                                      "NEW.event = 'member.password_changed'"),
         }
@@ -357,12 +363,14 @@ class ActWithItsRecordTests(TransactionTestCase):
         codes = second_factor.new_recovery_codes(operator)
         client = Client(HTTP_HOST=ADMIN, raise_request_exception=False)
         self.assertEqual(password_step(client, operator).status_code, 302)
-        self.refused_answer(refused_rows(SECURITY_EVENT_TABLE),
-                            lambda: client.post('/login/recovery', {'code': codes[0]}))
-        self.assertEqual(second_factor.recovery_codes_left(operator), settings.RECOVERY_CODE_COUNT)
-        self.assertIsNone(client.session.get('_auth_user_id'))
-        self.assertEqual(models.LoginAttempt.objects.get().outcome, models.LoginAttempt.SECOND_FACTOR_PENDING)
-        self.assertEqual(security_events('second_factor.recovery_used'), 0)
+        # refused at the statement, and at the commit - after the code, the record and the sign-in itself ran
+        for refusal in (refused_rows(SECURITY_EVENT_TABLE), refused_rows(SECURITY_EVENT_TABLE, at_commit=True)):
+            self.refused_answer(refusal, lambda: client.post('/login/recovery', {'code': codes[0]}))
+            self.assertEqual(second_factor.recovery_codes_left(operator), settings.RECOVERY_CODE_COUNT)
+            self.assertIsNone(client.session.get('_auth_user_id'))
+            self.assertEqual(models.LoginAttempt.objects.get().outcome, models.LoginAttempt.SECOND_FACTOR_PENDING)
+            self.assertEqual(security_events('second_factor.recovery_used'), 0)
+            self.assertEqual(live_sessions_of(operator), 0, 'no session signed in as the operator')
         # the control: the same code, the record written, signs in once
         used = client.post('/login/recovery', {'code': codes[0]})
         self.assertEqual((used.status_code, used['Location']), (302, '/ops/'))
