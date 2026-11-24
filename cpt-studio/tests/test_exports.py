@@ -18,7 +18,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from pypdf import PdfReader
 
-from studio import decisions, exports, models, state
+from studio import decisions, exports, models, rate, state
 from tests.support import rounds as r
 
 Export = models.ExportArtifact
@@ -430,19 +430,25 @@ class LimitTests(ExportCase):
     def test_the_eleventh_report_a_member_makes_in_ten_minutes_is_refused(self):
         self.assertEqual(settings.EXPORT_LIMIT_PER_MEMBER, (10, 600))
         documents = [self.enc] + [self.ready(number) for number in range(1, 12)]
-        for number, enc in enumerate(documents[:10]):
-            self.assertEqual(self.make(self.client, enc).status_code, 201, number)  # ten reports made
-        before = Export.objects.count()
-        self.assert_limited(self.make(self.client, documents[10]))
-        self.assert_limited(self.make(self.client, documents[10]))
-        self.assertEqual(Export.objects.count(), before)
-        events = models.SecurityEvent.objects.filter(event='export.rate_limited')
-        self.assertEqual(events.count(), 1)  # the first refusal of the window, once
-        self.assertEqual((events.get().subject_id, events.get().workspace_id, events.get().data),
-                         (self.reviewer.pk, self.ws.pk, {'scope': 'export.member', 'limit': 10, 'window_seconds': 600}))
-        self.assertEqual(self.make(self.client, documents[0]).status_code, 200)  # a stored copy: it makes nothing
-        self.assertEqual(self.make(self.client_for(self.viewer), documents[10]).status_code, 201)  # per member
-        later = timezone.now() + timedelta(seconds=601)
+        # One moment for the whole window, never the real clock: a member's window is aligned to multiples of 600 s
+        # since the epoch, so ten reports made on the real clock across a boundary were counted in two windows and the
+        # eleventh was made (201; repair round 2's d2 suite met it at 22:10:00Z). The moment is a second into the next
+        # window - never earlier than the session's own stamps, and within its idle limit.
+        moment = rate.window_start(600) + timedelta(seconds=601)
+        with mock.patch.object(timezone, 'now', return_value=moment):
+            for number, enc in enumerate(documents[:10]):
+                self.assertEqual(self.make(self.client, enc).status_code, 201, number)  # ten reports made
+            before = Export.objects.count()
+            self.assert_limited(self.make(self.client, documents[10]))
+            self.assert_limited(self.make(self.client, documents[10]))
+            self.assertEqual(Export.objects.count(), before)
+            events = models.SecurityEvent.objects.filter(event='export.rate_limited')
+            self.assertEqual(events.count(), 1)  # the first refusal of the window, once
+            self.assertEqual((events.get().subject_id, events.get().workspace_id, events.get().data),
+                             (self.reviewer.pk, self.ws.pk, {'scope': 'export.member', 'limit': 10, 'window_seconds': 600}))
+            self.assertEqual(self.make(self.client, documents[0]).status_code, 200)  # a stored copy: it makes nothing
+            self.assertEqual(self.make(self.client_for(self.viewer), documents[10]).status_code, 201)  # per member
+        later = moment + timedelta(seconds=601)
         with mock.patch.object(timezone, 'now', return_value=later):  # a new window
             self.assertEqual(self.make(self.client, documents[11]).status_code, 201)
 
